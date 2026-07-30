@@ -1,4 +1,4 @@
-use multiagent::{Account, Basket, ExchangeError, Ledger, Quantity, Rate};
+use axionomy::{Account, Basket, ExchangeError, Ledger, Quantity, Rate};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 enum Asset {

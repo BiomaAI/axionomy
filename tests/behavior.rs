@@ -1,4 +1,4 @@
-use multiagent::{Policy, TerminationCondition};
+use axionomy::{Policy, TerminationCondition};
 
 #[test]
 fn closures_can_define_policies() {

@@ -1,6 +1,10 @@
-# Multiagent closed economic state machine
+# Axionomy
 
-`multiagent` is building a closed computational system in which every
+> A closed economic state machine.
+
+**Everything is an asset. Every change is an exchange.**
+
+`axionomy` is a closed computational engine in which every
 semantically meaningful part of a problem is represented through assets,
 accounts, rates, and exchanges.
 
@@ -86,7 +90,7 @@ documented in the PDD.
 ## Current API example
 
 ```rust
-use multiagent::{Account, Basket, Ledger, Quantity, Rate};
+use axionomy::{Account, Basket, Ledger, Quantity, Rate};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 enum Asset {
@@ -121,7 +125,7 @@ let receipt = ledger.exchange(
 )?;
 
 assert_eq!(receipt.units(), Quantity::new(3));
-# Ok::<(), multiagent::ExchangeError<&str, Asset>>(())
+# Ok::<(), axionomy::ExchangeError<&str, Asset>>(())
 ```
 
 The ledger validates both sides and every arithmetic operation before

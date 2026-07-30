@@ -1,16 +1,16 @@
-# Multiagent Closed Economic State Machine
+# Axionomy
 
-## Product Design Document
+## Closed Economic State Machine — Product Design Document
 
 | Field | Value |
 | --- | --- |
 | Status | Living design document |
-| Product | `multiagent` Rust crate |
+| Product | Axionomy (`axionomy` Rust crate) |
 | Current crate version | `0.1.0` |
 | Rust edition | 2024 |
 | Minimum supported Rust version | 1.85 |
 | Last updated | 2026-07-30 |
-| Audience | Library contributors, problem modelers, solver authors, simulation designers, reinforcement-learning engineers, and future smart-contract implementers |
+| Audience | Library contributors, problem modelers, solver authors, simulation designers, reinforcement-learning engineers, and runtime implementers |
 
 This document defines the product philosophy, the target computational model,
 the current implementation, and the path between them.
@@ -23,7 +23,7 @@ document.
 
 ## 1. Executive summary
 
-`multiagent` is intended to become a closed economic state machine in which
+Axionomy is intended to become a closed economic state machine in which
 every semantically meaningful part of a problem is represented using four
 fundamental concepts:
 
@@ -299,7 +299,7 @@ reason about. A solver may optimize constraints that execution does not enforce.
 A simulation may mutate state that cannot be reconstructed from its event log.
 A reward function may depend on hidden state unavailable to another policy.
 
-`multiagent` aims to encode the complete problem space into one transition
+Axionomy aims to encode the complete problem space into one transition
 language.
 
 The original repository made a different mistake: it put one specific problem
@@ -336,7 +336,8 @@ The next evolution preserves the generic foundation while enforcing closure.
 - Define declared invariants for transformations.
 - Support multi-account and parameterized rates.
 - Add property-based, model-based, and eventually formal verification.
-- Evaluate a deterministic execution profile for smart contracts or WASM.
+- Evaluate deterministic, resource-bounded execution profiles for WASM and
+  other portable runtimes.
 
 ### 6.3 Non-goals today
 
@@ -1234,13 +1235,13 @@ The phases describe dependency order, not release dates.
 - Explore bounded model checking.
 - Distinguish tested, proven, and assumed properties.
 
-### Phase 8: Smart-contract execution profile
+### Phase 8: Portable execution profiles
 
-- Define deterministic resource-bounded execution.
-- Add ownership, signatures, authorization, and replay protection.
-- Evaluate `no_std`, WASM, and chain constraints.
-- Add adversarial and denial-of-service testing.
-- Keep consensus adapters separate from the pure closed machine.
+- Define deterministic, resource-bounded execution.
+- Evaluate `no_std`, WASM, embedded, and server runtime constraints.
+- Define a stable host-capability boundary.
+- Add metering, adversarial-input, and denial-of-service testing.
+- Keep runtime adapters separate from the pure closed machine.
 
 ## 23. Open questions
 
@@ -1345,10 +1346,10 @@ properties not established by the implementation.
 Mitigation: specify the exact formal model and distinguish inspiration,
 testing, and proof.
 
-### Risk: smart-contract scope arrives too early
+### Risk: portable-runtime scope arrives too early
 
-Adversarial execution adds authorization, metering, determinism, and denial-of-
-service concerns before the semantics are stable.
+Portable or adversarial execution adds metering, deterministic host behavior,
+and denial-of-service concerns before the semantics are stable.
 
 Mitigation: validate the closed machine through local bounded problems first.
 

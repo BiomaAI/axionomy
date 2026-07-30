@@ -1,4 +1,4 @@
-use multiagent::{
+use axionomy::{
     Account, Basket, ExchangeError, Ledger, Policy, Quantity, Rate, TerminationCondition,
 };
 use std::collections::HashMap;
