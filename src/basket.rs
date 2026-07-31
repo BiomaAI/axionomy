@@ -61,6 +61,17 @@ where
         Ok(basket)
     }
 
+    /// Builds a canonical basket from asset-qualified quantities.
+    ///
+    /// This is the preferred construction boundary for typed authoring
+    /// adapters because it preserves the asset identity paired with every
+    /// quantity and rejects duplicate assets.
+    pub fn try_from_amounts(
+        amounts: impl IntoIterator<Item = AssetAmount<A, N>>,
+    ) -> Result<Self, BasketError<A>> {
+        Self::try_from_entries(amounts.into_iter().map(AssetAmount::into_parts))
+    }
+
     pub fn get(&self, asset: &A) -> Option<&Quantity<N>> {
         self.quantities.get(asset)
     }

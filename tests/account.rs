@@ -1,4 +1,4 @@
-use axionomy::{Account, AccountError, Basket, Quantity};
+use axionomy::{Account, AccountError, AssetAmount, Basket, BasketError, Quantity};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 enum Asset {
@@ -89,5 +89,25 @@ fn baskets_offer_deterministic_sorted_iteration() {
             (&Asset::Credits, &Quantity::new(5)),
             (&Asset::Tokens, &Quantity::new(2)),
         ]
+    );
+}
+
+#[test]
+fn baskets_accept_asset_qualified_amounts_and_reject_duplicates() {
+    let balances = Basket::try_from_amounts([
+        AssetAmount::new(Asset::Credits, Quantity::new(5)),
+        AssetAmount::new(Asset::Tokens, Quantity::new(2)),
+    ])
+    .unwrap();
+
+    assert_eq!(balances, basket([(Asset::Credits, 5), (Asset::Tokens, 2)]));
+    assert_eq!(
+        Basket::try_from_amounts([
+            AssetAmount::new(Asset::Credits, Quantity::new(5)),
+            AssetAmount::new(Asset::Credits, Quantity::new(2)),
+        ]),
+        Err(BasketError::DuplicateAsset {
+            asset: Asset::Credits,
+        })
     );
 }

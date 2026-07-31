@@ -100,6 +100,25 @@ fn transform(units: u64) -> Action {
         .bind(Role::Sink, AccountId::Sink)
 }
 
+#[test]
+fn model_and_goal_expose_all_referenced_asset_keys() {
+    let world = world();
+    assert_eq!(
+        world.asset_keys().into_iter().copied().collect::<Vec<_>>(),
+        vec![
+            Asset::Input,
+            Asset::Catalyst,
+            Asset::Output,
+            Asset::Capacity,
+            Asset::UsedCapacity,
+            Asset::Solved,
+        ]
+    );
+
+    let goal = Goal::new().require(AccountId::Goal, basket([(Asset::Solved, 1)]));
+    assert_eq!(goal.asset_keys(), [&Asset::Solved].into_iter().collect());
+}
+
 fn finish() -> Action {
     Exchange::new(RateId::Finish, Quantity::new(1))
         .bind(Role::Sink, AccountId::Sink)

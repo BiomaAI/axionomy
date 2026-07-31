@@ -48,6 +48,20 @@ where
     }
 }
 
+impl<AccountId, A, N> Goal<AccountId, A, N>
+where
+    AccountId: Ord,
+    A: Ord,
+{
+    /// Returns every asset identity referenced by this goal.
+    pub fn asset_keys(&self) -> BTreeSet<&A> {
+        self.required
+            .values()
+            .flat_map(|basket| basket.iter().map(|(asset, _)| asset))
+            .collect()
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Economy<AccountId, A, RateId, Role, N = u64> {
     accounts: IndexMap<AccountId, Arc<Account<A, N>>>,
@@ -453,6 +467,38 @@ where
 
     pub fn rate_ids(&self) -> impl Iterator<Item = &RateId> {
         self.rates.keys()
+    }
+
+    /// Returns every asset identity referenced by the closed model.
+    ///
+    /// The set covers initial balances, every rate effect and requirement,
+    /// and declared invariant weights. It supports construction-time schema
+    /// validation without giving validators mutation authority.
+    pub fn asset_keys(&self) -> BTreeSet<&A> {
+        let mut assets = BTreeSet::new();
+
+        for account in self.accounts.values() {
+            assets.extend(account.balances().iter().map(|(asset, _)| asset));
+        }
+        for rate in self.rates.values() {
+            for role in rate.roles() {
+                for basket in [
+                    rate.consumed(role),
+                    rate.produced(role),
+                    rate.preserved(role),
+                ]
+                .into_iter()
+                .flatten()
+                {
+                    assets.extend(basket.iter().map(|(asset, _)| asset));
+                }
+            }
+        }
+        for invariant in self.invariants.iter() {
+            assets.extend(invariant.weights().map(|(asset, _)| asset));
+        }
+
+        assets
     }
 
     pub fn matches(&self, goal: &Goal<AccountId, A, N>) -> bool {
