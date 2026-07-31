@@ -10,8 +10,8 @@ pub mod rate;
 pub use account::{Account, AccountError};
 pub use basket::Basket;
 pub use economy::{
-    ApplyError, ApplyResult, EconomicView, Economy, EconomyBuilder, Goal, ReplayResult,
-    SimulationResult,
+    AccountAssessment, AccountShortfall, ApplyError, ApplyResult, AssessmentStatus, EconomicView,
+    Economy, EconomyBuilder, ExchangeAssessment, Goal, ReplayResult, SimulationResult,
 };
 pub use exchange::{AccountDelta, Exchange, Receipt, Trace};
 pub use quantity::Quantity;

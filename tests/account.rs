@@ -1,6 +1,6 @@
 use axionomy::{Account, AccountError, Basket, Quantity};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 enum Asset {
     Credits,
     Tokens,
@@ -76,5 +76,18 @@ fn baskets_scale_with_checked_arithmetic() {
             .checked_scale(Quantity::new(2))
             .unwrap_err(),
         Asset::Credits
+    );
+}
+
+#[test]
+fn baskets_offer_deterministic_sorted_iteration() {
+    let balances = basket([(Asset::Tokens, 2), (Asset::Credits, 5)]);
+
+    assert_eq!(
+        balances.iter_sorted().collect::<Vec<_>>(),
+        vec![
+            (&Asset::Credits, Quantity::new(5)),
+            (&Asset::Tokens, Quantity::new(2)),
+        ]
     );
 }

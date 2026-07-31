@@ -1,6 +1,6 @@
 use axionomy::{
-    Account, ApplyError, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Quantity, Rate,
-    Trace, basket,
+    Account, AccountDelta, ApplyError, AssessmentStatus, Economy, EconomyBuilder, Exchange,
+    ExchangeAssessment, Goal, LinearInvariant, Quantity, Rate, Trace, basket,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -105,6 +105,19 @@ fn finish() -> Action {
         .bind(Role::Goal, AccountId::Goal)
 }
 
+fn assert_deltas_eq(
+    left: &[AccountDelta<AccountId, Asset>],
+    right: &[AccountDelta<AccountId, Asset>],
+) {
+    assert_eq!(left.len(), right.len());
+    for (left, right) in left.iter().zip(right) {
+        assert_eq!(left.account(), right.account());
+        assert_eq!(left.consumed(), right.consumed());
+        assert_eq!(left.produced(), right.produced());
+        assert_eq!(left.preserved(), right.preserved());
+    }
+}
+
 #[test]
 fn one_exchange_atomically_rewrites_three_accounts() {
     let mut world = world();
@@ -141,17 +154,121 @@ fn failed_multi_account_exchange_changes_nothing() {
         .apply(transform(3))
         .expect_err("capacity and input are insufficient");
 
+    let ApplyError::Infeasible { shortfalls } = error else {
+        panic!("expected complete infeasibility report");
+    };
+    assert_eq!(shortfalls.len(), 2);
+    assert_eq!(shortfalls[0].account(), &AccountId::Source);
+    assert_eq!(shortfalls[0].missing(), &basket([(Asset::Input, 2)]));
+    assert_eq!(shortfalls[1].account(), &AccountId::Machine);
+    assert_eq!(shortfalls[1].missing(), &basket([(Asset::Capacity, 1)]));
+    assert_eq!(world.state_key(), before);
+}
+
+#[test]
+fn assessment_explains_complete_multi_account_distance_without_mutation() {
+    let world = world();
+    let before = world.state_key();
+    let assessment = world.assess(&transform(3));
+
+    assert_eq!(assessment.status(), AssessmentStatus::Infeasible);
+    assert!(!assessment.is_applicable());
+    assert_eq!(assessment.accounts().len(), 3);
+    assert!(assessment.projected_deltas().is_none());
+    assert!(assessment.issues().is_empty());
+
+    let source = assessment
+        .account(&AccountId::Source)
+        .expect("source account is assessed");
+    assert_eq!(source.required(), &basket([(Asset::Input, 6)]));
+    assert_eq!(source.available(), &basket([(Asset::Input, 4)]));
+
+    let machine = assessment
+        .account(&AccountId::Machine)
+        .expect("machine account is assessed");
+    assert_eq!(
+        machine.required(),
+        &basket([(Asset::Catalyst, 1), (Asset::Capacity, 3)])
+    );
+    assert_eq!(
+        machine.available(),
+        &basket([(Asset::Catalyst, 1), (Asset::Capacity, 2)])
+    );
+
+    let shortfalls = assessment.shortfalls();
+    assert_eq!(shortfalls.len(), 2);
+    assert_eq!(shortfalls[0].account(), &AccountId::Source);
+    assert_eq!(shortfalls[0].missing(), &basket([(Asset::Input, 2)]));
+    assert_eq!(shortfalls[1].account(), &AccountId::Machine);
+    assert_eq!(shortfalls[1].missing(), &basket([(Asset::Capacity, 1)]));
+    assert_eq!(
+        assessment.shortfall(&AccountId::Source),
+        Some(&basket([(Asset::Input, 2)]))
+    );
+    assert_eq!(assessment.shortfall(&AccountId::Sink), None);
+    assert_eq!(world.state_key(), before);
+}
+
+#[test]
+fn applicable_assessment_projects_exact_receipt_deltas() {
+    let mut world = world();
+    let action = transform(2);
+    let assessment = world.assess(&action);
+
+    assert_eq!(assessment.status(), AssessmentStatus::Applicable);
+    assert!(assessment.is_applicable());
+    assert_eq!(assessment.accounts().len(), 3);
+    assert!(assessment.shortfalls().is_empty());
+    assert!(assessment.issues().is_empty());
+
+    let projected = assessment
+        .projected_deltas()
+        .expect("applicable assessment projects deltas")
+        .to_vec();
+    let receipt = world.apply(action).expect("assessed exchange applies");
+
+    assert_deltas_eq(&projected, receipt.deltas());
+}
+
+#[test]
+fn applicability_conveniences_derive_from_assessment() {
+    let world = world();
+    let feasible = transform(2);
+    let infeasible = transform(3);
+
+    assert!(world.is_applicable(&feasible));
+    assert!(!world.is_applicable(&infeasible));
+    assert_eq!(
+        world.applicable([feasible.clone(), infeasible]),
+        vec![feasible]
+    );
+}
+
+#[test]
+fn invalid_assessment_collects_structural_issues() {
+    let world = world();
+    let malformed =
+        Exchange::new(RateId::Transform, Quantity::ZERO).bind(Role::Source, AccountId::Source);
+    let assessment = world.assess(&malformed);
+
+    assert_eq!(assessment.status(), AssessmentStatus::Invalid);
+    assert!(!assessment.is_applicable());
+    assert!(assessment.accounts().is_empty());
+    assert!(assessment.shortfalls().is_empty());
+    assert!(assessment.projected_deltas().is_none());
+    assert_eq!(assessment.issues().len(), 3);
+    assert!(matches!(assessment.issues()[0], ApplyError::ZeroUnits));
     assert!(matches!(
-        error,
-        ApplyError::InsufficientBalance {
-            account: AccountId::Machine,
-            ..
-        } | ApplyError::InsufficientBalance {
-            account: AccountId::Source,
-            ..
+        assessment.issues()[1],
+        ApplyError::MissingBinding {
+            role: Role::Machine
         }
     ));
-    assert_eq!(world.state_key(), before);
+    assert!(matches!(
+        assessment.issues()[2],
+        ApplyError::MissingBinding { role: Role::Sink }
+    ));
+    assert!(matches!(assessment, ExchangeAssessment::Invalid { .. }));
 }
 
 #[test]
@@ -178,6 +295,12 @@ fn bindings_and_invariants_are_core_validated() {
     let invalid = Exchange::new(RateId::Invalid, Quantity::new(1))
         .bind(Role::Source, AccountId::Source)
         .bind(Role::Sink, AccountId::Sink);
+    let assessment = world.assess(&invalid);
+    assert_eq!(assessment.status(), AssessmentStatus::Invalid);
+    assert!(matches!(
+        assessment.issues(),
+        [ApplyError::InvariantViolation { .. }]
+    ));
     assert!(matches!(
         world.apply(invalid),
         Err(ApplyError::InvariantViolation { .. })

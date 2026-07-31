@@ -62,6 +62,175 @@ pub type SimulationResult<AccountId, A, RateId, Role> = Result<
     ApplyError<RateId, Role, AccountId, A>,
 >;
 
+/// The high-level result of assessing an exchange without mutating the economy.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AssessmentStatus {
+    Applicable,
+    Infeasible,
+    Invalid,
+}
+
+/// One account's complete rate-derived requirements and effects.
+#[derive(Debug, Clone)]
+pub struct AccountAssessment<AccountId, A> {
+    account: AccountId,
+    available: Basket<A>,
+    required: Basket<A>,
+    consumed: Basket<A>,
+    produced: Basket<A>,
+    preserved: Basket<A>,
+}
+
+impl<AccountId, A> AccountAssessment<AccountId, A> {
+    pub fn account(&self) -> &AccountId {
+        &self.account
+    }
+
+    /// Balances relevant to this exchange's requirements.
+    pub fn available(&self) -> &Basket<A> {
+        &self.available
+    }
+
+    pub fn required(&self) -> &Basket<A> {
+        &self.required
+    }
+
+    pub fn consumed(&self) -> &Basket<A> {
+        &self.consumed
+    }
+
+    pub fn produced(&self) -> &Basket<A> {
+        &self.produced
+    }
+
+    pub fn preserved(&self) -> &Basket<A> {
+        &self.preserved
+    }
+
+    fn new(
+        account: AccountId,
+        available: Basket<A>,
+        required: Basket<A>,
+        consumed: Basket<A>,
+        produced: Basket<A>,
+        preserved: Basket<A>,
+    ) -> Self {
+        Self {
+            account,
+            available,
+            required,
+            consumed,
+            produced,
+            preserved,
+        }
+    }
+}
+
+/// The exact assets one account lacks for a well-formed exchange.
+#[derive(Debug, Clone)]
+pub struct AccountShortfall<AccountId, A> {
+    account: AccountId,
+    missing: Basket<A>,
+}
+
+impl<AccountId, A> AccountShortfall<AccountId, A> {
+    pub fn account(&self) -> &AccountId {
+        &self.account
+    }
+
+    pub fn missing(&self) -> &Basket<A> {
+        &self.missing
+    }
+
+    fn new(account: AccountId, missing: Basket<A>) -> Self {
+        Self { account, missing }
+    }
+}
+
+/// A non-mutating explanation of one proposed exchange.
+#[must_use]
+#[derive(Debug, Clone)]
+pub enum ExchangeAssessment<AccountId, A, RateId, Role> {
+    /// Every check succeeded; projected deltas match a subsequent receipt if
+    /// the economy remains unchanged.
+    Applicable {
+        accounts: Vec<AccountAssessment<AccountId, A>>,
+        projected_deltas: Vec<AccountDelta<AccountId, A>>,
+    },
+    /// The proposal is structurally valid but one or more accounts lack assets.
+    Infeasible {
+        accounts: Vec<AccountAssessment<AccountId, A>>,
+        shortfalls: Vec<AccountShortfall<AccountId, A>>,
+    },
+    /// The proposal is malformed, overflows, or violates an invariant.
+    Invalid {
+        issues: Vec<ApplyError<RateId, Role, AccountId, A>>,
+    },
+}
+
+impl<AccountId, A, RateId, Role> ExchangeAssessment<AccountId, A, RateId, Role> {
+    pub fn status(&self) -> AssessmentStatus {
+        match self {
+            Self::Applicable { .. } => AssessmentStatus::Applicable,
+            Self::Infeasible { .. } => AssessmentStatus::Infeasible,
+            Self::Invalid { .. } => AssessmentStatus::Invalid,
+        }
+    }
+
+    pub fn is_applicable(&self) -> bool {
+        matches!(self, Self::Applicable { .. })
+    }
+
+    pub fn accounts(&self) -> &[AccountAssessment<AccountId, A>] {
+        match self {
+            Self::Applicable { accounts, .. } | Self::Infeasible { accounts, .. } => accounts,
+            Self::Invalid { .. } => &[],
+        }
+    }
+
+    pub fn account(&self, account: &AccountId) -> Option<&AccountAssessment<AccountId, A>>
+    where
+        AccountId: PartialEq,
+    {
+        self.accounts()
+            .iter()
+            .find(|assessment| assessment.account() == account)
+    }
+
+    pub fn shortfalls(&self) -> &[AccountShortfall<AccountId, A>] {
+        match self {
+            Self::Infeasible { shortfalls, .. } => shortfalls,
+            Self::Applicable { .. } | Self::Invalid { .. } => &[],
+        }
+    }
+
+    pub fn shortfall(&self, account: &AccountId) -> Option<&Basket<A>>
+    where
+        AccountId: PartialEq,
+    {
+        self.shortfalls()
+            .iter()
+            .find(|shortfall| shortfall.account() == account)
+            .map(AccountShortfall::missing)
+    }
+
+    pub fn projected_deltas(&self) -> Option<&[AccountDelta<AccountId, A>]> {
+        match self {
+            Self::Applicable {
+                projected_deltas, ..
+            } => Some(projected_deltas),
+            Self::Infeasible { .. } | Self::Invalid { .. } => None,
+        }
+    }
+
+    pub fn issues(&self) -> &[ApplyError<RateId, Role, AccountId, A>] {
+        match self {
+            Self::Invalid { issues } => issues,
+            Self::Applicable { .. } | Self::Infeasible { .. } => &[],
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct EconomyBuilder<AccountId, A, RateId, Role> {
     accounts: HashMap<AccountId, Account<A>>,
@@ -189,20 +358,29 @@ where
         Ok((fork, receipt))
     }
 
-    pub fn can_apply(
+    /// Explains one exchange without mutating the economy.
+    pub fn assess(
         &self,
         exchange: &Exchange<RateId, Role, AccountId>,
-    ) -> Result<(), ApplyError<RateId, Role, AccountId, A>> {
-        self.prepare(exchange).map(|_| ())
+    ) -> ExchangeAssessment<AccountId, A, RateId, Role> {
+        self.analyze(exchange).assessment
     }
 
+    /// Returns whether one exchange is applicable to the current snapshot.
+    #[must_use]
+    pub fn is_applicable(&self, exchange: &Exchange<RateId, Role, AccountId>) -> bool {
+        self.assess(exchange).is_applicable()
+    }
+
+    /// Retains only candidates applicable to the current snapshot.
+    #[must_use]
     pub fn applicable(
         &self,
         candidates: impl IntoIterator<Item = Exchange<RateId, Role, AccountId>>,
     ) -> Vec<Exchange<RateId, Role, AccountId>> {
         candidates
             .into_iter()
-            .filter(|exchange| self.can_apply(exchange).is_ok())
+            .filter(|exchange| self.is_applicable(exchange))
             .collect()
     }
 
@@ -210,9 +388,27 @@ where
         &mut self,
         exchange: Exchange<RateId, Role, AccountId>,
     ) -> ApplyResult<AccountId, A, RateId, Role> {
-        let prepared = self.prepare(&exchange)?;
-        self.accounts = prepared.accounts;
-        Ok(Receipt::new(exchange, prepared.deltas))
+        let Analysis {
+            assessment,
+            prepared_accounts,
+        } = self.analyze(&exchange);
+
+        match assessment {
+            ExchangeAssessment::Applicable {
+                projected_deltas, ..
+            } => {
+                self.accounts =
+                    prepared_accounts.expect("applicable assessments have prepared accounts");
+                Ok(Receipt::new(exchange, projected_deltas))
+            }
+            ExchangeAssessment::Infeasible { shortfalls, .. } => {
+                Err(ApplyError::Infeasible { shortfalls })
+            }
+            ExchangeAssessment::Invalid { issues } => Err(issues
+                .into_iter()
+                .next()
+                .expect("invalid assessments contain at least one issue")),
+        }
     }
 
     pub fn replay(
@@ -237,38 +433,58 @@ where
         Ok(fork)
     }
 
-    fn prepare(
+    fn analyze(
         &self,
         exchange: &Exchange<RateId, Role, AccountId>,
-    ) -> Result<Prepared<AccountId, A>, ApplyError<RateId, Role, AccountId, A>> {
+    ) -> Analysis<AccountId, A, RateId, Role> {
+        let mut issues = Vec::new();
         if exchange.units().is_zero() {
-            return Err(ApplyError::ZeroUnits);
+            issues.push(ApplyError::ZeroUnits);
         }
 
-        let rate = self
-            .rates
-            .get(exchange.rate())
-            .ok_or_else(|| ApplyError::MissingRate {
+        let Some(rate) = self.rates.get(exchange.rate()) else {
+            issues.push(ApplyError::MissingRate {
                 rate: exchange.rate().clone(),
-            })?;
+            });
+            return invalid_analysis(issues);
+        };
 
         for role in rate.roles() {
             if !exchange.bindings().contains_key(role) {
-                return Err(ApplyError::MissingBinding { role: role.clone() });
+                issues.push(ApplyError::MissingBinding { role: role.clone() });
             }
         }
         for role in exchange.bindings().keys() {
             if !rate.roles().any(|known| known == role) {
-                return Err(ApplyError::UnknownBinding { role: role.clone() });
+                issues.push(ApplyError::UnknownBinding { role: role.clone() });
             }
         }
         for (left, right) in rate.distinct_roles() {
-            if exchange.bindings().get(left) == exchange.bindings().get(right) {
-                return Err(ApplyError::RolesMustDiffer {
-                    left: left.clone(),
-                    right: right.clone(),
-                });
+            if let (Some(left_account), Some(right_account)) = (
+                exchange.bindings().get(left),
+                exchange.bindings().get(right),
+            ) {
+                if left_account == right_account {
+                    issues.push(ApplyError::RolesMustDiffer {
+                        left: left.clone(),
+                        right: right.clone(),
+                    });
+                }
             }
+        }
+
+        let missing_accounts = rate
+            .roles()
+            .filter_map(|role| exchange.bindings().get(role))
+            .filter(|account| !self.accounts.contains_key(*account))
+            .cloned()
+            .collect::<BTreeSet<_>>();
+        for account in missing_accounts {
+            issues.push(ApplyError::MissingAccount { account });
+        }
+
+        if !issues.is_empty() {
+            return invalid_analysis(issues);
         }
 
         let mut effects: BTreeMap<AccountId, Effect<A>> = BTreeMap::new();
@@ -278,36 +494,70 @@ where
                 .get(role)
                 .expect("all role bindings were checked")
                 .clone();
-            if !self.accounts.contains_key(&account_id) {
-                return Err(ApplyError::MissingAccount {
-                    account: account_id,
-                });
-            }
             let effect = effects.entry(account_id).or_default();
             if let Some(consume) = rate.consumed(role) {
-                merge_scaled(&mut effect.consume, consume, exchange.units()).map_err(|asset| {
-                    ApplyError::RateOverflow {
+                if let Err(asset) = merge_scaled(&mut effect.consume, consume, exchange.units()) {
+                    return invalid_analysis(vec![ApplyError::RateOverflow {
                         rate: exchange.rate().clone(),
                         asset,
-                    }
-                })?;
+                    }]);
+                }
             }
             if let Some(produce) = rate.produced(role) {
-                merge_scaled(&mut effect.produce, produce, exchange.units()).map_err(|asset| {
-                    ApplyError::RateOverflow {
+                if let Err(asset) = merge_scaled(&mut effect.produce, produce, exchange.units()) {
+                    return invalid_analysis(vec![ApplyError::RateOverflow {
                         rate: exchange.rate().clone(),
                         asset,
-                    }
-                })?;
+                    }]);
+                }
             }
             if let Some(preserve) = rate.preserved(role) {
-                effect.preserve.checked_add(preserve).map_err(|asset| {
-                    ApplyError::RateOverflow {
+                if let Err(asset) = effect.preserve.checked_add(preserve) {
+                    return invalid_analysis(vec![ApplyError::RateOverflow {
                         rate: exchange.rate().clone(),
                         asset,
-                    }
-                })?;
+                    }]);
+                }
             }
+        }
+
+        let mut account_assessments = Vec::with_capacity(effects.len());
+        let mut shortfalls = Vec::new();
+        for (account_id, effect) in &effects {
+            let account = self
+                .accounts
+                .get(account_id)
+                .expect("bound accounts were checked");
+            let mut required = effect.consume.clone();
+            if let Err(asset) = required.checked_add(&effect.preserve) {
+                return invalid_analysis(vec![ApplyError::RateOverflow {
+                    rate: exchange.rate().clone(),
+                    asset,
+                }]);
+            }
+            let available = relevant_balances(account, &required);
+            let missing = account.balances().shortfall(&required);
+            account_assessments.push(AccountAssessment::new(
+                account_id.clone(),
+                available,
+                required,
+                effect.consume.clone(),
+                effect.produce.clone(),
+                effect.preserve.clone(),
+            ));
+            if !missing.is_empty() {
+                shortfalls.push(AccountShortfall::new(account_id.clone(), missing));
+            }
+        }
+
+        if !shortfalls.is_empty() {
+            return Analysis {
+                assessment: ExchangeAssessment::Infeasible {
+                    accounts: account_assessments,
+                    shortfalls,
+                },
+                prepared_accounts: None,
+            };
         }
 
         let mut accounts = self.accounts.clone();
@@ -316,26 +566,12 @@ where
             let account = accounts
                 .get_mut(&account_id)
                 .expect("bound accounts were checked");
-            let mut required = effect.consume.clone();
-            required
-                .checked_add(&effect.preserve)
-                .map_err(|asset| ApplyError::RateOverflow {
-                    rate: exchange.rate().clone(),
-                    asset,
-                })?;
-            let shortfall = account.balances().shortfall(&required);
-            if !shortfall.is_empty() {
-                return Err(ApplyError::InsufficientBalance {
-                    account: account_id,
-                    shortfall,
-                });
+            if let Err(error) = account.withdraw(&effect.consume) {
+                return invalid_analysis(vec![map_account_error(account_id.clone(), error)]);
             }
-            account
-                .withdraw(&effect.consume)
-                .map_err(|error| map_account_error(account_id.clone(), error))?;
-            account
-                .deposit(&effect.produce)
-                .map_err(|error| map_account_error(account_id.clone(), error))?;
+            if let Err(error) = account.deposit(&effect.produce) {
+                return invalid_analysis(vec![map_account_error(account_id.clone(), error)]);
+            }
             deltas.push(AccountDelta::new(
                 account_id,
                 effect.consume,
@@ -345,28 +581,32 @@ where
         }
 
         for invariant in &self.invariants {
-            let before =
-                invariant
-                    .measure(&self.accounts)
-                    .ok_or_else(|| ApplyError::InvariantOverflow {
-                        invariant: invariant.name().to_owned(),
-                    })?;
-            let after =
-                invariant
-                    .measure(&accounts)
-                    .ok_or_else(|| ApplyError::InvariantOverflow {
-                        invariant: invariant.name().to_owned(),
-                    })?;
+            let Some(before) = invariant.measure(&self.accounts) else {
+                return invalid_analysis(vec![ApplyError::InvariantOverflow {
+                    invariant: invariant.name().to_owned(),
+                }]);
+            };
+            let Some(after) = invariant.measure(&accounts) else {
+                return invalid_analysis(vec![ApplyError::InvariantOverflow {
+                    invariant: invariant.name().to_owned(),
+                }]);
+            };
             if before != after {
-                return Err(ApplyError::InvariantViolation {
+                return invalid_analysis(vec![ApplyError::InvariantViolation {
                     invariant: invariant.name().to_owned(),
                     before,
                     after,
-                });
+                }]);
             }
         }
 
-        Ok(Prepared { accounts, deltas })
+        Analysis {
+            assessment: ExchangeAssessment::Applicable {
+                accounts: account_assessments,
+                projected_deltas: deltas,
+            },
+            prepared_accounts: Some(accounts),
+        }
     }
 }
 
@@ -417,9 +657,8 @@ pub enum ApplyError<RateId, Role, AccountId, A> {
         rate: RateId,
         asset: A,
     },
-    InsufficientBalance {
-        account: AccountId,
-        shortfall: Basket<A>,
+    Infeasible {
+        shortfalls: Vec<AccountShortfall<AccountId, A>>,
     },
     BalanceOverflow {
         account: AccountId,
@@ -449,7 +688,7 @@ impl<RateId, Role, AccountId, A> fmt::Display for ApplyError<RateId, Role, Accou
             Self::MissingAccount { .. } => formatter.write_str("bound account does not exist"),
             Self::ZeroUnits => formatter.write_str("exchange units must be greater than zero"),
             Self::RateOverflow { .. } => formatter.write_str("scaled rate overflow"),
-            Self::InsufficientBalance { .. } => formatter.write_str("insufficient balance"),
+            Self::Infeasible { .. } => formatter.write_str("exchange is infeasible"),
             Self::BalanceOverflow { .. } => formatter.write_str("account balance overflow"),
             Self::InvariantOverflow { .. } => formatter.write_str("invariant arithmetic overflow"),
             Self::InvariantViolation { .. } => formatter.write_str("declared invariant violation"),
@@ -483,9 +722,9 @@ impl<A> Default for Effect<A> {
     }
 }
 
-struct Prepared<AccountId, A> {
-    accounts: HashMap<AccountId, Account<A>>,
-    deltas: Vec<AccountDelta<AccountId, A>>,
+struct Analysis<AccountId, A, RateId, Role> {
+    assessment: ExchangeAssessment<AccountId, A, RateId, Role>,
+    prepared_accounts: Option<HashMap<AccountId, Account<A>>>,
 }
 
 fn merge_scaled<A>(target: &mut Basket<A>, source: &Basket<A>, units: Quantity) -> Result<(), A>
@@ -496,14 +735,34 @@ where
     target.checked_add(&scaled)
 }
 
+fn invalid_analysis<AccountId, A, RateId, Role>(
+    issues: Vec<ApplyError<RateId, Role, AccountId, A>>,
+) -> Analysis<AccountId, A, RateId, Role> {
+    debug_assert!(!issues.is_empty());
+    Analysis {
+        assessment: ExchangeAssessment::Invalid { issues },
+        prepared_accounts: None,
+    }
+}
+
+fn relevant_balances<A>(account: &Account<A>, required: &Basket<A>) -> Basket<A>
+where
+    A: Clone + Eq + Hash,
+{
+    required
+        .iter()
+        .map(|(asset, _)| (asset.clone(), account.balance(asset)))
+        .collect()
+}
+
 fn map_account_error<RateId, Role, AccountId, A>(
     account: AccountId,
     error: AccountError<A>,
 ) -> ApplyError<RateId, Role, AccountId, A> {
     match error {
-        AccountError::InsufficientBalance { shortfall } => {
-            ApplyError::InsufficientBalance { account, shortfall }
-        }
+        AccountError::InsufficientBalance { shortfall } => ApplyError::Infeasible {
+            shortfalls: vec![AccountShortfall::new(account, shortfall)],
+        },
         AccountError::Overflow { asset } => ApplyError::BalanceOverflow { account, asset },
     }
 }

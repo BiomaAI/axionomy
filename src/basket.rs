@@ -28,6 +28,16 @@ impl<A> Basket<A> {
             .iter()
             .map(|(asset, quantity)| (asset, *quantity))
     }
+
+    /// Iterates by asset order for stable observations, reports, and encoding.
+    pub fn iter_sorted(&self) -> impl Iterator<Item = (&A, Quantity)>
+    where
+        A: Ord,
+    {
+        let mut entries = self.iter().collect::<Vec<_>>();
+        entries.sort_by_key(|(asset, _)| *asset);
+        entries.into_iter()
+    }
 }
 
 impl<A> Basket<A>
