@@ -4,6 +4,9 @@ use axionomy::{
     Account, Basket, EconomicView, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant,
     Quantity, Rate, Trace, basket,
 };
+use axionomy_search::rollout::{
+    RolloutConfig, RolloutDecision, RolloutStop, TraceRetention, run_to_goal,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Location {
@@ -302,48 +305,29 @@ pub fn instantiate(world: &World, truth: Location, seed: u8) -> Option<Action> {
         .find(|exchange| exchange.rate() == &RateId::Instantiate { truth, seed })
 }
 
-pub fn run_policy(mut world: World, policy: Policy) -> Rollout {
-    let mut trace = Trace::new();
-
-    let destination = match policy {
-        Policy::ObserveThenFollow => {
-            let Some(observation) = nature_observation(&world) else {
-                return rollout(world, trace, false);
-            };
-            if world.apply(observation.clone()).is_err() {
-                return rollout(world, trace, false);
-            }
-            trace.push(observation);
-            [Location::North, Location::South]
-                .into_iter()
-                .find(|location| {
-                    !world
-                        .balance(&AccountId::Agent, &Asset::Belief(*location))
-                        .is_zero()
-                })
-                .expect("an observation always produces one belief")
-        }
-        Policy::NorthWithoutObserving => Location::North,
-    };
-
-    for rate in [
-        RateId::Move {
-            from: Location::Base,
-            to: destination,
+pub fn run_policy(world: World, policy: Policy) -> Rollout {
+    let goal = goal();
+    let result = run_to_goal(
+        &world,
+        &goal,
+        RolloutConfig::new(4).with_retention(TraceRetention::Trace),
+        |state, _| match policy_action(state, policy) {
+            Some(exchange) => RolloutDecision::Propose(exchange),
+            None => RolloutDecision::Stop(RolloutStop::NoProposal),
         },
-        RateId::Rescue {
-            location: destination,
-        },
-        RateId::Finish,
-    ] {
-        let exchange = action(rate);
-        if world.apply(exchange.clone()).is_err() {
-            return rollout(world, trace, false);
-        }
-        trace.push(exchange);
+    );
+    let succeeded = result.world().matches(&goal);
+    Rollout {
+        spent_energy: result
+            .world()
+            .balance(&AccountId::Agent, &Asset::SpentEnergy)
+            .get(),
+        trace: result
+            .trace()
+            .cloned()
+            .expect("rescue rollouts retain their trace"),
+        succeeded,
     }
-    let succeeded = world.matches(&goal());
-    rollout(world, trace, succeeded)
 }
 
 /// Runs a policy after one explicit Nature instantiation and returns a trace
@@ -424,12 +408,49 @@ fn choose_weighted(scenarios: &[(Action, u64)], mut ticket: u64) -> &Action {
     unreachable!("ticket is reduced modulo total encoded scenario weight")
 }
 
-fn rollout(world: World, trace: Trace<RateId, Role, AccountId>, succeeded: bool) -> Rollout {
-    Rollout {
-        spent_energy: world.balance(&AccountId::Agent, &Asset::SpentEnergy).get(),
-        trace,
-        succeeded,
+fn policy_action(world: &World, policy: Policy) -> Option<Action> {
+    if !world.balance(&AccountId::Agent, &Asset::Rescued).is_zero() {
+        return Some(action(RateId::Finish));
     }
+
+    for location in [Location::North, Location::South] {
+        if !world
+            .balance(&AccountId::Agent, &Asset::At(location))
+            .is_zero()
+        {
+            return Some(action(RateId::Rescue { location }));
+        }
+    }
+
+    if world
+        .balance(&AccountId::Agent, &Asset::At(Location::Base))
+        .is_zero()
+    {
+        return None;
+    }
+
+    if policy == Policy::ObserveThenFollow
+        && !world.balance(&AccountId::Agent, &Asset::Sensor).is_zero()
+    {
+        return nature_observation(world);
+    }
+
+    let destination = match policy {
+        Policy::NorthWithoutObserving => Location::North,
+        Policy::ObserveThenFollow => {
+            [Location::North, Location::South]
+                .into_iter()
+                .find(|location| {
+                    !world
+                        .balance(&AccountId::Agent, &Asset::Belief(*location))
+                        .is_zero()
+                })?
+        }
+    };
+    Some(action(RateId::Move {
+        from: Location::Base,
+        to: destination,
+    }))
 }
 
 fn signal(truth: Location, seed: u8) -> Location {

@@ -1,5 +1,7 @@
 #![doc = include_str!("../README.md")]
 
+pub mod rollout;
+
 use axionomy::{Economy, Exchange, Goal, Trace};
 use std::cmp::Ordering;
 use std::collections::{BinaryHeap, HashMap, HashSet, VecDeque};
