@@ -5,7 +5,7 @@
 | Field | Value |
 | --- | --- |
 | Status | Implemented foundation; living design |
-| Product | Axionomy (`axionomy` Rust crate) |
+| Product | Axionomy Cargo workspace |
 | Version | `0.1.0` |
 | Rust edition | 2024 |
 | Minimum Rust | 1.85 |
@@ -87,8 +87,8 @@ they do not introduce parallel semantic worlds.
 
 Users define ordinary Rust types for assets, account IDs, rate IDs, and roles.
 That is an open vocabulary, not an authorization to keep authoritative
-instances elsewhere. The `problems` module intentionally contains several
-ontologies as conformance fixtures. No one of them is built into the kernel.
+instances elsewhere. Reference ontologies live in the separate
+`axionomy-problems` crate. No one of them is built into the kernel.
 
 ## 4. Formal state and transition model
 
@@ -240,7 +240,31 @@ Search and simulation use:
 all-or-nothing validation of an entire trace relative to an existing economy,
 it uses `replayed`; the source remains unchanged.
 
-## 6. Solver contract
+## 6. Workspace and package boundaries
+
+The repository makes authority boundaries visible as dependency boundaries:
+
+```text
+axionomy-search ──────→ axionomy
+axionomy-problems ────→ axionomy
+                    └─→ axionomy-search
+```
+
+- `axionomy` owns universal state and transition semantics.
+- `axionomy-search` owns disposable reference search strategies.
+- `axionomy-problems` owns domain ontologies, problem constructors,
+  specialized proposers, and conformance tests.
+
+The kernel must never depend on a solver or problem crate. Moving BFS and A*
+out of the kernel is philosophically significant: algorithms explore the
+machine but do not define it. Moving reference problems out prevents their
+asset types from becoming privileged engine concepts.
+
+The problem crate depends only on public APIs. It therefore tests not only
+correctness but whether downstream model authors can express the intended
+domains without kernel access.
+
+## 7. Solver contract
 
 A solver may keep priority queues, visited sets, rollout trees, clause
 databases, and other acceleration structures outside the economy when those
@@ -264,11 +288,12 @@ A solver may not:
 - Directly install a successor state.
 - Declare an assignment accepted without core replay.
 
-The built-in `bfs` and `best_first` functions are intentionally small
-reference strategies. Axionomy is an execution and validation substrate, not
-an attempt to replace every mature solver.
+The `axionomy-search` crate's `bfs` and `best_first` functions are
+intentionally small reference strategies. The `axionomy` kernel is an
+execution and validation substrate, not an attempt to replace every mature
+solver.
 
-## 7. Partial observation and chance
+## 8. Partial observation and chance
 
 Ground truth and belief belong in different accounts. An `EconomicView`
 restricts which accounts a policy may inspect.
@@ -301,7 +326,7 @@ Both Nature choices enter the trace, so the complete rollout replays from the
 uncertain model. The current library does not generate ambient random numbers;
 a Nature strategy selects among weighted, encoded outcome rates.
 
-## 8. Simultaneous and multi-agent decisions
+## 9. Simultaneous and multi-agent decisions
 
 Joint effects are encoded as one multi-account rate. In the bridge benchmark,
 auction resolution consumes both submitted bids and bridge capacity and
@@ -311,7 +336,7 @@ This is the current answer to simultaneous proposals: the resolution law must
 be represented by a rate, not an external world update. Richer transaction
 protocols and dynamic mechanism selection remain future design space.
 
-## 9. Executable conformance suite
+## 10. Executable conformance suite
 
 The project now validates the thesis with seven deliberately different
 problems. Full formal specifications live in [PROBLEMS.md](PROBLEMS.md).
@@ -335,11 +360,12 @@ These are not unrelated demos. Together they test:
 - Specialized algorithms over the same core semantics.
 - Replay of every accepted solution.
 
-The benchmark ontologies live under `src/problems`, outside the generic kernel
-modules. Their presence in the crate makes architectural pressure executable
-and prevents future API changes from silently narrowing the model.
+The benchmark ontologies live in `crates/axionomy-problems`, outside the
+generic kernel package. Their presence in the workspace makes architectural
+pressure executable and prevents future API changes from silently narrowing
+the model.
 
-## 10. Current guarantees
+## 11. Current guarantees
 
 - Asset, account, role, and rate-ID types are user-defined.
 - Quantities are non-negative and checked.
@@ -356,7 +382,7 @@ and prevents future API changes from silently narrowing the model.
 - Built-in benchmark results replay and specialized solvers agree where an
   oracle is provided.
 
-## 11. Explicit limitations
+## 12. Explicit limitations
 
 The current foundation is intentionally bounded:
 
@@ -384,52 +410,52 @@ The current foundation is intentionally bounded:
 - The conformance suite is evidence for useful bounded expressiveness, not a
   proof of computational universality.
 
-## 12. Design findings from the problem suite
+## 13. Design findings from the problem suite
 
-### 12.1 Multi-account consume/produce/preserve is the correct minimum
+### 13.1 Multi-account consume/produce/preserve is the correct minimum
 
 Bilateral transfer cannot naturally represent pushing a crate through three
 cells, reserving two machine slots, or resolving two bids with one bridge.
 Role-bound atomic rewriting is the smallest core that supports these without
 an external state update.
 
-### 12.2 Read-only facts deserve first-class semantics
+### 13.2 Read-only facts deserve first-class semantics
 
 Edges, tools, goals, truth, and completion evidence are required without being
 consumed. Explicit `preserve` makes rates clearer and distinguishes a fact from
 a resource.
 
-### 12.3 Invariants belong to the problem, enforcement belongs to the core
+### 13.3 Invariants belong to the problem, enforcement belongs to the core
 
 The workshop can install a malformed “counterfeit chair” rate. It still cannot
 create mass because the economy independently rejects the firing. Solver
 discipline is not a trust boundary.
 
-### 12.4 Concrete rate generation works but is the largest scalability pressure
+### 13.4 Concrete rate generation works but is the largest scalability pressure
 
 The maze and workshop need few rates. Scheduling creates a rate for each
 operation, readiness time, and start time. Rescue creates a rate for each
 truth/seed outcome. The next major abstraction should be a constrained,
 inspectable rate-schema and binding system—not arbitrary callbacks.
 
-### 12.5 Objectives can remain assets while algorithms remain generic
+### 13.5 Objectives can remain assets while algorithms remain generic
 
 Energy spent, waste, and makespan are ordinary balances. Search callbacks only
 read those balances. The callback chooses priority; it does not define or
 alter the objective state.
 
-### 12.6 Specialized solvers fit when translation and replay are explicit
+### 13.6 Specialized solvers fit when translation and replay are explicit
 
 Algorithm X and the independent schedule enumerator emit exchanges. This is
 the adapter contract future OR integrations must preserve.
 
-### 12.7 Nature is enough to make chance and priors auditable
+### 13.7 Nature is enough to make chance and priors auditable
 
 Encoding unresolved state, scenario weights, truth, and seed removes both the
 prior and stochastic mutation from the ambient runtime. Instantiation and
 observation exchanges record everything needed for exact replay.
 
-## 13. Roadmap
+## 14. Roadmap
 
 The next work should be driven by measured pressure from these encodings:
 
@@ -455,7 +481,7 @@ Performance work should follow semantic clarity. The current clone-based
 search and concrete rate expansion are acceptable reference implementations,
 not final scale targets.
 
-## 14. Decision record
+## 15. Decision record
 
 ### D-001: Semantic closure is non-negotiable
 
@@ -503,11 +529,16 @@ one-token-per-world construction. Turing completeness is not a current goal.
 
 ### D-010: Conformance problems stay in-tree
 
-The problem modules are executable architectural tests. They should evolve
-with the API and expose when a proposed abstraction makes one domain elegant
-at another domain's expense.
+The `axionomy-problems` crate is an executable architectural test package. It
+should evolve with the API and expose when a proposed abstraction makes one
+domain elegant at another domain's expense.
 
-## 15. Success criteria
+### D-011: Solvers and models are separate crates
+
+The kernel contains neither reference algorithms nor domain ontologies.
+Workspace crates may depend on the kernel; the kernel never depends on them.
+
+## 16. Success criteria
 
 Axionomy succeeds when:
 

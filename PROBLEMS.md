@@ -37,7 +37,7 @@ and effects.
 
 ## 1. Key-door energy maze
 
-Source: `src/problems/maze.rs`
+Source: `crates/axionomy-problems/src/maze.rs`
 
 ### Specification
 
@@ -75,7 +75,7 @@ preserves `At(Exit)` and the target fact and produces `Solved`.
 
 ## 2. Linear Sokoban
 
-Source: `src/problems/sokoban.rs`
+Source: `crates/axionomy-problems/src/sokoban.rs`
 
 ### Specification
 
@@ -105,7 +105,7 @@ crate against a wall from which no legal push can move it to the goal.
 
 ## 3. Exact cover
 
-Source: `src/problems/exact_cover.rs`
+Source: `crates/axionomy-problems/src/exact_cover.rs`
 
 ### Specification
 
@@ -137,7 +137,7 @@ tokens.
 
 ## 4. Stoichiometric workshop
 
-Source: `src/problems/workshop.rs`
+Source: `crates/axionomy-problems/src/workshop.rs`
 
 ### Specification
 
@@ -173,7 +173,7 @@ The rate book deliberately includes a malformed proposal:
 
 ## 5. Discrete job-shop scheduling
 
-Source: `src/problems/scheduling.rs`
+Source: `crates/axionomy-problems/src/scheduling.rs`
 
 ### Specification
 
@@ -208,7 +208,7 @@ Finish preserves both completion tokens and produces `Makespan(n)` and
 
 ## 6. Stochastic rescue
 
-Source: `src/problems/rescue.rs`
+Source: `crates/axionomy-problems/src/rescue.rs`
 
 ### Specification
 
@@ -247,7 +247,7 @@ match.
 
 ## 7. Single-lane bridge negotiation
 
-Source: `src/problems/bridge.rs`
+Source: `crates/axionomy-problems/src/bridge.rs`
 
 ### Specification
 
@@ -296,7 +296,7 @@ The repository test suite additionally verifies:
 Run the suite with:
 
 ```console
-cargo test --all-targets
+cargo test --workspace --all-targets
 ```
 
 ## What the suite says to build next

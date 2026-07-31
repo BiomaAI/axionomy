@@ -1,4 +1,4 @@
-//! Reference search strategies over closed Axionomy economies.
+#![doc = include_str!("../README.md")]
 
 use axionomy::{Economy, Exchange, Goal, Trace};
 use std::cmp::Ordering;

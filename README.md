@@ -35,6 +35,25 @@ Solution    = A replayable exchange trace reaching that configuration
 See [PDD.md](PDD.md) for the product and technical contract and
 [PROBLEMS.md](PROBLEMS.md) for the conformance problems that drive the API.
 
+## Workspace
+
+The repository separates execution semantics, solver strategies, and domain
+models into one-way workspace dependencies:
+
+| Crate | Responsibility |
+| --- | --- |
+| `axionomy` | Pure closed-state validation and exchange execution kernel |
+| `axionomy-search` | Non-authoritative BFS and best-first reference strategies |
+| `axionomy-problems` | Canonical problem encodings, specialized proposers, and conformance tests |
+
+```text
+axionomy-search ──────→ axionomy
+axionomy-problems ────→ axionomy
+                    └─→ axionomy-search
+```
+
+The kernel does not depend on any solver or domain crate.
+
 ## What is implemented
 
 - User-defined asset, account, rate-ID, and role types.
@@ -46,14 +65,14 @@ See [PDD.md](PDD.md) for the product and technical contract and
 - Asset-configured goals.
 - Isolated forks, speculative execution, and deterministic trace replay.
 - Account-restricted economic views.
-- Generic BFS and best-first search.
-- Seven closed benchmark encodings with independent solver strategies,
-  including core-encoded stochastic priors.
+- Generic BFS and best-first search in `axionomy-search`.
+- Seven closed benchmark encodings in `axionomy-problems`, with independent
+  solver strategies and core-encoded stochastic priors.
 - No third-party runtime dependencies.
 
-The core contains no application ontology. The asset enums in
-`axionomy::problems` are conformance fixtures and examples; users define their
-own vocabulary without editing the engine.
+The core contains no application ontology or search algorithm. Problem assets
+and specialized solvers compile against the same public kernel API available
+to users.
 
 ## Core example
 
@@ -156,7 +175,7 @@ specialized algorithms are proposers, not alternate execution engines.
 Run the maze example:
 
 ```console
-cargo run --example key_door_maze
+cargo run -p axionomy-problems --example key_door_maze
 ```
 
 Expected output:
@@ -188,10 +207,12 @@ Axionomy uses Rust Edition 2024, supports Rust 1.85 or newer, and currently has
 no third-party dependencies.
 
 ```console
-cargo test --all-targets
-cargo test --doc
-cargo clippy --all-targets --all-features -- -D warnings
+cargo test --workspace --all-targets
+cargo test --workspace --doc
+cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo fmt --all -- --check
-RUSTDOCFLAGS="-D warnings" cargo doc --no-deps
-cargo package --allow-dirty
+RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps
+cargo package -p axionomy
+cargo package -p axionomy-search
+cargo package -p axionomy-problems
 ```

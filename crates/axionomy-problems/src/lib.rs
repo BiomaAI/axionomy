@@ -1,4 +1,4 @@
-//! Canonical closed-problem encodings and conformance models for Axionomy.
+#![doc = include_str!("../README.md")]
 
 pub mod bridge;
 pub mod exact_cover;
