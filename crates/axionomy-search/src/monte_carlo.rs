@@ -1,6 +1,9 @@
 //! Generic repeated-experiment evaluation for core-validated rollouts.
 
+use statrs::distribution::{Beta, ContinuousCDF};
+use statrs::statistics::{Data, OrderStatistics, Statistics as StatrsStatistics};
 use std::convert::Infallible;
+use thiserror::Error;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct MonteCarloConfig {
@@ -45,13 +48,15 @@ impl<Policy, Summary> PolicyEstimate<Policy, Summary> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum MonteCarloError<ExperimentError, StatisticsError> {
+    #[error("experiment failed for policy {policy_index}, sample {sample_index}")]
     Experiment {
         policy_index: usize,
         sample_index: usize,
         error: ExperimentError,
     },
+    #[error("statistics failed for policy {policy_index}, sample {sample_index}")]
     Statistics {
         policy_index: usize,
         sample_index: usize,
@@ -169,10 +174,25 @@ impl BernoulliSummary {
             self.successes as f64 / self.samples as f64
         }
     }
+
+    /// Equal-tailed posterior interval using a uniform Beta(1, 1) prior.
+    pub fn credible_interval(self, confidence: f64) -> Option<(f64, f64)> {
+        if self.samples == 0 || !confidence.is_finite() || !(0.0..1.0).contains(&confidence) {
+            return None;
+        }
+        let failures = self.samples.checked_sub(self.successes)?;
+        let posterior = Beta::new(self.successes as f64 + 1.0, failures as f64 + 1.0).ok()?;
+        let tail = (1.0 - confidence) / 2.0;
+        Some((
+            posterior.inverse_cdf(tail),
+            posterior.inverse_cdf(1.0 - tail),
+        ))
+    }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Error)]
 pub enum ScalarStatisticsError {
+    #[error("statistics observation must be finite")]
     NonFiniteValue,
 }
 
@@ -205,19 +225,12 @@ impl Statistics<f64> for ScalarStatistics {
         let mean = if count == 0 {
             0.0
         } else {
-            self.values.iter().sum::<f64>() / count as f64
+            StatrsStatistics::mean(self.values.as_slice())
         };
         let variance = if count == 0 {
             0.0
         } else {
-            self.values
-                .iter()
-                .map(|value| {
-                    let difference = value - mean;
-                    difference * difference
-                })
-                .sum::<f64>()
-                / count as f64
+            StatrsStatistics::population_variance(self.values.as_slice())
         };
         ScalarSummary {
             values: self.values,
@@ -259,9 +272,8 @@ impl ScalarSummary {
         if self.values.is_empty() || !probability.is_finite() {
             return None;
         }
-        let probability = probability.clamp(0.0, 1.0);
-        let index = (probability * (self.values.len() - 1) as f64).round() as usize;
-        self.values.get(index).copied()
+        let mut data = Data::new(self.values.clone());
+        Some(data.quantile(probability.clamp(0.0, 1.0)))
     }
 
     /// Mean of the lowest `fraction` of observations.
@@ -270,13 +282,15 @@ impl ScalarSummary {
             return None;
         }
         let count = ((self.values.len() as f64 * fraction.clamp(0.0, 1.0)).ceil() as usize).max(1);
-        Some(self.values[..count].iter().sum::<f64>() / count as f64)
+        Some(StatrsStatistics::mean(&self.values[..count]))
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum VectorStatisticsError {
+    #[error("statistics vector has {actual} dimensions, expected {expected}")]
     WrongDimensions { expected: usize, actual: usize },
+    #[error("statistics vector dimension {dimension} must be finite")]
     NonFiniteValue { dimension: usize },
 }
 
@@ -350,6 +364,11 @@ mod tests {
 
         assert_eq!(estimates[0].summary().successes(), 4);
         assert_eq!(estimates[1].summary().successes(), 2);
+        let interval = estimates[1]
+            .summary()
+            .credible_interval(0.95)
+            .expect("non-empty Bernoulli samples");
+        assert!(interval.0 < 0.5 && interval.1 > 0.5);
     }
 
     #[test]
@@ -366,7 +385,7 @@ mod tests {
         assert_eq!(summary.samples(), 4);
         assert_eq!(summary.mean(), 2.5);
         assert_eq!(summary.variance(), 1.25);
-        assert_eq!(summary.quantile(0.5), Some(3.0));
+        assert_eq!(summary.quantile(0.5), Some(2.5));
         assert_eq!(summary.lower_tail_mean(0.5), Some(1.5));
     }
 

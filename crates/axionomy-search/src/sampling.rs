@@ -1,5 +1,9 @@
 //! Deterministic selection among weighted, core-encoded exchange proposals.
 
+use rand::{RngExt, SeedableRng};
+use rand_chacha::ChaCha8Rng;
+use thiserror::Error;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WeightedExchange<Action> {
     exchange: Action,
@@ -24,11 +28,15 @@ impl<Action> WeightedExchange<Action> {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Error)]
 pub enum SamplingError {
+    #[error("weighted support is empty")]
     EmptySupport,
+    #[error("weighted support has zero total weight")]
     ZeroTotalWeight,
+    #[error("weighted support total overflowed u64")]
     TotalWeightOverflow,
+    #[error("ticket {ticket} is outside total weight {total_weight}")]
     TicketOutOfRange { ticket: u64, total_weight: u64 },
 }
 
@@ -59,35 +67,43 @@ impl TicketSource for SystematicSampler {
     }
 }
 
-/// Small deterministic generator for reproducible solver exploration.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// ChaCha8-backed deterministic generator for reproducible solver exploration.
+#[derive(Debug, Clone)]
 pub struct SeededSampler {
-    state: u64,
+    random: ChaCha8Rng,
 }
 
 impl SeededSampler {
-    pub const fn new(seed: u64) -> Self {
-        Self { state: seed }
-    }
-
-    fn next_u64(&mut self) -> u64 {
-        self.state = self.state.wrapping_add(0x9e37_79b9_7f4a_7c15);
-        let mut value = self.state;
-        value = (value ^ (value >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
-        value = (value ^ (value >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
-        value ^ (value >> 31)
+    pub fn new(seed: u64) -> Self {
+        Self {
+            random: ChaCha8Rng::seed_from_u64(seed),
+        }
     }
 }
 
 impl TicketSource for SeededSampler {
     fn ticket(&mut self, total_weight: u64) -> u64 {
-        let rejection_limit = u64::MAX - (u64::MAX % total_weight);
-        loop {
-            let value = self.next_u64();
-            if value < rejection_limit {
-                return value % total_weight;
-            }
-        }
+        self.random.random_range(0..total_weight)
+    }
+}
+
+/// Adapts any caller-owned `rand` generator to weighted ticket sampling.
+pub struct RngTickets<'a, R: ?Sized> {
+    random: &'a mut R,
+}
+
+impl<'a, R: ?Sized> RngTickets<'a, R> {
+    pub const fn new(random: &'a mut R) -> Self {
+        Self { random }
+    }
+}
+
+impl<R> TicketSource for RngTickets<'_, R>
+where
+    R: rand::Rng + ?Sized,
+{
+    fn ticket(&mut self, total_weight: u64) -> u64 {
+        self.random.random_range(0..total_weight)
     }
 }
 
@@ -142,6 +158,8 @@ pub fn systematic_ticket(sample_index: usize, total_weight: u64) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rand::SeedableRng;
+    use rand_chacha::ChaCha8Rng;
 
     #[test]
     fn systematic_sampling_respects_integer_weights() {
@@ -169,6 +187,18 @@ mod tests {
         for _ in 0..100 {
             assert_eq!(sample(&outcomes, &mut left), sample(&outcomes, &mut right));
         }
+    }
+
+    #[test]
+    fn caller_owned_rand_generators_can_drive_sampling() {
+        let outcomes = [
+            WeightedExchange::new("left", 1),
+            WeightedExchange::new("right", 1),
+        ];
+        let mut random = ChaCha8Rng::seed_from_u64(7);
+        let mut tickets = RngTickets::new(&mut random);
+
+        assert!(sample(&outcomes, &mut tickets).is_ok());
     }
 
     #[test]

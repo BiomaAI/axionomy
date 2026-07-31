@@ -4,7 +4,7 @@ use crate::{
     action_source::{ActionSource, collect_actions, eager_actions},
     sampling::{SamplingError, SeededSampler, TicketSource, WeightedExchange, sample},
 };
-use axionomy::{ApplyError, Economy, Exchange, Quantity};
+use axionomy::{ApplyError, Economy, Exchange, Quantity, QuantityScalar};
 use std::collections::HashMap;
 use std::hash::Hash;
 
@@ -101,7 +101,10 @@ impl<Action> MctsDecision<Action> {
 }
 
 #[derive(Debug, Clone)]
-pub enum MctsError<RateId, Role, AccountId, A> {
+pub enum MctsError<RateId, Role, AccountId, A, N = u64>
+where
+    N: QuantityScalar,
+{
     NoPlayers,
     ZeroIterations,
     ZeroDepth,
@@ -114,11 +117,17 @@ pub enum MctsError<RateId, Role, AccountId, A> {
     InvalidValueDimensions { expected: usize, actual: usize },
     NonFiniteValue { player: usize },
     Sampling(SamplingError),
-    Rejected(ApplyError<RateId, Role, AccountId, A>),
+    Rejected(ApplyError<RateId, Role, AccountId, A, N>),
 }
 
-pub type MctsResult<RateId, Role, AccountId, A> =
-    Result<MctsDecision<Exchange<RateId, Role, AccountId>>, MctsError<RateId, Role, AccountId, A>>;
+pub type MctsResult<RateId, Role, AccountId, A, N = u64> = Result<
+    MctsDecision<Exchange<RateId, Role, AccountId, N>>,
+    MctsError<RateId, Role, AccountId, A, N>,
+>;
+
+type Transpositions<AccountId, A, N> = HashMap<Vec<(AccountId, A, Quantity<N>)>, usize>;
+type ExpansionResult<RateId, Role, AccountId, A, N> =
+    Result<(usize, bool), MctsError<RateId, Role, AccountId, A, N>>;
 
 /// Random rollout action selection with deterministic seeded exploration.
 pub fn random_action<World, Action>(
@@ -145,6 +154,7 @@ pub fn search<
     A,
     RateId,
     Role,
+    N,
     Candidates,
     Chance,
     Actor,
@@ -152,7 +162,7 @@ pub fn search<
     Cutoff,
     RolloutPolicy,
 >(
-    initial: &Economy<AccountId, A, RateId, Role>,
+    initial: &Economy<AccountId, A, RateId, Role, N>,
     config: MctsConfig,
     players: usize,
     candidates: Candidates,
@@ -161,25 +171,26 @@ pub fn search<
     terminal: Terminal,
     cutoff: Cutoff,
     rollout_policy: RolloutPolicy,
-) -> MctsResult<RateId, Role, AccountId, A>
+) -> MctsResult<RateId, Role, AccountId, A, N>
 where
     AccountId: Clone + Eq + Hash + Ord,
     A: Clone + Eq + Hash + Ord,
     RateId: Clone + Eq + Hash + Ord,
     Role: Clone + Ord,
+    N: QuantityScalar,
     Candidates:
-        FnMut(&Economy<AccountId, A, RateId, Role>) -> Vec<Exchange<RateId, Role, AccountId>>,
+        FnMut(&Economy<AccountId, A, RateId, Role, N>) -> Vec<Exchange<RateId, Role, AccountId, N>>,
     Chance: FnMut(
-        &Economy<AccountId, A, RateId, Role>,
-    ) -> Vec<WeightedExchange<Exchange<RateId, Role, AccountId>>>,
-    Actor: FnMut(&Economy<AccountId, A, RateId, Role>) -> usize,
-    Terminal: FnMut(&Economy<AccountId, A, RateId, Role>) -> Option<Vec<f64>>,
-    Cutoff: FnMut(&Economy<AccountId, A, RateId, Role>) -> Vec<f64>,
+        &Economy<AccountId, A, RateId, Role, N>,
+    ) -> Vec<WeightedExchange<Exchange<RateId, Role, AccountId, N>>>,
+    Actor: FnMut(&Economy<AccountId, A, RateId, Role, N>) -> usize,
+    Terminal: FnMut(&Economy<AccountId, A, RateId, Role, N>) -> Option<Vec<f64>>,
+    Cutoff: FnMut(&Economy<AccountId, A, RateId, Role, N>) -> Vec<f64>,
     RolloutPolicy: FnMut(
-        &Economy<AccountId, A, RateId, Role>,
-        &[Exchange<RateId, Role, AccountId>],
+        &Economy<AccountId, A, RateId, Role, N>,
+        &[Exchange<RateId, Role, AccountId, N>],
         &mut SeededSampler,
-    ) -> Option<Exchange<RateId, Role, AccountId>>,
+    ) -> Option<Exchange<RateId, Role, AccountId, N>>,
 {
     search_with_source(
         initial,
@@ -204,6 +215,7 @@ pub fn search_with_source<
     A,
     RateId,
     Role,
+    N,
     Source,
     Chance,
     Actor,
@@ -211,7 +223,7 @@ pub fn search_with_source<
     Cutoff,
     RolloutPolicy,
 >(
-    initial: &Economy<AccountId, A, RateId, Role>,
+    initial: &Economy<AccountId, A, RateId, Role, N>,
     config: MctsConfig,
     players: usize,
     mut source: Source,
@@ -220,24 +232,26 @@ pub fn search_with_source<
     mut terminal: Terminal,
     mut cutoff: Cutoff,
     mut rollout_policy: RolloutPolicy,
-) -> MctsResult<RateId, Role, AccountId, A>
+) -> MctsResult<RateId, Role, AccountId, A, N>
 where
     AccountId: Clone + Eq + Hash + Ord,
     A: Clone + Eq + Hash + Ord,
     RateId: Clone + Eq + Hash + Ord,
     Role: Clone + Ord,
-    Source: ActionSource<Economy<AccountId, A, RateId, Role>, Exchange<RateId, Role, AccountId>>,
+    N: QuantityScalar,
+    Source:
+        ActionSource<Economy<AccountId, A, RateId, Role, N>, Exchange<RateId, Role, AccountId, N>>,
     Chance: FnMut(
-        &Economy<AccountId, A, RateId, Role>,
-    ) -> Vec<WeightedExchange<Exchange<RateId, Role, AccountId>>>,
-    Actor: FnMut(&Economy<AccountId, A, RateId, Role>) -> usize,
-    Terminal: FnMut(&Economy<AccountId, A, RateId, Role>) -> Option<Vec<f64>>,
-    Cutoff: FnMut(&Economy<AccountId, A, RateId, Role>) -> Vec<f64>,
+        &Economy<AccountId, A, RateId, Role, N>,
+    ) -> Vec<WeightedExchange<Exchange<RateId, Role, AccountId, N>>>,
+    Actor: FnMut(&Economy<AccountId, A, RateId, Role, N>) -> usize,
+    Terminal: FnMut(&Economy<AccountId, A, RateId, Role, N>) -> Option<Vec<f64>>,
+    Cutoff: FnMut(&Economy<AccountId, A, RateId, Role, N>) -> Vec<f64>,
     RolloutPolicy: FnMut(
-        &Economy<AccountId, A, RateId, Role>,
-        &[Exchange<RateId, Role, AccountId>],
+        &Economy<AccountId, A, RateId, Role, N>,
+        &[Exchange<RateId, Role, AccountId, N>],
         &mut SeededSampler,
-    ) -> Option<Exchange<RateId, Role, AccountId>>,
+    ) -> Option<Exchange<RateId, Role, AccountId, N>>,
 {
     validate_config(config, players)?;
     if terminal(initial).is_some() {
@@ -392,8 +406,8 @@ where
 }
 
 #[allow(clippy::too_many_arguments)]
-fn simulate<AccountId, A, RateId, Role, Source, Chance, Terminal, Cutoff, RolloutPolicy>(
-    initial: &Economy<AccountId, A, RateId, Role>,
+fn simulate<AccountId, A, RateId, Role, N, Source, Chance, Terminal, Cutoff, RolloutPolicy>(
+    initial: &Economy<AccountId, A, RateId, Role, N>,
     mut depth: usize,
     max_depth: usize,
     players: usize,
@@ -403,23 +417,25 @@ fn simulate<AccountId, A, RateId, Role, Source, Chance, Terminal, Cutoff, Rollou
     cutoff: &mut Cutoff,
     rollout_policy: &mut RolloutPolicy,
     random: &mut SeededSampler,
-) -> Result<Vec<f64>, MctsError<RateId, Role, AccountId, A>>
+) -> Result<Vec<f64>, MctsError<RateId, Role, AccountId, A, N>>
 where
     AccountId: Clone + Eq + Hash + Ord,
     A: Clone + Eq + Hash + Ord,
     RateId: Clone + Eq + Hash + Ord,
     Role: Clone + Ord,
-    Source: ActionSource<Economy<AccountId, A, RateId, Role>, Exchange<RateId, Role, AccountId>>,
+    N: QuantityScalar,
+    Source:
+        ActionSource<Economy<AccountId, A, RateId, Role, N>, Exchange<RateId, Role, AccountId, N>>,
     Chance: FnMut(
-        &Economy<AccountId, A, RateId, Role>,
-    ) -> Vec<WeightedExchange<Exchange<RateId, Role, AccountId>>>,
-    Terminal: FnMut(&Economy<AccountId, A, RateId, Role>) -> Option<Vec<f64>>,
-    Cutoff: FnMut(&Economy<AccountId, A, RateId, Role>) -> Vec<f64>,
+        &Economy<AccountId, A, RateId, Role, N>,
+    ) -> Vec<WeightedExchange<Exchange<RateId, Role, AccountId, N>>>,
+    Terminal: FnMut(&Economy<AccountId, A, RateId, Role, N>) -> Option<Vec<f64>>,
+    Cutoff: FnMut(&Economy<AccountId, A, RateId, Role, N>) -> Vec<f64>,
     RolloutPolicy: FnMut(
-        &Economy<AccountId, A, RateId, Role>,
-        &[Exchange<RateId, Role, AccountId>],
+        &Economy<AccountId, A, RateId, Role, N>,
+        &[Exchange<RateId, Role, AccountId, N>],
         &mut SeededSampler,
-    ) -> Option<Exchange<RateId, Role, AccountId>>,
+    ) -> Option<Exchange<RateId, Role, AccountId, N>>,
 {
     let mut world = initial.fork();
     loop {
@@ -450,18 +466,19 @@ where
     }
 }
 
-fn applicable_actions<AccountId, A, RateId, Role>(
+fn applicable_actions<AccountId, A, RateId, Role, N>(
     source: &mut impl ActionSource<
-        Economy<AccountId, A, RateId, Role>,
-        Exchange<RateId, Role, AccountId>,
+        Economy<AccountId, A, RateId, Role, N>,
+        Exchange<RateId, Role, AccountId, N>,
     >,
-    world: &Economy<AccountId, A, RateId, Role>,
-) -> Vec<Exchange<RateId, Role, AccountId>>
+    world: &Economy<AccountId, A, RateId, Role, N>,
+) -> Vec<Exchange<RateId, Role, AccountId, N>>
 where
     AccountId: Clone + Eq + Hash + Ord,
     A: Clone + Eq + Hash + Ord,
     RateId: Clone + Eq + Hash + Ord,
     Role: Clone + Ord,
+    N: QuantityScalar,
 {
     let mut actions = Vec::new();
     for action in collect_actions(source, world) {
@@ -472,17 +489,18 @@ where
     actions
 }
 
-fn descend_or_expand<AccountId, A, RateId, Role>(
-    nodes: &mut Vec<Node<AccountId, A, RateId, Role>>,
-    transpositions: &mut HashMap<Vec<(AccountId, A, Quantity)>, usize>,
+fn descend_or_expand<AccountId, A, RateId, Role, N>(
+    nodes: &mut Vec<Node<AccountId, A, RateId, Role, N>>,
+    transpositions: &mut Transpositions<AccountId, A, N>,
     parent: usize,
-    action: Exchange<RateId, Role, AccountId>,
-) -> Result<(usize, bool), MctsError<RateId, Role, AccountId, A>>
+    action: Exchange<RateId, Role, AccountId, N>,
+) -> ExpansionResult<RateId, Role, AccountId, A, N>
 where
     AccountId: Clone + Eq + Hash + Ord,
     A: Clone + Eq + Hash + Ord,
     RateId: Clone + Eq + Hash + Ord,
     Role: Clone + Ord,
+    N: QuantityScalar,
 {
     if let Some(edge) = nodes[parent]
         .children
@@ -508,8 +526,8 @@ where
     Ok((child, expanded))
 }
 
-fn select_uct<AccountId, A, RateId, Role>(
-    nodes: &[Node<AccountId, A, RateId, Role>],
+fn select_uct<AccountId, A, RateId, Role, N>(
+    nodes: &[Node<AccountId, A, RateId, Role, N>],
     parent: usize,
     player: usize,
     exploration: f64,
@@ -527,8 +545,8 @@ fn select_uct<AccountId, A, RateId, Role>(
         .child
 }
 
-fn uct_score<AccountId, A, RateId, Role>(
-    child: &Node<AccountId, A, RateId, Role>,
+fn uct_score<AccountId, A, RateId, Role, N>(
+    child: &Node<AccountId, A, RateId, Role, N>,
     player: usize,
     parent_visits: f64,
     exploration: f64,
@@ -540,7 +558,9 @@ fn uct_score<AccountId, A, RateId, Role>(
     exploitation + exploration * (parent_visits.ln() / child.visits as f64).sqrt()
 }
 
-fn mean_values<AccountId, A, RateId, Role>(node: &Node<AccountId, A, RateId, Role>) -> Vec<f64> {
+fn mean_values<AccountId, A, RateId, Role, N>(
+    node: &Node<AccountId, A, RateId, Role, N>,
+) -> Vec<f64> {
     if node.visits == 0 {
         return vec![0.0; node.value_totals.len()];
     }
@@ -550,10 +570,13 @@ fn mean_values<AccountId, A, RateId, Role>(node: &Node<AccountId, A, RateId, Rol
         .collect()
 }
 
-fn validate_config<RateId, Role, AccountId, A>(
+fn validate_config<RateId, Role, AccountId, A, N>(
     config: MctsConfig,
     players: usize,
-) -> Result<(), MctsError<RateId, Role, AccountId, A>> {
+) -> Result<(), MctsError<RateId, Role, AccountId, A, N>>
+where
+    N: QuantityScalar,
+{
     if players == 0 {
         return Err(MctsError::NoPlayers);
     }
@@ -569,10 +592,13 @@ fn validate_config<RateId, Role, AccountId, A>(
     Ok(())
 }
 
-fn validate_actor<RateId, Role, AccountId, A>(
+fn validate_actor<RateId, Role, AccountId, A, N>(
     actor: usize,
     players: usize,
-) -> Result<(), MctsError<RateId, Role, AccountId, A>> {
+) -> Result<(), MctsError<RateId, Role, AccountId, A, N>>
+where
+    N: QuantityScalar,
+{
     if actor >= players {
         Err(MctsError::InvalidActor { actor, players })
     } else {
@@ -580,10 +606,13 @@ fn validate_actor<RateId, Role, AccountId, A>(
     }
 }
 
-fn validate_values<RateId, Role, AccountId, A>(
+fn validate_values<RateId, Role, AccountId, A, N>(
     values: Vec<f64>,
     players: usize,
-) -> Result<Vec<f64>, MctsError<RateId, Role, AccountId, A>> {
+) -> Result<Vec<f64>, MctsError<RateId, Role, AccountId, A, N>>
+where
+    N: QuantityScalar,
+{
     if values.len() != players {
         return Err(MctsError::InvalidValueDimensions {
             expected: players,
@@ -596,15 +625,15 @@ fn validate_values<RateId, Role, AccountId, A>(
     Ok(values)
 }
 
-struct Node<AccountId, A, RateId, Role> {
-    world: Economy<AccountId, A, RateId, Role>,
-    children: Vec<Edge<RateId, Role, AccountId>>,
+struct Node<AccountId, A, RateId, Role, N> {
+    world: Economy<AccountId, A, RateId, Role, N>,
+    children: Vec<Edge<RateId, Role, AccountId, N>>,
     visits: u64,
     value_totals: Vec<f64>,
 }
 
-impl<AccountId, A, RateId, Role> Node<AccountId, A, RateId, Role> {
-    fn new(world: Economy<AccountId, A, RateId, Role>, players: usize) -> Self {
+impl<AccountId, A, RateId, Role, N> Node<AccountId, A, RateId, Role, N> {
+    fn new(world: Economy<AccountId, A, RateId, Role, N>, players: usize) -> Self {
         Self {
             world,
             children: Vec::new(),
@@ -614,8 +643,8 @@ impl<AccountId, A, RateId, Role> Node<AccountId, A, RateId, Role> {
     }
 }
 
-struct Edge<RateId, Role, AccountId> {
-    action: Exchange<RateId, Role, AccountId>,
+struct Edge<RateId, Role, AccountId, N> {
+    action: Exchange<RateId, Role, AccountId, N>,
     child: usize,
 }
 

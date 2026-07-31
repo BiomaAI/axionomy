@@ -3,7 +3,7 @@
 use axionomy::{
     Account, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Quantity, Rate, basket,
 };
-use axionomy_search::{SearchSolution, best_first, bfs};
+use axionomy_search::{SearchSolution, astar, bfs, dijkstra};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Node {
@@ -185,11 +185,11 @@ pub fn solve_bfs(world: &World) -> Option<Solution> {
 }
 
 pub fn solve_dijkstra(world: &World) -> Option<Solution> {
-    best_first(world, &goal(), candidates, spent_energy, |_| 0)
+    dijkstra(world, &goal(), candidates, move_energy)
 }
 
 pub fn solve_astar(world: &World) -> Option<Solution> {
-    best_first(world, &goal(), candidates, spent_energy, heuristic)
+    astar(world, &goal(), candidates, move_energy, heuristic)
 }
 
 pub fn spent_energy(world: &World) -> u64 {
@@ -215,6 +215,13 @@ pub fn heuristic(world: &World) -> u64 {
             .balance(&AccountId::World, &Asset::Distance(node))
             .get()
     })
+}
+
+fn move_energy(_: &World, action: &Action, _: &World) -> u64 {
+    match action.rate() {
+        RateId::Move { energy, .. } => *energy,
+        RateId::TakeKey | RateId::UnlockDoor | RateId::Finish => 0,
+    }
 }
 
 fn action(rate: RateId) -> Action {
