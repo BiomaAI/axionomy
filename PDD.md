@@ -363,7 +363,10 @@ These are not unrelated demos. Together they test:
 The benchmark ontologies live in `crates/axionomy-problems`, outside the
 generic kernel package. Their presence in the workspace makes architectural
 pressure executable and prevents future API changes from silently narrowing
-the model.
+the model. Each ontology also has a minimal example binary that uses only its
+public API, replays the proposed trace, and checks the encoded goal. Examples
+are teaching and integration surfaces; authoritative problem semantics remain
+in the reusable model modules.
 
 ## 11. Current guarantees
 

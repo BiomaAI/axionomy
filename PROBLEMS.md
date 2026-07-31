@@ -35,6 +35,22 @@ and effects.
 | Multi-agent resolution |  |  |  |  |  |  | ✓ |
 | Deterministic replay test | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 
+## Runnable examples
+
+Each model has a symmetric consumer example. These binaries contain
+orchestration and display logic only; all state, rules, goals, and constraints
+remain in the reusable problem modules.
+
+```console
+cargo run -p axionomy-problems --example maze
+cargo run -p axionomy-problems --example sokoban
+cargo run -p axionomy-problems --example exact_cover
+cargo run -p axionomy-problems --example workshop
+cargo run -p axionomy-problems --example scheduling
+cargo run -p axionomy-problems --example rescue
+cargo run -p axionomy-problems --example bridge
+```
+
 ## 1. Key-door energy maze
 
 Source: `crates/axionomy-problems/src/maze.rs`

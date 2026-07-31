@@ -5,3 +5,15 @@ Canonical closed-problem encodings for
 
 Problem models exercise Axionomy exclusively through its public API. They are
 reference encodings and conformance fixtures, not privileged engine semantics.
+
+Each model has a matching runnable example:
+
+```console
+cargo run -p axionomy-problems --example maze
+cargo run -p axionomy-problems --example sokoban
+cargo run -p axionomy-problems --example exact_cover
+cargo run -p axionomy-problems --example workshop
+cargo run -p axionomy-problems --example scheduling
+cargo run -p axionomy-problems --example rescue
+cargo run -p axionomy-problems --example bridge
+```

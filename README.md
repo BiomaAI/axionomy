@@ -174,13 +174,21 @@ core prepares all affected accounts first and commits all of them together.
 Every accepted result is an exchange trace replayed by the same core. The
 specialized algorithms are proposers, not alternate execution engines.
 
-Run the maze example:
+Every problem has a small consumer-facing example. The examples contain no
+domain rules: they instantiate a public model, invoke one or more strategies,
+replay the proposed trace, assert the encoded goal, and print a summary.
 
 ```console
-cargo run -p axionomy-problems --example key_door_maze
+cargo run -p axionomy-problems --example maze
+cargo run -p axionomy-problems --example sokoban
+cargo run -p axionomy-problems --example exact_cover
+cargo run -p axionomy-problems --example workshop
+cargo run -p axionomy-problems --example scheduling
+cargo run -p axionomy-problems --example rescue
+cargo run -p axionomy-problems --example bridge
 ```
 
-Expected output:
+For example, the maze prints:
 
 ```text
 BFS: 3 exchanges; A*: 6 energy across 6 exchanges
