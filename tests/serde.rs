@@ -14,6 +14,7 @@ enum Asset {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 enum AccountId {
     Workshop,
+    Treasury,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
@@ -108,4 +109,33 @@ fn builder_reports_duplicate_model_identifiers() {
             },
         ]
     );
+}
+
+#[test]
+fn semantic_state_identity_is_independent_of_construction_order() {
+    let first = EconomyBuilder::<AccountId, Asset, RateId, Role>::new()
+        .account(
+            AccountId::Workshop,
+            Account::from(basket([(Asset::Raw, 2), (Asset::Tool, 1)])),
+        )
+        .account(
+            AccountId::Treasury,
+            Account::from(basket([(Asset::Finished, 3), (Asset::Raw, 1)])),
+        )
+        .build()
+        .unwrap();
+    let second = EconomyBuilder::<AccountId, Asset, RateId, Role>::new()
+        .account(
+            AccountId::Treasury,
+            Account::from(basket([(Asset::Raw, 1), (Asset::Finished, 3)])),
+        )
+        .account(
+            AccountId::Workshop,
+            Account::from(basket([(Asset::Tool, 1), (Asset::Raw, 2)])),
+        )
+        .build()
+        .unwrap();
+
+    assert_eq!(first.state_key(), second.state_key());
+    assert_eq!(first.state_fingerprint(), second.state_fingerprint());
 }
