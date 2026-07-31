@@ -1,16 +1,35 @@
+mod support;
+
 use axionomy_problems::workshop;
+use tracing::{debug, info};
 
 fn main() {
+    support::init(
+        "Workshop",
+        "Minimize encoded waste while preserving catalysts and material invariants.",
+    );
     let initial = workshop::initial();
+    info!(
+        accounts = initial.accounts().count(),
+        rates = initial.rate_ids().count(),
+        "encoded economy ready"
+    );
     let solution = workshop::minimize_waste(&initial).expect("two chairs can be produced");
     let final_world = initial
         .replayed(solution.trace())
         .expect("the optimized proposal must pass the core");
     assert!(final_world.matches(&workshop::goal()));
 
-    println!(
-        "Workshop: produced the goal with {} waste in {} exchanges",
-        workshop::waste(&final_world),
-        solution.trace().exchanges().len(),
+    info!(
+        strategy = "best-first",
+        exchanges = solution.trace().exchanges().len(),
+        expanded = solution.expanded(),
+        waste = workshop::waste(&final_world),
+        goal_verified = true,
+        "proposal replayed"
+    );
+    debug!(
+        trace = ?solution.trace().exchanges(),
+        "accepted exchange trace"
     );
 }

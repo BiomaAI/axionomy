@@ -239,6 +239,11 @@ cargo run -p axionomy-problems --example connect_four
 cargo run -p axionomy-problems --example mission
 ```
 
+The examples use structured console logging: `INFO` presents the model,
+strategy decisions, encoded outcomes, and replay checks, while
+`RUST_LOG=debug` adds complete exchange traces and assessments. Subscriber
+configuration stays in the example binaries, never in the libraries.
+
 A repeatable long-horizon workload is also available:
 
 ```console

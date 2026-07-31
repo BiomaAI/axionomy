@@ -24,6 +24,18 @@ cargo run -p axionomy-problems --example connect_four
 cargo run -p axionomy-problems --example mission
 ```
 
+Examples emit structured console events through `tracing`. `INFO` is the
+default and explains model construction, strategy choice, encoded outcomes,
+and replay verification. Set `RUST_LOG=debug` to include complete accepted
+exchange traces and assessments:
+
+```console
+RUST_LOG=debug cargo run -p axionomy-problems --example maze
+```
+
+Logging is initialized only by these example binaries. The reusable model,
+search, and kernel libraries never install a global subscriber.
+
 Performance probes are Cargo bench targets rather than examples:
 
 ```console

@@ -12,6 +12,10 @@ rust-version = "1.85"
 axionomy = { version = "0.1.0", path = "../.." }
 axionomy-search = { version = "0.1.0", path = "../axionomy-search" }
 
+[dev-dependencies]
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
 [[bench]]
 name = "rollout_throughput"
 harness = false
