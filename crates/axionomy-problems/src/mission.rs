@@ -5,9 +5,14 @@ use axionomy::{
     Rate, Trace, basket,
 };
 use axionomy_search::{
+    action_source::{ActionSource, lazy_actions},
+    ismcts::{InformationState, IsmctsResult, search as information_set_search},
+    mcts::MctsConfig,
     monte_carlo::{BernoulliStatistics, MonteCarloConfig, evaluate},
     rollout::{RolloutConfig, RolloutDecision, RolloutStop, TraceRetention, run_to_goal},
-    sampling::{WeightedExchange, choose_by_ticket, systematic_ticket, total_weight},
+    sampling::{
+        SeededSampler, WeightedExchange, choose_by_ticket, sample, systematic_ticket, total_weight,
+    },
 };
 
 const HORIZON: usize = 12;
@@ -111,6 +116,8 @@ pub enum Policy {
 pub type World = Economy<AccountId, Asset, RateId, Role>;
 pub type Action = Exchange<RateId, Role, AccountId>;
 pub type AgentView<'a> = EconomicView<'a, AccountId, Asset, RateId, Role>;
+pub type ObservationKey = Vec<(AccountId, Asset, Quantity)>;
+pub type MissionInformation = InformationState<ObservationKey>;
 
 #[derive(Debug, Clone)]
 pub struct MissionRollout {
@@ -461,6 +468,99 @@ pub fn candidates(world: &World) -> Vec<Action> {
     world.applicable(rates.into_iter().map(action))
 }
 
+/// Produces the acting Scout's information identity without exposing Nature or
+/// the Medic's private account.
+pub fn scout_information(world: &World) -> MissionInformation {
+    InformationState::new(0, agent_view(world, AgentId::Scout).observation_key())
+}
+
+/// Lazily derives public mission decisions from the Scout's observation.
+///
+/// The emitted values are ordinary concrete exchanges. ISMCTS still assesses
+/// them against each sampled economy and revalidates the selected exchange
+/// against the live mission.
+pub fn decision_source() -> impl ActionSource<MissionInformation, Action> {
+    lazy_actions(
+        |information: &MissionInformation, emit: &mut dyn FnMut(Action)| {
+            if observed(information, AccountId::Mission, Asset::NeedsTreatment) {
+                emit(action(RateId::Treat));
+                return;
+            }
+            if observed(information, AccountId::Mission, Asset::AreaSafe) {
+                for location in [Location::North, Location::South] {
+                    if observed(
+                        information,
+                        AccountId::Agent(AgentId::Scout),
+                        Asset::At(location),
+                    ) {
+                        emit(action(RateId::Rescue(location)));
+                    }
+                }
+                return;
+            }
+            if observed(information, AccountId::Mission, Asset::Rescued) {
+                emit(action(RateId::Finish));
+                return;
+            }
+            if !observed(information, AccountId::Mission, Asset::Planning) {
+                return;
+            }
+
+            if observed(information, AccountId::Agent(AgentId::Scout), Asset::Sensor) {
+                emit(action(RateId::BeginScan));
+            }
+            for location in [Location::North, Location::South] {
+                if observed(
+                    information,
+                    AccountId::Agent(AgentId::Scout),
+                    Asset::Intel(location),
+                ) {
+                    emit(action(RateId::Share(location)));
+                }
+                emit(action(RateId::MoveTogether(location)));
+            }
+        },
+    )
+}
+
+/// Plans the first public mission decision through observation-scoped ISMCTS.
+///
+/// Belief worlds are sampled solely from the encoded scenario prior. This
+/// entry point intentionally covers the initial information set; later mission
+/// decisions can use the same public search primitives with a belief update
+/// conditioned on their new observation.
+pub fn plan_initial(
+    actual: &World,
+    config: MctsConfig,
+) -> IsmctsResult<RateId, Role, AccountId, Asset> {
+    let belief_model = initial();
+    let belief_support = scenarios(&belief_model);
+    information_set_search(
+        actual,
+        config,
+        1,
+        scout_information,
+        move |_, random| sample_world(&belief_model, &belief_support, random),
+        decision_source(),
+        nature_outcomes,
+        |world| world.matches(&goal()).then_some(vec![1.0]),
+        |_| vec![0.0],
+        informed_rollout_action,
+    )
+}
+
+/// Instantiates one reproducible hidden scenario on an isolated branch.
+pub fn instantiate(model: &World, sample_index: usize) -> Option<World> {
+    let support = scenarios(model);
+    let total = total_weight(&support).ok()?;
+    let exchange = choose_by_ticket(&support, systematic_ticket(sample_index, total))
+        .ok()?
+        .clone();
+    let mut world = model.fork();
+    world.apply(exchange).ok()?;
+    Some(world)
+}
+
 pub fn run_policy(model: &World, policy: Policy, sample_index: usize) -> MissionRollout {
     let goal = goal();
     let scenarios = scenarios(model);
@@ -594,6 +694,90 @@ fn policy_action(world: &World, policy: Policy) -> Option<Action> {
     }
 }
 
+fn observed(information: &MissionInformation, account: AccountId, asset: Asset) -> bool {
+    information
+        .key()
+        .iter()
+        .any(|(present_account, present_asset, quantity)| {
+            present_account == &account && present_asset == &asset && !quantity.is_zero()
+        })
+}
+
+fn sample_world(
+    model: &World,
+    support: &[WeightedExchange<Action>],
+    random: &mut SeededSampler,
+) -> Option<World> {
+    let exchange = sample(support, random).ok()?.clone();
+    let mut world = model.fork();
+    world.apply(exchange).ok()?;
+    Some(world)
+}
+
+fn nature_outcomes(world: &World) -> Vec<WeightedExchange<Action>> {
+    candidates(world)
+        .into_iter()
+        .filter(|exchange| {
+            matches!(
+                exchange.rate(),
+                RateId::ResolveScan { .. } | RateId::Encounter { .. }
+            )
+        })
+        .map(|exchange| WeightedExchange::new(exchange, 1))
+        .collect()
+}
+
+fn informed_rollout_action(
+    information: &MissionInformation,
+    actions: &[Action],
+    _: &mut SeededSampler,
+) -> Option<Action> {
+    let preferred_location = [Location::North, Location::South]
+        .into_iter()
+        .find(|location| {
+            observed(
+                information,
+                AccountId::Agent(AgentId::Scout),
+                Asset::Intel(*location),
+            ) || observed(
+                information,
+                AccountId::Agent(AgentId::Scout),
+                Asset::SharedIntel(*location),
+            )
+        });
+    for simple in [RateId::Finish, RateId::Treat] {
+        if let Some(action) = actions.iter().find(|exchange| exchange.rate() == &simple) {
+            return Some(action.clone());
+        }
+    }
+    if let Some(action) = actions
+        .iter()
+        .find(|exchange| matches!(exchange.rate(), RateId::Rescue(_)))
+    {
+        return Some(action.clone());
+    }
+    if let Some(location) = preferred_location {
+        for preferred in [RateId::Share(location), RateId::MoveTogether(location)] {
+            if let Some(action) = actions
+                .iter()
+                .find(|exchange| exchange.rate() == &preferred)
+            {
+                return Some(action.clone());
+            }
+        }
+    }
+    for fallback in [
+        RateId::BeginScan,
+        RateId::MoveTogether(Location::North),
+        RateId::MoveTogether(Location::South),
+    ] {
+        if let Some(action) = actions.iter().find(|exchange| exchange.rate() == &fallback) {
+            return Some(action.clone());
+        }
+    }
+    None
+}
+
 fn believed_location(view: &AgentView<'_>, agent: AgentId, shared: bool) -> Option<Location> {
     [Location::North, Location::South]
         .into_iter()
@@ -681,7 +865,7 @@ fn action(rate: RateId) -> Action {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axionomy_search::rl::replay_transitions;
+    use axionomy_search::{action_source::collect_actions, rl::replay_transitions};
 
     #[test]
     fn agent_views_hide_nature_and_each_other() {
@@ -693,6 +877,56 @@ mod tests {
         assert!(scout.account(&AccountId::Agent(AgentId::Medic)).is_none());
         assert!(medic.account(&AccountId::Nature).is_none());
         assert!(medic.account(&AccountId::Agent(AgentId::Scout)).is_none());
+    }
+
+    #[test]
+    fn equal_scout_observations_have_equal_public_decisions() {
+        let model = initial();
+        let north = (0..16)
+            .filter_map(|sample| instantiate(&model, sample))
+            .find(|world| {
+                !world
+                    .balance(&AccountId::Nature, &Asset::Truth(Location::North))
+                    .is_zero()
+            })
+            .expect("the prior includes a north world");
+        let south = (0..16)
+            .filter_map(|sample| instantiate(&model, sample))
+            .find(|world| {
+                !world
+                    .balance(&AccountId::Nature, &Asset::Truth(Location::South))
+                    .is_zero()
+            })
+            .expect("the prior includes a south world");
+
+        assert_ne!(north.state_key(), south.state_key());
+        assert_eq!(scout_information(&north), scout_information(&south));
+        let information = scout_information(&north);
+        let mut source = decision_source();
+        let proposals = collect_actions(&mut source, &information);
+        assert_eq!(
+            proposals,
+            vec![
+                action(RateId::BeginScan),
+                action(RateId::MoveTogether(Location::North)),
+                action(RateId::MoveTogether(Location::South)),
+            ]
+        );
+        assert!(proposals.iter().all(|proposal| {
+            !matches!(
+                proposal.rate(),
+                RateId::Instantiate { .. } | RateId::ResolveScan { .. } | RateId::Encounter { .. }
+            )
+        }));
+
+        let config = MctsConfig::new(1_024, HORIZON).with_seed(29);
+        let north_decision = plan_initial(&north, config).expect("north can be planned");
+        let south_decision = plan_initial(&south, config).expect("south can be planned");
+
+        assert_eq!(north_decision.action().rate(), &RateId::BeginScan);
+        assert_eq!(north_decision.action(), south_decision.action());
+        assert!(north.is_applicable(north_decision.action()));
+        assert!(south.is_applicable(south_decision.action()));
     }
 
     #[test]
