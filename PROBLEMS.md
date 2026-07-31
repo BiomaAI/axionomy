@@ -30,11 +30,12 @@ and effects.
 | Resource objective | ✓ |  |  | ✓ | ✓ | ✓ | ✓ |  | ✓ |  | ✓ |
 | Infeasible instance |  | ✓ | ✓ |  | ✓ |  |  | ✓ | ✓ |  | ✓ |
 | Specialized proposer |  |  | Algorithm X |  | Branch optimizer | Monte Carlo | Auction | Assessment matcher | Monte Carlo | MCTS | Monte Carlo |
-| Generic algorithm | BFS/A*/Dijkstra | BFS | BFS | BFS/best-first | Best-first | Rollout | BFS |  | Rollout/MC | MCTS | Rollout/MC/RL |
+| Generic algorithm | BFS/A*/Dijkstra | BFS | BFS | BFS/best-first | Best-first | Rollout | BFS |  | Rollout/MC | MCTS | ISMCTS/Rollout/MC/RL |
 | Hidden or stochastic state |  |  |  |  |  | ✓ |  |  | ✓ |  | ✓ |
 | Multi-agent resolution |  |  |  |  |  |  | ✓ | ✓ |  | ✓ | ✓ |
 | Long-horizon trajectory |  |  |  |  |  |  |  |  | ✓ | ✓ |  |
 | Learning trajectory |  |  |  |  |  |  |  |  |  |  | ✓ |
+| Observation-scoped tree |  |  |  |  |  |  |  |  |  |  | ✓ |
 | Deterministic replay test | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 
 ## Runnable examples
@@ -445,25 +446,42 @@ Scout and Medic accounts begin at base while Nature holds unresolved weighted
 truth, sensor seed, and hazard state. Neither agent view can inspect Nature or
 the other agent's private account.
 
-The Scout may scan, receiving fallible private intelligence. A share exchange
-transfers that intelligence to the Medic while preserving explicit evidence
-for the Scout. Both agents then move jointly. At the true site, Nature resolves
-the encoded safe or injury hazard. Injury requires an atomic treatment
-exchange using the Medic's kit before the team can rescue the victim. Every
-mission action consumes encoded deadline time.
+The Scout may begin a scan without naming hidden truth. That public exchange
+creates `AwaitingScan`; Nature then resolves the scan through the uniquely
+applicable truth-and-seed-specific exchange, producing fallible private
+intelligence. A share exchange transfers that intelligence to the Medic while
+preserving explicit evidence for the Scout. Both agents then move jointly. At
+the true site, Nature resolves the encoded safe or injury hazard. Injury
+requires an atomic treatment exchange using the Medic's kit before the team
+can rescue the victim. Every public mission action consumes encoded deadline
+time except the final goal-marking exchange.
 
 The coordinated policy scans, shares, and follows the Medic's visible
 intelligence. A direct policy always sends both agents north. Replayed traces
 are also projected into observation, outcome, and termination transitions for
 learning.
 
+Observation-scoped ISMCTS receives only the Scout's canonical information
+identity when generating decisions or choosing rollout actions. Each iteration
+samples a complete encoded scenario from Nature's asset-held prior, rejects a
+sample inconsistent with the root observation, and merges tree statistics by
+information state rather than hidden world state. Nature resolution may inspect
+the sampled world, but only to propose concrete encoded outcome exchanges. The
+selected live action is core-revalidated.
+
 ### Required results
 
 - Agent views hide Nature and the other agent.
+- Two worlds with different hidden truths have equal Scout observation keys,
+  equal public proposal sets, and the same seeded ISMCTS decision.
+- The initial ISMCTS decision is the public `BeginScan` exchange in either
+  hidden world.
+- Hidden instantiation, scan resolution, and encounter exchanges never appear
+  in the Scout's decision source.
 - Intelligence changes ownership only through a share exchange.
 - Joint movement, encounter, treatment, and rescue are multi-account rates.
-- A coordinated successful trace contains instantiation, scan, share,
-  encounter, and finish exchanges and replays exactly.
+- A coordinated successful trace contains instantiation, scan intent, scan
+  resolution, share, encounter, and finish exchanges and replays exactly.
 - Across all 16 weighted scenarios, coordination succeeds 12 times and direct
   north succeeds 8.
 - The complete trace becomes one RL transition per exchange, ending with an
@@ -472,6 +490,9 @@ learning.
 ### API pressure
 
 - Agent-specific observations and information boundaries.
+- Information-state identities and observation-safe tree transpositions.
+- Belief sampling from encoded priors without giving policies hidden state.
+- Lazy public proposal generation followed by core applicability filtering.
 - Multi-agent communication as economic state change.
 - Hidden truth, belief, hazard, and deadline in one model.
 - Generic Monte Carlo over partially observed policies.
@@ -497,6 +518,11 @@ The repository test suite additionally verifies:
 - Deterministic systematic and seeded weighted sampling.
 - Bernoulli, scalar, vector, quantile, and lower-tail statistics.
 - Vector-valued MCTS selection, chance nodes, and transpositions.
+- Observation identities include visible-account boundaries and balances.
+- ISMCTS rejects inconsistent determinizations, passes only information states
+  to decision sources and rollout policies, and revalidates its selected
+  exchange.
+- Lazy action sources remain concrete, duplicate-safe, and core-filtered.
 - Compact state fingerprints and isolated shared-data forks.
 - RL action masks, shortfall features, receipts, and trajectory extraction.
 
@@ -521,8 +547,9 @@ limits clearly:
 5. More domains will require constrained local and inequality invariants.
 6. External OR adapters should compile encoded semantics, emit exchanges, and
    use replay as a mandatory proof checker.
-7. MCTS needs PUCT priors, progressive widening, deterministic parallel
-   workers, and a separate information-set contract.
+7. MCTS and ISMCTS may need PUCT priors, progressive widening, and deterministic
+   parallel workers once learned priors, measured branching, or throughput
+   justify them.
 8. Nature needs richer parameterized distribution updates for very large or
    continuous outcome spaces.
 

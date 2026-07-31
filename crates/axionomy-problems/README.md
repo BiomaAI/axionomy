@@ -5,6 +5,8 @@ Canonical closed-problem encodings for
 
 Problem models exercise Axionomy exclusively through its public API. They are
 reference encodings and conformance fixtures, not privileged engine semantics.
+The mission additionally proves that different hidden worlds with an identical
+agent view produce the same public proposal set and information-set decision.
 
 Each model has a matching runnable example:
 

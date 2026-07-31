@@ -322,8 +322,9 @@ axionomy-problems ────→ axionomy
 ```
 
 - `axionomy` owns universal state and transition semantics.
-- `axionomy-search` owns disposable search, rollout, sampling, Monte Carlo,
-  MCTS, and learning projections.
+- `axionomy-search` owns disposable action generation, search, rollout,
+  sampling, Monte Carlo, perfect-information MCTS, information-set MCTS, and
+  learning projections.
 - `axionomy-problems` owns domain ontologies, problem constructors,
   specialized proposers, and conformance tests.
 
@@ -363,9 +364,14 @@ A solver may not:
 
 The `axionomy-search` crate contains deliberately inspectable reference
 implementations: BFS, best-first search, rollout execution, weighted sampling,
-Monte Carlo aggregation, vector-valued MCTS, and RL trajectory projections.
-The `axionomy` kernel remains an execution and validation substrate, not an
-attempt to replace every mature solver.
+Monte Carlo aggregation, vector-valued MCTS, observation-scoped ISMCTS, and RL
+trajectory projections. The `axionomy` kernel remains an execution and
+validation substrate, not an attempt to replace every mature solver.
+
+Candidate generation is also disposable. An `ActionSource` may lazily emit
+concrete exchanges from a full state or an authorized information state. The
+source does not declare applicability: the receiving search algorithm filters
+each proposal through the economy before traversal.
 
 ### 7.1 Rollouts are speculative economic histories
 
@@ -434,6 +440,35 @@ Perfect-information MCTS and information-set MCTS are separate contracts.
 Policies in partially observed problems must key decisions and trees by
 authorized observations, not hidden full state.
 
+The implemented information-set contract makes that boundary explicit:
+
+1. An `EconomicView` produces an `ObservationKey` containing the visible
+   account boundary and its canonical balances.
+2. `InformationState` pairs that observation with the acting player.
+3. A caller-supplied belief sampler receives only the root information state
+   and returns a possible closed economy derived from encoded priors and
+   beliefs.
+4. Each sampled economy must reproduce the root information state or search
+   rejects it.
+5. Decision sources and rollout policies are passed information states and
+   already filtered concrete exchanges; the search API does not pass them the
+   sampled full economy.
+6. Nature, terminal, and outcome projections may inspect the sampled closed
+   economy because they represent environment simulation rather than agent
+   knowledge.
+7. Tree transpositions merge equal information states, and the final exchange
+   is revalidated against the live economy.
+
+The belief sampler is not a second world model. Each determinization is an
+ordinary economy containing encoded hidden truth, and any meaningful prior or
+belief weight must come from economic assets. Sampling strategy and tree
+statistics remain derived, disposable policy.
+
+This is an API information-flow contract, not a security sandbox. Rust callers
+could deliberately capture a full economy inside a closure; the conformance
+suite proves correct use of the public surfaces, while capability-enforced
+proposal authority remains separate future work.
+
 ### 7.5 Learning interfaces are projections
 
 An RL adapter may expose an observation, applicable-action mask, assessment
@@ -449,7 +484,10 @@ adapter.
 ## 8. Partial observation and chance
 
 Ground truth and belief belong in different accounts. An `EconomicView`
-restricts which accounts a policy may inspect.
+restricts which accounts a policy may inspect, and its canonical
+`ObservationKey` includes both that visibility boundary and the balances visible
+inside it. Two hidden worlds with the same key are one information set for that
+actor.
 
 Chance is modeled as a participant:
 
@@ -478,6 +516,14 @@ instantiation exchange on a fork; observation then advances the chosen seed.
 Both Nature choices enter the trace, so the complete rollout replays from the
 uncertain model. Systematic and seeded samplers select among weighted encoded
 outcome exchanges; they never generate ambient domain state.
+
+Agent intent and hidden resolution must be separate when one event would
+otherwise force an agent to name hidden parameters. In the mission, the Scout
+proposes a public `BeginScan` exchange. Nature then fires the uniquely
+applicable `ResolveScan` exchange containing hidden truth and seed. The same
+pattern separates joint movement from hidden encounter resolution. This keeps
+agent proposal sets equal across indistinguishable worlds without moving
+causal semantics outside the economy.
 
 ## 9. Simultaneous and multi-agent decisions
 
@@ -521,7 +567,7 @@ problems. Full formal specifications live in [PROBLEMS.md](PROBLEMS.md).
 | Marketplace | Account-derived matching, complete shortfalls, six-party atomic settlement, and caller-owned near-match ranking |
 | Logistics | Recurrent encoded chance, long rollout horizons, repair loops, replenishment, and risk-aware Monte Carlo |
 | Connect Four | Encoded gravity, turns, line counters, terminal truth, vector outcomes, and adversarial MCTS |
-| Mission | Private agent views, exchanged intelligence, hidden hazards, joint action, and RL trajectory projection |
+| Mission | Canonical private observations, public intent versus hidden Nature resolution, ISMCTS, exchanged intelligence, joint action, and RL trajectory projection |
 
 These are not unrelated demos. Together they test:
 
@@ -560,6 +606,10 @@ in the reusable model modules.
 - Model-scoped state fingerprints provide compact in-process cache keys.
 - Trace replay uses exactly the same validation path as live execution.
 - Restricted views cannot inspect omitted accounts.
+- Restricted views produce canonical observation keys that include their
+  account visibility boundary.
+- Lazy action sources emit concrete proposals which search filters through core
+  assessment.
 - Rollouts distinguish encoded terminal state, controller stops, rejection,
   and algorithmic horizons.
 - Weighted samplers select only encoded exchange proposals reproducibly.
@@ -567,6 +617,9 @@ in the reusable model modules.
   statistics without defining outcome truth.
 - MCTS supports vector values, encoded chance nodes, deterministic budgets,
   random rollouts, and canonical transpositions.
+- ISMCTS root-samples encoded belief worlds, rejects inconsistent
+  determinizations, merges actor-visible information states, and revalidates
+  the selected live exchange.
 - RL projections expose assessment masks, sparse shortfalls, receipts,
   observations, outcomes, and replay-derived transitions.
 - Built-in benchmark results replay and specialized solvers agree where an
@@ -584,7 +637,8 @@ The current foundation is intentionally bounded:
   schema.
 - Candidate binding enumeration is supplied by the model or adapter; the core
   filters and validates proposals but does not enumerate every account
-  permutation.
+  permutation. Search supports lazy visitor-based generation, but there is no
+  typed parameterized rate-schema language or automatic binding enumerator.
 - Linear invariants are global weighted sums. There are no local, inequality,
   temporal, or arbitrary logical invariant languages.
 - Hash maps are internal storage. `state_key` sorts logical entries and
@@ -596,10 +650,12 @@ The current foundation is intentionally bounded:
   modeled.
 - `fork` clones the account index while sharing immutable laws and account
   contents. There is no persistent map or incremental state fingerprint yet.
-- Views restrict account data, but there is not yet a capability system for
-  rate visibility or proposal authority.
-- MCTS currently provides UCT, not PUCT priors, progressive widening,
-  deterministic parallel workers, or information-set search.
+- Views restrict account data and observation identities preserve that
+  boundary, but there is not yet a capability system for rate visibility or
+  proposal authority.
+- MCTS and ISMCTS currently provide UCT, not PUCT priors, progressive widening,
+  or deterministic parallel workers. Belief construction and updating remain
+  caller-supplied projections from encoded state.
 - Monte Carlo consumes finite encoded weighted supports; parameterized or
   continuous distribution schemas remain future work.
 - No concurrency, signatures, persistence, distributed consensus, or
@@ -682,14 +738,33 @@ complete shortfalls, and successful transitions retain receipts. Replayed
 traces can therefore become datasets without constructing a second mutable
 environment or discarding why an action failed.
 
+### 13.12 Hidden information requires a separate search contract
+
+Filtering an agent's hand-written policy is insufficient if the search tree
+still uses the full economy as its node identity. Information-set search must
+receive an actor-visible observation, merge indistinguishable worlds, sample
+possible encoded worlds from that observation, and avoid passing hidden
+accounts to decision generation or rollout policy. Environment resolution may
+use hidden truth only through concrete Nature exchanges.
+
+The mission also shows why public intent and hidden outcome should be different
+rates. `BeginScan` is a decision available in every indistinguishable world;
+`ResolveScan` is Nature's encoded reaction. Otherwise a supposedly public
+action identifier would itself reveal the truth or random seed.
+
 ## 14. Roadmap
 
-The next work should be driven by measured pressure from these encodings:
+The remaining items are a pressure-driven backlog, not an instruction to add
+machinery speculatively. In particular, lazy concrete action generation is the
+current minimum; parameterized schemas should begin only when benchmarked
+domains show that concrete rate construction or enumeration is the limiting
+factor.
 
-1. Define a serializable parameterized rate-schema language with typed
-   variables and finite binding domains.
-2. Add automatic candidate instantiation without permitting arbitrary hidden
-   guards.
+1. Measure concrete rate construction and lazy candidate enumeration in larger
+   scheduling, game, and logistics models.
+2. If that pressure is material, define a serializable parameterized
+   rate-schema language with typed finite binding domains and automatic
+   candidate instantiation without arbitrary hidden guards.
 3. Define canonical problem, state, exchange, and trace serialization with
    schema/version identifiers.
 4. Replace the cloned account index with a persistent map, add incremental
@@ -704,10 +779,10 @@ The next work should be driven by measured pressure from these encodings:
 9. Add property-based reference-model tests and bounded model checking.
 10. Decide whether dynamic rate availability is represented by rate assets,
     capability assets, or immutable schemas plus explicit enabling state.
-11. Add PUCT priors, progressive widening, deterministic parallel workers, and
-    a separate information-set MCTS contract.
-12. Add capability-scoped proposal visibility and actor-specific observation
-    identities.
+11. Add PUCT priors, progressive widening, and deterministic parallel workers
+    when learned priors, measured branching, or throughput justify them.
+12. Add capability-scoped proposal visibility and richer multi-agent belief
+    and communication protocols.
 13. Integrate external learned policies through the implemented RL
     projections without granting mutation authority.
 
@@ -815,6 +890,25 @@ storage optimization cannot make speculative mutation visible elsewhere.
 Action masks come from assessment, transitions come from receipts or
 rejection, and terminal/outcome features are read from encoded state.
 Training adapters never receive a second mutation authority.
+
+### D-019: Information identity must exclude hidden state
+
+Partially observed planning keys its tree by actor plus canonical economic
+observation, never by the complete economy. Belief samples are closed economies
+consistent with that identity; they do not become accepted truth.
+
+### D-020: Public intent and hidden reaction are separate exchanges
+
+An actor cannot be required to propose a rate identifier containing facts it
+cannot observe. Public decisions create encoded pending state, and Nature
+resolves that state through the concrete hidden-dependent exchange.
+
+### D-021: Lazy proposal generation does not create a second action model
+
+An action source may derive exchanges on demand, but its output is immediately
+subject to core assessment. It owns neither transition validity nor effects,
+and full parameterized rate schemas remain deferred until measured problem
+pressure justifies them.
 
 ## 16. Success criteria
 
