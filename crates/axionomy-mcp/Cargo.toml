@@ -1,0 +1,35 @@
+[package]
+name = "axionomy-mcp"
+version = "0.1.0"
+authors = ["Alex Rozgo <alex.rozgo@gmail.com>"]
+description = "Stateless MCP reference server for Axionomy"
+edition = "2024"
+license.workspace = true
+readme = "README.md"
+repository = "https://github.com/BiomaAI/axionomy"
+rust-version = "1.89"
+
+[dependencies]
+axionomy = { version = "0.1.0", path = "../.." }
+axionomy-search = { version = "0.1.0", path = "../axionomy-search" }
+axum = "0.8.9"
+blake3 = "1.8.5"
+jiff = "0.2.35"
+rmcp = { version = "3.1.0", default-features = false, features = [
+    "macros",
+    "request-state",
+    "server",
+    "transport-streamable-http-server",
+] }
+schemars = "1.2.2"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
+thiserror = "2.0.19"
+tokio = { version = "1.53.1", features = ["macros", "net", "rt-multi-thread", "signal", "sync"] }
+tokio-rusqlite = { version = "0.7.0", features = ["bundled"] }
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.22", features = ["env-filter"] }
+uuid = { version = "1.24.0", features = ["v4"] }
+
+[dev-dependencies]
+tempfile = "3.27.0"

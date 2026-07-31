@@ -5,6 +5,7 @@ members = [
     "crates/axionomy-problems",
     "crates/axionomy-units",
     "crates/axionomy-time",
+    "crates/axionomy-mcp",
 ]
 resolver = "3"
 
