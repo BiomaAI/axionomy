@@ -1,9 +1,10 @@
 //! A tiny Sokoban board encoded entirely as cell accounts and rewrite rates.
 
-use crate::{
+use axionomy::{
     Account, Basket, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Quantity, Rate,
-    SearchSolution, basket, bfs,
+    basket,
 };
+use axionomy_search::{SearchSolution, bfs};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum AccountId {

@@ -1,9 +1,10 @@
 //! A two-job, two-machine scheduling problem with discrete capacity assets.
 
-use crate::{
-    Account, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Quantity, Rate,
-    SearchSolution, Trace, basket, best_first,
+use axionomy::{
+    Account, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Quantity, Rate, Trace,
+    basket,
 };
+use axionomy_search::{SearchSolution, best_first};
 use std::collections::HashSet;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]

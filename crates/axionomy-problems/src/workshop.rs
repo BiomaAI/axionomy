@@ -1,9 +1,10 @@
 //! A stoichiometric workshop with conserved material and labor accounting.
 
-use crate::{
+use axionomy::{
     Account, ApplyError, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Quantity, Rate,
-    SearchSolution, basket, best_first, bfs,
+    basket,
 };
+use axionomy_search::{SearchSolution, best_first, bfs};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum AccountId {

@@ -1,9 +1,9 @@
 //! A key-door maze where action count and encoded energy cost disagree.
 
-use crate::{
-    Account, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Quantity, Rate,
-    SearchSolution, basket, best_first, bfs,
+use axionomy::{
+    Account, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Quantity, Rate, basket,
 };
+use axionomy_search::{SearchSolution, best_first, bfs};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Node {
@@ -70,7 +70,7 @@ const EDGES: [(Node, Node, u64, bool); 5] = [
 /// Builds the complete closed problem. Topology, lock state, energy, target,
 /// and heuristic values are all assets held by accounts.
 pub fn initial() -> World {
-    let mut environment = crate::Basket::new();
+    let mut environment = axionomy::Basket::new();
     for (from, to, _, _) in EDGES {
         environment.insert(Asset::Edge(from, to), Quantity::new(1));
     }

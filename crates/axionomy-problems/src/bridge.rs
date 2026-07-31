@@ -1,9 +1,10 @@
 //! Multi-agent negotiation for a capacity-one bridge.
 
-use crate::{
-    Account, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Quantity, Rate,
-    SearchSolution, Trace, basket, bfs,
+use axionomy::{
+    Account, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Quantity, Rate, Trace,
+    basket,
 };
+use axionomy_search::{SearchSolution, bfs};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum AgentId {

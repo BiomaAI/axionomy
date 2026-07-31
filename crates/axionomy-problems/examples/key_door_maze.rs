@@ -1,4 +1,4 @@
-use axionomy::problems::maze;
+use axionomy_problems::maze;
 
 fn main() {
     let initial = maze::initial();

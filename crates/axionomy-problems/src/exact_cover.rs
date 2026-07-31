@@ -1,9 +1,10 @@
 //! Exact cover solved both by generic graph search and an Algorithm X proposer.
 
-use crate::{
+use axionomy::{
     Account, Basket, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Quantity, Rate,
-    SearchSolution, Trace, basket, bfs,
+    Trace, basket,
 };
+use axionomy_search::{SearchSolution, bfs};
 use std::collections::BTreeSet;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]

@@ -1,6 +1,6 @@
 //! A partially observed rescue decision with an explicitly encoded Nature.
 
-use crate::{
+use axionomy::{
     Account, Basket, EconomicView, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant,
     Quantity, Rate, Trace, basket,
 };
