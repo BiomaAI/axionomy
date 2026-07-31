@@ -53,6 +53,8 @@ axionomy-problems ────→ axionomy
 ```
 
 The kernel does not depend on any solver or domain crate.
+The packages are independently publishable and must be released in dependency
+order: `axionomy`, then `axionomy-search`, then `axionomy-problems`.
 
 ## What is implemented
 
@@ -213,6 +215,12 @@ cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo fmt --all -- --check
 RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps
 cargo package -p axionomy
-cargo package -p axionomy-search
-cargo package -p axionomy-problems
+cargo package -p axionomy-search --list
+cargo package -p axionomy-problems --list
 ```
+
+Until `axionomy` is available from a registry, Cargo cannot perform an
+ordinary registry-resolution dry run for the two dependent packages. CI can
+verify their package archives using local `[patch.crates-io]` overrides; their
+source manifests retain both path and version requirements for normal
+workspace development and future ordered publication.
