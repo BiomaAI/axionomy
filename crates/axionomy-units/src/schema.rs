@@ -50,6 +50,37 @@ impl<Id> AssetSchema<Id>
 where
     Id: Clone + Eq + Hash,
 {
+    /// Reconstructs a coherent schema from self-describing asset keys.
+    ///
+    /// Repeated equal keys are expected across accounts and rates. Reusing one
+    /// logical ID with a different definition is rejected.
+    pub fn from_assets<'a>(
+        assets: impl IntoIterator<Item = &'a UnitAsset<Id>>,
+    ) -> Result<Self, AssetSchemaError<Id>>
+    where
+        Id: 'a,
+    {
+        let mut schema = Self::new();
+        for asset in assets {
+            match schema.definitions.get(asset.id()) {
+                None => {
+                    schema
+                        .definitions
+                        .insert(asset.id().clone(), asset.definition().clone());
+                }
+                Some(existing) if existing == asset.definition() => {}
+                Some(existing) => {
+                    return Err(AssetSchemaError::ConflictingDefinition {
+                        id: asset.id().clone(),
+                        existing: existing.clone(),
+                        proposed: asset.definition().clone(),
+                    });
+                }
+            }
+        }
+        Ok(schema)
+    }
+
     /// Declares a countable asset with no physical dimension.
     pub fn define_discrete(&mut self, id: Id) -> Result<UnitAsset<Id>, AssetSchemaError<Id>> {
         self.insert(id, AssetDefinition::Discrete)
@@ -146,6 +177,20 @@ where
             self.validate_asset(asset)?;
         }
         Ok(())
+    }
+
+    /// Reconstructs and validates the complete schema embedded in an economy.
+    pub fn from_economy<AccountId, RateId, Role, N>(
+        economy: &Economy<AccountId, UnitAsset<Id>, RateId, Role, N>,
+    ) -> Result<Self, AssetSchemaError<Id>>
+    where
+        AccountId: Clone + Eq + Hash + Ord,
+        Id: Ord,
+        RateId: Clone + Eq + Hash + Ord,
+        Role: Clone + Ord,
+        N: QuantityScalar,
+    {
+        Self::from_assets(economy.asset_keys())
     }
 
     pub fn build_economy<AccountId, RateId, Role, N>(

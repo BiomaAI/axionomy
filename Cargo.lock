@@ -105,6 +105,7 @@ version = "0.1.0"
 dependencies = [
  "axionomy",
  "indexmap",
+ "num-bigint 0.5.1",
  "num-rational",
  "num-traits",
  "proptest",

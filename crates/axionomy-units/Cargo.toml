@@ -8,6 +8,10 @@ readme = "README.md"
 repository = "https://github.com/BiomaAI/axionomy"
 rust-version = "1.89"
 
+[features]
+default = []
+bigint = ["axionomy/bigint"]
+
 [dependencies]
 axionomy = { version = "0.1.0", path = "../.." }
 indexmap = { version = "2.14.0", features = ["serde"] }
@@ -24,6 +28,7 @@ uom = { version = "0.38.0", default-features = false, features = [
 ] }
 
 [dev-dependencies]
+num-bigint = { version = "0.5.1", features = ["serde"] }
 proptest = "1.11.0"
 serde_json = "1.0.149"
 tracing = "0.1"

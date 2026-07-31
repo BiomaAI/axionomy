@@ -9,6 +9,9 @@ use axionomy_units::{
 use proptest::prelude::*;
 use serde::{Deserialize, Serialize};
 
+#[cfg(feature = "bigint")]
+use num_bigint::BigUint;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 enum AssetId {
     Cargo,
@@ -216,6 +219,63 @@ fn malformed_non_positive_atomic_basis_is_rejected_by_serde() {
     }"#;
 
     assert!(serde_json::from_str::<UnitAsset<AssetId>>(invalid).is_err());
+}
+
+#[test]
+fn malformed_measurement_kind_is_rejected_by_serde() {
+    let invalid = r#"{
+        "id":"Cargo",
+        "definition":{"Measured":{
+            "dimension":{"length":0,"mass":1,"time":0,"electric_current":0,"thermodynamic_temperature":0,"amount_of_substance":0,"luminous_intensity":0},
+            "kind":"",
+            "atomic_base_value":[1,1000]
+        }}
+    }"#;
+
+    assert!(serde_json::from_str::<UnitAsset<AssetId>>(invalid).is_err());
+}
+
+#[test]
+fn embedded_definitions_reconstruct_a_schema_and_reject_conflicts() {
+    let mut grams_schema = AssetSchema::new();
+    let grams = grams_schema
+        .define_measure(AssetId::Cargo, Mass::new::<gram>(Rational::from_integer(1)))
+        .unwrap();
+    let mut kilograms_schema = AssetSchema::new();
+    let kilograms = kilograms_schema
+        .define_measure(
+            AssetId::Cargo,
+            Mass::new::<kilogram>(Rational::from_integer(1)),
+        )
+        .unwrap();
+    let balances =
+        Basket::try_from_amounts([grams.asset().atoms(1), kilograms.asset().atoms(1)]).unwrap();
+    let world = EconomyBuilder::<AccountId, UnitAsset<AssetId>, RateId, Role>::new()
+        .account(AccountId::Depot, Account::from(balances))
+        .build()
+        .unwrap();
+
+    assert!(matches!(
+        AssetSchema::from_economy(&world),
+        Err(AssetSchemaError::ConflictingDefinition {
+            id: AssetId::Cargo,
+            ..
+        })
+    ));
+}
+
+#[cfg(feature = "bigint")]
+#[test]
+fn typed_lowering_supports_non_copy_biguint_economies() {
+    let mut schema = AssetSchema::new();
+    let cargo = schema
+        .define_measure(AssetId::Cargo, Mass::new::<gram>(Rational::from_integer(1)))
+        .unwrap();
+    let amount: AssetAmount<UnitAsset<AssetId>, BigUint> = cargo
+        .encode(Mass::new::<kilogram>(Rational::from_integer(2)))
+        .unwrap();
+
+    assert_eq!(amount.quantity().as_scalar(), &BigUint::from(2_000_u64));
 }
 
 proptest! {
