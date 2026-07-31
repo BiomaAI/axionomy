@@ -97,6 +97,28 @@ That is an open vocabulary, not an authorization to keep authoritative
 instances elsewhere. Reference ontologies live in the separate
 `axionomy-problems` crate. No one of them is built into the kernel.
 
+### 3.1 Values have three independent axes
+
+Axionomy separates three questions that are often collapsed into one number:
+
+```text
+Asset A             = what the value means and its atomic economic basis
+Quantity<N = u64>   = how its exact non-negative coefficient is represented
+Typed binding       = how a physical or calendar value is validated and lowered
+```
+
+For example, a `uom` mass value may be converted exactly into an
+`Asset::CargoGram` and a `Quantity<u64>`. The physical dimension is checked at
+the authoring boundary, the asset preserves the unit and economic identity,
+and the quantity supplies the coefficient. A heterogeneous basket therefore
+does not erase meaning merely because it stores one numeric backend.
+
+One economy uses one numeric backend `N`. This gives every balance, rate,
+exchange, shortfall, receipt, and invariant one coherent arithmetic contract.
+Using a different numeric representation for every asset is deliberately out
+of scope: it would introduce dynamic value dispatch into the authoritative
+state and make conservation and generic algorithms substantially less clear.
+
 ## 4. Formal state and transition model
 
 ### 4.1 State
@@ -104,10 +126,14 @@ instances elsewhere. Reference ontologies live in the separate
 The complete current state is a finite sparse mapping:
 
 ```text
-S : Account × Asset → u64
+S : Account × Asset → Quantity<N>
 ```
 
-Missing entries have quantity zero. Zero entries are canonicalized away.
+`N` is an exact, totally ordered scalar representation and defaults to `u64`.
+Quantities are non-negative even when a future scalar backend can also
+represent negative values. Signed values exist only as derived invariant
+measurements, never as account balances. Missing entries have quantity zero,
+and zero entries are canonicalized away.
 
 The complete problem definition is:
 
@@ -272,11 +298,12 @@ economy.
 
 | Type or operation | Responsibility |
 | --- | --- |
-| `Quantity` | Checked non-negative multiplicity |
-| `Basket<A>` | Sparse asset multiset |
-| `Account<A>` | Balance container used during initialization and internal commits |
-| `Rate<Role, A>` | Multi-role consume/produce/preserve law |
-| `Exchange<RateId, Role, AccountId>` | Concrete proposal |
+| `Quantity<N = u64>` | Checked non-negative coefficient with an exact numeric backend |
+| `AssetAmount<A, N = u64>` | One asset-qualified quantity at an API boundary |
+| `Basket<A, N = u64>` | Sparse heterogeneous asset multiset with one numeric backend |
+| `Account<A, N = u64>` | Balance container used during initialization and internal commits |
+| `Rate<Role, A, N = u64>` | Multi-role consume/produce/preserve law |
+| `Exchange<RateId, Role, AccountId, N = u64>` | Concrete proposal |
 | `EconomyBuilder` | Initial problem construction |
 | `Economy` | Private account/rate ownership and sole execution authority |
 | `ExchangeAssessment` | Applicable, infeasible, or invalid explanatory projection |
@@ -629,8 +656,9 @@ in the reusable model modules.
 
 The current foundation is intentionally bounded:
 
-- Quantities are `u64`; there are no signed balances, fractions, or unbounded
-  tokens.
+- Every economy uses one exact quantity backend, defaulting to `u64`. Numeric
+  representations are not selected independently per asset, and floating
+  point is not accepted as authoritative balance storage.
 - Rates are concrete. There is no variable matching, unification, guard
   language, or parameterized rate schema.
 - Problem builders may generate many concrete rates to represent one logical
@@ -641,11 +669,11 @@ The current foundation is intentionally bounded:
   typed parameterized rate-schema language or automatic binding enumerator.
 - Linear invariants are global weighted sums. There are no local, inequality,
   temporal, or arbitrary logical invariant languages.
-- Hash maps are internal storage. `state_key` sorts logical entries and
-  `state_fingerprint` is deterministic within a fixed ontology executable,
-  but canonical durable serialization and collision-proof hashing are not yet
-  defined.
-- Traces contain exchanges, not durable schema-versioned receipts.
+- Stable insertion-ordered maps make iteration, diagnostics, and ordinary
+  serialization reproducible. This does not make a state fingerprint a
+  collision-proof durable identity.
+- Serialization represents the current public model directly. Durable schema
+  migration and explicit wire-version negotiation are not yet supported.
 - The rate book is immutable after construction; dynamic laws are not yet
   modeled.
 - `fork` clones the account index while sharing immutable laws and account
@@ -765,8 +793,8 @@ factor.
 2. If that pressure is material, define a serializable parameterized
    rate-schema language with typed finite binding domains and automatic
    candidate instantiation without arbitrary hidden guards.
-3. Define canonical problem, state, exchange, and trace serialization with
-   schema/version identifiers.
+3. Add explicit wire-schema versioning only when compatibility with deployed
+   historical data becomes a real requirement.
 4. Replace the cloned account index with a persistent map, add incremental
    fingerprints, and continue the checked-in logistics rollout benchmark.
 5. Extend invariants with carefully constrained local and inequality forms.
@@ -909,6 +937,31 @@ An action source may derive exchanges on demand, but its output is immediately
 subject to core assessment. It owns neither transition validity nor effects,
 and full parameterized rate schemas remain deferred until measured problem
 pressure justifies them.
+
+### D-022: Asset meaning, numeric representation, and typed authoring are separate
+
+An asset defines what a quantity means and names its atomic basis.
+`Quantity<N>` defines exact non-negative arithmetic. `uom` and calendar-aware
+time adapters validate richer authoring values and lower them into
+asset-qualified quantities. No physical dimension, unit, clock, or schedule
+becomes hidden authoritative state outside the economy.
+
+### D-023: Ecosystem primitives precede local reinvention
+
+The implementation uses mature crates for stable maps, serialization,
+numeric traits, units, civil time, randomness, probability, pathfinding,
+errors, property testing, and benchmarking when they preserve the closure
+contract. Axionomy-specific traits express domain laws such as non-negativity
+and signed invariant measurement; they do not reimplement general-purpose
+containers or arithmetic machinery.
+
+### D-024: Derived algorithms keep their own numeric domains
+
+Search depth, heuristic rank, visit count, statistical confidence, and wall
+clock runtime are disposable algorithm state. They do not inherit the
+economy's quantity backend unless a model explicitly encodes a corresponding
+asset, shortfall, cost, or reward. This keeps solver policy from silently
+changing economic truth.
 
 ## 16. Success criteria
 
