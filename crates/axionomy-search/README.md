@@ -33,6 +33,25 @@ costs, visit counts, random streams, and statistical values keep their own
 derived numeric domains because they are disposable policy rather than
 authoritative balances.
 
+## Bounded, caller-controlled execution
+
+Long-running algorithms expose runtime-neutral sessions instead of owning an
+async runtime, thread, logger, or transport. `BfsSession`, `MonteCarloSession`,
+`MctsSession`, and `IsmctsSession` advance by an explicit `WorkBudget` measured
+in deterministic algorithm units: expanded states, samples, or tree
+iterations. Each call returns an `AdvanceReport` with a serializable progress
+snapshot and lifecycle status.
+
+A `SearchObserver` may interrupt an `advance` call at a safe boundary. The
+session remains valid and can be advanced again, so callers can implement UI
+progress, cancellation flags, cooperative scheduling, task polling, or custom
+checkpoint policy without coupling the algorithms to Tokio or MCP. Chunking a
+fixed-seed computation does not change its result.
+
+This control state is disposable. Budgets and cancellation may stop
+exploration, but they cannot create domain success, failure, time, or cost;
+those meanings still require encoded assets and exchanges.
+
 Information-set search makes the visibility boundary structural. The caller
 derives an `InformationState` from an account-restricted economic view; the
 belief sampler receives only that root identity, and action sources receive

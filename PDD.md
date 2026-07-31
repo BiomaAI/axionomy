@@ -365,11 +365,19 @@ model-scoped caches. Neither stable presentation nor a 64-bit fingerprint is a
 substitute for validation, trace replay, collision-safe durable identity, or a
 future compatibility protocol.
 
+The MCP reference adapter adds one scoped identity policy: it hashes the exact
+serialized snapshot with BLAKE3 and stores those bytes immutably. This creates
+a collision-resistant deployment handle without changing `Economy` semantics.
+Semantically equal economies with different declared insertion order may have
+different handles, and a future serialization schema may change the hash.
+
 The current public types serialize directly. Axionomy does not maintain
 parallel `ModelDefinitionV1`, snapshot, or trace-envelope types before a real
 deployed compatibility requirement exists. Serde solves encoding and
 decoding; it does not by itself promise schema migration. Explicit wire types
 should be introduced only when their compatibility contract is known.
+The MCP string-ID/`u64` profile is therefore a current reference boundary, not
+an invented historical `V1` model hierarchy.
 
 ### 5.2 Numeric and typed authoring boundaries
 
@@ -427,6 +435,34 @@ decisions, encoded outcomes, assessments, receipts, and replay checks. Changing
 `RUST_LOG` changes visibility only; it cannot change economic state or accepted
 behavior.
 
+### 5.4 Long-running computation boundary
+
+Search control is operational state, not economic state. A queue position,
+expanded-node count, Monte Carlo sample count, cancellation flag, wall-clock
+deadline, or task handle may live outside the economy only because removing it
+cannot change which exchanges are valid, what they do, or whether an encoded
+goal has been reached.
+
+The runtime-neutral contract is a resumable session:
+
+```text
+advance(session, WorkBudget) → status + work completed + progress snapshot
+observer(progress)           → continue or interrupt at a safe boundary
+```
+
+Work budgets use deterministic algorithm units: BFS counts expanded states,
+Monte Carlo counts samples, and MCTS/ISMCTS count iterations. They are not
+economic quantities and do not impersonate encoded time or cost. An
+interrupted session remains valid and can be advanced again. For fixed inputs
+and random seeds, splitting the same total work across chunks must not change
+the result.
+
+The search crate owns this contract but does not own Tokio, threads, HTTP,
+logging, persistence, or a cancellation-token implementation. A caller may
+therefore integrate progress and interruption into a GUI, game loop, worker,
+MCP task, or another runtime without granting the adapter transition
+authority.
+
 ## 6. Workspace and package boundaries
 
 The repository makes authority boundaries visible as dependency boundaries:
@@ -437,6 +473,7 @@ axionomy-problems ────→ axionomy
                     └─→ axionomy-search
 axionomy-units ───────→ axionomy
 axionomy-time ────────→ axionomy-units ──→ axionomy
+axionomy-mcp ─────────→ axionomy-search ──→ axionomy
 ```
 
 - `axionomy` owns universal state and transition semantics.
@@ -447,6 +484,8 @@ axionomy-time ────────→ axionomy-units ──→ axionomy
   specialized proposers, and conformance tests.
 - `axionomy-units` owns optional dimension-safe physical authoring.
 - `axionomy-time` owns optional calendar-aware timeline authoring.
+- `axionomy-mcp` owns the strict stateless MCP reference boundary, immutable
+  snapshot storage, and durable task orchestration.
 
 The kernel must never depend on a solver or problem crate. Moving BFS and A*
 out of the kernel is philosophically significant: algorithms explore the
@@ -467,6 +506,12 @@ laws, and Criterion for benchmarks. `petgraph` is not a kernel dependency
 because Axionomy does not own an authoritative graph and its successors are
 generated implicitly from applicable exchanges. It remains a reasonable future
 adapter when a user needs explicit graph import, export, or analysis.
+
+The MCP adapter depends inward on search and the kernel. Neither reusable
+crate depends on rmcp, Tokio, Axum, or SQLite. This direction is essential:
+remote execution requirements may improve the generic progress and
+interruption contracts, but they cannot make a protocol task or database row
+part of economic truth.
 
 ## 7. Solver contract
 
@@ -624,6 +669,47 @@ Reward shaping may weight encoded progress and shortfall facts. If a fact
 changes terminal truth, payment, resource accounting, or transition validity,
 it must be represented in the economy rather than supplied only by the
 adapter.
+
+### 7.6 Stateless remote execution
+
+`axionomy-mcp` is the reference implementation of a remote boundary. It
+accepts only MCP `2026-07-28`, disables legacy sessions, requires per-request
+protocol and client metadata, and uses the revision's standardized HTTP
+routing headers. Transport statelessness is necessary but not sufficient, so
+the tool model also forbids an ambient current economy.
+
+Every operation names an immutable `economy_id`. The reference store derives
+that ID from a BLAKE3 hash of the exact current Serde bytes. Assessment returns
+an explanation without a new snapshot; successful apply and replay return a
+new content-addressed snapshot while preserving the source. The ID is a stable
+handle inside the current reference schema, not a versioned compatibility
+promise or a replacement for replay validation.
+
+The server exposes schema-backed tools for economy storage, assessment,
+application, replay, and search. The reference search request contains an
+explicit finite list of concrete candidate exchanges. That list is disposable
+proposal policy: BFS reconsiders it at every state and the core rejects
+inapplicable exchanges. The list cannot declare a successor or override a
+rate. A future declarative binding language should replace large concrete
+lists only when measured pressure justifies the new semantics.
+
+Long work uses the MCP Tasks extension:
+
+1. Validate the explicit snapshot handle and search bounds.
+2. Persist a working task before returning `CreateTaskResult`.
+3. Advance a `BfsSession` in deterministic chunks.
+4. Persist human-readable progress after each chunk.
+5. Observe durable cancellation intent between chunks.
+6. Store the terminal structured `CallToolResult`, including the replayable
+   solution trace.
+
+An optional idempotency key identifies one logical search request. Repeating
+the same serialized request returns the original task; reusing the key for
+different parameters is rejected. A process restart marks abandoned work as
+an explicit failure rather than making the handle vanish. Persisted
+checkpoints, worker leasing, notification fan-out, authentication, and
+multi-tenant authorization remain deployment concerns rather than hidden
+kernel responsibilities.
 
 ## 8. Partial observation and chance
 
@@ -788,6 +874,17 @@ in the reusable model modules.
   the selected live exchange.
 - RL projections expose assessment masks, sparse shortfalls, receipts,
   observations, outcomes, and replay-derived transitions.
+- BFS, Monte Carlo, MCTS, and ISMCTS expose resumable deterministic-budget
+  sessions with serializable progress and safe cooperative interruption.
+- The MCP reference server uses immutable explicit economy handles rather than
+  session-scoped current state and returns new handles for successful changes.
+- MCP search tasks are persisted before their handles are returned, expose
+  pollable progress and terminal results, support idempotent creation and
+  cooperative cancellation, and turn abandoned work into explicit failure on
+  restart.
+- Strict Streamable HTTP conformance is exercised end to end with MCP
+  `2026-07-28` metadata and standardized routing headers, without legacy
+  sessions.
 - Built-in benchmark results replay and specialized solvers agree where an
   oracle is provided.
 - Property laws cover assessment/application agreement, atomic failure,
@@ -835,8 +932,13 @@ The current foundation is intentionally bounded:
   continuous distribution schemas remain future work.
 - Native Rust is the current release target. Browser/Wasm compatibility is not
   yet a validated support guarantee.
-- No concurrency, signatures, persistence, distributed consensus, or
-  production financial controls are claimed.
+- The MCP adapter persists snapshots and task lifecycle in one local SQLite
+  store, but it does not persist live search checkpoints for continuation
+  after process failure.
+- The MCP reference server has no authentication, tenant isolation,
+  authorization, quotas, TTL garbage collection, distributed worker leasing,
+  cross-instance notifications, signatures, consensus, or production
+  financial controls.
 - The conformance suite is evidence for useful bounded expressiveness, not a
   proof of computational universality.
 
@@ -929,6 +1031,15 @@ rates. `BeginScan` is a decision available in every indistinguishable world;
 `ResolveScan` is Nature's encoded reaction. Otherwise a supposedly public
 action identifier would itself reveal the truth or random seed.
 
+### 13.13 Remote statelessness must be semantic, not merely transport-level
+
+Disabling HTTP sessions does not help if a server retains an ambient mutable
+economy. Immutable explicit snapshot handles make every operation reproducible
+and every branch visible. Durable task metadata may outlive one request because
+it controls derived computation, but its worker can only return a trace of
+core-validated exchanges. This is the same authority boundary as an in-process
+priority queue expressed across a protocol.
+
 ## 14. Roadmap
 
 The remaining items are a pressure-driven backlog, not an instruction to add
@@ -963,6 +1074,9 @@ factor.
     and communication protocols.
 13. Integrate external learned policies through the implemented RL
     projections without granting mutation authority.
+14. Add persisted search checkpoints, worker leases, task notifications, and
+    tenant-aware authorization only when the MCP reference boundary is moved
+    into a real multi-process deployment.
 
 Performance work should follow semantic clarity. Shared immutable state and
 copy-on-write account contents reduce branch cost, but the cloned account
@@ -1130,6 +1244,20 @@ but they never carry authoritative semantics. Libraries leave subscriber
 selection to their caller; example binaries configure `tracing` locally. A log
 filter may reveal more derived detail, but it cannot alter the economy.
 
+### D-027: Search control is resumable, bounded, and runtime-neutral
+
+Long-running algorithms advance in deterministic work units and expose
+serializable progress plus safe interruption. Async runtimes, transport tasks,
+threads, and cancellation-token implementations belong to callers. Stopping
+computation never creates encoded terminal truth.
+
+### D-028: Remote state uses explicit immutable economy handles
+
+A stateless integration names every economy snapshot and returns a new handle
+for every accepted change. Durable task records are allowed as disposable
+computation control, but neither they nor protocol sessions may become a
+parallel world model. Completed remote search returns a core-replayable trace.
+
 ## 16. Success criteria
 
 Axionomy succeeds when:
@@ -1143,6 +1271,8 @@ Axionomy succeeds when:
 - Different solvers operate over identical semantics.
 - External solver results translate into replayable exchanges.
 - Invalid proposals cannot bypass core constraints.
+- Remote callers can store, inspect, branch, search, cancel, poll, and replay
+  without relying on hidden session state.
 - Infeasible proposals expose every account-and-asset shortfall without
   mutation.
 - Successful assessments project the same account deltas later confirmed by

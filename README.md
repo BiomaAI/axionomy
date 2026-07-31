@@ -70,6 +70,7 @@ models into one-way workspace dependencies:
 | `axionomy-problems` | Canonical problem encodings, specialized proposers, and conformance tests |
 | `axionomy-units` | Self-describing asset denominations, schema coherence, and dimension-safe `uom` authoring |
 | `axionomy-time` | Calendar-aware Jiff authoring over the same canonical timeline denominations |
+| `axionomy-mcp` | Strict stateless MCP 2026-07-28 reference server with immutable snapshot handles and durable search tasks |
 
 ```text
 axionomy-search ──────→ axionomy
@@ -77,11 +78,13 @@ axionomy-problems ────→ axionomy
                     └─→ axionomy-search
 axionomy-units ───────→ axionomy
 axionomy-time ────────→ axionomy-units ──→ axionomy
+axionomy-mcp ─────────→ axionomy-search ──→ axionomy
 ```
 
 The kernel does not depend on a solver, problem, unit, or time crate. The
 packages are independently publishable: release `axionomy` first; search and
-units may follow; time follows units; `axionomy-problems` follows search.
+units may follow; time follows units; `axionomy-problems` and `axionomy-mcp`
+follow search.
 
 ## What is implemented
 
@@ -110,8 +113,15 @@ units may follow; time follows units; `axionomy-problems` follows search.
   means, variance, quantiles, tail risk, and Bernoulli credible intervals.
 - Lazy action sources that derive concrete proposals from a full economy or an
   actor observation before core applicability filtering.
+- Runtime-neutral resumable BFS, Monte Carlo, MCTS, and ISMCTS sessions with
+  deterministic work budgets, progress snapshots, and cooperative observer
+  interruption.
 - Forks share immutable laws and untouched account contents, with compact
   model-scoped state fingerprints for search caches.
+- A strict MCP 2026-07-28 Streamable HTTP reference server with
+  content-addressed immutable economy snapshots, schema-backed tools, SQLite
+  task persistence, idempotent search creation, polling, progress, and
+  cooperative cancellation.
 - Eleven closed benchmark encodings in `axionomy-problems`, with independent
   solver strategies and core-encoded stochastic priors.
 
@@ -245,7 +255,38 @@ Model types serialize directly through Serde and preserve stable insertion
 order for readable, repeatable output. Deserialization passes through the same
 canonical construction rules: zero balances are removed and duplicate
 identifiers are rejected. This ordinary serialization is intentionally not
-claimed as a versioned wire protocol or a collision-proof durable identity.
+claimed as a versioned compatibility protocol. The MCP reference server hashes
+the exact current serialized bytes to identify immutable snapshots inside its
+store; that deployment handle is not a promise that future schema versions
+will produce the same ID.
+
+## Stateless MCP reference server
+
+`axionomy-mcp` demonstrates how a remote, interruptible Axionomy integration
+can remain faithful to the closed model. It keeps no hidden “current economy.”
+`axionomy_economy_put` returns an immutable `economy_id`; assessment names that
+snapshot, while apply and replay return a new ID and leave the source
+available. `axionomy_search` accepts an explicit candidate exchange universe
+and returns an MCP task handle whose progress, terminal result, idempotency,
+and cancellation intent are persisted in SQLite.
+
+The server accepts only MCP `2026-07-28`, disables legacy sessions, and
+requires the revision's request metadata and standard HTTP routing headers.
+Task state, queues, progress counters, and snapshot handles are operational
+artifacts—not a parallel world model. Search still reaches successors only by
+applying concrete exchanges through the kernel, and its completed result is a
+replayable trace.
+
+```console
+AXIONOMY_MCP_DATABASE=axionomy-mcp.sqlite3 \
+  cargo run -p axionomy-mcp --bin axionomy-mcp
+
+# Full stateless HTTP lifecycle, including task polling:
+cargo test -p axionomy-mcp --test http
+```
+
+See [crates/axionomy-mcp/README.md](crates/axionomy-mcp/README.md) for the tool
+contract, deployment limits, and integration details.
 
 ## Conformance problems
 
@@ -343,6 +384,7 @@ cargo package -p axionomy-search --list
 cargo package -p axionomy-units --list
 cargo package -p axionomy-time --list
 cargo package -p axionomy-problems --list
+cargo package -p axionomy-mcp --list
 ```
 
 Until `axionomy` is available from a registry, Cargo cannot perform an
