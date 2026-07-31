@@ -19,6 +19,8 @@ pub enum StoreError {
     IdempotencyConflict,
     #[error("stored task contains invalid data: {0}")]
     InvalidTask(String),
+    #[error("content-addressed snapshot integrity check failed: {0}")]
+    SnapshotIntegrity(String),
 }
 
 #[derive(Debug, Clone)]
@@ -135,7 +137,7 @@ impl SqliteStore {
         let economy_id = format!("eco_{}", blake3::hash(economy_json.as_bytes()).to_hex());
         let created_at = Timestamp::now().to_string();
         let stored_id = economy_id.clone();
-        let inserted = self
+        let stored = self
             .connection
             .call(move |connection| {
                 let changed = connection.execute(
@@ -143,9 +145,22 @@ impl SqliteStore {
                      VALUES (?1, ?2, ?3)",
                     params![stored_id, economy_json, created_at],
                 )?;
-                Ok(changed == 1)
+                if changed == 1 {
+                    return Ok(Some(true));
+                }
+                let existing = connection.query_row(
+                    "SELECT economy_json FROM economies WHERE economy_id = ?1",
+                    params![stored_id],
+                    |row| row.get::<_, String>(0),
+                )?;
+                Ok((existing == economy_json).then_some(false))
             })
             .await?;
+        let inserted = stored.ok_or_else(|| {
+            StoreError::SnapshotIntegrity(format!(
+                "hash collision detected for snapshot `{economy_id}`"
+            ))
+        })?;
         Ok(PutEconomy {
             economy_id,
             deduplicated: !inserted,
@@ -154,21 +169,29 @@ impl SqliteStore {
 
     pub async fn get_economy(&self, economy_id: &str) -> Result<Option<WireEconomy>, StoreError> {
         let economy_id = economy_id.to_owned();
+        let query_id = economy_id.clone();
         let json = self
             .connection
             .call(move |connection| {
                 connection
                     .query_row(
                         "SELECT economy_json FROM economies WHERE economy_id = ?1",
-                        params![economy_id],
+                        params![query_id],
                         |row| row.get::<_, String>(0),
                     )
                     .optional()
             })
             .await?;
-        json.map(|json| serde_json::from_str(&json))
-            .transpose()
-            .map_err(Into::into)
+        let Some(json) = json else {
+            return Ok(None);
+        };
+        let actual_id = format!("eco_{}", blake3::hash(json.as_bytes()).to_hex());
+        if actual_id != economy_id {
+            return Err(StoreError::SnapshotIntegrity(format!(
+                "requested `{economy_id}` but stored bytes hash to `{actual_id}`"
+            )));
+        }
+        Ok(Some(serde_json::from_str(&json)?))
     }
 
     pub async fn create_search_task(

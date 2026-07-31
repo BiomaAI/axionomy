@@ -325,6 +325,15 @@ async fn run_search(
     let mut remaining = max_expansions;
 
     loop {
+        let status = session.status();
+        if status.is_terminal() {
+            let outcome = match status {
+                SearchStatus::Solved => SearchOutcome::Solved,
+                SearchStatus::Exhausted => SearchOutcome::Exhausted,
+                SearchStatus::Running | SearchStatus::Interrupted => unreachable!(),
+            };
+            return complete_search(store, task_id, economy_id, outcome, session).await;
+        }
         if store
             .cancellation_requested(task_id)
             .await
@@ -334,16 +343,6 @@ async fn run_search(
                 .cancel_task(task_id)
                 .await
                 .map_err(|error| error.to_string());
-        }
-
-        let status = session.status();
-        if status.is_terminal() {
-            let outcome = match status {
-                SearchStatus::Solved => SearchOutcome::Solved,
-                SearchStatus::Exhausted => SearchOutcome::Exhausted,
-                SearchStatus::Running | SearchStatus::Interrupted => unreachable!(),
-            };
-            return complete_search(store, task_id, economy_id, outcome, session).await;
         }
         if remaining == 0 {
             return complete_search(
@@ -480,6 +479,18 @@ mod tests {
             idempotency_key: None,
         };
         (economy, request)
+    }
+
+    #[tokio::test]
+    async fn every_reference_tool_exposes_input_and_output_schemas() {
+        let server = AxionomyMcp::new(SqliteStore::open_in_memory().await.unwrap());
+        let tools = server.tool_router.list_all();
+
+        assert_eq!(tools.len(), 5);
+        for tool in tools {
+            assert!(!tool.input_schema.is_empty(), "{} input schema", tool.name);
+            assert!(tool.output_schema.is_some(), "{} output schema", tool.name);
+        }
     }
 
     #[tokio::test]
