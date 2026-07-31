@@ -4,6 +4,25 @@
 
 **Everything is an asset. Every change is an exchange.**
 
+Axionomy treats every problem as an economy: assets represent anything that
+can exist or matter—resources, facts, permissions, beliefs, goals, or
+state—while accounts define where those assets belong, rates define the laws
+by which they may change, and exchanges are the only events that make those
+changes real. Search algorithms, optimizers, simulations, and policies may
+explore this economy and propose exchanges, but they never own its truth; the
+economy remains the single authoritative model, making every accepted decision
+inspectable, verifiable, and replayable.
+
+Because every transition exposes explicit preconditions, shortfalls, consumed
+resources, preserved facts, produced outcomes, and invariant violations,
+Axionomy provides much denser feedback than a sparse success-or-failure
+signal—especially for reinforcement learning, where it can supply valid-action
+masks, intermediate progress, resource costs, and structured failure reasons.
+The same encoding can also serve graph search, optimization, Monte Carlo
+simulation, and learned policies without duplicating domain logic; exact forks
+enable counterfactual exploration, while replayable traces make decisions
+auditable, comparable, and independently verifiable.
+
 Axionomy is a Rust engine for encoding bounded problem spaces through four
 primitives:
 
