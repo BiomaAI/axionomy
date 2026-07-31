@@ -365,6 +365,85 @@ intentionally small reference strategies. The `axionomy` kernel is an
 execution and validation substrate, not an attempt to replace every mature
 solver.
 
+### 7.1 Rollouts are speculative economic histories
+
+The foundational simulation abstraction is a rollout, not Monte Carlo. A
+rollout owns an isolated economy branch and repeatedly:
+
+1. Inspects the current economy or an account-restricted view.
+2. Asks a controller to propose one concrete exchange.
+3. Applies the proposal through the core.
+4. Records the accepted exchange and receipt.
+5. Stops at an encoded goal, a dead end, controller stop, rejection, or an
+   algorithmic step limit.
+
+The controller may decide what to propose, but it cannot install a successor
+state. A retained rollout trace must replay from its source economy to the same
+logical final state.
+
+Domain termination and algorithm termination are different. A goal, mission
+deadline, turn limit, or draw rule that belongs to the world must be encoded as
+assets and rates. A rollout horizon is only a resource limit on exploration
+and must be reported as `HorizonReached`, never as success or failure.
+
+### 7.2 Chance and sampling
+
+Domain chance is represented by weighted Nature exchanges. An algorithm may
+derive a disposable `WeightedExchange` list from encoded assets, then enumerate
+or sample that list. Sampling chooses a proposal; it never creates an
+unencoded successor.
+
+Domain randomness and exploration randomness have different authority:
+
+- Weather, sensor error, damage, breakdown, or another world outcome must be
+  encoded in Nature state and realized by an exchange.
+- Random rollout selection, UCT tie-breaking, or another search choice may use
+  an external deterministic seed because it only changes exploration.
+
+The latter seed is reproducibility metadata, not world state. Every sampled
+domain outcome still appears in the resulting trace.
+
+### 7.3 Outcomes and Monte Carlo
+
+Monte Carlo evaluates policies by running the same generic rollout mechanism
+many times. It does not define a reward model. Success, score, cost, elapsed
+time, casualties, delivered orders, and other semantically meaningful
+quantities must be encoded assets. An outcome reader projects those assets
+into disposable statistics.
+
+The search crate may provide standard aggregators for Bernoulli success,
+scalar mean and variance, vector outcomes, quantiles, and tail risk. Changing
+an aggregator or scalarization may change ranking, but cannot change exchange
+validity, effects, or the observed economic outcome vector.
+
+### 7.4 MCTS is a derived tree over core states
+
+Monte Carlo tree search reuses rollout execution but adds external selection,
+expansion, and backup state. Tree nodes may cache a state key, visits, value
+totals, policy priors, and child exchanges. All are derived accelerators.
+
+Every tree edge is an exchange. Expansion uses applicable core proposals,
+simulation uses isolated branches, Nature nodes use encoded outcome exchanges,
+and the selected live action is revalidated before commitment. Removing the
+tree or transposition table may affect speed and choice quality, but cannot
+alter the modeled laws.
+
+Perfect-information MCTS and information-set MCTS are separate contracts.
+Policies in partially observed problems must key decisions and trees by
+authorized observations, not hidden full state.
+
+### 7.5 Learning interfaces are projections
+
+An RL adapter may expose an observation, applicable-action mask, assessment
+features, receipt deltas, encoded outcome vector, and termination reason. A
+learned policy may return an action distribution or value estimate. These are
+proposal and training surfaces, not a second environment.
+
+Reward shaping may weight encoded progress and shortfall facts. If a fact
+changes terminal truth, payment, resource accounting, or transition validity,
+it must be represented in the economy rather than supplied only by the
+adapter.
+
 ## 8. Partial observation and chance
 
 Ground truth and belief belong in different accounts. An `EconomicView`
@@ -580,6 +659,12 @@ The next work should be driven by measured pressure from these encodings:
 9. Add property-based reference-model tests and bounded model checking.
 10. Decide whether dynamic rate availability is represented by rate assets,
     capability assets, or immutable schemas plus explicit enabling state.
+11. Build generic rollout execution, weighted sampling, Monte Carlo policy
+    evaluation, and MCTS over the same core transition path.
+12. Prove long-horizon use through stochastic logistics, an adversarial game,
+    and a partially observed multi-agent mission.
+13. Expose RL trajectory projections only after rollout and observation
+    boundaries are executable and tested.
 
 Performance work should follow semantic clarity. The current clone-based
 search and concrete rate expansion are acceptable reference implementations,
@@ -648,6 +733,30 @@ The core exposes complete shortfall vectors and projected deltas derived from
 the same preparation path as application. It does not assign universal scalar
 costs. Algorithms may value an assessment, but only encoded rates determine
 validity and only applied exchanges change state.
+
+### D-013: Rollout is the foundational simulation abstraction
+
+A rollout is a core-validated speculative exchange history. Monte Carlo,
+MCTS, learned policies, and mission planners share rollout execution rather
+than defining separate transition loops.
+
+### D-014: Domain randomness and exploration randomness are distinct
+
+Domain outcomes and their evolving seeds are economic state realized through
+Nature exchanges. Solver randomness may remain external deterministic
+metadata when it affects only which valid branches are explored.
+
+### D-015: Algorithmic cutoffs are not domain terminal state
+
+A rollout horizon, node budget, or wall-clock budget may stop computation but
+cannot claim that a goal, loss, draw, deadline, or mission outcome occurred.
+Those meanings require encoded state.
+
+### D-016: Outcome aggregation is disposable policy
+
+Monte Carlo and learning systems may aggregate encoded outcome assets into
+means, variances, quantiles, tail risk, or value estimates. Aggregation may
+rank proposals but cannot define the underlying outcome.
 
 ## 16. Success criteria
 
