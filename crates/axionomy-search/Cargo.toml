@@ -1,0 +1,12 @@
+[package]
+name = "axionomy-search"
+version = "0.1.0"
+authors = ["Alex Rozgo <alex.rozgo@gmail.com>"]
+description = "Reference search strategies over closed Axionomy economies"
+edition = "2024"
+readme = "README.md"
+repository = "https://github.com/BiomaAI/axionomy"
+rust-version = "1.85"
+
+[dependencies]
+axionomy = { version = "0.1.0", path = "../.." }

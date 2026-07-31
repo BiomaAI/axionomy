@@ -5,3 +5,18 @@ version = 4
 [[package]]
 name = "axionomy"
 version = "0.1.0"
+
+[[package]]
+name = "axionomy-problems"
+version = "0.1.0"
+dependencies = [
+ "axionomy",
+ "axionomy-search",
+]
+
+[[package]]
+name = "axionomy-search"
+version = "0.1.0"
+dependencies = [
+ "axionomy",
+]

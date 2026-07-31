@@ -1,0 +1,13 @@
+[package]
+name = "axionomy-problems"
+version = "0.1.0"
+authors = ["Alex Rozgo <alex.rozgo@gmail.com>"]
+description = "Canonical problem encodings and conformance models for Axionomy"
+edition = "2024"
+readme = "README.md"
+repository = "https://github.com/BiomaAI/axionomy"
+rust-version = "1.85"
+
+[dependencies]
+axionomy = { version = "0.1.0", path = "../.." }
+axionomy-search = { version = "0.1.0", path = "../axionomy-search" }

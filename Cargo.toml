@@ -1,3 +1,7 @@
+[workspace]
+members = [".", "crates/axionomy-search", "crates/axionomy-problems"]
+resolver = "3"
+
 [package]
 name = "axionomy"
 version = "0.1.0"
