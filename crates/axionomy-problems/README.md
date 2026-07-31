@@ -23,3 +23,9 @@ cargo run -p axionomy-problems --example logistics
 cargo run -p axionomy-problems --example connect_four
 cargo run -p axionomy-problems --example mission
 ```
+
+Performance probes are Cargo bench targets rather than examples:
+
+```console
+cargo bench -p axionomy-problems --bench rollout_throughput
+```

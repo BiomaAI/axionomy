@@ -58,6 +58,13 @@ cargo run -p axionomy-problems --example connect_four
 cargo run -p axionomy-problems --example mission
 ```
 
+The separate long-horizon throughput probe is intentionally a Cargo bench
+target, not a consumer example:
+
+```console
+cargo bench -p axionomy-problems --bench rollout_throughput
+```
+
 ## 1. Key-door energy maze
 
 Source: `crates/axionomy-problems/src/maze.rs`

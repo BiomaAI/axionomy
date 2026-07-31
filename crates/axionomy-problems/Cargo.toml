@@ -11,3 +11,8 @@ rust-version = "1.85"
 [dependencies]
 axionomy = { version = "0.1.0", path = "../.." }
 axionomy-search = { version = "0.1.0", path = "../axionomy-search" }
+
+[[bench]]
+name = "rollout_throughput"
+harness = false
+test = false

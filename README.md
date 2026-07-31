@@ -242,7 +242,7 @@ cargo run -p axionomy-problems --example mission
 A repeatable long-horizon workload is also available:
 
 ```console
-cargo run -p axionomy-problems --example logistics_benchmark
+cargo bench -p axionomy-problems --bench rollout_throughput
 ```
 
 For example, the maze prints:
