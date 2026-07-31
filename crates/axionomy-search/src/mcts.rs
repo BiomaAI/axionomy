@@ -3,12 +3,15 @@
 use crate::{
     action_source::{ActionSource, collect_actions, eager_actions},
     sampling::{SamplingError, SeededSampler, TicketSource, WeightedExchange, sample},
+    session::{AdvanceReport, Continue, SearchObserver, WorkBudget},
 };
 use axionomy::{ApplyError, Economy, Exchange, Quantity, QuantityScalar};
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::hash::Hash;
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct MctsConfig {
     iterations: usize,
     max_depth: usize,
@@ -53,7 +56,7 @@ impl MctsConfig {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, JsonSchema)]
 pub struct MctsChild<Action> {
     action: Action,
     visits: u64,
@@ -74,7 +77,7 @@ impl<Action> MctsChild<Action> {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, JsonSchema)]
 pub struct MctsDecision<Action> {
     action: Action,
     iterations: usize,
@@ -118,16 +121,53 @@ where
     NonFiniteValue { player: usize },
     Sampling(SamplingError),
     Rejected(ApplyError<RateId, Role, AccountId, A, N>),
+    SelectedActionRejected(ApplyError<RateId, Role, AccountId, A, N>),
 }
 
 pub type MctsResult<RateId, Role, AccountId, A, N = u64> = Result<
     MctsDecision<Exchange<RateId, Role, AccountId, N>>,
     MctsError<RateId, Role, AccountId, A, N>,
 >;
+pub type MctsAdvanceResult<RateId, Role, AccountId, A, N = u64> =
+    Result<AdvanceReport<MctsProgress, MctsStatus>, MctsError<RateId, Role, AccountId, A, N>>;
 
 type Transpositions<AccountId, A, N> = HashMap<Vec<(AccountId, A, Quantity<N>)>, usize>;
 type ExpansionResult<RateId, Role, AccountId, A, N> =
     Result<(usize, bool), MctsError<RateId, Role, AccountId, A, N>>;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum MctsStatus {
+    Running,
+    Completed,
+    Interrupted,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct MctsProgress {
+    iterations: usize,
+    target_iterations: usize,
+    nodes: usize,
+    root_children: usize,
+}
+
+impl MctsProgress {
+    pub const fn iterations(self) -> usize {
+        self.iterations
+    }
+
+    pub const fn target_iterations(self) -> usize {
+        self.target_iterations
+    }
+
+    pub const fn nodes(self) -> usize {
+        self.nodes
+    }
+
+    pub const fn root_children(self) -> usize {
+        self.root_children
+    }
+}
 
 /// Random rollout action selection with deterministic seeded exploration.
 pub fn random_action<World, Action>(
@@ -205,6 +245,325 @@ where
     )
 }
 
+/// Resumable vector-valued MCTS session.
+///
+/// One work unit is one complete tree iteration. The session is runtime
+/// neutral; callers decide whether progress is bridged to a channel, task,
+/// trace subscriber, UI, or a simple synchronous loop.
+pub struct MctsSession<
+    AccountId,
+    A,
+    RateId,
+    Role,
+    N,
+    Source,
+    Chance,
+    Actor,
+    Terminal,
+    Cutoff,
+    RolloutPolicy,
+> where
+    N: QuantityScalar,
+{
+    initial: Economy<AccountId, A, RateId, Role, N>,
+    config: MctsConfig,
+    players: usize,
+    source: Source,
+    chance: Chance,
+    actor: Actor,
+    terminal: Terminal,
+    cutoff: Cutoff,
+    rollout_policy: RolloutPolicy,
+    nodes: Vec<Node<AccountId, A, RateId, Role, N>>,
+    transpositions: Transpositions<AccountId, A, N>,
+    random: SeededSampler,
+    iterations: usize,
+    decision: Option<MctsDecision<Exchange<RateId, Role, AccountId, N>>>,
+}
+
+impl<AccountId, A, RateId, Role, N, Source, Chance, Actor, Terminal, Cutoff, RolloutPolicy>
+    MctsSession<
+        AccountId,
+        A,
+        RateId,
+        Role,
+        N,
+        Source,
+        Chance,
+        Actor,
+        Terminal,
+        Cutoff,
+        RolloutPolicy,
+    >
+where
+    AccountId: Clone + Eq + Hash + Ord,
+    A: Clone + Eq + Hash + Ord,
+    RateId: Clone + Eq + Hash + Ord,
+    Role: Clone + Ord,
+    N: QuantityScalar,
+    Source:
+        ActionSource<Economy<AccountId, A, RateId, Role, N>, Exchange<RateId, Role, AccountId, N>>,
+    Chance: FnMut(
+        &Economy<AccountId, A, RateId, Role, N>,
+    ) -> Vec<WeightedExchange<Exchange<RateId, Role, AccountId, N>>>,
+    Actor: FnMut(&Economy<AccountId, A, RateId, Role, N>) -> usize,
+    Terminal: FnMut(&Economy<AccountId, A, RateId, Role, N>) -> Option<Vec<f64>>,
+    Cutoff: FnMut(&Economy<AccountId, A, RateId, Role, N>) -> Vec<f64>,
+    RolloutPolicy: FnMut(
+        &Economy<AccountId, A, RateId, Role, N>,
+        &[Exchange<RateId, Role, AccountId, N>],
+        &mut SeededSampler,
+    ) -> Option<Exchange<RateId, Role, AccountId, N>>,
+{
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        initial: &Economy<AccountId, A, RateId, Role, N>,
+        config: MctsConfig,
+        players: usize,
+        mut source: Source,
+        mut chance: Chance,
+        mut actor: Actor,
+        mut terminal: Terminal,
+        cutoff: Cutoff,
+        rollout_policy: RolloutPolicy,
+    ) -> Result<Self, MctsError<RateId, Role, AccountId, A, N>> {
+        validate_config(config, players)?;
+        if terminal(initial).is_some() {
+            return Err(MctsError::TerminalRoot);
+        }
+        if !chance(initial).is_empty() {
+            return Err(MctsError::ChanceRoot);
+        }
+        if applicable_actions(&mut source, initial).is_empty() {
+            return Err(MctsError::NoRootActions);
+        }
+        validate_actor(actor(initial), players)?;
+
+        Ok(Self {
+            initial: initial.fork(),
+            config,
+            players,
+            source,
+            chance,
+            actor,
+            terminal,
+            cutoff,
+            rollout_policy,
+            nodes: vec![Node::new(initial.fork(), players)],
+            transpositions: HashMap::from([(initial.state_key(), 0)]),
+            random: SeededSampler::new(config.seed()),
+            iterations: 0,
+            decision: None,
+        })
+    }
+
+    pub fn progress(&self) -> MctsProgress {
+        MctsProgress {
+            iterations: self.iterations,
+            target_iterations: self.config.iterations(),
+            nodes: self.nodes.len(),
+            root_children: self.nodes[0].children.len(),
+        }
+    }
+
+    pub fn status(&self) -> MctsStatus {
+        if self.decision.is_some() {
+            MctsStatus::Completed
+        } else {
+            MctsStatus::Running
+        }
+    }
+
+    pub fn decision(&self) -> Option<&MctsDecision<Exchange<RateId, Role, AccountId, N>>> {
+        self.decision.as_ref()
+    }
+
+    pub fn into_decision(self) -> Option<MctsDecision<Exchange<RateId, Role, AccountId, N>>> {
+        self.decision
+    }
+
+    pub fn advance(
+        &mut self,
+        budget: WorkBudget,
+        observer: &mut impl SearchObserver<MctsProgress>,
+    ) -> MctsAdvanceResult<RateId, Role, AccountId, A, N> {
+        if self.decision.is_some() {
+            return Ok(AdvanceReport::new(
+                MctsStatus::Completed,
+                0,
+                self.progress(),
+            ));
+        }
+
+        let mut completed = 0;
+        while completed < budget.units() && self.iterations < self.config.iterations() {
+            if observer.observe(&self.progress()).is_break() {
+                return Ok(AdvanceReport::new(
+                    MctsStatus::Interrupted,
+                    completed,
+                    self.progress(),
+                ));
+            }
+            self.run_iteration()?;
+            self.iterations += 1;
+            completed += 1;
+        }
+
+        if self.iterations == self.config.iterations() {
+            self.finish()?;
+        }
+        Ok(AdvanceReport::new(
+            self.status(),
+            completed,
+            self.progress(),
+        ))
+    }
+
+    fn run_iteration(&mut self) -> Result<(), MctsError<RateId, Role, AccountId, A, N>> {
+        let mut node_index = 0;
+        let mut path = vec![0];
+        let mut depth = 0;
+
+        let values = loop {
+            if let Some(values) = (self.terminal)(&self.nodes[node_index].world) {
+                break validate_values(values, self.players)?;
+            }
+            if depth >= self.config.max_depth() {
+                break validate_values((self.cutoff)(&self.nodes[node_index].world), self.players)?;
+            }
+
+            let outcomes = (self.chance)(&self.nodes[node_index].world);
+            if !outcomes.is_empty() {
+                let action = sample(&outcomes, &mut self.random)
+                    .map_err(MctsError::Sampling)?
+                    .clone();
+                let (child, expanded) = descend_or_expand(
+                    &mut self.nodes,
+                    &mut self.transpositions,
+                    node_index,
+                    action,
+                )?;
+                depth += 1;
+                if path.contains(&child) {
+                    break validate_values((self.cutoff)(&self.nodes[child].world), self.players)?;
+                }
+                path.push(child);
+                node_index = child;
+                if expanded {
+                    break simulate(
+                        &self.nodes[node_index].world,
+                        depth,
+                        self.config.max_depth(),
+                        self.players,
+                        &mut self.source,
+                        &mut self.chance,
+                        &mut self.terminal,
+                        &mut self.cutoff,
+                        &mut self.rollout_policy,
+                        &mut self.random,
+                    )?;
+                }
+                continue;
+            }
+
+            let actions = applicable_actions(&mut self.source, &self.nodes[node_index].world);
+            if actions.is_empty() {
+                break validate_values((self.cutoff)(&self.nodes[node_index].world), self.players)?;
+            }
+            let unexpanded = actions
+                .into_iter()
+                .filter(|action| {
+                    !self.nodes[node_index]
+                        .children
+                        .iter()
+                        .any(|edge| edge.action == *action)
+                })
+                .collect::<Vec<_>>();
+            if !unexpanded.is_empty() {
+                let selected = self.random.ticket(unexpanded.len() as u64) as usize;
+                let (child, _) = descend_or_expand(
+                    &mut self.nodes,
+                    &mut self.transpositions,
+                    node_index,
+                    unexpanded[selected].clone(),
+                )?;
+                depth += 1;
+                path.push(child);
+                node_index = child;
+                break simulate(
+                    &self.nodes[node_index].world,
+                    depth,
+                    self.config.max_depth(),
+                    self.players,
+                    &mut self.source,
+                    &mut self.chance,
+                    &mut self.terminal,
+                    &mut self.cutoff,
+                    &mut self.rollout_policy,
+                    &mut self.random,
+                )?;
+            }
+
+            let player = (self.actor)(&self.nodes[node_index].world);
+            validate_actor(player, self.players)?;
+            let child = select_uct(&self.nodes, node_index, player, self.config.exploration());
+            depth += 1;
+            if path.contains(&child) {
+                break validate_values((self.cutoff)(&self.nodes[child].world), self.players)?;
+            }
+            path.push(child);
+            node_index = child;
+        };
+
+        for index in path {
+            let node = &mut self.nodes[index];
+            node.visits += 1;
+            for (total, value) in node.value_totals.iter_mut().zip(&values) {
+                *total += value;
+            }
+        }
+        Ok(())
+    }
+
+    fn finish(&mut self) -> Result<(), MctsError<RateId, Role, AccountId, A, N>> {
+        let root_player = (self.actor)(&self.initial);
+        validate_actor(root_player, self.players)?;
+        let mut children = self.nodes[0]
+            .children
+            .iter()
+            .map(|edge| {
+                let child = &self.nodes[edge.child];
+                MctsChild {
+                    action: edge.action.clone(),
+                    visits: child.visits,
+                    mean_values: mean_values(child),
+                }
+            })
+            .collect::<Vec<_>>();
+        children.sort_by(|left, right| {
+            right.visits.cmp(&left.visits).then_with(|| {
+                right.mean_values[root_player].total_cmp(&left.mean_values[root_player])
+            })
+        });
+        let action = children
+            .first()
+            .ok_or(MctsError::NoExploredAction)?
+            .action
+            .clone();
+        self.initial
+            .fork()
+            .apply(action.clone())
+            .map_err(MctsError::SelectedActionRejected)?;
+        self.decision = Some(MctsDecision {
+            action,
+            iterations: self.iterations,
+            nodes: self.nodes.len(),
+            children,
+        });
+        Ok(())
+    }
+}
+
 /// Runs vector-valued MCTS with visitor-based concrete action generation.
 ///
 /// Emitted proposals remain non-authoritative: this function retains only
@@ -226,12 +585,12 @@ pub fn search_with_source<
     initial: &Economy<AccountId, A, RateId, Role, N>,
     config: MctsConfig,
     players: usize,
-    mut source: Source,
-    mut chance: Chance,
-    mut actor: Actor,
-    mut terminal: Terminal,
-    mut cutoff: Cutoff,
-    mut rollout_policy: RolloutPolicy,
+    source: Source,
+    chance: Chance,
+    actor: Actor,
+    terminal: Terminal,
+    cutoff: Cutoff,
+    rollout_policy: RolloutPolicy,
 ) -> MctsResult<RateId, Role, AccountId, A, N>
 where
     AccountId: Clone + Eq + Hash + Ord,
@@ -253,156 +612,22 @@ where
         &mut SeededSampler,
     ) -> Option<Exchange<RateId, Role, AccountId, N>>,
 {
-    validate_config(config, players)?;
-    if terminal(initial).is_some() {
-        return Err(MctsError::TerminalRoot);
-    }
-    if !chance(initial).is_empty() {
-        return Err(MctsError::ChanceRoot);
-    }
-    let root_actions = applicable_actions(&mut source, initial);
-    if root_actions.is_empty() {
-        return Err(MctsError::NoRootActions);
-    }
-    validate_actor(actor(initial), players)?;
-
-    let mut nodes = vec![Node::new(initial.fork(), players)];
-    let mut transpositions = HashMap::from([(initial.state_key(), 0_usize)]);
-    let mut random = SeededSampler::new(config.seed());
-
-    for _ in 0..config.iterations() {
-        let mut node_index = 0;
-        let mut path = vec![0_usize];
-        let mut depth = 0;
-
-        let values = loop {
-            if let Some(values) = terminal(&nodes[node_index].world) {
-                break validate_values(values, players)?;
-            }
-            if depth >= config.max_depth() {
-                break validate_values(cutoff(&nodes[node_index].world), players)?;
-            }
-
-            let outcomes = chance(&nodes[node_index].world);
-            if !outcomes.is_empty() {
-                let action = sample(&outcomes, &mut random)
-                    .map_err(MctsError::Sampling)?
-                    .clone();
-                let (child, expanded) =
-                    descend_or_expand(&mut nodes, &mut transpositions, node_index, action)?;
-                depth += 1;
-                if path.contains(&child) {
-                    break validate_values(cutoff(&nodes[child].world), players)?;
-                }
-                path.push(child);
-                node_index = child;
-                if expanded {
-                    break simulate(
-                        &nodes[node_index].world,
-                        depth,
-                        config.max_depth(),
-                        players,
-                        &mut source,
-                        &mut chance,
-                        &mut terminal,
-                        &mut cutoff,
-                        &mut rollout_policy,
-                        &mut random,
-                    )?;
-                }
-                continue;
-            }
-
-            let actions = applicable_actions(&mut source, &nodes[node_index].world);
-            if actions.is_empty() {
-                break validate_values(cutoff(&nodes[node_index].world), players)?;
-            }
-            let unexpanded = actions
-                .into_iter()
-                .filter(|action| {
-                    !nodes[node_index]
-                        .children
-                        .iter()
-                        .any(|edge| edge.action == *action)
-                })
-                .collect::<Vec<_>>();
-            if !unexpanded.is_empty() {
-                let selected = random.ticket(unexpanded.len() as u64) as usize;
-                let (child, _) = descend_or_expand(
-                    &mut nodes,
-                    &mut transpositions,
-                    node_index,
-                    unexpanded[selected].clone(),
-                )?;
-                depth += 1;
-                path.push(child);
-                node_index = child;
-                break simulate(
-                    &nodes[node_index].world,
-                    depth,
-                    config.max_depth(),
-                    players,
-                    &mut source,
-                    &mut chance,
-                    &mut terminal,
-                    &mut cutoff,
-                    &mut rollout_policy,
-                    &mut random,
-                )?;
-            }
-
-            let player = actor(&nodes[node_index].world);
-            validate_actor(player, players)?;
-            let child = select_uct(&nodes, node_index, player, config.exploration());
-            depth += 1;
-            if path.contains(&child) {
-                break validate_values(cutoff(&nodes[child].world), players)?;
-            }
-            path.push(child);
-            node_index = child;
-        };
-
-        for index in path {
-            let node = &mut nodes[index];
-            node.visits += 1;
-            for (total, value) in node.value_totals.iter_mut().zip(&values) {
-                *total += value;
-            }
-        }
-    }
-
-    let root_player = actor(initial);
-    validate_actor(root_player, players)?;
-    let mut children = nodes[0]
-        .children
-        .iter()
-        .map(|edge| {
-            let child = &nodes[edge.child];
-            MctsChild {
-                action: edge.action.clone(),
-                visits: child.visits,
-                mean_values: mean_values(child),
-            }
-        })
-        .collect::<Vec<_>>();
-    children.sort_by(|left, right| {
-        right
-            .visits
-            .cmp(&left.visits)
-            .then_with(|| right.mean_values[root_player].total_cmp(&left.mean_values[root_player]))
-    });
-    let action = children
-        .first()
-        .ok_or(MctsError::NoExploredAction)?
-        .action
-        .clone();
-
-    Ok(MctsDecision {
-        action,
-        iterations: config.iterations(),
-        nodes: nodes.len(),
-        children,
-    })
+    let mut session = MctsSession::new(
+        initial,
+        config,
+        players,
+        source,
+        chance,
+        actor,
+        terminal,
+        cutoff,
+        rollout_policy,
+    )?;
+    let mut observer = Continue;
+    session.advance(WorkBudget::new(config.iterations()), &mut observer)?;
+    Ok(session
+        .into_decision()
+        .expect("the configured iteration budget completes the session"))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -746,6 +971,58 @@ mod tests {
         assert_eq!(decision.action().rate(), &RateId::Win);
         assert_eq!(decision.iterations(), 64);
         assert_eq!(decision.children().len(), 2);
+    }
+
+    #[test]
+    fn mcts_sessions_are_chunk_invariant_and_interruptible() {
+        let game = game();
+        let config = MctsConfig::new(64, 4).with_seed(7);
+        let mut session = MctsSession::new(
+            &game,
+            config,
+            1,
+            eager_actions(|world: &World| {
+                world.applicable([action(RateId::Win), action(RateId::Lose)])
+            }),
+            |_| Vec::new(),
+            |_| 0,
+            |world: &World| {
+                if !world.balance(&AccountId::Game, &Asset::Won).is_zero() {
+                    Some(vec![1.0])
+                } else if !world.balance(&AccountId::Game, &Asset::Lost).is_zero() {
+                    Some(vec![0.0])
+                } else {
+                    None
+                }
+            },
+            |_| vec![0.0],
+            random_action,
+        )
+        .unwrap();
+        let mut observer = Continue;
+        let first = session.advance(WorkBudget::new(16), &mut observer).unwrap();
+        assert_eq!(first.status(), MctsStatus::Running);
+        assert_eq!(first.progress().iterations(), 16);
+
+        let mut observations = 0;
+        let interrupted = session
+            .advance(WorkBudget::new(48), &mut |_: &MctsProgress| {
+                observations += 1;
+                if observations == 2 {
+                    std::ops::ControlFlow::Break(())
+                } else {
+                    std::ops::ControlFlow::Continue(())
+                }
+            })
+            .unwrap();
+        assert_eq!(interrupted.status(), MctsStatus::Interrupted);
+        assert_eq!(interrupted.work_completed(), 1);
+
+        let completed = session.advance(WorkBudget::new(47), &mut observer).unwrap();
+        assert_eq!(completed.status(), MctsStatus::Completed);
+        let decision = session.into_decision().unwrap();
+        assert_eq!(decision.action().rate(), &RateId::Win);
+        assert_eq!(decision.iterations(), 64);
     }
 
     #[test]
