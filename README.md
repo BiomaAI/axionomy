@@ -1,13 +1,17 @@
-# Axionomy
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/axionomy-logo-dark.webp">
+  <source media="(prefers-color-scheme: light)" srcset="assets/axionomy-logo-light.webp">
+  <img alt="Axionomy" src="assets/axionomy-logo-light.webp">
+</picture>
 
 > A closed economic state machine for verifiable problem solving.
 
 **Everything is an asset. Every change is an exchange.**
 
-Axionomy treats every problem as an economy: assets represent anything that
-can exist or matter—resources, facts, permissions, beliefs, goals, or
-state—while accounts define where those assets belong, rates define the laws
-by which they may change, and exchanges are the only events that make those
+Axionomy treats every problem as an economy. Assets represent anything that can
+exist or matter, including resources, facts, permissions, beliefs, goals, and
+state. Accounts define where those assets belong, rates define the laws by
+which they may change, and exchanges are the only events that make those
 changes real. Search algorithms, optimizers, simulations, and policies may
 explore this economy and propose exchanges, but they never own its truth; the
 economy remains the single authoritative model, making every accepted decision
