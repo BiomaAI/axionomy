@@ -1,9 +1,10 @@
 use crate::{Basket, Quantity, QuantityScalar};
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::hash::Hash;
 use thiserror::Error;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(bound(
     serialize = "A: Serialize, N: Serialize",
     deserialize = "A: Deserialize<'de> + Eq + Hash, N: Deserialize<'de> + QuantityScalar"
@@ -107,7 +108,7 @@ impl<A, N> From<Basket<A, N>> for Account<A, N> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Error, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Error, Serialize, Deserialize, JsonSchema)]
 #[serde(bound(
     serialize = "A: Serialize, N: Serialize",
     deserialize = "A: Deserialize<'de> + Eq + Hash, N: Deserialize<'de> + QuantityScalar"

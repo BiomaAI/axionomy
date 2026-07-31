@@ -1,9 +1,10 @@
 use crate::{Basket, Quantity, QuantityScalar};
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::hash::Hash;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(bound(
     serialize = "RateId: Serialize, Role: Serialize + Ord, AccountId: Serialize, N: Serialize",
     deserialize = "RateId: Deserialize<'de>, Role: Deserialize<'de> + Ord, AccountId: Deserialize<'de>, N: Deserialize<'de> + QuantityScalar"
@@ -44,7 +45,7 @@ where
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(bound(
     serialize = "AccountId: Serialize, A: Serialize, N: Serialize",
     deserialize = "AccountId: Deserialize<'de>, A: Deserialize<'de> + Eq + Hash, N: Deserialize<'de> + QuantityScalar"
@@ -88,7 +89,7 @@ impl<AccountId, A, N> AccountDelta<AccountId, A, N> {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(bound(
     serialize = "RateId: Serialize, Role: Serialize + Ord, AccountId: Serialize, A: Serialize, N: Serialize",
     deserialize = "RateId: Deserialize<'de>, Role: Deserialize<'de> + Ord, AccountId: Deserialize<'de>, A: Deserialize<'de> + Eq + Hash, N: Deserialize<'de> + QuantityScalar"
@@ -115,7 +116,7 @@ impl<RateId, Role, AccountId, A, N> Receipt<RateId, Role, AccountId, A, N> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(bound(
     serialize = "RateId: Serialize, Role: Serialize + Ord, AccountId: Serialize, N: Serialize",
     deserialize = "RateId: Deserialize<'de>, Role: Deserialize<'de> + Ord, AccountId: Deserialize<'de>, N: Deserialize<'de> + QuantityScalar"

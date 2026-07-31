@@ -1,7 +1,9 @@
 use crate::{AssetAmount, Quantity, QuantityScalar};
 use indexmap::IndexMap;
+use schemars::{JsonSchema, Schema, SchemaGenerator};
 use serde::ser::SerializeSeq;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use std::borrow::Cow;
 use std::hash::Hash;
 use std::iter::FromIterator;
 use thiserror::Error;
@@ -228,6 +230,20 @@ where
     {
         let entries = Vec::<(A, Quantity<N>)>::deserialize(deserializer)?;
         Self::try_from_entries(entries).map_err(serde::de::Error::custom)
+    }
+}
+
+impl<A, N> JsonSchema for Basket<A, N>
+where
+    A: JsonSchema,
+    N: JsonSchema,
+{
+    fn schema_name() -> Cow<'static, str> {
+        format!("Basket_{}_{}", A::schema_name(), N::schema_name()).into()
+    }
+
+    fn json_schema(generator: &mut SchemaGenerator) -> Schema {
+        generator.subschema_for::<Vec<(A, Quantity<N>)>>()
     }
 }
 

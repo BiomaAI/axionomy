@@ -31,6 +31,7 @@ indexmap = { version = "2.14.0", features = ["serde"] }
 num-bigint = { version = "0.5.1", features = ["serde"], optional = true }
 num-traits = "0.2.19"
 serde = { version = "1.0.229", features = ["derive", "rc"] }
+schemars = "1.2.2"
 thiserror = "2.0.19"
 
 [dev-dependencies]

@@ -1,11 +1,12 @@
 use crate::{Quantity, QuantityScalar};
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 /// One asset-qualified economic quantity.
 ///
 /// `A` preserves what the value means and names its atomic basis. `N`
 /// determines how the exact non-negative coefficient is represented.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
 #[serde(bound(
     serialize = "A: Serialize, N: Serialize",
     deserialize = "A: Deserialize<'de>, N: Deserialize<'de> + QuantityScalar"

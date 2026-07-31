@@ -1,5 +1,7 @@
 use num_traits::{CheckedAdd, CheckedMul, CheckedSub, Zero};
+use schemars::{JsonSchema, Schema, SchemaGenerator};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use std::borrow::Cow;
 use std::fmt;
 use std::hash::Hash;
 use thiserror::Error;
@@ -171,6 +173,19 @@ where
     {
         let value = N::deserialize(deserializer)?;
         Self::try_from_scalar(value).map_err(serde::de::Error::custom)
+    }
+}
+
+impl<N> JsonSchema for Quantity<N>
+where
+    N: JsonSchema,
+{
+    fn schema_name() -> Cow<'static, str> {
+        format!("Quantity_{}", N::schema_name()).into()
+    }
+
+    fn json_schema(generator: &mut SchemaGenerator) -> Schema {
+        generator.subschema_for::<N>()
     }
 }
 

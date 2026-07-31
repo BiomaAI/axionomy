@@ -3,14 +3,16 @@ use crate::{
     QuantityScalar, Rate, Receipt, Trace,
 };
 use indexmap::IndexMap;
+use schemars::{JsonSchema, Schema, SchemaGenerator};
 use serde::ser::SerializeStruct;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 use thiserror::Error;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(bound(
     serialize = "AccountId: Serialize + Ord, A: Serialize, N: Serialize",
     deserialize = "AccountId: Deserialize<'de> + Ord, A: Deserialize<'de> + Eq + Hash, N: Deserialize<'de> + QuantityScalar"
@@ -73,7 +75,9 @@ pub struct Economy<AccountId, A, RateId, Role, N = u64> {
 ///
 /// The fingerprint is deterministic for a fixed ontology implementation and
 /// executable, but it is not a durable serialization or collision-proof key.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize, JsonSchema,
+)]
 pub struct StateFingerprint(u64);
 
 impl StateFingerprint {
@@ -100,7 +104,7 @@ pub type ModelBuildResult<AccountId, A, RateId, Role, N = u64> =
     Result<Economy<AccountId, A, RateId, Role, N>, ModelBuildError<AccountId, RateId>>;
 
 /// The high-level result of assessing an exchange without mutating the economy.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub enum AssessmentStatus {
     Applicable,
     Infeasible,
@@ -108,7 +112,7 @@ pub enum AssessmentStatus {
 }
 
 /// One account's complete rate-derived requirements and effects.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(bound(
     serialize = "AccountId: Serialize, A: Serialize, N: Serialize",
     deserialize = "AccountId: Deserialize<'de>, A: Deserialize<'de> + Eq + Hash, N: Deserialize<'de> + QuantityScalar"
@@ -168,7 +172,7 @@ impl<AccountId, A, N> AccountAssessment<AccountId, A, N> {
 }
 
 /// The exact assets one account lacks for a well-formed exchange.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(bound(
     serialize = "AccountId: Serialize, A: Serialize, N: Serialize",
     deserialize = "AccountId: Deserialize<'de>, A: Deserialize<'de> + Eq + Hash, N: Deserialize<'de> + QuantityScalar"
@@ -194,7 +198,10 @@ impl<AccountId, A, N> AccountShortfall<AccountId, A, N> {
 
 /// A non-mutating explanation of one proposed exchange.
 #[must_use]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
+#[serde(bound(
+    serialize = "AccountId: Serialize, A: Serialize, RateId: Serialize, Role: Serialize, N: Serialize, N::SignedMeasure: Serialize"
+))]
 pub enum ExchangeAssessment<AccountId, A, RateId, Role, N = u64>
 where
     N: QuantityScalar,
@@ -434,6 +441,39 @@ where
             builder = builder.invariant(invariant);
         }
         builder.build().map_err(serde::de::Error::custom)
+    }
+}
+
+impl<AccountId, A, RateId, Role, N> JsonSchema for Economy<AccountId, A, RateId, Role, N>
+where
+    AccountId: JsonSchema,
+    A: JsonSchema,
+    RateId: JsonSchema,
+    Role: JsonSchema,
+    N: JsonSchema,
+{
+    fn schema_name() -> Cow<'static, str> {
+        format!(
+            "Economy_{}_{}_{}_{}_{}",
+            AccountId::schema_name(),
+            A::schema_name(),
+            RateId::schema_name(),
+            Role::schema_name(),
+            N::schema_name()
+        )
+        .into()
+    }
+
+    fn json_schema(generator: &mut SchemaGenerator) -> Schema {
+        #[allow(dead_code)]
+        #[derive(JsonSchema)]
+        struct EconomySchema<AccountId, A, RateId, Role, N> {
+            accounts: Vec<(AccountId, Account<A, N>)>,
+            rates: Vec<(RateId, Rate<Role, A, N>)>,
+            invariants: Vec<LinearInvariant<A>>,
+        }
+
+        generator.subschema_for::<EconomySchema<AccountId, A, RateId, Role, N>>()
     }
 }
 
@@ -836,7 +876,7 @@ pub struct EconomicView<'a, AccountId, A, RateId, Role, N = u64> {
 }
 
 /// Canonical actor-visible state, including the view's account boundary.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
 #[serde(bound(
     serialize = "AccountId: Serialize, A: Serialize, N: Serialize",
     deserialize = "AccountId: Deserialize<'de>, A: Deserialize<'de> + Eq + Hash, N: Deserialize<'de> + QuantityScalar"
@@ -898,7 +938,10 @@ where
     }
 }
 
-#[derive(Debug, Clone, Error)]
+#[derive(Debug, Clone, Error, Serialize)]
+#[serde(bound(
+    serialize = "RateId: Serialize, Role: Serialize, AccountId: Serialize, A: Serialize, N: Serialize, N::SignedMeasure: Serialize"
+))]
 pub enum ApplyError<RateId, Role, AccountId, A, N = u64>
 where
     N: QuantityScalar,

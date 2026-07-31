@@ -1,8 +1,10 @@
 use crate::{Account, Basket, Quantity, QuantityScalar};
 use indexmap::IndexMap;
 use num_traits::{CheckedAdd, Zero};
+use schemars::{JsonSchema, Schema, SchemaGenerator};
 use serde::ser::SerializeStruct;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
 use std::hash::Hash;
 use thiserror::Error;
@@ -207,6 +209,36 @@ where
     }
 }
 
+impl<Role, A, N> JsonSchema for Rate<Role, A, N>
+where
+    Role: JsonSchema,
+    A: JsonSchema,
+    N: JsonSchema,
+{
+    fn schema_name() -> Cow<'static, str> {
+        format!(
+            "Rate_{}_{}_{}",
+            Role::schema_name(),
+            A::schema_name(),
+            N::schema_name()
+        )
+        .into()
+    }
+
+    fn json_schema(generator: &mut SchemaGenerator) -> Schema {
+        #[allow(dead_code)]
+        #[derive(JsonSchema)]
+        struct RateSchema<Role, A, N> {
+            consume: Vec<(Role, Basket<A, N>)>,
+            produce: Vec<(Role, Basket<A, N>)>,
+            preserve: Vec<(Role, Basket<A, N>)>,
+            distinct: Vec<(Role, Role)>,
+        }
+
+        generator.subschema_for::<RateSchema<Role, A, N>>()
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum RateError<Role, A> {
     #[error("rate basket quantity overflow")]
@@ -308,6 +340,26 @@ where
             invariant = invariant.weight(asset, weight);
         }
         Ok(invariant)
+    }
+}
+
+impl<A> JsonSchema for LinearInvariant<A>
+where
+    A: JsonSchema,
+{
+    fn schema_name() -> Cow<'static, str> {
+        format!("LinearInvariant_{}", A::schema_name()).into()
+    }
+
+    fn json_schema(generator: &mut SchemaGenerator) -> Schema {
+        #[allow(dead_code)]
+        #[derive(JsonSchema)]
+        struct LinearInvariantSchema<A> {
+            name: String,
+            weights: Vec<(A, i64)>,
+        }
+
+        generator.subschema_for::<LinearInvariantSchema<A>>()
     }
 }
 
