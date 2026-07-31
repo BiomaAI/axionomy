@@ -65,6 +65,7 @@ pub struct ReplayResponse {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct SearchRequest {
     pub economy_id: String,
     pub goal: WireGoal,
@@ -72,12 +73,9 @@ pub struct SearchRequest {
     pub candidates: Vec<WireExchange>,
     /// Maximum states the search may expand before completing without a solution.
     pub max_expansions: usize,
-    /// Deterministic number of state expansions between persisted progress updates.
+    /// Deterministic number of state expansions between observable progress updates.
     #[serde(default = "default_chunk_size")]
     pub chunk_size: usize,
-    /// Caller-stable key for retrying the same logical search request.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub idempotency_key: Option<String>,
 }
 
 const fn default_chunk_size() -> usize {

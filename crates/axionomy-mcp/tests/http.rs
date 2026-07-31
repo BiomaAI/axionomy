@@ -1,5 +1,5 @@
 use axionomy::{Account, Basket, EconomyBuilder, Exchange, Goal, Quantity, Rate};
-use axionomy_mcp::{SearchRequest, SqliteStore, WireEconomy, stateless_http_service};
+use axionomy_mcp::{MemorySnapshotStore, SearchRequest, WireEconomy, stateless_http_service};
 use axum::Router;
 use reqwest::{Client, Response, StatusCode};
 use serde_json::{Value, json};
@@ -36,9 +36,8 @@ fn fixture() -> (
 }
 
 async fn spawn_server() -> (Client, String, CancellationToken) {
-    let store = SqliteStore::open_in_memory().await.unwrap();
     let cancellation = CancellationToken::new();
-    let service = stateless_http_service(store, cancellation.clone());
+    let service = stateless_http_service(MemorySnapshotStore::default(), cancellation.clone());
     let app = Router::new().nest_service("/mcp", service);
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let address = listener.local_addr().unwrap();
@@ -107,7 +106,7 @@ async fn post(
 }
 
 #[tokio::test]
-async fn strict_stateless_http_runs_a_durable_search_task() {
+async fn strict_stateless_http_runs_a_process_local_search_task() {
     let (client, url, cancellation) = spawn_server().await;
 
     let missing_header = client
@@ -160,7 +159,6 @@ async fn strict_stateless_http_runs_a_durable_search_task() {
         candidates: vec![exchange],
         max_expansions: 8,
         chunk_size: 1,
-        idempotency_key: Some("http-search".to_owned()),
     };
     let created = post(
         &client,

@@ -7,7 +7,7 @@ mod wire;
 
 pub use http::{StatelessHttpService, stateless_http_config, stateless_http_service};
 pub use server::AxionomyMcp;
-pub use store::{SqliteStore, StoreError};
+pub use store::{MemorySnapshotStore, MemorySnapshotStoreError, SnapshotStore, StoredSnapshot};
 pub use wire::{
     ApplyRequest, ApplyResponse, AssessRequest, AssessResponse, EconomyHandle, EconomyPutRequest,
     EconomyPutResponse, ReplayRequest, ReplayResponse, SearchRequest, SearchResponse,

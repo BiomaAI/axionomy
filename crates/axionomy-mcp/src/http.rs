@@ -1,11 +1,11 @@
-use crate::{AxionomyMcp, SqliteStore};
+use crate::{AxionomyMcp, SnapshotStore};
 use rmcp::transport::streamable_http_server::{
     StreamableHttpServerConfig, StreamableHttpService, session::never::NeverSessionManager,
 };
 use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
 
-pub type StatelessHttpService = StreamableHttpService<AxionomyMcp, NeverSessionManager>;
+pub type StatelessHttpService<S> = StreamableHttpService<AxionomyMcp<S>, NeverSessionManager>;
 
 /// Strict MCP 2026-07-28 configuration with legacy sessions disabled.
 pub fn stateless_http_config(cancellation_token: CancellationToken) -> StreamableHttpServerConfig {
@@ -17,11 +17,14 @@ pub fn stateless_http_config(cancellation_token: CancellationToken) -> Streamabl
         .with_cancellation_token(cancellation_token)
 }
 
-pub fn stateless_http_service(
-    store: SqliteStore,
+pub fn stateless_http_service<S>(
+    snapshots: S,
     cancellation_token: CancellationToken,
-) -> StatelessHttpService {
-    let server = AxionomyMcp::new(store);
+) -> StatelessHttpService<S>
+where
+    S: SnapshotStore,
+{
+    let server = AxionomyMcp::new(snapshots);
     StreamableHttpService::new(
         move || Ok(server.clone()),
         Arc::new(NeverSessionManager::default()),

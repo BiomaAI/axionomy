@@ -1,4 +1,4 @@
-use crate::store::{CreatedTask, SqliteStore};
+use crate::store::{MemorySnapshotStore, SnapshotStore};
 use crate::wire::{
     ApplyRequest, ApplyResponse, AssessRequest, AssessResponse, EconomyPutRequest,
     EconomyPutResponse, ReplayRequest, ReplayResponse, SearchOutcome, SearchRequest,
@@ -17,25 +17,36 @@ use rmcp::{
     },
     model::{
         CallToolRequestParams, CallToolResponse, CallToolResult, CancelTaskParams,
-        CreateTaskResult, GetTaskParams, GetTaskResult, Implementation, JsonObject,
-        ProtocolVersion, ServerCapabilities, ServerInfo, UpdateTaskParams,
+        CreateTaskResult, GetTaskParams, GetTaskResult, Implementation, ProtocolVersion,
+        ServerCapabilities, ServerInfo, UpdateTaskParams,
     },
     service::{RequestContext, RoleServer},
+    task_manager::{TaskContext, TaskExit, TaskManager, TaskOptions},
     tool, tool_handler, tool_router,
 };
-use std::borrow::Cow;
+use std::{borrow::Cow, sync::Arc};
 
-#[derive(Debug, Clone)]
-pub struct AxionomyMcp {
-    store: SqliteStore,
+const TASK_POLL_INTERVAL_MS: u64 = 100;
+
+#[derive(Clone)]
+pub struct AxionomyMcp<S = MemorySnapshotStore>
+where
+    S: SnapshotStore,
+{
+    snapshots: S,
+    tasks: TaskManager,
     tool_router: ToolRouter<Self>,
 }
 
 #[tool_router]
-impl AxionomyMcp {
-    pub fn new(store: SqliteStore) -> Self {
+impl<S> AxionomyMcp<S>
+where
+    S: SnapshotStore,
+{
+    pub fn new(snapshots: S) -> Self {
         Self {
-            store,
+            snapshots,
+            tasks: TaskManager::new(),
             tool_router: Self::tool_router(),
         }
     }
@@ -49,8 +60,8 @@ impl AxionomyMcp {
         Parameters(request): Parameters<EconomyPutRequest>,
     ) -> Result<Json<EconomyPutResponse>, String> {
         let stored = self
-            .store
-            .put_economy(&request.economy)
+            .snapshots
+            .put(request.economy)
             .await
             .map_err(|error| error.to_string())?;
         Ok(Json(EconomyPutResponse {
@@ -86,13 +97,13 @@ impl AxionomyMcp {
         Parameters(request): Parameters<ApplyRequest>,
     ) -> Result<Json<ApplyResponse>, String> {
         let source_economy_id = request.economy_id;
-        let mut economy = self.require_economy(&source_economy_id).await?;
+        let mut economy = self.require_economy(&source_economy_id).await?.fork();
         let receipt = economy
             .apply(request.exchange)
             .map_err(|error| error.to_string())?;
         let stored = self
-            .store
-            .put_economy(&economy)
+            .snapshots
+            .put(economy)
             .await
             .map_err(|error| error.to_string())?;
         Ok(Json(ApplyResponse {
@@ -117,8 +128,8 @@ impl AxionomyMcp {
             .replay(&request.trace)
             .map_err(|error| error.to_string())?;
         let stored = self
-            .store
-            .put_economy(&next)
+            .snapshots
+            .put(next)
             .await
             .map_err(|error| error.to_string())?;
         Ok(Json(ReplayResponse {
@@ -130,7 +141,7 @@ impl AxionomyMcp {
 
     #[tool(
         name = "axionomy_search",
-        description = "Start a durable, cancellable breadth-first search task over an explicit candidate exchange universe. Requires MCP Tasks support."
+        description = "Start a cancellable breadth-first search task over an explicit candidate exchange universe. Requires MCP Tasks support."
     )]
     async fn search_requires_tasks(
         &self,
@@ -139,32 +150,26 @@ impl AxionomyMcp {
         Err("axionomy_search requires the MCP io.modelcontextprotocol/tasks capability".to_owned())
     }
 
-    async fn require_economy(&self, economy_id: &str) -> Result<crate::wire::WireEconomy, String> {
-        self.store
-            .get_economy(economy_id)
+    async fn require_economy(&self, economy_id: &str) -> Result<Arc<WireEconomy>, String> {
+        self.snapshots
+            .get(economy_id)
             .await
             .map_err(|error| error.to_string())?
             .ok_or_else(|| format!("economy snapshot `{economy_id}` does not exist"))
     }
+}
 
-    async fn create_search_task(
-        &self,
-        request: &SearchRequest,
-    ) -> Result<(CreatedTask, WireEconomy), String> {
-        validate_search_request(request)?;
-        let economy = self.require_economy(&request.economy_id).await?;
-        let request_json = serde_json::to_string(request).map_err(|error| error.to_string())?;
-        let task = self
-            .store
-            .create_search_task(request_json, request.idempotency_key.clone())
-            .await
-            .map_err(|error| error.to_string())?;
-        Ok((task, economy))
+impl Default for AxionomyMcp<MemorySnapshotStore> {
+    fn default() -> Self {
+        Self::new(MemorySnapshotStore::default())
     }
 }
 
 #[tool_handler(router = self.tool_router)]
-impl ServerHandler for AxionomyMcp {
+impl<S> ServerHandler for AxionomyMcp<S>
+where
+    S: SnapshotStore,
+{
     async fn call_tool(
         &self,
         request: CallToolRequestParams,
@@ -187,8 +192,15 @@ impl ServerHandler for AxionomyMcp {
                     .into());
                 }
             };
-            let (created, economy) = match self.create_search_task(&search).await {
-                Ok(created) => created,
+            if let Err(error) = validate_search_request(&search) {
+                return Ok(CallToolResult::structured_error(serde_json::json!({
+                    "error": "search_not_started",
+                    "message": error
+                }))
+                .into());
+            }
+            let economy = match self.require_economy(&search.economy_id).await {
+                Ok(economy) => economy,
                 Err(error) => {
                     return Ok(CallToolResult::structured_error(serde_json::json!({
                         "error": "search_not_started",
@@ -197,15 +209,13 @@ impl ServerHandler for AxionomyMcp {
                     .into());
                 }
             };
-            if created.created {
-                spawn_search(
-                    self.store.clone(),
-                    created.task.task_id.clone(),
-                    economy,
-                    search,
-                );
-            }
-            return Ok(CreateTaskResult::new(created.task).into());
+            let task = self.tasks.spawn(
+                TaskOptions::new()
+                    .with_poll_interval_ms(TASK_POLL_INTERVAL_MS)
+                    .with_status_message("queued"),
+                move |context| Box::pin(run_search(context, economy, search)),
+            );
+            return Ok(CreateTaskResult::new(task).into());
         }
 
         let context = ToolCallContext::new(self, request, context);
@@ -217,13 +227,7 @@ impl ServerHandler for AxionomyMcp {
         request: GetTaskParams,
         _context: RequestContext<RoleServer>,
     ) -> Result<GetTaskResult, McpError> {
-        let task = self
-            .store
-            .get_task(&request.task_id)
-            .await
-            .map_err(internal_store_error)?
-            .ok_or_else(|| unknown_task(&request.task_id))?;
-        Ok(GetTaskResult::new(task))
+        Ok(GetTaskResult::new(self.tasks.get_task(&request.task_id)?))
     }
 
     async fn update_task(
@@ -231,16 +235,8 @@ impl ServerHandler for AxionomyMcp {
         request: UpdateTaskParams,
         _context: RequestContext<RoleServer>,
     ) -> Result<(), McpError> {
-        if self
-            .store
-            .task_exists(&request.task_id)
-            .await
-            .map_err(internal_store_error)?
-        {
-            Ok(())
-        } else {
-            Err(unknown_task(&request.task_id))
-        }
+        self.tasks
+            .update_task(&request.task_id, request.input_responses)
     }
 
     async fn cancel_task(
@@ -248,16 +244,7 @@ impl ServerHandler for AxionomyMcp {
         request: CancelTaskParams,
         _context: RequestContext<RoleServer>,
     ) -> Result<(), McpError> {
-        if self
-            .store
-            .request_cancellation(&request.task_id)
-            .await
-            .map_err(internal_store_error)?
-        {
-            Ok(())
-        } else {
-            Err(unknown_task(&request.task_id))
-        }
+        self.tasks.cancel_task(&request.task_id)
     }
 
     fn get_info(&self) -> ServerInfo {
@@ -290,38 +277,22 @@ fn validate_search_request(request: &SearchRequest) -> Result<(), String> {
             "chunk_size must not exceed 10000 so cancellation remains responsive".to_owned(),
         );
     }
-    if request.idempotency_key.as_deref() == Some("") {
-        return Err("idempotency_key must not be empty".to_owned());
-    }
     Ok(())
 }
 
-fn spawn_search(store: SqliteStore, task_id: String, economy: WireEconomy, request: SearchRequest) {
-    tokio::spawn(async move {
-        if let Err(error) = run_search(&store, &task_id, economy, request).await {
-            tracing::error!(task_id, %error, "Axionomy search task failed");
-            if let Err(store_error) = store.fail_task(&task_id, error).await {
-                tracing::error!(task_id, %store_error, "could not persist Axionomy task failure");
-            }
-        }
-    });
-}
-
 async fn run_search(
-    store: &SqliteStore,
-    task_id: &str,
-    economy: WireEconomy,
+    context: TaskContext,
+    economy: Arc<WireEconomy>,
     request: SearchRequest,
-) -> Result<(), String> {
+) -> Result<CallToolResult, TaskExit> {
     let SearchRequest {
         economy_id,
         goal,
         candidates,
         max_expansions,
         chunk_size,
-        idempotency_key: _,
     } = request;
-    let mut session = BfsSession::new(&economy, goal, move |_| candidates.clone());
+    let mut session = BfsSession::new(economy.as_ref(), goal, move |_| candidates.clone());
     let mut remaining = max_expansions;
 
     loop {
@@ -332,47 +303,29 @@ async fn run_search(
                 SearchStatus::Exhausted => SearchOutcome::Exhausted,
                 SearchStatus::Running | SearchStatus::Interrupted => unreachable!(),
             };
-            return complete_search(store, task_id, economy_id, outcome, session).await;
+            return complete_search(&context, economy_id, outcome, session);
         }
-        if store
-            .cancellation_requested(task_id)
-            .await
-            .map_err(|error| error.to_string())?
-        {
-            return store
-                .cancel_task(task_id)
-                .await
-                .map_err(|error| error.to_string());
+        if context.is_cancel_requested() {
+            return Err(TaskExit::Cancelled);
         }
         if remaining == 0 {
-            return complete_search(
-                store,
-                task_id,
-                economy_id,
-                SearchOutcome::ExpansionLimit,
-                session,
-            )
-            .await;
+            return complete_search(&context, economy_id, SearchOutcome::ExpansionLimit, session);
         }
 
         let budget = remaining.min(chunk_size);
         let report = session.advance(WorkBudget::new(budget), &mut Continue);
         remaining = remaining.saturating_sub(report.work_completed());
-        let progress = *report.progress();
-        store
-            .update_task_progress(
-                task_id,
-                progress_message(progress, max_expansions, remaining),
-            )
-            .await
-            .map_err(|error| error.to_string())?;
+        context.set_status_message(progress_message(
+            *report.progress(),
+            max_expansions,
+            remaining,
+        ));
         tokio::task::yield_now().await;
     }
 }
 
-async fn complete_search(
-    store: &SqliteStore,
-    task_id: &str,
+fn complete_search(
+    context: &TaskContext,
     economy_id: String,
     outcome: SearchOutcome,
     session: BfsSession<
@@ -383,22 +336,18 @@ async fn complete_search(
         u64,
         impl FnMut(&WireEconomy) -> Vec<crate::wire::WireExchange>,
     >,
-) -> Result<(), String> {
+) -> Result<CallToolResult, TaskExit> {
     let progress = session.progress();
+    context.set_status_message(terminal_message(progress));
     let response = SearchResponse {
         economy_id,
         outcome,
         progress,
         solution: session.into_solution(),
     };
-    let result = CallToolResult::structured(
-        serde_json::to_value(response).map_err(|error| error.to_string())?,
-    );
-    let result = json_object(result)?;
-    store
-        .complete_task(task_id, terminal_message(progress), result)
-        .await
-        .map_err(|error| error.to_string())
+    let structured = serde_json::to_value(response)
+        .map_err(|error| TaskExit::Error(McpError::internal_error(error.to_string(), None)))?;
+    Ok(CallToolResult::structured(structured))
 }
 
 fn progress_message(
@@ -427,25 +376,10 @@ fn terminal_message(progress: GraphSearchProgress) -> String {
     )
 }
 
-fn json_object(value: impl serde::Serialize) -> Result<JsonObject, String> {
-    serde_json::to_value(value)
-        .map_err(|error| error.to_string())?
-        .as_object()
-        .cloned()
-        .ok_or_else(|| "task result must serialize as a JSON object".to_owned())
-}
-
-fn unknown_task(task_id: &str) -> McpError {
-    McpError::invalid_params(format!("unknown task: {task_id}"), None)
-}
-
-fn internal_store_error(error: crate::StoreError) -> McpError {
-    McpError::internal_error(error.to_string(), None)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::SnapshotStore;
     use axionomy::{Account, Basket, EconomyBuilder, Exchange, Goal, Quantity, Rate};
     use rmcp::model::{TaskPayload, TaskStatus};
 
@@ -476,14 +410,24 @@ mod tests {
             candidates: vec![exchange],
             max_expansions: 8,
             chunk_size: 1,
-            idempotency_key: None,
         };
         (economy, request)
     }
 
+    async fn terminal_task(tasks: &TaskManager, task_id: &str) -> rmcp::model::DetailedTask {
+        for _ in 0..100 {
+            let task = tasks.get_task(task_id).unwrap();
+            if task.status().is_terminal() {
+                return task;
+            }
+            tokio::task::yield_now().await;
+        }
+        panic!("task did not reach a terminal state")
+    }
+
     #[tokio::test]
     async fn every_reference_tool_exposes_input_and_output_schemas() {
-        let server = AxionomyMcp::new(SqliteStore::open_in_memory().await.unwrap());
+        let server = AxionomyMcp::default();
         let tools = server.tool_router.list_all();
 
         assert_eq!(tools.len(), 5);
@@ -494,24 +438,16 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn bfs_task_persists_a_structured_solution() {
-        let store = SqliteStore::open_in_memory().await.unwrap();
+    async fn bfs_task_returns_a_structured_solution() {
+        let snapshots = MemorySnapshotStore::default();
         let (economy, mut request) = search_fixture();
-        request.economy_id = store.put_economy(&economy).await.unwrap().economy_id;
-        let created = store
-            .create_search_task(serde_json::to_string(&request).unwrap(), None)
-            .await
-            .unwrap();
+        request.economy_id = snapshots.put(economy.clone()).await.unwrap().economy_id;
+        let tasks = TaskManager::new();
+        let task = tasks.spawn(TaskOptions::new(), move |context| {
+            Box::pin(run_search(context, Arc::new(economy), request))
+        });
 
-        run_search(&store, &created.task.task_id, economy, request)
-            .await
-            .unwrap();
-
-        let detailed = store
-            .get_task(&created.task.task_id)
-            .await
-            .unwrap()
-            .unwrap();
+        let detailed = terminal_task(&tasks, &task.task_id).await;
         assert_eq!(detailed.status(), TaskStatus::Completed);
         let TaskPayload::Completed { result } = detailed.payload else {
             panic!("search should complete with a tool result")
@@ -525,28 +461,15 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn bfs_task_observes_persisted_cancellation() {
-        let store = SqliteStore::open_in_memory().await.unwrap();
-        let (economy, mut request) = search_fixture();
-        request.economy_id = store.put_economy(&economy).await.unwrap().economy_id;
-        let created = store
-            .create_search_task(serde_json::to_string(&request).unwrap(), None)
-            .await
-            .unwrap();
-        store
-            .request_cancellation(&created.task.task_id)
-            .await
-            .unwrap();
+    async fn bfs_task_observes_task_manager_cancellation() {
+        let (economy, request) = search_fixture();
+        let tasks = TaskManager::new();
+        let task = tasks.spawn(TaskOptions::new(), move |context| {
+            Box::pin(run_search(context, Arc::new(economy), request))
+        });
+        tasks.cancel_task(&task.task_id).unwrap();
 
-        run_search(&store, &created.task.task_id, economy, request)
-            .await
-            .unwrap();
-
-        let detailed = store
-            .get_task(&created.task.task_id)
-            .await
-            .unwrap()
-            .unwrap();
+        let detailed = terminal_task(&tasks, &task.task_id).await;
         assert_eq!(detailed.status(), TaskStatus::Cancelled);
         assert!(matches!(detailed.payload, TaskPayload::Cancelled));
     }

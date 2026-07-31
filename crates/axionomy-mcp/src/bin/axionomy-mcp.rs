@@ -1,6 +1,6 @@
-use axionomy_mcp::{SqliteStore, stateless_http_service};
+use axionomy_mcp::{MemorySnapshotStore, stateless_http_service};
 use axum::{Router, routing::get};
-use std::{env, error::Error, net::SocketAddr, path::PathBuf};
+use std::{env, error::Error, net::SocketAddr};
 use tokio_util::sync::CancellationToken;
 use tracing::info;
 use tracing_subscriber::EnvFilter;
@@ -18,18 +18,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let bind = env::var("AXIONOMY_MCP_BIND")
         .unwrap_or_else(|_| "127.0.0.1:8000".to_owned())
         .parse::<SocketAddr>()?;
-    let database = env::var_os("AXIONOMY_MCP_DATABASE")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("axionomy-mcp.sqlite3"));
-    let store = SqliteStore::open(&database).await?;
+    let snapshots = MemorySnapshotStore::default();
     let cancellation = CancellationToken::new();
-    let service = stateless_http_service(store, cancellation.clone());
+    let service = stateless_http_service(snapshots, cancellation.clone());
     let app = Router::new()
         .route("/health", get(|| async { "ok" }))
         .nest_service("/mcp", service);
     let listener = tokio::net::TcpListener::bind(bind).await?;
 
-    info!(address = %bind, database = %database.display(), "Axionomy MCP server listening");
+    info!(address = %bind, "Axionomy MCP server listening");
     axum::serve(listener, app)
         .with_graceful_shutdown(async move {
             if tokio::signal::ctrl_c().await.is_ok() {
