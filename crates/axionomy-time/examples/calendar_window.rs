@@ -2,7 +2,7 @@ use axionomy::{AssetAmount, Basket, Quantity};
 use axionomy_time::jiff::{SignedDuration, Span, Zoned};
 use axionomy_time::{CalendarWindow, TimelineAsset};
 use axionomy_units::{AssetSchema, UnitAsset};
-use tracing::info;
+use tracing::{debug, info};
 use tracing_subscriber::EnvFilter;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -40,9 +40,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let timeline = Basket::try_from_amounts([amount])?;
     info!(
-        asset = ?elapsed_hour.asset(),
+        asset_id = ?elapsed_hour.asset().id(),
         quantity = %timeline.quantity(elapsed_hour.asset()),
         "lowered elapsed time into authoritative economic state"
+    );
+    debug!(
+        definition = ?elapsed_hour.asset().definition(),
+        "canonical timeline denomination"
     );
 
     assert_eq!(timeline.quantity(elapsed_hour.asset()), Quantity::new(23));

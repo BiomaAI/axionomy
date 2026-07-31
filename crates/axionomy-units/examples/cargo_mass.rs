@@ -2,7 +2,7 @@ use axionomy::{AssetAmount, Basket, Quantity};
 use axionomy_units::si::mass::{gram, kilogram};
 use axionomy_units::si::rational64::Mass;
 use axionomy_units::{AssetSchema, Rational, UnitAsset};
-use tracing::info;
+use tracing::{debug, info};
 use tracing_subscriber::EnvFilter;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -28,10 +28,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     info!(
         input = "12.5 kg",
-        asset = ?amount.asset(),
+        asset_id = ?amount.asset().id(),
         atoms = %amount.quantity(),
         atomic_basis = "1 g",
         "lowered a dimension-safe value into an economic amount"
+    );
+    debug!(
+        definition = ?cargo_gram.asset().definition(),
+        "canonical asset denomination"
     );
 
     let cargo = Basket::try_from_amounts([amount])?;
