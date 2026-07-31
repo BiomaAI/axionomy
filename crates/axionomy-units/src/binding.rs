@@ -69,6 +69,29 @@ where
     ///
     /// The resulting atom count must fit `u64` before it is converted through
     /// [`QuantityScalar::from_u64`] into the selected economy backend.
+    ///
+    /// A handle accepts only the physical dimension with which it was defined:
+    ///
+    /// ```compile_fail
+    /// use axionomy_units::si::length::meter;
+    /// use axionomy_units::si::mass::gram;
+    /// use axionomy_units::si::rational64::{Length, Mass};
+    /// use axionomy_units::{AssetSchema, Rational};
+    ///
+    /// #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+    /// enum AssetId { Cargo }
+    ///
+    /// let mut schema = AssetSchema::new();
+    /// let cargo = schema
+    ///     .define_measure(
+    ///         AssetId::Cargo,
+    ///         Mass::new::<gram>(Rational::from_integer(1)),
+    ///     )
+    ///     .unwrap();
+    /// cargo
+    ///     .encode::<u64>(Length::new::<meter>(Rational::from_integer(1)))
+    ///     .unwrap();
+    /// ```
     pub fn encode<N>(
         &self,
         value: UomQuantity<D, U, MeasureScalar>,

@@ -295,9 +295,3 @@ proptest! {
         prop_assert_eq!(amount.quantity(), &Quantity::new(grams));
     }
 }
-
-#[test]
-fn measured_handles_reject_other_dimensions_at_compile_time() {
-    let tests = trybuild::TestCases::new();
-    tests.compile_fail("tests/ui/mass_rejects_length.rs");
-}
