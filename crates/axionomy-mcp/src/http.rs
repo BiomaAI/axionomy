@@ -1,11 +1,12 @@
-use crate::{AxionomyMcp, SnapshotStore};
+use crate::{AxionomyMcp, MemorySnapshotStore, SnapshotStore};
 use rmcp::transport::streamable_http_server::{
     StreamableHttpServerConfig, StreamableHttpService, session::never::NeverSessionManager,
 };
 use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
 
-pub type StatelessHttpService<S> = StreamableHttpService<AxionomyMcp<S>, NeverSessionManager>;
+pub type StatelessHttpService<S = MemorySnapshotStore> =
+    StreamableHttpService<AxionomyMcp<S>, NeverSessionManager>;
 
 /// Strict MCP 2026-07-28 configuration with legacy sessions disabled.
 pub fn stateless_http_config(cancellation_token: CancellationToken) -> StreamableHttpServerConfig {

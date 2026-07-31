@@ -70,7 +70,7 @@ models into one-way workspace dependencies:
 | `axionomy-problems` | Canonical problem encodings, specialized proposers, and conformance tests |
 | `axionomy-units` | Self-describing asset denominations, schema coherence, and dimension-safe `uom` authoring |
 | `axionomy-time` | Calendar-aware Jiff authoring over the same canonical timeline denominations |
-| `axionomy-mcp` | Strict stateless MCP 2026-07-28 reference server with immutable snapshot handles and durable search tasks |
+| `axionomy-mcp` | Strict stateless MCP 2026-07-28 reference server with caller-owned snapshot storage and interruptible search tasks |
 
 ```text
 axionomy-search ──────→ axionomy
@@ -119,9 +119,9 @@ follow search.
 - Forks share immutable laws and untouched account contents, with compact
   model-scoped state fingerprints for search caches.
 - A strict MCP 2026-07-28 Streamable HTTP reference server with
-  content-addressed immutable economy snapshots, schema-backed tools, SQLite
-  task persistence, idempotent search creation, polling, progress, and
-  cooperative cancellation.
+  content-addressed immutable economy snapshots, a caller-provided storage
+  boundary, an in-memory default, schema-backed tools, polling, progress, and
+  cooperative cancellation through `rmcp::TaskManager`.
 - Eleven closed benchmark encodings in `axionomy-problems`, with independent
   solver strategies and core-encoded stochastic priors.
 
@@ -267,8 +267,15 @@ can remain faithful to the closed model. It keeps no hidden “current economy.�
 `axionomy_economy_put` returns an immutable `economy_id`; assessment names that
 snapshot, while apply and replay return a new ID and leave the source
 available. `axionomy_search` accepts an explicit candidate exchange universe
-and returns an MCP task handle whose progress, terminal result, idempotency,
-and cancellation intent are persisted in SQLite.
+and returns an MCP task handle whose progress, terminal result, and cooperative
+cancellation are observable for the lifetime configured by the running server.
+
+Snapshot lifetime is caller policy. `AxionomyMcp<S>` accepts any
+`SnapshotStore`; the reference binary uses `MemorySnapshotStore`, whose clones
+share immutable content-addressed snapshots for one process. A restarted
+reference server intentionally starts empty. Applications that genuinely need
+longer-lived handles can provide database or object-store implementations
+without changing the MCP tools or the core engine.
 
 The server accepts only MCP `2026-07-28`, disables legacy sessions, and
 requires the revision's request metadata and standard HTTP routing headers.
@@ -278,8 +285,7 @@ applying concrete exchanges through the kernel, and its completed result is a
 replayable trace.
 
 ```console
-AXIONOMY_MCP_DATABASE=axionomy-mcp.sqlite3 \
-  cargo run -p axionomy-mcp --bin axionomy-mcp
+cargo run -p axionomy-mcp --bin axionomy-mcp
 
 # Full stateless HTTP lifecycle, including task polling:
 cargo test -p axionomy-mcp --test http

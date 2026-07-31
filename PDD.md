@@ -365,11 +365,15 @@ model-scoped caches. Neither stable presentation nor a 64-bit fingerprint is a
 substitute for validation, trace replay, collision-safe durable identity, or a
 future compatibility protocol.
 
-The MCP reference adapter adds one scoped identity policy: it hashes the exact
-serialized snapshot with BLAKE3 and stores those bytes immutably. This creates
-a collision-resistant deployment handle without changing `Economy` semantics.
-Semantically equal economies with different declared insertion order may have
-different handles, and a future serialization schema may change the hash.
+The MCP reference adapter's default `MemorySnapshotStore` adds one scoped
+identity policy: it hashes the exact serialized snapshot with BLAKE3 and stores
+those bytes immutably. This creates a collision-resistant process-local handle
+without changing `Economy` semantics. Semantically equal economies with
+different declared insertion order may have different handles, and a future
+serialization schema may change the hash. `AxionomyMcp<S>` accepts a
+caller-provided `SnapshotStore` so retention and physical storage remain
+integration policy; every implementation must preserve immutable-handle
+semantics.
 
 The current public types serialize directly. Axionomy does not maintain
 parallel `ModelDefinitionV1`, snapshot, or trace-envelope types before a real
@@ -485,7 +489,7 @@ axionomy-mcp ─────────→ axionomy-search ──→ axionomy
 - `axionomy-units` owns optional dimension-safe physical authoring.
 - `axionomy-time` owns optional calendar-aware timeline authoring.
 - `axionomy-mcp` owns the strict stateless MCP reference boundary, immutable
-  snapshot storage, and durable task orchestration.
+  snapshot-store contract, and process-local task orchestration.
 
 The kernel must never depend on a solver or problem crate. Moving BFS and A*
 out of the kernel is philosophically significant: algorithms explore the
@@ -508,9 +512,9 @@ generated implicitly from applicable exchanges. It remains a reasonable future
 adapter when a user needs explicit graph import, export, or analysis.
 
 The MCP adapter depends inward on search and the kernel. Neither reusable
-crate depends on rmcp, Tokio, Axum, or SQLite. This direction is essential:
+crate depends on rmcp, Tokio, Axum, or a database. This direction is essential:
 remote execution requirements may improve the generic progress and
-interruption contracts, but they cannot make a protocol task or database row
+interruption contracts, but they cannot make a protocol task or storage record
 part of economic truth.
 
 ## 7. Solver contract
@@ -678,12 +682,22 @@ protocol and client metadata, and uses the revision's standardized HTTP
 routing headers. Transport statelessness is necessary but not sufficient, so
 the tool model also forbids an ambient current economy.
 
-Every operation names an immutable `economy_id`. The reference store derives
-that ID from a BLAKE3 hash of the exact current Serde bytes. Assessment returns
-an explanation without a new snapshot; successful apply and replay return a
-new content-addressed snapshot while preserving the source. The ID is a stable
-handle inside the current reference schema, not a versioned compatibility
-promise or a replacement for replay validation.
+Every operation names an immutable `economy_id`. The default
+`MemorySnapshotStore` derives that ID from a BLAKE3 hash of the exact current
+Serde bytes. Assessment returns an explanation without a new snapshot;
+successful apply and replay return a new content-addressed snapshot while
+preserving the source. The ID is a process-local handle inside the current
+reference schema, not a versioned compatibility promise or a replacement for
+replay validation.
+
+Storage lifetime is supplied by the embedding application. `SnapshotStore`
+has only two responsibilities: store a complete immutable `WireEconomy` and
+resolve its opaque content-derived handle. `MemorySnapshotStore` serializes
+once, retains the bytes for collision checks, shares decoded snapshots through
+`Arc`, and deduplicates equal bytes. Its clones share state; a fresh instance
+or process restart starts empty. A database, object store, tenant boundary, or
+retention policy can implement the same contract when deployment pressure
+requires it without changing any tool schema or kernel rule.
 
 The server exposes schema-backed tools for economy storage, assessment,
 application, replay, and search. The reference search request contains an
@@ -696,20 +710,20 @@ lists only when measured pressure justifies the new semantics.
 Long work uses the MCP Tasks extension:
 
 1. Validate the explicit snapshot handle and search bounds.
-2. Persist a working task before returning `CreateTaskResult`.
+2. Register a working task in `rmcp::TaskManager` before returning
+   `CreateTaskResult`.
 3. Advance a `BfsSession` in deterministic chunks.
-4. Persist human-readable progress after each chunk.
-5. Observe durable cancellation intent between chunks.
-6. Store the terminal structured `CallToolResult`, including the replayable
-   solution trace.
+4. Publish human-readable progress after each chunk.
+5. Observe cooperative cancellation intent between chunks.
+6. Return the terminal structured `CallToolResult`, including the replayable
+   solution trace, to the task manager.
 
-An optional idempotency key identifies one logical search request. Repeating
-the same serialized request returns the original task; reusing the key for
-different parameters is rejected. A process restart marks abandoned work as
-an explicit failure rather than making the handle vanish. Persisted
-checkpoints, worker leasing, notification fan-out, authentication, and
-multi-tenant authorization remain deployment concerns rather than hidden
-kernel responsibilities.
+Task handles, progress, terminal results, and cancellation intent live only in
+the running manager. The default `rmcp` TTL bounds their retention; callers can
+replace task options, including choosing unlimited process-lifetime retention.
+Process restart recovery, idempotent submission, persisted checkpoints, worker
+leasing, notification fan-out, authentication, and multi-tenant authorization
+are deployment policies to add only when a real deployment requires them.
 
 ## 8. Partial observation and chance
 
@@ -878,10 +892,11 @@ in the reusable model modules.
   sessions with serializable progress and safe cooperative interruption.
 - The MCP reference server uses immutable explicit economy handles rather than
   session-scoped current state and returns new handles for successful changes.
-- MCP search tasks are persisted before their handles are returned, expose
-  pollable progress and terminal results, support idempotent creation and
-  cooperative cancellation, and turn abandoned work into explicit failure on
-  restart.
+- The MCP adapter accepts caller-provided snapshot storage and defaults to a
+  process-local, content-addressed `MemorySnapshotStore`.
+- MCP search tasks are registered before their handles are returned and expose
+  pollable progress, terminal results, configurable retention, and cooperative
+  cancellation through `rmcp::TaskManager`.
 - Strict Streamable HTTP conformance is exercised end to end with MCP
   `2026-07-28` metadata and standardized routing headers, without legacy
   sessions.
@@ -932,9 +947,10 @@ The current foundation is intentionally bounded:
   continuous distribution schemas remain future work.
 - Native Rust is the current release target. Browser/Wasm compatibility is not
   yet a validated support guarantee.
-- The MCP adapter persists snapshots and task lifecycle in one local SQLite
-  store, but it does not persist live search checkpoints for continuation
-  after process failure.
+- The MCP reference binary keeps snapshots and task lifecycle in memory. Its
+  handles do not survive restart; callers can implement `SnapshotStore` when
+  snapshot persistence is required, while distributed task recovery remains
+  outside the reference scope.
 - The MCP reference server has no authentication, tenant isolation,
   authorization, quotas, TTL garbage collection, distributed worker leasing,
   cross-instance notifications, signatures, consensus, or production
@@ -1035,8 +1051,9 @@ action identifier would itself reveal the truth or random seed.
 
 Disabling HTTP sessions does not help if a server retains an ambient mutable
 economy. Immutable explicit snapshot handles make every operation reproducible
-and every branch visible. Durable task metadata may outlive one request because
-it controls derived computation, but its worker can only return a trace of
+and every branch visible. Snapshot and task metadata may outlive one request
+because they identify immutable input and control derived computation, but
+their lifetime is caller policy and a worker can only return a trace of
 core-validated exchanges. This is the same authority boundary as an in-process
 priority queue expressed across a protocol.
 

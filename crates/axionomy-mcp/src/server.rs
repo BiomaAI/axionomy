@@ -35,6 +35,7 @@ where
 {
     snapshots: S,
     tasks: TaskManager,
+    task_options: TaskOptions,
     tool_router: ToolRouter<Self>,
 }
 
@@ -47,8 +48,17 @@ where
         Self {
             snapshots,
             tasks: TaskManager::new(),
+            task_options: TaskOptions::new()
+                .with_poll_interval_ms(TASK_POLL_INTERVAL_MS)
+                .with_status_message("queued"),
             tool_router: Self::tool_router(),
         }
+    }
+
+    /// Overrides retention, polling, and initial-status policy for new tasks.
+    pub fn with_task_options(mut self, task_options: TaskOptions) -> Self {
+        self.task_options = task_options;
+        self
     }
 
     #[tool(
@@ -209,12 +219,9 @@ where
                     .into());
                 }
             };
-            let task = self.tasks.spawn(
-                TaskOptions::new()
-                    .with_poll_interval_ms(TASK_POLL_INTERVAL_MS)
-                    .with_status_message("queued"),
-                move |context| Box::pin(run_search(context, economy, search)),
-            );
+            let task = self.tasks.spawn(self.task_options.clone(), move |context| {
+                Box::pin(run_search(context, economy, search))
+            });
             return Ok(CreateTaskResult::new(task).into());
         }
 
@@ -380,7 +387,7 @@ fn terminal_message(progress: GraphSearchProgress) -> String {
 mod tests {
     use super::*;
     use crate::SnapshotStore;
-    use axionomy::{Account, Basket, EconomyBuilder, Exchange, Goal, Quantity, Rate};
+    use axionomy::{Account, Basket, EconomyBuilder, Exchange, Goal, Quantity, Rate, Trace};
     use rmcp::model::{TaskPayload, TaskStatus};
 
     fn one(asset: &str) -> Basket<String> {
@@ -449,6 +456,13 @@ mod tests {
 
         let detailed = terminal_task(&tasks, &task.task_id).await;
         assert_eq!(detailed.status(), TaskStatus::Completed);
+        assert!(
+            detailed
+                .task
+                .status_message
+                .as_deref()
+                .is_some_and(|message| message.starts_with("finished:"))
+        );
         let TaskPayload::Completed { result } = detailed.payload else {
             panic!("search should complete with a tool result")
         };
@@ -472,5 +486,57 @@ mod tests {
         let detailed = terminal_task(&tasks, &task.task_id).await;
         assert_eq!(detailed.status(), TaskStatus::Cancelled);
         assert!(matches!(detailed.payload, TaskPayload::Cancelled));
+    }
+
+    #[test]
+    fn search_request_rejects_removed_idempotency_policy() {
+        let (_, request) = search_fixture();
+        let mut value = serde_json::to_value(request).unwrap();
+        value
+            .as_object_mut()
+            .unwrap()
+            .insert("idempotency_key".to_owned(), serde_json::json!("retry"));
+
+        assert!(serde_json::from_value::<SearchRequest>(value).is_err());
+    }
+
+    #[tokio::test]
+    async fn apply_and_replay_create_new_snapshots_without_replacing_the_source() {
+        let snapshots = MemorySnapshotStore::default();
+        let server = AxionomyMcp::new(snapshots.clone());
+        let (economy, request) = search_fixture();
+        let exchange = request.candidates[0].clone();
+        let source_id = snapshots.put(economy).await.unwrap().economy_id;
+
+        let Json(applied) = server
+            .exchange_apply(Parameters(ApplyRequest {
+                economy_id: source_id.clone(),
+                exchange: exchange.clone(),
+            }))
+            .await
+            .unwrap();
+        let mut trace = Trace::new();
+        trace.push(exchange);
+        let Json(replayed) = server
+            .trace_replay(Parameters(ReplayRequest {
+                economy_id: source_id.clone(),
+                trace,
+            }))
+            .await
+            .unwrap();
+
+        assert_ne!(source_id, applied.economy_id);
+        assert_eq!(applied.economy_id, replayed.economy_id);
+        assert_eq!(replayed.receipts.len(), 1);
+        let source = snapshots.get(&source_id).await.unwrap().unwrap();
+        let next = snapshots.get(&applied.economy_id).await.unwrap().unwrap();
+        assert_eq!(
+            source.balance(&"source".to_owned(), &"token".to_owned()),
+            Quantity::new(1)
+        );
+        assert_eq!(
+            next.balance(&"sink".to_owned(), &"token".to_owned()),
+            Quantity::new(1)
+        );
     }
 }

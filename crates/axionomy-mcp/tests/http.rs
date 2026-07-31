@@ -11,13 +11,33 @@ fn one(asset: &str) -> Basket<String> {
     [(asset.to_owned(), Quantity::new(1))].into_iter().collect()
 }
 
+fn amount(asset: &str, quantity: u64) -> Basket<String> {
+    [(asset.to_owned(), Quantity::new(quantity))]
+        .into_iter()
+        .collect()
+}
+
 fn fixture() -> (
     WireEconomy,
     Exchange<String, String, String>,
     Goal<String, String>,
 ) {
+    fixture_with_amounts(1, 1)
+}
+
+fn fixture_with_amounts(
+    source_balance: u64,
+    goal_balance: u64,
+) -> (
+    WireEconomy,
+    Exchange<String, String, String>,
+    Goal<String, String>,
+) {
     let economy = EconomyBuilder::new()
-        .account("source".to_owned(), Account::new(one("token")))
+        .account(
+            "source".to_owned(),
+            Account::new(amount("token", source_balance)),
+        )
         .account("sink".to_owned(), Account::default())
         .rate(
             "transfer".to_owned(),
@@ -31,7 +51,7 @@ fn fixture() -> (
     let exchange = Exchange::new("transfer".to_owned(), Quantity::new(1))
         .bind("giver".to_owned(), "source".to_owned())
         .bind("receiver".to_owned(), "sink".to_owned());
-    let goal = Goal::new().require("sink".to_owned(), one("token"));
+    let goal = Goal::new().require("sink".to_owned(), amount("token", goal_balance));
     (economy, exchange, goal)
 }
 
@@ -203,6 +223,76 @@ async fn strict_stateless_http_runs_a_process_local_search_task() {
         completed["result"]["result"]["structuredContent"]["solution"]["cost"],
         1
     );
+
+    let (large_economy, large_exchange, unreachable_goal) = fixture_with_amounts(100_000, 100_001);
+    let put = post(
+        &client,
+        &url,
+        6,
+        "tools/call",
+        json!({
+            "name": "axionomy_economy_put",
+            "arguments": { "economy": large_economy }
+        }),
+        false,
+    )
+    .await;
+    let put: Value = put.json().await.unwrap();
+    let economy_id = put["result"]["structuredContent"]["economy_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let created = post(
+        &client,
+        &url,
+        7,
+        "tools/call",
+        json!({
+            "name": "axionomy_search",
+            "arguments": SearchRequest {
+                economy_id,
+                goal: unreachable_goal,
+                candidates: vec![large_exchange],
+                max_expansions: 100_000,
+                chunk_size: 1,
+            }
+        }),
+        true,
+    )
+    .await;
+    let created: Value = created.json().await.unwrap();
+    let task_id = created["result"]["taskId"].as_str().unwrap().to_owned();
+    let cancelled = post(
+        &client,
+        &url,
+        8,
+        "tasks/cancel",
+        json!({ "taskId": task_id }),
+        true,
+    )
+    .await;
+    assert_eq!(cancelled.status(), StatusCode::OK);
+
+    let mut status = None;
+    for _ in 0..100 {
+        let polled = post(
+            &client,
+            &url,
+            9,
+            "tasks/get",
+            json!({ "taskId": task_id }),
+            true,
+        )
+        .await;
+        let polled: Value = polled.json().await.unwrap();
+        let current = polled["result"]["status"].as_str().unwrap();
+        if current != "working" {
+            status = Some(current.to_owned());
+            break;
+        }
+        tokio::task::yield_now().await;
+    }
+    assert_eq!(status.as_deref(), Some("cancelled"));
 
     cancellation.cancel();
 }

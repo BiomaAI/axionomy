@@ -62,28 +62,23 @@ pub struct MemorySnapshotStore {
 impl SnapshotStore for MemorySnapshotStore {
     type Error = MemorySnapshotStoreError;
 
-    fn put(
-        &self,
-        economy: WireEconomy,
-    ) -> impl Future<Output = Result<StoredSnapshot, Self::Error>> + Send + '_ {
-        async move {
-            let encoded = Arc::<[u8]>::from(serde_json::to_vec(&economy)?);
-            let economy_id = format!("eco_{}", blake3::hash(&encoded).to_hex());
-            let mut snapshots = self
-                .snapshots
-                .write()
-                .map_err(|_| MemorySnapshotStoreError::Poisoned)?;
+    async fn put(&self, economy: WireEconomy) -> Result<StoredSnapshot, Self::Error> {
+        let encoded = Arc::<[u8]>::from(serde_json::to_vec(&economy)?);
+        let economy_id = format!("eco_{}", blake3::hash(&encoded).to_hex());
+        let mut snapshots = self
+            .snapshots
+            .write()
+            .map_err(|_| MemorySnapshotStoreError::Poisoned)?;
 
-            if let Some(existing) = snapshots.get(&economy_id) {
-                if existing.encoded != encoded {
-                    return Err(MemorySnapshotStoreError::HashCollision { economy_id });
-                }
-                return Ok(StoredSnapshot {
-                    economy_id,
-                    deduplicated: true,
-                });
+        if let Some(existing) = snapshots.get(&economy_id) {
+            if existing.encoded != encoded {
+                return Err(MemorySnapshotStoreError::HashCollision { economy_id });
             }
-
+            Ok(StoredSnapshot {
+                economy_id,
+                deduplicated: true,
+            })
+        } else {
             snapshots.insert(
                 economy_id.clone(),
                 SnapshotEntry {
@@ -98,19 +93,14 @@ impl SnapshotStore for MemorySnapshotStore {
         }
     }
 
-    fn get<'a>(
-        &'a self,
-        economy_id: &'a str,
-    ) -> impl Future<Output = Result<Option<Arc<WireEconomy>>, Self::Error>> + Send + 'a {
-        async move {
-            let snapshots = self
-                .snapshots
-                .read()
-                .map_err(|_| MemorySnapshotStoreError::Poisoned)?;
-            Ok(snapshots
-                .get(economy_id)
-                .map(|entry| Arc::clone(&entry.economy)))
-        }
+    async fn get(&self, economy_id: &str) -> Result<Option<Arc<WireEconomy>>, Self::Error> {
+        let snapshots = self
+            .snapshots
+            .read()
+            .map_err(|_| MemorySnapshotStoreError::Poisoned)?;
+        Ok(snapshots
+            .get(economy_id)
+            .map(|entry| Arc::clone(&entry.economy)))
     }
 }
 
