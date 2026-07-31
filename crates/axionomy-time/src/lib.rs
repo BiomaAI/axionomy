@@ -77,8 +77,9 @@ impl<A> TimelineAsset<A> {
 
 /// A validated calendar-aware interval used to author timeline obligations.
 ///
-/// It is an authoring value, not hidden runtime state. Calling [`encode`]
-/// lowers its elapsed duration into an explicit asset and quantity.
+/// It is an authoring value, not hidden runtime state. Calling
+/// [`CalendarWindow::encode`] lowers its elapsed duration into an explicit
+/// asset and quantity.
 #[derive(Debug, Clone)]
 pub struct CalendarWindow {
     opens: Zoned,
