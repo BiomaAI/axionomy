@@ -19,9 +19,10 @@ use std::hash::{Hash, Hasher};
 
 use crate::session::{AdvanceReport, Continue, SearchObserver, SearchStatus, WorkBudget};
 
-#[derive(Debug, Clone, Serialize, JsonSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(bound(
-    serialize = "RateId: Serialize, Role: Serialize + Ord, AccountId: Serialize, N: Serialize"
+    serialize = "RateId: Serialize, Role: Serialize + Ord, AccountId: Serialize, N: Serialize",
+    deserialize = "RateId: Deserialize<'de>, Role: Deserialize<'de> + Ord, AccountId: Deserialize<'de>, N: Deserialize<'de> + QuantityScalar"
 ))]
 pub struct SearchSolution<RateId, Role, AccountId, N = u64> {
     trace: Trace<RateId, Role, AccountId, N>,

@@ -1,4 +1,4 @@
-use axionomy::{Economy, Exchange, Goal, Receipt, Trace};
+use axionomy::{Economy, Exchange, ExchangeAssessment, Goal, Receipt, Trace};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -7,6 +7,7 @@ pub type WireExchange = Exchange<String, String, String, u64>;
 pub type WireGoal = Goal<String, String, u64>;
 pub type WireTrace = Trace<String, String, String, u64>;
 pub type WireReceipt = Receipt<String, String, String, String, u64>;
+pub type WireAssessment = ExchangeAssessment<String, String, String, String, u64>;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct EconomyHandle {
@@ -18,7 +19,7 @@ pub struct EconomyPutRequest {
     pub economy: WireEconomy,
 }
 
-#[derive(Debug, Clone, Serialize, JsonSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct EconomyPutResponse {
     pub economy_id: String,
     pub deduplicated: bool,
@@ -34,7 +35,7 @@ pub struct AssessRequest {
 pub struct AssessResponse {
     pub economy_id: String,
     pub status: axionomy::AssessmentStatus,
-    pub assessment: serde_json::Value,
+    pub assessment: WireAssessment,
 }
 
 #[derive(Debug, Clone, Deserialize, JsonSchema)]
@@ -43,7 +44,7 @@ pub struct ApplyRequest {
     pub exchange: WireExchange,
 }
 
-#[derive(Debug, Clone, Serialize, JsonSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct ApplyResponse {
     pub source_economy_id: String,
     pub economy_id: String,
@@ -56,7 +57,7 @@ pub struct ReplayRequest {
     pub trace: WireTrace,
 }
 
-#[derive(Debug, Clone, Serialize, JsonSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct ReplayResponse {
     pub source_economy_id: String,
     pub economy_id: String,
@@ -83,7 +84,7 @@ const fn default_chunk_size() -> usize {
     256
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum SearchOutcome {
     Solved,
@@ -91,7 +92,7 @@ pub enum SearchOutcome {
     ExpansionLimit,
 }
 
-#[derive(Debug, Clone, Serialize, JsonSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct SearchResponse {
     pub economy_id: String,
     pub outcome: SearchOutcome,

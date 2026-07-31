@@ -198,10 +198,13 @@ impl<AccountId, A, N> AccountShortfall<AccountId, A, N> {
 
 /// A non-mutating explanation of one proposed exchange.
 #[must_use]
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, JsonSchema)]
 #[serde(bound(
     serialize = "AccountId: Serialize, A: Serialize, RateId: Serialize, Role: Serialize, N: Serialize, N::SignedMeasure: Serialize"
 ))]
+#[schemars(
+    bound = "AccountId: JsonSchema, A: JsonSchema, RateId: JsonSchema, Role: JsonSchema, N: JsonSchema, N::SignedMeasure: JsonSchema"
+)]
 pub enum ExchangeAssessment<AccountId, A, RateId, Role, N = u64>
 where
     N: QuantityScalar,
@@ -938,10 +941,13 @@ where
     }
 }
 
-#[derive(Debug, Clone, Error, Serialize)]
+#[derive(Debug, Clone, Error, Serialize, JsonSchema)]
 #[serde(bound(
     serialize = "RateId: Serialize, Role: Serialize, AccountId: Serialize, A: Serialize, N: Serialize, N::SignedMeasure: Serialize"
 ))]
+#[schemars(
+    bound = "RateId: JsonSchema, Role: JsonSchema, AccountId: JsonSchema, A: JsonSchema, N: JsonSchema, N::SignedMeasure: JsonSchema"
+)]
 pub enum ApplyError<RateId, Role, AccountId, A, N = u64>
 where
     N: QuantityScalar,
