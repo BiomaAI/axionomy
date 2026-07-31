@@ -48,7 +48,7 @@ the same closed state. Search and optimization algorithms may fork that state
 and propose exchanges, but only the core can accept a transition.
 
 ```text
-State       = Account × Asset → Quantity
+State       = Account × Asset → Quantity<N>
 Problem     = Initial accounts + available rates + declared invariants
 Computation = A sequence of valid exchanges
 Goal        = A required asset configuration
@@ -68,16 +68,20 @@ models into one-way workspace dependencies:
 | `axionomy` | Pure closed-state validation and exchange execution kernel |
 | `axionomy-search` | Non-authoritative search, rollout, Monte Carlo, perfect-information and information-set MCTS, and learning projections |
 | `axionomy-problems` | Canonical problem encodings, specialized proposers, and conformance tests |
+| `axionomy-units` | Dimension-safe `uom` authoring that lowers physical values into economic assets |
+| `axionomy-time` | Calendar-aware Jiff authoring that lowers elapsed time into timeline assets |
 
 ```text
 axionomy-search ──────→ axionomy
 axionomy-problems ────→ axionomy
                     └─→ axionomy-search
+axionomy-units ───────→ axionomy
+axionomy-time ────────→ axionomy
 ```
 
-The kernel does not depend on any solver or domain crate.
-The packages are independently publishable and must be released in dependency
-order: `axionomy`, then `axionomy-search`, then `axionomy-problems`.
+The kernel does not depend on a solver, problem, unit, or time crate. The
+packages are independently publishable: release `axionomy` first; the search,
+units, and time crates may follow; `axionomy-problems` follows search.
 
 ## What is implemented
 
@@ -85,7 +89,13 @@ order: `axionomy`, then `axionomy-search`, then `axionomy-problems`.
 - Atomic multi-account rewrite rates.
 - Separate consume, produce, and preserved/read-only baskets per role.
 - Explicit exchange role bindings and multiplicity.
-- Checked `u64` arithmetic and exact balance shortfalls.
+- Generic checked `Quantity<N = u64>` arithmetic with `u64` and optional
+  non-`Copy` `BigUint` support.
+- Stable insertion-ordered model collections and direct Serde support for
+  economies, rates, accounts, baskets, exchanges, receipts, traces, and goals.
+- Structured construction, validation, arithmetic, and invariant errors.
+- Asset-qualified `AssetAmount` values plus exact `uom` and Jiff authoring
+  adapters.
 - Explanatory exchange assessments with complete multi-account shortfalls and
   projected receipt deltas.
 - Boolean `is_applicable` checks and bulk `applicable` candidate filtering.
@@ -93,16 +103,17 @@ order: `axionomy`, then `axionomy-search`, then `axionomy-problems`.
 - Asset-configured goals.
 - Isolated forks, speculative execution, and deterministic trace replay.
 - Account-restricted economic views with canonical observation identities.
-- Generic BFS, best-first search, replayable rollouts, weighted sampling,
-  Monte Carlo statistics, vector-valued MCTS, observation-scoped ISMCTS, and RL
-  trajectory projections.
+- Generic BFS, Dijkstra, A*, best-first search, replayable rollouts, weighted
+  sampling, Monte Carlo statistics, vector-valued MCTS,
+  observation-scoped ISMCTS, and RL trajectory projections.
+- Reproducible ChaCha sampling and established statistical estimators for
+  means, variance, quantiles, tail risk, and Bernoulli credible intervals.
 - Lazy action sources that derive concrete proposals from a full economy or an
   actor observation before core applicability filtering.
 - Forks share immutable laws and untouched account contents, with compact
   model-scoped state fingerprints for search caches.
 - Eleven closed benchmark encodings in `axionomy-problems`, with independent
   solver strategies and core-encoded stochastic priors.
-- No third-party runtime dependencies.
 
 The core contains no application ontology or search algorithm. Problem assets
 and specialized solvers compile against the same public kernel API available
@@ -202,6 +213,29 @@ same per-account deltas later confirmed by their receipt, while infeasible
 exchanges expose every account-and-asset shortfall. The core prepares all
 affected accounts first and commits all of them together.
 
+## Exact values and typed authoring
+
+An asset defines what a value means and names its atomic economic basis;
+`Quantity<N>` defines how its exact non-negative coefficient is represented.
+The default backend is `u64`, while the `bigint` feature supports exact
+non-`Copy` `BigUint` economies without changing model semantics.
+`axionomy-units` and `axionomy-time` validate richer authoring values with
+`uom` and Jiff, then lower them into ordinary `AssetAmount` values. Dimensions,
+units, clocks, and schedules therefore help construct the economy without
+becoming hidden authoritative state.
+
+```console
+cargo run --features bigint --example bigint
+cargo run -p axionomy-units --example cargo_mass
+cargo run -p axionomy-time --example calendar_window
+```
+
+Model types serialize directly through Serde and preserve stable insertion
+order for readable, repeatable output. Deserialization passes through the same
+canonical construction rules: zero balances are removed and duplicate
+identifiers are rejected. This ordinary serialization is intentionally not
+claimed as a versioned wire protocol or a collision-proof durable identity.
+
 ## Conformance problems
 
 | Problem | Encoded concepts | Compared strategies |
@@ -275,22 +309,28 @@ measure before and after. A failure leaves the economy unchanged.
 
 ## Development
 
-Axionomy uses Rust Edition 2024, supports Rust 1.85 or newer, and currently has
-no third-party dependencies.
+Axionomy uses Rust Edition 2024 and supports Rust 1.89 or newer. It relies on
+mature ecosystem crates for ordered maps, serialization, exact numeric traits,
+typed units, civil time, randomness, statistics, pathfinding, errors, property
+testing, and benchmarking while keeping semantic authority in the four core
+primitives.
 
 ```console
-cargo test --workspace --all-targets
-cargo test --workspace --doc
+cargo test --workspace --all-targets --all-features
+cargo test --workspace --doc --all-features
 cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo fmt --all -- --check
-RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps
+RUSTDOCFLAGS="-D warnings" cargo doc --workspace --all-features --no-deps
+cargo bench --workspace --no-run
 cargo package -p axionomy
 cargo package -p axionomy-search --list
+cargo package -p axionomy-units --list
+cargo package -p axionomy-time --list
 cargo package -p axionomy-problems --list
 ```
 
 Until `axionomy` is available from a registry, Cargo cannot perform an
-ordinary registry-resolution dry run for the two dependent packages. CI can
+ordinary registry-resolution dry run for the dependent packages. CI can
 verify their package archives using local `[patch.crates-io]` overrides; their
 source manifests retain both path and version requirements for normal
 workspace development and future ordered publication.

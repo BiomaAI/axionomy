@@ -511,6 +511,9 @@ The repository test suite additionally verifies:
 
 - Exact basket shortfalls.
 - Checked scale, addition, withdrawal, and deposit.
+- Generic exact `u64` and non-`Copy` `BigUint` economies.
+- Direct Serde round trips, canonical zero removal, and duplicate rejection.
+- Exact dimension-safe and calendar-aware lowering into asset amounts.
 - Multi-role effect merging.
 - Required and unknown role errors.
 - Missing rate and account errors.
@@ -531,12 +534,15 @@ The repository test suite additionally verifies:
   exchange.
 - Lazy action sources remain concrete, duplicate-safe, and core-filtered.
 - Compact state fingerprints and isolated shared-data forks.
+- Construction-order-independent logical state identities.
 - RL action masks, shortfall features, receipts, and trajectory extraction.
+- Property laws for assessment/application parity, atomic failure, arithmetic,
+  serialization, and unit conversion.
 
 Run the suite with:
 
 ```console
-cargo test --workspace --all-targets
+cargo test --workspace --all-targets --all-features
 ```
 
 ## What the suite says to build next
@@ -548,7 +554,8 @@ limits clearly:
    avoid eager concrete expansion.
 2. Solvers need a standard finite binding enumerator derived from schemas and
    account capabilities.
-3. Durable replay needs canonical serialization and problem/rate versioning.
+3. Durable cross-version replay needs an explicit compatibility contract and
+   problem/rate versioning beyond current direct Serde support.
 4. Search-heavy workloads need a persistent account index and incremental
    state fingerprints beyond the current shared account contents and laws.
 5. More domains will require constrained local and inequality invariants.

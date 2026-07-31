@@ -33,3 +33,9 @@ assert_eq!(amount.asset(), &Asset::CargoGram);
 assert_eq!(amount.quantity(), &Quantity::new(12_500));
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
+
+Run the structured example with:
+
+```console
+cargo run -p axionomy-units --example cargo_mass
+```

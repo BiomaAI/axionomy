@@ -30,3 +30,9 @@ let amount: AssetAmount<Asset> = window.encode(&timeline)?;
 assert_eq!(amount.quantity(), &Quantity::new(23));
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
+
+Run the structured example with:
+
+```console
+cargo run -p axionomy-time --example calendar_window
+```

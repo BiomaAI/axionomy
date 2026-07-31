@@ -8,8 +8,8 @@
 | Product | Axionomy Cargo workspace |
 | Version | `0.1.0` |
 | Rust edition | 2024 |
-| Minimum Rust | 1.85 |
-| Last updated | 2026-07-30 |
+| Minimum Rust | 1.89 |
+| Last updated | 2026-07-31 |
 
 ## 1. Product thesis
 
@@ -338,6 +338,56 @@ share one internal analysis path so their semantics cannot drift.
 all-or-nothing validation of an entire trace relative to an existing economy,
 it uses `replayed`; the source remains unchanged.
 
+### 5.1 Construction, ordering, and serialization
+
+Model construction and deserialization share one canonical boundary.
+`EconomyBuilder::build` returns structured issues rather than silently
+replacing duplicate account or rate identifiers. Baskets likewise reject
+duplicate asset identifiers, remove zero quantities, and validate the selected
+numeric backend. Invalid serialized input cannot construct a looser economy
+than ordinary Rust input.
+
+Semantic maps use `IndexMap`: iteration, diagnostics, and direct Serde output
+preserve stable insertion order without requiring every user ontology to
+implement serialization-specific ordering. When semantic identity must ignore
+construction order, `state_key` explicitly sorts account, asset, and quantity
+tuples; `state_fingerprint` hashes that canonical logical key for compact
+model-scoped caches. Neither stable presentation nor a 64-bit fingerprint is a
+substitute for validation, trace replay, collision-safe durable identity, or a
+future compatibility protocol.
+
+The current public types serialize directly. Axionomy does not maintain
+parallel `ModelDefinitionV1`, snapshot, or trace-envelope types before a real
+deployed compatibility requirement exists. Serde solves encoding and
+decoding; it does not by itself promise schema migration. Explicit wire types
+should be introduced only when their compatibility contract is known.
+
+### 5.2 Numeric and typed authoring boundaries
+
+`QuantityScalar` is intentionally narrower than a general numeric trait. It
+defines the exact operations the authoritative economy needs:
+non-negativity, total ordering, checked addition/subtraction/multiplication,
+conversion from an atomic count, and an associated signed invariant-measure
+type. The default `u64` backend is compact and ergonomic. The optional
+`BigUint` backend proves that the complete model and search surfaces support
+exact non-`Copy` quantities beyond `u64`; its associated invariant measure is
+`BigInt`.
+
+Physical and calendar types belong at authoring boundaries:
+
+- `axionomy-units` uses `uom` with exact rational values to validate
+  dimensions and unit conversion, then lowers an exact multiple of an asset's
+  atomic basis into `AssetAmount<A, N>`.
+- `axionomy-time` uses Jiff to resolve timestamps, zones, daylight-saving
+  transitions, and calendar spans, then lowers exact elapsed duration into a
+  timeline asset.
+
+The lowered value is an ordinary asset plus quantity. The adapters do not
+type-erase meaning, put heterogeneous physical dimensions into `Quantity`, or
+create an external clock. A model chooses explicit assets such as
+`CargoGram`, `ElapsedMinute`, or `DeliveryWindowOpen`; those assets remain the
+authoritative vocabulary after conversion.
+
 ## 6. Workspace and package boundaries
 
 The repository makes authority boundaries visible as dependency boundaries:
@@ -346,6 +396,8 @@ The repository makes authority boundaries visible as dependency boundaries:
 axionomy-search ──────→ axionomy
 axionomy-problems ────→ axionomy
                     └─→ axionomy-search
+axionomy-units ───────→ axionomy
+axionomy-time ────────→ axionomy
 ```
 
 - `axionomy` owns universal state and transition semantics.
@@ -354,6 +406,8 @@ axionomy-problems ────→ axionomy
   learning projections.
 - `axionomy-problems` owns domain ontologies, problem constructors,
   specialized proposers, and conformance tests.
+- `axionomy-units` owns optional dimension-safe physical authoring.
+- `axionomy-time` owns optional calendar-aware timeline authoring.
 
 The kernel must never depend on a solver or problem crate. Moving BFS and A*
 out of the kernel is philosophically significant: algorithms explore the
@@ -363,6 +417,17 @@ asset types from becoming privileged engine concepts.
 The problem crate depends only on public APIs. It therefore tests not only
 correctness but whether downstream model authors can express the intended
 domains without kernel access.
+
+The implementation prefers focused, mature ecosystem crates over local
+reinvention: `indexmap` for stable maps, Serde for model encoding, `num-traits`
+and `num-bigint` for exact numeric backends, `thiserror` for structured errors,
+`uom` and Jiff for authoring, `rand`/`rand_chacha` for reproducible sampling,
+`statrs` for statistical estimators, `pathfinding` for standard implicit graph
+search, `proptest` for laws, and Criterion for benchmarks. `petgraph` is not a
+kernel dependency because Axionomy does not own an authoritative graph and its
+successors are generated implicitly from applicable exchanges. It remains a
+reasonable future adapter when a user needs explicit graph import, export, or
+analysis.
 
 ## 7. Solver contract
 
@@ -389,11 +454,14 @@ A solver may not:
 - Directly install a successor state.
 - Declare an assignment accepted without core replay.
 
-The `axionomy-search` crate contains deliberately inspectable reference
-implementations: BFS, best-first search, rollout execution, weighted sampling,
-Monte Carlo aggregation, vector-valued MCTS, observation-scoped ISMCTS, and RL
-trajectory projections. The `axionomy` kernel remains an execution and
-validation substrate, not an attempt to replace every mature solver.
+The `axionomy-search` crate contains deliberately inspectable integrations:
+BFS, Dijkstra, and A* use `pathfinding` over implicit core-validated
+successors; the compatibility best-first strategy remains local because it
+ranks complete economic states rather than additive graph edges. Rollout
+execution, weighted sampling, Monte Carlo aggregation, vector-valued MCTS,
+observation-scoped ISMCTS, and RL trajectory projections build on the same
+exchange boundary. The `axionomy` kernel remains an execution and validation
+substrate, not an attempt to replace every mature solver.
 
 Candidate generation is also disposable. An `ActionSource` may lazily emit
 concrete exchanges from a full state or an authorized information state. The
@@ -438,6 +506,11 @@ Domain randomness and exploration randomness have different authority:
 The latter seed is reproducibility metadata, not world state. Every sampled
 domain outcome still appears in the resulting trace.
 
+Reproducible exploration uses `rand` traits and ChaCha8 rather than a
+project-local random generator. Callers may provide their own compatible RNG.
+Fixed seeds make a solver run repeatable; they do not turn algorithmic
+randomness into authoritative state.
+
 ### 7.3 Outcomes and Monte Carlo
 
 Monte Carlo evaluates policies by running the same generic rollout mechanism
@@ -450,6 +523,11 @@ The search crate may provide standard aggregators for Bernoulli success,
 scalar mean and variance, vector outcomes, quantiles, and tail risk. Changing
 an aggregator or scalarization may change ranking, but cannot change exchange
 validity, effects, or the observed economic outcome vector.
+
+Standard distribution functions and estimators come from `statrs`, including
+means, population variance, quantiles, and Beta-posterior credible intervals.
+Axionomy-specific code retains only the projection from encoded outcomes into
+those statistical inputs.
 
 ### 7.4 MCTS is a derived tree over core states
 
@@ -617,8 +695,18 @@ in the reusable model modules.
 ## 11. Current guarantees
 
 - Asset, account, role, and rate-ID types are user-defined.
-- Quantities are non-negative and checked.
+- Quantities are generic, exact, non-negative, and checked; `u64` is the
+  default and optional `BigUint` demonstrates an unbounded non-`Copy` backend.
+- Signed invariant measurement is associated with the selected quantity
+  backend.
 - Missing balances behave as zero.
+- Stable maps preserve declared iteration order, while semantic state keys and
+  fingerprints are independent of construction order.
+- Core model, proposal, receipt, trace, and goal types serialize directly
+  through Serde; deserialization rejects duplicates and canonicalizes zeroes.
+- Construction and operational failures are structured `thiserror` values.
+- Physical and calendar authoring lower exactly into asset-qualified
+  quantities through the optional `uom` and Jiff adapter crates.
 - Exchange application is atomic across all affected accounts.
 - Consume, produce, and preserve effects are explicit.
 - Required role bindings and role distinctness are checked.
@@ -640,8 +728,12 @@ in the reusable model modules.
 - Rollouts distinguish encoded terminal state, controller stops, rejection,
   and algorithmic horizons.
 - Weighted samplers select only encoded exchange proposals reproducibly.
+- Seeded exploration uses ChaCha8, while caller-owned `rand` generators can be
+  adapted without changing search semantics.
 - Monte Carlo provides Bernoulli, scalar, vector, quantile, and tail
-  statistics without defining outcome truth.
+  statistics through established estimators without defining outcome truth.
+- BFS, Dijkstra, and A* use established implicit-graph implementations while
+  still deriving every successor through core exchange validation.
 - MCTS supports vector values, encoded chance nodes, deterministic budgets,
   random rollouts, and canonical transpositions.
 - ISMCTS root-samples encoded belief worlds, rejects inconsistent
@@ -651,6 +743,9 @@ in the reusable model modules.
   observations, outcomes, and replay-derived transitions.
 - Built-in benchmark results replay and specialized solvers agree where an
   oracle is provided.
+- Property laws cover assessment/application agreement, atomic failure,
+  serialization round trips, checked arithmetic, and exact unit lowering;
+  Criterion baselines cover core exchange and long-rollout throughput.
 
 ## 12. Explicit limitations
 
@@ -686,6 +781,8 @@ The current foundation is intentionally bounded:
   caller-supplied projections from encoded state.
 - Monte Carlo consumes finite encoded weighted supports; parameterized or
   continuous distribution schemas remain future work.
+- Native Rust is the current release target. Browser/Wasm compatibility is not
+  yet a validated support guarantee.
 - No concurrency, signatures, persistence, distributed consensus, or
   production financial controls are claimed.
 - The conformance suite is evidence for useful bounded expressiveness, not a
@@ -804,7 +901,8 @@ factor.
    the returned assignment.
 8. Extend encoded Nature schemas and distribution updates beyond finite
    weighted supports.
-9. Add property-based reference-model tests and bounded model checking.
+9. Extend the implemented property laws with independent reference models and
+   bounded model checking.
 10. Decide whether dynamic rate availability is represented by rate assets,
     capability assets, or immutable schemas plus explicit enabling state.
 11. Add PUCT priors, progressive widening, and deterministic parallel workers
