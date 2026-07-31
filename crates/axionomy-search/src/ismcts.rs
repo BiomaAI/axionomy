@@ -4,13 +4,16 @@ use crate::{
     action_source::{ActionSource, collect_actions},
     mcts::MctsConfig,
     sampling::{SamplingError, SeededSampler, TicketSource, WeightedExchange, sample},
+    session::{AdvanceReport, Continue, SearchObserver, WorkBudget},
 };
 use axionomy::{ApplyError, Economy, Exchange, QuantityScalar};
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::hash::Hash;
 
 /// An acting player and the canonical economic observation available to it.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
 pub struct InformationState<Key> {
     actor: usize,
     key: Key,
@@ -30,7 +33,7 @@ impl<Key> InformationState<Key> {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, JsonSchema)]
 pub struct IsmctsChild<Action> {
     action: Action,
     visits: u64,
@@ -57,7 +60,7 @@ impl<Action> IsmctsChild<Action> {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, JsonSchema)]
 pub struct IsmctsDecision<Action> {
     action: Action,
     iterations: usize,
@@ -110,6 +113,43 @@ pub type IsmctsResult<RateId, Role, AccountId, A, N = u64> = Result<
     IsmctsError<RateId, Role, AccountId, A, N>,
 >;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum IsmctsStatus {
+    Running,
+    Completed,
+    Interrupted,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct IsmctsProgress {
+    iterations: usize,
+    target_iterations: usize,
+    information_sets: usize,
+    root_children: usize,
+}
+
+impl IsmctsProgress {
+    pub const fn iterations(self) -> usize {
+        self.iterations
+    }
+
+    pub const fn target_iterations(self) -> usize {
+        self.target_iterations
+    }
+
+    pub const fn information_sets(self) -> usize {
+        self.information_sets
+    }
+
+    pub const fn root_children(self) -> usize {
+        self.root_children
+    }
+}
+
+pub type IsmctsAdvanceResult<RateId, Role, AccountId, A, N = u64> =
+    Result<AdvanceReport<IsmctsProgress, IsmctsStatus>, IsmctsError<RateId, Role, AccountId, A, N>>;
+
 /// Random rollout selection that can inspect only the information state and
 /// the already filtered concrete actions.
 pub fn random_action<Key, Action>(
@@ -124,6 +164,335 @@ where
         let index = random.ticket(actions.len() as u64) as usize;
         actions[index].clone()
     })
+}
+
+/// Resumable information-set MCTS session with one determinization per work unit.
+pub struct IsmctsSession<
+    AccountId,
+    A,
+    RateId,
+    Role,
+    N,
+    Key,
+    Information,
+    Determinize,
+    Source,
+    Chance,
+    Terminal,
+    Cutoff,
+    RolloutPolicy,
+> where
+    N: QuantityScalar,
+{
+    initial: Economy<AccountId, A, RateId, Role, N>,
+    config: MctsConfig,
+    players: usize,
+    root: InformationState<Key>,
+    information: Information,
+    determinize: Determinize,
+    source: Source,
+    chance: Chance,
+    terminal: Terminal,
+    cutoff: Cutoff,
+    rollout_policy: RolloutPolicy,
+    nodes: Vec<Node<Key, Exchange<RateId, Role, AccountId, N>>>,
+    transpositions: HashMap<InformationState<Key>, usize>,
+    random: SeededSampler,
+    iterations: usize,
+    decision: Option<IsmctsDecision<Exchange<RateId, Role, AccountId, N>>>,
+}
+
+impl<
+    AccountId,
+    A,
+    RateId,
+    Role,
+    N,
+    Key,
+    Information,
+    Determinize,
+    Source,
+    Chance,
+    Terminal,
+    Cutoff,
+    RolloutPolicy,
+>
+    IsmctsSession<
+        AccountId,
+        A,
+        RateId,
+        Role,
+        N,
+        Key,
+        Information,
+        Determinize,
+        Source,
+        Chance,
+        Terminal,
+        Cutoff,
+        RolloutPolicy,
+    >
+where
+    AccountId: Clone + Eq + Hash + Ord,
+    A: Clone + Eq + Hash + Ord,
+    RateId: Clone + Eq + Hash + Ord,
+    Role: Clone + Ord,
+    N: QuantityScalar,
+    Key: Clone + Eq + Hash,
+    Information: FnMut(&Economy<AccountId, A, RateId, Role, N>) -> InformationState<Key>,
+    Determinize: FnMut(
+        &InformationState<Key>,
+        &mut SeededSampler,
+    ) -> Option<Economy<AccountId, A, RateId, Role, N>>,
+    Source: ActionSource<InformationState<Key>, Exchange<RateId, Role, AccountId, N>>,
+    Chance: FnMut(
+        &Economy<AccountId, A, RateId, Role, N>,
+    ) -> Vec<WeightedExchange<Exchange<RateId, Role, AccountId, N>>>,
+    Terminal: FnMut(&Economy<AccountId, A, RateId, Role, N>) -> Option<Vec<f64>>,
+    Cutoff: FnMut(&Economy<AccountId, A, RateId, Role, N>) -> Vec<f64>,
+    RolloutPolicy: FnMut(
+        &InformationState<Key>,
+        &[Exchange<RateId, Role, AccountId, N>],
+        &mut SeededSampler,
+    ) -> Option<Exchange<RateId, Role, AccountId, N>>,
+{
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        initial: &Economy<AccountId, A, RateId, Role, N>,
+        config: MctsConfig,
+        players: usize,
+        mut information: Information,
+        determinize: Determinize,
+        mut source: Source,
+        chance: Chance,
+        mut terminal: Terminal,
+        cutoff: Cutoff,
+        rollout_policy: RolloutPolicy,
+    ) -> Result<Self, IsmctsError<RateId, Role, AccountId, A, N>> {
+        validate_config(config, players)?;
+        if terminal(initial).is_some() {
+            return Err(IsmctsError::TerminalRoot);
+        }
+        let root = information(initial);
+        validate_actor(root.actor(), players)?;
+        if unique_actions(collect_actions(&mut source, &root)).is_empty() {
+            return Err(IsmctsError::NoRootActions);
+        }
+
+        Ok(Self {
+            initial: initial.fork(),
+            config,
+            players,
+            root: root.clone(),
+            information,
+            determinize,
+            source,
+            chance,
+            terminal,
+            cutoff,
+            rollout_policy,
+            nodes: vec![Node::new(root.clone(), players)],
+            transpositions: HashMap::from([(root, 0)]),
+            random: SeededSampler::new(config.seed()),
+            iterations: 0,
+            decision: None,
+        })
+    }
+
+    pub fn progress(&self) -> IsmctsProgress {
+        IsmctsProgress {
+            iterations: self.iterations,
+            target_iterations: self.config.iterations(),
+            information_sets: self.nodes.len(),
+            root_children: self.nodes[0].edges.len(),
+        }
+    }
+
+    pub fn status(&self) -> IsmctsStatus {
+        if self.decision.is_some() {
+            IsmctsStatus::Completed
+        } else {
+            IsmctsStatus::Running
+        }
+    }
+
+    pub fn decision(&self) -> Option<&IsmctsDecision<Exchange<RateId, Role, AccountId, N>>> {
+        self.decision.as_ref()
+    }
+
+    pub fn into_decision(self) -> Option<IsmctsDecision<Exchange<RateId, Role, AccountId, N>>> {
+        self.decision
+    }
+
+    pub fn advance(
+        &mut self,
+        budget: WorkBudget,
+        observer: &mut impl SearchObserver<IsmctsProgress>,
+    ) -> IsmctsAdvanceResult<RateId, Role, AccountId, A, N> {
+        if self.decision.is_some() {
+            return Ok(AdvanceReport::new(
+                IsmctsStatus::Completed,
+                0,
+                self.progress(),
+            ));
+        }
+
+        let mut completed = 0;
+        while completed < budget.units() && self.iterations < self.config.iterations() {
+            if observer.observe(&self.progress()).is_break() {
+                return Ok(AdvanceReport::new(
+                    IsmctsStatus::Interrupted,
+                    completed,
+                    self.progress(),
+                ));
+            }
+            self.run_iteration()?;
+            self.iterations += 1;
+            completed += 1;
+        }
+        if self.iterations == self.config.iterations() {
+            self.finish()?;
+        }
+        Ok(AdvanceReport::new(
+            self.status(),
+            completed,
+            self.progress(),
+        ))
+    }
+
+    fn run_iteration(&mut self) -> Result<(), IsmctsError<RateId, Role, AccountId, A, N>> {
+        let iteration = self.iterations;
+        let mut world = (self.determinize)(&self.root, &mut self.random)
+            .ok_or(IsmctsError::NoDeterminization { iteration })?;
+        if (self.information)(&world) != self.root {
+            return Err(IsmctsError::InconsistentDeterminization);
+        }
+
+        let mut depth = 0;
+        let mut path = Vec::<(usize, usize)>::new();
+        let values = loop {
+            if let Some(values) = (self.terminal)(&world) {
+                break validate_values(values, self.players)?;
+            }
+            if depth >= self.config.max_depth() {
+                break validate_values((self.cutoff)(&world), self.players)?;
+            }
+
+            let outcomes = (self.chance)(&world);
+            if !outcomes.is_empty() {
+                let action = sample(&outcomes, &mut self.random)
+                    .map_err(IsmctsError::Sampling)?
+                    .clone();
+                world.apply(action).map_err(IsmctsError::Rejected)?;
+                depth += 1;
+                continue;
+            }
+
+            let current = (self.information)(&world);
+            validate_actor(current.actor(), self.players)?;
+            let node_index = node_for(
+                current.clone(),
+                &mut self.nodes,
+                &mut self.transpositions,
+                self.players,
+            );
+            if path.iter().any(|(visited, _)| *visited == node_index) {
+                break validate_values((self.cutoff)(&world), self.players)?;
+            }
+
+            let actions = applicable_actions(&mut self.source, &current, &world);
+            if actions.is_empty() {
+                break validate_values((self.cutoff)(&world), self.players)?;
+            }
+            let available = register_available(&mut self.nodes[node_index], actions);
+            let unvisited = available
+                .iter()
+                .copied()
+                .filter(|edge| self.nodes[node_index].edges[*edge].visits == 0)
+                .collect::<Vec<_>>();
+            let (edge_index, expanded) = if unvisited.is_empty() {
+                (
+                    select_uct(
+                        &self.nodes[node_index],
+                        &available,
+                        current.actor(),
+                        self.config.exploration(),
+                    ),
+                    false,
+                )
+            } else {
+                let selected = self.random.ticket(unvisited.len() as u64) as usize;
+                (unvisited[selected], true)
+            };
+            let action = self.nodes[node_index].edges[edge_index].action.clone();
+            world.apply(action).map_err(IsmctsError::Rejected)?;
+            path.push((node_index, edge_index));
+            depth += 1;
+
+            if expanded {
+                break simulate(
+                    &world,
+                    depth,
+                    self.config.max_depth(),
+                    self.players,
+                    &mut self.information,
+                    &mut self.source,
+                    &mut self.chance,
+                    &mut self.terminal,
+                    &mut self.cutoff,
+                    &mut self.rollout_policy,
+                    &mut self.random,
+                )?;
+            }
+        };
+
+        for (node_index, edge_index) in path {
+            let node = &mut self.nodes[node_index];
+            node.visits += 1;
+            let edge = &mut node.edges[edge_index];
+            edge.visits += 1;
+            for (total, value) in edge.value_totals.iter_mut().zip(&values) {
+                *total += value;
+            }
+        }
+        Ok(())
+    }
+
+    fn finish(&mut self) -> Result<(), IsmctsError<RateId, Role, AccountId, A, N>> {
+        let root_player = self.root.actor();
+        let mut children = self.nodes[0]
+            .edges
+            .iter()
+            .filter(|edge| edge.visits > 0)
+            .map(|edge| IsmctsChild {
+                action: edge.action.clone(),
+                visits: edge.visits,
+                availability: edge.availability,
+                mean_values: mean_values(edge),
+            })
+            .collect::<Vec<_>>();
+        children.sort_by(|left, right| {
+            right.visits.cmp(&left.visits).then_with(|| {
+                right.mean_values[root_player].total_cmp(&left.mean_values[root_player])
+            })
+        });
+        let action = children
+            .first()
+            .ok_or(IsmctsError::NoExploredAction)?
+            .action
+            .clone();
+        self.initial
+            .fork()
+            .apply(action.clone())
+            .map_err(IsmctsError::SelectedActionRejected)?;
+        self.decision = Some(IsmctsDecision {
+            action,
+            iterations: self.iterations,
+            information_sets: self.nodes.len(),
+            children,
+        });
+        Ok(())
+    }
 }
 
 /// Searches a shared information tree using one root determinization per
@@ -158,13 +527,13 @@ pub fn search<
     initial: &Economy<AccountId, A, RateId, Role, N>,
     config: MctsConfig,
     players: usize,
-    mut information: Information,
-    mut determinize: Determinize,
-    mut source: Source,
-    mut chance: Chance,
-    mut terminal: Terminal,
-    mut cutoff: Cutoff,
-    mut rollout_policy: RolloutPolicy,
+    information: Information,
+    determinize: Determinize,
+    source: Source,
+    chance: Chance,
+    terminal: Terminal,
+    cutoff: Cutoff,
+    rollout_policy: RolloutPolicy,
 ) -> IsmctsResult<RateId, Role, AccountId, A, N>
 where
     AccountId: Clone + Eq + Hash + Ord,
@@ -190,148 +559,23 @@ where
         &mut SeededSampler,
     ) -> Option<Exchange<RateId, Role, AccountId, N>>,
 {
-    validate_config(config, players)?;
-    if terminal(initial).is_some() {
-        return Err(IsmctsError::TerminalRoot);
-    }
-
-    let root = information(initial);
-    validate_actor(root.actor(), players)?;
-    if unique_actions(collect_actions(&mut source, &root)).is_empty() {
-        return Err(IsmctsError::NoRootActions);
-    }
-
-    let mut nodes = vec![Node::new(root.clone(), players)];
-    let mut transpositions = HashMap::from([(root.clone(), 0_usize)]);
-    let mut random = SeededSampler::new(config.seed());
-
-    for iteration in 0..config.iterations() {
-        let mut world =
-            determinize(&root, &mut random).ok_or(IsmctsError::NoDeterminization { iteration })?;
-        if information(&world) != root {
-            return Err(IsmctsError::InconsistentDeterminization);
-        }
-
-        let mut depth = 0;
-        let mut path = Vec::<(usize, usize)>::new();
-        let values = loop {
-            if let Some(values) = terminal(&world) {
-                break validate_values(values, players)?;
-            }
-            if depth >= config.max_depth() {
-                break validate_values(cutoff(&world), players)?;
-            }
-
-            let outcomes = chance(&world);
-            if !outcomes.is_empty() {
-                let action = sample(&outcomes, &mut random)
-                    .map_err(IsmctsError::Sampling)?
-                    .clone();
-                world.apply(action).map_err(IsmctsError::Rejected)?;
-                depth += 1;
-                continue;
-            }
-
-            let current = information(&world);
-            validate_actor(current.actor(), players)?;
-            let node_index = node_for(current.clone(), &mut nodes, &mut transpositions, players);
-            if path.iter().any(|(visited, _)| *visited == node_index) {
-                break validate_values(cutoff(&world), players)?;
-            }
-
-            let actions = applicable_actions(&mut source, &current, &world);
-            if actions.is_empty() {
-                break validate_values(cutoff(&world), players)?;
-            }
-            let available = register_available(&mut nodes[node_index], actions);
-            let unvisited = available
-                .iter()
-                .copied()
-                .filter(|edge| nodes[node_index].edges[*edge].visits == 0)
-                .collect::<Vec<_>>();
-            let (edge_index, expanded) = if unvisited.is_empty() {
-                (
-                    select_uct(
-                        &nodes[node_index],
-                        &available,
-                        current.actor(),
-                        config.exploration(),
-                    ),
-                    false,
-                )
-            } else {
-                let selected = random.ticket(unvisited.len() as u64) as usize;
-                (unvisited[selected], true)
-            };
-            let action = nodes[node_index].edges[edge_index].action.clone();
-            world.apply(action).map_err(IsmctsError::Rejected)?;
-            path.push((node_index, edge_index));
-            depth += 1;
-
-            if expanded {
-                break simulate(
-                    &world,
-                    depth,
-                    config.max_depth(),
-                    players,
-                    &mut information,
-                    &mut source,
-                    &mut chance,
-                    &mut terminal,
-                    &mut cutoff,
-                    &mut rollout_policy,
-                    &mut random,
-                )?;
-            }
-        };
-
-        for (node_index, edge_index) in path {
-            let node = &mut nodes[node_index];
-            node.visits += 1;
-            let edge = &mut node.edges[edge_index];
-            edge.visits += 1;
-            for (total, value) in edge.value_totals.iter_mut().zip(&values) {
-                *total += value;
-            }
-        }
-    }
-
-    let root_node = &nodes[0];
-    let root_player = root.actor();
-    let mut children = root_node
-        .edges
-        .iter()
-        .filter(|edge| edge.visits > 0)
-        .map(|edge| IsmctsChild {
-            action: edge.action.clone(),
-            visits: edge.visits,
-            availability: edge.availability,
-            mean_values: mean_values(edge),
-        })
-        .collect::<Vec<_>>();
-    children.sort_by(|left, right| {
-        right
-            .visits
-            .cmp(&left.visits)
-            .then_with(|| right.mean_values[root_player].total_cmp(&left.mean_values[root_player]))
-    });
-    let action = children
-        .first()
-        .ok_or(IsmctsError::NoExploredAction)?
-        .action
-        .clone();
-
-    let mut validation = initial.fork();
-    validation
-        .apply(action.clone())
-        .map_err(IsmctsError::SelectedActionRejected)?;
-
-    Ok(IsmctsDecision {
-        action,
-        iterations: config.iterations(),
-        information_sets: nodes.len(),
-        children,
-    })
+    let mut session = IsmctsSession::new(
+        initial,
+        config,
+        players,
+        information,
+        determinize,
+        source,
+        chance,
+        terminal,
+        cutoff,
+        rollout_policy,
+    )?;
+    let mut observer = Continue;
+    session.advance(WorkBudget::new(config.iterations()), &mut observer)?;
+    Ok(session
+        .into_decision()
+        .expect("the configured iteration budget completes the session"))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -862,6 +1106,52 @@ mod tests {
         assert!(heads.is_applicable(heads_decision.action()));
         assert!(tails.is_applicable(tails_decision.action()));
         assert!(heads_decision.information_sets() >= 3);
+    }
+
+    #[test]
+    fn ismcts_sessions_are_chunk_invariant_and_interruptible() {
+        let actual = hidden_world(true);
+        let config = MctsConfig::new(512, 8).with_seed(19);
+        let mut session = IsmctsSession::new(
+            &actual,
+            config,
+            1,
+            information,
+            |_, random: &mut SeededSampler| Some(hidden_world(random.ticket(2) == 0)),
+            source(),
+            chance,
+            terminal,
+            |_| vec![0.0],
+            random_action,
+        )
+        .unwrap();
+        let mut observer = Continue;
+        let first = session
+            .advance(WorkBudget::new(128), &mut observer)
+            .unwrap();
+        assert_eq!(first.status(), IsmctsStatus::Running);
+        assert_eq!(first.progress().iterations(), 128);
+
+        let interrupted = session
+            .advance(WorkBudget::new(384), &mut |progress: &IsmctsProgress| {
+                if progress.iterations() == 129 {
+                    std::ops::ControlFlow::Break(())
+                } else {
+                    std::ops::ControlFlow::Continue(())
+                }
+            })
+            .unwrap();
+        assert_eq!(interrupted.status(), IsmctsStatus::Interrupted);
+        assert_eq!(interrupted.work_completed(), 1);
+
+        let completed = session
+            .advance(WorkBudget::new(383), &mut observer)
+            .unwrap();
+        assert_eq!(completed.status(), IsmctsStatus::Completed);
+        let decision = session.into_decision().unwrap();
+        assert_eq!(decision.action().rate(), &RateId::Inspect);
+        assert_eq!(decision.iterations(), 512);
+        assert!(actual.is_applicable(decision.action()));
     }
 
     #[test]
