@@ -658,6 +658,7 @@ fn action(rate: RateId) -> Action {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use axionomy_search::rl::replay_transitions;
 
     #[test]
     fn agent_views_hide_nature_and_each_other() {
@@ -713,5 +714,41 @@ mod tests {
         assert_eq!(estimate.coordinated_successes(), 12);
         assert_eq!(estimate.direct_successes(), 8);
         assert_eq!(estimate.chosen(), Policy::ShareAndCoordinate);
+    }
+
+    #[test]
+    fn replayed_mission_produces_observation_and_outcome_transitions() {
+        let model = initial();
+        let rollout = run_policy(&model, Policy::ShareAndCoordinate, 3);
+        let transitions = replay_transitions(
+            &model,
+            rollout.trace(),
+            |world| {
+                [
+                    world.balance(&AccountId::Mission, &Asset::Planning).get(),
+                    world
+                        .balance(&AccountId::Mission, &Asset::AwaitingEncounter)
+                        .get(),
+                    world.balance(&AccountId::Success, &Asset::Solved).get(),
+                ]
+            },
+            |world| {
+                [
+                    world.balance(&AccountId::Success, &Asset::Solved).get(),
+                    world
+                        .balance(&AccountId::Mission, &Asset::ElapsedTime)
+                        .get(),
+                ]
+            },
+            |world| world.matches(&goal()),
+        )
+        .expect("valid mission trace becomes learning data");
+
+        assert_eq!(transitions.len(), rollout.trace().exchanges().len());
+        assert!(transitions.last().expect("finish transition").terminal());
+        assert_eq!(
+            transitions.last().expect("finish transition").outcome()[0],
+            1
+        );
     }
 }

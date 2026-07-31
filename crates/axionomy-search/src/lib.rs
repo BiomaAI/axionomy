@@ -2,6 +2,7 @@
 
 pub mod mcts;
 pub mod monte_carlo;
+pub mod rl;
 pub mod rollout;
 pub mod sampling;
 
