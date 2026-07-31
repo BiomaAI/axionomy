@@ -230,6 +230,11 @@ silently alias and the schema-backed model build rejects them. Jiff uses this
 same representation, so calendar and physical-time authoring cannot create
 competing clocks outside the economy.
 
+The typed `uom` and Jiff adapters currently require the resulting atom count to
+fit `u64` before converting it into the economy's selected `Quantity<N>`
+backend. `BigUint` removes the core economy's arithmetic ceiling, but it does
+not expand this authoring-adapter conversion boundary.
+
 ```console
 cargo run --features bigint --example bigint
 cargo run -p axionomy-units --example cargo_mass
@@ -279,10 +284,12 @@ cargo run -p axionomy-problems --example connect_four
 cargo run -p axionomy-problems --example mission
 ```
 
-The examples use structured console logging: `INFO` presents the model,
-strategy decisions, encoded outcomes, and replay checks, while
-`RUST_LOG=debug` adds complete exchange traces and assessments. Subscriber
-configuration stays in the example binaries, never in the libraries.
+All runnable examples use structured console logging. `INFO` presents model
+construction, strategy decisions, encoded outcomes, and verification;
+`RUST_LOG=debug` adds detailed traces, assessments, or canonical denomination
+definitions as appropriate. Each example binary installs its own subscriber.
+The reusable libraries never install a global subscriber or treat logs as
+authoritative state.
 
 A repeatable long-horizon workload is also available:
 
@@ -290,10 +297,13 @@ A repeatable long-horizon workload is also available:
 cargo bench -p axionomy-problems --bench rollout_throughput
 ```
 
-For example, the maze prints:
+For example, the maze's default `INFO` view is:
 
 ```text
-BFS: 3 exchanges; A*: 6 energy across 6 exchanges
+INFO Compare shortest-depth BFS with energy-aware A* over one encoded graph. example="Maze"
+INFO encoded economy ready accounts=3 rates=8
+INFO proposal replayed strategy="BFS" exchanges=3 expanded=5 goal_verified=true
+INFO proposal replayed strategy="A*" exchanges=6 expanded=6 energy=6 goal_verified=true
 ```
 
 ## Semantics in brief
@@ -318,8 +328,8 @@ measure before and after. A failure leaves the economy unchanged.
 Axionomy uses Rust Edition 2024 and supports Rust 1.89 or newer. It relies on
 mature ecosystem crates for ordered maps, serialization, exact numeric traits,
 typed units, civil time, randomness, statistics, pathfinding, errors, property
-testing, and benchmarking while keeping semantic authority in the four core
-primitives.
+testing, benchmarking, and structured example diagnostics while keeping
+semantic authority in the four core primitives.
 
 ```console
 cargo test --workspace --all-targets --all-features

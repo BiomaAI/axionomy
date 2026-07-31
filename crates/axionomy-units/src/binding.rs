@@ -66,6 +66,9 @@ where
     }
 
     /// Lowers a compatible physical value into the asset's canonical atoms.
+    ///
+    /// The resulting atom count must fit `u64` before it is converted through
+    /// [`QuantityScalar::from_u64`] into the selected economy backend.
     pub fn encode<N>(
         &self,
         value: UomQuantity<D, U, MeasureScalar>,
@@ -98,6 +101,6 @@ pub enum UnitBindingError {
     NegativeValue,
     #[error("physical value is not an exact multiple of the asset's atomic basis")]
     InexactAtomicConversion,
-    #[error("atomic count is outside the selected quantity backend's supported range")]
+    #[error("atomic count is outside the adapter or selected quantity backend's supported range")]
     NumericRange,
 }

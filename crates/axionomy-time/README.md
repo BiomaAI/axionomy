@@ -41,7 +41,12 @@ assert_eq!(amount.quantity(), &Quantity::new(23));
 asset originally declared through `uom`, proving both authoring systems share
 one denomination rather than maintaining separate clocks.
 
-Run the structured example with:
+Encoding currently requires the canonical timeline count to fit `u64` before
+it is converted into the selected `Quantity<N>` backend. A wider backend extends
+economy arithmetic after construction; it does not widen this adapter boundary.
+
+Run the structured example at `INFO`, or set `RUST_LOG=debug` to include the
+canonical timeline definition:
 
 ```console
 cargo run -p axionomy-time --example calendar_window

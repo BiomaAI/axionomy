@@ -58,6 +58,11 @@ cargo run -p axionomy-problems --example connect_four
 cargo run -p axionomy-problems --example mission
 ```
 
+The examples emit structured `tracing` events at `INFO` by default. Set
+`RUST_LOG=debug` to inspect accepted exchange traces, assessments, sampled
+outcomes, and search details. Logging is presentation logic owned by the
+example binaries; it is never part of problem state or transition validity.
+
 The separate long-horizon throughput probe is intentionally a Cargo bench
 target, not a consumer example:
 

@@ -412,6 +412,21 @@ not put heterogeneous physical values inside `Quantity` or create an external
 clock. Raw atomic counts remain available explicitly through `atoms` or
 `amount`; they cannot change the denomination carried by the asset key.
 
+The current typed adapters convert a validated atom count through `u64` before
+calling `QuantityScalar::from_u64`. A larger backend such as `BigUint` therefore
+extends authoritative economy arithmetic but does not enlarge the adapters'
+input range.
+
+### 5.3 Observability boundary
+
+Logs are derived presentation, not a fifth semantic channel. Reusable Axionomy
+crates never install a global tracing subscriber and no validation, search, or
+replay result depends on whether logging is enabled. Runnable binaries own
+subscriber configuration and emit structured summaries of model construction,
+decisions, encoded outcomes, assessments, receipts, and replay checks. Changing
+`RUST_LOG` changes visibility only; it cannot change economic state or accepted
+behavior.
+
 ## 6. Workspace and package boundaries
 
 The repository makes authority boundaries visible as dependency boundaries:
@@ -447,11 +462,11 @@ reinvention: `indexmap` for stable maps, Serde for model encoding, `num-traits`
 and `num-bigint` for exact numeric backends, `thiserror` for structured errors,
 `uom` and Jiff for authoring, `rand`/`rand_chacha` for reproducible sampling,
 `statrs` for statistical estimators, `pathfinding` for standard implicit graph
-search, `proptest` for laws, and Criterion for benchmarks. `petgraph` is not a
-kernel dependency because Axionomy does not own an authoritative graph and its
-successors are generated implicitly from applicable exchanges. It remains a
-reasonable future adapter when a user needs explicit graph import, export, or
-analysis.
+search, `tracing`/`tracing-subscriber` for example observability, `proptest` for
+laws, and Criterion for benchmarks. `petgraph` is not a kernel dependency
+because Axionomy does not own an authoritative graph and its successors are
+generated implicitly from applicable exchanges. It remains a reasonable future
+adapter when a user needs explicit graph import, export, or analysis.
 
 ## 7. Solver contract
 
@@ -737,6 +752,8 @@ in the reusable model modules.
   asset-qualified quantities through the optional `uom` and Jiff adapters.
 - Compile-time dimension checks prevent a typed handle from accepting an
   incompatible `uom` quantity, while schema checks prevent cross-handle alias.
+- Reusable crates do not install a global tracing subscriber; example binaries
+  own structured presentation without making logs authoritative.
 - Exchange application is atomic across all affected accounts.
 - Consume, produce, and preserve effects are explicit.
 - Required role bindings and role distinctness are checked.
@@ -787,6 +804,8 @@ The current foundation is intentionally bounded:
 - Unit safety is opt-in through `UnitAsset<Id>` and `AssetSchema`; the generic
   kernel cannot infer physical semantics for an arbitrary user-defined asset
   type. Raw counts remain valid and explicitly mean atoms of their asset key.
+- Typed `uom` and Jiff adapters currently require the lowered atom count to fit
+  `u64`, even when the target economy uses a wider quantity backend.
 - Rates are concrete. There is no variable matching, unification, guard
   language, or parameterized rate schema.
 - Problem builders may generate many concrete rates to represent one logical
@@ -1103,6 +1122,13 @@ cannot compare equal, and a model schema rejects one logical ID carrying more
 than one definition. The schema is derived authoring validation because the
 definition remains serialized in the asset itself. Intentional denominations
 are separate assets connected by explicit rates.
+
+### D-026: Observability is derived and consumer-owned
+
+Structured logs explain model construction, proposals, outcomes, and replay,
+but they never carry authoritative semantics. Libraries leave subscriber
+selection to their caller; example binaries configure `tracing` locally. A log
+filter may reveal more derived detail, but it cannot alter the economy.
 
 ## 16. Success criteria
 

@@ -65,6 +65,9 @@ where
     }
 
     /// Lowers elapsed duration into the timeline asset's canonical atoms.
+    ///
+    /// The resulting timeline count must fit `u64` before it is converted
+    /// through [`QuantityScalar::from_u64`] into the selected economy backend.
     pub fn encode<N>(
         &self,
         duration: SignedDuration,
@@ -201,7 +204,7 @@ pub enum TimeBindingError {
     NegativeDuration,
     #[error("duration is not an exact multiple of the timeline asset's atomic basis")]
     InexactAtomicConversion,
-    #[error("timeline count is outside the selected quantity backend's supported range")]
+    #[error("timeline count is outside the adapter or selected quantity backend's supported range")]
     NumericRange,
     #[error("calendar window ends before it starts")]
     WindowEndsBeforeItStarts,

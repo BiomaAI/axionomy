@@ -41,7 +41,12 @@ assets so measured and discrete values can share one `UnitAsset<Id>` basket.
 Use `AssetSchema::build_economy` and `validate_goal` to reject unknown or
 conflicting keys across the complete model.
 
-Run the structured example with:
+Encoding currently requires the canonical atom count to fit `u64` before it is
+converted into the selected `Quantity<N>` backend. A wider backend extends
+economy arithmetic after construction; it does not widen this adapter boundary.
+
+Run the structured example at `INFO`, or set `RUST_LOG=debug` to include the
+canonical denomination definition:
 
 ```console
 cargo run -p axionomy-units --example cargo_mass
