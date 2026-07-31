@@ -66,7 +66,7 @@ models into one-way workspace dependencies:
 | Crate | Responsibility |
 | --- | --- |
 | `axionomy` | Pure closed-state validation and exchange execution kernel |
-| `axionomy-search` | Non-authoritative BFS and best-first reference strategies |
+| `axionomy-search` | Non-authoritative search, rollout, Monte Carlo, MCTS, and learning projections |
 | `axionomy-problems` | Canonical problem encodings, specialized proposers, and conformance tests |
 
 ```text
@@ -93,8 +93,11 @@ order: `axionomy`, then `axionomy-search`, then `axionomy-problems`.
 - Asset-configured goals.
 - Isolated forks, speculative execution, and deterministic trace replay.
 - Account-restricted economic views.
-- Generic BFS and best-first search in `axionomy-search`.
-- Eight closed benchmark encodings in `axionomy-problems`, with independent
+- Generic BFS, best-first search, replayable rollouts, weighted sampling,
+  Monte Carlo statistics, vector-valued MCTS, and RL trajectory projections.
+- Forks share immutable laws and untouched account contents, with compact
+  model-scoped state fingerprints for search caches.
+- Eleven closed benchmark encodings in `axionomy-problems`, with independent
   solver strategies and core-encoded stochastic priors.
 - No third-party runtime dependencies.
 
@@ -208,6 +211,9 @@ affected accounts first and commits all of them together.
 | Rescue | Hidden truth, seed, observation, belief, chance | Policy rollouts and Monte Carlo |
 | Bridge | Capacity, bids, escrow, priority, joint resolution | BFS, first-come, and auction mechanisms |
 | Marketplace | Buyers, sellers, carriers, tax, commission, order lifecycle | Exact filtering and caller-ranked near matches |
+| Logistics | Orders, routes, fuel, time, weather, breakdown, repair | Long rollouts and risk-aware Monte Carlo |
+| Connect Four | Board, gravity, turns, line counts, wins, draw | Vector-valued adversarial MCTS |
+| Mission | Private views, shared intelligence, hazard, treatment, deadline | Multi-agent Monte Carlo and RL trajectories |
 
 Every accepted result is an exchange trace replayed by the same core. The
 specialized algorithms are proposers, not alternate execution engines.
@@ -225,6 +231,15 @@ cargo run -p axionomy-problems --example scheduling
 cargo run -p axionomy-problems --example rescue
 cargo run -p axionomy-problems --example bridge
 cargo run -p axionomy-problems --example marketplace
+cargo run -p axionomy-problems --example logistics
+cargo run -p axionomy-problems --example connect_four
+cargo run -p axionomy-problems --example mission
+```
+
+A repeatable long-horizon workload is also available:
+
+```console
+cargo run -p axionomy-problems --example logistics_benchmark
 ```
 
 For example, the maze prints:

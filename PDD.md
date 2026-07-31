@@ -322,7 +322,8 @@ axionomy-problems ────→ axionomy
 ```
 
 - `axionomy` owns universal state and transition semantics.
-- `axionomy-search` owns disposable reference search strategies.
+- `axionomy-search` owns disposable search, rollout, sampling, Monte Carlo,
+  MCTS, and learning projections.
 - `axionomy-problems` owns domain ontologies, problem constructors,
   specialized proposers, and conformance tests.
 
@@ -360,10 +361,11 @@ A solver may not:
 - Directly install a successor state.
 - Declare an assignment accepted without core replay.
 
-The `axionomy-search` crate's `bfs` and `best_first` functions are
-intentionally small reference strategies. The `axionomy` kernel is an
-execution and validation substrate, not an attempt to replace every mature
-solver.
+The `axionomy-search` crate contains deliberately inspectable reference
+implementations: BFS, best-first search, rollout execution, weighted sampling,
+Monte Carlo aggregation, vector-valued MCTS, and RL trajectory projections.
+The `axionomy` kernel remains an execution and validation substrate, not an
+attempt to replace every mature solver.
 
 ### 7.1 Rollouts are speculative economic histories
 
@@ -474,8 +476,8 @@ Observation exchange:
 The prior weights and unresolved state are assets. Sampling first fires an
 instantiation exchange on a fork; observation then advances the chosen seed.
 Both Nature choices enter the trace, so the complete rollout replays from the
-uncertain model. The current library does not generate ambient random numbers;
-a Nature strategy selects among weighted, encoded outcome rates.
+uncertain model. Systematic and seeded samplers select among weighted encoded
+outcome exchanges; they never generate ambient domain state.
 
 ## 9. Simultaneous and multi-agent decisions
 
@@ -504,7 +506,7 @@ protocols and dynamic mechanism selection remain future design space.
 
 ## 10. Executable conformance suite
 
-The project now validates the thesis with eight deliberately different
+The project now validates the thesis with eleven deliberately different
 problems. Full formal specifications live in [PROBLEMS.md](PROBLEMS.md).
 
 | Problem | What it demonstrates |
@@ -517,11 +519,14 @@ problems. Full formal specifications live in [PROBLEMS.md](PROBLEMS.md).
 | Rescue | Hidden truth, restricted views, encoded seed evolution, Monte Carlo, and deterministic replay |
 | Bridge | Multi-agent bids, escrow, capacity, joint resolution, and alternative mechanisms |
 | Marketplace | Account-derived matching, complete shortfalls, six-party atomic settlement, and caller-owned near-match ranking |
+| Logistics | Recurrent encoded chance, long rollout horizons, repair loops, replenishment, and risk-aware Monte Carlo |
+| Connect Four | Encoded gravity, turns, line counters, terminal truth, vector outcomes, and adversarial MCTS |
+| Mission | Private agent views, exchanged intelligence, hidden hazards, joint action, and RL trajectory projection |
 
 These are not unrelated demos. Together they test:
 
-- Search, constraint satisfaction, optimization, simulation, negotiation, and
-  market matching.
+- Search, constraint satisfaction, optimization, simulation, negotiation,
+  market matching, adversarial play, and learning-data generation.
 - Single-, multi-, and hidden-account transitions.
 - Resource consumption, fact preservation, and identity transformation.
 - Feasible and infeasible instances.
@@ -550,9 +555,20 @@ in the reusable model modules.
 - Infeasible assessment reports every affected account shortfall.
 - Applicable assessment projects the exact deltas later returned by `Receipt`.
 - Receipts describe accepted per-account deltas.
-- Forks are isolated clones.
+- Forks are isolated while sharing immutable rates, invariants, and untouched
+  account contents.
+- Model-scoped state fingerprints provide compact in-process cache keys.
 - Trace replay uses exactly the same validation path as live execution.
 - Restricted views cannot inspect omitted accounts.
+- Rollouts distinguish encoded terminal state, controller stops, rejection,
+  and algorithmic horizons.
+- Weighted samplers select only encoded exchange proposals reproducibly.
+- Monte Carlo provides Bernoulli, scalar, vector, quantile, and tail
+  statistics without defining outcome truth.
+- MCTS supports vector values, encoded chance nodes, deterministic budgets,
+  random rollouts, and canonical transpositions.
+- RL projections expose assessment masks, sparse shortfalls, receipts,
+  observations, outcomes, and replay-derived transitions.
 - Built-in benchmark results replay and specialized solvers agree where an
   oracle is provided.
 
@@ -571,14 +587,21 @@ The current foundation is intentionally bounded:
   permutation.
 - Linear invariants are global weighted sums. There are no local, inequality,
   temporal, or arbitrary logical invariant languages.
-- Hash maps are internal storage. `state_key` sorts logical entries, but
-  canonical serialization and stable hashing are not yet defined.
+- Hash maps are internal storage. `state_key` sorts logical entries and
+  `state_fingerprint` is deterministic within a fixed ontology executable,
+  but canonical durable serialization and collision-proof hashing are not yet
+  defined.
 - Traces contain exchanges, not durable schema-versioned receipts.
 - The rate book is immutable after construction; dynamic laws are not yet
   modeled.
-- `fork` performs a full clone; there is no persistent or copy-on-write state.
+- `fork` clones the account index while sharing immutable laws and account
+  contents. There is no persistent map or incremental state fingerprint yet.
 - Views restrict account data, but there is not yet a capability system for
   rate visibility or proposal authority.
+- MCTS currently provides UCT, not PUCT priors, progressive widening,
+  deterministic parallel workers, or information-set search.
+- Monte Carlo consumes finite encoded weighted supports; parameterized or
+  continuous distribution schemas remain future work.
 - No concurrency, signatures, persistence, distributed consensus, or
   production financial controls are claimed.
 - The conformance suite is evidence for useful bounded expressiveness, not a
@@ -638,6 +661,27 @@ representation. Projected deltas extend that explanation from “what is
 missing?” to “what would change?”, while receipts remain the authoritative
 record of what actually changed.
 
+### 13.9 Rollout must precede Monte Carlo
+
+Rescue, logistics, and the team mission now share one rollout executor. This
+prevents policy evaluation, long-horizon simulation, and future learned
+controllers from creating subtly different transition loops. Monte Carlo is
+an aggregator over trajectories, not an environment.
+
+### 13.10 Adversarial terminal truth can remain encoded
+
+Connect Four maintains gravity, turns, and every winning-line count as assets.
+A winning move produces the winner directly, so MCTS reads terminal values
+without defining an external board rule. This is more verbose than a callback
+but preserves the core's independent authority.
+
+### 13.11 Learning interfaces should preserve economic explanations
+
+Action masks derive from assessment status, dense failure features derive from
+complete shortfalls, and successful transitions retain receipts. Replayed
+traces can therefore become datasets without constructing a second mutable
+environment or discarding why an action failed.
+
 ## 14. Roadmap
 
 The next work should be driven by measured pressure from these encodings:
@@ -648,27 +692,29 @@ The next work should be driven by measured pressure from these encodings:
    guards.
 3. Define canonical problem, state, exchange, and trace serialization with
    schema/version identifiers.
-4. Add persistent or copy-on-write forks and benchmark search memory.
+4. Replace the cloned account index with a persistent map, add incremental
+   fingerprints, and continue the checked-in logistics rollout benchmark.
 5. Extend invariants with carefully constrained local and inequality forms.
 6. Define first-class objective declarations and multi-objective comparison
    while keeping objective quantities encoded.
 7. Build an external OR adapter that compiles one closed schedule and replays
    the returned assignment.
-8. Standardize weighted Nature sampling, seed evolution, and distribution
-   updates beyond the bounded reference implementation.
+8. Extend encoded Nature schemas and distribution updates beyond finite
+   weighted supports.
 9. Add property-based reference-model tests and bounded model checking.
 10. Decide whether dynamic rate availability is represented by rate assets,
     capability assets, or immutable schemas plus explicit enabling state.
-11. Build generic rollout execution, weighted sampling, Monte Carlo policy
-    evaluation, and MCTS over the same core transition path.
-12. Prove long-horizon use through stochastic logistics, an adversarial game,
-    and a partially observed multi-agent mission.
-13. Expose RL trajectory projections only after rollout and observation
-    boundaries are executable and tested.
+11. Add PUCT priors, progressive widening, deterministic parallel workers, and
+    a separate information-set MCTS contract.
+12. Add capability-scoped proposal visibility and actor-specific observation
+    identities.
+13. Integrate external learned policies through the implemented RL
+    projections without granting mutation authority.
 
-Performance work should follow semantic clarity. The current clone-based
-search and concrete rate expansion are acceptable reference implementations,
-not final scale targets.
+Performance work should follow semantic clarity. Shared immutable state and
+copy-on-write account contents reduce branch cost, but the cloned account
+index and concrete rate expansion remain reference implementations rather
+than final scale targets.
 
 ## 15. Decision record
 
@@ -713,7 +759,7 @@ encoded rather than supplied by opaque callbacks.
 
 ### D-009: Bounded structured expressiveness precedes universality claims
 
-Eight executable problems provide stronger product evidence than a vacuous
+Eleven executable problems provide stronger product evidence than a vacuous
 one-token-per-world construction. Turing completeness is not a current goal.
 
 ### D-010: Conformance problems stay in-tree
@@ -757,6 +803,18 @@ Those meanings require encoded state.
 Monte Carlo and learning systems may aggregate encoded outcome assets into
 means, variances, quantiles, tail risk, or value estimates. Aggregation may
 rank proposals but cannot define the underlying outcome.
+
+### D-017: Structural sharing is not semantic sharing
+
+Forks may share immutable laws and untouched account storage. Applying an
+exchange to one fork still prepares and commits an isolated account map, so
+storage optimization cannot make speculative mutation visible elsewhere.
+
+### D-018: Learning data is a projection, not an environment
+
+Action masks come from assessment, transitions come from receipts or
+rejection, and terminal/outcome features are read from encoded state.
+Training adapters never receive a second mutation authority.
 
 ## 16. Success criteria
 

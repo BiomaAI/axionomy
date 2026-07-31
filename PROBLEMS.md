@@ -22,18 +22,20 @@ and effects.
 
 ## Conformance matrix
 
-| Capability | Maze | Sokoban | Exact cover | Workshop | Job shop | Rescue | Bridge | Marketplace |
-| --- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| Multi-account atomic rewrite | ✓ | ✓ |  |  | ✓ | ✓ | ✓ | ✓ |
-| Preserved facts/catalysts | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| Declared invariants | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| Resource objective | ✓ |  |  | ✓ | ✓ | ✓ | ✓ |  |
-| Infeasible instance |  | ✓ | ✓ |  | ✓ |  |  | ✓ |
-| Specialized proposer |  |  | Algorithm X |  | Branch optimizer | Monte Carlo policy | Auction mechanism | Assessment matcher |
-| Multiple generic strategies | BFS/A*/Dijkstra | BFS | BFS | BFS/best-first | Best-first |  | BFS |  |
-| Hidden or stochastic state |  |  |  |  |  | ✓ |  |  |
-| Multi-agent resolution |  |  |  |  |  |  | ✓ | ✓ |
-| Deterministic replay test | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Capability | Maze | Sokoban | Exact cover | Workshop | Job shop | Rescue | Bridge | Marketplace | Logistics | Connect Four | Mission |
+| --- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| Multi-account atomic rewrite | ✓ | ✓ |  |  | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Preserved facts/catalysts | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |  | ✓ |
+| Declared invariants | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Resource objective | ✓ |  |  | ✓ | ✓ | ✓ | ✓ |  | ✓ |  | ✓ |
+| Infeasible instance |  | ✓ | ✓ |  | ✓ |  |  | ✓ | ✓ |  | ✓ |
+| Specialized proposer |  |  | Algorithm X |  | Branch optimizer | Monte Carlo | Auction | Assessment matcher | Monte Carlo | MCTS | Monte Carlo |
+| Generic algorithm | BFS/A*/Dijkstra | BFS | BFS | BFS/best-first | Best-first | Rollout | BFS |  | Rollout/MC | MCTS | Rollout/MC/RL |
+| Hidden or stochastic state |  |  |  |  |  | ✓ |  |  | ✓ |  | ✓ |
+| Multi-agent resolution |  |  |  |  |  |  | ✓ | ✓ |  | ✓ | ✓ |
+| Long-horizon trajectory |  |  |  |  |  |  |  |  | ✓ | ✓ |  |
+| Learning trajectory |  |  |  |  |  |  |  |  |  |  | ✓ |
+| Deterministic replay test | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 
 ## Runnable examples
 
@@ -50,6 +52,9 @@ cargo run -p axionomy-problems --example scheduling
 cargo run -p axionomy-problems --example rescue
 cargo run -p axionomy-problems --example bridge
 cargo run -p axionomy-problems --example marketplace
+cargo run -p axionomy-problems --example logistics
+cargo run -p axionomy-problems --example connect_four
+cargo run -p axionomy-problems --example mission
 ```
 
 ## 1. Key-door energy maze
@@ -350,6 +355,128 @@ disposable policy and never changes settlement law or feasibility.
 - Ergonomic all-distinct role constraints for larger joint transactions.
 - Conservation and lifecycle invariants across heterogeneous participants.
 
+## 9. Stochastic delivery logistics
+
+Source: `crates/axionomy-problems/src/logistics.rs`
+
+### Specification
+
+One vehicle must deliver four identified packages. Orders encode waiting,
+in-transit, and delivered state. The vehicle encodes its location, cargo
+capacity, package custody, fuel, money, repair tool, elapsed time, and
+remaining deadline. A fuel station holds replenishment stock.
+
+Two route policies are available:
+
+- Direct routes use fewer exchanges but have encoded clear, delay, and
+  breakdown weights of 2:1:1.
+- Reliable routes use two legs each way with weights 8:1:1 per leg.
+
+Departure converts an encoded location into a traveling-route state. Nature
+then resolves one weighted outcome exchange. Clear or delayed arrival consumes
+route-specific fuel and time; breakdown consumes time through a repair
+exchange and returns the route to Nature for another resolution. Loading,
+delivery, refueling, travel, repair, and order completion are all rates.
+
+### Required results
+
+- A reliable-policy trajectory delivers all four orders and exceeds forty
+  exchanges.
+- Every sampled travel outcome appears as a Nature exchange.
+- The complete long trajectory replays from the initial economy.
+- Fuel, money, time, cargo, order lifecycle, and position invariants hold.
+- Generic Monte Carlo compares both policies over 64 seeded rollouts.
+- Encoded reliability makes the reliable policy's mean utility higher.
+- A repeatable workload reports rollouts and exchanges per second.
+
+### API pressure
+
+- Long-horizon stochastic trajectories rather than one-step decisions.
+- Recurrent Nature outcomes and retry loops.
+- Outcome distributions, mean values, and risk statistics.
+- Efficient forks sharing immutable laws and untouched account data.
+- Candidate generation from current route, custody, and resource assets.
+
+## 10. Adversarial Connect Four
+
+Source: `crates/axionomy-problems/src/connect_four.rs`
+
+### Specification
+
+A compact four-by-four Connect Four board has one account per cell and one
+account per column. Cell occupancy, gravity progress, alternating turns, and
+both players' counts for every row, column, and diagonal are assets.
+
+Move rates consume the exact current line counters and produce their
+successors. A move completing a line consumes the current turn and produces
+`Winner(player)` directly. A full board with no winner enables a draw rate
+that preserves all four `ColumnFull` facts. Terminal truth therefore never
+comes from an external board callback.
+
+Generic vector-valued MCTS uses the encoded current turn to choose which
+player value to maximize. Tree edges are exchanges, transpositions use
+canonical state keys, rollouts use seeded action selection, and the final
+action is revalidated by the live economy.
+
+### Required results
+
+- Gravity places a first piece in row zero and advances the column token.
+- Line counters advance atomically with cell and turn state.
+- MCTS selects an immediately winning fourth column.
+- Applying that proposal produces the encoded winner asset.
+- Complete self-play terminates in a win or encoded draw.
+- The full game trace replays deterministically.
+
+### API pressure
+
+- Adversarial vector outcomes and actor-relative tree selection.
+- Large derived search trees over a compact authoritative state.
+- Core-encoded terminal detection without solver-only win logic.
+- Canonical transpositions and bounded seeded exploration.
+- Concrete-rate growth from structured move schemas.
+
+## 11. Partially observed team mission
+
+Source: `crates/axionomy-problems/src/mission.rs`
+
+### Specification
+
+Scout and Medic accounts begin at base while Nature holds unresolved weighted
+truth, sensor seed, and hazard state. Neither agent view can inspect Nature or
+the other agent's private account.
+
+The Scout may scan, receiving fallible private intelligence. A share exchange
+transfers that intelligence to the Medic while preserving explicit evidence
+for the Scout. Both agents then move jointly. At the true site, Nature resolves
+the encoded safe or injury hazard. Injury requires an atomic treatment
+exchange using the Medic's kit before the team can rescue the victim. Every
+mission action consumes encoded deadline time.
+
+The coordinated policy scans, shares, and follows the Medic's visible
+intelligence. A direct policy always sends both agents north. Replayed traces
+are also projected into observation, outcome, and termination transitions for
+learning.
+
+### Required results
+
+- Agent views hide Nature and the other agent.
+- Intelligence changes ownership only through a share exchange.
+- Joint movement, encounter, treatment, and rescue are multi-account rates.
+- A coordinated successful trace contains instantiation, scan, share,
+  encounter, and finish exchanges and replays exactly.
+- Across all 16 weighted scenarios, coordination succeeds 12 times and direct
+  north succeeds 8.
+- The complete trace becomes one RL transition per exchange, ending with an
+  encoded terminal outcome.
+
+### API pressure
+
+- Agent-specific observations and information boundaries.
+- Multi-agent communication as economic state change.
+- Hidden truth, belief, hazard, and deadline in one model.
+- Generic Monte Carlo over partially observed policies.
+- Assessment-derived masks and replay-derived learning trajectories.
+
 ## Cross-problem acceptance tests
 
 The repository test suite additionally verifies:
@@ -366,6 +493,12 @@ The repository test suite additionally verifies:
 - Complete multi-account distance-to-feasibility reports.
 - Applicable assessment parity with eventual receipt deltas.
 - Receipt deltas for every touched account.
+- Rollout goal, cutoff, rejection, retention, and replay behavior.
+- Deterministic systematic and seeded weighted sampling.
+- Bernoulli, scalar, vector, quantile, and lower-tail statistics.
+- Vector-valued MCTS selection, chance nodes, and transpositions.
+- Compact state fingerprints and isolated shared-data forks.
+- RL action masks, shortfall features, receipts, and trajectory extraction.
 
 Run the suite with:
 
@@ -383,12 +516,15 @@ limits clearly:
 2. Solvers need a standard finite binding enumerator derived from schemas and
    account capabilities.
 3. Durable replay needs canonical serialization and problem/rate versioning.
-4. Search-heavy workloads need persistent or copy-on-write forks.
+4. Search-heavy workloads need a persistent account index and incremental
+   state fingerprints beyond the current shared account contents and laws.
 5. More domains will require constrained local and inequality invariants.
 6. External OR adapters should compile encoded semantics, emit exchanges, and
    use replay as a mandatory proof checker.
-7. Nature needs a standardized deterministic weighted-sampling protocol and
-   richer encoded distribution updates.
+7. MCTS needs PUCT priors, progressive widening, deterministic parallel
+   workers, and a separate information-set contract.
+8. Nature needs richer parameterized distribution updates for very large or
+   continuous outcome spaces.
 
-Any future abstraction must continue to pass all eight problems without
+Any future abstraction must continue to pass all eleven problems without
 moving authoritative meaning into solver callbacks or an external world.
