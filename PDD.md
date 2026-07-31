@@ -54,6 +54,13 @@ or a callback can mutate state that an event log cannot reconstruct.
 
 Closure creates one validation boundary and one audit language.
 
+A closed engine should also explain rejection in the same language that
+defines validity. Given a proposed exchange, Axionomy should derive every
+affected account requirement, every missing asset, and every projected effect
+without mutating state. This turns validation from a binary gate into an
+economic explanation while keeping the explanation grounded entirely in the
+current accounts, assets, rate, and exchange bindings.
+
 A closed encoding must also be structured. Serializing an entire external
 world into an opaque `WorldBlob` asset and transforming it with an arbitrary
 callback would satisfy the vocabulary but violate the purpose. Useful
@@ -168,7 +175,57 @@ Application has a prepare-and-commit boundary:
 
 Any error leaves the stored economy unchanged.
 
-### 4.5 Declared invariants
+### 4.5 Assessment and distance to feasibility
+
+Assessment is a read-only projection of one exchange against one economy
+snapshot. It does not introduce a fifth primitive or an alternative execution
+path. It derives information from the same rate resolution, role binding,
+effect merging, checked arithmetic, balance requirements, and invariants used
+by application.
+
+For every affected account:
+
+```text
+required(account)  = consumed × units + preserved
+shortfall(account) = max(required - current, 0), per asset
+projected(account) = current - consumed × units + produced × units
+```
+
+The complete distance to feasibility is the sparse vector:
+
+```text
+Distance = { (account, asset, missing_quantity) }
+```
+
+An assessment must accumulate shortfalls across every affected account rather
+than stop at the first deficient account. It must distinguish a structurally
+invalid proposal—such as a missing rate, account, or role binding—from a
+well-formed exchange that is currently infeasible because assets are missing.
+Overflow and invariant failures remain separate structured issues because
+adding assets does not necessarily repair them.
+
+A successful assessment exposes the projected per-account deltas that
+application would produce. If the economy has not changed, those projected
+deltas must exactly match the deltas in the eventual `Receipt`. An assessment
+is evidence about a snapshot, not permission to bypass revalidation; `apply`
+remains the sole commit boundary.
+
+The core reports structured economic facts, not a universal scalar cost.
+Solvers, user interfaces, planners, and reinforcement-learning policies may
+weight the shortfall vector to build heuristics, rewards, or action rankings.
+Those weights are disposable policy. If a cost changes validity, payment, or
+state, it must instead be encoded through assets and rates.
+
+This contract enables:
+
+- Exact explanations of what an exchange lacks and by how much.
+- Valid-action masks without speculative mutation.
+- Dense reinforcement-learning observations and reward shaping.
+- Search heuristics based on distance to feasibility.
+- Procurement, prerequisite planning, and exchange repair.
+- Preview of all account effects before atomic commitment.
+
+### 4.6 Declared invariants
 
 Literal conservation is correct for trade but too narrow for transformations
 such as:
@@ -197,7 +254,7 @@ An invariant preserves whatever measure exists in the initial state. It does
 not by itself assert that the initial value is correct; problem construction
 and tests remain responsible for initial validity.
 
-### 4.6 Goals
+### 4.7 Goals
 
 A `Goal` is a set of required baskets at concrete accounts. Matching is
 monotone: an account may own additional assets. Problems commonly use a final
@@ -235,6 +292,12 @@ Search and simulation use:
 - `replayed` to validate a full trace without touching its source.
 - `state_key` for a canonicalized logical-state key.
 - `applicable` to filter concrete proposals through core validation.
+
+The next core API addition is `assess`, returning a structured
+`ExchangeAssessment`. It will expose all account requirements, complete
+shortfalls, projected deltas, and non-balance issues without mutation.
+`can_apply`, `applicable`, assessment, and application must share one internal
+preparation path so their semantics cannot drift.
 
 `replay` mutates its target one exchange at a time. If a caller needs
 all-or-nothing validation of an entire trace relative to an existing economy,
@@ -276,6 +339,7 @@ A solver may:
 - Inspect immutable core state or a permitted view.
 - Construct concrete exchange bindings.
 - Ask the core which proposals are applicable.
+- Request structured assessments and projected account deltas.
 - Fork states and explore.
 - Read objective or heuristic assets.
 - Compile a bounded economy to another representation.
@@ -398,6 +462,9 @@ The current foundation is intentionally bounded:
 - Candidate binding enumeration is supplied by the model or adapter; the core
   filters and validates proposals but does not enumerate every account
   permutation.
+- `can_apply` currently reports the first rejection. Complete multi-account
+  shortfall assessment and projected deltas are designed but not yet
+  implemented.
 - Linear invariants are global weighted sums. There are no local, inequality,
   temporal, or arbitrary logical invariant languages.
 - Hash maps are internal storage. `state_key` sorts logical entries, but
@@ -458,26 +525,37 @@ Encoding unresolved state, scenario weights, truth, and seed removes both the
 prior and stochastic mutation from the ambient runtime. Instantiation and
 observation exchanges record everything needed for exact replay.
 
+### 13.8 Rejection should be explanatory, not binary
+
+The same explicit baskets that make an exchange verifiable can explain why it
+is infeasible. A complete multi-account shortfall vector is therefore not an
+optional diagnostics layer; it is a direct product capability of the economic
+representation. Projected deltas extend that explanation from “what is
+missing?” to “what would change?”, while receipts remain the authoritative
+record of what actually changed.
+
 ## 14. Roadmap
 
 The next work should be driven by measured pressure from these encodings:
 
-1. Define a serializable parameterized rate-schema language with typed
+1. Add complete exchange assessment with all account shortfalls, projected
+   deltas, structured non-balance issues, and parity tests against receipts.
+2. Define a serializable parameterized rate-schema language with typed
    variables and finite binding domains.
-2. Add automatic candidate instantiation without permitting arbitrary hidden
+3. Add automatic candidate instantiation without permitting arbitrary hidden
    guards.
-3. Define canonical problem, state, exchange, and trace serialization with
+4. Define canonical problem, state, exchange, and trace serialization with
    schema/version identifiers.
-4. Add persistent or copy-on-write forks and benchmark search memory.
-5. Extend invariants with carefully constrained local and inequality forms.
-6. Define first-class objective declarations and multi-objective comparison
+5. Add persistent or copy-on-write forks and benchmark search memory.
+6. Extend invariants with carefully constrained local and inequality forms.
+7. Define first-class objective declarations and multi-objective comparison
    while keeping objective quantities encoded.
-7. Build an external OR adapter that compiles one closed schedule and replays
+8. Build an external OR adapter that compiles one closed schedule and replays
    the returned assignment.
-8. Standardize weighted Nature sampling, seed evolution, and distribution
+9. Standardize weighted Nature sampling, seed evolution, and distribution
    updates beyond the bounded reference implementation.
-9. Add property-based reference-model tests and bounded model checking.
-10. Decide whether dynamic rate availability is represented by rate assets,
+10. Add property-based reference-model tests and bounded model checking.
+11. Decide whether dynamic rate availability is represented by rate assets,
     capability assets, or immutable schemas plus explicit enabling state.
 
 Performance work should follow semantic clarity. The current clone-based
@@ -541,6 +619,13 @@ domain elegant at another domain's expense.
 The kernel contains neither reference algorithms nor domain ontologies.
 Workspace crates may depend on the kernel; the kernel never depends on them.
 
+### D-012: Assessment is derived, structured, and non-authoritative
+
+The core exposes complete shortfall vectors and projected deltas derived from
+the same preparation path as application. It does not assign universal scalar
+costs. Algorithms may value an assessment, but only encoded rates determine
+validity and only applied exchanges change state.
+
 ## 16. Success criteria
 
 Axionomy succeeds when:
@@ -554,6 +639,10 @@ Axionomy succeeds when:
 - Different solvers operate over identical semantics.
 - External solver results translate into replayable exchanges.
 - Invalid proposals cannot bypass core constraints.
+- Infeasible proposals expose every account-and-asset shortfall without
+  mutation.
+- Successful assessments project the same account deltas later confirmed by
+  receipts.
 - Encodings remain structured, local, inspectable, and compositional.
 - Mathematical claims are supported by executable laws or proofs.
 
