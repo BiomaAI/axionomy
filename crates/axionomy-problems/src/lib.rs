@@ -1,6 +1,7 @@
 #![doc = include_str!("../README.md")]
 
 pub mod bridge;
+pub mod connect_four;
 pub mod exact_cover;
 pub mod logistics;
 pub mod marketplace;

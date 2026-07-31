@@ -1,0 +1,530 @@
+//! Compact adversarial Connect Four with encoded gravity and terminal truth.
+
+use axionomy::{
+    Account, Basket, Economy, EconomyBuilder, Exchange, LinearInvariant, Quantity, Rate, Trace,
+    basket,
+};
+use axionomy_search::mcts::{MctsConfig, MctsDecision, MctsError, random_action, search};
+
+pub const WIDTH: u8 = 4;
+pub const HEIGHT: u8 = 4;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum Player {
+    Red,
+    Yellow,
+}
+
+impl Player {
+    pub const fn other(self) -> Self {
+        match self {
+            Self::Red => Self::Yellow,
+            Self::Yellow => Self::Red,
+        }
+    }
+
+    const fn index(self) -> usize {
+        match self {
+            Self::Red => 0,
+            Self::Yellow => 1,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum Line {
+    Row(u8),
+    Column(u8),
+    MainDiagonal,
+    AntiDiagonal,
+}
+
+pub const LINES: [Line; 10] = [
+    Line::Row(0),
+    Line::Row(1),
+    Line::Row(2),
+    Line::Row(3),
+    Line::Column(0),
+    Line::Column(1),
+    Line::Column(2),
+    Line::Column(3),
+    Line::MainDiagonal,
+    Line::AntiDiagonal,
+];
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum AccountId {
+    Game,
+    Column(u8),
+    Cell { column: u8, row: u8 },
+    Result,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum Asset {
+    Empty,
+    Piece(Player),
+    NextRow(u8),
+    ColumnFull,
+    Turn(Player),
+    LineCount(Player, Line, u8),
+    Winner(Player),
+    Draw,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum Role {
+    Game,
+    Column,
+    Cell,
+    Result,
+    Column0,
+    Column1,
+    Column2,
+    Column3,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct LineCounts {
+    row: u8,
+    column: u8,
+    main_diagonal: Option<u8>,
+    anti_diagonal: Option<u8>,
+}
+
+impl LineCounts {
+    pub const fn row(self) -> u8 {
+        self.row
+    }
+
+    pub const fn column(self) -> u8 {
+        self.column
+    }
+
+    pub const fn main_diagonal(self) -> Option<u8> {
+        self.main_diagonal
+    }
+
+    pub const fn anti_diagonal(self) -> Option<u8> {
+        self.anti_diagonal
+    }
+
+    pub fn completes_line(self) -> bool {
+        self.row == 3
+            || self.column == 3
+            || self.main_diagonal == Some(3)
+            || self.anti_diagonal == Some(3)
+    }
+
+    fn entries(self, column: u8, row: u8) -> Vec<(Line, u8)> {
+        let mut entries = vec![
+            (Line::Row(row), self.row),
+            (Line::Column(column), self.column),
+        ];
+        if let Some(count) = self.main_diagonal {
+            entries.push((Line::MainDiagonal, count));
+        }
+        if let Some(count) = self.anti_diagonal {
+            entries.push((Line::AntiDiagonal, count));
+        }
+        entries
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum RateId {
+    Move {
+        player: Player,
+        column: u8,
+        row: u8,
+        counts: LineCounts,
+    },
+    Draw(Player),
+}
+
+pub type World = Economy<AccountId, Asset, RateId, Role>;
+pub type Action = Exchange<RateId, Role, AccountId>;
+pub type Decision = MctsDecision<Action>;
+pub type DecisionError = MctsError<RateId, Role, AccountId, Asset>;
+
+pub fn initial() -> World {
+    let mut game_assets = basket([(Asset::Turn(Player::Red), 1)]);
+    for player in [Player::Red, Player::Yellow] {
+        for line in LINES {
+            game_assets.insert(Asset::LineCount(player, line, 0), Quantity::new(1));
+        }
+    }
+
+    let mut builder = EconomyBuilder::new()
+        .account(AccountId::Game, Account::from(game_assets))
+        .account(AccountId::Result, Account::default());
+
+    for column in 0..WIDTH {
+        builder = builder.account(
+            AccountId::Column(column),
+            Account::from(basket([(Asset::NextRow(0), 1)])),
+        );
+        for row in 0..HEIGHT {
+            builder = builder.account(
+                AccountId::Cell { column, row },
+                Account::from(basket([(Asset::Empty, 1)])),
+            );
+            for player in [Player::Red, Player::Yellow] {
+                for counts in count_combinations(column, row) {
+                    let rate = move_rate(player, column, row, counts);
+                    builder = builder.rate(
+                        RateId::Move {
+                            player,
+                            column,
+                            row,
+                            counts,
+                        },
+                        rate,
+                    );
+                }
+            }
+        }
+    }
+
+    for player in [Player::Red, Player::Yellow] {
+        builder = builder.rate(
+            RateId::Draw(player),
+            Rate::new()
+                .consume(Role::Game, basket([(Asset::Turn(player), 1)]))
+                .preserve(Role::Column0, basket([(Asset::ColumnFull, 1)]))
+                .preserve(Role::Column1, basket([(Asset::ColumnFull, 1)]))
+                .preserve(Role::Column2, basket([(Asset::ColumnFull, 1)]))
+                .preserve(Role::Column3, basket([(Asset::ColumnFull, 1)]))
+                .produce(Role::Result, basket([(Asset::Draw, 1)]))
+                .distinct(Role::Game, Role::Column0)
+                .distinct(Role::Game, Role::Column1)
+                .distinct(Role::Game, Role::Column2)
+                .distinct(Role::Game, Role::Column3)
+                .distinct(Role::Game, Role::Result)
+                .distinct(Role::Column0, Role::Column1)
+                .distinct(Role::Column0, Role::Column2)
+                .distinct(Role::Column0, Role::Column3)
+                .distinct(Role::Column0, Role::Result)
+                .distinct(Role::Column1, Role::Column2)
+                .distinct(Role::Column1, Role::Column3)
+                .distinct(Role::Column1, Role::Result)
+                .distinct(Role::Column2, Role::Column3)
+                .distinct(Role::Column2, Role::Result)
+                .distinct(Role::Column3, Role::Result),
+        );
+    }
+
+    builder
+        .invariant(
+            LinearInvariant::new("cell occupancy")
+                .weight(Asset::Empty, 1)
+                .weight(Asset::Piece(Player::Red), 1)
+                .weight(Asset::Piece(Player::Yellow), 1),
+        )
+        .invariant((0..HEIGHT).fold(
+            LinearInvariant::new("column progression").weight(Asset::ColumnFull, 1),
+            |invariant, row| invariant.weight(Asset::NextRow(row), 1),
+        ))
+        .invariant(
+            LinearInvariant::new("game phase")
+                .weight(Asset::Turn(Player::Red), 1)
+                .weight(Asset::Turn(Player::Yellow), 1)
+                .weight(Asset::Winner(Player::Red), 1)
+                .weight(Asset::Winner(Player::Yellow), 1)
+                .weight(Asset::Draw, 1),
+        )
+        .invariant(
+            [Player::Red, Player::Yellow]
+                .into_iter()
+                .flat_map(|player| LINES.into_iter().map(move |line| (player, line)))
+                .fold(
+                    LinearInvariant::new("line counter tokens"),
+                    |invariant, (player, line)| {
+                        (0..=4).fold(invariant, |invariant, count| {
+                            invariant.weight(Asset::LineCount(player, line, count), 1)
+                        })
+                    },
+                ),
+        )
+        .build()
+}
+
+pub fn candidates(world: &World) -> Vec<Action> {
+    let Some(player) = current_player(world) else {
+        return Vec::new();
+    };
+
+    let mut actions = Vec::new();
+    for column in 0..WIDTH {
+        if let Some(row) = next_row(world, column) {
+            let counts = current_counts(world, player, column, row);
+            actions.push(action(RateId::Move {
+                player,
+                column,
+                row,
+                counts,
+            }));
+        }
+    }
+    if actions.is_empty() {
+        actions.push(action(RateId::Draw(player)));
+    }
+    world.applicable(actions)
+}
+
+pub fn terminal_values(world: &World) -> Option<Vec<f64>> {
+    if !world
+        .balance(&AccountId::Result, &Asset::Winner(Player::Red))
+        .is_zero()
+    {
+        Some(vec![1.0, 0.0])
+    } else if !world
+        .balance(&AccountId::Result, &Asset::Winner(Player::Yellow))
+        .is_zero()
+    {
+        Some(vec![0.0, 1.0])
+    } else if !world.balance(&AccountId::Result, &Asset::Draw).is_zero() {
+        Some(vec![0.5, 0.5])
+    } else {
+        None
+    }
+}
+
+pub fn mcts(world: &World, iterations: usize, seed: u64) -> Result<Decision, DecisionError> {
+    search(
+        world,
+        MctsConfig::new(iterations, 20).with_seed(seed),
+        2,
+        candidates,
+        |_| Vec::new(),
+        |world| current_player(world).map_or(0, Player::index),
+        terminal_values,
+        |_| vec![0.5, 0.5],
+        random_action,
+    )
+}
+
+pub fn play_game(iterations_per_move: usize, seed: u64) -> Trace<RateId, Role, AccountId> {
+    let mut world = initial();
+    let mut trace = Trace::new();
+    for turn in 0..=WIDTH * HEIGHT {
+        if terminal_values(&world).is_some() {
+            break;
+        }
+        let decision = mcts(&world, iterations_per_move, seed + u64::from(turn))
+            .expect("non-terminal games have a move");
+        let exchange = decision.action().clone();
+        world
+            .apply(exchange.clone())
+            .expect("MCTS returns an applicable exchange");
+        trace.push(exchange);
+    }
+    trace
+}
+
+pub fn column_of(action: &Action) -> Option<u8> {
+    match action.rate() {
+        RateId::Move { column, .. } => Some(*column),
+        RateId::Draw(_) => None,
+    }
+}
+
+fn move_rate(player: Player, column: u8, row: u8, counts: LineCounts) -> Rate<Role, Asset> {
+    let mut consumed = basket([(Asset::Turn(player), 1)]);
+    let mut produced = Basket::new();
+    for (line, count) in counts.entries(column, row) {
+        consumed.insert(Asset::LineCount(player, line, count), Quantity::new(1));
+        produced.insert(Asset::LineCount(player, line, count + 1), Quantity::new(1));
+    }
+
+    let winning = counts.completes_line();
+    if !winning {
+        produced.insert(Asset::Turn(player.other()), Quantity::new(1));
+    }
+
+    let rate = Rate::new()
+        .consume(Role::Game, consumed)
+        .produce(Role::Game, produced)
+        .consume(Role::Column, basket([(Asset::NextRow(row), 1)]))
+        .produce(
+            Role::Column,
+            if row + 1 == HEIGHT {
+                basket([(Asset::ColumnFull, 1)])
+            } else {
+                basket([(Asset::NextRow(row + 1), 1)])
+            },
+        )
+        .consume(Role::Cell, basket([(Asset::Empty, 1)]))
+        .produce(Role::Cell, basket([(Asset::Piece(player), 1)]))
+        .distinct(Role::Game, Role::Column)
+        .distinct(Role::Game, Role::Cell)
+        .distinct(Role::Column, Role::Cell);
+
+    if winning {
+        rate.produce(Role::Result, basket([(Asset::Winner(player), 1)]))
+            .distinct(Role::Game, Role::Result)
+            .distinct(Role::Column, Role::Result)
+            .distinct(Role::Cell, Role::Result)
+    } else {
+        rate
+    }
+}
+
+fn action(rate: RateId) -> Action {
+    let exchange = Exchange::new(rate, Quantity::new(1));
+    match rate {
+        RateId::Move {
+            column,
+            row,
+            counts,
+            ..
+        } => {
+            let exchange = exchange
+                .bind(Role::Game, AccountId::Game)
+                .bind(Role::Column, AccountId::Column(column))
+                .bind(Role::Cell, AccountId::Cell { column, row });
+            if counts.completes_line() {
+                exchange.bind(Role::Result, AccountId::Result)
+            } else {
+                exchange
+            }
+        }
+        RateId::Draw(_) => exchange
+            .bind(Role::Game, AccountId::Game)
+            .bind(Role::Column0, AccountId::Column(0))
+            .bind(Role::Column1, AccountId::Column(1))
+            .bind(Role::Column2, AccountId::Column(2))
+            .bind(Role::Column3, AccountId::Column(3))
+            .bind(Role::Result, AccountId::Result),
+    }
+}
+
+fn current_player(world: &World) -> Option<Player> {
+    [Player::Red, Player::Yellow].into_iter().find(|player| {
+        !world
+            .balance(&AccountId::Game, &Asset::Turn(*player))
+            .is_zero()
+    })
+}
+
+fn next_row(world: &World, column: u8) -> Option<u8> {
+    (0..HEIGHT).find(|row| {
+        !world
+            .balance(&AccountId::Column(column), &Asset::NextRow(*row))
+            .is_zero()
+    })
+}
+
+fn current_counts(world: &World, player: Player, column: u8, row: u8) -> LineCounts {
+    LineCounts {
+        row: line_count(world, player, Line::Row(row)),
+        column: line_count(world, player, Line::Column(column)),
+        main_diagonal: (column == row).then(|| line_count(world, player, Line::MainDiagonal)),
+        anti_diagonal: (column + row + 1 == WIDTH)
+            .then(|| line_count(world, player, Line::AntiDiagonal)),
+    }
+}
+
+fn line_count(world: &World, player: Player, line: Line) -> u8 {
+    (0..=4)
+        .find(|count| {
+            !world
+                .balance(&AccountId::Game, &Asset::LineCount(player, line, *count))
+                .is_zero()
+        })
+        .expect("every line owns one encoded counter")
+}
+
+fn count_combinations(column: u8, row: u8) -> Vec<LineCounts> {
+    let diagonal = if column == row {
+        (0..4).map(Some).collect::<Vec<_>>()
+    } else {
+        vec![None]
+    };
+    let anti_diagonal = if column + row + 1 == WIDTH {
+        (0..4).map(Some).collect::<Vec<_>>()
+    } else {
+        vec![None]
+    };
+    let mut combinations = Vec::new();
+    for row_count in 0..4 {
+        for column_count in 0..4 {
+            for main_diagonal in &diagonal {
+                for anti_diagonal in &anti_diagonal {
+                    combinations.push(LineCounts {
+                        row: row_count,
+                        column: column_count,
+                        main_diagonal: *main_diagonal,
+                        anti_diagonal: *anti_diagonal,
+                    });
+                }
+            }
+        }
+    }
+    combinations
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn gravity_and_line_counts_are_core_validated() {
+        let mut world = initial();
+        let first = candidates(&world)
+            .into_iter()
+            .find(|action| column_of(action) == Some(0))
+            .expect("column zero is open");
+        world.apply(first).expect("first piece lands");
+
+        assert_eq!(
+            world.balance(
+                &AccountId::Cell { column: 0, row: 0 },
+                &Asset::Piece(Player::Red),
+            ),
+            Quantity::new(1)
+        );
+        assert_eq!(
+            world.balance(&AccountId::Column(0), &Asset::NextRow(1)),
+            Quantity::new(1)
+        );
+        assert_eq!(
+            world.balance(
+                &AccountId::Game,
+                &Asset::LineCount(Player::Red, Line::Row(0), 1),
+            ),
+            Quantity::new(1)
+        );
+    }
+
+    #[test]
+    fn mcts_selects_an_immediate_encoded_win() {
+        let mut world = initial();
+        for column in [0, 0, 1, 1, 2, 2] {
+            let exchange = candidates(&world)
+                .into_iter()
+                .find(|action| column_of(action) == Some(column))
+                .expect("scripted column is open");
+            world.apply(exchange).expect("scripted move is valid");
+        }
+
+        let decision = mcts(&world, 512, 19).expect("red can choose a move");
+        assert_eq!(column_of(decision.action()), Some(3));
+        let mut won = world.fork();
+        won.apply(decision.action().clone())
+            .expect("winning move applies");
+        assert_eq!(terminal_values(&won), Some(vec![1.0, 0.0]));
+    }
+
+    #[test]
+    fn complete_mcts_game_is_replayable() {
+        let initial = initial();
+        let trace = play_game(96, 5);
+        let final_world = initial
+            .replayed(&trace)
+            .expect("the complete game must replay");
+
+        assert!(terminal_values(&final_world).is_some());
+        assert!(trace.exchanges().len() <= usize::from(WIDTH * HEIGHT + 1));
+    }
+}
