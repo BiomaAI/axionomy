@@ -42,14 +42,14 @@ impl SearchStatus {
 
 /// Progress and lifecycle information returned after a bounded advance.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-pub struct AdvanceReport<Progress> {
-    status: SearchStatus,
+pub struct AdvanceReport<Progress, Status = SearchStatus> {
+    status: Status,
     work_completed: usize,
     progress: Progress,
 }
 
-impl<Progress> AdvanceReport<Progress> {
-    pub const fn new(status: SearchStatus, work_completed: usize, progress: Progress) -> Self {
+impl<Progress, Status> AdvanceReport<Progress, Status> {
+    pub const fn new(status: Status, work_completed: usize, progress: Progress) -> Self {
         Self {
             status,
             work_completed,
@@ -57,7 +57,10 @@ impl<Progress> AdvanceReport<Progress> {
         }
     }
 
-    pub const fn status(&self) -> SearchStatus {
+    pub const fn status(&self) -> Status
+    where
+        Status: Copy,
+    {
         self.status
     }
 

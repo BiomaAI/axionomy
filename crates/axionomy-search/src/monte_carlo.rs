@@ -1,11 +1,14 @@
 //! Generic repeated-experiment evaluation for core-validated rollouts.
 
+use crate::session::{AdvanceReport, Continue, SearchObserver, WorkBudget};
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
 use statrs::distribution::{Beta, ContinuousCDF};
 use statrs::statistics::{Data, OrderStatistics, Statistics as StatrsStatistics};
 use std::convert::Infallible;
 use thiserror::Error;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct MonteCarloConfig {
     samples: usize,
 }
@@ -25,10 +28,11 @@ pub trait Statistics<Observation> {
     type Error;
 
     fn observe(&mut self, observation: Observation) -> Result<(), Self::Error>;
-    fn summarize(self) -> Self::Summary;
+    /// Produces an owned snapshot without consuming the accumulator.
+    fn summarize(&self) -> Self::Summary;
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct PolicyEstimate<Policy, Summary> {
     policy: Policy,
     summary: Summary,
@@ -64,6 +68,194 @@ pub enum MonteCarloError<ExperimentError, StatisticsError> {
     },
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum MonteCarloStatus {
+    Running,
+    Completed,
+    Interrupted,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct MonteCarloProgress {
+    policies: usize,
+    samples_per_policy: usize,
+    policy_index: usize,
+    sample_index: usize,
+    completed_samples: usize,
+    total_samples: usize,
+}
+
+impl MonteCarloProgress {
+    pub const fn policies(self) -> usize {
+        self.policies
+    }
+
+    pub const fn samples_per_policy(self) -> usize {
+        self.samples_per_policy
+    }
+
+    pub const fn policy_index(self) -> usize {
+        self.policy_index
+    }
+
+    pub const fn sample_index(self) -> usize {
+        self.sample_index
+    }
+
+    pub const fn completed_samples(self) -> usize {
+        self.completed_samples
+    }
+
+    pub const fn total_samples(self) -> usize {
+        self.total_samples
+    }
+}
+
+/// Resumable policy evaluation with deterministic policy-major sample order.
+pub struct MonteCarloSession<Policy, Statistic, Experiment> {
+    policies: Vec<(Policy, Statistic)>,
+    config: MonteCarloConfig,
+    experiment: Experiment,
+    policy_index: usize,
+    sample_index: usize,
+    completed_samples: usize,
+}
+
+impl<Policy, Statistic, Experiment> MonteCarloSession<Policy, Statistic, Experiment> {
+    pub fn new(
+        policies: impl IntoIterator<Item = Policy>,
+        config: MonteCarloConfig,
+        experiment: Experiment,
+        mut make_statistics: impl FnMut() -> Statistic,
+    ) -> Self {
+        Self {
+            policies: policies
+                .into_iter()
+                .map(|policy| (policy, make_statistics()))
+                .collect(),
+            config,
+            experiment,
+            policy_index: 0,
+            sample_index: 0,
+            completed_samples: 0,
+        }
+    }
+
+    pub fn progress(&self) -> MonteCarloProgress {
+        MonteCarloProgress {
+            policies: self.policies.len(),
+            samples_per_policy: self.config.samples(),
+            policy_index: self.policy_index.min(self.policies.len()),
+            sample_index: self.sample_index,
+            completed_samples: self.completed_samples,
+            total_samples: self.policies.len().saturating_mul(self.config.samples()),
+        }
+    }
+
+    pub fn status(&self) -> MonteCarloStatus {
+        if self.policy_index >= self.policies.len() || self.config.samples() == 0 {
+            MonteCarloStatus::Completed
+        } else {
+            MonteCarloStatus::Running
+        }
+    }
+
+    pub fn advance<Observation, ExperimentError, StatisticsError>(
+        &mut self,
+        budget: WorkBudget,
+        observer: &mut impl SearchObserver<MonteCarloProgress>,
+    ) -> Result<
+        AdvanceReport<MonteCarloProgress, MonteCarloStatus>,
+        MonteCarloError<ExperimentError, StatisticsError>,
+    >
+    where
+        Experiment: FnMut(&Policy, usize) -> Result<Observation, ExperimentError>,
+        Statistic: Statistics<Observation, Error = StatisticsError>,
+    {
+        if self.status() == MonteCarloStatus::Completed {
+            return Ok(AdvanceReport::new(
+                MonteCarloStatus::Completed,
+                0,
+                self.progress(),
+            ));
+        }
+
+        let mut completed = 0;
+        while completed < budget.units() && self.policy_index < self.policies.len() {
+            if observer.observe(&self.progress()).is_break() {
+                return Ok(AdvanceReport::new(
+                    MonteCarloStatus::Interrupted,
+                    completed,
+                    self.progress(),
+                ));
+            }
+
+            let (policy, statistics) = &mut self.policies[self.policy_index];
+            let observation = (self.experiment)(policy, self.sample_index).map_err(|error| {
+                MonteCarloError::Experiment {
+                    policy_index: self.policy_index,
+                    sample_index: self.sample_index,
+                    error,
+                }
+            })?;
+            statistics
+                .observe(observation)
+                .map_err(|error| MonteCarloError::Statistics {
+                    policy_index: self.policy_index,
+                    sample_index: self.sample_index,
+                    error,
+                })?;
+
+            self.sample_index += 1;
+            self.completed_samples += 1;
+            completed += 1;
+            if self.sample_index == self.config.samples() {
+                self.policy_index += 1;
+                self.sample_index = 0;
+            }
+        }
+
+        Ok(AdvanceReport::new(
+            self.status(),
+            completed,
+            self.progress(),
+        ))
+    }
+
+    pub fn into_estimates<Observation, Summary, StatisticsError>(
+        self,
+    ) -> Option<Vec<PolicyEstimate<Policy, Summary>>>
+    where
+        Statistic: Statistics<Observation, Summary = Summary, Error = StatisticsError>,
+    {
+        (self.status() == MonteCarloStatus::Completed).then(|| {
+            self.policies
+                .into_iter()
+                .map(|(policy, statistics)| PolicyEstimate {
+                    policy,
+                    summary: statistics.summarize(),
+                })
+                .collect()
+        })
+    }
+
+    pub fn estimates<Observation, Summary, StatisticsError>(
+        &self,
+    ) -> Vec<PolicyEstimate<&Policy, Summary>>
+    where
+        Statistic: Statistics<Observation, Summary = Summary, Error = StatisticsError>,
+    {
+        self.policies
+            .iter()
+            .map(|(policy, statistics)| PolicyEstimate {
+                policy,
+                summary: statistics.summarize(),
+            })
+            .collect()
+    }
+}
+
 /// Evaluates each policy with common sample indices.
 ///
 /// The experiment is expected to run a core-validated rollout. Statistics are
@@ -81,8 +273,8 @@ pub fn evaluate<
 >(
     policies: Policies,
     config: MonteCarloConfig,
-    mut experiment: Experiment,
-    mut make_statistics: MakeStatistics,
+    experiment: Experiment,
+    make_statistics: MakeStatistics,
 ) -> Result<Vec<PolicyEstimate<Policy, Summary>>, MonteCarloError<ExperimentError, StatisticsError>>
 where
     Policies: IntoIterator<Item = Policy>,
@@ -90,36 +282,15 @@ where
     MakeStatistics: FnMut() -> Statistic,
     Statistic: Statistics<Observation, Summary = Summary, Error = StatisticsError>,
 {
-    policies
-        .into_iter()
-        .enumerate()
-        .map(|(policy_index, policy)| {
-            let mut statistics = make_statistics();
-            for sample_index in 0..config.samples() {
-                let observation = experiment(&policy, sample_index).map_err(|error| {
-                    MonteCarloError::Experiment {
-                        policy_index,
-                        sample_index,
-                        error,
-                    }
-                })?;
-                statistics
-                    .observe(observation)
-                    .map_err(|error| MonteCarloError::Statistics {
-                        policy_index,
-                        sample_index,
-                        error,
-                    })?;
-            }
-            Ok(PolicyEstimate {
-                policy,
-                summary: statistics.summarize(),
-            })
-        })
-        .collect()
+    let mut session = MonteCarloSession::new(policies, config, experiment, make_statistics);
+    let mut observer = Continue;
+    session.advance(WorkBudget::new(usize::MAX), &mut observer)?;
+    Ok(session
+        .into_estimates()
+        .expect("an unbounded advance completes finite Monte Carlo work"))
 }
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct BernoulliStatistics {
     samples: usize,
     successes: usize,
@@ -144,7 +315,7 @@ impl Statistics<bool> for BernoulliStatistics {
         Ok(())
     }
 
-    fn summarize(self) -> Self::Summary {
+    fn summarize(&self) -> Self::Summary {
         BernoulliSummary {
             samples: self.samples,
             successes: self.successes,
@@ -152,7 +323,7 @@ impl Statistics<bool> for BernoulliStatistics {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct BernoulliSummary {
     samples: usize,
     successes: usize,
@@ -196,7 +367,7 @@ pub enum ScalarStatisticsError {
     NonFiniteValue,
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
 pub struct ScalarStatistics {
     values: Vec<f64>,
 }
@@ -219,28 +390,29 @@ impl Statistics<f64> for ScalarStatistics {
         Ok(())
     }
 
-    fn summarize(mut self) -> Self::Summary {
-        self.values.sort_by(f64::total_cmp);
-        let count = self.values.len();
+    fn summarize(&self) -> Self::Summary {
+        let mut values = self.values.clone();
+        values.sort_by(f64::total_cmp);
+        let count = values.len();
         let mean = if count == 0 {
             0.0
         } else {
-            StatrsStatistics::mean(self.values.as_slice())
+            StatrsStatistics::mean(values.as_slice())
         };
         let variance = if count == 0 {
             0.0
         } else {
-            StatrsStatistics::population_variance(self.values.as_slice())
+            StatrsStatistics::population_variance(values.as_slice())
         };
         ScalarSummary {
-            values: self.values,
+            values,
             mean,
             variance,
         }
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct ScalarSummary {
     values: Vec<f64>,
     mean: f64,
@@ -294,7 +466,7 @@ pub enum VectorStatisticsError {
     NonFiniteValue { dimension: usize },
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct VectorStatistics {
     dimensions: Vec<ScalarStatistics>,
 }
@@ -326,18 +498,18 @@ impl Statistics<Vec<f64>> for VectorStatistics {
         Ok(())
     }
 
-    fn summarize(self) -> Self::Summary {
+    fn summarize(&self) -> Self::Summary {
         VectorSummary {
             dimensions: self
                 .dimensions
-                .into_iter()
+                .iter()
                 .map(ScalarStatistics::summarize)
                 .collect(),
         }
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct VectorSummary {
     dimensions: Vec<ScalarSummary>,
 }
@@ -408,5 +580,58 @@ mod tests {
                 ..
             }
         ));
+    }
+
+    #[test]
+    fn monte_carlo_sessions_are_chunk_invariant_and_expose_snapshots() {
+        let mut session = MonteCarloSession::new(
+            ["always", "alternating"],
+            MonteCarloConfig::new(4),
+            |policy: &&str, sample| Ok::<_, Infallible>(*policy == "always" || sample % 2 == 0),
+            BernoulliStatistics::new,
+        );
+        let mut observer = Continue;
+
+        let first = session.advance(WorkBudget::new(3), &mut observer).unwrap();
+        assert_eq!(first.status(), MonteCarloStatus::Running);
+        assert_eq!(first.progress().completed_samples(), 3);
+        let snapshots = session.estimates::<bool, BernoulliSummary, Infallible>();
+        assert_eq!(snapshots[0].summary().samples(), 3);
+        assert_eq!(snapshots[1].summary().samples(), 0);
+
+        let second = session.advance(WorkBudget::new(5), &mut observer).unwrap();
+        assert_eq!(second.status(), MonteCarloStatus::Completed);
+        let estimates = session
+            .into_estimates::<bool, BernoulliSummary, Infallible>()
+            .unwrap();
+        assert_eq!(estimates[0].summary().successes(), 4);
+        assert_eq!(estimates[1].summary().successes(), 2);
+    }
+
+    #[test]
+    fn monte_carlo_interruption_can_resume() {
+        let mut session = MonteCarloSession::new(
+            ["policy"],
+            MonteCarloConfig::new(3),
+            |_: &&str, _: usize| Ok::<_, Infallible>(true),
+            BernoulliStatistics::new,
+        );
+        let mut observations = 0;
+        let report = session
+            .advance(WorkBudget::new(3), &mut |_: &MonteCarloProgress| {
+                observations += 1;
+                if observations == 2 {
+                    std::ops::ControlFlow::Break(())
+                } else {
+                    std::ops::ControlFlow::Continue(())
+                }
+            })
+            .unwrap();
+        assert_eq!(report.status(), MonteCarloStatus::Interrupted);
+        assert_eq!(report.work_completed(), 1);
+
+        let mut observer = Continue;
+        let report = session.advance(WorkBudget::new(2), &mut observer).unwrap();
+        assert_eq!(report.status(), MonteCarloStatus::Completed);
     }
 }
