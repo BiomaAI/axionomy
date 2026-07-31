@@ -1,5 +1,7 @@
 //! Lazy proposal generation for search algorithms.
 
+use std::ops::ControlFlow;
+
 /// Emits concrete action proposals for one derived search state.
 ///
 /// An action source is deliberately non-authoritative. It may derive proposals
@@ -7,6 +9,24 @@
 /// exchange against the Axionomy economy it intends to traverse.
 pub trait ActionSource<State, Action> {
     fn for_each_action(&mut self, state: &State, emit: &mut dyn FnMut(Action));
+
+    /// Visits proposals until the source is exhausted or the receiver breaks.
+    ///
+    /// Existing sources receive a compatibility implementation. Sources that
+    /// can stop generation eagerly should override this method.
+    fn for_each_action_until(
+        &mut self,
+        state: &State,
+        emit: &mut dyn FnMut(Action) -> ControlFlow<()>,
+    ) -> ControlFlow<()> {
+        let mut flow = ControlFlow::Continue(());
+        self.for_each_action(state, &mut |action| {
+            if flow.is_continue() {
+                flow = emit(action);
+            }
+        });
+        flow
+    }
 }
 
 /// Adapts a visitor-style closure into a lazy [`ActionSource`].
@@ -44,6 +64,17 @@ where
         for action in (self.generate)(state) {
             emit(action);
         }
+    }
+
+    fn for_each_action_until(
+        &mut self,
+        state: &State,
+        emit: &mut dyn FnMut(Action) -> ControlFlow<()>,
+    ) -> ControlFlow<()> {
+        for action in (self.generate)(state) {
+            emit(action)?;
+        }
+        ControlFlow::Continue(())
     }
 }
 
@@ -86,5 +117,22 @@ mod tests {
         let mut source = eager_actions(|limit: &u8| (0..*limit).collect::<Vec<_>>());
 
         assert_eq!(collect_actions(&mut source, &2), vec![0, 1]);
+    }
+
+    #[test]
+    fn eager_sources_stop_generating_when_the_receiver_breaks() {
+        let mut source = eager_actions(|limit: &u8| (0..*limit).collect::<Vec<_>>());
+        let mut visited = Vec::new();
+        let flow = source.for_each_action_until(&5, &mut |action| {
+            visited.push(action);
+            if visited.len() == 2 {
+                ControlFlow::Break(())
+            } else {
+                ControlFlow::Continue(())
+            }
+        });
+
+        assert!(flow.is_break());
+        assert_eq!(visited, vec![0, 1]);
     }
 }

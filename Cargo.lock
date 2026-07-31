@@ -84,6 +84,9 @@ dependencies = [
  "pathfinding",
  "rand 0.10.2",
  "rand_chacha 0.10.0",
+ "schemars",
+ "serde",
+ "serde_json",
  "statrs",
  "thiserror",
 ]

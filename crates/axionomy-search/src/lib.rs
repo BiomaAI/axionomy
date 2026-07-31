@@ -7,20 +7,205 @@ pub mod monte_carlo;
 pub mod rl;
 pub mod rollout;
 pub mod sampling;
+pub mod session;
 
 use axionomy::{Economy, Exchange, Goal, Quantity, QuantityScalar, Trace};
-use pathfinding::prelude::{
-    astar as pathfinding_astar, bfs as pathfinding_bfs, dijkstra as pathfinding_dijkstra,
-};
+use pathfinding::prelude::{astar as pathfinding_astar, dijkstra as pathfinding_dijkstra};
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
-use std::collections::{BinaryHeap, HashMap};
+use std::collections::{BinaryHeap, HashMap, HashSet, VecDeque};
 use std::hash::{Hash, Hasher};
 
-#[derive(Debug, Clone)]
+use crate::session::{AdvanceReport, Continue, SearchObserver, SearchStatus, WorkBudget};
+
+#[derive(Debug, Clone, Serialize, JsonSchema)]
+#[serde(bound(
+    serialize = "RateId: Serialize, Role: Serialize + Ord, AccountId: Serialize, N: Serialize"
+))]
 pub struct SearchSolution<RateId, Role, AccountId, N = u64> {
     trace: Trace<RateId, Role, AccountId, N>,
     cost: u64,
     expanded: usize,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct GraphSearchProgress {
+    expanded: usize,
+    generated: usize,
+    frontier: usize,
+    visited: usize,
+    solution_depth: Option<u64>,
+}
+
+impl GraphSearchProgress {
+    pub const fn expanded(self) -> usize {
+        self.expanded
+    }
+
+    pub const fn generated(self) -> usize {
+        self.generated
+    }
+
+    pub const fn frontier(self) -> usize {
+        self.frontier
+    }
+
+    pub const fn visited(self) -> usize {
+        self.visited
+    }
+
+    pub const fn solution_depth(self) -> Option<u64> {
+        self.solution_depth
+    }
+}
+
+struct BfsState<AccountId, A, RateId, Role, N>
+where
+    N: QuantityScalar,
+{
+    world: Economy<AccountId, A, RateId, Role, N>,
+    trace: Trace<RateId, Role, AccountId, N>,
+}
+
+/// Resumable breadth-first search over implicit, core-validated successors.
+pub struct BfsSession<AccountId, A, RateId, Role, N, Candidates>
+where
+    N: QuantityScalar,
+{
+    goal: Goal<AccountId, A, N>,
+    candidates: Candidates,
+    states: Vec<BfsState<AccountId, A, RateId, Role, N>>,
+    frontier: VecDeque<usize>,
+    visited: HashSet<Vec<(AccountId, A, Quantity<N>)>>,
+    expanded: usize,
+    generated: usize,
+    solution: Option<SearchSolution<RateId, Role, AccountId, N>>,
+    exhausted: bool,
+}
+
+impl<AccountId, A, RateId, Role, N, Candidates>
+    BfsSession<AccountId, A, RateId, Role, N, Candidates>
+where
+    AccountId: Clone + Eq + Hash + Ord,
+    A: Clone + Eq + Hash + Ord,
+    RateId: Clone + Eq + Hash + Ord,
+    Role: Clone + Ord,
+    N: QuantityScalar,
+    Candidates:
+        FnMut(&Economy<AccountId, A, RateId, Role, N>) -> Vec<Exchange<RateId, Role, AccountId, N>>,
+{
+    pub fn new(
+        initial: &Economy<AccountId, A, RateId, Role, N>,
+        goal: Goal<AccountId, A, N>,
+        candidates: Candidates,
+    ) -> Self {
+        let initial = initial.fork();
+        let key = initial.state_key();
+        let solved = initial.matches(&goal).then(|| SearchSolution {
+            trace: Trace::new(),
+            cost: 0,
+            expanded: 0,
+        });
+        Self {
+            goal,
+            candidates,
+            states: vec![BfsState {
+                world: initial,
+                trace: Trace::new(),
+            }],
+            frontier: VecDeque::from([0]),
+            visited: HashSet::from([key]),
+            expanded: 0,
+            generated: 0,
+            solution: solved,
+            exhausted: false,
+        }
+    }
+
+    pub fn progress(&self) -> GraphSearchProgress {
+        GraphSearchProgress {
+            expanded: self.expanded,
+            generated: self.generated,
+            frontier: self.frontier.len(),
+            visited: self.visited.len(),
+            solution_depth: self.solution.as_ref().map(SearchSolution::cost),
+        }
+    }
+
+    pub fn status(&self) -> SearchStatus {
+        if self.solution.is_some() {
+            SearchStatus::Solved
+        } else if self.exhausted {
+            SearchStatus::Exhausted
+        } else {
+            SearchStatus::Running
+        }
+    }
+
+    pub fn solution(&self) -> Option<&SearchSolution<RateId, Role, AccountId, N>> {
+        self.solution.as_ref()
+    }
+
+    pub fn into_solution(self) -> Option<SearchSolution<RateId, Role, AccountId, N>> {
+        self.solution
+    }
+
+    pub fn advance(
+        &mut self,
+        budget: WorkBudget,
+        observer: &mut impl SearchObserver<GraphSearchProgress>,
+    ) -> AdvanceReport<GraphSearchProgress> {
+        if self.status().is_terminal() {
+            return AdvanceReport::new(self.status(), 0, self.progress());
+        }
+
+        let mut completed = 0;
+        while completed < budget.units() {
+            if observer.observe(&self.progress()).is_break() {
+                return AdvanceReport::new(SearchStatus::Interrupted, completed, self.progress());
+            }
+
+            let Some(index) = self.frontier.pop_front() else {
+                self.exhausted = true;
+                return AdvanceReport::new(SearchStatus::Exhausted, completed, self.progress());
+            };
+            self.expanded += 1;
+            completed += 1;
+
+            let exchanges = (self.candidates)(&self.states[index].world);
+            for exchange in exchanges {
+                let mut next = self.states[index].world.fork();
+                if next.apply(exchange.clone()).is_err() {
+                    continue;
+                }
+                let key = next.state_key();
+                if !self.visited.insert(key) {
+                    continue;
+                }
+                self.generated += 1;
+                let mut trace = self.states[index].trace.clone();
+                trace.push(exchange);
+                if next.matches(&self.goal) {
+                    let cost = u64::try_from(trace.exchanges().len()).unwrap_or(u64::MAX);
+                    self.solution = Some(SearchSolution {
+                        trace,
+                        cost,
+                        expanded: self.expanded,
+                    });
+                    return AdvanceReport::new(SearchStatus::Solved, completed, self.progress());
+                }
+                let next_index = self.states.len();
+                self.states.push(BfsState { world: next, trace });
+                self.frontier.push_back(next_index);
+            }
+        }
+
+        if self.frontier.is_empty() {
+            self.exhausted = true;
+        }
+        AdvanceReport::new(self.status(), completed, self.progress())
+    }
 }
 
 impl<RateId, Role, AccountId, N> SearchSolution<RateId, Role, AccountId, N> {
@@ -41,7 +226,7 @@ impl<RateId, Role, AccountId, N> SearchSolution<RateId, Role, AccountId, N> {
 pub fn bfs<AccountId, A, RateId, Role, N, Candidates>(
     initial: &Economy<AccountId, A, RateId, Role, N>,
     goal: &Goal<AccountId, A, N>,
-    mut candidates: Candidates,
+    candidates: Candidates,
 ) -> Option<SearchSolution<RateId, Role, AccountId, N>>
 where
     AccountId: Clone + Eq + Hash + Ord,
@@ -52,18 +237,12 @@ where
     Candidates:
         FnMut(&Economy<AccountId, A, RateId, Role, N>) -> Vec<Exchange<RateId, Role, AccountId, N>>,
 {
-    let start = EconomicNode::root(initial.fork());
-    let mut expanded = 0;
-    let path = pathfinding_bfs(
-        &start,
-        |node| {
-            expanded += 1;
-            successors(node, &mut candidates)
-        },
-        |node| node.world.matches(goal),
-    )?;
-    let cost = u64::try_from(path.len().saturating_sub(1)).unwrap_or(u64::MAX);
-    Some(solution_from_path(path, cost, expanded))
+    let mut session = BfsSession::new(initial, goal.clone(), candidates);
+    let mut observer = Continue;
+    while !session.status().is_terminal() {
+        session.advance(WorkBudget::new(usize::MAX), &mut observer);
+    }
+    session.into_solution()
 }
 
 /// Dijkstra search with caller-owned algorithmic edge costs.
@@ -281,30 +460,6 @@ where
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.key.hash(state);
     }
-}
-
-fn successors<AccountId, A, RateId, Role, N, Candidates>(
-    node: &EconomicNode<AccountId, A, RateId, Role, N>,
-    candidates: &mut Candidates,
-) -> Vec<EconomicNode<AccountId, A, RateId, Role, N>>
-where
-    AccountId: Clone + Eq + Hash + Ord,
-    A: Clone + Eq + Hash + Ord,
-    RateId: Clone + Eq + Hash + Ord,
-    Role: Clone + Ord,
-    N: QuantityScalar,
-    Candidates:
-        FnMut(&Economy<AccountId, A, RateId, Role, N>) -> Vec<Exchange<RateId, Role, AccountId, N>>,
-{
-    candidates(&node.world)
-        .into_iter()
-        .filter_map(|exchange| {
-            let mut next = node.world.fork();
-            next.apply(exchange.clone())
-                .ok()
-                .map(|_| EconomicNode::successor(next, exchange))
-        })
-        .collect()
 }
 
 fn weighted_successors<AccountId, A, RateId, Role, N, Candidates, StepCost>(
