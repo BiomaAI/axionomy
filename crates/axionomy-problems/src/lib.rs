@@ -6,6 +6,7 @@ pub mod exact_cover;
 pub mod logistics;
 pub mod marketplace;
 pub mod maze;
+pub mod mission;
 pub mod rescue;
 pub mod scheduling;
 pub mod sokoban;
