@@ -1,0 +1,517 @@
+//! A partially observed rescue decision with an explicitly encoded Nature.
+
+use crate::{
+    Account, Basket, EconomicView, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant,
+    Quantity, Rate, Trace, basket,
+};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum Location {
+    Base,
+    North,
+    South,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum AccountId {
+    Agent,
+    Nature,
+    Success,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum Asset {
+    At(Location),
+    Energy,
+    SpentEnergy,
+    Sensor,
+    UsedSensor,
+    Unresolved,
+    ScenarioWeight(Location, u8),
+    Truth(Location),
+    Seed(u8),
+    Belief(Location),
+    Rescued,
+    Solved,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum Role {
+    Actor,
+    Nature,
+    Goal,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum RateId {
+    Instantiate {
+        truth: Location,
+        seed: u8,
+    },
+    Observe {
+        truth: Location,
+        seed: u8,
+        report: Location,
+        next_seed: u8,
+    },
+    Move {
+        from: Location,
+        to: Location,
+    },
+    Rescue {
+        location: Location,
+    },
+    Finish,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Policy {
+    ObserveThenFollow,
+    NorthWithoutObserving,
+}
+
+#[derive(Debug, Clone)]
+pub struct Rollout {
+    trace: Trace<RateId, Role, AccountId>,
+    succeeded: bool,
+    spent_energy: u64,
+}
+
+impl Rollout {
+    pub fn trace(&self) -> &Trace<RateId, Role, AccountId> {
+        &self.trace
+    }
+
+    pub fn succeeded(&self) -> bool {
+        self.succeeded
+    }
+
+    pub fn spent_energy(&self) -> u64 {
+        self.spent_energy
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct MonteCarloEstimate {
+    chosen: Policy,
+    observe_successes: usize,
+    direct_successes: usize,
+    samples: usize,
+}
+
+impl MonteCarloEstimate {
+    pub fn chosen(&self) -> Policy {
+        self.chosen
+    }
+
+    pub fn observe_successes(&self) -> usize {
+        self.observe_successes
+    }
+
+    pub fn direct_successes(&self) -> usize {
+        self.direct_successes
+    }
+
+    pub fn samples(&self) -> usize {
+        self.samples
+    }
+}
+
+pub type World = Economy<AccountId, Asset, RateId, Role>;
+pub type Action = Exchange<RateId, Role, AccountId>;
+pub type AgentView<'a> = EconomicView<'a, AccountId, Asset, RateId, Role>;
+
+/// Builds one already-resolved deterministic world.
+pub fn scenario(truth: Location, seed: u8) -> World {
+    assert_rescue_location(truth);
+    assert!(seed < 4, "the fixture has four sensor seeds");
+    build(Account::from(basket([
+        (Asset::Truth(truth), 1),
+        (Asset::Seed(seed), 1),
+    ])))
+}
+
+/// Builds an unresolved world from user-provided, core-encoded prior weights.
+pub fn uncertain(prior: impl IntoIterator<Item = (Location, u8, u64)>) -> World {
+    let mut nature = Basket::from([(Asset::Unresolved, Quantity::new(1))]);
+    for (truth, seed, weight) in prior {
+        assert_rescue_location(truth);
+        assert!(seed < 4, "the fixture has four sensor seeds");
+        nature.insert(Asset::ScenarioWeight(truth, seed), Quantity::new(weight));
+    }
+    build(Account::from(nature))
+}
+
+pub fn uniform_uncertain() -> World {
+    uncertain(
+        [Location::North, Location::South]
+            .into_iter()
+            .flat_map(|truth| (0..4).map(move |seed| (truth, seed, 1))),
+    )
+}
+
+fn build(nature: Account<Asset>) -> World {
+    let mut builder = EconomyBuilder::new()
+        .account(
+            AccountId::Agent,
+            Account::from(basket([
+                (Asset::At(Location::Base), 1),
+                (Asset::Energy, 2),
+                (Asset::Sensor, 1),
+            ])),
+        )
+        .account(AccountId::Nature, nature)
+        .account(AccountId::Success, Account::default());
+
+    for encoded_truth in [Location::North, Location::South] {
+        for encoded_seed in 0..4 {
+            builder = builder.rate(
+                RateId::Instantiate {
+                    truth: encoded_truth,
+                    seed: encoded_seed,
+                },
+                Rate::new()
+                    .consume(Role::Nature, basket([(Asset::Unresolved, 1)]))
+                    .preserve(
+                        Role::Nature,
+                        basket([(Asset::ScenarioWeight(encoded_truth, encoded_seed), 1)]),
+                    )
+                    .produce(
+                        Role::Nature,
+                        basket([
+                            (Asset::Truth(encoded_truth), 1),
+                            (Asset::Seed(encoded_seed), 1),
+                        ]),
+                    ),
+            );
+
+            let report = signal(encoded_truth, encoded_seed);
+            let next_seed = (encoded_seed + 1) % 4;
+            builder = builder.rate(
+                RateId::Observe {
+                    truth: encoded_truth,
+                    seed: encoded_seed,
+                    report,
+                    next_seed,
+                },
+                Rate::new()
+                    .preserve(Role::Actor, basket([(Asset::At(Location::Base), 1)]))
+                    .consume(Role::Actor, basket([(Asset::Sensor, 1)]))
+                    .produce(
+                        Role::Actor,
+                        basket([(Asset::UsedSensor, 1), (Asset::Belief(report), 1)]),
+                    )
+                    .preserve(Role::Nature, basket([(Asset::Truth(encoded_truth), 1)]))
+                    .consume(Role::Nature, basket([(Asset::Seed(encoded_seed), 1)]))
+                    .produce(Role::Nature, basket([(Asset::Seed(next_seed), 1)]))
+                    .distinct(Role::Actor, Role::Nature),
+            );
+        }
+    }
+
+    for destination in [Location::North, Location::South] {
+        builder = builder
+            .rate(
+                RateId::Move {
+                    from: Location::Base,
+                    to: destination,
+                },
+                Rate::new()
+                    .consume(
+                        Role::Actor,
+                        basket([(Asset::At(Location::Base), 1), (Asset::Energy, 1)]),
+                    )
+                    .produce(
+                        Role::Actor,
+                        basket([(Asset::At(destination), 1), (Asset::SpentEnergy, 1)]),
+                    ),
+            )
+            .rate(
+                RateId::Rescue {
+                    location: destination,
+                },
+                Rate::new()
+                    .consume(Role::Actor, basket([(Asset::Energy, 1)]))
+                    .preserve(Role::Actor, basket([(Asset::At(destination), 1)]))
+                    .produce(
+                        Role::Actor,
+                        basket([(Asset::Rescued, 1), (Asset::SpentEnergy, 1)]),
+                    )
+                    .preserve(Role::Nature, basket([(Asset::Truth(destination), 1)]))
+                    .distinct(Role::Actor, Role::Nature),
+            );
+    }
+
+    builder
+        .rate(
+            RateId::Finish,
+            Rate::new()
+                .preserve(Role::Actor, basket([(Asset::Rescued, 1)]))
+                .produce(Role::Goal, basket([(Asset::Solved, 1)]))
+                .distinct(Role::Actor, Role::Goal),
+        )
+        .invariant(
+            [Location::Base, Location::North, Location::South]
+                .into_iter()
+                .fold(
+                    LinearInvariant::new("one agent position"),
+                    |invariant, location| invariant.weight(Asset::At(location), 1),
+                ),
+        )
+        .invariant(
+            LinearInvariant::new("energy accounting")
+                .weight(Asset::Energy, 1)
+                .weight(Asset::SpentEnergy, 1),
+        )
+        .invariant((0..4).fold(
+            LinearInvariant::new("one nature seed state").weight(Asset::Unresolved, 1),
+            |invariant, seed| invariant.weight(Asset::Seed(seed), 1),
+        ))
+        .invariant([Location::North, Location::South].into_iter().fold(
+            LinearInvariant::new("one hidden truth state").weight(Asset::Unresolved, 1),
+            |invariant, location| invariant.weight(Asset::Truth(location), 1),
+        ))
+        .build()
+}
+
+pub fn goal() -> Goal<AccountId, Asset> {
+    Goal::new().require(AccountId::Success, basket([(Asset::Solved, 1)]))
+}
+
+pub fn agent_view(world: &World) -> AgentView<'_> {
+    world.view([AccountId::Agent, AccountId::Success])
+}
+
+pub fn candidates(world: &World) -> Vec<Action> {
+    let mut ids: Vec<_> = world.rate_ids().copied().collect();
+    ids.sort();
+    world.applicable(ids.into_iter().map(action))
+}
+
+/// Nature resolves an observation request by selecting the only observation
+/// whose encoded preconditions match its hidden truth and seed.
+pub fn nature_observation(world: &World) -> Option<Action> {
+    candidates(world)
+        .into_iter()
+        .find(|exchange| matches!(exchange.rate(), RateId::Observe { .. }))
+}
+
+pub fn instantiate(world: &World, truth: Location, seed: u8) -> Option<Action> {
+    candidates(world)
+        .into_iter()
+        .find(|exchange| exchange.rate() == &RateId::Instantiate { truth, seed })
+}
+
+pub fn run_policy(mut world: World, policy: Policy) -> Rollout {
+    let mut trace = Trace::new();
+
+    let destination = match policy {
+        Policy::ObserveThenFollow => {
+            let Some(observation) = nature_observation(&world) else {
+                return rollout(world, trace, false);
+            };
+            if world.apply(observation.clone()).is_err() {
+                return rollout(world, trace, false);
+            }
+            trace.push(observation);
+            [Location::North, Location::South]
+                .into_iter()
+                .find(|location| {
+                    !world
+                        .balance(&AccountId::Agent, &Asset::Belief(*location))
+                        .is_zero()
+                })
+                .expect("an observation always produces one belief")
+        }
+        Policy::NorthWithoutObserving => Location::North,
+    };
+
+    for rate in [
+        RateId::Move {
+            from: Location::Base,
+            to: destination,
+        },
+        RateId::Rescue {
+            location: destination,
+        },
+        RateId::Finish,
+    ] {
+        let exchange = action(rate);
+        if world.apply(exchange.clone()).is_err() {
+            return rollout(world, trace, false);
+        }
+        trace.push(exchange);
+    }
+    let succeeded = world.matches(&goal());
+    rollout(world, trace, succeeded)
+}
+
+/// Runs a policy after one explicit Nature instantiation and returns a trace
+/// that begins at the unresolved model.
+pub fn run_sampled_policy(model: &World, sample: &Action, policy: Policy) -> Option<Rollout> {
+    let mut branch = model.fork();
+    branch.apply(sample.clone()).ok()?;
+    let rollout = run_policy(branch, policy);
+    let mut trace = Trace::new();
+    trace.push(sample.clone());
+    trace.extend(rollout.trace.into_exchanges());
+    Some(Rollout {
+        trace,
+        succeeded: rollout.succeeded,
+        spent_energy: rollout.spent_energy,
+    })
+}
+
+/// Deterministic, bounded Monte Carlo over weights held by Nature.
+pub fn monte_carlo(model: &World, samples: usize) -> Option<MonteCarloEstimate> {
+    let weighted_scenarios = encoded_scenarios(model);
+    let total_weight = weighted_scenarios
+        .iter()
+        .try_fold(0_u64, |total, (_, weight)| total.checked_add(*weight))?;
+    if total_weight == 0 {
+        return None;
+    }
+
+    let mut observe_successes = 0;
+    let mut direct_successes = 0;
+    for sample_index in 0..samples {
+        let ticket = u64::try_from(sample_index).unwrap_or(u64::MAX) % total_weight;
+        let sample = choose_weighted(&weighted_scenarios, ticket);
+        observe_successes +=
+            usize::from(run_sampled_policy(model, sample, Policy::ObserveThenFollow)?.succeeded());
+        direct_successes += usize::from(
+            run_sampled_policy(model, sample, Policy::NorthWithoutObserving)?.succeeded(),
+        );
+    }
+    let chosen = if observe_successes >= direct_successes {
+        Policy::ObserveThenFollow
+    } else {
+        Policy::NorthWithoutObserving
+    };
+    Some(MonteCarloEstimate {
+        chosen,
+        observe_successes,
+        direct_successes,
+        samples,
+    })
+}
+
+fn encoded_scenarios(model: &World) -> Vec<(Action, u64)> {
+    let mut scenarios: Vec<_> = candidates(model)
+        .into_iter()
+        .filter_map(|exchange| match *exchange.rate() {
+            RateId::Instantiate { truth, seed } => Some((
+                exchange,
+                model
+                    .balance(&AccountId::Nature, &Asset::ScenarioWeight(truth, seed))
+                    .get(),
+            )),
+            _ => None,
+        })
+        .filter(|(_, weight)| *weight > 0)
+        .collect();
+    scenarios.sort_by_key(|(exchange, _)| *exchange.rate());
+    scenarios
+}
+
+fn choose_weighted(scenarios: &[(Action, u64)], mut ticket: u64) -> &Action {
+    for (exchange, weight) in scenarios {
+        if ticket < *weight {
+            return exchange;
+        }
+        ticket -= *weight;
+    }
+    unreachable!("ticket is reduced modulo total encoded scenario weight")
+}
+
+fn rollout(world: World, trace: Trace<RateId, Role, AccountId>, succeeded: bool) -> Rollout {
+    Rollout {
+        spent_energy: world.balance(&AccountId::Agent, &Asset::SpentEnergy).get(),
+        trace,
+        succeeded,
+    }
+}
+
+fn signal(truth: Location, seed: u8) -> Location {
+    if seed == 0 {
+        match truth {
+            Location::North => Location::South,
+            Location::South => Location::North,
+            Location::Base => unreachable!("base is not a rescue truth"),
+        }
+    } else {
+        truth
+    }
+}
+
+fn assert_rescue_location(location: Location) {
+    assert!(
+        matches!(location, Location::North | Location::South),
+        "base is not a possible rescue truth"
+    );
+}
+
+fn action(rate: RateId) -> Action {
+    match rate {
+        RateId::Instantiate { .. } => {
+            Exchange::new(rate, Quantity::new(1)).bind(Role::Nature, AccountId::Nature)
+        }
+        RateId::Observe { .. } | RateId::Rescue { .. } => Exchange::new(rate, Quantity::new(1))
+            .bind(Role::Actor, AccountId::Agent)
+            .bind(Role::Nature, AccountId::Nature),
+        RateId::Finish => Exchange::new(rate, Quantity::new(1))
+            .bind(Role::Actor, AccountId::Agent)
+            .bind(Role::Goal, AccountId::Success),
+        RateId::Move { .. } => {
+            Exchange::new(rate, Quantity::new(1)).bind(Role::Actor, AccountId::Agent)
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn nature_is_hidden_but_its_observation_is_replayable() {
+        let world = scenario(Location::South, 1);
+        let view = agent_view(&world);
+        assert!(view.account(&AccountId::Nature).is_none());
+        assert_eq!(
+            view.balance(&AccountId::Agent, &Asset::Energy),
+            Some(Quantity::new(2))
+        );
+
+        let rollout = run_policy(world, Policy::ObserveThenFollow);
+        assert!(rollout.succeeded());
+        assert_eq!(rollout.spent_energy(), 2);
+
+        let replay = scenario(Location::South, 1)
+            .replayed(rollout.trace())
+            .expect("sampled trace must replay deterministically");
+        assert!(replay.matches(&goal()));
+    }
+
+    #[test]
+    fn monte_carlo_prefers_the_encoded_prior() {
+        let model = uniform_uncertain();
+        let estimate = monte_carlo(&model, 8).expect("prior has positive weight");
+        assert_eq!(estimate.observe_successes(), 6);
+        assert_eq!(estimate.direct_successes(), 4);
+        assert_eq!(estimate.chosen(), Policy::ObserveThenFollow);
+    }
+
+    #[test]
+    fn sampled_trace_replays_from_the_uncertain_model() {
+        let model = uniform_uncertain();
+        let sample = instantiate(&model, Location::South, 1).expect("scenario is encoded");
+        let rollout = run_sampled_policy(&model, &sample, Policy::ObserveThenFollow)
+            .expect("scenario can be instantiated");
+        assert!(rollout.succeeded());
+
+        let replay = model
+            .replayed(rollout.trace())
+            .expect("sample and policy must replay together");
+        assert!(replay.matches(&goal()));
+    }
+}

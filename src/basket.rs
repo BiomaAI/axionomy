@@ -54,6 +54,20 @@ impl<A> Basket<A>
 where
     A: Clone + Eq + Hash,
 {
+    pub fn checked_add(&mut self, other: &Self) -> Result<(), A> {
+        let mut updated = self.clone();
+
+        for (asset, quantity) in other.iter() {
+            let Some(quantity) = updated.quantity(asset).checked_add(quantity) else {
+                return Err(asset.clone());
+            };
+            updated.insert(asset.clone(), quantity);
+        }
+
+        *self = updated;
+        Ok(())
+    }
+
     pub fn checked_scale(&self, units: Quantity) -> Result<Self, A> {
         let mut scaled = Self::new();
 
@@ -81,6 +95,10 @@ where
         }
 
         shortfall
+    }
+
+    pub fn contains(&self, required: &Self) -> bool {
+        self.shortfall(required).is_empty()
     }
 }
 

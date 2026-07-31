@@ -1,178 +1,197 @@
 # Axionomy
 
-> A closed economic state machine.
+> A closed economic state machine for verifiable problem solving.
 
 **Everything is an asset. Every change is an exchange.**
 
-`axionomy` is a closed computational engine in which every
-semantically meaningful part of a problem is represented through assets,
-accounts, rates, and exchanges.
-
-The fundamental rule is:
-
-> Nothing semantically authoritative may live outside assets, accounts, rates,
-> and exchanges.
-
-Position, graph connectivity, time, energy, goals, constraints, lifecycle,
-memory, uncertainty, planner statistics, and rewards must all be encoded
-through the same ruleset. The ledger is not one component of an external world
-state. The closed economic state is the world.
-
-See [PDD.md](PDD.md) for the complete product philosophy, current technical
-contract, known gaps, and roadmap.
-
-## The model
-
-```text
-State       = Account × Asset → Quantity
-Problem     = Initial state + Available rates
-Computation = A sequence of valid exchanges
-Goal        = A desired asset configuration
-Solution    = A replayable exchange trace reaching that configuration
-```
-
-The four primitives have deliberately broad meanings:
+Axionomy is a Rust engine for encoding bounded problem spaces through four
+primitives:
 
 | Primitive | Meaning |
 | --- | --- |
 | Asset | A resource, fact, proposition, capability, condition, memory item, or state token |
-| Account | An owner, actor, location, scope, branch, or namespace |
-| Rate | A law specifying which asset configuration may become another |
-| Exchange | A concrete firing of a rate and therefore a state transition |
+| Account | An owner, actor, location, scope, or namespace |
+| Rate | A law describing what may be consumed, produced, and preserved |
+| Exchange | One concrete, role-bound firing of a rate |
 
-Users define the vocabulary of their problem, but they do not maintain a
-parallel authoritative world.
+The non-negotiable rule is:
 
-## Solvers over one source of truth
+> Nothing semantically authoritative may live outside assets, accounts, rates,
+> and exchanges.
 
-BFS, Dijkstra, A*, constraint and OR solvers, Monte Carlo simulation, MCTS,
-reinforcement learning, game-theoretic policies, and LLM planners can all
-operate over the same closed system.
-
-They may:
-
-- Inspect core-derived economic views.
-- Enumerate, prioritize, or simulate exchanges.
-- Fork states for search.
-- Compile bounded problems into specialized solver representations.
-- Propose an exchange sequence.
-
-They may not bypass core semantics or install hidden state. A proposed solution
-is accepted only after it is translated into exchanges and replayed through the
-core.
-
-> Solvers may propose. Only the asset/account/rate/exchange system defines and
-> validates reality.
-
-## Current implementation
-
-Version `0.1.0` is a correctness-oriented bilateral foundation for the larger
-model:
-
-- `Quantity` is a non-negative integer amount with checked arithmetic.
-- `Basket<A>` is a sparse collection of user-defined asset quantities.
-- `Account<A>` owns balances.
-- `Rate<A>` currently describes what a buyer receives and pays.
-- `Ledger<AccountId, A>` owns accounts and executes atomic bilateral
-  exchanges.
-- `Receipt` records a successful exchange.
-- Structured errors report exact shortfalls and arithmetic failures.
-
-Assets and account identifiers are ordinary user-defined Rust types. They need
-only standard traits such as `Eq`, `Hash`, and `Clone`.
-
-The current bilateral API is not yet the complete closed machine. General
-problem spaces require rates that can atomically consume, produce, and preserve
-assets across multiple account roles. The current policy, termination, mutable
-account, and mission-example APIs also contain known closure escape hatches
-documented in the PDD.
-
-## Current API example
-
-```rust
-use axionomy::{Account, Basket, Ledger, Quantity, Rate};
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-enum Asset {
-    Coin,
-    MissionTime,
-}
-
-let mut ledger = Ledger::new();
-ledger.insert(
-    "agent",
-    Account::new(Basket::from([
-        (Asset::Coin, Quantity::new(10)),
-    ])),
-);
-ledger.insert(
-    "mission",
-    Account::new(Basket::from([
-        (Asset::MissionTime, Quantity::new(10)),
-    ])),
-);
-
-let rate = Rate::new(
-    Basket::from([(Asset::MissionTime, Quantity::new(1))]),
-    Basket::from([(Asset::Coin, Quantity::new(2))]),
-);
-
-let receipt = ledger.exchange(
-    &"agent",
-    &"mission",
-    &rate,
-    Quantity::new(3),
-)?;
-
-assert_eq!(receipt.units(), Quantity::new(3));
-# Ok::<(), axionomy::ExchangeError<&str, Asset>>(())
-```
-
-The ledger validates both sides and every arithmetic operation before
-committing. A failed exchange leaves the complete stored ledger unchanged.
-
-## First proof problem: pathfinding
-
-The next architectural milestone is pathfinding encoded entirely inside the
-four primitives:
-
-- Position is an asset.
-- Nodes are accounts or structured assets.
-- Edges are assets or rates.
-- Movement is an exchange.
-- Time, energy, cost, frontier state, and parent relationships are assets.
-- The goal is an asset configuration producing `Solved`.
-- The answer is a replayable exchange trace.
-
-BFS and A* must solve exactly the same closed encoding without external
-position, graph, cost, or goal state. If this representation is elegant—not
-merely possible—it validates the model beyond traditional economic exchange.
-
-## Mission-time example
-
-The original resource-first, trust-second scenario remains available:
-
-```console
-cargo run --example mission_time
-```
-
-It demonstrates the current generic bilateral API and still produces:
+There is no parallel `WorldState`. Position, topology, time, goals, machine
+capacity, uncertainty, beliefs, random seeds, bids, and rewards are modeled in
+the same closed state. Search and optimization algorithms may fork that state
+and propose exchanges, but only the core can accept a transition.
 
 ```text
-RIP! Agent was alive for 2 hours, 55 minutes and 1 seconds.
+State       = Account × Asset → Quantity
+Problem     = Initial accounts + available rates + declared invariants
+Computation = A sequence of valid exchanges
+Goal        = A required asset configuration
+Solution    = A replayable exchange trace reaching that configuration
 ```
 
-It is intentionally documented as transitional: agent life is currently an
-external Boolean. The closed model will replace it with `Alive` and `Dead`
-assets and a rate-driven lifecycle transition.
+See [PDD.md](PDD.md) for the product and technical contract and
+[PROBLEMS.md](PROBLEMS.md) for the conformance problems that drive the API.
+
+## What is implemented
+
+- User-defined asset, account, rate-ID, and role types.
+- Atomic multi-account rewrite rates.
+- Separate consume, produce, and preserved/read-only baskets per role.
+- Explicit exchange role bindings and multiplicity.
+- Checked `u64` arithmetic and exact balance shortfalls.
+- Global declared linear invariants checked on every firing.
+- Asset-configured goals.
+- Isolated forks, speculative execution, and deterministic trace replay.
+- Account-restricted economic views.
+- Generic BFS and best-first search.
+- Seven closed benchmark encodings with independent solver strategies,
+  including core-encoded stochastic priors.
+- No third-party runtime dependencies.
+
+The core contains no application ontology. The asset enums in
+`axionomy::problems` are conformance fixtures and examples; users define their
+own vocabulary without editing the engine.
+
+## Core example
+
+```rust
+use axionomy::{
+    Account, EconomyBuilder, Exchange, Goal, LinearInvariant, Quantity, Rate,
+    basket,
+};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+enum Asset {
+    Raw,
+    Finished,
+    Tool,
+    Solved,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+enum AccountId {
+    Workshop,
+    Success,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+enum Role {
+    Shop,
+    Goal,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+enum RateId {
+    Build,
+    Finish,
+}
+
+let mut economy = EconomyBuilder::new()
+    .account(
+        AccountId::Workshop,
+        Account::from(basket([(Asset::Raw, 2), (Asset::Tool, 1)])),
+    )
+    .account(AccountId::Success, Account::default())
+    .rate(
+        RateId::Build,
+        Rate::new()
+            .consume(Role::Shop, basket([(Asset::Raw, 2)]))
+            .preserve(Role::Shop, basket([(Asset::Tool, 1)]))
+            .produce(Role::Shop, basket([(Asset::Finished, 1)])),
+    )
+    .rate(
+        RateId::Finish,
+        Rate::new()
+            .preserve(Role::Shop, basket([(Asset::Finished, 1)]))
+            .produce(Role::Goal, basket([(Asset::Solved, 1)]))
+            .distinct(Role::Shop, Role::Goal),
+    )
+    .invariant(
+        LinearInvariant::new("material")
+            .weight(Asset::Raw, 1)
+            .weight(Asset::Finished, 2),
+    )
+    .build();
+
+economy.apply(
+    Exchange::new(RateId::Build, Quantity::new(1))
+        .bind(Role::Shop, AccountId::Workshop),
+)?;
+economy.apply(
+    Exchange::new(RateId::Finish, Quantity::new(1))
+        .bind(Role::Shop, AccountId::Workshop)
+        .bind(Role::Goal, AccountId::Success),
+)?;
+
+let goal = Goal::new().require(
+    AccountId::Success,
+    basket([(Asset::Solved, 1)]),
+);
+assert!(economy.matches(&goal));
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
+The `Build` exchange is valid only if every role binding, balance,
+preservation requirement, arithmetic operation, and invariant succeeds. The
+core prepares all affected accounts first and commits all of them together.
+
+## Conformance problems
+
+| Problem | Encoded concepts | Compared strategies |
+| --- | --- | --- |
+| Key-door maze | Topology, position, lock, key, energy, heuristic, goal | BFS, Dijkstra, A* |
+| Sokoban | Cell occupancy, push legality, deadlock | BFS and infeasibility |
+| Exact cover | Universe, subsets, coverage, selection | BFS and Algorithm X |
+| Workshop | Recipes, catalysts, material, labor, waste | BFS and waste minimization |
+| Job shop | Precedence, discrete machine capacity, makespan | Best-first and independent branch optimizer |
+| Rescue | Hidden truth, seed, observation, belief, chance | Policy rollouts and Monte Carlo |
+| Bridge | Capacity, bids, escrow, priority, joint resolution | BFS, first-come, and auction mechanisms |
+
+Every accepted result is an exchange trace replayed by the same core. The
+specialized algorithms are proposers, not alternate execution engines.
+
+Run the maze example:
+
+```console
+cargo run --example key_door_maze
+```
+
+Expected output:
+
+```text
+BFS: 3 exchanges; A*: 6 energy across 6 exchanges
+```
+
+## Semantics in brief
+
+For exchange units `n`, consume and produce baskets scale by `n`. A preserved
+basket is an unscaled read threshold: it must exist, but it is not consumed.
+This makes a batched exchange observationally consistent with sequential
+firings that reuse the same catalyst or fact.
+
+For every affected account:
+
+```text
+required = consume × n + preserve
+next     = current - consume × n + produce × n
+```
+
+All quantities are checked. Every declared linear invariant must have the same
+measure before and after. A failure leaves the economy unchanged.
 
 ## Development
 
-The crate uses Rust Edition 2024 and supports Rust 1.85 or newer. It currently
-has no third-party dependencies.
+Axionomy uses Rust Edition 2024, supports Rust 1.85 or newer, and currently has
+no third-party dependencies.
 
 ```console
 cargo test --all-targets
+cargo test --doc
 cargo clippy --all-targets --all-features -- -D warnings
 cargo fmt --all -- --check
+RUSTDOCFLAGS="-D warnings" cargo doc --no-deps
+cargo package --allow-dirty
 ```
