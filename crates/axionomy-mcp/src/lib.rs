@@ -1,9 +1,11 @@
 #![doc = include_str!("../README.md")]
 
+mod http;
 mod server;
 mod store;
 mod wire;
 
+pub use http::{StatelessHttpService, stateless_http_config, stateless_http_service};
 pub use server::AxionomyMcp;
 pub use store::{SqliteStore, StoreError};
 pub use wire::{
