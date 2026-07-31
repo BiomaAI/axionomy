@@ -89,8 +89,8 @@ A useful mnemonic is:
 - Rates are the laws or verbs.
 - Exchanges are the events.
 
-`Quantity`, `Basket`, `Goal`, `Receipt`, and `Trace` support these primitives;
-they do not introduce parallel semantic worlds.
+`Quantity`, `Basket`, `Goal`, `ExchangeAssessment`, `Receipt`, and `Trace`
+support these primitives; they do not introduce parallel semantic worlds.
 
 Users define ordinary Rust types for assets, account IDs, rate IDs, and roles.
 That is an open vocabulary, not an authorization to keep authoritative
@@ -197,6 +197,10 @@ The complete distance to feasibility is the sparse vector:
 Distance = { (account, asset, missing_quantity) }
 ```
 
+Affected accounts and shortfalls use deterministic account ordering.
+`Basket::iter_sorted` provides deterministic asset ordering when a consumer
+materializes the vector for learning, serialization, or comparison.
+
 An assessment must accumulate shortfalls across every affected account rather
 than stop at the first deficient account. It must distinguish a structurally
 invalid proposal—such as a missing rate, account, or role binding—from a
@@ -275,6 +279,9 @@ economy.
 | `Exchange<RateId, Role, AccountId>` | Concrete proposal |
 | `EconomyBuilder` | Initial problem construction |
 | `Economy` | Private account/rate ownership and sole execution authority |
+| `ExchangeAssessment` | Applicable, infeasible, or invalid explanatory projection |
+| `AccountAssessment` | Required, available, consumed, preserved, and produced assets for one affected account |
+| `AccountShortfall` | Exact missing-asset basket for one affected account |
 | `ApplyError` | Structured rejection reason |
 | `Receipt` | Accepted exchange plus per-account deltas |
 | `Trace` | Ordered replayable exchange sequence |
@@ -291,13 +298,14 @@ Search and simulation use:
 - `simulate` to apply one exchange on a branch.
 - `replayed` to validate a full trace without touching its source.
 - `state_key` for a canonicalized logical-state key.
+- `assess` to explain one proposal and preview feasible deltas.
+- `is_applicable` to derive one boolean decision from assessment.
 - `applicable` to filter concrete proposals through core validation.
 
-The next core API addition is `assess`, returning a structured
-`ExchangeAssessment`. It will expose all account requirements, complete
-shortfalls, projected deltas, and non-balance issues without mutation.
-`can_apply`, `applicable`, assessment, and application must share one internal
-preparation path so their semantics cannot drift.
+`assess` returns a structured `ExchangeAssessment` with all account
+requirements, complete shortfalls, projected deltas, and non-balance issues
+without mutation. `is_applicable`, `applicable`, assessment, and application
+share one internal analysis path so their semantics cannot drift.
 
 `replay` mutates its target one exchange at a time. If a caller needs
 all-or-nothing validation of an entire trace relative to an existing economy,
@@ -442,6 +450,9 @@ in the reusable model modules.
 - Required role bindings and role distinctness are checked.
 - Failed exchanges preserve complete state.
 - Declared linear invariants are checked on every firing.
+- Assessment distinguishes applicable, infeasible, and invalid proposals.
+- Infeasible assessment reports every affected account shortfall.
+- Applicable assessment projects the exact deltas later returned by `Receipt`.
 - Receipts describe accepted per-account deltas.
 - Forks are isolated clones.
 - Trace replay uses exactly the same validation path as live execution.
@@ -462,9 +473,6 @@ The current foundation is intentionally bounded:
 - Candidate binding enumeration is supplied by the model or adapter; the core
   filters and validates proposals but does not enumerate every account
   permutation.
-- `can_apply` currently reports the first rejection. Complete multi-account
-  shortfall assessment and projected deltas are designed but not yet
-  implemented.
 - Linear invariants are global weighted sums. There are no local, inequality,
   temporal, or arbitrary logical invariant languages.
 - Hash maps are internal storage. `state_key` sorts logical entries, but
@@ -538,24 +546,22 @@ record of what actually changed.
 
 The next work should be driven by measured pressure from these encodings:
 
-1. Add complete exchange assessment with all account shortfalls, projected
-   deltas, structured non-balance issues, and parity tests against receipts.
-2. Define a serializable parameterized rate-schema language with typed
+1. Define a serializable parameterized rate-schema language with typed
    variables and finite binding domains.
-3. Add automatic candidate instantiation without permitting arbitrary hidden
+2. Add automatic candidate instantiation without permitting arbitrary hidden
    guards.
-4. Define canonical problem, state, exchange, and trace serialization with
+3. Define canonical problem, state, exchange, and trace serialization with
    schema/version identifiers.
-5. Add persistent or copy-on-write forks and benchmark search memory.
-6. Extend invariants with carefully constrained local and inequality forms.
-7. Define first-class objective declarations and multi-objective comparison
+4. Add persistent or copy-on-write forks and benchmark search memory.
+5. Extend invariants with carefully constrained local and inequality forms.
+6. Define first-class objective declarations and multi-objective comparison
    while keeping objective quantities encoded.
-8. Build an external OR adapter that compiles one closed schedule and replays
+7. Build an external OR adapter that compiles one closed schedule and replays
    the returned assignment.
-9. Standardize weighted Nature sampling, seed evolution, and distribution
+8. Standardize weighted Nature sampling, seed evolution, and distribution
    updates beyond the bounded reference implementation.
-10. Add property-based reference-model tests and bounded model checking.
-11. Decide whether dynamic rate availability is represented by rate assets,
+9. Add property-based reference-model tests and bounded model checking.
+10. Decide whether dynamic rate availability is represented by rate assets,
     capability assets, or immutable schemas plus explicit enabling state.
 
 Performance work should follow semantic clarity. The current clone-based

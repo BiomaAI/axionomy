@@ -307,6 +307,8 @@ The repository test suite additionally verifies:
 - Zero-unit rejection.
 - Rate-scaling and destination-balance overflow.
 - Non-mutating feasibility, simulation, and replay on forks.
+- Complete multi-account distance-to-feasibility reports.
+- Applicable assessment parity with eventual receipt deltas.
 - Receipt deltas for every touched account.
 
 Run the suite with:

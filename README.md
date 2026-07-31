@@ -86,6 +86,9 @@ order: `axionomy`, then `axionomy-search`, then `axionomy-problems`.
 - Separate consume, produce, and preserved/read-only baskets per role.
 - Explicit exchange role bindings and multiplicity.
 - Checked `u64` arithmetic and exact balance shortfalls.
+- Explanatory exchange assessments with complete multi-account shortfalls and
+  projected receipt deltas.
+- Boolean `is_applicable` checks and bulk `applicable` candidate filtering.
 - Global declared linear invariants checked on every firing.
 - Asset-configured goals.
 - Isolated forks, speculative execution, and deterministic trace replay.
@@ -160,10 +163,18 @@ let mut economy = EconomyBuilder::new()
     )
     .build();
 
-economy.apply(
-    Exchange::new(RateId::Build, Quantity::new(1))
-        .bind(Role::Shop, AccountId::Workshop),
-)?;
+let build = Exchange::new(RateId::Build, Quantity::new(1))
+    .bind(Role::Shop, AccountId::Workshop);
+let assessment = economy.assess(&build);
+assert!(assessment.is_applicable());
+assert_eq!(
+    assessment
+        .projected_deltas()
+        .expect("applicable exchanges project their receipt deltas")
+        .len(),
+    1,
+);
+economy.apply(build)?;
 economy.apply(
     Exchange::new(RateId::Finish, Quantity::new(1))
         .bind(Role::Shop, AccountId::Workshop)
@@ -179,8 +190,11 @@ assert!(economy.matches(&goal));
 ```
 
 The `Build` exchange is valid only if every role binding, balance,
-preservation requirement, arithmetic operation, and invariant succeeds. The
-core prepares all affected accounts first and commits all of them together.
+preservation requirement, arithmetic operation, and invariant succeeds.
+`assess` explains validity without mutation: feasible exchanges expose the
+same per-account deltas later confirmed by their receipt, while infeasible
+exchanges expose every account-and-asset shortfall. The core prepares all
+affected accounts first and commits all of them together.
 
 ## Conformance problems
 
