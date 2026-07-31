@@ -30,9 +30,15 @@ serde = { version = "1.0.229", features = ["derive", "rc"] }
 thiserror = "2.0.19"
 
 [dev-dependencies]
+criterion = "0.8.2"
 num-bigint = { version = "0.5.1", features = ["serde"] }
+proptest = "1.11.0"
 serde_json = "1.0.149"
 
 [lib]
 name = "axionomy"
 path = "src/lib.rs"
+
+[[bench]]
+name = "economy"
+harness = false

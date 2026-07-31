@@ -101,6 +101,7 @@ pub enum UnitBindingError {
 mod tests {
     use super::{MeasuredAsset, Rational};
     use axionomy::{AssetAmount, Quantity};
+    use proptest::prelude::*;
     use uom::si::mass::{gram, kilogram};
     use uom::si::rational64::Mass;
 
@@ -135,5 +136,21 @@ mod tests {
             binding.encode(Mass::new::<gram>(Rational::new(1, 2)));
 
         assert!(result.is_err());
+    }
+
+    proptest! {
+        #[test]
+        fn every_whole_gram_round_trips_exactly(grams in 0_u64..1_000_000) {
+            let binding = MeasuredAsset::new(
+                Asset::CargoGram,
+                Mass::new::<gram>(Rational::from_integer(1)),
+            )
+            .unwrap();
+            let amount: AssetAmount<Asset> = binding
+                .encode(Mass::new::<gram>(Rational::from_integer(grams as i64)))
+                .unwrap();
+
+            prop_assert_eq!(amount.quantity(), &Quantity::new(grams));
+        }
     }
 }

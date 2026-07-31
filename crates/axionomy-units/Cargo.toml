@@ -20,3 +20,6 @@ uom = { version = "0.38.0", default-features = false, features = [
     "si",
     "std",
 ] }
+
+[dev-dependencies]
+proptest = "1.11.0"

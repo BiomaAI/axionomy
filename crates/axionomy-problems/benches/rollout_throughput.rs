@@ -1,25 +1,21 @@
 use axionomy_problems::logistics::{self, Policy};
+use criterion::{Criterion, criterion_group, criterion_main};
 use std::hint::black_box;
-use std::time::Instant;
 
-const ROLLOUTS: u64 = 256;
-
-fn main() {
+fn benchmark(c: &mut Criterion) {
     let model = logistics::initial();
-    let started = Instant::now();
-    let exchanges = (0..ROLLOUTS)
-        .map(|seed| {
+    let mut seed = 0_u64;
+
+    c.bench_function("logistics_reliable_policy_rollout", |bencher| {
+        bencher.iter(|| {
             let rollout =
                 logistics::run_policy(black_box(&model), Policy::Reliable, black_box(seed));
+            seed = seed.wrapping_add(1);
             assert!(rollout.completed());
-            rollout.steps()
-        })
-        .sum::<usize>();
-    let elapsed = started.elapsed();
-
-    println!(
-        "Rollout throughput: {ROLLOUTS} logistics rollouts, {exchanges} exchanges, \
-         {:.0} rollouts/s",
-        ROLLOUTS as f64 / elapsed.as_secs_f64(),
-    );
+            black_box(rollout.steps())
+        });
+    });
 }
+
+criterion_group!(benches, benchmark);
+criterion_main!(benches);
