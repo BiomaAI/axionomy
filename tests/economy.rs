@@ -330,6 +330,29 @@ fn forks_and_replay_validate_a_trace_without_touching_the_source() {
 }
 
 #[test]
+fn economic_views_have_canonical_observation_identities() {
+    let world = world();
+    let source_and_sink = world.view([AccountId::Source, AccountId::Sink]);
+    let source_only = world.view([AccountId::Source]);
+
+    assert_eq!(
+        source_and_sink.observation_key(),
+        vec![(AccountId::Source, Asset::Input, Quantity::new(4))]
+    );
+    assert_eq!(
+        source_and_sink.observation_key(),
+        source_only.observation_key(),
+        "empty visible accounts do not add hidden or synthetic state"
+    );
+    assert!(
+        source_and_sink
+            .observation_key()
+            .iter()
+            .all(|(account, _, _)| account != &AccountId::Machine)
+    );
+}
+
+#[test]
 fn invalid_identifiers_units_and_role_aliasing_are_structured_errors() {
     let mut world = world();
 
