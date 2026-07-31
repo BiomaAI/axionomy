@@ -1,6 +1,8 @@
 #![doc = include_str!("../README.md")]
 
+pub mod monte_carlo;
 pub mod rollout;
+pub mod sampling;
 
 use axionomy::{Economy, Exchange, Goal, Trace};
 use std::cmp::Ordering;

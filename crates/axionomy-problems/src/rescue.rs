@@ -7,6 +7,10 @@ use axionomy::{
 use axionomy_search::rollout::{
     RolloutConfig, RolloutDecision, RolloutStop, TraceRetention, run_to_goal,
 };
+use axionomy_search::{
+    monte_carlo::{BernoulliStatistics, MonteCarloConfig, evaluate},
+    sampling::{WeightedExchange, choose_by_ticket, systematic_ticket, total_weight},
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Location {
@@ -349,24 +353,30 @@ pub fn run_sampled_policy(model: &World, sample: &Action, policy: Policy) -> Opt
 /// Deterministic, bounded Monte Carlo over weights held by Nature.
 pub fn monte_carlo(model: &World, samples: usize) -> Option<MonteCarloEstimate> {
     let weighted_scenarios = encoded_scenarios(model);
-    let total_weight = weighted_scenarios
+    let total_weight = total_weight(&weighted_scenarios).ok()?;
+    let estimates = evaluate(
+        [Policy::ObserveThenFollow, Policy::NorthWithoutObserving],
+        MonteCarloConfig::new(samples),
+        |policy, sample_index| {
+            let ticket = systematic_ticket(sample_index, total_weight);
+            let sample = choose_by_ticket(&weighted_scenarios, ticket).map_err(|_| ())?;
+            run_sampled_policy(model, sample, *policy)
+                .map(|rollout| rollout.succeeded())
+                .ok_or(())
+        },
+        BernoulliStatistics::new,
+    )
+    .ok()?;
+    let observe_successes = estimates
         .iter()
-        .try_fold(0_u64, |total, (_, weight)| total.checked_add(*weight))?;
-    if total_weight == 0 {
-        return None;
-    }
-
-    let mut observe_successes = 0;
-    let mut direct_successes = 0;
-    for sample_index in 0..samples {
-        let ticket = u64::try_from(sample_index).unwrap_or(u64::MAX) % total_weight;
-        let sample = choose_weighted(&weighted_scenarios, ticket);
-        observe_successes +=
-            usize::from(run_sampled_policy(model, sample, Policy::ObserveThenFollow)?.succeeded());
-        direct_successes += usize::from(
-            run_sampled_policy(model, sample, Policy::NorthWithoutObserving)?.succeeded(),
-        );
-    }
+        .find(|estimate| estimate.policy() == &Policy::ObserveThenFollow)?
+        .summary()
+        .successes();
+    let direct_successes = estimates
+        .iter()
+        .find(|estimate| estimate.policy() == &Policy::NorthWithoutObserving)?
+        .summary()
+        .successes();
     let chosen = if observe_successes >= direct_successes {
         Policy::ObserveThenFollow
     } else {
@@ -380,7 +390,7 @@ pub fn monte_carlo(model: &World, samples: usize) -> Option<MonteCarloEstimate> 
     })
 }
 
-fn encoded_scenarios(model: &World) -> Vec<(Action, u64)> {
+fn encoded_scenarios(model: &World) -> Vec<WeightedExchange<Action>> {
     let mut scenarios: Vec<_> = candidates(model)
         .into_iter()
         .filter_map(|exchange| match *exchange.rate() {
@@ -396,16 +406,9 @@ fn encoded_scenarios(model: &World) -> Vec<(Action, u64)> {
         .collect();
     scenarios.sort_by_key(|(exchange, _)| *exchange.rate());
     scenarios
-}
-
-fn choose_weighted(scenarios: &[(Action, u64)], mut ticket: u64) -> &Action {
-    for (exchange, weight) in scenarios {
-        if ticket < *weight {
-            return exchange;
-        }
-        ticket -= *weight;
-    }
-    unreachable!("ticket is reduced modulo total encoded scenario weight")
+        .into_iter()
+        .map(|(exchange, weight)| WeightedExchange::new(exchange, weight))
+        .collect()
 }
 
 fn policy_action(world: &World, policy: Policy) -> Option<Action> {
