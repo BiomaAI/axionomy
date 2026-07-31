@@ -277,7 +277,11 @@ fn build(horizon: u8) -> World {
         |invariant, operation| invariant.weight(Asset::Reserved(operation), 1),
     );
 
-    builder.invariant(job_state).invariant(capacity).build()
+    builder
+        .invariant(job_state)
+        .invariant(capacity)
+        .build()
+        .expect("scheduling model is valid")
 }
 
 fn schedule_rate(operation: Operation, ready: u8, start: u8) -> Rate<Role, Asset> {

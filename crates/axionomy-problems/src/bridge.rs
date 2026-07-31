@@ -262,6 +262,7 @@ pub fn initial() -> World {
                 .weight(Asset::SpentCredit, 1),
         )
         .build()
+        .expect("bridge model is valid")
 }
 
 pub fn goal() -> Goal<AccountId, Asset> {

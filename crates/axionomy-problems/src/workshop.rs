@@ -100,6 +100,7 @@ pub fn initial() -> World {
                 .weight(Asset::SpentLabor, 1),
         )
         .build()
+        .expect("workshop model is valid")
 }
 
 pub fn goal() -> Goal<AccountId, Asset> {

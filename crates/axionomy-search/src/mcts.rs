@@ -679,6 +679,7 @@ mod tests {
                     .produce(Role::Game, basket([(Asset::Lost, 1)])),
             )
             .build()
+            .expect("test model is valid")
     }
 
     fn action(rate: RateId) -> Action {
@@ -778,7 +779,8 @@ mod tests {
                     .preserve(Role::Nature, basket([(Asset::BadWeight, 1)]))
                     .distinct(Role::Game, Role::Nature),
             )
-            .build();
+            .build()
+            .expect("test model is valid");
 
         let decision = search(
             &game,

@@ -342,6 +342,7 @@ pub fn initial() -> World {
                 .weight(Asset::Delivered, 1),
         )
         .build()
+        .expect("logistics model is valid")
 }
 
 pub fn goal() -> Goal<AccountId, Asset> {

@@ -247,6 +247,7 @@ pub fn initial() -> World {
                 ),
         )
         .build()
+        .expect("connect four model is valid")
 }
 
 pub fn candidates(world: &World) -> Vec<Action> {

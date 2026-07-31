@@ -53,6 +53,7 @@ fn world() -> World {
                 .produce(Role::Actor, basket([(Asset::Solved, 1)])),
         )
         .build()
+        .expect("test model is valid")
 }
 
 fn goal() -> Goal<AccountId, Asset> {

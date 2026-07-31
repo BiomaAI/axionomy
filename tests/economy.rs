@@ -90,6 +90,7 @@ fn world() -> World {
                 .weight(Asset::UsedCapacity, 1),
         )
         .build()
+        .expect("test model is valid")
 }
 
 fn transform(units: u64) -> Action {
@@ -401,7 +402,8 @@ fn checked_arithmetic_failures_are_atomic() {
             RateId::Overflow,
             Rate::new().consume(Role::Source, basket([(Asset::Input, u64::MAX)])),
         )
-        .build();
+        .build()
+        .expect("test model is valid");
     let before = rate_overflow.state_key();
     let action =
         Exchange::new(RateId::Overflow, Quantity::new(2)).bind(Role::Source, AccountId::Source);
@@ -423,7 +425,8 @@ fn checked_arithmetic_failures_are_atomic() {
             RateId::Overflow,
             Rate::new().produce(Role::Sink, basket([(Asset::Output, 1)])),
         )
-        .build();
+        .build()
+        .expect("test model is valid");
     let before = balance_overflow.state_key();
     let action =
         Exchange::new(RateId::Overflow, Quantity::new(1)).bind(Role::Sink, AccountId::Sink);

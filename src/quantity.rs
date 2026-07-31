@@ -1,4 +1,5 @@
 use num_traits::{CheckedAdd, CheckedMul, CheckedSub, Zero};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt;
 use std::hash::Hash;
 use thiserror::Error;
@@ -134,6 +135,31 @@ where
 {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.0.fmt(formatter)
+    }
+}
+
+impl<N> Serialize for Quantity<N>
+where
+    N: Serialize,
+{
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        self.0.serialize(serializer)
+    }
+}
+
+impl<'de, N> Deserialize<'de> for Quantity<N>
+where
+    N: Deserialize<'de> + QuantityScalar,
+{
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let value = N::deserialize(deserializer)?;
+        Self::try_from_scalar(value).map_err(serde::de::Error::custom)
     }
 }
 

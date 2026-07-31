@@ -722,6 +722,7 @@ mod tests {
                 resolution(Asset::GuessTails, Asset::TruthHeads, Asset::Lost),
             )
             .build()
+            .expect("test model is valid")
     }
 
     fn resolution(guess: Asset, truth: Asset, result: Asset) -> Rate<Role, Asset> {

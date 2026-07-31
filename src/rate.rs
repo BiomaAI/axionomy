@@ -1,7 +1,11 @@
 use crate::{Account, Basket, Quantity, QuantityScalar};
+use indexmap::IndexMap;
 use num_traits::{CheckedAdd, Zero};
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use serde::ser::SerializeStruct;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use std::collections::{BTreeMap, BTreeSet};
 use std::hash::Hash;
+use thiserror::Error;
 
 #[derive(Debug, Clone)]
 pub struct Rate<Role, A, N = u64> {
@@ -28,22 +32,58 @@ where
         }
     }
 
-    pub fn consume(mut self, role: Role, basket: Basket<A, N>) -> Self {
+    pub fn try_consume(
+        mut self,
+        role: Role,
+        basket: Basket<A, N>,
+    ) -> Result<Self, RateError<Role, A>> {
         self.roles.insert(role.clone());
-        merge(&mut self.consume, role, basket);
-        self
+        merge(&mut self.consume, role.clone(), basket)
+            .map_err(|asset| RateError::BasketOverflow { role, asset })?;
+        Ok(self)
     }
 
-    pub fn produce(mut self, role: Role, basket: Basket<A, N>) -> Self {
-        self.roles.insert(role.clone());
-        merge(&mut self.produce, role, basket);
-        self
+    pub fn consume(self, role: Role, basket: Basket<A, N>) -> Self {
+        match self.try_consume(role, basket) {
+            Ok(rate) => rate,
+            Err(_) => panic!("rate consume basket quantity overflow"),
+        }
     }
 
-    pub fn preserve(mut self, role: Role, basket: Basket<A, N>) -> Self {
+    pub fn try_produce(
+        mut self,
+        role: Role,
+        basket: Basket<A, N>,
+    ) -> Result<Self, RateError<Role, A>> {
         self.roles.insert(role.clone());
-        merge(&mut self.preserve, role, basket);
-        self
+        merge(&mut self.produce, role.clone(), basket)
+            .map_err(|asset| RateError::BasketOverflow { role, asset })?;
+        Ok(self)
+    }
+
+    pub fn produce(self, role: Role, basket: Basket<A, N>) -> Self {
+        match self.try_produce(role, basket) {
+            Ok(rate) => rate,
+            Err(_) => panic!("rate produce basket quantity overflow"),
+        }
+    }
+
+    pub fn try_preserve(
+        mut self,
+        role: Role,
+        basket: Basket<A, N>,
+    ) -> Result<Self, RateError<Role, A>> {
+        self.roles.insert(role.clone());
+        merge(&mut self.preserve, role.clone(), basket)
+            .map_err(|asset| RateError::BasketOverflow { role, asset })?;
+        Ok(self)
+    }
+
+    pub fn preserve(self, role: Role, basket: Basket<A, N>) -> Self {
+        match self.try_preserve(role, basket) {
+            Ok(rate) => rate,
+            Err(_) => panic!("rate preserve basket quantity overflow"),
+        }
     }
 
     pub fn distinct(mut self, left: Role, right: Role) -> Self {
@@ -90,26 +130,93 @@ where
     }
 }
 
-fn merge<Role, A, N>(target: &mut BTreeMap<Role, Basket<A, N>>, role: Role, basket: Basket<A, N>)
+fn merge<Role, A, N>(
+    target: &mut BTreeMap<Role, Basket<A, N>>,
+    role: Role,
+    basket: Basket<A, N>,
+) -> Result<(), A>
 where
     Role: Ord,
     A: Clone + Eq + Hash,
     N: QuantityScalar,
 {
-    if target
-        .entry(role)
-        .or_default()
-        .checked_add(&basket)
-        .is_err()
+    target.entry(role).or_default().checked_add(&basket)
+}
+
+impl<Role, A, N> Serialize for Rate<Role, A, N>
+where
+    Role: Serialize + Ord,
+    A: Serialize,
+    N: Serialize,
+{
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
     {
-        panic!("rate basket quantity overflow");
+        let mut state = serializer.serialize_struct("Rate", 4)?;
+        state.serialize_field("consume", &self.consume.iter().collect::<Vec<_>>())?;
+        state.serialize_field("produce", &self.produce.iter().collect::<Vec<_>>())?;
+        state.serialize_field("preserve", &self.preserve.iter().collect::<Vec<_>>())?;
+        state.serialize_field("distinct", &self.distinct.iter().collect::<Vec<_>>())?;
+        state.end()
     }
+}
+
+#[derive(Deserialize)]
+#[serde(bound(
+    deserialize = "Role: Deserialize<'de> + Clone + Ord, A: Deserialize<'de> + Clone + Eq + Hash, N: Deserialize<'de> + QuantityScalar"
+))]
+struct RateData<Role, A, N> {
+    consume: Vec<(Role, Basket<A, N>)>,
+    produce: Vec<(Role, Basket<A, N>)>,
+    preserve: Vec<(Role, Basket<A, N>)>,
+    distinct: Vec<(Role, Role)>,
+}
+
+impl<'de, Role, A, N> Deserialize<'de> for Rate<Role, A, N>
+where
+    Role: Deserialize<'de> + Clone + Ord,
+    A: Deserialize<'de> + Clone + Eq + Hash,
+    N: Deserialize<'de> + QuantityScalar,
+{
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let data = RateData::<Role, A, N>::deserialize(deserializer)?;
+        let mut rate = Self::new();
+        for (role, basket) in data.consume {
+            rate = rate
+                .try_consume(role, basket)
+                .map_err(serde::de::Error::custom)?;
+        }
+        for (role, basket) in data.produce {
+            rate = rate
+                .try_produce(role, basket)
+                .map_err(serde::de::Error::custom)?;
+        }
+        for (role, basket) in data.preserve {
+            rate = rate
+                .try_preserve(role, basket)
+                .map_err(serde::de::Error::custom)?;
+        }
+        for (left, right) in data.distinct {
+            rate = rate.distinct(left, right);
+        }
+        Ok(rate)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
+pub enum RateError<Role, A> {
+    #[error("rate basket quantity overflow")]
+    BasketOverflow { role: Role, asset: A },
 }
 
 #[derive(Debug, Clone)]
 pub struct LinearInvariant<A> {
     name: String,
-    weights: HashMap<A, i64>,
+    weights: IndexMap<A, i64>,
 }
 
 impl<A> LinearInvariant<A>
@@ -119,13 +226,13 @@ where
     pub fn new(name: impl Into<String>) -> Self {
         Self {
             name: name.into(),
-            weights: HashMap::new(),
+            weights: IndexMap::new(),
         }
     }
 
     pub fn weight(mut self, asset: A, weight: i64) -> Self {
         if weight == 0 {
-            self.weights.remove(&asset);
+            self.weights.shift_remove(&asset);
         } else {
             self.weights.insert(asset, weight);
         }
@@ -136,9 +243,13 @@ where
         &self.name
     }
 
+    pub fn weights(&self) -> impl Iterator<Item = (&A, i64)> {
+        self.weights.iter().map(|(asset, weight)| (asset, *weight))
+    }
+
     pub fn measure<AccountId, Holder, N>(
         &self,
-        accounts: &HashMap<AccountId, Holder>,
+        accounts: &IndexMap<AccountId, Holder>,
     ) -> Option<N::SignedMeasure>
     where
         A: Clone,
@@ -154,6 +265,49 @@ where
             }
         }
         Some(total)
+    }
+}
+
+impl<A> Serialize for LinearInvariant<A>
+where
+    A: Serialize,
+{
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut state = serializer.serialize_struct("LinearInvariant", 2)?;
+        state.serialize_field("name", &self.name)?;
+        state.serialize_field("weights", &self.weights.iter().collect::<Vec<_>>())?;
+        state.end()
+    }
+}
+
+#[derive(Deserialize)]
+struct InvariantData<A> {
+    name: String,
+    weights: Vec<(A, i64)>,
+}
+
+impl<'de, A> Deserialize<'de> for LinearInvariant<A>
+where
+    A: Deserialize<'de> + Eq + Hash,
+{
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let data = InvariantData::<A>::deserialize(deserializer)?;
+        let mut invariant = Self::new(data.name);
+        for (asset, weight) in data.weights {
+            if invariant.weights.contains_key(&asset) {
+                return Err(serde::de::Error::custom(
+                    "linear invariant contains a duplicate asset weight",
+                ));
+            }
+            invariant = invariant.weight(asset, weight);
+        }
+        Ok(invariant)
     }
 }
 

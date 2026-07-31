@@ -17,12 +17,15 @@ default = []
 bigint = ["dep:num-bigint"]
 
 [dependencies]
+indexmap = { version = "2.14.0", features = ["serde"] }
 num-bigint = { version = "0.5.1", features = ["serde"], optional = true }
 num-traits = "0.2.19"
+serde = { version = "1.0.229", features = ["derive", "rc"] }
 thiserror = "2.0.19"
 
 [dev-dependencies]
 num-bigint = { version = "0.5.1", features = ["serde"] }
+serde_json = "1.0.149"
 
 [lib]
 name = "axionomy"

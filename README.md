@@ -167,7 +167,7 @@ let mut economy = EconomyBuilder::new()
             .weight(Asset::Raw, 1)
             .weight(Asset::Finished, 2),
     )
-    .build();
+    .build()?;
 
 let build = Exchange::new(RateId::Build, Quantity::new(1))
     .bind(Role::Shop, AccountId::Workshop);

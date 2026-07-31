@@ -299,6 +299,7 @@ mod tests {
                     .produce(Role::Actor, basket([(Asset::Solved, 1)])),
             )
             .build()
+            .expect("test model is valid")
     }
 
     fn action(rate: RateId) -> Action {

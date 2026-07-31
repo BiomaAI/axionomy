@@ -1,17 +1,21 @@
-use crate::{Quantity, QuantityScalar};
-use std::collections::HashMap;
+use crate::{AssetAmount, Quantity, QuantityScalar};
+use indexmap::IndexMap;
+use serde::ser::SerializeSeq;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::hash::Hash;
 use std::iter::FromIterator;
+use thiserror::Error;
 
+/// A sparse heterogeneous asset multiset with stable insertion order.
 #[derive(Debug, Clone)]
 pub struct Basket<A, N = u64> {
-    quantities: HashMap<A, Quantity<N>>,
+    quantities: IndexMap<A, Quantity<N>>,
 }
 
 impl<A, N> Basket<A, N> {
     pub fn new() -> Self {
         Self {
-            quantities: HashMap::new(),
+            quantities: IndexMap::new(),
         }
     }
 
@@ -27,7 +31,7 @@ impl<A, N> Basket<A, N> {
         self.quantities.iter()
     }
 
-    /// Iterates by asset order for stable observations, reports, and encoding.
+    /// Iterates by asset order when an ontology-defined sorted view is needed.
     pub fn iter_sorted(&self) -> impl Iterator<Item = (&A, &Quantity<N>)>
     where
         A: Ord,
@@ -43,6 +47,20 @@ where
     A: Eq + Hash,
     N: QuantityScalar,
 {
+    /// Builds a canonical basket, rejecting duplicate asset identifiers.
+    pub fn try_from_entries(
+        entries: impl IntoIterator<Item = (A, Quantity<N>)>,
+    ) -> Result<Self, BasketError<A>> {
+        let mut basket = Self::new();
+        for (asset, quantity) in entries {
+            if basket.quantities.contains_key(&asset) {
+                return Err(BasketError::DuplicateAsset { asset });
+            }
+            basket.insert(asset, quantity);
+        }
+        Ok(basket)
+    }
+
     pub fn get(&self, asset: &A) -> Option<&Quantity<N>> {
         self.quantities.get(asset)
     }
@@ -53,10 +71,15 @@ where
 
     pub fn insert(&mut self, asset: A, quantity: Quantity<N>) -> Option<Quantity<N>> {
         if quantity.is_zero() {
-            self.quantities.remove(&asset)
+            self.quantities.shift_remove(&asset)
         } else {
             self.quantities.insert(asset, quantity)
         }
+    }
+
+    pub fn insert_amount(&mut self, amount: AssetAmount<A, N>) -> Option<Quantity<N>> {
+        let (asset, quantity) = amount.into_parts();
+        self.insert(asset, quantity)
     }
 }
 
@@ -125,7 +148,11 @@ where
     N: PartialEq,
 {
     fn eq(&self, other: &Self) -> bool {
-        self.quantities == other.quantities
+        self.len() == other.len()
+            && self
+                .quantities
+                .iter()
+                .all(|(asset, quantity)| other.quantities.get(asset) == Some(quantity))
     }
 }
 
@@ -145,11 +172,10 @@ where
     where
         T: IntoIterator<Item = (A, Quantity<N>)>,
     {
-        let mut basket = Self::new();
-        for (asset, quantity) in entries {
-            basket.insert(asset, quantity);
+        match Self::try_from_entries(entries) {
+            Ok(basket) => basket,
+            Err(_) => panic!("basket entries must have unique assets"),
         }
-        basket
     }
 }
 
@@ -161,4 +187,41 @@ where
     fn from(entries: [(A, Quantity<N>); LEN]) -> Self {
         entries.into_iter().collect()
     }
+}
+
+impl<A, N> Serialize for Basket<A, N>
+where
+    A: Serialize,
+    N: Serialize,
+{
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut sequence = serializer.serialize_seq(Some(self.len()))?;
+        for entry in self.iter() {
+            sequence.serialize_element(&entry)?;
+        }
+        sequence.end()
+    }
+}
+
+impl<'de, A, N> Deserialize<'de> for Basket<A, N>
+where
+    A: Deserialize<'de> + Eq + Hash,
+    N: Deserialize<'de> + QuantityScalar,
+{
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let entries = Vec::<(A, Quantity<N>)>::deserialize(deserializer)?;
+        Self::try_from_entries(entries).map_err(serde::de::Error::custom)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
+pub enum BasketError<A> {
+    #[error("basket contains a duplicate asset")]
+    DuplicateAsset { asset: A },
 }

@@ -4,24 +4,25 @@ use axionomy::{
     Account, Basket, Economy, EconomyBuilder, Exchange, LinearInvariant, Quantity, Rate,
 };
 use num_bigint::BigUint;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 enum Asset {
     Raw,
     Finished,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 enum AccountId {
     Workshop,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 enum RateId {
     Build,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 enum Role {
     Workshop,
 }
@@ -50,7 +51,8 @@ fn economy_supports_non_copy_unbounded_quantities_and_signed_invariants() {
                 .weight(Asset::Raw, 1)
                 .weight(Asset::Finished, 1),
         )
-        .build();
+        .build()
+        .expect("test model is valid");
 
     let action =
         Exchange::new(RateId::Build, quantity(2_u8)).bind(Role::Workshop, AccountId::Workshop);
@@ -67,4 +69,8 @@ fn economy_supports_non_copy_unbounded_quantities_and_signed_invariants() {
         world.balance(&AccountId::Workshop, &Asset::Finished),
         quantity(2_u8)
     );
+
+    let encoded = serde_json::to_string(&world).unwrap();
+    let decoded: World = serde_json::from_str(&encoded).unwrap();
+    assert_eq!(decoded.state_key(), world.state_key());
 }

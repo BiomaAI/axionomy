@@ -166,6 +166,7 @@ pub fn initial() -> World {
                 .distinct(Role::Actor, Role::Goal),
         )
         .build()
+        .expect("maze model is valid")
 }
 
 pub fn goal() -> Goal<AccountId, Asset> {

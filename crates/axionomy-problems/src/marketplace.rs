@@ -203,6 +203,7 @@ pub fn initial() -> World {
                 .weight(Asset::SettledOrder, 1),
         )
         .build()
+        .expect("marketplace model is valid")
 }
 
 pub fn goal() -> Goal<AccountId, Asset> {

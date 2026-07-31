@@ -141,6 +141,7 @@ fn build(player: u8, crate_at: u8, goal_cell: u8) -> World {
                 .weight(Asset::Empty, 1),
         )
         .build()
+        .expect("sokoban model is valid")
 }
 
 fn neighbors(cell: u8) -> impl Iterator<Item = u8> {

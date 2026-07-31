@@ -448,6 +448,7 @@ pub fn initial() -> World {
             ),
         )
         .build()
+        .expect("mission model is valid")
 }
 
 pub fn goal() -> Goal<AccountId, Asset> {

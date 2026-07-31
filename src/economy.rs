@@ -2,13 +2,19 @@ use crate::{
     Account, AccountDelta, AccountError, Basket, Exchange, LinearInvariant, Quantity,
     QuantityScalar, Rate, Receipt, Trace,
 };
-use std::collections::{BTreeMap, BTreeSet, HashMap};
-use std::error::Error;
-use std::fmt;
+use indexmap::IndexMap;
+use serde::ser::SerializeStruct;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use std::collections::{BTreeMap, BTreeSet};
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
+use thiserror::Error;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(bound(
+    serialize = "AccountId: Serialize + Ord, A: Serialize, N: Serialize",
+    deserialize = "AccountId: Deserialize<'de> + Ord, A: Deserialize<'de> + Eq + Hash, N: Deserialize<'de> + QuantityScalar"
+))]
 pub struct Goal<AccountId, A, N = u64> {
     required: BTreeMap<AccountId, Basket<A, N>>,
 }
@@ -44,8 +50,8 @@ where
 
 #[derive(Debug, Clone)]
 pub struct Economy<AccountId, A, RateId, Role, N = u64> {
-    accounts: HashMap<AccountId, Arc<Account<A, N>>>,
-    rates: Arc<HashMap<RateId, Rate<Role, A, N>>>,
+    accounts: IndexMap<AccountId, Arc<Account<A, N>>>,
+    rates: Arc<IndexMap<RateId, Rate<Role, A, N>>>,
     invariants: Arc<Vec<LinearInvariant<A>>>,
 }
 
@@ -53,7 +59,7 @@ pub struct Economy<AccountId, A, RateId, Role, N = u64> {
 ///
 /// The fingerprint is deterministic for a fixed ontology implementation and
 /// executable, but it is not a durable serialization or collision-proof key.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct StateFingerprint(u64);
 
 impl StateFingerprint {
@@ -76,8 +82,11 @@ pub type SimulationResult<AccountId, A, RateId, Role, N = u64> = Result<
     ApplyError<RateId, Role, AccountId, A, N>,
 >;
 
+pub type ModelBuildResult<AccountId, A, RateId, Role, N = u64> =
+    Result<Economy<AccountId, A, RateId, Role, N>, ModelBuildError<AccountId, RateId>>;
+
 /// The high-level result of assessing an exchange without mutating the economy.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum AssessmentStatus {
     Applicable,
     Infeasible,
@@ -85,7 +94,11 @@ pub enum AssessmentStatus {
 }
 
 /// One account's complete rate-derived requirements and effects.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(bound(
+    serialize = "AccountId: Serialize, A: Serialize, N: Serialize",
+    deserialize = "AccountId: Deserialize<'de>, A: Deserialize<'de> + Eq + Hash, N: Deserialize<'de> + QuantityScalar"
+))]
 pub struct AccountAssessment<AccountId, A, N = u64> {
     account: AccountId,
     available: Basket<A, N>,
@@ -141,7 +154,11 @@ impl<AccountId, A, N> AccountAssessment<AccountId, A, N> {
 }
 
 /// The exact assets one account lacks for a well-formed exchange.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(bound(
+    serialize = "AccountId: Serialize, A: Serialize, N: Serialize",
+    deserialize = "AccountId: Deserialize<'de>, A: Deserialize<'de> + Eq + Hash, N: Deserialize<'de> + QuantityScalar"
+))]
 pub struct AccountShortfall<AccountId, A, N = u64> {
     account: AccountId,
     missing: Basket<A, N>,
@@ -253,9 +270,10 @@ where
 
 #[derive(Debug)]
 pub struct EconomyBuilder<AccountId, A, RateId, Role, N = u64> {
-    accounts: HashMap<AccountId, Account<A, N>>,
-    rates: HashMap<RateId, Rate<Role, A, N>>,
+    accounts: IndexMap<AccountId, Account<A, N>>,
+    rates: IndexMap<RateId, Rate<Role, A, N>>,
     invariants: Vec<LinearInvariant<A>>,
+    issues: Vec<ModelIssue<AccountId, RateId>>,
 }
 
 impl<AccountId, A, RateId, Role, N> EconomyBuilder<AccountId, A, RateId, Role, N>
@@ -265,19 +283,29 @@ where
 {
     pub fn new() -> Self {
         Self {
-            accounts: HashMap::new(),
-            rates: HashMap::new(),
+            accounts: IndexMap::new(),
+            rates: IndexMap::new(),
             invariants: Vec::new(),
+            issues: Vec::new(),
         }
     }
 
     pub fn account(mut self, id: AccountId, account: Account<A, N>) -> Self {
-        self.accounts.insert(id, account);
+        if self.accounts.contains_key(&id) {
+            self.issues
+                .push(ModelIssue::DuplicateAccount { account: id });
+        } else {
+            self.accounts.insert(id, account);
+        }
         self
     }
 
     pub fn rate(mut self, id: RateId, rate: Rate<Role, A, N>) -> Self {
-        self.rates.insert(id, rate);
+        if self.rates.contains_key(&id) {
+            self.issues.push(ModelIssue::DuplicateRate { rate: id });
+        } else {
+            self.rates.insert(id, rate);
+        }
         self
     }
 
@@ -286,8 +314,13 @@ where
         self
     }
 
-    pub fn build(self) -> Economy<AccountId, A, RateId, Role, N> {
-        Economy {
+    pub fn build(self) -> ModelBuildResult<AccountId, A, RateId, Role, N> {
+        if !self.issues.is_empty() {
+            return Err(ModelBuildError {
+                issues: self.issues,
+            });
+        }
+        Ok(Economy {
             accounts: self
                 .accounts
                 .into_iter()
@@ -295,7 +328,7 @@ where
                 .collect(),
             rates: Arc::new(self.rates),
             invariants: Arc::new(self.invariants),
-        }
+        })
     }
 }
 
@@ -306,6 +339,87 @@ where
 {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ModelIssue<AccountId, RateId> {
+    DuplicateAccount { account: AccountId },
+    DuplicateRate { rate: RateId },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Error, Serialize, Deserialize)]
+#[error("model definition contains duplicate identifiers")]
+pub struct ModelBuildError<AccountId, RateId> {
+    issues: Vec<ModelIssue<AccountId, RateId>>,
+}
+
+impl<AccountId, RateId> ModelBuildError<AccountId, RateId> {
+    pub fn issues(&self) -> &[ModelIssue<AccountId, RateId>] {
+        &self.issues
+    }
+}
+
+impl<AccountId, A, RateId, Role, N> Serialize for Economy<AccountId, A, RateId, Role, N>
+where
+    AccountId: Serialize,
+    A: Serialize,
+    RateId: Serialize,
+    Role: Serialize + Ord,
+    N: Serialize,
+{
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let accounts = self
+            .accounts
+            .iter()
+            .map(|(id, account)| (id, account.as_ref()))
+            .collect::<Vec<_>>();
+        let rates = self.rates.iter().collect::<Vec<_>>();
+        let mut state = serializer.serialize_struct("Economy", 3)?;
+        state.serialize_field("accounts", &accounts)?;
+        state.serialize_field("rates", &rates)?;
+        state.serialize_field("invariants", self.invariants.as_ref())?;
+        state.end()
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(bound(
+    deserialize = "AccountId: Deserialize<'de>, A: Deserialize<'de> + Clone + Eq + Hash, RateId: Deserialize<'de>, Role: Deserialize<'de> + Clone + Ord, N: Deserialize<'de> + QuantityScalar"
+))]
+struct EconomyData<AccountId, A, RateId, Role, N> {
+    accounts: Vec<(AccountId, Account<A, N>)>,
+    rates: Vec<(RateId, Rate<Role, A, N>)>,
+    invariants: Vec<LinearInvariant<A>>,
+}
+
+impl<'de, AccountId, A, RateId, Role, N> Deserialize<'de> for Economy<AccountId, A, RateId, Role, N>
+where
+    AccountId: Deserialize<'de> + Eq + Hash,
+    A: Deserialize<'de> + Clone + Eq + Hash,
+    RateId: Deserialize<'de> + Eq + Hash,
+    Role: Deserialize<'de> + Clone + Ord,
+    N: Deserialize<'de> + QuantityScalar,
+{
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let data = EconomyData::<AccountId, A, RateId, Role, N>::deserialize(deserializer)?;
+        let mut builder = EconomyBuilder::new();
+        for (id, account) in data.accounts {
+            builder = builder.account(id, account);
+        }
+        for (id, rate) in data.rates {
+            builder = builder.rate(id, rate);
+        }
+        for invariant in data.invariants {
+            builder = builder.invariant(invariant);
+        }
+        builder.build().map_err(serde::de::Error::custom)
     }
 }
 
@@ -497,13 +611,12 @@ where
             if let (Some(left_account), Some(right_account)) = (
                 exchange.bindings().get(left),
                 exchange.bindings().get(right),
-            ) {
-                if left_account == right_account {
-                    issues.push(ApplyError::RolesMustDiffer {
-                        left: left.clone(),
-                        right: right.clone(),
-                    });
-                }
+            ) && left_account == right_account
+            {
+                issues.push(ApplyError::RolesMustDiffer {
+                    left: left.clone(),
+                    right: right.clone(),
+                });
             }
         }
 
@@ -529,29 +642,29 @@ where
                 .expect("all role bindings were checked")
                 .clone();
             let effect = effects.entry(account_id).or_default();
-            if let Some(consume) = rate.consumed(role) {
-                if let Err(asset) = merge_scaled(&mut effect.consume, consume, exchange.units()) {
-                    return invalid_analysis(vec![ApplyError::RateOverflow {
-                        rate: exchange.rate().clone(),
-                        asset,
-                    }]);
-                }
+            if let Some(consume) = rate.consumed(role)
+                && let Err(asset) = merge_scaled(&mut effect.consume, consume, exchange.units())
+            {
+                return invalid_analysis(vec![ApplyError::RateOverflow {
+                    rate: exchange.rate().clone(),
+                    asset,
+                }]);
             }
-            if let Some(produce) = rate.produced(role) {
-                if let Err(asset) = merge_scaled(&mut effect.produce, produce, exchange.units()) {
-                    return invalid_analysis(vec![ApplyError::RateOverflow {
-                        rate: exchange.rate().clone(),
-                        asset,
-                    }]);
-                }
+            if let Some(produce) = rate.produced(role)
+                && let Err(asset) = merge_scaled(&mut effect.produce, produce, exchange.units())
+            {
+                return invalid_analysis(vec![ApplyError::RateOverflow {
+                    rate: exchange.rate().clone(),
+                    asset,
+                }]);
             }
-            if let Some(preserve) = rate.preserved(role) {
-                if let Err(asset) = effect.preserve.checked_add(preserve) {
-                    return invalid_analysis(vec![ApplyError::RateOverflow {
-                        rate: exchange.rate().clone(),
-                        asset,
-                    }]);
-                }
+            if let Some(preserve) = rate.preserved(role)
+                && let Err(asset) = effect.preserve.checked_add(preserve)
+            {
+                return invalid_analysis(vec![ApplyError::RateOverflow {
+                    rate: exchange.rate().clone(),
+                    asset,
+                }]);
             }
         }
 
@@ -677,7 +790,11 @@ pub struct EconomicView<'a, AccountId, A, RateId, Role, N = u64> {
 }
 
 /// Canonical actor-visible state, including the view's account boundary.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(bound(
+    serialize = "AccountId: Serialize, A: Serialize, N: Serialize",
+    deserialize = "AccountId: Deserialize<'de>, A: Deserialize<'de> + Eq + Hash, N: Deserialize<'de> + QuantityScalar"
+))]
 pub struct ObservationKey<AccountId, A, N = u64> {
     visible_accounts: Vec<AccountId>,
     balances: Vec<(AccountId, A, Quantity<N>)>,
@@ -735,82 +852,39 @@ where
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Error)]
 pub enum ApplyError<RateId, Role, AccountId, A, N = u64>
 where
     N: QuantityScalar,
 {
-    MissingRate {
-        rate: RateId,
-    },
-    MissingBinding {
-        role: Role,
-    },
-    UnknownBinding {
-        role: Role,
-    },
-    RolesMustDiffer {
-        left: Role,
-        right: Role,
-    },
-    MissingAccount {
-        account: AccountId,
-    },
+    #[error("rate does not exist")]
+    MissingRate { rate: RateId },
+    #[error("exchange is missing a role binding")]
+    MissingBinding { role: Role },
+    #[error("exchange contains an unknown role")]
+    UnknownBinding { role: Role },
+    #[error("rate roles must bind to different accounts")]
+    RolesMustDiffer { left: Role, right: Role },
+    #[error("bound account does not exist")]
+    MissingAccount { account: AccountId },
+    #[error("exchange units must be greater than zero")]
     ZeroUnits,
-    RateOverflow {
-        rate: RateId,
-        asset: A,
-    },
+    #[error("scaled rate overflow")]
+    RateOverflow { rate: RateId, asset: A },
+    #[error("exchange is infeasible")]
     Infeasible {
         shortfalls: Vec<AccountShortfall<AccountId, A, N>>,
     },
-    BalanceOverflow {
-        account: AccountId,
-        asset: A,
-    },
-    InvariantOverflow {
-        invariant: String,
-    },
+    #[error("account balance overflow")]
+    BalanceOverflow { account: AccountId, asset: A },
+    #[error("invariant arithmetic overflow")]
+    InvariantOverflow { invariant: String },
+    #[error("declared invariant violation")]
     InvariantViolation {
         invariant: String,
         before: N::SignedMeasure,
         after: N::SignedMeasure,
     },
-}
-
-impl<RateId, Role, AccountId, A, N> fmt::Display for ApplyError<RateId, Role, AccountId, A, N>
-where
-    N: QuantityScalar,
-{
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::MissingRate { .. } => formatter.write_str("rate does not exist"),
-            Self::MissingBinding { .. } => {
-                formatter.write_str("exchange is missing a role binding")
-            }
-            Self::UnknownBinding { .. } => formatter.write_str("exchange contains an unknown role"),
-            Self::RolesMustDiffer { .. } => {
-                formatter.write_str("rate roles must bind to different accounts")
-            }
-            Self::MissingAccount { .. } => formatter.write_str("bound account does not exist"),
-            Self::ZeroUnits => formatter.write_str("exchange units must be greater than zero"),
-            Self::RateOverflow { .. } => formatter.write_str("scaled rate overflow"),
-            Self::Infeasible { .. } => formatter.write_str("exchange is infeasible"),
-            Self::BalanceOverflow { .. } => formatter.write_str("account balance overflow"),
-            Self::InvariantOverflow { .. } => formatter.write_str("invariant arithmetic overflow"),
-            Self::InvariantViolation { .. } => formatter.write_str("declared invariant violation"),
-        }
-    }
-}
-
-impl<RateId, Role, AccountId, A, N> Error for ApplyError<RateId, Role, AccountId, A, N>
-where
-    RateId: fmt::Debug,
-    Role: fmt::Debug,
-    AccountId: fmt::Debug,
-    A: fmt::Debug,
-    N: QuantityScalar,
-{
 }
 
 #[derive(Debug, Clone)]
@@ -835,7 +909,7 @@ where
     N: QuantityScalar,
 {
     assessment: ExchangeAssessment<AccountId, A, RateId, Role, N>,
-    prepared_accounts: Option<HashMap<AccountId, Arc<Account<A, N>>>>,
+    prepared_accounts: Option<IndexMap<AccountId, Arc<Account<A, N>>>>,
 }
 
 fn merge_scaled<A, N>(

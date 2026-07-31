@@ -1,7 +1,13 @@
-use crate::{Basket, Quantity};
+use crate::{Basket, Quantity, QuantityScalar};
+use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
+use std::hash::Hash;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(bound(
+    serialize = "RateId: Serialize, Role: Serialize + Ord, AccountId: Serialize, N: Serialize",
+    deserialize = "RateId: Deserialize<'de>, Role: Deserialize<'de> + Ord, AccountId: Deserialize<'de>, N: Deserialize<'de> + QuantityScalar"
+))]
 pub struct Exchange<RateId, Role, AccountId, N = u64> {
     rate: RateId,
     bindings: BTreeMap<Role, AccountId>,
@@ -38,7 +44,11 @@ where
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(bound(
+    serialize = "AccountId: Serialize, A: Serialize, N: Serialize",
+    deserialize = "AccountId: Deserialize<'de>, A: Deserialize<'de> + Eq + Hash, N: Deserialize<'de> + QuantityScalar"
+))]
 pub struct AccountDelta<AccountId, A, N = u64> {
     account: AccountId,
     consumed: Basket<A, N>,
@@ -78,7 +88,11 @@ impl<AccountId, A, N> AccountDelta<AccountId, A, N> {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(bound(
+    serialize = "RateId: Serialize, Role: Serialize + Ord, AccountId: Serialize, A: Serialize, N: Serialize",
+    deserialize = "RateId: Deserialize<'de>, Role: Deserialize<'de> + Ord, AccountId: Deserialize<'de>, A: Deserialize<'de> + Eq + Hash, N: Deserialize<'de> + QuantityScalar"
+))]
 pub struct Receipt<RateId, Role, AccountId, A, N = u64> {
     exchange: Exchange<RateId, Role, AccountId, N>,
     deltas: Vec<AccountDelta<AccountId, A, N>>,
@@ -101,7 +115,11 @@ impl<RateId, Role, AccountId, A, N> Receipt<RateId, Role, AccountId, A, N> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(bound(
+    serialize = "RateId: Serialize, Role: Serialize + Ord, AccountId: Serialize, N: Serialize",
+    deserialize = "RateId: Deserialize<'de>, Role: Deserialize<'de> + Ord, AccountId: Deserialize<'de>, N: Deserialize<'de> + QuantityScalar"
+))]
 pub struct Trace<RateId, Role, AccountId, N = u64> {
     exchanges: Vec<Exchange<RateId, Role, AccountId, N>>,
 }

@@ -1,8 +1,13 @@
 use crate::{Basket, Quantity, QuantityScalar};
+use serde::{Deserialize, Serialize};
 use std::hash::Hash;
 use thiserror::Error;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(bound(
+    serialize = "A: Serialize, N: Serialize",
+    deserialize = "A: Deserialize<'de> + Eq + Hash, N: Deserialize<'de> + QuantityScalar"
+))]
 pub struct Account<A, N = u64> {
     balances: Basket<A, N>,
 }
@@ -102,11 +107,15 @@ impl<A, N> From<Basket<A, N>> for Account<A, N> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Error)]
+#[derive(Debug, Clone, PartialEq, Eq, Error, Serialize, Deserialize)]
+#[serde(bound(
+    serialize = "A: Serialize, N: Serialize",
+    deserialize = "A: Deserialize<'de> + Eq + Hash, N: Deserialize<'de> + QuantityScalar"
+))]
 pub enum AccountError<A, N = u64>
 where
     A: Eq + Hash,
-    N: Eq,
+    N: QuantityScalar,
 {
     #[error("insufficient balance")]
     InsufficientBalance { shortfall: Basket<A, N> },

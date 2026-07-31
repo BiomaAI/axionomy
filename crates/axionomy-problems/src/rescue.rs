@@ -279,6 +279,7 @@ fn build(nature: Account<Asset>) -> World {
             |invariant, location| invariant.weight(Asset::Truth(location), 1),
         ))
         .build()
+        .expect("rescue model is valid")
 }
 
 pub fn goal() -> Goal<AccountId, Asset> {

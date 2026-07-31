@@ -178,6 +178,7 @@ fn build(available: &[SetId]) -> World {
         .invariant(set_invariant)
         .invariant(progress_invariant)
         .build()
+        .expect("exact-cover model is valid")
 }
 
 fn declared_members(set: SetId) -> [Element; 2] {
