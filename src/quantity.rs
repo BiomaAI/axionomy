@@ -19,6 +19,9 @@ pub trait QuantityScalar:
     /// Returns whether this value is valid as a non-negative quantity.
     fn is_nonnegative(&self) -> bool;
 
+    /// Converts an atomic count into this backend without loss.
+    fn from_u64(value: u64) -> Option<Self>;
+
     /// Multiplies this non-negative value by a signed invariant coefficient.
     fn checked_weighted(&self, coefficient: i64) -> Option<Self::SignedMeasure>;
 }
@@ -28,6 +31,10 @@ impl QuantityScalar for u64 {
 
     fn is_nonnegative(&self) -> bool {
         true
+    }
+
+    fn from_u64(value: u64) -> Option<Self> {
+        Some(value)
     }
 
     fn checked_weighted(&self, coefficient: i64) -> Option<Self::SignedMeasure> {
@@ -41,6 +48,10 @@ impl QuantityScalar for num_bigint::BigUint {
 
     fn is_nonnegative(&self) -> bool {
         true
+    }
+
+    fn from_u64(value: u64) -> Option<Self> {
+        Some(value.into())
     }
 
     fn checked_weighted(&self, coefficient: i64) -> Option<Self::SignedMeasure> {
@@ -179,6 +190,10 @@ mod tests {
 
         fn is_nonnegative(&self) -> bool {
             true
+        }
+
+        fn from_u64(value: u64) -> Option<Self> {
+            Some(value.into())
         }
 
         fn checked_weighted(&self, coefficient: i64) -> Option<Self::SignedMeasure> {

@@ -1,5 +1,11 @@
 [workspace]
-members = [".", "crates/axionomy-search", "crates/axionomy-problems"]
+members = [
+    ".",
+    "crates/axionomy-search",
+    "crates/axionomy-problems",
+    "crates/axionomy-units",
+    "crates/axionomy-time",
+]
 resolver = "3"
 
 [package]

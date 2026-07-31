@@ -1,0 +1,22 @@
+[package]
+name = "axionomy-units"
+version = "0.1.0"
+authors = ["Alex Rozgo <alex.rozgo@gmail.com>"]
+description = "Dimension-safe physical quantity bindings for Axionomy assets"
+edition = "2024"
+readme = "README.md"
+repository = "https://github.com/BiomaAI/axionomy"
+rust-version = "1.89"
+
+[dependencies]
+axionomy = { version = "0.1.0", path = "../.." }
+num-rational = { version = "0.4.2", features = ["serde"] }
+num-traits = "0.2.19"
+thiserror = "2.0.19"
+uom = { version = "0.38.0", default-features = false, features = [
+    "autoconvert",
+    "rational64",
+    "serde",
+    "si",
+    "std",
+] }

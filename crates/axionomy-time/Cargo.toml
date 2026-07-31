@@ -1,0 +1,14 @@
+[package]
+name = "axionomy-time"
+version = "0.1.0"
+authors = ["Alex Rozgo <alex.rozgo@gmail.com>"]
+description = "Calendar-aware timeline asset bindings for Axionomy"
+edition = "2024"
+readme = "README.md"
+repository = "https://github.com/BiomaAI/axionomy"
+rust-version = "1.89"
+
+[dependencies]
+axionomy = { version = "0.1.0", path = "../.." }
+jiff = { version = "0.2.35", features = ["serde"] }
+thiserror = "2.0.19"
