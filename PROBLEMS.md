@@ -22,18 +22,18 @@ and effects.
 
 ## Conformance matrix
 
-| Capability | Maze | Sokoban | Exact cover | Workshop | Job shop | Rescue | Bridge |
-| --- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| Multi-account atomic rewrite | ✓ | ✓ |  |  | ✓ | ✓ | ✓ |
-| Preserved facts/catalysts | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| Declared invariants | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| Resource objective | ✓ |  |  | ✓ | ✓ | ✓ | ✓ |
-| Infeasible instance |  | ✓ | ✓ |  | ✓ |  |  |
-| Specialized proposer |  |  | Algorithm X |  | Branch optimizer | Monte Carlo policy | Auction mechanism |
-| Multiple generic strategies | BFS/A*/Dijkstra | BFS | BFS | BFS/best-first | Best-first |  | BFS |
-| Hidden or stochastic state |  |  |  |  |  | ✓ |  |
-| Multi-agent resolution |  |  |  |  |  |  | ✓ |
-| Deterministic replay test | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Capability | Maze | Sokoban | Exact cover | Workshop | Job shop | Rescue | Bridge | Marketplace |
+| --- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| Multi-account atomic rewrite | ✓ | ✓ |  |  | ✓ | ✓ | ✓ | ✓ |
+| Preserved facts/catalysts | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Declared invariants | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Resource objective | ✓ |  |  | ✓ | ✓ | ✓ | ✓ |  |
+| Infeasible instance |  | ✓ | ✓ |  | ✓ |  |  | ✓ |
+| Specialized proposer |  |  | Algorithm X |  | Branch optimizer | Monte Carlo policy | Auction mechanism | Assessment matcher |
+| Multiple generic strategies | BFS/A*/Dijkstra | BFS | BFS | BFS/best-first | Best-first |  | BFS |  |
+| Hidden or stochastic state |  |  |  |  |  | ✓ |  |  |
+| Multi-agent resolution |  |  |  |  |  |  | ✓ | ✓ |
+| Deterministic replay test | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 
 ## Runnable examples
 
@@ -49,6 +49,7 @@ cargo run -p axionomy-problems --example workshop
 cargo run -p axionomy-problems --example scheduling
 cargo run -p axionomy-problems --example rescue
 cargo run -p axionomy-problems --example bridge
+cargo run -p axionomy-problems --example marketplace
 ```
 
 ## 1. Key-door energy maze
@@ -294,6 +295,61 @@ the right. Finish requires both agents to hold `Crossed`.
 - Alternative mechanisms over one state vocabulary.
 - Capacity as a conserved asset.
 
+## 8. Multi-party marketplace settlement
+
+Source: `crates/axionomy-problems/src/marketplace.rs`
+
+### Specification
+
+Three buyer accounts, three seller accounts, and two carrier accounts form a
+bounded market. Participant identity comes from account IDs; readiness comes
+only from account assets. Two buyers hold enough money and a purchase intent,
+two sellers hold a widget and sale offer, and one carrier holds shipping
+capacity. A third buyer is short 25 money, a third seller lacks one widget,
+and a second carrier lacks one unit of capacity.
+
+The single generic settlement rate binds six distinct roles:
+
+```text
+Buyer pays 100 and receives widget + receipt
+Seller provides widget + offer and receives 80
+Platform preserves its license and receives 5
+Tax authority preserves its policy and receives 10
+Carrier spends one capacity and receives 5
+Order book converts OpenOrder into SettledOrder
+```
+
+Money, widgets, buyer and seller lifecycle tokens, shipping capacity, and
+order status are protected by declared invariants. Candidate enumeration
+derives the buyer, seller, and carrier sets from economy accounts and produces
+ordinary exchanges. Exact matching uses core applicability. Near matching
+uses complete core shortfalls plus a caller-provided valuation; that scalar is
+disposable policy and never changes settlement law or feasibility.
+
+### Required results
+
+- The account-derived Cartesian set contains 18 candidate exchanges.
+- Four candidates are exact matches and filtering does not mutate the market.
+- One candidate reports buyer, seller, and carrier shortfalls together.
+- A successful exchange settles six accounts atomically.
+- Projected assessment deltas exactly equal the resulting receipt deltas.
+- Failed settlement preserves every account.
+- Changing caller-owned shortfall weights changes near-match ranking without
+  changing validity.
+- Settlement reaches the encoded `SettledOrder` goal and replays
+  deterministically.
+
+### API pressure
+
+- Atomic settlement beyond bilateral exchange, including tax, commission, and
+  fulfillment.
+- Complete multi-account distance to feasibility as matching information.
+- Separation between authoritative economic truth and disposable ranking
+  policy.
+- Finite role-binding enumeration derived from account capabilities.
+- Ergonomic all-distinct role constraints for larger joint transactions.
+- Conservation and lifecycle invariants across heterogeneous participants.
+
 ## Cross-problem acceptance tests
 
 The repository test suite additionally verifies:
@@ -334,5 +390,5 @@ limits clearly:
 7. Nature needs a standardized deterministic weighted-sampling protocol and
    richer encoded distribution updates.
 
-Any future abstraction must continue to pass all seven problems without
+Any future abstraction must continue to pass all eight problems without
 moving authoritative meaning into solver callbacks or an external world.

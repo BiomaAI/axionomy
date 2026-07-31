@@ -404,13 +404,28 @@ Joint effects are encoded as one multi-account rate. In the bridge benchmark,
 auction resolution consumes both submitted bids and bridge capacity and
 produces the winner's crossing right and the loser's waiting status atomically.
 
+The marketplace benchmark extends this from joint resolution to six-party
+settlement. One rate transfers a widget and gross payment while splitting
+seller proceeds, tax, platform commission, and shipping fees; it also consumes
+shipping capacity and advances buyer, seller, and order lifecycle assets.
+There is no privileged bilateral transaction hidden underneath it and no
+compensating rollback protocol: either every role requirement and invariant
+passes and all six accounts commit, or nothing changes.
+
+Potential matches are ordinary exchanges built by deriving participant sets
+from economy accounts. `applicable` finds exact matches, while `assess` exposes
+complete shortfalls for near matches. A caller may rank those shortfalls for
+procurement, search, or learned policy, but the ranking is not market truth.
+Only account assets, the settlement rate, its role bindings, and the applied
+exchange determine whether and how settlement occurs.
+
 This is the current answer to simultaneous proposals: the resolution law must
 be represented by a rate, not an external world update. Richer transaction
 protocols and dynamic mechanism selection remain future design space.
 
 ## 10. Executable conformance suite
 
-The project now validates the thesis with seven deliberately different
+The project now validates the thesis with eight deliberately different
 problems. Full formal specifications live in [PROBLEMS.md](PROBLEMS.md).
 
 | Problem | What it demonstrates |
@@ -422,10 +437,12 @@ problems. Full formal specifications live in [PROBLEMS.md](PROBLEMS.md).
 | Job shop | Precedence tokens, discrete capacity accounts, makespan assets, and solver agreement |
 | Rescue | Hidden truth, restricted views, encoded seed evolution, Monte Carlo, and deterministic replay |
 | Bridge | Multi-agent bids, escrow, capacity, joint resolution, and alternative mechanisms |
+| Marketplace | Account-derived matching, complete shortfalls, six-party atomic settlement, and caller-owned near-match ranking |
 
 These are not unrelated demos. Together they test:
 
-- Search, constraint satisfaction, optimization, simulation, and negotiation.
+- Search, constraint satisfaction, optimization, simulation, negotiation, and
+  market matching.
 - Single-, multi-, and hidden-account transitions.
 - Resource consumption, fact preservation, and identity transformation.
 - Feasible and infeasible instances.
@@ -611,7 +628,7 @@ encoded rather than supplied by opaque callbacks.
 
 ### D-009: Bounded structured expressiveness precedes universality claims
 
-Seven executable problems provide stronger product evidence than a vacuous
+Eight executable problems provide stronger product evidence than a vacuous
 one-token-per-world construction. Turing completeness is not a current goal.
 
 ### D-010: Conformance problems stay in-tree

@@ -352,7 +352,7 @@ fn all_distinct(mut rate: Rate<Role, Asset>) -> Rate<Role, Asset> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axionomy::{ApplyError, ExchangeAssessment};
+    use axionomy::{ApplyError, ExchangeAssessment, Trace};
 
     #[test]
     fn derives_and_filters_all_candidate_bindings_without_mutation() {
@@ -418,6 +418,7 @@ mod tests {
     fn settles_six_accounts_atomically_and_projection_matches_receipt() {
         let mut world = initial();
         let exchange = settlement(BuyerId::A, SellerId::A, CarrierId::A);
+        let replay_exchange = exchange.clone();
         let assessment = world.assess(&exchange);
         let projected = assessment
             .projected_deltas()
@@ -459,6 +460,11 @@ mod tests {
         );
         assert!(world.matches(&goal()));
         assert!(exact_matches(&world).is_empty());
+
+        let mut trace = Trace::new();
+        trace.push(replay_exchange);
+        let replayed = initial().replayed(&trace).expect("settlement must replay");
+        assert_eq!(replayed.state_key(), world.state_key());
     }
 
     #[test]

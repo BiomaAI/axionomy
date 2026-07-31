@@ -94,7 +94,7 @@ order: `axionomy`, then `axionomy-search`, then `axionomy-problems`.
 - Isolated forks, speculative execution, and deterministic trace replay.
 - Account-restricted economic views.
 - Generic BFS and best-first search in `axionomy-search`.
-- Seven closed benchmark encodings in `axionomy-problems`, with independent
+- Eight closed benchmark encodings in `axionomy-problems`, with independent
   solver strategies and core-encoded stochastic priors.
 - No third-party runtime dependencies.
 
@@ -207,6 +207,7 @@ affected accounts first and commits all of them together.
 | Job shop | Precedence, discrete machine capacity, makespan | Best-first and independent branch optimizer |
 | Rescue | Hidden truth, seed, observation, belief, chance | Policy rollouts and Monte Carlo |
 | Bridge | Capacity, bids, escrow, priority, joint resolution | BFS, first-come, and auction mechanisms |
+| Marketplace | Buyers, sellers, carriers, tax, commission, order lifecycle | Exact filtering and caller-ranked near matches |
 
 Every accepted result is an exchange trace replayed by the same core. The
 specialized algorithms are proposers, not alternate execution engines.
@@ -223,6 +224,7 @@ cargo run -p axionomy-problems --example workshop
 cargo run -p axionomy-problems --example scheduling
 cargo run -p axionomy-problems --example rescue
 cargo run -p axionomy-problems --example bridge
+cargo run -p axionomy-problems --example marketplace
 ```
 
 For example, the maze prints:

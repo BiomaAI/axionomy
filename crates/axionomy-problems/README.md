@@ -16,4 +16,5 @@ cargo run -p axionomy-problems --example workshop
 cargo run -p axionomy-problems --example scheduling
 cargo run -p axionomy-problems --example rescue
 cargo run -p axionomy-problems --example bridge
+cargo run -p axionomy-problems --example marketplace
 ```
