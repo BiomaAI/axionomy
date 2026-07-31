@@ -336,17 +336,22 @@ fn economic_views_have_canonical_observation_identities() {
     let source_only = world.view([AccountId::Source]);
 
     assert_eq!(
-        source_and_sink.observation_key(),
+        source_and_sink.observation_key().balances(),
         vec![(AccountId::Source, Asset::Input, Quantity::new(4))]
     );
-    assert_eq!(
+    assert_ne!(
         source_and_sink.observation_key(),
         source_only.observation_key(),
-        "empty visible accounts do not add hidden or synthetic state"
+        "the account visibility boundary is part of the information identity"
+    );
+    assert_eq!(
+        source_and_sink.observation_key().visible_accounts(),
+        &[AccountId::Source, AccountId::Sink]
     );
     assert!(
         source_and_sink
             .observation_key()
+            .balances()
             .iter()
             .all(|(account, _, _)| account != &AccountId::Machine)
     );

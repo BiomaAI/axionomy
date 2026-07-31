@@ -669,6 +669,23 @@ pub struct EconomicView<'a, AccountId, A, RateId, Role> {
     visible: BTreeSet<AccountId>,
 }
 
+/// Canonical actor-visible state, including the view's account boundary.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct ObservationKey<AccountId, A> {
+    visible_accounts: Vec<AccountId>,
+    balances: Vec<(AccountId, A, Quantity)>,
+}
+
+impl<AccountId, A> ObservationKey<AccountId, A> {
+    pub fn visible_accounts(&self) -> &[AccountId] {
+        &self.visible_accounts
+    }
+
+    pub fn balances(&self) -> &[(AccountId, A, Quantity)] {
+        &self.balances
+    }
+}
+
 impl<AccountId, A, RateId, Role> EconomicView<'_, AccountId, A, RateId, Role>
 where
     AccountId: Clone + Eq + Hash + Ord,
@@ -692,18 +709,21 @@ where
     /// Equal observation keys mean that this view cannot distinguish the two
     /// snapshots. Search code can therefore key information sets without
     /// copying hidden accounts into a parallel state representation.
-    pub fn observation_key(&self) -> Vec<(AccountId, A, Quantity)> {
-        let mut key = Vec::new();
+    pub fn observation_key(&self) -> ObservationKey<AccountId, A> {
+        let mut balances = Vec::new();
         for account_id in &self.visible {
             let Some(account) = self.economy.account(account_id) else {
                 continue;
             };
             for (asset, quantity) in account.balances().iter() {
-                key.push((account_id.clone(), asset.clone(), quantity));
+                balances.push((account_id.clone(), asset.clone(), quantity));
             }
         }
-        key.sort();
-        key
+        balances.sort();
+        ObservationKey {
+            visible_accounts: self.visible.iter().cloned().collect(),
+            balances,
+        }
     }
 }
 

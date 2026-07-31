@@ -1,8 +1,8 @@
 //! Partially observed, stochastic two-agent reconnaissance mission.
 
 use axionomy::{
-    Account, EconomicView, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Quantity,
-    Rate, Trace, basket,
+    Account, EconomicView, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant,
+    ObservationKey, Quantity, Rate, Trace, basket,
 };
 use axionomy_search::{
     action_source::{ActionSource, lazy_actions},
@@ -116,8 +116,8 @@ pub enum Policy {
 pub type World = Economy<AccountId, Asset, RateId, Role>;
 pub type Action = Exchange<RateId, Role, AccountId>;
 pub type AgentView<'a> = EconomicView<'a, AccountId, Asset, RateId, Role>;
-pub type ObservationKey = Vec<(AccountId, Asset, Quantity)>;
-pub type MissionInformation = InformationState<ObservationKey>;
+pub type MissionObservation = ObservationKey<AccountId, Asset>;
+pub type MissionInformation = InformationState<MissionObservation>;
 
 #[derive(Debug, Clone)]
 pub struct MissionRollout {
@@ -697,6 +697,7 @@ fn policy_action(world: &World, policy: Policy) -> Option<Action> {
 fn observed(information: &MissionInformation, account: AccountId, asset: Asset) -> bool {
     information
         .key()
+        .balances()
         .iter()
         .any(|(present_account, present_asset, quantity)| {
             present_account == &account && present_asset == &asset && !quantity.is_zero()

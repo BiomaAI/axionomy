@@ -596,7 +596,7 @@ impl<Action> Edge<Action> {
 mod tests {
     use super::*;
     use crate::action_source::lazy_actions;
-    use axionomy::{Account, EconomyBuilder, Quantity, Rate, basket};
+    use axionomy::{Account, EconomyBuilder, ObservationKey, Quantity, Rate, basket};
 
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
     enum AccountId {
@@ -642,7 +642,7 @@ mod tests {
 
     type World = Economy<AccountId, Asset, RateId, Role>;
     type Action = Exchange<RateId, Role, AccountId>;
-    type Observation = Vec<(AccountId, Asset, Quantity)>;
+    type Observation = ObservationKey<AccountId, Asset>;
 
     fn hidden_world(heads: bool) -> World {
         let truth = if heads {
@@ -756,6 +756,7 @@ mod tests {
     fn has(information: &InformationState<Observation>, asset: Asset) -> bool {
         information
             .key()
+            .balances()
             .iter()
             .any(|(account, present, _)| account == &AccountId::Agent && present == &asset)
     }
@@ -830,6 +831,7 @@ mod tests {
         assert!(
             information(&heads)
                 .key()
+                .balances()
                 .iter()
                 .all(|(_, asset, _)| { !matches!(asset, Asset::TruthHeads | Asset::TruthTails) })
         );
