@@ -60,6 +60,7 @@ pub enum Asset {
     TimeRemaining,
     ElapsedTime,
     Planning,
+    AwaitingScan,
     AwaitingEncounter,
     NeedsTreatment,
     AreaSafe,
@@ -83,7 +84,8 @@ pub enum RateId {
         seed: u8,
         hazard: Hazard,
     },
-    Scan {
+    BeginScan,
+    ResolveScan {
         truth: Location,
         seed: u8,
         report: Location,
@@ -224,31 +226,42 @@ pub fn initial() -> World {
 
             let report = signal(truth, seed);
             builder = builder.rate(
-                RateId::Scan {
+                RateId::ResolveScan {
                     truth,
                     seed,
                     report,
                     next_seed: (seed + 1) % 4,
                 },
                 Rate::new()
-                    .preserve(Role::Scout, basket([(Asset::At(Location::Base), 1)]))
-                    .consume(Role::Scout, basket([(Asset::Sensor, 1)]))
-                    .produce(
-                        Role::Scout,
-                        basket([(Asset::UsedSensor, 1), (Asset::Intel(report), 1)]),
-                    )
+                    .produce(Role::Scout, basket([(Asset::Intel(report), 1)]))
                     .preserve(Role::Nature, basket([(Asset::Truth(truth), 1)]))
                     .consume(Role::Nature, basket([(Asset::Seed(seed), 1)]))
                     .produce(Role::Nature, basket([(Asset::Seed((seed + 1) % 4), 1)]))
-                    .preserve(Role::Mission, basket([(Asset::Planning, 1)]))
-                    .consume(Role::Mission, basket([(Asset::TimeRemaining, 1)]))
-                    .produce(Role::Mission, basket([(Asset::ElapsedTime, 1)]))
+                    .consume(Role::Mission, basket([(Asset::AwaitingScan, 1)]))
+                    .produce(Role::Mission, basket([(Asset::Planning, 1)]))
                     .distinct(Role::Scout, Role::Nature)
                     .distinct(Role::Scout, Role::Mission)
                     .distinct(Role::Nature, Role::Mission),
             );
         }
     }
+
+    builder = builder.rate(
+        RateId::BeginScan,
+        Rate::new()
+            .preserve(Role::Scout, basket([(Asset::At(Location::Base), 1)]))
+            .consume(Role::Scout, basket([(Asset::Sensor, 1)]))
+            .produce(Role::Scout, basket([(Asset::UsedSensor, 1)]))
+            .consume(
+                Role::Mission,
+                basket([(Asset::Planning, 1), (Asset::TimeRemaining, 1)]),
+            )
+            .produce(
+                Role::Mission,
+                basket([(Asset::AwaitingScan, 1), (Asset::ElapsedTime, 1)]),
+            )
+            .distinct(Role::Scout, Role::Mission),
+    );
 
     for location in [Location::North, Location::South] {
         builder = builder
@@ -404,6 +417,7 @@ pub fn initial() -> World {
         .invariant(
             LinearInvariant::new("mission lifecycle")
                 .weight(Asset::Planning, 1)
+                .weight(Asset::AwaitingScan, 1)
                 .weight(Asset::AwaitingEncounter, 1)
                 .weight(Asset::NeedsTreatment, 1)
                 .weight(Asset::AreaSafe, 1)
@@ -525,6 +539,14 @@ pub fn monte_carlo(model: &World, samples: usize) -> Option<MonteCarloEstimate> 
 
 fn policy_action(world: &World, policy: Policy) -> Option<Action> {
     if !world
+        .balance(&AccountId::Mission, &Asset::AwaitingScan)
+        .is_zero()
+    {
+        return candidates(world)
+            .into_iter()
+            .find(|exchange| matches!(exchange.rate(), RateId::ResolveScan { .. }));
+    }
+    if !world
         .balance(&AccountId::Mission, &Asset::Rescued)
         .is_zero()
     {
@@ -560,9 +582,7 @@ fn policy_action(world: &World, policy: Policy) -> Option<Action> {
                 .balance(&AccountId::Agent(AgentId::Scout), &Asset::Sensor)
                 .is_some_and(|quantity| !quantity.is_zero())
             {
-                return candidates(world)
-                    .into_iter()
-                    .find(|exchange| matches!(exchange.rate(), RateId::Scan { .. }));
+                return Some(action(RateId::BeginScan));
             }
             if let Some(location) = believed_location(&scout, AgentId::Scout, false) {
                 return Some(action(RateId::Share(location)));
@@ -636,7 +656,10 @@ fn action(rate: RateId) -> Action {
     let exchange = Exchange::new(rate, Quantity::new(1));
     match rate {
         RateId::Instantiate { .. } => exchange.bind(Role::Nature, AccountId::Nature),
-        RateId::Scan { .. } => exchange
+        RateId::BeginScan => exchange
+            .bind(Role::Scout, AccountId::Agent(AgentId::Scout))
+            .bind(Role::Mission, AccountId::Mission),
+        RateId::ResolveScan { .. } => exchange
             .bind(Role::Scout, AccountId::Agent(AgentId::Scout))
             .bind(Role::Nature, AccountId::Nature)
             .bind(Role::Mission, AccountId::Mission),
@@ -686,6 +709,20 @@ mod tests {
                 .iter()
                 .map(Action::rate)
                 .collect::<Vec<_>>()
+        );
+        assert!(
+            rollout
+                .trace()
+                .exchanges()
+                .iter()
+                .any(|exchange| exchange.rate() == &RateId::BeginScan)
+        );
+        assert!(
+            rollout
+                .trace()
+                .exchanges()
+                .iter()
+                .any(|exchange| matches!(exchange.rate(), RateId::ResolveScan { .. }))
         );
         assert!(
             rollout
