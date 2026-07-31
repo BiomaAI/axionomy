@@ -4,13 +4,19 @@ fn main() {
     let initial = exact_cover::initial();
     let generic = exact_cover::solve_bfs(&initial).expect("exact cover exists");
     let specialized = exact_cover::algorithm_x(&initial).expect("Algorithm X finds a cover");
-    let final_world = initial
+    let generic_world = initial
+        .replayed(generic.trace())
+        .expect("BFS must emit core-valid exchanges");
+    let specialized_world = initial
         .replayed(&specialized)
         .expect("Algorithm X must emit core-valid exchanges");
-    assert!(final_world.matches(&exact_cover::goal()));
+
+    assert!(generic_world.matches(&exact_cover::goal()));
+    assert!(specialized_world.matches(&exact_cover::goal()));
 
     println!(
-        "Exact cover: BFS and Algorithm X agree on {} exchanges",
+        "Exact cover: BFS {} exchanges; Algorithm X {} exchanges; both core-valid",
         generic.trace().exchanges().len(),
+        specialized.exchanges().len(),
     );
 }
