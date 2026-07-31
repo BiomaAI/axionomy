@@ -4,6 +4,7 @@ version = "0.1.0"
 authors = ["Alex Rozgo <alex.rozgo@gmail.com>"]
 description = "Calendar-aware timeline asset bindings for Axionomy"
 edition = "2024"
+license.workspace = true
 readme = "README.md"
 repository = "https://github.com/BiomaAI/axionomy"
 rust-version = "1.89"

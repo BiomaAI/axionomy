@@ -8,12 +8,16 @@ members = [
 ]
 resolver = "3"
 
+[workspace.package]
+license = "MIT"
+
 [package]
 name = "axionomy"
 version = "0.1.0"
 authors = ["Alex Rozgo <alex.rozgo@gmail.com>"]
 description = "Closed economic state-machine primitives for verifiable problem solving"
 edition = "2024"
+license.workspace = true
 readme = "README.md"
 repository = "https://github.com/BiomaAI/axionomy"
 rust-version = "1.89"
