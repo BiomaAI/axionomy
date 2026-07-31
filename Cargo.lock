@@ -92,6 +92,7 @@ name = "axionomy-time"
 version = "0.1.0"
 dependencies = [
  "axionomy",
+ "axionomy-units",
  "jiff",
  "thiserror",
  "tracing",

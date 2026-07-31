@@ -10,6 +10,7 @@ rust-version = "1.89"
 
 [dependencies]
 axionomy = { version = "0.1.0", path = "../.." }
+axionomy-units = { version = "0.1.0", path = "../axionomy-units" }
 jiff = { version = "0.2.35", features = ["serde"] }
 thiserror = "2.0.19"
 
