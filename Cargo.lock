@@ -59,6 +59,8 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
@@ -92,6 +94,8 @@ dependencies = [
  "axionomy",
  "jiff",
  "thiserror",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
@@ -103,6 +107,8 @@ dependencies = [
  "num-traits",
  "proptest",
  "thiserror",
+ "tracing",
+ "tracing-subscriber",
  "uom",
 ]
 
