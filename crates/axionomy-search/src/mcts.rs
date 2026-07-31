@@ -1,6 +1,9 @@
 //! Monte Carlo tree search over core-validated economy branches.
 
-use crate::sampling::{SamplingError, SeededSampler, TicketSource, WeightedExchange, sample};
+use crate::{
+    action_source::{ActionSource, collect_actions, eager_actions},
+    sampling::{SamplingError, SeededSampler, TicketSource, WeightedExchange, sample},
+};
 use axionomy::{ApplyError, Economy, Exchange, Quantity};
 use std::collections::HashMap;
 use std::hash::Hash;
@@ -152,12 +155,12 @@ pub fn search<
     initial: &Economy<AccountId, A, RateId, Role>,
     config: MctsConfig,
     players: usize,
-    mut candidates: Candidates,
-    mut chance: Chance,
-    mut actor: Actor,
-    mut terminal: Terminal,
-    mut cutoff: Cutoff,
-    mut rollout_policy: RolloutPolicy,
+    candidates: Candidates,
+    chance: Chance,
+    actor: Actor,
+    terminal: Terminal,
+    cutoff: Cutoff,
+    rollout_policy: RolloutPolicy,
 ) -> MctsResult<RateId, Role, AccountId, A>
 where
     AccountId: Clone + Eq + Hash + Ord,
@@ -178,6 +181,64 @@ where
         &mut SeededSampler,
     ) -> Option<Exchange<RateId, Role, AccountId>>,
 {
+    search_with_source(
+        initial,
+        config,
+        players,
+        eager_actions(candidates),
+        chance,
+        actor,
+        terminal,
+        cutoff,
+        rollout_policy,
+    )
+}
+
+/// Runs vector-valued MCTS with visitor-based concrete action generation.
+///
+/// Emitted proposals remain non-authoritative: this function retains only
+/// exchanges applicable to each simulated economy before traversing them.
+#[allow(clippy::too_many_arguments)]
+pub fn search_with_source<
+    AccountId,
+    A,
+    RateId,
+    Role,
+    Source,
+    Chance,
+    Actor,
+    Terminal,
+    Cutoff,
+    RolloutPolicy,
+>(
+    initial: &Economy<AccountId, A, RateId, Role>,
+    config: MctsConfig,
+    players: usize,
+    mut source: Source,
+    mut chance: Chance,
+    mut actor: Actor,
+    mut terminal: Terminal,
+    mut cutoff: Cutoff,
+    mut rollout_policy: RolloutPolicy,
+) -> MctsResult<RateId, Role, AccountId, A>
+where
+    AccountId: Clone + Eq + Hash + Ord,
+    A: Clone + Eq + Hash + Ord,
+    RateId: Clone + Eq + Hash + Ord,
+    Role: Clone + Ord,
+    Source: ActionSource<Economy<AccountId, A, RateId, Role>, Exchange<RateId, Role, AccountId>>,
+    Chance: FnMut(
+        &Economy<AccountId, A, RateId, Role>,
+    ) -> Vec<WeightedExchange<Exchange<RateId, Role, AccountId>>>,
+    Actor: FnMut(&Economy<AccountId, A, RateId, Role>) -> usize,
+    Terminal: FnMut(&Economy<AccountId, A, RateId, Role>) -> Option<Vec<f64>>,
+    Cutoff: FnMut(&Economy<AccountId, A, RateId, Role>) -> Vec<f64>,
+    RolloutPolicy: FnMut(
+        &Economy<AccountId, A, RateId, Role>,
+        &[Exchange<RateId, Role, AccountId>],
+        &mut SeededSampler,
+    ) -> Option<Exchange<RateId, Role, AccountId>>,
+{
     validate_config(config, players)?;
     if terminal(initial).is_some() {
         return Err(MctsError::TerminalRoot);
@@ -185,7 +246,7 @@ where
     if !chance(initial).is_empty() {
         return Err(MctsError::ChanceRoot);
     }
-    let root_actions = candidates(initial);
+    let root_actions = applicable_actions(&mut source, initial);
     if root_actions.is_empty() {
         return Err(MctsError::NoRootActions);
     }
@@ -227,7 +288,7 @@ where
                         depth,
                         config.max_depth(),
                         players,
-                        &mut candidates,
+                        &mut source,
                         &mut chance,
                         &mut terminal,
                         &mut cutoff,
@@ -238,7 +299,7 @@ where
                 continue;
             }
 
-            let actions = candidates(&nodes[node_index].world);
+            let actions = applicable_actions(&mut source, &nodes[node_index].world);
             if actions.is_empty() {
                 break validate_values(cutoff(&nodes[node_index].world), players)?;
             }
@@ -267,7 +328,7 @@ where
                     depth,
                     config.max_depth(),
                     players,
-                    &mut candidates,
+                    &mut source,
                     &mut chance,
                     &mut terminal,
                     &mut cutoff,
@@ -331,12 +392,12 @@ where
 }
 
 #[allow(clippy::too_many_arguments)]
-fn simulate<AccountId, A, RateId, Role, Candidates, Chance, Terminal, Cutoff, RolloutPolicy>(
+fn simulate<AccountId, A, RateId, Role, Source, Chance, Terminal, Cutoff, RolloutPolicy>(
     initial: &Economy<AccountId, A, RateId, Role>,
     mut depth: usize,
     max_depth: usize,
     players: usize,
-    candidates: &mut Candidates,
+    source: &mut Source,
     chance: &mut Chance,
     terminal: &mut Terminal,
     cutoff: &mut Cutoff,
@@ -348,8 +409,7 @@ where
     A: Clone + Eq + Hash + Ord,
     RateId: Clone + Eq + Hash + Ord,
     Role: Clone + Ord,
-    Candidates:
-        FnMut(&Economy<AccountId, A, RateId, Role>) -> Vec<Exchange<RateId, Role, AccountId>>,
+    Source: ActionSource<Economy<AccountId, A, RateId, Role>, Exchange<RateId, Role, AccountId>>,
     Chance: FnMut(
         &Economy<AccountId, A, RateId, Role>,
     ) -> Vec<WeightedExchange<Exchange<RateId, Role, AccountId>>>,
@@ -372,7 +432,7 @@ where
 
         let outcomes = chance(&world);
         let action = if outcomes.is_empty() {
-            let actions = candidates(&world);
+            let actions = applicable_actions(source, &world);
             if actions.is_empty() {
                 return validate_values(cutoff(&world), players);
             }
@@ -388,6 +448,28 @@ where
         world.apply(action).map_err(MctsError::Rejected)?;
         depth += 1;
     }
+}
+
+fn applicable_actions<AccountId, A, RateId, Role>(
+    source: &mut impl ActionSource<
+        Economy<AccountId, A, RateId, Role>,
+        Exchange<RateId, Role, AccountId>,
+    >,
+    world: &Economy<AccountId, A, RateId, Role>,
+) -> Vec<Exchange<RateId, Role, AccountId>>
+where
+    AccountId: Clone + Eq + Hash + Ord,
+    A: Clone + Eq + Hash + Ord,
+    RateId: Clone + Eq + Hash + Ord,
+    Role: Clone + Ord,
+{
+    let mut actions = Vec::new();
+    for action in collect_actions(source, world) {
+        if world.is_applicable(&action) && !actions.contains(&action) {
+            actions.push(action);
+        }
+    }
+    actions
 }
 
 fn descend_or_expand<AccountId, A, RateId, Role>(
@@ -540,6 +622,7 @@ struct Edge<RateId, Role, AccountId> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::action_source::lazy_actions;
     use axionomy::{Account, EconomyBuilder, Rate, basket};
 
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -633,6 +716,30 @@ mod tests {
         assert_eq!(decision.action().rate(), &RateId::Win);
         assert_eq!(decision.iterations(), 64);
         assert_eq!(decision.children().len(), 2);
+    }
+
+    #[test]
+    fn lazy_proposals_are_core_filtered_before_traversal() {
+        let decision = search_with_source(
+            &game(),
+            MctsConfig::new(32, 3).with_seed(5),
+            1,
+            lazy_actions(
+                |_: &World, emit: &mut dyn FnMut(Exchange<RateId, Role, AccountId>)| {
+                    emit(action(RateId::Win));
+                    emit(Exchange::new(RateId::Lose, Quantity::new(1)));
+                },
+            ),
+            |_| Vec::new(),
+            |_| 0,
+            |world| (!world.balance(&AccountId::Game, &Asset::Won).is_zero()).then_some(vec![1.0]),
+            |_| vec![0.0],
+            random_action,
+        )
+        .expect("the one applicable lazy proposal can be searched");
+
+        assert_eq!(decision.action().rate(), &RateId::Win);
+        assert_eq!(decision.children().len(), 1);
     }
 
     #[test]
