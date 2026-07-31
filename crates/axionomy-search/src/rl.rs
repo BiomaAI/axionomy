@@ -92,7 +92,7 @@ where
                 .map(|(asset, missing)| ShortfallFeature {
                     account: shortfall.account().clone(),
                     asset: asset.clone(),
-                    missing,
+                    missing: missing.clone(),
                 })
         })
         .collect()

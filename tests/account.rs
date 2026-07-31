@@ -68,12 +68,12 @@ fn deposit_overflow_is_atomic() {
 fn baskets_scale_with_checked_arithmetic() {
     let balances = basket([(Asset::Credits, 4), (Asset::Tokens, 3)]);
 
-    let scaled = balances.checked_scale(Quantity::new(2)).unwrap();
+    let scaled = balances.checked_scale(&Quantity::new(2)).unwrap();
 
     assert_eq!(scaled, basket([(Asset::Credits, 8), (Asset::Tokens, 6)]));
     assert_eq!(
         basket([(Asset::Credits, u64::MAX)])
-            .checked_scale(Quantity::new(2))
+            .checked_scale(&Quantity::new(2))
             .unwrap_err(),
         Asset::Credits
     );
@@ -86,8 +86,8 @@ fn baskets_offer_deterministic_sorted_iteration() {
     assert_eq!(
         balances.iter_sorted().collect::<Vec<_>>(),
         vec![
-            (&Asset::Credits, Quantity::new(5)),
-            (&Asset::Tokens, Quantity::new(2)),
+            (&Asset::Credits, &Quantity::new(5)),
+            (&Asset::Tokens, &Quantity::new(2)),
         ]
     );
 }

@@ -15,5 +15,5 @@ pub use economy::{
     SimulationResult, StateFingerprint,
 };
 pub use exchange::{AccountDelta, Exchange, Receipt, Trace};
-pub use quantity::Quantity;
+pub use quantity::{Quantity, QuantityError, QuantityScalar};
 pub use rate::{LinearInvariant, Rate, basket};

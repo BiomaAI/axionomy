@@ -1,20 +1,22 @@
-use crate::{Account, Basket, Quantity};
+use crate::{Account, Basket, Quantity, QuantityScalar};
+use num_traits::{CheckedAdd, Zero};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::hash::Hash;
 
 #[derive(Debug, Clone)]
-pub struct Rate<Role, A> {
-    consume: BTreeMap<Role, Basket<A>>,
-    produce: BTreeMap<Role, Basket<A>>,
-    preserve: BTreeMap<Role, Basket<A>>,
+pub struct Rate<Role, A, N = u64> {
+    consume: BTreeMap<Role, Basket<A, N>>,
+    produce: BTreeMap<Role, Basket<A, N>>,
+    preserve: BTreeMap<Role, Basket<A, N>>,
     roles: BTreeSet<Role>,
     distinct: BTreeSet<(Role, Role)>,
 }
 
-impl<Role, A> Rate<Role, A>
+impl<Role, A, N> Rate<Role, A, N>
 where
     Role: Clone + Ord,
     A: Clone + Eq + Hash,
+    N: QuantityScalar,
 {
     pub fn new() -> Self {
         Self {
@@ -26,19 +28,19 @@ where
         }
     }
 
-    pub fn consume(mut self, role: Role, basket: Basket<A>) -> Self {
+    pub fn consume(mut self, role: Role, basket: Basket<A, N>) -> Self {
         self.roles.insert(role.clone());
         merge(&mut self.consume, role, basket);
         self
     }
 
-    pub fn produce(mut self, role: Role, basket: Basket<A>) -> Self {
+    pub fn produce(mut self, role: Role, basket: Basket<A, N>) -> Self {
         self.roles.insert(role.clone());
         merge(&mut self.produce, role, basket);
         self
     }
 
-    pub fn preserve(mut self, role: Role, basket: Basket<A>) -> Self {
+    pub fn preserve(mut self, role: Role, basket: Basket<A, N>) -> Self {
         self.roles.insert(role.clone());
         merge(&mut self.preserve, role, basket);
         self
@@ -60,15 +62,15 @@ where
         self.roles.iter()
     }
 
-    pub fn consumed(&self, role: &Role) -> Option<&Basket<A>> {
+    pub fn consumed(&self, role: &Role) -> Option<&Basket<A, N>> {
         self.consume.get(role)
     }
 
-    pub fn produced(&self, role: &Role) -> Option<&Basket<A>> {
+    pub fn produced(&self, role: &Role) -> Option<&Basket<A, N>> {
         self.produce.get(role)
     }
 
-    pub fn preserved(&self, role: &Role) -> Option<&Basket<A>> {
+    pub fn preserved(&self, role: &Role) -> Option<&Basket<A, N>> {
         self.preserve.get(role)
     }
 
@@ -77,20 +79,22 @@ where
     }
 }
 
-impl<Role, A> Default for Rate<Role, A>
+impl<Role, A, N> Default for Rate<Role, A, N>
 where
     Role: Clone + Ord,
     A: Clone + Eq + Hash,
+    N: QuantityScalar,
 {
     fn default() -> Self {
         Self::new()
     }
 }
 
-fn merge<Role, A>(target: &mut BTreeMap<Role, Basket<A>>, role: Role, basket: Basket<A>)
+fn merge<Role, A, N>(target: &mut BTreeMap<Role, Basket<A, N>>, role: Role, basket: Basket<A, N>)
 where
     Role: Ord,
     A: Clone + Eq + Hash,
+    N: QuantityScalar,
 {
     if target
         .entry(role)
@@ -132,24 +136,28 @@ where
         &self.name
     }
 
-    pub fn measure<AccountId, Holder>(&self, accounts: &HashMap<AccountId, Holder>) -> Option<i128>
+    pub fn measure<AccountId, Holder, N>(
+        &self,
+        accounts: &HashMap<AccountId, Holder>,
+    ) -> Option<N::SignedMeasure>
     where
         A: Clone,
-        Holder: AsRef<Account<A>>,
+        Holder: AsRef<Account<A, N>>,
+        N: QuantityScalar,
     {
-        let mut total = 0_i128;
+        let mut total = N::SignedMeasure::zero();
         for account in accounts.values() {
             for (asset, quantity) in account.as_ref().balances().iter() {
-                let weight = i128::from(*self.weights.get(asset).unwrap_or(&0));
-                let weighted = weight.checked_mul(i128::from(quantity.get()))?;
-                total = total.checked_add(weighted)?;
+                let coefficient = *self.weights.get(asset).unwrap_or(&0);
+                let weighted = quantity.as_scalar().checked_weighted(coefficient)?;
+                total = CheckedAdd::checked_add(&total, &weighted)?;
             }
         }
         Some(total)
     }
 }
 
-pub fn basket<A, const N: usize>(entries: [(A, u64); N]) -> Basket<A>
+pub fn basket<A, const LEN: usize>(entries: [(A, u64); LEN]) -> Basket<A>
 where
     A: Eq + Hash,
 {

@@ -1,41 +1,42 @@
-use crate::{Basket, Quantity};
-use std::error::Error;
-use std::fmt;
+use crate::{Basket, Quantity, QuantityScalar};
 use std::hash::Hash;
+use thiserror::Error;
 
 #[derive(Debug, Clone)]
-pub struct Account<A> {
-    balances: Basket<A>,
+pub struct Account<A, N = u64> {
+    balances: Basket<A, N>,
 }
 
-impl<A> Account<A> {
-    pub fn new(balances: Basket<A>) -> Self {
+impl<A, N> Account<A, N> {
+    pub fn new(balances: Basket<A, N>) -> Self {
         Self { balances }
     }
 
-    pub fn balances(&self) -> &Basket<A> {
+    pub fn balances(&self) -> &Basket<A, N> {
         &self.balances
     }
 
-    pub fn into_balances(self) -> Basket<A> {
+    pub fn into_balances(self) -> Basket<A, N> {
         self.balances
     }
 }
 
-impl<A> Account<A>
+impl<A, N> Account<A, N>
 where
     A: Eq + Hash,
+    N: QuantityScalar,
 {
-    pub fn balance(&self, asset: &A) -> Quantity {
+    pub fn balance(&self, asset: &A) -> Quantity<N> {
         self.balances.quantity(asset)
     }
 }
 
-impl<A> Account<A>
+impl<A, N> Account<A, N>
 where
     A: Clone + Eq + Hash,
+    N: QuantityScalar,
 {
-    pub fn deposit(&mut self, assets: &Basket<A>) -> Result<(), AccountError<A>> {
+    pub fn deposit(&mut self, assets: &Basket<A, N>) -> Result<(), AccountError<A, N>> {
         let mut updated = self.balances.clone();
 
         for (asset, amount) in assets.iter() {
@@ -52,7 +53,7 @@ where
         Ok(())
     }
 
-    pub fn withdraw(&mut self, assets: &Basket<A>) -> Result<(), AccountError<A>> {
+    pub fn withdraw(&mut self, assets: &Basket<A, N>) -> Result<(), AccountError<A, N>> {
         let shortfall = self.balances.shortfall(assets);
         if !shortfall.is_empty() {
             return Err(AccountError::InsufficientBalance { shortfall });
@@ -72,60 +73,43 @@ where
     }
 }
 
-impl<A> Default for Account<A> {
+impl<A, N> Default for Account<A, N> {
     fn default() -> Self {
         Self::new(Basket::new())
     }
 }
 
-impl<A> PartialEq for Account<A>
+impl<A, N> PartialEq for Account<A, N>
 where
     A: Eq + Hash,
+    N: PartialEq,
 {
     fn eq(&self, other: &Self) -> bool {
         self.balances == other.balances
     }
 }
 
-impl<A> Eq for Account<A> where A: Eq + Hash {}
+impl<A, N> Eq for Account<A, N>
+where
+    A: Eq + Hash,
+    N: Eq,
+{
+}
 
-impl<A> From<Basket<A>> for Account<A> {
-    fn from(balances: Basket<A>) -> Self {
+impl<A, N> From<Basket<A, N>> for Account<A, N> {
+    fn from(balances: Basket<A, N>) -> Self {
         Self::new(balances)
     }
 }
 
-#[derive(Debug, Clone)]
-pub enum AccountError<A> {
-    InsufficientBalance { shortfall: Basket<A> },
-    Overflow { asset: A },
-}
-
-impl<A> fmt::Display for AccountError<A> {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::InsufficientBalance { .. } => formatter.write_str("insufficient balance"),
-            Self::Overflow { .. } => formatter.write_str("account balance overflow"),
-        }
-    }
-}
-
-impl<A> Error for AccountError<A> where A: fmt::Debug {}
-
-impl<A> PartialEq for AccountError<A>
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
+pub enum AccountError<A, N = u64>
 where
     A: Eq + Hash,
+    N: Eq,
 {
-    fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (
-                Self::InsufficientBalance { shortfall: left },
-                Self::InsufficientBalance { shortfall: right },
-            ) => left == right,
-            (Self::Overflow { asset: left }, Self::Overflow { asset: right }) => left == right,
-            _ => false,
-        }
-    }
+    #[error("insufficient balance")]
+    InsufficientBalance { shortfall: Basket<A, N> },
+    #[error("account balance overflow")]
+    Overflow { asset: A },
 }
-
-impl<A> Eq for AccountError<A> where A: Eq + Hash {}

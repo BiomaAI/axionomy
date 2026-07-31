@@ -1,14 +1,14 @@
-use crate::Quantity;
+use crate::{Quantity, QuantityScalar};
 use std::collections::HashMap;
 use std::hash::Hash;
 use std::iter::FromIterator;
 
 #[derive(Debug, Clone)]
-pub struct Basket<A> {
-    quantities: HashMap<A, Quantity>,
+pub struct Basket<A, N = u64> {
+    quantities: HashMap<A, Quantity<N>>,
 }
 
-impl<A> Basket<A> {
+impl<A, N> Basket<A, N> {
     pub fn new() -> Self {
         Self {
             quantities: HashMap::new(),
@@ -23,14 +23,12 @@ impl<A> Basket<A> {
         self.quantities.is_empty()
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = (&A, Quantity)> {
-        self.quantities
-            .iter()
-            .map(|(asset, quantity)| (asset, *quantity))
+    pub fn iter(&self) -> impl Iterator<Item = (&A, &Quantity<N>)> {
+        self.quantities.iter()
     }
 
     /// Iterates by asset order for stable observations, reports, and encoding.
-    pub fn iter_sorted(&self) -> impl Iterator<Item = (&A, Quantity)>
+    pub fn iter_sorted(&self) -> impl Iterator<Item = (&A, &Quantity<N>)>
     where
         A: Ord,
     {
@@ -40,18 +38,20 @@ impl<A> Basket<A> {
     }
 }
 
-impl<A> Basket<A>
+impl<A, N> Basket<A, N>
 where
     A: Eq + Hash,
+    N: QuantityScalar,
 {
-    pub fn quantity(&self, asset: &A) -> Quantity {
-        self.quantities
-            .get(asset)
-            .copied()
-            .unwrap_or(Quantity::ZERO)
+    pub fn get(&self, asset: &A) -> Option<&Quantity<N>> {
+        self.quantities.get(asset)
     }
 
-    pub fn insert(&mut self, asset: A, quantity: Quantity) -> Option<Quantity> {
+    pub fn quantity(&self, asset: &A) -> Quantity<N> {
+        self.quantities.get(asset).cloned().unwrap_or_default()
+    }
+
+    pub fn insert(&mut self, asset: A, quantity: Quantity<N>) -> Option<Quantity<N>> {
         if quantity.is_zero() {
             self.quantities.remove(&asset)
         } else {
@@ -60,9 +60,10 @@ where
     }
 }
 
-impl<A> Basket<A>
+impl<A, N> Basket<A, N>
 where
     A: Clone + Eq + Hash,
+    N: QuantityScalar,
 {
     pub fn checked_add(&mut self, other: &Self) -> Result<(), A> {
         let mut updated = self.clone();
@@ -78,7 +79,7 @@ where
         Ok(())
     }
 
-    pub fn checked_scale(&self, units: Quantity) -> Result<Self, A> {
+    pub fn checked_scale(&self, units: &Quantity<N>) -> Result<Self, A> {
         let mut scaled = Self::new();
 
         for (asset, quantity) in self.iter() {
@@ -96,9 +97,9 @@ where
 
         for (asset, required_quantity) in required.iter() {
             let available = self.quantity(asset);
-            if available < required_quantity {
+            if available < *required_quantity {
                 let missing = required_quantity
-                    .checked_sub(available)
+                    .checked_sub(&available)
                     .expect("available quantity is smaller than required quantity");
                 shortfall.insert(asset.clone(), missing);
             }
@@ -112,30 +113,37 @@ where
     }
 }
 
-impl<A> Default for Basket<A> {
+impl<A, N> Default for Basket<A, N> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<A> PartialEq for Basket<A>
+impl<A, N> PartialEq for Basket<A, N>
 where
     A: Eq + Hash,
+    N: PartialEq,
 {
     fn eq(&self, other: &Self) -> bool {
         self.quantities == other.quantities
     }
 }
 
-impl<A> Eq for Basket<A> where A: Eq + Hash {}
-
-impl<A> FromIterator<(A, Quantity)> for Basket<A>
+impl<A, N> Eq for Basket<A, N>
 where
     A: Eq + Hash,
+    N: Eq,
+{
+}
+
+impl<A, N> FromIterator<(A, Quantity<N>)> for Basket<A, N>
+where
+    A: Eq + Hash,
+    N: QuantityScalar,
 {
     fn from_iter<T>(entries: T) -> Self
     where
-        T: IntoIterator<Item = (A, Quantity)>,
+        T: IntoIterator<Item = (A, Quantity<N>)>,
     {
         let mut basket = Self::new();
         for (asset, quantity) in entries {
@@ -145,11 +153,12 @@ where
     }
 }
 
-impl<A, const N: usize> From<[(A, Quantity); N]> for Basket<A>
+impl<A, N, const LEN: usize> From<[(A, Quantity<N>); LEN]> for Basket<A, N>
 where
     A: Eq + Hash,
+    N: QuantityScalar,
 {
-    fn from(entries: [(A, Quantity); N]) -> Self {
+    fn from(entries: [(A, Quantity<N>); LEN]) -> Self {
         entries.into_iter().collect()
     }
 }

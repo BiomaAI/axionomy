@@ -1,6 +1,6 @@
 use crate::{
-    Account, AccountDelta, AccountError, Basket, Exchange, LinearInvariant, Quantity, Rate,
-    Receipt, Trace,
+    Account, AccountDelta, AccountError, Basket, Exchange, LinearInvariant, Quantity,
+    QuantityScalar, Rate, Receipt, Trace,
 };
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::error::Error;
@@ -9,11 +9,11 @@ use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
 #[derive(Debug, Clone)]
-pub struct Goal<AccountId, A> {
-    required: BTreeMap<AccountId, Basket<A>>,
+pub struct Goal<AccountId, A, N = u64> {
+    required: BTreeMap<AccountId, Basket<A, N>>,
 }
 
-impl<AccountId, A> Goal<AccountId, A>
+impl<AccountId, A, N> Goal<AccountId, A, N>
 where
     AccountId: Ord,
 {
@@ -23,17 +23,17 @@ where
         }
     }
 
-    pub fn require(mut self, account: AccountId, assets: Basket<A>) -> Self {
+    pub fn require(mut self, account: AccountId, assets: Basket<A, N>) -> Self {
         self.required.insert(account, assets);
         self
     }
 
-    pub fn requirements(&self) -> &BTreeMap<AccountId, Basket<A>> {
+    pub fn requirements(&self) -> &BTreeMap<AccountId, Basket<A, N>> {
         &self.required
     }
 }
 
-impl<AccountId, A> Default for Goal<AccountId, A>
+impl<AccountId, A, N> Default for Goal<AccountId, A, N>
 where
     AccountId: Ord,
 {
@@ -43,9 +43,9 @@ where
 }
 
 #[derive(Debug, Clone)]
-pub struct Economy<AccountId, A, RateId, Role> {
-    accounts: HashMap<AccountId, Arc<Account<A>>>,
-    rates: Arc<HashMap<RateId, Rate<Role, A>>>,
+pub struct Economy<AccountId, A, RateId, Role, N = u64> {
+    accounts: HashMap<AccountId, Arc<Account<A, N>>>,
+    rates: Arc<HashMap<RateId, Rate<Role, A, N>>>,
     invariants: Arc<Vec<LinearInvariant<A>>>,
 }
 
@@ -62,18 +62,18 @@ impl StateFingerprint {
     }
 }
 
-pub type ApplyResult<AccountId, A, RateId, Role> =
-    Result<Receipt<RateId, Role, AccountId, A>, ApplyError<RateId, Role, AccountId, A>>;
+pub type ApplyResult<AccountId, A, RateId, Role, N = u64> =
+    Result<Receipt<RateId, Role, AccountId, A, N>, ApplyError<RateId, Role, AccountId, A, N>>;
 
-pub type ReplayResult<AccountId, A, RateId, Role> =
-    Result<Vec<Receipt<RateId, Role, AccountId, A>>, ApplyError<RateId, Role, AccountId, A>>;
+pub type ReplayResult<AccountId, A, RateId, Role, N = u64> =
+    Result<Vec<Receipt<RateId, Role, AccountId, A, N>>, ApplyError<RateId, Role, AccountId, A, N>>;
 
-pub type SimulationResult<AccountId, A, RateId, Role> = Result<
+pub type SimulationResult<AccountId, A, RateId, Role, N = u64> = Result<
     (
-        Economy<AccountId, A, RateId, Role>,
-        Receipt<RateId, Role, AccountId, A>,
+        Economy<AccountId, A, RateId, Role, N>,
+        Receipt<RateId, Role, AccountId, A, N>,
     ),
-    ApplyError<RateId, Role, AccountId, A>,
+    ApplyError<RateId, Role, AccountId, A, N>,
 >;
 
 /// The high-level result of assessing an exchange without mutating the economy.
@@ -86,48 +86,48 @@ pub enum AssessmentStatus {
 
 /// One account's complete rate-derived requirements and effects.
 #[derive(Debug, Clone)]
-pub struct AccountAssessment<AccountId, A> {
+pub struct AccountAssessment<AccountId, A, N = u64> {
     account: AccountId,
-    available: Basket<A>,
-    required: Basket<A>,
-    consumed: Basket<A>,
-    produced: Basket<A>,
-    preserved: Basket<A>,
+    available: Basket<A, N>,
+    required: Basket<A, N>,
+    consumed: Basket<A, N>,
+    produced: Basket<A, N>,
+    preserved: Basket<A, N>,
 }
 
-impl<AccountId, A> AccountAssessment<AccountId, A> {
+impl<AccountId, A, N> AccountAssessment<AccountId, A, N> {
     pub fn account(&self) -> &AccountId {
         &self.account
     }
 
     /// Balances relevant to this exchange's requirements.
-    pub fn available(&self) -> &Basket<A> {
+    pub fn available(&self) -> &Basket<A, N> {
         &self.available
     }
 
-    pub fn required(&self) -> &Basket<A> {
+    pub fn required(&self) -> &Basket<A, N> {
         &self.required
     }
 
-    pub fn consumed(&self) -> &Basket<A> {
+    pub fn consumed(&self) -> &Basket<A, N> {
         &self.consumed
     }
 
-    pub fn produced(&self) -> &Basket<A> {
+    pub fn produced(&self) -> &Basket<A, N> {
         &self.produced
     }
 
-    pub fn preserved(&self) -> &Basket<A> {
+    pub fn preserved(&self) -> &Basket<A, N> {
         &self.preserved
     }
 
     fn new(
         account: AccountId,
-        available: Basket<A>,
-        required: Basket<A>,
-        consumed: Basket<A>,
-        produced: Basket<A>,
-        preserved: Basket<A>,
+        available: Basket<A, N>,
+        required: Basket<A, N>,
+        consumed: Basket<A, N>,
+        produced: Basket<A, N>,
+        preserved: Basket<A, N>,
     ) -> Self {
         Self {
             account,
@@ -142,21 +142,21 @@ impl<AccountId, A> AccountAssessment<AccountId, A> {
 
 /// The exact assets one account lacks for a well-formed exchange.
 #[derive(Debug, Clone)]
-pub struct AccountShortfall<AccountId, A> {
+pub struct AccountShortfall<AccountId, A, N = u64> {
     account: AccountId,
-    missing: Basket<A>,
+    missing: Basket<A, N>,
 }
 
-impl<AccountId, A> AccountShortfall<AccountId, A> {
+impl<AccountId, A, N> AccountShortfall<AccountId, A, N> {
     pub fn account(&self) -> &AccountId {
         &self.account
     }
 
-    pub fn missing(&self) -> &Basket<A> {
+    pub fn missing(&self) -> &Basket<A, N> {
         &self.missing
     }
 
-    fn new(account: AccountId, missing: Basket<A>) -> Self {
+    fn new(account: AccountId, missing: Basket<A, N>) -> Self {
         Self { account, missing }
     }
 }
@@ -164,25 +164,31 @@ impl<AccountId, A> AccountShortfall<AccountId, A> {
 /// A non-mutating explanation of one proposed exchange.
 #[must_use]
 #[derive(Debug, Clone)]
-pub enum ExchangeAssessment<AccountId, A, RateId, Role> {
+pub enum ExchangeAssessment<AccountId, A, RateId, Role, N = u64>
+where
+    N: QuantityScalar,
+{
     /// Every check succeeded; projected deltas match a subsequent receipt if
     /// the economy remains unchanged.
     Applicable {
-        accounts: Vec<AccountAssessment<AccountId, A>>,
-        projected_deltas: Vec<AccountDelta<AccountId, A>>,
+        accounts: Vec<AccountAssessment<AccountId, A, N>>,
+        projected_deltas: Vec<AccountDelta<AccountId, A, N>>,
     },
     /// The proposal is structurally valid but one or more accounts lack assets.
     Infeasible {
-        accounts: Vec<AccountAssessment<AccountId, A>>,
-        shortfalls: Vec<AccountShortfall<AccountId, A>>,
+        accounts: Vec<AccountAssessment<AccountId, A, N>>,
+        shortfalls: Vec<AccountShortfall<AccountId, A, N>>,
     },
     /// The proposal is malformed, overflows, or violates an invariant.
     Invalid {
-        issues: Vec<ApplyError<RateId, Role, AccountId, A>>,
+        issues: Vec<ApplyError<RateId, Role, AccountId, A, N>>,
     },
 }
 
-impl<AccountId, A, RateId, Role> ExchangeAssessment<AccountId, A, RateId, Role> {
+impl<AccountId, A, RateId, Role, N> ExchangeAssessment<AccountId, A, RateId, Role, N>
+where
+    N: QuantityScalar,
+{
     pub fn status(&self) -> AssessmentStatus {
         match self {
             Self::Applicable { .. } => AssessmentStatus::Applicable,
@@ -195,14 +201,14 @@ impl<AccountId, A, RateId, Role> ExchangeAssessment<AccountId, A, RateId, Role> 
         matches!(self, Self::Applicable { .. })
     }
 
-    pub fn accounts(&self) -> &[AccountAssessment<AccountId, A>] {
+    pub fn accounts(&self) -> &[AccountAssessment<AccountId, A, N>] {
         match self {
             Self::Applicable { accounts, .. } | Self::Infeasible { accounts, .. } => accounts,
             Self::Invalid { .. } => &[],
         }
     }
 
-    pub fn account(&self, account: &AccountId) -> Option<&AccountAssessment<AccountId, A>>
+    pub fn account(&self, account: &AccountId) -> Option<&AccountAssessment<AccountId, A, N>>
     where
         AccountId: PartialEq,
     {
@@ -211,14 +217,14 @@ impl<AccountId, A, RateId, Role> ExchangeAssessment<AccountId, A, RateId, Role> 
             .find(|assessment| assessment.account() == account)
     }
 
-    pub fn shortfalls(&self) -> &[AccountShortfall<AccountId, A>] {
+    pub fn shortfalls(&self) -> &[AccountShortfall<AccountId, A, N>] {
         match self {
             Self::Infeasible { shortfalls, .. } => shortfalls,
             Self::Applicable { .. } | Self::Invalid { .. } => &[],
         }
     }
 
-    pub fn shortfall(&self, account: &AccountId) -> Option<&Basket<A>>
+    pub fn shortfall(&self, account: &AccountId) -> Option<&Basket<A, N>>
     where
         AccountId: PartialEq,
     {
@@ -228,7 +234,7 @@ impl<AccountId, A, RateId, Role> ExchangeAssessment<AccountId, A, RateId, Role> 
             .map(AccountShortfall::missing)
     }
 
-    pub fn projected_deltas(&self) -> Option<&[AccountDelta<AccountId, A>]> {
+    pub fn projected_deltas(&self) -> Option<&[AccountDelta<AccountId, A, N>]> {
         match self {
             Self::Applicable {
                 projected_deltas, ..
@@ -237,7 +243,7 @@ impl<AccountId, A, RateId, Role> ExchangeAssessment<AccountId, A, RateId, Role> 
         }
     }
 
-    pub fn issues(&self) -> &[ApplyError<RateId, Role, AccountId, A>] {
+    pub fn issues(&self) -> &[ApplyError<RateId, Role, AccountId, A, N>] {
         match self {
             Self::Invalid { issues } => issues,
             Self::Applicable { .. } | Self::Infeasible { .. } => &[],
@@ -246,13 +252,13 @@ impl<AccountId, A, RateId, Role> ExchangeAssessment<AccountId, A, RateId, Role> 
 }
 
 #[derive(Debug)]
-pub struct EconomyBuilder<AccountId, A, RateId, Role> {
-    accounts: HashMap<AccountId, Account<A>>,
-    rates: HashMap<RateId, Rate<Role, A>>,
+pub struct EconomyBuilder<AccountId, A, RateId, Role, N = u64> {
+    accounts: HashMap<AccountId, Account<A, N>>,
+    rates: HashMap<RateId, Rate<Role, A, N>>,
     invariants: Vec<LinearInvariant<A>>,
 }
 
-impl<AccountId, A, RateId, Role> EconomyBuilder<AccountId, A, RateId, Role>
+impl<AccountId, A, RateId, Role, N> EconomyBuilder<AccountId, A, RateId, Role, N>
 where
     AccountId: Eq + Hash,
     RateId: Eq + Hash,
@@ -265,12 +271,12 @@ where
         }
     }
 
-    pub fn account(mut self, id: AccountId, account: Account<A>) -> Self {
+    pub fn account(mut self, id: AccountId, account: Account<A, N>) -> Self {
         self.accounts.insert(id, account);
         self
     }
 
-    pub fn rate(mut self, id: RateId, rate: Rate<Role, A>) -> Self {
+    pub fn rate(mut self, id: RateId, rate: Rate<Role, A, N>) -> Self {
         self.rates.insert(id, rate);
         self
     }
@@ -280,7 +286,7 @@ where
         self
     }
 
-    pub fn build(self) -> Economy<AccountId, A, RateId, Role> {
+    pub fn build(self) -> Economy<AccountId, A, RateId, Role, N> {
         Economy {
             accounts: self
                 .accounts
@@ -293,7 +299,7 @@ where
     }
 }
 
-impl<AccountId, A, RateId, Role> Default for EconomyBuilder<AccountId, A, RateId, Role>
+impl<AccountId, A, RateId, Role, N> Default for EconomyBuilder<AccountId, A, RateId, Role, N>
 where
     AccountId: Eq + Hash,
     RateId: Eq + Hash,
@@ -303,30 +309,31 @@ where
     }
 }
 
-impl<AccountId, A, RateId, Role> Economy<AccountId, A, RateId, Role>
+impl<AccountId, A, RateId, Role, N> Economy<AccountId, A, RateId, Role, N>
 where
     AccountId: Clone + Eq + Hash + Ord,
     A: Clone + Eq + Hash + Ord,
     RateId: Clone + Eq + Hash + Ord,
     Role: Clone + Ord,
+    N: QuantityScalar,
 {
-    pub fn account(&self, id: &AccountId) -> Option<&Account<A>> {
+    pub fn account(&self, id: &AccountId) -> Option<&Account<A, N>> {
         self.accounts.get(id).map(Arc::as_ref)
     }
 
-    pub fn balance(&self, account: &AccountId, asset: &A) -> Quantity {
+    pub fn balance(&self, account: &AccountId, asset: &A) -> Quantity<N> {
         self.accounts
             .get(account)
-            .map_or(Quantity::ZERO, |account| account.balance(asset))
+            .map_or_else(Quantity::default, |account| account.balance(asset))
     }
 
-    pub fn accounts(&self) -> impl Iterator<Item = (&AccountId, &Account<A>)> {
+    pub fn accounts(&self) -> impl Iterator<Item = (&AccountId, &Account<A, N>)> {
         self.accounts
             .iter()
             .map(|(id, account)| (id, account.as_ref()))
     }
 
-    pub fn rate(&self, id: &RateId) -> Option<&Rate<Role, A>> {
+    pub fn rate(&self, id: &RateId) -> Option<&Rate<Role, A, N>> {
         self.rates.get(id)
     }
 
@@ -334,7 +341,7 @@ where
         self.rates.keys()
     }
 
-    pub fn matches(&self, goal: &Goal<AccountId, A>) -> bool {
+    pub fn matches(&self, goal: &Goal<AccountId, A, N>) -> bool {
         goal.requirements().iter().all(|(account_id, required)| {
             self.accounts
                 .get(account_id)
@@ -345,18 +352,18 @@ where
     pub fn view(
         &self,
         visible_accounts: impl IntoIterator<Item = AccountId>,
-    ) -> EconomicView<'_, AccountId, A, RateId, Role> {
+    ) -> EconomicView<'_, AccountId, A, RateId, Role, N> {
         EconomicView {
             economy: self,
             visible: visible_accounts.into_iter().collect(),
         }
     }
 
-    pub fn state_key(&self) -> Vec<(AccountId, A, Quantity)> {
+    pub fn state_key(&self) -> Vec<(AccountId, A, Quantity<N>)> {
         let mut key = Vec::new();
         for (account_id, account) in &self.accounts {
             for (asset, quantity) in account.balances().iter() {
-                key.push((account_id.clone(), asset.clone(), quantity));
+                key.push((account_id.clone(), asset.clone(), quantity.clone()));
             }
         }
         key.sort();
@@ -378,8 +385,8 @@ where
     /// Applies one exchange to an isolated branch, leaving this economy intact.
     pub fn simulate(
         &self,
-        exchange: Exchange<RateId, Role, AccountId>,
-    ) -> SimulationResult<AccountId, A, RateId, Role> {
+        exchange: Exchange<RateId, Role, AccountId, N>,
+    ) -> SimulationResult<AccountId, A, RateId, Role, N> {
         let mut fork = self.fork();
         let receipt = fork.apply(exchange)?;
         Ok((fork, receipt))
@@ -388,14 +395,14 @@ where
     /// Explains one exchange without mutating the economy.
     pub fn assess(
         &self,
-        exchange: &Exchange<RateId, Role, AccountId>,
-    ) -> ExchangeAssessment<AccountId, A, RateId, Role> {
+        exchange: &Exchange<RateId, Role, AccountId, N>,
+    ) -> ExchangeAssessment<AccountId, A, RateId, Role, N> {
         self.analyze(exchange).assessment
     }
 
     /// Returns whether one exchange is applicable to the current snapshot.
     #[must_use]
-    pub fn is_applicable(&self, exchange: &Exchange<RateId, Role, AccountId>) -> bool {
+    pub fn is_applicable(&self, exchange: &Exchange<RateId, Role, AccountId, N>) -> bool {
         self.assess(exchange).is_applicable()
     }
 
@@ -403,8 +410,8 @@ where
     #[must_use]
     pub fn applicable(
         &self,
-        candidates: impl IntoIterator<Item = Exchange<RateId, Role, AccountId>>,
-    ) -> Vec<Exchange<RateId, Role, AccountId>> {
+        candidates: impl IntoIterator<Item = Exchange<RateId, Role, AccountId, N>>,
+    ) -> Vec<Exchange<RateId, Role, AccountId, N>> {
         candidates
             .into_iter()
             .filter(|exchange| self.is_applicable(exchange))
@@ -413,8 +420,8 @@ where
 
     pub fn apply(
         &mut self,
-        exchange: Exchange<RateId, Role, AccountId>,
-    ) -> ApplyResult<AccountId, A, RateId, Role> {
+        exchange: Exchange<RateId, Role, AccountId, N>,
+    ) -> ApplyResult<AccountId, A, RateId, Role, N> {
         let Analysis {
             assessment,
             prepared_accounts,
@@ -440,8 +447,8 @@ where
 
     pub fn replay(
         &mut self,
-        trace: &Trace<RateId, Role, AccountId>,
-    ) -> ReplayResult<AccountId, A, RateId, Role> {
+        trace: &Trace<RateId, Role, AccountId, N>,
+    ) -> ReplayResult<AccountId, A, RateId, Role, N> {
         trace
             .exchanges()
             .iter()
@@ -453,8 +460,8 @@ where
     /// Validates a complete trace on an isolated branch and returns its final state.
     pub fn replayed(
         &self,
-        trace: &Trace<RateId, Role, AccountId>,
-    ) -> Result<Self, ApplyError<RateId, Role, AccountId, A>> {
+        trace: &Trace<RateId, Role, AccountId, N>,
+    ) -> Result<Self, ApplyError<RateId, Role, AccountId, A, N>> {
         let mut fork = self.fork();
         fork.replay(trace)?;
         Ok(fork)
@@ -462,8 +469,8 @@ where
 
     fn analyze(
         &self,
-        exchange: &Exchange<RateId, Role, AccountId>,
-    ) -> Analysis<AccountId, A, RateId, Role> {
+        exchange: &Exchange<RateId, Role, AccountId, N>,
+    ) -> Analysis<AccountId, A, RateId, Role, N> {
         let mut issues = Vec::new();
         if exchange.units().is_zero() {
             issues.push(ApplyError::ZeroUnits);
@@ -514,7 +521,7 @@ where
             return invalid_analysis(issues);
         }
 
-        let mut effects: BTreeMap<AccountId, Effect<A>> = BTreeMap::new();
+        let mut effects: BTreeMap<AccountId, Effect<A, N>> = BTreeMap::new();
         for role in rate.roles() {
             let account_id = exchange
                 .bindings()
@@ -664,43 +671,44 @@ impl Hasher for FingerprintHasher {
     }
 }
 
-pub struct EconomicView<'a, AccountId, A, RateId, Role> {
-    economy: &'a Economy<AccountId, A, RateId, Role>,
+pub struct EconomicView<'a, AccountId, A, RateId, Role, N = u64> {
+    economy: &'a Economy<AccountId, A, RateId, Role, N>,
     visible: BTreeSet<AccountId>,
 }
 
 /// Canonical actor-visible state, including the view's account boundary.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct ObservationKey<AccountId, A> {
+pub struct ObservationKey<AccountId, A, N = u64> {
     visible_accounts: Vec<AccountId>,
-    balances: Vec<(AccountId, A, Quantity)>,
+    balances: Vec<(AccountId, A, Quantity<N>)>,
 }
 
-impl<AccountId, A> ObservationKey<AccountId, A> {
+impl<AccountId, A, N> ObservationKey<AccountId, A, N> {
     pub fn visible_accounts(&self) -> &[AccountId] {
         &self.visible_accounts
     }
 
-    pub fn balances(&self) -> &[(AccountId, A, Quantity)] {
+    pub fn balances(&self) -> &[(AccountId, A, Quantity<N>)] {
         &self.balances
     }
 }
 
-impl<AccountId, A, RateId, Role> EconomicView<'_, AccountId, A, RateId, Role>
+impl<AccountId, A, RateId, Role, N> EconomicView<'_, AccountId, A, RateId, Role, N>
 where
     AccountId: Clone + Eq + Hash + Ord,
     A: Clone + Eq + Hash + Ord,
     RateId: Clone + Eq + Hash + Ord,
     Role: Clone + Ord,
+    N: QuantityScalar,
 {
-    pub fn account(&self, id: &AccountId) -> Option<&Account<A>> {
+    pub fn account(&self, id: &AccountId) -> Option<&Account<A, N>> {
         self.visible
             .contains(id)
             .then(|| self.economy.account(id))
             .flatten()
     }
 
-    pub fn balance(&self, account: &AccountId, asset: &A) -> Option<Quantity> {
+    pub fn balance(&self, account: &AccountId, asset: &A) -> Option<Quantity<N>> {
         self.account(account).map(|visible| visible.balance(asset))
     }
 
@@ -709,14 +717,14 @@ where
     /// Equal observation keys mean that this view cannot distinguish the two
     /// snapshots. Search code can therefore key information sets without
     /// copying hidden accounts into a parallel state representation.
-    pub fn observation_key(&self) -> ObservationKey<AccountId, A> {
+    pub fn observation_key(&self) -> ObservationKey<AccountId, A, N> {
         let mut balances = Vec::new();
         for account_id in &self.visible {
             let Some(account) = self.economy.account(account_id) else {
                 continue;
             };
             for (asset, quantity) in account.balances().iter() {
-                balances.push((account_id.clone(), asset.clone(), quantity));
+                balances.push((account_id.clone(), asset.clone(), quantity.clone()));
             }
         }
         balances.sort();
@@ -728,7 +736,10 @@ where
 }
 
 #[derive(Debug, Clone)]
-pub enum ApplyError<RateId, Role, AccountId, A> {
+pub enum ApplyError<RateId, Role, AccountId, A, N = u64>
+where
+    N: QuantityScalar,
+{
     MissingRate {
         rate: RateId,
     },
@@ -751,7 +762,7 @@ pub enum ApplyError<RateId, Role, AccountId, A> {
         asset: A,
     },
     Infeasible {
-        shortfalls: Vec<AccountShortfall<AccountId, A>>,
+        shortfalls: Vec<AccountShortfall<AccountId, A, N>>,
     },
     BalanceOverflow {
         account: AccountId,
@@ -762,12 +773,15 @@ pub enum ApplyError<RateId, Role, AccountId, A> {
     },
     InvariantViolation {
         invariant: String,
-        before: i128,
-        after: i128,
+        before: N::SignedMeasure,
+        after: N::SignedMeasure,
     },
 }
 
-impl<RateId, Role, AccountId, A> fmt::Display for ApplyError<RateId, Role, AccountId, A> {
+impl<RateId, Role, AccountId, A, N> fmt::Display for ApplyError<RateId, Role, AccountId, A, N>
+where
+    N: QuantityScalar,
+{
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::MissingRate { .. } => formatter.write_str("rate does not exist"),
@@ -789,23 +803,24 @@ impl<RateId, Role, AccountId, A> fmt::Display for ApplyError<RateId, Role, Accou
     }
 }
 
-impl<RateId, Role, AccountId, A> Error for ApplyError<RateId, Role, AccountId, A>
+impl<RateId, Role, AccountId, A, N> Error for ApplyError<RateId, Role, AccountId, A, N>
 where
     RateId: fmt::Debug,
     Role: fmt::Debug,
     AccountId: fmt::Debug,
     A: fmt::Debug,
+    N: QuantityScalar,
 {
 }
 
 #[derive(Debug, Clone)]
-struct Effect<A> {
-    consume: Basket<A>,
-    produce: Basket<A>,
-    preserve: Basket<A>,
+struct Effect<A, N> {
+    consume: Basket<A, N>,
+    produce: Basket<A, N>,
+    preserve: Basket<A, N>,
 }
 
-impl<A> Default for Effect<A> {
+impl<A, N> Default for Effect<A, N> {
     fn default() -> Self {
         Self {
             consume: Basket::new(),
@@ -815,22 +830,33 @@ impl<A> Default for Effect<A> {
     }
 }
 
-struct Analysis<AccountId, A, RateId, Role> {
-    assessment: ExchangeAssessment<AccountId, A, RateId, Role>,
-    prepared_accounts: Option<HashMap<AccountId, Arc<Account<A>>>>,
+struct Analysis<AccountId, A, RateId, Role, N>
+where
+    N: QuantityScalar,
+{
+    assessment: ExchangeAssessment<AccountId, A, RateId, Role, N>,
+    prepared_accounts: Option<HashMap<AccountId, Arc<Account<A, N>>>>,
 }
 
-fn merge_scaled<A>(target: &mut Basket<A>, source: &Basket<A>, units: Quantity) -> Result<(), A>
+fn merge_scaled<A, N>(
+    target: &mut Basket<A, N>,
+    source: &Basket<A, N>,
+    units: &Quantity<N>,
+) -> Result<(), A>
 where
     A: Clone + Eq + Hash,
+    N: QuantityScalar,
 {
     let scaled = source.checked_scale(units)?;
     target.checked_add(&scaled)
 }
 
-fn invalid_analysis<AccountId, A, RateId, Role>(
-    issues: Vec<ApplyError<RateId, Role, AccountId, A>>,
-) -> Analysis<AccountId, A, RateId, Role> {
+fn invalid_analysis<AccountId, A, RateId, Role, N>(
+    issues: Vec<ApplyError<RateId, Role, AccountId, A, N>>,
+) -> Analysis<AccountId, A, RateId, Role, N>
+where
+    N: QuantityScalar,
+{
     debug_assert!(!issues.is_empty());
     Analysis {
         assessment: ExchangeAssessment::Invalid { issues },
@@ -838,9 +864,10 @@ fn invalid_analysis<AccountId, A, RateId, Role>(
     }
 }
 
-fn relevant_balances<A>(account: &Account<A>, required: &Basket<A>) -> Basket<A>
+fn relevant_balances<A, N>(account: &Account<A, N>, required: &Basket<A, N>) -> Basket<A, N>
 where
     A: Clone + Eq + Hash,
+    N: QuantityScalar,
 {
     required
         .iter()
@@ -848,10 +875,14 @@ where
         .collect()
 }
 
-fn map_account_error<RateId, Role, AccountId, A>(
+fn map_account_error<RateId, Role, AccountId, A, N>(
     account: AccountId,
-    error: AccountError<A>,
-) -> ApplyError<RateId, Role, AccountId, A> {
+    error: AccountError<A, N>,
+) -> ApplyError<RateId, Role, AccountId, A, N>
+where
+    A: Eq + Hash,
+    N: QuantityScalar,
+{
     match error {
         AccountError::InsufficientBalance { shortfall } => ApplyError::Infeasible {
             shortfalls: vec![AccountShortfall::new(account, shortfall)],

@@ -6,7 +6,7 @@ description = "Canonical problem encodings and conformance models for Axionomy"
 edition = "2024"
 readme = "README.md"
 repository = "https://github.com/BiomaAI/axionomy"
-rust-version = "1.85"
+rust-version = "1.89"
 
 [dependencies]
 axionomy = { version = "0.1.0", path = "../.." }

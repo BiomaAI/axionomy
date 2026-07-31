@@ -10,9 +10,19 @@ description = "Closed economic state-machine primitives for verifiable problem s
 edition = "2024"
 readme = "README.md"
 repository = "https://github.com/BiomaAI/axionomy"
-rust-version = "1.85"
+rust-version = "1.89"
+
+[features]
+default = []
+bigint = ["dep:num-bigint"]
 
 [dependencies]
+num-bigint = { version = "0.5.1", features = ["serde"], optional = true }
+num-traits = "0.2.19"
+thiserror = "2.0.19"
+
+[dev-dependencies]
+num-bigint = { version = "0.5.1", features = ["serde"] }
 
 [lib]
 name = "axionomy"
