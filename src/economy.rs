@@ -5,7 +5,8 @@ use crate::{
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::error::Error;
 use std::fmt;
-use std::hash::Hash;
+use std::hash::{Hash, Hasher};
+use std::sync::Arc;
 
 #[derive(Debug, Clone)]
 pub struct Goal<AccountId, A> {
@@ -43,9 +44,22 @@ where
 
 #[derive(Debug, Clone)]
 pub struct Economy<AccountId, A, RateId, Role> {
-    accounts: HashMap<AccountId, Account<A>>,
-    rates: HashMap<RateId, Rate<Role, A>>,
-    invariants: Vec<LinearInvariant<A>>,
+    accounts: HashMap<AccountId, Arc<Account<A>>>,
+    rates: Arc<HashMap<RateId, Rate<Role, A>>>,
+    invariants: Arc<Vec<LinearInvariant<A>>>,
+}
+
+/// Compact logical-state identity for in-process search and transpositions.
+///
+/// The fingerprint is deterministic for a fixed ontology implementation and
+/// executable, but it is not a durable serialization or collision-proof key.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct StateFingerprint(u64);
+
+impl StateFingerprint {
+    pub const fn get(self) -> u64 {
+        self.0
+    }
 }
 
 pub type ApplyResult<AccountId, A, RateId, Role> =
@@ -268,9 +282,13 @@ where
 
     pub fn build(self) -> Economy<AccountId, A, RateId, Role> {
         Economy {
-            accounts: self.accounts,
-            rates: self.rates,
-            invariants: self.invariants,
+            accounts: self
+                .accounts
+                .into_iter()
+                .map(|(id, account)| (id, Arc::new(account)))
+                .collect(),
+            rates: Arc::new(self.rates),
+            invariants: Arc::new(self.invariants),
         }
     }
 }
@@ -293,7 +311,7 @@ where
     Role: Clone + Ord,
 {
     pub fn account(&self, id: &AccountId) -> Option<&Account<A>> {
-        self.accounts.get(id)
+        self.accounts.get(id).map(Arc::as_ref)
     }
 
     pub fn balance(&self, account: &AccountId, asset: &A) -> Quantity {
@@ -303,7 +321,9 @@ where
     }
 
     pub fn accounts(&self) -> impl Iterator<Item = (&AccountId, &Account<A>)> {
-        self.accounts.iter()
+        self.accounts
+            .iter()
+            .map(|(id, account)| (id, account.as_ref()))
     }
 
     pub fn rate(&self, id: &RateId) -> Option<&Rate<Role, A>> {
@@ -341,6 +361,13 @@ where
         }
         key.sort();
         key
+    }
+
+    /// Returns a compact fingerprint for caches scoped to this economy model.
+    pub fn state_fingerprint(&self) -> StateFingerprint {
+        let mut hasher = FingerprintHasher::new();
+        self.state_key().hash(&mut hasher);
+        StateFingerprint(hasher.finish())
     }
 
     /// Creates an isolated branch for search, simulation, or speculative work.
@@ -563,9 +590,11 @@ where
         let mut accounts = self.accounts.clone();
         let mut deltas = Vec::with_capacity(effects.len());
         for (account_id, effect) in effects {
-            let account = accounts
-                .get_mut(&account_id)
-                .expect("bound accounts were checked");
+            let account = Arc::make_mut(
+                accounts
+                    .get_mut(&account_id)
+                    .expect("bound accounts were checked"),
+            );
             if let Err(error) = account.withdraw(&effect.consume) {
                 return invalid_analysis(vec![map_account_error(account_id.clone(), error)]);
             }
@@ -580,7 +609,7 @@ where
             ));
         }
 
-        for invariant in &self.invariants {
+        for invariant in self.invariants.iter() {
             let Some(before) = invariant.measure(&self.accounts) else {
                 return invalid_analysis(vec![ApplyError::InvariantOverflow {
                     invariant: invariant.name().to_owned(),
@@ -606,6 +635,31 @@ where
                 projected_deltas: deltas,
             },
             prepared_accounts: Some(accounts),
+        }
+    }
+}
+
+struct FingerprintHasher {
+    state: u64,
+}
+
+impl FingerprintHasher {
+    const fn new() -> Self {
+        Self {
+            state: 0xcbf2_9ce4_8422_2325,
+        }
+    }
+}
+
+impl Hasher for FingerprintHasher {
+    fn finish(&self) -> u64 {
+        self.state
+    }
+
+    fn write(&mut self, bytes: &[u8]) {
+        for byte in bytes {
+            self.state ^= u64::from(*byte);
+            self.state = self.state.wrapping_mul(0x0000_0100_0000_01b3);
         }
     }
 }
@@ -724,7 +778,7 @@ impl<A> Default for Effect<A> {
 
 struct Analysis<AccountId, A, RateId, Role> {
     assessment: ExchangeAssessment<AccountId, A, RateId, Role>,
-    prepared_accounts: Option<HashMap<AccountId, Account<A>>>,
+    prepared_accounts: Option<HashMap<AccountId, Arc<Account<A>>>>,
 }
 
 fn merge_scaled<A>(target: &mut Basket<A>, source: &Basket<A>, units: Quantity) -> Result<(), A>

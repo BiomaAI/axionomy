@@ -312,6 +312,7 @@ fn bindings_and_invariants_are_core_validated() {
 fn forks_and_replay_validate_a_trace_without_touching_the_source() {
     let world = world();
     let before = world.state_key();
+    let before_fingerprint = world.state_fingerprint();
     let mut trace = Trace::new();
     trace.push(transform(2));
     trace.push(finish());
@@ -323,7 +324,9 @@ fn forks_and_replay_validate_a_trace_without_touching_the_source() {
 
     let (simulated, _) = world.simulate(transform(1)).expect("fork is feasible");
     assert_ne!(simulated.state_key(), world.state_key());
+    assert_ne!(simulated.state_fingerprint(), before_fingerprint);
     assert_eq!(world.state_key(), before);
+    assert_eq!(world.state_fingerprint(), before_fingerprint);
 }
 
 #[test]

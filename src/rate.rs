@@ -132,13 +132,14 @@ where
         &self.name
     }
 
-    pub fn measure<AccountId>(&self, accounts: &HashMap<AccountId, Account<A>>) -> Option<i128>
+    pub fn measure<AccountId, Holder>(&self, accounts: &HashMap<AccountId, Holder>) -> Option<i128>
     where
         A: Clone,
+        Holder: AsRef<Account<A>>,
     {
         let mut total = 0_i128;
         for account in accounts.values() {
-            for (asset, quantity) in account.balances().iter() {
+            for (asset, quantity) in account.as_ref().balances().iter() {
                 let weight = i128::from(*self.weights.get(asset).unwrap_or(&0));
                 let weighted = weight.checked_mul(i128::from(quantity.get()))?;
                 total = total.checked_add(weighted)?;
