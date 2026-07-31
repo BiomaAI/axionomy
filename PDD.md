@@ -102,16 +102,25 @@ instances elsewhere. Reference ontologies live in the separate
 Axionomy separates three questions that are often collapsed into one number:
 
 ```text
-Asset A             = what the value means and its atomic economic basis
-Quantity<N = u64>   = how its exact non-negative coefficient is represented
-Typed binding       = how a physical or calendar value is validated and lowered
+Asset A / UnitAsset<Id> = what the value means and its atomic economic basis
+Quantity<N = u64>       = how its exact non-negative coefficient is represented
+Typed binding           = how a physical or calendar value is validated and lowered
 ```
 
-For example, a `uom` mass value may be converted exactly into an
-`Asset::CargoGram` and a `Quantity<u64>`. The physical dimension is checked at
-the authoring boundary, the asset preserves the unit and economic identity,
-and the quantity supplies the coefficient. A heterogeneous basket therefore
-does not erase meaning merely because it stores one numeric backend.
+For example, a `uom` mass value may be converted exactly into a canonical
+`Cargo` unit asset and a `Quantity<u64>`. A unit-aware asset key carries its
+logical ID, physical dimension, stable quantity kind, and exact atomic basis.
+The physical dimension is checked at the authoring boundary, the asset
+preserves the denomination and economic identity, and the quantity supplies
+the coefficient. A heterogeneous basket therefore does not erase meaning
+merely because it stores one numeric backend.
+
+Units are never properties of accounts or baskets. One account may author a
+cargo balance in kilograms and another in grams, but both inputs lower through
+the same schema-issued handle into the same canonical asset atoms. If two
+denominations are economically distinct—such as loose grams and sealed
+25-kilogram bags—they are different logical assets connected by an explicit
+rate rather than alternate representations of one balance.
 
 One economy uses one numeric backend `N`. This gives every balance, rate,
 exchange, shortfall, receipt, and invariant one coherent arithmetic contract.
@@ -375,18 +384,33 @@ exact non-`Copy` quantities beyond `u64`; its associated invariant measure is
 
 Physical and calendar types belong at authoring boundaries:
 
-- `axionomy-units` uses `uom` with exact rational values to validate
-  dimensions and unit conversion, then lowers an exact multiple of an asset's
-  atomic basis into `AssetAmount<A, N>`.
+- `axionomy-units` uses `uom` with exact rational values to declare a measured
+  `UnitAsset<Id>`, validate dimensions and unit conversion, and lower an exact
+  multiple of its atomic basis into `AssetAmount<UnitAsset<Id>, N>`.
 - `axionomy-time` uses Jiff to resolve timestamps, zones, daylight-saving
-  transitions, and calendar spans, then lowers exact elapsed duration into a
-  timeline asset.
+  transitions, and calendar spans, then lowers exact elapsed duration into the
+  same schema-defined time asset representation.
 
-The lowered value is an ordinary asset plus quantity. The adapters do not
-type-erase meaning, put heterogeneous physical dimensions into `Quantity`, or
-create an external clock. A model chooses explicit assets such as
-`CargoGram`, `ElapsedMinute`, or `DeliveryWindowOpen`; those assets remain the
-authoritative vocabulary after conversion.
+`AssetSchema` is the one declaration point for unit-aware logical IDs. It
+rejects repeated IDs, conflicting discrete/measured definitions, incompatible
+atomic bases, unknown keys, and definitions foreign to the model. The
+schema-backed economy build inspects initial accounts, every rate basket, and
+invariant weights; goal validation applies the same rule. Schema-issued typed
+handles accept only the `uom` dimension used at declaration.
+
+The asset key itself remains self-describing: its definition participates in
+equality, hashing, ordering, and Serde. Even keys created by independent
+schemas cannot silently alias when their dimensions, quantity kinds, or
+atomic bases differ. A schema can be reconstructed from the keys embedded in
+a deserialized economy and will reject one logical ID carrying conflicting
+definitions. The schema is therefore a constructor and validator, not a
+second authoritative world that must survive for the balances to remain
+meaningful.
+
+The lowered value is still an ordinary asset plus quantity. The adapters do
+not put heterogeneous physical values inside `Quantity` or create an external
+clock. Raw atomic counts remain available explicitly through `atoms` or
+`amount`; they cannot change the denomination carried by the asset key.
 
 ## 6. Workspace and package boundaries
 
@@ -397,7 +421,7 @@ axionomy-search ──────→ axionomy
 axionomy-problems ────→ axionomy
                     └─→ axionomy-search
 axionomy-units ───────→ axionomy
-axionomy-time ────────→ axionomy
+axionomy-time ────────→ axionomy-units ──→ axionomy
 ```
 
 - `axionomy` owns universal state and transition semantics.
@@ -705,8 +729,14 @@ in the reusable model modules.
 - Core model, proposal, receipt, trace, and goal types serialize directly
   through Serde; deserialization rejects duplicates and canonicalizes zeroes.
 - Construction and operational failures are structured `thiserror` values.
-- Physical and calendar authoring lower exactly into asset-qualified
-  quantities through the optional `uom` and Jiff adapter crates.
+- Unit-aware keys retain logical ID, dimension, quantity kind, and atomic basis
+  through equality, hashing, ordering, and serialization.
+- One asset schema rejects repeated logical IDs and conflicting denominations
+  across initial accounts, rates, invariants, and goals.
+- Physical and calendar authoring lower exactly into the same schema-defined
+  asset-qualified quantities through the optional `uom` and Jiff adapters.
+- Compile-time dimension checks prevent a typed handle from accepting an
+  incompatible `uom` quantity, while schema checks prevent cross-handle alias.
 - Exchange application is atomic across all affected accounts.
 - Consume, produce, and preserve effects are explicit.
 - Required role bindings and role distinctness are checked.
@@ -754,6 +784,9 @@ The current foundation is intentionally bounded:
 - Every economy uses one exact quantity backend, defaulting to `u64`. Numeric
   representations are not selected independently per asset, and floating
   point is not accepted as authoritative balance storage.
+- Unit safety is opt-in through `UnitAsset<Id>` and `AssetSchema`; the generic
+  kernel cannot infer physical semantics for an arbitrary user-defined asset
+  type. Raw counts remain valid and explicitly mean atoms of their asset key.
 - Rates are concrete. There is no variable matching, unification, guard
   language, or parameterized rate schema.
 - Problem builders may generate many concrete rates to represent one logical
@@ -1061,6 +1094,16 @@ economy's quantity backend unless a model explicitly encodes a corresponding
 asset, shortfall, cost, or reward. This keeps solver policy from silently
 changing economic truth.
 
+### D-025: Atomic denomination is intrinsic to unit-aware asset identity
+
+Accounts, baskets, and rates do not select units. A unit-aware asset key carries
+its logical ID, physical dimension, stable quantity kind, and exact atomic
+basis; all typed inputs normalize into that identity. Conflicting definitions
+cannot compare equal, and a model schema rejects one logical ID carrying more
+than one definition. The schema is derived authoring validation because the
+definition remains serialized in the asset itself. Intentional denominations
+are separate assets connected by explicit rates.
+
 ## 16. Success criteria
 
 Axionomy succeeds when:
@@ -1078,6 +1121,8 @@ Axionomy succeeds when:
   mutation.
 - Successful assessments project the same account deltas later confirmed by
   receipts.
+- Unit-aware models cannot silently combine incompatible physical dimensions,
+  quantity kinds, or atomic denominations under one asset identity.
 - Encodings remain structured, local, inspectable, and compositional.
 - Mathematical claims are supported by executable laws or proofs.
 

@@ -68,20 +68,20 @@ models into one-way workspace dependencies:
 | `axionomy` | Pure closed-state validation and exchange execution kernel |
 | `axionomy-search` | Non-authoritative search, rollout, Monte Carlo, perfect-information and information-set MCTS, and learning projections |
 | `axionomy-problems` | Canonical problem encodings, specialized proposers, and conformance tests |
-| `axionomy-units` | Dimension-safe `uom` authoring that lowers physical values into economic assets |
-| `axionomy-time` | Calendar-aware Jiff authoring that lowers elapsed time into timeline assets |
+| `axionomy-units` | Self-describing asset denominations, schema coherence, and dimension-safe `uom` authoring |
+| `axionomy-time` | Calendar-aware Jiff authoring over the same canonical timeline denominations |
 
 ```text
 axionomy-search ──────→ axionomy
 axionomy-problems ────→ axionomy
                     └─→ axionomy-search
 axionomy-units ───────→ axionomy
-axionomy-time ────────→ axionomy
+axionomy-time ────────→ axionomy-units ──→ axionomy
 ```
 
 The kernel does not depend on a solver, problem, unit, or time crate. The
-packages are independently publishable: release `axionomy` first; the search,
-units, and time crates may follow; `axionomy-problems` follows search.
+packages are independently publishable: release `axionomy` first; search and
+units may follow; time follows units; `axionomy-problems` follows search.
 
 ## What is implemented
 
@@ -94,8 +94,8 @@ units, and time crates may follow; `axionomy-problems` follows search.
 - Stable insertion-ordered model collections and direct Serde support for
   economies, rates, accounts, baskets, exchanges, receipts, traces, and goals.
 - Structured construction, validation, arithmetic, and invariant errors.
-- Asset-qualified `AssetAmount` values plus exact `uom` and Jiff authoring
-  adapters.
+- Asset-qualified `AssetAmount` values, self-describing unit-aware asset keys,
+  model-wide denomination validation, and exact `uom` and Jiff adapters.
 - Explanatory exchange assessments with complete multi-account shortfalls and
   projected receipt deltas.
 - Boolean `is_applicable` checks and bulk `applicable` candidate filtering.
@@ -219,10 +219,16 @@ An asset defines what a value means and names its atomic economic basis;
 `Quantity<N>` defines how its exact non-negative coefficient is represented.
 The default backend is `u64`, while the `bigint` feature supports exact
 non-`Copy` `BigUint` economies without changing model semantics.
-`axionomy-units` and `axionomy-time` validate richer authoring values with
-`uom` and Jiff, then lower them into ordinary `AssetAmount` values. Dimensions,
-units, clocks, and schedules therefore help construct the economy without
-becoming hidden authoritative state.
+
+Unit-aware models use `UnitAsset<Id>` as their actual asset key. An
+`AssetSchema` declares each logical ID once as discrete or measured, and the
+key carries the physical dimension, stable `uom` quantity kind, and exact
+atomic basis through equality, hashing, ordering, and Serde. Inputs may be
+expressed in any compatible unit, but every account, basket, rate, invariant,
+and goal stores the same canonical atoms. Conflicting definitions cannot
+silently alias and the schema-backed model build rejects them. Jiff uses this
+same representation, so calendar and physical-time authoring cannot create
+competing clocks outside the economy.
 
 ```console
 cargo run --features bigint --example bigint

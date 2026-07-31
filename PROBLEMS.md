@@ -513,7 +513,13 @@ The repository test suite additionally verifies:
 - Checked scale, addition, withdrawal, and deposit.
 - Generic exact `u64` and non-`Copy` `BigUint` economies.
 - Direct Serde round trips, canonical zero removal, and duplicate rejection.
-- Exact dimension-safe and calendar-aware lowering into asset amounts.
+- Exact dimension-safe and calendar-aware lowering into self-describing asset
+  denominations.
+- Schema rejection of duplicate logical IDs, conflicting atomic bases,
+  discrete/measured collisions, foreign model keys, and malformed serialized
+  definitions.
+- Compile-fail proof that a measured handle cannot accept another physical
+  dimension, plus shared Jiff/`uom` time identity.
 - Multi-role effect merging.
 - Required and unknown role errors.
 - Missing rate and account errors.
