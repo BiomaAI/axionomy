@@ -2,6 +2,7 @@
 
 pub mod bridge;
 pub mod exact_cover;
+pub mod marketplace;
 pub mod maze;
 pub mod rescue;
 pub mod scheduling;
