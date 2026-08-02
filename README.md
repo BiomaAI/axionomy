@@ -55,6 +55,14 @@ Goal        = A required asset configuration
 Solution    = A replayable exchange trace reaching that configuration
 ```
 
+Fungibility follows asset identity rather than a privileged token class. A
+balance of `10_000 × Claim(CohortA)` is one fungible quantity, while
+`Condition(CohortA, Fresh) = 1` is a unique state fact whose lifecycle is
+protected by rates and invariants. This also supports non-fungible goods by
+giving each item a unique asset identity and conserving its unit supply. When
+many holders share one fate, their balances can remain stable claims while a
+single cohort or pool account carries the authoritative condition or epoch.
+
 See [PDD.md](PDD.md) for the product and technical contract and
 [PROBLEMS.md](PROBLEMS.md) for the conformance problems that drive the API.
 
@@ -103,6 +111,9 @@ follow search.
   projected receipt deltas.
 - Boolean `is_applicable` checks and bulk `applicable` candidate filtering.
 - Global declared linear invariants checked on every firing.
+- Successful application prepares and commits only touched account contents;
+  linear conservation is checked from exchange deltas without scanning
+  unrelated balances.
 - Asset-configured goals.
 - Isolated forks, speculative execution, and deterministic trace replay.
 - Account-restricted economic views with canonical observation identities.
@@ -122,7 +133,7 @@ follow search.
   content-addressed immutable economy snapshots, a caller-provided storage
   boundary, an in-memory default, schema-backed tools, polling, progress, and
   cooperative cancellation through `rmcp::TaskManager`.
-- Eleven closed benchmark encodings in `axionomy-problems`, with distinct
+- Twelve closed benchmark encodings in `axionomy-problems`, with distinct
   solver strategies, independent reference oracles, and encoded stochastic
   priors.
 
@@ -310,6 +321,7 @@ contract, deployment limits, and integration details.
 | Logistics | Orders, routes, fuel, time, weather, breakdown, repair | Long rollouts, risk-aware Monte Carlo, and route MCTS |
 | Connect Four | Identified cells, gravity, turns, line counts, wins, draw | Vector-valued MCTS with plain-board/minimax oracles |
 | Mission | Private views, caller-owned beliefs, causal shared intelligence, hazard, treatment | Repeated observation-scoped ISMCTS, scenario/MC evaluation, and RL trajectories |
+| Perishables | Fungible cohort claims, unique condition facts, deadlines, refrigeration, and power loss | Receipt-maintained holdings index, event agenda, and independent inventory oracle |
 
 Every accepted result is an exchange trace replayed by the same core. The
 specialized algorithms are proposers, not alternate execution engines.
@@ -338,6 +350,7 @@ cargo run -p axionomy-problems --example marketplace
 cargo run -p axionomy-problems --example logistics
 cargo run -p axionomy-problems --example connect_four
 cargo run -p axionomy-problems --example mission
+cargo run -p axionomy-problems --example perishables
 ```
 
 All runnable examples use structured console logging. `INFO` presents model

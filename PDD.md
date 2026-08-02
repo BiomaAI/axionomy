@@ -128,6 +128,29 @@ Using a different numeric representation for every asset is deliberately out
 of scope: it would introduce dynamic value dispatch into the authoritative
 state and make conservation and generic algorithms substantially less clear.
 
+### 3.2 Fungibility is an identity relation
+
+Axionomy does not need separate fungible-token and non-fungible-token storage
+engines. Units with the same asset identity are interchangeable and aggregate
+into one quantity. A genuinely unique item receives a unique asset identity,
+starts with quantity one, and has its supply or lifecycle protected by the
+closed rate book and declared invariants. The kernel deliberately does not
+assume that every fact-like asset must have quantity one; capacities,
+permissions, and observations may legitimately have greater multiplicity.
+
+Shared fate can be encoded without rewriting every holder. Accounts may own
+fungible claims or shares while a cohort, pool, or protocol account owns one
+condition, epoch, conversion, or supply fact. Rates that use a claim preserve
+the shared fact. Changing that fact once therefore changes which exchanges are
+available to every claim holder. This is semantic indirection represented in
+accounts and assets, not an external cache.
+
+Secondary holdings, aggregate-supply, rate-dependency, and event indexes are a
+different kind of index. They are disposable projections rebuilt from the
+economy and updated from receipts. They may decide where a simulator looks
+next, but every candidate must still pass core assessment; losing or rebuilding
+an index cannot change transition validity.
+
 ## 4. Formal state and transition model
 
 ### 4.1 State
@@ -804,7 +827,7 @@ compatible set or sequence of those resolutions, but it cannot bypass them.
 
 ## 10. Executable conformance suite
 
-The project now validates the thesis with eleven deliberately different
+The project now validates the thesis with twelve deliberately different
 problems. Full formal specifications live in [PROBLEMS.md](PROBLEMS.md).
 
 | Problem | What it demonstrates |
@@ -820,6 +843,7 @@ problems. Full formal specifications live in [PROBLEMS.md](PROBLEMS.md).
 | Logistics | Recurrent encoded chance, long rollouts, repair loops, risk projections, and MCTS route planning |
 | Connect Four | Identified coordinates, encoded gravity and terminal truth, adversarial MCTS, and plain-board oracles |
 | Mission | Canonical private observations, caller-owned posterior beliefs, repeated ISMCTS, causal intelligence exchange, and RL trajectory projection |
+| Perishables | Fungible cohort claims, non-fungible shared condition facts, explicit time windows, refrigeration, outage effects, stale-event rejection, and an independent inventory oracle |
 
 These are not unrelated demos. Together they test:
 
@@ -876,6 +900,8 @@ examples, but they are not promised as reusable domain APIs.
 - Required role bindings and role distinctness are checked.
 - Failed exchanges preserve complete state.
 - Declared linear invariants are checked on every firing.
+- Applicable exchanges prepare only touched account contents, and linear
+  invariants use weighted receipt deltas on the successful path.
 - Assessment distinguishes applicable, infeasible, and invalid proposals.
 - Infeasible assessment reports every affected account shortfall.
 - Applicable assessment projects the exact deltas later returned by `Receipt`.
@@ -1104,6 +1130,28 @@ their lifetime is caller policy and a worker can only return a trace of
 core-validated exchanges. This is the same authority boundary as an in-process
 priority queue expressed across a protocol.
 
+### 13.15 Shared fate should be represented once
+
+The perishables fixture separates fungible claims from one unique condition
+fact per cohort. A power or decay exchange changes the shared condition while
+leaving every claim balance untouched; claim use remains gated by that fact.
+This is more than a storage optimization: it is the correct economic model for
+many claims governed by one pool, epoch, contract, or physical condition.
+
+The same fixture distinguishes this semantic indirection from disposable
+indexes. Its holdings index is rebuilt from balances and maintained from
+receipts, while its event agenda is rebuilt from fresh-condition facts. Both
+can be stale or absent without permitting an invalid transition. Explicit
+before/reached assets ensure the core rejects early decay and late use even if
+the agenda is delayed.
+
+This pressure also improved the kernel application path. Applicable exchanges
+prepare and commit only touched account contents. Global linear invariants are
+normally validated by comparing the weighted consumed and produced receipt
+deltas; a complete before/after state is constructed only to explain an actual
+violation. Fork creation still copies the top-level account index and remains
+a separate measured scaling target.
+
 ## 14. Roadmap
 
 The remaining items are a pressure-driven backlog, not an instruction to add
@@ -1119,8 +1167,10 @@ factor.
    candidate instantiation without arbitrary hidden guards.
 3. Add explicit wire-schema versioning only when compatibility with deployed
    historical data becomes a real requirement.
-4. Replace the cloned account index with a persistent map, add incremental
-   fingerprints, and continue the checked-in logistics rollout benchmark.
+4. Measure large fork trees and many-holder simulations; if the top-level
+   account-index copy dominates, adopt a persistent map and incremental
+   fingerprints. Extract generic holdings, dependency, and event indexes only
+   after a second domain confirms the perishables shapes.
 5. Extend invariants with carefully constrained local and inequality forms.
 6. Define first-class objective declarations and multi-objective comparison
    while keeping objective quantities encoded.
@@ -1142,10 +1192,11 @@ factor.
     tenant-aware authorization only when the MCP reference boundary is moved
     into a real multi-process deployment.
 
-Performance work should follow semantic clarity. Shared immutable state and
-copy-on-write account contents reduce branch cost, but the cloned account
-index and concrete rate expansion remain reference implementations rather
-than final scale targets.
+Performance work should follow semantic clarity. Application now clones only
+touched account contents and validates conserved deltas incrementally. Shared
+immutable laws and account contents reduce branch cost, but fork-time account
+index cloning and concrete rate expansion remain reference implementations
+rather than final scale targets.
 
 ## 15. Decision record
 
@@ -1190,7 +1241,7 @@ encoded rather than supplied by opaque callbacks.
 
 ### D-009: Bounded structured expressiveness precedes universality claims
 
-Eleven executable problems provide stronger product evidence than a vacuous
+Twelve executable problems provide stronger product evidence than a vacuous
 one-token-per-world construction. Turing completeness is not a current goal.
 
 ### D-010: Conformance problems stay in-tree
@@ -1321,6 +1372,26 @@ A stateless integration names every economy snapshot and returns a new handle
 for every accepted change. Durable task records are allowed as disposable
 computation control, but neither they nor protocol sessions may become a
 parallel world model. Completed remote search returns a core-replayable trace.
+
+### D-029: Effects are triggered rates, not hidden mutation
+
+Time, environment, power, and cohort condition remain assets in accounts.
+An event agenda may index those facts and propose a due exchange, but it never
+mutates state or decides validity. Before/reached window assets prevent early
+effects and late use even when materialization is delayed. Environment changes
+atomically reclassify shared cohort state, causing previously queued proposals
+to become ordinary infeasible exchanges. This preserves deterministic replay
+and permits event-driven work proportional to affected cohorts rather than
+individual fungible units.
+
+### D-030: Fungibility is structural, uniqueness is modeled
+
+One asset identity with quantity greater than one is fungible. A distinct
+identity with conserved unit supply is non-fungible. Shared claims may point to
+one cohort or pool condition so a global economic change touches one encoded
+fact rather than every holder. The core does not add a universal fungibility
+flag because interchangeability and uniqueness are ontology claims that the
+problem must close with identities, rates, quantities, and invariants.
 
 ## 16. Success criteria
 

@@ -32,21 +32,21 @@ they bypass the example's trusted action helper.
 
 ## Conformance matrix
 
-| Capability | Maze | Sokoban | Exact cover | Workshop | Job shop | Rescue | Bridge | Marketplace | Logistics | Connect Four | Mission |
-| --- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| Multi-account atomic rewrite | ✓ | ✓ |  |  | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| Preserved facts/catalysts | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| Declared invariants | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| Resource objective | ✓ |  |  | ✓ | ✓ | ✓ | ✓ |  | ✓ |  | ✓ |
-| Infeasible instance |  | ✓ | ✓ |  | ✓ |  |  | ✓ | ✓ |  | ✓ |
-| Specialized proposer |  |  | Algorithm X |  | Branch optimizer | Scenario/MC evaluator | Auction | Assessment clearing | Monte Carlo/MCTS | MCTS/minimax oracle | ISMCTS/scenario evaluator |
-| Generic algorithm | BFS/A*/Dijkstra | BFS | BFS | BFS/best-first | Best-first | Rollout | BFS |  | Rollout/MC | MCTS | ISMCTS/Rollout/MC/RL |
-| Hidden or stochastic state |  |  |  |  |  | ✓ |  |  | ✓ |  | ✓ |
-| Multi-agent resolution |  |  |  |  |  |  | ✓ | ✓ |  | ✓ | ✓ |
-| Long-horizon trajectory |  |  |  |  |  |  |  |  | ✓ | ✓ |  |
-| Learning trajectory |  |  |  |  |  |  |  |  |  |  | ✓ |
-| Observation-scoped tree |  |  |  |  |  |  |  |  |  |  | ✓ |
-| Deterministic replay test | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Capability | Maze | Sokoban | Exact cover | Workshop | Job shop | Rescue | Bridge | Marketplace | Logistics | Connect Four | Mission | Perishables |
+| --- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| Multi-account atomic rewrite | ✓ | ✓ |  |  | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Preserved facts/catalysts | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Declared invariants | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Resource objective | ✓ |  |  | ✓ | ✓ | ✓ | ✓ |  | ✓ |  | ✓ |  |
+| Infeasible instance |  | ✓ | ✓ |  | ✓ |  |  | ✓ | ✓ |  | ✓ | ✓ |
+| Specialized proposer |  |  | Algorithm X |  | Branch optimizer | Scenario/MC evaluator | Auction | Assessment clearing | Monte Carlo/MCTS | MCTS/minimax oracle | ISMCTS/scenario evaluator | Event agenda/index |
+| Generic algorithm | BFS/A*/Dijkstra | BFS | BFS | BFS/best-first | Best-first | Rollout | BFS |  | Rollout/MC | MCTS | ISMCTS/Rollout/MC/RL |  |
+| Hidden or stochastic state |  |  |  |  |  | ✓ |  |  | ✓ |  | ✓ |  |
+| Multi-agent resolution |  |  |  |  |  |  | ✓ | ✓ |  | ✓ | ✓ |  |
+| Long-horizon trajectory |  |  |  |  |  |  |  |  | ✓ | ✓ |  | ✓ |
+| Learning trajectory |  |  |  |  |  |  |  |  |  |  | ✓ |  |
+| Observation-scoped tree |  |  |  |  |  |  |  |  |  |  | ✓ |  |
+| Deterministic replay test | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 
 ## Runnable examples
 
@@ -66,6 +66,7 @@ cargo run -p axionomy-problems --example marketplace
 cargo run -p axionomy-problems --example logistics
 cargo run -p axionomy-problems --example connect_four
 cargo run -p axionomy-problems --example mission
+cargo run -p axionomy-problems --example perishables
 ```
 
 The examples emit structured `tracing` events at `INFO` by default. Set
@@ -574,6 +575,80 @@ outcome exchanges. The selected live action is core-revalidated.
 - Caller-owned belief evolution and repeated information-set planning.
 - Assessment-derived masks and replay-derived learning trajectories.
 
+## 12. Cohort-indexed perishables
+
+Source: `crates/axionomy-problems/src/perishables.rs`
+
+### Specification
+
+Warehouse and fridge accounts hold ten thousand fungible fruit claims in two
+cohorts. The claim quantity is stable ownership or custody state; it does not
+duplicate freshness on every unit. Each cohort account instead holds one
+unique condition fact:
+
+```text
+Warehouse:       Claim(Ambient) = 7,000, Ambient
+Fridge:          Claim(Refrigerated) = 3,000, Cold, Powered
+Ambient cohort:  Fresh(AmbientExpiry) = 1
+Cold cohort:     Fresh(ColdExpiry) = 1
+```
+
+A single exchange with multiplicity 1,000 moves claims from the ambient cohort
+to the refrigerated cohort while preserving both location identities, both
+cohort identities, cold power, freshness, and the open transfer window. It
+does not fire one thousand transitions.
+
+Time is explicit economic state. The World account owns exactly one `Now`
+fact, plus complementary `Before(deadline)` and `Reached(deadline)` facts.
+Advancing the clock consumes the applicable `Before` fact and produces its
+`Reached` fact. Consequently fruit cannot spoil early, but it also cannot be
+eaten or moved after expiry while a simulator is still materializing due
+effects.
+
+At ambient expiry, one spoil exchange changes the ambient cohort's unique
+fresh condition into `Rotten`; its six thousand claims are untouched. A power
+loss then atomically changes the fridge from cold/powered to
+ambient/unpowered and reclassifies the refrigerated cohort from cold expiry to
+an earlier warmed-expiry condition. The event agenda schedules that newly
+produced condition. Its old cold-expiry candidate remains in the disposable
+queue but is later rejected as infeasible because the authoritative condition
+and environment no longer exist.
+
+The `ClaimIndex` is a receipt-maintained `cohort → account → quantity`
+projection. It provides holder and aggregate-supply queries without becoming
+truth: it can be rebuilt from the economy, and tests compare the incremental
+index to a full rebuild. The `EffectAgenda` similarly indexes fresh condition
+facts and only proposes ordinary spoil exchanges.
+
+### Required results
+
+- Ten thousand claims occupy the same number of state entries as ten claims.
+- A 1,000-unit move is one scaled multi-account exchange.
+- Each cohort condition has unit supply; multi-unit or repeated spoilage is
+  infeasible.
+- Before/reached facts reject early decay and late consumption independently
+  of event-loop discipline.
+- Power loss touches no claim balance and changes one shared cohort fact.
+- The newly warmed cohort spoils at its earlier deadline.
+- The queued cold event becomes stale and is rejected by core assessment.
+- Incorrect location, cohort, or World bindings are rejected by encoded
+  identities and conditions.
+- The complete outage trace replays to the encoded goal and becomes quiescent.
+- 128 generated inventory splits and transfers agree with a plain independent
+  inventory oracle.
+- The receipt-maintained holdings index always equals a complete rebuild.
+
+### API pressure
+
+- Structural fungibility through shared asset identity and quantity.
+- Non-fungible facts through unique identity, unit supply, and invariants.
+- Semantic cohort indirection versus disposable physical indexes.
+- Event-driven temporal effects without mutation-on-read or an external clock.
+- Trigger indexes, stale proposal rejection, and receipt-driven projections.
+- Work proportional to shared-fate cohorts rather than physical units.
+- Incremental touched-account commit and receipt-delta invariant validation
+  without weakening atomicity.
+
 ## Cross-problem acceptance tests
 
 The repository test suite additionally verifies:
@@ -617,7 +692,8 @@ The repository test suite additionally verifies:
 - Property laws for assessment/application parity, atomic failure, arithmetic,
   serialization, and unit conversion.
 - Exhaustive fixture variation against direct domain oracles for exact cover,
-  small scheduling horizons, and generated Connect Four prefixes.
+  small scheduling horizons, and generated Connect Four prefixes, plus
+  generated perishables inventories against an independent cohort oracle.
 
 Run the suite with:
 
@@ -636,8 +712,9 @@ limits clearly:
    account capabilities.
 3. Durable cross-version replay needs an explicit compatibility contract and
    problem/rate versioning beyond current direct Serde support.
-4. Search-heavy workloads need a persistent account index and incremental
-   state fingerprints beyond the current shared account contents and laws.
+4. Search- and simulation-heavy workloads need receipt-maintained holdings,
+   supply, dependency, and event indexes plus incremental state fingerprints;
+   these must remain rebuildable projections rather than semantic authority.
 5. More domains will require constrained local and inequality invariants.
 6. External OR adapters should compile encoded semantics, emit exchanges, and
    use replay as a mandatory proof checker.
@@ -647,5 +724,5 @@ limits clearly:
 8. Nature needs richer parameterized distribution updates for very large or
    continuous outcome spaces.
 
-Any future abstraction must continue to pass all eleven problems without
+Any future abstraction must continue to pass all twelve problems without
 moving authoritative meaning into solver callbacks or an external world.

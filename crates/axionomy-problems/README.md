@@ -26,7 +26,14 @@ cargo run -p axionomy-problems --example marketplace
 cargo run -p axionomy-problems --example logistics
 cargo run -p axionomy-problems --example connect_four
 cargo run -p axionomy-problems --example mission
+cargo run -p axionomy-problems --example perishables
 ```
+
+The perishables fixture also demonstrates structural fungibility: thousands of
+equivalent claims aggregate into ordinary quantities, while unique cohort
+condition facts behave non-fungibly through unit supply and lifecycle
+invariants. A derived event agenda and holdings index accelerate decisions but
+never authorize state changes.
 
 Examples emit structured console events through `tracing`. `INFO` is the
 default and explains model construction, strategy choice, encoded outcomes,
