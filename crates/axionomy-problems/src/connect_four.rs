@@ -62,6 +62,10 @@ pub enum AccountId {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Asset {
+    GameIdentity,
+    ColumnIdentity(u8),
+    CellIdentity { column: u8, row: u8 },
+    ResultIdentity,
     Empty,
     Piece(Player),
     NextRow(u8),
@@ -148,7 +152,7 @@ pub type Decision = MctsDecision<Action>;
 pub type DecisionError = MctsError<RateId, Role, AccountId, Asset>;
 
 pub fn initial() -> World {
-    let mut game_assets = basket([(Asset::Turn(Player::Red), 1)]);
+    let mut game_assets = basket([(Asset::GameIdentity, 1), (Asset::Turn(Player::Red), 1)]);
     for player in [Player::Red, Player::Yellow] {
         for line in LINES {
             game_assets.insert(Asset::LineCount(player, line, 0), Quantity::new(1));
@@ -157,17 +161,26 @@ pub fn initial() -> World {
 
     let mut builder = EconomyBuilder::new()
         .account(AccountId::Game, Account::from(game_assets))
-        .account(AccountId::Result, Account::default());
+        .account(
+            AccountId::Result,
+            Account::from(basket([(Asset::ResultIdentity, 1)])),
+        );
 
     for column in 0..WIDTH {
         builder = builder.account(
             AccountId::Column(column),
-            Account::from(basket([(Asset::NextRow(0), 1)])),
+            Account::from(basket([
+                (Asset::ColumnIdentity(column), 1),
+                (Asset::NextRow(0), 1),
+            ])),
         );
         for row in 0..HEIGHT {
             builder = builder.account(
                 AccountId::Cell { column, row },
-                Account::from(basket([(Asset::Empty, 1)])),
+                Account::from(basket([
+                    (Asset::CellIdentity { column, row }, 1),
+                    (Asset::Empty, 1),
+                ])),
             );
             for player in [Player::Red, Player::Yellow] {
                 for counts in count_combinations(column, row) {
@@ -190,11 +203,25 @@ pub fn initial() -> World {
         builder = builder.rate(
             RateId::Draw(player),
             Rate::new()
+                .preserve(Role::Game, basket([(Asset::GameIdentity, 1)]))
                 .consume(Role::Game, basket([(Asset::Turn(player), 1)]))
-                .preserve(Role::Column0, basket([(Asset::ColumnFull, 1)]))
-                .preserve(Role::Column1, basket([(Asset::ColumnFull, 1)]))
-                .preserve(Role::Column2, basket([(Asset::ColumnFull, 1)]))
-                .preserve(Role::Column3, basket([(Asset::ColumnFull, 1)]))
+                .preserve(
+                    Role::Column0,
+                    basket([(Asset::ColumnIdentity(0), 1), (Asset::ColumnFull, 1)]),
+                )
+                .preserve(
+                    Role::Column1,
+                    basket([(Asset::ColumnIdentity(1), 1), (Asset::ColumnFull, 1)]),
+                )
+                .preserve(
+                    Role::Column2,
+                    basket([(Asset::ColumnIdentity(2), 1), (Asset::ColumnFull, 1)]),
+                )
+                .preserve(
+                    Role::Column3,
+                    basket([(Asset::ColumnIdentity(3), 1), (Asset::ColumnFull, 1)]),
+                )
+                .preserve(Role::Result, basket([(Asset::ResultIdentity, 1)]))
                 .produce(Role::Result, basket([(Asset::Draw, 1)]))
                 .distinct(Role::Game, Role::Column0)
                 .distinct(Role::Game, Role::Column1)
@@ -344,8 +371,10 @@ fn move_rate(player: Player, column: u8, row: u8, counts: LineCounts) -> Rate<Ro
     }
 
     let rate = Rate::new()
+        .preserve(Role::Game, basket([(Asset::GameIdentity, 1)]))
         .consume(Role::Game, consumed)
         .produce(Role::Game, produced)
+        .preserve(Role::Column, basket([(Asset::ColumnIdentity(column), 1)]))
         .consume(Role::Column, basket([(Asset::NextRow(row), 1)]))
         .produce(
             Role::Column,
@@ -355,6 +384,10 @@ fn move_rate(player: Player, column: u8, row: u8, counts: LineCounts) -> Rate<Ro
                 basket([(Asset::NextRow(row + 1), 1)])
             },
         )
+        .preserve(
+            Role::Cell,
+            basket([(Asset::CellIdentity { column, row }, 1)]),
+        )
         .consume(Role::Cell, basket([(Asset::Empty, 1)]))
         .produce(Role::Cell, basket([(Asset::Piece(player), 1)]))
         .distinct(Role::Game, Role::Column)
@@ -362,7 +395,8 @@ fn move_rate(player: Player, column: u8, row: u8, counts: LineCounts) -> Rate<Ro
         .distinct(Role::Column, Role::Cell);
 
     if winning {
-        rate.produce(Role::Result, basket([(Asset::Winner(player), 1)]))
+        rate.preserve(Role::Result, basket([(Asset::ResultIdentity, 1)]))
+            .produce(Role::Result, basket([(Asset::Winner(player), 1)]))
             .distinct(Role::Game, Role::Result)
             .distinct(Role::Column, Role::Result)
             .distinct(Role::Cell, Role::Result)
@@ -496,6 +530,26 @@ mod tests {
             ),
             Quantity::new(1)
         );
+    }
+
+    #[test]
+    fn encoded_coordinates_reject_misbinding_an_otherwise_empty_cell() {
+        let world = initial();
+        let counts = current_counts(&world, Player::Red, 0, 0);
+        let misplaced = Exchange::new(
+            RateId::Move {
+                player: Player::Red,
+                column: 0,
+                row: 0,
+                counts,
+            },
+            Quantity::new(1),
+        )
+        .bind(Role::Game, AccountId::Game)
+        .bind(Role::Column, AccountId::Column(3))
+        .bind(Role::Cell, AccountId::Cell { column: 3, row: 3 });
+
+        assert!(!world.is_applicable(&misplaced));
     }
 
     #[test]

@@ -46,6 +46,10 @@ pub enum AccountId {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Asset {
+    AgentIdentity(AgentId),
+    NatureIdentity,
+    MissionIdentity,
+    SuccessIdentity,
     At(Location),
     Energy,
     SpentEnergy,
@@ -185,6 +189,7 @@ pub fn initial() -> World {
         .account(
             AccountId::Agent(AgentId::Scout),
             Account::from(basket([
+                (Asset::AgentIdentity(AgentId::Scout), 1),
                 (Asset::At(Location::Base), 1),
                 (Asset::Energy, 2),
                 (Asset::Sensor, 1),
@@ -193,17 +198,28 @@ pub fn initial() -> World {
         .account(
             AccountId::Agent(AgentId::Medic),
             Account::from(basket([
+                (Asset::AgentIdentity(AgentId::Medic), 1),
                 (Asset::At(Location::Base), 1),
                 (Asset::Energy, 2),
                 (Asset::MedicalKit, 1),
             ])),
         )
-        .account(AccountId::Nature, Account::from(nature))
+        .account(AccountId::Nature, {
+            nature.insert(Asset::NatureIdentity, Quantity::new(1));
+            Account::from(nature)
+        })
         .account(
             AccountId::Mission,
-            Account::from(basket([(Asset::TimeRemaining, 10), (Asset::Planning, 1)])),
+            Account::from(basket([
+                (Asset::MissionIdentity, 1),
+                (Asset::TimeRemaining, 10),
+                (Asset::Planning, 1),
+            ])),
         )
-        .account(AccountId::Success, Account::default());
+        .account(
+            AccountId::Success,
+            Account::from(basket([(Asset::SuccessIdentity, 1)])),
+        );
 
     for truth in [Location::North, Location::South] {
         for seed in 0..4 {
@@ -215,6 +231,7 @@ pub fn initial() -> World {
                         hazard,
                     },
                     Rate::new()
+                        .preserve(Role::Nature, basket([(Asset::NatureIdentity, 1)]))
                         .consume(Role::Nature, basket([(Asset::Unresolved, 1)]))
                         .preserve(
                             Role::Nature,
@@ -240,6 +257,12 @@ pub fn initial() -> World {
                     next_seed: (seed + 1) % 4,
                 },
                 Rate::new()
+                    .preserve(
+                        Role::Scout,
+                        basket([(Asset::AgentIdentity(AgentId::Scout), 1)]),
+                    )
+                    .preserve(Role::Nature, basket([(Asset::NatureIdentity, 1)]))
+                    .preserve(Role::Mission, basket([(Asset::MissionIdentity, 1)]))
                     .produce(Role::Scout, basket([(Asset::Intel(report), 1)]))
                     .preserve(Role::Nature, basket([(Asset::Truth(truth), 1)]))
                     .consume(Role::Nature, basket([(Asset::Seed(seed), 1)]))
@@ -256,7 +279,14 @@ pub fn initial() -> World {
     builder = builder.rate(
         RateId::BeginScan,
         Rate::new()
-            .preserve(Role::Scout, basket([(Asset::At(Location::Base), 1)]))
+            .preserve(
+                Role::Scout,
+                basket([
+                    (Asset::AgentIdentity(AgentId::Scout), 1),
+                    (Asset::At(Location::Base), 1),
+                ]),
+            )
+            .preserve(Role::Mission, basket([(Asset::MissionIdentity, 1)]))
             .consume(Role::Scout, basket([(Asset::Sensor, 1)]))
             .produce(Role::Scout, basket([(Asset::UsedSensor, 1)]))
             .consume(
@@ -275,6 +305,15 @@ pub fn initial() -> World {
             .rate(
                 RateId::Share(location),
                 Rate::new()
+                    .preserve(
+                        Role::Scout,
+                        basket([(Asset::AgentIdentity(AgentId::Scout), 1)]),
+                    )
+                    .preserve(
+                        Role::Medic,
+                        basket([(Asset::AgentIdentity(AgentId::Medic), 1)]),
+                    )
+                    .preserve(Role::Mission, basket([(Asset::MissionIdentity, 1)]))
                     .consume(Role::Scout, basket([(Asset::Intel(location), 1)]))
                     .produce(Role::Scout, basket([(Asset::SharedIntel(location), 1)]))
                     .produce(Role::Medic, basket([(Asset::Intel(location), 1)]))
@@ -288,6 +327,15 @@ pub fn initial() -> World {
             .rate(
                 RateId::MoveTogether(location),
                 Rate::new()
+                    .preserve(
+                        Role::Scout,
+                        basket([(Asset::AgentIdentity(AgentId::Scout), 1)]),
+                    )
+                    .preserve(
+                        Role::Medic,
+                        basket([(Asset::AgentIdentity(AgentId::Medic), 1)]),
+                    )
+                    .preserve(Role::Mission, basket([(Asset::MissionIdentity, 1)]))
                     .consume(
                         Role::Scout,
                         basket([(Asset::At(Location::Base), 1), (Asset::Energy, 1)]),
@@ -317,9 +365,25 @@ pub fn initial() -> World {
 
         for hazard in [Hazard::Safe, Hazard::Injury] {
             let rate = Rate::new()
-                .preserve(Role::Scout, basket([(Asset::At(location), 1)]))
-                .preserve(Role::Medic, basket([(Asset::At(location), 1)]))
-                .preserve(Role::Nature, basket([(Asset::Truth(location), 1)]))
+                .preserve(
+                    Role::Scout,
+                    basket([
+                        (Asset::AgentIdentity(AgentId::Scout), 1),
+                        (Asset::At(location), 1),
+                    ]),
+                )
+                .preserve(
+                    Role::Medic,
+                    basket([
+                        (Asset::AgentIdentity(AgentId::Medic), 1),
+                        (Asset::At(location), 1),
+                    ]),
+                )
+                .preserve(
+                    Role::Nature,
+                    basket([(Asset::NatureIdentity, 1), (Asset::Truth(location), 1)]),
+                )
+                .preserve(Role::Mission, basket([(Asset::MissionIdentity, 1)]))
                 .consume(Role::Nature, basket([(Asset::Hazard(hazard), 1)]))
                 .produce(Role::Nature, basket([(Asset::HazardResolved, 1)]))
                 .consume(
@@ -347,9 +411,25 @@ pub fn initial() -> World {
         builder = builder.rate(
             RateId::Rescue(location),
             Rate::new()
-                .preserve(Role::Scout, basket([(Asset::At(location), 1)]))
-                .preserve(Role::Medic, basket([(Asset::At(location), 1)]))
-                .preserve(Role::Nature, basket([(Asset::Truth(location), 1)]))
+                .preserve(
+                    Role::Scout,
+                    basket([
+                        (Asset::AgentIdentity(AgentId::Scout), 1),
+                        (Asset::At(location), 1),
+                    ]),
+                )
+                .preserve(
+                    Role::Medic,
+                    basket([
+                        (Asset::AgentIdentity(AgentId::Medic), 1),
+                        (Asset::At(location), 1),
+                    ]),
+                )
+                .preserve(
+                    Role::Nature,
+                    basket([(Asset::NatureIdentity, 1), (Asset::Truth(location), 1)]),
+                )
+                .preserve(Role::Mission, basket([(Asset::MissionIdentity, 1)]))
                 .consume(
                     Role::Mission,
                     basket([(Asset::AreaSafe, 1), (Asset::TimeRemaining, 1)]),
@@ -371,6 +451,15 @@ pub fn initial() -> World {
         .rate(
             RateId::Treat,
             Rate::new()
+                .preserve(
+                    Role::Scout,
+                    basket([(Asset::AgentIdentity(AgentId::Scout), 1)]),
+                )
+                .preserve(
+                    Role::Medic,
+                    basket([(Asset::AgentIdentity(AgentId::Medic), 1)]),
+                )
+                .preserve(Role::Mission, basket([(Asset::MissionIdentity, 1)]))
                 .consume(Role::Scout, basket([(Asset::Injured, 1)]))
                 .consume(Role::Medic, basket([(Asset::MedicalKit, 1)]))
                 .produce(Role::Medic, basket([(Asset::UsedMedicalKit, 1)]))
@@ -389,6 +478,8 @@ pub fn initial() -> World {
         .rate(
             RateId::Finish,
             Rate::new()
+                .preserve(Role::Mission, basket([(Asset::MissionIdentity, 1)]))
+                .preserve(Role::Goal, basket([(Asset::SuccessIdentity, 1)]))
                 .consume(Role::Mission, basket([(Asset::Rescued, 1)]))
                 .produce(Role::Goal, basket([(Asset::Solved, 1)]))
                 .distinct(Role::Mission, Role::Goal),
@@ -1023,5 +1114,24 @@ mod tests {
             transitions.last().expect("finish transition").outcome()[0],
             1
         );
+    }
+
+    #[test]
+    fn encoded_roles_reject_resolving_a_scan_into_the_medics_account() {
+        let model = initial();
+        let mut world = instantiate(&model, 0).expect("scenario exists");
+        world
+            .apply(action(RateId::BeginScan))
+            .expect("scout starts scan");
+        let resolution = candidates(&world)
+            .into_iter()
+            .find(|exchange| matches!(exchange.rate(), RateId::ResolveScan { .. }))
+            .expect("nature can resolve the scan");
+        let rebound = Exchange::new(*resolution.rate(), Quantity::new(1))
+            .bind(Role::Scout, AccountId::Agent(AgentId::Medic))
+            .bind(Role::Nature, AccountId::Nature)
+            .bind(Role::Mission, AccountId::Mission);
+
+        assert!(!world.is_applicable(&rebound));
     }
 }

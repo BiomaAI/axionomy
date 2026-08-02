@@ -36,11 +36,14 @@ pub enum AccountId {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Asset {
+    JobIdentity(Job),
+    SlotIdentity(Machine, u8),
     ReadyAt(Operation, u8),
     CompletedAt(Operation, u8),
     Available,
     Reserved(Operation),
     Makespan(u8),
+    Active,
     Solved,
 }
 
@@ -171,18 +174,30 @@ fn build(horizon: u8) -> World {
     let mut builder = EconomyBuilder::new()
         .account(
             AccountId::Job(Job::One),
-            Account::from(basket([(Asset::ReadyAt(Operation::OneA, 0), 1)])),
+            Account::from(basket([
+                (Asset::JobIdentity(Job::One), 1),
+                (Asset::ReadyAt(Operation::OneA, 0), 1),
+            ])),
         )
         .account(
             AccountId::Job(Job::Two),
-            Account::from(basket([(Asset::ReadyAt(Operation::TwoA, 0), 1)])),
+            Account::from(basket([
+                (Asset::JobIdentity(Job::Two), 1),
+                (Asset::ReadyAt(Operation::TwoA, 0), 1),
+            ])),
         )
-        .account(AccountId::Success, Account::default());
+        .account(
+            AccountId::Success,
+            Account::from(basket([(Asset::Active, 1)])),
+        );
     for machine in [Machine::One, Machine::Two] {
         for time in 0..horizon {
             builder = builder.account(
                 AccountId::Slot(machine, time),
-                Account::from(basket([(Asset::Available, 1)])),
+                Account::from(basket([
+                    (Asset::SlotIdentity(machine, time), 1),
+                    (Asset::Available, 1),
+                ])),
             );
         }
     }
@@ -231,12 +246,19 @@ fn build(horizon: u8) -> World {
                 Rate::new()
                     .preserve(
                         Role::PrimaryJob,
-                        basket([(Asset::CompletedAt(Operation::OneB, one_end), 1)]),
+                        basket([
+                            (Asset::JobIdentity(Job::One), 1),
+                            (Asset::CompletedAt(Operation::OneB, one_end), 1),
+                        ]),
                     )
                     .preserve(
                         Role::SecondaryJob,
-                        basket([(Asset::CompletedAt(Operation::TwoB, two_end), 1)]),
+                        basket([
+                            (Asset::JobIdentity(Job::Two), 1),
+                            (Asset::CompletedAt(Operation::TwoB, two_end), 1),
+                        ]),
                     )
+                    .consume(Role::Goal, basket([(Asset::Active, 1)]))
                     .produce(
                         Role::Goal,
                         basket([(Asset::Makespan(makespan), 1), (Asset::Solved, 1)]),
@@ -280,14 +302,24 @@ fn build(horizon: u8) -> World {
     builder
         .invariant(job_state)
         .invariant(capacity)
+        .invariant(
+            LinearInvariant::new("schedule lifecycle")
+                .weight(Asset::Active, 1)
+                .weight(Asset::Solved, 1),
+        )
         .build()
         .expect("scheduling model is valid")
 }
 
 fn schedule_rate(operation: Operation, ready: u8, start: u8) -> Rate<Role, Asset> {
-    let (_, _, duration, _) = operation_spec(operation);
+    let (job, machine, duration, _) = operation_spec(operation);
     let end = start + duration;
     let mut rate = Rate::new()
+        .preserve(Role::PrimaryJob, basket([(Asset::JobIdentity(job), 1)]))
+        .preserve(
+            Role::Slot0,
+            basket([(Asset::SlotIdentity(machine, start), 1)]),
+        )
         .consume(
             Role::PrimaryJob,
             basket([(Asset::ReadyAt(operation, ready), 1)]),
@@ -305,6 +337,10 @@ fn schedule_rate(operation: Operation, ready: u8, start: u8) -> Rate<Role, Asset
     }
     if duration == 2 {
         rate = rate
+            .preserve(
+                Role::Slot1,
+                basket([(Asset::SlotIdentity(machine, start + 1), 1)]),
+            )
             .consume(Role::Slot1, basket([(Asset::Available, 1)]))
             .produce(Role::Slot1, basket([(Asset::Reserved(operation), 1)]))
             .distinct(Role::PrimaryJob, Role::Slot1)
@@ -375,5 +411,23 @@ mod tests {
         let world = impossible();
         assert!(solve_best_first(&world).is_none());
         assert!(independent_optimize(&world).is_none());
+    }
+
+    #[test]
+    fn operation_cannot_reserve_another_machine_or_time() {
+        let world = initial();
+        let wrong_machine = Exchange::new(
+            RateId::Schedule {
+                operation: Operation::OneA,
+                ready: 0,
+                start: 0,
+            },
+            Quantity::new(1),
+        )
+        .bind(Role::PrimaryJob, AccountId::Job(Job::One))
+        .bind(Role::Slot0, AccountId::Slot(Machine::Two, 0))
+        .bind(Role::Slot1, AccountId::Slot(Machine::Two, 1));
+
+        assert!(!world.is_applicable(&wrong_machine));
     }
 }

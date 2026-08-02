@@ -27,6 +27,8 @@ pub enum AccountId {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Asset {
+    AgentIdentity(AgentId),
+    BridgeIdentity,
     At(Side),
     Energy,
     SpentEnergy,
@@ -40,6 +42,7 @@ pub enum Asset {
     Waiting,
     Crossed,
     CapacityFree,
+    Active,
     Solved,
 }
 
@@ -87,6 +90,7 @@ pub fn initial() -> World {
         .account(
             AccountId::Agent(AgentId::A),
             Account::from(basket([
+                (Asset::AgentIdentity(AgentId::A), 1),
                 (Asset::At(Side::West), 1),
                 (Asset::Energy, 1),
                 (Asset::Credit, 2),
@@ -96,6 +100,7 @@ pub fn initial() -> World {
         .account(
             AccountId::Agent(AgentId::B),
             Account::from(basket([
+                (Asset::AgentIdentity(AgentId::B), 1),
                 (Asset::At(Side::West), 1),
                 (Asset::Energy, 1),
                 (Asset::Credit, 2),
@@ -104,15 +109,22 @@ pub fn initial() -> World {
         )
         .account(
             AccountId::Bridge,
-            Account::from(basket([(Asset::CapacityFree, 1)])),
+            Account::from(basket([
+                (Asset::BridgeIdentity, 1),
+                (Asset::CapacityFree, 1),
+            ])),
         )
-        .account(AccountId::Success, Account::default());
+        .account(
+            AccountId::Success,
+            Account::from(basket([(Asset::Active, 1)])),
+        );
 
     for agent in [AgentId::A, AgentId::B] {
         for amount in 1..=2 {
             builder = builder.rate(
                 RateId::SubmitBid { agent, amount },
                 Rate::new()
+                    .preserve(Role::Traveler, basket([(Asset::AgentIdentity(agent), 1)]))
                     .consume(
                         Role::Traveler,
                         basket([(Asset::CanBid, 1), (Asset::Credit, u64::from(amount))]),
@@ -131,6 +143,8 @@ pub fn initial() -> World {
             .rate(
                 RateId::ClaimFirst { agent },
                 Rate::new()
+                    .preserve(Role::Traveler, basket([(Asset::AgentIdentity(agent), 1)]))
+                    .preserve(Role::Bridge, basket([(Asset::BridgeIdentity, 1)]))
                     .consume(Role::Traveler, basket([(Asset::CanBid, 1)]))
                     .consume(Role::Bridge, basket([(Asset::CapacityFree, 1)]))
                     .produce(Role::Traveler, basket([(Asset::CrossingRight, 1)]))
@@ -139,6 +153,8 @@ pub fn initial() -> World {
             .rate(
                 RateId::YieldToWaiting { agent },
                 Rate::new()
+                    .preserve(Role::Traveler, basket([(Asset::AgentIdentity(agent), 1)]))
+                    .preserve(Role::Bridge, basket([(Asset::BridgeIdentity, 1)]))
                     .consume(Role::Traveler, basket([(Asset::Waiting, 1)]))
                     .consume(Role::Bridge, basket([(Asset::CapacityFree, 1)]))
                     .produce(Role::Traveler, basket([(Asset::CrossingRight, 1)]))
@@ -147,6 +163,8 @@ pub fn initial() -> World {
             .rate(
                 RateId::Cross { agent },
                 Rate::new()
+                    .preserve(Role::Traveler, basket([(Asset::AgentIdentity(agent), 1)]))
+                    .preserve(Role::Bridge, basket([(Asset::BridgeIdentity, 1)]))
                     .consume(
                         Role::Traveler,
                         basket([
@@ -187,6 +205,12 @@ pub fn initial() -> World {
                     losing_bid,
                 },
                 Rate::new()
+                    .preserve(Role::Winner, basket([(Asset::AgentIdentity(winner), 1)]))
+                    .preserve(
+                        Role::Loser,
+                        basket([(Asset::AgentIdentity(other(winner)), 1)]),
+                    )
+                    .preserve(Role::Bridge, basket([(Asset::BridgeIdentity, 1)]))
                     .consume(
                         Role::Winner,
                         basket([
@@ -236,8 +260,15 @@ pub fn initial() -> World {
         .rate(
             RateId::Finish,
             Rate::new()
-                .preserve(Role::AgentA, basket([(Asset::Crossed, 1)]))
-                .preserve(Role::AgentB, basket([(Asset::Crossed, 1)]))
+                .preserve(
+                    Role::AgentA,
+                    basket([(Asset::AgentIdentity(AgentId::A), 1), (Asset::Crossed, 1)]),
+                )
+                .preserve(
+                    Role::AgentB,
+                    basket([(Asset::AgentIdentity(AgentId::B), 1), (Asset::Crossed, 1)]),
+                )
+                .consume(Role::Goal, basket([(Asset::Active, 1)]))
                 .produce(Role::Goal, basket([(Asset::Solved, 1)]))
                 .distinct(Role::AgentA, Role::AgentB)
                 .distinct(Role::AgentA, Role::Goal)
@@ -245,6 +276,11 @@ pub fn initial() -> World {
         )
         .invariant(positions)
         .invariant(status)
+        .invariant(
+            LinearInvariant::new("bridge lifecycle")
+                .weight(Asset::Active, 1)
+                .weight(Asset::Solved, 1),
+        )
         .invariant(
             LinearInvariant::new("bridge capacity")
                 .weight(Asset::CapacityFree, 1)
@@ -409,5 +445,50 @@ mod tests {
                 .is_err()
         );
         assert_eq!(world.state_key(), before);
+    }
+
+    #[test]
+    fn encoded_identity_rejects_bidder_impersonation() {
+        let world = initial();
+        let impersonation = Exchange::new(
+            RateId::SubmitBid {
+                agent: AgentId::A,
+                amount: 1,
+            },
+            Quantity::new(1),
+        )
+        .bind(Role::Traveler, AccountId::Agent(AgentId::B));
+
+        assert!(!world.is_applicable(&impersonation));
+    }
+
+    #[test]
+    fn encoded_identity_rejects_wrong_auction_winner() {
+        let mut world = initial();
+        world
+            .apply(action(RateId::SubmitBid {
+                agent: AgentId::A,
+                amount: 2,
+            }))
+            .expect("A submits");
+        world
+            .apply(action(RateId::SubmitBid {
+                agent: AgentId::B,
+                amount: 1,
+            }))
+            .expect("B submits");
+        let swapped = Exchange::new(
+            RateId::Resolve {
+                winner: AgentId::A,
+                winning_bid: 2,
+                losing_bid: 1,
+            },
+            Quantity::new(1),
+        )
+        .bind(Role::Winner, AccountId::Agent(AgentId::B))
+        .bind(Role::Loser, AccountId::Agent(AgentId::A))
+        .bind(Role::Bridge, AccountId::Bridge);
+
+        assert!(!world.is_applicable(&swapped));
     }
 }

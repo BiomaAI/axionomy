@@ -14,10 +14,12 @@ pub enum AccountId {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Asset {
+    CellIdentity(u8),
     Player,
     Crate,
     Empty,
     GoalCell,
+    Active,
     Solved,
 }
 
@@ -63,7 +65,10 @@ pub fn solve(world: &World) -> Option<Solution> {
 }
 
 fn build(player: u8, crate_at: u8, goal_cell: u8) -> World {
-    let mut builder = EconomyBuilder::new().account(AccountId::Success, Account::default());
+    let mut builder = EconomyBuilder::new().account(
+        AccountId::Success,
+        Account::from(basket([(Asset::Active, 1)])),
+    );
     for cell in 0..5 {
         let occupant = if cell == player {
             Asset::Player
@@ -72,7 +77,10 @@ fn build(player: u8, crate_at: u8, goal_cell: u8) -> World {
         } else {
             Asset::Empty
         };
-        let mut assets = Basket::from([(occupant, Quantity::new(1))]);
+        let mut assets = Basket::from([
+            (Asset::CellIdentity(cell), Quantity::new(1)),
+            (occupant, Quantity::new(1)),
+        ]);
         if cell == goal_cell {
             assets.insert(Asset::GoalCell, Quantity::new(1));
         }
@@ -84,6 +92,8 @@ fn build(player: u8, crate_at: u8, goal_cell: u8) -> World {
             builder = builder.rate(
                 RateId::Move { from, to },
                 Rate::new()
+                    .preserve(Role::From, basket([(Asset::CellIdentity(from), 1)]))
+                    .preserve(Role::To, basket([(Asset::CellIdentity(to), 1)]))
                     .consume(Role::From, basket([(Asset::Player, 1)]))
                     .consume(Role::To, basket([(Asset::Empty, 1)]))
                     .produce(Role::From, basket([(Asset::Empty, 1)]))
@@ -107,6 +117,9 @@ fn build(player: u8, crate_at: u8, goal_cell: u8) -> World {
                 to,
             },
             Rate::new()
+                .preserve(Role::From, basket([(Asset::CellIdentity(behind), 1)]))
+                .preserve(Role::Middle, basket([(Asset::CellIdentity(middle), 1)]))
+                .preserve(Role::To, basket([(Asset::CellIdentity(to), 1)]))
                 .consume(Role::From, basket([(Asset::Player, 1)]))
                 .consume(Role::Middle, basket([(Asset::Crate, 1)]))
                 .consume(Role::To, basket([(Asset::Empty, 1)]))
@@ -124,8 +137,13 @@ fn build(player: u8, crate_at: u8, goal_cell: u8) -> World {
             Rate::new()
                 .preserve(
                     Role::Middle,
-                    basket([(Asset::Crate, 1), (Asset::GoalCell, 1)]),
+                    basket([
+                        (Asset::CellIdentity(cell), 1),
+                        (Asset::Crate, 1),
+                        (Asset::GoalCell, 1),
+                    ]),
                 )
+                .consume(Role::Goal, basket([(Asset::Active, 1)]))
                 .produce(Role::Goal, basket([(Asset::Solved, 1)]))
                 .distinct(Role::Middle, Role::Goal),
         );
@@ -139,6 +157,11 @@ fn build(player: u8, crate_at: u8, goal_cell: u8) -> World {
                 .weight(Asset::Player, 1)
                 .weight(Asset::Crate, 1)
                 .weight(Asset::Empty, 1),
+        )
+        .invariant(
+            LinearInvariant::new("puzzle lifecycle")
+                .weight(Asset::Active, 1)
+                .weight(Asset::Solved, 1),
         )
         .build()
         .expect("sokoban model is valid")
@@ -198,5 +221,26 @@ mod tests {
         let before = world.state_key();
         assert!(solve(&world).is_none());
         assert_eq!(world.state_key(), before);
+    }
+
+    #[test]
+    fn encoded_cell_identities_reject_teleports() {
+        let world = initial();
+        let teleport = Exchange::new(RateId::Move { from: 0, to: 1 }, Quantity::new(1))
+            .bind(Role::From, AccountId::Cell(0))
+            .bind(Role::To, AccountId::Cell(4));
+
+        assert!(!world.is_applicable(&teleport));
+    }
+
+    #[test]
+    fn solved_marker_cannot_be_minted_twice() {
+        let solution = solve(&initial()).expect("puzzle is solvable");
+        let solved = initial()
+            .replayed(solution.trace())
+            .expect("solution must replay");
+        let finish = action(RateId::Finish { cell: 3 });
+
+        assert!(!solved.is_applicable(&finish));
     }
 }
