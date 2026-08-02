@@ -28,7 +28,7 @@ pub enum Role {
     From,
     Middle,
     To,
-    Goal,
+    Puzzle,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -92,6 +92,7 @@ fn build(player: u8, crate_at: u8, goal_cell: u8) -> World {
             builder = builder.rate(
                 RateId::Move { from, to },
                 Rate::new()
+                    .preserve(Role::Puzzle, basket([(Asset::Active, 1)]))
                     .preserve(Role::From, basket([(Asset::CellIdentity(from), 1)]))
                     .preserve(Role::To, basket([(Asset::CellIdentity(to), 1)]))
                     .consume(Role::From, basket([(Asset::Player, 1)]))
@@ -117,6 +118,7 @@ fn build(player: u8, crate_at: u8, goal_cell: u8) -> World {
                 to,
             },
             Rate::new()
+                .preserve(Role::Puzzle, basket([(Asset::Active, 1)]))
                 .preserve(Role::From, basket([(Asset::CellIdentity(behind), 1)]))
                 .preserve(Role::Middle, basket([(Asset::CellIdentity(middle), 1)]))
                 .preserve(Role::To, basket([(Asset::CellIdentity(to), 1)]))
@@ -143,9 +145,9 @@ fn build(player: u8, crate_at: u8, goal_cell: u8) -> World {
                         (Asset::GoalCell, 1),
                     ]),
                 )
-                .consume(Role::Goal, basket([(Asset::Active, 1)]))
-                .produce(Role::Goal, basket([(Asset::Solved, 1)]))
-                .distinct(Role::Middle, Role::Goal),
+                .consume(Role::Puzzle, basket([(Asset::Active, 1)]))
+                .produce(Role::Puzzle, basket([(Asset::Solved, 1)]))
+                .distinct(Role::Middle, Role::Puzzle),
         );
     }
 
@@ -177,21 +179,21 @@ fn neighbors(cell: u8) -> impl Iterator<Item = u8> {
 }
 
 fn action(rate: RateId) -> Action {
+    let exchange = Exchange::new(rate, Quantity::new(1)).bind(Role::Puzzle, AccountId::Success);
     match rate {
         RateId::Move { from, to } => Exchange::new(rate, Quantity::new(1))
+            .bind(Role::Puzzle, AccountId::Success)
             .bind(Role::From, AccountId::Cell(from))
             .bind(Role::To, AccountId::Cell(to)),
         RateId::Push {
             behind,
             crate_at,
             to,
-        } => Exchange::new(rate, Quantity::new(1))
+        } => exchange
             .bind(Role::From, AccountId::Cell(behind))
             .bind(Role::Middle, AccountId::Cell(crate_at))
             .bind(Role::To, AccountId::Cell(to)),
-        RateId::Finish { cell } => Exchange::new(rate, Quantity::new(1))
-            .bind(Role::Middle, AccountId::Cell(cell))
-            .bind(Role::Goal, AccountId::Success),
+        RateId::Finish { cell } => exchange.bind(Role::Middle, AccountId::Cell(cell)),
     }
 }
 
@@ -234,13 +236,12 @@ mod tests {
     }
 
     #[test]
-    fn solved_marker_cannot_be_minted_twice() {
+    fn solved_puzzle_is_quiescent() {
         let solution = solve(&initial()).expect("puzzle is solvable");
         let solved = initial()
             .replayed(solution.trace())
             .expect("solution must replay");
-        let finish = action(RateId::Finish { cell: 3 });
 
-        assert!(!solved.is_applicable(&finish));
+        assert!(candidates(&solved).is_empty());
     }
 }

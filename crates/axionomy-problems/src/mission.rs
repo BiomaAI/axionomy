@@ -150,14 +150,14 @@ impl MissionRollout {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct MonteCarloEstimate {
+pub struct PolicyComparison {
     chosen: Policy,
     coordinated_successes: usize,
     direct_successes: usize,
     samples: usize,
 }
 
-impl MonteCarloEstimate {
+impl PolicyComparison {
     pub const fn chosen(self) -> Policy {
         self.chosen
     }
@@ -654,12 +654,16 @@ pub fn instantiate(model: &World, sample_index: usize) -> Option<World> {
 }
 
 pub fn run_policy(model: &World, policy: Policy, sample_index: usize) -> MissionRollout {
-    let goal = goal();
     let scenarios = scenarios(model);
     let total = total_weight(&scenarios).expect("mission has encoded scenarios");
     let scenario = choose_by_ticket(&scenarios, systematic_ticket(sample_index, total))
         .expect("systematic ticket is in range")
         .clone();
+    run_policy_with_scenario(model, policy, scenario)
+}
+
+fn run_policy_with_scenario(model: &World, policy: Policy, scenario: Action) -> MissionRollout {
+    let goal = goal();
     let mut scenario = Some(scenario);
     let result = run_to_goal(
         model,
@@ -697,7 +701,10 @@ pub fn run_policy(model: &World, policy: Policy, sample_index: usize) -> Mission
     }
 }
 
-pub fn monte_carlo(model: &World, samples: usize) -> Option<MonteCarloEstimate> {
+/// Exhaustively compares policies across every integer-weighted scenario.
+pub fn evaluate_scenarios(model: &World) -> Option<PolicyComparison> {
+    let support = scenarios(model);
+    let samples = usize::try_from(total_weight(&support).ok()?).ok()?;
     let estimates = evaluate(
         [Policy::ShareAndCoordinate, Policy::NorthTogether],
         MonteCarloConfig::new(samples),
@@ -707,6 +714,38 @@ pub fn monte_carlo(model: &World, samples: usize) -> Option<MonteCarloEstimate> 
         BernoulliStatistics::new,
     )
     .ok()?;
+    comparison(estimates, samples)
+}
+
+/// Estimates policies from reproducible random draws over the encoded prior.
+pub fn monte_carlo(model: &World, samples: usize, seed: u64) -> Option<PolicyComparison> {
+    let support = scenarios(model);
+    let estimates = evaluate(
+        [Policy::ShareAndCoordinate, Policy::NorthTogether],
+        MonteCarloConfig::new(samples),
+        |policy, sample_index| {
+            let offset = u64::try_from(sample_index)
+                .unwrap_or(u64::MAX)
+                .wrapping_mul(0x9e37_79b9_7f4a_7c15);
+            let mut sampler = SeededSampler::new(seed.wrapping_add(offset));
+            let scenario = sample(&support, &mut sampler).map_err(|_| ())?.clone();
+            Ok::<_, ()>(run_policy_with_scenario(model, *policy, scenario).succeeded())
+        },
+        BernoulliStatistics::new,
+    )
+    .ok()?;
+    comparison(estimates, samples)
+}
+
+fn comparison(
+    estimates: Vec<
+        axionomy_search::monte_carlo::PolicyEstimate<
+            Policy,
+            axionomy_search::monte_carlo::BernoulliSummary,
+        >,
+    >,
+    samples: usize,
+) -> Option<PolicyComparison> {
     let coordinated_successes = estimates
         .iter()
         .find(|estimate| estimate.policy() == &Policy::ShareAndCoordinate)?
@@ -717,7 +756,7 @@ pub fn monte_carlo(model: &World, samples: usize) -> Option<MonteCarloEstimate> 
         .find(|estimate| estimate.policy() == &Policy::NorthTogether)?
         .summary()
         .successes();
-    Some(MonteCarloEstimate {
+    Some(PolicyComparison {
         chosen: if coordinated_successes >= direct_successes {
             Policy::ShareAndCoordinate
         } else {
@@ -1072,12 +1111,18 @@ mod tests {
     }
 
     #[test]
-    fn monte_carlo_prefers_observe_share_and_coordinate() {
-        let estimate = monte_carlo(&initial(), 16).expect("mission prior is encoded");
+    fn exact_scenario_evaluation_prefers_observe_share_and_coordinate() {
+        let estimate = evaluate_scenarios(&initial()).expect("mission prior is encoded");
 
         assert_eq!(estimate.coordinated_successes(), 12);
         assert_eq!(estimate.direct_successes(), 8);
         assert_eq!(estimate.chosen(), Policy::ShareAndCoordinate);
+    }
+
+    #[test]
+    fn seeded_monte_carlo_is_reproducible() {
+        let model = initial();
+        assert_eq!(monte_carlo(&model, 64, 23), monte_carlo(&model, 64, 23));
     }
 
     #[test]

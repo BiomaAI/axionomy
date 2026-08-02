@@ -15,13 +15,13 @@ fn main() {
         scenarios = 8,
         "uncertain economy ready"
     );
-    let estimate = rescue::monte_carlo(&model, 8).expect("prior has positive weight");
+    let estimate = rescue::evaluate_scenarios(&model).expect("prior has positive weight");
     info!(
         samples = estimate.samples(),
         observe_then_follow_wins = estimate.observe_successes(),
         direct_north_wins = estimate.direct_successes(),
         chosen = ?estimate.chosen(),
-        "Monte Carlo policy comparison complete"
+        "exact encoded-scenario comparison complete"
     );
     let sample = rescue::instantiate(&model, Location::South, 1).expect("scenario is encoded");
     let rollout = rescue::run_sampled_policy(&model, &sample, estimate.chosen())

@@ -22,7 +22,6 @@ pub enum Side {
 pub enum AccountId {
     Agent(AgentId),
     Bridge,
-    Success,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -54,7 +53,6 @@ pub enum Role {
     Bridge,
     AgentA,
     AgentB,
-    Goal,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -112,11 +110,8 @@ pub fn initial() -> World {
             Account::from(basket([
                 (Asset::BridgeIdentity, 1),
                 (Asset::CapacityFree, 1),
+                (Asset::Active, 1),
             ])),
-        )
-        .account(
-            AccountId::Success,
-            Account::from(basket([(Asset::Active, 1)])),
         );
 
     for agent in [AgentId::A, AgentId::B] {
@@ -125,6 +120,10 @@ pub fn initial() -> World {
                 RateId::SubmitBid { agent, amount },
                 Rate::new()
                     .preserve(Role::Traveler, basket([(Asset::AgentIdentity(agent), 1)]))
+                    .preserve(
+                        Role::Bridge,
+                        basket([(Asset::BridgeIdentity, 1), (Asset::Active, 1)]),
+                    )
                     .consume(
                         Role::Traveler,
                         basket([(Asset::CanBid, 1), (Asset::Credit, u64::from(amount))]),
@@ -136,7 +135,8 @@ pub fn initial() -> World {
                             (Asset::Bid(amount), 1),
                             (Asset::Escrow, u64::from(amount)),
                         ]),
-                    ),
+                    )
+                    .distinct(Role::Traveler, Role::Bridge),
             );
         }
         builder = builder
@@ -144,7 +144,10 @@ pub fn initial() -> World {
                 RateId::ClaimFirst { agent },
                 Rate::new()
                     .preserve(Role::Traveler, basket([(Asset::AgentIdentity(agent), 1)]))
-                    .preserve(Role::Bridge, basket([(Asset::BridgeIdentity, 1)]))
+                    .preserve(
+                        Role::Bridge,
+                        basket([(Asset::BridgeIdentity, 1), (Asset::Active, 1)]),
+                    )
                     .consume(Role::Traveler, basket([(Asset::CanBid, 1)]))
                     .consume(Role::Bridge, basket([(Asset::CapacityFree, 1)]))
                     .produce(Role::Traveler, basket([(Asset::CrossingRight, 1)]))
@@ -154,7 +157,10 @@ pub fn initial() -> World {
                 RateId::YieldToWaiting { agent },
                 Rate::new()
                     .preserve(Role::Traveler, basket([(Asset::AgentIdentity(agent), 1)]))
-                    .preserve(Role::Bridge, basket([(Asset::BridgeIdentity, 1)]))
+                    .preserve(
+                        Role::Bridge,
+                        basket([(Asset::BridgeIdentity, 1), (Asset::Active, 1)]),
+                    )
                     .consume(Role::Traveler, basket([(Asset::Waiting, 1)]))
                     .consume(Role::Bridge, basket([(Asset::CapacityFree, 1)]))
                     .produce(Role::Traveler, basket([(Asset::CrossingRight, 1)]))
@@ -164,7 +170,10 @@ pub fn initial() -> World {
                 RateId::Cross { agent },
                 Rate::new()
                     .preserve(Role::Traveler, basket([(Asset::AgentIdentity(agent), 1)]))
-                    .preserve(Role::Bridge, basket([(Asset::BridgeIdentity, 1)]))
+                    .preserve(
+                        Role::Bridge,
+                        basket([(Asset::BridgeIdentity, 1), (Asset::Active, 1)]),
+                    )
                     .consume(
                         Role::Traveler,
                         basket([
@@ -210,7 +219,10 @@ pub fn initial() -> World {
                         Role::Loser,
                         basket([(Asset::AgentIdentity(other(winner)), 1)]),
                     )
-                    .preserve(Role::Bridge, basket([(Asset::BridgeIdentity, 1)]))
+                    .preserve(
+                        Role::Bridge,
+                        basket([(Asset::BridgeIdentity, 1), (Asset::Active, 1)]),
+                    )
                     .consume(
                         Role::Winner,
                         basket([
@@ -268,11 +280,12 @@ pub fn initial() -> World {
                     Role::AgentB,
                     basket([(Asset::AgentIdentity(AgentId::B), 1), (Asset::Crossed, 1)]),
                 )
-                .consume(Role::Goal, basket([(Asset::Active, 1)]))
-                .produce(Role::Goal, basket([(Asset::Solved, 1)]))
+                .preserve(Role::Bridge, basket([(Asset::BridgeIdentity, 1)]))
+                .consume(Role::Bridge, basket([(Asset::Active, 1)]))
+                .produce(Role::Bridge, basket([(Asset::Solved, 1)]))
                 .distinct(Role::AgentA, Role::AgentB)
-                .distinct(Role::AgentA, Role::Goal)
-                .distinct(Role::AgentB, Role::Goal),
+                .distinct(Role::AgentA, Role::Bridge)
+                .distinct(Role::AgentB, Role::Bridge),
         )
         .invariant(positions)
         .invariant(status)
@@ -302,7 +315,7 @@ pub fn initial() -> World {
 }
 
 pub fn goal() -> Goal<AccountId, Asset> {
-    Goal::new().require(AccountId::Success, basket([(Asset::Solved, 1)]))
+    Goal::new().require(AccountId::Bridge, basket([(Asset::Solved, 1)]))
 }
 
 pub fn candidates(world: &World) -> Vec<Action> {
@@ -391,7 +404,7 @@ pub fn action(rate: RateId) -> Action {
             ) {
                 exchange.bind(Role::Bridge, AccountId::Bridge)
             } else {
-                exchange
+                exchange.bind(Role::Bridge, AccountId::Bridge)
             }
         }
         RateId::Resolve { winner, .. } => Exchange::new(rate, Quantity::new(1))
@@ -401,7 +414,7 @@ pub fn action(rate: RateId) -> Action {
         RateId::Finish => Exchange::new(rate, Quantity::new(1))
             .bind(Role::AgentA, AccountId::Agent(AgentId::A))
             .bind(Role::AgentB, AccountId::Agent(AgentId::B))
-            .bind(Role::Goal, AccountId::Success),
+            .bind(Role::Bridge, AccountId::Bridge),
     }
 }
 
@@ -429,6 +442,7 @@ mod tests {
             let mut replay = initial();
             replay.replay(trace).expect("mechanism must replay");
             assert!(replay.matches(&goal()));
+            assert!(candidates(&replay).is_empty());
         }
     }
 
@@ -457,7 +471,8 @@ mod tests {
             },
             Quantity::new(1),
         )
-        .bind(Role::Traveler, AccountId::Agent(AgentId::B));
+        .bind(Role::Traveler, AccountId::Agent(AgentId::B))
+        .bind(Role::Bridge, AccountId::Bridge);
 
         assert!(!world.is_applicable(&impersonation));
     }

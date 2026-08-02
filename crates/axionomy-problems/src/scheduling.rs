@@ -53,7 +53,7 @@ pub enum Role {
     SecondaryJob,
     Slot0,
     Slot1,
-    Goal,
+    Schedule,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -258,14 +258,14 @@ fn build(horizon: u8) -> World {
                             (Asset::CompletedAt(Operation::TwoB, two_end), 1),
                         ]),
                     )
-                    .consume(Role::Goal, basket([(Asset::Active, 1)]))
+                    .consume(Role::Schedule, basket([(Asset::Active, 1)]))
                     .produce(
-                        Role::Goal,
+                        Role::Schedule,
                         basket([(Asset::Makespan(makespan), 1), (Asset::Solved, 1)]),
                     )
                     .distinct(Role::PrimaryJob, Role::SecondaryJob)
-                    .distinct(Role::PrimaryJob, Role::Goal)
-                    .distinct(Role::SecondaryJob, Role::Goal),
+                    .distinct(Role::PrimaryJob, Role::Schedule)
+                    .distinct(Role::SecondaryJob, Role::Schedule),
             );
         }
     }
@@ -315,6 +315,7 @@ fn schedule_rate(operation: Operation, ready: u8, start: u8) -> Rate<Role, Asset
     let (job, machine, duration, _) = operation_spec(operation);
     let end = start + duration;
     let mut rate = Rate::new()
+        .preserve(Role::Schedule, basket([(Asset::Active, 1)]))
         .preserve(Role::PrimaryJob, basket([(Asset::JobIdentity(job), 1)]))
         .preserve(
             Role::Slot0,
@@ -326,6 +327,8 @@ fn schedule_rate(operation: Operation, ready: u8, start: u8) -> Rate<Role, Asset
         )
         .consume(Role::Slot0, basket([(Asset::Available, 1)]))
         .produce(Role::Slot0, basket([(Asset::Reserved(operation), 1)]))
+        .distinct(Role::Schedule, Role::PrimaryJob)
+        .distinct(Role::Schedule, Role::Slot0)
         .distinct(Role::PrimaryJob, Role::Slot0);
     if let Some(next) = successor(operation) {
         rate = rate.produce(Role::PrimaryJob, basket([(Asset::ReadyAt(next, end), 1)]));
@@ -343,6 +346,7 @@ fn schedule_rate(operation: Operation, ready: u8, start: u8) -> Rate<Role, Asset
             )
             .consume(Role::Slot1, basket([(Asset::Available, 1)]))
             .produce(Role::Slot1, basket([(Asset::Reserved(operation), 1)]))
+            .distinct(Role::Schedule, Role::Slot1)
             .distinct(Role::PrimaryJob, Role::Slot1)
             .distinct(Role::Slot0, Role::Slot1);
     }
@@ -367,12 +371,13 @@ fn successor(operation: Operation) -> Option<Operation> {
 }
 
 fn action(rate: RateId) -> Action {
+    let exchange = Exchange::new(rate, Quantity::new(1)).bind(Role::Schedule, AccountId::Success);
     match rate {
         RateId::Schedule {
             operation, start, ..
         } => {
             let (job, machine, duration, _) = operation_spec(operation);
-            let mut exchange = Exchange::new(rate, Quantity::new(1))
+            let mut exchange = exchange
                 .bind(Role::PrimaryJob, AccountId::Job(job))
                 .bind(Role::Slot0, AccountId::Slot(machine, start));
             if duration == 2 {
@@ -380,10 +385,9 @@ fn action(rate: RateId) -> Action {
             }
             exchange
         }
-        RateId::Finish { .. } => Exchange::new(rate, Quantity::new(1))
+        RateId::Finish { .. } => exchange
             .bind(Role::PrimaryJob, AccountId::Job(Job::One))
-            .bind(Role::SecondaryJob, AccountId::Job(Job::Two))
-            .bind(Role::Goal, AccountId::Success),
+            .bind(Role::SecondaryJob, AccountId::Job(Job::Two)),
     }
 }
 
@@ -404,6 +408,7 @@ mod tests {
             .replay(independent.trace())
             .expect("optimizer proposal must replay");
         assert!(replay.matches(&goal()));
+        assert!(candidates(&replay).is_empty());
     }
 
     #[test]

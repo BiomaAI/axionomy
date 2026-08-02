@@ -39,13 +39,13 @@ fn main() {
     );
     debug!(children = ?decision.children(), "root action statistics");
 
-    let estimate = mission::monte_carlo(&model, 16).expect("mission policies can be evaluated");
+    let estimate = mission::evaluate_scenarios(&model).expect("mission policies can be evaluated");
     info!(
         samples = estimate.samples(),
         coordinated_wins = estimate.coordinated_successes(),
         direct_north_wins = estimate.direct_successes(),
         chosen = ?estimate.chosen(),
-        "Monte Carlo policy comparison complete"
+        "exact encoded-scenario comparison complete"
     );
     let rollout = mission::run_policy(&model, estimate.chosen(), 3);
     let replayed = model

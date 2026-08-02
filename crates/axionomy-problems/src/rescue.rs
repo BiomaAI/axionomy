@@ -9,7 +9,9 @@ use axionomy_search::rollout::{
 };
 use axionomy_search::{
     monte_carlo::{BernoulliStatistics, MonteCarloConfig, evaluate},
-    sampling::{WeightedExchange, choose_by_ticket, systematic_ticket, total_weight},
+    sampling::{
+        SeededSampler, WeightedExchange, choose_by_ticket, sample, systematic_ticket, total_weight,
+    },
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -23,7 +25,6 @@ pub enum Location {
 pub enum AccountId {
     Agent,
     Nature,
-    Success,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -39,6 +40,7 @@ pub enum Asset {
     Seed(u8),
     Belief(Location),
     Rescued,
+    Active,
     Solved,
 }
 
@@ -46,7 +48,6 @@ pub enum Asset {
 pub enum Role {
     Actor,
     Nature,
-    Goal,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -99,14 +100,14 @@ impl Rollout {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct MonteCarloEstimate {
+pub struct PolicyComparison {
     chosen: Policy,
     observe_successes: usize,
     direct_successes: usize,
     samples: usize,
 }
 
-impl MonteCarloEstimate {
+impl PolicyComparison {
     pub fn chosen(&self) -> Policy {
         self.chosen
     }
@@ -165,10 +166,10 @@ fn build(nature: Account<Asset>) -> World {
                 (Asset::At(Location::Base), 1),
                 (Asset::Energy, 2),
                 (Asset::Sensor, 1),
+                (Asset::Active, 1),
             ])),
         )
-        .account(AccountId::Nature, nature)
-        .account(AccountId::Success, Account::default());
+        .account(AccountId::Nature, nature);
 
     for encoded_truth in [Location::North, Location::South] {
         for encoded_seed in 0..4 {
@@ -202,7 +203,10 @@ fn build(nature: Account<Asset>) -> World {
                     next_seed,
                 },
                 Rate::new()
-                    .preserve(Role::Actor, basket([(Asset::At(Location::Base), 1)]))
+                    .preserve(
+                        Role::Actor,
+                        basket([(Asset::At(Location::Base), 1), (Asset::Active, 1)]),
+                    )
                     .consume(Role::Actor, basket([(Asset::Sensor, 1)]))
                     .produce(
                         Role::Actor,
@@ -224,6 +228,7 @@ fn build(nature: Account<Asset>) -> World {
                     to: destination,
                 },
                 Rate::new()
+                    .preserve(Role::Actor, basket([(Asset::Active, 1)]))
                     .consume(
                         Role::Actor,
                         basket([(Asset::At(Location::Base), 1), (Asset::Energy, 1)]),
@@ -238,6 +243,7 @@ fn build(nature: Account<Asset>) -> World {
                     location: destination,
                 },
                 Rate::new()
+                    .preserve(Role::Actor, basket([(Asset::Active, 1)]))
                     .consume(Role::Actor, basket([(Asset::Energy, 1)]))
                     .preserve(Role::Actor, basket([(Asset::At(destination), 1)]))
                     .produce(
@@ -254,8 +260,8 @@ fn build(nature: Account<Asset>) -> World {
             RateId::Finish,
             Rate::new()
                 .preserve(Role::Actor, basket([(Asset::Rescued, 1)]))
-                .produce(Role::Goal, basket([(Asset::Solved, 1)]))
-                .distinct(Role::Actor, Role::Goal),
+                .consume(Role::Actor, basket([(Asset::Active, 1)]))
+                .produce(Role::Actor, basket([(Asset::Solved, 1)])),
         )
         .invariant(
             [Location::Base, Location::North, Location::South]
@@ -278,16 +284,21 @@ fn build(nature: Account<Asset>) -> World {
             LinearInvariant::new("one hidden truth state").weight(Asset::Unresolved, 1),
             |invariant, location| invariant.weight(Asset::Truth(location), 1),
         ))
+        .invariant(
+            LinearInvariant::new("rescue lifecycle")
+                .weight(Asset::Active, 1)
+                .weight(Asset::Solved, 1),
+        )
         .build()
         .expect("rescue model is valid")
 }
 
 pub fn goal() -> Goal<AccountId, Asset> {
-    Goal::new().require(AccountId::Success, basket([(Asset::Solved, 1)]))
+    Goal::new().require(AccountId::Agent, basket([(Asset::Solved, 1)]))
 }
 
 pub fn agent_view(world: &World) -> AgentView<'_> {
-    world.view([AccountId::Agent, AccountId::Success])
+    world.view([AccountId::Agent])
 }
 
 pub fn candidates(world: &World) -> Vec<Action> {
@@ -351,10 +362,11 @@ pub fn run_sampled_policy(model: &World, sample: &Action, policy: Policy) -> Opt
     })
 }
 
-/// Deterministic, bounded Monte Carlo over weights held by Nature.
-pub fn monte_carlo(model: &World, samples: usize) -> Option<MonteCarloEstimate> {
+/// Exhaustively evaluates every integer-weighted scenario encoded by Nature.
+pub fn evaluate_scenarios(model: &World) -> Option<PolicyComparison> {
     let weighted_scenarios = encoded_scenarios(model);
     let total_weight = total_weight(&weighted_scenarios).ok()?;
+    let samples = usize::try_from(total_weight).ok()?;
     let estimates = evaluate(
         [Policy::ObserveThenFollow, Policy::NorthWithoutObserving],
         MonteCarloConfig::new(samples),
@@ -368,6 +380,40 @@ pub fn monte_carlo(model: &World, samples: usize) -> Option<MonteCarloEstimate> 
         BernoulliStatistics::new,
     )
     .ok()?;
+    comparison(estimates, samples)
+}
+
+/// Estimates both policies from reproducible random draws over Nature's prior.
+pub fn monte_carlo(model: &World, samples: usize, seed: u64) -> Option<PolicyComparison> {
+    let weighted_scenarios = encoded_scenarios(model);
+    let estimates = evaluate(
+        [Policy::ObserveThenFollow, Policy::NorthWithoutObserving],
+        MonteCarloConfig::new(samples),
+        |policy, sample_index| {
+            let offset = u64::try_from(sample_index)
+                .unwrap_or(u64::MAX)
+                .wrapping_mul(0x9e37_79b9_7f4a_7c15);
+            let mut sampler = SeededSampler::new(seed.wrapping_add(offset));
+            let sampled = sample(&weighted_scenarios, &mut sampler).map_err(|_| ())?;
+            run_sampled_policy(model, sampled, *policy)
+                .map(|rollout| rollout.succeeded())
+                .ok_or(())
+        },
+        BernoulliStatistics::new,
+    )
+    .ok()?;
+    comparison(estimates, samples)
+}
+
+fn comparison(
+    estimates: Vec<
+        axionomy_search::monte_carlo::PolicyEstimate<
+            Policy,
+            axionomy_search::monte_carlo::BernoulliSummary,
+        >,
+    >,
+    samples: usize,
+) -> Option<PolicyComparison> {
     let observe_successes = estimates
         .iter()
         .find(|estimate| estimate.policy() == &Policy::ObserveThenFollow)?
@@ -383,7 +429,7 @@ pub fn monte_carlo(model: &World, samples: usize) -> Option<MonteCarloEstimate> 
     } else {
         Policy::NorthWithoutObserving
     };
-    Some(MonteCarloEstimate {
+    Some(PolicyComparison {
         chosen,
         observe_successes,
         direct_successes,
@@ -484,9 +530,7 @@ fn action(rate: RateId) -> Action {
         RateId::Observe { .. } | RateId::Rescue { .. } => Exchange::new(rate, Quantity::new(1))
             .bind(Role::Actor, AccountId::Agent)
             .bind(Role::Nature, AccountId::Nature),
-        RateId::Finish => Exchange::new(rate, Quantity::new(1))
-            .bind(Role::Actor, AccountId::Agent)
-            .bind(Role::Goal, AccountId::Success),
+        RateId::Finish => Exchange::new(rate, Quantity::new(1)).bind(Role::Actor, AccountId::Agent),
         RateId::Move { .. } => {
             Exchange::new(rate, Quantity::new(1)).bind(Role::Actor, AccountId::Agent)
         }
@@ -518,12 +562,18 @@ mod tests {
     }
 
     #[test]
-    fn monte_carlo_prefers_the_encoded_prior() {
+    fn exact_scenario_evaluation_prefers_the_encoded_prior() {
         let model = uniform_uncertain();
-        let estimate = monte_carlo(&model, 8).expect("prior has positive weight");
+        let estimate = evaluate_scenarios(&model).expect("prior has positive weight");
         assert_eq!(estimate.observe_successes(), 6);
         assert_eq!(estimate.direct_successes(), 4);
         assert_eq!(estimate.chosen(), Policy::ObserveThenFollow);
+    }
+
+    #[test]
+    fn seeded_monte_carlo_is_reproducible() {
+        let model = uniform_uncertain();
+        assert_eq!(monte_carlo(&model, 64, 19), monte_carlo(&model, 64, 19));
     }
 
     #[test]
@@ -538,5 +588,6 @@ mod tests {
             .replayed(rollout.trace())
             .expect("sample and policy must replay together");
         assert!(replay.matches(&goal()));
+        assert!(candidates(&replay).is_empty());
     }
 }

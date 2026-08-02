@@ -9,7 +9,6 @@ use axionomy_search::{SearchSolution, best_first, bfs};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum AccountId {
     Workshop,
-    Success,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -20,13 +19,13 @@ pub enum Asset {
     Tool,
     Chair,
     Waste,
+    Active,
     Solved,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Role {
     Shop,
-    Goal,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -50,12 +49,13 @@ pub fn initial() -> World {
                 (Asset::Wood, 6),
                 (Asset::Labor, 4),
                 (Asset::Tool, 1),
+                (Asset::Active, 1),
             ])),
         )
-        .account(AccountId::Success, Account::default())
         .rate(
             RateId::BasicChair,
             Rate::new()
+                .preserve(Role::Shop, basket([(Asset::Active, 1)]))
                 .consume(Role::Shop, basket([(Asset::Wood, 2), (Asset::Labor, 1)]))
                 .preserve(Role::Shop, basket([(Asset::Tool, 1)]))
                 .produce(
@@ -66,6 +66,7 @@ pub fn initial() -> World {
         .rate(
             RateId::EfficientBatch,
             Rate::new()
+                .preserve(Role::Shop, basket([(Asset::Active, 1)]))
                 .consume(Role::Shop, basket([(Asset::Wood, 3), (Asset::Labor, 2)]))
                 .preserve(Role::Shop, basket([(Asset::Tool, 1)]))
                 .produce(
@@ -78,6 +79,7 @@ pub fn initial() -> World {
         .rate(
             RateId::CounterfeitChair,
             Rate::new()
+                .preserve(Role::Shop, basket([(Asset::Active, 1)]))
                 .consume(Role::Shop, basket([(Asset::Wood, 1)]))
                 .produce(Role::Shop, basket([(Asset::Chair, 2)])),
         )
@@ -85,8 +87,8 @@ pub fn initial() -> World {
             RateId::Finish,
             Rate::new()
                 .preserve(Role::Shop, basket([(Asset::Chair, 2)]))
-                .produce(Role::Goal, basket([(Asset::Solved, 1)]))
-                .distinct(Role::Shop, Role::Goal),
+                .consume(Role::Shop, basket([(Asset::Active, 1)]))
+                .produce(Role::Shop, basket([(Asset::Solved, 1)])),
         )
         .invariant(
             LinearInvariant::new("material mass")
@@ -99,12 +101,17 @@ pub fn initial() -> World {
                 .weight(Asset::Labor, 1)
                 .weight(Asset::SpentLabor, 1),
         )
+        .invariant(
+            LinearInvariant::new("workshop lifecycle")
+                .weight(Asset::Active, 1)
+                .weight(Asset::Solved, 1),
+        )
         .build()
         .expect("workshop model is valid")
 }
 
 pub fn goal() -> Goal<AccountId, Asset> {
-    Goal::new().require(AccountId::Success, basket([(Asset::Solved, 1)]))
+    Goal::new().require(AccountId::Workshop, basket([(Asset::Solved, 1)]))
 }
 
 pub fn candidates(world: &World) -> Vec<Action> {
@@ -126,12 +133,7 @@ pub fn waste(world: &World) -> u64 {
 }
 
 pub fn action(rate: RateId) -> Action {
-    let exchange = Exchange::new(rate, Quantity::new(1)).bind(Role::Shop, AccountId::Workshop);
-    if rate == RateId::Finish {
-        exchange.bind(Role::Goal, AccountId::Success)
-    } else {
-        exchange
-    }
+    Exchange::new(rate, Quantity::new(1)).bind(Role::Shop, AccountId::Workshop)
 }
 
 #[cfg(test)]
@@ -151,6 +153,7 @@ mod tests {
             .replay(optimized.trace())
             .expect("optimized proposal must replay");
         assert!(replay.matches(&goal()));
+        assert!(candidates(&replay).is_empty());
     }
 
     #[test]

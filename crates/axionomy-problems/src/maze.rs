@@ -18,7 +18,6 @@ pub enum Node {
 pub enum AccountId {
     Agent,
     World,
-    Success,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -32,6 +31,7 @@ pub enum Asset {
     SpentEnergy,
     Target(Node),
     Distance(Node),
+    Active,
     Solved,
 }
 
@@ -39,7 +39,6 @@ pub enum Asset {
 pub enum Role {
     Actor,
     Environment,
-    Goal,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -90,10 +89,13 @@ pub fn initial() -> World {
     let mut builder = EconomyBuilder::new()
         .account(
             AccountId::Agent,
-            Account::from(basket([(Asset::At(Node::Start), 1), (Asset::Energy, 9)])),
+            Account::from(basket([
+                (Asset::At(Node::Start), 1),
+                (Asset::Energy, 9),
+                (Asset::Active, 1),
+            ])),
         )
         .account(AccountId::World, Account::from(environment))
-        .account(AccountId::Success, Account::default())
         .invariant(
             [
                 Node::Start,
@@ -112,10 +114,16 @@ pub fn initial() -> World {
             LinearInvariant::new("energy is only spent")
                 .weight(Asset::Energy, 1)
                 .weight(Asset::SpentEnergy, 1),
+        )
+        .invariant(
+            LinearInvariant::new("maze lifecycle")
+                .weight(Asset::Active, 1)
+                .weight(Asset::Solved, 1),
         );
 
     for (from, to, energy, needs_open_door) in EDGES {
         let mut rate = Rate::new()
+            .preserve(Role::Actor, basket([(Asset::Active, 1)]))
             .consume(
                 Role::Actor,
                 basket([(Asset::At(from), 1), (Asset::Energy, energy)]),
@@ -144,7 +152,10 @@ pub fn initial() -> World {
         .rate(
             RateId::TakeKey,
             Rate::new()
-                .preserve(Role::Actor, basket([(Asset::At(Node::KeyRoom), 1)]))
+                .preserve(
+                    Role::Actor,
+                    basket([(Asset::At(Node::KeyRoom), 1), (Asset::Active, 1)]),
+                )
                 .consume(Role::Environment, basket([(Asset::Key, 1)]))
                 .produce(Role::Actor, basket([(Asset::Key, 1)]))
                 .distinct(Role::Actor, Role::Environment),
@@ -152,6 +163,7 @@ pub fn initial() -> World {
         .rate(
             RateId::UnlockDoor,
             Rate::new()
+                .preserve(Role::Actor, basket([(Asset::Active, 1)]))
                 .consume(Role::Actor, basket([(Asset::Key, 1)]))
                 .consume(Role::Environment, basket([(Asset::Locked, 1)]))
                 .produce(Role::Environment, basket([(Asset::Open, 1)]))
@@ -162,15 +174,15 @@ pub fn initial() -> World {
             Rate::new()
                 .preserve(Role::Actor, basket([(Asset::At(Node::Exit), 1)]))
                 .preserve(Role::Environment, basket([(Asset::Target(Node::Exit), 1)]))
-                .produce(Role::Goal, basket([(Asset::Solved, 1)]))
-                .distinct(Role::Actor, Role::Goal),
+                .consume(Role::Actor, basket([(Asset::Active, 1)]))
+                .produce(Role::Actor, basket([(Asset::Solved, 1)])),
         )
         .build()
         .expect("maze model is valid")
 }
 
 pub fn goal() -> Goal<AccountId, Asset> {
-    Goal::new().require(AccountId::Success, basket([(Asset::Solved, 1)]))
+    Goal::new().require(AccountId::Agent, basket([(Asset::Solved, 1)]))
 }
 
 /// Derives executable exchanges from the rate identifiers encoded in the economy.
@@ -217,22 +229,14 @@ pub fn heuristic(world: &World) -> u64 {
     })
 }
 
-fn move_energy(_: &World, action: &Action, _: &World) -> u64 {
-    match action.rate() {
-        RateId::Move { energy, .. } => *energy,
-        RateId::TakeKey | RateId::UnlockDoor | RateId::Finish => 0,
-    }
+fn move_energy(before: &World, _: &Action, after: &World) -> u64 {
+    spent_energy(after).saturating_sub(spent_energy(before))
 }
 
 fn action(rate: RateId) -> Action {
-    let exchange = Exchange::new(rate, Quantity::new(1))
+    Exchange::new(rate, Quantity::new(1))
         .bind(Role::Actor, AccountId::Agent)
-        .bind(Role::Environment, AccountId::World);
-    if rate == RateId::Finish {
-        exchange.bind(Role::Goal, AccountId::Success)
-    } else {
-        exchange
-    }
+        .bind(Role::Environment, AccountId::World)
 }
 
 #[cfg(test)]
@@ -254,6 +258,7 @@ mod tests {
             let mut replay = initial();
             replay.replay(solution.trace()).expect("trace must replay");
             assert!(replay.matches(&goal()));
+            assert!(candidates(&replay).is_empty());
         }
     }
 }

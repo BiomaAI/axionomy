@@ -26,7 +26,6 @@ pub enum SetId {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum AccountId {
     Problem,
-    Success,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -36,13 +35,13 @@ pub enum Asset {
     Available(SetId),
     Selected(SetId),
     Progress(u8),
+    Active,
     Solved,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Role {
     Problem,
-    Goal,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -68,7 +67,7 @@ pub fn unsatisfiable() -> World {
 }
 
 pub fn goal() -> Goal<AccountId, Asset> {
-    Goal::new().require(AccountId::Success, basket([(Asset::Solved, 1)]))
+    Goal::new().require(AccountId::Problem, basket([(Asset::Solved, 1)]))
 }
 
 pub fn candidates(world: &World) -> Vec<Action> {
@@ -117,10 +116,9 @@ fn build(available: &[SetId]) -> World {
         problem.insert(Asset::Available(*set), Quantity::new(1));
     }
     problem.insert(Asset::Progress(0), Quantity::new(1));
+    problem.insert(Asset::Active, Quantity::new(1));
 
-    let mut builder = EconomyBuilder::new()
-        .account(AccountId::Problem, Account::from(problem))
-        .account(AccountId::Success, Account::default());
+    let mut builder = EconomyBuilder::new().account(AccountId::Problem, Account::from(problem));
 
     for set in SETS {
         for before in [0, 2] {
@@ -139,6 +137,7 @@ fn build(available: &[SetId]) -> World {
             builder = builder.rate(
                 RateId::Select { set, before },
                 Rate::new()
+                    .preserve(Role::Problem, basket([(Asset::Active, 1)]))
                     .consume(Role::Problem, consume)
                     .produce(Role::Problem, produce),
             );
@@ -170,13 +169,27 @@ fn build(available: &[SetId]) -> World {
         .rate(
             RateId::Finish,
             Rate::new()
-                .preserve(Role::Problem, basket([(Asset::Progress(4), 1)]))
-                .produce(Role::Goal, basket([(Asset::Solved, 1)]))
-                .distinct(Role::Problem, Role::Goal),
+                .preserve(
+                    Role::Problem,
+                    basket([
+                        (Asset::Progress(4), 1),
+                        (Asset::Covered(Element::A), 1),
+                        (Asset::Covered(Element::B), 1),
+                        (Asset::Covered(Element::C), 1),
+                        (Asset::Covered(Element::D), 1),
+                    ]),
+                )
+                .consume(Role::Problem, basket([(Asset::Active, 1)]))
+                .produce(Role::Problem, basket([(Asset::Solved, 1)])),
         )
         .invariant(element_invariant)
         .invariant(set_invariant)
         .invariant(progress_invariant)
+        .invariant(
+            LinearInvariant::new("exact-cover lifecycle")
+                .weight(Asset::Active, 1)
+                .weight(Asset::Solved, 1),
+        )
         .build()
         .expect("exact-cover model is valid")
 }
@@ -241,12 +254,7 @@ fn cover(
 }
 
 fn action(rate: RateId) -> Action {
-    let exchange = Exchange::new(rate, Quantity::new(1)).bind(Role::Problem, AccountId::Problem);
-    if rate == RateId::Finish {
-        exchange.bind(Role::Goal, AccountId::Success)
-    } else {
-        exchange
-    }
+    Exchange::new(rate, Quantity::new(1)).bind(Role::Problem, AccountId::Problem)
 }
 
 #[cfg(test)]
@@ -264,6 +272,7 @@ mod tests {
             let mut replay = initial();
             replay.replay(trace).expect("proposal must replay");
             assert!(replay.matches(&goal()));
+            assert!(candidates(&replay).is_empty());
         }
     }
 
