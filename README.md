@@ -122,8 +122,9 @@ follow search.
   content-addressed immutable economy snapshots, a caller-provided storage
   boundary, an in-memory default, schema-backed tools, polling, progress, and
   cooperative cancellation through `rmcp::TaskManager`.
-- Eleven closed benchmark encodings in `axionomy-problems`, with independent
-  solver strategies and core-encoded stochastic priors.
+- Eleven closed benchmark encodings in `axionomy-problems`, with distinct
+  solver strategies, independent reference oracles, and encoded stochastic
+  priors.
 
 The core contains no application ontology or search algorithm. Problem assets
 and specialized solvers compile against the same public kernel API available
@@ -302,19 +303,27 @@ contract, deployment limits, and integration details.
 | Sokoban | Cell occupancy, push legality, deadlock | BFS and infeasibility |
 | Exact cover | Universe, subsets, coverage, selection | BFS and Algorithm X |
 | Workshop | Recipes, catalysts, material, labor, waste | BFS and waste minimization |
-| Job shop | Precedence, discrete machine capacity, makespan | Best-first and independent branch optimizer |
-| Rescue | Hidden truth, seed, observation, belief, chance | Policy rollouts and Monte Carlo |
+| Job shop | Precedence, identified machine slots, makespan | Best-first, branch search, and direct brute-force oracle |
+| Rescue | Hidden truth, seed, observation, belief, chance | Exact scenario evaluation and seeded Monte Carlo |
 | Bridge | Capacity, bids, escrow, priority, joint resolution | BFS, first-come, and auction mechanisms |
-| Marketplace | Buyers, sellers, carriers, tax, commission, order lifecycle | Exact filtering and caller-ranked near matches |
-| Logistics | Orders, routes, fuel, time, weather, breakdown, repair | Long rollouts and risk-aware Monte Carlo |
-| Connect Four | Board, gravity, turns, line counts, wins, draw | Vector-valued adversarial MCTS |
-| Mission | Private views, shared intelligence, hazard, treatment, deadline | Observation-scoped ISMCTS, Monte Carlo, and RL trajectories |
+| Marketplace | Buyers, sellers, carriers, tax, commission, competing orders | Assessment matching and replayable global clearing |
+| Logistics | Orders, routes, fuel, time, weather, breakdown, repair | Long rollouts, risk-aware Monte Carlo, and route MCTS |
+| Connect Four | Identified cells, gravity, turns, line counts, wins, draw | Vector-valued MCTS with plain-board/minimax oracles |
+| Mission | Private views, caller-owned beliefs, causal shared intelligence, hazard, treatment | Repeated observation-scoped ISMCTS, scenario/MC evaluation, and RL trajectories |
 
 Every accepted result is an exchange trace replayed by the same core. The
 specialized algorithms are proposers, not alternate execution engines.
 
-Every problem has a small consumer-facing example. The examples contain no
-domain rules: they instantiate a public model, invoke one or more strategies,
+These are concrete examples and conformance fixtures, not reusable maze,
+scheduler, marketplace, or game frameworks. Users create their own economies.
+The suite's purpose is to prove that the common assets/accounts/rates/exchange
+axioms generalize and to expose friction that belongs in domain-independent
+engine APIs. Rate names never authorize bindings: where identity matters, the
+rates require preserved identity or capability assets, and adversarial tests
+construct incorrect bindings directly to prove the core rejects them.
+
+Every problem has a small consumer-facing example. The example binaries contain
+no domain rules: they instantiate their concrete economy, invoke strategies,
 replay the proposed trace, assert the encoded goal, and print a summary.
 
 ```console

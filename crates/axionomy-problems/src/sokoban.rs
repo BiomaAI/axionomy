@@ -181,8 +181,7 @@ fn neighbors(cell: u8) -> impl Iterator<Item = u8> {
 fn action(rate: RateId) -> Action {
     let exchange = Exchange::new(rate, Quantity::new(1)).bind(Role::Puzzle, AccountId::Success);
     match rate {
-        RateId::Move { from, to } => Exchange::new(rate, Quantity::new(1))
-            .bind(Role::Puzzle, AccountId::Success)
+        RateId::Move { from, to } => exchange
             .bind(Role::From, AccountId::Cell(from))
             .bind(Role::To, AccountId::Cell(to)),
         RateId::Push {

@@ -776,9 +776,10 @@ auction resolution consumes both submitted bids and bridge capacity and
 produces the winner's crossing right and the loser's waiting status atomically.
 
 The marketplace benchmark extends this from joint resolution to six-party
-settlement. One rate transfers a widget and gross payment while splitting
-seller proceeds, tax, platform commission, and shipping fees; it also consumes
-shipping capacity and advances buyer, seller, and order lifecycle assets.
+settlement across two competing orders. Each order-specific rate transfers its
+item and gross payment while splitting seller proceeds, tax, platform
+commission, and shipping fees; it also consumes shipping capacity and advances
+buyer, seller, and order lifecycle assets.
 There is no privileged bilateral transaction hidden underneath it and no
 compensating rollback protocol: either every role requirement and invariant
 passes and all six accounts commit, or nothing changes.
@@ -790,9 +791,16 @@ procurement, search, or learned policy, but the ranking is not market truth.
 Only account assets, the settlement rate, its role bindings, and the applied
 exchange determine whether and how settlement occurs.
 
+A disposable clearing search explores sequences of currently applicable
+settlements and ranks resulting economies by encoded settled-order count and
+gross value. It does not own an order book or commit compensating mutations;
+its output is a two-exchange trace that must replay to both order goals. This
+is how global compatibility may remain algorithmic while settlement law stays
+economic.
+
 This is the current answer to simultaneous proposals: the resolution law must
-be represented by a rate, not an external world update. Richer transaction
-protocols and dynamic mechanism selection remain future design space.
+be represented by a rate, not an external world update. Search may choose a
+compatible set or sequence of those resolutions, but it cannot bypass them.
 
 ## 10. Executable conformance suite
 
@@ -805,13 +813,13 @@ problems. Full formal specifications live in [PROBLEMS.md](PROBLEMS.md).
 | Sokoban | Atomic three-account rewrites, spatial occupancy, and core-observed infeasibility |
 | Exact cover | Logical constraint state plus Algorithm X as an untrusted proposal generator |
 | Workshop | Stoichiometric transformation, reusable catalysts, waste objective, and invariant rejection |
-| Job shop | Precedence tokens, discrete capacity accounts, makespan assets, and solver agreement |
-| Rescue | Hidden truth, restricted views, encoded seed evolution, Monte Carlo, and deterministic replay |
+| Job shop | Identified capacity slots, precedence tokens, makespan assets, and direct-oracle agreement |
+| Rescue | Hidden truth, restricted views, exact scenario evaluation, seeded Monte Carlo, and deterministic replay |
 | Bridge | Multi-agent bids, escrow, capacity, joint resolution, and alternative mechanisms |
-| Marketplace | Account-derived matching, complete shortfalls, six-party atomic settlement, and caller-owned near-match ranking |
-| Logistics | Recurrent encoded chance, long rollout horizons, repair loops, replenishment, and risk-aware Monte Carlo |
-| Connect Four | Encoded gravity, turns, line counters, terminal truth, vector outcomes, and adversarial MCTS |
-| Mission | Canonical private observations, public intent versus hidden Nature resolution, ISMCTS, exchanged intelligence, joint action, and RL trajectory projection |
+| Marketplace | Account-derived matching, complete shortfalls, six-party atomic settlement, and replayable multi-order clearing |
+| Logistics | Recurrent encoded chance, long rollouts, repair loops, risk projections, and MCTS route planning |
+| Connect Four | Identified coordinates, encoded gravity and terminal truth, adversarial MCTS, and plain-board oracles |
+| Mission | Canonical private observations, caller-owned posterior beliefs, repeated ISMCTS, causal intelligence exchange, and RL trajectory projection |
 
 These are not unrelated demos. Together they test:
 
@@ -823,13 +831,22 @@ These are not unrelated demos. Together they test:
 - Specialized algorithms over the same core semantics.
 - Replay of every accepted solution.
 
+They are deliberately concrete examples and conformance fixtures, not reusable
+domain frameworks. Users should construct their own economies rather than
+depend on an Axionomy maze, scheduler, market, or game ontology. The suite
+exists to prove that the four primitives generalize and to identify recurring
+domain-independent authoring or search requirements. Descriptive rate IDs are
+never treated as authorization: semantic role identity is witnessed by assets,
+and adversarial tests bypass trusted action helpers to verify closure.
+
 The benchmark ontologies live in `crates/axionomy-problems`, outside the
 generic kernel package. Their presence in the workspace makes architectural
 pressure executable and prevents future API changes from silently narrowing
 the model. Each ontology also has a minimal example binary that uses only its
 public API, replays the proposed trace, and checks the encoded goal. Examples
 are teaching and integration surfaces; authoritative problem semantics remain
-in the reusable model modules.
+in each concrete example economy. Those modules are importable for tests and
+examples, but they are not promised as reusable domain APIs.
 
 ## 11. Current guarantees
 
@@ -983,8 +1000,10 @@ discipline is not a trust boundary.
 
 The maze and workshop need few rates. Scheduling creates a rate for each
 operation, readiness time, and start time. Rescue creates a rate for each
-truth/seed outcome. The next major abstraction should be a constrained,
-inspectable rate-schema and binding system—not arbitrary callbacks.
+truth/seed outcome. This is a real scaling pressure, but not yet authority to
+add a fifth semantic primitive. Concrete rates remain the minimum until
+measurement justifies a constrained, inspectable rate-schema and binding
+system; arbitrary hidden callbacks would not be acceptable.
 
 ### 13.5 Objectives can remain assets while algorithms remain generic
 
@@ -994,8 +1013,11 @@ alter the objective state.
 
 ### 13.6 Specialized solvers fit when translation and replay are explicit
 
-Algorithm X and the independent schedule enumerator emit exchanges. This is
-the adapter contract future OR integrations must preserve.
+Algorithm X and the separate schedule branch enumerator emit exchanges. Small
+scheduling horizons are also checked against a direct domain-level brute-force
+oracle. This is the adapter contract future OR integrations must preserve:
+strategy diversity does not itself prove model fidelity, while replay does not
+replace an independent oracle.
 
 ### 13.7 Nature is enough to make chance and priors auditable
 
@@ -1017,7 +1039,9 @@ record of what actually changed.
 Rescue, logistics, and the team mission now share one rollout executor. This
 prevents policy evaluation, long-horizon simulation, and future learned
 controllers from creating subtly different transition loops. Monte Carlo is
-an aggregator over trajectories, not an environment.
+an aggregator over randomly sampled trajectories, not an environment. When a
+finite support is deliberately traversed exactly, the product and docs call it
+scenario evaluation rather than Monte Carlo.
 
 ### 13.10 Adversarial terminal truth can remain encoded
 
@@ -1042,12 +1066,30 @@ possible encoded worlds from that observation, and avoid passing hidden
 accounts to decision generation or rollout policy. Environment resolution may
 use hidden truth only through concrete Nature exchanges.
 
+Belief sets are caller-owned derived artifacts, not authoritative parallel
+world state. The caller supplies complete encoded determinizations, advances
+them through public exchanges and required Nature responses, filters them by
+the new canonical observation, and may invoke the same information-set planner
+again. Every determinization remains an economy and every selected live action
+is still core-revalidated.
+
 The mission also shows why public intent and hidden outcome should be different
 rates. `BeginScan` is a decision available in every indistinguishable world;
 `ResolveScan` is Nature's encoded reaction. Otherwise a supposedly public
 action identifier would itself reveal the truth or random seed.
 
-### 13.13 Remote statelessness must be semantic, not merely transport-level
+### 13.13 Semantic identity must be witnessed by assets
+
+A descriptive rate ID cannot authorize an account binding because the generic
+kernel does not interpret application identifiers. If a transition means
+“this cell,” “this machine slot,” “this bidder,” or “this agent role,” the
+bound account must preserve the corresponding identity or capability asset.
+The same principle applies to terminal state: a consumable active lifecycle
+asset prevents repeated completion and makes terminal quiescence economic
+rather than a candidate-generator convention. Conformance tests must bypass
+trusted action helpers and attempt incorrect bindings directly.
+
+### 13.14 Remote statelessness must be semantic, not merely transport-level
 
 Disabling HTTP sessions does not help if a server retains an ambient mutable
 economy. Immutable explicit snapshot handles make every operation reproducible
@@ -1081,8 +1123,8 @@ factor.
    the returned assignment.
 8. Extend encoded Nature schemas and distribution updates beyond finite
    weighted supports.
-9. Extend the implemented property laws with independent reference models and
-   bounded model checking.
+9. Extend the exact-cover, scheduling, and Connect Four reference-oracle tests
+   into broader bounded model checking where failures justify the cost.
 10. Decide whether dynamic rate availability is represented by rate assets,
     capability assets, or immutable schemas plus explicit enabling state.
 11. Add PUCT priors, progressive widening, and deterministic parallel workers

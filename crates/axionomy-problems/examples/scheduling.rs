@@ -6,7 +6,7 @@ use tracing::{debug, info};
 fn main() {
     support::init(
         "Job-shop scheduling",
-        "Compare best-first search with an independent bounded optimizer.",
+        "Compare best-first search with a separate bounded branch optimizer.",
     );
     let initial = scheduling::initial();
     info!(
@@ -15,7 +15,7 @@ fn main() {
         "encoded economy ready"
     );
     let generic = scheduling::solve_best_first(&initial).expect("schedule is feasible");
-    let specialized = scheduling::independent_optimize(&initial).expect("schedule is feasible");
+    let specialized = scheduling::branch_optimize(&initial).expect("schedule is feasible");
     let generic_world = initial
         .replayed(generic.trace())
         .expect("best-first search must pass the core");

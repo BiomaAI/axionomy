@@ -395,18 +395,9 @@ pub fn action(rate: RateId) -> Action {
         RateId::SubmitBid { agent, .. }
         | RateId::ClaimFirst { agent }
         | RateId::YieldToWaiting { agent }
-        | RateId::Cross { agent } => {
-            let exchange =
-                Exchange::new(rate, Quantity::new(1)).bind(Role::Traveler, AccountId::Agent(agent));
-            if matches!(
-                rate,
-                RateId::ClaimFirst { .. } | RateId::YieldToWaiting { .. } | RateId::Cross { .. }
-            ) {
-                exchange.bind(Role::Bridge, AccountId::Bridge)
-            } else {
-                exchange.bind(Role::Bridge, AccountId::Bridge)
-            }
-        }
+        | RateId::Cross { agent } => Exchange::new(rate, Quantity::new(1))
+            .bind(Role::Traveler, AccountId::Agent(agent))
+            .bind(Role::Bridge, AccountId::Bridge),
         RateId::Resolve { winner, .. } => Exchange::new(rate, Quantity::new(1))
             .bind(Role::Winner, AccountId::Agent(winner))
             .bind(Role::Loser, AccountId::Agent(other(winner)))

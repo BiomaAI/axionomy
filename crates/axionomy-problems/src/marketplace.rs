@@ -2,7 +2,7 @@
 //!
 //! Candidate enumeration and ranking are derived, disposable policy. The
 //! economy remains the authority for participant state, settlement terms,
-//! feasibility, effects, and the completed order.
+//! feasibility, effects, and completed orders.
 
 use axionomy::{
     Account, AssessmentStatus, Economy, EconomyBuilder, Exchange, ExchangeAssessment, Goal,
@@ -85,7 +85,7 @@ pub enum Role {
     Platform,
     TaxAuthority,
     Carrier,
-    OrderBook,
+    Order,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -97,7 +97,7 @@ pub type World = Economy<AccountId, Asset, RateId, Role>;
 pub type Action = Exchange<RateId, Role, AccountId>;
 pub type Assessment = ExchangeAssessment<AccountId, Asset, RateId, Role>;
 
-/// One possible buyer, seller, and carrier binding.
+/// One possible order, buyer, seller, and carrier binding.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct MarketMatch {
     order: OrderId,
@@ -280,7 +280,7 @@ pub fn initial() -> World {
                 .weight(Asset::UsedShippingCapacity, 1),
         )
         .invariant(
-            LinearInvariant::new("order-book lifecycle")
+            LinearInvariant::new("order lifecycle")
                 .weight(Asset::OpenOrder(OrderId::A), 1)
                 .weight(Asset::OpenOrder(OrderId::B), 1)
                 .weight(Asset::SettledOrder(OrderId::A), 1)
@@ -404,7 +404,7 @@ pub fn settlement(order: OrderId, buyer: BuyerId, seller: SellerId, carrier: Car
         .bind(Role::Platform, AccountId::Platform)
         .bind(Role::TaxAuthority, AccountId::TaxAuthority)
         .bind(Role::Carrier, AccountId::Carrier(carrier))
-        .bind(Role::OrderBook, AccountId::Order(order))
+        .bind(Role::Order, AccountId::Order(order))
 }
 
 fn settlement_rate(order: OrderId) -> Rate<Role, Asset> {
@@ -438,9 +438,9 @@ fn settlement_rate(order: OrderId) -> Rate<Role, Asset> {
             Role::Carrier,
             basket([(Asset::Money, shipping), (Asset::UsedShippingCapacity, 1)]),
         )
-        .consume(Role::OrderBook, basket([(Asset::OpenOrder(order), 1)]))
+        .consume(Role::Order, basket([(Asset::OpenOrder(order), 1)]))
         .produce(
-            Role::OrderBook,
+            Role::Order,
             basket([
                 (Asset::SettledOrder(order), 1),
                 (Asset::SettledValue(gross), 1),
@@ -519,7 +519,7 @@ fn all_distinct(mut rate: Rate<Role, Asset>) -> Rate<Role, Asset> {
         Role::Platform,
         Role::TaxAuthority,
         Role::Carrier,
-        Role::OrderBook,
+        Role::Order,
     ];
     for (index, left) in roles.iter().enumerate() {
         for right in &roles[index + 1..] {
@@ -711,7 +711,7 @@ mod tests {
             .bind(Role::Platform, AccountId::Platform)
             .bind(Role::TaxAuthority, AccountId::TaxAuthority)
             .bind(Role::Carrier, AccountId::Carrier(CarrierId::A))
-            .bind(Role::OrderBook, AccountId::Order(OrderId::A));
+            .bind(Role::Order, AccountId::Order(OrderId::A));
 
         let ExchangeAssessment::Invalid { issues } = world.assess(&exchange) else {
             panic!("buyer and seller must be different accounts");
@@ -734,7 +734,7 @@ mod tests {
             .bind(Role::Platform, AccountId::TaxAuthority)
             .bind(Role::TaxAuthority, AccountId::Platform)
             .bind(Role::Carrier, AccountId::Carrier(CarrierId::A))
-            .bind(Role::OrderBook, AccountId::Order(OrderId::A));
+            .bind(Role::Order, AccountId::Order(OrderId::A));
 
         assert!(!world.is_applicable(&rebound));
     }

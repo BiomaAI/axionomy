@@ -115,7 +115,7 @@ pub fn solve_best_first(world: &World) -> Option<Solution> {
 /// A separate depth-first branch enumerator. It understands no scheduling
 /// internals: it forks the economy, asks for applicable exchanges, and reads
 /// the objective asset from completed states.
-pub fn independent_optimize(world: &World) -> Option<OptimizedProposal> {
+pub fn branch_optimize(world: &World) -> Option<OptimizedProposal> {
     let mut visited = HashSet::new();
     let mut best: Option<OptimizedProposal> = None;
     optimize_branch(world.clone(), Trace::new(), &mut visited, &mut best);
@@ -396,10 +396,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn independent_optimizer_and_best_first_agree() {
+    fn branch_optimizer_and_best_first_agree() {
         let world = initial();
         let generic = solve_best_first(&world).expect("schedule is feasible");
-        let independent = independent_optimize(&world).expect("schedule is feasible");
+        let independent = branch_optimize(&world).expect("schedule is feasible");
         assert_eq!(generic.cost(), 3);
         assert_eq!(independent.makespan(), 3);
 
@@ -415,7 +415,7 @@ mod tests {
     fn insufficient_horizon_is_infeasible() {
         let world = impossible();
         assert!(solve_best_first(&world).is_none());
-        assert!(independent_optimize(&world).is_none());
+        assert!(branch_optimize(&world).is_none());
     }
 
     #[test]
@@ -442,7 +442,7 @@ mod tests {
             let expected = brute_force_makespan(horizon);
             let world = build(horizon);
             let generic = solve_best_first(&world).map(|solution| solution.cost() as u8);
-            let branch = independent_optimize(&world).map(|proposal| proposal.makespan());
+            let branch = branch_optimize(&world).map(|proposal| proposal.makespan());
 
             assert_eq!(generic, expected, "generic search at horizon {horizon}");
             assert_eq!(branch, expected, "branch search at horizon {horizon}");

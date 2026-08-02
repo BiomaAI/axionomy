@@ -14,22 +14,32 @@ The suite is successful only when a problem is genuinely closed:
 6. Solver-side structures are derived, disposable caches.
 7. A proposed solution is accepted only after core replay.
 
-Rust enums and builder loops define the vocabulary and construct the initial
-closed problem. They are not mutable parallel world state. A solver may use an
-adapter to translate a rate ID into proposed role bindings, but the bindings
-become part of the exchange and the rate remains the authority for validity
-and effects.
+Rust enums and builder loops define each concrete fixture's vocabulary and
+construct its initial closed problem. They are not mutable parallel world
+state. These modules are examples and executable conformance tests, not public
+maze, scheduling, market, or game frameworks. Users define their own
+economies; the examples exist to prove that the common axioms survive very
+different domains and to expose unnecessary friction in the generic engine.
+
+A solver may use an adapter to translate a rate ID into proposed role
+bindings, but the bindings become part of the exchange and the rate remains
+the authority for validity and effects. A field in `RateId` is descriptive,
+not authorization. When a role must represent a particular cell, slot,
+participant, institution, or result account, the rate requires preserved
+identity or capability assets from that role. Adversarial tests deliberately
+rebind roles to ensure the core rejects domain-invalid exchanges even when
+they bypass the example's trusted action helper.
 
 ## Conformance matrix
 
 | Capability | Maze | Sokoban | Exact cover | Workshop | Job shop | Rescue | Bridge | Marketplace | Logistics | Connect Four | Mission |
 | --- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
 | Multi-account atomic rewrite | ✓ | ✓ |  |  | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| Preserved facts/catalysts | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |  | ✓ |
+| Preserved facts/catalysts | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | Declared invariants | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | Resource objective | ✓ |  |  | ✓ | ✓ | ✓ | ✓ |  | ✓ |  | ✓ |
 | Infeasible instance |  | ✓ | ✓ |  | ✓ |  |  | ✓ | ✓ |  | ✓ |
-| Specialized proposer |  |  | Algorithm X |  | Branch optimizer | Monte Carlo | Auction | Assessment matcher | Monte Carlo | MCTS | Monte Carlo |
+| Specialized proposer |  |  | Algorithm X |  | Branch optimizer | Scenario/MC evaluator | Auction | Assessment clearing | Monte Carlo/MCTS | MCTS/minimax oracle | ISMCTS/scenario evaluator |
 | Generic algorithm | BFS/A*/Dijkstra | BFS | BFS | BFS/best-first | Best-first | Rollout | BFS |  | Rollout/MC | MCTS | ISMCTS/Rollout/MC/RL |
 | Hidden or stochastic state |  |  |  |  |  | ✓ |  |  | ✓ |  | ✓ |
 | Multi-agent resolution |  |  |  |  |  |  | ✓ | ✓ |  | ✓ | ✓ |
@@ -41,8 +51,8 @@ and effects.
 ## Runnable examples
 
 Each model has a symmetric consumer example. These binaries contain
-orchestration and display logic only; all state, rules, goals, and constraints
-remain in the reusable problem modules.
+orchestration and display logic only; all authoritative state, rules, goals,
+and constraints remain in that concrete problem economy.
 
 ```console
 cargo run -p axionomy-problems --example maze
@@ -91,8 +101,10 @@ The key route also requires `TakeKey` and `UnlockDoor`. The detour therefore
 has fewer exchanges, while the key route spends less energy.
 
 Movement consumes `At(from)` and energy, preserves `Edge(from,to)` and any
-door permission, and produces `At(to)` plus `SpentEnergy`. A final rate
-preserves `At(Exit)` and the target fact and produces `Solved`.
+door permission, and produces `At(to)` plus `SpentEnergy`. Search cost is
+derived from the before/after `SpentEnergy` delta rather than copied from the
+rate identifier. A final rate consumes the maze's `Active` lifecycle asset and
+produces `Solved`, leaving no post-terminal moves applicable.
 
 ### Required results
 
@@ -100,6 +112,8 @@ preserves `At(Exit)` and the target fact and produces `Solved`.
 - Dijkstra and A* choose the six-energy key route.
 - Dijkstra and A* agree on cost.
 - Every trace replays to `Solved`.
+- Actor/environment role swapping is rejected by encoded requirements.
+- A solved maze has no applicable actions.
 
 ### API pressure
 
@@ -114,7 +128,8 @@ Source: `crates/axionomy-problems/src/sokoban.rs`
 
 ### Specification
 
-Five cell accounts each hold exactly one of `Player`, `Crate`, or `Empty`.
+Five cell accounts each preserve their coordinate identity and hold exactly
+one of `Player`, `Crate`, or `Empty`.
 One cell also owns `GoalCell`. A move atomically exchanges player and empty
 tokens between two adjacent cells. A push atomically rewrites three accounts:
 
@@ -131,6 +146,8 @@ crate against a wall from which no legal push can move it to the goal.
 - Every cell retains exactly one occupancy token.
 - The deadlocked instance returns no solution.
 - Failed search leaves the source economy unchanged.
+- Rebinding a legal move rate to nonadjacent cells is rejected.
+- Completion consumes the active puzzle lifecycle and is quiescent.
 
 ### API pressure
 
@@ -150,7 +167,7 @@ The universe is `{A,B,C,D}`. Four available subsets are encoded:
 AB, CD, AC, BD
 ```
 
-Selecting a subset consumes its availability token and every corresponding
+Selecting a subset preserves the active problem lifecycle, consumes its availability token and every corresponding
 `Uncovered(element)` token. It produces `Selected(set)`,
 `Covered(element)`, and advances an explicit progress token. Overlapping
 subsets become inapplicable because they require already-consumed uncovered
@@ -163,6 +180,8 @@ tokens.
 - Algorithm X emits ordinary exchanges and validates them by replay.
 - Both traces have two selections plus finish.
 - Both solvers reject an instance containing only `AB` and `AC`.
+- All 16 availability combinations agree with a direct exhaustive oracle.
+- Finish requires all four encoded `Covered` facts, then consumes `Active`.
 
 ### API pressure
 
@@ -198,6 +217,7 @@ The rate book deliberately includes a malformed proposal:
 - BFS also reaches the two-chair goal.
 - The malformed rate is rejected by the material invariant.
 - Rejection is atomic.
+- Completion consumes `Active`; no recipe remains applicable afterward.
 
 ### API pressure
 
@@ -219,7 +239,8 @@ Job 1: M1 for 2 slots → M2 for 1 slot
 Job 2: M2 for 2 slots → M1 for 1 slot
 ```
 
-Every `(machine,time)` pair is an account initially holding `Available`.
+Every `(machine,time)` pair is an account preserving
+`SlotIdentity(machine,time)` and initially holding `Available`.
 Scheduling consumes a job's `ReadyAt` token and every required slot's
 availability, then produces `Reserved(operation)` and the successor readiness
 or final completion token.
@@ -230,9 +251,11 @@ Finish preserves both completion tokens and produces `Makespan(n)` and
 ### Required results
 
 - Generic best-first search finds makespan 3.
-- An independent depth-first branch optimizer also finds makespan 3.
-- The independent proposal replays through the core.
+- A separate depth-first branch strategy also finds makespan 3.
+- Its proposal replays through the core.
 - A horizon of two slots is infeasible for both algorithms.
+- Horizons zero through five agree with a direct job-shop brute-force oracle.
+- Rebinding an operation to the wrong machine or time slot is rejected.
 
 ### API pressure
 
@@ -269,16 +292,19 @@ match.
 - A chosen Nature observation is recorded as an exchange.
 - A successful sampled rollout, including Nature instantiation, replays from
   the unresolved weighted model.
-- Over eight bounded scenarios, observe-then-follow succeeds six times while
+- Across all eight encoded scenarios, observe-then-follow succeeds six times while
   a north-only policy succeeds four.
-- Monte Carlo selects observe-then-follow.
+- Exact scenario evaluation selects observe-then-follow.
+- A separate seeded Monte Carlo entry point draws randomly from the same
+  encoded weighted prior and is reproducible.
 
 ### API pressure
 
 - Restricted observation without a second state model.
 - Hidden truth and belief as different account holdings.
 - Reproducible priors and chance through an encoded Nature participant.
-- Monte Carlo over isolated forks.
+- Exact finite-support evaluation and genuine seeded Monte Carlo over isolated
+  forks.
 
 ## 7. Single-lane bridge negotiation
 
@@ -299,11 +325,17 @@ Two mechanisms are encoded:
 Crossing returns the bridge's capacity token. A waiting agent can then receive
 the right. Finish requires both agents to hold `Crossed`.
 
+Every participant and the bridge preserve identity assets. Agent names in
+rate identifiers therefore cannot be used to impersonate another account or
+swap the encoded auction winner. Finish consumes the bridge's active lifecycle
+asset, making the terminal economy quiescent.
+
 ### Required results
 
 - First-come and auction proposals both replay to the same goal.
 - A bid of A=2 and B=1 resolves to A.
 - A second claim while capacity is held is rejected.
+- Bidder impersonation and winner/loser rebinding are rejected.
 - Rejection leaves every account unchanged.
 
 ### API pressure
@@ -319,14 +351,15 @@ Source: `crates/axionomy-problems/src/marketplace.rs`
 
 ### Specification
 
-Three buyer accounts, three seller accounts, and two carrier accounts form a
-bounded market. Participant identity comes from account IDs; readiness comes
-only from account assets. Two buyers hold enough money and a purchase intent,
-two sellers hold a widget and sale offer, and one carrier holds shipping
-capacity. A third buyer is short 25 money, a third seller lacks one widget,
-and a second carrier lacks one unit of capacity.
+Three buyer accounts, three seller accounts, two carrier accounts, and two
+order accounts form a bounded market. Participant identity comes from account
+IDs; eligibility comes only from account assets. Order A requests a widget for
+100 and Order B requests a gadget for 90. Buyer A can fund both, Buyer B can
+fund Order A, and Buyer C is 25 short on Order A. Two sellers offer widgets,
+one offers a gadget, Carrier A owns two units of capacity, and Carrier B has no
+capacity.
 
-The single generic settlement rate binds six distinct roles:
+Each order-specific settlement rate binds the same six distinct roles:
 
 ```text
 Buyer pays 100 and receives widget + receipt
@@ -334,7 +367,7 @@ Seller provides widget + offer and receives 80
 Platform preserves its license and receives 5
 Tax authority preserves its policy and receives 10
 Carrier spends one capacity and receives 5
-Order book converts OpenOrder into SettledOrder
+Order account converts matching OpenOrder into SettledOrder + SettledValue
 ```
 
 Money, widgets, buyer and seller lifecycle tokens, shipping capacity, and
@@ -342,19 +375,23 @@ order status are protected by declared invariants. Candidate enumeration
 derives the buyer, seller, and carrier sets from economy accounts and produces
 ordinary exchanges. Exact matching uses core applicability. Near matching
 uses complete core shortfalls plus a caller-provided valuation; that scalar is
-disposable policy and never changes settlement law or feasibility.
+disposable policy and never changes settlement law or feasibility. A
+disposable clearing search explores compatible applicable settlements,
+maximizing encoded settled-order count and gross value. Its result is an
+ordinary replayable exchange trace, not a second market state.
 
 ### Required results
 
-- The account-derived Cartesian set contains 18 candidate exchanges.
-- Four candidates are exact matches and filtering does not mutate the market.
+- The account-derived Cartesian set contains 36 candidate exchanges.
+- Five candidates are initially exact and filtering does not mutate the market.
 - One candidate reports buyer, seller, and carrier shortfalls together.
 - A successful exchange settles six accounts atomically.
 - Projected assessment deltas exactly equal the resulting receipt deltas.
 - Failed settlement preserves every account.
 - Changing caller-owned shortfall weights changes near-match ranking without
   changing validity.
-- Settlement reaches the encoded `SettledOrder` goal and replays
+- Clearing selects two compatible settlements with gross value 190.
+- The two-exchange clearing reaches both encoded order goals and replays
   deterministically.
 
 ### API pressure
@@ -365,6 +402,7 @@ disposable policy and never changes settlement law or feasibility.
 - Separation between authoritative economic truth and disposable ranking
   policy.
 - Finite role-binding enumeration derived from account capabilities.
+- Global compatibility search over sequential multi-order settlement.
 - Ergonomic all-distinct role constraints for larger joint transactions.
 - Conservation and lifecycle invariants across heterogeneous participants.
 
@@ -400,6 +438,10 @@ delivery, refueling, travel, repair, and order completion are all rates.
 - Fuel, money, time, cargo, order lifecycle, and position invariants hold.
 - Generic Monte Carlo compares both policies over 64 seeded rollouts.
 - Encoded reliability makes the reliable policy's mean utility higher.
+- Mean and lower-decile selection both use caller-chosen projections of the
+  same sampled encoded outcomes.
+- MCTS selects a live applicable route while deriving chance branches from
+  Nature's encoded weights.
 - A repeatable workload reports rollouts and exchanges per second.
 
 ### API pressure
@@ -407,6 +449,7 @@ delivery, refueling, travel, repair, and order completion are all rates.
 - Long-horizon stochastic trajectories rather than one-step decisions.
 - Recurrent Nature outcomes and retry loops.
 - Outcome distributions, mean values, and risk statistics.
+- Disposable MCTS route planning over the same transition system.
 - Efficient forks sharing immutable laws and untouched account data.
 - Candidate generation from current route, custody, and resource assets.
 
@@ -417,7 +460,8 @@ Source: `crates/axionomy-problems/src/connect_four.rs`
 ### Specification
 
 A compact four-by-four Connect Four board has one account per cell and one
-account per column. Cell occupancy, gravity progress, alternating turns, and
+account per column. Every game, result, column, and cell account preserves an
+encoded identity. Cell occupancy, gravity progress, alternating turns, and
 both players' counts for every row, column, and diagonal are assets.
 
 Move rates consume the exact current line counters and produce their
@@ -435,7 +479,11 @@ action is revalidated by the live economy.
 
 - Gravity places a first piece in row zero and advances the column token.
 - Line counters advance atomically with cell and turn state.
+- Rebinding a move to another empty cell or column is rejected by identities.
 - MCTS selects an immediately winning fourth column.
+- A plain-board minimax oracle independently agrees on that winning move.
+- Generated legal prefixes through depth five agree with the plain-board
+  oracle's legal actions and terminal values.
 - Applying that proposal produces the encoded winner asset.
 - Complete self-play terminates in a win or encoded draw.
 - The full game trace replays deterministically.
@@ -462,7 +510,10 @@ The Scout may begin a scan without naming hidden truth. That public exchange
 creates `AwaitingScan`; Nature then resolves the scan through the uniquely
 applicable truth-and-seed-specific exchange, producing fallible private
 intelligence. A share exchange transfers that intelligence to the Medic while
-preserving explicit evidence for the Scout. Both agents then move jointly. At
+preserving explicit evidence for the Scout. A scanned team can make the
+coordinated move only when the Scout preserves shared intelligence and the
+Medic preserves the received intelligence. A direct pre-scan commitment is a
+separate rate that requires the Scout's still-unused sensor. At
 the true site, Nature resolves the encoded safe or injury hazard. Injury
 requires an atomic treatment exchange using the Medic's kit before the team
 can rescue the victim. Every public mission action consumes encoded deadline
@@ -474,12 +525,14 @@ are also projected into observation, outcome, and termination transitions for
 learning.
 
 Observation-scoped ISMCTS receives only the Scout's canonical information
-identity when generating decisions or choosing rollout actions. Each iteration
-samples a complete encoded scenario from Nature's asset-held prior, rejects a
-sample inconsistent with the root observation, and merges tree statistics by
-information state rather than hidden world state. Nature resolution may inspect
-the sampled world, but only to propose concrete encoded outcome exchanges. The
-selected live action is core-revalidated.
+identity when generating decisions or choosing rollout actions. The caller
+supplies complete encoded belief worlds; the planner retains only worlds
+consistent with the live observation and samples among them. After a public
+action and required Nature response, caller-owned belief worlds are advanced,
+filtered to the new observation, and passed back to the same planner. Tree
+statistics merge by information state rather than hidden world state. Nature
+resolution may inspect the sampled world, but only to propose concrete encoded
+outcome exchanges. The selected live action is core-revalidated.
 
 ### Required results
 
@@ -491,6 +544,10 @@ selected live action is core-revalidated.
 - Hidden instantiation, scan resolution, and encounter exchanges never appear
   in the Scout's decision source.
 - Intelligence changes ownership only through a share exchange.
+- Role identities reject scan results, injuries, or intelligence bound to the
+  wrong agent.
+- After observing, the caller filters 16 initial belief worlds to a posterior
+  and replans; the next selected action is the now-causal share exchange.
 - Joint movement, encounter, treatment, and rescue are multi-account rates.
 - A coordinated successful trace contains instantiation, scan intent, scan
   resolution, share, encounter, and finish exchanges and replays exactly.
@@ -507,7 +564,9 @@ selected live action is core-revalidated.
 - Lazy public proposal generation followed by core applicability filtering.
 - Multi-agent communication as economic state change.
 - Hidden truth, belief, hazard, and deadline in one model.
-- Generic Monte Carlo over partially observed policies.
+- Exact 16-scenario comparison plus genuine seeded Monte Carlo over partially
+  observed policies.
+- Caller-owned belief evolution and repeated information-set planning.
 - Assessment-derived masks and replay-derived learning trajectories.
 
 ## Cross-problem acceptance tests
@@ -529,6 +588,9 @@ The repository test suite additionally verifies:
 - Required and unknown role errors.
 - Missing rate and account errors.
 - Distinct-role enforcement.
+- Identity- and capability-witnessed role bindings, including adversarial
+  rebinding outside trusted action helpers.
+- Consumable terminal lifecycle assets and quiescent marker-based goals.
 - Zero-unit rejection.
 - Rate-scaling and destination-balance overflow.
 - Non-mutating feasibility, simulation, and replay on forks.
@@ -549,6 +611,8 @@ The repository test suite additionally verifies:
 - RL action masks, shortfall features, receipts, and trajectory extraction.
 - Property laws for assessment/application parity, atomic failure, arithmetic,
   serialization, and unit conversion.
+- Exhaustive fixture variation against direct domain oracles for exact cover,
+  small scheduling horizons, and generated Connect Four prefixes.
 
 Run the suite with:
 
