@@ -5,6 +5,7 @@ use axionomy::{
     basket,
 };
 use axionomy_search::{
+    mcts::{MctsConfig, MctsDecision, MctsError, search},
     monte_carlo::{MonteCarloConfig, PolicyEstimate, ScalarStatistics, ScalarSummary, evaluate},
     rollout::{RolloutConfig, RolloutDecision, RolloutStop, TraceRetention, run_to_goal},
     sampling::{SeededSampler, TicketSource, WeightedExchange, sample},
@@ -117,8 +118,16 @@ pub enum Policy {
     Reliable,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RiskCriterion {
+    Mean,
+    LowerDecile,
+}
+
 pub type World = Economy<AccountId, Asset, RateId, Role>;
 pub type Action = Exchange<RateId, Role, AccountId>;
+pub type PlanningDecision = MctsDecision<Action>;
+pub type PlanningError = MctsError<RateId, Role, AccountId, Asset>;
 
 #[derive(Debug, Clone)]
 pub struct MissionRollout {
@@ -385,6 +394,14 @@ pub fn run_policy(model: &World, policy: Policy, exploration_seed: u64) -> Missi
 }
 
 pub fn monte_carlo(model: &World, samples: usize) -> Option<MonteCarloEstimate> {
+    monte_carlo_with_risk(model, samples, RiskCriterion::Mean)
+}
+
+pub fn monte_carlo_with_risk(
+    model: &World,
+    samples: usize,
+    criterion: RiskCriterion,
+) -> Option<MonteCarloEstimate> {
     let estimates = evaluate(
         [Policy::Direct, Policy::Reliable],
         MonteCarloConfig::new(samples),
@@ -402,14 +419,121 @@ pub fn monte_carlo(model: &World, samples: usize) -> Option<MonteCarloEstimate> 
     let chosen = estimates
         .iter()
         .max_by(|left, right| {
-            left.summary()
-                .mean()
-                .total_cmp(&right.summary().mean())
+            risk_score(left.summary(), criterion)
+                .total_cmp(&risk_score(right.summary(), criterion))
                 .then_with(|| right.policy().cmp(left.policy()))
         })?
         .policy()
         .to_owned();
     Some(MonteCarloEstimate { estimates, chosen })
+}
+
+/// Plans one live decision with MCTS over encoded routes and Nature outcomes.
+///
+/// The tree is disposable: its edges are ordinary exchanges, chance weights
+/// come from Nature's assets, and the selected action is revalidated against
+/// the supplied economy by `axionomy-search` before it is returned.
+pub fn plan_action(
+    world: &World,
+    iterations: usize,
+    seed: u64,
+) -> Result<PlanningDecision, PlanningError> {
+    search(
+        world,
+        MctsConfig::new(iterations, ROLLOUT_HORIZON).with_seed(seed),
+        1,
+        planning_candidates,
+        planning_outcomes,
+        |_| 0,
+        |state| {
+            state
+                .matches(&goal())
+                .then(|| vec![planning_utility(state)])
+        },
+        |state| vec![planning_utility(state)],
+        |state, actions, random| {
+            policy_action(state, Policy::Reliable, random)
+                .filter(|preferred| actions.contains(preferred))
+                .or_else(|| actions.first().cloned())
+        },
+    )
+}
+
+fn planning_candidates(world: &World) -> Vec<Action> {
+    let actions = candidates(world);
+    if active_route(world).is_some() {
+        return actions
+            .into_iter()
+            .filter(|exchange| !matches!(exchange.rate(), RateId::Resolve(_, _)))
+            .collect();
+    }
+    let carrying = carried_order(world);
+    match current_location(world) {
+        Some(Location::Depot) if carrying.is_some() => {
+            let needs_fuel = world.balance(&AccountId::Vehicle, &Asset::Fuel).is_zero();
+            actions
+                .into_iter()
+                .filter(|exchange| {
+                    matches!(
+                        exchange.rate(),
+                        RateId::Depart(Route::DirectOut | Route::SafeOutFirst)
+                    ) || (needs_fuel && matches!(exchange.rate(), RateId::Refuel))
+                })
+                .collect()
+        }
+        Some(Location::Depot) => {
+            let needs_fuel = world.balance(&AccountId::Vehicle, &Asset::Fuel).get() < REFUEL_AMOUNT;
+            actions
+                .into_iter()
+                .filter(|exchange| {
+                    matches!(exchange.rate(), RateId::Load(_))
+                        || (needs_fuel && matches!(exchange.rate(), RateId::Refuel))
+                })
+                .collect()
+        }
+        Some(Location::Customer) if carrying.is_some() => actions
+            .into_iter()
+            .filter(|exchange| matches!(exchange.rate(), RateId::Deliver(_)))
+            .collect(),
+        Some(Location::Customer) => actions
+            .into_iter()
+            .filter(|exchange| {
+                matches!(
+                    exchange.rate(),
+                    RateId::Depart(Route::DirectBack | Route::SafeBackFirst)
+                )
+            })
+            .collect(),
+        Some(Location::Junction) => actions
+            .into_iter()
+            .filter(|exchange| {
+                matches!(
+                    exchange.rate(),
+                    RateId::Depart(Route::SafeOutSecond | Route::SafeBackSecond)
+                )
+            })
+            .collect(),
+        None => Vec::new(),
+    }
+}
+
+fn planning_outcomes(world: &World) -> Vec<WeightedExchange<Action>> {
+    active_route(world).map_or_else(Vec::new, |route| nature_outcomes(world, route))
+}
+
+fn planning_utility(world: &World) -> f64 {
+    let completion_bonus = if world.matches(&goal()) { 1_000.0 } else { 0.0 };
+    completion_bonus + delivered(world) as f64 * 100.0
+        - world
+            .balance(&AccountId::Vehicle, &Asset::ElapsedTime)
+            .get() as f64
+}
+
+fn risk_score(summary: &ScalarSummary, criterion: RiskCriterion) -> f64 {
+    match criterion {
+        RiskCriterion::Mean => summary.mean(),
+        RiskCriterion::LowerDecile => summary.lower_tail_mean(0.1).unwrap_or(f64::NEG_INFINITY),
+    }
 }
 
 fn policy_action(world: &World, policy: Policy, sampler: &mut impl TicketSource) -> Option<Action> {
@@ -641,6 +765,25 @@ mod tests {
         assert_eq!(estimate.chosen(), Policy::Reliable);
         assert!(reliable.mean() > direct.mean());
         assert_eq!(direct.samples(), 64);
+
+        let tail = monte_carlo_with_risk(&initial(), 64, RiskCriterion::LowerDecile)
+            .expect("mission has policies");
+        assert_eq!(tail.chosen(), Policy::Reliable);
+    }
+
+    #[test]
+    fn mcts_plans_an_applicable_route_from_encoded_chance() {
+        let mut world = initial();
+        world
+            .apply(action(RateId::Load(OrderId::A)))
+            .expect("first package loads");
+
+        let decision = plan_action(&world, 64, 31).expect("loaded vehicle has a plan");
+        assert!(world.is_applicable(decision.action()));
+        assert!(matches!(
+            decision.action().rate(),
+            RateId::Depart(Route::DirectOut | Route::SafeOutFirst)
+        ));
     }
 
     #[test]
@@ -655,5 +798,15 @@ mod tests {
             .expect_err("vehicle has not departed or resolved Nature");
         assert!(matches!(error, axionomy::ApplyError::Infeasible { .. }));
         assert_eq!(world.state_key(), before);
+    }
+
+    #[test]
+    fn package_identity_rejects_loading_from_the_wrong_order() {
+        let world = initial();
+        let rebound = Exchange::new(RateId::Load(OrderId::A), Quantity::new(1))
+            .bind(Role::Vehicle, AccountId::Vehicle)
+            .bind(Role::Order, AccountId::Order(OrderId::B));
+
+        assert!(!world.is_applicable(&rebound));
     }
 }

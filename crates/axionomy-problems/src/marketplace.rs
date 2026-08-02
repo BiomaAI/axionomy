@@ -6,14 +6,30 @@
 
 use axionomy::{
     Account, AssessmentStatus, Economy, EconomyBuilder, Exchange, ExchangeAssessment, Goal,
-    LinearInvariant, Quantity, Rate, basket,
+    LinearInvariant, Quantity, Rate, Trace, basket,
 };
+use std::collections::HashSet;
 
 pub const GROSS_PAYMENT: u64 = 100;
 pub const SELLER_PROCEEDS: u64 = 80;
 pub const TAX: u64 = 10;
 pub const PLATFORM_COMMISSION: u64 = 5;
 pub const SHIPPING_FEE: u64 = 5;
+pub const SECOND_GROSS_PAYMENT: u64 = 90;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum OrderId {
+    A,
+    B,
+}
+
+pub const ORDERS: [OrderId; 2] = [OrderId::A, OrderId::B];
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum Item {
+    Widget,
+    Gadget,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum BuyerId {
@@ -42,23 +58,24 @@ pub enum AccountId {
     Platform,
     TaxAuthority,
     Carrier(CarrierId),
-    OrderBook,
+    Order(OrderId),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Asset {
     Money,
-    Widget,
-    PurchaseIntent,
-    PurchaseReceipt,
-    SaleOffer,
-    CompletedSale,
+    Item(Item),
+    PurchaseIntent(OrderId),
+    PurchaseReceipt(OrderId),
+    SaleOffer(Item),
+    CompletedSale(OrderId),
     MarketplaceLicense,
     TaxPolicy,
     ShippingCapacity,
     UsedShippingCapacity,
-    OpenOrder,
-    SettledOrder,
+    OpenOrder(OrderId),
+    SettledOrder(OrderId),
+    SettledValue(u64),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -73,7 +90,7 @@ pub enum Role {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum RateId {
-    SettleOrder,
+    SettleOrder(OrderId),
 }
 
 pub type World = Economy<AccountId, Asset, RateId, Role>;
@@ -83,18 +100,24 @@ pub type Assessment = ExchangeAssessment<AccountId, Asset, RateId, Role>;
 /// One possible buyer, seller, and carrier binding.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct MarketMatch {
+    order: OrderId,
     buyer: BuyerId,
     seller: SellerId,
     carrier: CarrierId,
 }
 
 impl MarketMatch {
-    pub const fn new(buyer: BuyerId, seller: SellerId, carrier: CarrierId) -> Self {
+    pub const fn new(order: OrderId, buyer: BuyerId, seller: SellerId, carrier: CarrierId) -> Self {
         Self {
+            order,
             buyer,
             seller,
             carrier,
         }
+    }
+
+    pub const fn order(self) -> OrderId {
+        self.order
     }
 
     pub const fn buyer(self) -> BuyerId {
@@ -110,7 +133,28 @@ impl MarketMatch {
     }
 
     pub fn exchange(self) -> Action {
-        settlement(self.buyer, self.seller, self.carrier)
+        settlement(self.order, self.buyer, self.seller, self.carrier)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ClearingProposal {
+    trace: Trace<RateId, Role, AccountId>,
+    settled_orders: usize,
+    gross_value: u64,
+}
+
+impl ClearingProposal {
+    pub const fn trace(&self) -> &Trace<RateId, Role, AccountId> {
+        &self.trace
+    }
+
+    pub const fn settled_orders(&self) -> usize {
+        self.settled_orders
+    }
+
+    pub const fn gross_value(&self) -> u64 {
+        self.gross_value
     }
 }
 
@@ -140,31 +184,50 @@ pub fn initial() -> World {
     EconomyBuilder::new()
         .account(
             AccountId::Buyer(BuyerId::A),
-            Account::from(basket([(Asset::Money, 120), (Asset::PurchaseIntent, 1)])),
+            Account::from(basket([
+                (Asset::Money, 190),
+                (Asset::PurchaseIntent(OrderId::A), 1),
+                (Asset::PurchaseIntent(OrderId::B), 1),
+            ])),
         )
         .account(
             AccountId::Buyer(BuyerId::B),
-            Account::from(basket([(Asset::Money, 100), (Asset::PurchaseIntent, 1)])),
+            Account::from(basket([
+                (Asset::Money, 100),
+                (Asset::PurchaseIntent(OrderId::A), 1),
+            ])),
         )
         .account(
             AccountId::Buyer(BuyerId::C),
-            Account::from(basket([(Asset::Money, 75), (Asset::PurchaseIntent, 1)])),
+            Account::from(basket([
+                (Asset::Money, 75),
+                (Asset::PurchaseIntent(OrderId::A), 1),
+            ])),
         )
         .account(
             AccountId::Seller(SellerId::A),
-            Account::from(basket([(Asset::Widget, 1), (Asset::SaleOffer, 1)])),
+            Account::from(basket([
+                (Asset::Item(Item::Widget), 1),
+                (Asset::SaleOffer(Item::Widget), 1),
+            ])),
         )
         .account(
             AccountId::Seller(SellerId::B),
-            Account::from(basket([(Asset::Widget, 1), (Asset::SaleOffer, 1)])),
+            Account::from(basket([
+                (Asset::Item(Item::Widget), 1),
+                (Asset::SaleOffer(Item::Widget), 1),
+            ])),
         )
         .account(
             AccountId::Seller(SellerId::C),
-            Account::from(basket([(Asset::SaleOffer, 1)])),
+            Account::from(basket([
+                (Asset::Item(Item::Gadget), 1),
+                (Asset::SaleOffer(Item::Gadget), 1),
+            ])),
         )
         .account(
             AccountId::Carrier(CarrierId::A),
-            Account::from(basket([(Asset::ShippingCapacity, 1)])),
+            Account::from(basket([(Asset::ShippingCapacity, 2)])),
         )
         .account(AccountId::Carrier(CarrierId::B), Account::default())
         .account(
@@ -176,21 +239,40 @@ pub fn initial() -> World {
             Account::from(basket([(Asset::TaxPolicy, 1)])),
         )
         .account(
-            AccountId::OrderBook,
-            Account::from(basket([(Asset::OpenOrder, 1)])),
+            AccountId::Order(OrderId::A),
+            Account::from(basket([(Asset::OpenOrder(OrderId::A), 1)])),
         )
-        .rate(RateId::SettleOrder, all_distinct(settlement_rate()))
+        .account(
+            AccountId::Order(OrderId::B),
+            Account::from(basket([(Asset::OpenOrder(OrderId::B), 1)])),
+        )
+        .rate(
+            RateId::SettleOrder(OrderId::A),
+            all_distinct(settlement_rate(OrderId::A)),
+        )
+        .rate(
+            RateId::SettleOrder(OrderId::B),
+            all_distinct(settlement_rate(OrderId::B)),
+        )
         .invariant(LinearInvariant::new("money accounting").weight(Asset::Money, 1))
-        .invariant(LinearInvariant::new("widget accounting").weight(Asset::Widget, 1))
+        .invariant(
+            LinearInvariant::new("item accounting")
+                .weight(Asset::Item(Item::Widget), 1)
+                .weight(Asset::Item(Item::Gadget), 1),
+        )
         .invariant(
             LinearInvariant::new("buyer order lifecycle")
-                .weight(Asset::PurchaseIntent, 1)
-                .weight(Asset::PurchaseReceipt, 1),
+                .weight(Asset::PurchaseIntent(OrderId::A), 1)
+                .weight(Asset::PurchaseIntent(OrderId::B), 1)
+                .weight(Asset::PurchaseReceipt(OrderId::A), 1)
+                .weight(Asset::PurchaseReceipt(OrderId::B), 1),
         )
         .invariant(
             LinearInvariant::new("seller order lifecycle")
-                .weight(Asset::SaleOffer, 1)
-                .weight(Asset::CompletedSale, 1),
+                .weight(Asset::SaleOffer(Item::Widget), 1)
+                .weight(Asset::SaleOffer(Item::Gadget), 1)
+                .weight(Asset::CompletedSale(OrderId::A), 1)
+                .weight(Asset::CompletedSale(OrderId::B), 1),
         )
         .invariant(
             LinearInvariant::new("shipping capacity accounting")
@@ -199,15 +281,22 @@ pub fn initial() -> World {
         )
         .invariant(
             LinearInvariant::new("order-book lifecycle")
-                .weight(Asset::OpenOrder, 1)
-                .weight(Asset::SettledOrder, 1),
+                .weight(Asset::OpenOrder(OrderId::A), 1)
+                .weight(Asset::OpenOrder(OrderId::B), 1)
+                .weight(Asset::SettledOrder(OrderId::A), 1)
+                .weight(Asset::SettledOrder(OrderId::B), 1),
         )
         .build()
         .expect("marketplace model is valid")
 }
 
 pub fn goal() -> Goal<AccountId, Asset> {
-    Goal::new().require(AccountId::OrderBook, basket([(Asset::SettledOrder, 1)]))
+    ORDERS.into_iter().fold(Goal::new(), |goal, order| {
+        goal.require(
+            AccountId::Order(order),
+            basket([(Asset::SettledOrder(order), 1)]),
+        )
+    })
 }
 
 /// Derives the finite Cartesian candidate set from participant accounts.
@@ -221,7 +310,7 @@ pub fn candidate_matches(world: &World) -> Vec<MarketMatch> {
             AccountId::Buyer(buyer) => buyers.push(*buyer),
             AccountId::Seller(seller) => sellers.push(*seller),
             AccountId::Carrier(carrier) => carriers.push(*carrier),
-            AccountId::Platform | AccountId::TaxAuthority | AccountId::OrderBook => {}
+            AccountId::Platform | AccountId::TaxAuthority | AccountId::Order(_) => {}
         }
     }
 
@@ -230,10 +319,12 @@ pub fn candidate_matches(world: &World) -> Vec<MarketMatch> {
     carriers.sort();
 
     let mut matches = Vec::new();
-    for buyer in buyers {
-        for seller in &sellers {
-            for carrier in &carriers {
-                matches.push(MarketMatch::new(buyer, *seller, *carrier));
+    for order in ORDERS {
+        for buyer in &buyers {
+            for seller in &sellers {
+                for carrier in &carriers {
+                    matches.push(MarketMatch::new(order, *buyer, *seller, *carrier));
+                }
             }
         }
     }
@@ -286,51 +377,139 @@ pub fn rank_near_matches(
     scored.into_iter().map(|(_, candidate)| candidate).collect()
 }
 
-pub fn settlement(buyer: BuyerId, seller: SellerId, carrier: CarrierId) -> Action {
-    Exchange::new(RateId::SettleOrder, Quantity::new(1))
+/// Searches the finite concrete fixture for the best compatible settlement set.
+///
+/// The search state is disposable. Every edge is still a core-assessed
+/// settlement exchange, and the returned trace is replay-validated.
+pub fn clear_market(world: &World) -> ClearingProposal {
+    let mut visited = HashSet::new();
+    let mut best = ClearingProposal {
+        trace: Trace::new(),
+        settled_orders: settled_orders(world),
+        gross_value: gross_value(world),
+    };
+    clear_branch(world.clone(), Trace::new(), &mut visited, &mut best);
+    let replayed = world
+        .replayed(best.trace())
+        .expect("clearing search only records applicable exchanges");
+    assert_eq!(settled_orders(&replayed), best.settled_orders);
+    assert_eq!(gross_value(&replayed), best.gross_value);
+    best
+}
+
+pub fn settlement(order: OrderId, buyer: BuyerId, seller: SellerId, carrier: CarrierId) -> Action {
+    Exchange::new(RateId::SettleOrder(order), Quantity::new(1))
         .bind(Role::Buyer, AccountId::Buyer(buyer))
         .bind(Role::Seller, AccountId::Seller(seller))
         .bind(Role::Platform, AccountId::Platform)
         .bind(Role::TaxAuthority, AccountId::TaxAuthority)
         .bind(Role::Carrier, AccountId::Carrier(carrier))
-        .bind(Role::OrderBook, AccountId::OrderBook)
+        .bind(Role::OrderBook, AccountId::Order(order))
 }
 
-fn settlement_rate() -> Rate<Role, Asset> {
+fn settlement_rate(order: OrderId) -> Rate<Role, Asset> {
+    let (item, gross, seller_proceeds, tax, commission, shipping) = order_terms(order);
     Rate::new()
         .consume(
             Role::Buyer,
-            basket([(Asset::Money, GROSS_PAYMENT), (Asset::PurchaseIntent, 1)]),
+            basket([(Asset::Money, gross), (Asset::PurchaseIntent(order), 1)]),
         )
         .produce(
             Role::Buyer,
-            basket([(Asset::Widget, 1), (Asset::PurchaseReceipt, 1)]),
+            basket([(Asset::Item(item), 1), (Asset::PurchaseReceipt(order), 1)]),
         )
         .consume(
             Role::Seller,
-            basket([(Asset::Widget, 1), (Asset::SaleOffer, 1)]),
+            basket([(Asset::Item(item), 1), (Asset::SaleOffer(item), 1)]),
         )
         .produce(
             Role::Seller,
-            basket([(Asset::Money, SELLER_PROCEEDS), (Asset::CompletedSale, 1)]),
+            basket([
+                (Asset::Money, seller_proceeds),
+                (Asset::CompletedSale(order), 1),
+            ]),
         )
         .preserve(Role::Platform, basket([(Asset::MarketplaceLicense, 1)]))
-        .produce(
-            Role::Platform,
-            basket([(Asset::Money, PLATFORM_COMMISSION)]),
-        )
+        .produce(Role::Platform, basket([(Asset::Money, commission)]))
         .preserve(Role::TaxAuthority, basket([(Asset::TaxPolicy, 1)]))
-        .produce(Role::TaxAuthority, basket([(Asset::Money, TAX)]))
+        .produce(Role::TaxAuthority, basket([(Asset::Money, tax)]))
         .consume(Role::Carrier, basket([(Asset::ShippingCapacity, 1)]))
         .produce(
             Role::Carrier,
+            basket([(Asset::Money, shipping), (Asset::UsedShippingCapacity, 1)]),
+        )
+        .consume(Role::OrderBook, basket([(Asset::OpenOrder(order), 1)]))
+        .produce(
+            Role::OrderBook,
             basket([
-                (Asset::Money, SHIPPING_FEE),
-                (Asset::UsedShippingCapacity, 1),
+                (Asset::SettledOrder(order), 1),
+                (Asset::SettledValue(gross), 1),
             ]),
         )
-        .consume(Role::OrderBook, basket([(Asset::OpenOrder, 1)]))
-        .produce(Role::OrderBook, basket([(Asset::SettledOrder, 1)]))
+}
+
+const fn order_terms(order: OrderId) -> (Item, u64, u64, u64, u64, u64) {
+    match order {
+        OrderId::A => (
+            Item::Widget,
+            GROSS_PAYMENT,
+            SELLER_PROCEEDS,
+            TAX,
+            PLATFORM_COMMISSION,
+            SHIPPING_FEE,
+        ),
+        OrderId::B => (Item::Gadget, SECOND_GROSS_PAYMENT, 72, 9, 5, 4),
+    }
+}
+
+fn clear_branch(
+    world: World,
+    trace: Trace<RateId, Role, AccountId>,
+    visited: &mut HashSet<Vec<(AccountId, Asset, Quantity)>>,
+    best: &mut ClearingProposal,
+) {
+    if !visited.insert(world.state_key()) {
+        return;
+    }
+    let candidate = (settled_orders(&world), gross_value(&world));
+    if candidate > (best.settled_orders, best.gross_value) {
+        best.trace = trace.clone();
+        best.settled_orders = candidate.0;
+        best.gross_value = candidate.1;
+    }
+    for exchange in exact_matches(&world) {
+        let mut next = world.fork();
+        if next.apply(exchange.clone()).is_err() {
+            continue;
+        }
+        let mut next_trace = trace.clone();
+        next_trace.push(exchange);
+        clear_branch(next, next_trace, visited, best);
+    }
+}
+
+fn settled_orders(world: &World) -> usize {
+    ORDERS
+        .into_iter()
+        .filter(|order| {
+            !world
+                .balance(&AccountId::Order(*order), &Asset::SettledOrder(*order))
+                .is_zero()
+        })
+        .count()
+}
+
+fn gross_value(world: &World) -> u64 {
+    ORDERS
+        .into_iter()
+        .map(|order| {
+            let gross = order_terms(order).1;
+            world
+                .balance(&AccountId::Order(order), &Asset::SettledValue(gross))
+                .get()
+                * gross
+        })
+        .sum()
 }
 
 fn all_distinct(mut rate: Rate<Role, Asset>) -> Rate<Role, Asset> {
@@ -360,21 +539,35 @@ mod tests {
         let world = initial();
         let before = world.state_key();
 
-        assert_eq!(candidate_matches(&world).len(), 18);
+        assert_eq!(candidate_matches(&world).len(), 36);
         let exact = exact_matches(&world);
-        assert_eq!(exact.len(), 4);
+        assert_eq!(exact.len(), 5);
         assert!(exact.iter().all(|exchange| world.is_applicable(exchange)));
         assert_eq!(world.state_key(), before);
 
         for exchange in exact {
-            assert!(matches!(
-                exchange.bindings().get(&Role::Buyer),
-                Some(AccountId::Buyer(BuyerId::A | BuyerId::B))
-            ));
-            assert!(matches!(
-                exchange.bindings().get(&Role::Seller),
-                Some(AccountId::Seller(SellerId::A | SellerId::B))
-            ));
+            match exchange.rate() {
+                RateId::SettleOrder(OrderId::A) => {
+                    assert!(matches!(
+                        exchange.bindings().get(&Role::Buyer),
+                        Some(AccountId::Buyer(BuyerId::A | BuyerId::B))
+                    ));
+                    assert!(matches!(
+                        exchange.bindings().get(&Role::Seller),
+                        Some(AccountId::Seller(SellerId::A | SellerId::B))
+                    ));
+                }
+                RateId::SettleOrder(OrderId::B) => {
+                    assert_eq!(
+                        exchange.bindings().get(&Role::Buyer),
+                        Some(&AccountId::Buyer(BuyerId::A))
+                    );
+                    assert_eq!(
+                        exchange.bindings().get(&Role::Seller),
+                        Some(&AccountId::Seller(SellerId::C))
+                    );
+                }
+            }
             assert_eq!(
                 exchange.bindings().get(&Role::Carrier),
                 Some(&AccountId::Carrier(CarrierId::A))
@@ -386,7 +579,7 @@ mod tests {
     fn reports_buyer_seller_and_carrier_shortfalls_together() {
         let world = initial();
         let before = world.state_key();
-        let exchange = settlement(BuyerId::C, SellerId::C, CarrierId::B);
+        let exchange = settlement(OrderId::A, BuyerId::C, SellerId::C, CarrierId::B);
         let assessment = world.assess(&exchange);
 
         assert_eq!(assessment.status(), AssessmentStatus::Infeasible);
@@ -402,7 +595,7 @@ mod tests {
             assessment
                 .shortfall(&AccountId::Seller(SellerId::C))
                 .expect("seller shortfall")
-                .quantity(&Asset::Widget),
+                .quantity(&Asset::Item(Item::Widget)),
             Quantity::new(1)
         );
         assert_eq!(
@@ -418,7 +611,7 @@ mod tests {
     #[test]
     fn settles_six_accounts_atomically_and_projection_matches_receipt() {
         let mut world = initial();
-        let exchange = settlement(BuyerId::A, SellerId::A, CarrierId::A);
+        let exchange = settlement(OrderId::A, BuyerId::A, SellerId::A, CarrierId::A);
         let replay_exchange = exchange.clone();
         let assessment = world.assess(&exchange);
         let projected = assessment
@@ -437,10 +630,10 @@ mod tests {
 
         assert_eq!(
             world.balance(&AccountId::Buyer(BuyerId::A), &Asset::Money),
-            Quantity::new(20)
+            Quantity::new(90)
         );
         assert_eq!(
-            world.balance(&AccountId::Buyer(BuyerId::A), &Asset::Widget),
+            world.balance(&AccountId::Buyer(BuyerId::A), &Asset::Item(Item::Widget)),
             Quantity::new(1)
         );
         assert_eq!(
@@ -459,8 +652,14 @@ mod tests {
             world.balance(&AccountId::Carrier(CarrierId::A), &Asset::Money),
             Quantity::new(SHIPPING_FEE)
         );
-        assert!(world.matches(&goal()));
-        assert!(exact_matches(&world).is_empty());
+        assert_eq!(
+            world.balance(
+                &AccountId::Order(OrderId::A),
+                &Asset::SettledOrder(OrderId::A)
+            ),
+            Quantity::new(1)
+        );
+        assert_eq!(exact_matches(&world).len(), 1);
 
         let mut trace = Trace::new();
         trace.push(replay_exchange);
@@ -469,11 +668,31 @@ mod tests {
     }
 
     #[test]
+    fn clearing_search_selects_two_compatible_settlements_and_replays() {
+        let world = initial();
+        let clearing = clear_market(&world);
+
+        assert_eq!(clearing.settled_orders(), 2);
+        assert_eq!(clearing.gross_value(), GROSS_PAYMENT + SECOND_GROSS_PAYMENT);
+        assert_eq!(clearing.trace().exchanges().len(), 2);
+        let replayed = world
+            .replayed(clearing.trace())
+            .expect("clearing trace must replay");
+        assert!(replayed.matches(&goal()));
+        assert!(exact_matches(&replayed).is_empty());
+    }
+
+    #[test]
     fn failed_settlement_returns_all_shortfalls_and_changes_nothing() {
         let mut world = initial();
         let before = world.state_key();
         let error = world
-            .apply(settlement(BuyerId::C, SellerId::C, CarrierId::B))
+            .apply(settlement(
+                OrderId::A,
+                BuyerId::C,
+                SellerId::C,
+                CarrierId::B,
+            ))
             .expect_err("three participants are missing requirements");
 
         let ApplyError::Infeasible { shortfalls } = error else {
@@ -486,13 +705,13 @@ mod tests {
     #[test]
     fn rejects_one_account_bound_to_distinct_market_roles() {
         let world = initial();
-        let exchange = Exchange::new(RateId::SettleOrder, Quantity::new(1))
+        let exchange = Exchange::new(RateId::SettleOrder(OrderId::A), Quantity::new(1))
             .bind(Role::Buyer, AccountId::Buyer(BuyerId::A))
             .bind(Role::Seller, AccountId::Buyer(BuyerId::A))
             .bind(Role::Platform, AccountId::Platform)
             .bind(Role::TaxAuthority, AccountId::TaxAuthority)
             .bind(Role::Carrier, AccountId::Carrier(CarrierId::A))
-            .bind(Role::OrderBook, AccountId::OrderBook);
+            .bind(Role::OrderBook, AccountId::Order(OrderId::A));
 
         let ExchangeAssessment::Invalid { issues } = world.assess(&exchange) else {
             panic!("buyer and seller must be different accounts");
@@ -507,6 +726,20 @@ mod tests {
     }
 
     #[test]
+    fn role_capabilities_reject_swapped_institutions() {
+        let world = initial();
+        let rebound = Exchange::new(RateId::SettleOrder(OrderId::A), Quantity::new(1))
+            .bind(Role::Buyer, AccountId::Buyer(BuyerId::A))
+            .bind(Role::Seller, AccountId::Seller(SellerId::A))
+            .bind(Role::Platform, AccountId::TaxAuthority)
+            .bind(Role::TaxAuthority, AccountId::Platform)
+            .bind(Role::Carrier, AccountId::Carrier(CarrierId::A))
+            .bind(Role::OrderBook, AccountId::Order(OrderId::A));
+
+        assert!(!world.is_applicable(&rebound));
+    }
+
+    #[test]
     fn caller_owned_cost_changes_near_match_ranking() {
         let world = initial();
 
@@ -515,7 +748,7 @@ mod tests {
         });
         assert_eq!(
             cash_friendly[0].candidate(),
-            MarketMatch::new(BuyerId::C, SellerId::A, CarrierId::A)
+            MarketMatch::new(OrderId::A, BuyerId::C, SellerId::A, CarrierId::A)
         );
 
         let capacity_friendly = rank_near_matches(&world, |assessment| {
@@ -523,7 +756,7 @@ mod tests {
         });
         assert_eq!(
             capacity_friendly[0].candidate(),
-            MarketMatch::new(BuyerId::A, SellerId::A, CarrierId::B)
+            MarketMatch::new(OrderId::A, BuyerId::A, SellerId::A, CarrierId::B)
         );
     }
 
@@ -540,7 +773,7 @@ mod tests {
             .map(|(asset, quantity)| {
                 let weight = match asset {
                     Asset::Money => money_weight,
-                    Asset::Widget => widget_weight,
+                    Asset::Item(Item::Widget | Item::Gadget) => widget_weight,
                     Asset::ShippingCapacity => capacity_weight,
                     _ => 1_000,
                 };

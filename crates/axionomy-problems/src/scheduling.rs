@@ -435,4 +435,52 @@ mod tests {
 
         assert!(!world.is_applicable(&wrong_machine));
     }
+
+    #[test]
+    fn small_horizons_match_a_direct_job_shop_oracle() {
+        for horizon in 0..=5 {
+            let expected = brute_force_makespan(horizon);
+            let world = build(horizon);
+            let generic = solve_best_first(&world).map(|solution| solution.cost() as u8);
+            let branch = independent_optimize(&world).map(|proposal| proposal.makespan());
+
+            assert_eq!(generic, expected, "generic search at horizon {horizon}");
+            assert_eq!(branch, expected, "branch search at horizon {horizon}");
+        }
+    }
+
+    fn brute_force_makespan(horizon: u8) -> Option<u8> {
+        let starts = 0..=horizon;
+        let mut best = None;
+        for one_a in starts.clone() {
+            for one_b in starts.clone() {
+                for two_a in starts.clone() {
+                    for two_b in starts.clone() {
+                        let one_a_end = one_a.checked_add(2)?;
+                        let one_b_end = one_b.checked_add(1)?;
+                        let two_a_end = two_a.checked_add(2)?;
+                        let two_b_end = two_b.checked_add(1)?;
+                        if one_a_end > horizon
+                            || one_b_end > horizon
+                            || two_a_end > horizon
+                            || two_b_end > horizon
+                            || one_b < one_a_end
+                            || two_b < two_a_end
+                            || overlaps(one_a, one_a_end, two_b, two_b_end)
+                            || overlaps(two_a, two_a_end, one_b, one_b_end)
+                        {
+                            continue;
+                        }
+                        let makespan = one_b_end.max(two_b_end);
+                        best = Some(best.map_or(makespan, |known: u8| known.min(makespan)));
+                    }
+                }
+            }
+        }
+        best
+    }
+
+    const fn overlaps(left_start: u8, left_end: u8, right_start: u8, right_end: u8) -> bool {
+        left_start < right_end && right_start < left_end
+    }
 }

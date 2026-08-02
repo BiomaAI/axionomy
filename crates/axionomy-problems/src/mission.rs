@@ -11,7 +11,8 @@ use axionomy_search::{
     monte_carlo::{BernoulliStatistics, MonteCarloConfig, evaluate},
     rollout::{RolloutConfig, RolloutDecision, RolloutStop, TraceRetention, run_to_goal},
     sampling::{
-        SeededSampler, WeightedExchange, choose_by_ticket, sample, systematic_ticket, total_weight,
+        SeededSampler, TicketSource, WeightedExchange, choose_by_ticket, sample, systematic_ticket,
+        total_weight,
     },
 };
 
@@ -102,6 +103,7 @@ pub enum RateId {
     },
     Share(Location),
     MoveTogether(Location),
+    MoveDirect(Location),
     Encounter {
         location: Location,
         hazard: Hazard,
@@ -326,42 +328,9 @@ pub fn initial() -> World {
             )
             .rate(
                 RateId::MoveTogether(location),
-                Rate::new()
-                    .preserve(
-                        Role::Scout,
-                        basket([(Asset::AgentIdentity(AgentId::Scout), 1)]),
-                    )
-                    .preserve(
-                        Role::Medic,
-                        basket([(Asset::AgentIdentity(AgentId::Medic), 1)]),
-                    )
-                    .preserve(Role::Mission, basket([(Asset::MissionIdentity, 1)]))
-                    .consume(
-                        Role::Scout,
-                        basket([(Asset::At(Location::Base), 1), (Asset::Energy, 1)]),
-                    )
-                    .produce(
-                        Role::Scout,
-                        basket([(Asset::At(location), 1), (Asset::SpentEnergy, 1)]),
-                    )
-                    .consume(
-                        Role::Medic,
-                        basket([(Asset::At(Location::Base), 1), (Asset::Energy, 1)]),
-                    )
-                    .produce(
-                        Role::Medic,
-                        basket([(Asset::At(location), 1), (Asset::SpentEnergy, 1)]),
-                    )
-                    .consume(Role::Mission, basket([(Asset::Planning, 1)]))
-                    .consume(Role::Mission, basket([(Asset::TimeRemaining, 1)]))
-                    .produce(
-                        Role::Mission,
-                        basket([(Asset::AwaitingEncounter, 1), (Asset::ElapsedTime, 1)]),
-                    )
-                    .distinct(Role::Scout, Role::Medic)
-                    .distinct(Role::Scout, Role::Mission)
-                    .distinct(Role::Medic, Role::Mission),
-            );
+                movement_rate(location, true),
+            )
+            .rate(RateId::MoveDirect(location), movement_rate(location, false));
 
         for hazard in [Hazard::Safe, Hazard::Injury] {
             let rate = Rate::new()
@@ -542,6 +511,52 @@ pub fn initial() -> World {
         .expect("mission model is valid")
 }
 
+fn movement_rate(location: Location, coordinated: bool) -> Rate<Role, Asset> {
+    let rate = Rate::new()
+        .preserve(
+            Role::Scout,
+            basket([(Asset::AgentIdentity(AgentId::Scout), 1)]),
+        )
+        .preserve(
+            Role::Medic,
+            basket([(Asset::AgentIdentity(AgentId::Medic), 1)]),
+        )
+        .preserve(Role::Mission, basket([(Asset::MissionIdentity, 1)]))
+        .consume(
+            Role::Scout,
+            basket([(Asset::At(Location::Base), 1), (Asset::Energy, 1)]),
+        )
+        .produce(
+            Role::Scout,
+            basket([(Asset::At(location), 1), (Asset::SpentEnergy, 1)]),
+        )
+        .consume(
+            Role::Medic,
+            basket([(Asset::At(Location::Base), 1), (Asset::Energy, 1)]),
+        )
+        .produce(
+            Role::Medic,
+            basket([(Asset::At(location), 1), (Asset::SpentEnergy, 1)]),
+        )
+        .consume(Role::Mission, basket([(Asset::Planning, 1)]))
+        .consume(Role::Mission, basket([(Asset::TimeRemaining, 1)]))
+        .produce(
+            Role::Mission,
+            basket([(Asset::AwaitingEncounter, 1), (Asset::ElapsedTime, 1)]),
+        )
+        .distinct(Role::Scout, Role::Medic)
+        .distinct(Role::Scout, Role::Mission)
+        .distinct(Role::Medic, Role::Mission);
+    if coordinated {
+        rate.preserve(Role::Scout, basket([(Asset::SharedIntel(location), 1)]))
+            .preserve(Role::Medic, basket([(Asset::Intel(location), 1)]))
+    } else {
+        // The unused sensor proves this direct commitment was made before a
+        // scan. Once the Scout observes, coordination requires explicit share.
+        rate.preserve(Role::Scout, basket([(Asset::Sensor, 1)]))
+    }
+}
+
 pub fn goal() -> Goal<AccountId, Asset> {
     Goal::new().require(AccountId::Success, basket([(Asset::Solved, 1)]))
 }
@@ -598,7 +613,8 @@ pub fn decision_source() -> impl ActionSource<MissionInformation, Action> {
                 return;
             }
 
-            if observed(information, AccountId::Agent(AgentId::Scout), Asset::Sensor) {
+            let has_sensor = observed(information, AccountId::Agent(AgentId::Scout), Asset::Sensor);
+            if has_sensor {
                 emit(action(RateId::BeginScan));
             }
             for location in [Location::North, Location::South] {
@@ -609,36 +625,106 @@ pub fn decision_source() -> impl ActionSource<MissionInformation, Action> {
                 ) {
                     emit(action(RateId::Share(location)));
                 }
-                emit(action(RateId::MoveTogether(location)));
+                if observed(
+                    information,
+                    AccountId::Agent(AgentId::Scout),
+                    Asset::SharedIntel(location),
+                ) {
+                    emit(action(RateId::MoveTogether(location)));
+                }
+                if has_sensor {
+                    emit(action(RateId::MoveDirect(location)));
+                }
             }
         },
     )
 }
 
-/// Plans the first public mission decision through observation-scoped ISMCTS.
+/// Plans a public mission decision from caller-supplied encoded belief worlds.
 ///
-/// Belief worlds are sampled solely from the encoded scenario prior. This
-/// entry point intentionally covers the initial information set; later mission
-/// decisions can use the same public search primitives with a belief update
-/// conditioned on their new observation.
-pub fn plan_initial(
+/// Belief management stays outside the authoritative economy. Every supplied
+/// determinization is still a complete economy, inconsistent worlds are
+/// discarded by observation identity, and the selected live exchange is
+/// revalidated against `actual`.
+pub fn plan(
     actual: &World,
+    beliefs: &[World],
     config: MctsConfig,
 ) -> IsmctsResult<RateId, Role, AccountId, Asset> {
-    let belief_model = initial();
-    let belief_support = scenarios(&belief_model);
+    let root = scout_information(actual);
+    let compatible = beliefs
+        .iter()
+        .filter(|world| scout_information(world) == root)
+        .cloned()
+        .collect::<Vec<_>>();
     information_set_search(
         actual,
         config,
         1,
         scout_information,
-        move |_, random| sample_world(&belief_model, &belief_support, random),
+        move |_, random| {
+            (!compatible.is_empty()).then(|| {
+                let index = random.ticket(compatible.len() as u64) as usize;
+                compatible[index].fork()
+            })
+        },
         decision_source(),
         nature_outcomes,
         |world| world.matches(&goal()).then_some(vec![1.0]),
         |_| vec![0.0],
         informed_rollout_action,
     )
+}
+
+/// Expands Nature's encoded integer-weighted prior into initial belief worlds.
+///
+/// This is fixture orchestration, not authoritative state: callers may retain,
+/// filter, replace, or generate their own complete encoded determinizations.
+pub fn initial_beliefs(model: &World) -> Vec<World> {
+    scenarios(model)
+        .into_iter()
+        .flat_map(|weighted| {
+            let mut world = model.fork();
+            world
+                .apply(weighted.exchange().clone())
+                .expect("scenario support contains applicable exchanges");
+            std::iter::repeat_n(
+                world,
+                usize::try_from(weighted.weight())
+                    .expect("this concrete fixture uses platform-sized integer weights"),
+            )
+        })
+        .collect()
+}
+
+/// Advances caller-owned beliefs through one public action and any immediately
+/// required encoded Nature response, then conditions on the live observation.
+pub fn update_beliefs(
+    beliefs: &[World],
+    public_action: &Action,
+    live_observation: &MissionInformation,
+) -> Vec<World> {
+    beliefs
+        .iter()
+        .filter_map(|belief| {
+            let mut next = belief.fork();
+            next.apply(public_action.clone()).ok()?;
+            if let Some(response) = required_nature_response(&next) {
+                next.apply(response).ok()?;
+            }
+            (scout_information(&next) == *live_observation).then_some(next)
+        })
+        .collect()
+}
+
+/// Returns the unique immediately required Nature exchange in this fixture.
+pub fn required_nature_response(world: &World) -> Option<Action> {
+    candidates(world).into_iter().find(|exchange| {
+        matches!(
+            exchange.rate(),
+            RateId::ResolveScan { .. } | RateId::Encounter { .. }
+        )
+    })
 }
 
 /// Instantiates one reproducible hidden scenario on an isolated branch.
@@ -806,7 +892,7 @@ fn policy_action(world: &World, policy: Policy) -> Option<Action> {
     }
 
     match policy {
-        Policy::NorthTogether => Some(action(RateId::MoveTogether(Location::North))),
+        Policy::NorthTogether => Some(action(RateId::MoveDirect(Location::North))),
         Policy::ShareAndCoordinate => {
             let scout = agent_view(world, AgentId::Scout);
             if scout
@@ -833,17 +919,6 @@ fn observed(information: &MissionInformation, account: AccountId, asset: Asset) 
         .any(|(present_account, present_asset, quantity)| {
             present_account == &account && present_asset == &asset && !quantity.is_zero()
         })
-}
-
-fn sample_world(
-    model: &World,
-    support: &[WeightedExchange<Action>],
-    random: &mut SeededSampler,
-) -> Option<World> {
-    let exchange = sample(support, random).ok()?.clone();
-    let mut world = model.fork();
-    world.apply(exchange).ok()?;
-    Some(world)
 }
 
 fn nature_outcomes(world: &World) -> Vec<WeightedExchange<Action>> {
@@ -900,8 +975,8 @@ fn informed_rollout_action(
     }
     for fallback in [
         RateId::BeginScan,
-        RateId::MoveTogether(Location::North),
-        RateId::MoveTogether(Location::South),
+        RateId::MoveDirect(Location::North),
+        RateId::MoveDirect(Location::South),
     ] {
         if let Some(action) = actions.iter().find(|exchange| exchange.rate() == &fallback) {
             return Some(action.clone());
@@ -979,10 +1054,12 @@ fn action(rate: RateId) -> Action {
             .bind(Role::Scout, AccountId::Agent(AgentId::Scout))
             .bind(Role::Nature, AccountId::Nature)
             .bind(Role::Mission, AccountId::Mission),
-        RateId::Share(_) | RateId::MoveTogether(_) | RateId::Treat => exchange
-            .bind(Role::Scout, AccountId::Agent(AgentId::Scout))
-            .bind(Role::Medic, AccountId::Agent(AgentId::Medic))
-            .bind(Role::Mission, AccountId::Mission),
+        RateId::Share(_) | RateId::MoveTogether(_) | RateId::MoveDirect(_) | RateId::Treat => {
+            exchange
+                .bind(Role::Scout, AccountId::Agent(AgentId::Scout))
+                .bind(Role::Medic, AccountId::Agent(AgentId::Medic))
+                .bind(Role::Mission, AccountId::Mission)
+        }
         RateId::Encounter { .. } | RateId::Rescue(_) => exchange
             .bind(Role::Scout, AccountId::Agent(AgentId::Scout))
             .bind(Role::Medic, AccountId::Agent(AgentId::Medic))
@@ -1040,8 +1117,8 @@ mod tests {
             proposals,
             vec![
                 action(RateId::BeginScan),
-                action(RateId::MoveTogether(Location::North)),
-                action(RateId::MoveTogether(Location::South)),
+                action(RateId::MoveDirect(Location::North)),
+                action(RateId::MoveDirect(Location::South)),
             ]
         );
         assert!(proposals.iter().all(|proposal| {
@@ -1052,13 +1129,54 @@ mod tests {
         }));
 
         let config = MctsConfig::new(1_024, HORIZON).with_seed(29);
-        let north_decision = plan_initial(&north, config).expect("north can be planned");
-        let south_decision = plan_initial(&south, config).expect("south can be planned");
+        let beliefs = initial_beliefs(&model);
+        let north_decision = plan(&north, &beliefs, config).expect("north can be planned");
+        let south_decision = plan(&south, &beliefs, config).expect("south can be planned");
 
         assert_eq!(north_decision.action().rate(), &RateId::BeginScan);
         assert_eq!(north_decision.action(), south_decision.action());
         assert!(north.is_applicable(north_decision.action()));
         assert!(south.is_applicable(south_decision.action()));
+    }
+
+    #[test]
+    fn caller_filters_beliefs_and_replans_after_the_scan() {
+        let model = initial();
+        let beliefs = initial_beliefs(&model);
+        assert_eq!(beliefs.len(), 16);
+        let mut actual = instantiate(&model, 3).expect("scenario exists");
+
+        let first = plan(
+            &actual,
+            &beliefs,
+            MctsConfig::new(1_024, HORIZON).with_seed(29),
+        )
+        .expect("initial information set can be planned");
+        assert_eq!(first.action().rate(), &RateId::BeginScan);
+        actual
+            .apply(first.action().clone())
+            .expect("public scan intent applies");
+        let response = required_nature_response(&actual).expect("Nature resolves the scan");
+        actual.apply(response).expect("encoded response applies");
+
+        let observation = scout_information(&actual);
+        let posterior = update_beliefs(&beliefs, first.action(), &observation);
+        assert!(!posterior.is_empty());
+        assert!(posterior.len() < beliefs.len());
+        assert!(
+            posterior
+                .iter()
+                .all(|belief| scout_information(belief) == observation)
+        );
+
+        let second = plan(
+            &actual,
+            &posterior,
+            MctsConfig::new(1_024, HORIZON).with_seed(37),
+        )
+        .expect("posterior information set can be replanned");
+        assert!(matches!(second.action().rate(), RateId::Share(_)));
+        assert!(actual.is_applicable(second.action()));
     }
 
     #[test]
@@ -1108,6 +1226,7 @@ mod tests {
             .replayed(rollout.trace())
             .expect("mission trace must replay");
         assert!(replayed.matches(&goal()));
+        assert!(candidates(&replayed).is_empty());
     }
 
     #[test]

@@ -1,6 +1,6 @@
 mod support;
 
-use axionomy_problems::logistics::{self, Policy};
+use axionomy_problems::logistics::{self, OrderId, Policy, RateId, RiskCriterion};
 use tracing::{debug, info};
 
 fn main() {
@@ -26,9 +26,32 @@ fn main() {
             mean_utility = summary.mean(),
             variance = summary.variance(),
             worst_utility = summary.minimum().unwrap_or_default(),
+            lower_decile_utility = summary.lower_tail_mean(0.1).unwrap_or_default(),
             "Monte Carlo estimate"
         );
     }
+    let tail_choice = logistics::monte_carlo_with_risk(&model, 64, RiskCriterion::LowerDecile)
+        .expect("tail risk can be evaluated");
+    info!(
+        mean_choice = ?estimate.chosen(),
+        lower_decile_choice = ?tail_choice.chosen(),
+        "caller-selected risk criteria compared"
+    );
+
+    let mut loaded = model.fork();
+    let load = logistics::candidates(&loaded)
+        .into_iter()
+        .find(|exchange| exchange.rate() == &RateId::Load(OrderId::A))
+        .expect("first package can be loaded");
+    loaded.apply(load).expect("load applies");
+    let planned = logistics::plan_action(&loaded, 64, 31).expect("route can be planned");
+    info!(
+        action = ?planned.action().rate(),
+        iterations = planned.iterations(),
+        root_actions = planned.children().len(),
+        live_applicable = loaded.is_applicable(planned.action()),
+        "MCTS planned a route from encoded chance"
+    );
     let chosen = estimate.chosen();
     let rollout = logistics::run_policy(&model, chosen, 7);
     let replayed = model

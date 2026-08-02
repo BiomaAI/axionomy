@@ -261,4 +261,22 @@ mod tests {
             assert!(candidates(&replay).is_empty());
         }
     }
+
+    #[test]
+    fn actor_and_environment_roles_cannot_be_swapped() {
+        let world = initial();
+        let rebound = Exchange::new(
+            RateId::Move {
+                from: Node::Start,
+                to: Node::KeyRoom,
+                energy: 2,
+                needs_open_door: false,
+            },
+            Quantity::new(1),
+        )
+        .bind(Role::Actor, AccountId::World)
+        .bind(Role::Environment, AccountId::Agent);
+
+        assert!(!world.is_applicable(&rebound));
+    }
 }

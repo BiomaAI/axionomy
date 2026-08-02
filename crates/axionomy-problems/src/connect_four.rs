@@ -502,6 +502,66 @@ fn count_combinations(column: u8, row: u8) -> Vec<LineCounts> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashMap;
+
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+    struct PlainBoard {
+        cells: [[Option<Player>; HEIGHT as usize]; WIDTH as usize],
+        heights: [u8; WIDTH as usize],
+        turn: Player,
+    }
+
+    impl PlainBoard {
+        const fn new() -> Self {
+            Self {
+                cells: [[None; HEIGHT as usize]; WIDTH as usize],
+                heights: [0; WIDTH as usize],
+                turn: Player::Red,
+            }
+        }
+
+        fn legal_columns(self) -> Vec<u8> {
+            if self.winner().is_some() {
+                return Vec::new();
+            }
+            (0..WIDTH)
+                .filter(|column| self.heights[usize::from(*column)] < HEIGHT)
+                .collect()
+        }
+
+        fn played(mut self, column: u8) -> Self {
+            let index = usize::from(column);
+            let row = self.heights[index];
+            self.cells[index][usize::from(row)] = Some(self.turn);
+            self.heights[index] += 1;
+            self.turn = self.turn.other();
+            self
+        }
+
+        fn winner(self) -> Option<Player> {
+            [Player::Red, Player::Yellow]
+                .into_iter()
+                .find(|player| plain_has_line(&self.cells, *player))
+        }
+
+        fn full(self) -> bool {
+            self.heights.into_iter().all(|height| height == HEIGHT)
+        }
+    }
+
+    fn plain_has_line(
+        cells: &[[Option<Player>; HEIGHT as usize]; WIDTH as usize],
+        player: Player,
+    ) -> bool {
+        (0..HEIGHT).any(|row| {
+            (0..WIDTH).all(|column| cells[usize::from(column)][usize::from(row)] == Some(player))
+        }) || (0..WIDTH).any(|column| {
+            (0..HEIGHT).all(|row| cells[usize::from(column)][usize::from(row)] == Some(player))
+        }) || (0..WIDTH).all(|index| cells[usize::from(index)][usize::from(index)] == Some(player))
+            || (0..WIDTH).all(|column| {
+                cells[usize::from(column)][usize::from(HEIGHT - 1 - column)] == Some(player)
+            })
+    }
 
     #[test]
     fn gravity_and_line_counts_are_core_validated() {
@@ -555,14 +615,17 @@ mod tests {
     #[test]
     fn mcts_selects_an_immediate_encoded_win() {
         let mut world = initial();
+        let mut plain = PlainBoard::new();
         for column in [0, 0, 1, 1, 2, 2] {
             let exchange = candidates(&world)
                 .into_iter()
                 .find(|action| column_of(action) == Some(column))
                 .expect("scripted column is open");
             world.apply(exchange).expect("scripted move is valid");
+            plain = plain.played(column);
         }
 
+        assert_eq!(minimax_best_column(plain), Some(3));
         let decision = mcts(&world, 512, 19).expect("red can choose a move");
         assert_eq!(column_of(decision.action()), Some(3));
         let mut won = world.fork();
@@ -580,6 +643,82 @@ mod tests {
             .expect("the complete game must replay");
 
         assert!(terminal_values(&final_world).is_some());
+        assert!(candidates(&final_world).is_empty());
         assert!(trace.exchanges().len() <= usize::from(WIDTH * HEIGHT + 1));
+    }
+
+    #[test]
+    fn generated_prefixes_match_a_plain_board_oracle() {
+        compare_prefixes(initial(), PlainBoard::new(), 0, 5);
+    }
+
+    fn compare_prefixes(world: World, plain: PlainBoard, depth: usize, limit: usize) {
+        let mut encoded_columns = candidates(&world)
+            .iter()
+            .filter_map(column_of)
+            .collect::<Vec<_>>();
+        encoded_columns.sort_unstable();
+        assert_eq!(encoded_columns, plain.legal_columns());
+        assert_eq!(
+            terminal_values(&world),
+            plain.winner().map(|winner| match winner {
+                Player::Red => vec![1.0, 0.0],
+                Player::Yellow => vec![0.0, 1.0],
+            })
+        );
+        if depth == limit || plain.winner().is_some() || plain.full() {
+            return;
+        }
+        for column in encoded_columns {
+            let exchange = candidates(&world)
+                .into_iter()
+                .find(|action| column_of(action) == Some(column))
+                .expect("oracle column is encoded");
+            let mut next = world.fork();
+            next.apply(exchange).expect("generated prefix is valid");
+            compare_prefixes(next, plain.played(column), depth + 1, limit);
+        }
+    }
+
+    fn minimax_best_column(board: PlainBoard) -> Option<u8> {
+        let player = board.turn;
+        let mut cache = HashMap::new();
+        board
+            .legal_columns()
+            .into_iter()
+            .max_by_key(|column| minimax_score(board.played(*column), player, &mut cache))
+    }
+
+    fn minimax_score(
+        board: PlainBoard,
+        maximizing: Player,
+        cache: &mut HashMap<PlainBoard, i8>,
+    ) -> i8 {
+        if let Some(winner) = board.winner() {
+            return if winner == maximizing { 1 } else { -1 };
+        }
+        if board.full() {
+            return 0;
+        }
+        if let Some(score) = cache.get(&board) {
+            return *score;
+        }
+        let score = if board.turn == maximizing {
+            board
+                .legal_columns()
+                .into_iter()
+                .map(|column| minimax_score(board.played(column), maximizing, cache))
+                .max()
+                .expect("non-terminal board has a move")
+        } else {
+            board
+                .legal_columns()
+                .into_iter()
+                .map(|column| minimax_score(board.played(column), maximizing, cache))
+                .min()
+                .expect("non-terminal board has a move")
+        };
+        cache.insert(board, score);
+        score
     }
 }

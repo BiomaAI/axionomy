@@ -282,4 +282,35 @@ mod tests {
         assert!(solve_bfs(&world).is_none());
         assert!(algorithm_x(&world).is_none());
     }
+
+    #[test]
+    fn every_available_set_combination_matches_a_direct_domain_oracle() {
+        for mask in 0_u8..(1 << SETS.len()) {
+            let available = SETS
+                .into_iter()
+                .enumerate()
+                .filter_map(|(index, set)| (mask & (1 << index) != 0).then_some(set))
+                .collect::<Vec<_>>();
+            let expected = brute_force_has_exact_cover(&available);
+            let world = build(&available);
+
+            assert_eq!(solve_bfs(&world).is_some(), expected, "mask {mask:04b}");
+            assert_eq!(algorithm_x(&world).is_some(), expected, "mask {mask:04b}");
+        }
+    }
+
+    fn brute_force_has_exact_cover(available: &[SetId]) -> bool {
+        (0_u8..(1 << available.len())).any(|selection| {
+            ELEMENTS.into_iter().all(|element| {
+                available
+                    .iter()
+                    .enumerate()
+                    .filter(|(index, set)| {
+                        selection & (1 << index) != 0 && declared_members(**set).contains(&element)
+                    })
+                    .count()
+                    == 1
+            })
+        })
+    }
 }

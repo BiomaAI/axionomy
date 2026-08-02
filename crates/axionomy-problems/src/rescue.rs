@@ -577,6 +577,24 @@ mod tests {
     }
 
     #[test]
+    fn hidden_nature_and_actor_roles_cannot_be_swapped() {
+        let world = scenario(Location::South, 1);
+        let rebound = Exchange::new(
+            RateId::Observe {
+                truth: Location::South,
+                seed: 1,
+                report: Location::South,
+                next_seed: 2,
+            },
+            Quantity::new(1),
+        )
+        .bind(Role::Actor, AccountId::Nature)
+        .bind(Role::Nature, AccountId::Agent);
+
+        assert!(!world.is_applicable(&rebound));
+    }
+
+    #[test]
     fn sampled_trace_replays_from_the_uncertain_model() {
         let model = uniform_uncertain();
         let sample = instantiate(&model, Location::South, 1).expect("scenario is encoded");

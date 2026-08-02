@@ -18,6 +18,7 @@ fn main() {
     );
     let actual =
         mission::instantiate(&model, 3).expect("the encoded prior contains the selected scenario");
+    let beliefs = mission::initial_beliefs(&model);
     let observation = mission::scout_information(&actual);
     info!(
         actor = observation.actor(),
@@ -25,7 +26,7 @@ fn main() {
         visible_balances = observation.key().balances().len(),
         "Scout information state derived; hidden Nature account excluded"
     );
-    let decision = mission::plan_initial(&actual, MctsConfig::new(1_024, 12).with_seed(29))
+    let decision = mission::plan(&actual, &beliefs, MctsConfig::new(1_024, 12).with_seed(29))
         .expect("the initial mission information set can be searched");
     assert_eq!(decision.action().rate(), &mission::RateId::BeginScan);
     assert!(actual.is_applicable(decision.action()));
@@ -38,6 +39,31 @@ fn main() {
         "ISMCTS decision selected and revalidated"
     );
     debug!(children = ?decision.children(), "root action statistics");
+
+    let mut observed_actual = actual.fork();
+    observed_actual
+        .apply(decision.action().clone())
+        .expect("public scan intent applies");
+    let response = mission::required_nature_response(&observed_actual)
+        .expect("Nature has an encoded scan response");
+    observed_actual
+        .apply(response)
+        .expect("encoded Nature response applies");
+    let updated_information = mission::scout_information(&observed_actual);
+    let posterior = mission::update_beliefs(&beliefs, decision.action(), &updated_information);
+    let follow_up = mission::plan(
+        &observed_actual,
+        &posterior,
+        MctsConfig::new(1_024, 12).with_seed(37),
+    )
+    .expect("the observed mission can be replanned");
+    info!(
+        prior_worlds = beliefs.len(),
+        posterior_worlds = posterior.len(),
+        follow_up = ?follow_up.action().rate(),
+        live_applicable = observed_actual.is_applicable(follow_up.action()),
+        "caller conditioned beliefs and replanned after observation"
+    );
 
     let estimate = mission::evaluate_scenarios(&model).expect("mission policies can be evaluated");
     info!(

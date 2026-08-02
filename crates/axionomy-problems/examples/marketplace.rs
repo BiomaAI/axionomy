@@ -12,7 +12,7 @@ fn operational_cost(assessment: &Assessment) -> u64 {
             let weight = match asset {
                 Asset::Money => 1,
                 Asset::ShippingCapacity => 50,
-                Asset::Widget => 100,
+                Asset::Item(_) => 100,
                 _ => 1_000,
             };
             weight * quantity.get()
@@ -25,7 +25,7 @@ fn main() {
         "Marketplace",
         "Assess buyer, seller, and carrier combinations before six-account settlement.",
     );
-    let mut market = marketplace::initial();
+    let market = marketplace::initial();
     info!(
         accounts = market.accounts().count(),
         rates = market.rate_ids().count(),
@@ -60,16 +60,30 @@ fn main() {
         .projected_deltas()
         .expect("an exact match projects its effects")
         .len();
-    let receipt = market.apply(settlement).expect("the exact match settles");
+    let mut settlement_branch = market.fork();
+    let receipt = settlement_branch
+        .apply(settlement)
+        .expect("the exact match settles");
 
     assert_eq!(receipt.deltas().len(), projected_accounts);
-    assert!(market.matches(&marketplace::goal()));
 
     info!(
         touched_accounts = receipt.deltas().len(),
-        projected_accounts,
-        goal_verified = true,
-        "exact match settled atomically"
+        projected_accounts, "one exact match settled atomically on an isolated branch"
     );
     debug!(receipt = ?receipt, "accepted settlement receipt");
+
+    let clearing = marketplace::clear_market(&market);
+    let cleared = market
+        .replayed(clearing.trace())
+        .expect("the clearing trace must replay");
+    assert!(cleared.matches(&marketplace::goal()));
+    info!(
+        settlements = clearing.settled_orders(),
+        gross_value = clearing.gross_value(),
+        exchanges = clearing.trace().exchanges().len(),
+        goal_verified = true,
+        "compatible multi-order clearing selected and replayed"
+    );
+    debug!(trace = ?clearing.trace().exchanges(), "clearing settlement trace");
 }
