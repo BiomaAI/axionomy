@@ -634,8 +634,14 @@ where
             ExchangeAssessment::Applicable {
                 projected_deltas, ..
             } => {
-                self.accounts =
-                    prepared_accounts.expect("applicable assessments have prepared accounts");
+                for (account_id, account) in
+                    prepared_accounts.expect("applicable assessments have prepared accounts")
+                {
+                    *self
+                        .accounts
+                        .get_mut(&account_id)
+                        .expect("prepared accounts already exist in the economy") = account;
+                }
                 Ok(Receipt::new(exchange, projected_deltas))
             }
             ExchangeAssessment::Infeasible { shortfalls, .. } => {
@@ -796,14 +802,15 @@ where
             };
         }
 
-        let mut accounts = self.accounts.clone();
+        let mut prepared_accounts = Vec::with_capacity(effects.len());
         let mut deltas = Vec::with_capacity(effects.len());
         for (account_id, effect) in effects {
-            let account = Arc::make_mut(
-                accounts
-                    .get_mut(&account_id)
-                    .expect("bound accounts were checked"),
-            );
+            let mut account = self
+                .accounts
+                .get(&account_id)
+                .expect("bound accounts were checked")
+                .as_ref()
+                .clone();
             if let Err(error) = account.withdraw(&effect.consume) {
                 return invalid_analysis(vec![map_account_error(account_id.clone(), error)]);
             }
@@ -811,25 +818,37 @@ where
                 return invalid_analysis(vec![map_account_error(account_id.clone(), error)]);
             }
             deltas.push(AccountDelta::new(
-                account_id,
+                account_id.clone(),
                 effect.consume,
                 effect.produce,
                 effect.preserve,
             ));
+            prepared_accounts.push((account_id, Arc::new(account)));
         }
 
         for invariant in self.invariants.iter() {
-            let Some(before) = invariant.measure(&self.accounts) else {
+            let Some(conserved) = invariant.conserves(&deltas) else {
                 return invalid_analysis(vec![ApplyError::InvariantOverflow {
                     invariant: invariant.name().to_owned(),
                 }]);
             };
-            let Some(after) = invariant.measure(&accounts) else {
-                return invalid_analysis(vec![ApplyError::InvariantOverflow {
-                    invariant: invariant.name().to_owned(),
-                }]);
-            };
-            if before != after {
+            if !conserved {
+                let Some(before) = invariant.measure(&self.accounts) else {
+                    return invalid_analysis(vec![ApplyError::InvariantOverflow {
+                        invariant: invariant.name().to_owned(),
+                    }]);
+                };
+                let mut after_accounts = self.accounts.clone();
+                for (account_id, account) in &prepared_accounts {
+                    *after_accounts
+                        .get_mut(account_id)
+                        .expect("prepared accounts already exist in the economy") = account.clone();
+                }
+                let Some(after) = invariant.measure(&after_accounts) else {
+                    return invalid_analysis(vec![ApplyError::InvariantOverflow {
+                        invariant: invariant.name().to_owned(),
+                    }]);
+                };
                 return invalid_analysis(vec![ApplyError::InvariantViolation {
                     invariant: invariant.name().to_owned(),
                     before,
@@ -843,7 +862,7 @@ where
                 accounts: account_assessments,
                 projected_deltas: deltas,
             },
-            prepared_accounts: Some(accounts),
+            prepared_accounts: Some(prepared_accounts),
         }
     }
 }
@@ -999,12 +1018,14 @@ impl<A, N> Default for Effect<A, N> {
     }
 }
 
+type PreparedAccounts<AccountId, A, N> = Vec<(AccountId, Arc<Account<A, N>>)>;
+
 struct Analysis<AccountId, A, RateId, Role, N>
 where
     N: QuantityScalar,
 {
     assessment: ExchangeAssessment<AccountId, A, RateId, Role, N>,
-    prepared_accounts: Option<IndexMap<AccountId, Arc<Account<A, N>>>>,
+    prepared_accounts: Option<PreparedAccounts<AccountId, A, N>>,
 }
 
 fn merge_scaled<A, N>(

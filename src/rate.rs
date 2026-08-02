@@ -1,4 +1,4 @@
-use crate::{Account, Basket, Quantity, QuantityScalar};
+use crate::{Account, AccountDelta, Basket, Quantity, QuantityScalar};
 use indexmap::IndexMap;
 use num_traits::{CheckedAdd, Zero};
 use schemars::{JsonSchema, Schema, SchemaGenerator};
@@ -295,6 +295,44 @@ where
                 let weighted = quantity.as_scalar().checked_weighted(coefficient)?;
                 total = CheckedAdd::checked_add(&total, &weighted)?;
             }
+        }
+        Some(total)
+    }
+
+    /// Checks conservation from only the accounts changed by an exchange.
+    ///
+    /// Linear invariants are location-independent sums, so an exchange
+    /// preserves one exactly when the weighted consumed and produced baskets
+    /// have equal measures. This avoids rescanning untouched accounts on the
+    /// successful application path.
+    pub(crate) fn conserves<AccountId, N>(
+        &self,
+        deltas: &[AccountDelta<AccountId, A, N>],
+    ) -> Option<bool>
+    where
+        N: QuantityScalar,
+    {
+        let mut consumed = N::SignedMeasure::zero();
+        let mut produced = N::SignedMeasure::zero();
+        for delta in deltas {
+            consumed = self.checked_add_basket_measure(consumed, delta.consumed())?;
+            produced = self.checked_add_basket_measure(produced, delta.produced())?;
+        }
+        Some(consumed == produced)
+    }
+
+    fn checked_add_basket_measure<N>(
+        &self,
+        mut total: N::SignedMeasure,
+        basket: &Basket<A, N>,
+    ) -> Option<N::SignedMeasure>
+    where
+        N: QuantityScalar,
+    {
+        for (asset, quantity) in basket.iter() {
+            let coefficient = *self.weights.get(asset).unwrap_or(&0);
+            let weighted = quantity.as_scalar().checked_weighted(coefficient)?;
+            total = CheckedAdd::checked_add(&total, &weighted)?;
         }
         Some(total)
     }

@@ -11,6 +11,7 @@ enum Asset {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 enum AccountId {
     Worker,
+    Unrelated(u32),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -47,6 +48,32 @@ fn benchmark(c: &mut Criterion) {
         bencher.iter(|| {
             let mut branch = black_box(&world).fork();
             black_box(branch.apply(black_box(action.clone())).unwrap());
+        });
+    });
+
+    let mut builder = EconomyBuilder::new().account(
+        AccountId::Worker,
+        Account::from(basket([(Asset::Input, u64::MAX)])),
+    );
+    for id in 0..10_000 {
+        builder = builder.account(AccountId::Unrelated(id), Account::default());
+    }
+    let mut large_world = builder
+        .rate(
+            RateId::Convert,
+            Rate::new()
+                .consume(Role::Worker, basket([(Asset::Input, 1)]))
+                .produce(Role::Worker, basket([(Asset::Output, 1)])),
+        )
+        .build()
+        .unwrap();
+    c.bench_function("apply_one_of_10_001_accounts", |bencher| {
+        bencher.iter(|| {
+            black_box(
+                large_world
+                    .apply(black_box(action.clone()))
+                    .expect("the worker retains ample input"),
+            );
         });
     });
 }
