@@ -1078,6 +1078,11 @@ rates. `BeginScan` is a decision available in every indistinguishable world;
 `ResolveScan` is Nature's encoded reaction. Otherwise a supposedly public
 action identifier would itself reveal the truth or random seed.
 
+The smaller Rescue fixture applies the same contract with `BeginObserve` and
+`ResolveObservation`. Its ordinary policy receives only the agent's restricted
+economic view; the full world is consulted solely by the separate Nature
+resolution path.
+
 ### 13.13 Semantic identity must be witnessed by assets
 
 A descriptive rate ID cannot authorize an account binding because the generic

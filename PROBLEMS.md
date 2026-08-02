@@ -274,10 +274,13 @@ The agent begins at base with energy and one sensor. An unresolved Nature
 account owns `Unresolved` and a user-provided
 `ScenarioWeight(truth,seed)` prior. A sampling exchange preserves the selected
 weight, consumes `Unresolved`, and produces private `Truth(North|South)` and
-`Seed(0..3)` assets. An observation exchange then:
+`Seed(0..3)` assets. The policy first proposes a truth-independent public
+`BeginObserve` exchange, which consumes `Planning` and the sensor and produces
+`AwaitingObservation`. Nature then fires the uniquely applicable hidden
+`ResolveObservation` exchange, which:
 
 - Preserves the agent at base.
-- Consumes the sensor.
+- Consumes `AwaitingObservation` and restores `Planning`.
 - Preserves Nature's matching truth.
 - Advances the seed.
 - Produces an agent belief.
@@ -289,7 +292,9 @@ match.
 ### Required results
 
 - An agent view cannot inspect the Nature account.
-- A chosen Nature observation is recorded as an exchange.
+- Equal agent views under different truths choose the same public observation
+  intent.
+- Public intent and Nature's chosen resolution are separate recorded exchanges.
 - A successful sampled rollout, including Nature instantiation, replays from
   the unresolved weighted model.
 - Across all eight encoded scenarios, observe-then-follow succeeds six times while

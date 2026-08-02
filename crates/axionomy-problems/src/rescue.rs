@@ -39,8 +39,10 @@ pub enum Asset {
     Truth(Location),
     Seed(u8),
     Belief(Location),
+    Planning,
+    AwaitingObservation,
+    Committed,
     Rescued,
-    Active,
     Solved,
 }
 
@@ -56,7 +58,8 @@ pub enum RateId {
         truth: Location,
         seed: u8,
     },
-    Observe {
+    BeginObserve,
+    ResolveObservation {
         truth: Location,
         seed: u8,
         report: Location,
@@ -166,7 +169,7 @@ fn build(nature: Account<Asset>) -> World {
                 (Asset::At(Location::Base), 1),
                 (Asset::Energy, 2),
                 (Asset::Sensor, 1),
-                (Asset::Active, 1),
+                (Asset::Planning, 1),
             ])),
         )
         .account(AccountId::Nature, nature);
@@ -196,21 +199,18 @@ fn build(nature: Account<Asset>) -> World {
             let report = signal(encoded_truth, encoded_seed);
             let next_seed = (encoded_seed + 1) % 4;
             builder = builder.rate(
-                RateId::Observe {
+                RateId::ResolveObservation {
                     truth: encoded_truth,
                     seed: encoded_seed,
                     report,
                     next_seed,
                 },
                 Rate::new()
-                    .preserve(
-                        Role::Actor,
-                        basket([(Asset::At(Location::Base), 1), (Asset::Active, 1)]),
-                    )
-                    .consume(Role::Actor, basket([(Asset::Sensor, 1)]))
+                    .preserve(Role::Actor, basket([(Asset::At(Location::Base), 1)]))
+                    .consume(Role::Actor, basket([(Asset::AwaitingObservation, 1)]))
                     .produce(
                         Role::Actor,
-                        basket([(Asset::UsedSensor, 1), (Asset::Belief(report), 1)]),
+                        basket([(Asset::Planning, 1), (Asset::Belief(report), 1)]),
                     )
                     .preserve(Role::Nature, basket([(Asset::Truth(encoded_truth), 1)]))
                     .consume(Role::Nature, basket([(Asset::Seed(encoded_seed), 1)]))
@@ -220,6 +220,20 @@ fn build(nature: Account<Asset>) -> World {
         }
     }
 
+    builder = builder.rate(
+        RateId::BeginObserve,
+        Rate::new()
+            .preserve(Role::Actor, basket([(Asset::At(Location::Base), 1)]))
+            .consume(
+                Role::Actor,
+                basket([(Asset::Planning, 1), (Asset::Sensor, 1)]),
+            )
+            .produce(
+                Role::Actor,
+                basket([(Asset::AwaitingObservation, 1), (Asset::UsedSensor, 1)]),
+            ),
+    );
+
     for destination in [Location::North, Location::South] {
         builder = builder
             .rate(
@@ -228,14 +242,21 @@ fn build(nature: Account<Asset>) -> World {
                     to: destination,
                 },
                 Rate::new()
-                    .preserve(Role::Actor, basket([(Asset::Active, 1)]))
                     .consume(
                         Role::Actor,
-                        basket([(Asset::At(Location::Base), 1), (Asset::Energy, 1)]),
+                        basket([
+                            (Asset::Planning, 1),
+                            (Asset::At(Location::Base), 1),
+                            (Asset::Energy, 1),
+                        ]),
                     )
                     .produce(
                         Role::Actor,
-                        basket([(Asset::At(destination), 1), (Asset::SpentEnergy, 1)]),
+                        basket([
+                            (Asset::Committed, 1),
+                            (Asset::At(destination), 1),
+                            (Asset::SpentEnergy, 1),
+                        ]),
                     ),
             )
             .rate(
@@ -243,8 +264,10 @@ fn build(nature: Account<Asset>) -> World {
                     location: destination,
                 },
                 Rate::new()
-                    .preserve(Role::Actor, basket([(Asset::Active, 1)]))
-                    .consume(Role::Actor, basket([(Asset::Energy, 1)]))
+                    .consume(
+                        Role::Actor,
+                        basket([(Asset::Committed, 1), (Asset::Energy, 1)]),
+                    )
                     .preserve(Role::Actor, basket([(Asset::At(destination), 1)]))
                     .produce(
                         Role::Actor,
@@ -259,8 +282,7 @@ fn build(nature: Account<Asset>) -> World {
         .rate(
             RateId::Finish,
             Rate::new()
-                .preserve(Role::Actor, basket([(Asset::Rescued, 1)]))
-                .consume(Role::Actor, basket([(Asset::Active, 1)]))
+                .consume(Role::Actor, basket([(Asset::Rescued, 1)]))
                 .produce(Role::Actor, basket([(Asset::Solved, 1)])),
         )
         .invariant(
@@ -276,6 +298,11 @@ fn build(nature: Account<Asset>) -> World {
                 .weight(Asset::Energy, 1)
                 .weight(Asset::SpentEnergy, 1),
         )
+        .invariant(
+            LinearInvariant::new("sensor accounting")
+                .weight(Asset::Sensor, 1)
+                .weight(Asset::UsedSensor, 1),
+        )
         .invariant((0..4).fold(
             LinearInvariant::new("one nature seed state").weight(Asset::Unresolved, 1),
             |invariant, seed| invariant.weight(Asset::Seed(seed), 1),
@@ -286,7 +313,10 @@ fn build(nature: Account<Asset>) -> World {
         ))
         .invariant(
             LinearInvariant::new("rescue lifecycle")
-                .weight(Asset::Active, 1)
+                .weight(Asset::Planning, 1)
+                .weight(Asset::AwaitingObservation, 1)
+                .weight(Asset::Committed, 1)
+                .weight(Asset::Rescued, 1)
                 .weight(Asset::Solved, 1),
         )
         .build()
@@ -312,7 +342,7 @@ pub fn candidates(world: &World) -> Vec<Action> {
 pub fn nature_observation(world: &World) -> Option<Action> {
     candidates(world)
         .into_iter()
-        .find(|exchange| matches!(exchange.rate(), RateId::Observe { .. }))
+        .find(|exchange| matches!(exchange.rate(), RateId::ResolveObservation { .. }))
 }
 
 pub fn instantiate(world: &World, truth: Location, seed: u8) -> Option<Action> {
@@ -326,7 +356,7 @@ pub fn run_policy(world: World, policy: Policy) -> Rollout {
     let result = run_to_goal(
         &world,
         &goal,
-        RolloutConfig::new(4).with_retention(TraceRetention::Trace),
+        RolloutConfig::new(5).with_retention(TraceRetention::Trace),
         |state, _| match policy_action(state, policy) {
             Some(exchange) => RolloutDecision::Propose(exchange),
             None => RolloutDecision::Stop(RolloutStop::NoProposal),
@@ -459,48 +489,49 @@ fn encoded_scenarios(model: &World) -> Vec<WeightedExchange<Action>> {
 }
 
 fn policy_action(world: &World, policy: Policy) -> Option<Action> {
-    if !world.balance(&AccountId::Agent, &Asset::Rescued).is_zero() {
+    if !world
+        .balance(&AccountId::Agent, &Asset::AwaitingObservation)
+        .is_zero()
+    {
+        return nature_observation(world);
+    }
+    public_policy_action(&agent_view(world), policy)
+}
+
+fn public_policy_action(view: &AgentView<'_>, policy: Policy) -> Option<Action> {
+    if view_has(view, Asset::Rescued) {
         return Some(action(RateId::Finish));
     }
 
     for location in [Location::North, Location::South] {
-        if !world
-            .balance(&AccountId::Agent, &Asset::At(location))
-            .is_zero()
-        {
+        if view_has(view, Asset::At(location)) {
             return Some(action(RateId::Rescue { location }));
         }
     }
 
-    if world
-        .balance(&AccountId::Agent, &Asset::At(Location::Base))
-        .is_zero()
-    {
+    if !view_has(view, Asset::At(Location::Base)) {
         return None;
     }
 
-    if policy == Policy::ObserveThenFollow
-        && !world.balance(&AccountId::Agent, &Asset::Sensor).is_zero()
-    {
-        return nature_observation(world);
+    if policy == Policy::ObserveThenFollow && view_has(view, Asset::Sensor) {
+        return Some(action(RateId::BeginObserve));
     }
 
     let destination = match policy {
         Policy::NorthWithoutObserving => Location::North,
-        Policy::ObserveThenFollow => {
-            [Location::North, Location::South]
-                .into_iter()
-                .find(|location| {
-                    !world
-                        .balance(&AccountId::Agent, &Asset::Belief(*location))
-                        .is_zero()
-                })?
-        }
+        Policy::ObserveThenFollow => [Location::North, Location::South]
+            .into_iter()
+            .find(|location| view_has(view, Asset::Belief(*location)))?,
     };
     Some(action(RateId::Move {
         from: Location::Base,
         to: destination,
     }))
+}
+
+fn view_has(view: &AgentView<'_>, asset: Asset) -> bool {
+    view.balance(&AccountId::Agent, &asset)
+        .is_some_and(|quantity| !quantity.is_zero())
 }
 
 fn signal(truth: Location, seed: u8) -> Location {
@@ -527,11 +558,13 @@ fn action(rate: RateId) -> Action {
         RateId::Instantiate { .. } => {
             Exchange::new(rate, Quantity::new(1)).bind(Role::Nature, AccountId::Nature)
         }
-        RateId::Observe { .. } | RateId::Rescue { .. } => Exchange::new(rate, Quantity::new(1))
-            .bind(Role::Actor, AccountId::Agent)
-            .bind(Role::Nature, AccountId::Nature),
+        RateId::ResolveObservation { .. } | RateId::Rescue { .. } => {
+            Exchange::new(rate, Quantity::new(1))
+                .bind(Role::Actor, AccountId::Agent)
+                .bind(Role::Nature, AccountId::Nature)
+        }
         RateId::Finish => Exchange::new(rate, Quantity::new(1)).bind(Role::Actor, AccountId::Agent),
-        RateId::Move { .. } => {
+        RateId::BeginObserve | RateId::Move { .. } => {
             Exchange::new(rate, Quantity::new(1)).bind(Role::Actor, AccountId::Agent)
         }
     }
@@ -554,6 +587,11 @@ mod tests {
         let rollout = run_policy(world, Policy::ObserveThenFollow);
         assert!(rollout.succeeded());
         assert_eq!(rollout.spent_energy(), 2);
+        assert_eq!(rollout.trace().exchanges()[0].rate(), &RateId::BeginObserve);
+        assert!(matches!(
+            rollout.trace().exchanges()[1].rate(),
+            RateId::ResolveObservation { .. }
+        ));
 
         let replay = scenario(Location::South, 1)
             .replayed(rollout.trace())
@@ -579,8 +617,12 @@ mod tests {
     #[test]
     fn hidden_nature_and_actor_roles_cannot_be_swapped() {
         let world = scenario(Location::South, 1);
+        let mut awaiting = world.fork();
+        awaiting
+            .apply(action(RateId::BeginObserve))
+            .expect("public observation intent applies");
         let rebound = Exchange::new(
-            RateId::Observe {
+            RateId::ResolveObservation {
                 truth: Location::South,
                 seed: 1,
                 report: Location::South,
@@ -591,7 +633,25 @@ mod tests {
         .bind(Role::Actor, AccountId::Nature)
         .bind(Role::Nature, AccountId::Agent);
 
-        assert!(!world.is_applicable(&rebound));
+        assert!(!awaiting.is_applicable(&rebound));
+    }
+
+    #[test]
+    fn public_observation_intent_does_not_depend_on_hidden_truth() {
+        let north = scenario(Location::North, 1);
+        let south = scenario(Location::South, 0);
+        let north_view = agent_view(&north);
+        let south_view = agent_view(&south);
+
+        assert_eq!(north_view.observation_key(), south_view.observation_key());
+        assert_eq!(
+            public_policy_action(&north_view, Policy::ObserveThenFollow),
+            Some(action(RateId::BeginObserve))
+        );
+        assert_eq!(
+            public_policy_action(&south_view, Policy::ObserveThenFollow),
+            Some(action(RateId::BeginObserve))
+        );
     }
 
     #[test]

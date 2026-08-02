@@ -37,6 +37,15 @@ fn main() {
         exchanges = rollout.trace().exchanges().len(),
         spent_energy = rollout.spent_energy(),
         succeeded = rollout.succeeded(),
+        public_intent = rollout
+            .trace()
+            .exchanges()
+            .iter()
+            .any(|exchange| exchange.rate() == &rescue::RateId::BeginObserve),
+        nature_resolution = rollout.trace().exchanges().iter().any(|exchange| matches!(
+            exchange.rate(),
+            rescue::RateId::ResolveObservation { .. }
+        )),
         goal_verified = true,
         "sampled scenario replayed"
     );
