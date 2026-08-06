@@ -512,6 +512,15 @@ where
         self.rates.keys()
     }
 
+    /// Returns the model's declared conservation laws.
+    ///
+    /// Invariants remain immutable engine authority. This read-only iterator is
+    /// useful to explain and inspect a closed model without duplicating its
+    /// definition in presentation or transport layers.
+    pub fn invariants(&self) -> impl Iterator<Item = &LinearInvariant<A>> {
+        self.invariants.iter()
+    }
+
     /// Returns every asset identity referenced by the closed model.
     ///
     /// The set covers initial balances, every rate effect and requirement,

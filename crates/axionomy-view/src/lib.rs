@@ -5,13 +5,13 @@
 //! scenes are read-only projections supplied by the caller.
 
 use axionomy::{
-    AccountAssessment, AccountDelta, Basket, Economy, Exchange, ExchangeAssessment, Quantity,
+    AccountAssessment, AccountDelta, Basket, Economy, Exchange, ExchangeAssessment, Goal, Quantity,
     QuantityScalar, Receipt, Trace,
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::hash::Hash;
+use std::{fmt::Debug, hash::Hash, marker::PhantomData};
 use thiserror::Error;
 
 /// A browser-safe identity for an arbitrary user-defined ontology value.
@@ -127,6 +127,49 @@ pub struct ReceiptView {
     pub deltas: Vec<AccountDeltaView>,
 }
 
+/// A rate role's complete consume/produce/preserve contract.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct RateRoleView {
+    pub role: ViewId,
+    pub consumed: Vec<AssetQuantityView>,
+    pub produced: Vec<AssetQuantityView>,
+    pub preserved: Vec<AssetQuantityView>,
+}
+
+/// One immutable transition rule in the closed model.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct RateView {
+    pub rate: ViewId,
+    pub roles: Vec<RateRoleView>,
+    pub distinct_roles: Vec<[ViewId; 2]>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct GoalRequirementView {
+    pub account: ViewId,
+    pub required: Vec<AssetQuantityView>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct InvariantTermView {
+    pub asset: ViewId,
+    pub weight: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct InvariantView {
+    pub name: String,
+    pub terms: Vec<InvariantTermView>,
+}
+
+/// Read-only explanation of the authoritative economy definition.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct ModelView {
+    pub rates: Vec<RateView>,
+    pub goal: Vec<GoalRequirementView>,
+    pub invariants: Vec<InvariantView>,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct GraphNodeView {
     pub id: ViewId,
@@ -166,12 +209,52 @@ pub enum Scene {
         height: u32,
         cells: Vec<GridCellView>,
     },
+    Matrix {
+        title: String,
+        rows: Vec<ViewId>,
+        columns: Vec<ViewId>,
+        cells: Vec<MatrixCellView>,
+    },
+    Timeline {
+        title: String,
+        lanes: Vec<TimelineLaneView>,
+        spans: Vec<TimelineSpanView>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        cursor: Option<u64>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct GridCellView {
     pub x: u32,
     pub y: u32,
+    pub label: String,
+    #[serde(default)]
+    pub classes: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct MatrixCellView {
+    pub row: String,
+    pub column: String,
+    pub label: String,
+    #[serde(default)]
+    pub classes: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct TimelineLaneView {
+    pub id: ViewId,
+    #[serde(default)]
+    pub classes: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct TimelineSpanView {
+    pub id: String,
+    pub lane: String,
+    pub start: u64,
+    pub end: u64,
     pub label: String,
     #[serde(default)]
     pub classes: Vec<String>,
@@ -240,18 +323,78 @@ pub struct ParetoFrontView {
     pub points: Vec<ParetoPointView>,
 }
 
+/// A proposal assessed against an exact snapshot, including rejected actions.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct ProposalView {
+    pub id: String,
+    pub label: String,
+    pub description: String,
+    pub snapshot_index: u64,
+    pub exchange: ExchangeView,
+    pub assessment: AssessmentView,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum TelemetryKindView {
+    Expanded,
+    Generated,
+    Iteration,
+    Sample,
+    InformationSet,
+    Message,
+}
+
+/// A transport-neutral progress observation. Counters are exact text so the
+/// same contract remains safe in native and JavaScript consumers.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct TelemetryPointView {
+    pub sequence: u64,
+    pub kind: TelemetryKindView,
+    pub value: String,
+    pub label: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct SearchTelemetryView {
+    pub algorithm: String,
+    pub exact: bool,
+    #[serde(default)]
+    pub points: Vec<TelemetryPointView>,
+}
+
+/// An actor-relative observation. Omitted accounts and assets are intentionally
+/// not visible to that actor; this is not a filtered copy of authoritative
+/// state pretending to be complete.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct ObservationView {
+    pub actor: ViewId,
+    pub label: String,
+    pub visible_accounts: Vec<AccountView>,
+    #[serde(default)]
+    pub facts: Vec<AssetQuantityView>,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct ViewDocument {
     pub id: String,
     pub title: String,
     pub description: String,
     pub source: ViewSource,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub model: Option<ModelView>,
     pub initial: ViewSnapshot,
     pub frames: Vec<ExchangeFrame>,
     #[serde(default)]
     pub objectives: Vec<ObjectiveView>,
     #[serde(default)]
     pub pareto_fronts: Vec<ParetoFrontView>,
+    #[serde(default)]
+    pub proposals: Vec<ProposalView>,
+    #[serde(default)]
+    pub telemetry: Vec<SearchTelemetryView>,
+    #[serde(default)]
+    pub observations: Vec<ObservationView>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -348,6 +491,147 @@ pub trait ViewOntology<AccountId, A, RateId, Role, N = u64> {
     }
 }
 
+/// A useful default for user ontologies and reference fixtures. It preserves
+/// exact typed engine values internally while deriving stable diagnostic IDs
+/// from `Debug` output at the presentation boundary.
+pub struct DebugOntology<AccountId, A, RateId, Role, N = u64, SceneFn = NoScene> {
+    namespace: String,
+    scene: SceneFn,
+    marker: PhantomData<fn() -> (AccountId, A, RateId, Role, N)>,
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+pub struct NoScene;
+
+impl<AccountId, A, RateId, Role, N> DebugOntology<AccountId, A, RateId, Role, N, NoScene> {
+    pub fn new(namespace: impl Into<String>) -> Self {
+        Self {
+            namespace: namespace.into(),
+            scene: NoScene,
+            marker: PhantomData,
+        }
+    }
+}
+
+impl<AccountId, A, RateId, Role, N, CurrentScene>
+    DebugOntology<AccountId, A, RateId, Role, N, CurrentScene>
+{
+    pub fn with_scene<SceneFn>(
+        self,
+        scene: SceneFn,
+    ) -> DebugOntology<AccountId, A, RateId, Role, N, SceneFn> {
+        DebugOntology {
+            namespace: self.namespace,
+            scene,
+            marker: PhantomData,
+        }
+    }
+
+    fn id<T: Debug>(&self, category: &str, value: &T) -> ViewId {
+        let debug = format!("{value:?}");
+        ViewId::new(
+            format!("{}:{category}:{}", self.namespace, debug_key(&debug)),
+            humanize_debug(&debug),
+        )
+    }
+}
+
+impl<AccountId, A, RateId, Role, N> ViewOntology<AccountId, A, RateId, Role, N>
+    for DebugOntology<AccountId, A, RateId, Role, N, NoScene>
+where
+    AccountId: Debug,
+    A: Debug,
+    RateId: Debug,
+    Role: Debug,
+{
+    fn account(&self, id: &AccountId) -> ViewId {
+        self.id("account", id)
+    }
+
+    fn asset(&self, id: &A) -> ViewId {
+        self.id("asset", id)
+    }
+
+    fn rate(&self, id: &RateId) -> ViewId {
+        self.id("rate", id)
+    }
+
+    fn role(&self, id: &Role) -> ViewId {
+        self.id("role", id)
+    }
+}
+
+impl<AccountId, A, RateId, Role, N, SceneFn> ViewOntology<AccountId, A, RateId, Role, N>
+    for DebugOntology<AccountId, A, RateId, Role, N, SceneFn>
+where
+    AccountId: Debug,
+    A: Debug,
+    RateId: Debug,
+    Role: Debug,
+    SceneFn: Fn(u64, &Economy<AccountId, A, RateId, Role, N>) -> Option<Scene>,
+{
+    fn account(&self, id: &AccountId) -> ViewId {
+        self.id("account", id)
+    }
+
+    fn asset(&self, id: &A) -> ViewId {
+        self.id("asset", id)
+    }
+
+    fn rate(&self, id: &RateId) -> ViewId {
+        self.id("rate", id)
+    }
+
+    fn role(&self, id: &Role) -> ViewId {
+        self.id("role", id)
+    }
+
+    fn scene(&self, index: u64, economy: &Economy<AccountId, A, RateId, Role, N>) -> Option<Scene> {
+        (self.scene)(index, economy)
+    }
+}
+
+fn debug_key(debug: &str) -> String {
+    debug
+        .chars()
+        .map(|character| {
+            if character.is_ascii_alphanumeric() {
+                character.to_ascii_lowercase()
+            } else {
+                '-'
+            }
+        })
+        .collect::<String>()
+        .split('-')
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>()
+        .join("-")
+}
+
+fn humanize_debug(debug: &str) -> String {
+    let mut output = String::with_capacity(debug.len() + 4);
+    let mut previous_lowercase = false;
+    for character in debug.chars() {
+        if matches!(character, '(' | ')' | '{' | '}' | '[' | ']') {
+            output.push(' ');
+            previous_lowercase = false;
+        } else if character == ',' {
+            output.push_str(", ");
+            previous_lowercase = false;
+        } else if character == '_' {
+            output.push(' ');
+            previous_lowercase = false;
+        } else {
+            if character.is_ascii_uppercase() && previous_lowercase {
+                output.push(' ');
+            }
+            output.push(character);
+            previous_lowercase = character.is_ascii_lowercase() || character.is_ascii_digit();
+        }
+    }
+    output.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum PlaybackError {
     #[error("trace exchange {index} failed replay: {message}")]
@@ -400,11 +684,140 @@ where
         title: metadata.title,
         description: metadata.description,
         source: metadata.source,
+        model: None,
         initial,
         frames,
         objectives,
         pareto_fronts: Vec::new(),
+        proposals: Vec::new(),
+        telemetry: Vec::new(),
+        observations: Vec::new(),
     })
+}
+
+/// Derives the immutable model definition used by a view document.
+pub fn derive_model<AccountId, A, RateId, Role, N, O>(
+    economy: &Economy<AccountId, A, RateId, Role, N>,
+    goal: &Goal<AccountId, A, N>,
+    ontology: &O,
+) -> ModelView
+where
+    AccountId: Clone + Eq + Hash + Ord,
+    A: Clone + Eq + Hash + Ord,
+    RateId: Clone + Eq + Hash + Ord,
+    Role: Clone + Ord,
+    N: QuantityScalar,
+    O: ViewOntology<AccountId, A, RateId, Role, N>,
+{
+    let mut rates = economy
+        .rate_ids()
+        .filter_map(|id| {
+            let rate = economy.rate(id)?;
+            let roles = rate
+                .roles()
+                .map(|role| RateRoleView {
+                    role: ontology.role(role),
+                    consumed: rate
+                        .consumed(role)
+                        .map_or_else(Vec::new, |basket| basket_view(basket, ontology)),
+                    produced: rate
+                        .produced(role)
+                        .map_or_else(Vec::new, |basket| basket_view(basket, ontology)),
+                    preserved: rate
+                        .preserved(role)
+                        .map_or_else(Vec::new, |basket| basket_view(basket, ontology)),
+                })
+                .collect();
+            let distinct_roles = rate
+                .distinct_roles()
+                .map(|(left, right)| [ontology.role(left), ontology.role(right)])
+                .collect();
+            Some(RateView {
+                rate: ontology.rate(id),
+                roles,
+                distinct_roles,
+            })
+        })
+        .collect::<Vec<_>>();
+    rates.sort_by(|left, right| left.rate.key.cmp(&right.rate.key));
+
+    let goal = goal
+        .requirements()
+        .iter()
+        .map(|(account, required)| GoalRequirementView {
+            account: ontology.account(account),
+            required: basket_view(required, ontology),
+        })
+        .collect();
+
+    let invariants = economy
+        .invariants()
+        .map(|invariant| {
+            let mut terms = invariant
+                .weights()
+                .map(|(asset, weight)| InvariantTermView {
+                    asset: ontology.asset(asset),
+                    weight,
+                })
+                .collect::<Vec<_>>();
+            terms.sort_by(|left, right| left.asset.key.cmp(&right.asset.key));
+            InvariantView {
+                name: invariant.name().into(),
+                terms,
+            }
+        })
+        .collect();
+
+    ModelView {
+        rates,
+        goal,
+        invariants,
+    }
+}
+
+/// Projects a snapshot without mutating or replaying it.
+pub fn derive_snapshot<AccountId, A, RateId, Role, N, O>(
+    index: u64,
+    economy: &Economy<AccountId, A, RateId, Role, N>,
+    ontology: &O,
+) -> ViewSnapshot
+where
+    AccountId: Clone + Eq + Hash + Ord,
+    A: Clone + Eq + Hash + Ord,
+    RateId: Clone + Eq + Hash + Ord,
+    Role: Clone + Ord,
+    N: QuantityScalar,
+    O: ViewOntology<AccountId, A, RateId, Role, N>,
+{
+    snapshot(index, economy, ontology)
+}
+
+/// Projects an exchange and its non-mutating feasibility assessment.
+pub fn derive_proposal<AccountId, A, RateId, Role, N, O>(
+    id: impl Into<String>,
+    label: impl Into<String>,
+    description: impl Into<String>,
+    snapshot_index: u64,
+    economy: &Economy<AccountId, A, RateId, Role, N>,
+    exchange: &Exchange<RateId, Role, AccountId, N>,
+    ontology: &O,
+) -> ProposalView
+where
+    AccountId: Clone + Eq + Hash + Ord,
+    A: Clone + Eq + Hash + Ord,
+    RateId: Clone + Eq + Hash + Ord,
+    Role: Clone + Ord,
+    N: QuantityScalar,
+    O: ViewOntology<AccountId, A, RateId, Role, N>,
+{
+    ProposalView {
+        id: id.into(),
+        label: label.into(),
+        description: description.into(),
+        snapshot_index,
+        exchange: exchange_view(exchange, ontology),
+        assessment: assessment_view(&economy.assess(exchange), ontology),
+    }
 }
 
 fn snapshot<AccountId, A, RateId, Role, N, O>(
