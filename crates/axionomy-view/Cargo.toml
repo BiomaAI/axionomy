@@ -1,0 +1,20 @@
+[package]
+name = "axionomy-view"
+version = "0.1.0"
+authors = ["Alex Rozgo <alex.rozgo@gmail.com>"]
+description = "Runtime-neutral playback and presentation contracts for Axionomy"
+edition = "2024"
+license.workspace = true
+readme = "README.md"
+repository = "https://github.com/BiomaAI/axionomy"
+rust-version = "1.89"
+
+[dependencies]
+axionomy = { version = "0.1.0", path = "../.." }
+schemars = "1.2.2"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
+thiserror = "2.0.19"
+
+[dev-dependencies]
+serde_json = "1.0.151"

@@ -6,6 +6,8 @@ members = [
     "crates/axionomy-units",
     "crates/axionomy-time",
     "crates/axionomy-mcp",
+    "crates/axionomy-view",
+    "crates/axionomy-studio-server",
 ]
 resolver = "3"
 

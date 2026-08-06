@@ -70,7 +70,7 @@ pub enum ObjectiveKey {
     Time,
 }
 
-const EDGES: [(Node, Node, u64, bool); 5] = [
+pub(crate) const EDGES: [(Node, Node, u64, bool); 5] = [
     (Node::Start, Node::KeyRoom, 2, false),
     (Node::KeyRoom, Node::Door, 2, true),
     (Node::Door, Node::Exit, 2, false),
