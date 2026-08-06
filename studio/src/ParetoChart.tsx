@@ -49,10 +49,15 @@ export default function ParetoChart({ document }: { document: ViewDocument }) {
         })),
       }],
     });
-    const resize = new ResizeObserver(() => chart.resize());
+    let pendingResize = 0;
+    const resize = new ResizeObserver(() => {
+      window.cancelAnimationFrame(pendingResize);
+      pendingResize = window.requestAnimationFrame(() => chart.resize());
+    });
     resize.observe(container.current);
     return () => {
       resize.disconnect();
+      window.cancelAnimationFrame(pendingResize);
       chart.dispose();
     };
   }, [front]);

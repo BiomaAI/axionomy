@@ -260,6 +260,14 @@ pub struct ViewSource {
     pub label: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct ViewDocumentMetadata {
+    pub id: String,
+    pub title: String,
+    pub description: String,
+    pub source: ViewSource,
+}
+
 /// Lifecycle events emitted by a Studio run. `sequence` orders transport
 /// events; it is not economic time and has no effect on replay.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -324,10 +332,7 @@ pub enum PlaybackError {
 
 /// Replays a trace and materializes a portable, self-contained view document.
 pub fn derive_document<AccountId, A, RateId, Role, N, O>(
-    id: impl Into<String>,
-    title: impl Into<String>,
-    description: impl Into<String>,
-    source: ViewSource,
+    metadata: ViewDocumentMetadata,
     initial: &Economy<AccountId, A, RateId, Role, N>,
     trace: &Trace<RateId, Role, AccountId, N>,
     ontology: &O,
@@ -367,10 +372,10 @@ where
     }
 
     Ok(ViewDocument {
-        id: id.into(),
-        title: title.into(),
-        description: description.into(),
-        source,
+        id: metadata.id,
+        title: metadata.title,
+        description: metadata.description,
+        source: metadata.source,
         initial,
         frames,
         objectives,
@@ -622,12 +627,14 @@ mod tests {
         trace.push(exchange);
 
         let document = derive_document(
-            "test",
-            "Test",
-            "A test trace",
-            ViewSource {
-                key: "test".into(),
-                label: "Test".into(),
+            ViewDocumentMetadata {
+                id: "test".into(),
+                title: "Test".into(),
+                description: "A test trace".into(),
+                source: ViewSource {
+                    key: "test".into(),
+                    label: "Test".into(),
+                },
             },
             &economy,
             &trace,
@@ -642,7 +649,7 @@ mod tests {
             u64::MAX.to_string()
         );
         assert_eq!(
-            serde_json::to_value(&document.frames[0].assessment.status).unwrap(),
+            serde_json::to_value(document.frames[0].assessment.status).unwrap(),
             json!("applicable")
         );
         assert_eq!(

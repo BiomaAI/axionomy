@@ -5,7 +5,7 @@ use axionomy::Trace;
 use axionomy_view::{
     FrontierCompletenessView, GraphEdgeView, GraphNodeView, ObjectiveAxisView,
     ObjectiveDirectionView, ObjectiveView, ParetoFrontView, ParetoPointView, PlaybackError, Scene,
-    ViewDocument, ViewId, ViewOntology, ViewSource, derive_document,
+    ViewDocument, ViewDocumentMetadata, ViewId, ViewOntology, ViewSource, derive_document,
 };
 use std::fmt;
 use thiserror::Error;
@@ -103,12 +103,14 @@ pub fn document(strategy: MazeStrategy) -> Result<ViewDocument, MazeViewError> {
     ];
 
     let mut document = derive_document(
-        strategy.key(),
-        strategy.label(),
-        strategy.description(),
-        ViewSource {
-            key: "maze".into(),
-            label: "Key-door maze".into(),
+        ViewDocumentMetadata {
+            id: strategy.key().into(),
+            title: strategy.label().into(),
+            description: strategy.description().into(),
+            source: ViewSource {
+                key: "maze".into(),
+                label: "Key-door maze".into(),
+            },
         },
         &initial,
         &trace,

@@ -595,12 +595,8 @@ async fn run_events(
 > {
     let record = find_run(&state, &path.run_id).await?;
     let history = record.history.read().await.clone();
-    let live = BroadcastStream::new(record.events.subscribe()).filter_map(|event| async move {
-        match event {
-            Ok(event) => Some(event),
-            Err(tokio_stream::wrappers::errors::BroadcastStreamRecvError::Lagged(_)) => None,
-        }
-    });
+    let live = BroadcastStream::new(record.events.subscribe())
+        .filter_map(|event| async move { event.ok() });
     let stream = tokio_stream::iter(history).chain(live).map(|event| {
         let kind = match &event {
             StudioEvent::RunStarted { .. } => "run_started",
