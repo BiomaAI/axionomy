@@ -79,6 +79,8 @@ models into one-way workspace dependencies:
 | `axionomy-units` | Self-describing asset denominations, schema coherence, and dimension-safe `uom` authoring |
 | `axionomy-time` | Calendar-aware Jiff authoring over the same canonical timeline denominations |
 | `axionomy-mcp` | Strict stateless MCP 2026-07-28 reference server with caller-owned snapshot storage and interruptible search tasks |
+| `axionomy-view` | Runtime-neutral, replay-derived browser presentation contracts |
+| `axionomy-studio-server` | Native OpenAPI/SSE reference backend and in-memory run orchestration for Axionomy Studio |
 
 ```text
 axionomy-search ──────→ axionomy
@@ -87,12 +89,14 @@ axionomy-problems ────→ axionomy
 axionomy-units ───────→ axionomy
 axionomy-time ────────→ axionomy-units ──→ axionomy
 axionomy-mcp ─────────→ axionomy-search ──→ axionomy
+axionomy-view ────────→ axionomy
+axionomy-studio-server → axionomy-problems → axionomy-view
 ```
 
 The kernel does not depend on a solver, problem, unit, or time crate. The
 packages are independently publishable: release `axionomy` first; search and
 units may follow; time follows units; `axionomy-problems` and `axionomy-mcp`
-follow search.
+follow search; Studio remains an outer presentation adapter.
 
 ## What is implemented
 
@@ -138,6 +142,10 @@ follow search.
 - Twelve closed benchmark encodings in `axionomy-problems`, with distinct
   solver strategies, independent reference oracles, and encoded stochastic
   priors.
+- Axionomy Studio's Rust-owned `ViewDocument` contract, replay-derived account
+  snapshots, assessments and receipts, exact string quantities, optional
+  domain scenes, Maze playback, Pareto inspection, OpenAPI-generated
+  TypeScript, live SSE progress, cancellation, and portable static JSON.
 
 The core contains no application ontology or search algorithm. Problem assets
 and specialized solvers compile against the same public kernel API available
@@ -162,6 +170,29 @@ policy or reinforcement learner. Every exact entry carries a trace that is
 replayed from the source economy. Exhaustive finite search is labeled `Exact`
 only after completion; interrupted search and Monte Carlo policy fronts remain
 visibly `Approximate`.
+
+## Inspect with Axionomy Studio
+
+Axionomy Studio is a universal economic debugger and trace player, not a
+second simulator. It scrubs a trace by replaying accepted exchanges through
+the Rust core, then shows the resulting accounts, assets, assessments,
+receipt deltas, objectives, and optional read-only domain projection. The Maze
+projection is the first proof: its graph helps a person understand the state,
+but the graph cannot move the agent or unlock the door. Portable documents and
+live runs use the same Rust-derived contract, and browser types are generated
+from its OpenAPI schema rather than maintained by hand.
+
+```console
+cargo run -p axionomy-studio-server --bin axionomy-studio
+cd studio
+pnpm install
+pnpm dev
+```
+
+Open `http://127.0.0.1:5173`. The committed static Maze document works without
+the server; connecting the native server enables searches, Server-Sent Event
+progress, cancellation, and freshly derived documents. See
+[`studio/README.md`](studio/README.md) for contract generation and verification.
 
 ## Core example
 

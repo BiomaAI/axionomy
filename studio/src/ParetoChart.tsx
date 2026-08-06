@@ -1,0 +1,69 @@
+import { useEffect, useRef } from "react";
+import * as echarts from "echarts/core";
+import { ScatterChart } from "echarts/charts";
+import { GridComponent, TooltipComponent } from "echarts/components";
+import { CanvasRenderer } from "echarts/renderers";
+import type { ViewDocument } from "./api";
+
+echarts.use([ScatterChart, GridComponent, TooltipComponent, CanvasRenderer]);
+
+export default function ParetoChart({ document }: { document: ViewDocument }) {
+  const container = useRef<HTMLDivElement>(null);
+  const front = document.pareto_fronts[0];
+  useEffect(() => {
+    if (!container.current || !front || front.axes.length < 2) return;
+    const chart = echarts.init(container.current);
+    chart.setOption({
+      animationDuration: 450,
+      grid: { left: 48, right: 24, top: 30, bottom: 48 },
+      xAxis: {
+        name: front.axes[0].label,
+        nameLocation: "middle",
+        nameGap: 31,
+        splitLine: { lineStyle: { opacity: 0.12 } },
+      },
+      yAxis: {
+        name: front.axes[1].label,
+        nameLocation: "middle",
+        nameGap: 34,
+        splitLine: { lineStyle: { opacity: 0.12 } },
+      },
+      tooltip: {
+        trigger: "item",
+        formatter: (params: { data: { name: string; exact: string[] } }) =>
+          `<strong>${params.data.name}</strong><br>${front.axes[0].label}: ${params.data.exact[0]}<br>${front.axes[1].label}: ${params.data.exact[1]}`,
+      },
+      series: [{
+        type: "scatter",
+        data: front.points.map((point) => ({
+          name: point.label,
+          // Numeric conversion is visualization-only; DTO values and tooltips stay exact text.
+          value: [Number(point.values[0]), Number(point.values[1])],
+          exact: point.values,
+          symbolSize: point.selected ? 20 : 13,
+          itemStyle: {
+            color: point.selected ? "#d8ff3e" : "#53c9ff",
+            borderColor: "#081018",
+            borderWidth: 2,
+          },
+        })),
+      }],
+    });
+    const resize = new ResizeObserver(() => chart.resize());
+    resize.observe(container.current);
+    return () => {
+      resize.disconnect();
+      chart.dispose();
+    };
+  }, [front]);
+  if (!front) {
+    return <div className="empty-state">This document does not include a Pareto analysis.</div>;
+  }
+  return <>
+    <div className="analysis-meta">
+      <span>{front.completeness} frontier</span>
+      <strong>{front.points.length} non-dominated outcomes</strong>
+    </div>
+    <div ref={container} className="pareto-chart" aria-label="Pareto frontier chart" />
+  </>;
+}

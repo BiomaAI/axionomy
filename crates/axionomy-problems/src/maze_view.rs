@@ -3,7 +3,8 @@
 use crate::maze::{self, AccountId, Asset, Node, ObjectiveKey, RateId, Role, World};
 use axionomy::Trace;
 use axionomy_view::{
-    GraphEdgeView, GraphNodeView, ObjectiveDirectionView, ObjectiveView, PlaybackError, Scene,
+    FrontierCompletenessView, GraphEdgeView, GraphNodeView, ObjectiveAxisView,
+    ObjectiveDirectionView, ObjectiveView, ParetoFrontView, ParetoPointView, PlaybackError, Scene,
     ViewDocument, ViewId, ViewOntology, ViewSource, derive_document,
 };
 use std::fmt;
@@ -101,7 +102,7 @@ pub fn document(strategy: MazeStrategy) -> Result<ViewDocument, MazeViewError> {
         },
     ];
 
-    derive_document(
+    let mut document = derive_document(
         strategy.key(),
         strategy.label(),
         strategy.description(),
@@ -114,7 +115,61 @@ pub fn document(strategy: MazeStrategy) -> Result<ViewDocument, MazeViewError> {
         &MazeOntology,
         objectives,
     )
-    .map_err(Into::into)
+    .map_err(MazeViewError::from)?;
+    document
+        .pareto_fronts
+        .push(pareto_view(&initial, &document)?);
+    Ok(document)
+}
+
+fn pareto_view(initial: &World, document: &ViewDocument) -> Result<ParetoFrontView, MazeViewError> {
+    let result =
+        maze::pareto_front(initial).map_err(|error| MazeViewError::Pareto(error.to_string()))?;
+    let selected = document
+        .objectives
+        .iter()
+        .map(|objective| objective.value.as_str())
+        .collect::<Vec<_>>();
+    let points = result
+        .front()
+        .entries()
+        .iter()
+        .map(|entry| {
+            let values = entry
+                .objectives()
+                .objectives()
+                .iter()
+                .map(|objective| objective.value().to_string())
+                .collect::<Vec<_>>();
+            let energy = &values[0];
+            let time = &values[1];
+            ParetoPointView {
+                label: format!("{energy} energy · {time} time"),
+                selected: values
+                    .iter()
+                    .map(String::as_str)
+                    .eq(selected.iter().copied()),
+                values,
+            }
+        })
+        .collect();
+    Ok(ParetoFrontView {
+        title: "Replay-verified energy/time frontier".into(),
+        completeness: FrontierCompletenessView::Exact,
+        axes: vec![
+            ObjectiveAxisView {
+                key: "energy".into(),
+                label: "Energy spent".into(),
+                direction: ObjectiveDirectionView::Minimize,
+            },
+            ObjectiveAxisView {
+                key: "time".into(),
+                label: "Time spent".into(),
+                direction: ObjectiveDirectionView::Minimize,
+            },
+        ],
+        points,
+    })
 }
 
 fn trace_for(strategy: MazeStrategy, initial: &World) -> Result<MazeTrace, MazeViewError> {

@@ -1,6 +1,7 @@
 //! Native HTTP reference server for Axionomy Studio.
 
 use aide::{
+    IntoApi, UseApi,
     axum::{ApiRouter, routing},
     openapi::{Info, OpenApi},
 };
@@ -96,6 +97,16 @@ pub struct FrameQuery {
     pub limit: u64,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, JsonSchema)]
+pub struct RunPath {
+    pub run_id: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, JsonSchema)]
+pub struct DocumentPath {
+    pub document_id: String,
+}
+
 const fn default_frame_limit() -> u64 {
     100
 }
@@ -103,6 +114,39 @@ const fn default_frame_limit() -> u64 {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct ErrorResponse {
     pub error: String,
+}
+
+struct EventStreamContract;
+
+impl aide::OperationOutput for EventStreamContract {
+    type Inner = StudioEvent;
+
+    fn operation_response(
+        context: &mut aide::generate::GenContext,
+        operation: &mut aide::openapi::Operation,
+    ) -> Option<aide::openapi::Response> {
+        let mut response =
+            <String as aide::OperationOutput>::operation_response(context, operation)?;
+        let mut media = response.content.shift_remove("text/plain; charset=utf-8")?;
+        media.schema = Some(aide::openapi::SchemaObject {
+            json_schema: context.schema.subschema_for::<StudioEvent>(),
+            example: None,
+            external_docs: None,
+        });
+        response.content.insert("text/event-stream".into(), media);
+        response.description = "Tagged StudioEvent values encoded in SSE data fields".into();
+        Some(response)
+    }
+
+    fn inferred_responses(
+        context: &mut aide::generate::GenContext,
+        operation: &mut aide::openapi::Operation,
+    ) -> Vec<(Option<aide::openapi::StatusCode>, aide::openapi::Response)> {
+        Self::operation_response(context, operation)
+            .into_iter()
+            .map(|response| (Some(aide::openapi::StatusCode::Code(200)), response))
+            .collect()
+    }
 }
 
 #[derive(Debug)]
@@ -185,10 +229,7 @@ impl aide::OperationOutput for ApiError {
     fn inferred_responses(
         context: &mut aide::generate::GenContext,
         operation: &mut aide::openapi::Operation,
-    ) -> Vec<(
-        Option<aide::openapi::StatusCode>,
-        aide::openapi::Response,
-    )> {
+    ) -> Vec<(Option<aide::openapi::StatusCode>, aide::openapi::Response)> {
         Self::operation_response(context, operation)
             .into_iter()
             .map(|response| (None, response))
@@ -224,18 +265,69 @@ pub fn api(state: StudioState) -> (Router, OpenApi) {
     };
 
     let api = ApiRouter::new()
-        .api_route("/api/examples", routing::get(list_examples))
-        .api_route("/api/runs", routing::post(create_run))
+        .api_route(
+            "/api/examples",
+            routing::get_with(list_examples, |operation| {
+                operation
+                    .id("listExamples")
+                    .summary("List runnable reference examples")
+                    .tag("examples")
+            }),
+        )
+        .api_route(
+            "/api/runs",
+            routing::post_with(create_run, |operation| {
+                operation
+                    .id("createRun")
+                    .summary("Start an interruptible example run")
+                    .tag("runs")
+            }),
+        )
         .api_route(
             "/api/runs/{run_id}",
-            routing::get(get_run).delete(cancel_run),
+            routing::get_with(get_run, |operation| {
+                operation
+                    .id("getRun")
+                    .summary("Inspect run lifecycle and latest event")
+                    .tag("runs")
+            })
+            .delete_with(cancel_run, |operation| {
+                operation
+                    .id("cancelRun")
+                    .summary("Request cooperative cancellation")
+                    .tag("runs")
+            }),
         )
-        .api_route("/api/traces/{document_id}", routing::get(get_document))
-        .api_route("/api/traces/{document_id}/frames", routing::get(get_frames))
-        // SSE is a transport stream rather than a JSON response, so it is
-        // served by Axum directly. StudioEvent remains in the OpenAPI schema
-        // through RunSummary.last_event.
-        .route("/api/runs/{run_id}/events", get(run_events))
+        .api_route(
+            "/api/runs/{run_id}/events",
+            routing::get_with(run_events, |operation| {
+                operation
+                    .id("streamRunEvents")
+                    .summary("Follow ordered lifecycle events over SSE")
+                    .description(
+                        "Each named Server-Sent Event carries one tagged StudioEvent JSON value. Sequence numbers are transport order, not economic time.",
+                    )
+                    .tag("runs")
+            }),
+        )
+        .api_route(
+            "/api/traces/{document_id}",
+            routing::get_with(get_document, |operation| {
+                operation
+                    .id("getViewDocument")
+                    .summary("Load a portable replay-derived document")
+                    .tag("traces")
+            }),
+        )
+        .api_route(
+            "/api/traces/{document_id}/frames",
+            routing::get_with(get_frames, |operation| {
+                operation
+                    .id("getTraceFrames")
+                    .summary("Page through replay-derived exchange frames")
+                    .tag("traces")
+            }),
+        )
         .with_state(state)
         .finish_api(&mut openapi)
         .layer(Extension(Arc::new(openapi.clone())))
@@ -419,18 +511,18 @@ async fn finish_cancelled(record: &RunRecord, run_id: &str, sequence: u64) {
 
 async fn get_run(
     State(state): State<StudioState>,
-    Path(run_id): Path<String>,
+    Path(path): Path<RunPath>,
 ) -> Result<Json<RunSummary>, ApiError> {
-    let record = find_run(&state, &run_id).await?;
+    let record = find_run(&state, &path.run_id).await?;
     let summary = record.summary.read().await.clone();
     Ok(Json(summary))
 }
 
 async fn cancel_run(
     State(state): State<StudioState>,
-    Path(run_id): Path<String>,
+    Path(path): Path<RunPath>,
 ) -> Result<Json<RunSummary>, ApiError> {
-    let record = find_run(&state, &run_id).await?;
+    let record = find_run(&state, &path.run_id).await?;
     record.cancellation.cancel();
     tokio::task::yield_now().await;
     let summary = record.summary.read().await.clone();
@@ -449,8 +541,9 @@ async fn find_run(state: &StudioState, run_id: &str) -> Result<Arc<RunRecord>, A
 
 async fn get_document(
     State(state): State<StudioState>,
-    Path(document_id): Path<String>,
+    Path(path): Path<DocumentPath>,
 ) -> Result<Json<ViewDocument>, ApiError> {
+    let document_id = path.document_id;
     let document = state
         .documents
         .read()
@@ -463,9 +556,10 @@ async fn get_document(
 
 async fn get_frames(
     State(state): State<StudioState>,
-    Path(document_id): Path<String>,
+    Path(path): Path<DocumentPath>,
     Query(query): Query<FrameQuery>,
 ) -> Result<Json<FramePage>, ApiError> {
+    let document_id = path.document_id;
     if query.limit == 0 || query.limit > 1_000 {
         return Err(ApiError::bad_request(
             "frame limit must be between 1 and 1000",
@@ -491,12 +585,15 @@ async fn get_frames(
 
 async fn run_events(
     State(state): State<StudioState>,
-    Path(run_id): Path<String>,
+    Path(path): Path<RunPath>,
 ) -> Result<
-    Sse<impl futures_util::Stream<Item = Result<Event, Infallible>> + Send + 'static>,
+    UseApi<
+        Sse<impl futures_util::Stream<Item = Result<Event, Infallible>> + Send + 'static>,
+        EventStreamContract,
+    >,
     ApiError,
 > {
-    let record = find_run(&state, &run_id).await?;
+    let record = find_run(&state, &path.run_id).await?;
     let history = record.history.read().await.clone();
     let live = BroadcastStream::new(record.events.subscribe()).filter_map(|event| async move {
         match event {
@@ -518,7 +615,7 @@ async fn run_events(
             .json_data(event)
             .expect("StudioEvent always serializes"))
     });
-    Ok(Sse::new(stream))
+    Ok(Sse::new(stream).into_api())
 }
 
 #[cfg(test)]
@@ -624,6 +721,7 @@ mod tests {
             "/api/examples",
             "/api/runs",
             "/api/runs/{run_id}",
+            "/api/runs/{run_id}/events",
             "/api/traces/{document_id}",
             "/api/traces/{document_id}/frames",
         ] {

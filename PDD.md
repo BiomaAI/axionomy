@@ -549,6 +549,8 @@ axionomy-problems ────→ axionomy
 axionomy-units ───────→ axionomy
 axionomy-time ────────→ axionomy-units ──→ axionomy
 axionomy-mcp ─────────→ axionomy-search ──→ axionomy
+axionomy-view ────────→ axionomy
+axionomy-studio-server → axionomy-problems → axionomy-view
 ```
 
 - `axionomy` owns universal state and transition semantics.
@@ -561,6 +563,10 @@ axionomy-mcp ─────────→ axionomy-search ──→ axionomy
 - `axionomy-time` owns optional calendar-aware timeline authoring.
 - `axionomy-mcp` owns the strict stateless MCP reference boundary, immutable
   snapshot-store contract, and process-local task orchestration.
+- `axionomy-view` owns runtime-neutral monomorphic presentation contracts and
+  replay-derived frames, without owning a domain ontology or runtime.
+- `axionomy-studio-server` owns native HTTP, OpenAPI, SSE, in-memory run
+  lifecycle, static export, and hosting for the browser application.
 
 The kernel must never depend on a solver or problem crate. Moving BFS and A*
 out of the kernel is philosophically significant: algorithms explore the
@@ -587,6 +593,77 @@ crate depends on rmcp, Tokio, Axum, or a database. This direction is essential:
 remote execution requirements may improve the generic progress and
 interruption contracts, but they cannot make a protocol task or storage record
 part of economic truth.
+
+### 6.1 Presentation is a replay-derived boundary
+
+Axionomy Studio is designed as an economic debugger and decision observatory,
+not as a second environment. Its universal view shows accounts and balances,
+exchange bindings, non-mutating assessments, projected effects, successful
+receipt deltas, trace position, search lifecycle, and decision analyses. A
+domain may additionally supply a graph or grid scene, but that scene is a
+read-only projection of the same economy snapshot. Removing the projection
+must make the display less convenient without changing which exchanges are
+valid, what they do, or whether a trace reaches its goal.
+
+The browser boundary is deliberately monomorphic. Arbitrary user types such
+as `Economy<MyAccount, MyAsset, MyRate, MyRole>` cannot be known statically by
+a TypeScript build, so the Rust adapter lowers them into:
+
+```text
+ViewId        = stable presentation key + human label + optional JSON context
+ExactQuantity = decimal text
+ViewSnapshot  = ordered accounts and balances + optional derived scene
+ExchangeFrame = before + assessment + exchange + receipt + after
+ViewDocument  = metadata + initial snapshot + frames + decision analyses
+```
+
+`ViewId` does not replace the ontology value and its optional JSON is not an
+authority channel. Exact quantities cross JSON as strings because JSON and
+JavaScript numbers cannot preserve every `u64` or wider exact integer. Charts
+may convert a value for screen coordinates, but labels and tooltips retain the
+exact text and no plotted approximation is fed back into the economy.
+
+There is one generated contract pipeline:
+
+```text
+Rust DTOs
+  └─ Serde + Schemars
+       └─ Aide OpenAPI 3.1
+            └─ openapi-typescript
+                 └─ typed openapi-fetch client
+```
+
+Generated OpenAPI and TypeScript declarations are committed for review and
+regenerated in CI. They are never edited manually. This repository pins the
+Schemars-1-native Aide line because duplicating the entire DTO graph for an old
+schema-trait release would create two contract systems.
+
+The native server exposes an example catalog, starts runs, reports state,
+cancels computation cooperatively, serves completed documents and paginated
+frames, and streams tagged `StudioEvent` values through Server-Sent Events.
+Event sequence numbers order transport observations only; they are not encoded
+time. Run records and documents are process-local reference state, just like a
+search queue. They do not survive restart and cannot authorize an exchange.
+Applications that need persistence may store portable `ViewDocument` JSON or
+build their own outer run service without changing the core.
+
+The React application uses the generated client for JSON endpoints and the
+same tagged event union for SSE. Local playback position and play/pause state
+stay in a component reducer/state boundary rather than becoming server or
+economic state. React Flow renders graph projections; Apache ECharts renders
+decision surfaces; specialized grids remain ordinary React/SVG until measured
+scale requires Canvas. TanStack Query owns server-cache behavior. Vite,
+Vitest, and Playwright provide build, component-contract, and real-server
+browser verification.
+
+The first vertical proof combines four Maze strategies, replay-derived
+before/after frames, a graph scene, authoritative account inspection, receipt
+deltas, and the exact two-point energy/time Pareto frontier. The portable
+static document proves offline playback, while the live path proves
+OpenAPI-generated calls, SSE progress, cancellation hooks, trace retrieval,
+and scrubbing. New problem viewers should first work in the universal account
+inspector and add a specialized projection only when it materially improves
+human understanding.
 
 ## 7. Solver contract
 
@@ -1054,7 +1131,12 @@ The current foundation is intentionally bounded:
   state and candidate spaces; epsilon fronts, constrained dominance, and
   domain-proven safe pruning are not implemented.
 - Native Rust is the current release target. Browser/Wasm compatibility is not
-  yet a validated support guarantee.
+  yet a validated kernel support guarantee. The implemented browser Studio
+  currently talks to a native Rust server or loads a portable static document.
+- Studio currently supplies one specialized Maze graph projection. Every
+  problem already works with the universal account/trace contract, but richer
+  scheduling, marketplace, logistics, stochastic, partial-observation, and
+  game projections remain pressure-driven presentation work.
 - The MCP reference binary keeps snapshots and task lifecycle in memory. Its
   handles do not survive restart; callers can implement `SnapshotStore` when
   snapshot persistence is required, while distributed task recovery remains
@@ -1268,6 +1350,9 @@ factor.
 13. Add persisted search checkpoints, worker leases, task notifications, and
     tenant-aware authorization only when the MCP reference boundary is moved
     into a real multi-process deployment.
+14. Add scheduling, marketplace, and stochastic Studio projections, followed
+    by live Pareto-front and Monte Carlo distribution updates, when their
+    examples establish the smallest reusable scene and analysis contracts.
 
 Performance work should follow semantic clarity. Application now clones only
 touched account contents and validates conserved deltas incrementally. Shared
@@ -1479,6 +1564,15 @@ finite search and replayable traces; interrupted or sampled fronts remain
 explicitly approximate. This exposes allocation tradeoffs without granting a
 solver authority to define utility, validity, or state.
 
+### D-032: Visualization is a disposable replay projection
+
+The universal viewer derives snapshots, assessments, receipts, and analysis
+from a core-replayed trace. Domain scenes are optional read-only projections;
+browser playback and transport lifecycle are operational state. Rust owns the
+monomorphic wire contract, exact quantities serialize as text, and generated
+OpenAPI/TypeScript prevents a second manually maintained type system. A viewer
+may explain economic truth but cannot create it.
+
 ## 16. Success criteria
 
 Axionomy succeeds when:
@@ -1496,6 +1590,9 @@ Axionomy succeeds when:
 - Invalid proposals cannot bypass core constraints.
 - Remote callers can store, inspect, branch, search, cancel, poll, and replay
   without relying on hidden session state.
+- Browser users can load a portable document or follow a live run, scrub every
+  accepted exchange, and inspect exact balances and deltas without a parallel
+  mutable world model or handwritten cross-language contract.
 - Infeasible proposals expose every account-and-asset shortfall without
   mutation.
 - Successful assessments project the same account deltas later confirmed by

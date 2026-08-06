@@ -1,0 +1,1356 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Axionomy Studio API",
+    "description": "Replay-derived economic inspection, run lifecycle, and visualization data.",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/api/examples": {
+      "get": {
+        "tags": [
+          "examples"
+        ],
+        "summary": "List runnable reference examples",
+        "operationId": "listExamples",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExampleList"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/runs": {
+      "post": {
+        "tags": [
+          "runs"
+        ],
+        "summary": "Start an interruptible example run",
+        "operationId": "createRun",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateRunRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunSummary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Failed to parse the request body as JSON",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Expected request with `Content-Type: application/json`",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Failed to deserialize the JSON body into the target type",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/runs/{run_id}": {
+      "get": {
+        "tags": [
+          "runs"
+        ],
+        "summary": "Inspect run lifecycle and latest event",
+        "operationId": "getRun",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "style": "simple"
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunSummary"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "runs"
+        ],
+        "summary": "Request cooperative cancellation",
+        "operationId": "cancelRun",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "style": "simple"
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunSummary"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/runs/{run_id}/events": {
+      "get": {
+        "tags": [
+          "runs"
+        ],
+        "summary": "Follow ordered lifecycle events over SSE",
+        "description": "Each named Server-Sent Event carries one tagged StudioEvent JSON value. Sequence numbers are transport order, not economic time.",
+        "operationId": "streamRunEvents",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "style": "simple"
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Tagged StudioEvent values encoded in SSE data fields",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/StudioEvent"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/traces/{document_id}": {
+      "get": {
+        "tags": [
+          "traces"
+        ],
+        "summary": "Load a portable replay-derived document",
+        "operationId": "getViewDocument",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "style": "simple"
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ViewDocument"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/traces/{document_id}/frames": {
+      "get": {
+        "tags": [
+          "traces"
+        ],
+        "summary": "Page through replay-derived exchange frames",
+        "operationId": "getTraceFrames",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "style": "simple"
+          },
+          {
+            "in": "query",
+            "name": "from",
+            "schema": {
+              "type": "integer",
+              "format": "uint64",
+              "default": 0,
+              "minimum": 0
+            },
+            "style": "form"
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer",
+              "format": "uint64",
+              "default": 100,
+              "minimum": 0
+            },
+            "style": "form"
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FramePage"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AccountAssessmentView": {
+        "type": "object",
+        "properties": {
+          "account": {
+            "$ref": "#/components/schemas/ViewId"
+          },
+          "available": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AssetQuantityView"
+            }
+          },
+          "consumed": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AssetQuantityView"
+            }
+          },
+          "preserved": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AssetQuantityView"
+            }
+          },
+          "produced": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AssetQuantityView"
+            }
+          },
+          "required": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AssetQuantityView"
+            }
+          }
+        },
+        "required": [
+          "account",
+          "available",
+          "required",
+          "consumed",
+          "produced",
+          "preserved"
+        ]
+      },
+      "AccountDeltaView": {
+        "type": "object",
+        "properties": {
+          "account": {
+            "$ref": "#/components/schemas/ViewId"
+          },
+          "consumed": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AssetQuantityView"
+            }
+          },
+          "preserved": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AssetQuantityView"
+            }
+          },
+          "produced": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AssetQuantityView"
+            }
+          }
+        },
+        "required": [
+          "account",
+          "consumed",
+          "produced",
+          "preserved"
+        ]
+      },
+      "AccountShortfallView": {
+        "type": "object",
+        "properties": {
+          "account": {
+            "$ref": "#/components/schemas/ViewId"
+          },
+          "missing": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AssetQuantityView"
+            }
+          }
+        },
+        "required": [
+          "account",
+          "missing"
+        ]
+      },
+      "AccountView": {
+        "type": "object",
+        "properties": {
+          "account": {
+            "$ref": "#/components/schemas/ViewId"
+          },
+          "balances": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AssetQuantityView"
+            }
+          }
+        },
+        "required": [
+          "account",
+          "balances"
+        ]
+      },
+      "AssessmentStatusView": {
+        "type": "string",
+        "enum": [
+          "applicable",
+          "infeasible",
+          "invalid"
+        ]
+      },
+      "AssessmentView": {
+        "type": "object",
+        "properties": {
+          "accounts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AccountAssessmentView"
+            }
+          },
+          "issues": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "projected_deltas": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AccountDeltaView"
+            }
+          },
+          "shortfalls": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AccountShortfallView"
+            }
+          },
+          "status": {
+            "$ref": "#/components/schemas/AssessmentStatusView"
+          }
+        },
+        "required": [
+          "status",
+          "accounts",
+          "projected_deltas",
+          "shortfalls",
+          "issues"
+        ]
+      },
+      "AssetQuantityView": {
+        "type": "object",
+        "properties": {
+          "asset": {
+            "$ref": "#/components/schemas/ViewId"
+          },
+          "quantity": {
+            "$ref": "#/components/schemas/ExactQuantity"
+          }
+        },
+        "required": [
+          "asset",
+          "quantity"
+        ]
+      },
+      "CreateRunRequest": {
+        "type": "object",
+        "properties": {
+          "example": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "example"
+        ]
+      },
+      "DocumentPath": {
+        "type": "object",
+        "properties": {
+          "document_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "document_id"
+        ]
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "error"
+        ]
+      },
+      "ExactQuantity": {
+        "description": "An exact, non-negative quantity encoded as text for JavaScript safety.",
+        "type": "string"
+      },
+      "ExampleList": {
+        "type": "object",
+        "properties": {
+          "examples": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ExampleSummary"
+            }
+          }
+        },
+        "required": [
+          "examples"
+        ]
+      },
+      "ExampleSummary": {
+        "type": "object",
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "domain": {
+            "type": "string"
+          },
+          "key": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "title",
+          "description",
+          "domain"
+        ]
+      },
+      "ExchangeFrame": {
+        "type": "object",
+        "properties": {
+          "after": {
+            "$ref": "#/components/schemas/ViewSnapshot"
+          },
+          "assessment": {
+            "$ref": "#/components/schemas/AssessmentView"
+          },
+          "before": {
+            "$ref": "#/components/schemas/ViewSnapshot"
+          },
+          "exchange": {
+            "$ref": "#/components/schemas/ExchangeView"
+          },
+          "index": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          },
+          "receipt": {
+            "$ref": "#/components/schemas/ReceiptView"
+          }
+        },
+        "required": [
+          "index",
+          "exchange",
+          "assessment",
+          "receipt",
+          "before",
+          "after"
+        ]
+      },
+      "ExchangeView": {
+        "type": "object",
+        "properties": {
+          "bindings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RoleBindingView"
+            }
+          },
+          "rate": {
+            "$ref": "#/components/schemas/ViewId"
+          },
+          "units": {
+            "$ref": "#/components/schemas/ExactQuantity"
+          }
+        },
+        "required": [
+          "rate",
+          "units",
+          "bindings"
+        ]
+      },
+      "FramePage": {
+        "type": "object",
+        "properties": {
+          "document_id": {
+            "type": "string"
+          },
+          "frames": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ExchangeFrame"
+            }
+          },
+          "from": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          },
+          "total": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "document_id",
+          "from",
+          "total",
+          "frames"
+        ]
+      },
+      "FrameQuery": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "integer",
+            "format": "uint64",
+            "default": 0,
+            "minimum": 0
+          },
+          "limit": {
+            "type": "integer",
+            "format": "uint64",
+            "default": 100,
+            "minimum": 0
+          }
+        }
+      },
+      "FrontierCompletenessView": {
+        "type": "string",
+        "enum": [
+          "exact",
+          "approximate"
+        ]
+      },
+      "GraphEdgeView": {
+        "type": "object",
+        "properties": {
+          "classes": {
+            "type": "array",
+            "default": [],
+            "items": {
+              "type": "string"
+            }
+          },
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "source": {
+            "type": "string"
+          },
+          "target": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "source",
+          "target"
+        ]
+      },
+      "GraphNodeView": {
+        "type": "object",
+        "properties": {
+          "classes": {
+            "type": "array",
+            "default": [],
+            "items": {
+              "type": "string"
+            }
+          },
+          "id": {
+            "$ref": "#/components/schemas/ViewId"
+          },
+          "x": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "y": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          }
+        },
+        "required": [
+          "id"
+        ]
+      },
+      "GridCellView": {
+        "type": "object",
+        "properties": {
+          "classes": {
+            "type": "array",
+            "default": [],
+            "items": {
+              "type": "string"
+            }
+          },
+          "label": {
+            "type": "string"
+          },
+          "x": {
+            "type": "integer",
+            "format": "uint32",
+            "minimum": 0
+          },
+          "y": {
+            "type": "integer",
+            "format": "uint32",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "x",
+          "y",
+          "label"
+        ]
+      },
+      "ObjectiveAxisView": {
+        "type": "object",
+        "properties": {
+          "direction": {
+            "$ref": "#/components/schemas/ObjectiveDirectionView"
+          },
+          "key": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "direction"
+        ]
+      },
+      "ObjectiveDirectionView": {
+        "type": "string",
+        "enum": [
+          "minimize",
+          "maximize"
+        ]
+      },
+      "ObjectiveView": {
+        "type": "object",
+        "properties": {
+          "direction": {
+            "$ref": "#/components/schemas/ObjectiveDirectionView"
+          },
+          "key": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "direction",
+          "value"
+        ]
+      },
+      "ParetoFrontView": {
+        "type": "object",
+        "properties": {
+          "axes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ObjectiveAxisView"
+            }
+          },
+          "completeness": {
+            "$ref": "#/components/schemas/FrontierCompletenessView"
+          },
+          "points": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ParetoPointView"
+            }
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "completeness",
+          "axes",
+          "points"
+        ]
+      },
+      "ParetoPointView": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string"
+          },
+          "selected": {
+            "type": "boolean"
+          },
+          "values": {
+            "description": "Ordered exactly like `ParetoFrontView.axes`; values remain exact text.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "label",
+          "values",
+          "selected"
+        ]
+      },
+      "ReceiptView": {
+        "type": "object",
+        "properties": {
+          "deltas": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AccountDeltaView"
+            }
+          }
+        },
+        "required": [
+          "deltas"
+        ]
+      },
+      "RoleBindingView": {
+        "type": "object",
+        "properties": {
+          "account": {
+            "$ref": "#/components/schemas/ViewId"
+          },
+          "role": {
+            "$ref": "#/components/schemas/ViewId"
+          }
+        },
+        "required": [
+          "role",
+          "account"
+        ]
+      },
+      "RunPath": {
+        "type": "object",
+        "properties": {
+          "run_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "run_id"
+        ]
+      },
+      "RunStatus": {
+        "type": "string",
+        "enum": [
+          "running",
+          "completed",
+          "cancelled",
+          "failed"
+        ]
+      },
+      "RunSummary": {
+        "type": "object",
+        "properties": {
+          "completed": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          },
+          "document_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "example": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "last_event": {
+            "description": "Carries the tagged event union into the generated browser contract and\nalso lets reconnecting clients inspect the latest lifecycle event.",
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StudioEvent"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "message": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "$ref": "#/components/schemas/RunStatus"
+          },
+          "total": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "uint64",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "id",
+          "example",
+          "status",
+          "completed"
+        ]
+      },
+      "Scene": {
+        "description": "Optional domain projections. They explain economic state but never govern it.",
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "edges": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/GraphEdgeView"
+                }
+              },
+              "focus": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "kind": {
+                "type": "string",
+                "const": "graph"
+              },
+              "nodes": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/GraphNodeView"
+                }
+              },
+              "title": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "title",
+              "nodes",
+              "edges"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "cells": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/GridCellView"
+                }
+              },
+              "height": {
+                "type": "integer",
+                "format": "uint32",
+                "minimum": 0
+              },
+              "kind": {
+                "type": "string",
+                "const": "grid"
+              },
+              "title": {
+                "type": "string"
+              },
+              "width": {
+                "type": "integer",
+                "format": "uint32",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "kind",
+              "title",
+              "width",
+              "height",
+              "cells"
+            ]
+          }
+        ]
+      },
+      "StudioEvent": {
+        "description": "Lifecycle events emitted by a Studio run. `sequence` orders transport\nevents; it is not economic time and has no effect on replay.",
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "example": {
+                "type": "string"
+              },
+              "kind": {
+                "type": "string",
+                "const": "run_started"
+              },
+              "run_id": {
+                "type": "string"
+              },
+              "sequence": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "kind",
+              "run_id",
+              "sequence",
+              "example"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "completed": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0
+              },
+              "kind": {
+                "type": "string",
+                "const": "progress"
+              },
+              "message": {
+                "type": "string"
+              },
+              "run_id": {
+                "type": "string"
+              },
+              "sequence": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0
+              },
+              "total": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint64",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "kind",
+              "run_id",
+              "sequence",
+              "completed",
+              "message"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "frame_index": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0
+              },
+              "kind": {
+                "type": "string",
+                "const": "frame_appended"
+              },
+              "run_id": {
+                "type": "string"
+              },
+              "sequence": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "kind",
+              "run_id",
+              "sequence",
+              "frame_index"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "document_id": {
+                "type": "string"
+              },
+              "kind": {
+                "type": "string",
+                "const": "run_completed"
+              },
+              "run_id": {
+                "type": "string"
+              },
+              "sequence": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "kind",
+              "run_id",
+              "sequence",
+              "document_id"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "run_cancelled"
+              },
+              "run_id": {
+                "type": "string"
+              },
+              "sequence": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "kind",
+              "run_id",
+              "sequence"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "run_failed"
+              },
+              "message": {
+                "type": "string"
+              },
+              "run_id": {
+                "type": "string"
+              },
+              "sequence": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "kind",
+              "run_id",
+              "sequence",
+              "message"
+            ]
+          }
+        ]
+      },
+      "ViewDocument": {
+        "type": "object",
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "frames": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ExchangeFrame"
+            }
+          },
+          "id": {
+            "type": "string"
+          },
+          "initial": {
+            "$ref": "#/components/schemas/ViewSnapshot"
+          },
+          "objectives": {
+            "type": "array",
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ObjectiveView"
+            }
+          },
+          "pareto_fronts": {
+            "type": "array",
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ParetoFrontView"
+            }
+          },
+          "source": {
+            "$ref": "#/components/schemas/ViewSource"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "description",
+          "source",
+          "initial",
+          "frames"
+        ]
+      },
+      "ViewId": {
+        "description": "A browser-safe identity for an arbitrary user-defined ontology value.\n\n`key` is used for joins, `label` is for people, and `value` is optional\ndiagnostic context. None of these fields replaces the underlying Rust value\nas semantic authority.",
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "value": true
+        },
+        "required": [
+          "key",
+          "label"
+        ]
+      },
+      "ViewSnapshot": {
+        "type": "object",
+        "properties": {
+          "accounts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AccountView"
+            }
+          },
+          "index": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          },
+          "scene": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Scene"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "index",
+          "accounts"
+        ]
+      },
+      "ViewSource": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "label"
+        ]
+      }
+    }
+  }
+}

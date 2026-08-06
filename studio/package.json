@@ -1,0 +1,38 @@
+{
+  "name": "axionomy-studio",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "packageManager": "pnpm@10.14.0",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "test": "vitest run",
+    "test:e2e": "playwright test",
+    "generate:api": "openapi-typescript openapi.json -o src/generated/api.d.ts",
+    "generate:contracts": "cargo run -q -p axionomy-studio-server --bin export-openapi -- openapi.json && cargo run -q -p axionomy-studio-server --bin export-view -- maze_pareto_energy public/examples/maze-pareto-energy.json && pnpm generate:api",
+    "check:contracts": "pnpm generate:contracts && git diff --exit-code -- openapi.json src/generated/api.d.ts public/examples/maze-pareto-energy.json"
+  },
+  "dependencies": {
+    "@tanstack/react-query": "5.101.4",
+    "@xyflow/react": "12.11.2",
+    "echarts": "6.1.0",
+    "openapi-fetch": "0.17.0",
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.62.1",
+    "@testing-library/jest-dom": "7.0.0",
+    "@testing-library/react": "16.3.2",
+    "@testing-library/user-event": "14.6.3",
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.4",
+    "@vitejs/plugin-react": "6.0.5",
+    "jsdom": "30.0.1",
+    "openapi-typescript": "7.13.0",
+    "typescript": "5.9.3",
+    "vite": "8.2.1",
+    "vitest": "4.1.10"
+  }
+}

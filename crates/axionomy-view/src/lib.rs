@@ -210,6 +210,36 @@ pub enum ObjectiveDirectionView {
     Maximize,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum FrontierCompletenessView {
+    Exact,
+    Approximate,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct ObjectiveAxisView {
+    pub key: String,
+    pub label: String,
+    pub direction: ObjectiveDirectionView,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct ParetoPointView {
+    pub label: String,
+    /// Ordered exactly like `ParetoFrontView.axes`; values remain exact text.
+    pub values: Vec<String>,
+    pub selected: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct ParetoFrontView {
+    pub title: String,
+    pub completeness: FrontierCompletenessView,
+    pub axes: Vec<ObjectiveAxisView>,
+    pub points: Vec<ParetoPointView>,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct ViewDocument {
     pub id: String,
@@ -220,6 +250,8 @@ pub struct ViewDocument {
     pub frames: Vec<ExchangeFrame>,
     #[serde(default)]
     pub objectives: Vec<ObjectiveView>,
+    #[serde(default)]
+    pub pareto_fronts: Vec<ParetoFrontView>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -342,6 +374,7 @@ where
         initial,
         frames,
         objectives,
+        pareto_fronts: Vec::new(),
     })
 }
 

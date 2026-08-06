@@ -1,0 +1,5118 @@
+{
+  "id": "maze_pareto_energy",
+  "title": "Maze Pareto · least energy",
+  "description": "The energy-minimizing member of the exact replay-verified Pareto frontier.",
+  "source": {
+    "key": "maze",
+    "label": "Key-door maze"
+  },
+  "initial": {
+    "index": 0,
+    "accounts": [
+      {
+        "account": {
+          "key": "account:agent",
+          "label": "Agent"
+        },
+        "balances": [
+          {
+            "asset": {
+              "key": "asset:Active",
+              "label": "Active"
+            },
+            "quantity": "1"
+          },
+          {
+            "asset": {
+              "key": "asset:At(Start)",
+              "label": "At Start"
+            },
+            "quantity": "1"
+          },
+          {
+            "asset": {
+              "key": "asset:Energy",
+              "label": "Energy"
+            },
+            "quantity": "9"
+          },
+          {
+            "asset": {
+              "key": "asset:Time",
+              "label": "Time"
+            },
+            "quantity": "6"
+          }
+        ]
+      },
+      {
+        "account": {
+          "key": "account:world",
+          "label": "World"
+        },
+        "balances": [
+          {
+            "asset": {
+              "key": "asset:Distance(Detour)",
+              "label": "Distance from Detour"
+            },
+            "quantity": "5"
+          },
+          {
+            "asset": {
+              "key": "asset:Distance(Door)",
+              "label": "Distance from Door"
+            },
+            "quantity": "2"
+          },
+          {
+            "asset": {
+              "key": "asset:Distance(KeyRoom)",
+              "label": "Distance from Key room"
+            },
+            "quantity": "4"
+          },
+          {
+            "asset": {
+              "key": "asset:Distance(Start)",
+              "label": "Distance from Start"
+            },
+            "quantity": "6"
+          },
+          {
+            "asset": {
+              "key": "asset:Edge(Detour, Exit)",
+              "label": "Edge Detour → Exit"
+            },
+            "quantity": "1"
+          },
+          {
+            "asset": {
+              "key": "asset:Edge(Door, Exit)",
+              "label": "Edge Door → Exit"
+            },
+            "quantity": "1"
+          },
+          {
+            "asset": {
+              "key": "asset:Edge(KeyRoom, Door)",
+              "label": "Edge Key room → Door"
+            },
+            "quantity": "1"
+          },
+          {
+            "asset": {
+              "key": "asset:Edge(Start, Detour)",
+              "label": "Edge Start → Detour"
+            },
+            "quantity": "1"
+          },
+          {
+            "asset": {
+              "key": "asset:Edge(Start, KeyRoom)",
+              "label": "Edge Start → Key room"
+            },
+            "quantity": "1"
+          },
+          {
+            "asset": {
+              "key": "asset:Key",
+              "label": "Key"
+            },
+            "quantity": "1"
+          },
+          {
+            "asset": {
+              "key": "asset:Locked",
+              "label": "Locked"
+            },
+            "quantity": "1"
+          },
+          {
+            "asset": {
+              "key": "asset:Target(Exit)",
+              "label": "Target Exit"
+            },
+            "quantity": "1"
+          }
+        ]
+      }
+    ],
+    "scene": {
+      "kind": "graph",
+      "title": "Encoded maze topology",
+      "nodes": [
+        {
+          "id": {
+            "key": "node:start",
+            "label": "Start"
+          },
+          "classes": [
+            "current"
+          ],
+          "x": 80.0,
+          "y": 150.0
+        },
+        {
+          "id": {
+            "key": "node:key_room",
+            "label": "Key room"
+          },
+          "classes": [],
+          "x": 240.0,
+          "y": 65.0
+        },
+        {
+          "id": {
+            "key": "node:door",
+            "label": "Door"
+          },
+          "classes": [],
+          "x": 410.0,
+          "y": 65.0
+        },
+        {
+          "id": {
+            "key": "node:detour",
+            "label": "Detour"
+          },
+          "classes": [],
+          "x": 310.0,
+          "y": 240.0
+        },
+        {
+          "id": {
+            "key": "node:exit",
+            "label": "Exit"
+          },
+          "classes": [
+            "goal"
+          ],
+          "x": 570.0,
+          "y": 150.0
+        }
+      ],
+      "edges": [
+        {
+          "id": "edge:0",
+          "source": "node:start",
+          "target": "node:key_room",
+          "label": "2 energy",
+          "classes": []
+        },
+        {
+          "id": "edge:1",
+          "source": "node:key_room",
+          "target": "node:door",
+          "label": "2 energy · door",
+          "classes": [
+            "locked"
+          ]
+        },
+        {
+          "id": "edge:2",
+          "source": "node:door",
+          "target": "node:exit",
+          "label": "2 energy",
+          "classes": []
+        },
+        {
+          "id": "edge:3",
+          "source": "node:start",
+          "target": "node:detour",
+          "label": "4 energy",
+          "classes": []
+        },
+        {
+          "id": "edge:4",
+          "source": "node:detour",
+          "target": "node:exit",
+          "label": "5 energy",
+          "classes": []
+        }
+      ],
+      "focus": "node:start"
+    }
+  },
+  "frames": [
+    {
+      "index": 0,
+      "exchange": {
+        "rate": {
+          "key": "rate:Move { from: Start, to: KeyRoom, energy: 2, needs_open_door: false }",
+          "label": "Move Start → Key room"
+        },
+        "units": "1",
+        "bindings": [
+          {
+            "role": {
+              "key": "role:actor",
+              "label": "Actor"
+            },
+            "account": {
+              "key": "account:agent",
+              "label": "Agent"
+            }
+          },
+          {
+            "role": {
+              "key": "role:environment",
+              "label": "Environment"
+            },
+            "account": {
+              "key": "account:world",
+              "label": "World"
+            }
+          }
+        ]
+      },
+      "assessment": {
+        "status": "applicable",
+        "accounts": [
+          {
+            "account": {
+              "key": "account:agent",
+              "label": "Agent"
+            },
+            "available": [
+              {
+                "asset": {
+                  "key": "asset:Active",
+                  "label": "Active"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:At(Start)",
+                  "label": "At Start"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Energy",
+                  "label": "Energy"
+                },
+                "quantity": "9"
+              },
+              {
+                "asset": {
+                  "key": "asset:Time",
+                  "label": "Time"
+                },
+                "quantity": "6"
+              }
+            ],
+            "required": [
+              {
+                "asset": {
+                  "key": "asset:Active",
+                  "label": "Active"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:At(Start)",
+                  "label": "At Start"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Energy",
+                  "label": "Energy"
+                },
+                "quantity": "2"
+              },
+              {
+                "asset": {
+                  "key": "asset:Time",
+                  "label": "Time"
+                },
+                "quantity": "1"
+              }
+            ],
+            "consumed": [
+              {
+                "asset": {
+                  "key": "asset:At(Start)",
+                  "label": "At Start"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Energy",
+                  "label": "Energy"
+                },
+                "quantity": "2"
+              },
+              {
+                "asset": {
+                  "key": "asset:Time",
+                  "label": "Time"
+                },
+                "quantity": "1"
+              }
+            ],
+            "produced": [
+              {
+                "asset": {
+                  "key": "asset:At(KeyRoom)",
+                  "label": "At Key room"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:SpentEnergy",
+                  "label": "Spent energy"
+                },
+                "quantity": "2"
+              },
+              {
+                "asset": {
+                  "key": "asset:SpentTime",
+                  "label": "Spent time"
+                },
+                "quantity": "1"
+              }
+            ],
+            "preserved": [
+              {
+                "asset": {
+                  "key": "asset:Active",
+                  "label": "Active"
+                },
+                "quantity": "1"
+              }
+            ]
+          },
+          {
+            "account": {
+              "key": "account:world",
+              "label": "World"
+            },
+            "available": [
+              {
+                "asset": {
+                  "key": "asset:Edge(Start, KeyRoom)",
+                  "label": "Edge Start → Key room"
+                },
+                "quantity": "1"
+              }
+            ],
+            "required": [
+              {
+                "asset": {
+                  "key": "asset:Edge(Start, KeyRoom)",
+                  "label": "Edge Start → Key room"
+                },
+                "quantity": "1"
+              }
+            ],
+            "consumed": [],
+            "produced": [],
+            "preserved": [
+              {
+                "asset": {
+                  "key": "asset:Edge(Start, KeyRoom)",
+                  "label": "Edge Start → Key room"
+                },
+                "quantity": "1"
+              }
+            ]
+          }
+        ],
+        "projected_deltas": [
+          {
+            "account": {
+              "key": "account:agent",
+              "label": "Agent"
+            },
+            "consumed": [
+              {
+                "asset": {
+                  "key": "asset:At(Start)",
+                  "label": "At Start"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Energy",
+                  "label": "Energy"
+                },
+                "quantity": "2"
+              },
+              {
+                "asset": {
+                  "key": "asset:Time",
+                  "label": "Time"
+                },
+                "quantity": "1"
+              }
+            ],
+            "produced": [
+              {
+                "asset": {
+                  "key": "asset:At(KeyRoom)",
+                  "label": "At Key room"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:SpentEnergy",
+                  "label": "Spent energy"
+                },
+                "quantity": "2"
+              },
+              {
+                "asset": {
+                  "key": "asset:SpentTime",
+                  "label": "Spent time"
+                },
+                "quantity": "1"
+              }
+            ],
+            "preserved": [
+              {
+                "asset": {
+                  "key": "asset:Active",
+                  "label": "Active"
+                },
+                "quantity": "1"
+              }
+            ]
+          },
+          {
+            "account": {
+              "key": "account:world",
+              "label": "World"
+            },
+            "consumed": [],
+            "produced": [],
+            "preserved": [
+              {
+                "asset": {
+                  "key": "asset:Edge(Start, KeyRoom)",
+                  "label": "Edge Start → Key room"
+                },
+                "quantity": "1"
+              }
+            ]
+          }
+        ],
+        "shortfalls": [],
+        "issues": []
+      },
+      "receipt": {
+        "deltas": [
+          {
+            "account": {
+              "key": "account:agent",
+              "label": "Agent"
+            },
+            "consumed": [
+              {
+                "asset": {
+                  "key": "asset:At(Start)",
+                  "label": "At Start"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Energy",
+                  "label": "Energy"
+                },
+                "quantity": "2"
+              },
+              {
+                "asset": {
+                  "key": "asset:Time",
+                  "label": "Time"
+                },
+                "quantity": "1"
+              }
+            ],
+            "produced": [
+              {
+                "asset": {
+                  "key": "asset:At(KeyRoom)",
+                  "label": "At Key room"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:SpentEnergy",
+                  "label": "Spent energy"
+                },
+                "quantity": "2"
+              },
+              {
+                "asset": {
+                  "key": "asset:SpentTime",
+                  "label": "Spent time"
+                },
+                "quantity": "1"
+              }
+            ],
+            "preserved": [
+              {
+                "asset": {
+                  "key": "asset:Active",
+                  "label": "Active"
+                },
+                "quantity": "1"
+              }
+            ]
+          },
+          {
+            "account": {
+              "key": "account:world",
+              "label": "World"
+            },
+            "consumed": [],
+            "produced": [],
+            "preserved": [
+              {
+                "asset": {
+                  "key": "asset:Edge(Start, KeyRoom)",
+                  "label": "Edge Start → Key room"
+                },
+                "quantity": "1"
+              }
+            ]
+          }
+        ]
+      },
+      "before": {
+        "index": 0,
+        "accounts": [
+          {
+            "account": {
+              "key": "account:agent",
+              "label": "Agent"
+            },
+            "balances": [
+              {
+                "asset": {
+                  "key": "asset:Active",
+                  "label": "Active"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:At(Start)",
+                  "label": "At Start"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Energy",
+                  "label": "Energy"
+                },
+                "quantity": "9"
+              },
+              {
+                "asset": {
+                  "key": "asset:Time",
+                  "label": "Time"
+                },
+                "quantity": "6"
+              }
+            ]
+          },
+          {
+            "account": {
+              "key": "account:world",
+              "label": "World"
+            },
+            "balances": [
+              {
+                "asset": {
+                  "key": "asset:Distance(Detour)",
+                  "label": "Distance from Detour"
+                },
+                "quantity": "5"
+              },
+              {
+                "asset": {
+                  "key": "asset:Distance(Door)",
+                  "label": "Distance from Door"
+                },
+                "quantity": "2"
+              },
+              {
+                "asset": {
+                  "key": "asset:Distance(KeyRoom)",
+                  "label": "Distance from Key room"
+                },
+                "quantity": "4"
+              },
+              {
+                "asset": {
+                  "key": "asset:Distance(Start)",
+                  "label": "Distance from Start"
+                },
+                "quantity": "6"
+              },
+              {
+                "asset": {
+                  "key": "asset:Edge(Detour, Exit)",
+                  "label": "Edge Detour → Exit"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Edge(Door, Exit)",
+                  "label": "Edge Door → Exit"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Edge(KeyRoom, Door)",
+                  "label": "Edge Key room → Door"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Edge(Start, Detour)",
+                  "label": "Edge Start → Detour"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Edge(Start, KeyRoom)",
+                  "label": "Edge Start → Key room"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Key",
+                  "label": "Key"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Locked",
+                  "label": "Locked"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Target(Exit)",
+                  "label": "Target Exit"
+                },
+                "quantity": "1"
+              }
+            ]
+          }
+        ],
+        "scene": {
+          "kind": "graph",
+          "title": "Encoded maze topology",
+          "nodes": [
+            {
+              "id": {
+                "key": "node:start",
+                "label": "Start"
+              },
+              "classes": [
+                "current"
+              ],
+              "x": 80.0,
+              "y": 150.0
+            },
+            {
+              "id": {
+                "key": "node:key_room",
+                "label": "Key room"
+              },
+              "classes": [],
+              "x": 240.0,
+              "y": 65.0
+            },
+            {
+              "id": {
+                "key": "node:door",
+                "label": "Door"
+              },
+              "classes": [],
+              "x": 410.0,
+              "y": 65.0
+            },
+            {
+              "id": {
+                "key": "node:detour",
+                "label": "Detour"
+              },
+              "classes": [],
+              "x": 310.0,
+              "y": 240.0
+            },
+            {
+              "id": {
+                "key": "node:exit",
+                "label": "Exit"
+              },
+              "classes": [
+                "goal"
+              ],
+              "x": 570.0,
+              "y": 150.0
+            }
+          ],
+          "edges": [
+            {
+              "id": "edge:0",
+              "source": "node:start",
+              "target": "node:key_room",
+              "label": "2 energy",
+              "classes": []
+            },
+            {
+              "id": "edge:1",
+              "source": "node:key_room",
+              "target": "node:door",
+              "label": "2 energy · door",
+              "classes": [
+                "locked"
+              ]
+            },
+            {
+              "id": "edge:2",
+              "source": "node:door",
+              "target": "node:exit",
+              "label": "2 energy",
+              "classes": []
+            },
+            {
+              "id": "edge:3",
+              "source": "node:start",
+              "target": "node:detour",
+              "label": "4 energy",
+              "classes": []
+            },
+            {
+              "id": "edge:4",
+              "source": "node:detour",
+              "target": "node:exit",
+              "label": "5 energy",
+              "classes": []
+            }
+          ],
+          "focus": "node:start"
+        }
+      },
+      "after": {
+        "index": 1,
+        "accounts": [
+          {
+            "account": {
+              "key": "account:agent",
+              "label": "Agent"
+            },
+            "balances": [
+              {
+                "asset": {
+                  "key": "asset:Active",
+                  "label": "Active"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:At(KeyRoom)",
+                  "label": "At Key room"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Energy",
+                  "label": "Energy"
+                },
+                "quantity": "7"
+              },
+              {
+                "asset": {
+                  "key": "asset:SpentEnergy",
+                  "label": "Spent energy"
+                },
+                "quantity": "2"
+              },
+              {
+                "asset": {
+                  "key": "asset:SpentTime",
+                  "label": "Spent time"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Time",
+                  "label": "Time"
+                },
+                "quantity": "5"
+              }
+            ]
+          },
+          {
+            "account": {
+              "key": "account:world",
+              "label": "World"
+            },
+            "balances": [
+              {
+                "asset": {
+                  "key": "asset:Distance(Detour)",
+                  "label": "Distance from Detour"
+                },
+                "quantity": "5"
+              },
+              {
+                "asset": {
+                  "key": "asset:Distance(Door)",
+                  "label": "Distance from Door"
+                },
+                "quantity": "2"
+              },
+              {
+                "asset": {
+                  "key": "asset:Distance(KeyRoom)",
+                  "label": "Distance from Key room"
+                },
+                "quantity": "4"
+              },
+              {
+                "asset": {
+                  "key": "asset:Distance(Start)",
+                  "label": "Distance from Start"
+                },
+                "quantity": "6"
+              },
+              {
+                "asset": {
+                  "key": "asset:Edge(Detour, Exit)",
+                  "label": "Edge Detour → Exit"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Edge(Door, Exit)",
+                  "label": "Edge Door → Exit"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Edge(KeyRoom, Door)",
+                  "label": "Edge Key room → Door"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Edge(Start, Detour)",
+                  "label": "Edge Start → Detour"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Edge(Start, KeyRoom)",
+                  "label": "Edge Start → Key room"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Key",
+                  "label": "Key"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Locked",
+                  "label": "Locked"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Target(Exit)",
+                  "label": "Target Exit"
+                },
+                "quantity": "1"
+              }
+            ]
+          }
+        ],
+        "scene": {
+          "kind": "graph",
+          "title": "Encoded maze topology",
+          "nodes": [
+            {
+              "id": {
+                "key": "node:start",
+                "label": "Start"
+              },
+              "classes": [],
+              "x": 80.0,
+              "y": 150.0
+            },
+            {
+              "id": {
+                "key": "node:key_room",
+                "label": "Key room"
+              },
+              "classes": [
+                "current"
+              ],
+              "x": 240.0,
+              "y": 65.0
+            },
+            {
+              "id": {
+                "key": "node:door",
+                "label": "Door"
+              },
+              "classes": [],
+              "x": 410.0,
+              "y": 65.0
+            },
+            {
+              "id": {
+                "key": "node:detour",
+                "label": "Detour"
+              },
+              "classes": [],
+              "x": 310.0,
+              "y": 240.0
+            },
+            {
+              "id": {
+                "key": "node:exit",
+                "label": "Exit"
+              },
+              "classes": [
+                "goal"
+              ],
+              "x": 570.0,
+              "y": 150.0
+            }
+          ],
+          "edges": [
+            {
+              "id": "edge:0",
+              "source": "node:start",
+              "target": "node:key_room",
+              "label": "2 energy",
+              "classes": []
+            },
+            {
+              "id": "edge:1",
+              "source": "node:key_room",
+              "target": "node:door",
+              "label": "2 energy · door",
+              "classes": [
+                "locked"
+              ]
+            },
+            {
+              "id": "edge:2",
+              "source": "node:door",
+              "target": "node:exit",
+              "label": "2 energy",
+              "classes": []
+            },
+            {
+              "id": "edge:3",
+              "source": "node:start",
+              "target": "node:detour",
+              "label": "4 energy",
+              "classes": []
+            },
+            {
+              "id": "edge:4",
+              "source": "node:detour",
+              "target": "node:exit",
+              "label": "5 energy",
+              "classes": []
+            }
+          ],
+          "focus": "node:key_room"
+        }
+      }
+    },
+    {
+      "index": 1,
+      "exchange": {
+        "rate": {
+          "key": "rate:TakeKey",
+          "label": "Take key"
+        },
+        "units": "1",
+        "bindings": [
+          {
+            "role": {
+              "key": "role:actor",
+              "label": "Actor"
+            },
+            "account": {
+              "key": "account:agent",
+              "label": "Agent"
+            }
+          },
+          {
+            "role": {
+              "key": "role:environment",
+              "label": "Environment"
+            },
+            "account": {
+              "key": "account:world",
+              "label": "World"
+            }
+          }
+        ]
+      },
+      "assessment": {
+        "status": "applicable",
+        "accounts": [
+          {
+            "account": {
+              "key": "account:agent",
+              "label": "Agent"
+            },
+            "available": [
+              {
+                "asset": {
+                  "key": "asset:Active",
+                  "label": "Active"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:At(KeyRoom)",
+                  "label": "At Key room"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Time",
+                  "label": "Time"
+                },
+                "quantity": "5"
+              }
+            ],
+            "required": [
+              {
+                "asset": {
+                  "key": "asset:Active",
+                  "label": "Active"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:At(KeyRoom)",
+                  "label": "At Key room"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Time",
+                  "label": "Time"
+                },
+                "quantity": "1"
+              }
+            ],
+            "consumed": [
+              {
+                "asset": {
+                  "key": "asset:Time",
+                  "label": "Time"
+                },
+                "quantity": "1"
+              }
+            ],
+            "produced": [
+              {
+                "asset": {
+                  "key": "asset:Key",
+                  "label": "Key"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:SpentTime",
+                  "label": "Spent time"
+                },
+                "quantity": "1"
+              }
+            ],
+            "preserved": [
+              {
+                "asset": {
+                  "key": "asset:Active",
+                  "label": "Active"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:At(KeyRoom)",
+                  "label": "At Key room"
+                },
+                "quantity": "1"
+              }
+            ]
+          },
+          {
+            "account": {
+              "key": "account:world",
+              "label": "World"
+            },
+            "available": [
+              {
+                "asset": {
+                  "key": "asset:Key",
+                  "label": "Key"
+                },
+                "quantity": "1"
+              }
+            ],
+            "required": [
+              {
+                "asset": {
+                  "key": "asset:Key",
+                  "label": "Key"
+                },
+                "quantity": "1"
+              }
+            ],
+            "consumed": [
+              {
+                "asset": {
+                  "key": "asset:Key",
+                  "label": "Key"
+                },
+                "quantity": "1"
+              }
+            ],
+            "produced": [],
+            "preserved": []
+          }
+        ],
+        "projected_deltas": [
+          {
+            "account": {
+              "key": "account:agent",
+              "label": "Agent"
+            },
+            "consumed": [
+              {
+                "asset": {
+                  "key": "asset:Time",
+                  "label": "Time"
+                },
+                "quantity": "1"
+              }
+            ],
+            "produced": [
+              {
+                "asset": {
+                  "key": "asset:Key",
+                  "label": "Key"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:SpentTime",
+                  "label": "Spent time"
+                },
+                "quantity": "1"
+              }
+            ],
+            "preserved": [
+              {
+                "asset": {
+                  "key": "asset:Active",
+                  "label": "Active"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:At(KeyRoom)",
+                  "label": "At Key room"
+                },
+                "quantity": "1"
+              }
+            ]
+          },
+          {
+            "account": {
+              "key": "account:world",
+              "label": "World"
+            },
+            "consumed": [
+              {
+                "asset": {
+                  "key": "asset:Key",
+                  "label": "Key"
+                },
+                "quantity": "1"
+              }
+            ],
+            "produced": [],
+            "preserved": []
+          }
+        ],
+        "shortfalls": [],
+        "issues": []
+      },
+      "receipt": {
+        "deltas": [
+          {
+            "account": {
+              "key": "account:agent",
+              "label": "Agent"
+            },
+            "consumed": [
+              {
+                "asset": {
+                  "key": "asset:Time",
+                  "label": "Time"
+                },
+                "quantity": "1"
+              }
+            ],
+            "produced": [
+              {
+                "asset": {
+                  "key": "asset:Key",
+                  "label": "Key"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:SpentTime",
+                  "label": "Spent time"
+                },
+                "quantity": "1"
+              }
+            ],
+            "preserved": [
+              {
+                "asset": {
+                  "key": "asset:Active",
+                  "label": "Active"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:At(KeyRoom)",
+                  "label": "At Key room"
+                },
+                "quantity": "1"
+              }
+            ]
+          },
+          {
+            "account": {
+              "key": "account:world",
+              "label": "World"
+            },
+            "consumed": [
+              {
+                "asset": {
+                  "key": "asset:Key",
+                  "label": "Key"
+                },
+                "quantity": "1"
+              }
+            ],
+            "produced": [],
+            "preserved": []
+          }
+        ]
+      },
+      "before": {
+        "index": 1,
+        "accounts": [
+          {
+            "account": {
+              "key": "account:agent",
+              "label": "Agent"
+            },
+            "balances": [
+              {
+                "asset": {
+                  "key": "asset:Active",
+                  "label": "Active"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:At(KeyRoom)",
+                  "label": "At Key room"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Energy",
+                  "label": "Energy"
+                },
+                "quantity": "7"
+              },
+              {
+                "asset": {
+                  "key": "asset:SpentEnergy",
+                  "label": "Spent energy"
+                },
+                "quantity": "2"
+              },
+              {
+                "asset": {
+                  "key": "asset:SpentTime",
+                  "label": "Spent time"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Time",
+                  "label": "Time"
+                },
+                "quantity": "5"
+              }
+            ]
+          },
+          {
+            "account": {
+              "key": "account:world",
+              "label": "World"
+            },
+            "balances": [
+              {
+                "asset": {
+                  "key": "asset:Distance(Detour)",
+                  "label": "Distance from Detour"
+                },
+                "quantity": "5"
+              },
+              {
+                "asset": {
+                  "key": "asset:Distance(Door)",
+                  "label": "Distance from Door"
+                },
+                "quantity": "2"
+              },
+              {
+                "asset": {
+                  "key": "asset:Distance(KeyRoom)",
+                  "label": "Distance from Key room"
+                },
+                "quantity": "4"
+              },
+              {
+                "asset": {
+                  "key": "asset:Distance(Start)",
+                  "label": "Distance from Start"
+                },
+                "quantity": "6"
+              },
+              {
+                "asset": {
+                  "key": "asset:Edge(Detour, Exit)",
+                  "label": "Edge Detour → Exit"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Edge(Door, Exit)",
+                  "label": "Edge Door → Exit"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Edge(KeyRoom, Door)",
+                  "label": "Edge Key room → Door"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Edge(Start, Detour)",
+                  "label": "Edge Start → Detour"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Edge(Start, KeyRoom)",
+                  "label": "Edge Start → Key room"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Key",
+                  "label": "Key"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Locked",
+                  "label": "Locked"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Target(Exit)",
+                  "label": "Target Exit"
+                },
+                "quantity": "1"
+              }
+            ]
+          }
+        ],
+        "scene": {
+          "kind": "graph",
+          "title": "Encoded maze topology",
+          "nodes": [
+            {
+              "id": {
+                "key": "node:start",
+                "label": "Start"
+              },
+              "classes": [],
+              "x": 80.0,
+              "y": 150.0
+            },
+            {
+              "id": {
+                "key": "node:key_room",
+                "label": "Key room"
+              },
+              "classes": [
+                "current"
+              ],
+              "x": 240.0,
+              "y": 65.0
+            },
+            {
+              "id": {
+                "key": "node:door",
+                "label": "Door"
+              },
+              "classes": [],
+              "x": 410.0,
+              "y": 65.0
+            },
+            {
+              "id": {
+                "key": "node:detour",
+                "label": "Detour"
+              },
+              "classes": [],
+              "x": 310.0,
+              "y": 240.0
+            },
+            {
+              "id": {
+                "key": "node:exit",
+                "label": "Exit"
+              },
+              "classes": [
+                "goal"
+              ],
+              "x": 570.0,
+              "y": 150.0
+            }
+          ],
+          "edges": [
+            {
+              "id": "edge:0",
+              "source": "node:start",
+              "target": "node:key_room",
+              "label": "2 energy",
+              "classes": []
+            },
+            {
+              "id": "edge:1",
+              "source": "node:key_room",
+              "target": "node:door",
+              "label": "2 energy · door",
+              "classes": [
+                "locked"
+              ]
+            },
+            {
+              "id": "edge:2",
+              "source": "node:door",
+              "target": "node:exit",
+              "label": "2 energy",
+              "classes": []
+            },
+            {
+              "id": "edge:3",
+              "source": "node:start",
+              "target": "node:detour",
+              "label": "4 energy",
+              "classes": []
+            },
+            {
+              "id": "edge:4",
+              "source": "node:detour",
+              "target": "node:exit",
+              "label": "5 energy",
+              "classes": []
+            }
+          ],
+          "focus": "node:key_room"
+        }
+      },
+      "after": {
+        "index": 2,
+        "accounts": [
+          {
+            "account": {
+              "key": "account:agent",
+              "label": "Agent"
+            },
+            "balances": [
+              {
+                "asset": {
+                  "key": "asset:Active",
+                  "label": "Active"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:At(KeyRoom)",
+                  "label": "At Key room"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Energy",
+                  "label": "Energy"
+                },
+                "quantity": "7"
+              },
+              {
+                "asset": {
+                  "key": "asset:Key",
+                  "label": "Key"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:SpentEnergy",
+                  "label": "Spent energy"
+                },
+                "quantity": "2"
+              },
+              {
+                "asset": {
+                  "key": "asset:SpentTime",
+                  "label": "Spent time"
+                },
+                "quantity": "2"
+              },
+              {
+                "asset": {
+                  "key": "asset:Time",
+                  "label": "Time"
+                },
+                "quantity": "4"
+              }
+            ]
+          },
+          {
+            "account": {
+              "key": "account:world",
+              "label": "World"
+            },
+            "balances": [
+              {
+                "asset": {
+                  "key": "asset:Distance(Detour)",
+                  "label": "Distance from Detour"
+                },
+                "quantity": "5"
+              },
+              {
+                "asset": {
+                  "key": "asset:Distance(Door)",
+                  "label": "Distance from Door"
+                },
+                "quantity": "2"
+              },
+              {
+                "asset": {
+                  "key": "asset:Distance(KeyRoom)",
+                  "label": "Distance from Key room"
+                },
+                "quantity": "4"
+              },
+              {
+                "asset": {
+                  "key": "asset:Distance(Start)",
+                  "label": "Distance from Start"
+                },
+                "quantity": "6"
+              },
+              {
+                "asset": {
+                  "key": "asset:Edge(Detour, Exit)",
+                  "label": "Edge Detour → Exit"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Edge(Door, Exit)",
+                  "label": "Edge Door → Exit"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Edge(KeyRoom, Door)",
+                  "label": "Edge Key room → Door"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Edge(Start, Detour)",
+                  "label": "Edge Start → Detour"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Edge(Start, KeyRoom)",
+                  "label": "Edge Start → Key room"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Locked",
+                  "label": "Locked"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Target(Exit)",
+                  "label": "Target Exit"
+                },
+                "quantity": "1"
+              }
+            ]
+          }
+        ],
+        "scene": {
+          "kind": "graph",
+          "title": "Encoded maze topology",
+          "nodes": [
+            {
+              "id": {
+                "key": "node:start",
+                "label": "Start"
+              },
+              "classes": [],
+              "x": 80.0,
+              "y": 150.0
+            },
+            {
+              "id": {
+                "key": "node:key_room",
+                "label": "Key room"
+              },
+              "classes": [
+                "current"
+              ],
+              "x": 240.0,
+              "y": 65.0
+            },
+            {
+              "id": {
+                "key": "node:door",
+                "label": "Door"
+              },
+              "classes": [],
+              "x": 410.0,
+              "y": 65.0
+            },
+            {
+              "id": {
+                "key": "node:detour",
+                "label": "Detour"
+              },
+              "classes": [],
+              "x": 310.0,
+              "y": 240.0
+            },
+            {
+              "id": {
+                "key": "node:exit",
+                "label": "Exit"
+              },
+              "classes": [
+                "goal"
+              ],
+              "x": 570.0,
+              "y": 150.0
+            }
+          ],
+          "edges": [
+            {
+              "id": "edge:0",
+              "source": "node:start",
+              "target": "node:key_room",
+              "label": "2 energy",
+              "classes": []
+            },
+            {
+              "id": "edge:1",
+              "source": "node:key_room",
+              "target": "node:door",
+              "label": "2 energy · door",
+              "classes": [
+                "locked"
+              ]
+            },
+            {
+              "id": "edge:2",
+              "source": "node:door",
+              "target": "node:exit",
+              "label": "2 energy",
+              "classes": []
+            },
+            {
+              "id": "edge:3",
+              "source": "node:start",
+              "target": "node:detour",
+              "label": "4 energy",
+              "classes": []
+            },
+            {
+              "id": "edge:4",
+              "source": "node:detour",
+              "target": "node:exit",
+              "label": "5 energy",
+              "classes": []
+            }
+          ],
+          "focus": "node:key_room"
+        }
+      }
+    },
+    {
+      "index": 2,
+      "exchange": {
+        "rate": {
+          "key": "rate:UnlockDoor",
+          "label": "Unlock door"
+        },
+        "units": "1",
+        "bindings": [
+          {
+            "role": {
+              "key": "role:actor",
+              "label": "Actor"
+            },
+            "account": {
+              "key": "account:agent",
+              "label": "Agent"
+            }
+          },
+          {
+            "role": {
+              "key": "role:environment",
+              "label": "Environment"
+            },
+            "account": {
+              "key": "account:world",
+              "label": "World"
+            }
+          }
+        ]
+      },
+      "assessment": {
+        "status": "applicable",
+        "accounts": [
+          {
+            "account": {
+              "key": "account:agent",
+              "label": "Agent"
+            },
+            "available": [
+              {
+                "asset": {
+                  "key": "asset:Active",
+                  "label": "Active"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Key",
+                  "label": "Key"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Time",
+                  "label": "Time"
+                },
+                "quantity": "4"
+              }
+            ],
+            "required": [
+              {
+                "asset": {
+                  "key": "asset:Active",
+                  "label": "Active"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Key",
+                  "label": "Key"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Time",
+                  "label": "Time"
+                },
+                "quantity": "1"
+              }
+            ],
+            "consumed": [
+              {
+                "asset": {
+                  "key": "asset:Key",
+                  "label": "Key"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Time",
+                  "label": "Time"
+                },
+                "quantity": "1"
+              }
+            ],
+            "produced": [
+              {
+                "asset": {
+                  "key": "asset:SpentTime",
+                  "label": "Spent time"
+                },
+                "quantity": "1"
+              }
+            ],
+            "preserved": [
+              {
+                "asset": {
+                  "key": "asset:Active",
+                  "label": "Active"
+                },
+                "quantity": "1"
+              }
+            ]
+          },
+          {
+            "account": {
+              "key": "account:world",
+              "label": "World"
+            },
+            "available": [
+              {
+                "asset": {
+                  "key": "asset:Locked",
+                  "label": "Locked"
+                },
+                "quantity": "1"
+              }
+            ],
+            "required": [
+              {
+                "asset": {
+                  "key": "asset:Locked",
+                  "label": "Locked"
+                },
+                "quantity": "1"
+              }
+            ],
+            "consumed": [
+              {
+                "asset": {
+                  "key": "asset:Locked",
+                  "label": "Locked"
+                },
+                "quantity": "1"
+              }
+            ],
+            "produced": [
+              {
+                "asset": {
+                  "key": "asset:Open",
+                  "label": "Open"
+                },
+                "quantity": "1"
+              }
+            ],
+            "preserved": []
+          }
+        ],
+        "projected_deltas": [
+          {
+            "account": {
+              "key": "account:agent",
+              "label": "Agent"
+            },
+            "consumed": [
+              {
+                "asset": {
+                  "key": "asset:Key",
+                  "label": "Key"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Time",
+                  "label": "Time"
+                },
+                "quantity": "1"
+              }
+            ],
+            "produced": [
+              {
+                "asset": {
+                  "key": "asset:SpentTime",
+                  "label": "Spent time"
+                },
+                "quantity": "1"
+              }
+            ],
+            "preserved": [
+              {
+                "asset": {
+                  "key": "asset:Active",
+                  "label": "Active"
+                },
+                "quantity": "1"
+              }
+            ]
+          },
+          {
+            "account": {
+              "key": "account:world",
+              "label": "World"
+            },
+            "consumed": [
+              {
+                "asset": {
+                  "key": "asset:Locked",
+                  "label": "Locked"
+                },
+                "quantity": "1"
+              }
+            ],
+            "produced": [
+              {
+                "asset": {
+                  "key": "asset:Open",
+                  "label": "Open"
+                },
+                "quantity": "1"
+              }
+            ],
+            "preserved": []
+          }
+        ],
+        "shortfalls": [],
+        "issues": []
+      },
+      "receipt": {
+        "deltas": [
+          {
+            "account": {
+              "key": "account:agent",
+              "label": "Agent"
+            },
+            "consumed": [
+              {
+                "asset": {
+                  "key": "asset:Key",
+                  "label": "Key"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Time",
+                  "label": "Time"
+                },
+                "quantity": "1"
+              }
+            ],
+            "produced": [
+              {
+                "asset": {
+                  "key": "asset:SpentTime",
+                  "label": "Spent time"
+                },
+                "quantity": "1"
+              }
+            ],
+            "preserved": [
+              {
+                "asset": {
+                  "key": "asset:Active",
+                  "label": "Active"
+                },
+                "quantity": "1"
+              }
+            ]
+          },
+          {
+            "account": {
+              "key": "account:world",
+              "label": "World"
+            },
+            "consumed": [
+              {
+                "asset": {
+                  "key": "asset:Locked",
+                  "label": "Locked"
+                },
+                "quantity": "1"
+              }
+            ],
+            "produced": [
+              {
+                "asset": {
+                  "key": "asset:Open",
+                  "label": "Open"
+                },
+                "quantity": "1"
+              }
+            ],
+            "preserved": []
+          }
+        ]
+      },
+      "before": {
+        "index": 2,
+        "accounts": [
+          {
+            "account": {
+              "key": "account:agent",
+              "label": "Agent"
+            },
+            "balances": [
+              {
+                "asset": {
+                  "key": "asset:Active",
+                  "label": "Active"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:At(KeyRoom)",
+                  "label": "At Key room"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Energy",
+                  "label": "Energy"
+                },
+                "quantity": "7"
+              },
+              {
+                "asset": {
+                  "key": "asset:Key",
+                  "label": "Key"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:SpentEnergy",
+                  "label": "Spent energy"
+                },
+                "quantity": "2"
+              },
+              {
+                "asset": {
+                  "key": "asset:SpentTime",
+                  "label": "Spent time"
+                },
+                "quantity": "2"
+              },
+              {
+                "asset": {
+                  "key": "asset:Time",
+                  "label": "Time"
+                },
+                "quantity": "4"
+              }
+            ]
+          },
+          {
+            "account": {
+              "key": "account:world",
+              "label": "World"
+            },
+            "balances": [
+              {
+                "asset": {
+                  "key": "asset:Distance(Detour)",
+                  "label": "Distance from Detour"
+                },
+                "quantity": "5"
+              },
+              {
+                "asset": {
+                  "key": "asset:Distance(Door)",
+                  "label": "Distance from Door"
+                },
+                "quantity": "2"
+              },
+              {
+                "asset": {
+                  "key": "asset:Distance(KeyRoom)",
+                  "label": "Distance from Key room"
+                },
+                "quantity": "4"
+              },
+              {
+                "asset": {
+                  "key": "asset:Distance(Start)",
+                  "label": "Distance from Start"
+                },
+                "quantity": "6"
+              },
+              {
+                "asset": {
+                  "key": "asset:Edge(Detour, Exit)",
+                  "label": "Edge Detour → Exit"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Edge(Door, Exit)",
+                  "label": "Edge Door → Exit"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Edge(KeyRoom, Door)",
+                  "label": "Edge Key room → Door"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Edge(Start, Detour)",
+                  "label": "Edge Start → Detour"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Edge(Start, KeyRoom)",
+                  "label": "Edge Start → Key room"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Locked",
+                  "label": "Locked"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Target(Exit)",
+                  "label": "Target Exit"
+                },
+                "quantity": "1"
+              }
+            ]
+          }
+        ],
+        "scene": {
+          "kind": "graph",
+          "title": "Encoded maze topology",
+          "nodes": [
+            {
+              "id": {
+                "key": "node:start",
+                "label": "Start"
+              },
+              "classes": [],
+              "x": 80.0,
+              "y": 150.0
+            },
+            {
+              "id": {
+                "key": "node:key_room",
+                "label": "Key room"
+              },
+              "classes": [
+                "current"
+              ],
+              "x": 240.0,
+              "y": 65.0
+            },
+            {
+              "id": {
+                "key": "node:door",
+                "label": "Door"
+              },
+              "classes": [],
+              "x": 410.0,
+              "y": 65.0
+            },
+            {
+              "id": {
+                "key": "node:detour",
+                "label": "Detour"
+              },
+              "classes": [],
+              "x": 310.0,
+              "y": 240.0
+            },
+            {
+              "id": {
+                "key": "node:exit",
+                "label": "Exit"
+              },
+              "classes": [
+                "goal"
+              ],
+              "x": 570.0,
+              "y": 150.0
+            }
+          ],
+          "edges": [
+            {
+              "id": "edge:0",
+              "source": "node:start",
+              "target": "node:key_room",
+              "label": "2 energy",
+              "classes": []
+            },
+            {
+              "id": "edge:1",
+              "source": "node:key_room",
+              "target": "node:door",
+              "label": "2 energy · door",
+              "classes": [
+                "locked"
+              ]
+            },
+            {
+              "id": "edge:2",
+              "source": "node:door",
+              "target": "node:exit",
+              "label": "2 energy",
+              "classes": []
+            },
+            {
+              "id": "edge:3",
+              "source": "node:start",
+              "target": "node:detour",
+              "label": "4 energy",
+              "classes": []
+            },
+            {
+              "id": "edge:4",
+              "source": "node:detour",
+              "target": "node:exit",
+              "label": "5 energy",
+              "classes": []
+            }
+          ],
+          "focus": "node:key_room"
+        }
+      },
+      "after": {
+        "index": 3,
+        "accounts": [
+          {
+            "account": {
+              "key": "account:agent",
+              "label": "Agent"
+            },
+            "balances": [
+              {
+                "asset": {
+                  "key": "asset:Active",
+                  "label": "Active"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:At(KeyRoom)",
+                  "label": "At Key room"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Energy",
+                  "label": "Energy"
+                },
+                "quantity": "7"
+              },
+              {
+                "asset": {
+                  "key": "asset:SpentEnergy",
+                  "label": "Spent energy"
+                },
+                "quantity": "2"
+              },
+              {
+                "asset": {
+                  "key": "asset:SpentTime",
+                  "label": "Spent time"
+                },
+                "quantity": "3"
+              },
+              {
+                "asset": {
+                  "key": "asset:Time",
+                  "label": "Time"
+                },
+                "quantity": "3"
+              }
+            ]
+          },
+          {
+            "account": {
+              "key": "account:world",
+              "label": "World"
+            },
+            "balances": [
+              {
+                "asset": {
+                  "key": "asset:Distance(Detour)",
+                  "label": "Distance from Detour"
+                },
+                "quantity": "5"
+              },
+              {
+                "asset": {
+                  "key": "asset:Distance(Door)",
+                  "label": "Distance from Door"
+                },
+                "quantity": "2"
+              },
+              {
+                "asset": {
+                  "key": "asset:Distance(KeyRoom)",
+                  "label": "Distance from Key room"
+                },
+                "quantity": "4"
+              },
+              {
+                "asset": {
+                  "key": "asset:Distance(Start)",
+                  "label": "Distance from Start"
+                },
+                "quantity": "6"
+              },
+              {
+                "asset": {
+                  "key": "asset:Edge(Detour, Exit)",
+                  "label": "Edge Detour → Exit"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Edge(Door, Exit)",
+                  "label": "Edge Door → Exit"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Edge(KeyRoom, Door)",
+                  "label": "Edge Key room → Door"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Edge(Start, Detour)",
+                  "label": "Edge Start → Detour"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Edge(Start, KeyRoom)",
+                  "label": "Edge Start → Key room"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Open",
+                  "label": "Open"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Target(Exit)",
+                  "label": "Target Exit"
+                },
+                "quantity": "1"
+              }
+            ]
+          }
+        ],
+        "scene": {
+          "kind": "graph",
+          "title": "Encoded maze topology",
+          "nodes": [
+            {
+              "id": {
+                "key": "node:start",
+                "label": "Start"
+              },
+              "classes": [],
+              "x": 80.0,
+              "y": 150.0
+            },
+            {
+              "id": {
+                "key": "node:key_room",
+                "label": "Key room"
+              },
+              "classes": [
+                "current"
+              ],
+              "x": 240.0,
+              "y": 65.0
+            },
+            {
+              "id": {
+                "key": "node:door",
+                "label": "Door"
+              },
+              "classes": [],
+              "x": 410.0,
+              "y": 65.0
+            },
+            {
+              "id": {
+                "key": "node:detour",
+                "label": "Detour"
+              },
+              "classes": [],
+              "x": 310.0,
+              "y": 240.0
+            },
+            {
+              "id": {
+                "key": "node:exit",
+                "label": "Exit"
+              },
+              "classes": [
+                "goal"
+              ],
+              "x": 570.0,
+              "y": 150.0
+            }
+          ],
+          "edges": [
+            {
+              "id": "edge:0",
+              "source": "node:start",
+              "target": "node:key_room",
+              "label": "2 energy",
+              "classes": []
+            },
+            {
+              "id": "edge:1",
+              "source": "node:key_room",
+              "target": "node:door",
+              "label": "2 energy · door",
+              "classes": []
+            },
+            {
+              "id": "edge:2",
+              "source": "node:door",
+              "target": "node:exit",
+              "label": "2 energy",
+              "classes": []
+            },
+            {
+              "id": "edge:3",
+              "source": "node:start",
+              "target": "node:detour",
+              "label": "4 energy",
+              "classes": []
+            },
+            {
+              "id": "edge:4",
+              "source": "node:detour",
+              "target": "node:exit",
+              "label": "5 energy",
+              "classes": []
+            }
+          ],
+          "focus": "node:key_room"
+        }
+      }
+    },
+    {
+      "index": 3,
+      "exchange": {
+        "rate": {
+          "key": "rate:Move { from: KeyRoom, to: Door, energy: 2, needs_open_door: true }",
+          "label": "Move Key room → Door"
+        },
+        "units": "1",
+        "bindings": [
+          {
+            "role": {
+              "key": "role:actor",
+              "label": "Actor"
+            },
+            "account": {
+              "key": "account:agent",
+              "label": "Agent"
+            }
+          },
+          {
+            "role": {
+              "key": "role:environment",
+              "label": "Environment"
+            },
+            "account": {
+              "key": "account:world",
+              "label": "World"
+            }
+          }
+        ]
+      },
+      "assessment": {
+        "status": "applicable",
+        "accounts": [
+          {
+            "account": {
+              "key": "account:agent",
+              "label": "Agent"
+            },
+            "available": [
+              {
+                "asset": {
+                  "key": "asset:Active",
+                  "label": "Active"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:At(KeyRoom)",
+                  "label": "At Key room"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Energy",
+                  "label": "Energy"
+                },
+                "quantity": "7"
+              },
+              {
+                "asset": {
+                  "key": "asset:Time",
+                  "label": "Time"
+                },
+                "quantity": "3"
+              }
+            ],
+            "required": [
+              {
+                "asset": {
+                  "key": "asset:Active",
+                  "label": "Active"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:At(KeyRoom)",
+                  "label": "At Key room"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Energy",
+                  "label": "Energy"
+                },
+                "quantity": "2"
+              },
+              {
+                "asset": {
+                  "key": "asset:Time",
+                  "label": "Time"
+                },
+                "quantity": "1"
+              }
+            ],
+            "consumed": [
+              {
+                "asset": {
+                  "key": "asset:At(KeyRoom)",
+                  "label": "At Key room"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Energy",
+                  "label": "Energy"
+                },
+                "quantity": "2"
+              },
+              {
+                "asset": {
+                  "key": "asset:Time",
+                  "label": "Time"
+                },
+                "quantity": "1"
+              }
+            ],
+            "produced": [
+              {
+                "asset": {
+                  "key": "asset:At(Door)",
+                  "label": "At Door"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:SpentEnergy",
+                  "label": "Spent energy"
+                },
+                "quantity": "2"
+              },
+              {
+                "asset": {
+                  "key": "asset:SpentTime",
+                  "label": "Spent time"
+                },
+                "quantity": "1"
+              }
+            ],
+            "preserved": [
+              {
+                "asset": {
+                  "key": "asset:Active",
+                  "label": "Active"
+                },
+                "quantity": "1"
+              }
+            ]
+          },
+          {
+            "account": {
+              "key": "account:world",
+              "label": "World"
+            },
+            "available": [
+              {
+                "asset": {
+                  "key": "asset:Edge(KeyRoom, Door)",
+                  "label": "Edge Key room → Door"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Open",
+                  "label": "Open"
+                },
+                "quantity": "1"
+              }
+            ],
+            "required": [
+              {
+                "asset": {
+                  "key": "asset:Edge(KeyRoom, Door)",
+                  "label": "Edge Key room → Door"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Open",
+                  "label": "Open"
+                },
+                "quantity": "1"
+              }
+            ],
+            "consumed": [],
+            "produced": [],
+            "preserved": [
+              {
+                "asset": {
+                  "key": "asset:Edge(KeyRoom, Door)",
+                  "label": "Edge Key room → Door"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Open",
+                  "label": "Open"
+                },
+                "quantity": "1"
+              }
+            ]
+          }
+        ],
+        "projected_deltas": [
+          {
+            "account": {
+              "key": "account:agent",
+              "label": "Agent"
+            },
+            "consumed": [
+              {
+                "asset": {
+                  "key": "asset:At(KeyRoom)",
+                  "label": "At Key room"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Energy",
+                  "label": "Energy"
+                },
+                "quantity": "2"
+              },
+              {
+                "asset": {
+                  "key": "asset:Time",
+                  "label": "Time"
+                },
+                "quantity": "1"
+              }
+            ],
+            "produced": [
+              {
+                "asset": {
+                  "key": "asset:At(Door)",
+                  "label": "At Door"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:SpentEnergy",
+                  "label": "Spent energy"
+                },
+                "quantity": "2"
+              },
+              {
+                "asset": {
+                  "key": "asset:SpentTime",
+                  "label": "Spent time"
+                },
+                "quantity": "1"
+              }
+            ],
+            "preserved": [
+              {
+                "asset": {
+                  "key": "asset:Active",
+                  "label": "Active"
+                },
+                "quantity": "1"
+              }
+            ]
+          },
+          {
+            "account": {
+              "key": "account:world",
+              "label": "World"
+            },
+            "consumed": [],
+            "produced": [],
+            "preserved": [
+              {
+                "asset": {
+                  "key": "asset:Edge(KeyRoom, Door)",
+                  "label": "Edge Key room → Door"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Open",
+                  "label": "Open"
+                },
+                "quantity": "1"
+              }
+            ]
+          }
+        ],
+        "shortfalls": [],
+        "issues": []
+      },
+      "receipt": {
+        "deltas": [
+          {
+            "account": {
+              "key": "account:agent",
+              "label": "Agent"
+            },
+            "consumed": [
+              {
+                "asset": {
+                  "key": "asset:At(KeyRoom)",
+                  "label": "At Key room"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Energy",
+                  "label": "Energy"
+                },
+                "quantity": "2"
+              },
+              {
+                "asset": {
+                  "key": "asset:Time",
+                  "label": "Time"
+                },
+                "quantity": "1"
+              }
+            ],
+            "produced": [
+              {
+                "asset": {
+                  "key": "asset:At(Door)",
+                  "label": "At Door"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:SpentEnergy",
+                  "label": "Spent energy"
+                },
+                "quantity": "2"
+              },
+              {
+                "asset": {
+                  "key": "asset:SpentTime",
+                  "label": "Spent time"
+                },
+                "quantity": "1"
+              }
+            ],
+            "preserved": [
+              {
+                "asset": {
+                  "key": "asset:Active",
+                  "label": "Active"
+                },
+                "quantity": "1"
+              }
+            ]
+          },
+          {
+            "account": {
+              "key": "account:world",
+              "label": "World"
+            },
+            "consumed": [],
+            "produced": [],
+            "preserved": [
+              {
+                "asset": {
+                  "key": "asset:Edge(KeyRoom, Door)",
+                  "label": "Edge Key room → Door"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Open",
+                  "label": "Open"
+                },
+                "quantity": "1"
+              }
+            ]
+          }
+        ]
+      },
+      "before": {
+        "index": 3,
+        "accounts": [
+          {
+            "account": {
+              "key": "account:agent",
+              "label": "Agent"
+            },
+            "balances": [
+              {
+                "asset": {
+                  "key": "asset:Active",
+                  "label": "Active"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:At(KeyRoom)",
+                  "label": "At Key room"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Energy",
+                  "label": "Energy"
+                },
+                "quantity": "7"
+              },
+              {
+                "asset": {
+                  "key": "asset:SpentEnergy",
+                  "label": "Spent energy"
+                },
+                "quantity": "2"
+              },
+              {
+                "asset": {
+                  "key": "asset:SpentTime",
+                  "label": "Spent time"
+                },
+                "quantity": "3"
+              },
+              {
+                "asset": {
+                  "key": "asset:Time",
+                  "label": "Time"
+                },
+                "quantity": "3"
+              }
+            ]
+          },
+          {
+            "account": {
+              "key": "account:world",
+              "label": "World"
+            },
+            "balances": [
+              {
+                "asset": {
+                  "key": "asset:Distance(Detour)",
+                  "label": "Distance from Detour"
+                },
+                "quantity": "5"
+              },
+              {
+                "asset": {
+                  "key": "asset:Distance(Door)",
+                  "label": "Distance from Door"
+                },
+                "quantity": "2"
+              },
+              {
+                "asset": {
+                  "key": "asset:Distance(KeyRoom)",
+                  "label": "Distance from Key room"
+                },
+                "quantity": "4"
+              },
+              {
+                "asset": {
+                  "key": "asset:Distance(Start)",
+                  "label": "Distance from Start"
+                },
+                "quantity": "6"
+              },
+              {
+                "asset": {
+                  "key": "asset:Edge(Detour, Exit)",
+                  "label": "Edge Detour → Exit"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Edge(Door, Exit)",
+                  "label": "Edge Door → Exit"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Edge(KeyRoom, Door)",
+                  "label": "Edge Key room → Door"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Edge(Start, Detour)",
+                  "label": "Edge Start → Detour"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Edge(Start, KeyRoom)",
+                  "label": "Edge Start → Key room"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Open",
+                  "label": "Open"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Target(Exit)",
+                  "label": "Target Exit"
+                },
+                "quantity": "1"
+              }
+            ]
+          }
+        ],
+        "scene": {
+          "kind": "graph",
+          "title": "Encoded maze topology",
+          "nodes": [
+            {
+              "id": {
+                "key": "node:start",
+                "label": "Start"
+              },
+              "classes": [],
+              "x": 80.0,
+              "y": 150.0
+            },
+            {
+              "id": {
+                "key": "node:key_room",
+                "label": "Key room"
+              },
+              "classes": [
+                "current"
+              ],
+              "x": 240.0,
+              "y": 65.0
+            },
+            {
+              "id": {
+                "key": "node:door",
+                "label": "Door"
+              },
+              "classes": [],
+              "x": 410.0,
+              "y": 65.0
+            },
+            {
+              "id": {
+                "key": "node:detour",
+                "label": "Detour"
+              },
+              "classes": [],
+              "x": 310.0,
+              "y": 240.0
+            },
+            {
+              "id": {
+                "key": "node:exit",
+                "label": "Exit"
+              },
+              "classes": [
+                "goal"
+              ],
+              "x": 570.0,
+              "y": 150.0
+            }
+          ],
+          "edges": [
+            {
+              "id": "edge:0",
+              "source": "node:start",
+              "target": "node:key_room",
+              "label": "2 energy",
+              "classes": []
+            },
+            {
+              "id": "edge:1",
+              "source": "node:key_room",
+              "target": "node:door",
+              "label": "2 energy · door",
+              "classes": []
+            },
+            {
+              "id": "edge:2",
+              "source": "node:door",
+              "target": "node:exit",
+              "label": "2 energy",
+              "classes": []
+            },
+            {
+              "id": "edge:3",
+              "source": "node:start",
+              "target": "node:detour",
+              "label": "4 energy",
+              "classes": []
+            },
+            {
+              "id": "edge:4",
+              "source": "node:detour",
+              "target": "node:exit",
+              "label": "5 energy",
+              "classes": []
+            }
+          ],
+          "focus": "node:key_room"
+        }
+      },
+      "after": {
+        "index": 4,
+        "accounts": [
+          {
+            "account": {
+              "key": "account:agent",
+              "label": "Agent"
+            },
+            "balances": [
+              {
+                "asset": {
+                  "key": "asset:Active",
+                  "label": "Active"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:At(Door)",
+                  "label": "At Door"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Energy",
+                  "label": "Energy"
+                },
+                "quantity": "5"
+              },
+              {
+                "asset": {
+                  "key": "asset:SpentEnergy",
+                  "label": "Spent energy"
+                },
+                "quantity": "4"
+              },
+              {
+                "asset": {
+                  "key": "asset:SpentTime",
+                  "label": "Spent time"
+                },
+                "quantity": "4"
+              },
+              {
+                "asset": {
+                  "key": "asset:Time",
+                  "label": "Time"
+                },
+                "quantity": "2"
+              }
+            ]
+          },
+          {
+            "account": {
+              "key": "account:world",
+              "label": "World"
+            },
+            "balances": [
+              {
+                "asset": {
+                  "key": "asset:Distance(Detour)",
+                  "label": "Distance from Detour"
+                },
+                "quantity": "5"
+              },
+              {
+                "asset": {
+                  "key": "asset:Distance(Door)",
+                  "label": "Distance from Door"
+                },
+                "quantity": "2"
+              },
+              {
+                "asset": {
+                  "key": "asset:Distance(KeyRoom)",
+                  "label": "Distance from Key room"
+                },
+                "quantity": "4"
+              },
+              {
+                "asset": {
+                  "key": "asset:Distance(Start)",
+                  "label": "Distance from Start"
+                },
+                "quantity": "6"
+              },
+              {
+                "asset": {
+                  "key": "asset:Edge(Detour, Exit)",
+                  "label": "Edge Detour → Exit"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Edge(Door, Exit)",
+                  "label": "Edge Door → Exit"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Edge(KeyRoom, Door)",
+                  "label": "Edge Key room → Door"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Edge(Start, Detour)",
+                  "label": "Edge Start → Detour"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Edge(Start, KeyRoom)",
+                  "label": "Edge Start → Key room"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Open",
+                  "label": "Open"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Target(Exit)",
+                  "label": "Target Exit"
+                },
+                "quantity": "1"
+              }
+            ]
+          }
+        ],
+        "scene": {
+          "kind": "graph",
+          "title": "Encoded maze topology",
+          "nodes": [
+            {
+              "id": {
+                "key": "node:start",
+                "label": "Start"
+              },
+              "classes": [],
+              "x": 80.0,
+              "y": 150.0
+            },
+            {
+              "id": {
+                "key": "node:key_room",
+                "label": "Key room"
+              },
+              "classes": [],
+              "x": 240.0,
+              "y": 65.0
+            },
+            {
+              "id": {
+                "key": "node:door",
+                "label": "Door"
+              },
+              "classes": [
+                "current"
+              ],
+              "x": 410.0,
+              "y": 65.0
+            },
+            {
+              "id": {
+                "key": "node:detour",
+                "label": "Detour"
+              },
+              "classes": [],
+              "x": 310.0,
+              "y": 240.0
+            },
+            {
+              "id": {
+                "key": "node:exit",
+                "label": "Exit"
+              },
+              "classes": [
+                "goal"
+              ],
+              "x": 570.0,
+              "y": 150.0
+            }
+          ],
+          "edges": [
+            {
+              "id": "edge:0",
+              "source": "node:start",
+              "target": "node:key_room",
+              "label": "2 energy",
+              "classes": []
+            },
+            {
+              "id": "edge:1",
+              "source": "node:key_room",
+              "target": "node:door",
+              "label": "2 energy · door",
+              "classes": []
+            },
+            {
+              "id": "edge:2",
+              "source": "node:door",
+              "target": "node:exit",
+              "label": "2 energy",
+              "classes": []
+            },
+            {
+              "id": "edge:3",
+              "source": "node:start",
+              "target": "node:detour",
+              "label": "4 energy",
+              "classes": []
+            },
+            {
+              "id": "edge:4",
+              "source": "node:detour",
+              "target": "node:exit",
+              "label": "5 energy",
+              "classes": []
+            }
+          ],
+          "focus": "node:door"
+        }
+      }
+    },
+    {
+      "index": 4,
+      "exchange": {
+        "rate": {
+          "key": "rate:Move { from: Door, to: Exit, energy: 2, needs_open_door: false }",
+          "label": "Move Door → Exit"
+        },
+        "units": "1",
+        "bindings": [
+          {
+            "role": {
+              "key": "role:actor",
+              "label": "Actor"
+            },
+            "account": {
+              "key": "account:agent",
+              "label": "Agent"
+            }
+          },
+          {
+            "role": {
+              "key": "role:environment",
+              "label": "Environment"
+            },
+            "account": {
+              "key": "account:world",
+              "label": "World"
+            }
+          }
+        ]
+      },
+      "assessment": {
+        "status": "applicable",
+        "accounts": [
+          {
+            "account": {
+              "key": "account:agent",
+              "label": "Agent"
+            },
+            "available": [
+              {
+                "asset": {
+                  "key": "asset:Active",
+                  "label": "Active"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:At(Door)",
+                  "label": "At Door"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Energy",
+                  "label": "Energy"
+                },
+                "quantity": "5"
+              },
+              {
+                "asset": {
+                  "key": "asset:Time",
+                  "label": "Time"
+                },
+                "quantity": "2"
+              }
+            ],
+            "required": [
+              {
+                "asset": {
+                  "key": "asset:Active",
+                  "label": "Active"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:At(Door)",
+                  "label": "At Door"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Energy",
+                  "label": "Energy"
+                },
+                "quantity": "2"
+              },
+              {
+                "asset": {
+                  "key": "asset:Time",
+                  "label": "Time"
+                },
+                "quantity": "1"
+              }
+            ],
+            "consumed": [
+              {
+                "asset": {
+                  "key": "asset:At(Door)",
+                  "label": "At Door"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Energy",
+                  "label": "Energy"
+                },
+                "quantity": "2"
+              },
+              {
+                "asset": {
+                  "key": "asset:Time",
+                  "label": "Time"
+                },
+                "quantity": "1"
+              }
+            ],
+            "produced": [
+              {
+                "asset": {
+                  "key": "asset:At(Exit)",
+                  "label": "At Exit"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:SpentEnergy",
+                  "label": "Spent energy"
+                },
+                "quantity": "2"
+              },
+              {
+                "asset": {
+                  "key": "asset:SpentTime",
+                  "label": "Spent time"
+                },
+                "quantity": "1"
+              }
+            ],
+            "preserved": [
+              {
+                "asset": {
+                  "key": "asset:Active",
+                  "label": "Active"
+                },
+                "quantity": "1"
+              }
+            ]
+          },
+          {
+            "account": {
+              "key": "account:world",
+              "label": "World"
+            },
+            "available": [
+              {
+                "asset": {
+                  "key": "asset:Edge(Door, Exit)",
+                  "label": "Edge Door → Exit"
+                },
+                "quantity": "1"
+              }
+            ],
+            "required": [
+              {
+                "asset": {
+                  "key": "asset:Edge(Door, Exit)",
+                  "label": "Edge Door → Exit"
+                },
+                "quantity": "1"
+              }
+            ],
+            "consumed": [],
+            "produced": [],
+            "preserved": [
+              {
+                "asset": {
+                  "key": "asset:Edge(Door, Exit)",
+                  "label": "Edge Door → Exit"
+                },
+                "quantity": "1"
+              }
+            ]
+          }
+        ],
+        "projected_deltas": [
+          {
+            "account": {
+              "key": "account:agent",
+              "label": "Agent"
+            },
+            "consumed": [
+              {
+                "asset": {
+                  "key": "asset:At(Door)",
+                  "label": "At Door"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Energy",
+                  "label": "Energy"
+                },
+                "quantity": "2"
+              },
+              {
+                "asset": {
+                  "key": "asset:Time",
+                  "label": "Time"
+                },
+                "quantity": "1"
+              }
+            ],
+            "produced": [
+              {
+                "asset": {
+                  "key": "asset:At(Exit)",
+                  "label": "At Exit"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:SpentEnergy",
+                  "label": "Spent energy"
+                },
+                "quantity": "2"
+              },
+              {
+                "asset": {
+                  "key": "asset:SpentTime",
+                  "label": "Spent time"
+                },
+                "quantity": "1"
+              }
+            ],
+            "preserved": [
+              {
+                "asset": {
+                  "key": "asset:Active",
+                  "label": "Active"
+                },
+                "quantity": "1"
+              }
+            ]
+          },
+          {
+            "account": {
+              "key": "account:world",
+              "label": "World"
+            },
+            "consumed": [],
+            "produced": [],
+            "preserved": [
+              {
+                "asset": {
+                  "key": "asset:Edge(Door, Exit)",
+                  "label": "Edge Door → Exit"
+                },
+                "quantity": "1"
+              }
+            ]
+          }
+        ],
+        "shortfalls": [],
+        "issues": []
+      },
+      "receipt": {
+        "deltas": [
+          {
+            "account": {
+              "key": "account:agent",
+              "label": "Agent"
+            },
+            "consumed": [
+              {
+                "asset": {
+                  "key": "asset:At(Door)",
+                  "label": "At Door"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Energy",
+                  "label": "Energy"
+                },
+                "quantity": "2"
+              },
+              {
+                "asset": {
+                  "key": "asset:Time",
+                  "label": "Time"
+                },
+                "quantity": "1"
+              }
+            ],
+            "produced": [
+              {
+                "asset": {
+                  "key": "asset:At(Exit)",
+                  "label": "At Exit"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:SpentEnergy",
+                  "label": "Spent energy"
+                },
+                "quantity": "2"
+              },
+              {
+                "asset": {
+                  "key": "asset:SpentTime",
+                  "label": "Spent time"
+                },
+                "quantity": "1"
+              }
+            ],
+            "preserved": [
+              {
+                "asset": {
+                  "key": "asset:Active",
+                  "label": "Active"
+                },
+                "quantity": "1"
+              }
+            ]
+          },
+          {
+            "account": {
+              "key": "account:world",
+              "label": "World"
+            },
+            "consumed": [],
+            "produced": [],
+            "preserved": [
+              {
+                "asset": {
+                  "key": "asset:Edge(Door, Exit)",
+                  "label": "Edge Door → Exit"
+                },
+                "quantity": "1"
+              }
+            ]
+          }
+        ]
+      },
+      "before": {
+        "index": 4,
+        "accounts": [
+          {
+            "account": {
+              "key": "account:agent",
+              "label": "Agent"
+            },
+            "balances": [
+              {
+                "asset": {
+                  "key": "asset:Active",
+                  "label": "Active"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:At(Door)",
+                  "label": "At Door"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Energy",
+                  "label": "Energy"
+                },
+                "quantity": "5"
+              },
+              {
+                "asset": {
+                  "key": "asset:SpentEnergy",
+                  "label": "Spent energy"
+                },
+                "quantity": "4"
+              },
+              {
+                "asset": {
+                  "key": "asset:SpentTime",
+                  "label": "Spent time"
+                },
+                "quantity": "4"
+              },
+              {
+                "asset": {
+                  "key": "asset:Time",
+                  "label": "Time"
+                },
+                "quantity": "2"
+              }
+            ]
+          },
+          {
+            "account": {
+              "key": "account:world",
+              "label": "World"
+            },
+            "balances": [
+              {
+                "asset": {
+                  "key": "asset:Distance(Detour)",
+                  "label": "Distance from Detour"
+                },
+                "quantity": "5"
+              },
+              {
+                "asset": {
+                  "key": "asset:Distance(Door)",
+                  "label": "Distance from Door"
+                },
+                "quantity": "2"
+              },
+              {
+                "asset": {
+                  "key": "asset:Distance(KeyRoom)",
+                  "label": "Distance from Key room"
+                },
+                "quantity": "4"
+              },
+              {
+                "asset": {
+                  "key": "asset:Distance(Start)",
+                  "label": "Distance from Start"
+                },
+                "quantity": "6"
+              },
+              {
+                "asset": {
+                  "key": "asset:Edge(Detour, Exit)",
+                  "label": "Edge Detour → Exit"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Edge(Door, Exit)",
+                  "label": "Edge Door → Exit"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Edge(KeyRoom, Door)",
+                  "label": "Edge Key room → Door"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Edge(Start, Detour)",
+                  "label": "Edge Start → Detour"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Edge(Start, KeyRoom)",
+                  "label": "Edge Start → Key room"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Open",
+                  "label": "Open"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Target(Exit)",
+                  "label": "Target Exit"
+                },
+                "quantity": "1"
+              }
+            ]
+          }
+        ],
+        "scene": {
+          "kind": "graph",
+          "title": "Encoded maze topology",
+          "nodes": [
+            {
+              "id": {
+                "key": "node:start",
+                "label": "Start"
+              },
+              "classes": [],
+              "x": 80.0,
+              "y": 150.0
+            },
+            {
+              "id": {
+                "key": "node:key_room",
+                "label": "Key room"
+              },
+              "classes": [],
+              "x": 240.0,
+              "y": 65.0
+            },
+            {
+              "id": {
+                "key": "node:door",
+                "label": "Door"
+              },
+              "classes": [
+                "current"
+              ],
+              "x": 410.0,
+              "y": 65.0
+            },
+            {
+              "id": {
+                "key": "node:detour",
+                "label": "Detour"
+              },
+              "classes": [],
+              "x": 310.0,
+              "y": 240.0
+            },
+            {
+              "id": {
+                "key": "node:exit",
+                "label": "Exit"
+              },
+              "classes": [
+                "goal"
+              ],
+              "x": 570.0,
+              "y": 150.0
+            }
+          ],
+          "edges": [
+            {
+              "id": "edge:0",
+              "source": "node:start",
+              "target": "node:key_room",
+              "label": "2 energy",
+              "classes": []
+            },
+            {
+              "id": "edge:1",
+              "source": "node:key_room",
+              "target": "node:door",
+              "label": "2 energy · door",
+              "classes": []
+            },
+            {
+              "id": "edge:2",
+              "source": "node:door",
+              "target": "node:exit",
+              "label": "2 energy",
+              "classes": []
+            },
+            {
+              "id": "edge:3",
+              "source": "node:start",
+              "target": "node:detour",
+              "label": "4 energy",
+              "classes": []
+            },
+            {
+              "id": "edge:4",
+              "source": "node:detour",
+              "target": "node:exit",
+              "label": "5 energy",
+              "classes": []
+            }
+          ],
+          "focus": "node:door"
+        }
+      },
+      "after": {
+        "index": 5,
+        "accounts": [
+          {
+            "account": {
+              "key": "account:agent",
+              "label": "Agent"
+            },
+            "balances": [
+              {
+                "asset": {
+                  "key": "asset:Active",
+                  "label": "Active"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:At(Exit)",
+                  "label": "At Exit"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Energy",
+                  "label": "Energy"
+                },
+                "quantity": "3"
+              },
+              {
+                "asset": {
+                  "key": "asset:SpentEnergy",
+                  "label": "Spent energy"
+                },
+                "quantity": "6"
+              },
+              {
+                "asset": {
+                  "key": "asset:SpentTime",
+                  "label": "Spent time"
+                },
+                "quantity": "5"
+              },
+              {
+                "asset": {
+                  "key": "asset:Time",
+                  "label": "Time"
+                },
+                "quantity": "1"
+              }
+            ]
+          },
+          {
+            "account": {
+              "key": "account:world",
+              "label": "World"
+            },
+            "balances": [
+              {
+                "asset": {
+                  "key": "asset:Distance(Detour)",
+                  "label": "Distance from Detour"
+                },
+                "quantity": "5"
+              },
+              {
+                "asset": {
+                  "key": "asset:Distance(Door)",
+                  "label": "Distance from Door"
+                },
+                "quantity": "2"
+              },
+              {
+                "asset": {
+                  "key": "asset:Distance(KeyRoom)",
+                  "label": "Distance from Key room"
+                },
+                "quantity": "4"
+              },
+              {
+                "asset": {
+                  "key": "asset:Distance(Start)",
+                  "label": "Distance from Start"
+                },
+                "quantity": "6"
+              },
+              {
+                "asset": {
+                  "key": "asset:Edge(Detour, Exit)",
+                  "label": "Edge Detour → Exit"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Edge(Door, Exit)",
+                  "label": "Edge Door → Exit"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Edge(KeyRoom, Door)",
+                  "label": "Edge Key room → Door"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Edge(Start, Detour)",
+                  "label": "Edge Start → Detour"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Edge(Start, KeyRoom)",
+                  "label": "Edge Start → Key room"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Open",
+                  "label": "Open"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Target(Exit)",
+                  "label": "Target Exit"
+                },
+                "quantity": "1"
+              }
+            ]
+          }
+        ],
+        "scene": {
+          "kind": "graph",
+          "title": "Encoded maze topology",
+          "nodes": [
+            {
+              "id": {
+                "key": "node:start",
+                "label": "Start"
+              },
+              "classes": [],
+              "x": 80.0,
+              "y": 150.0
+            },
+            {
+              "id": {
+                "key": "node:key_room",
+                "label": "Key room"
+              },
+              "classes": [],
+              "x": 240.0,
+              "y": 65.0
+            },
+            {
+              "id": {
+                "key": "node:door",
+                "label": "Door"
+              },
+              "classes": [],
+              "x": 410.0,
+              "y": 65.0
+            },
+            {
+              "id": {
+                "key": "node:detour",
+                "label": "Detour"
+              },
+              "classes": [],
+              "x": 310.0,
+              "y": 240.0
+            },
+            {
+              "id": {
+                "key": "node:exit",
+                "label": "Exit"
+              },
+              "classes": [
+                "current",
+                "goal"
+              ],
+              "x": 570.0,
+              "y": 150.0
+            }
+          ],
+          "edges": [
+            {
+              "id": "edge:0",
+              "source": "node:start",
+              "target": "node:key_room",
+              "label": "2 energy",
+              "classes": []
+            },
+            {
+              "id": "edge:1",
+              "source": "node:key_room",
+              "target": "node:door",
+              "label": "2 energy · door",
+              "classes": []
+            },
+            {
+              "id": "edge:2",
+              "source": "node:door",
+              "target": "node:exit",
+              "label": "2 energy",
+              "classes": []
+            },
+            {
+              "id": "edge:3",
+              "source": "node:start",
+              "target": "node:detour",
+              "label": "4 energy",
+              "classes": []
+            },
+            {
+              "id": "edge:4",
+              "source": "node:detour",
+              "target": "node:exit",
+              "label": "5 energy",
+              "classes": []
+            }
+          ],
+          "focus": "node:exit"
+        }
+      }
+    },
+    {
+      "index": 5,
+      "exchange": {
+        "rate": {
+          "key": "rate:Finish",
+          "label": "Finish"
+        },
+        "units": "1",
+        "bindings": [
+          {
+            "role": {
+              "key": "role:actor",
+              "label": "Actor"
+            },
+            "account": {
+              "key": "account:agent",
+              "label": "Agent"
+            }
+          },
+          {
+            "role": {
+              "key": "role:environment",
+              "label": "Environment"
+            },
+            "account": {
+              "key": "account:world",
+              "label": "World"
+            }
+          }
+        ]
+      },
+      "assessment": {
+        "status": "applicable",
+        "accounts": [
+          {
+            "account": {
+              "key": "account:agent",
+              "label": "Agent"
+            },
+            "available": [
+              {
+                "asset": {
+                  "key": "asset:Active",
+                  "label": "Active"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:At(Exit)",
+                  "label": "At Exit"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Time",
+                  "label": "Time"
+                },
+                "quantity": "1"
+              }
+            ],
+            "required": [
+              {
+                "asset": {
+                  "key": "asset:Active",
+                  "label": "Active"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:At(Exit)",
+                  "label": "At Exit"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Time",
+                  "label": "Time"
+                },
+                "quantity": "1"
+              }
+            ],
+            "consumed": [
+              {
+                "asset": {
+                  "key": "asset:Active",
+                  "label": "Active"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Time",
+                  "label": "Time"
+                },
+                "quantity": "1"
+              }
+            ],
+            "produced": [
+              {
+                "asset": {
+                  "key": "asset:Solved",
+                  "label": "Solved"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:SpentTime",
+                  "label": "Spent time"
+                },
+                "quantity": "1"
+              }
+            ],
+            "preserved": [
+              {
+                "asset": {
+                  "key": "asset:At(Exit)",
+                  "label": "At Exit"
+                },
+                "quantity": "1"
+              }
+            ]
+          },
+          {
+            "account": {
+              "key": "account:world",
+              "label": "World"
+            },
+            "available": [
+              {
+                "asset": {
+                  "key": "asset:Target(Exit)",
+                  "label": "Target Exit"
+                },
+                "quantity": "1"
+              }
+            ],
+            "required": [
+              {
+                "asset": {
+                  "key": "asset:Target(Exit)",
+                  "label": "Target Exit"
+                },
+                "quantity": "1"
+              }
+            ],
+            "consumed": [],
+            "produced": [],
+            "preserved": [
+              {
+                "asset": {
+                  "key": "asset:Target(Exit)",
+                  "label": "Target Exit"
+                },
+                "quantity": "1"
+              }
+            ]
+          }
+        ],
+        "projected_deltas": [
+          {
+            "account": {
+              "key": "account:agent",
+              "label": "Agent"
+            },
+            "consumed": [
+              {
+                "asset": {
+                  "key": "asset:Active",
+                  "label": "Active"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Time",
+                  "label": "Time"
+                },
+                "quantity": "1"
+              }
+            ],
+            "produced": [
+              {
+                "asset": {
+                  "key": "asset:Solved",
+                  "label": "Solved"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:SpentTime",
+                  "label": "Spent time"
+                },
+                "quantity": "1"
+              }
+            ],
+            "preserved": [
+              {
+                "asset": {
+                  "key": "asset:At(Exit)",
+                  "label": "At Exit"
+                },
+                "quantity": "1"
+              }
+            ]
+          },
+          {
+            "account": {
+              "key": "account:world",
+              "label": "World"
+            },
+            "consumed": [],
+            "produced": [],
+            "preserved": [
+              {
+                "asset": {
+                  "key": "asset:Target(Exit)",
+                  "label": "Target Exit"
+                },
+                "quantity": "1"
+              }
+            ]
+          }
+        ],
+        "shortfalls": [],
+        "issues": []
+      },
+      "receipt": {
+        "deltas": [
+          {
+            "account": {
+              "key": "account:agent",
+              "label": "Agent"
+            },
+            "consumed": [
+              {
+                "asset": {
+                  "key": "asset:Active",
+                  "label": "Active"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Time",
+                  "label": "Time"
+                },
+                "quantity": "1"
+              }
+            ],
+            "produced": [
+              {
+                "asset": {
+                  "key": "asset:Solved",
+                  "label": "Solved"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:SpentTime",
+                  "label": "Spent time"
+                },
+                "quantity": "1"
+              }
+            ],
+            "preserved": [
+              {
+                "asset": {
+                  "key": "asset:At(Exit)",
+                  "label": "At Exit"
+                },
+                "quantity": "1"
+              }
+            ]
+          },
+          {
+            "account": {
+              "key": "account:world",
+              "label": "World"
+            },
+            "consumed": [],
+            "produced": [],
+            "preserved": [
+              {
+                "asset": {
+                  "key": "asset:Target(Exit)",
+                  "label": "Target Exit"
+                },
+                "quantity": "1"
+              }
+            ]
+          }
+        ]
+      },
+      "before": {
+        "index": 5,
+        "accounts": [
+          {
+            "account": {
+              "key": "account:agent",
+              "label": "Agent"
+            },
+            "balances": [
+              {
+                "asset": {
+                  "key": "asset:Active",
+                  "label": "Active"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:At(Exit)",
+                  "label": "At Exit"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Energy",
+                  "label": "Energy"
+                },
+                "quantity": "3"
+              },
+              {
+                "asset": {
+                  "key": "asset:SpentEnergy",
+                  "label": "Spent energy"
+                },
+                "quantity": "6"
+              },
+              {
+                "asset": {
+                  "key": "asset:SpentTime",
+                  "label": "Spent time"
+                },
+                "quantity": "5"
+              },
+              {
+                "asset": {
+                  "key": "asset:Time",
+                  "label": "Time"
+                },
+                "quantity": "1"
+              }
+            ]
+          },
+          {
+            "account": {
+              "key": "account:world",
+              "label": "World"
+            },
+            "balances": [
+              {
+                "asset": {
+                  "key": "asset:Distance(Detour)",
+                  "label": "Distance from Detour"
+                },
+                "quantity": "5"
+              },
+              {
+                "asset": {
+                  "key": "asset:Distance(Door)",
+                  "label": "Distance from Door"
+                },
+                "quantity": "2"
+              },
+              {
+                "asset": {
+                  "key": "asset:Distance(KeyRoom)",
+                  "label": "Distance from Key room"
+                },
+                "quantity": "4"
+              },
+              {
+                "asset": {
+                  "key": "asset:Distance(Start)",
+                  "label": "Distance from Start"
+                },
+                "quantity": "6"
+              },
+              {
+                "asset": {
+                  "key": "asset:Edge(Detour, Exit)",
+                  "label": "Edge Detour → Exit"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Edge(Door, Exit)",
+                  "label": "Edge Door → Exit"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Edge(KeyRoom, Door)",
+                  "label": "Edge Key room → Door"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Edge(Start, Detour)",
+                  "label": "Edge Start → Detour"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Edge(Start, KeyRoom)",
+                  "label": "Edge Start → Key room"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Open",
+                  "label": "Open"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Target(Exit)",
+                  "label": "Target Exit"
+                },
+                "quantity": "1"
+              }
+            ]
+          }
+        ],
+        "scene": {
+          "kind": "graph",
+          "title": "Encoded maze topology",
+          "nodes": [
+            {
+              "id": {
+                "key": "node:start",
+                "label": "Start"
+              },
+              "classes": [],
+              "x": 80.0,
+              "y": 150.0
+            },
+            {
+              "id": {
+                "key": "node:key_room",
+                "label": "Key room"
+              },
+              "classes": [],
+              "x": 240.0,
+              "y": 65.0
+            },
+            {
+              "id": {
+                "key": "node:door",
+                "label": "Door"
+              },
+              "classes": [],
+              "x": 410.0,
+              "y": 65.0
+            },
+            {
+              "id": {
+                "key": "node:detour",
+                "label": "Detour"
+              },
+              "classes": [],
+              "x": 310.0,
+              "y": 240.0
+            },
+            {
+              "id": {
+                "key": "node:exit",
+                "label": "Exit"
+              },
+              "classes": [
+                "current",
+                "goal"
+              ],
+              "x": 570.0,
+              "y": 150.0
+            }
+          ],
+          "edges": [
+            {
+              "id": "edge:0",
+              "source": "node:start",
+              "target": "node:key_room",
+              "label": "2 energy",
+              "classes": []
+            },
+            {
+              "id": "edge:1",
+              "source": "node:key_room",
+              "target": "node:door",
+              "label": "2 energy · door",
+              "classes": []
+            },
+            {
+              "id": "edge:2",
+              "source": "node:door",
+              "target": "node:exit",
+              "label": "2 energy",
+              "classes": []
+            },
+            {
+              "id": "edge:3",
+              "source": "node:start",
+              "target": "node:detour",
+              "label": "4 energy",
+              "classes": []
+            },
+            {
+              "id": "edge:4",
+              "source": "node:detour",
+              "target": "node:exit",
+              "label": "5 energy",
+              "classes": []
+            }
+          ],
+          "focus": "node:exit"
+        }
+      },
+      "after": {
+        "index": 6,
+        "accounts": [
+          {
+            "account": {
+              "key": "account:agent",
+              "label": "Agent"
+            },
+            "balances": [
+              {
+                "asset": {
+                  "key": "asset:At(Exit)",
+                  "label": "At Exit"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Energy",
+                  "label": "Energy"
+                },
+                "quantity": "3"
+              },
+              {
+                "asset": {
+                  "key": "asset:Solved",
+                  "label": "Solved"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:SpentEnergy",
+                  "label": "Spent energy"
+                },
+                "quantity": "6"
+              },
+              {
+                "asset": {
+                  "key": "asset:SpentTime",
+                  "label": "Spent time"
+                },
+                "quantity": "6"
+              }
+            ]
+          },
+          {
+            "account": {
+              "key": "account:world",
+              "label": "World"
+            },
+            "balances": [
+              {
+                "asset": {
+                  "key": "asset:Distance(Detour)",
+                  "label": "Distance from Detour"
+                },
+                "quantity": "5"
+              },
+              {
+                "asset": {
+                  "key": "asset:Distance(Door)",
+                  "label": "Distance from Door"
+                },
+                "quantity": "2"
+              },
+              {
+                "asset": {
+                  "key": "asset:Distance(KeyRoom)",
+                  "label": "Distance from Key room"
+                },
+                "quantity": "4"
+              },
+              {
+                "asset": {
+                  "key": "asset:Distance(Start)",
+                  "label": "Distance from Start"
+                },
+                "quantity": "6"
+              },
+              {
+                "asset": {
+                  "key": "asset:Edge(Detour, Exit)",
+                  "label": "Edge Detour → Exit"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Edge(Door, Exit)",
+                  "label": "Edge Door → Exit"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Edge(KeyRoom, Door)",
+                  "label": "Edge Key room → Door"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Edge(Start, Detour)",
+                  "label": "Edge Start → Detour"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Edge(Start, KeyRoom)",
+                  "label": "Edge Start → Key room"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Open",
+                  "label": "Open"
+                },
+                "quantity": "1"
+              },
+              {
+                "asset": {
+                  "key": "asset:Target(Exit)",
+                  "label": "Target Exit"
+                },
+                "quantity": "1"
+              }
+            ]
+          }
+        ],
+        "scene": {
+          "kind": "graph",
+          "title": "Encoded maze topology",
+          "nodes": [
+            {
+              "id": {
+                "key": "node:start",
+                "label": "Start"
+              },
+              "classes": [],
+              "x": 80.0,
+              "y": 150.0
+            },
+            {
+              "id": {
+                "key": "node:key_room",
+                "label": "Key room"
+              },
+              "classes": [],
+              "x": 240.0,
+              "y": 65.0
+            },
+            {
+              "id": {
+                "key": "node:door",
+                "label": "Door"
+              },
+              "classes": [],
+              "x": 410.0,
+              "y": 65.0
+            },
+            {
+              "id": {
+                "key": "node:detour",
+                "label": "Detour"
+              },
+              "classes": [],
+              "x": 310.0,
+              "y": 240.0
+            },
+            {
+              "id": {
+                "key": "node:exit",
+                "label": "Exit"
+              },
+              "classes": [
+                "current",
+                "goal"
+              ],
+              "x": 570.0,
+              "y": 150.0
+            }
+          ],
+          "edges": [
+            {
+              "id": "edge:0",
+              "source": "node:start",
+              "target": "node:key_room",
+              "label": "2 energy",
+              "classes": []
+            },
+            {
+              "id": "edge:1",
+              "source": "node:key_room",
+              "target": "node:door",
+              "label": "2 energy · door",
+              "classes": []
+            },
+            {
+              "id": "edge:2",
+              "source": "node:door",
+              "target": "node:exit",
+              "label": "2 energy",
+              "classes": []
+            },
+            {
+              "id": "edge:3",
+              "source": "node:start",
+              "target": "node:detour",
+              "label": "4 energy",
+              "classes": []
+            },
+            {
+              "id": "edge:4",
+              "source": "node:detour",
+              "target": "node:exit",
+              "label": "5 energy",
+              "classes": []
+            }
+          ],
+          "focus": "node:exit"
+        }
+      }
+    }
+  ],
+  "objectives": [
+    {
+      "key": "energy",
+      "label": "Energy spent",
+      "direction": "minimize",
+      "value": "6"
+    },
+    {
+      "key": "time",
+      "label": "Time spent",
+      "direction": "minimize",
+      "value": "6"
+    }
+  ],
+  "pareto_fronts": [
+    {
+      "title": "Replay-verified energy/time frontier",
+      "completeness": "exact",
+      "axes": [
+        {
+          "key": "energy",
+          "label": "Energy spent",
+          "direction": "minimize"
+        },
+        {
+          "key": "time",
+          "label": "Time spent",
+          "direction": "minimize"
+        }
+      ],
+      "points": [
+        {
+          "label": "9 energy · 3 time",
+          "values": [
+            "9",
+            "3"
+          ],
+          "selected": false
+        },
+        {
+          "label": "6 energy · 6 time",
+          "values": [
+            "6",
+            "6"
+          ],
+          "selected": true
+        }
+      ]
+    }
+  ]
+}
