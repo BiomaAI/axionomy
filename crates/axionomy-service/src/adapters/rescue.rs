@@ -1,0 +1,181 @@
+use super::*;
+use axionomy_problems::rescue::{self, AccountId, Asset, Location, Policy, World};
+use axionomy_view::{
+    AccountView, AssetQuantityView, ExactQuantity, FrontierCompletenessView, GraphEdgeView,
+    GraphNodeView, ObjectiveAxisView, ObjectiveDirectionView, ObservationView, ParetoFrontView,
+    ParetoPointView, TelemetryKindView, ViewId,
+};
+
+pub(super) fn build(
+    request: &RunRequest,
+    descriptor: &ProblemDescriptor,
+) -> Result<RunArtifact, ServiceError> {
+    let model = rescue::uniform_uncertain();
+    let sample = rescue::instantiate(&model, Location::South, 1)
+        .ok_or_else(|| problem_error("rescue", "scenario could not be instantiated"))?;
+    let front = rescue::policy_front(&model, request.budget.max(2) as usize, request.seed)
+        .ok_or_else(|| problem_error("rescue", "policy front failed"))?;
+    let comparison = rescue::monte_carlo(&model, request.budget.max(2) as usize, request.seed)
+        .ok_or_else(|| problem_error("rescue", "Monte Carlo failed"))?;
+    let policies = [
+        ("observe_then_follow", Policy::ObserveThenFollow),
+        ("direct_north", Policy::NorthWithoutObserving),
+    ];
+    let mut documents = Vec::new();
+    for (strategy, policy) in policies {
+        let rollout = rescue::run_sampled_policy(&model, &sample, policy)
+            .ok_or_else(|| problem_error("rescue", "sampled rollout failed"))?;
+        let mut view = document(
+            DocumentSpec { problem: "rescue", strategy, title: if policy == Policy::ObserveThenFollow { "Rescue · observe then follow" } else { "Rescue · direct north" }, description: if policy == Policy::ObserveThenFollow { "The agent spends a sensor, receives a Nature-authored observation, then follows evidence." } else { "The agent commits north without observing; the selected south scenario exposes the failed branch." }, source_label: "Uncertain rescue" },
+            &model, &rescue::goal(), rollout.trace(), vec![
+                ObjectiveView { key: "success".into(), label: "Succeeded".into(), direction: ObjectiveDirectionView::Maximize, value: u8::from(rollout.succeeded()).to_string() },
+                ObjectiveView { key: "sensor".into(), label: "Sensor used".into(), direction: ObjectiveDirectionView::Minimize, value: u8::from(rollout.used_sensor()).to_string() },
+                ObjectiveView { key: "energy".into(), label: "Energy spent".into(), direction: ObjectiveDirectionView::Minimize, value: rollout.spent_energy().to_string() },
+            ], scene,
+        ).map_err(|error| problem_error("rescue", error))?;
+        view.pareto_fronts.push(policy_front(&front, policy));
+        view.telemetry.push(telemetry(
+            "Monte Carlo policy evaluation",
+            false,
+            [
+                (
+                    TelemetryKindView::Sample,
+                    comparison.samples() as u64,
+                    "encoded scenarios sampled".into(),
+                ),
+                (
+                    TelemetryKindView::Generated,
+                    rollout.trace().exchanges().len() as u64,
+                    "rollout exchanges".into(),
+                ),
+            ],
+        ));
+        view.observations.push(observation(&model));
+        if let Some(candidate) = rescue::candidates(&model).first() {
+            view.proposals.push(proposal("rescue", ProposalSpec { id: "unresolved-action", label: "Act before Nature resolves", description: "A public action assessed against the unresolved prior exposes which facts must first be supplied by Nature." }, &model, candidate));
+        }
+        documents.push(view);
+    }
+    artifact(
+        request,
+        descriptor,
+        selected_strategy(request, descriptor),
+        documents,
+    )
+}
+
+fn observation(world: &World) -> ObservationView {
+    let key = rescue::agent_view(world).observation_key();
+    let accounts = key
+        .visible_accounts()
+        .iter()
+        .map(|account| AccountView {
+            account: ViewId::new(
+                format!("rescue:account:{account:?}"),
+                format!("{account:?}"),
+            ),
+            balances: key
+                .balances()
+                .iter()
+                .filter(|(owner, _, _)| owner == account)
+                .map(|(_, asset, quantity)| AssetQuantityView {
+                    asset: ViewId::new(format!("rescue:asset:{asset:?}"), format!("{asset:?}")),
+                    quantity: ExactQuantity(quantity.to_string()),
+                })
+                .collect(),
+        })
+        .collect();
+    ObservationView {
+        actor: ViewId::new("rescue:actor:agent", "Rescue agent"),
+        label: "Agent-visible state; Nature truth and seed are omitted".into(),
+        visible_accounts: accounts,
+        facts: Vec::new(),
+    }
+}
+
+fn policy_front(front: &rescue::PolicyFront, selected: Policy) -> ParetoFrontView {
+    ParetoFrontView {
+        title: "Sampled success / sensing / energy frontier".into(),
+        completeness: FrontierCompletenessView::Approximate,
+        axes: vec![
+            ObjectiveAxisView {
+                key: "success".into(),
+                label: "Success probability".into(),
+                direction: ObjectiveDirectionView::Maximize,
+            },
+            ObjectiveAxisView {
+                key: "sensor".into(),
+                label: "Sensor use".into(),
+                direction: ObjectiveDirectionView::Minimize,
+            },
+            ObjectiveAxisView {
+                key: "energy".into(),
+                label: "Mean energy".into(),
+                direction: ObjectiveDirectionView::Minimize,
+            },
+        ],
+        points: front
+            .entries()
+            .iter()
+            .map(|entry| {
+                let policy = *entry.payload().policy();
+                let values = entry
+                    .objectives()
+                    .objectives()
+                    .iter()
+                    .map(|o| format!("{:.3}", o.value()))
+                    .collect::<Vec<_>>();
+                ParetoPointView {
+                    label: format!("{policy:?}"),
+                    values,
+                    selected: policy == selected,
+                }
+            })
+            .collect(),
+    }
+}
+
+fn scene(_: u64, world: &World) -> Option<Scene> {
+    let locations = [
+        (Location::Base, 300.0, 250.0),
+        (Location::North, 120.0, 60.0),
+        (Location::South, 480.0, 60.0),
+    ];
+    let focus = locations
+        .into_iter()
+        .find(|(location, _, _)| {
+            !world
+                .balance(&AccountId::Agent, &Asset::At(*location))
+                .is_zero()
+        })
+        .map(|(location, _, _)| location);
+    let nodes = locations
+        .into_iter()
+        .map(|(location, x, y)| GraphNodeView {
+            id: ViewId::new(format!("location:{location:?}"), format!("{location:?}")),
+            classes: if focus == Some(location) {
+                vec!["current".into()]
+            } else {
+                Vec::new()
+            },
+            x: Some(x),
+            y: Some(y),
+        })
+        .collect();
+    let edges = [Location::North, Location::South]
+        .into_iter()
+        .map(|location| GraphEdgeView {
+            id: format!("route:{location:?}"),
+            source: "location:Base".into(),
+            target: format!("location:{location:?}"),
+            label: Some("hidden victim prior".into()),
+            classes: vec!["uncertain".into()],
+        })
+        .collect();
+    Some(Scene::Graph {
+        title: "Actor view over hidden rescue truth".into(),
+        nodes,
+        edges,
+        focus: focus.map(|location| format!("location:{location:?}")),
+    })
+}
