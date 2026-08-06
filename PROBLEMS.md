@@ -37,7 +37,9 @@ they bypass the example's trusted action helper.
 | Multi-account atomic rewrite | ✓ | ✓ |  |  | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | Preserved facts/catalysts | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | Declared invariants | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| Resource objective | ✓ |  |  | ✓ | ✓ | ✓ | ✓ |  | ✓ |  | ✓ |  |
+| Resource objective | ✓ |  |  | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |  | ✓ | ✓ |
+| Exact Pareto front | ✓ |  |  | ✓ | ✓ |  | ✓ | ✓ |  |  |  | ✓ |
+| Approximate policy front |  |  |  |  |  | ✓ |  |  | ✓ |  | ✓ |  |
 | Infeasible instance |  | ✓ | ✓ |  | ✓ |  |  | ✓ | ✓ |  | ✓ | ✓ |
 | Specialized proposer |  |  | Algorithm X |  | Branch optimizer | Scenario/MC evaluator | Auction | Assessment clearing | Monte Carlo/MCTS | MCTS/minimax oracle | ISMCTS/scenario evaluator | Event agenda/index |
 | Generic algorithm | BFS/A*/Dijkstra | BFS | BFS | BFS/best-first | Best-first | Rollout | BFS |  | Rollout/MC | MCTS | ISMCTS/Rollout/MC/RL |  |
@@ -87,7 +89,7 @@ Source: `crates/axionomy-problems/src/maze.rs`
 
 ### Specification
 
-The agent starts at `Start` with nine energy. The world owns directed edge
+The agent starts at `Start` with nine energy and six time. The world owns directed edge
 facts, a key in `KeyRoom`, a locked door, a target at `Exit`, and one encoded
 distance estimate per node.
 
@@ -101,8 +103,9 @@ Detour route: Start --4--> Detour --5--> Exit
 The key route also requires `TakeKey` and `UnlockDoor`. The detour therefore
 has fewer exchanges, while the key route spends less energy.
 
-Movement consumes `At(from)` and energy, preserves `Edge(from,to)` and any
-door permission, and produces `At(to)` plus `SpentEnergy`. Search cost is
+Every semantic action consumes time and produces `SpentTime`. Movement also
+consumes `At(from)` and energy, preserves `Edge(from,to)` and any door
+permission, and produces `At(to)` plus `SpentEnergy`. Search cost is
 derived from the before/after `SpentEnergy` delta rather than copied from the
 rate identifier. A final rate consumes the maze's `Active` lifecycle asset and
 produces `Solved`, leaving no post-terminal moves applicable.
@@ -112,6 +115,8 @@ produces `Solved`, leaving no post-terminal moves applicable.
 - BFS chooses the three-exchange detour.
 - Dijkstra and A* choose the six-energy key route.
 - Dijkstra and A* agree on cost.
+- Exact Pareto search retains `(energy=6,time=6)` and `(energy=9,time=3)`;
+  neither route is hidden behind one scalar weight.
 - Every trace replays to `Solved`.
 - Actor/environment role swapping is rejected by encoded requirements.
 - A solved maze has no applicable actions.
@@ -196,11 +201,12 @@ Source: `crates/axionomy-problems/src/workshop.rs`
 
 ### Specification
 
-The workshop owns wood, labor, and one reusable tool. It may fire:
+The workshop owns wood, labor, three process-time units, and one reusable tool.
+It may fire:
 
 ```text
-Basic:     2 Wood + 1 Labor --Tool--> 1 Chair + 1 Waste
-Efficient: 3 Wood + 2 Labor --Tool--> 2 Chair + 1 Waste
+Basic:     2 Wood + 1 Labor + 1 Time --Tool--> 1 Chair + 1 Waste
+Efficient: 3 Wood + 2 Labor + 3 Time --Tool--> 2 Chair + 1 Waste
 ```
 
 Labor becomes `SpentLabor`. The tool is preserved. Material and labor
@@ -216,6 +222,8 @@ The rate book deliberately includes a malformed proposal:
 
 - Waste minimization chooses the efficient batch with waste 1.
 - BFS also reaches the two-chair goal.
+- Exact Pareto search retains the efficient `(waste=1,time=3)` batch and the
+  two-basic `(waste=2,time=2)` plan, and every retained trace replays.
 - The malformed rate is rejected by the material invariant.
 - Rejection is atomic.
 - Completion consumes `Active`; no recipe remains applicable afterward.
@@ -237,7 +245,7 @@ Two jobs each have two ordered operations:
 
 ```text
 Job 1: M1 for 2 slots → M2 for 1 slot
-Job 2: M2 for 2 slots → M1 for 1 slot
+Job 2: M1 for 2 slots → M2 for 1 slot
 ```
 
 Every `(machine,time)` pair is an account preserving
@@ -251,12 +259,14 @@ Finish preserves both completion tokens and produces `Makespan(n)` and
 
 ### Required results
 
-- Generic best-first search finds makespan 3.
-- A separate depth-first branch strategy also finds makespan 3.
+- Generic best-first search finds makespan 5.
+- A separate depth-first branch strategy also finds makespan 5.
 - Its proposal replays through the core.
 - A horizon of two slots is infeasible for both algorithms.
 - Horizons zero through five agree with a direct job-shop brute-force oracle.
 - Rebinding an operation to the wrong machine or time slot is rejected.
+- Exact Pareto search retains the two completion allocations `(3,5)` and
+  `(5,3)`, making the shared machine's stakeholder tradeoff explicit.
 
 ### API pressure
 
@@ -303,6 +313,8 @@ match.
 - Exact scenario evaluation selects observe-then-follow.
 - A separate seeded Monte Carlo entry point draws randomly from the same
   encoded weighted prior and is reproducible.
+- A sampled Pareto front retains the higher-success sensor policy and the
+  sensor-free direct policy, and is explicitly labeled approximate.
 
 ### API pressure
 
@@ -319,17 +331,19 @@ Source: `crates/axionomy-problems/src/bridge.rs`
 ### Specification
 
 Two agents begin west of a bridge with energy, credits, and bidding status.
-The bridge owns one `CapacityFree` token.
+The bridge owns one `CapacityFree` token and an encoded first/second turn.
 
 Two mechanisms are encoded:
 
-- First-come consumes capacity and gives one agent `CrossingRight`.
+- First-come consumes first-turn capacity and gives one agent
+  `CrossingRight` plus `PriorityBenefit`.
 - Auction submission escrows credits; one atomic resolution consumes both
   bids and capacity, charges the winner, refunds the loser, and produces
   `CrossingRight` plus `Waiting`.
 
-Crossing returns the bridge's capacity token. A waiting agent can then receive
-the right. Finish requires both agents to hold `Crossed`.
+Crossing returns the bridge's capacity token and enables the second turn. A
+waiting or first-come agent can then receive the second right. Finish requires
+both agents to hold `Crossed`.
 
 Every participant and the bridge preserve identity assets. Agent names in
 rate identifiers therefore cannot be used to impersonate another account or
@@ -343,6 +357,9 @@ asset, making the terminal economy quiescent.
 - A second claim while capacity is held is rejected.
 - Bidder impersonation and winner/loser rebinding are rejected.
 - Rejection leaves every account unchanged.
+- Exact Pareto search retains both possible priority allocations with both
+  agents' credits intact; auction outcomes with the same priority but spent
+  credit are correctly dominated under the encoded objectives.
 
 ### API pressure
 
@@ -376,6 +393,10 @@ Carrier spends one capacity and receives 5
 Order account converts matching OpenOrder into SettledOrder + SettledValue
 ```
 
+The settlement terms also produce declared `Utility` assets for the bound
+buyer and seller. They make participant benefit part of the outcome rather
+than a clearing callback.
+
 Money, widgets, buyer and seller lifecycle tokens, shipping capacity, and
 order status are protected by declared invariants. Candidate enumeration
 derives the buyer, seller, and carrier sets from economy accounts and produces
@@ -399,6 +420,8 @@ ordinary replayable exchange trace, not a second market state.
 - Clearing selects two compatible settlements with gross value 190.
 - The two-exchange clearing reaches both encoded order goals and replays
   deterministically.
+- Exact Pareto clearing retains four participant-utility allocations covering
+  the two eligible Order A buyers and two widget sellers; every entry replays.
 
 ### API pressure
 
@@ -448,6 +471,8 @@ delivery, refueling, travel, repair, and order completion are all rates.
   same sampled encoded outcomes.
 - MCTS selects a live applicable route while deriving chance branches from
   Nature's encoded weights.
+- A vector Monte Carlo evaluation exposes completion probability, mean
+  deliveries, and mean elapsed time as an explicitly approximate policy front.
 - A repeatable workload reports rollouts and exchanges per second.
 
 ### API pressure
@@ -561,6 +586,8 @@ outcome exchanges. The selected live action is core-revalidated.
   north succeeds 8.
 - The complete trace becomes one RL transition per exchange, ending with an
   encoded terminal outcome.
+- A sampled Pareto front retains the reliability/time/medical-use tradeoff and
+  remains explicitly approximate.
 
 ### API pressure
 
@@ -588,7 +615,7 @@ unique condition fact:
 
 ```text
 Warehouse:       Claim(Ambient) = 7,000, Ambient
-Fridge:          Claim(Refrigerated) = 3,000, Cold, Powered
+Fridge:          Claim(Refrigerated) = 3,000, Cold, Powered, CoolingEnergy = 7,000
 Ambient cohort:  Fresh(AmbientExpiry) = 1
 Cold cohort:     Fresh(ColdExpiry) = 1
 ```
@@ -596,7 +623,8 @@ Cold cohort:     Fresh(ColdExpiry) = 1
 A single exchange with multiplicity 1,000 moves claims from the ambient cohort
 to the refrigerated cohort while preserving both location identities, both
 cohort identities, cold power, freshness, and the open transfer window. It
-does not fire one thousand transitions.
+also converts `CoolingEnergy` into `SpentCoolingEnergy`; it does not fire one
+thousand transitions.
 
 Time is explicit economic state. The World account owns exactly one `Now`
 fact, plus complementary `Before(deadline)` and `Reached(deadline)` facts.
@@ -637,6 +665,8 @@ facts and only proposes ordinary spoil exchanges.
 - 128 generated inventory splits and transfers agree with a plain independent
   inventory oracle.
 - The receipt-maintained holdings index always equals a complete rebuild.
+- Bounded exact planning evaluates zero through seven 1,000-claim transfers and
+  retains all eight preservation/cooling-energy tradeoffs as replayable traces.
 
 ### API pressure
 
@@ -680,6 +710,8 @@ The repository test suite additionally verifies:
 - Rollout goal, cutoff, rejection, retention, and replay behavior.
 - Deterministic systematic and seeded weighted sampling.
 - Bernoulli, scalar, vector, quantile, and lower-tail statistics.
+- Objective-schema validation, four-way dominance, incremental Pareto
+  filtering, exact replayable fronts, and approximate sampled fronts.
 - Vector-valued MCTS selection, chance nodes, and transpositions.
 - Observation identities include visible-account boundaries and balances.
 - ISMCTS rejects inconsistent determinizations, passes only information states

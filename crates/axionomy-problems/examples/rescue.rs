@@ -23,6 +23,24 @@ fn main() {
         chosen = ?estimate.chosen(),
         "exact encoded-scenario comparison complete"
     );
+    let front = rescue::policy_front(&model, 64, 19).expect("policies can be sampled");
+    info!(
+        completeness = ?front.completeness(),
+        retained_policies = front.len(),
+        "sampled success/resource front estimated"
+    );
+    for entry in front.entries() {
+        let dimensions = entry.payload().summary().dimensions();
+        info!(
+            policy = ?entry.payload().policy(),
+            samples = dimensions[0].samples(),
+            success = %format_args!("{:.1}%", dimensions[0].mean() * 100.0),
+            sensor_use = %format_args!("{:.1}%", dimensions[1].mean() * 100.0),
+            mean_spent_energy = %format_args!("{:.2}", dimensions[2].mean()),
+            exact = false,
+            "non-dominated sampled policy"
+        );
+    }
     let sample = rescue::instantiate(&model, Location::South, 1).expect("scenario is encoded");
     let rollout = rescue::run_sampled_policy(&model, &sample, estimate.chosen())
         .expect("scenario can be instantiated");
@@ -36,6 +54,7 @@ fn main() {
         policy = ?estimate.chosen(),
         exchanges = rollout.trace().exchanges().len(),
         spent_energy = rollout.spent_energy(),
+        used_sensor = rollout.used_sensor(),
         succeeded = rollout.succeeded(),
         public_intent = rollout
             .trace()

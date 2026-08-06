@@ -9,7 +9,7 @@
 | Version | `0.1.0` |
 | Rust edition | 2024 |
 | Minimum Rust | 1.89 |
-| Last updated | 2026-07-31 |
+| Last updated | 2026-08-06 |
 
 ## 1. Product thesis
 
@@ -326,6 +326,50 @@ success account.
 This avoids arbitrary termination callbacks. Terminal state is part of the
 economy.
 
+### 4.8 Multi-objective outcome analysis
+
+Axionomy does not require a universal scalar utility function. A caller may
+project several objective values from a terminal economy and compare complete
+outcomes by Pareto dominance:
+
+```text
+x dominates y
+  iff x is no worse than y on every declared objective
+  and x is strictly better on at least one objective
+```
+
+The values must remain economic facts: spent energy, elapsed time, waste,
+completion evidence, retained credit, participant utility, preserved
+inventory, or another balance produced by accepted exchanges. The ordered
+objective keys and minimize/maximize directions are derived decision policy.
+They decide how valid worlds are compared, but they neither authorize a
+transition nor manufacture an outcome.
+
+`axionomy-search::pareto` provides `Objective`, `ObjectiveVector`, four-way
+`Dominance`, and `ParetoFront`. Objective vectors fail on duplicate keys,
+schema drift, or unordered values. A front is explicitly `Exact` or
+`Approximate`; equal vectors retain one representative artifact.
+
+`ParetoSearchSession` exhausts a finite reachable state space and stores a
+replayable trace with every retained terminal outcome. It deliberately does
+not prune an intermediate state merely because its current objective balances
+look worse: later exchange availability and resources may reverse that
+comparison. The front becomes exact only after all reachable states are
+exhausted. Interruption leaves a resumable session and an approximate
+best-known front.
+
+Monte Carlo policy evaluation can use the same dominance relation over means,
+probabilities, or other summaries derived from encoded rollout outcomes. Such
+a front remains approximate because the estimates are sampled, even when the
+sampling work itself completes. Exact finite-support scenario enumeration and
+sampled estimation must keep these different epistemic claims visible.
+
+The product gain is deferred scalarization. Callers can inspect allocation and
+resource tradeoffs, retain discrete or non-convex alternatives that a weighted
+sum can miss, and provide a learner with a denser set of viable outcome targets
+without moving reward truth into a solver callback. Choosing one point from
+the front remains caller policy.
+
 ## 5. Core API and ownership boundary
 
 | Type or operation | Responsibility |
@@ -346,6 +390,10 @@ economy.
 | `Trace` | Ordered replayable exchange sequence |
 | `Goal` | Required terminal asset configuration |
 | `EconomicView` | Account-restricted, immutable projection |
+
+Search-owned `ObjectiveVector`, `ParetoFront`, and `ParetoSearchSession` are
+not core primitives. They compare and explore economies through the public API
+and return replayable evidence; the `axionomy` kernel does not depend on them.
 
 `Economy` exposes immutable account and rate inspection. It does not expose a
 mutable account reference. Semantic mutation occurs only through `apply` or
@@ -821,6 +869,12 @@ its output is a two-exchange trace that must replay to both order goals. This
 is how global compatibility may remain algorithmic while settlement law stays
 economic.
 
+Settlement rates also produce participant utility assets declared by the
+market model. Exact Pareto search over completed clearings retains allocations
+that differ in which buyer and seller receive those benefits. This does not
+make a solver-side utility callback market truth: the benefit is an exchange
+effect, while dominance only compares already-valid terminal allocations.
+
 This is the current answer to simultaneous proposals: the resolution law must
 be represented by a rate, not an external world update. Search may choose a
 compatible set or sequence of those resolutions, but it cannot bypass them.
@@ -832,18 +886,18 @@ problems. Full formal specifications live in [PROBLEMS.md](PROBLEMS.md).
 
 | Problem | What it demonstrates |
 | --- | --- |
-| Key-door maze | A closed graph, explicit key/lock state, encoded energy and heuristic, and different BFS versus A* choices |
+| Key-door maze | A closed graph, explicit key/lock state, encoded energy/time tradeoff, exact Pareto front, and different BFS versus A* choices |
 | Sokoban | Atomic three-account rewrites, spatial occupancy, and core-observed infeasibility |
 | Exact cover | Logical constraint state plus Algorithm X as an untrusted proposal generator |
-| Workshop | Stoichiometric transformation, reusable catalysts, waste objective, and invariant rejection |
-| Job shop | Identified capacity slots, precedence tokens, makespan assets, and direct-oracle agreement |
-| Rescue | Hidden truth, restricted views, exact scenario evaluation, seeded Monte Carlo, and deterministic replay |
-| Bridge | Multi-agent bids, escrow, capacity, joint resolution, and alternative mechanisms |
-| Marketplace | Account-derived matching, complete shortfalls, six-party atomic settlement, and replayable multi-order clearing |
-| Logistics | Recurrent encoded chance, long rollouts, repair loops, risk projections, and MCTS route planning |
+| Workshop | Stoichiometric transformation, reusable catalysts, encoded waste/time front, and invariant rejection |
+| Job shop | Identified capacity slots, precedence tokens, per-job completion front, makespan, and direct-oracle agreement |
+| Rescue | Hidden truth, restricted views, exact scenario evaluation, seeded Monte Carlo, approximate success/resource front, and replay |
+| Bridge | Multi-agent bids, escrow, capacity, joint resolution, alternative mechanisms, and exact allocation front |
+| Marketplace | Account-derived matching, complete shortfalls, six-party settlement, clearing, and exact participant-utility front |
+| Logistics | Recurrent encoded chance, long rollouts, repair loops, risk projections, approximate policy front, and MCTS route planning |
 | Connect Four | Identified coordinates, encoded gravity and terminal truth, adversarial MCTS, and plain-board oracles |
-| Mission | Canonical private observations, caller-owned posterior beliefs, repeated ISMCTS, causal intelligence exchange, and RL trajectory projection |
-| Perishables | Fungible cohort claims, non-fungible shared condition facts, explicit time windows, refrigeration, outage effects, stale-event rejection, and an independent inventory oracle |
+| Mission | Canonical private observations, caller-owned posterior beliefs, repeated ISMCTS, approximate policy front, causal intelligence exchange, and RL trajectory projection |
+| Perishables | Fungible cohort claims, shared condition facts, explicit time, refrigeration, exact preservation/energy front, outage effects, stale-event rejection, and an independent oracle |
 
 These are not unrelated demos. Together they test:
 
@@ -922,6 +976,12 @@ examples, but they are not promised as reusable domain APIs.
   adapted without changing search semantics.
 - Monte Carlo provides Bernoulli, scalar, vector, quantile, and tail
   statistics through established estimators without defining outcome truth.
+- Ordered objective schemas reject duplicates, direction drift, and unordered
+  values; incremental Pareto fronts preserve non-dominated outcomes.
+- Exhaustive Pareto sessions return replayable traces, expose bounded progress
+  and interruption, and claim exactness only after reachable-state exhaustion.
+- Sampled logistics, rescue, and mission policy fronts remain explicitly
+  approximate even after their configured Monte Carlo work completes.
 - BFS, Dijkstra, and A* use established implicit-graph implementations while
   still deriving every successor through core exchange validation.
 - MCTS supports vector values, encoded chance nodes, deterministic budgets,
@@ -931,8 +991,9 @@ examples, but they are not promised as reusable domain APIs.
   the selected live exchange.
 - RL projections expose assessment masks, sparse shortfalls, receipts,
   observations, outcomes, and replay-derived transitions.
-- BFS, Monte Carlo, MCTS, and ISMCTS expose resumable deterministic-budget
-  sessions with serializable progress and safe cooperative interruption.
+- BFS, exhaustive Pareto search, Monte Carlo, MCTS, and ISMCTS expose resumable
+  deterministic-budget sessions with serializable progress and safe
+  cooperative interruption.
 - The MCP reference server uses immutable explicit economy handles rather than
   session-scoped current state and returns new handles for successful changes.
 - The MCP adapter accepts caller-provided snapshot storage and defaults to a
@@ -988,6 +1049,10 @@ The current foundation is intentionally bounded:
   caller-supplied projections from encoded state.
 - Monte Carlo consumes finite encoded weighted supports; parameterized or
   continuous distribution schemas remain future work.
+- Exact Pareto search currently exhausts finite reachable states without
+  intermediate dominance pruning. Large or cyclic models must provide bounded
+  state and candidate spaces; epsilon fronts, constrained dominance, and
+  domain-proven safe pruning are not implemented.
 - Native Rust is the current release target. Browser/Wasm compatibility is not
   yet a validated support guarantee.
 - The MCP reference binary keeps snapshots and task lifecycle in memory. Its
@@ -1033,9 +1098,23 @@ system; arbitrary hidden callbacks would not be acceptable.
 
 ### 13.5 Objectives can remain assets while algorithms remain generic
 
-Energy spent, waste, and makespan are ordinary balances. Search callbacks only
-read those balances. The callback chooses priority; it does not define or
-alter the objective state.
+Energy spent, process time, waste, per-job completion, participant utility,
+retained credit, and cooling energy are ordinary balances. Search projections
+only read those balances. Objective names and minimize/maximize directions
+choose comparison policy; they do not define or alter the outcome state.
+
+The exact maze, workshop, scheduling, bridge, marketplace, and perishables
+fronts demonstrate why this matters. They preserve real discrete alternatives
+instead of committing early to weights, make distributional allocation visible
+alongside resource efficiency, and return a replayable proof for each retained
+point. The search remains conservative: it filters completed outcomes and does
+not assume that current intermediate objective values safely predict all
+future exchanges.
+
+Logistics, rescue, and mission apply the same relation to Monte Carlo summaries
+of encoded outcomes. Their fronts are useful decision estimates, not exact
+claims about the policy space. Exactness therefore belongs in the result type,
+not in prose or caller convention.
 
 ### 13.6 Specialized solvers fit when translation and replay are explicit
 
@@ -1172,23 +1251,21 @@ factor.
    fingerprints. Extract generic holdings, dependency, and event indexes only
    after a second domain confirms the perishables shapes.
 5. Extend invariants with carefully constrained local and inequality forms.
-6. Define first-class objective declarations and multi-objective comparison
-   while keeping objective quantities encoded.
-7. Build an external OR adapter that compiles one closed schedule and replays
+6. Build an external OR adapter that compiles one closed schedule and replays
    the returned assignment.
-8. Extend encoded Nature schemas and distribution updates beyond finite
+7. Extend encoded Nature schemas and distribution updates beyond finite
    weighted supports.
-9. Extend the exact-cover, scheduling, and Connect Four reference-oracle tests
+8. Extend the exact-cover, scheduling, and Connect Four reference-oracle tests
    into broader bounded model checking where failures justify the cost.
-10. Decide whether dynamic rate availability is represented by rate assets,
+9. Decide whether dynamic rate availability is represented by rate assets,
     capability assets, or immutable schemas plus explicit enabling state.
-11. Add PUCT priors, progressive widening, and deterministic parallel workers
+10. Add PUCT priors, progressive widening, and deterministic parallel workers
     when learned priors, measured branching, or throughput justify them.
-12. Add capability-scoped proposal visibility and richer multi-agent belief
+11. Add capability-scoped proposal visibility and richer multi-agent belief
     and communication protocols.
-13. Integrate external learned policies through the implemented RL
+12. Integrate external learned policies through the implemented RL
     projections without granting mutation authority.
-14. Add persisted search checkpoints, worker leases, task notifications, and
+13. Add persisted search checkpoints, worker leases, task notifications, and
     tenant-aware authorization only when the MCP reference boundary is moved
     into a real multi-process deployment.
 
@@ -1393,6 +1470,15 @@ fact rather than every holder. The core does not add a universal fungibility
 flag because interchangeability and uniqueness are ontology claims that the
 problem must close with identities, rates, quantities, and invariants.
 
+### D-031: Pareto comparison defers preference without externalizing outcomes
+
+Multi-objective values are read from encoded terminal economies. Ordered keys,
+minimize/maximize direction, dominance filtering, statistical estimation, and
+the final selection are disposable policy. Exact fronts require exhaustive
+finite search and replayable traces; interrupted or sampled fronts remain
+explicitly approximate. This exposes allocation tradeoffs without granting a
+solver authority to define utility, validity, or state.
+
 ## 16. Success criteria
 
 Axionomy succeeds when:
@@ -1404,6 +1490,8 @@ Axionomy succeeds when:
 - Every semantic effect is a receipt-producing exchange.
 - Users introduce new ontologies without modifying kernel source.
 - Different solvers operate over identical semantics.
+- Multi-objective search exposes replayable non-dominated outcomes without
+  forcing one universal scalar utility or overstating sampled completeness.
 - External solver results translate into replayable exchanges.
 - Invalid proposals cannot bypass core constraints.
 - Remote callers can store, inspect, branch, search, cancel, poll, and replay

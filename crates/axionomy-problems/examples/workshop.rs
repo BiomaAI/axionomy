@@ -32,4 +32,22 @@ fn main() {
         trace = ?solution.trace().exchanges(),
         "accepted exchange trace"
     );
+
+    let pareto = workshop::pareto_front(&initial).expect("objective schema is valid");
+    info!(
+        completeness = ?pareto.front().completeness(),
+        outcomes = pareto.front().len(),
+        "exact search retained fast and low-waste recipes"
+    );
+    for entry in pareto.front().entries() {
+        let outcome = initial
+            .replayed(entry.payload())
+            .expect("Pareto trace must replay");
+        info!(
+            waste = workshop::waste(&outcome),
+            process_time = workshop::spent_time(&outcome),
+            replay_verified = true,
+            "non-dominated production plan"
+        );
+    }
 }

@@ -65,4 +65,23 @@ fn main() {
         "power loss changed one shared cohort fact without rewriting its four thousand claims"
     );
     debug!(trace = ?run.trace().exchanges(), "accepted temporal exchange trace");
+
+    let pareto = perishables::storage_plan_front(&source).expect("objective schema is valid");
+    info!(
+        completeness = ?pareto.front().completeness(),
+        plans = pareto.front().len(),
+        batch_size = DEFAULT_TRANSFER,
+        "exact bounded policy search exposed preservation versus cooling energy"
+    );
+    for entry in pareto.front().entries() {
+        let outcome = source
+            .replayed(entry.payload())
+            .expect("Pareto storage plan must replay");
+        info!(
+            usable_inventory = perishables::usable_inventory(&outcome),
+            cooling_energy = perishables::spent_cooling_energy(&outcome),
+            replay_verified = true,
+            "non-dominated storage commitment"
+        );
+    }
 }

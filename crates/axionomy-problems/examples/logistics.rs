@@ -37,6 +37,24 @@ fn main() {
         lower_decile_choice = ?tail_choice.chosen(),
         "caller-selected risk criteria compared"
     );
+    let front = logistics::policy_front(&model, 64).expect("policies can be sampled");
+    info!(
+        completeness = ?front.completeness(),
+        retained_policies = front.len(),
+        "sampled multi-objective policy front estimated"
+    );
+    for entry in front.entries() {
+        let dimensions = entry.payload().summary().dimensions();
+        info!(
+            policy = ?entry.payload().policy(),
+            samples = dimensions[0].samples(),
+            completion = %format_args!("{:.1}%", dimensions[0].mean() * 100.0),
+            mean_delivered = %format_args!("{:.2}", dimensions[1].mean()),
+            mean_elapsed_time = %format_args!("{:.2}", dimensions[2].mean()),
+            exact = false,
+            "non-dominated sampled policy"
+        );
+    }
 
     let mut loaded = model.fork();
     let load = logistics::candidates(&loaded)

@@ -86,4 +86,36 @@ fn main() {
         "compatible multi-order clearing selected and replayed"
     );
     debug!(trace = ?clearing.trace().exchanges(), "clearing settlement trace");
+
+    let pareto = marketplace::pareto_front(&market).expect("objective schema is valid");
+    info!(
+        completeness = ?pareto.front().completeness(),
+        allocations = pareto.front().len(),
+        "exact clearing search retained participant-utility tradeoffs"
+    );
+    for entry in pareto.front().entries() {
+        let outcome = market
+            .replayed(entry.payload())
+            .expect("Pareto clearing must replay");
+        info!(
+            buyer_a = marketplace::utility(
+                &outcome,
+                marketplace::AccountId::Buyer(marketplace::BuyerId::A)
+            ),
+            buyer_b = marketplace::utility(
+                &outcome,
+                marketplace::AccountId::Buyer(marketplace::BuyerId::B)
+            ),
+            seller_a = marketplace::utility(
+                &outcome,
+                marketplace::AccountId::Seller(marketplace::SellerId::A)
+            ),
+            seller_b = marketplace::utility(
+                &outcome,
+                marketplace::AccountId::Seller(marketplace::SellerId::B)
+            ),
+            replay_verified = true,
+            "non-dominated market allocation"
+        );
+    }
 }

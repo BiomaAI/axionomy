@@ -52,4 +52,23 @@ fn main() {
         trace = ?specialized.trace().exchanges(),
         "accepted exchange trace"
     );
+
+    let pareto = scheduling::pareto_front(&initial).expect("objective schema is valid");
+    info!(
+        completeness = ?pareto.front().completeness(),
+        allocations = pareto.front().len(),
+        terminal_schedules = pareto.progress().terminal_outcomes(),
+        "exact search exposed who receives the earliest completion"
+    );
+    for entry in pareto.front().entries() {
+        let outcome = initial
+            .replayed(entry.payload())
+            .expect("Pareto schedule must replay");
+        info!(
+            job_one_completion = scheduling::completion_time(&outcome, scheduling::Job::One),
+            job_two_completion = scheduling::completion_time(&outcome, scheduling::Job::Two),
+            replay_verified = true,
+            "non-dominated schedule allocation"
+        );
+    }
 }

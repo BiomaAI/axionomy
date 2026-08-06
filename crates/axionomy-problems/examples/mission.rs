@@ -73,6 +73,24 @@ fn main() {
         chosen = ?estimate.chosen(),
         "exact encoded-scenario comparison complete"
     );
+    let front = mission::policy_front(&model, 64, 23).expect("policies can be sampled");
+    info!(
+        completeness = ?front.completeness(),
+        retained_policies = front.len(),
+        "sampled reliability/resource front estimated"
+    );
+    for entry in front.entries() {
+        let dimensions = entry.payload().summary().dimensions();
+        info!(
+            policy = ?entry.payload().policy(),
+            samples = dimensions[0].samples(),
+            success = %format_args!("{:.1}%", dimensions[0].mean() * 100.0),
+            mean_elapsed_time = %format_args!("{:.2}", dimensions[1].mean()),
+            medical_kit_use = %format_args!("{:.1}%", dimensions[2].mean() * 100.0),
+            exact = false,
+            "non-dominated sampled policy"
+        );
+    }
     let rollout = mission::run_policy(&model, estimate.chosen(), 3);
     let replayed = model
         .replayed(rollout.trace())

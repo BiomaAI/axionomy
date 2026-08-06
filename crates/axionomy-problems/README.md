@@ -12,6 +12,14 @@ domain-valid even when a caller bypasses the examples' action helpers and
 rebinds roles directly. The mission additionally proves caller-owned belief
 filtering and repeated planning across information sets.
 
+The applicable fixtures also expose multi-objective decisions. Maze, workshop,
+scheduling, bridge, marketplace, and perishables exhaust finite state spaces
+and return exact fronts of replay-verified traces. Logistics, rescue, and
+mission compare sampled policy statistics and therefore return explicitly
+approximate fronts. In both cases the objective values come from encoded
+outcomes; dominance is disposable comparison policy, never a parallel domain
+model.
+
 Each model has a matching runnable example:
 
 ```console

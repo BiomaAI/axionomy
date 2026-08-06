@@ -74,7 +74,7 @@ models into one-way workspace dependencies:
 | Crate | Responsibility |
 | --- | --- |
 | `axionomy` | Pure closed-state validation and exchange execution kernel |
-| `axionomy-search` | Non-authoritative search, rollout, Monte Carlo, perfect-information and information-set MCTS, and learning projections |
+| `axionomy-search` | Non-authoritative graph and Pareto search, rollout, Monte Carlo, perfect-information and information-set MCTS, and learning projections |
 | `axionomy-problems` | Canonical problem encodings, specialized proposers, and conformance tests |
 | `axionomy-units` | Self-describing asset denominations, schema coherence, and dimension-safe `uom` authoring |
 | `axionomy-time` | Calendar-aware Jiff authoring over the same canonical timeline denominations |
@@ -118,15 +118,17 @@ follow search.
 - Isolated forks, speculative execution, and deterministic trace replay.
 - Account-restricted economic views with canonical observation identities.
 - Generic BFS, Dijkstra, A*, best-first search, replayable rollouts, weighted
-  sampling, Monte Carlo statistics, vector-valued MCTS,
+  sampling, exact replayable Pareto fronts, approximate sampled policy fronts,
+  Monte Carlo statistics, vector-valued MCTS,
   observation-scoped ISMCTS, and RL trajectory projections.
 - Reproducible ChaCha sampling and established statistical estimators for
   means, variance, quantiles, tail risk, and Bernoulli credible intervals.
 - Lazy action sources that derive concrete proposals from a full economy or an
   actor observation before core applicability filtering.
-- Runtime-neutral resumable BFS, Monte Carlo, MCTS, and ISMCTS sessions with
-  deterministic work budgets, progress snapshots, and cooperative observer
-  interruption.
+- Runtime-neutral resumable BFS, exhaustive Pareto, Monte Carlo, MCTS, and
+  ISMCTS sessions with deterministic work budgets, progress snapshots, and
+  cooperative observer interruption; a running Pareto front remains explicitly
+  approximate until the reachable state space is exhausted.
 - Forks share immutable laws and untouched account contents, with compact
   model-scoped state fingerprints for search caches.
 - A strict MCP 2026-07-28 Streamable HTTP reference server with
@@ -140,6 +142,26 @@ follow search.
 The core contains no application ontology or search algorithm. Problem assets
 and specialized solvers compile against the same public kernel API available
 to users.
+
+## Multi-objective decisions without a second truth
+
+Axionomy can expose every non-dominated outcome instead of forcing a caller to
+hide tradeoffs inside one weighted score. A result dominates another only when
+it is no worse on every declared objective and strictly better on at least one.
+Objective values are read from terminal account balances—energy spent, process
+time, participant utility, retained credit, completion time, preserved
+inventory—not invented by the search. The search-layer schema supplies names
+and minimize/maximize direction as disposable decision policy; it cannot make
+an invalid exchange valid or alter an outcome.
+
+This produces a more useful decision surface for allocation, planning, and
+learning. Callers can inspect who benefits, defer the final tradeoff until
+preferences are known, preserve discrete or non-convex alternatives that a
+weighted sum can miss, and use the retained set as richer supervision for a
+policy or reinforcement learner. Every exact entry carries a trace that is
+replayed from the source economy. Exhaustive finite search is labeled `Exact`
+only after completion; interrupted search and Monte Carlo policy fronts remain
+visibly `Approximate`.
 
 ## Core example
 
@@ -310,18 +332,18 @@ contract, deployment limits, and integration details.
 
 | Problem | Encoded concepts | Compared strategies |
 | --- | --- | --- |
-| Key-door maze | Topology, position, lock, key, energy, heuristic, goal | BFS, Dijkstra, A* |
+| Key-door maze | Topology, position, lock, key, energy, time, heuristic, goal | BFS, Dijkstra, A*, exact energy/time Pareto front |
 | Sokoban | Cell occupancy, push legality, deadlock | BFS and infeasibility |
 | Exact cover | Universe, subsets, coverage, selection | BFS and Algorithm X |
-| Workshop | Recipes, catalysts, material, labor, waste | BFS and waste minimization |
-| Job shop | Precedence, identified machine slots, makespan | Best-first, branch search, and direct brute-force oracle |
-| Rescue | Hidden truth, seed, observation, belief, chance | Exact scenario evaluation and seeded Monte Carlo |
-| Bridge | Capacity, bids, escrow, priority, joint resolution | BFS, first-come, and auction mechanisms |
-| Marketplace | Buyers, sellers, carriers, tax, commission, competing orders | Assessment matching and replayable global clearing |
-| Logistics | Orders, routes, fuel, time, weather, breakdown, repair | Long rollouts, risk-aware Monte Carlo, and route MCTS |
+| Workshop | Recipes, catalysts, material, labor, waste, process time | BFS, waste minimization, exact waste/time Pareto front |
+| Job shop | Precedence, identified machine slots, makespan, per-job completion | Best-first, branch search, direct oracle, exact allocation Pareto front |
+| Rescue | Hidden truth, seed, observation, belief, chance, sensor use | Exact scenario evaluation, seeded Monte Carlo, approximate policy front |
+| Bridge | Capacity, bids, escrow, priority, joint resolution | BFS, first-come, auction, exact priority/credit Pareto front |
+| Marketplace | Buyers, sellers, carriers, tax, commission, competing orders, participant utility | Assessment matching, replayable clearing, exact allocation Pareto front |
+| Logistics | Orders, routes, fuel, time, weather, breakdown, repair | Long rollouts, risk-aware Monte Carlo, route MCTS, approximate policy front |
 | Connect Four | Identified cells, gravity, turns, line counts, wins, draw | Vector-valued MCTS with plain-board/minimax oracles |
-| Mission | Private views, caller-owned beliefs, causal shared intelligence, hazard, treatment | Repeated observation-scoped ISMCTS, scenario/MC evaluation, and RL trajectories |
-| Perishables | Fungible cohort claims, unique condition facts, deadlines, refrigeration, and power loss | Receipt-maintained holdings index, event agenda, and independent inventory oracle |
+| Mission | Private views, caller-owned beliefs, causal shared intelligence, hazard, treatment | Repeated observation-scoped ISMCTS, scenario/MC evaluation, approximate policy front, RL trajectories |
+| Perishables | Fungible cohort claims, unique condition facts, deadlines, refrigeration, power loss, cooling energy | Receipt-maintained index, event agenda, exact storage Pareto front, independent oracle |
 
 Every accepted result is an exchange trace replayed by the same core. The
 specialized algorithms are proposers, not alternate execution engines.
@@ -370,9 +392,12 @@ For example, the maze's default `INFO` view is:
 
 ```text
 INFO Compare shortest-depth BFS with energy-aware A* over one encoded graph. example="Maze"
-INFO encoded economy ready accounts=3 rates=8
+INFO encoded economy ready accounts=2 rates=8
 INFO proposal replayed strategy="BFS" exchanges=3 expanded=5 goal_verified=true
 INFO proposal replayed strategy="A*" exchanges=6 expanded=6 energy=6 goal_verified=true
+INFO exact search retained every non-dominated route completeness=Exact outcomes=2 terminal_outcomes=2 expanded=10
+INFO non-dominated route energy=9 time=3 exchanges=3 replay_verified=true
+INFO non-dominated route energy=6 time=6 exchanges=6 replay_verified=true
 ```
 
 ## Semantics in brief

@@ -51,4 +51,25 @@ fn main() {
         trace = ?cheapest.trace().exchanges(),
         "accepted exchange trace"
     );
+
+    let pareto = maze::pareto_front(&initial).expect("objective schema is valid");
+    info!(
+        completeness = ?pareto.front().completeness(),
+        outcomes = pareto.front().len(),
+        terminal_outcomes = pareto.progress().terminal_outcomes(),
+        expanded = pareto.progress().expanded(),
+        "exact search retained every non-dominated route"
+    );
+    for entry in pareto.front().entries() {
+        let outcome = initial
+            .replayed(entry.payload())
+            .expect("Pareto trace must replay");
+        info!(
+            energy = maze::spent_energy(&outcome),
+            time = maze::spent_time(&outcome),
+            exchanges = entry.payload().exchanges().len(),
+            replay_verified = true,
+            "non-dominated route"
+        );
+    }
 }

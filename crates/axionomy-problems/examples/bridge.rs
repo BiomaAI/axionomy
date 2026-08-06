@@ -69,4 +69,24 @@ fn main() {
         trace = ?auction.exchanges(),
         "accepted exchange trace"
     );
+
+    let pareto = bridge::pareto_front(&initial).expect("objective schema is valid");
+    info!(
+        completeness = ?pareto.front().completeness(),
+        allocations = pareto.front().len(),
+        "exact search removed mechanisms dominated on priority and retained credit"
+    );
+    for entry in pareto.front().entries() {
+        let outcome = initial
+            .replayed(entry.payload())
+            .expect("Pareto allocation must replay");
+        info!(
+            priority_a = bridge::priority(&outcome, AgentId::A),
+            priority_b = bridge::priority(&outcome, AgentId::B),
+            credit_a = bridge::credit(&outcome, AgentId::A),
+            credit_b = bridge::credit(&outcome, AgentId::B),
+            replay_verified = true,
+            "non-dominated crossing allocation"
+        );
+    }
 }
