@@ -1,0 +1,20 @@
+[package]
+name = "axionomy-cli"
+version = "0.1.0"
+authors = ["Alex Rozgo <alex.rozgo@gmail.com>"]
+description = "Command-line interface for Axionomy services and reference problems"
+edition = "2024"
+license.workspace = true
+readme = "README.md"
+repository = "https://github.com/BiomaAI/axionomy"
+rust-version = "1.89"
+
+[dependencies]
+axionomy-service = { version = "0.1.0", path = "../axionomy-service" }
+clap = { version = "4.5.46", features = ["derive"] }
+serde_json = "1.0.151"
+thiserror = "2.0.19"
+
+[[bin]]
+name = "axionomy"
+path = "src/main.rs"
