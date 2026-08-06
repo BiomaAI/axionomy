@@ -3,7 +3,10 @@
 use axionomy::{
     Account, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Quantity, Rate, basket,
 };
-use axionomy_search::{SearchSolution, astar, bfs, dijkstra};
+use axionomy_search::{
+    SearchSolution, astar, bfs, dijkstra,
+    pareto::{self, Objective, ObjectiveVector, ParetoError, ParetoSearchResult},
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Node {
@@ -29,6 +32,8 @@ pub enum Asset {
     Open,
     Energy,
     SpentEnergy,
+    Time,
+    SpentTime,
     Target(Node),
     Distance(Node),
     Active,
@@ -57,6 +62,13 @@ pub enum RateId {
 pub type World = Economy<AccountId, Asset, RateId, Role>;
 pub type Action = Exchange<RateId, Role, AccountId>;
 pub type Solution = SearchSolution<RateId, Role, AccountId>;
+pub type ParetoResult = ParetoSearchResult<RateId, Role, AccountId, u64, ObjectiveKey, u64>;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ObjectiveKey {
+    Energy,
+    Time,
+}
 
 const EDGES: [(Node, Node, u64, bool); 5] = [
     (Node::Start, Node::KeyRoom, 2, false),
@@ -92,6 +104,7 @@ pub fn initial() -> World {
             Account::from(basket([
                 (Asset::At(Node::Start), 1),
                 (Asset::Energy, 9),
+                (Asset::Time, 6),
                 (Asset::Active, 1),
             ])),
         )
@@ -116,6 +129,11 @@ pub fn initial() -> World {
                 .weight(Asset::SpentEnergy, 1),
         )
         .invariant(
+            LinearInvariant::new("time is only spent")
+                .weight(Asset::Time, 1)
+                .weight(Asset::SpentTime, 1),
+        )
+        .invariant(
             LinearInvariant::new("maze lifecycle")
                 .weight(Asset::Active, 1)
                 .weight(Asset::Solved, 1),
@@ -126,11 +144,19 @@ pub fn initial() -> World {
             .preserve(Role::Actor, basket([(Asset::Active, 1)]))
             .consume(
                 Role::Actor,
-                basket([(Asset::At(from), 1), (Asset::Energy, energy)]),
+                basket([
+                    (Asset::At(from), 1),
+                    (Asset::Energy, energy),
+                    (Asset::Time, 1),
+                ]),
             )
             .produce(
                 Role::Actor,
-                basket([(Asset::At(to), 1), (Asset::SpentEnergy, energy)]),
+                basket([
+                    (Asset::At(to), 1),
+                    (Asset::SpentEnergy, energy),
+                    (Asset::SpentTime, 1),
+                ]),
             )
             .preserve(Role::Environment, basket([(Asset::Edge(from, to), 1)]))
             .distinct(Role::Actor, Role::Environment);
@@ -156,6 +182,8 @@ pub fn initial() -> World {
                     Role::Actor,
                     basket([(Asset::At(Node::KeyRoom), 1), (Asset::Active, 1)]),
                 )
+                .consume(Role::Actor, basket([(Asset::Time, 1)]))
+                .produce(Role::Actor, basket([(Asset::SpentTime, 1)]))
                 .consume(Role::Environment, basket([(Asset::Key, 1)]))
                 .produce(Role::Actor, basket([(Asset::Key, 1)]))
                 .distinct(Role::Actor, Role::Environment),
@@ -164,7 +192,8 @@ pub fn initial() -> World {
             RateId::UnlockDoor,
             Rate::new()
                 .preserve(Role::Actor, basket([(Asset::Active, 1)]))
-                .consume(Role::Actor, basket([(Asset::Key, 1)]))
+                .consume(Role::Actor, basket([(Asset::Key, 1), (Asset::Time, 1)]))
+                .produce(Role::Actor, basket([(Asset::SpentTime, 1)]))
                 .consume(Role::Environment, basket([(Asset::Locked, 1)]))
                 .produce(Role::Environment, basket([(Asset::Open, 1)]))
                 .distinct(Role::Actor, Role::Environment),
@@ -174,8 +203,11 @@ pub fn initial() -> World {
             Rate::new()
                 .preserve(Role::Actor, basket([(Asset::At(Node::Exit), 1)]))
                 .preserve(Role::Environment, basket([(Asset::Target(Node::Exit), 1)]))
-                .consume(Role::Actor, basket([(Asset::Active, 1)]))
-                .produce(Role::Actor, basket([(Asset::Solved, 1)])),
+                .consume(Role::Actor, basket([(Asset::Active, 1), (Asset::Time, 1)]))
+                .produce(
+                    Role::Actor,
+                    basket([(Asset::Solved, 1), (Asset::SpentTime, 1)]),
+                ),
         )
         .build()
         .expect("maze model is valid")
@@ -204,8 +236,25 @@ pub fn solve_astar(world: &World) -> Option<Solution> {
     astar(world, &goal(), candidates, move_energy, heuristic)
 }
 
+/// Exhaustively exposes the valid energy/time tradeoffs as replayable traces.
+pub fn pareto_front(world: &World) -> Result<ParetoResult, ParetoError> {
+    pareto::search(world, &goal(), candidates, objectives)
+}
+
+pub fn objectives(world: &World) -> ObjectiveVector<ObjectiveKey, u64> {
+    ObjectiveVector::try_new([
+        Objective::minimize(ObjectiveKey::Energy, spent_energy(world)),
+        Objective::minimize(ObjectiveKey::Time, spent_time(world)),
+    ])
+    .expect("maze objective schema is static and unique")
+}
+
 pub fn spent_energy(world: &World) -> u64 {
     world.balance(&AccountId::Agent, &Asset::SpentEnergy).get()
+}
+
+pub fn spent_time(world: &World) -> u64 {
+    world.balance(&AccountId::Agent, &Asset::SpentTime).get()
 }
 
 pub fn heuristic(world: &World) -> u64 {
@@ -278,5 +327,22 @@ mod tests {
         .bind(Role::Environment, AccountId::Agent);
 
         assert!(!world.is_applicable(&rebound));
+    }
+
+    #[test]
+    fn pareto_front_preserves_both_encoded_routes_and_replays_them() {
+        let initial = initial();
+        let result = pareto_front(&initial).unwrap();
+        let mut outcomes = Vec::new();
+
+        for entry in result.front().entries() {
+            let replayed = initial.replayed(entry.payload()).unwrap();
+            assert!(replayed.matches(&goal()));
+            assert_eq!(&objectives(&replayed), entry.objectives());
+            outcomes.push((spent_energy(&replayed), spent_time(&replayed)));
+        }
+
+        outcomes.sort_unstable();
+        assert_eq!(outcomes, [(6, 6), (9, 3)]);
     }
 }

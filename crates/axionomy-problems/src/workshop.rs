@@ -4,7 +4,10 @@ use axionomy::{
     Account, ApplyError, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Quantity, Rate,
     basket,
 };
-use axionomy_search::{SearchSolution, best_first, bfs};
+use axionomy_search::{
+    SearchSolution, best_first, bfs,
+    pareto::{self, Objective, ObjectiveVector, ParetoError, ParetoSearchResult},
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum AccountId {
@@ -19,6 +22,8 @@ pub enum Asset {
     Tool,
     Chair,
     Waste,
+    Time,
+    SpentTime,
     Active,
     Solved,
 }
@@ -40,6 +45,13 @@ pub type World = Economy<AccountId, Asset, RateId, Role>;
 pub type Action = Exchange<RateId, Role, AccountId>;
 pub type Solution = SearchSolution<RateId, Role, AccountId>;
 pub type Failure = ApplyError<RateId, Role, AccountId, Asset>;
+pub type ParetoResult = ParetoSearchResult<RateId, Role, AccountId, u64, ObjectiveKey, u64>;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ObjectiveKey {
+    Waste,
+    Time,
+}
 
 pub fn initial() -> World {
     EconomyBuilder::new()
@@ -49,6 +61,7 @@ pub fn initial() -> World {
                 (Asset::Wood, 6),
                 (Asset::Labor, 4),
                 (Asset::Tool, 1),
+                (Asset::Time, 3),
                 (Asset::Active, 1),
             ])),
         )
@@ -56,22 +69,38 @@ pub fn initial() -> World {
             RateId::BasicChair,
             Rate::new()
                 .preserve(Role::Shop, basket([(Asset::Active, 1)]))
-                .consume(Role::Shop, basket([(Asset::Wood, 2), (Asset::Labor, 1)]))
+                .consume(
+                    Role::Shop,
+                    basket([(Asset::Wood, 2), (Asset::Labor, 1), (Asset::Time, 1)]),
+                )
                 .preserve(Role::Shop, basket([(Asset::Tool, 1)]))
                 .produce(
                     Role::Shop,
-                    basket([(Asset::Chair, 1), (Asset::Waste, 1), (Asset::SpentLabor, 1)]),
+                    basket([
+                        (Asset::Chair, 1),
+                        (Asset::Waste, 1),
+                        (Asset::SpentLabor, 1),
+                        (Asset::SpentTime, 1),
+                    ]),
                 ),
         )
         .rate(
             RateId::EfficientBatch,
             Rate::new()
                 .preserve(Role::Shop, basket([(Asset::Active, 1)]))
-                .consume(Role::Shop, basket([(Asset::Wood, 3), (Asset::Labor, 2)]))
+                .consume(
+                    Role::Shop,
+                    basket([(Asset::Wood, 3), (Asset::Labor, 2), (Asset::Time, 3)]),
+                )
                 .preserve(Role::Shop, basket([(Asset::Tool, 1)]))
                 .produce(
                     Role::Shop,
-                    basket([(Asset::Chair, 2), (Asset::Waste, 1), (Asset::SpentLabor, 2)]),
+                    basket([
+                        (Asset::Chair, 2),
+                        (Asset::Waste, 1),
+                        (Asset::SpentLabor, 2),
+                        (Asset::SpentTime, 3),
+                    ]),
                 ),
         )
         // This deliberately malformed domain proposal is installed to prove
@@ -80,8 +109,11 @@ pub fn initial() -> World {
             RateId::CounterfeitChair,
             Rate::new()
                 .preserve(Role::Shop, basket([(Asset::Active, 1)]))
-                .consume(Role::Shop, basket([(Asset::Wood, 1)]))
-                .produce(Role::Shop, basket([(Asset::Chair, 2)])),
+                .consume(Role::Shop, basket([(Asset::Wood, 1), (Asset::Time, 1)]))
+                .produce(
+                    Role::Shop,
+                    basket([(Asset::Chair, 2), (Asset::SpentTime, 1)]),
+                ),
         )
         .rate(
             RateId::Finish,
@@ -100,6 +132,11 @@ pub fn initial() -> World {
             LinearInvariant::new("labor accounting")
                 .weight(Asset::Labor, 1)
                 .weight(Asset::SpentLabor, 1),
+        )
+        .invariant(
+            LinearInvariant::new("time accounting")
+                .weight(Asset::Time, 1)
+                .weight(Asset::SpentTime, 1),
         )
         .invariant(
             LinearInvariant::new("workshop lifecycle")
@@ -128,8 +165,25 @@ pub fn minimize_waste(world: &World) -> Option<Solution> {
     best_first(world, &goal(), candidates, waste, |_| 0)
 }
 
+/// Exhaustively exposes the valid waste/time recipe tradeoffs.
+pub fn pareto_front(world: &World) -> Result<ParetoResult, ParetoError> {
+    pareto::search(world, &goal(), candidates, objectives)
+}
+
+pub fn objectives(world: &World) -> ObjectiveVector<ObjectiveKey, u64> {
+    ObjectiveVector::try_new([
+        Objective::minimize(ObjectiveKey::Waste, waste(world)),
+        Objective::minimize(ObjectiveKey::Time, spent_time(world)),
+    ])
+    .expect("workshop objective schema is static and unique")
+}
+
 pub fn waste(world: &World) -> u64 {
     world.balance(&AccountId::Workshop, &Asset::Waste).get()
+}
+
+pub fn spent_time(world: &World) -> u64 {
+    world.balance(&AccountId::Workshop, &Asset::SpentTime).get()
 }
 
 pub fn action(rate: RateId) -> Action {
@@ -172,5 +226,22 @@ mod tests {
             } if invariant == "material mass"
         ));
         assert_eq!(world.state_key(), before);
+    }
+
+    #[test]
+    fn pareto_front_retains_fast_and_low_waste_recipes() {
+        let initial = initial();
+        let result = pareto_front(&initial).unwrap();
+        let mut outcomes = Vec::new();
+
+        for entry in result.front().entries() {
+            let replayed = initial.replayed(entry.payload()).unwrap();
+            assert!(replayed.matches(&goal()));
+            assert_eq!(&objectives(&replayed), entry.objectives());
+            outcomes.push((waste(&replayed), spent_time(&replayed)));
+        }
+
+        outcomes.sort_unstable();
+        assert_eq!(outcomes, [(1, 3), (2, 2)]);
     }
 }
