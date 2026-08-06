@@ -24,16 +24,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     fs::create_dir_all(&output)?;
     if problem == "all" {
         let catalog_path = output.join("catalog.json");
-        fs::write(
-            &catalog_path,
-            serde_json::to_string_pretty(&service.catalog())? + "\n",
-        )?;
+        fs::write(&catalog_path, serde_json::to_vec(&service.catalog())?)?;
         println!("wrote {}", catalog_path.display());
     }
     for descriptor in problems {
         let artifact = service.run(RunRequest::new(&descriptor.key))?;
         let path = output.join(format!("{}.json", descriptor.key));
-        fs::write(&path, serde_json::to_string_pretty(&artifact)? + "\n")?;
+        fs::write(&path, serde_json::to_vec(&artifact)?)?;
         println!("wrote {}", path.display());
     }
     Ok(())
