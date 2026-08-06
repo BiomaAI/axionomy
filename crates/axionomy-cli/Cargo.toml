@@ -18,3 +18,4 @@ thiserror = "2.0.19"
 [[bin]]
 name = "axionomy"
 path = "src/main.rs"
+doc = false
