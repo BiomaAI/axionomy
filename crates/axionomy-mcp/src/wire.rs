@@ -2,6 +2,15 @@ use axionomy::{Economy, Exchange, ExchangeAssessment, Goal, Receipt, Trace};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
+#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ProblemCatalogRequest {}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct ProblemCatalogResponse {
+    pub problems: Vec<axionomy_service::ProblemDescriptor>,
+}
+
 pub type WireEconomy = Economy<String, String, String, String, u64>;
 pub type WireExchange = Exchange<String, String, String, u64>;
 pub type WireGoal = Goal<String, String, u64>;

@@ -1,13 +1,14 @@
 use crate::store::{MemorySnapshotStore, SnapshotStore};
 use crate::wire::{
     ApplyRequest, ApplyResponse, AssessRequest, AssessResponse, EconomyPutRequest,
-    EconomyPutResponse, ReplayRequest, ReplayResponse, SearchOutcome, SearchRequest,
-    SearchResponse, WireEconomy,
+    EconomyPutResponse, ProblemCatalogRequest, ProblemCatalogResponse, ReplayRequest,
+    ReplayResponse, SearchOutcome, SearchRequest, SearchResponse, WireEconomy,
 };
 use axionomy_search::{
     BfsSession, GraphSearchProgress,
     session::{Continue, SearchStatus, WorkBudget},
 };
+use axionomy_service::{ReferenceService, RunControl, RunRequest, ServiceProgress};
 use rmcp::{
     ErrorData as McpError, ServerHandler,
     handler::server::{
@@ -160,6 +161,33 @@ where
         Err("axionomy_search requires the MCP io.modelcontextprotocol/tasks capability".to_owned())
     }
 
+    #[tool(
+        name = "axionomy_problem_catalog",
+        description = "List all canonical Axionomy problem models, strategies, and demonstrated capabilities."
+    )]
+    async fn problem_catalog(
+        &self,
+        Parameters(_request): Parameters<ProblemCatalogRequest>,
+    ) -> Result<Json<ProblemCatalogResponse>, String> {
+        Ok(Json(ProblemCatalogResponse {
+            problems: ReferenceService.catalog(),
+        }))
+    }
+
+    #[tool(
+        name = "axionomy_problem_run",
+        description = "Run one canonical problem through the shared interface-neutral service and return its complete replay artifact. Requires MCP Tasks support."
+    )]
+    async fn problem_run_requires_tasks(
+        &self,
+        Parameters(_request): Parameters<RunRequest>,
+    ) -> Result<Json<serde_json::Value>, String> {
+        Err(
+            "axionomy_problem_run requires the MCP io.modelcontextprotocol/tasks capability"
+                .to_owned(),
+        )
+    }
+
     async fn require_economy(&self, economy_id: &str) -> Result<Arc<WireEconomy>, String> {
         self.snapshots
             .get(economy_id)
@@ -185,6 +213,36 @@ where
         request: CallToolRequestParams,
         context: RequestContext<RoleServer>,
     ) -> Result<CallToolResponse, McpError> {
+        if request.name == "axionomy_problem_run"
+            && context
+                .client_capabilities()
+                .is_some_and(|capabilities| capabilities.supports_tasks())
+        {
+            let run = match serde_json::from_value::<RunRequest>(serde_json::Value::Object(
+                request.arguments.clone().unwrap_or_default(),
+            )) {
+                Ok(run) => run,
+                Err(error) => {
+                    return Ok(CallToolResult::structured_error(serde_json::json!({
+                        "error": "invalid_problem_run_request",
+                        "message": error.to_string()
+                    }))
+                    .into());
+                }
+            };
+            if let Err(error) = validate_problem_run(&run) {
+                return Ok(CallToolResult::structured_error(serde_json::json!({
+                    "error": "problem_run_not_started",
+                    "message": error
+                }))
+                .into());
+            }
+            let task = self.tasks.spawn(self.task_options.clone(), move |context| {
+                Box::pin(run_problem(context, run))
+            });
+            return Ok(CreateTaskResult::new(task).into());
+        }
+
         if request.name == "axionomy_search"
             && context
                 .client_capabilities()
@@ -270,6 +328,71 @@ where
     fn supported_protocol_versions(&self) -> Cow<'static, [ProtocolVersion]> {
         Cow::Borrowed(&[ProtocolVersion::V_2026_07_28])
     }
+}
+
+fn validate_problem_run(request: &RunRequest) -> Result<(), String> {
+    if request.budget == 0 {
+        return Err("budget must be greater than zero".into());
+    }
+    let problem = ReferenceService
+        .problem(&request.problem)
+        .ok_or_else(|| format!("unknown problem `{}`", request.problem))?;
+    if let Some(strategy) = &request.strategy
+        && !problem
+            .strategies
+            .iter()
+            .any(|known| &known.key == strategy)
+    {
+        return Err(format!(
+            "unknown strategy `{strategy}` for problem `{}`",
+            request.problem
+        ));
+    }
+    Ok(())
+}
+
+async fn run_problem(
+    context: TaskContext,
+    request: RunRequest,
+) -> Result<CallToolResult, TaskExit> {
+    let control = Arc::new(RunControl::default());
+    let worker_control = Arc::clone(&control);
+    let (progress_tx, mut progress_rx) = tokio::sync::mpsc::unbounded_channel::<ServiceProgress>();
+    let mut worker = tokio::task::spawn_blocking(move || {
+        let mut observer = move |progress| {
+            let _ = progress_tx.send(progress);
+        };
+        ReferenceService.run_with(&request, &worker_control, &mut observer)
+    });
+
+    let artifact = loop {
+        tokio::select! {
+            progress = progress_rx.recv() => {
+                if let Some(progress) = progress {
+                    context.set_status_message(format!("{}: {} ({}/{})", progress.phase, progress.message, progress.completed, progress.total));
+                }
+            }
+            result = &mut worker => {
+                break result
+                    .map_err(|error| TaskExit::Error(McpError::internal_error(error.to_string(), None)))?
+                    .map_err(|error| TaskExit::Error(McpError::internal_error(error.to_string(), None)))?;
+            }
+            () = tokio::time::sleep(std::time::Duration::from_millis(10)) => {
+                if context.is_cancel_requested() {
+                    control.cancel();
+                    return Err(TaskExit::Cancelled);
+                }
+            }
+        }
+    };
+    context.set_status_message(format!(
+        "completed: {} alternatives, selected {}",
+        artifact.documents.len(),
+        artifact.selected_document_id
+    ));
+    let structured = serde_json::to_value(artifact)
+        .map_err(|error| TaskExit::Error(McpError::internal_error(error.to_string(), None)))?;
+    Ok(CallToolResult::structured(structured))
 }
 
 fn validate_search_request(request: &SearchRequest) -> Result<(), String> {
@@ -427,7 +550,7 @@ mod tests {
             if task.status().is_terminal() {
                 return task;
             }
-            tokio::task::yield_now().await;
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
         }
         panic!("task did not reach a terminal state")
     }
@@ -437,7 +560,7 @@ mod tests {
         let server = AxionomyMcp::default();
         let tools = server.tool_router.list_all();
 
-        assert_eq!(tools.len(), 5);
+        assert_eq!(tools.len(), 7);
         for tool in tools {
             assert!(!tool.input_schema.is_empty(), "{} input schema", tool.name);
             assert!(tool.output_schema.is_some(), "{} output schema", tool.name);
@@ -486,6 +609,27 @@ mod tests {
         let detailed = terminal_task(&tasks, &task.task_id).await;
         assert_eq!(detailed.status(), TaskStatus::Cancelled);
         assert!(matches!(detailed.payload, TaskPayload::Cancelled));
+    }
+
+    #[tokio::test]
+    async fn problem_task_returns_the_shared_service_artifact() {
+        let request = RunRequest::new("maze").with_strategy("a_star");
+        let tasks = TaskManager::new();
+        let task_request = request.clone();
+        let task = tasks.spawn(TaskOptions::new(), move |context| {
+            Box::pin(run_problem(context, task_request))
+        });
+        let detailed = terminal_task(&tasks, &task.task_id).await;
+        assert_eq!(detailed.status(), TaskStatus::Completed);
+        let TaskPayload::Completed { result } = detailed.payload else {
+            panic!("problem run should complete with a tool result")
+        };
+        let tool_result: CallToolResult =
+            serde_json::from_value(serde_json::Value::Object(result)).unwrap();
+        let mcp_artifact: axionomy_service::RunArtifact =
+            serde_json::from_value(tool_result.structured_content.unwrap()).unwrap();
+        let service_artifact = ReferenceService.run(request).unwrap();
+        assert_eq!(mcp_artifact, service_artifact);
     }
 
     #[test]

@@ -183,6 +183,7 @@ version = "0.1.0"
 dependencies = [
  "axionomy",
  "axionomy-search",
+ "axionomy-service",
  "axum",
  "blake3",
  "reqwest",
@@ -246,7 +247,7 @@ name = "axionomy-studio-server"
 version = "0.1.0"
 dependencies = [
  "aide",
- "axionomy-problems",
+ "axionomy-service",
  "axionomy-view",
  "axum",
  "futures-util",
@@ -257,7 +258,6 @@ dependencies = [
  "thiserror",
  "tokio",
  "tokio-stream",
- "tokio-util",
  "tower",
  "tower-http 0.7.0",
  "tracing",

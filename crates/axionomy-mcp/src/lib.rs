@@ -10,6 +10,7 @@ pub use server::AxionomyMcp;
 pub use store::{MemorySnapshotStore, MemorySnapshotStoreError, SnapshotStore, StoredSnapshot};
 pub use wire::{
     ApplyRequest, ApplyResponse, AssessRequest, AssessResponse, EconomyHandle, EconomyPutRequest,
-    EconomyPutResponse, ReplayRequest, ReplayResponse, SearchRequest, SearchResponse,
-    WireAssessment, WireEconomy, WireExchange, WireGoal, WireReceipt, WireTrace,
+    EconomyPutResponse, ProblemCatalogRequest, ProblemCatalogResponse, ReplayRequest,
+    ReplayResponse, SearchRequest, SearchResponse, WireAssessment, WireEconomy, WireExchange,
+    WireGoal, WireReceipt, WireTrace,
 };

@@ -419,7 +419,8 @@ pub enum StudioEvent {
     RunStarted {
         run_id: String,
         sequence: u64,
-        example: String,
+        problem: String,
+        strategy: String,
     },
     Progress {
         run_id: String,
@@ -434,9 +435,24 @@ pub enum StudioEvent {
         sequence: u64,
         frame_index: u64,
     },
+    ArtifactPublished {
+        run_id: String,
+        sequence: u64,
+        artifact_id: String,
+        documents: u64,
+    },
+    RunPaused {
+        run_id: String,
+        sequence: u64,
+    },
+    RunResumed {
+        run_id: String,
+        sequence: u64,
+    },
     RunCompleted {
         run_id: String,
         sequence: u64,
+        artifact_id: String,
         document_id: String,
     },
     RunCancelled {
@@ -456,6 +472,9 @@ impl StudioEvent {
             Self::RunStarted { sequence, .. }
             | Self::Progress { sequence, .. }
             | Self::FrameAppended { sequence, .. }
+            | Self::ArtifactPublished { sequence, .. }
+            | Self::RunPaused { sequence, .. }
+            | Self::RunResumed { sequence, .. }
             | Self::RunCompleted { sequence, .. }
             | Self::RunCancelled { sequence, .. }
             | Self::RunFailed { sequence, .. } => *sequence,
@@ -467,6 +486,9 @@ impl StudioEvent {
             Self::RunStarted { run_id, .. }
             | Self::Progress { run_id, .. }
             | Self::FrameAppended { run_id, .. }
+            | Self::ArtifactPublished { run_id, .. }
+            | Self::RunPaused { run_id, .. }
+            | Self::RunResumed { run_id, .. }
             | Self::RunCompleted { run_id, .. }
             | Self::RunCancelled { run_id, .. }
             | Self::RunFailed { run_id, .. } => run_id,

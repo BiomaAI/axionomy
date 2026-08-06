@@ -1,24 +1,32 @@
-use axionomy_problems::maze_view::{self, MazeStrategy};
+use axionomy_service::{ReferenceService, RunRequest};
 use std::{fs, path::PathBuf};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut arguments = std::env::args_os().skip(1);
-    let strategy_key = arguments
+    let problem = arguments
         .next()
         .and_then(|value| value.into_string().ok())
-        .unwrap_or_else(|| "maze_pareto_energy".into());
-    let strategy = MazeStrategy::from_key(&strategy_key)
-        .ok_or_else(|| format!("unknown Maze strategy `{strategy_key}`"))?;
+        .unwrap_or_else(|| "all".into());
     let output = arguments
         .next()
         .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("studio/public/examples/maze-pareto-energy.json"));
-    let document = maze_view::document(strategy)?;
-    let encoded = serde_json::to_string_pretty(&document)? + "\n";
-    if let Some(parent) = output.parent() {
-        fs::create_dir_all(parent)?;
+        .unwrap_or_else(|| PathBuf::from("studio/public/artifacts"));
+    let service = ReferenceService;
+    let problems = if problem == "all" {
+        service.catalog()
+    } else {
+        vec![
+            service
+                .problem(&problem)
+                .ok_or_else(|| format!("unknown problem `{problem}`"))?,
+        ]
+    };
+    fs::create_dir_all(&output)?;
+    for descriptor in problems {
+        let artifact = service.run(RunRequest::new(&descriptor.key))?;
+        let path = output.join(format!("{}.json", descriptor.key));
+        fs::write(&path, serde_json::to_string_pretty(&artifact)? + "\n")?;
+        println!("wrote {}", path.display());
     }
-    fs::write(&output, encoded)?;
-    println!("wrote {}", output.display());
     Ok(())
 }
