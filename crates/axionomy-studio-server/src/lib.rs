@@ -594,9 +594,17 @@ async fn run_events(
     ApiError,
 > {
     let record = find_run(&state, &path.run_id).await?;
+    // Subscribe before copying history so an event emitted at this boundary is
+    // present in at least one source. Sequence filtering removes overlap.
+    let receiver = record.events.subscribe();
     let history = record.history.read().await.clone();
-    let live = BroadcastStream::new(record.events.subscribe())
-        .filter_map(|event| async move { event.ok() });
+    let last_history_sequence = history.last().map(StudioEvent::sequence);
+    let live = BroadcastStream::new(receiver).filter_map(move |event| {
+        let event = event
+            .ok()
+            .filter(|event| last_history_sequence.is_none_or(|last| event.sequence() > last));
+        async move { event }
+    });
     let stream = tokio_stream::iter(history).chain(live).map(|event| {
         let kind = match &event {
             StudioEvent::RunStarted { .. } => "run_started",

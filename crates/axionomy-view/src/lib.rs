@@ -307,6 +307,30 @@ pub enum StudioEvent {
     },
 }
 
+impl StudioEvent {
+    pub const fn sequence(&self) -> u64 {
+        match self {
+            Self::RunStarted { sequence, .. }
+            | Self::Progress { sequence, .. }
+            | Self::FrameAppended { sequence, .. }
+            | Self::RunCompleted { sequence, .. }
+            | Self::RunCancelled { sequence, .. }
+            | Self::RunFailed { sequence, .. } => *sequence,
+        }
+    }
+
+    pub fn run_id(&self) -> &str {
+        match self {
+            Self::RunStarted { run_id, .. }
+            | Self::Progress { run_id, .. }
+            | Self::FrameAppended { run_id, .. }
+            | Self::RunCompleted { run_id, .. }
+            | Self::RunCancelled { run_id, .. }
+            | Self::RunFailed { run_id, .. } => run_id,
+        }
+    }
+}
+
 /// Converts user ontology values into stable, browser-facing identities and
 /// may derive a scene from each replayed economy snapshot.
 pub trait ViewOntology<AccountId, A, RateId, Role, N = u64> {
@@ -670,6 +694,10 @@ mod tests {
         let value = serde_json::to_value(event).unwrap();
         assert_eq!(value["kind"], "progress");
         assert_eq!(value["completed"], 3);
+
+        let decoded: StudioEvent = serde_json::from_value(value).unwrap();
+        assert_eq!(decoded.run_id(), "run-1");
+        assert_eq!(decoded.sequence(), 2);
     }
 
     #[test]
