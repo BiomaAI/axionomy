@@ -8,6 +8,7 @@ use axionomy::{
     Account, AssessmentStatus, Economy, EconomyBuilder, Exchange, ExchangeAssessment, Goal,
     LinearInvariant, Quantity, Rate, Trace, basket,
 };
+use axionomy_search::pareto::{self, Objective, ObjectiveVector, ParetoError, ParetoSearchResult};
 use std::collections::HashSet;
 
 pub const GROSS_PAYMENT: u64 = 100;
@@ -76,6 +77,8 @@ pub enum Asset {
     OpenOrder(OrderId),
     SettledOrder(OrderId),
     SettledValue(u64),
+    /// Participant benefit declared by settlement terms, distinct from cash flow.
+    Utility,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -96,6 +99,13 @@ pub enum RateId {
 pub type World = Economy<AccountId, Asset, RateId, Role>;
 pub type Action = Exchange<RateId, Role, AccountId>;
 pub type Assessment = ExchangeAssessment<AccountId, Asset, RateId, Role>;
+pub type ParetoResult = ParetoSearchResult<RateId, Role, AccountId, u64, ObjectiveKey, u64>;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ObjectiveKey {
+    Buyer(BuyerId),
+    Seller(SellerId),
+}
 
 /// One possible order, buyer, seller, and carrier binding.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -397,6 +407,38 @@ pub fn clear_market(world: &World) -> ClearingProposal {
     best
 }
 
+/// Exhaustively exposes non-dominated participant-utility allocations among
+/// complete, atomic market clearings.
+pub fn pareto_front(world: &World) -> Result<ParetoResult, ParetoError> {
+    pareto::search(world, &goal(), exact_matches, objectives)
+}
+
+pub fn objectives(world: &World) -> ObjectiveVector<ObjectiveKey, u64> {
+    ObjectiveVector::try_new([
+        Objective::maximize(
+            ObjectiveKey::Buyer(BuyerId::A),
+            utility(world, AccountId::Buyer(BuyerId::A)),
+        ),
+        Objective::maximize(
+            ObjectiveKey::Buyer(BuyerId::B),
+            utility(world, AccountId::Buyer(BuyerId::B)),
+        ),
+        Objective::maximize(
+            ObjectiveKey::Seller(SellerId::A),
+            utility(world, AccountId::Seller(SellerId::A)),
+        ),
+        Objective::maximize(
+            ObjectiveKey::Seller(SellerId::B),
+            utility(world, AccountId::Seller(SellerId::B)),
+        ),
+    ])
+    .expect("market objective schema is static and unique")
+}
+
+pub fn utility(world: &World, account: AccountId) -> u64 {
+    world.balance(&account, &Asset::Utility).get()
+}
+
 pub fn settlement(order: OrderId, buyer: BuyerId, seller: SellerId, carrier: CarrierId) -> Action {
     Exchange::new(RateId::SettleOrder(order), Quantity::new(1))
         .bind(Role::Buyer, AccountId::Buyer(buyer))
@@ -409,6 +451,7 @@ pub fn settlement(order: OrderId, buyer: BuyerId, seller: SellerId, carrier: Car
 
 fn settlement_rate(order: OrderId) -> Rate<Role, Asset> {
     let (item, gross, seller_proceeds, tax, commission, shipping) = order_terms(order);
+    let (buyer_utility, seller_utility) = utility_terms(order);
     Rate::new()
         .consume(
             Role::Buyer,
@@ -416,7 +459,11 @@ fn settlement_rate(order: OrderId) -> Rate<Role, Asset> {
         )
         .produce(
             Role::Buyer,
-            basket([(Asset::Item(item), 1), (Asset::PurchaseReceipt(order), 1)]),
+            basket([
+                (Asset::Item(item), 1),
+                (Asset::PurchaseReceipt(order), 1),
+                (Asset::Utility, buyer_utility),
+            ]),
         )
         .consume(
             Role::Seller,
@@ -427,6 +474,7 @@ fn settlement_rate(order: OrderId) -> Rate<Role, Asset> {
             basket([
                 (Asset::Money, seller_proceeds),
                 (Asset::CompletedSale(order), 1),
+                (Asset::Utility, seller_utility),
             ]),
         )
         .preserve(Role::Platform, basket([(Asset::MarketplaceLicense, 1)]))
@@ -446,6 +494,13 @@ fn settlement_rate(order: OrderId) -> Rate<Role, Asset> {
                 (Asset::SettledValue(gross), 1),
             ]),
         )
+}
+
+const fn utility_terms(order: OrderId) -> (u64, u64) {
+    match order {
+        OrderId::A => (30, 20),
+        OrderId::B => (25, 18),
+    }
 }
 
 const fn order_terms(order: OrderId) -> (Item, u64, u64, u64, u64, u64) {
@@ -757,6 +812,36 @@ mod tests {
         assert_eq!(
             capacity_friendly[0].candidate(),
             MarketMatch::new(OrderId::A, BuyerId::A, SellerId::A, CarrierId::B)
+        );
+    }
+
+    #[test]
+    fn pareto_front_exposes_buyer_and_seller_allocation_choices() {
+        let initial = initial();
+        let result = pareto_front(&initial).unwrap();
+        assert_eq!(result.front().len(), 4);
+
+        let mut outcomes = Vec::new();
+        for entry in result.front().entries() {
+            let replayed = initial.replayed(entry.payload()).unwrap();
+            assert!(replayed.matches(&goal()));
+            assert_eq!(&objectives(&replayed), entry.objectives());
+            outcomes.push((
+                utility(&replayed, AccountId::Buyer(BuyerId::A)),
+                utility(&replayed, AccountId::Buyer(BuyerId::B)),
+                utility(&replayed, AccountId::Seller(SellerId::A)),
+                utility(&replayed, AccountId::Seller(SellerId::B)),
+            ));
+        }
+        outcomes.sort_unstable();
+        assert_eq!(
+            outcomes,
+            [
+                (25, 30, 0, 20),
+                (25, 30, 20, 0),
+                (55, 0, 0, 20),
+                (55, 0, 20, 0),
+            ]
         );
     }
 
