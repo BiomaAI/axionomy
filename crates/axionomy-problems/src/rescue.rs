@@ -8,7 +8,11 @@ use axionomy_search::rollout::{
     RolloutConfig, RolloutDecision, RolloutStop, TraceRetention, run_to_goal,
 };
 use axionomy_search::{
-    monte_carlo::{BernoulliStatistics, MonteCarloConfig, evaluate},
+    monte_carlo::{
+        BernoulliStatistics, MonteCarloConfig, PolicyEstimate, VectorStatistics, VectorSummary,
+        evaluate,
+    },
+    pareto::{FrontierCompleteness, Objective, ObjectiveVector, ParetoFront},
     sampling::{
         SeededSampler, WeightedExchange, choose_by_ticket, sample, systematic_ticket, total_weight,
     },
@@ -86,6 +90,7 @@ pub struct Rollout {
     trace: Trace<RateId, Role, AccountId>,
     succeeded: bool,
     spent_energy: u64,
+    used_sensor: bool,
 }
 
 impl Rollout {
@@ -99,6 +104,10 @@ impl Rollout {
 
     pub fn spent_energy(&self) -> u64 {
         self.spent_energy
+    }
+
+    pub fn used_sensor(&self) -> bool {
+        self.used_sensor
     }
 }
 
@@ -131,6 +140,14 @@ impl PolicyComparison {
 pub type World = Economy<AccountId, Asset, RateId, Role>;
 pub type Action = Exchange<RateId, Role, AccountId>;
 pub type AgentView<'a> = EconomicView<'a, AccountId, Asset, RateId, Role>;
+pub type PolicyFront = ParetoFront<PolicyEstimate<Policy, VectorSummary>, PolicyObjective, f64>;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PolicyObjective {
+    SuccessProbability,
+    SensorUseProbability,
+    MeanSpentEnergy,
+}
 
 /// Builds one already-resolved deterministic world.
 pub fn scenario(truth: Location, seed: u8) -> World {
@@ -373,6 +390,10 @@ pub fn run_policy(world: World, policy: Policy) -> Rollout {
             .cloned()
             .expect("rescue rollouts retain their trace"),
         succeeded,
+        used_sensor: !result
+            .world()
+            .balance(&AccountId::Agent, &Asset::UsedSensor)
+            .is_zero(),
     }
 }
 
@@ -389,6 +410,7 @@ pub fn run_sampled_policy(model: &World, sample: &Action, policy: Policy) -> Opt
         trace,
         succeeded: rollout.succeeded,
         spent_energy: rollout.spent_energy,
+        used_sensor: rollout.used_sensor,
     })
 }
 
@@ -433,6 +455,52 @@ pub fn monte_carlo(model: &World, samples: usize, seed: u64) -> Option<PolicyCom
     )
     .ok()?;
     comparison(estimates, samples)
+}
+
+/// Estimates the success/resource tradeoff across sampled encoded scenarios.
+pub fn policy_front(model: &World, samples: usize, seed: u64) -> Option<PolicyFront> {
+    if samples == 0 {
+        return None;
+    }
+    let weighted_scenarios = encoded_scenarios(model);
+    let estimates = evaluate(
+        [Policy::ObserveThenFollow, Policy::NorthWithoutObserving],
+        MonteCarloConfig::new(samples),
+        |policy, sample_index| {
+            let offset = u64::try_from(sample_index)
+                .unwrap_or(u64::MAX)
+                .wrapping_mul(0x9e37_79b9_7f4a_7c15);
+            let mut sampler = SeededSampler::new(seed.wrapping_add(offset));
+            let sampled = sample(&weighted_scenarios, &mut sampler).map_err(|_| ())?;
+            let rollout = run_sampled_policy(model, sampled, *policy).ok_or(())?;
+            Ok::<_, ()>(vec![
+                f64::from(rollout.succeeded()),
+                f64::from(rollout.used_sensor()),
+                rollout.spent_energy() as f64,
+            ])
+        },
+        || VectorStatistics::new(3),
+    )
+    .ok()?;
+
+    let mut front = ParetoFront::approximate();
+    for estimate in estimates {
+        let objectives = policy_objectives(estimate.summary())?;
+        front.insert(estimate, objectives).ok()?;
+    }
+    debug_assert_eq!(front.completeness(), FrontierCompleteness::Approximate);
+    Some(front)
+}
+
+pub fn policy_objectives(summary: &VectorSummary) -> Option<ObjectiveVector<PolicyObjective, f64>> {
+    let dimensions = summary.dimensions();
+    (dimensions.len() == 3).then_some(())?;
+    ObjectiveVector::try_new([
+        Objective::maximize(PolicyObjective::SuccessProbability, dimensions[0].mean()),
+        Objective::minimize(PolicyObjective::SensorUseProbability, dimensions[1].mean()),
+        Objective::minimize(PolicyObjective::MeanSpentEnergy, dimensions[2].mean()),
+    ])
+    .ok()
 }
 
 fn comparison(
@@ -612,6 +680,20 @@ mod tests {
     fn seeded_monte_carlo_is_reproducible() {
         let model = uniform_uncertain();
         assert_eq!(monte_carlo(&model, 64, 19), monte_carlo(&model, 64, 19));
+    }
+
+    #[test]
+    fn sampled_policy_front_keeps_success_sensor_tradeoff_approximate() {
+        let front = policy_front(&uniform_uncertain(), 64, 19).unwrap();
+        assert_eq!(front.completeness(), FrontierCompleteness::Approximate);
+        assert_eq!(front.len(), 2);
+        for entry in front.entries() {
+            assert_eq!(entry.payload().summary().dimensions()[0].samples(), 64);
+            assert_eq!(
+                &policy_objectives(entry.payload().summary()).unwrap(),
+                entry.objectives()
+            );
+        }
     }
 
     #[test]

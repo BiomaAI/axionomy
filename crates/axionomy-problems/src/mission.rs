@@ -8,7 +8,11 @@ use axionomy_search::{
     action_source::{ActionSource, lazy_actions},
     ismcts::{InformationState, IsmctsResult, search as information_set_search},
     mcts::MctsConfig,
-    monte_carlo::{BernoulliStatistics, MonteCarloConfig, evaluate},
+    monte_carlo::{
+        BernoulliStatistics, MonteCarloConfig, PolicyEstimate, VectorStatistics, VectorSummary,
+        evaluate,
+    },
+    pareto::{FrontierCompleteness, Objective, ObjectiveVector, ParetoFront},
     rollout::{RolloutConfig, RolloutDecision, RolloutStop, TraceRetention, run_to_goal},
     sampling::{
         SeededSampler, TicketSource, WeightedExchange, choose_by_ticket, sample, systematic_ticket,
@@ -124,6 +128,14 @@ pub type Action = Exchange<RateId, Role, AccountId>;
 pub type AgentView<'a> = EconomicView<'a, AccountId, Asset, RateId, Role>;
 pub type MissionObservation = ObservationKey<AccountId, Asset>;
 pub type MissionInformation = InformationState<MissionObservation>;
+pub type PolicyFront = ParetoFront<PolicyEstimate<Policy, VectorSummary>, PolicyObjective, f64>;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PolicyObjective {
+    SuccessProbability,
+    MeanElapsedTime,
+    MedicalKitUseProbability,
+}
 
 #[derive(Debug, Clone)]
 pub struct MissionRollout {
@@ -823,6 +835,55 @@ pub fn monte_carlo(model: &World, samples: usize, seed: u64) -> Option<PolicyCom
     comparison(estimates, samples)
 }
 
+/// Estimates a non-dominated policy set from sampled hidden scenarios.
+pub fn policy_front(model: &World, samples: usize, seed: u64) -> Option<PolicyFront> {
+    if samples == 0 {
+        return None;
+    }
+    let support = scenarios(model);
+    let estimates = evaluate(
+        [Policy::ShareAndCoordinate, Policy::NorthTogether],
+        MonteCarloConfig::new(samples),
+        |policy, sample_index| {
+            let offset = u64::try_from(sample_index)
+                .unwrap_or(u64::MAX)
+                .wrapping_mul(0x9e37_79b9_7f4a_7c15);
+            let mut sampler = SeededSampler::new(seed.wrapping_add(offset));
+            let scenario = sample(&support, &mut sampler).map_err(|_| ())?.clone();
+            let rollout = run_policy_with_scenario(model, *policy, scenario);
+            Ok::<_, ()>(vec![
+                f64::from(rollout.succeeded()),
+                rollout.elapsed_time() as f64,
+                f64::from(rollout.used_medical_kit()),
+            ])
+        },
+        || VectorStatistics::new(3),
+    )
+    .ok()?;
+
+    let mut front = ParetoFront::approximate();
+    for estimate in estimates {
+        let objectives = policy_objectives(estimate.summary())?;
+        front.insert(estimate, objectives).ok()?;
+    }
+    debug_assert_eq!(front.completeness(), FrontierCompleteness::Approximate);
+    Some(front)
+}
+
+pub fn policy_objectives(summary: &VectorSummary) -> Option<ObjectiveVector<PolicyObjective, f64>> {
+    let dimensions = summary.dimensions();
+    (dimensions.len() == 3).then_some(())?;
+    ObjectiveVector::try_new([
+        Objective::maximize(PolicyObjective::SuccessProbability, dimensions[0].mean()),
+        Objective::minimize(PolicyObjective::MeanElapsedTime, dimensions[1].mean()),
+        Objective::minimize(
+            PolicyObjective::MedicalKitUseProbability,
+            dimensions[2].mean(),
+        ),
+    ])
+    .ok()
+}
+
 fn comparison(
     estimates: Vec<
         axionomy_search::monte_carlo::PolicyEstimate<
@@ -1242,6 +1303,20 @@ mod tests {
     fn seeded_monte_carlo_is_reproducible() {
         let model = initial();
         assert_eq!(monte_carlo(&model, 64, 23), monte_carlo(&model, 64, 23));
+    }
+
+    #[test]
+    fn sampled_policy_front_keeps_reliability_cost_tradeoff_approximate() {
+        let front = policy_front(&initial(), 64, 23).unwrap();
+        assert_eq!(front.completeness(), FrontierCompleteness::Approximate);
+        assert_eq!(front.len(), 2);
+        for entry in front.entries() {
+            assert_eq!(entry.payload().summary().dimensions()[0].samples(), 64);
+            assert_eq!(
+                &policy_objectives(entry.payload().summary()).unwrap(),
+                entry.objectives()
+            );
+        }
     }
 
     #[test]

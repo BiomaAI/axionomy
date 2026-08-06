@@ -6,7 +6,11 @@ use axionomy::{
 };
 use axionomy_search::{
     mcts::{MctsConfig, MctsDecision, MctsError, search},
-    monte_carlo::{MonteCarloConfig, PolicyEstimate, ScalarStatistics, ScalarSummary, evaluate},
+    monte_carlo::{
+        MonteCarloConfig, PolicyEstimate, ScalarStatistics, ScalarSummary, VectorStatistics,
+        VectorSummary, evaluate,
+    },
+    pareto::{FrontierCompleteness, Objective, ObjectiveVector, ParetoFront},
     rollout::{RolloutConfig, RolloutDecision, RolloutStop, TraceRetention, run_to_goal},
     sampling::{SeededSampler, TicketSource, WeightedExchange, sample},
 };
@@ -128,6 +132,14 @@ pub type World = Economy<AccountId, Asset, RateId, Role>;
 pub type Action = Exchange<RateId, Role, AccountId>;
 pub type PlanningDecision = MctsDecision<Action>;
 pub type PlanningError = MctsError<RateId, Role, AccountId, Asset>;
+pub type PolicyFront = ParetoFront<PolicyEstimate<Policy, VectorSummary>, PolicyObjective, f64>;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PolicyObjective {
+    CompletionProbability,
+    MeanDelivered,
+    MeanElapsedTime,
+}
 
 #[derive(Debug, Clone)]
 pub struct MissionRollout {
@@ -426,6 +438,51 @@ pub fn monte_carlo_with_risk(
         .policy()
         .to_owned();
     Some(MonteCarloEstimate { estimates, chosen })
+}
+
+/// Estimates a non-dominated policy set from sampled, core-validated rollouts.
+/// Statistical sampling means this front is intentionally never labeled exact.
+pub fn policy_front(model: &World, samples: usize) -> Option<PolicyFront> {
+    if samples == 0 {
+        return None;
+    }
+    let estimates = evaluate(
+        [Policy::Direct, Policy::Reliable],
+        MonteCarloConfig::new(samples),
+        |policy, sample_index| {
+            let rollout = run_policy(
+                model,
+                *policy,
+                u64::try_from(sample_index).unwrap_or(u64::MAX),
+            );
+            Ok::<_, std::convert::Infallible>(vec![
+                f64::from(rollout.completed()),
+                rollout.delivered() as f64,
+                rollout.elapsed_time() as f64,
+            ])
+        },
+        || VectorStatistics::new(3),
+    )
+    .ok()?;
+
+    let mut front = ParetoFront::approximate();
+    for estimate in estimates {
+        let objectives = policy_objectives(estimate.summary())?;
+        front.insert(estimate, objectives).ok()?;
+    }
+    debug_assert_eq!(front.completeness(), FrontierCompleteness::Approximate);
+    Some(front)
+}
+
+pub fn policy_objectives(summary: &VectorSummary) -> Option<ObjectiveVector<PolicyObjective, f64>> {
+    let dimensions = summary.dimensions();
+    (dimensions.len() == 3).then_some(())?;
+    ObjectiveVector::try_new([
+        Objective::maximize(PolicyObjective::CompletionProbability, dimensions[0].mean()),
+        Objective::maximize(PolicyObjective::MeanDelivered, dimensions[1].mean()),
+        Objective::minimize(PolicyObjective::MeanElapsedTime, dimensions[2].mean()),
+    ])
+    .ok()
 }
 
 /// Plans one live decision with MCTS over encoded routes and Nature outcomes.
@@ -769,6 +826,20 @@ mod tests {
         let tail = monte_carlo_with_risk(&initial(), 64, RiskCriterion::LowerDecile)
             .expect("mission has policies");
         assert_eq!(tail.chosen(), Policy::Reliable);
+    }
+
+    #[test]
+    fn sampled_policy_front_is_explicitly_approximate_and_self_consistent() {
+        let front = policy_front(&initial(), 64).expect("policies have sampled outcomes");
+        assert_eq!(front.completeness(), FrontierCompleteness::Approximate);
+        assert!(!front.is_empty());
+        for entry in front.entries() {
+            assert_eq!(entry.payload().summary().dimensions()[0].samples(), 64);
+            assert_eq!(
+                &policy_objectives(entry.payload().summary()).unwrap(),
+                entry.objectives()
+            );
+        }
     }
 
     #[test]
