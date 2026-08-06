@@ -4,7 +4,10 @@ use axionomy::{
     Account, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Quantity, Rate, Trace,
     basket,
 };
-use axionomy_search::{SearchSolution, bfs};
+use axionomy_search::{
+    SearchSolution, bfs,
+    pareto::{self, Objective, ObjectiveVector, ParetoError, ParetoSearchResult},
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum AgentId {
@@ -38,6 +41,9 @@ pub enum Asset {
     CanBid,
     Submitted,
     CrossingRight,
+    FirstTurn,
+    SecondTurn,
+    PriorityBenefit,
     Waiting,
     Crossed,
     CapacityFree,
@@ -69,6 +75,9 @@ pub enum RateId {
     ClaimFirst {
         agent: AgentId,
     },
+    ClaimSecond {
+        agent: AgentId,
+    },
     YieldToWaiting {
         agent: AgentId,
     },
@@ -82,6 +91,13 @@ pub type World = Economy<AccountId, Asset, RateId, Role>;
 pub type Action = Exchange<RateId, Role, AccountId>;
 pub type Solution = SearchSolution<RateId, Role, AccountId>;
 pub type Proposal = Trace<RateId, Role, AccountId>;
+pub type ParetoResult = ParetoSearchResult<RateId, Role, AccountId, u64, ObjectiveKey, u64>;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ObjectiveKey {
+    Priority(AgentId),
+    Credit(AgentId),
+}
 
 pub fn initial() -> World {
     let mut builder = EconomyBuilder::new()
@@ -110,6 +126,7 @@ pub fn initial() -> World {
             Account::from(basket([
                 (Asset::BridgeIdentity, 1),
                 (Asset::CapacityFree, 1),
+                (Asset::FirstTurn, 1),
                 (Asset::Active, 1),
             ])),
         );
@@ -149,7 +166,29 @@ pub fn initial() -> World {
                         basket([(Asset::BridgeIdentity, 1), (Asset::Active, 1)]),
                     )
                     .consume(Role::Traveler, basket([(Asset::CanBid, 1)]))
-                    .consume(Role::Bridge, basket([(Asset::CapacityFree, 1)]))
+                    .consume(
+                        Role::Bridge,
+                        basket([(Asset::CapacityFree, 1), (Asset::FirstTurn, 1)]),
+                    )
+                    .produce(
+                        Role::Traveler,
+                        basket([(Asset::CrossingRight, 1), (Asset::PriorityBenefit, 1)]),
+                    )
+                    .distinct(Role::Traveler, Role::Bridge),
+            )
+            .rate(
+                RateId::ClaimSecond { agent },
+                Rate::new()
+                    .preserve(Role::Traveler, basket([(Asset::AgentIdentity(agent), 1)]))
+                    .preserve(
+                        Role::Bridge,
+                        basket([(Asset::BridgeIdentity, 1), (Asset::Active, 1)]),
+                    )
+                    .consume(Role::Traveler, basket([(Asset::CanBid, 1)]))
+                    .consume(
+                        Role::Bridge,
+                        basket([(Asset::CapacityFree, 1), (Asset::SecondTurn, 1)]),
+                    )
                     .produce(Role::Traveler, basket([(Asset::CrossingRight, 1)]))
                     .distinct(Role::Traveler, Role::Bridge),
             )
@@ -162,7 +201,10 @@ pub fn initial() -> World {
                         basket([(Asset::BridgeIdentity, 1), (Asset::Active, 1)]),
                     )
                     .consume(Role::Traveler, basket([(Asset::Waiting, 1)]))
-                    .consume(Role::Bridge, basket([(Asset::CapacityFree, 1)]))
+                    .consume(
+                        Role::Bridge,
+                        basket([(Asset::CapacityFree, 1), (Asset::SecondTurn, 1)]),
+                    )
                     .produce(Role::Traveler, basket([(Asset::CrossingRight, 1)]))
                     .distinct(Role::Traveler, Role::Bridge),
             )
@@ -190,7 +232,10 @@ pub fn initial() -> World {
                             (Asset::SpentEnergy, 1),
                         ]),
                     )
-                    .produce(Role::Bridge, basket([(Asset::CapacityFree, 1)]))
+                    .produce(
+                        Role::Bridge,
+                        basket([(Asset::CapacityFree, 1), (Asset::SecondTurn, 1)]),
+                    )
                     .distinct(Role::Traveler, Role::Bridge),
             );
     }
@@ -236,6 +281,7 @@ pub fn initial() -> World {
                         basket([
                             (Asset::CrossingRight, 1),
                             (Asset::SpentCredit, u64::from(winning_bid)),
+                            (Asset::PriorityBenefit, 1),
                         ]),
                     )
                     .consume(
@@ -250,7 +296,10 @@ pub fn initial() -> World {
                         Role::Loser,
                         basket([(Asset::Waiting, 1), (Asset::Credit, u64::from(losing_bid))]),
                     )
-                    .consume(Role::Bridge, basket([(Asset::CapacityFree, 1)]))
+                    .consume(
+                        Role::Bridge,
+                        basket([(Asset::CapacityFree, 1), (Asset::FirstTurn, 1)]),
+                    )
                     .distinct(Role::Winner, Role::Loser)
                     .distinct(Role::Winner, Role::Bridge)
                     .distinct(Role::Loser, Role::Bridge),
@@ -300,6 +349,12 @@ pub fn initial() -> World {
                 .weight(Asset::CrossingRight, 1),
         )
         .invariant(
+            LinearInvariant::new("crossing turn")
+                .weight(Asset::FirstTurn, 1)
+                .weight(Asset::SecondTurn, 1)
+                .weight(Asset::CrossingRight, 1),
+        )
+        .invariant(
             LinearInvariant::new("energy accounting")
                 .weight(Asset::Energy, 1)
                 .weight(Asset::SpentEnergy, 1),
@@ -328,12 +383,46 @@ pub fn solve(world: &World) -> Option<Solution> {
     bfs(world, &goal(), candidates)
 }
 
+/// Exhaustively compares valid allocation mechanisms using participant
+/// priority and retained-credit assets.
+pub fn pareto_front(world: &World) -> Result<ParetoResult, ParetoError> {
+    pareto::search(world, &goal(), candidates, objectives)
+}
+
+pub fn objectives(world: &World) -> ObjectiveVector<ObjectiveKey, u64> {
+    ObjectiveVector::try_new([
+        Objective::maximize(
+            ObjectiveKey::Priority(AgentId::A),
+            priority(world, AgentId::A),
+        ),
+        Objective::maximize(
+            ObjectiveKey::Priority(AgentId::B),
+            priority(world, AgentId::B),
+        ),
+        Objective::maximize(ObjectiveKey::Credit(AgentId::A), credit(world, AgentId::A)),
+        Objective::maximize(ObjectiveKey::Credit(AgentId::B), credit(world, AgentId::B)),
+    ])
+    .expect("bridge objective schema is static and unique")
+}
+
+pub fn priority(world: &World, agent: AgentId) -> u64 {
+    world
+        .balance(&AccountId::Agent(agent), &Asset::PriorityBenefit)
+        .get()
+}
+
+pub fn credit(world: &World, agent: AgentId) -> u64 {
+    world
+        .balance(&AccountId::Agent(agent), &Asset::Credit)
+        .get()
+}
+
 pub fn first_come_proposal(first: AgentId) -> Option<Proposal> {
     let second = other(first);
     validated_trace([
         RateId::ClaimFirst { agent: first },
         RateId::Cross { agent: first },
-        RateId::ClaimFirst { agent: second },
+        RateId::ClaimSecond { agent: second },
         RateId::Cross { agent: second },
         RateId::Finish,
     ])
@@ -394,6 +483,7 @@ pub fn action(rate: RateId) -> Action {
     match rate {
         RateId::SubmitBid { agent, .. }
         | RateId::ClaimFirst { agent }
+        | RateId::ClaimSecond { agent }
         | RateId::YieldToWaiting { agent }
         | RateId::Cross { agent } => Exchange::new(rate, Quantity::new(1))
             .bind(Role::Traveler, AccountId::Agent(agent))
@@ -496,5 +586,27 @@ mod tests {
         .bind(Role::Bridge, AccountId::Bridge);
 
         assert!(!world.is_applicable(&swapped));
+    }
+
+    #[test]
+    fn pareto_front_retains_both_priority_allocations_and_rejects_wasteful_payment() {
+        let initial = initial();
+        let result = pareto_front(&initial).unwrap();
+        let mut outcomes = Vec::new();
+
+        for entry in result.front().entries() {
+            let replayed = initial.replayed(entry.payload()).unwrap();
+            assert!(replayed.matches(&goal()));
+            assert_eq!(&objectives(&replayed), entry.objectives());
+            outcomes.push((
+                priority(&replayed, AgentId::A),
+                priority(&replayed, AgentId::B),
+                credit(&replayed, AgentId::A),
+                credit(&replayed, AgentId::B),
+            ));
+        }
+
+        outcomes.sort_unstable();
+        assert_eq!(outcomes, [(0, 1, 2, 2), (1, 0, 2, 2)]);
     }
 }
