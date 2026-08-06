@@ -4,6 +4,7 @@ pub mod action_source;
 pub mod ismcts;
 pub mod mcts;
 pub mod monte_carlo;
+pub mod pareto;
 pub mod rl;
 pub mod rollout;
 pub mod sampling;
