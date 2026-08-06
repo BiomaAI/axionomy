@@ -516,10 +516,13 @@ pub trait ViewOntology<AccountId, A, RateId, Role, N = u64> {
 /// A useful default for user ontologies and reference fixtures. It preserves
 /// exact typed engine values internally while deriving stable diagnostic IDs
 /// from `Debug` output at the presentation boundary.
+type OntologyMarker<AccountId, A, RateId, Role, N> =
+    PhantomData<fn() -> (AccountId, A, RateId, Role, N)>;
+
 pub struct DebugOntology<AccountId, A, RateId, Role, N = u64, SceneFn = NoScene> {
     namespace: String,
     scene: SceneFn,
-    marker: PhantomData<fn() -> (AccountId, A, RateId, Role, N)>,
+    marker: OntologyMarker<AccountId, A, RateId, Role, N>,
 }
 
 #[derive(Debug, Clone, Copy, Default)]

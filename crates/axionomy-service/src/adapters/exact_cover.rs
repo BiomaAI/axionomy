@@ -112,8 +112,10 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
     let cells = sets
         .into_iter()
         .flat_map(|set| {
-            elements.into_iter().filter_map(move |element| {
-                includes(set, element).then(|| {
+            elements
+                .into_iter()
+                .filter(move |element| includes(set, *element))
+                .map(move |element| {
                     let selected = !world
                         .balance(&AccountId::Problem, &Asset::Selected(set))
                         .is_zero();
@@ -128,7 +130,6 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                         },
                     }
                 })
-            })
         })
         .collect();
     Some(Scene::Matrix {

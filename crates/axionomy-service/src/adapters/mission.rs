@@ -72,7 +72,7 @@ pub(super) fn build(
             observation(&actual, AgentId::Medic),
         ];
         if let Some(candidate) = mission::candidates(&model).first() {
-            let malformed = Exchange::new(*candidate.rate(), candidate.units().clone());
+            let malformed = Exchange::new(*candidate.rate(), *candidate.units());
             view.proposals.push(proposal("mission", ProposalSpec { id: "action-without-actors", label: "Mission action without roles", description: "Actor, Nature, mission, and goal roles are explicit; omitting them yields a structured invalid assessment." }, &model, &malformed));
         }
         documents.push(view);

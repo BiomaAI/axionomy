@@ -158,7 +158,7 @@ where
     T: Into<std::ffi::OsString> + Clone,
 {
     Cli::try_parse_from(arguments)
-        .map(|cli| execute(cli))
+        .map(execute)
         .and_then(|result| {
             result.map_err(|error| clap::Error::raw(clap::error::ErrorKind::Io, error.to_string()))
         })

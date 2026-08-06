@@ -36,7 +36,7 @@ pub(super) fn build(
         ],
     ));
     if let Some(first) = trace.exchanges().first() {
-        let malformed = Exchange::new(*first.rate(), first.units().clone());
+        let malformed = Exchange::new(*first.rate(), *first.units());
         view.proposals.push(proposal("connect_four", ProposalSpec { id: "move-without-board", label: "Move without board bindings", description: "Gravity and line-count updates require game, column, cell, and result accounts; an unbound move is invalid." }, &initial, &malformed));
     }
     artifact(
