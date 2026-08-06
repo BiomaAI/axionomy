@@ -4,7 +4,10 @@ use axionomy::{
     Account, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Quantity, Rate, Trace,
     basket,
 };
-use axionomy_search::{SearchSolution, best_first};
+use axionomy_search::{
+    SearchSolution, best_first,
+    pareto::{self, Objective, ObjectiveVector, ParetoError, ParetoSearchResult},
+};
 use std::collections::HashSet;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -73,6 +76,13 @@ pub enum RateId {
 pub type World = Economy<AccountId, Asset, RateId, Role>;
 pub type Action = Exchange<RateId, Role, AccountId>;
 pub type Solution = SearchSolution<RateId, Role, AccountId>;
+pub type ParetoResult = ParetoSearchResult<RateId, Role, AccountId, u64, ObjectiveKey, u64>;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ObjectiveKey {
+    JobOneCompletion,
+    JobTwoCompletion,
+}
 
 #[derive(Debug, Clone)]
 pub struct OptimizedProposal {
@@ -110,6 +120,42 @@ pub fn candidates(world: &World) -> Vec<Action> {
 
 pub fn solve_best_first(world: &World) -> Option<Solution> {
     best_first(world, &goal(), candidates, encoded_makespan, |_| 0)
+}
+
+/// Exhaustively exposes the non-dominated completion allocations between jobs.
+pub fn pareto_front(world: &World) -> Result<ParetoResult, ParetoError> {
+    pareto::search(world, &goal(), candidates, objectives)
+}
+
+pub fn objectives(world: &World) -> ObjectiveVector<ObjectiveKey, u64> {
+    ObjectiveVector::try_new([
+        Objective::minimize(
+            ObjectiveKey::JobOneCompletion,
+            completion_time(world, Job::One),
+        ),
+        Objective::minimize(
+            ObjectiveKey::JobTwoCompletion,
+            completion_time(world, Job::Two),
+        ),
+    ])
+    .expect("scheduling objective schema is static and unique")
+}
+
+pub fn completion_time(world: &World, job: Job) -> u64 {
+    let operation = match job {
+        Job::One => Operation::OneB,
+        Job::Two => Operation::TwoB,
+    };
+    (0..=16)
+        .find(|time| {
+            !world
+                .balance(
+                    &AccountId::Job(job),
+                    &Asset::CompletedAt(operation, u8::try_from(*time).expect("bounded")),
+                )
+                .is_zero()
+        })
+        .unwrap_or(0)
 }
 
 /// A separate depth-first branch enumerator. It understands no scheduling
@@ -357,8 +403,8 @@ fn operation_spec(operation: Operation) -> (Job, Machine, u8, u8) {
     match operation {
         Operation::OneA => (Job::One, Machine::One, 2, 0),
         Operation::OneB => (Job::One, Machine::Two, 1, 2),
-        Operation::TwoA => (Job::Two, Machine::Two, 2, 0),
-        Operation::TwoB => (Job::Two, Machine::One, 1, 2),
+        Operation::TwoA => (Job::Two, Machine::One, 2, 0),
+        Operation::TwoB => (Job::Two, Machine::Two, 1, 2),
     }
 }
 
@@ -400,8 +446,8 @@ mod tests {
         let world = initial();
         let generic = solve_best_first(&world).expect("schedule is feasible");
         let independent = branch_optimize(&world).expect("schedule is feasible");
-        assert_eq!(generic.cost(), 3);
-        assert_eq!(independent.makespan(), 3);
+        assert_eq!(generic.cost(), 5);
+        assert_eq!(independent.makespan(), 5);
 
         let mut replay = initial();
         replay
@@ -416,6 +462,26 @@ mod tests {
         let world = impossible();
         assert!(solve_best_first(&world).is_none());
         assert!(branch_optimize(&world).is_none());
+    }
+
+    #[test]
+    fn pareto_front_exposes_which_job_gets_the_earliest_completion() {
+        let initial = initial();
+        let result = pareto_front(&initial).unwrap();
+        let mut outcomes = Vec::new();
+
+        for entry in result.front().entries() {
+            let replayed = initial.replayed(entry.payload()).unwrap();
+            assert!(replayed.matches(&goal()));
+            assert_eq!(&objectives(&replayed), entry.objectives());
+            outcomes.push((
+                completion_time(&replayed, Job::One),
+                completion_time(&replayed, Job::Two),
+            ));
+        }
+
+        outcomes.sort_unstable();
+        assert_eq!(outcomes, [(3, 5), (5, 3)]);
     }
 
     #[test]
@@ -466,8 +532,8 @@ mod tests {
                             || two_b_end > horizon
                             || one_b < one_a_end
                             || two_b < two_a_end
-                            || overlaps(one_a, one_a_end, two_b, two_b_end)
-                            || overlaps(two_a, two_a_end, one_b, one_b_end)
+                            || overlaps(one_a, one_a_end, two_a, two_a_end)
+                            || overlaps(one_b, one_b_end, two_b, two_b_end)
                         {
                             continue;
                         }
