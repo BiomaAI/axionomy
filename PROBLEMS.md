@@ -42,7 +42,7 @@ they bypass the example's trusted action helper.
 | Approximate policy front |  |  |  |  |  | ✓ |  |  | ✓ |  | ✓ |  |
 | Infeasible instance |  | ✓ | ✓ |  | ✓ |  |  | ✓ | ✓ |  | ✓ | ✓ |
 | Specialized proposer |  |  | Algorithm X |  | Branch optimizer | Scenario/MC evaluator | Auction | Assessment clearing | Monte Carlo/MCTS | MCTS/minimax oracle | ISMCTS/scenario evaluator | Event agenda/index |
-| Generic algorithm | BFS/A*/Dijkstra | BFS | BFS | BFS/best-first | Best-first | Rollout | BFS |  | Rollout/MC | MCTS | ISMCTS/Rollout/MC/RL |  |
+| Generic algorithm | BFS/A*/Dijkstra/Pareto | BFS | BFS | BFS/best-first/Pareto | Best-first/Pareto | Rollout/MC/Pareto | BFS/Pareto | Pareto | Rollout/MC/Pareto | MCTS | ISMCTS/Rollout/MC/Pareto/RL | Pareto |
 | Hidden or stochastic state |  |  |  |  |  | ✓ |  |  | ✓ |  | ✓ |  |
 | Multi-agent resolution |  |  |  |  |  |  | ✓ | ✓ |  | ✓ | ✓ |  |
 | Long-horizon trajectory |  |  |  |  |  |  |  |  | ✓ | ✓ |  | ✓ |
@@ -127,6 +127,7 @@ produces `Solved`, leaving no post-terminal moves applicable.
 - Preserved topology and permissions.
 - Objective and admissible heuristic values encoded as assets.
 - One state graph served by multiple traversal strategies.
+- Exact multi-objective comparison without weighted-sum scalarization.
 
 ## 2. Linear Sokoban
 
@@ -234,6 +235,7 @@ The rate book deliberately includes a malformed proposal:
 - Catalysts/read arcs.
 - Domain-declared conservation dimensions.
 - Core enforcement even when the rate proposer is wrong.
+- Process tradeoffs remain terminal assets and replayable plans.
 
 ## 5. Discrete job-shop scheduling
 
@@ -274,6 +276,7 @@ Finish preserves both completion tokens and produces `Makespan(n)` and
 - Precedence represented as tokens, not solver-only constraints.
 - Optimization objective encoded in final state.
 - Concrete-rate explosion across ready/start times.
+- Stakeholder completion allocation without a privileged scalar compromise.
 
 ## 6. Stochastic rescue
 
@@ -323,6 +326,7 @@ match.
 - Reproducible priors and chance through an encoded Nature participant.
 - Exact finite-support evaluation and genuine seeded Monte Carlo over isolated
   forks.
+- Approximate multi-objective estimates keep sampling uncertainty visible.
 
 ## 7. Single-lane bridge negotiation
 
@@ -367,6 +371,8 @@ asset, making the terminal economy quiescent.
 - Escrow and resource accounting.
 - Alternative mechanisms over one state vocabulary.
 - Capacity as a conserved asset.
+- Dominance can reject an economically wasteful mechanism without rejecting
+  its core validity.
 
 ## 8. Multi-party marketplace settlement
 
@@ -434,6 +440,7 @@ ordinary replayable exchange trace, not a second market state.
 - Global compatibility search over sequential multi-order settlement.
 - Ergonomic all-distinct role constraints for larger joint transactions.
 - Conservation and lifecycle invariants across heterogeneous participants.
+- Participant-level allocation fronts without an external market state.
 
 ## 9. Stochastic delivery logistics
 
@@ -483,6 +490,8 @@ delivery, refueling, travel, repair, and order completion are all rates.
 - Disposable MCTS route planning over the same transition system.
 - Efficient forks sharing immutable laws and untouched account data.
 - Candidate generation from current route, custody, and resource assets.
+- Sampled dominance may remove a policy while preserving its underlying
+  encoded rollouts for audit and alternative statistics.
 
 ## 10. Adversarial Connect Four
 
@@ -601,6 +610,8 @@ outcome exchanges. The selected live action is core-revalidated.
   observed policies.
 - Caller-owned belief evolution and repeated information-set planning.
 - Assessment-derived masks and replay-derived learning trajectories.
+- Approximate fronts provide set-valued policy supervision without claiming
+  exact hidden-world performance.
 
 ## 12. Cohort-indexed perishables
 
@@ -678,6 +689,8 @@ facts and only proposes ordinary spoil exchanges.
 - Work proportional to shared-fate cohorts rather than physical units.
 - Incremental touched-account commit and receipt-delta invariant validation
   without weakening atomicity.
+- Bounded policy discretization can coexist with an arbitrary-unit fungible
+  exchange rate.
 
 ## Cross-problem acceptance tests
 
@@ -755,6 +768,9 @@ limits clearly:
    justify them.
 8. Nature needs richer parameterized distribution updates for very large or
    continuous outcome spaces.
+9. Larger multi-objective spaces will need measured frontier representations
+   or domain-proven pruning; approximate epsilon dominance must never be
+   mislabeled as exhaustive Pareto truth.
 
 Any future abstraction must continue to pass all twelve problems without
 moving authoritative meaning into solver callbacks or an external world.

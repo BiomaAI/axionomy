@@ -631,6 +631,26 @@ mod tests {
             Err(ParetoError::DuplicateObjective { left: 0, right: 1 })
         );
 
+        let left = ObjectiveVector::try_new([
+            Objective::minimize("cost", 1),
+            Objective::maximize("quality", 2),
+        ])
+        .unwrap();
+        let shorter = ObjectiveVector::try_new([Objective::minimize("cost", 1)]).unwrap();
+        assert_eq!(
+            left.dominance(&shorter),
+            Err(ParetoError::SchemaLength { left: 2, right: 1 })
+        );
+        let wrong_direction = ObjectiveVector::try_new([
+            Objective::minimize("cost", 1),
+            Objective::minimize("quality", 2),
+        ])
+        .unwrap();
+        assert_eq!(
+            left.dominance(&wrong_direction),
+            Err(ParetoError::SchemaMismatch { dimension: 1 })
+        );
+
         let mut front = ParetoFront::approximate();
         assert_eq!(
             front.insert(
