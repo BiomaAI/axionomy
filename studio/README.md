@@ -1,6 +1,11 @@
 # Axionomy Studio
 
-Axionomy Studio is the browser trace player and economic debugger for Axionomy. Its universal panels inspect account balances, exchange bindings, assessments, receipts, and objectives. Optional graph or grid scenes are derived conveniences; they never become a second simulation model. The included Maze scene and exact Pareto plot are the first reference projection.
+Axionomy Studio is the browser trace player and economic debugger for Axionomy.
+All twelve canonical problems are discoverable and runnable. Universal panels
+inspect balances, exchange bindings, assessments, projected and committed
+deltas, encoded rates and invariants, objectives, alternatives, telemetry, and
+actor-relative observations. Graph, grid, matrix, and timeline scenes are
+derived conveniences; they never become a second simulation model.
 
 ## Run locally
 
@@ -18,7 +23,9 @@ pnpm install
 pnpm dev
 ```
 
-Open `http://127.0.0.1:5173`. Vite proxies `/api` to the server at `127.0.0.1:3000`. The committed document in `public/examples` also loads when the server is unavailable.
+Open `http://127.0.0.1:5173`. Vite proxies `/api` to the server at
+`127.0.0.1:3000`. The Rust-generated catalog and artifacts in
+`public/artifacts` provide every problem when the server is unavailable.
 
 ## One source of browser types
 
@@ -40,4 +47,7 @@ pnpm exec playwright install chromium
 pnpm test:e2e
 ```
 
-The Playwright test launches both servers, starts a real Maze run, follows its SSE stream, fetches the completed document, and scrubs an assessed exchange.
+The Playwright tests launch both servers, start a real run, follow its SSE
+stream, fetch and scrub its replay-verified artifact, and verify a structurally
+different static Exact Cover matrix. Rust adapter tests build all twelve
+problem artifacts.

@@ -66,6 +66,8 @@ inputs, tool outputs, or economic semantics.
 | `axionomy_exchange_apply` | `economy_id`, exchange | Source ID, new snapshot ID, and receipt |
 | `axionomy_trace_replay` | `economy_id`, trace | Source ID, new snapshot ID, and all receipts |
 | `axionomy_search` | `economy_id`, goal, concrete candidate exchanges, bounds | MCP task handle; poll `tasks/get` for progress and the structured search result |
+| `axionomy_problem_catalog` | None | The same twelve descriptors, strategies, and capabilities exposed by CLI and Studio |
+| `axionomy_problem_run` | Problem, optional strategy, seed, and budget | MCP task handle whose terminal result is the shared replay-derived `RunArtifact` |
 
 Tool inputs and outputs carry generated JSON Schemas. The reference wire
 ontology uses `String` for asset, account, rate, and role IDs and `u64` for
@@ -81,7 +83,8 @@ be added only when concrete candidate pressure justifies them.
 
 ## Tasks and control
 
-`axionomy_search` returns `CreateTaskResult` only when the caller advertises
+`axionomy_search` and `axionomy_problem_run` return `CreateTaskResult` only
+when the caller advertises
 the `io.modelcontextprotocol/tasks` extension. Otherwise it returns a visible
 tool error. `rmcp::TaskManager` registers the task before returning its handle,
 so `tasks/get` can resolve it immediately within the running server.

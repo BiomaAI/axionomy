@@ -80,6 +80,8 @@ models into one-way workspace dependencies:
 | `axionomy-time` | Calendar-aware Jiff authoring over the same canonical timeline denominations |
 | `axionomy-mcp` | Strict stateless MCP 2026-07-28 reference server with caller-owned snapshot storage and interruptible search tasks |
 | `axionomy-view` | Runtime-neutral, replay-derived browser presentation contracts |
+| `axionomy-service` | Interface-neutral catalog, run control, progress, and replay-derived artifacts for every canonical problem |
+| `axionomy-cli` | Human- and script-friendly access to the shared problem service |
 | `axionomy-studio-server` | Native OpenAPI/SSE reference backend and in-memory run orchestration for Axionomy Studio |
 
 ```text
@@ -88,15 +90,18 @@ axionomy-problems ────→ axionomy
                     └─→ axionomy-search
 axionomy-units ───────→ axionomy
 axionomy-time ────────→ axionomy-units ──→ axionomy
-axionomy-mcp ─────────→ axionomy-search ──→ axionomy
 axionomy-view ────────→ axionomy
-axionomy-studio-server → axionomy-problems → axionomy-view
+axionomy-service ─────→ axionomy-problems + axionomy-view
+axionomy-cli ─────────→ axionomy-service
+axionomy-mcp ─────────→ axionomy-service + axionomy-search + axionomy
+axionomy-studio-server → axionomy-service
 ```
 
 The kernel does not depend on a solver, problem, unit, or time crate. The
 packages are independently publishable: release `axionomy` first; search and
-units may follow; time follows units; `axionomy-problems` and `axionomy-mcp`
-follow search; Studio remains an outer presentation adapter.
+units may follow; time follows units; problems and view follow the reusable
+layers; the service follows those; CLI, MCP, HTTP, and Studio remain outer
+adapters.
 
 ## What is implemented
 
@@ -142,10 +147,15 @@ follow search; Studio remains an outer presentation adapter.
 - Twelve closed benchmark encodings in `axionomy-problems`, with distinct
   solver strategies, independent reference oracles, and encoded stochastic
   priors.
+- One interface-neutral problem service used by CLI, HTTP/Studio, and MCP,
+  with twelve discoverable canonical problems, reproducible strategy requests,
+  cooperative run control, progress, alternatives, and portable artifacts.
 - Axionomy Studio's Rust-owned `ViewDocument` contract, replay-derived account
-  snapshots, assessments and receipts, exact string quantities, optional
-  domain scenes, Maze playback, Pareto inspection, OpenAPI-generated
-  TypeScript, live SSE progress, cancellation, and portable static JSON.
+  snapshots, assessments and receipts, exact string quantities, graph, grid,
+  matrix, and timeline scenes, alternative traces, Pareto fronts, stochastic
+  telemetry, partial observations, model inspection, live resumable SSE runs,
+  cancellation, OpenAPI-generated TypeScript, and static JSON for all twelve
+  problems.
 
 The core contains no application ontology or search algorithm. Problem assets
 and specialized solvers compile against the same public kernel API available
@@ -177,10 +187,18 @@ Axionomy Studio is a universal economic debugger and trace player, not a
 second simulator. It scrubs a trace by replaying accepted exchanges through
 the Rust core, then shows the resulting accounts, assets, assessments,
 receipt deltas, objectives, and optional read-only domain projection. The Maze
-projection is the first proof: its graph helps a person understand the state,
-but the graph cannot move the agent or unlock the door. Portable documents and
-live runs use the same Rust-derived contract, and browser types are generated
-from its OpenAPI schema rather than maintained by hand.
+graph, Sokoban and Connect Four grids, Exact Cover matrix, scheduling and
+perishables timelines, market and logistics networks, stochastic telemetry,
+Pareto alternatives, rejected proposals, and actor-relative observations are
+all projections over that same truth; none can make an exchange valid.
+
+Studio, the CLI, the HTTP API, and MCP deliberately call the same
+interface-neutral service. Their different usability demands pressure one
+shared catalog, request, progress, control, and artifact API. A capability is
+promoted toward the core only when it is independent of transport and
+presentation and belongs to economic validation or replay; interface-specific
+state stays outside. Cross-interface tests compare complete artifacts so the
+four surfaces cannot quietly acquire different semantics.
 
 ```console
 cargo run -p axionomy-studio-server --bin axionomy-studio
@@ -189,10 +207,19 @@ pnpm install
 pnpm dev
 ```
 
-Open `http://127.0.0.1:5173`. The committed static Maze document works without
-the server; connecting the native server enables searches, Server-Sent Event
-progress, cancellation, and freshly derived documents. See
+Open `http://127.0.0.1:5173`. The committed static catalog and all twelve
+artifacts work without the server; connecting the native server enables
+reproducible runs, Server-Sent Event progress, pause/resume/cancel control, and
+freshly derived documents. Every canonical problem is present in both modes. See
 [`studio/README.md`](studio/README.md) for contract generation and verification.
+
+The same service is available without a browser:
+
+```console
+cargo run -p axionomy-cli -- catalog
+cargo run -p axionomy-cli -- describe logistics
+cargo run -p axionomy-cli -- run logistics --strategy reliable
+```
 
 ## Core example
 

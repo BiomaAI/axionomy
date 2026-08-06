@@ -7,3 +7,14 @@ browser.
 
 `ReferenceService` adapts the twelve canonical conformance problems. External
 interfaces call the same service and are tested for semantic parity.
+
+Its deliberately small vocabulary is `ProblemDescriptor`, `RunRequest`,
+`RunControl`, `ServiceProgress`, and `RunArtifact`. A run artifact includes all
+replayable alternatives, the selected document, model and observation
+projections, decision evidence, and assessed proposals. Pause, resume, and
+cancel are cooperative runtime signals; they cannot mutate an economy or
+authorize an exchange.
+
+Every problem owns an adapter here—not in `axionomy-problems` and not in a
+transport. That adapter lowers user-defined Rust ontologies into the
+monomorphic `axionomy-view` contract and derives every frame by core replay.

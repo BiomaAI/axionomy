@@ -548,9 +548,11 @@ axionomy-problems ────→ axionomy
                     └─→ axionomy-search
 axionomy-units ───────→ axionomy
 axionomy-time ────────→ axionomy-units ──→ axionomy
-axionomy-mcp ─────────→ axionomy-search ──→ axionomy
 axionomy-view ────────→ axionomy
-axionomy-studio-server → axionomy-problems → axionomy-view
+axionomy-service ─────→ axionomy-problems + axionomy-view
+axionomy-cli ─────────→ axionomy-service
+axionomy-mcp ─────────→ axionomy-service + axionomy-search + axionomy
+axionomy-studio-server → axionomy-service
 ```
 
 - `axionomy` owns universal state and transition semantics.
@@ -565,6 +567,9 @@ axionomy-studio-server → axionomy-problems → axionomy-view
   snapshot-store contract, and process-local task orchestration.
 - `axionomy-view` owns runtime-neutral monomorphic presentation contracts and
   replay-derived frames, without owning a domain ontology or runtime.
+- `axionomy-service` owns the interface-neutral problem catalog, reproducible
+  run requests, cooperative controls, progress, and complete artifacts.
+- `axionomy-cli` owns human- and script-oriented command parsing and output.
 - `axionomy-studio-server` owns native HTTP, OpenAPI, SSE, in-memory run
   lifecycle, static export, and hosting for the browser application.
 
@@ -588,22 +593,57 @@ because Axionomy does not own an authoritative graph and its successors are
 generated implicitly from applicable exchanges. It remains a reasonable future
 adapter when a user needs explicit graph import, export, or analysis.
 
-The MCP adapter depends inward on search and the kernel. Neither reusable
-crate depends on rmcp, Tokio, Axum, or a database. This direction is essential:
-remote execution requirements may improve the generic progress and
-interruption contracts, but they cannot make a protocol task or storage record
-part of economic truth.
+The MCP adapter depends inward on the shared service, search, and kernel.
+Neither reusable crate depends on rmcp, Tokio, Axum, Clap, a browser, or a
+database. This direction is essential: interface requirements may improve the
+generic progress, explanation, and interruption contracts, but they cannot
+make a protocol task, UI selection, or storage record part of economic truth.
 
-### 6.1 Presentation is a replay-derived boundary
+### 6.1 Interfaces pressure one application boundary
+
+CLI, HTTP/Studio, and MCP use one interface-neutral service rather than
+reimplementing problem dispatch. Its public vocabulary is intentionally small:
+
+```text
+ProblemDescriptor = identity + family + strategies + capabilities
+RunRequest         = problem + strategy + deterministic seed + work budget
+RunControl         = cooperative pause + resume + cancel
+ServiceProgress    = ordered phase + completed/total work + message
+RunArtifact        = request + selected document + replayable alternatives
+                     + assessed proposals
+```
+
+The service contains no HTTP, async runtime, CLI parser, MCP types, database,
+or browser state. Every canonical problem has one adapter here that translates
+its user-defined ontology and solver evidence into `axionomy-view`; no problem
+gets a privileged viewer module. A synchronous caller may use `run`, while a
+runtime calls `run_with` and owns the thread, task, scheduling policy, and
+`RunControl` lifetime.
+
+Different interfaces create useful pressure. CLI requires discoverability,
+stable machine-readable output, and useful defaults. HTTP requires resumable
+event streams, lifecycle control, pagination, and generated schemas. MCP
+requires explicit task semantics and cancellation. Studio requires
+alternatives, explanations, scrubbing, partial observations, and domain-aware
+projections. These demands may change the service and view contracts. They
+move into the kernel only when they are transport-neutral parts of economic
+validation, assessment, application, or replay.
+
+Semantic parity is executable: CLI JSON, HTTP artifacts, and MCP task results
+are compared with the complete `ReferenceService` artifact, not merely a
+shared identifier. Transport events and run records are allowed to differ;
+economic documents, assessments, receipts, objectives, and traces are not.
+
+### 6.2 Presentation is a replay-derived boundary
 
 Axionomy Studio is designed as an economic debugger and decision observatory,
 not as a second environment. Its universal view shows accounts and balances,
 exchange bindings, non-mutating assessments, projected effects, successful
 receipt deltas, trace position, search lifecycle, and decision analyses. A
-domain may additionally supply a graph or grid scene, but that scene is a
-read-only projection of the same economy snapshot. Removing the projection
-must make the display less convenient without changing which exchanges are
-valid, what they do, or whether a trace reaches its goal.
+domain may additionally supply a graph, grid, matrix, or timeline scene, but
+that scene is a read-only projection of the same economy snapshot. Removing
+the projection must make the display less convenient without changing which
+exchanges are valid, what they do, or whether a trace reaches its goal.
 
 The browser boundary is deliberately monomorphic. Arbitrary user types such
 as `Economy<MyAccount, MyAsset, MyRate, MyRole>` cannot be known statically by
@@ -614,7 +654,9 @@ ViewId        = stable presentation key + human label + optional JSON context
 ExactQuantity = decimal text
 ViewSnapshot  = ordered accounts and balances + optional derived scene
 ExchangeFrame = before + assessment + exchange + receipt + after
-ViewDocument  = metadata + initial snapshot + frames + decision analyses
+ViewDocument  = metadata + model + initial snapshot + replay frames
+                + proposals + objectives + Pareto fronts + telemetry
+                + actor-relative observations
 ```
 
 `ViewId` does not replace the ontology value and its optional JSON is not an
@@ -638,13 +680,14 @@ regenerated in CI. They are never edited manually. This repository pins the
 Schemars-1-native Aide line because duplicating the entire DTO graph for an old
 schema-trait release would create two contract systems.
 
-The native server exposes an example catalog, starts runs, reports state,
-cancels computation cooperatively, serves completed documents and paginated
-frames, and streams tagged `StudioEvent` values through Server-Sent Events.
+The native server exposes the canonical catalog, starts runs, reports state,
+pauses, resumes, or cancels computation cooperatively, serves completed
+artifacts, documents, and paginated frames, and streams tagged `StudioEvent`
+values through Server-Sent Events.
 Event sequence numbers order transport observations only; they are not encoded
 time. Run records and documents are process-local reference state, just like a
 search queue. They do not survive restart and cannot authorize an exchange.
-Applications that need persistence may store portable `ViewDocument` JSON or
+Applications that need persistence may store portable `RunArtifact` JSON or
 build their own outer run service without changing the core.
 
 The React application uses the generated client for JSON endpoints and the
@@ -656,14 +699,21 @@ scale requires Canvas. TanStack Query owns server-cache behavior. Vite,
 Vitest, and Playwright provide build, component-contract, and real-server
 browser verification.
 
-The first vertical proof combines four Maze strategies, replay-derived
-before/after frames, a graph scene, authoritative account inspection, receipt
-deltas, and the exact two-point energy/time Pareto frontier. The portable
-static document proves offline playback, while the live path proves
-OpenAPI-generated calls, SSE progress, cancellation hooks, trace retrieval,
-and scrubbing. New problem viewers should first work in the universal account
-inspector and add a specialized projection only when it materially improves
-human understanding.
+The implemented Studio exposes the complete twelve-problem conformance
+surface: pathfinding and networks use graphs; Sokoban and Connect Four use
+grids; Exact Cover uses a constraint matrix; scheduling and perishables use
+timelines; markets expose multi-party settlement and rejected shortfalls;
+stochastic and partially observed domains expose telemetry, sampled policy
+evidence, and actor-relative views. Every artifact includes replayable strategy
+alternatives where the domain supplies them. The universal model explorer
+exposes encoded rates, roles, goals, and invariants even when a specialized
+scene is absent.
+
+Portable artifacts prove offline playback for the full catalog. The live path
+proves generated OpenAPI calls, resumable SSE, pause/resume/cancel hooks,
+artifact and frame retrieval, and scrubbing. Specialized projections are added
+only when they materially improve comprehension; the authoritative account,
+assessment, receipt, and model inspectors remain available for every problem.
 
 ## 7. Solver contract
 
@@ -1133,10 +1183,14 @@ The current foundation is intentionally bounded:
 - Native Rust is the current release target. Browser/Wasm compatibility is not
   yet a validated kernel support guarantee. The implemented browser Studio
   currently talks to a native Rust server or loads a portable static document.
-- Studio currently supplies one specialized Maze graph projection. Every
-  problem already works with the universal account/trace contract, but richer
-  scheduling, marketplace, logistics, stochastic, partial-observation, and
-  game projections remain pressure-driven presentation work.
+- Studio run control is cooperative. The service checks pause/cancel at adapter
+  and document-publication boundaries; search sessions that expose smaller
+  work-budget advances can check more frequently. A one-shot domain solver is
+  not preempted in the middle of an indivisible call.
+- Full model projection currently materializes every concrete rate. Studio
+  filters large rate books client-side, but the portable Connect Four artifact
+  demonstrates the size pressure that should justify pagination or a compact
+  parameterized schema before either is introduced.
 - The MCP reference binary keeps snapshots and task lifecycle in memory. Its
   handles do not survive restart; callers can implement `SnapshotStore` when
   snapshot persistence is required, while distributed task recovery remains
@@ -1350,9 +1404,10 @@ factor.
 13. Add persisted search checkpoints, worker leases, task notifications, and
     tenant-aware authorization only when the MCP reference boundary is moved
     into a real multi-process deployment.
-14. Add scheduling, marketplace, and stochastic Studio projections, followed
-    by live Pareto-front and Monte Carlo distribution updates, when their
-    examples establish the smallest reusable scene and analysis contracts.
+14. Measure full-artifact transfer and rendering across the twelve Studio
+    adapters; add paged model projection, incremental Pareto/Monte Carlo
+    publication, or compact rate schemas only where measured pressure warrants
+    them.
 
 Performance work should follow semantic clarity. Application now clones only
 touched account contents and validates conserved deltas incrementally. Shared
@@ -1573,6 +1628,14 @@ monomorphic wire contract, exact quantities serialize as text, and generated
 OpenAPI/TypeScript prevents a second manually maintained type system. A viewer
 may explain economic truth but cannot create it.
 
+### D-033: Interfaces share commands and artifacts, not semantics by convention
+
+CLI, HTTP/Studio, and MCP adapt one runtime-neutral problem service. Catalogs,
+strategy requests, progress, control, and complete replay-derived artifacts
+are defined once and tested for cross-interface equality. Interface pressure
+may improve this shared boundary and reveal missing kernel explanations, but
+transport lifecycle and presentation state never become economic authority.
+
 ## 16. Success criteria
 
 Axionomy succeeds when:
@@ -1593,6 +1656,10 @@ Axionomy succeeds when:
 - Browser users can load a portable document or follow a live run, scrub every
   accepted exchange, and inspect exact balances and deltas without a parallel
   mutable world model or handwritten cross-language contract.
+- All twelve canonical problems are discoverable, runnable, replayable, and
+  meaningfully inspectable through Studio and static artifacts.
+- CLI, HTTP, and MCP return the same semantic problem artifacts for the same
+  request, while retaining interface-appropriate operational behavior.
 - Infeasible proposals expose every account-and-asset shortfall without
   mutation.
 - Successful assessments project the same account deltas later confirmed by

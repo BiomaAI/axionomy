@@ -55,11 +55,10 @@ RUST_LOG=debug cargo run -p axionomy-problems --example maze
 Logging is initialized only by these example binaries. Problem modules,
 search, and kernel libraries never install a global subscriber.
 
-The `maze_view` module is the first optional Axionomy Studio adapter. It lowers
-the Maze ontology into generic view IDs and a read-only graph scene, then
-builds every frame by core replay. This is a reference for presentation
-adapters, not a reusable Maze framework or an alternate source of transition
-rules.
+Replay-derived presentation adapters for all twelve problems live uniformly
+in `axionomy-service`. Keeping them out of this crate prevents a singled-out
+viewer from becoming part of a problem's semantics: these modules remain pure
+domain encodings and strategy helpers usable without Studio.
 
 Performance probes are Cargo bench targets rather than examples:
 
