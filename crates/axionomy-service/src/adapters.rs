@@ -400,12 +400,7 @@ pub(crate) fn run(
             strategy: strategy.into(),
         });
     }
-    if control.is_cancelled() {
-        return Err(ServiceError::Cancelled);
-    }
-    if control.is_paused() {
-        return Err(ServiceError::Paused);
-    }
+    control.checkpoint()?;
     observer.progress(ServiceProgress {
         sequence: 0,
         phase: "prepare".into(),
@@ -428,13 +423,9 @@ pub(crate) fn run(
         "perishables" => perishables::build(request, &descriptor),
         _ => unreachable!("catalog and dispatch must agree"),
     }?;
-    if control.is_cancelled() {
-        return Err(ServiceError::Cancelled);
-    }
-    if control.is_paused() {
-        return Err(ServiceError::Paused);
-    }
+    control.checkpoint()?;
     for (offset, document) in artifact.documents.iter().enumerate() {
+        control.checkpoint()?;
         observer.progress(ServiceProgress {
             sequence: offset as u64 + 1,
             phase: "artifact".into(),

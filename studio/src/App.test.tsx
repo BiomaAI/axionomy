@@ -5,32 +5,56 @@ import { App } from "./App";
 
 vi.mock("echarts/core", () => ({
   use: vi.fn(),
-  init: () => ({ setOption: vi.fn(), resize: vi.fn(), dispose: vi.fn() }),
+  init: () => ({ setOption: vi.fn(), on: vi.fn(), resize: vi.fn(), dispose: vi.fn() }),
 }));
 
-beforeEach(() => {
-  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
-    if (String(input).includes("/api/examples")) {
-      return new Response(JSON.stringify({ examples: [] }), { status: 200, headers: { "content-type": "application/json" } });
-    }
-    return new Response(JSON.stringify({
-      id: "fixture",
-      title: "Fixture economy",
-      description: "Replay fixture",
-      source: { key: "fixture", label: "Fixture" },
-      initial: { index: 0, accounts: [], scene: null },
-      frames: [],
-      objectives: [],
-      pareto_fronts: [],
-    }), { status: 200 });
-  }));
+const problem = {
+  key: "maze",
+  title: "Key-door maze",
+  summary: "A fixture problem",
+  family: "pathfinding",
+  default_strategy: "a_star",
+  strategies: [{ key: "a_star", label: "Least energy", description: "A*", algorithm: "a*" }],
+  capabilities: ["weighted_search"],
+};
+
+const artifact = {
+  id: "maze:a_star:17:128",
+  problem,
+  request: { problem: "maze", strategy: "a_star", seed: 17, budget: 128 },
+  selected_document_id: "maze:a_star",
+  assessed_proposals: [],
+  documents: [{
+    id: "maze:a_star",
+    title: "Maze · least energy",
+    description: "Replay fixture",
+    source: { key: "maze", label: "Key-door maze" },
+    model: { rates: [], goal: [], invariants: [] },
+    initial: { index: 0, accounts: [], scene: null },
+    frames: [],
+    objectives: [],
+    pareto_fronts: [],
+    proposals: [],
+    telemetry: [],
+    observations: [],
+  }],
+};
+
+vi.mock("./api", async (importOriginal) => {
+  const original = await importOriginal<typeof import("./api")>();
+  return {
+    ...original,
+    fetchProblems: vi.fn(async () => [problem]),
+    fetchStaticProblems: vi.fn(async () => [problem]),
+    fetchStaticArtifact: vi.fn(async () => artifact),
+  };
 });
 
-afterEach(() => vi.unstubAllGlobals());
-
-test("loads a portable document without requiring the server", async () => {
+test("loads a full portable artifact and exposes the model workbench", async () => {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(<QueryClientProvider client={client}><App /></QueryClientProvider>);
-  expect(await screen.findByRole("heading", { name: "Fixture economy" })).toBeInTheDocument();
+  expect(await screen.findByRole("heading", { name: "Maze · least energy" })).toBeInTheDocument();
+  expect(screen.getByText("Rates, roles, goals & invariants")).toBeInTheDocument();
   expect(screen.getByText("replay verified")).toBeInTheDocument();
+  expect(screen.getByRole("img", { name: "Axionomy" })).toBeInTheDocument();
 });

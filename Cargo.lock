@@ -204,7 +204,6 @@ version = "0.1.0"
 dependencies = [
  "axionomy",
  "axionomy-search",
- "axionomy-view",
  "criterion",
  "proptest",
  "thiserror",

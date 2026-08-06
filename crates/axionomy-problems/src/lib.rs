@@ -6,7 +6,6 @@ pub mod exact_cover;
 pub mod logistics;
 pub mod marketplace;
 pub mod maze;
-pub mod maze_view;
 pub mod mission;
 pub mod perishables;
 pub mod rescue;

@@ -631,7 +631,6 @@ async fn pause_run(
             return Err(ApiError::bad_request("only a running run can be paused"));
         }
     }
-    record.generation.fetch_add(1, Ordering::AcqRel);
     record.control.pause();
     {
         let mut summary = record.summary.write().await;
@@ -652,24 +651,22 @@ async fn resume_run(
     Path(path): Path<RunPath>,
 ) -> Result<Json<RunSummary>, ApiError> {
     let record = find_run(&state, &path.run_id).await?;
-    let request = {
+    {
         let mut summary = record.summary.write().await;
         if summary.status != RunStatus::Paused {
             return Err(ApiError::bad_request("only a paused run can be resumed"));
         }
         summary.status = RunStatus::Running;
         summary.message = Some("resumed by caller".into());
-        summary.request.clone()
-    };
+    }
     record.control.resume();
-    let generation = record.generation.fetch_add(1, Ordering::AcqRel) + 1;
     record
         .emit(StudioEvent::RunResumed {
             run_id: path.run_id.clone(),
             sequence: record.sequence(),
         })
         .await;
-    spawn_run(state, Arc::clone(&record), path.run_id, request, generation);
+    drop(state);
     Ok(Json(record.summary.read().await.clone()))
 }
 

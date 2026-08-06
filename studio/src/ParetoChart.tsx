@@ -7,12 +7,16 @@ import type { ViewDocument } from "./api";
 
 echarts.use([ScatterChart, GridComponent, TooltipComponent, CanvasRenderer]);
 
-export default function ParetoChart({ document }: { document: ViewDocument }) {
+export default function ParetoChart({ document, onSelect }: { document: ViewDocument; onSelect?: (values: string[]) => void }) {
   const container = useRef<HTMLDivElement>(null);
   const front = document.pareto_fronts[0];
   useEffect(() => {
     if (!container.current || !front || front.axes.length < 2) return;
     const chart = echarts.init(container.current);
+    const style = getComputedStyle(container.current);
+    const selectedColor = style.getPropertyValue("--lime").trim();
+    const peerColor = style.getPropertyValue("--blue").trim();
+    const backgroundColor = style.getPropertyValue("--bg").trim();
     chart.setOption({
       animationDuration: 450,
       grid: { left: 48, right: 24, top: 30, bottom: 48 },
@@ -42,12 +46,18 @@ export default function ParetoChart({ document }: { document: ViewDocument }) {
           exact: point.values,
           symbolSize: point.selected ? 20 : 13,
           itemStyle: {
-            color: point.selected ? "#d8ff3e" : "#53c9ff",
-            borderColor: "#081018",
+            color: point.selected ? selectedColor : peerColor,
+            borderColor: backgroundColor,
             borderWidth: 2,
           },
         })),
       }],
+    });
+    chart.on("click", (params) => {
+      const data = params.data;
+      if (data && typeof data === "object" && "exact" in data && Array.isArray(data.exact)) {
+        onSelect?.(data.exact.filter((value): value is string => typeof value === "string"));
+      }
     });
     let pendingResize = 0;
     const resize = new ResizeObserver(() => {
@@ -60,7 +70,7 @@ export default function ParetoChart({ document }: { document: ViewDocument }) {
       window.cancelAnimationFrame(pendingResize);
       chart.dispose();
     };
-  }, [front]);
+  }, [front, onSelect]);
   if (!front) {
     return <div className="empty-state">This document does not include a Pareto analysis.</div>;
   }
@@ -70,5 +80,11 @@ export default function ParetoChart({ document }: { document: ViewDocument }) {
       <strong>{front.points.length} non-dominated outcomes</strong>
     </div>
     <div ref={container} className="pareto-chart" aria-label="Pareto frontier chart" />
+    {front.axes.length > 2 && <div className="pareto-dimensions">
+      {front.points.map((point) => <button type="button" key={point.label} className={point.selected ? "selected" : ""} onClick={() => onSelect?.(point.values)}>
+        <strong>{point.label}</strong>
+        {front.axes.map((axis, index) => <span key={axis.key}>{axis.label}: {point.values[index]}</span>)}
+      </button>)}
+    </div>}
   </>;
 }

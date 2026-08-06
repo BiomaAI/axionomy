@@ -10,8 +10,8 @@
     "test": "vitest run",
     "test:e2e": "playwright test",
     "generate:api": "openapi-typescript openapi.json -o src/generated/api.d.ts",
-    "generate:contracts": "cargo run -q -p axionomy-studio-server --bin export-openapi -- openapi.json && cargo run -q -p axionomy-studio-server --bin export-view -- maze_pareto_energy public/examples/maze-pareto-energy.json && pnpm generate:api",
-    "check:contracts": "pnpm generate:contracts && git diff --exit-code -- openapi.json src/generated/api.d.ts public/examples/maze-pareto-energy.json"
+    "generate:contracts": "cargo run -q -p axionomy-studio-server --bin export-openapi -- openapi.json && cargo run -q -p axionomy-studio-server --bin export-view -- all public/artifacts && pnpm generate:api",
+    "check:contracts": "pnpm generate:contracts && git diff --exit-code -- openapi.json src/generated/api.d.ts public/artifacts"
   },
   "dependencies": {
     "@tanstack/react-query": "5.101.4",

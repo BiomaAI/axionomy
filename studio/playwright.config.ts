@@ -10,7 +10,7 @@ export default defineConfig({
     {
       command: "cargo run -p axionomy-studio-server --bin axionomy-studio",
       cwd: "..",
-      url: "http://127.0.0.1:3000/api/examples",
+      url: "http://127.0.0.1:3000/api/problems",
       reuseExistingServer: true,
       timeout: 120_000,
     },

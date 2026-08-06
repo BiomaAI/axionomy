@@ -172,6 +172,23 @@ impl RunControl {
     pub fn is_paused(&self) -> bool {
         self.paused.load(Ordering::Acquire)
     }
+
+    /// Cooperatively waits at an application boundary until the caller resumes
+    /// or cancels the run. Search algorithms with finer-grained sessions can
+    /// call this between work-budget advances.
+    pub fn checkpoint(&self) -> Result<(), ServiceError> {
+        while self.is_paused() {
+            if self.is_cancelled() {
+                return Err(ServiceError::Cancelled);
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        if self.is_cancelled() {
+            Err(ServiceError::Cancelled)
+        } else {
+            Ok(())
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
@@ -212,12 +229,7 @@ impl ReferenceService {
         control: &RunControl,
         observer: &mut dyn RunObserver,
     ) -> Result<RunArtifact, ServiceError> {
-        if control.is_cancelled() {
-            return Err(ServiceError::Cancelled);
-        }
-        if control.is_paused() {
-            return Err(ServiceError::Paused);
-        }
+        control.checkpoint()?;
         adapters::run(request, control, observer)
     }
 }
@@ -251,5 +263,23 @@ mod tests {
                 problem.key
             );
         }
+    }
+
+    #[test]
+    fn paused_run_waits_and_resumes_without_restarting_its_command() {
+        let control = std::sync::Arc::new(RunControl::default());
+        control.pause();
+        let worker_control = std::sync::Arc::clone(&control);
+        let worker = std::thread::spawn(move || {
+            ReferenceService.run_with(
+                &RunRequest::new("maze").with_strategy("a_star"),
+                &worker_control,
+                &mut |_| {},
+            )
+        });
+        std::thread::sleep(std::time::Duration::from_millis(25));
+        assert!(!worker.is_finished());
+        control.resume();
+        assert!(worker.join().unwrap().is_ok());
     }
 }

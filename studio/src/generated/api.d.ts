@@ -4,15 +4,15 @@
  */
 
 export interface paths {
-    "/api/examples": {
+    "/api/problems": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** List runnable reference examples */
-        get: operations["listExamples"];
+        /** List canonical problems, strategies, and capabilities */
+        get: operations["listProblems"];
         put?: never;
         post?: never;
         delete?: never;
@@ -30,7 +30,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Start an interruptible example run */
+        /** Start a reproducible, cooperatively controlled run */
         post: operations["createRun"];
         delete?: never;
         options?: never;
@@ -45,12 +45,46 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Inspect run lifecycle and latest event */
+        /** Inspect run state */
         get: operations["getRun"];
         put?: never;
         post?: never;
-        /** Request cooperative cancellation */
+        /** Cancel a run */
         delete: operations["cancelRun"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/runs/{run_id}/pause": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Pause a run */
+        post: operations["pauseRun"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/runs/{run_id}/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Resume a paused run */
+        post: operations["resumeRun"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -63,10 +97,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /**
-         * Follow ordered lifecycle events over SSE
-         * @description Each named Server-Sent Event carries one tagged StudioEvent JSON value. Sequence numbers are transport order, not economic time.
-         */
+        /** Follow resumable ordered lifecycle events over SSE */
         get: operations["streamRunEvents"];
         put?: never;
         post?: never;
@@ -76,14 +107,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/traces/{document_id}": {
+    "/api/artifacts/{artifact_id}": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** Load a portable replay-derived document */
+        /** Load a complete portable problem artifact */
+        get: operations["getRunArtifact"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/artifacts/{artifact_id}/documents/{document_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Load one replay-derived alternative */
         get: operations["getViewDocument"];
         put?: never;
         post?: never;
@@ -93,7 +141,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/traces/{document_id}/frames": {
+    "/api/artifacts/{artifact_id}/documents/{document_id}/frames": {
         parameters: {
             query?: never;
             header?: never;
@@ -136,6 +184,13 @@ export interface components {
             account: components["schemas"]["ViewId"];
             balances: components["schemas"]["AssetQuantityView"][];
         };
+        ArtifactDocumentPath: {
+            artifact_id: string;
+            document_id: string;
+        };
+        ArtifactPath: {
+            artifact_id: string;
+        };
         /** @enum {string} */
         AssessmentStatusView: "applicable" | "infeasible" | "invalid";
         AssessmentView: {
@@ -149,26 +204,13 @@ export interface components {
             asset: components["schemas"]["ViewId"];
             quantity: components["schemas"]["ExactQuantity"];
         };
-        CreateRunRequest: {
-            example: string;
-        };
-        DocumentPath: {
-            document_id: string;
-        };
+        /** @enum {string} */
+        Capability: "deterministic_search" | "weighted_search" | "specialized_algorithm" | "exact_pareto" | "approximate_pareto" | "feasibility_assessment" | "multi_account_exchange" | "atomic_settlement" | "branch_optimization" | "monte_carlo" | "mcts" | "information_set_search" | "partial_observation" | "chance" | "temporal_effects" | "fungible_cohorts" | "non_fungible_facts" | "rl_projection";
         ErrorResponse: {
             error: string;
         };
         /** @description An exact, non-negative quantity encoded as text for JavaScript safety. */
         ExactQuantity: string;
-        ExampleList: {
-            examples: components["schemas"]["ExampleSummary"][];
-        };
-        ExampleSummary: {
-            description: string;
-            domain: string;
-            key: string;
-            title: string;
-        };
         ExchangeFrame: {
             after: components["schemas"]["ViewSnapshot"];
             assessment: components["schemas"]["AssessmentView"];
@@ -184,6 +226,7 @@ export interface components {
             units: components["schemas"]["ExactQuantity"];
         };
         FramePage: {
+            artifact_id: string;
             document_id: string;
             frames: components["schemas"]["ExchangeFrame"][];
             /** Format: uint64 */
@@ -205,6 +248,10 @@ export interface components {
         };
         /** @enum {string} */
         FrontierCompletenessView: "exact" | "approximate";
+        GoalRequirementView: {
+            account: components["schemas"]["ViewId"];
+            required: components["schemas"]["AssetQuantityView"][];
+        };
         GraphEdgeView: {
             /** @default [] */
             classes: string[];
@@ -231,6 +278,28 @@ export interface components {
             /** Format: uint32 */
             y: number;
         };
+        InvariantTermView: {
+            asset: components["schemas"]["ViewId"];
+            /** Format: int64 */
+            weight: number;
+        };
+        InvariantView: {
+            name: string;
+            terms: components["schemas"]["InvariantTermView"][];
+        };
+        MatrixCellView: {
+            /** @default [] */
+            classes: string[];
+            column: string;
+            label: string;
+            row: string;
+        };
+        /** @description Read-only explanation of the authoritative economy definition. */
+        ModelView: {
+            goal: components["schemas"]["GoalRequirementView"][];
+            invariants: components["schemas"]["InvariantView"][];
+            rates: components["schemas"]["RateView"][];
+        };
         ObjectiveAxisView: {
             direction: components["schemas"]["ObjectiveDirectionView"];
             key: string;
@@ -244,6 +313,18 @@ export interface components {
             label: string;
             value: string;
         };
+        /**
+         * @description An actor-relative observation. Omitted accounts and assets are intentionally
+         *     not visible to that actor; this is not a filtered copy of authoritative
+         *     state pretending to be complete.
+         */
+        ObservationView: {
+            actor: components["schemas"]["ViewId"];
+            /** @default [] */
+            facts: components["schemas"]["AssetQuantityView"][];
+            label: string;
+            visible_accounts: components["schemas"]["AccountView"][];
+        };
         ParetoFrontView: {
             axes: components["schemas"]["ObjectiveAxisView"][];
             completeness: components["schemas"]["FrontierCompletenessView"];
@@ -256,6 +337,43 @@ export interface components {
             /** @description Ordered exactly like `ParetoFrontView.axes`; values remain exact text. */
             values: string[];
         };
+        ProblemDescriptor: {
+            capabilities: components["schemas"]["Capability"][];
+            default_strategy: string;
+            family: components["schemas"]["ProblemFamily"];
+            key: string;
+            strategies: components["schemas"]["StrategyDescriptor"][];
+            summary: string;
+            title: string;
+        };
+        /** @enum {string} */
+        ProblemFamily: "pathfinding" | "constraint" | "production" | "scheduling" | "allocation" | "market" | "stochastic_planning" | "adversarial_game" | "partial_observation" | "temporal_simulation";
+        ProblemList: {
+            problems: components["schemas"]["ProblemDescriptor"][];
+        };
+        /** @description A proposal assessed against an exact snapshot, including rejected actions. */
+        ProposalView: {
+            assessment: components["schemas"]["AssessmentView"];
+            description: string;
+            exchange: components["schemas"]["ExchangeView"];
+            id: string;
+            label: string;
+            /** Format: uint64 */
+            snapshot_index: number;
+        };
+        /** @description A rate role's complete consume/produce/preserve contract. */
+        RateRoleView: {
+            consumed: components["schemas"]["AssetQuantityView"][];
+            preserved: components["schemas"]["AssetQuantityView"][];
+            produced: components["schemas"]["AssetQuantityView"][];
+            role: components["schemas"]["ViewId"];
+        };
+        /** @description One immutable transition rule in the closed model. */
+        RateView: {
+            distinct_roles: components["schemas"]["ViewId"][][];
+            rate: components["schemas"]["ViewId"];
+            roles: components["schemas"]["RateRoleView"][];
+        };
         ReceiptView: {
             deltas: components["schemas"]["AccountDeltaView"][];
         };
@@ -263,23 +381,43 @@ export interface components {
             account: components["schemas"]["ViewId"];
             role: components["schemas"]["ViewId"];
         };
+        RunArtifact: {
+            /** @default [] */
+            assessed_proposals: components["schemas"]["ProposalView"][];
+            documents: components["schemas"]["ViewDocument"][];
+            id: string;
+            problem: components["schemas"]["ProblemDescriptor"];
+            request: components["schemas"]["RunRequest"];
+            selected_document_id: string;
+        };
         RunPath: {
             run_id: string;
         };
+        RunRequest: {
+            /**
+             * Format: uint64
+             * @default 128
+             */
+            budget: number;
+            problem: string;
+            /**
+             * Format: uint64
+             * @default 17
+             */
+            seed: number;
+            strategy?: string | null;
+        };
         /** @enum {string} */
-        RunStatus: "running" | "completed" | "cancelled" | "failed";
+        RunStatus: "running" | "paused" | "completed" | "cancelled" | "failed";
         RunSummary: {
+            artifact_id?: string | null;
             /** Format: uint64 */
             completed: number;
-            document_id?: string | null;
-            example: string;
             id: string;
-            /**
-             * @description Carries the tagged event union into the generated browser contract and
-             *     also lets reconnecting clients inspect the latest lifecycle event.
-             */
             last_event?: components["schemas"]["StudioEvent"] | null;
             message?: string | null;
+            request: components["schemas"]["RunRequest"];
+            selected_document_id?: string | null;
             status: components["schemas"]["RunStatus"];
             /** Format: uint64 */
             total?: number | null;
@@ -301,18 +439,46 @@ export interface components {
             title: string;
             /** Format: uint32 */
             width: number;
+        } | {
+            cells: components["schemas"]["MatrixCellView"][];
+            columns: components["schemas"]["ViewId"][];
+            /** @constant */
+            kind: "matrix";
+            rows: components["schemas"]["ViewId"][];
+            title: string;
+        } | {
+            /** Format: uint64 */
+            cursor?: number | null;
+            /** @constant */
+            kind: "timeline";
+            lanes: components["schemas"]["TimelineLaneView"][];
+            spans: components["schemas"]["TimelineSpanView"][];
+            title: string;
+        };
+        SearchTelemetryView: {
+            algorithm: string;
+            exact: boolean;
+            /** @default [] */
+            points: components["schemas"]["TelemetryPointView"][];
+        };
+        StrategyDescriptor: {
+            algorithm: string;
+            description: string;
+            key: string;
+            label: string;
         };
         /**
          * @description Lifecycle events emitted by a Studio run. `sequence` orders transport
          *     events; it is not economic time and has no effect on replay.
          */
         StudioEvent: {
-            example: string;
             /** @constant */
             kind: "run_started";
+            problem: string;
             run_id: string;
             /** Format: uint64 */
             sequence: number;
+            strategy: string;
         } | {
             /** Format: uint64 */
             completed: number;
@@ -333,6 +499,28 @@ export interface components {
             /** Format: uint64 */
             sequence: number;
         } | {
+            artifact_id: string;
+            /** Format: uint64 */
+            documents: number;
+            /** @constant */
+            kind: "artifact_published";
+            run_id: string;
+            /** Format: uint64 */
+            sequence: number;
+        } | {
+            /** @constant */
+            kind: "run_paused";
+            run_id: string;
+            /** Format: uint64 */
+            sequence: number;
+        } | {
+            /** @constant */
+            kind: "run_resumed";
+            run_id: string;
+            /** Format: uint64 */
+            sequence: number;
+        } | {
+            artifact_id: string;
             document_id: string;
             /** @constant */
             kind: "run_completed";
@@ -353,16 +541,52 @@ export interface components {
             /** Format: uint64 */
             sequence: number;
         };
+        /** @enum {string} */
+        TelemetryKindView: "expanded" | "generated" | "iteration" | "sample" | "information_set" | "message";
+        /**
+         * @description A transport-neutral progress observation. Counters are exact text so the
+         *     same contract remains safe in native and JavaScript consumers.
+         */
+        TelemetryPointView: {
+            kind: components["schemas"]["TelemetryKindView"];
+            label: string;
+            /** Format: uint64 */
+            sequence: number;
+            value: string;
+        };
+        TimelineLaneView: {
+            /** @default [] */
+            classes: string[];
+            id: components["schemas"]["ViewId"];
+        };
+        TimelineSpanView: {
+            /** @default [] */
+            classes: string[];
+            /** Format: uint64 */
+            end: number;
+            id: string;
+            label: string;
+            lane: string;
+            /** Format: uint64 */
+            start: number;
+        };
         ViewDocument: {
             description: string;
             frames: components["schemas"]["ExchangeFrame"][];
             id: string;
             initial: components["schemas"]["ViewSnapshot"];
+            model?: components["schemas"]["ModelView"] | null;
             /** @default [] */
             objectives: components["schemas"]["ObjectiveView"][];
             /** @default [] */
+            observations: components["schemas"]["ObservationView"][];
+            /** @default [] */
             pareto_fronts: components["schemas"]["ParetoFrontView"][];
+            /** @default [] */
+            proposals: components["schemas"]["ProposalView"][];
             source: components["schemas"]["ViewSource"];
+            /** @default [] */
+            telemetry: components["schemas"]["SearchTelemetryView"][];
             title: string;
         };
         /**
@@ -396,7 +620,7 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
-    listExamples: {
+    listProblems: {
         parameters: {
             query?: never;
             header?: never;
@@ -410,7 +634,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ExampleList"];
+                    "application/json": components["schemas"]["ProblemList"];
                 };
             };
         };
@@ -424,7 +648,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["CreateRunRequest"];
+                "application/json": components["schemas"]["RunRequest"];
             };
         };
         responses: {
@@ -531,6 +755,64 @@ export interface operations {
             };
         };
     };
+    pauseRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunSummary"];
+                };
+            };
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    resumeRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunSummary"];
+                };
+            };
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     streamRunEvents: {
         parameters: {
             query?: never;
@@ -561,11 +843,41 @@ export interface operations {
             };
         };
     };
+    getRunArtifact: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                artifact_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunArtifact"];
+                };
+            };
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     getViewDocument: {
         parameters: {
             query?: never;
             header?: never;
             path: {
+                artifact_id: string;
                 document_id: string;
             };
             cookie?: never;
@@ -598,6 +910,7 @@ export interface operations {
             };
             header?: never;
             path: {
+                artifact_id: string;
                 document_id: string;
             };
             cookie?: never;

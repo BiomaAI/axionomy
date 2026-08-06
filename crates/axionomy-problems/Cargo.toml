@@ -12,7 +12,6 @@ rust-version = "1.89"
 [dependencies]
 axionomy = { version = "0.1.0", path = "../.." }
 axionomy-search = { version = "0.1.0", path = "../axionomy-search" }
-axionomy-view = { version = "0.1.0", path = "../axionomy-view" }
 thiserror = "2.0.19"
 
 [dev-dependencies]

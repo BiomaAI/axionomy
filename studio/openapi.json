@@ -1,25 +1,25 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "Axionomy Studio API",
-    "description": "Replay-derived economic inspection, run lifecycle, and visualization data.",
+    "title": "Axionomy Service API",
+    "description": "Interface-neutral problem commands, replay artifacts, lifecycle control, and Studio data.",
     "version": "0.1.0"
   },
   "paths": {
-    "/api/examples": {
+    "/api/problems": {
       "get": {
         "tags": [
-          "examples"
+          "problems"
         ],
-        "summary": "List runnable reference examples",
-        "operationId": "listExamples",
+        "summary": "List canonical problems, strategies, and capabilities",
+        "operationId": "listProblems",
         "responses": {
           "200": {
             "description": "",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ExampleList"
+                  "$ref": "#/components/schemas/ProblemList"
                 }
               }
             }
@@ -32,13 +32,13 @@
         "tags": [
           "runs"
         ],
-        "summary": "Start an interruptible example run",
+        "summary": "Start a reproducible, cooperatively controlled run",
         "operationId": "createRun",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/CreateRunRequest"
+                "$ref": "#/components/schemas/RunRequest"
               }
             }
           },
@@ -103,7 +103,7 @@
         "tags": [
           "runs"
         ],
-        "summary": "Inspect run lifecycle and latest event",
+        "summary": "Inspect run state",
         "operationId": "getRun",
         "parameters": [
           {
@@ -143,8 +143,92 @@
         "tags": [
           "runs"
         ],
-        "summary": "Request cooperative cancellation",
+        "summary": "Cancel a run",
         "operationId": "cancelRun",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "style": "simple"
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunSummary"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/runs/{run_id}/pause": {
+      "post": {
+        "tags": [
+          "runs"
+        ],
+        "summary": "Pause a run",
+        "operationId": "pauseRun",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "style": "simple"
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunSummary"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/runs/{run_id}/resume": {
+      "post": {
+        "tags": [
+          "runs"
+        ],
+        "summary": "Resume a paused run",
+        "operationId": "resumeRun",
         "parameters": [
           {
             "in": "path",
@@ -185,8 +269,7 @@
         "tags": [
           "runs"
         ],
-        "summary": "Follow ordered lifecycle events over SSE",
-        "description": "Each named Server-Sent Event carries one tagged StudioEvent JSON value. Sequence numbers are transport order, not economic time.",
+        "summary": "Follow resumable ordered lifecycle events over SSE",
         "operationId": "streamRunEvents",
         "parameters": [
           {
@@ -223,14 +306,65 @@
         }
       }
     },
-    "/api/traces/{document_id}": {
+    "/api/artifacts/{artifact_id}": {
       "get": {
         "tags": [
-          "traces"
+          "artifacts"
         ],
-        "summary": "Load a portable replay-derived document",
+        "summary": "Load a complete portable problem artifact",
+        "operationId": "getRunArtifact",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "artifact_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "style": "simple"
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunArtifact"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/artifacts/{artifact_id}/documents/{document_id}": {
+      "get": {
+        "tags": [
+          "artifacts"
+        ],
+        "summary": "Load one replay-derived alternative",
         "operationId": "getViewDocument",
         "parameters": [
+          {
+            "in": "path",
+            "name": "artifact_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "style": "simple"
+          },
           {
             "in": "path",
             "name": "document_id",
@@ -265,14 +399,23 @@
         }
       }
     },
-    "/api/traces/{document_id}/frames": {
+    "/api/artifacts/{artifact_id}/documents/{document_id}/frames": {
       "get": {
         "tags": [
-          "traces"
+          "artifacts"
         ],
         "summary": "Page through replay-derived exchange frames",
         "operationId": "getTraceFrames",
         "parameters": [
+          {
+            "in": "path",
+            "name": "artifact_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "style": "simple"
+          },
           {
             "in": "path",
             "name": "document_id",
@@ -446,6 +589,32 @@
           "balances"
         ]
       },
+      "ArtifactDocumentPath": {
+        "type": "object",
+        "properties": {
+          "artifact_id": {
+            "type": "string"
+          },
+          "document_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "artifact_id",
+          "document_id"
+        ]
+      },
+      "ArtifactPath": {
+        "type": "object",
+        "properties": {
+          "artifact_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "artifact_id"
+        ]
+      },
       "AssessmentStatusView": {
         "type": "string",
         "enum": [
@@ -508,27 +677,27 @@
           "quantity"
         ]
       },
-      "CreateRunRequest": {
-        "type": "object",
-        "properties": {
-          "example": {
-            "type": "string"
-          }
-        },
-        "additionalProperties": false,
-        "required": [
-          "example"
-        ]
-      },
-      "DocumentPath": {
-        "type": "object",
-        "properties": {
-          "document_id": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "document_id"
+      "Capability": {
+        "type": "string",
+        "enum": [
+          "deterministic_search",
+          "weighted_search",
+          "specialized_algorithm",
+          "exact_pareto",
+          "approximate_pareto",
+          "feasibility_assessment",
+          "multi_account_exchange",
+          "atomic_settlement",
+          "branch_optimization",
+          "monte_carlo",
+          "mcts",
+          "information_set_search",
+          "partial_observation",
+          "chance",
+          "temporal_effects",
+          "fungible_cohorts",
+          "non_fungible_facts",
+          "rl_projection"
         ]
       },
       "ErrorResponse": {
@@ -545,43 +714,6 @@
       "ExactQuantity": {
         "description": "An exact, non-negative quantity encoded as text for JavaScript safety.",
         "type": "string"
-      },
-      "ExampleList": {
-        "type": "object",
-        "properties": {
-          "examples": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/ExampleSummary"
-            }
-          }
-        },
-        "required": [
-          "examples"
-        ]
-      },
-      "ExampleSummary": {
-        "type": "object",
-        "properties": {
-          "description": {
-            "type": "string"
-          },
-          "domain": {
-            "type": "string"
-          },
-          "key": {
-            "type": "string"
-          },
-          "title": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "key",
-          "title",
-          "description",
-          "domain"
-        ]
       },
       "ExchangeFrame": {
         "type": "object",
@@ -641,6 +773,9 @@
       "FramePage": {
         "type": "object",
         "properties": {
+          "artifact_id": {
+            "type": "string"
+          },
           "document_id": {
             "type": "string"
           },
@@ -662,6 +797,7 @@
           }
         },
         "required": [
+          "artifact_id",
           "document_id",
           "from",
           "total",
@@ -690,6 +826,24 @@
         "enum": [
           "exact",
           "approximate"
+        ]
+      },
+      "GoalRequirementView": {
+        "type": "object",
+        "properties": {
+          "account": {
+            "$ref": "#/components/schemas/ViewId"
+          },
+          "required": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AssetQuantityView"
+            }
+          }
+        },
+        "required": [
+          "account",
+          "required"
         ]
       },
       "GraphEdgeView": {
@@ -786,6 +940,95 @@
           "label"
         ]
       },
+      "InvariantTermView": {
+        "type": "object",
+        "properties": {
+          "asset": {
+            "$ref": "#/components/schemas/ViewId"
+          },
+          "weight": {
+            "type": "integer",
+            "format": "int64"
+          }
+        },
+        "required": [
+          "asset",
+          "weight"
+        ]
+      },
+      "InvariantView": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "terms": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InvariantTermView"
+            }
+          }
+        },
+        "required": [
+          "name",
+          "terms"
+        ]
+      },
+      "MatrixCellView": {
+        "type": "object",
+        "properties": {
+          "classes": {
+            "type": "array",
+            "default": [],
+            "items": {
+              "type": "string"
+            }
+          },
+          "column": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "row": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "row",
+          "column",
+          "label"
+        ]
+      },
+      "ModelView": {
+        "description": "Read-only explanation of the authoritative economy definition.",
+        "type": "object",
+        "properties": {
+          "goal": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GoalRequirementView"
+            }
+          },
+          "invariants": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InvariantView"
+            }
+          },
+          "rates": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RateView"
+            }
+          }
+        },
+        "required": [
+          "rates",
+          "goal",
+          "invariants"
+        ]
+      },
       "ObjectiveAxisView": {
         "type": "object",
         "properties": {
@@ -833,6 +1076,36 @@
           "label",
           "direction",
           "value"
+        ]
+      },
+      "ObservationView": {
+        "description": "An actor-relative observation. Omitted accounts and assets are intentionally\nnot visible to that actor; this is not a filtered copy of authoritative\nstate pretending to be complete.",
+        "type": "object",
+        "properties": {
+          "actor": {
+            "$ref": "#/components/schemas/ViewId"
+          },
+          "facts": {
+            "type": "array",
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/AssetQuantityView"
+            }
+          },
+          "label": {
+            "type": "string"
+          },
+          "visible_accounts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AccountView"
+            }
+          }
+        },
+        "required": [
+          "actor",
+          "label",
+          "visible_accounts"
         ]
       },
       "ParetoFrontView": {
@@ -887,6 +1160,174 @@
           "selected"
         ]
       },
+      "ProblemDescriptor": {
+        "type": "object",
+        "properties": {
+          "capabilities": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Capability"
+            }
+          },
+          "default_strategy": {
+            "type": "string"
+          },
+          "family": {
+            "$ref": "#/components/schemas/ProblemFamily"
+          },
+          "key": {
+            "type": "string"
+          },
+          "strategies": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StrategyDescriptor"
+            }
+          },
+          "summary": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "title",
+          "summary",
+          "family",
+          "default_strategy",
+          "strategies",
+          "capabilities"
+        ]
+      },
+      "ProblemFamily": {
+        "type": "string",
+        "enum": [
+          "pathfinding",
+          "constraint",
+          "production",
+          "scheduling",
+          "allocation",
+          "market",
+          "stochastic_planning",
+          "adversarial_game",
+          "partial_observation",
+          "temporal_simulation"
+        ]
+      },
+      "ProblemList": {
+        "type": "object",
+        "properties": {
+          "problems": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProblemDescriptor"
+            }
+          }
+        },
+        "required": [
+          "problems"
+        ]
+      },
+      "ProposalView": {
+        "description": "A proposal assessed against an exact snapshot, including rejected actions.",
+        "type": "object",
+        "properties": {
+          "assessment": {
+            "$ref": "#/components/schemas/AssessmentView"
+          },
+          "description": {
+            "type": "string"
+          },
+          "exchange": {
+            "$ref": "#/components/schemas/ExchangeView"
+          },
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "snapshot_index": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "description",
+          "snapshot_index",
+          "exchange",
+          "assessment"
+        ]
+      },
+      "RateRoleView": {
+        "description": "A rate role's complete consume/produce/preserve contract.",
+        "type": "object",
+        "properties": {
+          "consumed": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AssetQuantityView"
+            }
+          },
+          "preserved": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AssetQuantityView"
+            }
+          },
+          "produced": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AssetQuantityView"
+            }
+          },
+          "role": {
+            "$ref": "#/components/schemas/ViewId"
+          }
+        },
+        "required": [
+          "role",
+          "consumed",
+          "produced",
+          "preserved"
+        ]
+      },
+      "RateView": {
+        "description": "One immutable transition rule in the closed model.",
+        "type": "object",
+        "properties": {
+          "distinct_roles": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/ViewId"
+              },
+              "maxItems": 2,
+              "minItems": 2
+            }
+          },
+          "rate": {
+            "$ref": "#/components/schemas/ViewId"
+          },
+          "roles": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RateRoleView"
+            }
+          }
+        },
+        "required": [
+          "rate",
+          "roles",
+          "distinct_roles"
+        ]
+      },
       "ReceiptView": {
         "type": "object",
         "properties": {
@@ -916,6 +1357,43 @@
           "account"
         ]
       },
+      "RunArtifact": {
+        "type": "object",
+        "properties": {
+          "assessed_proposals": {
+            "type": "array",
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ProposalView"
+            }
+          },
+          "documents": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ViewDocument"
+            }
+          },
+          "id": {
+            "type": "string"
+          },
+          "problem": {
+            "$ref": "#/components/schemas/ProblemDescriptor"
+          },
+          "request": {
+            "$ref": "#/components/schemas/RunRequest"
+          },
+          "selected_document_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "problem",
+          "request",
+          "selected_document_id",
+          "documents"
+        ]
+      },
       "RunPath": {
         "type": "object",
         "properties": {
@@ -927,10 +1405,41 @@
           "run_id"
         ]
       },
+      "RunRequest": {
+        "type": "object",
+        "properties": {
+          "budget": {
+            "type": "integer",
+            "format": "uint64",
+            "default": 128,
+            "minimum": 0
+          },
+          "problem": {
+            "type": "string"
+          },
+          "seed": {
+            "type": "integer",
+            "format": "uint64",
+            "default": 17,
+            "minimum": 0
+          },
+          "strategy": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "problem"
+        ]
+      },
       "RunStatus": {
         "type": "string",
         "enum": [
           "running",
+          "paused",
           "completed",
           "cancelled",
           "failed"
@@ -939,25 +1448,21 @@
       "RunSummary": {
         "type": "object",
         "properties": {
-          "completed": {
-            "type": "integer",
-            "format": "uint64",
-            "minimum": 0
-          },
-          "document_id": {
+          "artifact_id": {
             "type": [
               "string",
               "null"
             ]
           },
-          "example": {
-            "type": "string"
+          "completed": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
           },
           "id": {
             "type": "string"
           },
           "last_event": {
-            "description": "Carries the tagged event union into the generated browser contract and\nalso lets reconnecting clients inspect the latest lifecycle event.",
             "anyOf": [
               {
                 "$ref": "#/components/schemas/StudioEvent"
@@ -968,6 +1473,15 @@
             ]
           },
           "message": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "request": {
+            "$ref": "#/components/schemas/RunRequest"
+          },
+          "selected_document_id": {
             "type": [
               "string",
               "null"
@@ -987,7 +1501,7 @@
         },
         "required": [
           "id",
-          "example",
+          "request",
           "status",
           "completed"
         ]
@@ -1065,7 +1579,127 @@
               "height",
               "cells"
             ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "cells": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/MatrixCellView"
+                }
+              },
+              "columns": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/ViewId"
+                }
+              },
+              "kind": {
+                "type": "string",
+                "const": "matrix"
+              },
+              "rows": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/ViewId"
+                }
+              },
+              "title": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "title",
+              "rows",
+              "columns",
+              "cells"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "cursor": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint64",
+                "minimum": 0
+              },
+              "kind": {
+                "type": "string",
+                "const": "timeline"
+              },
+              "lanes": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/TimelineLaneView"
+                }
+              },
+              "spans": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/TimelineSpanView"
+                }
+              },
+              "title": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "title",
+              "lanes",
+              "spans"
+            ]
           }
+        ]
+      },
+      "SearchTelemetryView": {
+        "type": "object",
+        "properties": {
+          "algorithm": {
+            "type": "string"
+          },
+          "exact": {
+            "type": "boolean"
+          },
+          "points": {
+            "type": "array",
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/TelemetryPointView"
+            }
+          }
+        },
+        "required": [
+          "algorithm",
+          "exact"
+        ]
+      },
+      "StrategyDescriptor": {
+        "type": "object",
+        "properties": {
+          "algorithm": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "key": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "description",
+          "algorithm"
         ]
       },
       "StudioEvent": {
@@ -1074,12 +1708,12 @@
           {
             "type": "object",
             "properties": {
-              "example": {
-                "type": "string"
-              },
               "kind": {
                 "type": "string",
                 "const": "run_started"
+              },
+              "problem": {
+                "type": "string"
               },
               "run_id": {
                 "type": "string"
@@ -1088,13 +1722,17 @@
                 "type": "integer",
                 "format": "uint64",
                 "minimum": 0
+              },
+              "strategy": {
+                "type": "string"
               }
             },
             "required": [
               "kind",
               "run_id",
               "sequence",
-              "example"
+              "problem",
+              "strategy"
             ]
           },
           {
@@ -1168,6 +1806,85 @@
           {
             "type": "object",
             "properties": {
+              "artifact_id": {
+                "type": "string"
+              },
+              "documents": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0
+              },
+              "kind": {
+                "type": "string",
+                "const": "artifact_published"
+              },
+              "run_id": {
+                "type": "string"
+              },
+              "sequence": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "kind",
+              "run_id",
+              "sequence",
+              "artifact_id",
+              "documents"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "run_paused"
+              },
+              "run_id": {
+                "type": "string"
+              },
+              "sequence": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "kind",
+              "run_id",
+              "sequence"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "run_resumed"
+              },
+              "run_id": {
+                "type": "string"
+              },
+              "sequence": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "kind",
+              "run_id",
+              "sequence"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "artifact_id": {
+                "type": "string"
+              },
               "document_id": {
                 "type": "string"
               },
@@ -1188,6 +1905,7 @@
               "kind",
               "run_id",
               "sequence",
+              "artifact_id",
               "document_id"
             ]
           },
@@ -1241,6 +1959,99 @@
           }
         ]
       },
+      "TelemetryKindView": {
+        "type": "string",
+        "enum": [
+          "expanded",
+          "generated",
+          "iteration",
+          "sample",
+          "information_set",
+          "message"
+        ]
+      },
+      "TelemetryPointView": {
+        "description": "A transport-neutral progress observation. Counters are exact text so the\nsame contract remains safe in native and JavaScript consumers.",
+        "type": "object",
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/TelemetryKindView"
+          },
+          "label": {
+            "type": "string"
+          },
+          "sequence": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          },
+          "value": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "sequence",
+          "kind",
+          "value",
+          "label"
+        ]
+      },
+      "TimelineLaneView": {
+        "type": "object",
+        "properties": {
+          "classes": {
+            "type": "array",
+            "default": [],
+            "items": {
+              "type": "string"
+            }
+          },
+          "id": {
+            "$ref": "#/components/schemas/ViewId"
+          }
+        },
+        "required": [
+          "id"
+        ]
+      },
+      "TimelineSpanView": {
+        "type": "object",
+        "properties": {
+          "classes": {
+            "type": "array",
+            "default": [],
+            "items": {
+              "type": "string"
+            }
+          },
+          "end": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          },
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "lane": {
+            "type": "string"
+          },
+          "start": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "id",
+          "lane",
+          "start",
+          "end",
+          "label"
+        ]
+      },
       "ViewDocument": {
         "type": "object",
         "properties": {
@@ -1259,11 +2070,28 @@
           "initial": {
             "$ref": "#/components/schemas/ViewSnapshot"
           },
+          "model": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ModelView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "objectives": {
             "type": "array",
             "default": [],
             "items": {
               "$ref": "#/components/schemas/ObjectiveView"
+            }
+          },
+          "observations": {
+            "type": "array",
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ObservationView"
             }
           },
           "pareto_fronts": {
@@ -1273,8 +2101,22 @@
               "$ref": "#/components/schemas/ParetoFrontView"
             }
           },
+          "proposals": {
+            "type": "array",
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ProposalView"
+            }
+          },
           "source": {
             "$ref": "#/components/schemas/ViewSource"
+          },
+          "telemetry": {
+            "type": "array",
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/SearchTelemetryView"
+            }
           },
           "title": {
             "type": "string"

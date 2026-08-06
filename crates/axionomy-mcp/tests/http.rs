@@ -150,7 +150,11 @@ async fn strict_stateless_http_runs_a_process_local_search_task() {
     let listed_text = listed.text().await.unwrap();
     assert_eq!(listed_status, StatusCode::OK, "{listed_text}");
     let listed: Value = serde_json::from_str(&listed_text).unwrap();
-    assert_eq!(listed["result"]["tools"].as_array().unwrap().len(), 5);
+    let tools = listed["result"]["tools"].as_array().unwrap();
+    assert_eq!(tools.len(), 7);
+    for expected in ["axionomy_problem_catalog", "axionomy_problem_run"] {
+        assert!(tools.iter().any(|tool| tool["name"] == expected));
+    }
 
     let (economy, exchange, goal) = fixture();
     let put = post(
