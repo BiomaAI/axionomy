@@ -10,6 +10,7 @@ use axionomy::{
     Account, ApplyError, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Quantity, Rate,
     Receipt, Trace, basket,
 };
+use axionomy_search::pareto::{self, Objective, ObjectiveVector, ParetoError, ParetoSearchResult};
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BinaryHeap};
 
@@ -64,11 +65,15 @@ pub enum Asset {
     Cold,
     Powered,
     Unpowered,
+    CoolingEnergy,
+    SpentCoolingEnergy,
     Now(Moment),
     Before(Moment),
     Reached(Moment),
     Active,
     Solved,
+    Planning,
+    PlanSolved,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -91,6 +96,7 @@ pub enum RateId {
     Eat { cohort: Cohort, exposure: Exposure },
     Spoil { cohort: Cohort, exposure: Exposure },
     Finish,
+    SealStoragePlan,
 }
 
 pub type World = Economy<AccountId, Asset, RateId, Role>;
@@ -98,6 +104,13 @@ pub type Action = Exchange<RateId, Role, AccountId>;
 pub type EventTrace = Trace<RateId, Role, AccountId>;
 pub type EventReceipt = Receipt<RateId, Role, AccountId, Asset>;
 pub type Failure = ApplyError<RateId, Role, AccountId, Asset>;
+pub type ParetoResult = ParetoSearchResult<RateId, Role, AccountId, u64, ObjectiveKey, u64>;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ObjectiveKey {
+    UsableInventory,
+    CoolingEnergy,
+}
 
 const COHORTS: [Cohort; 2] = [Cohort::Ambient, Cohort::Refrigerated];
 const MOMENTS: [Moment; 4] = [
@@ -132,6 +145,7 @@ pub fn initial_with_inventory(warehouse_claims: u64, fridge_claims: u64) -> Worl
                 (Asset::Before(Moment::WarmedExpiry), 1),
                 (Asset::Before(Moment::ColdExpiry), 1),
                 (Asset::Active, 1),
+                (Asset::Planning, 1),
             ])),
         )
         .account(
@@ -148,6 +162,7 @@ pub fn initial_with_inventory(warehouse_claims: u64, fridge_claims: u64) -> Worl
                 (Asset::LocationIdentity(Location::Fridge), 1),
                 (Asset::Cold, 1),
                 (Asset::Powered, 1),
+                (Asset::CoolingEnergy, warehouse_claims),
                 (Asset::Claim(Cohort::Refrigerated), fridge_claims),
             ])),
         )
@@ -200,6 +215,7 @@ pub fn initial_with_inventory(warehouse_claims: u64, fridge_claims: u64) -> Worl
 
     builder
         .rate(RateId::Finish, finish_rate())
+        .rate(RateId::SealStoragePlan, seal_storage_plan_rate())
         .invariant(claim_invariant())
         .invariant(cohort_condition_invariant(Cohort::Ambient))
         .invariant(cohort_condition_invariant(Cohort::Refrigerated))
@@ -213,6 +229,11 @@ pub fn initial_with_inventory(warehouse_claims: u64, fridge_claims: u64) -> Worl
                 .weight(Asset::Powered, 1)
                 .weight(Asset::Unpowered, 1),
         )
+        .invariant(
+            LinearInvariant::new("cooling energy")
+                .weight(Asset::CoolingEnergy, 1)
+                .weight(Asset::SpentCoolingEnergy, 1),
+        )
         .invariant(clock_invariant())
         .invariant(deadline_invariant(Moment::AmbientExpiry))
         .invariant(deadline_invariant(Moment::WarmedExpiry))
@@ -221,6 +242,11 @@ pub fn initial_with_inventory(warehouse_claims: u64, fridge_claims: u64) -> Worl
             LinearInvariant::new("scenario lifecycle")
                 .weight(Asset::Active, 1)
                 .weight(Asset::Solved, 1),
+        )
+        .invariant(
+            LinearInvariant::new("storage planning lifecycle")
+                .weight(Asset::Planning, 1)
+                .weight(Asset::PlanSolved, 1),
         )
         .build()
         .expect("perishables model is valid")
@@ -255,7 +281,7 @@ pub fn action(rate: RateId, units: u64) -> Action {
             .bind(Role::Storage, storage_for(cohort))
             .bind(Role::Cohort, cohort_account(cohort))
             .bind(Role::World, AccountId::World),
-        RateId::Finish => exchange
+        RateId::Finish | RateId::SealStoragePlan => exchange
             .bind(Role::SourceStorage, storage_account(Location::Warehouse))
             .bind(Role::DestinationStorage, storage_account(Location::Fridge))
             .bind(Role::SourceCohort, cohort_account(Cohort::Ambient))
@@ -291,8 +317,64 @@ pub fn finish() -> Action {
     action(RateId::Finish, 1)
 }
 
+pub fn seal_storage_plan() -> Action {
+    action(RateId::SealStoragePlan, 1)
+}
+
 pub fn candidates(world: &World) -> Vec<Action> {
     world.applicable(world.rate_ids().copied().map(|rate| action(rate, 1)))
+}
+
+pub fn storage_plan_goal() -> Goal<AccountId, Asset> {
+    Goal::new().require(AccountId::World, basket([(Asset::PlanSolved, 1)]))
+}
+
+/// A deliberately bounded policy set: transfer another 1,000 claims, advance
+/// to ambient expiry, apply the due cohort effect, or seal the storage plan.
+pub fn storage_plan_candidates(world: &World) -> Vec<Action> {
+    world.applicable([
+        move_to_fridge(DEFAULT_TRANSFER),
+        advance(Moment::Harvest, Moment::AmbientExpiry),
+        spoil(Cohort::Ambient, Exposure::Ambient),
+        seal_storage_plan(),
+    ])
+}
+
+/// Exhaustively compares the bounded storage commitments while the underlying
+/// transfer rate remains fungible and accepts arbitrary caller-selected units.
+pub fn storage_plan_front(world: &World) -> Result<ParetoResult, ParetoError> {
+    pareto::search(
+        world,
+        &storage_plan_goal(),
+        storage_plan_candidates,
+        storage_objectives,
+    )
+}
+
+pub fn storage_objectives(world: &World) -> ObjectiveVector<ObjectiveKey, u64> {
+    ObjectiveVector::try_new([
+        Objective::maximize(ObjectiveKey::UsableInventory, usable_inventory(world)),
+        Objective::minimize(ObjectiveKey::CoolingEnergy, spent_cooling_energy(world)),
+    ])
+    .expect("storage objective schema is static and unique")
+}
+
+pub fn usable_inventory(world: &World) -> u64 {
+    world
+        .balance(
+            &storage_account(Location::Fridge),
+            &Asset::Claim(Cohort::Refrigerated),
+        )
+        .get()
+}
+
+pub fn spent_cooling_energy(world: &World) -> u64 {
+    world
+        .balance(
+            &storage_account(Location::Fridge),
+            &Asset::SpentCoolingEnergy,
+        )
+        .get()
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -745,9 +827,16 @@ fn move_to_fridge_rate() -> Rate<Role, Asset> {
                         (Asset::Powered, 1),
                     ]),
                 )
+                .consume(
+                    Role::DestinationStorage,
+                    basket([(Asset::CoolingEnergy, 1)]),
+                )
                 .produce(
                     Role::DestinationStorage,
-                    basket([(Asset::Claim(Cohort::Refrigerated), 1)]),
+                    basket([
+                        (Asset::Claim(Cohort::Refrigerated), 1),
+                        (Asset::SpentCoolingEnergy, 1),
+                    ]),
                 )
                 .preserve(
                     Role::SourceCohort,
@@ -913,6 +1002,55 @@ fn finish_rate() -> Rate<Role, Asset> {
     )
 }
 
+fn seal_storage_plan_rate() -> Rate<Role, Asset> {
+    all_distinct(
+        Rate::new()
+            .preserve(
+                Role::SourceStorage,
+                basket([(Asset::LocationIdentity(Location::Warehouse), 1)]),
+            )
+            .preserve(
+                Role::DestinationStorage,
+                basket([
+                    (Asset::LocationIdentity(Location::Fridge), 1),
+                    (Asset::Cold, 1),
+                    (Asset::Powered, 1),
+                ]),
+            )
+            .preserve(
+                Role::SourceCohort,
+                basket([
+                    (Asset::CohortIdentity(Cohort::Ambient), 1),
+                    (Asset::Rotten(Cohort::Ambient), 1),
+                ]),
+            )
+            .preserve(
+                Role::DestinationCohort,
+                basket([
+                    (Asset::CohortIdentity(Cohort::Refrigerated), 1),
+                    (fresh_asset(Cohort::Refrigerated, Exposure::Cold), 1),
+                ]),
+            )
+            .preserve(
+                Role::World,
+                basket([
+                    (Asset::WorldIdentity, 1),
+                    (Asset::Now(Moment::AmbientExpiry), 1),
+                    (Asset::Active, 1),
+                ]),
+            )
+            .consume(Role::World, basket([(Asset::Planning, 1)]))
+            .produce(Role::World, basket([(Asset::PlanSolved, 1)])),
+        &[
+            Role::SourceStorage,
+            Role::DestinationStorage,
+            Role::SourceCohort,
+            Role::DestinationCohort,
+            Role::World,
+        ],
+    )
+}
+
 fn storage_requirements(cohort: Cohort, exposure: Exposure) -> axionomy::Basket<Asset> {
     match (cohort, exposure) {
         (Cohort::Ambient, Exposure::Ambient) => basket([
@@ -1016,6 +1154,35 @@ mod tests {
                 &fresh_asset(Cohort::Refrigerated, Exposure::Cold),
             ),
             Quantity::new(1)
+        );
+    }
+
+    #[test]
+    fn storage_front_exposes_the_full_preservation_energy_curve() {
+        let initial = initial();
+        let result = storage_plan_front(&initial).unwrap();
+        let mut outcomes = Vec::new();
+
+        for entry in result.front().entries() {
+            let replayed = initial.replayed(entry.payload()).unwrap();
+            assert!(replayed.matches(&storage_plan_goal()));
+            assert_eq!(&storage_objectives(&replayed), entry.objectives());
+            outcomes.push((usable_inventory(&replayed), spent_cooling_energy(&replayed)));
+        }
+
+        outcomes.sort_unstable();
+        assert_eq!(
+            outcomes,
+            [
+                (3_000, 0),
+                (4_000, 1_000),
+                (5_000, 2_000),
+                (6_000, 3_000),
+                (7_000, 4_000),
+                (8_000, 5_000),
+                (9_000, 6_000),
+                (10_000, 7_000),
+            ]
         );
     }
 
