@@ -63,8 +63,10 @@ giving each item a unique asset identity and conserving its unit supply. When
 many holders share one fate, their balances can remain stable claims while a
 single cohort or pool account carries the authoritative condition or epoch.
 
-See [PDD.md](PDD.md) for the product and technical contract and
-[PROBLEMS.md](PROBLEMS.md) for the conformance problems that drive the API.
+See [PDD.md](PDD.md) for the product and technical contract,
+[PROBLEMS.md](PROBLEMS.md) for the conformance problems that drive the API,
+and [AGENT_BENCHMARK.md](AGENT_BENCHMARK.md) for the future single- and
+multi-agent evaluation and rating design.
 
 ## Workspace
 

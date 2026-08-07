@@ -1429,6 +1429,10 @@ factor.
     adapters; add paged model projection, incremental Pareto/Monte Carlo
     publication, or compact rate schemas only where measured pressure warrants
     them.
+15. Build the [agent benchmark and rating layer](AGENT_BENCHMARK.md) across
+    single-agent, cooperative, competitive, and mixed-motive designs. Use it to
+    pressure generated instances, long-horizon policies, coordination, work
+    accounting, robustness, and replay-derived scoring.
 
 Performance work should follow semantic clarity. Application now clones only
 touched account contents and validates conserved deltas incrementally. Shared
