@@ -332,8 +332,12 @@ pub fn storage_plan_goal() -> Goal<AccountId, Asset> {
 /// A deliberately bounded policy set: transfer another 1,000 claims, advance
 /// to ambient expiry, apply the due cohort effect, or seal the storage plan.
 pub fn storage_plan_candidates(world: &World) -> Vec<Action> {
+    storage_plan_candidates_with_transfer(world, DEFAULT_TRANSFER)
+}
+
+pub fn storage_plan_candidates_with_transfer(world: &World, transfer: u64) -> Vec<Action> {
     world.applicable([
-        move_to_fridge(DEFAULT_TRANSFER),
+        move_to_fridge(transfer),
         advance(Moment::Harvest, Moment::AmbientExpiry),
         spoil(Cohort::Ambient, Exposure::Ambient),
         seal_storage_plan(),
@@ -343,10 +347,17 @@ pub fn storage_plan_candidates(world: &World) -> Vec<Action> {
 /// Exhaustively compares the bounded storage commitments while the underlying
 /// transfer rate remains fungible and accepts arbitrary caller-selected units.
 pub fn storage_plan_front(world: &World) -> Result<ParetoResult, ParetoError> {
+    storage_plan_front_with_transfer(world, DEFAULT_TRANSFER)
+}
+
+pub fn storage_plan_front_with_transfer(
+    world: &World,
+    transfer: u64,
+) -> Result<ParetoResult, ParetoError> {
     pareto::search(
         world,
         &storage_plan_goal(),
-        storage_plan_candidates,
+        |world| storage_plan_candidates_with_transfer(world, transfer),
         storage_objectives,
     )
 }

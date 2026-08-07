@@ -23,6 +23,8 @@ pub enum Location {
     Base,
     North,
     South,
+    East,
+    West,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -47,6 +49,7 @@ pub enum Asset {
     AwaitingObservation,
     Committed,
     Rescued,
+    Evacuated,
     Solved,
 }
 
@@ -74,6 +77,9 @@ pub enum RateId {
         to: Location,
     },
     Rescue {
+        location: Location,
+    },
+    Evacuate {
         location: Location,
     },
     Finish,
@@ -152,22 +158,33 @@ pub enum PolicyObjective {
 /// Builds one already-resolved deterministic world.
 pub fn scenario(truth: Location, seed: u8) -> World {
     assert_rescue_location(truth);
-    assert!(seed < 4, "the fixture has four sensor seeds");
-    build(Account::from(basket([
-        (Asset::Truth(truth), 1),
-        (Asset::Seed(seed), 1),
-    ])))
+    let extended = matches!(truth, Location::East | Location::West) || seed >= 4;
+    assert!(
+        seed < if extended { 8 } else { 4 },
+        "seed is outside the encoded sensor states"
+    );
+    build(
+        Account::from(basket([(Asset::Truth(truth), 1), (Asset::Seed(seed), 1)])),
+        extended,
+    )
 }
 
 /// Builds an unresolved world from user-provided, core-encoded prior weights.
 pub fn uncertain(prior: impl IntoIterator<Item = (Location, u8, u64)>) -> World {
+    let prior = prior.into_iter().collect::<Vec<_>>();
+    let extended = prior
+        .iter()
+        .any(|(truth, seed, _)| matches!(truth, Location::East | Location::West) || *seed >= 4);
     let mut nature = Basket::from([(Asset::Unresolved, Quantity::new(1))]);
     for (truth, seed, weight) in prior {
         assert_rescue_location(truth);
-        assert!(seed < 4, "the fixture has four sensor seeds");
+        assert!(
+            seed < if extended { 8 } else { 4 },
+            "seed is outside the encoded sensor states"
+        );
         nature.insert(Asset::ScenarioWeight(truth, seed), Quantity::new(weight));
     }
-    build(Account::from(nature))
+    build(Account::from(nature), extended)
 }
 
 pub fn uniform_uncertain() -> World {
@@ -178,21 +195,49 @@ pub fn uniform_uncertain() -> World {
     )
 }
 
-fn build(nature: Account<Asset>) -> World {
+/// Four possible sites, twice as many sensor states, and a required return
+/// evacuation after contact make this a longer partially observed mission.
+pub fn uniform_uncertain_showcase() -> World {
+    let mut nature = Basket::from([(Asset::Unresolved, Quantity::new(1))]);
+    for truth in [
+        Location::North,
+        Location::South,
+        Location::East,
+        Location::West,
+    ] {
+        for seed in 0..8 {
+            nature.insert(Asset::ScenarioWeight(truth, seed), Quantity::new(1));
+        }
+    }
+    build(Account::from(nature), true)
+}
+
+fn build(nature: Account<Asset>, extended: bool) -> World {
+    let destinations: &[Location] = if extended {
+        &[
+            Location::North,
+            Location::South,
+            Location::East,
+            Location::West,
+        ]
+    } else {
+        &[Location::North, Location::South]
+    };
+    let seed_count = if extended { 8 } else { 4 };
     let mut builder = EconomyBuilder::new()
         .account(
             AccountId::Agent,
             Account::from(basket([
                 (Asset::At(Location::Base), 1),
-                (Asset::Energy, 2),
+                (Asset::Energy, if extended { 3 } else { 2 }),
                 (Asset::Sensor, 1),
                 (Asset::Planning, 1),
             ])),
         )
         .account(AccountId::Nature, nature);
 
-    for encoded_truth in [Location::North, Location::South] {
-        for encoded_seed in 0..4 {
+    for &encoded_truth in destinations {
+        for encoded_seed in 0..seed_count {
             builder = builder.rate(
                 RateId::Instantiate {
                     truth: encoded_truth,
@@ -214,7 +259,7 @@ fn build(nature: Account<Asset>) -> World {
             );
 
             let report = signal(encoded_truth, encoded_seed);
-            let next_seed = (encoded_seed + 1) % 4;
+            let next_seed = (encoded_seed + 1) % seed_count;
             builder = builder.rate(
                 RateId::ResolveObservation {
                     truth: encoded_truth,
@@ -251,7 +296,7 @@ fn build(nature: Account<Asset>) -> World {
             ),
     );
 
-    for destination in [Location::North, Location::South] {
+    for &destination in destinations {
         builder = builder
             .rate(
                 RateId::Move {
@@ -293,18 +338,48 @@ fn build(nature: Account<Asset>) -> World {
                     .preserve(Role::Nature, basket([(Asset::Truth(destination), 1)]))
                     .distinct(Role::Actor, Role::Nature),
             );
+        if extended {
+            builder = builder.rate(
+                RateId::Evacuate {
+                    location: destination,
+                },
+                Rate::new()
+                    .consume(
+                        Role::Actor,
+                        basket([
+                            (Asset::Rescued, 1),
+                            (Asset::At(destination), 1),
+                            (Asset::Energy, 1),
+                        ]),
+                    )
+                    .produce(
+                        Role::Actor,
+                        basket([
+                            (Asset::Evacuated, 1),
+                            (Asset::At(Location::Base), 1),
+                            (Asset::SpentEnergy, 1),
+                        ]),
+                    ),
+            );
+        }
     }
+
+    let completion = if extended {
+        Asset::Evacuated
+    } else {
+        Asset::Rescued
+    };
 
     builder
         .rate(
             RateId::Finish,
             Rate::new()
-                .consume(Role::Actor, basket([(Asset::Rescued, 1)]))
+                .consume(Role::Actor, basket([(completion, 1)]))
                 .produce(Role::Actor, basket([(Asset::Solved, 1)])),
         )
         .invariant(
-            [Location::Base, Location::North, Location::South]
-                .into_iter()
+            std::iter::once(Location::Base)
+                .chain(destinations.iter().copied())
                 .fold(
                     LinearInvariant::new("one agent position"),
                     |invariant, location| invariant.weight(Asset::At(location), 1),
@@ -320,11 +395,11 @@ fn build(nature: Account<Asset>) -> World {
                 .weight(Asset::Sensor, 1)
                 .weight(Asset::UsedSensor, 1),
         )
-        .invariant((0..4).fold(
+        .invariant((0..seed_count).fold(
             LinearInvariant::new("one nature seed state").weight(Asset::Unresolved, 1),
             |invariant, seed| invariant.weight(Asset::Seed(seed), 1),
         ))
-        .invariant([Location::North, Location::South].into_iter().fold(
+        .invariant(destinations.iter().copied().fold(
             LinearInvariant::new("one hidden truth state").weight(Asset::Unresolved, 1),
             |invariant, location| invariant.weight(Asset::Truth(location), 1),
         ))
@@ -334,6 +409,7 @@ fn build(nature: Account<Asset>) -> World {
                 .weight(Asset::AwaitingObservation, 1)
                 .weight(Asset::Committed, 1)
                 .weight(Asset::Rescued, 1)
+                .weight(Asset::Evacuated, 1)
                 .weight(Asset::Solved, 1),
         )
         .build()
@@ -373,7 +449,7 @@ pub fn run_policy(world: World, policy: Policy) -> Rollout {
     let result = run_to_goal(
         &world,
         &goal,
-        RolloutConfig::new(5).with_retention(TraceRetention::Trace),
+        RolloutConfig::new(8).with_retention(TraceRetention::Trace),
         |state, _| match policy_action(state, policy) {
             Some(exchange) => RolloutDecision::Propose(exchange),
             None => RolloutDecision::Stop(RolloutStop::NoProposal),
@@ -563,15 +639,27 @@ fn policy_action(world: &World, policy: Policy) -> Option<Action> {
     {
         return nature_observation(world);
     }
+    if !world.balance(&AccountId::Agent, &Asset::Rescued).is_zero()
+        && let Some(evacuate) = candidates(world)
+            .into_iter()
+            .find(|exchange| matches!(exchange.rate(), RateId::Evacuate { .. }))
+    {
+        return Some(evacuate);
+    }
     public_policy_action(&agent_view(world), policy)
 }
 
 fn public_policy_action(view: &AgentView<'_>, policy: Policy) -> Option<Action> {
-    if view_has(view, Asset::Rescued) {
+    if view_has(view, Asset::Evacuated) || view_has(view, Asset::Rescued) {
         return Some(action(RateId::Finish));
     }
 
-    for location in [Location::North, Location::South] {
+    for location in [
+        Location::North,
+        Location::South,
+        Location::East,
+        Location::West,
+    ] {
         if view_has(view, Asset::At(location)) {
             return Some(action(RateId::Rescue { location }));
         }
@@ -587,9 +675,14 @@ fn public_policy_action(view: &AgentView<'_>, policy: Policy) -> Option<Action> 
 
     let destination = match policy {
         Policy::NorthWithoutObserving => Location::North,
-        Policy::ObserveThenFollow => [Location::North, Location::South]
-            .into_iter()
-            .find(|location| view_has(view, Asset::Belief(*location)))?,
+        Policy::ObserveThenFollow => [
+            Location::North,
+            Location::South,
+            Location::East,
+            Location::West,
+        ]
+        .into_iter()
+        .find(|location| view_has(view, Asset::Belief(*location)))?,
     };
     Some(action(RateId::Move {
         from: Location::Base,
@@ -606,7 +699,9 @@ fn signal(truth: Location, seed: u8) -> Location {
     if seed == 0 {
         match truth {
             Location::North => Location::South,
-            Location::South => Location::North,
+            Location::South => Location::East,
+            Location::East => Location::West,
+            Location::West => Location::North,
             Location::Base => unreachable!("base is not a rescue truth"),
         }
     } else {
@@ -616,7 +711,10 @@ fn signal(truth: Location, seed: u8) -> Location {
 
 fn assert_rescue_location(location: Location) {
     assert!(
-        matches!(location, Location::North | Location::South),
+        matches!(
+            location,
+            Location::North | Location::South | Location::East | Location::West
+        ),
         "base is not a possible rescue truth"
     );
 }
@@ -632,7 +730,7 @@ fn action(rate: RateId) -> Action {
                 .bind(Role::Nature, AccountId::Nature)
         }
         RateId::Finish => Exchange::new(rate, Quantity::new(1)).bind(Role::Actor, AccountId::Agent),
-        RateId::BeginObserve | RateId::Move { .. } => {
+        RateId::BeginObserve | RateId::Move { .. } | RateId::Evacuate { .. } => {
             Exchange::new(rate, Quantity::new(1)).bind(Role::Actor, AccountId::Agent)
         }
     }

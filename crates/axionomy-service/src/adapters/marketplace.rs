@@ -11,7 +11,20 @@ pub(super) fn build(
     request: &RunRequest,
     descriptor: &ProblemDescriptor,
 ) -> Result<RunArtifact, ServiceError> {
-    let initial = marketplace::initial();
+    let showcase = !matches!(
+        instance_profile(request, descriptor),
+        InstanceProfile::Micro
+    );
+    let initial = if showcase {
+        marketplace::initial_showcase()
+    } else {
+        marketplace::initial()
+    };
+    let goal = if showcase {
+        marketplace::goal_showcase()
+    } else {
+        marketplace::goal()
+    };
     let clearing = marketplace::clear_market(&initial);
     let pareto =
         marketplace::pareto_front(&initial).map_err(|error| problem_error("marketplace", error))?;
@@ -55,7 +68,7 @@ pub(super) fn build(
                 source_label: "Multi-party marketplace",
             },
             &initial,
-            &marketplace::goal(),
+            &goal,
             &trace,
             objectives(&final_world),
             scene,
@@ -214,7 +227,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             y: Some(200.0 + (carrier as u8 as f64) * 85.0),
         });
     }
-    let edges = marketplace::ORDERS
+    let edges = marketplace::orders(world)
         .into_iter()
         .flat_map(|order| {
             let settled = !world

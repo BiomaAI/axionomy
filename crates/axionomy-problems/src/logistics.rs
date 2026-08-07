@@ -195,6 +195,16 @@ impl MonteCarloEstimate {
 }
 
 pub fn initial() -> World {
+    build(&ORDERS)
+}
+
+/// One remaining delivery for fast transport and oracle checks; the other
+/// orders are already represented as completed economic state.
+pub fn initial_micro() -> World {
+    build(&[OrderId::A])
+}
+
+fn build(pending: &[OrderId]) -> World {
     let mut builder = EconomyBuilder::new()
         .account(
             AccountId::Vehicle,
@@ -214,11 +224,13 @@ pub fn initial() -> World {
         );
 
     for order in ORDERS {
+        let order_state = if pending.contains(&order) {
+            basket([(Asset::Waiting, 1), (Asset::Package(order), 1)])
+        } else {
+            basket([(Asset::Delivered, 1), (Asset::Package(order), 1)])
+        };
         builder = builder
-            .account(
-                AccountId::Order(order),
-                Account::from(basket([(Asset::Waiting, 1), (Asset::Package(order), 1)])),
-            )
+            .account(AccountId::Order(order), Account::from(order_state))
             .rate(
                 RateId::Load(order),
                 Rate::new()

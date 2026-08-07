@@ -13,11 +13,16 @@ pub(super) fn build(
     descriptor: &ProblemDescriptor,
     progress: &mut ProgressSink<'_>,
 ) -> Result<RunArtifact, ServiceError> {
+    let profile = instance_profile(request, descriptor);
     let model = mission::initial();
     let sample_index = (request.seed as usize) % 16;
     let actual = mission::instantiate(&model, sample_index)
         .ok_or_else(|| problem_error("mission", "scenario could not be instantiated"))?;
-    let samples = request.budget.max(2) as usize;
+    let samples = match profile {
+        InstanceProfile::Micro => request.budget.clamp(2, 16),
+        InstanceProfile::Showcase => request.budget.max(2),
+        InstanceProfile::Stress => request.budget.max(256),
+    } as usize;
     let comparison = mission::monte_carlo_with_progress(
         &model,
         samples,

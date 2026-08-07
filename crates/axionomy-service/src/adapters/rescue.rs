@@ -10,7 +10,14 @@ pub(super) fn build(
     request: &RunRequest,
     descriptor: &ProblemDescriptor,
 ) -> Result<RunArtifact, ServiceError> {
-    let model = rescue::uniform_uncertain();
+    let model = if matches!(
+        instance_profile(request, descriptor),
+        InstanceProfile::Micro
+    ) {
+        rescue::uniform_uncertain()
+    } else {
+        rescue::uniform_uncertain_showcase()
+    };
     let sample = rescue::instantiate(&model, Location::South, 1)
         .ok_or_else(|| problem_error("rescue", "scenario could not be instantiated"))?;
     let front = rescue::policy_front(&model, request.budget.max(2) as usize, request.seed)
@@ -140,6 +147,8 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         (Location::Base, 300.0, 250.0),
         (Location::North, 120.0, 60.0),
         (Location::South, 480.0, 60.0),
+        (Location::East, 570.0, 170.0),
+        (Location::West, 30.0, 170.0),
     ];
     let focus = locations
         .into_iter()
@@ -162,16 +171,21 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             y: Some(y),
         })
         .collect();
-    let edges = [Location::North, Location::South]
-        .into_iter()
-        .map(|location| GraphEdgeView {
-            id: format!("route:{location:?}"),
-            source: "location:Base".into(),
-            target: format!("location:{location:?}"),
-            label: Some("hidden victim prior".into()),
-            classes: vec!["uncertain".into()],
-        })
-        .collect();
+    let edges = [
+        Location::North,
+        Location::South,
+        Location::East,
+        Location::West,
+    ]
+    .into_iter()
+    .map(|location| GraphEdgeView {
+        id: format!("route:{location:?}"),
+        source: "location:Base".into(),
+        target: format!("location:{location:?}"),
+        label: Some("hidden victim prior".into()),
+        classes: vec!["uncertain".into()],
+    })
+    .collect();
     Some(Scene::Graph {
         title: "Actor view over hidden rescue truth".into(),
         nodes,

@@ -13,8 +13,19 @@ pub(super) fn build(
     descriptor: &ProblemDescriptor,
     progress: &mut ProgressSink<'_>,
 ) -> Result<RunArtifact, ServiceError> {
-    let initial = logistics::initial();
-    let samples = request.budget.max(2) as usize;
+    let initial = if matches!(
+        instance_profile(request, descriptor),
+        InstanceProfile::Micro
+    ) {
+        logistics::initial_micro()
+    } else {
+        logistics::initial()
+    };
+    let samples = match instance_profile(request, descriptor) {
+        InstanceProfile::Micro => request.budget.clamp(2, 16),
+        InstanceProfile::Showcase => request.budget.max(2),
+        InstanceProfile::Stress => request.budget.max(256),
+    } as usize;
     let estimate = logistics::monte_carlo_with_risk_progress(
         &initial,
         samples,

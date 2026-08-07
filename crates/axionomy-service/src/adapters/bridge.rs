@@ -12,18 +12,52 @@ pub(super) fn build(
     request: &RunRequest,
     descriptor: &ProblemDescriptor,
 ) -> Result<RunArtifact, ServiceError> {
-    let initial = bridge::initial();
+    let showcase = !matches!(
+        instance_profile(request, descriptor),
+        InstanceProfile::Micro
+    );
+    let initial = if showcase {
+        bridge::initial_showcase()
+    } else {
+        bridge::initial()
+    };
     let bfs = bridge::solve(&initial)
         .ok_or_else(|| problem_error("bridge", "BFS found no allocation"))?;
-    let first_a = bridge::first_come_proposal(AgentId::A)
-        .ok_or_else(|| problem_error("bridge", "first-come A failed"))?;
-    let first_b = bridge::first_come_proposal(AgentId::B)
-        .ok_or_else(|| problem_error("bridge", "first-come B failed"))?;
-    let auction =
-        bridge::auction_proposal(2, 1).ok_or_else(|| problem_error("bridge", "auction failed"))?;
-    let pareto = bridge::pareto_front(&initial).map_err(|error| problem_error("bridge", error))?;
-    let pareto_a = pareto_trace(&pareto, AgentId::A)?;
-    let pareto_b = pareto_trace(&pareto, AgentId::B)?;
+    let first_a = if showcase {
+        bridge::first_come_showcase(AgentId::A)
+    } else {
+        bridge::first_come_proposal(AgentId::A)
+    }
+    .ok_or_else(|| problem_error("bridge", "first-come A failed"))?;
+    let first_b = if showcase {
+        bridge::first_come_showcase(AgentId::B)
+    } else {
+        bridge::first_come_proposal(AgentId::B)
+    }
+    .ok_or_else(|| problem_error("bridge", "first-come B failed"))?;
+    let auction = if showcase {
+        bridge::auction_showcase()
+    } else {
+        bridge::auction_proposal(2, 1)
+    }
+    .ok_or_else(|| problem_error("bridge", "auction failed"))?;
+    let pareto = (!showcase)
+        .then(|| bridge::pareto_front(&initial))
+        .transpose()
+        .map_err(|error| problem_error("bridge", error))?;
+    let pareto_a = if let Some(result) = &pareto {
+        pareto_trace(result, AgentId::A)?
+    } else {
+        first_a.clone()
+    };
+    let pareto_b = if let Some(result) = &pareto {
+        pareto_trace(result, AgentId::B)?
+    } else {
+        first_b.clone()
+    };
+    let pareto_expanded = pareto
+        .as_ref()
+        .map(|result| result.progress().expanded() as u64);
     let traces = [
         (
             "breadth_first",
@@ -63,7 +97,7 @@ pub(super) fn build(
             "The exact allocation frontier member favoring Agent A.",
             pareto_a,
             "exact Pareto search",
-            Some(pareto.progress().expanded() as u64),
+            pareto_expanded,
         ),
         (
             "pareto_b",
@@ -71,7 +105,7 @@ pub(super) fn build(
             "The exact allocation frontier member favoring Agent B.",
             pareto_b,
             "exact Pareto search",
-            Some(pareto.progress().expanded() as u64),
+            pareto_expanded,
         ),
     ];
     let mut documents = Vec::new();
@@ -94,7 +128,6 @@ pub(super) fn build(
             scene,
         )
         .map_err(|error| problem_error("bridge", error))?;
-        view.pareto_fronts.push(front_view(&pareto, &view));
         view.telemetry.push(telemetry(
             algorithm,
             true,
@@ -119,12 +152,67 @@ pub(super) fn build(
         view.proposals.push(proposal("bridge", ProposalSpec { id: "impersonated-bid", label: "Agent B submits Agent A bid", description: "The role binding conflicts with the encoded agent identity and is explained as an asset shortfall." }, &initial, &wrong_identity));
         documents.push(view);
     }
+    for index in 0..documents.len() {
+        let front = if let Some(result) = &pareto {
+            front_view(result, &documents[index])
+        } else {
+            candidate_front_view(&documents, &documents[index])
+        };
+        documents[index].pareto_fronts.push(front);
+    }
     artifact(
         request,
         descriptor,
         selected_strategy(request, descriptor),
         documents,
     )
+}
+
+fn candidate_front_view(documents: &[ViewDocument], selected: &ViewDocument) -> ParetoFrontView {
+    let rows = documents
+        .iter()
+        .filter(|document| document.objectives.len() == 4)
+        .map(|document| {
+            let values = document
+                .objectives
+                .iter()
+                .map(|objective| objective.value.parse::<u64>().unwrap_or(0))
+                .collect::<Vec<_>>();
+            (document, values)
+        })
+        .collect::<Vec<_>>();
+    let non_dominated = rows.iter().filter(|(_, candidate)| {
+        !rows.iter().any(|(_, other)| {
+            other
+                .iter()
+                .zip(candidate)
+                .all(|(left, right)| left >= right)
+                && other
+                    .iter()
+                    .zip(candidate)
+                    .any(|(left, right)| left > right)
+        })
+    });
+    ParetoFrontView {
+        title: "Evaluated two-round mechanism frontier".into(),
+        completeness: FrontierCompletenessView::Approximate,
+        axes: ["A priority", "A credit", "B priority", "B credit"]
+            .into_iter()
+            .enumerate()
+            .map(|(index, label)| ObjectiveAxisView {
+                key: format!("axis_{index}"),
+                label: label.into(),
+                direction: ObjectiveDirectionView::Maximize,
+            })
+            .collect(),
+        points: non_dominated
+            .map(|(document, values)| ParetoPointView {
+                label: document.title.clone(),
+                selected: document.id == selected.id,
+                values: values.into_iter().map(|value| value.to_string()).collect(),
+            })
+            .collect(),
+    }
 }
 
 fn pareto_trace(

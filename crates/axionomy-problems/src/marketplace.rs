@@ -22,9 +22,12 @@ pub const SECOND_GROSS_PAYMENT: u64 = 90;
 pub enum OrderId {
     A,
     B,
+    C,
+    D,
 }
 
-pub const ORDERS: [OrderId; 2] = [OrderId::A, OrderId::B];
+const MICRO_ORDERS: [OrderId; 2] = [OrderId::A, OrderId::B];
+const SHOWCASE_ORDERS: [OrderId; 4] = [OrderId::A, OrderId::B, OrderId::C, OrderId::D];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Item {
@@ -191,34 +194,49 @@ impl AssessedMatch {
 }
 
 pub fn initial() -> World {
-    EconomyBuilder::new()
-        .account(
-            AccountId::Buyer(BuyerId::A),
-            Account::from(basket([
-                (Asset::Money, 190),
-                (Asset::PurchaseIntent(OrderId::A), 1),
-                (Asset::PurchaseIntent(OrderId::B), 1),
-            ])),
-        )
-        .account(
-            AccountId::Buyer(BuyerId::B),
-            Account::from(basket([
-                (Asset::Money, 100),
-                (Asset::PurchaseIntent(OrderId::A), 1),
-            ])),
-        )
-        .account(
-            AccountId::Buyer(BuyerId::C),
-            Account::from(basket([
-                (Asset::Money, 75),
-                (Asset::PurchaseIntent(OrderId::A), 1),
-            ])),
-        )
+    build(false)
+}
+
+/// A four-order market day with shared buyer budgets, seller inventory, and
+/// carrier capacity coupling otherwise individually feasible settlements.
+pub fn initial_showcase() -> World {
+    build(true)
+}
+
+fn build(showcase: bool) -> World {
+    let orders: &[OrderId] = if showcase {
+        &SHOWCASE_ORDERS
+    } else {
+        &MICRO_ORDERS
+    };
+    let mut buyer_a = basket([
+        (Asset::Money, if showcase { 300 } else { 190 }),
+        (Asset::PurchaseIntent(OrderId::A), 1),
+        (Asset::PurchaseIntent(OrderId::B), 1),
+    ]);
+    let mut buyer_b = basket([
+        (Asset::Money, if showcase { 210 } else { 100 }),
+        (Asset::PurchaseIntent(OrderId::A), 1),
+    ]);
+    let mut buyer_c = basket([
+        (Asset::Money, if showcase { 190 } else { 75 }),
+        (Asset::PurchaseIntent(OrderId::A), 1),
+    ]);
+    if showcase {
+        buyer_a.insert(Asset::PurchaseIntent(OrderId::C), Quantity::new(1));
+        buyer_b.insert(Asset::PurchaseIntent(OrderId::C), Quantity::new(1));
+        buyer_c.insert(Asset::PurchaseIntent(OrderId::B), Quantity::new(1));
+        buyer_c.insert(Asset::PurchaseIntent(OrderId::D), Quantity::new(1));
+    }
+    let mut builder = EconomyBuilder::new()
+        .account(AccountId::Buyer(BuyerId::A), Account::from(buyer_a))
+        .account(AccountId::Buyer(BuyerId::B), Account::from(buyer_b))
+        .account(AccountId::Buyer(BuyerId::C), Account::from(buyer_c))
         .account(
             AccountId::Seller(SellerId::A),
             Account::from(basket([
-                (Asset::Item(Item::Widget), 1),
-                (Asset::SaleOffer(Item::Widget), 1),
+                (Asset::Item(Item::Widget), if showcase { 2 } else { 1 }),
+                (Asset::SaleOffer(Item::Widget), if showcase { 2 } else { 1 }),
             ])),
         )
         .account(
@@ -226,20 +244,28 @@ pub fn initial() -> World {
             Account::from(basket([
                 (Asset::Item(Item::Widget), 1),
                 (Asset::SaleOffer(Item::Widget), 1),
+                (Asset::Item(Item::Gadget), u64::from(showcase)),
+                (Asset::SaleOffer(Item::Gadget), u64::from(showcase)),
             ])),
         )
         .account(
             AccountId::Seller(SellerId::C),
             Account::from(basket([
-                (Asset::Item(Item::Gadget), 1),
-                (Asset::SaleOffer(Item::Gadget), 1),
+                (Asset::Item(Item::Gadget), if showcase { 2 } else { 1 }),
+                (Asset::SaleOffer(Item::Gadget), if showcase { 2 } else { 1 }),
             ])),
         )
         .account(
             AccountId::Carrier(CarrierId::A),
-            Account::from(basket([(Asset::ShippingCapacity, 2)])),
+            Account::from(basket([(
+                Asset::ShippingCapacity,
+                if showcase { 3 } else { 2 },
+            )])),
         )
-        .account(AccountId::Carrier(CarrierId::B), Account::default())
+        .account(
+            AccountId::Carrier(CarrierId::B),
+            Account::from(basket([(Asset::ShippingCapacity, u64::from(showcase))])),
+        )
         .account(
             AccountId::Platform,
             Account::from(basket([(Asset::MarketplaceLicense, 1)])),
@@ -248,60 +274,69 @@ pub fn initial() -> World {
             AccountId::TaxAuthority,
             Account::from(basket([(Asset::TaxPolicy, 1)])),
         )
-        .account(
-            AccountId::Order(OrderId::A),
-            Account::from(basket([(Asset::OpenOrder(OrderId::A), 1)])),
-        )
-        .account(
-            AccountId::Order(OrderId::B),
-            Account::from(basket([(Asset::OpenOrder(OrderId::B), 1)])),
-        )
-        .rate(
-            RateId::SettleOrder(OrderId::A),
-            all_distinct(settlement_rate(OrderId::A)),
-        )
-        .rate(
-            RateId::SettleOrder(OrderId::B),
-            all_distinct(settlement_rate(OrderId::B)),
-        )
+        .invariant(LinearInvariant::new("money accounting").weight(Asset::Money, 1));
+    for &order in orders {
+        builder = builder
+            .account(
+                AccountId::Order(order),
+                Account::from(basket([(Asset::OpenOrder(order), 1)])),
+            )
+            .rate(
+                RateId::SettleOrder(order),
+                all_distinct(settlement_rate(order)),
+            );
+    }
+    let buyer_lifecycle = orders.iter().copied().fold(
+        LinearInvariant::new("buyer order lifecycle"),
+        |invariant, order| {
+            invariant
+                .weight(Asset::PurchaseIntent(order), 1)
+                .weight(Asset::PurchaseReceipt(order), 1)
+        },
+    );
+    let seller_lifecycle = orders.iter().copied().fold(
+        LinearInvariant::new("seller order lifecycle")
+            .weight(Asset::SaleOffer(Item::Widget), 1)
+            .weight(Asset::SaleOffer(Item::Gadget), 1),
+        |invariant, order| invariant.weight(Asset::CompletedSale(order), 1),
+    );
+    let order_lifecycle = orders.iter().copied().fold(
+        LinearInvariant::new("order lifecycle"),
+        |invariant, order| {
+            invariant
+                .weight(Asset::OpenOrder(order), 1)
+                .weight(Asset::SettledOrder(order), 1)
+        },
+    );
+    builder
         .invariant(LinearInvariant::new("money accounting").weight(Asset::Money, 1))
         .invariant(
             LinearInvariant::new("item accounting")
                 .weight(Asset::Item(Item::Widget), 1)
                 .weight(Asset::Item(Item::Gadget), 1),
         )
-        .invariant(
-            LinearInvariant::new("buyer order lifecycle")
-                .weight(Asset::PurchaseIntent(OrderId::A), 1)
-                .weight(Asset::PurchaseIntent(OrderId::B), 1)
-                .weight(Asset::PurchaseReceipt(OrderId::A), 1)
-                .weight(Asset::PurchaseReceipt(OrderId::B), 1),
-        )
-        .invariant(
-            LinearInvariant::new("seller order lifecycle")
-                .weight(Asset::SaleOffer(Item::Widget), 1)
-                .weight(Asset::SaleOffer(Item::Gadget), 1)
-                .weight(Asset::CompletedSale(OrderId::A), 1)
-                .weight(Asset::CompletedSale(OrderId::B), 1),
-        )
+        .invariant(buyer_lifecycle)
+        .invariant(seller_lifecycle)
         .invariant(
             LinearInvariant::new("shipping capacity accounting")
                 .weight(Asset::ShippingCapacity, 1)
                 .weight(Asset::UsedShippingCapacity, 1),
         )
-        .invariant(
-            LinearInvariant::new("order lifecycle")
-                .weight(Asset::OpenOrder(OrderId::A), 1)
-                .weight(Asset::OpenOrder(OrderId::B), 1)
-                .weight(Asset::SettledOrder(OrderId::A), 1)
-                .weight(Asset::SettledOrder(OrderId::B), 1),
-        )
+        .invariant(order_lifecycle)
         .build()
         .expect("marketplace model is valid")
 }
 
 pub fn goal() -> Goal<AccountId, Asset> {
-    ORDERS.into_iter().fold(Goal::new(), |goal, order| {
+    goal_for(&MICRO_ORDERS)
+}
+
+pub fn goal_showcase() -> Goal<AccountId, Asset> {
+    goal_for(&SHOWCASE_ORDERS)
+}
+
+fn goal_for(orders: &[OrderId]) -> Goal<AccountId, Asset> {
+    orders.iter().copied().fold(Goal::new(), |goal, order| {
         goal.require(
             AccountId::Order(order),
             basket([(Asset::SettledOrder(order), 1)]),
@@ -329,7 +364,7 @@ pub fn candidate_matches(world: &World) -> Vec<MarketMatch> {
     carriers.sort();
 
     let mut matches = Vec::new();
-    for order in ORDERS {
+    for order in orders(world) {
         for buyer in &buyers {
             for seller in &sellers {
                 for carrier in &carriers {
@@ -339,6 +374,18 @@ pub fn candidate_matches(world: &World) -> Vec<MarketMatch> {
         }
     }
     matches
+}
+
+pub fn orders(world: &World) -> Vec<OrderId> {
+    let mut orders = world
+        .rate_ids()
+        .map(|rate| match rate {
+            RateId::SettleOrder(order) => *order,
+        })
+        .collect::<Vec<_>>();
+    orders.sort();
+    orders.dedup();
+    orders
 }
 
 pub fn candidates(world: &World) -> Vec<Action> {
@@ -410,7 +457,12 @@ pub fn clear_market(world: &World) -> ClearingProposal {
 /// Exhaustively exposes non-dominated participant-utility allocations among
 /// complete, atomic market clearings.
 pub fn pareto_front(world: &World) -> Result<ParetoResult, ParetoError> {
-    pareto::search(world, &goal(), exact_matches, objectives)
+    let goal = if orders(world).len() > MICRO_ORDERS.len() {
+        goal_showcase()
+    } else {
+        goal()
+    };
+    pareto::search(world, &goal, exact_matches, objectives)
 }
 
 pub fn objectives(world: &World) -> ObjectiveVector<ObjectiveKey, u64> {
@@ -500,6 +552,8 @@ const fn utility_terms(order: OrderId) -> (u64, u64) {
     match order {
         OrderId::A => (30, 20),
         OrderId::B => (25, 18),
+        OrderId::C => (34, 17),
+        OrderId::D => (22, 24),
     }
 }
 
@@ -514,6 +568,8 @@ const fn order_terms(order: OrderId) -> (Item, u64, u64, u64, u64, u64) {
             SHIPPING_FEE,
         ),
         OrderId::B => (Item::Gadget, SECOND_GROSS_PAYMENT, 72, 9, 5, 4),
+        OrderId::C => (Item::Widget, 110, 86, 11, 7, 6),
+        OrderId::D => (Item::Gadget, 95, 75, 10, 5, 5),
     }
 }
 
@@ -544,7 +600,7 @@ fn clear_branch(
 }
 
 fn settled_orders(world: &World) -> usize {
-    ORDERS
+    orders(world)
         .into_iter()
         .filter(|order| {
             !world
@@ -555,7 +611,7 @@ fn settled_orders(world: &World) -> usize {
 }
 
 fn gross_value(world: &World) -> u64 {
-    ORDERS
+    orders(world)
         .into_iter()
         .map(|order| {
             let gross = order_terms(order).1;
@@ -621,6 +677,9 @@ mod tests {
                         exchange.bindings().get(&Role::Seller),
                         Some(&AccountId::Seller(SellerId::C))
                     );
+                }
+                RateId::SettleOrder(OrderId::C | OrderId::D) => {
+                    unreachable!("micro fixture only has two orders")
                 }
             }
             assert_eq!(

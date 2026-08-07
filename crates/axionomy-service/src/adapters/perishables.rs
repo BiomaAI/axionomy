@@ -12,10 +12,18 @@ pub(super) fn build(
     request: &RunRequest,
     descriptor: &ProblemDescriptor,
 ) -> Result<RunArtifact, ServiceError> {
-    let initial = perishables::initial();
-    let outage = perishables::run_outage_scenario(&initial, perishables::DEFAULT_TRANSFER)
+    let profile = instance_profile(request, descriptor);
+    let (initial, transfer) = match profile {
+        InstanceProfile::Micro => (perishables::initial_with_inventory(70, 30), 10),
+        InstanceProfile::Showcase => (perishables::initial(), perishables::DEFAULT_TRANSFER),
+        InstanceProfile::Stress => (
+            perishables::initial_with_inventory(700_000, 300_000),
+            100_000,
+        ),
+    };
+    let outage = perishables::run_outage_scenario(&initial, transfer)
         .map_err(|error| problem_error("perishables", error))?;
-    let front = perishables::storage_plan_front(&initial)
+    let front = perishables::storage_plan_front_with_transfer(&initial, transfer)
         .map_err(|error| problem_error("perishables", error))?;
     let inventory_trace = frontier_trace(&front, true)?;
     let energy_trace = frontier_trace(&front, false)?;

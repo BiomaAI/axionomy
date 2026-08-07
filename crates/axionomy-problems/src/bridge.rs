@@ -46,6 +46,7 @@ pub enum Asset {
     PriorityBenefit,
     Waiting,
     Crossed,
+    CompletedTrip,
     CapacityFree,
     Active,
     Solved,
@@ -84,6 +85,7 @@ pub enum RateId {
     Cross {
         agent: AgentId,
     },
+    ResetRound,
     Finish,
 }
 
@@ -100,6 +102,17 @@ pub enum ObjectiveKey {
 }
 
 pub fn initial() -> World {
+    build(false)
+}
+
+/// Two consecutive capacity allocations force policies to reason about
+/// repeated fairness, retained credit, and an atomic multi-agent round reset.
+pub fn initial_showcase() -> World {
+    build(true)
+}
+
+fn build(repeated: bool) -> World {
+    let credit = if repeated { 4 } else { 2 };
     let mut builder = EconomyBuilder::new()
         .account(
             AccountId::Agent(AgentId::A),
@@ -107,7 +120,7 @@ pub fn initial() -> World {
                 (Asset::AgentIdentity(AgentId::A), 1),
                 (Asset::At(Side::West), 1),
                 (Asset::Energy, 1),
-                (Asset::Credit, 2),
+                (Asset::Credit, credit),
                 (Asset::CanBid, 1),
             ])),
         )
@@ -117,7 +130,7 @@ pub fn initial() -> World {
                 (Asset::AgentIdentity(AgentId::B), 1),
                 (Asset::At(Side::West), 1),
                 (Asset::Energy, 1),
-                (Asset::Credit, 2),
+                (Asset::Credit, credit),
                 (Asset::CanBid, 1),
             ])),
         )
@@ -307,6 +320,64 @@ pub fn initial() -> World {
         }
     }
 
+    if repeated {
+        builder = builder.rate(
+            RateId::ResetRound,
+            Rate::new()
+                .preserve(
+                    Role::AgentA,
+                    basket([(Asset::AgentIdentity(AgentId::A), 1)]),
+                )
+                .preserve(
+                    Role::AgentB,
+                    basket([(Asset::AgentIdentity(AgentId::B), 1)]),
+                )
+                .preserve(
+                    Role::Bridge,
+                    basket([(Asset::BridgeIdentity, 1), (Asset::Active, 1)]),
+                )
+                .consume(
+                    Role::AgentA,
+                    basket([
+                        (Asset::At(Side::East), 1),
+                        (Asset::Crossed, 1),
+                        (Asset::SpentEnergy, 1),
+                    ]),
+                )
+                .produce(
+                    Role::AgentA,
+                    basket([
+                        (Asset::At(Side::West), 1),
+                        (Asset::CanBid, 1),
+                        (Asset::CompletedTrip, 1),
+                        (Asset::Energy, 1),
+                    ]),
+                )
+                .consume(
+                    Role::AgentB,
+                    basket([
+                        (Asset::At(Side::East), 1),
+                        (Asset::Crossed, 1),
+                        (Asset::SpentEnergy, 1),
+                    ]),
+                )
+                .produce(
+                    Role::AgentB,
+                    basket([
+                        (Asset::At(Side::West), 1),
+                        (Asset::CanBid, 1),
+                        (Asset::CompletedTrip, 1),
+                        (Asset::Energy, 1),
+                    ]),
+                )
+                .consume(Role::Bridge, basket([(Asset::SecondTurn, 1)]))
+                .produce(Role::Bridge, basket([(Asset::FirstTurn, 1)]))
+                .distinct(Role::AgentA, Role::AgentB)
+                .distinct(Role::AgentA, Role::Bridge)
+                .distinct(Role::AgentB, Role::Bridge),
+        );
+    }
+
     let positions = LinearInvariant::new("two agent positions")
         .weight(Asset::At(Side::West), 1)
         .weight(Asset::At(Side::East), 1);
@@ -317,25 +388,30 @@ pub fn initial() -> World {
         .weight(Asset::Waiting, 1)
         .weight(Asset::Crossed, 1);
 
-    builder
-        .rate(
-            RateId::Finish,
-            Rate::new()
-                .preserve(
-                    Role::AgentA,
-                    basket([(Asset::AgentIdentity(AgentId::A), 1), (Asset::Crossed, 1)]),
-                )
-                .preserve(
-                    Role::AgentB,
-                    basket([(Asset::AgentIdentity(AgentId::B), 1), (Asset::Crossed, 1)]),
-                )
-                .preserve(Role::Bridge, basket([(Asset::BridgeIdentity, 1)]))
-                .consume(Role::Bridge, basket([(Asset::Active, 1)]))
-                .produce(Role::Bridge, basket([(Asset::Solved, 1)]))
-                .distinct(Role::AgentA, Role::AgentB)
-                .distinct(Role::AgentA, Role::Bridge)
-                .distinct(Role::AgentB, Role::Bridge),
+    let mut finish = Rate::new()
+        .preserve(
+            Role::AgentA,
+            basket([(Asset::AgentIdentity(AgentId::A), 1), (Asset::Crossed, 1)]),
         )
+        .preserve(
+            Role::AgentB,
+            basket([(Asset::AgentIdentity(AgentId::B), 1), (Asset::Crossed, 1)]),
+        );
+    if repeated {
+        finish = finish
+            .preserve(Role::AgentA, basket([(Asset::CompletedTrip, 1)]))
+            .preserve(Role::AgentB, basket([(Asset::CompletedTrip, 1)]));
+    }
+    finish = finish
+        .preserve(Role::Bridge, basket([(Asset::BridgeIdentity, 1)]))
+        .consume(Role::Bridge, basket([(Asset::Active, 1)]))
+        .produce(Role::Bridge, basket([(Asset::Solved, 1)]))
+        .distinct(Role::AgentA, Role::AgentB)
+        .distinct(Role::AgentA, Role::Bridge)
+        .distinct(Role::AgentB, Role::Bridge);
+
+    builder
+        .rate(RateId::Finish, finish)
         .invariant(positions)
         .invariant(status)
         .invariant(
@@ -461,8 +537,72 @@ pub fn auction_proposal(bid_a: u8, bid_b: u8) -> Option<Proposal> {
     ])
 }
 
+pub fn first_come_showcase(first: AgentId) -> Option<Proposal> {
+    let second = other(first);
+    validated_trace_from(
+        initial_showcase(),
+        [
+            RateId::ClaimFirst { agent: first },
+            RateId::Cross { agent: first },
+            RateId::ClaimSecond { agent: second },
+            RateId::Cross { agent: second },
+            RateId::ResetRound,
+            RateId::ClaimFirst { agent: first },
+            RateId::Cross { agent: first },
+            RateId::ClaimSecond { agent: second },
+            RateId::Cross { agent: second },
+            RateId::Finish,
+        ],
+    )
+}
+
+pub fn auction_showcase() -> Option<Proposal> {
+    validated_trace_from(
+        initial_showcase(),
+        [
+            RateId::SubmitBid {
+                agent: AgentId::A,
+                amount: 2,
+            },
+            RateId::SubmitBid {
+                agent: AgentId::B,
+                amount: 1,
+            },
+            RateId::Resolve {
+                winner: AgentId::A,
+                winning_bid: 2,
+                losing_bid: 1,
+            },
+            RateId::Cross { agent: AgentId::A },
+            RateId::YieldToWaiting { agent: AgentId::B },
+            RateId::Cross { agent: AgentId::B },
+            RateId::ResetRound,
+            RateId::SubmitBid {
+                agent: AgentId::A,
+                amount: 1,
+            },
+            RateId::SubmitBid {
+                agent: AgentId::B,
+                amount: 2,
+            },
+            RateId::Resolve {
+                winner: AgentId::B,
+                winning_bid: 2,
+                losing_bid: 1,
+            },
+            RateId::Cross { agent: AgentId::B },
+            RateId::YieldToWaiting { agent: AgentId::A },
+            RateId::Cross { agent: AgentId::A },
+            RateId::Finish,
+        ],
+    )
+}
+
 fn validated_trace<const N: usize>(rates: [RateId; N]) -> Option<Proposal> {
-    let mut world = initial();
+    validated_trace_from(initial(), rates)
+}
+
+fn validated_trace_from<const N: usize>(mut world: World, rates: [RateId; N]) -> Option<Proposal> {
     let mut trace = Trace::new();
     for rate in rates {
         let exchange = action(rate);
@@ -492,7 +632,7 @@ pub fn action(rate: RateId) -> Action {
             .bind(Role::Winner, AccountId::Agent(winner))
             .bind(Role::Loser, AccountId::Agent(other(winner)))
             .bind(Role::Bridge, AccountId::Bridge),
-        RateId::Finish => Exchange::new(rate, Quantity::new(1))
+        RateId::ResetRound | RateId::Finish => Exchange::new(rate, Quantity::new(1))
             .bind(Role::AgentA, AccountId::Agent(AgentId::A))
             .bind(Role::AgentB, AccountId::Agent(AgentId::B))
             .bind(Role::Bridge, AccountId::Bridge),
