@@ -12,22 +12,22 @@ import {
 import type { Scene, SceneEntity, SceneSurface } from "./api";
 import { SceneIcon } from "./SceneIcon";
 
-export function SceneView({ scene }: { scene?: Scene | null }) {
+export function SceneView({ scene, onAccount }: { scene?: Scene | null; onAccount?: (account: string) => void }) {
   if (!scene) {
     return <div className="empty-state">No domain projection supplied; the accounts remain fully inspectable.</div>;
   }
   return <div className="scene-composition">
     <SceneChrome scene={scene} />
-    <SceneSurfaceView scene={scene} />
+    <SceneSurfaceView scene={scene} onAccount={onAccount} />
   </div>;
 }
 
-function SceneSurfaceView({ scene }: { scene: Scene }) {
+function SceneSurfaceView({ scene, onAccount }: { scene: Scene; onAccount?: (account: string) => void }) {
   switch (scene.surface.kind) {
-    case "graph": return <GraphScene scene={scene} surface={scene.surface} />;
-    case "grid": return <GridScene scene={scene} surface={scene.surface} />;
-    case "matrix": return <MatrixScene scene={scene} surface={scene.surface} />;
-    case "timeline": return <TimelineScene scene={scene} surface={scene.surface} />;
+    case "graph": return <GraphScene scene={scene} surface={scene.surface} onAccount={onAccount} />;
+    case "grid": return <GridScene scene={scene} surface={scene.surface} onAccount={onAccount} />;
+    case "matrix": return <MatrixScene scene={scene} surface={scene.surface} onAccount={onAccount} />;
+    case "timeline": return <TimelineScene scene={scene} surface={scene.surface} onAccount={onAccount} />;
   }
 }
 
@@ -56,7 +56,7 @@ function RichNode({ data }: NodeProps) {
 
 const nodeTypes = { rich: RichNode };
 
-function GraphScene({ scene, surface }: { scene: Scene; surface: GraphSurface }) {
+function GraphScene({ scene, surface, onAccount }: { scene: Scene; surface: GraphSurface; onAccount?: (account: string) => void }) {
   const positions = new Map(surface.nodes.map((node) => [node.id.key, { x: node.x ?? 0, y: node.y ?? 0 }]));
   const entityAtNode = (key: string) => scene.entities.find((entity) => entity.anchor.kind === "graph_node" && entity.anchor.node === key && entity.id.key === key)
     ?? scene.entities.find((entity) => entity.anchor.kind === "graph_node" && entity.anchor.node === key);
@@ -99,7 +99,7 @@ function GraphScene({ scene, surface }: { scene: Scene; surface: GraphSurface })
     };
   });
   return <div className="graph-scene" role="img" aria-label={scene.title}>
-    <ReactFlow nodes={nodes} edges={edges} nodeTypes={nodeTypes} fitView minZoom={0.25} maxZoom={2} nodesConnectable={false} nodesDraggable={false} elementsSelectable>
+    <ReactFlow nodes={nodes} edges={edges} nodeTypes={nodeTypes} fitView minZoom={0.25} maxZoom={2} nodesConnectable={false} nodesDraggable={false} elementsSelectable onNodeClick={(_, node) => { const account = (node.data as RichNodeData).entity?.account; if (account) onAccount?.(account); }}>
       <Background gap={22} size={1} />
       <Controls showInteractive={false} />
     </ReactFlow>
@@ -108,11 +108,11 @@ function GraphScene({ scene, surface }: { scene: Scene; surface: GraphSurface })
 
 type GridSurface = Extract<SceneSurface, { kind: "grid" }>;
 
-function GridScene({ scene, surface }: { scene: Scene; surface: GridSurface }) {
+function GridScene({ scene, surface, onAccount }: { scene: Scene; surface: GridSurface; onAccount?: (account: string) => void }) {
   const entities = (x: number, y: number) => scene.entities.filter((entity) => entity.anchor.kind === "grid_cell" && entity.anchor.x === x && entity.anchor.y === y);
   return <div className="grid-scene" role="grid" aria-label={scene.title} style={{ gridTemplateColumns: `repeat(${surface.width}, minmax(42px, 1fr))`, gridTemplateRows: `repeat(${surface.height}, minmax(42px, 1fr))` }}>
     {surface.cells.map((cell) => <div role="gridcell" aria-label={`${cell.x}, ${cell.y}: ${cell.label}`} key={`${cell.x}:${cell.y}`} className={cell.classes.join(" ")} style={{ gridColumn: cell.x + 1, gridRow: cell.y + 1 }}>
-      <div className="grid-entities">{entities(cell.x, cell.y).map((entity) => <span key={entity.id.key} className={`grid-entity tone-${entity.tone}`} title={entity.id.label}><SceneIcon glyph={entity.glyph} size={24} /><b>{entity.id.label}</b></span>)}</div>
+      <div className="grid-entities">{entities(cell.x, cell.y).map((entity) => <button type="button" key={entity.id.key} className={`grid-entity tone-${entity.tone}`} title={entity.id.label} disabled={!entity.account} onClick={() => entity.account && onAccount?.(entity.account)}><SceneIcon glyph={entity.glyph} size={24} /><b>{entity.id.label}</b></button>)}</div>
       {entities(cell.x, cell.y).length === 0 && <span>{cell.label}</span>}
       <small>{cell.x},{cell.y}</small>
     </div>)}
@@ -121,25 +121,25 @@ function GridScene({ scene, surface }: { scene: Scene; surface: GridSurface }) {
 
 type MatrixSurface = Extract<SceneSurface, { kind: "matrix" }>;
 
-function MatrixScene({ scene, surface }: { scene: Scene; surface: MatrixSurface }) {
+function MatrixScene({ scene, surface, onAccount }: { scene: Scene; surface: MatrixSurface; onAccount?: (account: string) => void }) {
   const cell = (row: string, column: string) => surface.cells.find((candidate) => candidate.row === row && candidate.column === column);
   const entities = (row: string, column: string) => scene.entities.filter((entity) => entity.anchor.kind === "matrix_cell" && entity.anchor.row === row && entity.anchor.column === column);
   return <div className="matrix-scene"><table aria-label={scene.title}><thead><tr><th>Set</th>{surface.columns.map((column) => <th key={column.key}>{column.label}</th>)}</tr></thead><tbody>
     {surface.rows.map((row) => <tr key={row.key}><th>{row.label}</th>{surface.columns.map((column) => {
       const value = cell(row.key, column.key); const occupants = entities(row.key, column.key);
-      return <td key={column.key} className={value?.classes.join(" ")}>{occupants.map((entity) => <span key={entity.id.key} className={`matrix-entity tone-${entity.tone}`} title={entity.id.label}><SceneIcon glyph={entity.glyph} size={18} /></span>)}{occupants.length === 0 ? value?.label ?? "·" : null}</td>;
+      return <td key={column.key} className={value?.classes.join(" ")}>{occupants.map((entity) => <button type="button" key={entity.id.key} className={`matrix-entity tone-${entity.tone}`} title={entity.id.label} disabled={!entity.account} onClick={() => entity.account && onAccount?.(entity.account)}><SceneIcon glyph={entity.glyph} size={18} /></button>)}{occupants.length === 0 ? value?.label ?? "·" : null}</td>;
     })}</tr>)}
   </tbody></table></div>;
 }
 
 type TimelineSurface = Extract<SceneSurface, { kind: "timeline" }>;
 
-function TimelineScene({ scene, surface }: { scene: Scene; surface: TimelineSurface }) {
+function TimelineScene({ scene, surface, onAccount }: { scene: Scene; surface: TimelineSurface; onAccount?: (account: string) => void }) {
   const maximum = Math.max(1, ...surface.spans.map((span) => span.end), surface.cursor ?? 0);
   const entity = (id: string) => scene.entities.find((candidate) => candidate.id.key === id);
   const queued = scene.entities.filter((candidate) => candidate.anchor.kind === "unanchored");
   return <div className="timeline-scene" role="img" aria-label={scene.title}>
-    {queued.length > 0 && <div className="timeline-queue"><strong>Ready queue</strong>{queued.map((item) => <span key={item.id.key} className={`tone-${item.tone}`}><SceneIcon glyph={item.glyph} size={15} />{item.id.label}</span>)}</div>}
+    {queued.length > 0 && <div className="timeline-queue"><strong>Ready queue</strong>{queued.map((item) => <button type="button" key={item.id.key} className={`tone-${item.tone}`} disabled={!item.account} onClick={() => item.account && onAccount?.(item.account)}><SceneIcon glyph={item.glyph} size={15} />{item.id.label}</button>)}</div>}
     <div className="timeline-axis"><span>0</span><span>{maximum}</span></div>
     {surface.lanes.map((lane) => <div className="timeline-lane" key={lane.id.key}><strong>{lane.id.label}</strong><div className="timeline-track">
       {surface.spans.filter((span) => span.lane === lane.id.key).map((span) => { const item = entity(span.id); return <div key={span.id} className={`timeline-span ${span.classes.join(" ")} ${item ? `tone-${item.tone}` : ""}`} style={{ left: `${(span.start / maximum) * 100}%`, width: `${Math.max(2, ((span.end - span.start) / maximum) * 100)}%` }}>{item && <SceneIcon glyph={item.glyph} size={15} />}{span.label}</div>; })}

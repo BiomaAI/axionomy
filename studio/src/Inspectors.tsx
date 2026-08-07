@@ -5,10 +5,14 @@ export function PanelHeading({ kicker, title, aside }: { kicker: string; title: 
   return <div className="panel-heading"><div><span>{kicker}</span><h2>{title}</h2></div>{aside && <small>{aside}</small>}</div>;
 }
 
-export function Accounts({ snapshot, previous }: { snapshot: ViewSnapshot; previous?: ViewSnapshot }) {
+export function Accounts({ snapshot, previous, focus }: { snapshot: ViewSnapshot; previous?: ViewSnapshot; focus?: string }) {
+  useEffect(() => {
+    if (!focus) return;
+    document.getElementById(`account-${encodeURIComponent(focus)}`)?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }, [focus, snapshot.index]);
   return <div className="accounts-list">
     {snapshot.accounts.map((account) => (
-      <article className="account-card" key={account.account.key}>
+      <article id={`account-${encodeURIComponent(account.account.key)}`} className={`account-card ${focus === account.account.key ? "focused" : ""}`} key={account.account.key}>
         <h3><span className="account-icon">{account.account.label.slice(0, 1)}</span>{account.account.label}</h3>
         <div className="balances">
           {account.balances.map((balance) => {

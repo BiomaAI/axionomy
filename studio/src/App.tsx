@@ -77,6 +77,7 @@ export function App() {
   const [playing, setPlaying] = useState(false);
   const [playbackDelay, setPlaybackDelay] = useState(650);
   const [viewMode, setViewMode] = useState<"solve" | "replay">("replay");
+  const [focusedAccount, setFocusedAccount] = useState<string>();
   const [run, setRun] = useState<RunSummary>();
   const [launching, setLaunching] = useState(false);
   const [events, setEvents] = useState<StudioEvent[]>([]);
@@ -116,7 +117,7 @@ export function App() {
     }).catch((cause: unknown) => setError(cause instanceof Error ? cause.message : String(cause)));
   }, [problem?.key, engine.kind]);
 
-  useEffect(() => { setPosition(0); setPlaying(false); }, [document?.id]);
+  useEffect(() => { setPosition(0); setPlaying(false); setFocusedAccount(undefined); }, [document?.id]);
 
   useEffect(() => {
     if (!playing || !document) return;
@@ -220,8 +221,8 @@ export function App() {
       <PlaybackControls position={position} count={document.frames.length} playing={playing} delay={playbackDelay} onDelay={setPlaybackDelay} onPosition={setPosition} onPlaying={(next) => { if (next && position >= document.frames.length) setPosition(0); setPlaying(next); }} frame={frame} />
 
       <section className="workspace-grid">
-        <div className="panel world-panel"><PanelHeading kicker="Derived projection" title={snapshot.scene?.title ?? "Economic world"} aside={snapshot.scene?.surface.kind} /><SceneView scene={snapshot.scene} /></div>
-        <div className="panel accounts-panel"><PanelHeading kicker="Authoritative state" title="Accounts & assets" aside={`${snapshot.accounts.length} accounts`} /><Accounts snapshot={snapshot} previous={previous} /></div>
+        <div className="panel world-panel"><PanelHeading kicker="Derived projection" title={snapshot.scene?.title ?? "Economic world"} aside={snapshot.scene?.surface.kind} /><SceneView scene={snapshot.scene} onAccount={setFocusedAccount} /></div>
+        <div className="panel accounts-panel"><PanelHeading kicker="Authoritative state" title="Accounts & assets" aside={focusedAccount ? "linked from scene" : `${snapshot.accounts.length} accounts`} /><Accounts snapshot={snapshot} previous={previous} focus={focusedAccount} /></div>
       </section>
 
       <section className="evidence-grid">
