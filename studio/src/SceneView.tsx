@@ -68,7 +68,8 @@ function GraphScene({ scene, surface, onAccount }: { scene: Scene; surface: Grap
     className: node.classes.join(" "),
     draggable: false,
   }));
-  for (const [index, entity] of scene.entities.entries()) {
+  const overlays: Array<{ entity: SceneEntity; position: { x: number; y: number } }> = [];
+  for (const entity of scene.entities) {
     if (surface.nodes.some((node) => node.id.key === entity.id.key)) continue;
     let position: { x: number; y: number } | undefined;
     if (entity.anchor.kind === "graph_node") position = positions.get(entity.anchor.node);
@@ -83,7 +84,17 @@ function GraphScene({ scene, surface, onAccount }: { scene: Scene; surface: Grap
       }
     }
     if (!position) continue;
-    nodes.push({ id: `entity:${entity.id.key}`, type: "rich", position: { x: position.x + (index % 3) * 34, y: position.y + 74 + Math.floor(index / 3) * 30 }, data: { label: entity.id.label, entity, token: true } satisfies RichNodeData, draggable: false, selectable: false, className: "entity-overlay" });
+    overlays.push({ entity, position });
+  }
+  const colocated = new Map<string, number>();
+  for (const overlay of overlays) {
+    // Entities that share a node or route position form a readable vertical stack.
+    // Quantizing the anchor also prevents distinct, crossing graph edges with the
+    // same midpoint from placing interactive tokens on top of one another.
+    const anchor = `${Math.round(overlay.position.x / 24)}:${Math.round(overlay.position.y / 24)}`;
+    const index = colocated.get(anchor) ?? 0;
+    colocated.set(anchor, index + 1);
+    nodes.push({ id: `entity:${overlay.entity.id.key}`, type: "rich", position: { x: overlay.position.x, y: overlay.position.y + 88 + index * 52 }, data: { label: overlay.entity.id.label, entity: overlay.entity, token: true } satisfies RichNodeData, draggable: false, selectable: false, className: "entity-overlay" });
   }
   const edges: Edge[] = surface.edges.map((edge) => {
     const semantic = scene.paths.find((path) => path.id === edge.id);
