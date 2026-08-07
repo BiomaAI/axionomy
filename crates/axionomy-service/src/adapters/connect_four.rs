@@ -6,10 +6,39 @@ use axionomy_view::{GridCellView, ObjectiveDirectionView, TelemetryKindView};
 pub(super) fn build(
     request: &RunRequest,
     descriptor: &ProblemDescriptor,
+    progress: &mut ProgressSink<'_>,
 ) -> Result<RunArtifact, ServiceError> {
     let initial = connect_four::initial();
     let iterations = request.budget.max(8) as usize;
-    let trace = connect_four::play_game(iterations, request.seed);
+    let trace = connect_four::play_game_with_progress(
+        iterations,
+        request.seed,
+        iterations.clamp(1, 8),
+        |state| {
+            let completed = state
+                .moves_completed()
+                .saturating_mul(state.iterations_per_move())
+                .saturating_add(state.iterations_completed());
+            let total = state
+                .maximum_moves()
+                .saturating_mul(state.iterations_per_move());
+            progress.emit(
+                "mcts_game",
+                completed as u64,
+                total as u64,
+                format!(
+                    "move {}/{} · {}/{} MCTS iterations · {} nodes",
+                    state.moves_completed() + 1,
+                    state.maximum_moves(),
+                    state.iterations_completed(),
+                    state.iterations_per_move(),
+                    state.nodes()
+                ),
+            )
+        },
+    );
+    progress.ensure()?;
+    let trace = trace.ok_or_else(|| problem_error("connect_four", "MCTS game was interrupted"))?;
     let final_world = initial
         .replayed(&trace)
         .map_err(|error| problem_error("connect_four", error))?;

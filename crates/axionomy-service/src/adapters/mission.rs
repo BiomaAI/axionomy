@@ -11,23 +11,78 @@ use axionomy_view::{
 pub(super) fn build(
     request: &RunRequest,
     descriptor: &ProblemDescriptor,
+    progress: &mut ProgressSink<'_>,
 ) -> Result<RunArtifact, ServiceError> {
     let model = mission::initial();
     let sample_index = (request.seed as usize) % 16;
     let actual = mission::instantiate(&model, sample_index)
         .ok_or_else(|| problem_error("mission", "scenario could not be instantiated"))?;
     let samples = request.budget.max(2) as usize;
-    let comparison = mission::monte_carlo(&model, samples, request.seed)
-        .ok_or_else(|| problem_error("mission", "Monte Carlo failed"))?;
-    let front = mission::policy_front(&model, samples, request.seed)
-        .ok_or_else(|| problem_error("mission", "policy front failed"))?;
+    let comparison = mission::monte_carlo_with_progress(
+        &model,
+        samples,
+        request.seed,
+        samples.clamp(1, 8),
+        |state| {
+            progress.emit(
+                "monte_carlo",
+                state.completed_samples() as u64,
+                state.total_samples() as u64,
+                format!(
+                    "{}/{} hidden-scenario policy rollouts",
+                    state.completed_samples(),
+                    state.total_samples()
+                ),
+            )
+        },
+    );
+    progress.ensure()?;
+    let comparison = comparison.ok_or_else(|| problem_error("mission", "Monte Carlo failed"))?;
+    let front = mission::policy_front_with_progress(
+        &model,
+        samples,
+        request.seed,
+        samples.clamp(1, 8),
+        |state| {
+            progress.emit(
+                "pareto_sampling",
+                state.completed_samples() as u64,
+                state.total_samples() as u64,
+                format!(
+                    "{}/{} multi-objective mission rollouts",
+                    state.completed_samples(),
+                    state.total_samples()
+                ),
+            )
+        },
+    );
+    progress.ensure()?;
+    let front = front.ok_or_else(|| problem_error("mission", "policy front failed"))?;
     let beliefs = mission::initial_beliefs(&model);
-    let decision = mission::plan(
+    let decision = mission::plan_with_progress(
         &actual,
         &beliefs,
         MctsConfig::new(samples, 12).with_seed(request.seed),
+        samples.clamp(1, 8),
+        |state| {
+            progress.emit(
+                "ismcts",
+                state.iterations() as u64,
+                state.target_iterations() as u64,
+                format!(
+                    "{}/{} ISMCTS iterations · {} information sets · {} root actions",
+                    state.iterations(),
+                    state.target_iterations(),
+                    state.information_sets(),
+                    state.root_children()
+                ),
+            )
+        },
     )
     .map_err(|error| problem_error("mission", format!("{error:?}")))?;
+    progress.ensure()?;
+    let decision =
+        decision.ok_or_else(|| problem_error("mission", "ISMCTS planning was interrupted"))?;
     let policies = [
         ("coordinated", Policy::ShareAndCoordinate),
         ("direct_north", Policy::NorthTogether),

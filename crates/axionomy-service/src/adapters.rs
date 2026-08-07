@@ -8,7 +8,7 @@ use axionomy_view::{
     TelemetryKindView, TelemetryPointView, ViewDocument, ViewDocumentMetadata, ViewSource,
     derive_document, derive_model, derive_proposal,
 };
-use std::{fmt::Debug, hash::Hash};
+use std::{fmt::Debug, hash::Hash, ops::ControlFlow};
 
 mod bridge;
 mod connect_four;
@@ -400,14 +400,9 @@ pub(crate) fn run(
             strategy: strategy.into(),
         });
     }
-    control.checkpoint()?;
-    observer.progress(ServiceProgress {
-        sequence: 0,
-        phase: "prepare".into(),
-        completed: 0,
-        total: 1,
-        message: format!("preparing {}", request.problem),
-    });
+    let mut progress = ProgressSink::new(control, observer);
+    let _ = progress.emit("prepare", 0, 1, format!("preparing {}", request.problem));
+    progress.ensure()?;
     let mut artifact = match request.problem.as_str() {
         "maze" => maze::build(request, &descriptor),
         "sokoban" => sokoban::build(request, &descriptor),
@@ -417,22 +412,21 @@ pub(crate) fn run(
         "rescue" => rescue::build(request, &descriptor),
         "bridge" => bridge::build(request, &descriptor),
         "marketplace" => marketplace::build(request, &descriptor),
-        "logistics" => logistics::build(request, &descriptor),
-        "connect_four" => connect_four::build(request, &descriptor),
-        "mission" => mission::build(request, &descriptor),
+        "logistics" => logistics::build(request, &descriptor, &mut progress),
+        "connect_four" => connect_four::build(request, &descriptor, &mut progress),
+        "mission" => mission::build(request, &descriptor, &mut progress),
         "perishables" => perishables::build(request, &descriptor),
         _ => unreachable!("catalog and dispatch must agree"),
     }?;
-    control.checkpoint()?;
+    progress.ensure()?;
     for (offset, document) in artifact.documents.iter().enumerate() {
-        control.checkpoint()?;
-        observer.progress(ServiceProgress {
-            sequence: offset as u64 + 1,
-            phase: "artifact".into(),
-            completed: offset as u64 + 1,
-            total: artifact.documents.len() as u64,
-            message: format!("derived {}", document.title),
-        });
+        let _ = progress.emit(
+            "artifact",
+            offset as u64 + 1,
+            artifact.documents.len() as u64,
+            format!("derived {}", document.title),
+        );
+        progress.ensure()?;
     }
     artifact.assessed_proposals = artifact
         .documents
@@ -440,6 +434,56 @@ pub(crate) fn run(
         .flat_map(|document| document.proposals.iter().cloned())
         .collect();
     Ok(artifact)
+}
+
+pub(super) struct ProgressSink<'a> {
+    control: &'a RunControl,
+    observer: &'a mut dyn RunObserver,
+    sequence: u64,
+    error: Option<ServiceError>,
+}
+
+impl<'a> ProgressSink<'a> {
+    fn new(control: &'a RunControl, observer: &'a mut dyn RunObserver) -> Self {
+        Self {
+            control,
+            observer,
+            sequence: 0,
+            error: None,
+        }
+    }
+
+    pub fn emit(
+        &mut self,
+        phase: impl Into<String>,
+        completed: u64,
+        total: u64,
+        message: impl Into<String>,
+    ) -> ControlFlow<()> {
+        if self.error.is_some() {
+            return ControlFlow::Break(());
+        }
+        if let Err(error) = self.control.checkpoint() {
+            self.error = Some(error);
+            return ControlFlow::Break(());
+        }
+        self.observer.progress(ServiceProgress {
+            sequence: self.sequence,
+            phase: phase.into(),
+            completed,
+            total,
+            message: message.into(),
+        });
+        self.sequence += 1;
+        ControlFlow::Continue(())
+    }
+
+    pub fn ensure(&self) -> Result<(), ServiceError> {
+        match &self.error {
+            Some(error) => Err(error.clone()),
+            None => Ok(()),
+        }
+    }
 }
 
 pub(super) struct DocumentSpec<'a> {

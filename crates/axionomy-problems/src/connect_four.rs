@@ -4,7 +4,12 @@ use axionomy::{
     Account, Basket, Economy, EconomyBuilder, Exchange, LinearInvariant, Quantity, Rate, Trace,
     basket,
 };
-use axionomy_search::mcts::{MctsConfig, MctsDecision, MctsError, random_action, search};
+use axionomy_search::{
+    action_source::eager_actions,
+    mcts::{MctsConfig, MctsDecision, MctsError, MctsSession, MctsStatus, random_action, search},
+    session::{Continue, WorkBudget},
+};
+use std::ops::ControlFlow;
 
 pub const WIDTH: u8 = 4;
 pub const HEIGHT: u8 = 4;
@@ -150,6 +155,37 @@ pub type World = Economy<AccountId, Asset, RateId, Role>;
 pub type Action = Exchange<RateId, Role, AccountId>;
 pub type Decision = MctsDecision<Action>;
 pub type DecisionError = MctsError<RateId, Role, AccountId, Asset>;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct GameProgress {
+    moves_completed: usize,
+    maximum_moves: usize,
+    iterations_completed: usize,
+    iterations_per_move: usize,
+    nodes: usize,
+}
+
+impl GameProgress {
+    pub const fn moves_completed(self) -> usize {
+        self.moves_completed
+    }
+
+    pub const fn maximum_moves(self) -> usize {
+        self.maximum_moves
+    }
+
+    pub const fn iterations_completed(self) -> usize {
+        self.iterations_completed
+    }
+
+    pub const fn iterations_per_move(self) -> usize {
+        self.iterations_per_move
+    }
+
+    pub const fn nodes(self) -> usize {
+        self.nodes
+    }
+}
 
 pub fn initial() -> World {
     let mut game_assets = basket([(Asset::GameIdentity, 1), (Asset::Turn(Player::Red), 1)]);
@@ -333,21 +369,72 @@ pub fn mcts(world: &World, iterations: usize, seed: u64) -> Result<Decision, Dec
 }
 
 pub fn play_game(iterations_per_move: usize, seed: u64) -> Trace<RateId, Role, AccountId> {
+    play_game_with_progress(
+        iterations_per_move,
+        seed,
+        iterations_per_move.max(1),
+        |_| ControlFlow::Continue(()),
+    )
+    .expect("uninterrupted MCTS play produces a complete trace")
+}
+
+/// Plays a complete game through bounded MCTS advances.
+///
+/// The observer runs between deterministic iteration chunks. Returning
+/// `Break` leaves the partial game disposable and returns `None`; every move
+/// already accepted into the local trace remains independently replayable.
+pub fn play_game_with_progress(
+    iterations_per_move: usize,
+    seed: u64,
+    chunk_size: usize,
+    mut observer: impl FnMut(GameProgress) -> ControlFlow<()>,
+) -> Option<Trace<RateId, Role, AccountId>> {
     let mut world = initial();
     let mut trace = Trace::new();
-    for turn in 0..=WIDTH * HEIGHT {
+    let maximum_moves = usize::from(WIDTH) * usize::from(HEIGHT) + 1;
+    for turn in 0..maximum_moves {
         if terminal_values(&world).is_some() {
             break;
         }
-        let decision = mcts(&world, iterations_per_move, seed + u64::from(turn))
-            .expect("non-terminal games have a move");
+        let config = MctsConfig::new(iterations_per_move, 20)
+            .with_seed(seed + u64::try_from(turn).unwrap_or(u64::MAX));
+        let mut session = MctsSession::new(
+            &world,
+            config,
+            2,
+            eager_actions(candidates),
+            |_| Vec::new(),
+            |world| current_player(world).map_or(0, Player::index),
+            terminal_values,
+            |_| vec![0.5, 0.5],
+            random_action,
+        )
+        .ok()?;
+        while session.status() == MctsStatus::Running {
+            let report = session
+                .advance(WorkBudget::new(chunk_size.max(1)), &mut Continue)
+                .ok()?;
+            let progress = *report.progress();
+            if observer(GameProgress {
+                moves_completed: turn,
+                maximum_moves,
+                iterations_completed: progress.iterations(),
+                iterations_per_move,
+                nodes: progress.nodes(),
+            })
+            .is_break()
+            {
+                return None;
+            }
+        }
+        let decision = session.into_decision()?;
         let exchange = decision.action().clone();
         world
             .apply(exchange.clone())
             .expect("MCTS returns an applicable exchange");
         trace.push(exchange);
     }
-    trace
+    Some(trace)
 }
 
 pub fn column_of(action: &Action) -> Option<u8> {

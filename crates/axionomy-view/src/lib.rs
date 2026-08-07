@@ -5,8 +5,8 @@
 //! scenes are read-only projections supplied by the caller.
 
 use axionomy::{
-    AccountAssessment, AccountDelta, Basket, Economy, Exchange, ExchangeAssessment, Goal, Quantity,
-    QuantityScalar, Receipt, Trace,
+    AccountAssessment, AccountDelta, ApplyError, Basket, Economy, Exchange, ExchangeAssessment,
+    Goal, Quantity, QuantityScalar, Receipt, Trace,
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -107,13 +107,41 @@ pub enum AssessmentStatusView {
     Invalid,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum AssessmentIssueKindView {
+    MissingRate,
+    MissingBinding,
+    UnknownBinding,
+    RolesMustDiffer,
+    MissingAccount,
+    ZeroUnits,
+    RateOverflow,
+    Infeasible,
+    BalanceOverflow,
+    InvariantOverflow,
+    InvariantViolation,
+}
+
+/// One structured reason why a proposal is invalid.
+///
+/// Subjects retain the browser-facing identities of the roles, accounts,
+/// rates, and assets involved instead of flattening distinct failures into the
+/// same generic error string.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct AssessmentIssueView {
+    pub kind: AssessmentIssueKindView,
+    pub message: String,
+    pub subjects: Vec<ViewId>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct AssessmentView {
     pub status: AssessmentStatusView,
     pub accounts: Vec<AccountAssessmentView>,
     pub projected_deltas: Vec<AccountDeltaView>,
     pub shortfalls: Vec<AccountShortfallView>,
-    pub issues: Vec<String>,
+    pub issues: Vec<AssessmentIssueView>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -1016,8 +1044,122 @@ where
             accounts: Vec::new(),
             projected_deltas: Vec::new(),
             shortfalls: Vec::new(),
-            issues: issues.iter().map(ToString::to_string).collect(),
+            issues: issues
+                .iter()
+                .map(|issue| assessment_issue_view(issue, ontology))
+                .collect(),
         },
+    }
+}
+
+fn assessment_issue_view<AccountId, A, RateId, Role, N, O>(
+    issue: &ApplyError<RateId, Role, AccountId, A, N>,
+    ontology: &O,
+) -> AssessmentIssueView
+where
+    N: QuantityScalar,
+    O: ViewOntology<AccountId, A, RateId, Role, N>,
+{
+    let (kind, message, subjects) = match issue {
+        ApplyError::MissingRate { rate } => {
+            let rate = ontology.rate(rate);
+            (
+                AssessmentIssueKindView::MissingRate,
+                format!("Rate `{}` does not exist.", rate.label),
+                vec![rate],
+            )
+        }
+        ApplyError::MissingBinding { role } => {
+            let role = ontology.role(role);
+            (
+                AssessmentIssueKindView::MissingBinding,
+                format!("Missing account binding for role `{}`.", role.label),
+                vec![role],
+            )
+        }
+        ApplyError::UnknownBinding { role } => {
+            let role = ontology.role(role);
+            (
+                AssessmentIssueKindView::UnknownBinding,
+                format!("Role `{}` is not declared by this rate.", role.label),
+                vec![role],
+            )
+        }
+        ApplyError::RolesMustDiffer { left, right } => {
+            let left = ontology.role(left);
+            let right = ontology.role(right);
+            (
+                AssessmentIssueKindView::RolesMustDiffer,
+                format!(
+                    "Roles `{}` and `{}` must bind to different accounts.",
+                    left.label, right.label
+                ),
+                vec![left, right],
+            )
+        }
+        ApplyError::MissingAccount { account } => {
+            let account = ontology.account(account);
+            (
+                AssessmentIssueKindView::MissingAccount,
+                format!("Bound account `{}` does not exist.", account.label),
+                vec![account],
+            )
+        }
+        ApplyError::ZeroUnits => (
+            AssessmentIssueKindView::ZeroUnits,
+            "Exchange units must be greater than zero.".into(),
+            Vec::new(),
+        ),
+        ApplyError::RateOverflow { rate, asset } => {
+            let rate = ontology.rate(rate);
+            let asset = ontology.asset(asset);
+            (
+                AssessmentIssueKindView::RateOverflow,
+                format!(
+                    "Scaling rate `{}` overflowed asset `{}`.",
+                    rate.label, asset.label
+                ),
+                vec![rate, asset],
+            )
+        }
+        ApplyError::Infeasible { shortfalls } => {
+            let accounts = shortfalls
+                .iter()
+                .map(|shortfall| ontology.account(shortfall.account()))
+                .collect::<Vec<_>>();
+            (
+                AssessmentIssueKindView::Infeasible,
+                "Exchange requirements are not currently feasible.".into(),
+                accounts,
+            )
+        }
+        ApplyError::BalanceOverflow { account, asset } => {
+            let account = ontology.account(account);
+            let asset = ontology.asset(asset);
+            (
+                AssessmentIssueKindView::BalanceOverflow,
+                format!(
+                    "Applying the exchange would overflow `{}` in account `{}`.",
+                    asset.label, account.label
+                ),
+                vec![account, asset],
+            )
+        }
+        ApplyError::InvariantOverflow { invariant } => (
+            AssessmentIssueKindView::InvariantOverflow,
+            format!("Invariant `{invariant}` overflowed during evaluation."),
+            Vec::new(),
+        ),
+        ApplyError::InvariantViolation { invariant, .. } => (
+            AssessmentIssueKindView::InvariantViolation,
+            format!("Declared invariant `{invariant}` would be violated."),
+            Vec::new(),
+        ),
+    };
+    AssessmentIssueView {
+        kind,
+        message,
+        subjects,
     }
 }
 
@@ -1118,6 +1260,38 @@ mod tests {
             document.frames[0].assessment.projected_deltas,
             document.frames[0].receipt.deltas
         );
+    }
+
+    #[test]
+    fn invalid_proposals_preserve_the_missing_role_identity() {
+        let economy = EconomyBuilder::new()
+            .account(AccountId::Agent, Account::from(basket([(Asset::Ready, 1)])))
+            .rate(
+                RateId::Finish,
+                Rate::new().consume(Role::Actor, basket([(Asset::Ready, 1)])),
+            )
+            .build()
+            .unwrap();
+        let proposal = derive_proposal(
+            "missing-actor",
+            "Missing actor",
+            "An intentionally unbound exchange",
+            0,
+            &economy,
+            &Exchange::new(RateId::Finish, Quantity::new(1)),
+            &Ontology,
+        );
+
+        assert_eq!(proposal.assessment.issues.len(), 1);
+        assert_eq!(
+            proposal.assessment.issues[0].kind,
+            AssessmentIssueKindView::MissingBinding
+        );
+        assert_eq!(
+            proposal.assessment.issues[0].message,
+            "Missing account binding for role `Actor`."
+        );
+        assert_eq!(proposal.assessment.issues[0].subjects[0].key, "role:actor");
     }
 
     #[test]

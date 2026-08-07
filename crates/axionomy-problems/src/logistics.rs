@@ -5,15 +5,18 @@ use axionomy::{
     basket,
 };
 use axionomy_search::{
-    mcts::{MctsConfig, MctsDecision, MctsError, search},
+    action_source::eager_actions,
+    mcts::{MctsConfig, MctsDecision, MctsError, MctsProgress, MctsSession, MctsStatus, search},
     monte_carlo::{
-        MonteCarloConfig, PolicyEstimate, ScalarStatistics, ScalarSummary, VectorStatistics,
-        VectorSummary, evaluate,
+        MonteCarloConfig, MonteCarloProgress, MonteCarloSession, MonteCarloStatus, PolicyEstimate,
+        ScalarStatistics, ScalarSummary, VectorStatistics, VectorSummary, evaluate,
     },
     pareto::{FrontierCompleteness, Objective, ObjectiveVector, ParetoFront},
     rollout::{RolloutConfig, RolloutDecision, RolloutStop, TraceRetention, run_to_goal},
     sampling::{SeededSampler, TicketSource, WeightedExchange, sample},
+    session::{Continue, WorkBudget},
 };
+use std::ops::ControlFlow;
 
 const REFUEL_AMOUNT: u64 = 4;
 const REPAIR_TIME: u64 = 2;
@@ -428,6 +431,44 @@ pub fn monte_carlo_with_risk(
         ScalarStatistics::new,
     )
     .ok()?;
+    monte_carlo_estimate(estimates, criterion)
+}
+
+pub fn monte_carlo_with_risk_progress(
+    model: &World,
+    samples: usize,
+    criterion: RiskCriterion,
+    chunk_size: usize,
+    mut observer: impl FnMut(MonteCarloProgress) -> ControlFlow<()>,
+) -> Option<MonteCarloEstimate> {
+    let mut session = MonteCarloSession::new(
+        [Policy::Direct, Policy::Reliable],
+        MonteCarloConfig::new(samples),
+        |policy: &Policy, sample_index| {
+            let rollout = run_policy(
+                model,
+                *policy,
+                u64::try_from(sample_index).unwrap_or(u64::MAX),
+            );
+            Ok::<_, std::convert::Infallible>(mission_utility(&rollout))
+        },
+        ScalarStatistics::new,
+    );
+    while session.status() == MonteCarloStatus::Running {
+        let report = session
+            .advance(WorkBudget::new(chunk_size.max(1)), &mut Continue)
+            .ok()?;
+        if observer(*report.progress()).is_break() {
+            return None;
+        }
+    }
+    monte_carlo_estimate(session.into_estimates()?, criterion)
+}
+
+fn monte_carlo_estimate(
+    estimates: Vec<PolicyEstimate<Policy, ScalarSummary>>,
+    criterion: RiskCriterion,
+) -> Option<MonteCarloEstimate> {
     let chosen = estimates
         .iter()
         .max_by(|left, right| {
@@ -465,6 +506,47 @@ pub fn policy_front(model: &World, samples: usize) -> Option<PolicyFront> {
     )
     .ok()?;
 
+    policy_front_from(estimates)
+}
+
+pub fn policy_front_with_progress(
+    model: &World,
+    samples: usize,
+    chunk_size: usize,
+    mut observer: impl FnMut(MonteCarloProgress) -> ControlFlow<()>,
+) -> Option<PolicyFront> {
+    if samples == 0 {
+        return None;
+    }
+    let mut session = MonteCarloSession::new(
+        [Policy::Direct, Policy::Reliable],
+        MonteCarloConfig::new(samples),
+        |policy: &Policy, sample_index| {
+            let rollout = run_policy(
+                model,
+                *policy,
+                u64::try_from(sample_index).unwrap_or(u64::MAX),
+            );
+            Ok::<_, std::convert::Infallible>(vec![
+                f64::from(rollout.completed()),
+                rollout.delivered() as f64,
+                rollout.elapsed_time() as f64,
+            ])
+        },
+        || VectorStatistics::new(3),
+    );
+    while session.status() == MonteCarloStatus::Running {
+        let report = session
+            .advance(WorkBudget::new(chunk_size.max(1)), &mut Continue)
+            .ok()?;
+        if observer(*report.progress()).is_break() {
+            return None;
+        }
+    }
+    policy_front_from(session.into_estimates()?)
+}
+
+fn policy_front_from(estimates: Vec<PolicyEstimate<Policy, VectorSummary>>) -> Option<PolicyFront> {
     let mut front = ParetoFront::approximate();
     for estimate in estimates {
         let objectives = policy_objectives(estimate.summary())?;
@@ -514,6 +596,42 @@ pub fn plan_action(
                 .or_else(|| actions.first().cloned())
         },
     )
+}
+
+pub fn plan_action_with_progress(
+    world: &World,
+    iterations: usize,
+    seed: u64,
+    chunk_size: usize,
+    mut observer: impl FnMut(MctsProgress) -> ControlFlow<()>,
+) -> Result<Option<PlanningDecision>, PlanningError> {
+    let config = MctsConfig::new(iterations, ROLLOUT_HORIZON).with_seed(seed);
+    let mut session = MctsSession::new(
+        world,
+        config,
+        1,
+        eager_actions(planning_candidates),
+        planning_outcomes,
+        |_| 0,
+        |state| {
+            state
+                .matches(&goal())
+                .then(|| vec![planning_utility(state)])
+        },
+        |state| vec![planning_utility(state)],
+        |state, actions, random| {
+            policy_action(state, Policy::Reliable, random)
+                .filter(|preferred| actions.contains(preferred))
+                .or_else(|| actions.first().cloned())
+        },
+    )?;
+    while session.status() == MctsStatus::Running {
+        let report = session.advance(WorkBudget::new(chunk_size.max(1)), &mut Continue)?;
+        if observer(*report.progress()).is_break() {
+            return Ok(None);
+        }
+    }
+    Ok(session.into_decision())
 }
 
 fn planning_candidates(world: &World) -> Vec<Action> {

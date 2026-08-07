@@ -615,6 +615,45 @@
           "artifact_id"
         ]
       },
+      "AssessmentIssueKindView": {
+        "type": "string",
+        "enum": [
+          "missing_rate",
+          "missing_binding",
+          "unknown_binding",
+          "roles_must_differ",
+          "missing_account",
+          "zero_units",
+          "rate_overflow",
+          "infeasible",
+          "balance_overflow",
+          "invariant_overflow",
+          "invariant_violation"
+        ]
+      },
+      "AssessmentIssueView": {
+        "description": "One structured reason why a proposal is invalid.\n\nSubjects retain the browser-facing identities of the roles, accounts,\nrates, and assets involved instead of flattening distinct failures into the\nsame generic error string.",
+        "type": "object",
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/AssessmentIssueKindView"
+          },
+          "message": {
+            "type": "string"
+          },
+          "subjects": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ViewId"
+            }
+          }
+        },
+        "required": [
+          "kind",
+          "message",
+          "subjects"
+        ]
+      },
       "AssessmentStatusView": {
         "type": "string",
         "enum": [
@@ -635,7 +674,7 @@
           "issues": {
             "type": "array",
             "items": {
-              "type": "string"
+              "$ref": "#/components/schemas/AssessmentIssueView"
             }
           },
           "projected_deltas": {

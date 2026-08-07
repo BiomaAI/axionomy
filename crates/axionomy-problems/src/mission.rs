@@ -6,11 +6,14 @@ use axionomy::{
 };
 use axionomy_search::{
     action_source::{ActionSource, lazy_actions},
-    ismcts::{InformationState, IsmctsResult, search as information_set_search},
+    ismcts::{
+        InformationState, IsmctsDecision, IsmctsError, IsmctsProgress, IsmctsResult, IsmctsSession,
+        IsmctsStatus, search as information_set_search,
+    },
     mcts::MctsConfig,
     monte_carlo::{
-        BernoulliStatistics, MonteCarloConfig, PolicyEstimate, VectorStatistics, VectorSummary,
-        evaluate,
+        BernoulliStatistics, MonteCarloConfig, MonteCarloProgress, MonteCarloSession,
+        MonteCarloStatus, PolicyEstimate, VectorStatistics, VectorSummary, evaluate,
     },
     pareto::{FrontierCompleteness, Objective, ObjectiveVector, ParetoFront},
     rollout::{RolloutConfig, RolloutDecision, RolloutStop, TraceRetention, run_to_goal},
@@ -18,7 +21,9 @@ use axionomy_search::{
         SeededSampler, TicketSource, WeightedExchange, choose_by_ticket, sample, systematic_ticket,
         total_weight,
     },
+    session::{Continue, WorkBudget},
 };
+use std::ops::ControlFlow;
 
 const HORIZON: usize = 12;
 
@@ -129,6 +134,8 @@ pub type AgentView<'a> = EconomicView<'a, AccountId, Asset, RateId, Role>;
 pub type MissionObservation = ObservationKey<AccountId, Asset>;
 pub type MissionInformation = InformationState<MissionObservation>;
 pub type PolicyFront = ParetoFront<PolicyEstimate<Policy, VectorSummary>, PolicyObjective, f64>;
+pub type PlanningDecision = IsmctsDecision<Action>;
+pub type PlanningError = IsmctsError<RateId, Role, AccountId, Asset>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PolicyObjective {
@@ -688,6 +695,45 @@ pub fn plan(
     )
 }
 
+pub fn plan_with_progress(
+    actual: &World,
+    beliefs: &[World],
+    config: MctsConfig,
+    chunk_size: usize,
+    mut observer: impl FnMut(IsmctsProgress) -> ControlFlow<()>,
+) -> Result<Option<PlanningDecision>, PlanningError> {
+    let root = scout_information(actual);
+    let compatible = beliefs
+        .iter()
+        .filter(|world| scout_information(world) == root)
+        .cloned()
+        .collect::<Vec<_>>();
+    let mut session = IsmctsSession::new(
+        actual,
+        config,
+        1,
+        scout_information,
+        move |_, random| {
+            (!compatible.is_empty()).then(|| {
+                let index = random.ticket(compatible.len() as u64) as usize;
+                compatible[index].fork()
+            })
+        },
+        decision_source(),
+        nature_outcomes,
+        |world| world.matches(&goal()).then_some(vec![1.0]),
+        |_| vec![0.0],
+        informed_rollout_action,
+    )?;
+    while session.status() == IsmctsStatus::Running {
+        let report = session.advance(WorkBudget::new(chunk_size.max(1)), &mut Continue)?;
+        if observer(*report.progress()).is_break() {
+            return Ok(None);
+        }
+    }
+    Ok(session.into_decision())
+}
+
 /// Expands Nature's encoded integer-weighted prior into initial belief worlds.
 ///
 /// This is fixture orchestration, not authoritative state: callers may retain,
@@ -835,6 +881,38 @@ pub fn monte_carlo(model: &World, samples: usize, seed: u64) -> Option<PolicyCom
     comparison(estimates, samples)
 }
 
+pub fn monte_carlo_with_progress(
+    model: &World,
+    samples: usize,
+    seed: u64,
+    chunk_size: usize,
+    mut observer: impl FnMut(MonteCarloProgress) -> ControlFlow<()>,
+) -> Option<PolicyComparison> {
+    let support = scenarios(model);
+    let mut session = MonteCarloSession::new(
+        [Policy::ShareAndCoordinate, Policy::NorthTogether],
+        MonteCarloConfig::new(samples),
+        |policy: &Policy, sample_index| {
+            let offset = u64::try_from(sample_index)
+                .unwrap_or(u64::MAX)
+                .wrapping_mul(0x9e37_79b9_7f4a_7c15);
+            let mut sampler = SeededSampler::new(seed.wrapping_add(offset));
+            let scenario = sample(&support, &mut sampler).map_err(|_| ())?.clone();
+            Ok::<_, ()>(run_policy_with_scenario(model, *policy, scenario).succeeded())
+        },
+        BernoulliStatistics::new,
+    );
+    while session.status() == MonteCarloStatus::Running {
+        let report = session
+            .advance(WorkBudget::new(chunk_size.max(1)), &mut Continue)
+            .ok()?;
+        if observer(*report.progress()).is_break() {
+            return None;
+        }
+    }
+    comparison(session.into_estimates()?, samples)
+}
+
 /// Estimates a non-dominated policy set from sampled hidden scenarios.
 pub fn policy_front(model: &World, samples: usize, seed: u64) -> Option<PolicyFront> {
     if samples == 0 {
@@ -861,6 +939,50 @@ pub fn policy_front(model: &World, samples: usize, seed: u64) -> Option<PolicyFr
     )
     .ok()?;
 
+    policy_front_from(estimates)
+}
+
+pub fn policy_front_with_progress(
+    model: &World,
+    samples: usize,
+    seed: u64,
+    chunk_size: usize,
+    mut observer: impl FnMut(MonteCarloProgress) -> ControlFlow<()>,
+) -> Option<PolicyFront> {
+    if samples == 0 {
+        return None;
+    }
+    let support = scenarios(model);
+    let mut session = MonteCarloSession::new(
+        [Policy::ShareAndCoordinate, Policy::NorthTogether],
+        MonteCarloConfig::new(samples),
+        |policy: &Policy, sample_index| {
+            let offset = u64::try_from(sample_index)
+                .unwrap_or(u64::MAX)
+                .wrapping_mul(0x9e37_79b9_7f4a_7c15);
+            let mut sampler = SeededSampler::new(seed.wrapping_add(offset));
+            let scenario = sample(&support, &mut sampler).map_err(|_| ())?.clone();
+            let rollout = run_policy_with_scenario(model, *policy, scenario);
+            Ok::<_, ()>(vec![
+                f64::from(rollout.succeeded()),
+                rollout.elapsed_time() as f64,
+                f64::from(rollout.used_medical_kit()),
+            ])
+        },
+        || VectorStatistics::new(3),
+    );
+    while session.status() == MonteCarloStatus::Running {
+        let report = session
+            .advance(WorkBudget::new(chunk_size.max(1)), &mut Continue)
+            .ok()?;
+        if observer(*report.progress()).is_break() {
+            return None;
+        }
+    }
+    policy_front_from(session.into_estimates()?)
+}
+
+fn policy_front_from(estimates: Vec<PolicyEstimate<Policy, VectorSummary>>) -> Option<PolicyFront> {
     let mut front = ParetoFront::approximate();
     for estimate in estimates {
         let objectives = policy_objectives(estimate.summary())?;

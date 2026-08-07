@@ -192,10 +192,24 @@ export interface components {
             artifact_id: string;
         };
         /** @enum {string} */
+        AssessmentIssueKindView: "missing_rate" | "missing_binding" | "unknown_binding" | "roles_must_differ" | "missing_account" | "zero_units" | "rate_overflow" | "infeasible" | "balance_overflow" | "invariant_overflow" | "invariant_violation";
+        /**
+         * @description One structured reason why a proposal is invalid.
+         *
+         *     Subjects retain the browser-facing identities of the roles, accounts,
+         *     rates, and assets involved instead of flattening distinct failures into the
+         *     same generic error string.
+         */
+        AssessmentIssueView: {
+            kind: components["schemas"]["AssessmentIssueKindView"];
+            message: string;
+            subjects: components["schemas"]["ViewId"][];
+        };
+        /** @enum {string} */
         AssessmentStatusView: "applicable" | "infeasible" | "invalid";
         AssessmentView: {
             accounts: components["schemas"]["AccountAssessmentView"][];
-            issues: string[];
+            issues: components["schemas"]["AssessmentIssueView"][];
             projected_deltas: components["schemas"]["AccountDeltaView"][];
             shortfalls: components["schemas"]["AccountShortfallView"][];
             status: components["schemas"]["AssessmentStatusView"];

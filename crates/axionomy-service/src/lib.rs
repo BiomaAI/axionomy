@@ -282,4 +282,72 @@ mod tests {
         control.resume();
         assert!(worker.join().unwrap().is_ok());
     }
+
+    #[test]
+    fn logistics_reports_algorithm_progress_and_observes_mid_run_cancellation() {
+        let control = RunControl::default();
+        let mut observed = Vec::new();
+        let result = ReferenceService.run_with(
+            &RunRequest {
+                problem: "logistics".into(),
+                strategy: Some("reliable".into()),
+                seed: 42,
+                budget: 64,
+            },
+            &control,
+            &mut |progress: ServiceProgress| {
+                if progress.phase == "monte_carlo" && progress.completed >= 16 {
+                    control.cancel();
+                }
+                observed.push(progress);
+            },
+        );
+
+        assert_eq!(result, Err(ServiceError::Cancelled));
+        let monte_carlo = observed
+            .iter()
+            .filter(|progress| progress.phase == "monte_carlo")
+            .collect::<Vec<_>>();
+        assert!(monte_carlo.len() >= 2);
+        assert!(
+            monte_carlo
+                .windows(2)
+                .all(|pair| pair[0].completed < pair[1].completed)
+        );
+        assert!(monte_carlo.iter().all(|progress| progress.total == 128));
+    }
+
+    #[test]
+    fn a_mid_run_pause_blocks_the_next_chunk_until_resume() {
+        let control = std::sync::Arc::new(RunControl::default());
+        let resume_control = std::sync::Arc::clone(&control);
+        let (paused_tx, paused_rx) = std::sync::mpsc::sync_channel(1);
+        let resumer = std::thread::spawn(move || {
+            paused_rx.recv().unwrap();
+            std::thread::sleep(std::time::Duration::from_millis(30));
+            assert!(resume_control.is_paused());
+            resume_control.resume();
+        });
+        let mut paused_once = false;
+        let result = ReferenceService.run_with(
+            &RunRequest {
+                problem: "logistics".into(),
+                strategy: Some("reliable".into()),
+                seed: 42,
+                budget: 16,
+            },
+            &control,
+            &mut |progress: ServiceProgress| {
+                if !paused_once && progress.phase == "monte_carlo" {
+                    paused_once = true;
+                    control.pause();
+                    paused_tx.send(()).unwrap();
+                }
+            },
+        );
+        resumer.join().unwrap();
+
+        assert!(paused_once);
+        assert!(result.is_ok());
+    }
 }

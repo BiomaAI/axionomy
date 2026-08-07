@@ -11,13 +11,45 @@ use axionomy_view::{
 pub(super) fn build(
     request: &RunRequest,
     descriptor: &ProblemDescriptor,
+    progress: &mut ProgressSink<'_>,
 ) -> Result<RunArtifact, ServiceError> {
     let initial = logistics::initial();
     let samples = request.budget.max(2) as usize;
-    let estimate = logistics::monte_carlo(&initial, samples)
-        .ok_or_else(|| problem_error("logistics", "Monte Carlo failed"))?;
-    let front = logistics::policy_front(&initial, samples)
-        .ok_or_else(|| problem_error("logistics", "policy front failed"))?;
+    let estimate = logistics::monte_carlo_with_risk_progress(
+        &initial,
+        samples,
+        logistics::RiskCriterion::Mean,
+        samples.clamp(1, 8),
+        |state| {
+            progress.emit(
+                "monte_carlo",
+                state.completed_samples() as u64,
+                state.total_samples() as u64,
+                format!(
+                    "{}/{} logistics policy rollouts",
+                    state.completed_samples(),
+                    state.total_samples()
+                ),
+            )
+        },
+    );
+    progress.ensure()?;
+    let estimate = estimate.ok_or_else(|| problem_error("logistics", "Monte Carlo failed"))?;
+    let front =
+        logistics::policy_front_with_progress(&initial, samples, samples.clamp(1, 8), |state| {
+            progress.emit(
+                "pareto_sampling",
+                state.completed_samples() as u64,
+                state.total_samples() as u64,
+                format!(
+                    "{}/{} multi-objective policy rollouts",
+                    state.completed_samples(),
+                    state.total_samples()
+                ),
+            )
+        });
+    progress.ensure()?;
+    let front = front.ok_or_else(|| problem_error("logistics", "policy front failed"))?;
     let mut documents = Vec::new();
     for (strategy, policy) in [("direct", Policy::Direct), ("reliable", Policy::Reliable)] {
         let rollout = logistics::run_policy(&initial, policy, request.seed);
@@ -57,8 +89,30 @@ pub(super) fn build(
     loaded
         .apply(load.clone())
         .map_err(|error| problem_error("logistics", format!("{error:?}")))?;
-    let decision = logistics::plan_action(&loaded, samples, request.seed)
-        .map_err(|error| problem_error("logistics", format!("{error:?}")))?;
+    let decision = logistics::plan_action_with_progress(
+        &loaded,
+        samples,
+        request.seed,
+        samples.clamp(1, 8),
+        |state| {
+            progress.emit(
+                "mcts",
+                state.iterations() as u64,
+                state.target_iterations() as u64,
+                format!(
+                    "{}/{} MCTS iterations · {} nodes · {} root actions",
+                    state.iterations(),
+                    state.target_iterations(),
+                    state.nodes(),
+                    state.root_children()
+                ),
+            )
+        },
+    )
+    .map_err(|error| problem_error("logistics", format!("{error:?}")))?;
+    progress.ensure()?;
+    let decision =
+        decision.ok_or_else(|| problem_error("logistics", "MCTS planning was interrupted"))?;
     let mut prefix = Trace::new();
     prefix.push(load);
     prefix.push(decision.action().clone());
