@@ -689,10 +689,11 @@ a TypeScript build, so the Rust adapter lowers them into:
 ViewId        = stable presentation key + human label + optional JSON context
 ExactQuantity = decimal text
 ViewSnapshot  = ordered accounts and balances + optional derived scene
-ExchangeFrame = before + assessment + exchange + receipt + after
+Scene         = surface + semantic entities + paths + annotations + metrics
+ExchangeFrame = before + assessment + exchange + receipt + after + cues
 ViewDocument  = metadata + model + initial snapshot + replay frames
                 + proposals + objectives + Pareto fronts + telemetry
-                + actor-relative observations
+                + actor-relative observations + retained solver observations
 ```
 
 `ViewId` does not replace the ontology value and its optional JSON is not an
@@ -732,19 +733,35 @@ search queue. They do not survive restart and cannot authorize an exchange.
 Applications that need persistence may store portable `RunArtifact` JSON or
 build their own outer run service without changing the core.
 
-The React application uses the generated client for JSON endpoints and the
-same tagged event union for SSE. Local playback position and play/pause state
+`SearchObservationView` is the presentation lowering of disposable solver
+state. It records phase, algorithm, evidence kind, bounded progress, and exact
+metrics without turning a queue, rollout tree, frontier, or belief cache into
+economic truth. The service sends observations through a bounded observer
+channel and retains at most its configured history in every completed
+document. Live execution and a saved artifact therefore expose the same
+evidence surface; transport speed does not decide whether a run is explainable.
+
+The React application uses one `EngineClient` boundary for native HTTP/SSE,
+the browser Worker, and static playback. The native connection badge is backed
+by a periodic health check; a catalog loaded before a server stopped cannot
+claim that the engine is still connected. The browser adapter runs
+`axionomy-service` compiled to Rust/Wasm inside a dedicated Worker, and static
+playback advertises that it cannot execute. Local playback position and play/pause state
 stay in a component reducer/state boundary rather than becoming server or
 economic state. React Flow renders graph projections; Apache ECharts renders
 decision surfaces; specialized grids remain ordinary React/SVG until measured
 scale requires Canvas. TanStack Query owns server-cache behavior. Vite,
 Vitest, and Playwright provide build, component-contract, and real-server
-browser verification.
+browser verification. Tabler supplies the curated implementation of semantic
+glyph keys, but the portable contract contains neither React component names
+nor arbitrary SVG.
 
-Live execution and trace playback are deliberately distinct controls. `Run`
+Solve evidence and trace playback are deliberately distinct controls. `Run`
 creates a new artifact; the transport controls only replay its accepted
-exchanges. An active run immediately exposes a spinner, phase message, elapsed
-time, deterministic request parameters, and the latest bounded-work counter.
+exchanges. The Solve surface exposes live or retained phase, rollout, tree,
+frontier, and artifact observations. An active run immediately exposes a
+spinner, phase message, elapsed time, deterministic request parameters, and
+the latest bounded-work counter.
 Completion leaves a dismissible receipt containing duration and request
 identity and visibly marks the replacement artifact, so even a sub-second run
 has an inspectable result.
@@ -757,9 +774,12 @@ stochastic and partially observed domains expose telemetry, sampled policy
 evidence, and actor-relative views. Every artifact includes replayable strategy
 alternatives where the domain supplies them. The universal model explorer
 exposes encoded rates, roles, goals, and invariants even when a specialized
-scene is absent. An instance selector makes Micro and Stress available to a
-connected engine, while static hosting deliberately serves the committed
-Showcase artifacts.
+scene is absent. The shared scene vocabulary renders stable semantic entities,
+paths, statuses, exact metrics, annotations, and transition cues across all
+four geometric surfaces. A transition remains visible through its receipt-
+derived cue even when before/after geometry is identical. An instance selector
+makes Micro and Stress available to either executable engine, while static
+fallback deliberately serves the committed Showcase artifacts.
 
 Assessed proposals in conformance documents are constraint probes. Some are
 deliberately malformed or infeasible, and their rejection proves that encoded
@@ -768,9 +788,13 @@ structured issue kind plus involved role, account, asset, or rate identities;
 Studio labels these as expected rejection proofs and keeps them separate from
 operational run and transport failures.
 
-Portable artifacts prove offline playback for the full catalog. The live path
-proves generated OpenAPI calls, resumable SSE, pause/resume/cancel hooks,
-artifact and frame retrieval, and scrubbing. Specialized projections are added
+Portable artifacts prove offline playback for the full catalog. The native
+path proves generated OpenAPI calls, resumable SSE, pause/resume/cancel hooks,
+artifact and frame retrieval, and scrubbing. Browser tests prove that the same
+twelve-problem Rust service initializes, runs, streams observations, publishes
+artifacts, and cancels inside an isolated Worker. The Pages build uses a
+repository-relative Vite base, includes its Wasm binary and `.nojekyll`, and
+deploys from `main` without a server. Specialized projections are added
 only when they materially improve comprehension; the authoritative account,
 assessment, receipt, and model inspectors remain available for every problem.
 
@@ -1239,13 +1263,17 @@ The current foundation is intentionally bounded:
   intermediate dominance pruning. Large or cyclic models must provide bounded
   state and candidate spaces; epsilon fronts, constrained dominance, and
   domain-proven safe pruning are not implemented.
-- Native Rust is the current release target. Browser/Wasm compatibility is not
-  yet a validated kernel support guarantee. The implemented browser Studio
-  currently talks to a native Rust server or loads a portable static document.
+- Native Rust and single-threaded `wasm32-unknown-unknown` are validated Studio
+  engine targets. GitHub Pages cannot supply cross-origin isolation headers, so
+  the reference browser engine deliberately avoids Wasm threads and
+  `SharedArrayBuffer`; scale comes from a dedicated Worker, not parallelism.
 - Studio run control is cooperative. Resumable Monte Carlo, MCTS, and ISMCTS
   adapters check pause/cancel between bounded work chunks; other adapters check
   at phase and document-publication boundaries. A one-shot domain solver is not
-  preempted in the middle of an indivisible call.
+  preempted in the middle of an indivisible call. Native runs support resumable
+  pause. Browser cancellation is immediate because the Worker is disposable;
+  browser pause is intentionally not advertised until service sessions can be
+  suspended and resumed across Worker event-loop turns.
 - Full model projection currently materializes every concrete rate. Studio
   filters large rate books client-side. Standard 7×6 Connect Four now uses 226
   concrete placement, adjudication, and four-cell certificate rates—smaller
@@ -1710,6 +1738,26 @@ may introduce external semantic state. Complexity telemetry and per-problem
 Showcase thresholds prevent attractive visualizations from hiding trivial
 models or forced traces.
 
+### D-035: Browser execution reuses the Rust service
+
+The browser does not maintain a TypeScript economy or a second set of problem
+solvers. `axionomy-studio-wasm` compiles the interface-neutral service to
+`wasm32-unknown-unknown`; a dedicated Worker transports Rust-owned requests,
+observations, and artifacts. Native HTTP/SSE remains preferable when present,
+the Worker is the first-class GitHub Pages engine, and committed artifacts are
+the final read-only fallback. Connection labels report verified current
+capability rather than inferring liveness from cached data.
+
+### D-036: Visual richness is typed explanation, not extra truth
+
+A scene has a geometric surface plus stable semantic entities, anchors, paths,
+annotations, exact metrics, and a constrained glyph vocabulary. Tabler is a
+replaceable browser rendering dependency. Frame cues are derived from the
+exchange and receipt, and scene references are validated before an artifact is
+published. This permits rich animation and linked inspection while preserving
+the rule that deleting every visual projection changes no valid exchange,
+balance, goal, or replay result.
+
 ## 16. Success criteria
 
 Axionomy succeeds when:
@@ -1727,14 +1775,16 @@ Axionomy succeeds when:
 - Invalid proposals cannot bypass core constraints.
 - Remote callers can store, inspect, branch, search, cancel, poll, and replay
   without relying on hidden session state.
-- Browser users can load a portable document or follow a live run, scrub every
-  accepted exchange, and inspect exact balances and deltas without a parallel
-  mutable world model or handwritten cross-language contract.
+- Browser users can load a portable document, follow a native live run, or run
+  the same Rust service in a Worker; they can inspect retained solver evidence,
+  scrub every accepted exchange, and inspect exact balances and deltas without
+  a parallel mutable world model or handwritten cross-language contract.
 - All twelve canonical problems are discoverable, runnable, replayable, and
   meaningfully inspectable through Studio and static Showcase artifacts, with
   explicit Micro and Stress selection on live interfaces.
-- CLI, HTTP, and MCP return the same semantic problem artifacts for the same
-  request, while retaining interface-appropriate operational behavior.
+- CLI, HTTP, MCP, and the browser Worker return the same semantic problem
+  artifacts for the same request, while retaining interface-appropriate
+  operational behavior.
 - Infeasible proposals expose every account-and-asset shortfall without
   mutation.
 - Successful assessments project the same account deltas later confirmed by

@@ -92,6 +92,7 @@ models into one-way workspace dependencies:
 | `axionomy-service` | Interface-neutral catalog, run control, progress, and replay-derived artifacts for every canonical problem |
 | `axionomy-cli` | Human- and script-friendly access to the shared problem service |
 | `axionomy-studio-server` | Native OpenAPI/SSE reference backend and in-memory run orchestration for Axionomy Studio |
+| `axionomy-studio-wasm` | Single-threaded Web Worker adapter for running the same Rust service in a browser |
 
 ```text
 axionomy-search ──────→ axionomy
@@ -104,6 +105,7 @@ axionomy-service ─────→ axionomy-problems + axionomy-view
 axionomy-cli ─────────→ axionomy-service
 axionomy-mcp ─────────→ axionomy-service + axionomy-search + axionomy
 axionomy-studio-server → axionomy-service
+axionomy-studio-wasm ──→ axionomy-service
 ```
 
 The kernel does not depend on a solver, problem, unit, or time crate. The
@@ -162,12 +164,14 @@ adapters.
   Monte Carlo/MCTS progress, alternatives, and portable artifacts.
 - Axionomy Studio's Rust-owned `ViewDocument` contract, replay-derived account
   snapshots, assessments and receipts, exact string quantities, graph, grid,
-  matrix, and timeline scenes, alternative traces, Pareto fronts, stochastic
-  telemetry, uniform complexity evidence, cross-strategy comparison, partial
-  observations, model inspection, live resumable SSE runs,
-  responsive pause/cancellation, persistent run feedback, structured expected
-  rejection proofs, OpenAPI-generated TypeScript, and static JSON for all
-  twelve problems.
+  matrix, and timeline surfaces, semantic entities, paths, exact metrics,
+  transition cues, curated Tabler glyphs, alternative traces, Pareto fronts,
+  stochastic telemetry, retained and live solver observations, uniform
+  complexity evidence, cross-strategy comparison, partial observations, model
+  inspection, native SSE runs, an isolated Rust/Wasm Worker engine, truthful
+  connection health, responsive cancellation, persistent run feedback,
+  structured expected rejection proofs, OpenAPI-generated TypeScript, static
+  JSON for all twelve problems, and automatic GitHub Pages deployment.
 
 The core contains no application ontology or search algorithm. Problem assets
 and specialized solvers compile against the same public kernel API available
@@ -198,7 +202,10 @@ visibly `Approximate`.
 Axionomy Studio is a universal economic debugger and trace player, not a
 second simulator. It scrubs a trace by replaying accepted exchanges through
 the Rust core, then shows the resulting accounts, assets, assessments,
-receipt deltas, objectives, and optional read-only domain projection. The Maze
+receipt deltas, objectives, semantic transition cues, and optional read-only
+domain projection. Its separate Solve view follows bounded solver observations
+live and retains them in the artifact, so even a sub-second run remains
+inspectable. The Maze
 graph, Sokoban and Connect Four grids, Exact Cover matrix, scheduling and
 perishables timelines, market and logistics networks, stochastic telemetry,
 Pareto alternatives, rejected proposals, and actor-relative observations are
@@ -223,13 +230,19 @@ pnpm install
 pnpm dev
 ```
 
-Open `http://127.0.0.1:5173`. The committed static catalog and all twelve
-artifacts work without the server; connecting the native server enables
-reproducible runs, Server-Sent Event phase and algorithm progress,
-pause/resume/cancel control, completion receipts, and freshly derived
-documents. Long-running Monte Carlo, MCTS, and ISMCTS adapters advance in
-bounded chunks so Studio can report samples, iterations, nodes, and game moves
-while remaining responsive. Every canonical problem is present in both modes. See
+Open `http://127.0.0.1:5173`. The native server is optional: when it is healthy,
+Studio uses HTTP/SSE and exposes pause, resume, and cancellation; otherwise it
+loads the same Rust service as WebAssembly in an isolated Worker and keeps Run
+enabled for all twelve problems. Worker cancellation is immediate by
+terminating that disposable worker. If WebAssembly cannot initialize, the
+committed Showcase artifacts still provide read-only playback. The status badge
+is backed by a current health/initialization check rather than by a catalog that
+may have been cached earlier.
+
+The repository deploys the browser engine and static artifacts to
+`https://biomaai.github.io/axionomy/` from `main` through the Pages workflow.
+GitHub Pages requires no application server and no cross-origin isolation: the
+engine is intentionally single-threaded inside a Worker. See
 [`studio/README.md`](studio/README.md) for contract generation and verification.
 
 The same service is available without a browser:
