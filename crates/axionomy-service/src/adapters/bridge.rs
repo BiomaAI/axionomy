@@ -209,7 +209,7 @@ fn candidate_front_view(documents: &[ViewDocument], selected: &ViewDocument) -> 
             .map(|(document, values)| ParetoPointView {
                 label: document.title.clone(),
                 selected: document.id == selected.id,
-                values: values.into_iter().map(|value| value.to_string()).collect(),
+                values: values.iter().map(|value| value.to_string()).collect(),
             })
             .collect(),
     }
