@@ -6,6 +6,27 @@
     "version": "0.1.0"
   },
   "paths": {
+    "/api/health": {
+      "get": {
+        "tags": [
+          "system"
+        ],
+        "summary": "Check whether the native Studio engine is reachable",
+        "operationId": "getHealth",
+        "responses": {
+          "200": {
+            "description": "A deliberately small liveness contract. A successful response proves that\nthe native engine adapter is reachable now; loading a cached catalog does\nnot.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/problems": {
       "get": {
         "tags": [
@@ -977,6 +998,22 @@
           "x",
           "y",
           "label"
+        ]
+      },
+      "HealthResponse": {
+        "description": "A deliberately small liveness contract. A successful response proves that\nthe native engine adapter is reachable now; loading a cached catalog does\nnot.",
+        "type": "object",
+        "properties": {
+          "engine": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "engine"
         ]
       },
       "InstanceDescriptor": {

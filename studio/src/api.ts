@@ -21,7 +21,7 @@ export async function fetchProblems(): Promise<ProblemDescriptor[]> {
 }
 
 export async function fetchStaticProblems(): Promise<ProblemDescriptor[]> {
-  const response = await fetch("/artifacts/catalog.json");
+  const response = await fetch(staticUrl("artifacts/catalog.json"), { cache: "no-store" });
   if (!response.ok) throw new Error("static problem catalog was unavailable");
   return (await response.json()) as ProblemDescriptor[];
 }
@@ -65,9 +65,13 @@ export async function fetchArtifact(artifactId: string): Promise<RunArtifact> {
 }
 
 export async function fetchStaticArtifact(problem: string): Promise<RunArtifact> {
-  const response = await fetch(`/artifacts/${encodeURIComponent(problem)}.json`);
+  const response = await fetch(staticUrl(`artifacts/${encodeURIComponent(problem)}.json`));
   if (!response.ok) throw new Error(`static artifact for ${problem} could not be loaded`);
   return (await response.json()) as RunArtifact;
+}
+
+function staticUrl(path: string): URL {
+  return new URL(path, new URL(import.meta.env.BASE_URL, window.location.origin));
 }
 
 function readError(error: unknown): string {

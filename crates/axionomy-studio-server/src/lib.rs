@@ -42,6 +42,15 @@ pub struct ProblemList {
     pub problems: Vec<ProblemDescriptor>,
 }
 
+/// A deliberately small liveness contract. A successful response proves that
+/// the native engine adapter is reachable now; loading a cached catalog does
+/// not.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct HealthResponse {
+    pub status: String,
+    pub engine: String,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum RunStatus {
@@ -261,6 +270,15 @@ pub fn api(state: StudioState) -> (Router, OpenApi) {
 
     let api = ApiRouter::new()
         .api_route(
+            "/api/health",
+            routing::get_with(health, |operation| {
+                operation
+                    .id("getHealth")
+                    .summary("Check whether the native Studio engine is reachable")
+                    .tag("system")
+            }),
+        )
+        .api_route(
             "/api/problems",
             routing::get_with(list_problems, |operation| {
                 operation
@@ -371,6 +389,13 @@ async fn serve_openapi(Extension(api): Extension<Arc<OpenApi>>) -> Json<OpenApi>
 async fn list_problems() -> Json<ProblemList> {
     Json(ProblemList {
         problems: problem_catalog(),
+    })
+}
+
+async fn health() -> Json<HealthResponse> {
+    Json(HealthResponse {
+        status: "ok".into(),
+        engine: "native".into(),
     })
 }
 

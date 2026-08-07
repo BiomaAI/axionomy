@@ -4,14 +4,6 @@ import "@xyflow/react/dist/style.css";
 import logoDark from "../../assets/axionomy-logo-dark.webp";
 import logoLight from "../../assets/axionomy-logo-light.webp";
 import {
-  cancelRun,
-  createRun,
-  fetchArtifact,
-  fetchProblems,
-  fetchStaticArtifact,
-  fetchStaticProblems,
-  pauseRun,
-  resumeRun,
   type ExchangeFrame,
   type RunArtifact,
   type RunSummary,
@@ -19,6 +11,7 @@ import {
   type ViewDocument,
   type ViewSnapshot,
 } from "./api";
+import { connectionLabel, nativeEngine, staticEngine, type EngineConnectivity } from "./engine";
 import { SceneView } from "./SceneView";
 import {
   Accounts,
@@ -46,13 +39,24 @@ type CompletionNotice = {
 };
 
 export function App() {
-  const catalog = useQuery({
-    queryKey: ["problems"],
+  const nativeHealth = useQuery({
+    queryKey: ["native-engine-health"],
+    queryFn: () => nativeEngine.health(),
+    refetchInterval: 3_000,
+    refetchIntervalInBackground: true,
     retry: false,
-    queryFn: async () => {
-      try { return { problems: await fetchProblems(), connected: true }; }
-      catch { return { problems: await fetchStaticProblems(), connected: false }; }
-    },
+  });
+  const nativeConnected = nativeHealth.data === true;
+  const engine = nativeConnected ? nativeEngine : staticEngine;
+  const connectivity: EngineConnectivity = nativeHealth.isPending
+    ? "checking"
+    : nativeConnected
+      ? "connected"
+      : "disconnected";
+  const catalog = useQuery({
+    queryKey: ["problems", engine.kind],
+    retry: false,
+    queryFn: () => engine.catalog(),
   });
   const [problemKey, setProblemKey] = useState("maze");
   const [instanceKey, setInstanceKey] = useState("showcase");
@@ -73,7 +77,7 @@ export function App() {
   const eventSource = useRef<EventSource | null>(null);
   const runStartedAt = useRef<number | undefined>(undefined);
 
-  const problem = catalog.data?.problems.find((candidate) => candidate.key === problemKey);
+  const problem = catalog.data?.find((candidate) => candidate.key === problemKey);
   const instance = problem?.instances.find((candidate) => candidate.key === instanceKey);
   const document = artifact?.documents.find((candidate) => candidate.id === documentId) ?? artifact?.documents.find((candidate) => candidate.id === artifact.selected_document_id) ?? artifact?.documents[0];
   const snapshot = useSnapshot(document, position);
@@ -96,11 +100,11 @@ export function App() {
     setStrategyKey(problem.default_strategy);
     setError(undefined);
     setFreshArtifactId(undefined);
-    fetchStaticArtifact(problem.key).then((next) => {
+    engine.defaultArtifact(problem.key).then((next) => {
       setArtifact(next);
       setDocumentId(next.selected_document_id);
     }).catch((cause: unknown) => setError(cause instanceof Error ? cause.message : String(cause)));
-  }, [problem?.key]);
+  }, [problem?.key, engine.kind]);
 
   useEffect(() => { setPosition(0); setPlaying(false); }, [document?.id]);
 
@@ -120,16 +124,16 @@ export function App() {
     setError(undefined); setEvents([]); setCompletion(undefined); eventSource.current?.close();
     runStartedAt.current = performance.now(); setElapsedMs(0); setLaunching(true);
     try {
-      const created = await createRun({ problem: problemKey, instance: instanceKey, strategy: strategyKey, seed, budget });
+      const created = await engine.createRun({ problem: problemKey, instance: instanceKey, strategy: strategyKey, seed, budget });
       setRun(created); setLaunching(false);
-      const source = new EventSource(`/api/runs/${created.id}/events`);
+      const source = new EventSource(engine.eventsUrl(created.id));
       eventSource.current = source;
       for (const kind of eventKinds) source.addEventListener(kind, async (message) => {
         const event = JSON.parse((message as MessageEvent<string>).data) as StudioEvent;
         setEvents((current) => current.some((known) => known.sequence === event.sequence) ? current : [...current, event]);
         if (event.kind === "run_completed") {
           source.close();
-          const next = await fetchArtifact(event.artifact_id);
+          const next = await engine.artifact(event.artifact_id);
           const durationMs = runStartedAt.current === undefined ? 0 : performance.now() - runStartedAt.current;
           setArtifact(next); setDocumentId(event.document_id); setFreshArtifactId(event.artifact_id);
           setCompletion({ artifactId: event.artifact_id, problem: submittedProblem, instance: submittedInstance, strategy: submittedStrategy, seed, budget, durationMs, documents: next.documents.length });
@@ -143,9 +147,9 @@ export function App() {
     } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); setRun(undefined); setLaunching(false); }
   };
 
-  const pause = async () => { if (run) setRun(await pauseRun(run.id)); };
-  const resume = async () => { if (run) setRun(await resumeRun(run.id)); };
-  const cancel = async () => { if (run) await cancelRun(run.id); };
+  const pause = async () => { if (run) setRun(await engine.pause(run.id)); };
+  const resume = async () => { if (run) setRun(await engine.resume(run.id)); };
+  const cancel = async () => { if (run) await engine.cancel(run.id); };
 
   const loadFile = async (file?: File) => {
     if (!file) return;
@@ -165,21 +169,21 @@ export function App() {
   return <div className="app-shell">
     <header className="topbar">
       <div className="brand"><picture><source media="(prefers-color-scheme: light)" srcSet={logoLight} /><img src={logoDark} alt="Axionomy" /></picture><div><div className="brand-name">Studio</div><div className="brand-subtitle">Economic reasoning workbench</div></div></div>
-      <div className="connection"><span className={`status-dot ${catalog.data?.connected ? "online" : "static"}`} />{catalog.data?.connected ? "engine connected" : "static artifacts"}</div>
+      <div className="connection" title={nativeConnected ? "Verified by a live health check" : "No native health response received"}><span className={`status-dot ${nativeConnected ? "online" : "static"}`} />{connectionLabel(engine.kind, connectivity)}</div>
     </header>
 
     <section className="command-bar" aria-label="Problem controls">
-      <label className="field problem-field"><span>Canonical problem</span><select value={problemKey} onChange={(event) => setProblemKey(event.target.value)} disabled={active}>{catalog.data?.problems.map((candidate) => <option value={candidate.key} key={candidate.key}>{candidate.title}</option>)}</select></label>
-      <label className="field instance-field"><span>Instance</span><select value={instanceKey} onChange={(event) => { setInstanceKey(event.target.value); setCompletion(undefined); }} disabled={active || !catalog.data?.connected}>{problem?.instances.map((candidate) => <option value={candidate.key} key={candidate.key}>{candidate.label}</option>)}</select></label>
+      <label className="field problem-field"><span>Canonical problem</span><select value={problemKey} onChange={(event) => setProblemKey(event.target.value)} disabled={active}>{catalog.data?.map((candidate) => <option value={candidate.key} key={candidate.key}>{candidate.title}</option>)}</select></label>
+      <label className="field instance-field"><span>Instance</span><select value={instanceKey} onChange={(event) => { setInstanceKey(event.target.value); setCompletion(undefined); }} disabled={active}>{problem?.instances.map((candidate) => <option value={candidate.key} key={candidate.key}>{candidate.label}</option>)}</select></label>
       <label className="field strategy-field"><span>Strategy</span><select value={strategyKey} onChange={(event) => { const key = event.target.value; setStrategyKey(key); const match = artifact?.documents.find((candidate) => candidate.id === `${problemKey}:${key}`); if (match) setDocumentId(match.id); }} disabled={active}>{problem?.strategies.map((strategy) => <option value={strategy.key} key={strategy.key}>{strategy.label}</option>)}</select></label>
       <label className="field numeric-field"><span>Seed</span><input type="number" min="0" value={seed} disabled={active} onChange={(event) => setSeed(Number(event.target.value))} /></label>
       <label className="field numeric-field"><span>Budget</span><input type="number" min="1" value={budget} disabled={active} onChange={(event) => setBudget(Math.max(1, Number(event.target.value)))} /></label>
-      <button className="primary" onClick={start} disabled={active || !catalog.data?.connected}>{launching ? "Starting…" : run?.status === "paused" ? "Paused" : run ? "Running…" : "Run"}</button>
+      <button className="primary" onClick={start} disabled={active || !engine.canRun}>{launching ? "Starting…" : run?.status === "paused" ? "Paused" : run ? "Running…" : "Run"}</button>
       {run?.status === "running" && <button onClick={pause}>Pause</button>}
       {run?.status === "paused" && <button onClick={resume}>Resume</button>}
       {run && <button className="danger" onClick={cancel}>Cancel</button>}
       <label className="file-button">Load artifact<input type="file" accept="application/json,.json" onChange={(event) => loadFile(event.target.files?.[0])} /></label>
-      <div className="run-message">{active ? "A new replay-verified artifact will replace the current view." : catalog.data?.connected ? "CLI, HTTP, MCP, and Studio share this artifact contract." : "Browsing deterministic Rust-generated artifacts."}</div>
+      <div className="run-message">{active ? "A new replay-verified artifact will replace the current view." : engine.canRun ? "CLI, HTTP, MCP, and Studio share this artifact contract." : "Native engine unavailable; deterministic Rust-generated artifacts remain playable."}</div>
     </section>
 
     {active && <RunActivity launching={launching} run={run} events={events} elapsedMs={elapsedMs} />}

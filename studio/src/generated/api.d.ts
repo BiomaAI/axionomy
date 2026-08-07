@@ -4,6 +4,23 @@
  */
 
 export interface paths {
+    "/api/health": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Check whether the native Studio engine is reachable */
+        get: operations["getHealth"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/problems": {
         parameters: {
             query?: never;
@@ -291,6 +308,15 @@ export interface components {
             x: number;
             /** Format: uint32 */
             y: number;
+        };
+        /**
+         * @description A deliberately small liveness contract. A successful response proves that
+         *     the native engine adapter is reachable now; loading a cached catalog does
+         *     not.
+         */
+        HealthResponse: {
+            engine: string;
+            status: string;
         };
         InstanceDescriptor: {
             description: string;
@@ -646,6 +672,30 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    getHealth: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /**
+             * @description A deliberately small liveness contract. A successful response proves that
+             *     the native engine adapter is reachable now; loading a cached catalog does
+             *     not.
+             */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HealthResponse"];
+                };
+            };
+        };
+    };
     listProblems: {
         parameters: {
             query?: never;
