@@ -7,11 +7,13 @@ import {
   type ExchangeFrame,
   type RunArtifact,
   type RunSummary,
+  type SearchObservation,
   type StudioEvent,
   type ViewDocument,
   type ViewSnapshot,
 } from "./api";
 import { connectionLabel, nativeEngine, staticEngine, type EngineConnectivity } from "./engine";
+import { SceneIcon } from "./SceneIcon";
 import { SceneView } from "./SceneView";
 import {
   Accounts,
@@ -25,7 +27,7 @@ import {
 } from "./Inspectors";
 
 const ParetoChart = lazy(() => import("./ParetoChart"));
-const eventKinds: StudioEvent["kind"][] = ["run_started", "progress", "frame_appended", "artifact_published", "run_paused", "run_resumed", "run_completed", "run_cancelled", "run_failed"];
+const eventKinds: StudioEvent["kind"][] = ["run_started", "progress", "search_observation", "frame_appended", "artifact_published", "run_paused", "run_resumed", "run_completed", "run_cancelled", "run_failed"];
 
 type CompletionNotice = {
   artifactId: string;
@@ -67,6 +69,8 @@ export function App() {
   const [documentId, setDocumentId] = useState<string>();
   const [position, setPosition] = useState(0);
   const [playing, setPlaying] = useState(false);
+  const [playbackDelay, setPlaybackDelay] = useState(650);
+  const [viewMode, setViewMode] = useState<"solve" | "replay">("replay");
   const [run, setRun] = useState<RunSummary>();
   const [launching, setLaunching] = useState(false);
   const [events, setEvents] = useState<StudioEvent[]>([]);
@@ -113,15 +117,28 @@ export function App() {
     const timer = window.setInterval(() => setPosition((current) => {
       if (current >= document.frames.length) { setPlaying(false); return current; }
       return current + 1;
-    }), 650);
+    }), playbackDelay);
     return () => window.clearInterval(timer);
-  }, [playing, document]);
+  }, [playing, document, playbackDelay]);
+
+  useEffect(() => {
+    const keyboard = (event: KeyboardEvent) => {
+      if (!document || (event.target instanceof HTMLElement && event.target.matches("input, select, textarea, button"))) return;
+      if (event.key === "ArrowLeft") setPosition((current) => Math.max(0, current - 1));
+      else if (event.key === "ArrowRight") setPosition((current) => Math.min(document.frames.length, current + 1));
+      else if (event.key === " ") { event.preventDefault(); setPlaying((current) => !current); }
+      else return;
+    };
+    window.addEventListener("keydown", keyboard);
+    return () => window.removeEventListener("keydown", keyboard);
+  }, [document]);
 
   const start = async () => {
     const submittedProblem = problem?.title ?? problemKey;
     const submittedInstance = problem?.instances.find((candidate) => candidate.key === instanceKey)?.label ?? instanceKey;
     const submittedStrategy = problem?.strategies.find((candidate) => candidate.key === strategyKey)?.label ?? strategyKey;
     setError(undefined); setEvents([]); setCompletion(undefined); eventSource.current?.close();
+    setViewMode("solve");
     runStartedAt.current = performance.now(); setElapsedMs(0); setLaunching(true);
     try {
       const created = await engine.createRun({ problem: problemKey, instance: instanceKey, strategy: strategyKey, seed, budget });
@@ -196,7 +213,9 @@ export function App() {
       <section className="alternative-bar"><div><span>Artifact alternatives</span><strong>{artifact.documents.length} replayable outcomes</strong></div><div role="tablist">{artifact.documents.map((candidate) => <button key={candidate.id} role="tab" aria-selected={candidate.id === document.id} onClick={() => setDocumentId(candidate.id)}>{candidate.title.replace(`${artifact.problem.title} · `, "")}</button>)}</div></section>
       <StrategyComparison artifact={artifact} selected={document.id} onSelect={setDocumentId} />
       <section className="document-heading"><div><span className="eyebrow">{artifact.instance.label} · {document.source.label} · {document.id}{freshArtifactId === artifact.id ? " · newly computed" : ""}</span><h1>{document.title}</h1><p>{document.description}</p></div><div className="objective-pills">{document.objectives.map((objective) => <div className="objective" key={objective.key}><span>{objective.label}</span><strong>{objective.value}</strong><small>{objective.direction}</small></div>)}</div></section>
-      <PlaybackControls position={position} count={document.frames.length} playing={playing} onPosition={setPosition} onPlaying={setPlaying} frame={frame} />
+      <div className="view-tabs" role="tablist" aria-label="Studio evidence mode"><button type="button" role="tab" aria-selected={viewMode === "solve"} onClick={() => setViewMode("solve")}>Solve evidence <small>{active ? "live" : document.solve_observations.length}</small></button><button type="button" role="tab" aria-selected={viewMode === "replay"} onClick={() => setViewMode("replay")}>Verified replay <small>{document.frames.length}</small></button></div>
+      {viewMode === "solve" ? <SolveWorkspace observations={active ? events.flatMap((event) => event.kind === "search_observation" ? [event.observation] : []) : document.solve_observations} active={active} /> : <>
+      <PlaybackControls position={position} count={document.frames.length} playing={playing} delay={playbackDelay} onDelay={setPlaybackDelay} onPosition={setPosition} onPlaying={(next) => { if (next && position >= document.frames.length) setPosition(0); setPlaying(next); }} frame={frame} />
 
       <section className="workspace-grid">
         <div className="panel world-panel"><PanelHeading kicker="Derived projection" title={snapshot.scene?.title ?? "Economic world"} aside={snapshot.scene?.surface.kind} /><SceneView scene={snapshot.scene} /></div>
@@ -213,6 +232,7 @@ export function App() {
         <div className="panel model-panel"><PanelHeading kicker="Closed model" title="Rates, roles, goals & invariants" aside={`${document.model?.rates.length ?? 0} rates`} /><ModelExplorer document={document} /></div>
         <div className="panel observation-panel"><PanelHeading kicker="Information boundary" title="Actor-relative observations" aside={`${document.observations.length} views`} /><Observations document={document} /></div>
       </section>
+      </>}
     </main> : <div className="loading">Loading replay-derived problem artifact…</div>}
 
     <footer>Scenes explain. Accounts, assets, rates, bindings, assessment, and replay prove.</footer>
@@ -244,6 +264,31 @@ function CompletionBanner({ notice, onDismiss }: { notice: CompletionNotice; onD
   </section>;
 }
 
+function SolveWorkspace({ observations, active }: { observations: SearchObservation[]; active: boolean }) {
+  const latest = observations.at(-1);
+  const kinds = [...new Set(observations.map((observation) => observation.kind))];
+  return <section className={`solve-workspace ${active ? "live" : "retained"}`} aria-label="Solver evidence">
+    <header><div><span className={active ? "spinner" : "solve-complete"} aria-hidden="true">{active ? "" : "✓"}</span><div><strong>{active ? "Live solver observations" : "Retained solver observations"}</strong><small>{active ? "Bounded updates from cooperative search checkpoints" : "Saved in the portable artifact for offline inspection"}</small></div></div><span>{observations.length} observations</span></header>
+    {latest && <div className="solve-summary"><div><span>Current phase</span><strong>{latest.phase.replaceAll("_", " ")}</strong></div><div><span>Algorithm</span><strong>{latest.algorithm.replaceAll("_", " ")}</strong></div><div><span>Progress</span><strong>{latest.completed} / {latest.total}</strong></div><div><span>Evidence</span><strong>{kinds.join(" · ").replaceAll("_", " ")}</strong></div></div>}
+    {latest && latest.total > 0 && <progress max={latest.total} value={Math.min(latest.completed, latest.total)} aria-label="Solver observation progress" />}
+    <div className="solve-stream">{observations.length === 0 ? <div className="empty-state">Waiting for the first solver checkpoint…</div> : observations.map((observation) => <article key={`${observation.sequence}:${observation.phase}`} className={`observation-${observation.kind}`}><div className="solve-observation-icon"><SceneIcon glyph={observationGlyph(observation.kind)} size={20} /></div><div><strong>{observation.label}</strong><span>{observation.phase.replaceAll("_", " ")} · {observation.completed} / {observation.total}</span></div><div>{observation.metrics.map((metric) => <span key={metric.key}><small>{metric.label}</small><b>{metric.value}</b></span>)}</div></article>)}</div>
+  </section>;
+}
+
+function observationGlyph(kind: SearchObservation["kind"]): Parameters<typeof SceneIcon>[0]["glyph"] {
+  switch (kind) {
+    case "tree": return "move";
+    case "rollout": return "weather";
+    case "frontier": return "constraint";
+    case "belief": return "information";
+    case "candidate": return "token";
+    case "incumbent": return "goal";
+    case "prune": return "hazard";
+    case "artifact": return "package";
+    case "phase": return "clock";
+  }
+}
+
 function StrategyComparison({ artifact, selected, onSelect }: { artifact: RunArtifact; selected: string; onSelect: (id: string) => void }) {
   return <section className="strategy-comparison" aria-label="Outcome comparison">
     <div className="comparison-heading"><span>Outcome comparison</span><strong>Strategies and tradeoffs on one evidence surface</strong></div>
@@ -266,14 +311,15 @@ function formatDuration(milliseconds: number): string {
   return seconds < 10 ? `${seconds.toFixed(1)} s` : `${Math.round(seconds)} s`;
 }
 
-function PlaybackControls({ position, count, playing, onPosition, onPlaying, frame }: { position: number; count: number; playing: boolean; onPosition: (position: number) => void; onPlaying: (playing: boolean) => void; frame?: ExchangeFrame }) {
-  return <section className="playback"><div className="transport"><button aria-label="Previous exchange" onClick={() => onPosition(Math.max(0, position - 1))}>←</button><button className="play" aria-label={playing ? "Pause" : "Play"} onClick={() => onPlaying(!playing)}>{playing ? "Ⅱ" : "▶"}</button><button aria-label="Next exchange" onClick={() => onPosition(Math.min(count, position + 1))}>→</button></div><div className="scrubber"><div className="scrubber-label"><span>{position === 0 ? "Initial state" : frame?.exchange.rate.label}</span><strong>{position} / {count}</strong></div><input aria-label="Trace position" type="range" min="0" max={count} value={position} onChange={(event) => onPosition(Number(event.target.value))} /></div><div className="replay-proof"><span>✓</span> replay verified</div></section>;
+function PlaybackControls({ position, count, playing, delay, onDelay, onPosition, onPlaying, frame }: { position: number; count: number; playing: boolean; delay: number; onDelay: (delay: number) => void; onPosition: (position: number) => void; onPlaying: (playing: boolean) => void; frame?: ExchangeFrame }) {
+  return <section className="playback"><div className="transport"><button aria-label="Previous exchange" onClick={() => onPosition(Math.max(0, position - 1))}>←</button><button className="play" aria-label={playing ? "Pause" : "Play"} onClick={() => onPlaying(!playing)}>{playing ? "Ⅱ" : "▶"}</button><button aria-label="Next exchange" onClick={() => onPosition(Math.min(count, position + 1))}>→</button></div><div className="scrubber"><div className="scrubber-label"><span>{position === 0 ? "Initial state" : frame?.cues[0]?.label ?? frame?.exchange.rate.label}</span><strong>{position} / {count}</strong></div><input aria-label="Trace position" type="range" min="0" max={count} value={position} onChange={(event) => onPosition(Number(event.target.value))} /></div><label className="playback-speed"><span>Speed</span><select aria-label="Playback speed" value={delay} onChange={(event) => onDelay(Number(event.target.value))}><option value={1600}>0.5×</option><option value={900}>0.75×</option><option value={650}>1×</option><option value={325}>2×</option><option value={160}>4×</option></select></label><div className="replay-proof"><span>✓</span> replay verified</div></section>;
 }
 
 function eventMessage(event: StudioEvent): string {
   switch (event.kind) {
     case "run_started": return `Started ${event.problem} · ${event.strategy}`;
     case "progress": return event.message;
+    case "search_observation": return event.observation.label;
     case "frame_appended": return `Published replay frame ${event.frame_index + 1}`;
     case "artifact_published": return `Published ${event.documents} alternatives`;
     case "run_paused": return "Computation is waiting for resume.";

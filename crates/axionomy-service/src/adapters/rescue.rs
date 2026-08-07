@@ -186,10 +186,79 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         classes: vec!["uncertain".into()],
     })
     .collect();
-    Some(Scene::graph(
-        "Actor view over hidden rescue truth",
-        nodes,
-        edges,
-        focus.map(|location| format!("location:{location:?}")),
-    ))
+    let mut agent = visual_entity(
+        "agent:responder",
+        "Responder",
+        SceneGlyphView::Agent,
+        focus.map_or(SceneAnchorView::Unanchored, |location| {
+            SceneAnchorView::GraphNode {
+                node: format!("location:{location:?}"),
+            }
+        }),
+        SceneToneView::Active,
+        Some(
+            if world
+                .balance(&AccountId::Agent, &Asset::AwaitingObservation)
+                .is_zero()
+            {
+                "acting".into()
+            } else {
+                "awaiting observation".into()
+            },
+        ),
+    );
+    agent.account = Some("rescue:account:agent".into());
+    agent.metrics = vec![visual_metric(
+        "energy",
+        "Energy",
+        world.balance(&AccountId::Agent, &Asset::Energy),
+        Some("units"),
+    )];
+    let belief_entities = [
+        Location::North,
+        Location::South,
+        Location::East,
+        Location::West,
+    ]
+    .into_iter()
+    .filter(|location| {
+        !world
+            .balance(&AccountId::Agent, &Asset::Belief(*location))
+            .is_zero()
+    })
+    .map(|location| {
+        visual_entity(
+            format!("belief:{location:?}"),
+            format!("Belief: {location:?}"),
+            SceneGlyphView::Information,
+            SceneAnchorView::GraphNode {
+                node: format!("location:{location:?}"),
+            },
+            SceneToneView::Uncertain,
+            Some("actor belief".into()),
+        )
+    });
+    Some(
+        Scene::graph(
+            "Actor view over hidden rescue truth",
+            nodes,
+            edges,
+            focus.map(|location| format!("location:{location:?}")),
+        )
+        .with_entities(std::iter::once(agent).chain(belief_entities))
+        .with_metrics([
+            visual_metric(
+                "energy",
+                "Energy remaining",
+                world.balance(&AccountId::Agent, &Asset::Energy),
+                Some("units"),
+            ),
+            visual_metric(
+                "sensor",
+                "Sensor charges",
+                world.balance(&AccountId::Agent, &Asset::Sensor),
+                Some("uses"),
+            ),
+        ]),
+    )
 }

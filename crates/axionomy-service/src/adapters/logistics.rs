@@ -276,10 +276,115 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             }
         })
         .collect();
-    Some(Scene::graph(
-        "Encoded route network and stochastic travel",
-        nodes,
-        edges,
-        focus.map(|location| format!("location:{location:?}")),
-    ))
+    let traveling = logistics::ROUTES.into_iter().find(|route| {
+        !world
+            .balance(&AccountId::Vehicle, &Asset::Traveling(*route))
+            .is_zero()
+    });
+    let vehicle_anchor = if let Some(location) = focus {
+        SceneAnchorView::GraphNode {
+            node: format!("location:{location:?}"),
+        }
+    } else if let Some(route) = traveling {
+        SceneAnchorView::GraphEdge {
+            edge: format!("route:{route:?}"),
+            progress: Some(0.5),
+        }
+    } else {
+        SceneAnchorView::Unanchored
+    };
+    let mut vehicle = visual_entity(
+        "vehicle:fleet-1",
+        "Vehicle 1",
+        SceneGlyphView::Vehicle,
+        vehicle_anchor.clone(),
+        SceneToneView::Active,
+        traveling.map(|route| format!("traveling {route:?}")),
+    );
+    vehicle.account = Some("logistics:account:vehicle".into());
+    vehicle.metrics = vec![
+        visual_metric(
+            "fuel",
+            "Fuel",
+            world.balance(&AccountId::Vehicle, &Asset::Fuel),
+            Some("units"),
+        ),
+        visual_metric(
+            "cargo",
+            "Cargo",
+            world.balance(&AccountId::Vehicle, &Asset::CargoOccupied),
+            Some("orders"),
+        ),
+        visual_metric(
+            "elapsed",
+            "Elapsed",
+            world.balance(&AccountId::Vehicle, &Asset::ElapsedTime),
+            Some("ticks"),
+        ),
+    ];
+    let order_entities = logistics::ORDERS.into_iter().map(|order| {
+        let order_account = AccountId::Order(order);
+        let (anchor, tone, status) = if !world.balance(&order_account, &Asset::Delivered).is_zero()
+        {
+            (
+                SceneAnchorView::GraphNode {
+                    node: "location:Customer".into(),
+                },
+                SceneToneView::Success,
+                "delivered",
+            )
+        } else if !world.balance(&order_account, &Asset::InTransit).is_zero() {
+            (vehicle_anchor.clone(), SceneToneView::Active, "in transit")
+        } else {
+            (
+                SceneAnchorView::GraphNode {
+                    node: "location:Depot".into(),
+                },
+                SceneToneView::Neutral,
+                "waiting",
+            )
+        };
+        let mut entity = visual_entity(
+            format!("order:{order:?}"),
+            format!("Order {order:?}"),
+            SceneGlyphView::Package,
+            anchor,
+            tone,
+            Some(status.into()),
+        );
+        entity.account = Some(format!("logistics:account:order-{order:?}").to_ascii_lowercase());
+        entity
+    });
+    let delivered = logistics::ORDERS
+        .into_iter()
+        .filter(|order| {
+            !world
+                .balance(&AccountId::Order(*order), &Asset::Delivered)
+                .is_zero()
+        })
+        .count();
+    Some(
+        Scene::graph(
+            "Encoded route network and stochastic travel",
+            nodes,
+            edges,
+            focus.map(|location| format!("location:{location:?}")),
+        )
+        .with_entities(std::iter::once(vehicle).chain(order_entities))
+        .with_metrics([
+            visual_metric("delivered", "Orders delivered", delivered, Some("orders")),
+            visual_metric(
+                "remaining_time",
+                "Time remaining",
+                world.balance(&AccountId::Vehicle, &Asset::TimeRemaining),
+                Some("ticks"),
+            ),
+            visual_metric(
+                "fuel",
+                "Fuel remaining",
+                world.balance(&AccountId::Vehicle, &Asset::Fuel),
+                Some("units"),
+            ),
+        ]),
+    )
 }

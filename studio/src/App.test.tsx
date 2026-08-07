@@ -40,6 +40,7 @@ const artifact = {
     proposals: [],
     telemetry: [],
     observations: [],
+    solve_observations: [],
   }],
 };
 

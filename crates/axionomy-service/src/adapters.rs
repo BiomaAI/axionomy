@@ -5,11 +5,47 @@ use crate::{
 };
 use axionomy::{Economy, Goal, QuantityScalar, Trace};
 use axionomy_view::{
-    DebugOntology, ObjectiveView, PlaybackError, ProposalView, Scene, SearchTelemetryView,
-    TelemetryKindView, TelemetryPointView, ViewDocument, ViewDocumentMetadata, ViewSource,
-    derive_document, derive_model, derive_proposal,
+    DebugOntology, ObjectiveView, PlaybackError, ProposalView, Scene, SceneAnchorView,
+    SceneEntityView, SceneGlyphView, SceneMetricView, SceneToneView, SearchObservationKindView,
+    SearchObservationView, SearchTelemetryView, TelemetryKindView, TelemetryPointView,
+    ViewDocument, ViewDocumentMetadata, ViewId, ViewSource, derive_document, derive_model,
+    derive_proposal,
 };
 use std::{fmt::Debug, hash::Hash, ops::ControlFlow};
+
+pub(super) fn visual_entity(
+    key: impl Into<String>,
+    label: impl Into<String>,
+    glyph: SceneGlyphView,
+    anchor: SceneAnchorView,
+    tone: SceneToneView,
+    status: Option<String>,
+) -> SceneEntityView {
+    SceneEntityView {
+        id: ViewId::new(key, label),
+        glyph,
+        anchor,
+        tone,
+        status,
+        account: None,
+        metrics: Vec::new(),
+    }
+}
+
+pub(super) fn visual_metric(
+    key: impl Into<String>,
+    label: impl Into<String>,
+    value: impl ToString,
+    unit: Option<&str>,
+) -> SceneMetricView {
+    SceneMetricView {
+        key: key.into(),
+        label: label.into(),
+        value: value.to_string(),
+        unit: unit.map(str::to_owned),
+        previous: None,
+    }
+}
 
 mod bridge;
 mod connect_four;
@@ -474,6 +510,15 @@ pub(crate) fn run(
         .iter()
         .flat_map(|document| document.proposals.iter().cloned())
         .collect();
+    let solve_observations = progress.observations().to_vec();
+    for document in &mut artifact.documents {
+        document.solve_observations = solve_observations.clone();
+        for frame in &mut document.frames {
+            if frame.observations.is_empty() {
+                frame.observations = document.observations.clone();
+            }
+        }
+    }
     Ok(artifact)
 }
 
@@ -482,6 +527,7 @@ pub(super) struct ProgressSink<'a> {
     observer: &'a mut dyn RunObserver,
     sequence: u64,
     error: Option<ServiceError>,
+    observations: Vec<SearchObservationView>,
 }
 
 impl<'a> ProgressSink<'a> {
@@ -491,6 +537,7 @@ impl<'a> ProgressSink<'a> {
             observer,
             sequence: 0,
             error: None,
+            observations: Vec::new(),
         }
     }
 
@@ -508,13 +555,38 @@ impl<'a> ProgressSink<'a> {
             self.error = Some(error);
             return ControlFlow::Break(());
         }
+        let phase = phase.into();
+        let message = message.into();
         self.observer.progress(ServiceProgress {
             sequence: self.sequence,
-            phase: phase.into(),
+            phase: phase.clone(),
             completed,
             total,
-            message: message.into(),
+            message: message.clone(),
         });
+        let observation = SearchObservationView {
+            sequence: self.sequence,
+            algorithm: phase.clone(),
+            kind: observation_kind(&phase),
+            phase,
+            label: message,
+            completed,
+            total,
+            metrics: vec![
+                visual_metric("completed", "Work completed", completed, None),
+                visual_metric(
+                    "remaining",
+                    "Work remaining",
+                    total.saturating_sub(completed),
+                    None,
+                ),
+            ],
+        };
+        self.observer.observation(observation.clone());
+        if self.observations.len() == 256 {
+            self.observations.remove(0);
+        }
+        self.observations.push(observation);
         self.sequence += 1;
         ControlFlow::Continue(())
     }
@@ -524,6 +596,24 @@ impl<'a> ProgressSink<'a> {
             Some(error) => Err(error.clone()),
             None => Ok(()),
         }
+    }
+
+    pub fn observations(&self) -> &[SearchObservationView] {
+        &self.observations
+    }
+}
+
+fn observation_kind(phase: &str) -> SearchObservationKindView {
+    if phase.contains("pareto") || phase.contains("frontier") {
+        SearchObservationKindView::Frontier
+    } else if phase.contains("monte") || phase.contains("rollout") {
+        SearchObservationKindView::Rollout
+    } else if phase.contains("mcts") || phase.contains("tree") {
+        SearchObservationKindView::Tree
+    } else if phase == "artifact" {
+        SearchObservationKindView::Artifact
+    } else {
+        SearchObservationKindView::Phase
     }
 }
 

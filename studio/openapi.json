@@ -2203,6 +2203,69 @@
           "muted"
         ]
       },
+      "SearchObservationKindView": {
+        "type": "string",
+        "enum": [
+          "phase",
+          "frontier",
+          "rollout",
+          "tree",
+          "belief",
+          "candidate",
+          "incumbent",
+          "prune",
+          "artifact"
+        ]
+      },
+      "SearchObservationView": {
+        "description": "A bounded, transport-neutral view of solver work. Search crates expose\ntyped session state; the service maps it into this presentation contract so\nHTTP, WASM, saved artifacts, and Studio use identical evidence.",
+        "type": "object",
+        "properties": {
+          "algorithm": {
+            "type": "string"
+          },
+          "completed": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          },
+          "kind": {
+            "$ref": "#/components/schemas/SearchObservationKindView"
+          },
+          "label": {
+            "type": "string"
+          },
+          "metrics": {
+            "type": "array",
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/SceneMetricView"
+            }
+          },
+          "phase": {
+            "type": "string"
+          },
+          "sequence": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          },
+          "total": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "sequence",
+          "phase",
+          "algorithm",
+          "kind",
+          "label",
+          "completed",
+          "total"
+        ]
+      },
       "SearchTelemetryView": {
         "type": "object",
         "properties": {
@@ -2319,6 +2382,32 @@
               "sequence",
               "completed",
               "message"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "search_observation"
+              },
+              "observation": {
+                "$ref": "#/components/schemas/SearchObservationView"
+              },
+              "run_id": {
+                "type": "string"
+              },
+              "sequence": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "kind",
+              "run_id",
+              "sequence",
+              "observation"
             ]
           },
           {
@@ -2657,6 +2746,14 @@
             "default": [],
             "items": {
               "$ref": "#/components/schemas/ProposalView"
+            }
+          },
+          "solve_observations": {
+            "description": "Bounded solver history retained so a fast native run or a static Pages\nartifact is as inspectable as a live stream.",
+            "type": "array",
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/SearchObservationView"
             }
           },
           "source": {

@@ -504,7 +504,11 @@ impl Scene {
     ) -> Self {
         let entities = cells
             .iter()
-            .filter(|cell| !cell.label.trim().is_empty() && cell.label != "·")
+            .filter(|cell| {
+                !cell.label.trim().is_empty()
+                    && cell.label != "·"
+                    && !cell.label.eq_ignore_ascii_case("empty")
+            })
             .map(|cell| SceneEntityView {
                 id: ViewId::new(
                     format!("cell:{}:{}:{}", cell.x, cell.y, debug_key(&cell.label)),
@@ -1035,6 +1039,36 @@ pub struct ObservationView {
     pub facts: Vec<AssetQuantityView>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum SearchObservationKindView {
+    Phase,
+    Frontier,
+    Rollout,
+    Tree,
+    Belief,
+    Candidate,
+    Incumbent,
+    Prune,
+    Artifact,
+}
+
+/// A bounded, transport-neutral view of solver work. Search crates expose
+/// typed session state; the service maps it into this presentation contract so
+/// HTTP, WASM, saved artifacts, and Studio use identical evidence.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct SearchObservationView {
+    pub sequence: u64,
+    pub phase: String,
+    pub algorithm: String,
+    pub kind: SearchObservationKindView,
+    pub label: String,
+    pub completed: u64,
+    pub total: u64,
+    #[serde(default)]
+    pub metrics: Vec<SceneMetricView>,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct ViewDocument {
     pub id: String,
@@ -1055,6 +1089,10 @@ pub struct ViewDocument {
     pub telemetry: Vec<SearchTelemetryView>,
     #[serde(default)]
     pub observations: Vec<ObservationView>,
+    /// Bounded solver history retained so a fast native run or a static Pages
+    /// artifact is as inspectable as a live stream.
+    #[serde(default)]
+    pub solve_observations: Vec<SearchObservationView>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -1089,6 +1127,11 @@ pub enum StudioEvent {
         #[serde(skip_serializing_if = "Option::is_none")]
         total: Option<u64>,
         message: String,
+    },
+    SearchObservation {
+        run_id: String,
+        sequence: u64,
+        observation: SearchObservationView,
     },
     FrameAppended {
         run_id: String,
@@ -1131,6 +1174,7 @@ impl StudioEvent {
         match self {
             Self::RunStarted { sequence, .. }
             | Self::Progress { sequence, .. }
+            | Self::SearchObservation { sequence, .. }
             | Self::FrameAppended { sequence, .. }
             | Self::ArtifactPublished { sequence, .. }
             | Self::RunPaused { sequence, .. }
@@ -1145,6 +1189,7 @@ impl StudioEvent {
         match self {
             Self::RunStarted { run_id, .. }
             | Self::Progress { run_id, .. }
+            | Self::SearchObservation { run_id, .. }
             | Self::FrameAppended { run_id, .. }
             | Self::ArtifactPublished { run_id, .. }
             | Self::RunPaused { run_id, .. }
@@ -1382,6 +1427,7 @@ where
         proposals: Vec::new(),
         telemetry: Vec::new(),
         observations: Vec::new(),
+        solve_observations: Vec::new(),
     })
 }
 
@@ -1574,11 +1620,41 @@ where
         })
         .collect::<Vec<_>>();
     accounts.sort_by(|left, right| left.account.key.cmp(&right.account.key));
+    let balance_entries = accounts
+        .iter()
+        .map(|account| account.balances.len())
+        .sum::<usize>();
+    let scene = ontology.scene(index, economy).map(|mut scene| {
+        scene.metrics.extend([
+            SceneMetricView {
+                key: "snapshot".into(),
+                label: "Economic step".into(),
+                value: index.to_string(),
+                unit: Some("exchanges".into()),
+                previous: index.checked_sub(1).map(|value| value.to_string()),
+            },
+            SceneMetricView {
+                key: "accounts".into(),
+                label: "Accounts".into(),
+                value: accounts.len().to_string(),
+                unit: None,
+                previous: None,
+            },
+            SceneMetricView {
+                key: "balances".into(),
+                label: "Non-zero balances".into(),
+                value: balance_entries.to_string(),
+                unit: None,
+                previous: None,
+            },
+        ]);
+        scene
+    });
 
     ViewSnapshot {
         index,
         accounts,
-        scene: ontology.scene(index, economy),
+        scene,
     }
 }
 

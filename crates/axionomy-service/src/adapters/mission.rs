@@ -263,10 +263,79 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             classes: vec!["uncertain".into()],
         })
         .collect();
-    Some(Scene::graph(
-        "Actor positions, hidden Nature, and information flow",
-        nodes,
-        edges,
-        None,
-    ))
+    let agent_entities = [AgentId::Scout, AgentId::Medic].into_iter().map(|agent| {
+        let location = [Location::Base, Location::North, Location::South]
+            .into_iter()
+            .find(|location| {
+                !world
+                    .balance(&AccountId::Agent(agent), &Asset::At(*location))
+                    .is_zero()
+            });
+        let mut entity = visual_entity(
+            format!("agent:{agent:?}"),
+            format!("{agent:?}"),
+            if agent == AgentId::Scout {
+                SceneGlyphView::Sensor
+            } else {
+                SceneGlyphView::Agent
+            },
+            location.map_or(SceneAnchorView::Unanchored, |location| {
+                SceneAnchorView::GraphNode {
+                    node: format!("location:{location:?}"),
+                }
+            }),
+            SceneToneView::Active,
+            Some(
+                if world
+                    .balance(&AccountId::Agent(agent), &Asset::Injured)
+                    .is_zero()
+                {
+                    "ready".into()
+                } else {
+                    "injured".into()
+                },
+            ),
+        );
+        entity.account = Some(format!("mission:account:agent-{agent:?}").to_ascii_lowercase());
+        entity.metrics = vec![visual_metric(
+            format!("energy-{agent:?}"),
+            "Energy",
+            world.balance(&AccountId::Agent(agent), &Asset::Energy),
+            Some("units"),
+        )];
+        entity
+    });
+    Some(
+        Scene::graph(
+            "Actor positions, hidden Nature, and information flow",
+            nodes,
+            edges,
+            None,
+        )
+        .with_entities(agent_entities)
+        .with_metrics([
+            visual_metric(
+                "time",
+                "Mission time remaining",
+                world.balance(&AccountId::Mission, &Asset::TimeRemaining),
+                Some("ticks"),
+            ),
+            visual_metric(
+                "shared-intel",
+                "Shared intel",
+                [Location::North, Location::South]
+                    .into_iter()
+                    .filter(|location| {
+                        !world
+                            .balance(
+                                &AccountId::Agent(AgentId::Medic),
+                                &Asset::SharedIntel(*location),
+                            )
+                            .is_zero()
+                    })
+                    .count(),
+                Some("reports"),
+            ),
+        ]),
+    )
 }

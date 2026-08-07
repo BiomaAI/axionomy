@@ -6,10 +6,10 @@ use aide::{
     openapi::{Info, OpenApi},
 };
 use axionomy_service::{
-    ProblemDescriptor, ReferenceService, RunArtifact, RunControl, RunRequest, ServiceError,
-    ServiceProgress,
+    ProblemDescriptor, ReferenceService, RunArtifact, RunControl, RunObserver, RunRequest,
+    ServiceError, ServiceProgress,
 };
-use axionomy_view::{ExchangeFrame, StudioEvent, ViewDocument};
+use axionomy_view::{ExchangeFrame, SearchObservationView, StudioEvent, ViewDocument};
 use axum::{
     Extension, Json, Router,
     extract::{Path, Query, State},
@@ -162,6 +162,27 @@ struct RunRecord {
     control: Arc<RunControl>,
     generation: AtomicU64,
     next_sequence: AtomicU64,
+}
+
+enum WorkerUpdate {
+    Progress(ServiceProgress),
+    Observation(SearchObservationView),
+}
+
+struct ChannelObserver {
+    updates: mpsc::Sender<WorkerUpdate>,
+}
+
+impl RunObserver for ChannelObserver {
+    fn progress(&mut self, progress: ServiceProgress) {
+        let _ = self.updates.blocking_send(WorkerUpdate::Progress(progress));
+    }
+
+    fn observation(&mut self, observation: SearchObservationView) {
+        let _ = self
+            .updates
+            .blocking_send(WorkerUpdate::Observation(observation));
+    }
 }
 
 impl RunRecord {
@@ -499,35 +520,48 @@ async fn execute_run(
         })
         .await;
 
-    let (progress_tx, mut progress_rx) = mpsc::unbounded_channel::<ServiceProgress>();
+    let (updates_tx, mut updates_rx) = mpsc::channel::<WorkerUpdate>(64);
     let worker_control = Arc::clone(&record.control);
     let worker_request = request.clone();
     let worker = tokio::task::spawn_blocking(move || {
-        let mut observer = move |progress| {
-            let _ = progress_tx.send(progress);
+        let mut observer = ChannelObserver {
+            updates: updates_tx,
         };
         ReferenceService.run_with(&worker_request, &worker_control, &mut observer)
     });
 
-    while let Some(progress) = progress_rx.recv().await {
+    while let Some(update) = updates_rx.recv().await {
         if record.generation.load(Ordering::Acquire) != generation {
             return;
         }
-        {
-            let mut summary = record.summary.write().await;
-            summary.completed = progress.completed;
-            summary.total = Some(progress.total);
-            summary.message = Some(progress.message.clone());
+        match update {
+            WorkerUpdate::Progress(progress) => {
+                {
+                    let mut summary = record.summary.write().await;
+                    summary.completed = progress.completed;
+                    summary.total = Some(progress.total);
+                    summary.message = Some(progress.message.clone());
+                }
+                record
+                    .emit(StudioEvent::Progress {
+                        run_id: run_id.clone(),
+                        sequence: record.sequence(),
+                        completed: progress.completed,
+                        total: Some(progress.total),
+                        message: format!("{}: {}", progress.phase, progress.message),
+                    })
+                    .await;
+            }
+            WorkerUpdate::Observation(observation) => {
+                record
+                    .emit(StudioEvent::SearchObservation {
+                        run_id: run_id.clone(),
+                        sequence: record.sequence(),
+                        observation,
+                    })
+                    .await;
+            }
         }
-        record
-            .emit(StudioEvent::Progress {
-                run_id: run_id.clone(),
-                sequence: record.sequence(),
-                completed: progress.completed,
-                total: Some(progress.total),
-                message: format!("{}: {}", progress.phase, progress.message),
-            })
-            .await;
     }
 
     let result = match worker.await {
@@ -805,6 +839,7 @@ async fn run_events(
         let kind = match &event {
             StudioEvent::RunStarted { .. } => "run_started",
             StudioEvent::Progress { .. } => "progress",
+            StudioEvent::SearchObservation { .. } => "search_observation",
             StudioEvent::FrameAppended { .. } => "frame_appended",
             StudioEvent::ArtifactPublished { .. } => "artifact_published",
             StudioEvent::RunPaused { .. } => "run_paused",

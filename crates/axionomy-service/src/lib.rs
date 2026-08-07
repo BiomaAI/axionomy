@@ -6,7 +6,7 @@
 
 mod adapters;
 
-use axionomy_view::{ProposalView, ViewDocument};
+use axionomy_view::{ProposalView, SearchObservationView, ViewDocument};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -162,6 +162,8 @@ pub struct ServiceProgress {
 
 pub trait RunObserver {
     fn progress(&mut self, progress: ServiceProgress);
+
+    fn observation(&mut self, _observation: SearchObservationView) {}
 }
 
 impl<F> RunObserver for F

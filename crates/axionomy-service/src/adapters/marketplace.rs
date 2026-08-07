@@ -227,45 +227,163 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             y: Some(200.0 + (carrier as u8 as f64) * 85.0),
         });
     }
-    let edges = marketplace::orders(world)
-        .into_iter()
-        .flat_map(|order| {
-            let settled = !world
+    let orders = marketplace::orders(world);
+    for (index, order) in orders.iter().enumerate() {
+        nodes.push(GraphNodeView {
+            id: ViewId::new(format!("order:{order:?}"), format!("Order {order:?}")),
+            classes: if !world
                 .balance(
-                    &AccountId::Order(order),
-                    &marketplace::Asset::SettledOrder(order),
+                    &AccountId::Order(*order),
+                    &marketplace::Asset::SettledOrder(*order),
                 )
-                .is_zero();
-            [
-                GraphEdgeView {
-                    id: format!("order:{order:?}:in"),
-                    source: "buyer:A".into(),
-                    target: "platform".into(),
-                    label: Some(format!("Order {order:?}")),
-                    classes: if settled {
-                        vec!["completed".into()]
-                    } else {
-                        Vec::new()
-                    },
-                },
-                GraphEdgeView {
-                    id: format!("order:{order:?}:out"),
-                    source: "platform".into(),
-                    target: "seller:A".into(),
-                    label: Some("atomic split".into()),
-                    classes: if settled {
-                        vec!["completed".into()]
-                    } else {
-                        Vec::new()
-                    },
-                },
-            ]
+                .is_zero()
+            {
+                vec!["completed".into()]
+            } else {
+                vec!["resource".into()]
+            },
+            x: Some(310.0),
+            y: Some(75.0 + index as f64 * 72.0),
+        });
+    }
+    let assessed = marketplace::assessed_matches(world);
+    let mut matches = assessed
+        .iter()
+        .filter(|entry| entry.assessment().is_applicable())
+        .map(|entry| entry.candidate())
+        .collect::<Vec<_>>();
+    for order in &orders {
+        let buyer = [BuyerId::A, BuyerId::B, BuyerId::C]
+            .into_iter()
+            .find(|buyer| {
+                !world
+                    .balance(
+                        &AccountId::Buyer(*buyer),
+                        &marketplace::Asset::PurchaseReceipt(*order),
+                    )
+                    .is_zero()
+            });
+        let seller = [SellerId::A, SellerId::B, SellerId::C]
+            .into_iter()
+            .find(|seller| {
+                !world
+                    .balance(
+                        &AccountId::Seller(*seller),
+                        &marketplace::Asset::CompletedSale(*order),
+                    )
+                    .is_zero()
+            });
+        if let (Some(buyer), Some(seller)) = (buyer, seller) {
+            matches.push(marketplace::MarketMatch::new(
+                *order,
+                buyer,
+                seller,
+                CarrierId::A,
+            ));
+        }
+    }
+    matches.sort();
+    matches.dedup();
+    let mut edges = Vec::new();
+    for candidate in &matches {
+        let settled = !world
+            .balance(
+                &AccountId::Order(candidate.order()),
+                &marketplace::Asset::SettledOrder(candidate.order()),
+            )
+            .is_zero();
+        let classes = if settled {
+            vec!["completed".into()]
+        } else {
+            vec!["uncertain".into()]
+        };
+        edges.push(GraphEdgeView {
+            id: format!(
+                "candidate:{:?}:{:?}:{:?}:in",
+                candidate.order(),
+                candidate.buyer(),
+                candidate.seller()
+            ),
+            source: format!("buyer:{:?}", candidate.buyer()),
+            target: format!("order:{:?}", candidate.order()),
+            label: Some(format!("via {:?}", candidate.carrier())),
+            classes: classes.clone(),
+        });
+        edges.push(GraphEdgeView {
+            id: format!(
+                "candidate:{:?}:{:?}:{:?}:out",
+                candidate.order(),
+                candidate.buyer(),
+                candidate.seller()
+            ),
+            source: format!("order:{:?}", candidate.order()),
+            target: format!("seller:{:?}", candidate.seller()),
+            label: Some(if settled {
+                "atomic split".into()
+            } else {
+                "feasible match".into()
+            }),
+            classes,
+        });
+    }
+    let order_entities = orders.iter().map(|order| {
+        let settled = !world
+            .balance(
+                &AccountId::Order(*order),
+                &marketplace::Asset::SettledOrder(*order),
+            )
+            .is_zero();
+        visual_entity(
+            format!("order-token:{order:?}"),
+            format!("Order {order:?}"),
+            SceneGlyphView::Package,
+            SceneAnchorView::GraphNode {
+                node: format!("order:{order:?}"),
+            },
+            if settled {
+                SceneToneView::Success
+            } else {
+                SceneToneView::Active
+            },
+            Some(if settled { "settled" } else { "open" }.into()),
+        )
+    });
+    let settled = orders
+        .iter()
+        .filter(|order| {
+            !world
+                .balance(
+                    &AccountId::Order(**order),
+                    &marketplace::Asset::SettledOrder(**order),
+                )
+                .is_zero()
         })
-        .collect();
-    Some(Scene::graph(
-        "Candidate participants and atomic settlement flows",
-        nodes,
-        edges,
-        None,
-    ))
+        .count();
+    Some(
+        Scene::graph(
+            "Candidate participants and atomic settlement flows",
+            nodes,
+            edges,
+            None,
+        )
+        .with_entities(order_entities)
+        .with_metrics([
+            visual_metric(
+                "open",
+                "Open orders",
+                orders.len() - settled,
+                Some("orders"),
+            ),
+            visual_metric("settled", "Settled orders", settled, Some("orders")),
+            visual_metric(
+                "feasible",
+                "Feasible bindings",
+                assessed
+                    .iter()
+                    .filter(|entry| entry.assessment().is_applicable())
+                    .count(),
+                Some("matches"),
+            ),
+        ]),
+    )
 }

@@ -622,6 +622,27 @@ export interface components {
         };
         /** @enum {string} */
         SceneToneView: "neutral" | "active" | "goal" | "success" | "warning" | "danger" | "uncertain" | "muted";
+        /** @enum {string} */
+        SearchObservationKindView: "phase" | "frontier" | "rollout" | "tree" | "belief" | "candidate" | "incumbent" | "prune" | "artifact";
+        /**
+         * @description A bounded, transport-neutral view of solver work. Search crates expose
+         *     typed session state; the service maps it into this presentation contract so
+         *     HTTP, WASM, saved artifacts, and Studio use identical evidence.
+         */
+        SearchObservationView: {
+            algorithm: string;
+            /** Format: uint64 */
+            completed: number;
+            kind: components["schemas"]["SearchObservationKindView"];
+            label: string;
+            /** @default [] */
+            metrics: components["schemas"]["SceneMetricView"][];
+            phase: string;
+            /** Format: uint64 */
+            sequence: number;
+            /** Format: uint64 */
+            total: number;
+        };
         SearchTelemetryView: {
             algorithm: string;
             exact: boolean;
@@ -657,6 +678,13 @@ export interface components {
             sequence: number;
             /** Format: uint64 */
             total?: number | null;
+        } | {
+            /** @constant */
+            kind: "search_observation";
+            observation: components["schemas"]["SearchObservationView"];
+            run_id: string;
+            /** Format: uint64 */
+            sequence: number;
         } | {
             /** Format: uint64 */
             frame_index: number;
@@ -751,6 +779,12 @@ export interface components {
             pareto_fronts: components["schemas"]["ParetoFrontView"][];
             /** @default [] */
             proposals: components["schemas"]["ProposalView"][];
+            /**
+             * @description Bounded solver history retained so a fast native run or a static Pages
+             *     artifact is as inspectable as a live stream.
+             * @default []
+             */
+            solve_observations: components["schemas"]["SearchObservationView"][];
             source: components["schemas"]["ViewSource"];
             /** @default [] */
             telemetry: components["schemas"]["SearchTelemetryView"][];
