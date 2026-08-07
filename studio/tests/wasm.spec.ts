@@ -12,6 +12,8 @@ test("runs the Rust engine in a Worker and loads its verified artifact", async (
   await page.getByRole("tab", { name: /Verified replay/ }).click();
   await expect(page.getByText("Vehicle 1", { exact: true }).first()).toBeVisible();
   await expect(page.locator(".graph-scene")).toBeVisible();
+  await page.locator(".react-flow__node.entity-overlay").filter({ hasText: "Vehicle 1" }).click();
+  await expect(page.locator(".account-card.focused")).toContainText("Vehicle");
 });
 
 test("cancels browser computation by terminating its isolated Worker", async ({ page }) => {
