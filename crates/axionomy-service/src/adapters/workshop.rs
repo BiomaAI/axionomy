@@ -251,10 +251,10 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             classes: Vec::new(),
         },
     ];
-    Some(Scene::Graph {
-        title: "Encoded material and recipe flow".into(),
+    Some(Scene::graph(
+        "Encoded material and recipe flow",
         nodes,
         edges,
-        focus: None,
-    })
+        None,
+    ))
 }

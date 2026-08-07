@@ -101,10 +101,10 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             }
         })
         .collect();
-    Some(Scene::Grid {
-        title: "Encoded cells, player, crate, and goal".into(),
-        width: u32::from(width),
-        height: u32::from(height),
+    Some(Scene::grid(
+        "Encoded cells, player, crate, and goal",
+        u32::from(width),
+        u32::from(height),
         cells,
-    })
+    ))
 }

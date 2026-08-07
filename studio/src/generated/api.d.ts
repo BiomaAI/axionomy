@@ -246,15 +246,34 @@ export interface components {
             after: components["schemas"]["ViewSnapshot"];
             assessment: components["schemas"]["AssessmentView"];
             before: components["schemas"]["ViewSnapshot"];
+            /** @default [] */
+            cues: components["schemas"]["FrameCueView"][];
             exchange: components["schemas"]["ExchangeView"];
             /** Format: uint64 */
             index: number;
+            /** @default [] */
+            observations: components["schemas"]["ObservationView"][];
             receipt: components["schemas"]["ReceiptView"];
         };
         ExchangeView: {
             bindings: components["schemas"]["RoleBindingView"][];
             rate: components["schemas"]["ViewId"];
             units: components["schemas"]["ExactQuantity"];
+        };
+        /** @enum {string} */
+        FrameCueKindView: "atomic_exchange" | "consumed" | "produced" | "preserved" | "movement" | "information" | "chance" | "completion";
+        /**
+         * @description A readable explanation derived from the applied exchange and its receipt.
+         *     Cues make economically meaningful transitions visible even when a domain
+         *     projection chooses identical geometry before and after the exchange.
+         */
+        FrameCueView: {
+            /** @default [] */
+            details: string[];
+            kind: components["schemas"]["FrameCueKindView"];
+            label: string;
+            /** @default [] */
+            subjects: components["schemas"]["ViewId"][];
         };
         FramePage: {
             artifact_id: string;
@@ -474,21 +493,117 @@ export interface components {
             /** Format: uint64 */
             total?: number | null;
         };
-        /** @description Optional domain projections. They explain economic state but never govern it. */
+        /**
+         * @description Optional domain projection derived from authoritative economic state.
+         *     Scenes explain and animate; they never decide whether an exchange applies.
+         */
         Scene: {
+            /** @default [] */
+            annotations: components["schemas"]["SceneAnnotationView"][];
+            /** @default [] */
+            entities: components["schemas"]["SceneEntityView"][];
+            /** @default [] */
+            legend: components["schemas"]["SceneLegendView"][];
+            /** @default [] */
+            metrics: components["schemas"]["SceneMetricView"][];
+            /** @default [] */
+            paths: components["schemas"]["ScenePathView"][];
+            surface: components["schemas"]["SceneSurfaceView"];
+            title: string;
+        };
+        SceneAnchorView: {
+            /** @constant */
+            kind: "graph_node";
+            node: string;
+        } | {
+            edge: string;
+            /** @constant */
+            kind: "graph_edge";
+            /** Format: double */
+            progress?: number | null;
+        } | {
+            /** @constant */
+            kind: "grid_cell";
+            /** Format: uint32 */
+            x: number;
+            /** Format: uint32 */
+            y: number;
+        } | {
+            column: string;
+            /** @constant */
+            kind: "matrix_cell";
+            row: string;
+        } | {
+            /** Format: uint64 */
+            at: number;
+            /** @constant */
+            kind: "timeline";
+            lane: string;
+        } | {
+            /** @constant */
+            kind: "unanchored";
+        };
+        SceneAnnotationView: {
+            anchor: components["schemas"]["SceneAnchorView"];
+            id: string;
+            label: string;
+            tone: components["schemas"]["SceneToneView"];
+        };
+        SceneEntityView: {
+            account?: string | null;
+            anchor: components["schemas"]["SceneAnchorView"];
+            glyph: components["schemas"]["SceneGlyphView"];
+            id: components["schemas"]["ViewId"];
+            /** @default [] */
+            metrics: components["schemas"]["SceneMetricView"][];
+            status?: string | null;
+            tone: components["schemas"]["SceneToneView"];
+        };
+        /**
+         * @description A semantic icon key owned by the portable Rust contract. The browser maps
+         *     these keys to its chosen icon implementation; documents never contain SVG,
+         *     CSS class names masquerading as meaning, or React component names.
+         * @enum {string}
+         */
+        SceneGlyphView: "agent" | "robot" | "vehicle" | "package" | "location" | "goal" | "key" | "door" | "fuel" | "money" | "product" | "person" | "organization" | "tool" | "material" | "food" | "temperature" | "energy" | "clock" | "hazard" | "weather" | "repair" | "sensor" | "information" | "move" | "constraint" | "task" | "machine" | "token" | "shield";
+        SceneLegendView: {
+            glyph: components["schemas"]["SceneGlyphView"];
+            label: string;
+            tone: components["schemas"]["SceneToneView"];
+        };
+        SceneMetricView: {
+            key: string;
+            label: string;
+            previous?: string | null;
+            unit?: string | null;
+            /** @description Exact text preserves arbitrarily large quantities and caller units. */
+            value: string;
+        };
+        /** @enum {string} */
+        ScenePathStatusView: "available" | "candidate" | "explored" | "traversed" | "current" | "incumbent" | "rejected" | "blocked" | "uncertain";
+        ScenePathView: {
+            anchors: components["schemas"]["SceneAnchorView"][];
+            id: string;
+            label: string;
+            status: components["schemas"]["ScenePathStatusView"];
+        };
+        /**
+         * @description The geometric substrate for a derived scene. Surface geometry and semantic
+         *     entities are deliberately separate so one vehicle can move through a graph,
+         *     grid, matrix, or timeline without inventing four domain models.
+         */
+        SceneSurfaceView: {
             edges: components["schemas"]["GraphEdgeView"][];
             focus?: string | null;
             /** @constant */
             kind: "graph";
             nodes: components["schemas"]["GraphNodeView"][];
-            title: string;
         } | {
             cells: components["schemas"]["GridCellView"][];
             /** Format: uint32 */
             height: number;
             /** @constant */
             kind: "grid";
-            title: string;
             /** Format: uint32 */
             width: number;
         } | {
@@ -497,7 +612,6 @@ export interface components {
             /** @constant */
             kind: "matrix";
             rows: components["schemas"]["ViewId"][];
-            title: string;
         } | {
             /** Format: uint64 */
             cursor?: number | null;
@@ -505,8 +619,9 @@ export interface components {
             kind: "timeline";
             lanes: components["schemas"]["TimelineLaneView"][];
             spans: components["schemas"]["TimelineSpanView"][];
-            title: string;
         };
+        /** @enum {string} */
+        SceneToneView: "neutral" | "active" | "goal" | "success" | "warning" | "danger" | "uncertain" | "muted";
         SearchTelemetryView: {
             algorithm: string;
             exact: boolean;

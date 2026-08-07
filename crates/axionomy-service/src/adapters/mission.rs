@@ -263,10 +263,10 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             classes: vec!["uncertain".into()],
         })
         .collect();
-    Some(Scene::Graph {
-        title: "Actor positions, hidden Nature, and information flow".into(),
+    Some(Scene::graph(
+        "Actor positions, hidden Nature, and information flow",
         nodes,
         edges,
-        focus: None,
-    })
+        None,
+    ))
 }

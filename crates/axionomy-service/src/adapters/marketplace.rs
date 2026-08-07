@@ -262,10 +262,10 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             ]
         })
         .collect();
-    Some(Scene::Graph {
-        title: "Candidate participants and atomic settlement flows".into(),
+    Some(Scene::graph(
+        "Candidate participants and atomic settlement flows",
         nodes,
         edges,
-        focus: None,
-    })
+        None,
+    ))
 }

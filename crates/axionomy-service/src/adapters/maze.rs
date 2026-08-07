@@ -299,10 +299,10 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             _ => None,
         })
         .collect();
-    Some(Scene::Graph {
-        title: "Encoded maze topology".into(),
-        nodes: graph_nodes,
-        edges: graph_edges,
-        focus: focus.map(node_key),
-    })
+    Some(Scene::graph(
+        "Encoded maze topology",
+        graph_nodes,
+        graph_edges,
+        focus.map(node_key),
+    ))
 }

@@ -186,10 +186,10 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         classes: vec!["uncertain".into()],
     })
     .collect();
-    Some(Scene::Graph {
-        title: "Actor view over hidden rescue truth".into(),
+    Some(Scene::graph(
+        "Actor view over hidden rescue truth",
         nodes,
         edges,
-        focus: focus.map(|location| format!("location:{location:?}")),
-    })
+        focus.map(|location| format!("location:{location:?}")),
+    ))
 }

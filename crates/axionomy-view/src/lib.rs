@@ -11,7 +11,7 @@ use axionomy::{
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::{fmt::Debug, hash::Hash, marker::PhantomData};
+use std::{collections::HashSet, fmt::Debug, hash::Hash, marker::PhantomData};
 use thiserror::Error;
 
 /// A browser-safe identity for an arbitrary user-defined ontology value.
@@ -220,36 +220,192 @@ pub struct GraphEdgeView {
     pub classes: Vec<String>,
 }
 
-/// Optional domain projections. They explain economic state but never govern it.
+/// A semantic icon key owned by the portable Rust contract. The browser maps
+/// these keys to its chosen icon implementation; documents never contain SVG,
+/// CSS class names masquerading as meaning, or React component names.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum SceneGlyphView {
+    Agent,
+    Robot,
+    Vehicle,
+    Package,
+    Location,
+    Goal,
+    Key,
+    Door,
+    Fuel,
+    Money,
+    Product,
+    Person,
+    Organization,
+    Tool,
+    Material,
+    Food,
+    Temperature,
+    Energy,
+    Clock,
+    Hazard,
+    Weather,
+    Repair,
+    Sensor,
+    Information,
+    Move,
+    Constraint,
+    Task,
+    Machine,
+    Token,
+    Shield,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum SceneToneView {
+    Neutral,
+    Active,
+    Goal,
+    Success,
+    Warning,
+    Danger,
+    Uncertain,
+    Muted,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "snake_case")]
-pub enum Scene {
+pub enum SceneAnchorView {
+    GraphNode {
+        node: String,
+    },
+    GraphEdge {
+        edge: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        progress: Option<f64>,
+    },
+    GridCell {
+        x: u32,
+        y: u32,
+    },
+    MatrixCell {
+        row: String,
+        column: String,
+    },
+    Timeline {
+        lane: String,
+        at: u64,
+    },
+    Unanchored,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct SceneMetricView {
+    pub key: String,
+    pub label: String,
+    /// Exact text preserves arbitrarily large quantities and caller units.
+    pub value: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub unit: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub previous: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct SceneEntityView {
+    pub id: ViewId,
+    pub glyph: SceneGlyphView,
+    pub anchor: SceneAnchorView,
+    pub tone: SceneToneView,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub status: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub account: Option<String>,
+    #[serde(default)]
+    pub metrics: Vec<SceneMetricView>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ScenePathStatusView {
+    Available,
+    Candidate,
+    Explored,
+    Traversed,
+    Current,
+    Incumbent,
+    Rejected,
+    Blocked,
+    Uncertain,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct ScenePathView {
+    pub id: String,
+    pub label: String,
+    pub anchors: Vec<SceneAnchorView>,
+    pub status: ScenePathStatusView,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct SceneAnnotationView {
+    pub id: String,
+    pub label: String,
+    pub anchor: SceneAnchorView,
+    pub tone: SceneToneView,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct SceneLegendView {
+    pub label: String,
+    pub glyph: SceneGlyphView,
+    pub tone: SceneToneView,
+}
+
+/// The geometric substrate for a derived scene. Surface geometry and semantic
+/// entities are deliberately separate so one vehicle can move through a graph,
+/// grid, matrix, or timeline without inventing four domain models.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum SceneSurfaceView {
     Graph {
-        title: String,
         nodes: Vec<GraphNodeView>,
         edges: Vec<GraphEdgeView>,
         #[serde(skip_serializing_if = "Option::is_none")]
         focus: Option<String>,
     },
     Grid {
-        title: String,
         width: u32,
         height: u32,
         cells: Vec<GridCellView>,
     },
     Matrix {
-        title: String,
         rows: Vec<ViewId>,
         columns: Vec<ViewId>,
         cells: Vec<MatrixCellView>,
     },
     Timeline {
-        title: String,
         lanes: Vec<TimelineLaneView>,
         spans: Vec<TimelineSpanView>,
         #[serde(skip_serializing_if = "Option::is_none")]
         cursor: Option<u64>,
     },
+}
+
+/// Optional domain projection derived from authoritative economic state.
+/// Scenes explain and animate; they never decide whether an exchange applies.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct Scene {
+    pub title: String,
+    pub surface: SceneSurfaceView,
+    #[serde(default)]
+    pub entities: Vec<SceneEntityView>,
+    #[serde(default)]
+    pub paths: Vec<ScenePathView>,
+    #[serde(default)]
+    pub annotations: Vec<SceneAnnotationView>,
+    #[serde(default)]
+    pub metrics: Vec<SceneMetricView>,
+    #[serde(default)]
+    pub legend: Vec<SceneLegendView>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -288,12 +444,479 @@ pub struct TimelineSpanView {
     pub classes: Vec<String>,
 }
 
+impl Scene {
+    pub fn graph(
+        title: impl Into<String>,
+        nodes: Vec<GraphNodeView>,
+        edges: Vec<GraphEdgeView>,
+        focus: Option<String>,
+    ) -> Self {
+        let entities = nodes
+            .iter()
+            .map(|node| SceneEntityView {
+                id: node.id.clone(),
+                glyph: inferred_glyph(&node.id.label, &node.classes),
+                anchor: SceneAnchorView::GraphNode {
+                    node: node.id.key.clone(),
+                },
+                tone: inferred_tone(&node.classes),
+                status: node.classes.first().cloned(),
+                account: None,
+                metrics: Vec::new(),
+            })
+            .collect::<Vec<_>>();
+        let paths = edges
+            .iter()
+            .map(|edge| ScenePathView {
+                id: edge.id.clone(),
+                label: edge.label.clone().unwrap_or_else(|| edge.id.clone()),
+                anchors: vec![
+                    SceneAnchorView::GraphNode {
+                        node: edge.source.clone(),
+                    },
+                    SceneAnchorView::GraphNode {
+                        node: edge.target.clone(),
+                    },
+                ],
+                status: inferred_path_status(&edge.classes),
+            })
+            .collect();
+        Self {
+            title: title.into(),
+            surface: SceneSurfaceView::Graph {
+                nodes,
+                edges,
+                focus,
+            },
+            legend: inferred_legend(&entities),
+            entities,
+            paths,
+            annotations: Vec::new(),
+            metrics: Vec::new(),
+        }
+    }
+
+    pub fn grid(
+        title: impl Into<String>,
+        width: u32,
+        height: u32,
+        cells: Vec<GridCellView>,
+    ) -> Self {
+        let entities = cells
+            .iter()
+            .filter(|cell| !cell.label.trim().is_empty() && cell.label != "·")
+            .map(|cell| SceneEntityView {
+                id: ViewId::new(
+                    format!("cell:{}:{}:{}", cell.x, cell.y, debug_key(&cell.label)),
+                    cell.label.clone(),
+                ),
+                glyph: inferred_glyph(&cell.label, &cell.classes),
+                anchor: SceneAnchorView::GridCell {
+                    x: cell.x,
+                    y: cell.y,
+                },
+                tone: inferred_tone(&cell.classes),
+                status: cell.classes.first().cloned(),
+                account: None,
+                metrics: Vec::new(),
+            })
+            .collect::<Vec<_>>();
+        Self {
+            title: title.into(),
+            surface: SceneSurfaceView::Grid {
+                width,
+                height,
+                cells,
+            },
+            legend: inferred_legend(&entities),
+            entities,
+            paths: Vec::new(),
+            annotations: Vec::new(),
+            metrics: Vec::new(),
+        }
+    }
+
+    pub fn matrix(
+        title: impl Into<String>,
+        rows: Vec<ViewId>,
+        columns: Vec<ViewId>,
+        cells: Vec<MatrixCellView>,
+    ) -> Self {
+        let entities = cells
+            .iter()
+            .filter(|cell| !cell.label.trim().is_empty() && cell.label != "·")
+            .map(|cell| SceneEntityView {
+                id: ViewId::new(
+                    format!("matrix:{}:{}", cell.row, cell.column),
+                    cell.label.clone(),
+                ),
+                glyph: SceneGlyphView::Constraint,
+                anchor: SceneAnchorView::MatrixCell {
+                    row: cell.row.clone(),
+                    column: cell.column.clone(),
+                },
+                tone: inferred_tone(&cell.classes),
+                status: cell.classes.first().cloned(),
+                account: None,
+                metrics: Vec::new(),
+            })
+            .collect::<Vec<_>>();
+        Self {
+            title: title.into(),
+            surface: SceneSurfaceView::Matrix {
+                rows,
+                columns,
+                cells,
+            },
+            legend: inferred_legend(&entities),
+            entities,
+            paths: Vec::new(),
+            annotations: Vec::new(),
+            metrics: Vec::new(),
+        }
+    }
+
+    pub fn timeline(
+        title: impl Into<String>,
+        lanes: Vec<TimelineLaneView>,
+        spans: Vec<TimelineSpanView>,
+        cursor: Option<u64>,
+    ) -> Self {
+        let entities = spans
+            .iter()
+            .map(|span| SceneEntityView {
+                id: ViewId::new(&span.id, &span.label),
+                glyph: inferred_glyph(&span.label, &span.classes),
+                anchor: SceneAnchorView::Timeline {
+                    lane: span.lane.clone(),
+                    at: span.start,
+                },
+                tone: inferred_tone(&span.classes),
+                status: span.classes.first().cloned(),
+                account: None,
+                metrics: vec![SceneMetricView {
+                    key: "duration".into(),
+                    label: "Duration".into(),
+                    value: span.end.saturating_sub(span.start).to_string(),
+                    unit: None,
+                    previous: None,
+                }],
+            })
+            .collect::<Vec<_>>();
+        Self {
+            title: title.into(),
+            surface: SceneSurfaceView::Timeline {
+                lanes,
+                spans,
+                cursor,
+            },
+            legend: inferred_legend(&entities),
+            entities,
+            paths: Vec::new(),
+            annotations: Vec::new(),
+            metrics: Vec::new(),
+        }
+    }
+
+    pub fn with_entities(mut self, entities: impl IntoIterator<Item = SceneEntityView>) -> Self {
+        self.entities.extend(entities);
+        self.legend = inferred_legend(&self.entities);
+        self
+    }
+
+    pub fn with_annotations(
+        mut self,
+        annotations: impl IntoIterator<Item = SceneAnnotationView>,
+    ) -> Self {
+        self.annotations.extend(annotations);
+        self
+    }
+
+    pub fn with_metrics(mut self, metrics: impl IntoIterator<Item = SceneMetricView>) -> Self {
+        self.metrics.extend(metrics);
+        self
+    }
+
+    /// Verifies that a disposable projection is internally joinable. This does
+    /// not validate the economy—the replay already did that—but it prevents a
+    /// broken renderer contract from silently hiding valid economic evidence.
+    pub fn validate(&self) -> Result<(), SceneValidationError> {
+        let entity_ids = self
+            .entities
+            .iter()
+            .map(|entity| entity.id.key.as_str())
+            .collect::<HashSet<_>>();
+        if entity_ids.len() != self.entities.len() {
+            return Err(SceneValidationError::DuplicateEntity);
+        }
+        match &self.surface {
+            SceneSurfaceView::Graph { nodes, edges, .. } => {
+                let nodes = nodes
+                    .iter()
+                    .map(|node| node.id.key.as_str())
+                    .collect::<HashSet<_>>();
+                for edge in edges {
+                    if !nodes.contains(edge.source.as_str())
+                        || !nodes.contains(edge.target.as_str())
+                    {
+                        return Err(SceneValidationError::UnknownAnchor(edge.id.clone()));
+                    }
+                }
+            }
+            SceneSurfaceView::Grid {
+                width,
+                height,
+                cells,
+            } => {
+                if cells
+                    .iter()
+                    .any(|cell| cell.x >= *width || cell.y >= *height)
+                {
+                    return Err(SceneValidationError::OutOfBounds);
+                }
+            }
+            SceneSurfaceView::Matrix {
+                rows,
+                columns,
+                cells,
+            } => {
+                let rows = rows
+                    .iter()
+                    .map(|row| row.key.as_str())
+                    .collect::<HashSet<_>>();
+                let columns = columns
+                    .iter()
+                    .map(|column| column.key.as_str())
+                    .collect::<HashSet<_>>();
+                if cells.iter().any(|cell| {
+                    !rows.contains(cell.row.as_str()) || !columns.contains(cell.column.as_str())
+                }) {
+                    return Err(SceneValidationError::UnknownAnchor("matrix cell".into()));
+                }
+            }
+            SceneSurfaceView::Timeline { lanes, spans, .. } => {
+                let lanes = lanes
+                    .iter()
+                    .map(|lane| lane.id.key.as_str())
+                    .collect::<HashSet<_>>();
+                if spans.iter().any(|span| !lanes.contains(span.lane.as_str())) {
+                    return Err(SceneValidationError::UnknownAnchor("timeline span".into()));
+                }
+            }
+        }
+        for anchor in self
+            .entities
+            .iter()
+            .map(|entity| &entity.anchor)
+            .chain(self.annotations.iter().map(|annotation| &annotation.anchor))
+            .chain(self.paths.iter().flat_map(|path| path.anchors.iter()))
+        {
+            self.validate_anchor(anchor)?;
+        }
+        Ok(())
+    }
+
+    fn validate_anchor(&self, anchor: &SceneAnchorView) -> Result<(), SceneValidationError> {
+        let valid = match (anchor, &self.surface) {
+            (SceneAnchorView::Unanchored, _) => true,
+            (SceneAnchorView::GraphNode { node }, SceneSurfaceView::Graph { nodes, .. }) => {
+                nodes.iter().any(|candidate| candidate.id.key == *node)
+            }
+            (
+                SceneAnchorView::GraphEdge { edge, progress },
+                SceneSurfaceView::Graph { edges, .. },
+            ) => {
+                edges.iter().any(|candidate| candidate.id == *edge)
+                    && progress.is_none_or(|value| (0.0..=1.0).contains(&value))
+            }
+            (SceneAnchorView::GridCell { x, y }, SceneSurfaceView::Grid { width, height, .. }) => {
+                x < width && y < height
+            }
+            (
+                SceneAnchorView::MatrixCell { row, column },
+                SceneSurfaceView::Matrix { rows, columns, .. },
+            ) => {
+                rows.iter().any(|candidate| candidate.key == *row)
+                    && columns.iter().any(|candidate| candidate.key == *column)
+            }
+            (SceneAnchorView::Timeline { lane, .. }, SceneSurfaceView::Timeline { lanes, .. }) => {
+                lanes.iter().any(|candidate| candidate.id.key == *lane)
+            }
+            _ => false,
+        };
+        if valid {
+            Ok(())
+        } else {
+            Err(SceneValidationError::UnknownAnchor(format!("{anchor:?}")))
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
+pub enum SceneValidationError {
+    #[error("scene contains duplicate entity ids")]
+    DuplicateEntity,
+    #[error("scene contains an unknown or incompatible anchor: {0}")]
+    UnknownAnchor(String),
+    #[error("scene contains an out-of-bounds coordinate")]
+    OutOfBounds,
+}
+
+fn inferred_glyph(label: &str, classes: &[String]) -> SceneGlyphView {
+    let words = format!("{} {}", label, classes.join(" ")).to_ascii_lowercase();
+    if words.contains("vehicle") || words.contains("truck") || words.contains("carrier") {
+        SceneGlyphView::Vehicle
+    } else if words.contains("robot") {
+        SceneGlyphView::Robot
+    } else if words.contains("agent") || words.contains("player") || words.contains("scout") {
+        SceneGlyphView::Agent
+    } else if words.contains("package") || words.contains("order") || words.contains("crate") {
+        SceneGlyphView::Package
+    } else if words.contains("goal") || words.contains("exit") || words.contains("customer") {
+        SceneGlyphView::Goal
+    } else if words.contains("key") {
+        SceneGlyphView::Key
+    } else if words.contains("door") || words.contains("gate") {
+        SceneGlyphView::Door
+    } else if words.contains("fuel") {
+        SceneGlyphView::Fuel
+    } else if words.contains("money") || words.contains("buyer") || words.contains("seller") {
+        SceneGlyphView::Money
+    } else if words.contains("food") || words.contains("fruit") || words.contains("cohort") {
+        SceneGlyphView::Food
+    } else if words.contains("machine") {
+        SceneGlyphView::Machine
+    } else if words.contains("task") || words.contains("job") {
+        SceneGlyphView::Task
+    } else if words.contains("hazard") || words.contains("danger") {
+        SceneGlyphView::Hazard
+    } else if words.contains("sensor") || words.contains("observe") {
+        SceneGlyphView::Sensor
+    } else if words.contains("tool") {
+        SceneGlyphView::Tool
+    } else if words.contains("material") || words.contains("input") {
+        SceneGlyphView::Material
+    } else if words.contains("time") || words.contains("wait") {
+        SceneGlyphView::Clock
+    } else if words.contains("energy") {
+        SceneGlyphView::Energy
+    } else if words.contains("shield") || words.contains("safe") {
+        SceneGlyphView::Shield
+    } else if words.contains("location") || words.contains("room") || words.contains("depot") {
+        SceneGlyphView::Location
+    } else {
+        SceneGlyphView::Token
+    }
+}
+
+fn inferred_tone(classes: &[String]) -> SceneToneView {
+    if classes
+        .iter()
+        .any(|class| class == "current" || class == "active")
+    {
+        SceneToneView::Active
+    } else if classes.iter().any(|class| class == "goal") {
+        SceneToneView::Goal
+    } else if classes
+        .iter()
+        .any(|class| class == "success" || class == "selected")
+    {
+        SceneToneView::Success
+    } else if classes
+        .iter()
+        .any(|class| class == "danger" || class == "invalid")
+    {
+        SceneToneView::Danger
+    } else if classes
+        .iter()
+        .any(|class| class == "warning" || class == "blocked")
+    {
+        SceneToneView::Warning
+    } else if classes.iter().any(|class| class == "uncertain") {
+        SceneToneView::Uncertain
+    } else if classes
+        .iter()
+        .any(|class| class == "muted" || class == "inactive")
+    {
+        SceneToneView::Muted
+    } else {
+        SceneToneView::Neutral
+    }
+}
+
+fn inferred_path_status(classes: &[String]) -> ScenePathStatusView {
+    if classes.iter().any(|class| class == "current") {
+        ScenePathStatusView::Current
+    } else if classes
+        .iter()
+        .any(|class| class == "selected" || class == "incumbent")
+    {
+        ScenePathStatusView::Incumbent
+    } else if classes.iter().any(|class| class == "traversed") {
+        ScenePathStatusView::Traversed
+    } else if classes
+        .iter()
+        .any(|class| class == "rejected" || class == "invalid")
+    {
+        ScenePathStatusView::Rejected
+    } else if classes.iter().any(|class| class == "blocked") {
+        ScenePathStatusView::Blocked
+    } else if classes.iter().any(|class| class == "uncertain") {
+        ScenePathStatusView::Uncertain
+    } else {
+        ScenePathStatusView::Available
+    }
+}
+
+fn inferred_legend(entities: &[SceneEntityView]) -> Vec<SceneLegendView> {
+    let mut entries = Vec::new();
+    for entity in entities {
+        if !entries
+            .iter()
+            .any(|known: &SceneLegendView| known.glyph == entity.glyph && known.tone == entity.tone)
+        {
+            entries.push(SceneLegendView {
+                label: entity.id.label.clone(),
+                glyph: entity.glyph,
+                tone: entity.tone,
+            });
+        }
+    }
+    entries
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct ViewSnapshot {
     pub index: u64,
     pub accounts: Vec<AccountView>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub scene: Option<Scene>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum FrameCueKindView {
+    AtomicExchange,
+    Consumed,
+    Produced,
+    Preserved,
+    Movement,
+    Information,
+    Chance,
+    Completion,
+}
+
+/// A readable explanation derived from the applied exchange and its receipt.
+/// Cues make economically meaningful transitions visible even when a domain
+/// projection chooses identical geometry before and after the exchange.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct FrameCueView {
+    pub kind: FrameCueKindView,
+    pub label: String,
+    #[serde(default)]
+    pub details: Vec<String>,
+    #[serde(default)]
+    pub subjects: Vec<ViewId>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -304,6 +927,10 @@ pub struct ExchangeFrame {
     pub receipt: ReceiptView,
     pub before: ViewSnapshot,
     pub after: ViewSnapshot,
+    #[serde(default)]
+    pub cues: Vec<FrameCueView>,
+    #[serde(default)]
+    pub observations: Vec<ObservationView>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -727,13 +1354,18 @@ where
                 message: error.to_string(),
             })?;
         let after = snapshot(index + 1, &economy, ontology);
+        let exchange = exchange_view(exchange, ontology);
+        let receipt = receipt_view(&receipt, ontology);
+        let cues = frame_cues(&exchange, &receipt);
         frames.push(ExchangeFrame {
             index,
-            exchange: exchange_view(exchange, ontology),
+            exchange,
             assessment,
-            receipt: receipt_view(&receipt, ontology),
+            receipt,
             before,
             after,
+            cues,
+            observations: Vec::new(),
         });
     }
 
@@ -751,6 +1383,49 @@ where
         telemetry: Vec::new(),
         observations: Vec::new(),
     })
+}
+
+fn frame_cues(exchange: &ExchangeView, receipt: &ReceiptView) -> Vec<FrameCueView> {
+    let mut cues = vec![FrameCueView {
+        kind: FrameCueKindView::AtomicExchange,
+        label: format!("{} applied atomically", exchange.rate.label),
+        details: vec![format!(
+            "{} role bindings · {} account deltas",
+            exchange.bindings.len(),
+            receipt.deltas.len()
+        )],
+        subjects: std::iter::once(exchange.rate.clone())
+            .chain(
+                exchange
+                    .bindings
+                    .iter()
+                    .flat_map(|binding| [binding.role.clone(), binding.account.clone()]),
+            )
+            .collect(),
+    }];
+    for delta in &receipt.deltas {
+        for (kind, verb, assets) in [
+            (FrameCueKindView::Consumed, "consumed", &delta.consumed),
+            (FrameCueKindView::Produced, "produced", &delta.produced),
+            (FrameCueKindView::Preserved, "verified", &delta.preserved),
+        ] {
+            if assets.is_empty() {
+                continue;
+            }
+            cues.push(FrameCueView {
+                kind,
+                label: format!("{} {verb} {}", delta.account.label, assets.len()),
+                details: assets
+                    .iter()
+                    .map(|asset| format!("{} {}", asset.quantity.0, asset.asset.label))
+                    .collect(),
+                subjects: std::iter::once(delta.account.clone())
+                    .chain(assets.iter().map(|asset| asset.asset.clone()))
+                    .collect(),
+            });
+        }
+    }
+    cues
 }
 
 /// Derives the immutable model definition used by a view document.

@@ -14,6 +14,7 @@
     "check:contracts": "pnpm generate:contracts && git diff --exit-code -- openapi.json src/generated/api.d.ts public/artifacts"
   },
   "dependencies": {
+    "@tabler/icons-react": "3.46.0",
     "@tanstack/react-query": "5.101.4",
     "@xyflow/react": "12.11.2",
     "echarts": "6.1.0",

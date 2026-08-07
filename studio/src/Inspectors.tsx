@@ -32,6 +32,9 @@ export function Accounts({ snapshot, previous }: { snapshot: ViewSnapshot; previ
 export function Transition({ frame }: { frame?: ExchangeFrame }) {
   if (!frame) return <div className="empty-state">Move the scrubber to inspect the assessment, projected deltas, and receipt.</div>;
   return <div className="transition">
+    <div className="frame-cues" aria-label="Transition cues">
+      {frame.cues.map((cue, index) => <article key={`${cue.kind}:${index}`} className={`cue-${cue.kind}`}><strong>{cue.label}</strong>{cue.details.map((detail) => <span key={detail}>{detail}</span>)}</article>)}
+    </div>
     <div className="binding-row">
       {frame.exchange.bindings.map((binding) => <span key={binding.role.key}><small>{binding.role.label}</small>{binding.account.label}</span>)}
       <span><small>Units</small>{frame.exchange.units}</span>

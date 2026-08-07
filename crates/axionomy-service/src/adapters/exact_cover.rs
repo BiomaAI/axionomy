@@ -139,10 +139,10 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 })
         })
         .collect();
-    Some(Scene::Matrix {
-        title: "Encoded set × universe incidence".into(),
+    Some(Scene::matrix(
+        "Encoded set × universe incidence",
         rows,
         columns,
         cells,
-    })
+    ))
 }

@@ -123,10 +123,10 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             });
         }
     }
-    Some(Scene::Grid {
-        title: "Encoded board, gravity, and pieces".into(),
-        width: u32::from(width),
-        height: u32::from(height),
+    Some(Scene::grid(
+        "Encoded board, gravity, and pieces",
+        u32::from(width),
+        u32::from(height),
         cells,
-    })
+    ))
 }

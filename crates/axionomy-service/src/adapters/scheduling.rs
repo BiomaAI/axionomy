@@ -271,10 +271,10 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             }
         }
     }
-    Some(Scene::Timeline {
-        title: "Encoded machine reservations".into(),
+    Some(Scene::timeline(
+        "Encoded machine reservations",
         lanes,
         spans,
-        cursor: Some(scheduling::encoded_makespan(world)),
-    })
+        Some(scheduling::encoded_makespan(world)),
+    ))
 }

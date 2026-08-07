@@ -276,10 +276,10 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             }
         })
         .collect();
-    Some(Scene::Graph {
-        title: "Encoded route network and stochastic travel".into(),
+    Some(Scene::graph(
+        "Encoded route network and stochastic travel",
         nodes,
         edges,
-        focus: focus.map(|location| format!("location:{location:?}")),
-    })
+        focus.map(|location| format!("location:{location:?}")),
+    ))
 }

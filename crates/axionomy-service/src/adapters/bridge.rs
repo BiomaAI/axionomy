@@ -352,10 +352,10 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             }
         })
         .collect();
-    Some(Scene::Graph {
-        title: "Agents, scarce capacity, and crossing allocation".into(),
+    Some(Scene::graph(
+        "Agents, scarce capacity, and crossing allocation",
         nodes,
         edges,
-        focus: None,
-    })
+        None,
+    ))
 }

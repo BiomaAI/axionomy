@@ -125,8 +125,25 @@ input[type="range"] { width: 100%; accent-color: var(--lime); }
 .world-panel, .accounts-panel, .transition-panel, .proposal-panel, .analysis-panel, .model-panel, .observation-panel { display: flex; flex-direction: column; }
 .accounts-list, .transition, .proposal-inspector, .model-explorer, .observations { overflow: auto; }
 
+.scene-composition { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.scene-chrome { flex: 0 0 auto; display: grid; gap: 7px; padding: 9px 12px; border-bottom: 1px solid var(--line); background: color-mix(in srgb, var(--surface-2) 86%, transparent); }
+.scene-metrics, .scene-legend, .scene-annotations { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.scene-metric { min-width: 92px; padding-right: 9px; border-right: 1px solid var(--line); }
+.scene-metric span, .scene-metric small { display: block; color: var(--muted); font: 7px var(--mono); text-transform: uppercase; }
+.scene-metric strong { font: 12px var(--mono); color: var(--lime); }
+.scene-legend span, .scene-annotations span { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); font: 8px var(--mono); text-transform: uppercase; }
+.tone-active, .tone-goal, .tone-success { color: var(--lime) !important; }
+.tone-warning, .tone-uncertain { color: var(--orange) !important; }
+.tone-danger { color: var(--red) !important; }
+.tone-muted { opacity: .55; }
 .graph-scene { flex: 1; min-height: 360px; background: radial-gradient(circle at 50% 45%, #15202a, #0d1319 68%); }
 .react-flow__node { background: var(--surface-3); color: var(--text); border: 1px solid #4e6578; border-radius: 50%; width: 88px; min-height: 72px; display: grid; place-items: center; padding: 8px; text-align: center; font: 500 10px var(--mono); box-shadow: 0 7px 25px #0008; }
+.rich-node { width: 100%; display: grid; place-items: center; gap: 3px; }
+.rich-node svg { color: var(--blue); }
+.rich-node small { color: var(--muted); max-width: 76px; font-size: 6px; text-transform: uppercase; }
+.react-flow__node.entity-overlay { width: auto; min-width: 70px; min-height: 34px; padding: 5px 8px; border-radius: 18px; z-index: 4 !important; transition: transform .28s ease, left .28s ease, top .28s ease; }
+.entity-token { grid-auto-flow: column; grid-template-columns: auto 1fr; text-align: left; }
+.entity-token small { grid-column: 1 / -1; }
 .react-flow__node.current { background: var(--lime); border-color: var(--lime); color: #0a0f13; box-shadow: 0 0 0 7px #d8ff3e17, 0 8px 30px #000; }
 .react-flow__node.goal { border-style: double; border-width: 3px; }
 .react-flow__node.resource { border-radius: 5px; }
@@ -134,6 +151,8 @@ input[type="range"] { width: 100%; accent-color: var(--lime); }
 .react-flow__edge.locked .react-flow__edge-path, .react-flow__edge.failed .react-flow__edge-path { stroke: var(--red); stroke-dasharray: 5 5; }
 .react-flow__edge.uncertain .react-flow__edge-path { stroke: var(--orange); stroke-dasharray: 3 4; }
 .react-flow__edge.completed .react-flow__edge-path { stroke: var(--lime); }
+.react-flow__edge.path-current .react-flow__edge-path, .react-flow__edge.path-incumbent .react-flow__edge-path, .react-flow__edge.path-traversed .react-flow__edge-path { stroke: var(--lime); stroke-width: 2.5; }
+.react-flow__edge.path-rejected .react-flow__edge-path, .react-flow__edge.path-blocked .react-flow__edge-path { stroke: var(--red); stroke-dasharray: 4 4; }
 .react-flow__edge-text { font: 9px var(--mono); fill: var(--muted); }
 .react-flow__edge-textbg { fill: var(--surface); }
 .react-flow__controls { background: var(--surface); border-color: var(--line); }
@@ -142,6 +161,9 @@ input[type="range"] { width: 100%; accent-color: var(--lime); }
 .grid-scene { flex: 1; display: grid; gap: 5px; padding: 28px; align-content: center; justify-content: center; background: radial-gradient(circle, #15202a, #0d1319); }
 .grid-scene > div { min-width: 48px; min-height: 48px; border: 1px solid var(--line); background: var(--surface-2); display: grid; place-items: center; position: relative; font: 10px var(--mono); }
 .grid-scene > div small { position: absolute; right: 3px; bottom: 2px; color: var(--muted); font-size: 7px; }
+.grid-entities { display: flex; align-items: center; justify-content: center; gap: 3px; flex-wrap: wrap; }
+.grid-entity { display: grid; place-items: center; gap: 1px; }
+.grid-entity b { max-width: 74px; overflow: hidden; font-size: 7px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
 .grid-scene > div.goal { box-shadow: inset 0 0 0 2px var(--lime); }
 .grid-scene > div.player { background: color-mix(in srgb, var(--blue) 30%, var(--surface)); }
 .grid-scene > div.crate { background: color-mix(in srgb, var(--orange) 35%, var(--surface)); }
@@ -153,13 +175,14 @@ input[type="range"] { width: 100%; accent-color: var(--lime); }
 .matrix-scene th, .matrix-scene td { min-width: 68px; height: 54px; padding: 7px; text-align: center; border: 1px solid var(--line); }
 .matrix-scene th { color: var(--muted); font-weight: 500; }
 .matrix-scene td.selected { background: color-mix(in srgb, var(--lime) 24%, var(--surface)); color: var(--lime); }
+.matrix-entity { display: inline-grid; place-items: center; }
 
 .timeline-scene { flex: 1; overflow: auto; padding: 28px 22px; }
 .timeline-axis { margin-left: 160px; display: flex; justify-content: space-between; color: var(--muted); font: 9px var(--mono); }
 .timeline-lane { display: grid; grid-template-columns: 145px 1fr; gap: 15px; align-items: center; min-height: 56px; border-bottom: 1px solid var(--line); }
 .timeline-lane > strong { font-size: 10px; font-weight: 500; }
 .timeline-track { height: 34px; position: relative; background: repeating-linear-gradient(90deg, transparent 0, transparent calc(20% - 1px), var(--line) 20%); }
-.timeline-span { position: absolute; top: 6px; height: 22px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; padding: 4px 6px; background: color-mix(in srgb, var(--blue) 22%, var(--surface)); border-left: 2px solid var(--blue); font: 9px var(--mono); }
+.timeline-span { position: absolute; top: 6px; height: 22px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; padding: 3px 6px; background: color-mix(in srgb, var(--blue) 22%, var(--surface)); border-left: 2px solid var(--blue); font: 9px var(--mono); display: flex; align-items: center; gap: 4px; }
 .timeline-span.selected { background: color-mix(in srgb, var(--lime) 20%, var(--surface)); border-color: var(--lime); }
 .timeline-span.failed { background: color-mix(in srgb, var(--red) 20%, var(--surface)); border-color: var(--red); }
 .timeline-span.uncertain { background: color-mix(in srgb, var(--orange) 18%, var(--surface)); border-color: var(--orange); }
@@ -177,6 +200,13 @@ input[type="range"] { width: 100%; accent-color: var(--lime); }
 .balance.changed strong { color: var(--lime); }
 
 .transition, .proposal-inspector { padding: 11px; }
+.frame-cues { display: grid; gap: 5px; margin-bottom: 10px; }
+.frame-cues article { padding: 7px 9px; border-left: 2px solid var(--blue); background: color-mix(in srgb, var(--blue) 6%, transparent); }
+.frame-cues strong, .frame-cues span { display: block; }
+.frame-cues strong { font-size: 9px; }
+.frame-cues span { margin-top: 2px; color: var(--muted); font: 8px var(--mono); }
+.frame-cues article.cue-produced { border-color: var(--lime); }
+.frame-cues article.cue-consumed { border-color: var(--red); }
 .binding-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 9px; }
 .binding-row > span { padding: 6px 9px; border: 1px solid var(--line); font: 10px var(--mono); }
 .binding-row small { color: var(--muted); display: block; font-size: 7px; margin-bottom: 3px; text-transform: uppercase; }

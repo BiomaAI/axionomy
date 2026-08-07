@@ -199,7 +199,7 @@ export function App() {
       <PlaybackControls position={position} count={document.frames.length} playing={playing} onPosition={setPosition} onPlaying={setPlaying} frame={frame} />
 
       <section className="workspace-grid">
-        <div className="panel world-panel"><PanelHeading kicker="Derived projection" title={snapshot.scene?.title ?? "Economic world"} aside={snapshot.scene?.kind} /><SceneView scene={snapshot.scene} /></div>
+        <div className="panel world-panel"><PanelHeading kicker="Derived projection" title={snapshot.scene?.title ?? "Economic world"} aside={snapshot.scene?.surface.kind} /><SceneView scene={snapshot.scene} /></div>
         <div className="panel accounts-panel"><PanelHeading kicker="Authoritative state" title="Accounts & assets" aside={`${snapshot.accounts.length} accounts`} /><Accounts snapshot={snapshot} previous={previous} /></div>
       </section>
 

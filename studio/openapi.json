@@ -787,6 +787,13 @@
           "before": {
             "$ref": "#/components/schemas/ViewSnapshot"
           },
+          "cues": {
+            "type": "array",
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/FrameCueView"
+            }
+          },
           "exchange": {
             "$ref": "#/components/schemas/ExchangeView"
           },
@@ -794,6 +801,13 @@
             "type": "integer",
             "format": "uint64",
             "minimum": 0
+          },
+          "observations": {
+            "type": "array",
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ObservationView"
+            }
           },
           "receipt": {
             "$ref": "#/components/schemas/ReceiptView"
@@ -828,6 +842,49 @@
           "rate",
           "units",
           "bindings"
+        ]
+      },
+      "FrameCueKindView": {
+        "type": "string",
+        "enum": [
+          "atomic_exchange",
+          "consumed",
+          "produced",
+          "preserved",
+          "movement",
+          "information",
+          "chance",
+          "completion"
+        ]
+      },
+      "FrameCueView": {
+        "description": "A readable explanation derived from the applied exchange and its receipt.\nCues make economically meaningful transitions visible even when a domain\nprojection chooses identical geometry before and after the exchange.",
+        "type": "object",
+        "properties": {
+          "details": {
+            "type": "array",
+            "default": [],
+            "items": {
+              "type": "string"
+            }
+          },
+          "kind": {
+            "$ref": "#/components/schemas/FrameCueKindView"
+          },
+          "label": {
+            "type": "string"
+          },
+          "subjects": {
+            "type": "array",
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ViewId"
+            }
+          }
+        },
+        "required": [
+          "kind",
+          "label"
         ]
       },
       "FramePage": {
@@ -1635,7 +1692,371 @@
         ]
       },
       "Scene": {
-        "description": "Optional domain projections. They explain economic state but never govern it.",
+        "description": "Optional domain projection derived from authoritative economic state.\nScenes explain and animate; they never decide whether an exchange applies.",
+        "type": "object",
+        "properties": {
+          "annotations": {
+            "type": "array",
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/SceneAnnotationView"
+            }
+          },
+          "entities": {
+            "type": "array",
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/SceneEntityView"
+            }
+          },
+          "legend": {
+            "type": "array",
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/SceneLegendView"
+            }
+          },
+          "metrics": {
+            "type": "array",
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/SceneMetricView"
+            }
+          },
+          "paths": {
+            "type": "array",
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ScenePathView"
+            }
+          },
+          "surface": {
+            "$ref": "#/components/schemas/SceneSurfaceView"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "surface"
+        ]
+      },
+      "SceneAnchorView": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "graph_node"
+              },
+              "node": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "node"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "edge": {
+                "type": "string"
+              },
+              "kind": {
+                "type": "string",
+                "const": "graph_edge"
+              },
+              "progress": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "format": "double"
+              }
+            },
+            "required": [
+              "kind",
+              "edge"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "grid_cell"
+              },
+              "x": {
+                "type": "integer",
+                "format": "uint32",
+                "minimum": 0
+              },
+              "y": {
+                "type": "integer",
+                "format": "uint32",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "kind",
+              "x",
+              "y"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "column": {
+                "type": "string"
+              },
+              "kind": {
+                "type": "string",
+                "const": "matrix_cell"
+              },
+              "row": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "row",
+              "column"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "at": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0
+              },
+              "kind": {
+                "type": "string",
+                "const": "timeline"
+              },
+              "lane": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "lane",
+              "at"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "unanchored"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          }
+        ]
+      },
+      "SceneAnnotationView": {
+        "type": "object",
+        "properties": {
+          "anchor": {
+            "$ref": "#/components/schemas/SceneAnchorView"
+          },
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "tone": {
+            "$ref": "#/components/schemas/SceneToneView"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "anchor",
+          "tone"
+        ]
+      },
+      "SceneEntityView": {
+        "type": "object",
+        "properties": {
+          "account": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "anchor": {
+            "$ref": "#/components/schemas/SceneAnchorView"
+          },
+          "glyph": {
+            "$ref": "#/components/schemas/SceneGlyphView"
+          },
+          "id": {
+            "$ref": "#/components/schemas/ViewId"
+          },
+          "metrics": {
+            "type": "array",
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/SceneMetricView"
+            }
+          },
+          "status": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "tone": {
+            "$ref": "#/components/schemas/SceneToneView"
+          }
+        },
+        "required": [
+          "id",
+          "glyph",
+          "anchor",
+          "tone"
+        ]
+      },
+      "SceneGlyphView": {
+        "description": "A semantic icon key owned by the portable Rust contract. The browser maps\nthese keys to its chosen icon implementation; documents never contain SVG,\nCSS class names masquerading as meaning, or React component names.",
+        "type": "string",
+        "enum": [
+          "agent",
+          "robot",
+          "vehicle",
+          "package",
+          "location",
+          "goal",
+          "key",
+          "door",
+          "fuel",
+          "money",
+          "product",
+          "person",
+          "organization",
+          "tool",
+          "material",
+          "food",
+          "temperature",
+          "energy",
+          "clock",
+          "hazard",
+          "weather",
+          "repair",
+          "sensor",
+          "information",
+          "move",
+          "constraint",
+          "task",
+          "machine",
+          "token",
+          "shield"
+        ]
+      },
+      "SceneLegendView": {
+        "type": "object",
+        "properties": {
+          "glyph": {
+            "$ref": "#/components/schemas/SceneGlyphView"
+          },
+          "label": {
+            "type": "string"
+          },
+          "tone": {
+            "$ref": "#/components/schemas/SceneToneView"
+          }
+        },
+        "required": [
+          "label",
+          "glyph",
+          "tone"
+        ]
+      },
+      "SceneMetricView": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "previous": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "unit": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "value": {
+            "description": "Exact text preserves arbitrarily large quantities and caller units.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "value"
+        ]
+      },
+      "ScenePathStatusView": {
+        "type": "string",
+        "enum": [
+          "available",
+          "candidate",
+          "explored",
+          "traversed",
+          "current",
+          "incumbent",
+          "rejected",
+          "blocked",
+          "uncertain"
+        ]
+      },
+      "ScenePathView": {
+        "type": "object",
+        "properties": {
+          "anchors": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SceneAnchorView"
+            }
+          },
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ScenePathStatusView"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "anchors",
+          "status"
+        ]
+      },
+      "SceneSurfaceView": {
+        "description": "The geometric substrate for a derived scene. Surface geometry and semantic\nentities are deliberately separate so one vehicle can move through a graph,\ngrid, matrix, or timeline without inventing four domain models.",
         "oneOf": [
           {
             "type": "object",
@@ -1661,14 +2082,10 @@
                 "items": {
                   "$ref": "#/components/schemas/GraphNodeView"
                 }
-              },
-              "title": {
-                "type": "string"
               }
             },
             "required": [
               "kind",
-              "title",
               "nodes",
               "edges"
             ]
@@ -1691,9 +2108,6 @@
                 "type": "string",
                 "const": "grid"
               },
-              "title": {
-                "type": "string"
-              },
               "width": {
                 "type": "integer",
                 "format": "uint32",
@@ -1702,7 +2116,6 @@
             },
             "required": [
               "kind",
-              "title",
               "width",
               "height",
               "cells"
@@ -1732,14 +2145,10 @@
                 "items": {
                   "$ref": "#/components/schemas/ViewId"
                 }
-              },
-              "title": {
-                "type": "string"
               }
             },
             "required": [
               "kind",
-              "title",
               "rows",
               "columns",
               "cells"
@@ -1771,18 +2180,27 @@
                 "items": {
                   "$ref": "#/components/schemas/TimelineSpanView"
                 }
-              },
-              "title": {
-                "type": "string"
               }
             },
             "required": [
               "kind",
-              "title",
               "lanes",
               "spans"
             ]
           }
+        ]
+      },
+      "SceneToneView": {
+        "type": "string",
+        "enum": [
+          "neutral",
+          "active",
+          "goal",
+          "success",
+          "warning",
+          "danger",
+          "uncertain",
+          "muted"
         ]
       },
       "SearchTelemetryView": {

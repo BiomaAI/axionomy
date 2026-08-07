@@ -312,10 +312,10 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             classes: Vec::new(),
         },
     ];
-    Some(Scene::Timeline {
-        title: "Cohort conditions, claims, storage, and event time".into(),
+    Some(Scene::timeline(
+        "Cohort conditions, claims, storage, and event time",
         lanes,
         spans,
-        cursor: Some(moment),
-    })
+        Some(moment),
+    ))
 }

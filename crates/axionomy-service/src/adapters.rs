@@ -636,6 +636,25 @@ pub(super) fn artifact(
     let selected_document_id = format!("{}:{}", descriptor.key, selected_strategy);
     let alternatives = documents.len() as u64;
     for document in &mut documents {
+        for snapshot in std::iter::once(&document.initial).chain(
+            document
+                .frames
+                .iter()
+                .flat_map(|frame| [&frame.before, &frame.after]),
+        ) {
+            if let Some(scene) = &snapshot.scene {
+                scene.validate().map_err(|error| ServiceError::Problem {
+                    problem: descriptor.key.clone(),
+                    message: format!("invalid scene at snapshot {}: {error}", snapshot.index),
+                })?;
+            }
+        }
+        if document.frames.iter().any(|frame| frame.cues.is_empty()) {
+            return Err(ServiceError::Problem {
+                problem: descriptor.key.clone(),
+                message: "accepted transition omitted its explanatory frame cue".into(),
+            });
+        }
         let accounts = document.initial.accounts.len() as u64;
         let rates = document
             .model
