@@ -8,35 +8,55 @@ pub(super) fn build(
     descriptor: &ProblemDescriptor,
     progress: &mut ProgressSink<'_>,
 ) -> Result<RunArtifact, ServiceError> {
-    let initial = connect_four::initial();
-    let iterations = request.budget.max(8) as usize;
-    let trace = connect_four::play_game_with_progress(
-        iterations,
-        request.seed,
-        iterations.clamp(1, 8),
-        |state| {
-            let completed = state
-                .moves_completed()
-                .saturating_mul(state.iterations_per_move())
-                .saturating_add(state.iterations_completed());
-            let total = state
-                .maximum_moves()
-                .saturating_mul(state.iterations_per_move());
-            progress.emit(
-                "mcts_game",
-                completed as u64,
-                total as u64,
-                format!(
-                    "move {}/{} · {}/{} MCTS iterations · {} nodes",
-                    state.moves_completed() + 1,
-                    state.maximum_moves(),
-                    state.iterations_completed(),
-                    state.iterations_per_move(),
-                    state.nodes()
-                ),
-            )
-        },
-    );
+    let profile = instance_profile(request, descriptor);
+    let standard = !matches!(profile, InstanceProfile::Micro);
+    let initial = if standard {
+        connect_four::initial_standard()
+    } else {
+        connect_four::initial()
+    };
+    let iterations = match profile {
+        InstanceProfile::Micro => request.budget.clamp(8, 64),
+        InstanceProfile::Showcase => (request.budget / 8).clamp(8, 32),
+        InstanceProfile::Stress => (request.budget / 4).clamp(32, 128),
+    } as usize;
+    let mut observe = |state: connect_four::GameProgress| {
+        let completed = state
+            .moves_completed()
+            .saturating_mul(state.iterations_per_move())
+            .saturating_add(state.iterations_completed());
+        let total = state
+            .maximum_moves()
+            .saturating_mul(state.iterations_per_move());
+        progress.emit(
+            "mcts_game",
+            completed as u64,
+            total as u64,
+            format!(
+                "action {}/{} · {}/{} MCTS iterations · {} nodes",
+                state.moves_completed() + 1,
+                state.maximum_moves(),
+                state.iterations_completed(),
+                state.iterations_per_move(),
+                state.nodes()
+            ),
+        )
+    };
+    let trace = if standard {
+        connect_four::play_standard_game_with_progress(
+            iterations,
+            request.seed,
+            iterations.clamp(1, 8),
+            &mut observe,
+        )
+    } else {
+        connect_four::play_game_with_progress(
+            iterations,
+            request.seed,
+            iterations.clamp(1, 8),
+            &mut observe,
+        )
+    };
     progress.ensure()?;
     let trace = trace.ok_or_else(|| problem_error("connect_four", "MCTS game was interrupted"))?;
     let final_world = initial
@@ -78,8 +98,9 @@ pub(super) fn build(
 
 fn scene(_: u64, world: &World) -> Option<Scene> {
     let mut cells = Vec::new();
-    for column in 0..connect_four::WIDTH {
-        for row in 0..connect_four::HEIGHT {
+    let (width, height) = connect_four::board_dimensions(world);
+    for column in 0..width {
+        for row in 0..height {
             let account = AccountId::Cell { column, row };
             let (label, classes) = if !world
                 .balance(&account, &Asset::Piece(Player::Red))
@@ -96,7 +117,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             };
             cells.push(GridCellView {
                 x: u32::from(column),
-                y: u32::from(connect_four::HEIGHT - row - 1),
+                y: u32::from(height - row - 1),
                 label: label.into(),
                 classes,
             });
@@ -104,8 +125,8 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
     }
     Some(Scene::Grid {
         title: "Encoded board, gravity, and pieces".into(),
-        width: u32::from(connect_four::WIDTH),
-        height: u32::from(connect_four::HEIGHT),
+        width: u32::from(width),
+        height: u32::from(height),
         cells,
     })
 }
