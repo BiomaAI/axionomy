@@ -149,13 +149,15 @@ adapters.
   priors.
 - One interface-neutral problem service used by CLI, HTTP/Studio, and MCP,
   with twelve discoverable canonical problems, reproducible strategy requests,
-  cooperative run control, progress, alternatives, and portable artifacts.
+  cooperative run control, bounded Monte Carlo/MCTS progress, alternatives,
+  and portable artifacts.
 - Axionomy Studio's Rust-owned `ViewDocument` contract, replay-derived account
   snapshots, assessments and receipts, exact string quantities, graph, grid,
   matrix, and timeline scenes, alternative traces, Pareto fronts, stochastic
   telemetry, partial observations, model inspection, live resumable SSE runs,
-  cancellation, OpenAPI-generated TypeScript, and static JSON for all twelve
-  problems.
+  responsive pause/cancellation, persistent run feedback, structured expected
+  rejection proofs, OpenAPI-generated TypeScript, and static JSON for all
+  twelve problems.
 
 The core contains no application ontology or search algorithm. Problem assets
 and specialized solvers compile against the same public kernel API available
@@ -191,6 +193,10 @@ graph, Sokoban and Connect Four grids, Exact Cover matrix, scheduling and
 perishables timelines, market and logistics networks, stochastic telemetry,
 Pareto alternatives, rejected proposals, and actor-relative observations are
 all projections over that same truth; none can make an exchange valid.
+Deliberately invalid or infeasible proposals appear as **expected rejection
+proofs**, with structured role, account, asset, and rate diagnostics. They
+demonstrate that encoded constraints are active and are kept visually separate
+from genuine run or transport failures.
 
 Studio, the CLI, the HTTP API, and MCP deliberately call the same
 interface-neutral service. Their different usability demands pressure one
@@ -209,8 +215,11 @@ pnpm dev
 
 Open `http://127.0.0.1:5173`. The committed static catalog and all twelve
 artifacts work without the server; connecting the native server enables
-reproducible runs, Server-Sent Event progress, pause/resume/cancel control, and
-freshly derived documents. Every canonical problem is present in both modes. See
+reproducible runs, Server-Sent Event phase and algorithm progress,
+pause/resume/cancel control, completion receipts, and freshly derived
+documents. Long-running Monte Carlo, MCTS, and ISMCTS adapters advance in
+bounded chunks so Studio can report samples, iterations, nodes, and game moves
+while remaining responsive. Every canonical problem is present in both modes. See
 [`studio/README.md`](studio/README.md) for contract generation and verification.
 
 The same service is available without a browser:

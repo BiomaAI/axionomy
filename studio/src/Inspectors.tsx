@@ -53,6 +53,7 @@ export function ProposalInspector({ proposals }: { proposals: ProposalView[] }) 
   if (proposals.length === 0) return <div className="empty-state">This adapter does not publish a rejected proposal.</div>;
   const selected = proposals.find((proposal) => proposal.id === selectedId) ?? proposals[0];
   return <div className="proposal-inspector">
+    <div className="counterexample-note"><strong>Expected rejection</strong><span>These probes are intentionally malformed or infeasible. Their rejection proves that the encoded constraints are active; they are not run failures.</span></div>
     <div className="proposal-tabs" role="tablist">
       {proposals.map((proposal) => <button type="button" role="tab" aria-selected={proposal.id === selected.id} key={proposal.id} onClick={() => setSelectedId(proposal.id)}>{proposal.label}</button>)}
     </div>
@@ -61,17 +62,17 @@ export function ProposalInspector({ proposals }: { proposals: ProposalView[] }) 
       <span><small>Rate</small>{selected.exchange.rate.label}</span>
       {selected.exchange.bindings.map((binding) => <span key={binding.role.key}><small>{binding.role.label}</small>{binding.account.label}</span>)}
     </div>
-    <Assessment assessment={selected.assessment} />
+    <Assessment assessment={selected.assessment} expectedRejection />
   </div>;
 }
 
-function Assessment({ assessment }: { assessment: ExchangeFrame["assessment"] }) {
-  return <div className={`assessment assessment-${assessment.status}`}>
-    <strong>{assessment.status}</strong>
+function Assessment({ assessment, expectedRejection = false }: { assessment: ExchangeFrame["assessment"]; expectedRejection?: boolean }) {
+  return <div className={`assessment assessment-${assessment.status} ${expectedRejection ? "expected-rejection" : ""}`}>
+    <strong>{expectedRejection ? `expected rejection · ${assessment.status}` : assessment.status}</strong>
     {assessment.shortfalls.map((shortfall) => <div key={shortfall.account.key}>
       {shortfall.account.label} lacks {shortfall.missing.map((missing) => `${missing.quantity} ${missing.asset.label}`).join(", ")}
     </div>)}
-    {assessment.issues.map((issue) => <div key={issue}>{issue}</div>)}
+    {assessment.issues.map((issue, index) => <div className="assessment-issue" key={`${issue.kind}:${index}`}><span>{issue.message}</span><small>{issue.kind.replaceAll("_", " ")}</small></div>)}
     {assessment.status === "applicable" && <div>{assessment.projected_deltas.length} account deltas projected without mutation</div>}
   </div>;
 }

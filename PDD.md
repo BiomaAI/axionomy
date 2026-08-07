@@ -610,7 +610,7 @@ RunRequest         = problem + strategy + deterministic seed + work budget
 RunControl         = cooperative pause + resume + cancel
 ServiceProgress    = ordered phase + completed/total work + message
 RunArtifact        = request + selected document + replayable alternatives
-                     + assessed proposals
+                     + assessed constraint probes
 ```
 
 The service contains no HTTP, async runtime, CLI parser, MCP types, database,
@@ -684,6 +684,12 @@ The native server exposes the canonical catalog, starts runs, reports state,
 pauses, resumes, or cancels computation cooperatively, serves completed
 artifacts, documents, and paginated frames, and streams tagged `StudioEvent`
 values through Server-Sent Events.
+The service emits one monotonic event sequence across adapter phases.
+Logistics, Connect Four, and Mission advance their resumable Monte Carlo,
+MCTS, and ISMCTS sessions in bounded work chunks, publishing phase-local
+samples, iterations, nodes, and moves while observing pause or cancellation at
+each chunk boundary. Adapters whose domain algorithms are still indivisible
+observe control between their larger phases.
 Event sequence numbers order transport observations only; they are not encoded
 time. Run records and documents are process-local reference state, just like a
 search queue. They do not survive restart and cannot authorize an exchange.
@@ -699,6 +705,14 @@ scale requires Canvas. TanStack Query owns server-cache behavior. Vite,
 Vitest, and Playwright provide build, component-contract, and real-server
 browser verification.
 
+Live execution and trace playback are deliberately distinct controls. `Run`
+creates a new artifact; the transport controls only replay its accepted
+exchanges. An active run immediately exposes a spinner, phase message, elapsed
+time, deterministic request parameters, and the latest bounded-work counter.
+Completion leaves a dismissible receipt containing duration and request
+identity and visibly marks the replacement artifact, so even a sub-second run
+has an inspectable result.
+
 The implemented Studio exposes the complete twelve-problem conformance
 surface: pathfinding and networks use graphs; Sokoban and Connect Four use
 grids; Exact Cover uses a constraint matrix; scheduling and perishables use
@@ -708,6 +722,13 @@ evidence, and actor-relative views. Every artifact includes replayable strategy
 alternatives where the domain supplies them. The universal model explorer
 exposes encoded rates, roles, goals, and invariants even when a specialized
 scene is absent.
+
+Assessed proposals in conformance documents are constraint probes. Some are
+deliberately malformed or infeasible, and their rejection proves that encoded
+roles, balances, and invariants are active. The view contract preserves a
+structured issue kind plus involved role, account, asset, or rate identities;
+Studio labels these as expected rejection proofs and keeps them separate from
+operational run and transport failures.
 
 Portable artifacts prove offline playback for the full catalog. The live path
 proves generated OpenAPI calls, resumable SSE, pause/resume/cancel hooks,
@@ -1183,10 +1204,10 @@ The current foundation is intentionally bounded:
 - Native Rust is the current release target. Browser/Wasm compatibility is not
   yet a validated kernel support guarantee. The implemented browser Studio
   currently talks to a native Rust server or loads a portable static document.
-- Studio run control is cooperative. The service checks pause/cancel at adapter
-  and document-publication boundaries; search sessions that expose smaller
-  work-budget advances can check more frequently. A one-shot domain solver is
-  not preempted in the middle of an indivisible call.
+- Studio run control is cooperative. Resumable Monte Carlo, MCTS, and ISMCTS
+  adapters check pause/cancel between bounded work chunks; other adapters check
+  at phase and document-publication boundaries. A one-shot domain solver is not
+  preempted in the middle of an indivisible call.
 - Full model projection currently materializes every concrete rate. Studio
   filters large rate books client-side, but the portable Connect Four artifact
   demonstrates the size pressure that should justify pagination or a compact

@@ -46,6 +46,31 @@ button.danger { color: var(--red); }
 .file-button { display: grid; place-items: center; font-size: 11px; cursor: pointer; white-space: nowrap; }
 .file-button input { display: none; }
 .run-message { margin-left: auto; align-self: center; max-width: 380px; color: var(--muted); font-size: 11px; text-align: right; }
+.run-activity { display: grid; grid-template-columns: minmax(250px, .7fr) minmax(260px, 1fr) auto; align-items: center; gap: 22px; padding: 13px 15px; margin-top: 12px; border: 1px solid color-mix(in srgb, var(--blue) 55%, var(--line)); background: color-mix(in srgb, var(--blue) 7%, var(--surface)); }
+.run-activity-heading { display: flex; align-items: center; gap: 11px; min-width: 0; }
+.run-activity-heading > div { min-width: 0; }
+.run-activity-heading strong, .run-activity-heading span { display: block; }
+.run-activity-heading strong { font-size: 12px; }
+.run-activity-heading span { margin-top: 3px; overflow: hidden; color: var(--muted); font: 9px var(--mono); text-overflow: ellipsis; white-space: nowrap; }
+.spinner { width: 20px; height: 20px; flex: 0 0 auto; border: 2px solid color-mix(in srgb, var(--blue) 25%, var(--line)); border-top-color: var(--blue); border-radius: 50%; animation: spin .8s linear infinite; }
+.run-activity.paused .spinner { border-color: var(--orange); animation-play-state: paused; }
+.run-activity-progress { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 10px; }
+.run-activity-progress progress { width: 100%; height: 7px; accent-color: var(--blue); }
+.run-activity-progress > span, .run-activity-meta { color: var(--muted); font: 8px var(--mono); text-transform: uppercase; }
+.indeterminate-progress { height: 5px; overflow: hidden; background: var(--surface-3); }
+.indeterminate-progress::after { content: ""; display: block; width: 35%; height: 100%; background: var(--blue); animation: seek 1.2s ease-in-out infinite alternate; }
+.run-activity-meta { display: flex; justify-content: end; gap: 9px; flex-wrap: wrap; }
+.run-activity-meta code { max-width: 150px; overflow: hidden; text-overflow: ellipsis; }
+.completion-banner { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 12px; padding: 12px 14px; margin-top: 12px; border: 1px solid color-mix(in srgb, var(--lime) 55%, var(--line)); background: color-mix(in srgb, var(--lime) 7%, var(--surface)); }
+.completion-mark { color: var(--lime); font: 500 20px var(--mono); }
+.completion-banner strong, .completion-banner span, .completion-banner small { display: block; }
+.completion-banner strong { font-size: 12px; }
+.completion-banner span { margin-top: 2px; color: var(--text); font-size: 10px; }
+.completion-banner small { margin-top: 3px; color: var(--muted); font: 8px var(--mono); }
+.completion-banner button { min-height: 30px; font-size: 9px; }
+.fresh-artifact .document-heading { border-left: 2px solid var(--lime); padding-left: 14px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes seek { from { transform: translateX(-100%); } to { transform: translateX(285%); } }
 .problem-context { display: flex; justify-content: space-between; gap: 30px; padding: 12px 0; border-bottom: 1px solid var(--line); }
 .problem-context > div:first-child { display: flex; align-items: center; gap: 13px; min-width: 0; }
 .problem-context > div:first-child > span { color: var(--blue); font: 10px var(--mono); text-transform: uppercase; white-space: nowrap; }
@@ -147,6 +172,9 @@ input[type="range"] { width: 100%; accent-color: var(--lime); }
 .assessment-applicable { color: #b9d477; background: #171f14; border-color: #344229; }
 .assessment-infeasible { color: var(--orange); background: #251d12; border-color: #60451f; }
 .assessment-invalid { color: var(--red); background: #261418; border-color: #71343a; }
+.assessment.expected-rejection { color: var(--orange); background: color-mix(in srgb, var(--orange) 8%, var(--surface)); border-color: color-mix(in srgb, var(--orange) 45%, var(--line)); }
+.assessment-issue { display: flex; justify-content: space-between; gap: 12px; padding: 3px 0; }
+.assessment-issue small { color: var(--muted); text-transform: uppercase; }
 .proof-line { color: var(--muted); margin-top: 7px; font: 8px var(--mono); text-transform: uppercase; }
 .delta { margin-top: 10px; border: 1px solid var(--line); }
 .delta-group { padding: 7px 9px; display: grid; grid-template-columns: 62px 1fr; gap: 7px; font-size: 9px; }
@@ -159,6 +187,9 @@ input[type="range"] { width: 100%; accent-color: var(--lime); }
 .delta-group.preserved b { color: var(--blue); }
 .proposal-tabs { margin-bottom: 10px; }
 .proposal-inspector > p { color: var(--muted); font-size: 11px; line-height: 1.5; }
+.counterexample-note { display: grid; gap: 3px; margin-bottom: 11px; padding: 8px 9px; border-left: 2px solid var(--blue); background: color-mix(in srgb, var(--blue) 6%, transparent); }
+.counterexample-note strong { color: var(--blue); font: 9px var(--mono); text-transform: uppercase; }
+.counterexample-note span { color: var(--muted); font-size: 10px; line-height: 1.45; }
 
 .analysis-meta { display: flex; justify-content: space-between; padding: 9px 13px 0; color: var(--muted); font: 8px var(--mono); text-transform: uppercase; }
 .analysis-meta strong { color: var(--blue); font-weight: 500; }
@@ -213,6 +244,8 @@ footer { padding: 25px 0 36px; color: var(--muted); text-align: center; font: 8p
 @media (max-width: 1180px) {
   .command-bar { flex-wrap: wrap; }
   .run-message { width: 100%; max-width: none; margin: 5px 0 0; text-align: left; }
+  .run-activity { grid-template-columns: minmax(240px, .8fr) 1fr; }
+  .run-activity-meta { grid-column: 1 / -1; justify-content: start; }
   .evidence-grid { grid-template-columns: 1fr 1fr; }
   .analysis-panel { grid-column: 1 / -1; }
 }
@@ -241,9 +274,17 @@ footer { padding: 25px 0 36px; color: var(--muted); text-align: center; font: 8p
   .connection { font-size: 8px; }
   .field, .problem-field, .strategy-field { width: 100%; min-width: 0; }
   .numeric-field { width: calc(50% - 5px); }
+  .run-activity, .completion-banner { grid-template-columns: 1fr; }
+  .run-activity-progress { grid-template-columns: 1fr; }
+  .completion-mark { display: none; }
+  .completion-banner button { width: 100%; }
   .objective-pills { justify-content: start; }
   .timeline-lane { grid-template-columns: 100px 1fr; }
   .timeline-axis { margin-left: 115px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner, .indeterminate-progress::after { animation: none; }
 }
 
 @media (prefers-color-scheme: light) {
