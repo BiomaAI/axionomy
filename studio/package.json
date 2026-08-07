@@ -5,10 +5,16 @@
   "type": "module",
   "packageManager": "pnpm@10.14.0",
   "scripts": {
+    "predev": "pnpm build:wasm",
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build:wasm": "wasm-pack build ../crates/axionomy-studio-wasm --target web --out-dir ../../studio/src/generated/wasm --release",
+    "build:ui": "tsc -b && vite build",
+    "build": "pnpm build:wasm && pnpm build:ui",
+    "pretest": "pnpm build:wasm",
     "test": "vitest run",
+    "test:ui": "vitest run",
     "test:e2e": "playwright test",
+    "test:e2e:wasm": "playwright test --config playwright.wasm.config.ts",
     "generate:api": "openapi-typescript openapi.json -o src/generated/api.d.ts",
     "generate:contracts": "cargo run -q -p axionomy-studio-server --bin export-openapi -- openapi.json && cargo run -q -p axionomy-studio-server --bin export-view -- all public/artifacts && pnpm generate:api",
     "check:contracts": "pnpm generate:contracts && git diff --exit-code -- openapi.json src/generated/api.d.ts public/artifacts"

@@ -5,6 +5,7 @@ import react from "@vitejs/plugin-react";
 export default defineConfig(({ mode }) => {
   const environment = loadEnv(mode, ".", "");
   return {
+    base: environment.VITE_AXIONOMY_BASE ?? "/",
     plugins: [react()],
     server: {
       port: 5173,

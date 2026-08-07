@@ -271,10 +271,62 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             }
         }
     }
-    Some(Scene::timeline(
-        "Encoded machine reservations",
-        lanes,
-        spans,
-        Some(scheduling::encoded_makespan(world)),
-    ))
+    let operations = [
+        Operation::OneA,
+        Operation::OneB,
+        Operation::OneC,
+        Operation::TwoA,
+        Operation::TwoB,
+        Operation::TwoC,
+    ];
+    let pending = operations.into_iter().filter(|operation| {
+        ![Machine::One, Machine::Two, Machine::Three]
+            .into_iter()
+            .flat_map(|machine| (0..12).map(move |time| AccountId::Slot(machine, time)))
+            .any(|account| {
+                !world
+                    .balance(&account, &Asset::Reserved(*operation))
+                    .is_zero()
+            })
+    });
+    let pending_entities = pending.clone().map(|operation| {
+        visual_entity(
+            format!("pending:{operation:?}"),
+            format!("{operation:?}"),
+            SceneGlyphView::Task,
+            SceneAnchorView::Unanchored,
+            SceneToneView::Warning,
+            Some("ready queue".into()),
+        )
+    });
+    let pending_count = pending.count();
+    Some(
+        Scene::timeline(
+            "Encoded machine reservations",
+            lanes,
+            spans,
+            Some(scheduling::encoded_makespan(world)),
+        )
+        .with_entities(pending_entities)
+        .with_metrics([
+            visual_metric(
+                "pending",
+                "Pending operations",
+                pending_count,
+                Some("tasks"),
+            ),
+            visual_metric(
+                "scheduled",
+                "Scheduled operations",
+                operations.len() - pending_count,
+                Some("tasks"),
+            ),
+            visual_metric(
+                "makespan",
+                "Current makespan",
+                scheduling::encoded_makespan(world),
+                Some("ticks"),
+            ),
+        ]),
+    )
 }

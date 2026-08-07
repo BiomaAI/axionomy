@@ -137,7 +137,9 @@ type TimelineSurface = Extract<SceneSurface, { kind: "timeline" }>;
 function TimelineScene({ scene, surface }: { scene: Scene; surface: TimelineSurface }) {
   const maximum = Math.max(1, ...surface.spans.map((span) => span.end), surface.cursor ?? 0);
   const entity = (id: string) => scene.entities.find((candidate) => candidate.id.key === id);
+  const queued = scene.entities.filter((candidate) => candidate.anchor.kind === "unanchored");
   return <div className="timeline-scene" role="img" aria-label={scene.title}>
+    {queued.length > 0 && <div className="timeline-queue"><strong>Ready queue</strong>{queued.map((item) => <span key={item.id.key} className={`tone-${item.tone}`}><SceneIcon glyph={item.glyph} size={15} />{item.id.label}</span>)}</div>}
     <div className="timeline-axis"><span>0</span><span>{maximum}</span></div>
     {surface.lanes.map((lane) => <div className="timeline-lane" key={lane.id.key}><strong>{lane.id.label}</strong><div className="timeline-track">
       {surface.spans.filter((span) => span.lane === lane.id.key).map((span) => { const item = entity(span.id); return <div key={span.id} className={`timeline-span ${span.classes.join(" ")} ${item ? `tone-${item.tone}` : ""}`} style={{ left: `${(span.start / maximum) * 100}%`, width: `${Math.max(2, ((span.end - span.start) / maximum) * 100)}%` }}>{item && <SceneIcon glyph={item.glyph} size={15} />}{span.label}</div>; })}

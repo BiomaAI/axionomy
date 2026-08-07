@@ -16,7 +16,7 @@ bigint = ["axionomy/bigint"]
 [dependencies]
 axionomy = { version = "0.1.0", path = "../.." }
 pathfinding = "4.15.0"
-rand = "0.10.2"
+rand = { version = "0.10.2", default-features = false, features = ["std"] }
 rand_chacha = "0.10.0"
 schemars = "1.2.2"
 serde = { version = "1.0.229", features = ["derive"] }

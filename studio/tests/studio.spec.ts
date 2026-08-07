@@ -5,6 +5,7 @@ test("runs a search, receives events, and scrubs its replay", async ({ page }) =
   await expect(page.getByRole("heading", { name: /Maze · least energy/ })).toBeVisible();
   await page.getByRole("button", { name: "Run", exact: true }).click();
   await expect(page.getByText("New artifact computed and loaded")).toBeVisible();
+  await page.getByRole("tab", { name: /Verified replay/ }).click();
   await page.getByRole("button", { name: "Next exchange" }).click();
   await expect(page.locator(".assessment-applicable")).toContainText("applicable");
   await expect(page.locator(".replay-proof")).toContainText("replay verified");
@@ -23,6 +24,7 @@ test("shows incremental stochastic progress and responsive pause control", async
   await page.getByRole("button", { name: "Resume" }).click();
   await expect(page.getByText("New artifact computed and loaded")).toBeVisible({ timeout: 30_000 });
   await expect(page.getByText(/Stochastic logistics · Substantial showcase · Reliable policy · seed 42 · budget 64/)).toBeVisible();
+  await page.getByRole("tab", { name: /Verified replay/ }).click();
   await expect(page.getByText("Expected rejection proofs")).toBeVisible();
   await expect(page.getByText("Missing account binding for role `Vehicle`.")).toBeVisible();
   await expect(page.getByText("Missing account binding for role `Order`.")).toBeVisible();

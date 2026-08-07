@@ -12,7 +12,8 @@ import {
   type ViewDocument,
   type ViewSnapshot,
 } from "./api";
-import { connectionLabel, nativeEngine, staticEngine, type EngineConnectivity } from "./engine";
+import { browserEngine } from "./browserEngine";
+import { connectionLabel, nativeEngine, staticEngine, type EngineConnectivity, type EngineRunSubscription } from "./engine";
 import { SceneIcon } from "./SceneIcon";
 import { SceneView } from "./SceneView";
 import {
@@ -27,8 +28,6 @@ import {
 } from "./Inspectors";
 
 const ParetoChart = lazy(() => import("./ParetoChart"));
-const eventKinds: StudioEvent["kind"][] = ["run_started", "progress", "search_observation", "frame_appended", "artifact_published", "run_paused", "run_resumed", "run_completed", "run_cancelled", "run_failed"];
-
 type CompletionNotice = {
   artifactId: string;
   problem: string;
@@ -41,20 +40,27 @@ type CompletionNotice = {
 };
 
 export function App() {
+  const nativeProbeEnabled = import.meta.env.VITE_AXIONOMY_ENGINE !== "browser" && !window.location.hostname.endsWith(".github.io");
   const nativeHealth = useQuery({
     queryKey: ["native-engine-health"],
     queryFn: () => nativeEngine.health(),
     refetchInterval: 3_000,
     refetchIntervalInBackground: true,
     retry: false,
+    enabled: nativeProbeEnabled,
   });
   const nativeConnected = nativeHealth.data === true;
-  const engine = nativeConnected ? nativeEngine : staticEngine;
-  const connectivity: EngineConnectivity = nativeHealth.isPending
-    ? "checking"
-    : nativeConnected
-      ? "connected"
-      : "disconnected";
+  const browserHealth = useQuery({
+    queryKey: ["browser-engine-health"],
+    queryFn: () => browserEngine.health(),
+    retry: false,
+    enabled: !nativeConnected,
+  });
+  const browserConnected = browserHealth.data === true;
+  const engine = nativeConnected ? nativeEngine : browserConnected ? browserEngine : staticEngine;
+  const connectivity: EngineConnectivity = engine.kind === "static"
+    ? nativeHealth.isPending || browserHealth.isPending ? "checking" : "static"
+    : "connected";
   const catalog = useQuery({
     queryKey: ["problems", engine.kind],
     retry: false,
@@ -78,7 +84,7 @@ export function App() {
   const [elapsedMs, setElapsedMs] = useState(0);
   const [completion, setCompletion] = useState<CompletionNotice>();
   const [freshArtifactId, setFreshArtifactId] = useState<string>();
-  const eventSource = useRef<EventSource | null>(null);
+  const eventSource = useRef<EngineRunSubscription | null>(null);
   const runStartedAt = useRef<number | undefined>(undefined);
 
   const problem = catalog.data?.find((candidate) => candidate.key === problemKey);
@@ -141,26 +147,22 @@ export function App() {
     setViewMode("solve");
     runStartedAt.current = performance.now(); setElapsedMs(0); setLaunching(true);
     try {
-      const created = await engine.createRun({ problem: problemKey, instance: instanceKey, strategy: strategyKey, seed, budget });
-      setRun(created); setLaunching(false);
-      const source = new EventSource(engine.eventsUrl(created.id));
-      eventSource.current = source;
-      for (const kind of eventKinds) source.addEventListener(kind, async (message) => {
-        const event = JSON.parse((message as MessageEvent<string>).data) as StudioEvent;
+      const subscription = await engine.start({ problem: problemKey, instance: instanceKey, strategy: strategyKey, seed, budget }, async (event) => {
         setEvents((current) => current.some((known) => known.sequence === event.sequence) ? current : [...current, event]);
         if (event.kind === "run_completed") {
-          source.close();
+          eventSource.current?.close();
           const next = await engine.artifact(event.artifact_id);
           const durationMs = runStartedAt.current === undefined ? 0 : performance.now() - runStartedAt.current;
           setArtifact(next); setDocumentId(event.document_id); setFreshArtifactId(event.artifact_id);
           setCompletion({ artifactId: event.artifact_id, problem: submittedProblem, instance: submittedInstance, strategy: submittedStrategy, seed, budget, durationMs, documents: next.documents.length });
           setElapsedMs(durationMs); setRun(undefined);
         } else if (event.kind === "run_cancelled" || event.kind === "run_failed") {
-          source.close(); setRun(undefined);
+          eventSource.current?.close(); setRun(undefined);
           if (event.kind === "run_failed") setError(event.message);
         }
-      });
-      source.onerror = () => { if (source.readyState !== EventSource.CLOSED) setError("event stream disconnected; reconnecting remains safe by sequence"); };
+      }, setError);
+      eventSource.current = subscription;
+      setRun(subscription.summary); setLaunching(false);
     } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); setRun(undefined); setLaunching(false); }
   };
 
@@ -186,7 +188,7 @@ export function App() {
   return <div className="app-shell">
     <header className="topbar">
       <div className="brand"><picture><source media="(prefers-color-scheme: light)" srcSet={logoLight} /><img src={logoDark} alt="Axionomy" /></picture><div><div className="brand-name">Studio</div><div className="brand-subtitle">Economic reasoning workbench</div></div></div>
-      <div className="connection" title={nativeConnected ? "Verified by a live health check" : "No native health response received"}><span className={`status-dot ${nativeConnected ? "online" : "static"}`} />{connectionLabel(engine.kind, connectivity)}</div>
+      <div className="connection" title={engine.kind === "native" ? "Verified by a live health check" : engine.kind === "browser" ? "Rust/WASM engine isolated in a Web Worker" : "No executable engine is available"}><span className={`status-dot ${engine.canRun ? "online" : "static"}`} />{connectionLabel(engine.kind, connectivity)}</div>
     </header>
 
     <section className="command-bar" aria-label="Problem controls">
@@ -196,8 +198,8 @@ export function App() {
       <label className="field numeric-field"><span>Seed</span><input type="number" min="0" value={seed} disabled={active} onChange={(event) => setSeed(Number(event.target.value))} /></label>
       <label className="field numeric-field"><span>Budget</span><input type="number" min="1" value={budget} disabled={active} onChange={(event) => setBudget(Math.max(1, Number(event.target.value)))} /></label>
       <button className="primary" onClick={start} disabled={active || !engine.canRun}>{launching ? "Starting…" : run?.status === "paused" ? "Paused" : run ? "Running…" : "Run"}</button>
-      {run?.status === "running" && <button onClick={pause}>Pause</button>}
-      {run?.status === "paused" && <button onClick={resume}>Resume</button>}
+      {engine.canPause && run?.status === "running" && <button onClick={pause}>Pause</button>}
+      {engine.canPause && run?.status === "paused" && <button onClick={resume}>Resume</button>}
       {run && <button className="danger" onClick={cancel}>Cancel</button>}
       <label className="file-button">Load artifact<input type="file" accept="application/json,.json" onChange={(event) => loadFile(event.target.files?.[0])} /></label>
       <div className="run-message">{active ? "A new replay-verified artifact will replace the current view." : engine.canRun ? "CLI, HTTP, MCP, and Studio share this artifact contract." : "Native engine unavailable; deterministic Rust-generated artifacts remain playable."}</div>

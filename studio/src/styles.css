@@ -210,6 +210,9 @@ input[type="range"] { width: 100%; accent-color: var(--lime); }
 .matrix-entity { display: inline-grid; place-items: center; }
 
 .timeline-scene { flex: 1; overflow: auto; padding: 28px 22px; }
+.timeline-queue { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; padding: 8px 10px; border: 1px solid var(--line); }
+.timeline-queue > strong { margin-right: 6px; color: var(--muted); font: 8px var(--mono); text-transform: uppercase; }
+.timeline-queue > span { display: inline-flex; align-items: center; gap: 4px; padding: 4px 6px; background: var(--surface-2); font: 8px var(--mono); }
 .timeline-axis { margin-left: 160px; display: flex; justify-content: space-between; color: var(--muted); font: 9px var(--mono); }
 .timeline-lane { display: grid; grid-template-columns: 145px 1fr; gap: 15px; align-items: center; min-height: 56px; border-bottom: 1px solid var(--line); }
 .timeline-lane > strong { font-size: 10px; font-weight: 500; }

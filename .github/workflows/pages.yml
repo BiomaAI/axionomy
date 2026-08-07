@@ -1,0 +1,77 @@
+name: Deploy Studio to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.89.0
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - name: Install wasm-pack
+        run: cargo install wasm-pack --locked --version 0.13.1
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.14.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: studio/pnpm-lock.yaml
+      - name: Install Studio dependencies
+        working-directory: studio
+        run: pnpm install --frozen-lockfile
+      - name: Verify Rust workspace and WASM target
+        run: |
+          cargo test --workspace --all-features --lib
+          cargo check --target wasm32-unknown-unknown -p axionomy-studio-wasm
+      - name: Generate Rust-owned browser contracts and engine
+        working-directory: studio
+        run: |
+          pnpm generate:contracts
+          pnpm build:wasm
+          pnpm test:ui
+      - name: Build repository Pages site
+        working-directory: studio
+        env:
+          VITE_AXIONOMY_BASE: /axionomy/
+          VITE_AXIONOMY_ENGINE: browser
+        run: pnpm build:ui
+      - name: Smoke-test Pages output
+        working-directory: studio
+        run: |
+          test -f dist/index.html
+          test -f dist/.nojekyll
+          find dist/assets -name '*.wasm' -size +100k | grep -q .
+          grep -q '/axionomy/' dist/index.html
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: studio/dist
+
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Deploy Studio
+        id: deployment
+        uses: actions/deploy-pages@v4

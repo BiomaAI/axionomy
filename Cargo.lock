@@ -264,6 +264,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "axionomy-studio-wasm"
+version = "0.1.0"
+dependencies = [
+ "axionomy-service",
+ "axionomy-view",
+ "js-sys",
+ "serde_json",
+ "wasm-bindgen",
+]
+
+[[package]]
 name = "axionomy-time"
 version = "0.1.0"
 dependencies = [

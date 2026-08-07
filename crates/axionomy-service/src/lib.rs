@@ -377,6 +377,30 @@ mod tests {
                     .iter()
                     .any(|series| series.algorithm == "artifact complexity")
             }));
+            assert!(artifact.documents.iter().all(|document| {
+                document.initial.scene.is_some()
+                    && document.frames.iter().all(|frame| {
+                        frame.before.scene.is_some()
+                            && frame.after.scene.is_some()
+                            && !frame.cues.is_empty()
+                    })
+                    && std::iter::once(&document.initial)
+                        .chain(document.frames.iter().map(|frame| &frame.after))
+                        .filter_map(|snapshot| snapshot.scene.as_ref())
+                        .all(|scene| !scene.metrics.is_empty())
+            }));
+            assert!(artifact.documents.iter().all(|document| {
+                std::iter::once(&document.initial)
+                    .chain(document.frames.iter().map(|frame| &frame.after))
+                    .filter_map(|snapshot| snapshot.scene.as_ref())
+                    .any(|scene| !scene.entities.is_empty())
+            }));
+            assert!(
+                artifact
+                    .documents
+                    .iter()
+                    .all(|document| !document.solve_observations.is_empty())
+            );
             if problem.key == "connect_four" {
                 assert!(maximum_rates < 300, "compact standard board regressed");
             }
