@@ -43,11 +43,25 @@ pub type Action = Exchange<RateId, Role, AccountId>;
 pub type Solution = SearchSolution<RateId, Role, AccountId>;
 
 pub fn initial() -> World {
-    build(0, 1, 3)
+    build_board(5, 1, 0, 1, 3)
 }
 
 pub fn deadlocked() -> World {
-    build(0, 4, 3)
+    build_board(5, 1, 0, 4, 3)
+}
+
+/// An open two-dimensional board that requires walking around the crate to
+/// change push direction; many legal moves do not advance the objective.
+pub fn initial_showcase() -> World {
+    build_board(7, 5, cell(7, 0, 0), cell(7, 2, 2), cell(7, 5, 3))
+}
+
+pub fn deadlocked_showcase() -> World {
+    build_board(7, 5, cell(7, 2, 2), cell(7, 0, 0), cell(7, 5, 3))
+}
+
+pub fn initial_stress() -> World {
+    build_board(8, 6, cell(8, 0, 0), cell(8, 3, 2), cell(8, 6, 4))
 }
 
 pub fn goal() -> Goal<AccountId, Asset> {
@@ -64,12 +78,13 @@ pub fn solve(world: &World) -> Option<Solution> {
     bfs(world, &goal(), candidates)
 }
 
-fn build(player: u8, crate_at: u8, goal_cell: u8) -> World {
+fn build_board(width: u8, height: u8, player: u8, crate_at: u8, goal_cell: u8) -> World {
+    let cell_count = width.checked_mul(height).expect("small encoded board");
     let mut builder = EconomyBuilder::new().account(
         AccountId::Success,
         Account::from(basket([(Asset::Active, 1)])),
     );
-    for cell in 0..5 {
+    for cell in 0..cell_count {
         let occupant = if cell == player {
             Asset::Player
         } else if cell == crate_at {
@@ -87,8 +102,8 @@ fn build(player: u8, crate_at: u8, goal_cell: u8) -> World {
         builder = builder.account(AccountId::Cell(cell), Account::from(assets));
     }
 
-    for from in 0..5 {
-        for to in neighbors(from) {
+    for from in 0..cell_count {
+        for to in neighbors(from, width, height) {
             builder = builder.rate(
                 RateId::Move { from, to },
                 Rate::new()
@@ -103,14 +118,7 @@ fn build(player: u8, crate_at: u8, goal_cell: u8) -> World {
             );
         }
     }
-    for (behind, middle, to) in [
-        (0, 1, 2),
-        (1, 2, 3),
-        (2, 3, 4),
-        (4, 3, 2),
-        (3, 2, 1),
-        (2, 1, 0),
-    ] {
+    for (behind, middle, to) in push_lines(width, height) {
         builder = builder.rate(
             RateId::Push {
                 behind,
@@ -133,7 +141,7 @@ fn build(player: u8, crate_at: u8, goal_cell: u8) -> World {
                 .distinct(Role::From, Role::To),
         );
     }
-    for cell in 0..5 {
+    for cell in 0..cell_count {
         builder = builder.rate(
             RateId::Finish { cell },
             Rate::new()
@@ -169,13 +177,71 @@ fn build(player: u8, crate_at: u8, goal_cell: u8) -> World {
         .expect("sokoban model is valid")
 }
 
-fn neighbors(cell: u8) -> impl Iterator<Item = u8> {
+fn neighbors(index: u8, width: u8, height: u8) -> Vec<u8> {
+    let x = index % width;
+    let y = index / width;
     [
-        cell.checked_sub(1),
-        cell.checked_add(1).filter(|next| *next < 5),
+        x.checked_sub(1).map(|next| cell(width, next, y)),
+        (x + 1 < width).then(|| cell(width, x + 1, y)),
+        y.checked_sub(1).map(|next| cell(width, x, next)),
+        (y + 1 < height).then(|| cell(width, x, y + 1)),
     ]
     .into_iter()
     .flatten()
+    .collect()
+}
+
+fn push_lines(width: u8, height: u8) -> Vec<(u8, u8, u8)> {
+    let mut lines = Vec::new();
+    for y in 0..height {
+        for x in 0..width {
+            if x + 2 < width {
+                lines.push((
+                    cell(width, x, y),
+                    cell(width, x + 1, y),
+                    cell(width, x + 2, y),
+                ));
+                lines.push((
+                    cell(width, x + 2, y),
+                    cell(width, x + 1, y),
+                    cell(width, x, y),
+                ));
+            }
+            if y + 2 < height {
+                lines.push((
+                    cell(width, x, y),
+                    cell(width, x, y + 1),
+                    cell(width, x, y + 2),
+                ));
+                lines.push((
+                    cell(width, x, y + 2),
+                    cell(width, x, y + 1),
+                    cell(width, x, y),
+                ));
+            }
+        }
+    }
+    lines
+}
+
+const fn cell(width: u8, x: u8, y: u8) -> u8 {
+    y * width + x
+}
+
+pub fn dimensions(world: &World) -> (u8, u8) {
+    if !world
+        .balance(&AccountId::Cell(47), &Asset::CellIdentity(47))
+        .is_zero()
+    {
+        (8, 6)
+    } else if !world
+        .balance(&AccountId::Cell(34), &Asset::CellIdentity(34))
+        .is_zero()
+    {
+        (7, 5)
+    } else {
+        (5, 1)
+    }
 }
 
 fn action(rate: RateId) -> Action {

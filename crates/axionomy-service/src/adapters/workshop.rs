@@ -10,7 +10,11 @@ pub(super) fn build(
     request: &RunRequest,
     descriptor: &ProblemDescriptor,
 ) -> Result<RunArtifact, ServiceError> {
-    let initial = workshop::initial();
+    let initial = match instance_profile(request, descriptor) {
+        InstanceProfile::Micro => workshop::initial(),
+        InstanceProfile::Showcase => workshop::initial_showcase(),
+        InstanceProfile::Stress => workshop::initial_stress(),
+    };
     let bfs = workshop::solve_bfs(&initial)
         .ok_or_else(|| problem_error("workshop", "BFS found no plan"))?;
     let best = workshop::minimize_waste(&initial)

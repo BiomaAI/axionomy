@@ -20,14 +20,17 @@ pub enum Job {
 pub enum Machine {
     One,
     Two,
+    Three,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Operation {
     OneA,
     OneB,
+    OneC,
     TwoA,
     TwoB,
+    TwoC,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -101,11 +104,24 @@ impl OptimizedProposal {
 }
 
 pub fn initial() -> World {
-    build(5)
+    build(5, false)
 }
 
 pub fn impossible() -> World {
-    build(2)
+    build(2, false)
+}
+
+/// Two three-operation jobs competing across three discrete-capacity machines.
+pub fn initial_showcase() -> World {
+    build(6, true)
+}
+
+pub fn initial_stress() -> World {
+    build(8, true)
+}
+
+pub fn impossible_showcase() -> World {
+    build(3, true)
 }
 
 pub fn goal() -> Goal<AccountId, Asset> {
@@ -142,18 +158,21 @@ pub fn objectives(world: &World) -> ObjectiveVector<ObjectiveKey, u64> {
 }
 
 pub fn completion_time(world: &World, job: Job) -> u64 {
-    let operation = match job {
-        Job::One => Operation::OneB,
-        Job::Two => Operation::TwoB,
+    let operations = match job {
+        Job::One => [Operation::OneC, Operation::OneB],
+        Job::Two => [Operation::TwoC, Operation::TwoB],
     };
-    (0..=16)
-        .find(|time| {
-            !world
-                .balance(
-                    &AccountId::Job(job),
-                    &Asset::CompletedAt(operation, u8::try_from(*time).expect("bounded")),
-                )
-                .is_zero()
+    operations
+        .into_iter()
+        .find_map(|operation| {
+            (0..=16).find(|time| {
+                !world
+                    .balance(
+                        &AccountId::Job(job),
+                        &Asset::CompletedAt(operation, u8::try_from(*time).expect("bounded")),
+                    )
+                    .is_zero()
+            })
         })
         .unwrap_or(0)
 }
@@ -216,7 +235,29 @@ fn optimize_branch(
     }
 }
 
-fn build(horizon: u8) -> World {
+fn build(horizon: u8, extended: bool) -> World {
+    let operations: &[Operation] = if extended {
+        &[
+            Operation::OneA,
+            Operation::OneB,
+            Operation::OneC,
+            Operation::TwoA,
+            Operation::TwoB,
+            Operation::TwoC,
+        ]
+    } else {
+        &[
+            Operation::OneA,
+            Operation::OneB,
+            Operation::TwoA,
+            Operation::TwoB,
+        ]
+    };
+    let final_operations = if extended {
+        (Operation::OneC, Operation::TwoC)
+    } else {
+        (Operation::OneB, Operation::TwoB)
+    };
     let mut builder = EconomyBuilder::new()
         .account(
             AccountId::Job(Job::One),
@@ -236,7 +277,12 @@ fn build(horizon: u8) -> World {
             AccountId::Success,
             Account::from(basket([(Asset::Active, 1)])),
         );
-    for machine in [Machine::One, Machine::Two] {
+    let machines: &[Machine] = if extended {
+        &[Machine::One, Machine::Two, Machine::Three]
+    } else {
+        &[Machine::One, Machine::Two]
+    };
+    for &machine in machines {
         for time in 0..horizon {
             builder = builder.account(
                 AccountId::Slot(machine, time),
@@ -248,12 +294,7 @@ fn build(horizon: u8) -> World {
         }
     }
 
-    for operation in [
-        Operation::OneA,
-        Operation::OneB,
-        Operation::TwoA,
-        Operation::TwoB,
-    ] {
+    for &operation in operations {
         let (_, _, duration, predecessor_duration) = operation_spec(operation);
         if duration > horizon {
             continue;
@@ -274,7 +315,12 @@ fn build(horizon: u8) -> World {
                         ready,
                         start,
                     },
-                    schedule_rate(operation, ready, start),
+                    schedule_rate(
+                        operation,
+                        ready,
+                        start,
+                        operation == final_operations.0 || operation == final_operations.1,
+                    ),
                 );
             }
         }
@@ -294,14 +340,14 @@ fn build(horizon: u8) -> World {
                         Role::PrimaryJob,
                         basket([
                             (Asset::JobIdentity(Job::One), 1),
-                            (Asset::CompletedAt(Operation::OneB, one_end), 1),
+                            (Asset::CompletedAt(final_operations.0, one_end), 1),
                         ]),
                     )
                     .preserve(
                         Role::SecondaryJob,
                         basket([
                             (Asset::JobIdentity(Job::Two), 1),
-                            (Asset::CompletedAt(Operation::TwoB, two_end), 1),
+                            (Asset::CompletedAt(final_operations.1, two_end), 1),
                         ]),
                     )
                     .consume(Role::Schedule, basket([(Asset::Active, 1)]))
@@ -316,14 +362,7 @@ fn build(horizon: u8) -> World {
         }
     }
 
-    let job_state = [
-        Operation::OneA,
-        Operation::OneB,
-        Operation::TwoA,
-        Operation::TwoB,
-    ]
-    .into_iter()
-    .fold(
+    let job_state = operations.iter().copied().fold(
         LinearInvariant::new("two job state tokens"),
         |invariant, operation| {
             (0..=horizon).fold(invariant, |invariant, time| {
@@ -333,14 +372,7 @@ fn build(horizon: u8) -> World {
             })
         },
     );
-    let capacity = [
-        Operation::OneA,
-        Operation::OneB,
-        Operation::TwoA,
-        Operation::TwoB,
-    ]
-    .into_iter()
-    .fold(
+    let capacity = operations.iter().copied().fold(
         LinearInvariant::new("machine slot capacity").weight(Asset::Available, 1),
         |invariant, operation| invariant.weight(Asset::Reserved(operation), 1),
     );
@@ -357,7 +389,12 @@ fn build(horizon: u8) -> World {
         .expect("scheduling model is valid")
 }
 
-fn schedule_rate(operation: Operation, ready: u8, start: u8) -> Rate<Role, Asset> {
+fn schedule_rate(
+    operation: Operation,
+    ready: u8,
+    start: u8,
+    final_operation: bool,
+) -> Rate<Role, Asset> {
     let (job, machine, duration, _) = operation_spec(operation);
     let end = start + duration;
     let mut rate = Rate::new()
@@ -376,7 +413,8 @@ fn schedule_rate(operation: Operation, ready: u8, start: u8) -> Rate<Role, Asset
         .distinct(Role::Schedule, Role::PrimaryJob)
         .distinct(Role::Schedule, Role::Slot0)
         .distinct(Role::PrimaryJob, Role::Slot0);
-    if let Some(next) = successor(operation) {
+    if !final_operation {
+        let next = successor(operation).expect("non-final operation has a successor");
         rate = rate.produce(Role::PrimaryJob, basket([(Asset::ReadyAt(next, end), 1)]));
     } else {
         rate = rate.produce(
@@ -403,16 +441,20 @@ fn operation_spec(operation: Operation) -> (Job, Machine, u8, u8) {
     match operation {
         Operation::OneA => (Job::One, Machine::One, 2, 0),
         Operation::OneB => (Job::One, Machine::Two, 1, 2),
+        Operation::OneC => (Job::One, Machine::Three, 1, 1),
         Operation::TwoA => (Job::Two, Machine::One, 2, 0),
         Operation::TwoB => (Job::Two, Machine::Two, 1, 2),
+        Operation::TwoC => (Job::Two, Machine::Three, 1, 1),
     }
 }
 
 fn successor(operation: Operation) -> Option<Operation> {
     match operation {
         Operation::OneA => Some(Operation::OneB),
+        Operation::OneB => Some(Operation::OneC),
         Operation::TwoA => Some(Operation::TwoB),
-        Operation::OneB | Operation::TwoB => None,
+        Operation::TwoB => Some(Operation::TwoC),
+        Operation::OneC | Operation::TwoC => None,
     }
 }
 
@@ -506,7 +548,7 @@ mod tests {
     fn small_horizons_match_a_direct_job_shop_oracle() {
         for horizon in 0..=5 {
             let expected = brute_force_makespan(horizon);
-            let world = build(horizon);
+            let world = build(horizon, false);
             let generic = solve_best_first(&world).map(|solution| solution.cost() as u8);
             let branch = branch_optimize(&world).map(|proposal| proposal.makespan());
 

@@ -7,7 +7,12 @@ pub(super) fn build(
     request: &RunRequest,
     descriptor: &ProblemDescriptor,
 ) -> Result<RunArtifact, ServiceError> {
-    let initial = sokoban::initial();
+    let profile = instance_profile(request, descriptor);
+    let initial = match profile {
+        InstanceProfile::Micro => sokoban::initial(),
+        InstanceProfile::Showcase => sokoban::initial_showcase(),
+        InstanceProfile::Stress => sokoban::initial_stress(),
+    };
     let solution = sokoban::solve(&initial)
         .ok_or_else(|| problem_error("sokoban", "puzzle has no solution"))?;
     let mut solved = document(
@@ -44,7 +49,11 @@ pub(super) fn build(
     .bind(Role::To, AccountId::Cell(3));
     solved.proposals.push(proposal("sokoban", ProposalSpec { id: "push-without-crate", label: "Push empty cell", description: "The roles are structurally valid, but the bound middle cell does not hold a crate." }, &initial, &blocked_push));
 
-    let deadlocked = sokoban::deadlocked();
+    let deadlocked = if matches!(profile, InstanceProfile::Micro) {
+        sokoban::deadlocked()
+    } else {
+        sokoban::deadlocked_showcase()
+    };
     let mut deadlock = document(
         DocumentSpec { problem: "sokoban", strategy: "deadlock", title: "Sokoban · deadlocked state", description: "A replayable zero-step counterexample: no sequence can move the crate from the corner to the goal.", source_label: "Sokoban" },
         &deadlocked, &sokoban::goal(), &Trace::new(), Vec::new(), scene,
@@ -67,7 +76,8 @@ pub(super) fn build(
 }
 
 fn scene(_: u64, world: &World) -> Option<Scene> {
-    let cells = (0..5)
+    let (width, height) = sokoban::dimensions(world);
+    let cells = (0..width * height)
         .map(|cell| {
             let account = AccountId::Cell(cell);
             let mut classes = Vec::new();
@@ -84,8 +94,8 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 classes.push("goal".into());
             }
             GridCellView {
-                x: u32::from(cell),
-                y: 0,
+                x: u32::from(cell % width),
+                y: u32::from(cell / width),
                 label: label.into(),
                 classes,
             }
@@ -93,8 +103,8 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         .collect();
     Some(Scene::Grid {
         title: "Encoded cells, player, crate, and goal".into(),
-        width: 5,
-        height: 1,
+        width: u32::from(width),
+        height: u32::from(height),
         cells,
     })
 }

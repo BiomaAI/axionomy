@@ -11,8 +11,17 @@ use axionomy_search::{
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Node {
     Start,
+    Gallery,
+    Archive,
     KeyRoom,
     Door,
+    Garden,
+    Market,
+    Canal,
+    Tower,
+    Tunnel,
+    Ridge,
+    Bridge,
     Detour,
     Exit,
 }
@@ -70,7 +79,7 @@ pub enum ObjectiveKey {
     Time,
 }
 
-pub(crate) const EDGES: [(Node, Node, u64, bool); 5] = [
+const MICRO_EDGES: [(Node, Node, u64, bool); 5] = [
     (Node::Start, Node::KeyRoom, 2, false),
     (Node::KeyRoom, Node::Door, 2, true),
     (Node::Door, Node::Exit, 2, false),
@@ -78,24 +87,82 @@ pub(crate) const EDGES: [(Node, Node, u64, bool); 5] = [
     (Node::Detour, Node::Exit, 5, false),
 ];
 
+const SHOWCASE_EDGES: [(Node, Node, u64, bool); 16] = [
+    (Node::Start, Node::Gallery, 1, false),
+    (Node::Gallery, Node::Archive, 1, false),
+    (Node::Archive, Node::KeyRoom, 1, false),
+    (Node::KeyRoom, Node::Door, 1, true),
+    (Node::Door, Node::Exit, 1, false),
+    (Node::Start, Node::Garden, 1, false),
+    (Node::Garden, Node::Market, 1, false),
+    (Node::Market, Node::Canal, 1, false),
+    (Node::Canal, Node::Tower, 1, false),
+    (Node::Tower, Node::Exit, 2, false),
+    (Node::Start, Node::Tunnel, 2, false),
+    (Node::Tunnel, Node::Ridge, 2, false),
+    (Node::Ridge, Node::Bridge, 2, false),
+    (Node::Bridge, Node::Exit, 2, false),
+    (Node::Start, Node::Detour, 5, false),
+    (Node::Detour, Node::Exit, 6, false),
+];
+
 /// Builds the complete closed problem. Topology, lock state, energy, target,
 /// and heuristic values are all assets held by accounts.
 pub fn initial() -> World {
+    build(
+        &MICRO_EDGES,
+        9,
+        6,
+        &[
+            (Node::Start, 6),
+            (Node::KeyRoom, 4),
+            (Node::Door, 2),
+            (Node::Detour, 5),
+            (Node::Exit, 0),
+        ],
+    )
+}
+
+/// A decision-dense maze with four route families and a longer key/door plan.
+pub fn initial_showcase() -> World {
+    build(
+        &SHOWCASE_EDGES,
+        11,
+        8,
+        &[
+            (Node::Start, 5),
+            (Node::Gallery, 4),
+            (Node::Archive, 3),
+            (Node::KeyRoom, 2),
+            (Node::Door, 1),
+            (Node::Garden, 5),
+            (Node::Market, 4),
+            (Node::Canal, 3),
+            (Node::Tower, 2),
+            (Node::Tunnel, 6),
+            (Node::Ridge, 4),
+            (Node::Bridge, 2),
+            (Node::Detour, 6),
+            (Node::Exit, 0),
+        ],
+    )
+}
+
+fn build(
+    edges: &[(Node, Node, u64, bool)],
+    energy: u64,
+    time: u64,
+    distances: &[(Node, u64)],
+) -> World {
     let mut environment = axionomy::Basket::new();
-    for (from, to, _, _) in EDGES {
-        environment.insert(Asset::Edge(from, to), Quantity::new(1));
+    for (from, to, _, _) in edges {
+        environment.insert(Asset::Edge(*from, *to), Quantity::new(1));
     }
     environment.insert(Asset::Key, Quantity::new(1));
     environment.insert(Asset::Locked, Quantity::new(1));
     environment.insert(Asset::Target(Node::Exit), Quantity::new(1));
-    for (node, distance) in [
-        (Node::Start, 6),
-        (Node::KeyRoom, 4),
-        (Node::Door, 2),
-        (Node::Detour, 5),
-        (Node::Exit, 0),
-    ] {
-        environment.insert(Asset::Distance(node), Quantity::new(distance));
+    for (node, distance) in distances {
+        environment.insert(Asset::Distance(*node), Quantity::new(*distance));
     }
 
     let mut builder = EconomyBuilder::new()
@@ -103,26 +170,16 @@ pub fn initial() -> World {
             AccountId::Agent,
             Account::from(basket([
                 (Asset::At(Node::Start), 1),
-                (Asset::Energy, 9),
-                (Asset::Time, 6),
+                (Asset::Energy, energy),
+                (Asset::Time, time),
                 (Asset::Active, 1),
             ])),
         )
         .account(AccountId::World, Account::from(environment))
-        .invariant(
-            [
-                Node::Start,
-                Node::KeyRoom,
-                Node::Door,
-                Node::Detour,
-                Node::Exit,
-            ]
-            .into_iter()
-            .fold(
-                LinearInvariant::new("one agent position"),
-                |invariant, node| invariant.weight(Asset::At(node), 1),
-            ),
-        )
+        .invariant(nodes_from_edges(edges).into_iter().fold(
+            LinearInvariant::new("one agent position"),
+            |invariant, node| invariant.weight(Asset::At(node), 1),
+        ))
         .invariant(
             LinearInvariant::new("energy is only spent")
                 .weight(Asset::Energy, 1)
@@ -139,7 +196,7 @@ pub fn initial() -> World {
                 .weight(Asset::Solved, 1),
         );
 
-    for (from, to, energy, needs_open_door) in EDGES {
+    for &(from, to, energy, needs_open_door) in edges {
         let mut rate = Rate::new()
             .preserve(Role::Actor, basket([(Asset::Active, 1)]))
             .consume(
@@ -258,24 +315,41 @@ pub fn spent_time(world: &World) -> u64 {
 }
 
 pub fn heuristic(world: &World) -> u64 {
-    [
-        Node::Start,
-        Node::KeyRoom,
-        Node::Door,
-        Node::Detour,
-        Node::Exit,
-    ]
-    .into_iter()
-    .find(|node| {
-        !world
-            .balance(&AccountId::Agent, &Asset::At(*node))
-            .is_zero()
-    })
-    .map_or(0, |node| {
-        world
-            .balance(&AccountId::World, &Asset::Distance(node))
-            .get()
-    })
+    nodes(world)
+        .into_iter()
+        .find(|node| {
+            !world
+                .balance(&AccountId::Agent, &Asset::At(*node))
+                .is_zero()
+        })
+        .map_or(0, |node| {
+            world
+                .balance(&AccountId::World, &Asset::Distance(node))
+                .get()
+        })
+}
+
+/// Returns the topology nodes encoded by the world's edge assets.
+pub fn nodes(world: &World) -> Vec<Node> {
+    let edges = world.rate_ids().filter_map(|rate| match rate {
+        RateId::Move { from, to, .. } => Some((*from, *to)),
+        _ => None,
+    });
+    let mut nodes = std::collections::BTreeSet::new();
+    for (from, to) in edges {
+        nodes.insert(from);
+        nodes.insert(to);
+    }
+    nodes.into_iter().collect()
+}
+
+fn nodes_from_edges(edges: &[(Node, Node, u64, bool)]) -> Vec<Node> {
+    let mut nodes = std::collections::BTreeSet::new();
+    for (from, to, _, _) in edges {
+        nodes.insert(*from);
+        nodes.insert(*to);
+    }
+    nodes.into_iter().collect()
 }
 
 fn move_energy(before: &World, _: &Action, after: &World) -> u64 {

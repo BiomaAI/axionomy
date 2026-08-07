@@ -13,6 +13,10 @@ pub enum Element {
     B,
     C,
     D,
+    E,
+    F,
+    G,
+    H,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -21,6 +25,14 @@ pub enum SetId {
     Cd,
     Ac,
     Bd,
+    Ef,
+    Gh,
+    Eg,
+    Fh,
+    Ad,
+    Bc,
+    Eh,
+    Fg,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -55,15 +67,60 @@ pub type Action = Exchange<RateId, Role, AccountId>;
 pub type Solution = SearchSolution<RateId, Role, AccountId>;
 pub type Proposal = Trace<RateId, Role, AccountId>;
 
-const SETS: [SetId; 4] = [SetId::Ab, SetId::Cd, SetId::Ac, SetId::Bd];
-const ELEMENTS: [Element; 4] = [Element::A, Element::B, Element::C, Element::D];
+const MICRO_SETS: [SetId; 4] = [SetId::Ab, SetId::Cd, SetId::Ac, SetId::Bd];
+const MICRO_ELEMENTS: [Element; 4] = [Element::A, Element::B, Element::C, Element::D];
+const SHOWCASE_SETS: [SetId; 12] = [
+    SetId::Ab,
+    SetId::Cd,
+    SetId::Ef,
+    SetId::Gh,
+    SetId::Ac,
+    SetId::Bd,
+    SetId::Eg,
+    SetId::Fh,
+    SetId::Ad,
+    SetId::Bc,
+    SetId::Eh,
+    SetId::Fg,
+];
+const SHOWCASE_ELEMENTS: [Element; 8] = [
+    Element::A,
+    Element::B,
+    Element::C,
+    Element::D,
+    Element::E,
+    Element::F,
+    Element::G,
+    Element::H,
+];
 
 pub fn initial() -> World {
-    build(&SETS)
+    build(&MICRO_ELEMENTS, &MICRO_SETS)
 }
 
 pub fn unsatisfiable() -> World {
-    build(&[SetId::Ab, SetId::Ac])
+    build(&MICRO_ELEMENTS, &[SetId::Ab, SetId::Ac])
+}
+
+/// An eight-element incidence matrix with several competing exact covers.
+pub fn initial_showcase() -> World {
+    build(&SHOWCASE_ELEMENTS, &SHOWCASE_SETS)
+}
+
+pub fn unsatisfiable_showcase() -> World {
+    build(
+        &SHOWCASE_ELEMENTS,
+        &[
+            SetId::Ab,
+            SetId::Cd,
+            SetId::Ef,
+            SetId::Ac,
+            SetId::Bd,
+            SetId::Eg,
+            SetId::Ad,
+            SetId::Bc,
+        ],
+    )
 }
 
 pub fn goal() -> Goal<AccountId, Asset> {
@@ -85,8 +142,8 @@ pub fn solve_bfs(world: &World) -> Option<Solution> {
 /// It is deliberately only a proposer: the resulting trace still has to pass
 /// `Economy::replay`.
 pub fn algorithm_x(world: &World) -> Option<Proposal> {
-    let remaining = ELEMENTS.into_iter().collect();
-    let available = SETS
+    let remaining = elements(world).into_iter().collect();
+    let available = sets(world)
         .into_iter()
         .filter(|set| {
             !world
@@ -96,9 +153,10 @@ pub fn algorithm_x(world: &World) -> Option<Proposal> {
         .collect();
     let selected = cover(world, remaining, available)?;
     let mut trace = Trace::new();
-    for (index, set) in selected.into_iter().enumerate() {
-        let before = u8::try_from(index * 2).ok()?;
+    let mut before = 0_u8;
+    for set in selected {
         trace.push(action(RateId::Select { set, before }));
+        before = before.checked_add(u8::try_from(members(world, set).len()).ok()?)?;
     }
     trace.push(action(RateId::Finish));
 
@@ -107,10 +165,10 @@ pub fn algorithm_x(world: &World) -> Option<Proposal> {
     validation.matches(&goal()).then_some(trace)
 }
 
-fn build(available: &[SetId]) -> World {
+fn build(elements: &[Element], available: &[SetId]) -> World {
     let mut problem = Basket::new();
-    for element in ELEMENTS {
-        problem.insert(Asset::Uncovered(element), Quantity::new(1));
+    for element in elements {
+        problem.insert(Asset::Uncovered(*element), Quantity::new(1));
     }
     for set in available {
         problem.insert(Asset::Available(*set), Quantity::new(1));
@@ -120,8 +178,8 @@ fn build(available: &[SetId]) -> World {
 
     let mut builder = EconomyBuilder::new().account(AccountId::Problem, Account::from(problem));
 
-    for set in SETS {
-        for before in [0, 2] {
+    for &set in available {
+        for before in (0..elements.len()).step_by(2).map(|value| value as u8) {
             let mut consume = Basket::from([
                 (Asset::Available(set), Quantity::new(1)),
                 (Asset::Progress(before), Quantity::new(1)),
@@ -144,7 +202,7 @@ fn build(available: &[SetId]) -> World {
         }
     }
 
-    let element_invariant = ELEMENTS.into_iter().fold(
+    let element_invariant = elements.iter().copied().fold(
         LinearInvariant::new("each universe element persists"),
         |invariant, element| {
             invariant
@@ -152,7 +210,7 @@ fn build(available: &[SetId]) -> World {
                 .weight(Asset::Covered(element), 1)
         },
     );
-    let set_invariant = SETS.into_iter().fold(
+    let set_invariant = available.iter().copied().fold(
         LinearInvariant::new("set choice is single use"),
         |invariant, set| {
             invariant
@@ -160,25 +218,24 @@ fn build(available: &[SetId]) -> World {
                 .weight(Asset::Selected(set), 1)
         },
     );
-    let progress_invariant = [0, 2, 4].into_iter().fold(
+    let progress_invariant = (0..=elements.len()).step_by(2).fold(
         LinearInvariant::new("one progress token"),
-        |invariant, progress| invariant.weight(Asset::Progress(progress), 1),
+        |invariant, progress| invariant.weight(Asset::Progress(progress as u8), 1),
+    );
+
+    let finish_requirements = elements.iter().copied().fold(
+        Basket::from([(Asset::Progress(elements.len() as u8), Quantity::new(1))]),
+        |mut basket, element| {
+            basket.insert(Asset::Covered(element), Quantity::new(1));
+            basket
+        },
     );
 
     builder
         .rate(
             RateId::Finish,
             Rate::new()
-                .preserve(
-                    Role::Problem,
-                    basket([
-                        (Asset::Progress(4), 1),
-                        (Asset::Covered(Element::A), 1),
-                        (Asset::Covered(Element::B), 1),
-                        (Asset::Covered(Element::C), 1),
-                        (Asset::Covered(Element::D), 1),
-                    ]),
-                )
+                .preserve(Role::Problem, finish_requirements)
                 .consume(Role::Problem, basket([(Asset::Active, 1)]))
                 .produce(Role::Problem, basket([(Asset::Solved, 1)])),
         )
@@ -200,6 +257,14 @@ fn declared_members(set: SetId) -> [Element; 2] {
         SetId::Cd => [Element::C, Element::D],
         SetId::Ac => [Element::A, Element::C],
         SetId::Bd => [Element::B, Element::D],
+        SetId::Ef => [Element::E, Element::F],
+        SetId::Gh => [Element::G, Element::H],
+        SetId::Eg => [Element::E, Element::G],
+        SetId::Fh => [Element::F, Element::H],
+        SetId::Ad => [Element::A, Element::D],
+        SetId::Bc => [Element::B, Element::C],
+        SetId::Eh => [Element::E, Element::H],
+        SetId::Fg => [Element::F, Element::G],
     }
 }
 
@@ -214,6 +279,34 @@ fn encoded_members(world: &World, set: SetId) -> BTreeSet<Element> {
             _ => None,
         })
         .collect()
+}
+
+pub fn elements(world: &World) -> Vec<Element> {
+    SHOWCASE_ELEMENTS
+        .into_iter()
+        .filter(|element| {
+            !world
+                .balance(&AccountId::Problem, &Asset::Uncovered(*element))
+                .is_zero()
+                || !world
+                    .balance(&AccountId::Problem, &Asset::Covered(*element))
+                    .is_zero()
+        })
+        .collect()
+}
+
+pub fn sets(world: &World) -> Vec<SetId> {
+    let mut values = BTreeSet::new();
+    for rate in world.rate_ids() {
+        if let RateId::Select { set, .. } = rate {
+            values.insert(*set);
+        }
+    }
+    values.into_iter().collect()
+}
+
+pub fn members(world: &World, set: SetId) -> Vec<Element> {
+    encoded_members(world, set).into_iter().collect()
 }
 
 fn cover(
@@ -285,14 +378,14 @@ mod tests {
 
     #[test]
     fn every_available_set_combination_matches_a_direct_domain_oracle() {
-        for mask in 0_u8..(1 << SETS.len()) {
-            let available = SETS
+        for mask in 0_u8..(1 << MICRO_SETS.len()) {
+            let available = MICRO_SETS
                 .into_iter()
                 .enumerate()
                 .filter_map(|(index, set)| (mask & (1 << index) != 0).then_some(set))
                 .collect::<Vec<_>>();
             let expected = brute_force_has_exact_cover(&available);
-            let world = build(&available);
+            let world = build(&MICRO_ELEMENTS, &available);
 
             assert_eq!(solve_bfs(&world).is_some(), expected, "mask {mask:04b}");
             assert_eq!(algorithm_x(&world).is_some(), expected, "mask {mask:04b}");
@@ -301,7 +394,7 @@ mod tests {
 
     fn brute_force_has_exact_cover(available: &[SetId]) -> bool {
         (0_u8..(1 << available.len())).any(|selection| {
-            ELEMENTS.into_iter().all(|element| {
+            MICRO_ELEMENTS.into_iter().all(|element| {
                 available
                     .iter()
                     .enumerate()

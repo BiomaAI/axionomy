@@ -11,7 +11,10 @@ pub(super) fn build(
     request: &RunRequest,
     descriptor: &ProblemDescriptor,
 ) -> Result<RunArtifact, ServiceError> {
-    let initial = maze::initial();
+    let initial = match instance_profile(request, descriptor) {
+        InstanceProfile::Micro => maze::initial(),
+        InstanceProfile::Showcase | InstanceProfile::Stress => maze::initial_showcase(),
+    };
     let bfs = maze::solve_bfs(&initial).ok_or_else(|| problem_error("maze", "no BFS route"))?;
     let astar = maze::solve_astar(&initial).ok_or_else(|| problem_error("maze", "no A* route"))?;
     let pareto = maze::pareto_front(&initial).map_err(|error| problem_error("maze", error))?;
@@ -225,28 +228,32 @@ fn front_view(result: &maze::ParetoResult, selected: &ViewDocument) -> ParetoFro
 }
 
 fn scene(_: u64, world: &World) -> Option<Scene> {
-    let nodes = [
-        Node::Start,
-        Node::KeyRoom,
-        Node::Door,
-        Node::Detour,
-        Node::Exit,
-    ];
-    let focus = nodes.into_iter().find(|node| {
+    let nodes = maze::nodes(world);
+    let focus = nodes.iter().copied().find(|node| {
         !world
             .balance(&AccountId::Agent, &Asset::At(*node))
             .is_zero()
     });
     let positions = |node| match node {
         Node::Start => (70.0, 155.0),
-        Node::KeyRoom => (235.0, 55.0),
-        Node::Door => (420.0, 55.0),
-        Node::Detour => (300.0, 250.0),
-        Node::Exit => (600.0, 155.0),
+        Node::Gallery => (185.0, 35.0),
+        Node::Archive => (315.0, 35.0),
+        Node::KeyRoom => (445.0, 35.0),
+        Node::Door => (575.0, 35.0),
+        Node::Garden => (170.0, 110.0),
+        Node::Market => (290.0, 110.0),
+        Node::Canal => (410.0, 110.0),
+        Node::Tower => (535.0, 110.0),
+        Node::Tunnel => (210.0, 205.0),
+        Node::Ridge => (360.0, 205.0),
+        Node::Bridge => (520.0, 205.0),
+        Node::Detour => (350.0, 285.0),
+        Node::Exit => (720.0, 155.0),
     };
     let node_key = |node| format!("node:{node:?}").to_lowercase();
     let graph_nodes = nodes
-        .into_iter()
+        .iter()
+        .copied()
         .map(|node| {
             let (x, y) = positions(node);
             let mut classes = Vec::new();

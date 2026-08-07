@@ -54,14 +54,27 @@ pub enum ObjectiveKey {
 }
 
 pub fn initial() -> World {
+    build(6, 4, 3, 2)
+}
+
+/// Requires a multi-batch production plan with visible time/waste tradeoffs.
+pub fn initial_showcase() -> World {
+    build(18, 12, 18, 6)
+}
+
+pub fn initial_stress() -> World {
+    build(30, 20, 30, 10)
+}
+
+fn build(wood: u64, labor: u64, time: u64, target: u64) -> World {
     EconomyBuilder::new()
         .account(
             AccountId::Workshop,
             Account::from(basket([
-                (Asset::Wood, 6),
-                (Asset::Labor, 4),
+                (Asset::Wood, wood),
+                (Asset::Labor, labor),
                 (Asset::Tool, 1),
-                (Asset::Time, 3),
+                (Asset::Time, time),
                 (Asset::Active, 1),
             ])),
         )
@@ -118,7 +131,7 @@ pub fn initial() -> World {
         .rate(
             RateId::Finish,
             Rate::new()
-                .preserve(Role::Shop, basket([(Asset::Chair, 2)]))
+                .preserve(Role::Shop, basket([(Asset::Chair, target)]))
                 .consume(Role::Shop, basket([(Asset::Active, 1)]))
                 .produce(Role::Shop, basket([(Asset::Solved, 1)])),
         )

@@ -13,7 +13,12 @@ pub(super) fn build(
     request: &RunRequest,
     descriptor: &ProblemDescriptor,
 ) -> Result<RunArtifact, ServiceError> {
-    let initial = scheduling::initial();
+    let profile = instance_profile(request, descriptor);
+    let initial = match profile {
+        InstanceProfile::Micro => scheduling::initial(),
+        InstanceProfile::Showcase => scheduling::initial_showcase(),
+        InstanceProfile::Stress => scheduling::initial_stress(),
+    };
     let best = scheduling::solve_best_first(&initial)
         .ok_or_else(|| problem_error("scheduling", "best-first found no schedule"))?;
     let bounded = scheduling::branch_optimize(&initial)
@@ -101,7 +106,11 @@ pub(super) fn build(
         }
         documents.push(view);
     }
-    let impossible = scheduling::impossible();
+    let impossible = if matches!(profile, InstanceProfile::Showcase | InstanceProfile::Stress) {
+        scheduling::impossible_showcase()
+    } else {
+        scheduling::impossible()
+    };
     let mut impossible_view = document(DocumentSpec { problem: "scheduling", strategy: "infeasible_horizon", title: "Scheduling · insufficient horizon", description: "A two-slot horizon is a replayable unschedulable model instance, not an exception hidden by the optimizer.", source_label: "Job-shop scheduling" }, &impossible, &scheduling::goal(), &Trace::new(), Vec::new(), scene).map_err(|error| problem_error("scheduling", error))?;
     impossible_view.telemetry.push(telemetry(
         "exhaustive feasibility",
@@ -207,7 +216,7 @@ fn front_view(result: &scheduling::ParetoResult, selected: &ViewDocument) -> Par
 }
 
 fn scene(_: u64, world: &World) -> Option<Scene> {
-    let lanes = [Machine::One, Machine::Two]
+    let lanes = [Machine::One, Machine::Two, Machine::Three]
         .into_iter()
         .map(|machine| TimelineLaneView {
             id: ViewId::new(
@@ -218,14 +227,16 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         })
         .collect();
     let mut spans = Vec::new();
-    for machine in [Machine::One, Machine::Two] {
+    for machine in [Machine::One, Machine::Two, Machine::Three] {
         for operation in [
             Operation::OneA,
             Operation::OneB,
+            Operation::OneC,
             Operation::TwoA,
             Operation::TwoB,
+            Operation::TwoC,
         ] {
-            let occupied = (0..5)
+            let occupied = (0..12)
                 .filter(|time| {
                     !world
                         .balance(
@@ -245,7 +256,10 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                     classes: vec![
                         format!(
                             "job-{:?}",
-                            if matches!(operation, Operation::OneA | Operation::OneB) {
+                            if matches!(
+                                operation,
+                                Operation::OneA | Operation::OneB | Operation::OneC
+                            ) {
                                 Job::One
                             } else {
                                 Job::Two

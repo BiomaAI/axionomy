@@ -1,13 +1,21 @@
 use super::*;
 use axionomy::{Exchange, Quantity, Trace};
-use axionomy_problems::exact_cover::{self, AccountId, Asset, Element, RateId, Role, SetId, World};
+use axionomy_problems::exact_cover::{self, AccountId, Asset, RateId, Role, SetId, World};
 use axionomy_view::{MatrixCellView, TelemetryKindView, ViewId};
 
 pub(super) fn build(
     request: &RunRequest,
     descriptor: &ProblemDescriptor,
 ) -> Result<RunArtifact, ServiceError> {
-    let initial = exact_cover::initial();
+    let showcase = !matches!(
+        instance_profile(request, descriptor),
+        InstanceProfile::Micro
+    );
+    let initial = if showcase {
+        exact_cover::initial_showcase()
+    } else {
+        exact_cover::initial()
+    };
     let bfs = exact_cover::solve_bfs(&initial)
         .ok_or_else(|| problem_error("exact_cover", "BFS found no cover"))?;
     let algorithm_x = exact_cover::algorithm_x(&initial)
@@ -73,7 +81,11 @@ pub(super) fn build(
         view.proposals.push(proposal("exact_cover", ProposalSpec { id: "wrong-progress", label: "Select AB at progress 2", description: "The set is available, but the encoded progress token and already-covered elements make this infeasible." }, &initial, &overlapping));
         documents.push(view);
     }
-    let unsatisfiable = exact_cover::unsatisfiable();
+    let unsatisfiable = if showcase {
+        exact_cover::unsatisfiable_showcase()
+    } else {
+        exact_cover::unsatisfiable()
+    };
     let mut unsat = document(DocumentSpec { problem: "exact_cover", strategy: "unsatisfiable", title: "Exact cover · unsatisfiable instance", description: "The same model surface exposes a replayable instance whose available sets cannot cover the universe exactly.", source_label: "Exact cover" }, &unsatisfiable, &exact_cover::goal(), &Trace::new(), Vec::new(), scene).map_err(|error| problem_error("exact_cover", error))?;
     unsat.telemetry.push(telemetry(
         "exhaustive search",
@@ -90,31 +102,26 @@ pub(super) fn build(
 }
 
 fn scene(_: u64, world: &World) -> Option<Scene> {
-    let sets = [SetId::Ab, SetId::Cd, SetId::Ac, SetId::Bd];
-    let elements = [Element::A, Element::B, Element::C, Element::D];
-    let includes = |set, element| {
-        matches!(
-            (set, element),
-            (SetId::Ab, Element::A | Element::B)
-                | (SetId::Cd, Element::C | Element::D)
-                | (SetId::Ac, Element::A | Element::C)
-                | (SetId::Bd, Element::B | Element::D)
-        )
-    };
+    let sets = exact_cover::sets(world);
+    let elements = exact_cover::elements(world);
     let rows = sets
-        .into_iter()
+        .iter()
+        .copied()
         .map(|set| ViewId::new(format!("set:{set:?}"), format!("{set:?}")))
         .collect();
     let columns = elements
-        .into_iter()
+        .iter()
+        .copied()
         .map(|element| ViewId::new(format!("element:{element:?}"), format!("{element:?}")))
         .collect();
     let cells = sets
-        .into_iter()
+        .iter()
+        .copied()
         .flat_map(|set| {
             elements
-                .into_iter()
-                .filter(move |element| includes(set, *element))
+                .iter()
+                .copied()
+                .filter(move |element| exact_cover::members(world, set).contains(element))
                 .map(move |element| {
                     let selected = !world
                         .balance(&AccountId::Problem, &Asset::Selected(set))
