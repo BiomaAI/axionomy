@@ -37,6 +37,7 @@ const eventKinds: StudioEvent["kind"][] = ["run_started", "progress", "frame_app
 type CompletionNotice = {
   artifactId: string;
   problem: string;
+  instance: string;
   strategy: string;
   seed: number;
   budget: number;
@@ -54,6 +55,7 @@ export function App() {
     },
   });
   const [problemKey, setProblemKey] = useState("maze");
+  const [instanceKey, setInstanceKey] = useState("showcase");
   const [strategyKey, setStrategyKey] = useState("a_star");
   const [seed, setSeed] = useState(17);
   const [budget, setBudget] = useState(128);
@@ -72,6 +74,7 @@ export function App() {
   const runStartedAt = useRef<number | undefined>(undefined);
 
   const problem = catalog.data?.problems.find((candidate) => candidate.key === problemKey);
+  const instance = problem?.instances.find((candidate) => candidate.key === instanceKey);
   const document = artifact?.documents.find((candidate) => candidate.id === documentId) ?? artifact?.documents.find((candidate) => candidate.id === artifact.selected_document_id) ?? artifact?.documents[0];
   const snapshot = useSnapshot(document, position);
   const previous = useSnapshot(document, Math.max(0, position - 1));
@@ -89,6 +92,7 @@ export function App() {
 
   useEffect(() => {
     if (!problem) return;
+    setInstanceKey(problem.default_instance);
     setStrategyKey(problem.default_strategy);
     setError(undefined);
     setFreshArtifactId(undefined);
@@ -111,11 +115,12 @@ export function App() {
 
   const start = async () => {
     const submittedProblem = problem?.title ?? problemKey;
+    const submittedInstance = problem?.instances.find((candidate) => candidate.key === instanceKey)?.label ?? instanceKey;
     const submittedStrategy = problem?.strategies.find((candidate) => candidate.key === strategyKey)?.label ?? strategyKey;
     setError(undefined); setEvents([]); setCompletion(undefined); eventSource.current?.close();
     runStartedAt.current = performance.now(); setElapsedMs(0); setLaunching(true);
     try {
-      const created = await createRun({ problem: problemKey, strategy: strategyKey, seed, budget });
+      const created = await createRun({ problem: problemKey, instance: instanceKey, strategy: strategyKey, seed, budget });
       setRun(created); setLaunching(false);
       const source = new EventSource(`/api/runs/${created.id}/events`);
       eventSource.current = source;
@@ -127,7 +132,7 @@ export function App() {
           const next = await fetchArtifact(event.artifact_id);
           const durationMs = runStartedAt.current === undefined ? 0 : performance.now() - runStartedAt.current;
           setArtifact(next); setDocumentId(event.document_id); setFreshArtifactId(event.artifact_id);
-          setCompletion({ artifactId: event.artifact_id, problem: submittedProblem, strategy: submittedStrategy, seed, budget, durationMs, documents: next.documents.length });
+          setCompletion({ artifactId: event.artifact_id, problem: submittedProblem, instance: submittedInstance, strategy: submittedStrategy, seed, budget, durationMs, documents: next.documents.length });
           setElapsedMs(durationMs); setRun(undefined);
         } else if (event.kind === "run_cancelled" || event.kind === "run_failed") {
           source.close(); setRun(undefined);
@@ -147,7 +152,7 @@ export function App() {
     try {
       const next = JSON.parse(await file.text()) as RunArtifact;
       if (!Array.isArray(next.documents) || !next.selected_document_id) throw new Error("missing artifact documents");
-      setArtifact(next); setProblemKey(next.problem.key); setStrategyKey(next.request.strategy ?? next.problem.default_strategy); setDocumentId(next.selected_document_id); setFreshArtifactId(undefined); setError(undefined);
+      setArtifact(next); setProblemKey(next.problem.key); setInstanceKey(next.instance.key); setStrategyKey(next.request.strategy ?? next.problem.default_strategy); setDocumentId(next.selected_document_id); setFreshArtifactId(undefined); setError(undefined);
     } catch (cause) { setError(cause instanceof Error ? cause.message : "the selected file is not a RunArtifact"); }
   };
 
@@ -165,6 +170,7 @@ export function App() {
 
     <section className="command-bar" aria-label="Problem controls">
       <label className="field problem-field"><span>Canonical problem</span><select value={problemKey} onChange={(event) => setProblemKey(event.target.value)} disabled={active}>{catalog.data?.problems.map((candidate) => <option value={candidate.key} key={candidate.key}>{candidate.title}</option>)}</select></label>
+      <label className="field instance-field"><span>Instance</span><select value={instanceKey} onChange={(event) => { setInstanceKey(event.target.value); setCompletion(undefined); }} disabled={active || !catalog.data?.connected}>{problem?.instances.map((candidate) => <option value={candidate.key} key={candidate.key}>{candidate.label}</option>)}</select></label>
       <label className="field strategy-field"><span>Strategy</span><select value={strategyKey} onChange={(event) => { const key = event.target.value; setStrategyKey(key); const match = artifact?.documents.find((candidate) => candidate.id === `${problemKey}:${key}`); if (match) setDocumentId(match.id); }} disabled={active}>{problem?.strategies.map((strategy) => <option value={strategy.key} key={strategy.key}>{strategy.label}</option>)}</select></label>
       <label className="field numeric-field"><span>Seed</span><input type="number" min="0" value={seed} disabled={active} onChange={(event) => setSeed(Number(event.target.value))} /></label>
       <label className="field numeric-field"><span>Budget</span><input type="number" min="1" value={budget} disabled={active} onChange={(event) => setBudget(Math.max(1, Number(event.target.value)))} /></label>
@@ -179,12 +185,12 @@ export function App() {
     {active && <RunActivity launching={launching} run={run} events={events} elapsedMs={elapsedMs} />}
     {completion && <CompletionBanner notice={completion} onDismiss={() => setCompletion(undefined)} />}
 
-    {problem && <section className="problem-context"><div><span>{problem.family.replaceAll("_", " ")}</span><p>{problem.summary}</p></div><div>{problem.capabilities.map((capability) => <span key={capability}>{capability.replaceAll("_", " ")}</span>)}</div></section>}
+    {problem && <section className="problem-context"><div><span>{problem.family.replaceAll("_", " ")}</span><p>{problem.summary}<small>{instance?.label ?? artifact?.instance.label}: {instance?.description ?? artifact?.instance.description}</small></p></div><div>{problem.capabilities.map((capability) => <span key={capability}>{capability.replaceAll("_", " ")}</span>)}</div></section>}
     {error && <div className="error-banner" role="alert">{error}</div>}
 
     {artifact && document && snapshot ? <main className={freshArtifactId === artifact.id ? "fresh-artifact" : undefined}>
       <section className="alternative-bar"><div><span>Artifact alternatives</span><strong>{artifact.documents.length} replayable outcomes</strong></div><div role="tablist">{artifact.documents.map((candidate) => <button key={candidate.id} role="tab" aria-selected={candidate.id === document.id} onClick={() => setDocumentId(candidate.id)}>{candidate.title.replace(`${artifact.problem.title} · `, "")}</button>)}</div></section>
-      <section className="document-heading"><div><span className="eyebrow">{document.source.label} · {document.id}{freshArtifactId === artifact.id ? " · newly computed" : ""}</span><h1>{document.title}</h1><p>{document.description}</p></div><div className="objective-pills">{document.objectives.map((objective) => <div className="objective" key={objective.key}><span>{objective.label}</span><strong>{objective.value}</strong><small>{objective.direction}</small></div>)}</div></section>
+      <section className="document-heading"><div><span className="eyebrow">{artifact.instance.label} · {document.source.label} · {document.id}{freshArtifactId === artifact.id ? " · newly computed" : ""}</span><h1>{document.title}</h1><p>{document.description}</p></div><div className="objective-pills">{document.objectives.map((objective) => <div className="objective" key={objective.key}><span>{objective.label}</span><strong>{objective.value}</strong><small>{objective.direction}</small></div>)}</div></section>
       <PlaybackControls position={position} count={document.frames.length} playing={playing} onPosition={setPosition} onPlaying={setPlaying} frame={frame} />
 
       <section className="workspace-grid">
@@ -221,14 +227,14 @@ function RunActivity({ launching, run, events, elapsedMs }: { launching: boolean
       {total !== undefined && total > 0 ? <progress max={total} value={Math.min(completed, total)} aria-label="Run phase progress" /> : <div className="indeterminate-progress" />}
       <span>{total !== undefined ? `${completed} / ${total}` : "waiting for first checkpoint"}</span>
     </div>
-    <div className="run-activity-meta"><span>{formatDuration(elapsedMs)} elapsed</span>{run && <><span>seed {run.request.seed}</span><span>budget {run.request.budget}</span><code>{run.id}</code></>}</div>
+    <div className="run-activity-meta"><span>{formatDuration(elapsedMs)} elapsed</span>{run && <><span>{run.request.instance ?? "default"} instance</span><span>seed {run.request.seed}</span><span>budget {run.request.budget}</span><code>{run.id}</code></>}</div>
   </section>;
 }
 
 function CompletionBanner({ notice, onDismiss }: { notice: CompletionNotice; onDismiss: () => void }) {
   return <section className="completion-banner" role="status">
     <div className="completion-mark" aria-hidden="true">✓</div>
-    <div><strong>New artifact computed and loaded</strong><span>{notice.problem} · {notice.strategy} · seed {notice.seed} · budget {notice.budget}</span><small>{notice.documents} replayable {notice.documents === 1 ? "outcome" : "outcomes"} · completed in {formatDuration(notice.durationMs)} · <code>{notice.artifactId}</code></small></div>
+    <div><strong>New artifact computed and loaded</strong><span>{notice.problem} · {notice.instance} · {notice.strategy} · seed {notice.seed} · budget {notice.budget}</span><small>{notice.documents} replayable {notice.documents === 1 ? "outcome" : "outcomes"} · completed in {formatDuration(notice.durationMs)} · <code>{notice.artifactId}</code></small></div>
     <button type="button" onClick={onDismiss}>Dismiss</button>
   </section>;
 }

@@ -425,6 +425,14 @@ fn validate_request(request: &RunRequest) -> Result<(), ApiError> {
             request.problem
         )));
     }
+    if let Some(instance) = &request.instance
+        && !problem.instances.iter().any(|known| &known.key == instance)
+    {
+        return Err(ApiError::bad_request(format!(
+            "unknown instance `{instance}` for problem `{}`",
+            request.problem
+        )));
+    }
     if request.budget == 0 {
         return Err(ApiError::bad_request("budget must be greater than zero"));
     }

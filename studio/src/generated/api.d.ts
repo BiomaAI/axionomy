@@ -292,6 +292,14 @@ export interface components {
             /** Format: uint32 */
             y: number;
         };
+        InstanceDescriptor: {
+            description: string;
+            key: string;
+            label: string;
+            profile: components["schemas"]["InstanceProfile"];
+        };
+        /** @enum {string} */
+        InstanceProfile: "micro" | "showcase" | "stress";
         InvariantTermView: {
             asset: components["schemas"]["ViewId"];
             /** Format: int64 */
@@ -353,8 +361,10 @@ export interface components {
         };
         ProblemDescriptor: {
             capabilities: components["schemas"]["Capability"][];
+            default_instance: string;
             default_strategy: string;
             family: components["schemas"]["ProblemFamily"];
+            instances: components["schemas"]["InstanceDescriptor"][];
             key: string;
             strategies: components["schemas"]["StrategyDescriptor"][];
             summary: string;
@@ -400,6 +410,7 @@ export interface components {
             assessed_proposals: components["schemas"]["ProposalView"][];
             documents: components["schemas"]["ViewDocument"][];
             id: string;
+            instance: components["schemas"]["InstanceDescriptor"];
             problem: components["schemas"]["ProblemDescriptor"];
             request: components["schemas"]["RunRequest"];
             selected_document_id: string;
@@ -413,6 +424,7 @@ export interface components {
              * @default 128
              */
             budget: number;
+            instance?: string | null;
             problem: string;
             /**
              * Format: uint64

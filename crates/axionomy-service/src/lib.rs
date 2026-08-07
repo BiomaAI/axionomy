@@ -58,12 +58,30 @@ pub struct StrategyDescriptor {
     pub algorithm: String,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum InstanceProfile {
+    Micro,
+    Showcase,
+    Stress,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct InstanceDescriptor {
+    pub key: String,
+    pub label: String,
+    pub description: String,
+    pub profile: InstanceProfile,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct ProblemDescriptor {
     pub key: String,
     pub title: String,
     pub summary: String,
     pub family: ProblemFamily,
+    pub default_instance: String,
+    pub instances: Vec<InstanceDescriptor>,
     pub default_strategy: String,
     pub strategies: Vec<StrategyDescriptor>,
     pub capabilities: Vec<Capability>,
@@ -73,6 +91,8 @@ pub struct ProblemDescriptor {
 #[serde(deny_unknown_fields)]
 pub struct RunRequest {
     pub problem: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub instance: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub strategy: Option<String>,
     #[serde(default = "default_seed")]
@@ -93,6 +113,7 @@ impl RunRequest {
     pub fn new(problem: impl Into<String>) -> Self {
         Self {
             problem: problem.into(),
+            instance: None,
             strategy: None,
             seed: default_seed(),
             budget: default_budget(),
@@ -103,12 +124,18 @@ impl RunRequest {
         self.strategy = Some(strategy.into());
         self
     }
+
+    pub fn with_instance(mut self, instance: impl Into<String>) -> Self {
+        self.instance = Some(instance.into());
+        self
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct RunArtifact {
     pub id: String,
     pub problem: ProblemDescriptor,
+    pub instance: InstanceDescriptor,
     pub request: RunRequest,
     pub selected_document_id: String,
     pub documents: Vec<ViewDocument>,
@@ -197,6 +224,8 @@ pub enum ServiceError {
     UnknownProblem(String),
     #[error("unknown strategy `{strategy}` for problem `{problem}`")]
     UnknownStrategy { problem: String, strategy: String },
+    #[error("unknown instance `{instance}` for problem `{problem}`")]
+    UnknownInstance { problem: String, instance: String },
     #[error("run was cancelled")]
     Cancelled,
     #[error("run is paused")]
@@ -290,6 +319,7 @@ mod tests {
         let result = ReferenceService.run_with(
             &RunRequest {
                 problem: "logistics".into(),
+                instance: None,
                 strategy: Some("reliable".into()),
                 seed: 42,
                 budget: 64,
@@ -332,6 +362,7 @@ mod tests {
         let result = ReferenceService.run_with(
             &RunRequest {
                 problem: "logistics".into(),
+                instance: None,
                 strategy: Some("reliable".into()),
                 seed: 42,
                 budget: 16,

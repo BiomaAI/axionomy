@@ -979,6 +979,37 @@
           "label"
         ]
       },
+      "InstanceDescriptor": {
+        "type": "object",
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "key": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "profile": {
+            "$ref": "#/components/schemas/InstanceProfile"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "description",
+          "profile"
+        ]
+      },
+      "InstanceProfile": {
+        "type": "string",
+        "enum": [
+          "micro",
+          "showcase",
+          "stress"
+        ]
+      },
       "InvariantTermView": {
         "type": "object",
         "properties": {
@@ -1208,11 +1239,20 @@
               "$ref": "#/components/schemas/Capability"
             }
           },
+          "default_instance": {
+            "type": "string"
+          },
           "default_strategy": {
             "type": "string"
           },
           "family": {
             "$ref": "#/components/schemas/ProblemFamily"
+          },
+          "instances": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InstanceDescriptor"
+            }
           },
           "key": {
             "type": "string"
@@ -1235,6 +1275,8 @@
           "title",
           "summary",
           "family",
+          "default_instance",
+          "instances",
           "default_strategy",
           "strategies",
           "capabilities"
@@ -1415,6 +1457,9 @@
           "id": {
             "type": "string"
           },
+          "instance": {
+            "$ref": "#/components/schemas/InstanceDescriptor"
+          },
           "problem": {
             "$ref": "#/components/schemas/ProblemDescriptor"
           },
@@ -1428,6 +1473,7 @@
         "required": [
           "id",
           "problem",
+          "instance",
           "request",
           "selected_document_id",
           "documents"
@@ -1452,6 +1498,12 @@
             "format": "uint64",
             "default": 128,
             "minimum": 0
+          },
+          "instance": {
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "problem": {
             "type": "string"

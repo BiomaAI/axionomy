@@ -1,6 +1,7 @@
 use crate::{
-    Capability, ProblemDescriptor, ProblemFamily, ReferenceService, RunArtifact, RunControl,
-    RunObserver, RunRequest, ServiceError, ServiceProgress, StrategyDescriptor,
+    Capability, InstanceDescriptor, InstanceProfile, ProblemDescriptor, ProblemFamily,
+    ReferenceService, RunArtifact, RunControl, RunObserver, RunRequest, ServiceError,
+    ServiceProgress, StrategyDescriptor,
 };
 use axionomy::{Economy, Goal, QuantityScalar, Trace};
 use axionomy_view::{
@@ -364,6 +365,27 @@ fn problem(
         title: title.into(),
         summary: summary.into(),
         family,
+        default_instance: "showcase".into(),
+        instances: vec![
+            InstanceDescriptor {
+                key: "micro".into(),
+                label: "Micro proof".into(),
+                description: "Compact exact fixture for laws, oracles, and fast tests".into(),
+                profile: InstanceProfile::Micro,
+            },
+            InstanceDescriptor {
+                key: "showcase".into(),
+                label: "Substantial showcase".into(),
+                description: "Richer default instance for Studio and interface evaluation".into(),
+                profile: InstanceProfile::Showcase,
+            },
+            InstanceDescriptor {
+                key: "stress".into(),
+                label: "Stress workload".into(),
+                description: "Larger seeded workload for scalability and benchmark runs".into(),
+                profile: InstanceProfile::Stress,
+            },
+        ],
         default_strategy: default_strategy.into(),
         strategies: strategies
             .iter()
@@ -400,8 +422,27 @@ pub(crate) fn run(
             strategy: strategy.into(),
         });
     }
+    let instance_key = request
+        .instance
+        .as_deref()
+        .unwrap_or(&descriptor.default_instance);
+    if !descriptor
+        .instances
+        .iter()
+        .any(|item| item.key == instance_key)
+    {
+        return Err(ServiceError::UnknownInstance {
+            problem: descriptor.key,
+            instance: instance_key.into(),
+        });
+    }
     let mut progress = ProgressSink::new(control, observer);
-    let _ = progress.emit("prepare", 0, 1, format!("preparing {}", request.problem));
+    let _ = progress.emit(
+        "prepare",
+        0,
+        1,
+        format!("preparing {} · {instance_key}", request.problem),
+    );
     progress.ensure()?;
     let mut artifact = match request.problem.as_str() {
         "maze" => maze::build(request, &descriptor),
@@ -589,6 +630,9 @@ pub(super) fn artifact(
     selected_strategy: &str,
     documents: Vec<ViewDocument>,
 ) -> Result<RunArtifact, ServiceError> {
+    let instance = selected_instance(request, descriptor)
+        .expect("service validates instance identity before adapter dispatch")
+        .clone();
     let selected_document_id = format!("{}:{}", descriptor.key, selected_strategy);
     if !documents
         .iter()
@@ -601,15 +645,39 @@ pub(super) fn artifact(
     }
     Ok(RunArtifact {
         id: format!(
-            "{}:{}:{}:{}",
-            descriptor.key, selected_strategy, request.seed, request.budget
+            "{}:{}:{}:{}:{}",
+            descriptor.key, instance.key, selected_strategy, request.seed, request.budget
         ),
         problem: descriptor.clone(),
+        instance,
         request: request.clone(),
         selected_document_id,
         documents,
         assessed_proposals: Vec::new(),
     })
+}
+
+pub(super) fn selected_instance<'a>(
+    request: &RunRequest,
+    descriptor: &'a ProblemDescriptor,
+) -> Option<&'a InstanceDescriptor> {
+    let key = request
+        .instance
+        .as_deref()
+        .unwrap_or(&descriptor.default_instance);
+    descriptor
+        .instances
+        .iter()
+        .find(|instance| instance.key == key)
+}
+
+pub(super) fn instance_profile(
+    request: &RunRequest,
+    descriptor: &ProblemDescriptor,
+) -> InstanceProfile {
+    selected_instance(request, descriptor)
+        .expect("service validates instance identity before adapter dispatch")
+        .profile
 }
 
 pub(super) fn selected_strategy<'a>(

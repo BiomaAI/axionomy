@@ -13,15 +13,18 @@ const problem = {
   title: "Key-door maze",
   summary: "A fixture problem",
   family: "pathfinding",
+  default_instance: "showcase",
+  instances: [{ key: "showcase", label: "Substantial showcase", description: "A richer interactive workload", profile: "showcase" }],
   default_strategy: "a_star",
   strategies: [{ key: "a_star", label: "Least energy", description: "A*", algorithm: "a*" }],
   capabilities: ["weighted_search"],
 };
 
 const artifact = {
-  id: "maze:a_star:17:128",
+  id: "maze:showcase:a_star:17:128",
   problem,
-  request: { problem: "maze", strategy: "a_star", seed: 17, budget: 128 },
+  instance: problem.instances[0],
+  request: { problem: "maze", instance: "showcase", strategy: "a_star", seed: 17, budget: 128 },
   selected_document_id: "maze:a_star",
   assessed_proposals: [],
   documents: [{

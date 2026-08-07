@@ -348,6 +348,14 @@ fn validate_problem_run(request: &RunRequest) -> Result<(), String> {
             request.problem
         ));
     }
+    if let Some(instance) = &request.instance
+        && !problem.instances.iter().any(|known| &known.key == instance)
+    {
+        return Err(format!(
+            "unknown instance `{instance}` for problem `{}`",
+            request.problem
+        ));
+    }
     Ok(())
 }
 

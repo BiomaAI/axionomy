@@ -35,6 +35,7 @@ button { cursor: pointer; }
 .command-bar { display: flex; gap: 9px; align-items: end; padding: 16px 0; border-bottom: 1px solid var(--line); }
 .field { min-width: 180px; display: grid; gap: 6px; }
 .problem-field { min-width: 230px; }
+.instance-field { min-width: 175px; }
 .strategy-field { min-width: 230px; }
 .numeric-field { min-width: 78px; width: 88px; }
 .field > span, .eyebrow, .panel-heading span, .alternative-bar > div:first-child > span, .rate-browser label > span { font: 500 9px var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
@@ -75,6 +76,7 @@ button.danger { color: var(--red); }
 .problem-context > div:first-child { display: flex; align-items: center; gap: 13px; min-width: 0; }
 .problem-context > div:first-child > span { color: var(--blue); font: 10px var(--mono); text-transform: uppercase; white-space: nowrap; }
 .problem-context p { color: var(--muted); margin: 0; font-size: 12px; }
+.problem-context p small { display: block; margin-top: 4px; color: var(--text); font: 8px var(--mono); }
 .problem-context > div:last-child { display: flex; flex-wrap: wrap; justify-content: end; gap: 5px; }
 .problem-context > div:last-child span { border: 1px solid var(--line); padding: 4px 6px; color: var(--muted); font: 8px var(--mono); text-transform: uppercase; }
 .error-banner { margin: 14px 0; padding: 11px 14px; border: 1px solid #71343a; background: #261418; color: #ff9a9e; }
@@ -272,7 +274,7 @@ footer { padding: 25px 0 36px; color: var(--muted); text-align: center; font: 8p
   .topbar { height: auto; min-height: 76px; align-items: start; padding: 13px 0; }
   .brand { align-items: start; flex-direction: column; gap: 4px; }
   .connection { font-size: 8px; }
-  .field, .problem-field, .strategy-field { width: 100%; min-width: 0; }
+  .field, .problem-field, .instance-field, .strategy-field { width: 100%; min-width: 0; }
   .numeric-field { width: calc(50% - 5px); }
   .run-activity, .completion-banner { grid-template-columns: 1fr; }
   .run-activity-progress { grid-template-columns: 1fr; }

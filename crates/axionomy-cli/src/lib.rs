@@ -30,6 +30,9 @@ enum Command {
     /// Run a problem and emit a summary or portable artifact JSON.
     Run {
         problem: String,
+        /// Select micro, showcase, or stress instance profile.
+        #[arg(long)]
+        instance: Option<String>,
         #[arg(long)]
         strategy: Option<String>,
         #[arg(long, default_value_t = 17)]
@@ -80,8 +83,12 @@ pub fn execute(cli: Cli) -> Result<CliOutput, CliError> {
                     .into_iter()
                     .map(|problem| {
                         format!(
-                            "{:<16} {:<24} default={}\n  {}",
-                            problem.key, problem.title, problem.default_strategy, problem.summary
+                            "{:<16} {:<24} instance={} strategy={}\n  {}",
+                            problem.key,
+                            problem.title,
+                            problem.default_instance,
+                            problem.default_strategy,
+                            problem.summary
                         )
                     })
                     .collect::<Vec<_>>()
@@ -114,8 +121,26 @@ pub fn execute(cli: Cli) -> Result<CliOutput, CliError> {
                     })
                     .collect::<Vec<_>>()
                     .join("\n");
+                let instances = descriptor
+                    .instances
+                    .iter()
+                    .map(|instance| {
+                        format!(
+                            "  {:<20} {}{}\n    {}",
+                            instance.key,
+                            instance.label,
+                            if instance.key == descriptor.default_instance {
+                                " (default)"
+                            } else {
+                                ""
+                            },
+                            instance.description
+                        )
+                    })
+                    .collect::<Vec<_>>()
+                    .join("\n");
                 format!(
-                    "{} [{}]\n{}\n\nCapabilities: {}\n\nStrategies:\n{}",
+                    "{} [{}]\n{}\n\nCapabilities: {}\n\nInstances:\n{}\n\nStrategies:\n{}",
                     descriptor.title,
                     descriptor.key,
                     descriptor.summary,
@@ -125,6 +150,7 @@ pub fn execute(cli: Cli) -> Result<CliOutput, CliError> {
                         .map(|capability| format!("{capability:?}"))
                         .collect::<Vec<_>>()
                         .join(", "),
+                    instances,
                     strategies
                 )
             };
@@ -132,6 +158,7 @@ pub fn execute(cli: Cli) -> Result<CliOutput, CliError> {
         }
         Command::Run {
             problem,
+            instance,
             strategy,
             seed,
             budget,
@@ -139,6 +166,7 @@ pub fn execute(cli: Cli) -> Result<CliOutput, CliError> {
             output,
         } => {
             let mut request = RunRequest::new(problem);
+            request.instance = instance;
             request.strategy = strategy;
             request.seed = seed;
             request.budget = budget;
@@ -179,10 +207,11 @@ fn summary(artifact: &RunArtifact) -> String {
             .join(", ")
     };
     format!(
-        "{}\n{}\nartifact: {}\nselected: {}\nalternatives: {}\nexchanges: {}\nobjectives: {}\nassessed proposals: {}",
+        "{}\n{}\nartifact: {}\ninstance: {}\nselected: {}\nalternatives: {}\nexchanges: {}\nobjectives: {}\nassessed proposals: {}",
         selected.title,
         selected.description,
         artifact.id,
+        artifact.instance.key,
         selected.id,
         artifact.documents.len().saturating_sub(1),
         selected.frames.len(),
