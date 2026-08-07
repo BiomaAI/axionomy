@@ -628,12 +628,53 @@ pub(super) fn artifact(
     request: &RunRequest,
     descriptor: &ProblemDescriptor,
     selected_strategy: &str,
-    documents: Vec<ViewDocument>,
+    mut documents: Vec<ViewDocument>,
 ) -> Result<RunArtifact, ServiceError> {
     let instance = selected_instance(request, descriptor)
         .expect("service validates instance identity before adapter dispatch")
         .clone();
     let selected_document_id = format!("{}:{}", descriptor.key, selected_strategy);
+    let alternatives = documents.len() as u64;
+    for document in &mut documents {
+        let accounts = document.initial.accounts.len() as u64;
+        let rates = document
+            .model
+            .as_ref()
+            .map_or(0, |model| model.rates.len() as u64);
+        let transitions = document.frames.len() as u64;
+        let constraints = document.proposals.len() as u64;
+        document.telemetry.push(telemetry(
+            "artifact complexity",
+            true,
+            [
+                (
+                    TelemetryKindView::Accounts,
+                    accounts,
+                    "modeled accounts".into(),
+                ),
+                (
+                    TelemetryKindView::Rates,
+                    rates,
+                    "encoded transition rules".into(),
+                ),
+                (
+                    TelemetryKindView::Transitions,
+                    transitions,
+                    "accepted atomic transitions".into(),
+                ),
+                (
+                    TelemetryKindView::Constraints,
+                    constraints,
+                    "rejected proposals explained".into(),
+                ),
+                (
+                    TelemetryKindView::Alternatives,
+                    alternatives,
+                    "replayable outcomes compared".into(),
+                ),
+            ],
+        ));
+    }
     if !documents
         .iter()
         .any(|document| document.id == selected_document_id)

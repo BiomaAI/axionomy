@@ -86,6 +86,17 @@ button.danger { color: var(--red); }
 .alternative-bar [role="tablist"], .proposal-tabs { display: flex; gap: 5px; flex-wrap: wrap; }
 .alternative-bar button, .proposal-tabs button { min-height: 30px; padding: 0 9px; color: var(--muted); font-size: 10px; }
 button[aria-selected="true"] { color: var(--lime); border-color: var(--lime); background: color-mix(in srgb, var(--lime) 9%, var(--surface)); }
+.strategy-comparison { margin-top: 12px; border: 1px solid var(--line); background: var(--surface); }
+.comparison-heading { display: flex; align-items: baseline; gap: 12px; padding: 10px 12px; border-bottom: 1px solid var(--line); }
+.comparison-heading span { color: var(--blue); font: 8px var(--mono); letter-spacing: .11em; text-transform: uppercase; }
+.comparison-heading strong { font-size: 11px; }
+.comparison-scroll { overflow-x: auto; }
+.strategy-comparison table { width: 100%; border-collapse: collapse; font-size: 10px; }
+.strategy-comparison th { color: var(--muted); font: 8px var(--mono); letter-spacing: .08em; text-align: left; text-transform: uppercase; }
+.strategy-comparison th, .strategy-comparison td { padding: 8px 12px; border-bottom: 1px solid color-mix(in srgb, var(--line) 68%, transparent); white-space: nowrap; }
+.strategy-comparison tbody tr:last-child td { border-bottom: 0; }
+.strategy-comparison tr.selected { background: color-mix(in srgb, var(--lime) 5%, transparent); }
+.strategy-comparison td button { min-height: 26px; padding: 0 8px; color: var(--blue); font-size: 9px; }
 .document-heading { display: flex; align-items: end; justify-content: space-between; gap: 30px; padding: 28px 0 20px; }
 h1 { font-size: clamp(30px, 3vw, 48px); line-height: 1; letter-spacing: -.055em; margin: 8px 0 11px; }
 .document-heading p { color: var(--muted); max-width: 790px; margin: 0; font-size: 13px; }

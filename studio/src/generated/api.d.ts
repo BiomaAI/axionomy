@@ -568,7 +568,7 @@ export interface components {
             sequence: number;
         };
         /** @enum {string} */
-        TelemetryKindView: "expanded" | "generated" | "iteration" | "sample" | "information_set" | "message";
+        TelemetryKindView: "expanded" | "generated" | "iteration" | "sample" | "information_set" | "accounts" | "rates" | "transitions" | "constraints" | "alternatives" | "message";
         /**
          * @description A transport-neutral progress observation. Counters are exact text so the
          *     same contract remains safe in native and JavaScript consumers.

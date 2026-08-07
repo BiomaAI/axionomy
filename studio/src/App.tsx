@@ -190,6 +190,7 @@ export function App() {
 
     {artifact && document && snapshot ? <main className={freshArtifactId === artifact.id ? "fresh-artifact" : undefined}>
       <section className="alternative-bar"><div><span>Artifact alternatives</span><strong>{artifact.documents.length} replayable outcomes</strong></div><div role="tablist">{artifact.documents.map((candidate) => <button key={candidate.id} role="tab" aria-selected={candidate.id === document.id} onClick={() => setDocumentId(candidate.id)}>{candidate.title.replace(`${artifact.problem.title} · `, "")}</button>)}</div></section>
+      <StrategyComparison artifact={artifact} selected={document.id} onSelect={setDocumentId} />
       <section className="document-heading"><div><span className="eyebrow">{artifact.instance.label} · {document.source.label} · {document.id}{freshArtifactId === artifact.id ? " · newly computed" : ""}</span><h1>{document.title}</h1><p>{document.description}</p></div><div className="objective-pills">{document.objectives.map((objective) => <div className="objective" key={objective.key}><span>{objective.label}</span><strong>{objective.value}</strong><small>{objective.direction}</small></div>)}</div></section>
       <PlaybackControls position={position} count={document.frames.length} playing={playing} onPosition={setPosition} onPlaying={setPlaying} frame={frame} />
 
@@ -236,6 +237,22 @@ function CompletionBanner({ notice, onDismiss }: { notice: CompletionNotice; onD
     <div className="completion-mark" aria-hidden="true">✓</div>
     <div><strong>New artifact computed and loaded</strong><span>{notice.problem} · {notice.instance} · {notice.strategy} · seed {notice.seed} · budget {notice.budget}</span><small>{notice.documents} replayable {notice.documents === 1 ? "outcome" : "outcomes"} · completed in {formatDuration(notice.durationMs)} · <code>{notice.artifactId}</code></small></div>
     <button type="button" onClick={onDismiss}>Dismiss</button>
+  </section>;
+}
+
+function StrategyComparison({ artifact, selected, onSelect }: { artifact: RunArtifact; selected: string; onSelect: (id: string) => void }) {
+  return <section className="strategy-comparison" aria-label="Outcome comparison">
+    <div className="comparison-heading"><span>Outcome comparison</span><strong>Strategies and tradeoffs on one evidence surface</strong></div>
+    <div className="comparison-scroll"><table><thead><tr><th>Outcome</th><th>Result</th><th>Trace</th><th>Search evidence</th></tr></thead><tbody>{artifact.documents.map((candidate) => {
+      const series = candidate.telemetry.find((entry) => entry.algorithm !== "artifact complexity");
+      const work = series ? [...series.points].reverse().find((point) => ["generated", "expanded", "iteration", "sample"].includes(point.kind)) : undefined;
+      return <tr key={candidate.id} className={candidate.id === selected ? "selected" : undefined}>
+        <td><button type="button" onClick={() => onSelect(candidate.id)}>{candidate.title.replace(`${artifact.problem.title} · `, "")}</button></td>
+        <td>{candidate.objectives.length > 0 ? candidate.objectives.map((objective) => `${objective.label}: ${objective.value}`).join(" · ") : "Feasibility outcome"}</td>
+        <td>{candidate.frames.length} atomic {candidate.frames.length === 1 ? "transition" : "transitions"}</td>
+        <td>{series ? `${series.algorithm} · ${series.exact ? "exact" : "sampled"}${work ? ` · ${work.value} ${work.kind.replaceAll("_", " ")}` : ""}` : "Replay only"}</td>
+      </tr>;
+    })}</tbody></table></div>
   </section>;
 }
 

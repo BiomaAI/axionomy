@@ -2058,6 +2058,11 @@
           "iteration",
           "sample",
           "information_set",
+          "accounts",
+          "rates",
+          "transitions",
+          "constraints",
+          "alternatives",
           "message"
         ]
       },

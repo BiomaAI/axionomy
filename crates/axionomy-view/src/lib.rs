@@ -370,6 +370,11 @@ pub enum TelemetryKindView {
     Iteration,
     Sample,
     InformationSet,
+    Accounts,
+    Rates,
+    Transitions,
+    Constraints,
+    Alternatives,
     Message,
 }
 
