@@ -605,11 +605,11 @@ CLI, HTTP/Studio, and MCP use one interface-neutral service rather than
 reimplementing problem dispatch. Its public vocabulary is intentionally small:
 
 ```text
-ProblemDescriptor = identity + family + strategies + capabilities
-RunRequest         = problem + strategy + deterministic seed + work budget
+ProblemDescriptor = identity + family + instance profiles + strategies + capabilities
+RunRequest         = problem + instance + strategy + deterministic seed + work budget
 RunControl         = cooperative pause + resume + cancel
 ServiceProgress    = ordered phase + completed/total work + message
-RunArtifact        = request + selected document + replayable alternatives
+RunArtifact        = request + resolved instance + selected document + replayable alternatives
                      + assessed constraint probes
 ```
 
@@ -634,7 +634,43 @@ are compared with the complete `ReferenceService` artifact, not merely a
 shared identifier. Transport events and run records are allowed to differ;
 economic documents, assessments, receipts, objectives, and traces are not.
 
-### 6.2 Presentation is a replay-derived boundary
+### 6.2 Instance profiles keep examples honest
+
+The reference service separates correctness scale from product-demonstration
+scale with three explicit problem profiles:
+
+```text
+Micro     = compact exact fixture, independent oracle, fast integration proof
+Showcase  = decision-dense default for Studio and portable artifacts
+Stress    = larger domain-relevant workload for scale and interruption checks
+```
+
+This is not a global size knob. Each problem chooses the dimension that
+actually pressures its semantics: topology and route tradeoffs for Maze,
+spatial maneuvering for Sokoban, incidence alternatives for Exact Cover,
+precedence and capacity for scheduling, repeated allocations for Bridge,
+coupled settlements for Marketplace, hidden scenario support for Rescue,
+standard board geometry for Connect Four, sample work for stochastic search,
+and fungible inventory magnitude for Perishables. Showcase growth must add
+branching, constraints, roles, uncertainty, or tradeoffs—not merely repeat a
+forced exchange.
+
+Profiles remain closed problem definitions. Their accounts, assets, rates,
+invariants, goals, and initial quantities are ordinary model data; the
+`InstanceDescriptor` is interface identity, not semantic authority. Every
+artifact resolves and records that identity. Micro continues to support exact
+oracles even when exhaustive search over Showcase would be inappropriate, and
+an approximate or candidate-bounded Showcase frontier must be labeled as such.
+
+The conformance service enforces minimum Showcase pressure for all twelve
+problems. Every document also receives transport-neutral complexity evidence:
+modeled accounts, encoded rates, accepted atomic transitions, explained
+rejections, and replayable alternatives. These measurements are explanatory,
+not objectives, and cannot affect validity. Studio uses them with a generic
+outcome-comparison table so API awkwardness and accidental toy regressions are
+visible early across unrelated domains.
+
+### 6.3 Presentation is a replay-derived boundary
 
 Axionomy Studio is designed as an economic debugger and decision observatory,
 not as a second environment. Its universal view shows accounts and balances,
@@ -713,7 +749,7 @@ Completion leaves a dismissible receipt containing duration and request
 identity and visibly marks the replacement artifact, so even a sub-second run
 has an inspectable result.
 
-The implemented Studio exposes the complete twelve-problem conformance
+The implemented Studio exposes the complete twelve-problem Showcase
 surface: pathfinding and networks use graphs; Sokoban and Connect Four use
 grids; Exact Cover uses a constraint matrix; scheduling and perishables use
 timelines; markets expose multi-party settlement and rejected shortfalls;
@@ -721,7 +757,9 @@ stochastic and partially observed domains expose telemetry, sampled policy
 evidence, and actor-relative views. Every artifact includes replayable strategy
 alternatives where the domain supplies them. The universal model explorer
 exposes encoded rates, roles, goals, and invariants even when a specialized
-scene is absent.
+scene is absent. An instance selector makes Micro and Stress available to a
+connected engine, while static hosting deliberately serves the committed
+Showcase artifacts.
 
 Assessed proposals in conformance documents are constraint probes. Some are
 deliberately malformed or infeasible, and their rejection proves that encoded
@@ -1034,16 +1072,16 @@ problems. Full formal specifications live in [PROBLEMS.md](PROBLEMS.md).
 
 | Problem | What it demonstrates |
 | --- | --- |
-| Key-door maze | A closed graph, explicit key/lock state, encoded energy/time tradeoff, exact Pareto front, and different BFS versus A* choices |
-| Sokoban | Atomic three-account rewrites, spatial occupancy, and core-observed infeasibility |
-| Exact cover | Logical constraint state plus Algorithm X as an untrusted proposal generator |
-| Workshop | Stoichiometric transformation, reusable catalysts, encoded waste/time front, and invariant rejection |
-| Job shop | Identified capacity slots, precedence tokens, per-job completion front, makespan, and direct-oracle agreement |
-| Rescue | Hidden truth, restricted views, exact scenario evaluation, seeded Monte Carlo, approximate success/resource front, and replay |
-| Bridge | Multi-agent bids, escrow, capacity, joint resolution, alternative mechanisms, and exact allocation front |
-| Marketplace | Account-derived matching, complete shortfalls, six-party settlement, clearing, and exact participant-utility front |
+| Key-door maze | A 14-node closed graph, explicit key/lock state, four encoded energy/time routes, exact Pareto front, and different BFS versus A* choices |
+| Sokoban | A 7×5 spatial search, atomic three-account rewrites, repositioning choices, occupancy, and core-observed infeasibility |
+| Exact cover | An 8-element/12-subset logical constraint surface plus Algorithm X as an untrusted proposal generator |
+| Workshop | Six-chair multi-batch stoichiometric transformation, reusable catalysts, encoded waste/time front, and invariant rejection |
+| Job shop | Six operations, three machines, identified capacity slots, precedence tokens, completion front, makespan, and direct-oracle agreement |
+| Rescue | Four hidden sites, 32 encoded scenarios, restricted views, sensing and evacuation, seeded Monte Carlo, approximate success/resource front, and replay |
+| Bridge | Repeated multi-agent bids, escrow, capacity, atomic round reset, alternative mechanisms, and fairness/credit frontier |
+| Marketplace | Account-derived matching, complete shortfalls, four coupled six-party settlements, clearing, and participant-utility front |
 | Logistics | Recurrent encoded chance, long rollouts, repair loops, risk projections, approximate policy front, and MCTS route planning |
-| Connect Four | Identified coordinates, encoded gravity and terminal truth, adversarial MCTS, and plain-board oracles |
+| Connect Four | Standard 7×6 geometry, compact 69-line win certificates, encoded gravity and terminal truth, adversarial MCTS, and plain-board oracles |
 | Mission | Canonical private observations, caller-owned posterior beliefs, repeated ISMCTS, approximate policy front, causal intelligence exchange, and RL trajectory projection |
 | Perishables | Fungible cohort claims, shared condition facts, explicit time, refrigeration, exact preservation/energy front, outage effects, stale-event rejection, and an independent oracle |
 
@@ -1209,9 +1247,11 @@ The current foundation is intentionally bounded:
   at phase and document-publication boundaries. A one-shot domain solver is not
   preempted in the middle of an indivisible call.
 - Full model projection currently materializes every concrete rate. Studio
-  filters large rate books client-side, but the portable Connect Four artifact
-  demonstrates the size pressure that should justify pagination or a compact
-  parameterized schema before either is introduced.
+  filters large rate books client-side. Standard 7×6 Connect Four now uses 226
+  concrete placement, adjudication, and four-cell certificate rates—smaller
+  than the former 1,282-rate 4×4 counter cross-product—but pagination or a
+  generic parameterized-rate view still awaits measured pressure from other
+  domains.
 - The MCP reference binary keeps snapshots and task lifecycle in memory. Its
   handles do not survive restart; callers can implement `SnapshotStore` when
   snapshot persistence is required, while distributed task recovery remains
@@ -1661,6 +1701,15 @@ are defined once and tested for cross-interface equality. Interface pressure
 may improve this shared boundary and reveal missing kernel explanations, but
 transport lifecycle and presentation state never become economic authority.
 
+### D-034: Correctness fixtures and product workloads are distinct instances
+
+Micro keeps exhaustive laws and independent oracles cheap. Showcase is the
+decision-dense interface default. Stress scales a domain-relevant dimension.
+All three are ordinary closed economies with explicit artifact identity; none
+may introduce external semantic state. Complexity telemetry and per-problem
+Showcase thresholds prevent attractive visualizations from hiding trivial
+models or forced traces.
+
 ## 16. Success criteria
 
 Axionomy succeeds when:
@@ -1682,7 +1731,8 @@ Axionomy succeeds when:
   accepted exchange, and inspect exact balances and deltas without a parallel
   mutable world model or handwritten cross-language contract.
 - All twelve canonical problems are discoverable, runnable, replayable, and
-  meaningfully inspectable through Studio and static artifacts.
+  meaningfully inspectable through Studio and static Showcase artifacts, with
+  explicit Micro and Stress selection on live interfaces.
 - CLI, HTTP, and MCP return the same semantic problem artifacts for the same
   request, while retaining interface-appropriate operational behavior.
 - Infeasible proposals expose every account-and-asset shortfall without

@@ -1,8 +1,9 @@
 # Axionomy Closed-Problem Conformance Suite
 
 This document specifies the problem set used to evolve and test Axionomy's
-API. Each problem is intentionally small enough to solve exhaustively and
-different enough to expose a distinct architectural pressure.
+API. Each problem has a small proof fixture and a materially larger default
+workload. The suite is deliberately different enough to expose distinct
+architectural pressure without confusing raw size with semantic difficulty.
 
 The suite is successful only when a problem is genuinely closed:
 
@@ -83,6 +84,51 @@ target, not a consumer example:
 cargo bench -p axionomy-problems --bench rollout_throughput
 ```
 
+## Instance profiles and anti-toy pressure
+
+Every service-visible problem exposes the same explicit profile contract:
+
+- **Micro** preserves the compact exact fixtures and independent oracles used
+  by unit tests and quick integration checks.
+- **Showcase** is the Studio, CLI, HTTP, and MCP default. It adds decision
+  density: longer plans, competing actions, coupled resources, more accounts,
+  richer constraints, or broader uncertainty.
+- **Stress** increases a problem-appropriate dimension such as board size,
+  sample work, scheduling horizon, production target, or fungible inventory.
+
+These are problem instances, not alternate semantics. A profile may change
+initial accounts, the closed rate book, and encoded goals, but it never moves
+truth into the service or viewer. Instance identity is carried in
+`RunRequest` and `RunArtifact`, so a result cannot be compared or replayed as
+though it came from a different workload.
+
+The committed Showcase artifacts currently apply this pressure:
+
+| Problem | Default Showcase pressure |
+| --- | --- |
+| Maze | 14 nodes, 16 directed edges, four energy/time route families, and an eight-transition low-energy plan |
+| Sokoban | 7×5 board, 35 cell accounts, two-dimensional repositioning, and a ten-transition solution |
+| Exact cover | 8 universe elements, 12 competing subsets, four selections, and an independently proposed Algorithm X trace |
+| Workshop | Six-chair multi-batch target with seven-step fast and four-step efficient extremes |
+| Job shop | Six precedence-constrained operations across three machines and 18 capacity slots |
+| Rescue | Four hidden sites, 32 encoded Nature scenarios, noisy sensing, contact, and return evacuation |
+| Bridge | Two consecutive auctions/allocations with escrow, recharge, atomic round reset, and fairness tradeoffs |
+| Marketplace | Four coupled orders across 14 accounts with shared budgets, inventory, shipping capacity, taxes, and commissions |
+| Logistics | Four deliveries, recurrent weather and breakdowns, refueling/repair loops, up to 53 accepted transitions, Monte Carlo, and MCTS |
+| Connect Four | Standard 7×6 board and 69 four-cell win certificates; 226 concrete rates replace the old 1,282-rate 4×4 projection |
+| Mission | 16 hidden joint scenarios, private observations, belief filtering, information exchange, hazard response, Monte Carlo, and ISMCTS |
+| Perishables | 10,000 fungible claims, cohort-level decay, refrigeration, outage effects, indexed deadlines, and an eight-point storage frontier |
+
+Artifact complexity telemetry records modeled accounts, encoded rates,
+accepted transitions, rejection proofs, and compared outcomes for every
+document. The service test also enforces per-problem minimum pressure (and a
+maximum compact-rate bound for standard Connect Four), preventing future
+refactors from silently collapsing Showcase back into a toy.
+
+The detailed specifications below describe the Micro conformance contract
+unless a larger profile is named explicitly. Showcase builds on those same
+laws; it does not replace the exact fixtures that make correctness auditable.
+
 ## 1. Key-door energy maze
 
 Source: `crates/axionomy-problems/src/maze.rs`
@@ -129,7 +175,7 @@ produces `Solved`, leaving no post-terminal moves applicable.
 - One state graph served by multiple traversal strategies.
 - Exact multi-objective comparison without weighted-sum scalarization.
 
-## 2. Linear Sokoban
+## 2. Sokoban
 
 Source: `crates/axionomy-problems/src/sokoban.rs`
 

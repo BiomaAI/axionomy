@@ -7,6 +7,13 @@ deltas, encoded rates and invariants, objectives, alternatives, telemetry, and
 actor-relative observations. Graph, grid, matrix, and timeline scenes are
 derived conveniences; they never become a second simulation model.
 
+Each problem advertises Micro, Showcase, and Stress instances. Showcase is the
+default and is also the committed offline artifact; Micro and Stress are live
+engine choices. The comparison surface puts replayable outcomes, objective
+values, trace lengths, and algorithm evidence side by side, while uniform
+complexity telemetry exposes accounts, rates, transitions, rejection proofs,
+and alternatives across every domain.
+
 `Run` asks the native engine for a new reproducible artifact; the playback
 transport only scrubs the selected artifact's already verified exchange trace.
 During a live run, Studio shows the current phase, elapsed time, deterministic

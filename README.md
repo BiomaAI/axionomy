@@ -68,6 +68,13 @@ See [PDD.md](PDD.md) for the product and technical contract,
 and [AGENT_BENCHMARK.md](AGENT_BENCHMARK.md) for the future single- and
 multi-agent evaluation and rating design.
 
+The twelve reference problems expose explicit **Micro**, **Showcase**, and
+**Stress** instances. Micro keeps exact fixtures and independent oracles fast;
+Showcase is the substantial default used by Studio and generated artifacts;
+Stress scales a domain-relevant dimension. This keeps examples honest without
+turning arbitrary size into a product claim, and it lets CLI, HTTP, MCP, and
+Studio identify exactly which closed economy produced an outcome.
+
 ## Workspace
 
 The repository separates execution semantics, solver strategies, and domain
@@ -146,17 +153,18 @@ adapters.
   content-addressed immutable economy snapshots, a caller-provided storage
   boundary, an in-memory default, schema-backed tools, polling, progress, and
   cooperative cancellation through `rmcp::TaskManager`.
-- Twelve closed benchmark encodings in `axionomy-problems`, with distinct
-  solver strategies, independent reference oracles, and encoded stochastic
-  priors.
+- Twelve closed benchmark encodings in `axionomy-problems`, each with explicit
+  Micro/Showcase/Stress identity, distinct solver strategies, independent
+  reference oracles, and encoded stochastic priors.
 - One interface-neutral problem service used by CLI, HTTP/Studio, and MCP,
-  with twelve discoverable canonical problems, reproducible strategy requests,
-  cooperative run control, bounded Monte Carlo/MCTS progress, alternatives,
-  and portable artifacts.
+  with twelve discoverable canonical problems, explicit instance selection,
+  reproducible strategy requests, cooperative run control, bounded
+  Monte Carlo/MCTS progress, alternatives, and portable artifacts.
 - Axionomy Studio's Rust-owned `ViewDocument` contract, replay-derived account
   snapshots, assessments and receipts, exact string quantities, graph, grid,
   matrix, and timeline scenes, alternative traces, Pareto fronts, stochastic
-  telemetry, partial observations, model inspection, live resumable SSE runs,
+  telemetry, uniform complexity evidence, cross-strategy comparison, partial
+  observations, model inspection, live resumable SSE runs,
   responsive pause/cancellation, persistent run feedback, structured expected
   rejection proofs, OpenAPI-generated TypeScript, and static JSON for all
   twelve problems.
@@ -229,7 +237,7 @@ The same service is available without a browser:
 ```console
 cargo run -p axionomy-cli -- catalog
 cargo run -p axionomy-cli -- describe logistics
-cargo run -p axionomy-cli -- run logistics --strategy reliable
+cargo run -p axionomy-cli -- run logistics --instance showcase --strategy reliable
 ```
 
 ## Core example

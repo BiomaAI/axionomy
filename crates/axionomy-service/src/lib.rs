@@ -272,6 +272,34 @@ mod tests {
         let catalog = ReferenceService.catalog();
         assert_eq!(catalog.len(), 12);
         assert!(catalog.iter().all(|problem| !problem.strategies.is_empty()));
+        assert!(catalog.iter().all(|problem| {
+            problem.default_instance == "showcase"
+                && problem
+                    .instances
+                    .iter()
+                    .map(|instance| instance.profile)
+                    .eq([
+                        InstanceProfile::Micro,
+                        InstanceProfile::Showcase,
+                        InstanceProfile::Stress,
+                    ])
+        }));
+    }
+
+    #[test]
+    fn every_micro_problem_remains_a_fast_replayable_contract_fixture() {
+        let service = ReferenceService;
+        for problem in service.catalog() {
+            let mut request = RunRequest::new(&problem.key)
+                .with_instance("micro")
+                .with_strategy(&problem.default_strategy);
+            request.budget = 8;
+            let artifact = service
+                .run(request)
+                .unwrap_or_else(|error| panic!("{} micro failed: {error}", problem.key));
+            assert_eq!(artifact.instance.profile, InstanceProfile::Micro);
+            assert!(artifact.selected_document().is_some());
+        }
     }
 
     #[test]
@@ -283,6 +311,7 @@ mod tests {
                 .unwrap_or_else(|error| panic!("{} failed: {error}", problem.key));
             assert!(artifact.selected_document().is_some(), "{}", problem.key);
             assert!(!artifact.documents.is_empty(), "{}", problem.key);
+            assert_eq!(artifact.instance.profile, InstanceProfile::Showcase);
             assert!(
                 artifact
                     .documents
@@ -291,6 +320,64 @@ mod tests {
                 "{}",
                 problem.key
             );
+            let maximum_frames = artifact
+                .documents
+                .iter()
+                .map(|document| document.frames.len())
+                .max()
+                .unwrap_or(0);
+            let maximum_accounts = artifact
+                .documents
+                .iter()
+                .map(|document| document.initial.accounts.len())
+                .max()
+                .unwrap_or(0);
+            let maximum_rates = artifact
+                .documents
+                .iter()
+                .filter_map(|document| document.model.as_ref())
+                .map(|model| model.rates.len())
+                .max()
+                .unwrap_or(0);
+            let (minimum_frames, minimum_accounts, minimum_rates) = match problem.key.as_str() {
+                "maze" => (8, 2, 19),
+                "sokoban" => (10, 36, 200),
+                "exact_cover" => (5, 1, 40),
+                "workshop" => (7, 1, 4),
+                "scheduling" => (7, 20, 100),
+                "rescue" => (7, 2, 70),
+                "bridge" => (10, 3, 18),
+                "marketplace" => (4, 14, 4),
+                "logistics" => (40, 7, 50),
+                "connect_four" => (15, 50, 200),
+                "mission" => (6, 5, 39),
+                "perishables" => (10, 5, 13),
+                other => panic!("missing showcase pressure threshold for {other}"),
+            };
+            assert!(
+                maximum_frames >= minimum_frames,
+                "{} trace regressed",
+                problem.key
+            );
+            assert!(
+                maximum_accounts >= minimum_accounts,
+                "{} account surface regressed",
+                problem.key
+            );
+            assert!(
+                maximum_rates >= minimum_rates,
+                "{} rate surface regressed",
+                problem.key
+            );
+            assert!(artifact.documents.iter().all(|document| {
+                document
+                    .telemetry
+                    .iter()
+                    .any(|series| series.algorithm == "artifact complexity")
+            }));
+            if problem.key == "connect_four" {
+                assert!(maximum_rates < 300, "compact standard board regressed");
+            }
         }
     }
 

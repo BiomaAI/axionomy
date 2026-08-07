@@ -66,8 +66,8 @@ inputs, tool outputs, or economic semantics.
 | `axionomy_exchange_apply` | `economy_id`, exchange | Source ID, new snapshot ID, and receipt |
 | `axionomy_trace_replay` | `economy_id`, trace | Source ID, new snapshot ID, and all receipts |
 | `axionomy_search` | `economy_id`, goal, concrete candidate exchanges, bounds | MCP task handle; poll `tasks/get` for progress and the structured search result |
-| `axionomy_problem_catalog` | None | The same twelve descriptors, strategies, and capabilities exposed by CLI and Studio |
-| `axionomy_problem_run` | Problem, optional strategy, seed, and budget | MCP task handle whose terminal result is the shared replay-derived `RunArtifact` |
+| `axionomy_problem_catalog` | None | The same twelve descriptors, Micro/Showcase/Stress instances, strategies, and capabilities exposed by CLI and Studio |
+| `axionomy_problem_run` | Problem, optional instance and strategy, seed, and budget | MCP task handle whose terminal result is the shared replay-derived `RunArtifact` with resolved instance identity |
 
 Tool inputs and outputs carry generated JSON Schemas. The reference wire
 ontology uses `String` for asset, account, rate, and role IDs and `u64` for
