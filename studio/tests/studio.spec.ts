@@ -22,7 +22,7 @@ test("shows incremental stochastic progress and responsive pause control", async
   await expect(page.getByText("Run paused", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Resume" }).click();
   await expect(page.getByText("New artifact computed and loaded")).toBeVisible({ timeout: 30_000 });
-  await expect(page.getByText(/Stochastic logistics · Reliable policy · seed 42 · budget 64/)).toBeVisible();
+  await expect(page.getByText(/Stochastic logistics · Substantial showcase · Reliable policy · seed 42 · budget 64/)).toBeVisible();
   await expect(page.getByText("Expected rejection proofs")).toBeVisible();
   await expect(page.getByText("Missing account binding for role `Vehicle`.")).toBeVisible();
   await expect(page.getByText("Missing account binding for role `Order`.")).toBeVisible();
