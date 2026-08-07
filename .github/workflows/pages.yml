@@ -18,7 +18,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: 1.89.0
@@ -26,10 +26,10 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Install wasm-pack
         run: cargo install wasm-pack --locked --version 0.13.1
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         with:
           version: 10.14.0
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: pnpm
@@ -60,8 +60,8 @@ jobs:
           test -f dist/.nojekyll
           find dist/assets -name '*.wasm' -size +100k | grep -q .
           grep -q '/axionomy/' dist/index.html
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v4
+      - uses: actions/configure-pages@v6
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: studio/dist
 
@@ -74,4 +74,4 @@ jobs:
     steps:
       - name: Deploy Studio
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
