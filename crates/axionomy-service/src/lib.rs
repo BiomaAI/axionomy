@@ -268,6 +268,15 @@ impl ReferenceService {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use axionomy_view::SceneSurfaceView;
+    use std::collections::HashSet;
+
+    fn assert_unique<'a>(problem: &str, kind: &str, ids: impl Iterator<Item = &'a str>) {
+        let mut seen = HashSet::new();
+        for id in ids {
+            assert!(seen.insert(id), "{problem} repeats {kind} `{id}`");
+        }
+    }
 
     #[test]
     fn catalog_covers_every_canonical_problem() {
@@ -459,6 +468,52 @@ mod tests {
                     .filter_map(|snapshot| snapshot.scene.as_ref())
                     .any(|scene| !scene.entities.is_empty())
             }));
+            for document in &artifact.documents {
+                let model = document.model.as_ref().expect("model definition");
+                assert_unique(
+                    &problem.key,
+                    "invariant name",
+                    model
+                        .invariants
+                        .iter()
+                        .map(|invariant| invariant.name.as_str()),
+                );
+                for scene in std::iter::once(&document.initial)
+                    .chain(document.frames.iter().map(|frame| &frame.after))
+                    .filter_map(|snapshot| snapshot.scene.as_ref())
+                {
+                    assert_unique(
+                        &problem.key,
+                        "scene entity ID",
+                        scene.entities.iter().map(|entity| entity.id.key.as_str()),
+                    );
+                    assert_unique(
+                        &problem.key,
+                        "scene path ID",
+                        scene.paths.iter().map(|path| path.id.as_str()),
+                    );
+                    assert_unique(
+                        &problem.key,
+                        "scene annotation ID",
+                        scene
+                            .annotations
+                            .iter()
+                            .map(|annotation| annotation.id.as_str()),
+                    );
+                    if let SceneSurfaceView::Graph { nodes, edges, .. } = &scene.surface {
+                        assert_unique(
+                            &problem.key,
+                            "graph node ID",
+                            nodes.iter().map(|node| node.id.key.as_str()),
+                        );
+                        assert_unique(
+                            &problem.key,
+                            "graph edge ID",
+                            edges.iter().map(|edge| edge.id.as_str()),
+                        );
+                    }
+                }
+            }
             assert!(
                 artifact
                     .documents

@@ -296,10 +296,11 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         };
         edges.push(GraphEdgeView {
             id: format!(
-                "candidate:{:?}:{:?}:{:?}:in",
+                "candidate:{:?}:{:?}:{:?}:{:?}:in",
                 candidate.order(),
                 candidate.buyer(),
-                candidate.seller()
+                candidate.seller(),
+                candidate.carrier()
             ),
             source: format!("buyer:{:?}", candidate.buyer()),
             target: format!("order:{:?}", candidate.order()),
@@ -308,10 +309,11 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         });
         edges.push(GraphEdgeView {
             id: format!(
-                "candidate:{:?}:{:?}:{:?}:out",
+                "candidate:{:?}:{:?}:{:?}:{:?}:out",
                 candidate.order(),
                 candidate.buyer(),
-                candidate.seller()
+                candidate.seller(),
+                candidate.carrier()
             ),
             source: format!("order:{:?}", candidate.order()),
             target: format!("seller:{:?}", candidate.seller()),

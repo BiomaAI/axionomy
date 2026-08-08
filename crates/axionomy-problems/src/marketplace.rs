@@ -340,8 +340,7 @@ fn build(size: MarketSize) -> World {
         .account(
             AccountId::TaxAuthority,
             Account::from(basket([(Asset::TaxPolicy, 1)])),
-        )
-        .invariant(LinearInvariant::new("money accounting").weight(Asset::Money, 1));
+        );
     for &order in orders {
         builder = builder
             .account(
