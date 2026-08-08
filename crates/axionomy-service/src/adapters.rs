@@ -8,8 +8,8 @@ use axionomy_view::{
     DebugOntology, ObjectiveView, PlaybackError, ProposalView, Scene, SceneAnchorView,
     SceneEntityView, SceneGlyphView, SceneMetricView, SceneToneView, SearchObservationKindView,
     SearchObservationView, SearchTelemetryView, TelemetryKindView, TelemetryPointView,
-    ViewDocument, ViewDocumentMetadata, ViewId, ViewSource, derive_document, derive_model,
-    derive_proposal,
+    ViewDocument, ViewDocumentMetadata, ViewId, ViewOntology, ViewSource, derive_document,
+    derive_model, derive_proposal,
 };
 use std::{fmt::Debug, hash::Hash, ops::ControlFlow};
 
@@ -50,6 +50,7 @@ pub(super) fn visual_metric(
 mod bridge;
 mod connect_four;
 mod exact_cover;
+mod labels;
 mod logistics;
 mod marketplace;
 mod maze;
@@ -60,34 +61,99 @@ mod scheduling;
 mod sokoban;
 mod workshop;
 
+use labels::StudioLabel;
+
+type StudioScene<AccountId, A, RateId, Role, N> =
+    fn(u64, &Economy<AccountId, A, RateId, Role, N>) -> Option<Scene>;
+
+struct StudioOntology<AccountId, A, RateId, Role, N = u64> {
+    fallback: DebugOntology<AccountId, A, RateId, Role, N>,
+    scene: Option<StudioScene<AccountId, A, RateId, Role, N>>,
+}
+
+impl<AccountId, A, RateId, Role, N> StudioOntology<AccountId, A, RateId, Role, N> {
+    fn new(
+        namespace: impl Into<String>,
+        scene: Option<StudioScene<AccountId, A, RateId, Role, N>>,
+    ) -> Self {
+        Self {
+            fallback: DebugOntology::new(namespace),
+            scene,
+        }
+    }
+
+    fn relabel<T: StudioLabel>(mut id: ViewId, value: &T) -> ViewId {
+        id.label = value.studio_label();
+        id
+    }
+}
+
+impl<AccountId, A, RateId, Role, N> ViewOntology<AccountId, A, RateId, Role, N>
+    for StudioOntology<AccountId, A, RateId, Role, N>
+where
+    AccountId: Debug + StudioLabel,
+    A: Debug + StudioLabel,
+    RateId: Debug + StudioLabel,
+    Role: Debug + StudioLabel,
+{
+    fn account(&self, id: &AccountId) -> ViewId {
+        Self::relabel(self.fallback.account(id), id)
+    }
+
+    fn asset(&self, id: &A) -> ViewId {
+        Self::relabel(self.fallback.asset(id), id)
+    }
+
+    fn rate(&self, id: &RateId) -> ViewId {
+        Self::relabel(self.fallback.rate(id), id)
+    }
+
+    fn role(&self, id: &Role) -> ViewId {
+        Self::relabel(self.fallback.role(id), id)
+    }
+
+    fn scene(&self, index: u64, economy: &Economy<AccountId, A, RateId, Role, N>) -> Option<Scene> {
+        self.scene.and_then(|scene| scene(index, economy))
+    }
+}
+
 pub(crate) fn catalog() -> Vec<ProblemDescriptor> {
     vec![
         problem(
             "maze",
             "Key-door maze",
-            "Weighted paths, keys, doors, rejected moves, and an exact energy/time frontier.",
+            "Reach the exit on limited energy and time. The key route costs less energy, the detour takes fewer moves, and no single weighting picks between them.",
+            [
+                "The smallest maze with a key, a locked door, and a real route choice",
+                "14 rooms, 16 one-way passages, and four competing route families",
+                "22 rooms, 29 passages, five route families, and cross-route choices",
+            ],
             ProblemFamily::Pathfinding,
             "a_star",
             &[
                 (
                     "breadth_first",
-                    "Fewest exchanges",
-                    "Breadth-first graph search",
+                    "Fewest moves",
+                    "Breadth-first search: the shortest sequence, whatever it costs.",
+                    "breadth-first search",
                 ),
                 (
                     "a_star",
                     "Least energy",
-                    "A* with an encoded admissible heuristic",
+                    "A*, guided by a distance estimate stored in the economy itself.",
+                    "A*",
                 ),
                 (
                     "pareto_energy",
                     "Pareto: least energy",
-                    "Select the energy-first exact frontier member",
+                    "The lowest-energy point on the exact Pareto frontier, where no route is better on both energy and time.",
+                    "exact Pareto search",
                 ),
                 (
                     "pareto_time",
                     "Pareto: least time",
-                    "Select the time-first exact frontier member",
+                    "The fastest point on that exact frontier.",
+                    "exact Pareto search",
                 ),
             ],
             &[
@@ -100,13 +166,19 @@ pub(crate) fn catalog() -> Vec<ProblemDescriptor> {
         problem(
             "sokoban",
             "Sokoban",
-            "Spatial pushes, multi-account rewrites, deadlocks, and replay-verified puzzle solving.",
+            "Push crates onto their goal squares. Every push rewrites three cells at once, and some positions can never be recovered.",
+            [
+                "Five cells and two pushes",
+                "A 7×5 board with 35 cells and a ten-step solution",
+                "An 8×6 board with a longer route and a larger cell economy",
+            ],
             ProblemFamily::Pathfinding,
             "breadth_first",
             &[(
                 "breadth_first",
                 "Solve puzzle",
-                "Breadth-first search over atomic pushes",
+                "Breadth-first search over single moves and crate pushes.",
+                "breadth-first search",
             )],
             &[
                 Capability::DeterministicSearch,
@@ -117,15 +189,26 @@ pub(crate) fn catalog() -> Vec<ProblemDescriptor> {
         problem(
             "exact_cover",
             "Exact cover",
-            "One encoded constraint system proposed by generic search and Algorithm X.",
+            "Choose subsets that cover every element exactly once. A plain search and Algorithm X reach the same answer by different routes.",
+            [
+                "Four elements and four competing subsets",
+                "Eight elements and twelve subsets arranged as two interacting blocks",
+                "Twelve elements and eighteen subsets with 27 competing exact covers",
+            ],
             ProblemFamily::Constraint,
             "algorithm_x",
             &[
-                ("breadth_first", "Generic BFS", "Generic graph search"),
+                (
+                    "breadth_first",
+                    "Plain search",
+                    "Breadth-first search with no knowledge of cover structure; it just tries selections.",
+                    "breadth-first search",
+                ),
                 (
                     "algorithm_x",
                     "Algorithm X",
-                    "Traditional Algorithm X proposes core-valid exchanges",
+                    "Knuth's Algorithm X chooses the moves; the economy still validates every one.",
+                    "Algorithm X",
                 ),
             ],
             &[
@@ -137,29 +220,38 @@ pub(crate) fn catalog() -> Vec<ProblemDescriptor> {
         problem(
             "workshop",
             "Workshop",
-            "Stoichiometric production with conserved tools, labor, waste, time, and exact tradeoffs.",
+            "Build the order from raw stock without creating or destroying material. The fastest plan and the least wasteful plan are not the same plan.",
+            [
+                "One chair made from raw stock",
+                "A six-chair order with competing fast and low-waste recipes",
+                "A ten-chair order with more material, labor, and production choices",
+            ],
             ProblemFamily::Production,
             "minimum_waste",
             &[
                 (
                     "breadth_first",
-                    "Fewest recipes",
-                    "Breadth-first production search",
+                    "Fewest steps",
+                    "Breadth-first search: the fewest recipe firings, whatever they waste.",
+                    "breadth-first search",
                 ),
                 (
                     "minimum_waste",
-                    "Minimum waste",
-                    "Best-first production search",
+                    "Least waste",
+                    "Best-first search guided by scrap accumulated in the workshop account.",
+                    "best-first search",
                 ),
                 (
                     "pareto_waste",
                     "Pareto: least waste",
-                    "Waste-first exact frontier member",
+                    "The lowest-scrap point on the exact Pareto frontier.",
+                    "exact Pareto search",
                 ),
                 (
                     "pareto_time",
                     "Pareto: least time",
-                    "Time-first exact frontier member",
+                    "The fastest point on that exact frontier.",
+                    "exact Pareto search",
                 ),
             ],
             &[
@@ -172,29 +264,38 @@ pub(crate) fn catalog() -> Vec<ProblemDescriptor> {
         problem(
             "scheduling",
             "Job-shop scheduling",
-            "Machine capacity, precedence, alternate allocations, and bounded optimization.",
+            "Fit every operation onto a machine without double-booking one or running a job out of order. Finishing one job early delays the other.",
+            [
+                "Two jobs on the smallest horizon that still forces a machine conflict",
+                "Six ordered operations across three machines and 18 time slots",
+                "The same operations across a longer eight-slot decision horizon",
+            ],
             ProblemFamily::Scheduling,
             "bounded_optimizer",
             &[
                 (
                     "best_first",
-                    "Best-first",
-                    "Generic best-first schedule search",
+                    "Shortest makespan",
+                    "Best-first search on the finish time recorded in the schedule.",
+                    "best-first search",
                 ),
                 (
                     "bounded_optimizer",
-                    "Bounded optimizer",
-                    "Caller-owned branch optimizer",
+                    "Branch optimizer",
+                    "Depth-first branch-and-bound abandons schedules it can already prove are worse.",
+                    "branch-and-bound",
                 ),
                 (
                     "pareto_job_one",
-                    "Pareto: Job One",
-                    "Earliest Job One frontier member",
+                    "Pareto: Job One first",
+                    "The frontier schedule that finishes Job One earliest.",
+                    "exact Pareto search",
                 ),
                 (
                     "pareto_job_two",
-                    "Pareto: Job Two",
-                    "Earliest Job Two frontier member",
+                    "Pareto: Job Two first",
+                    "The frontier schedule that finishes Job Two earliest.",
+                    "exact Pareto search",
                 ),
             ],
             &[
@@ -207,16 +308,27 @@ pub(crate) fn catalog() -> Vec<ProblemDescriptor> {
         problem(
             "rescue",
             "Uncertain rescue",
-            "Partially observed rescue policies compared across encoded Nature scenarios.",
+            "The survivor's location is unknown. Spend the sensor first, or commit immediately and risk searching the wrong site.",
+            [
+                "Two possible sites and eight hidden location/sensor outcomes",
+                "Four possible sites, 32 outcomes, an unreliable sensor, and an evacuation leg",
+                "Six possible sites, 72 outcomes, and at least 256 policy samples",
+            ],
             ProblemFamily::PartialObservation,
             "observe_then_follow",
             &[
                 (
                     "observe_then_follow",
-                    "Observe then follow",
-                    "Sense before committing",
+                    "Sense, then move",
+                    "Spend the sensor, read what Nature reports, then head for the reported site.",
+                    "Monte Carlo policy evaluation",
                 ),
-                ("direct_north", "Direct north", "Commit without observing"),
+                (
+                    "direct_north",
+                    "Go north immediately",
+                    "Skip the sensor and commit; the drawn scenario decides whether that pays off.",
+                    "Monte Carlo policy evaluation",
+                ),
             ],
             &[
                 Capability::PartialObservation,
@@ -228,35 +340,50 @@ pub(crate) fn catalog() -> Vec<ProblemDescriptor> {
         problem(
             "bridge",
             "Bridge allocation",
-            "Capacity allocation through search, first-come policy, auctions, and exact welfare tradeoffs.",
+            "One lane, two agents, both need it. Compare first-come priority against an auction that settles bids and access in indivisible steps.",
+            [
+                "One crossing round for two agents and one lane",
+                "Two allocation rounds with escrow, recharge, and retained credit",
+                "Three bounded rounds where priority and spending affect later choices",
+            ],
             ProblemFamily::Allocation,
             "auction",
             &[
-                ("breadth_first", "Generic BFS", "Generic allocation search"),
+                (
+                    "breadth_first",
+                    "Plain search",
+                    "Breadth-first search for any valid crossing order.",
+                    "breadth-first search",
+                ),
                 (
                     "first_come_a",
                     "First come: A",
-                    "Give Agent A first priority",
+                    "Agent A gets the first crossing right by arrival order, not by bid.",
+                    "first-come allocation",
                 ),
                 (
                     "first_come_b",
                     "First come: B",
-                    "Give Agent B first priority",
+                    "Agent B gets the first crossing right by arrival order, not by bid.",
+                    "first-come allocation",
                 ),
                 (
                     "auction",
-                    "Atomic auction",
-                    "Resolve bids and allocation atomically",
+                    "Auction",
+                    "Bids, winner, escrow, refunds, and crossing rights settle through indivisible changes.",
+                    "auction mechanism",
                 ),
                 (
                     "pareto_a",
-                    "Pareto: Agent A",
-                    "Agent A-first frontier member",
+                    "Pareto: favors A",
+                    "The point on the exact frontier that is best for Agent A.",
+                    "exact Pareto search",
                 ),
                 (
                     "pareto_b",
-                    "Pareto: Agent B",
-                    "Agent B-first frontier member",
+                    "Pareto: favors B",
+                    "The point on the exact frontier that is best for Agent B.",
+                    "exact Pareto search",
                 ),
             ],
             &[
@@ -269,24 +396,32 @@ pub(crate) fn catalog() -> Vec<ProblemDescriptor> {
         problem(
             "marketplace",
             "Multi-party marketplace",
-            "Buyer, seller, carrier, platform, and tax accounts cleared with explanatory shortfalls.",
+            "Settle orders across buyers, sellers, carriers, the platform, and tax in one indivisible step. When it fails, you see exactly which account fell short and by how much.",
+            [
+                "Two orders across three buyers, three sellers, and one active carrier",
+                "Four linked orders across 14 accounts sharing budget, stock, shipping capacity, and tax",
+                "Six linked orders across 16 accounts with exactly enough stock and shipping capacity",
+            ],
             ProblemFamily::Market,
             "market_clearing",
             &[
                 (
                     "market_clearing",
-                    "Clear market",
-                    "Select compatible exact settlements",
+                    "Clear the market",
+                    "Pick orders that can all settle together without overdrawing any account.",
+                    "market clearing",
                 ),
                 (
                     "pareto_buyers",
-                    "Pareto: buyers",
-                    "Buyer-utility frontier member",
+                    "Pareto: favors buyers",
+                    "The clearing on the exact frontier with the highest total buyer benefit.",
+                    "exact Pareto clearing",
                 ),
                 (
                     "pareto_sellers",
-                    "Pareto: sellers",
-                    "Seller-utility frontier member",
+                    "Pareto: favors sellers",
+                    "The clearing on the exact frontier with the highest total seller benefit.",
+                    "exact Pareto clearing",
                 ),
             ],
             &[
@@ -299,13 +434,33 @@ pub(crate) fn catalog() -> Vec<ProblemDescriptor> {
         problem(
             "logistics",
             "Stochastic logistics",
-            "Long-horizon routes with weather, breakdowns, risk criteria, Monte Carlo, and MCTS.",
+            "Deliver four orders through weather and breakdowns. The short route wins when nothing goes wrong; the long one finishes more often when things do.",
+            [
+                "Two deliveries with a compact route and a small sample budget",
+                "Four deliveries with recurring weather and breakdowns",
+                "The four-delivery network evaluated with at least 256 stochastic rollouts",
+            ],
             ProblemFamily::StochasticPlanning,
             "reliable",
             &[
-                ("direct", "Direct policy", "Shortest stochastic route"),
-                ("reliable", "Reliable policy", "Safer long-horizon route"),
-                ("mcts", "MCTS policy", "Plan actions from encoded chance"),
+                (
+                    "direct",
+                    "Direct route",
+                    "The shortest route, fastest when weather and breakdowns cooperate.",
+                    "Monte Carlo policy evaluation",
+                ),
+                (
+                    "reliable",
+                    "Reliable route",
+                    "A longer route that completes more often when they do not.",
+                    "Monte Carlo policy evaluation",
+                ),
+                (
+                    "mcts",
+                    "MCTS",
+                    "Monte Carlo tree search plans the next move by sampling how chance could unfold.",
+                    "Monte Carlo tree search",
+                ),
             ],
             &[
                 Capability::Chance,
@@ -317,32 +472,45 @@ pub(crate) fn catalog() -> Vec<ProblemDescriptor> {
         problem(
             "connect_four",
             "Connect Four",
-            "A complete adversarial game played by vector-valued MCTS over encoded gravity and wins.",
+            "A full game of Connect Four played by MCTS on both sides, with gravity and every winning line written as rules.",
+            [
+                "A compact board with a short game and few rollouts",
+                "The full 7×6 board and all 69 winning lines",
+                "The full board with four times the MCTS work per move",
+            ],
             ProblemFamily::AdversarialGame,
             "mcts_game",
             &[(
                 "mcts_game",
-                "MCTS game",
-                "Play both sides to a terminal state",
+                "MCTS self-play",
+                "Monte Carlo tree search plays both colours until someone wins or the board fills.",
+                "Monte Carlo tree search",
             )],
             &[Capability::Mcts, Capability::MultiAccountExchange],
         ),
         problem(
             "mission",
             "Hidden-information mission",
-            "Two-agent coordination with actor views, beliefs, information sets, Nature, and RL projections.",
+            "Two agents each see only part of the map. Compare sharing what they see before acting against both moving straight in.",
+            [
+                "Two hidden scenarios and one private sighting",
+                "Sixteen hidden scenarios with private sightings, belief updates, and hazards",
+                "The same mission evaluated with at least 256 belief-conditioned simulations",
+            ],
             ProblemFamily::PartialObservation,
             "coordinated",
             &[
                 (
                     "coordinated",
-                    "Share and coordinate",
-                    "Observe, share, and act on updated beliefs",
+                    "Scout, share, then move",
+                    "One agent looks, tells the other, and both act on the updated picture.",
+                    "information-set policy evaluation",
                 ),
                 (
                     "direct_north",
-                    "Direct north",
-                    "Commit both agents without information",
+                    "Both go north",
+                    "Neither agent looks or shares; replay keeps whatever goes wrong.",
+                    "Monte Carlo policy evaluation",
                 ),
             ],
             &[
@@ -357,24 +525,32 @@ pub(crate) fn catalog() -> Vec<ProblemDescriptor> {
         problem(
             "perishables",
             "Perishable inventory",
-            "Fungible cohorts, unique condition facts, time, cooling, power loss, and event-driven decay.",
+            "Ten thousand units spoil by batch, not one at a time. Cooling costs energy, and a power outage forces the tradeoff.",
+            [
+                "One hundred units split between two batches",
+                "Ten thousand units with cooling, deadlines, and a power outage",
+                "One million units using the same two batch-level condition facts",
+            ],
             ProblemFamily::TemporalSimulation,
             "outage",
             &[
                 (
                     "outage",
                     "Power outage",
-                    "Replay indexed temporal effects after refrigeration fails",
+                    "Refrigeration fails, and every batch past its deadline spoils at once.",
+                    "indexed temporal effects",
                 ),
                 (
                     "pareto_inventory",
-                    "Pareto: preserve inventory",
-                    "Inventory-first storage frontier member",
+                    "Pareto: save stock",
+                    "The storage plan on the exact frontier that keeps the most usable units.",
+                    "exact Pareto search",
                 ),
                 (
                     "pareto_energy",
                     "Pareto: save energy",
-                    "Cooling-energy-first storage frontier member",
+                    "The storage plan that spends the least cooling energy.",
+                    "exact Pareto search",
                 ),
             ],
             &[
@@ -391,9 +567,10 @@ fn problem(
     key: &str,
     title: &str,
     summary: &str,
+    instance_descriptions: [&str; 3],
     family: ProblemFamily,
     default_strategy: &str,
-    strategies: &[(&str, &str, &str)],
+    strategies: &[(&str, &str, &str, &str)],
     capabilities: &[Capability],
 ) -> ProblemDescriptor {
     ProblemDescriptor {
@@ -405,31 +582,31 @@ fn problem(
         instances: vec![
             InstanceDescriptor {
                 key: "micro".into(),
-                label: "Micro proof".into(),
-                description: "Compact exact fixture for laws, oracles, and fast tests".into(),
+                label: "Micro".into(),
+                description: instance_descriptions[0].into(),
                 profile: InstanceProfile::Micro,
             },
             InstanceDescriptor {
                 key: "showcase".into(),
-                label: "Substantial showcase".into(),
-                description: "Richer default instance for Studio and interface evaluation".into(),
+                label: "Showcase".into(),
+                description: instance_descriptions[1].into(),
                 profile: InstanceProfile::Showcase,
             },
             InstanceDescriptor {
                 key: "stress".into(),
-                label: "Stress workload".into(),
-                description: "Larger seeded workload for scalability and benchmark runs".into(),
+                label: "Stress".into(),
+                description: instance_descriptions[2].into(),
                 profile: InstanceProfile::Stress,
             },
         ],
         default_strategy: default_strategy.into(),
         strategies: strategies
             .iter()
-            .map(|(key, label, description)| StrategyDescriptor {
+            .map(|(key, label, description, algorithm)| StrategyDescriptor {
                 key: (*key).into(),
                 label: (*label).into(),
                 description: (*description).into(),
-                algorithm: description.to_lowercase(),
+                algorithm: (*algorithm).into(),
             })
             .collect(),
         capabilities: capabilities.to_vec(),
@@ -625,24 +802,22 @@ pub(super) struct DocumentSpec<'a> {
     pub source_label: &'a str,
 }
 
-pub(super) fn document<AccountId, A, RateId, Role, N, SceneFn>(
+pub(super) fn document<AccountId, A, RateId, Role, N>(
     spec: DocumentSpec<'_>,
     initial: &Economy<AccountId, A, RateId, Role, N>,
     goal: &Goal<AccountId, A, N>,
     trace: &Trace<RateId, Role, AccountId, N>,
     objectives: Vec<ObjectiveView>,
-    scene: SceneFn,
+    scene: StudioScene<AccountId, A, RateId, Role, N>,
 ) -> Result<ViewDocument, PlaybackError>
 where
-    AccountId: Clone + Debug + Eq + Hash + Ord,
-    A: Clone + Debug + Eq + Hash + Ord,
-    RateId: Clone + Debug + Eq + Hash + Ord,
-    Role: Clone + Debug + Ord,
+    AccountId: Clone + Debug + Eq + Hash + Ord + StudioLabel,
+    A: Clone + Debug + Eq + Hash + Ord + StudioLabel,
+    RateId: Clone + Debug + Eq + Hash + Ord + StudioLabel,
+    Role: Clone + Debug + Ord + StudioLabel,
     N: QuantityScalar,
-    SceneFn: Fn(u64, &Economy<AccountId, A, RateId, Role, N>) -> Option<Scene>,
 {
-    let ontology =
-        DebugOntology::<AccountId, A, RateId, Role, N>::new(spec.problem).with_scene(scene);
+    let ontology = StudioOntology::<AccountId, A, RateId, Role, N>::new(spec.problem, Some(scene));
     let mut document = derive_document(
         ViewDocumentMetadata {
             id: format!("{}:{}", spec.problem, spec.strategy),
@@ -675,13 +850,13 @@ pub(super) fn proposal<AccountId, A, RateId, Role, N>(
     exchange: &axionomy::Exchange<RateId, Role, AccountId, N>,
 ) -> ProposalView
 where
-    AccountId: Clone + Debug + Eq + Hash + Ord,
-    A: Clone + Debug + Eq + Hash + Ord,
-    RateId: Clone + Debug + Eq + Hash + Ord,
-    Role: Clone + Debug + Ord,
+    AccountId: Clone + Debug + Eq + Hash + Ord + StudioLabel,
+    A: Clone + Debug + Eq + Hash + Ord + StudioLabel,
+    RateId: Clone + Debug + Eq + Hash + Ord + StudioLabel,
+    Role: Clone + Debug + Ord + StudioLabel,
     N: QuantityScalar,
 {
-    let ontology = DebugOntology::<AccountId, A, RateId, Role, N>::new(namespace);
+    let ontology = StudioOntology::<AccountId, A, RateId, Role, N>::new(namespace, None);
     derive_proposal(
         spec.id,
         spec.label,
@@ -753,33 +928,25 @@ pub(super) fn artifact(
         let transitions = document.frames.len() as u64;
         let constraints = document.proposals.len() as u64;
         document.telemetry.push(telemetry(
-            "artifact complexity",
+            "Model size",
             true,
             [
-                (
-                    TelemetryKindView::Accounts,
-                    accounts,
-                    "modeled accounts".into(),
-                ),
-                (
-                    TelemetryKindView::Rates,
-                    rates,
-                    "encoded transition rules".into(),
-                ),
+                (TelemetryKindView::Accounts, accounts, "accounts".into()),
+                (TelemetryKindView::Rates, rates, "rules".into()),
                 (
                     TelemetryKindView::Transitions,
                     transitions,
-                    "accepted atomic transitions".into(),
+                    "steps in this trace".into(),
                 ),
                 (
                     TelemetryKindView::Constraints,
                     constraints,
-                    "rejected proposals explained".into(),
+                    "rejection probes".into(),
                 ),
                 (
                     TelemetryKindView::Alternatives,
                     alternatives,
-                    "replayable outcomes compared".into(),
+                    "alternatives compared".into(),
                 ),
             ],
         ));

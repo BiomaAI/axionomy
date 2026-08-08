@@ -375,7 +375,7 @@ mod tests {
                 document
                     .telemetry
                     .iter()
-                    .any(|series| series.algorithm == "artifact complexity")
+                    .any(|series| series.algorithm == "Model size")
             }));
             assert!(artifact.documents.iter().all(|document| {
                 document.initial.scene.is_some()

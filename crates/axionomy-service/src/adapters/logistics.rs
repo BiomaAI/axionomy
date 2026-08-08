@@ -64,7 +64,29 @@ pub(super) fn build(
     let mut documents = Vec::new();
     for (strategy, policy) in [("direct", Policy::Direct), ("reliable", Policy::Reliable)] {
         let rollout = logistics::run_policy(&initial, policy, request.seed);
-        let mut view = document(DocumentSpec { problem: "logistics", strategy, title: if policy == Policy::Direct { "Logistics · direct route" } else { "Logistics · reliable route" }, description: if policy == Policy::Direct { "A shorter policy repeatedly accepts encoded weather and breakdown outcomes." } else { "A longer policy trades time for higher completion reliability across recurrent chance events." }, source_label: "Stochastic logistics" }, &initial, &logistics::goal(), rollout.trace(), objectives(&rollout), scene).map_err(|error| problem_error("logistics", error))?;
+        let mut view = document(
+            DocumentSpec {
+                problem: "logistics",
+                strategy,
+                title: if policy == Policy::Direct {
+                    "Logistics · direct route"
+                } else {
+                    "Logistics · reliable route"
+                },
+                description: if policy == Policy::Direct {
+                    "The short route, taking whatever weather and breakdowns the run produces."
+                } else {
+                    "A longer route that spends time to finish more often."
+                },
+                source_label: "Stochastic logistics",
+            },
+            &initial,
+            &logistics::goal(),
+            rollout.trace(),
+            objectives(&rollout),
+            scene,
+        )
+        .map_err(|error| problem_error("logistics", error))?;
         view.pareto_fronts.push(policy_front(&front, policy));
         let stats = estimate
             .estimate(policy)
@@ -87,7 +109,16 @@ pub(super) fn build(
         ));
         if let Some(load) = logistics::candidates(&initial).first() {
             let malformed = Exchange::new(*load.rate(), Quantity::new(1));
-            view.proposals.push(proposal("logistics", ProposalSpec { id: "load-without-roles", label: "Load without vehicle/order", description: "The rate is known, but the required vehicle and order bindings are missing." }, &initial, &malformed));
+            view.proposals.push(proposal(
+                "logistics",
+                ProposalSpec {
+                    id: "load-without-roles",
+                    label: "Load without vehicle/order",
+                    description: "The rule exists, but no vehicle and no order were named.",
+                },
+                &initial,
+                &malformed,
+            ));
         }
         documents.push(view);
     }
@@ -127,7 +158,7 @@ pub(super) fn build(
     let mut prefix = Trace::new();
     prefix.push(load);
     prefix.push(decision.action().clone());
-    let mut mcts = document(DocumentSpec { problem: "logistics", strategy: "mcts", title: "Logistics · live MCTS decision", description: "A load action followed by the current MCTS route decision; this prefix is deliberately branchable rather than presented as a completed mission.", source_label: "Stochastic logistics" }, &initial, &logistics::goal(), &prefix, Vec::new(), scene).map_err(|error| problem_error("logistics", error))?;
+    let mut mcts = document(DocumentSpec { problem: "logistics", strategy: "mcts", title: "Logistics · live MCTS decision", description: "A load, then the route MCTS currently prefers. This stops mid-journey on purpose: it is a decision in progress, not a finished delivery.", source_label: "Stochastic logistics" }, &initial, &logistics::goal(), &prefix, Vec::new(), scene).map_err(|error| problem_error("logistics", error))?;
     mcts.telemetry.push(telemetry(
         "Monte Carlo tree search",
         false,
@@ -179,7 +210,7 @@ fn objectives(rollout: &logistics::MissionRollout) -> Vec<ObjectiveView> {
 }
 fn policy_front(front: &logistics::PolicyFront, selected: Policy) -> ParetoFrontView {
     ParetoFrontView {
-        title: "Sampled completion / delivery / time frontier".into(),
+        title: "Completion vs. deliveries vs. time — sampled, not exact".into(),
         completeness: FrontierCompletenessView::Approximate,
         axes: vec![
             ObjectiveAxisView {
@@ -365,7 +396,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         .count();
     Some(
         Scene::graph(
-            "Encoded route network and stochastic travel",
+            "Route network and travel risk",
             nodes,
             edges,
             focus.map(|location| format!("location:{location:?}")),

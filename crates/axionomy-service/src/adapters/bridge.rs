@@ -58,8 +58,8 @@ pub(super) fn build(
     let traces = [
         (
             "breadth_first",
-            "Bridge · generic BFS",
-            "Generic search finds a valid capacity-one crossing allocation.",
+            "Bridge · plain search",
+            "A generic search finds one valid order for a lane that fits a single agent.",
             bfs.trace().clone(),
             "breadth-first search",
             Some(bfs.expanded() as u64),
@@ -67,7 +67,7 @@ pub(super) fn build(
         (
             "first_come_a",
             "Bridge · Agent A first",
-            "First-come policy allocates the first crossing right to Agent A.",
+            "First-come priority: Agent A crosses first regardless of what either agent would pay.",
             first_a,
             "first-come mechanism",
             None,
@@ -75,15 +75,15 @@ pub(super) fn build(
         (
             "first_come_b",
             "Bridge · Agent B first",
-            "First-come policy allocates the first crossing right to Agent B.",
+            "First-come priority: Agent B crosses first regardless of what either agent would pay.",
             first_b,
             "first-come mechanism",
             None,
         ),
         (
             "auction",
-            "Bridge · atomic auction",
-            "Bid escrow, winner resolution, capacity rights, and refunds form replay-verified atomic exchanges.",
+            "Bridge · auction",
+            "Escrowing bids, picking the winner, granting the lane, and refunding losers happen as indivisible steps.",
             auction,
             "auction mechanism",
             None,
@@ -91,7 +91,7 @@ pub(super) fn build(
         (
             "pareto_a",
             "Bridge Pareto · Agent A",
-            "The exact allocation frontier member favoring Agent A.",
+            "The frontier outcome that treats Agent A best.",
             pareto_a,
             "exact Pareto search",
             pareto_expanded,
@@ -99,7 +99,7 @@ pub(super) fn build(
         (
             "pareto_b",
             "Bridge Pareto · Agent B",
-            "The exact allocation frontier member favoring Agent B.",
+            "The frontier outcome that treats Agent B best.",
             pareto_b,
             "exact Pareto search",
             pareto_expanded,
@@ -130,7 +130,7 @@ pub(super) fn build(
             true,
             expanded
                 .into_iter()
-                .map(|value| (TelemetryKindView::Expanded, value, "states expanded".into()))
+                .map(|value| (TelemetryKindView::Expanded, value, "states explored".into()))
                 .chain([(
                     TelemetryKindView::Generated,
                     trace.exchanges().len() as u64,
@@ -146,7 +146,7 @@ pub(super) fn build(
         )
         .bind(Role::Traveler, AccountId::Agent(AgentId::B))
         .bind(Role::Bridge, AccountId::Bridge);
-        view.proposals.push(proposal("bridge", ProposalSpec { id: "impersonated-bid", label: "Agent B submits Agent A bid", description: "The role binding conflicts with the encoded agent identity and is explained as an asset shortfall." }, &initial, &wrong_identity));
+        view.proposals.push(proposal("bridge", ProposalSpec { id: "impersonated-bid", label: "Agent B submits Agent A bid", description: "Agent B tries to bid as Agent A. The rejection names the identity B does not hold." }, &initial, &wrong_identity));
         documents.push(view);
     }
     for index in 0..documents.len() {
@@ -191,7 +191,7 @@ fn candidate_front_view(documents: &[ViewDocument], selected: &ViewDocument) -> 
         })
     });
     ParetoFrontView {
-        title: "Evaluated two-round mechanism frontier".into(),
+        title: "Every non-dominated evaluated mechanism outcome".into(),
         completeness: FrontierCompletenessView::Approximate,
         axes: ["A priority", "A credit", "B priority", "B credit"]
             .into_iter()
@@ -274,7 +274,7 @@ fn front_view(result: &bridge::ParetoResult, selected: &ViewDocument) -> ParetoF
         .map(|o| o.value.as_str())
         .collect::<Vec<_>>();
     ParetoFrontView {
-        title: "Priority and retained-credit frontier".into(),
+        title: "Crossings vs. credit kept".into(),
         completeness: FrontierCompletenessView::Exact,
         axes: ["A priority", "A credit", "B priority", "B credit"]
             .into_iter()
@@ -350,7 +350,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         })
         .collect();
     Some(Scene::graph(
-        "Agents, scarce capacity, and crossing allocation",
+        "Agents competing for one lane",
         nodes,
         edges,
         None,

@@ -296,7 +296,7 @@ function StrategyComparison({ artifact, selected, onSelect }: { artifact: RunArt
   return <section className="strategy-comparison" aria-label="Outcome comparison">
     <div className="comparison-heading"><span>Outcome comparison</span><strong>Strategies and tradeoffs on one evidence surface</strong></div>
     <div className="comparison-scroll"><table><thead><tr><th>Outcome</th><th>Result</th><th>Trace</th><th>Search evidence</th></tr></thead><tbody>{artifact.documents.map((candidate) => {
-      const series = candidate.telemetry.find((entry) => entry.algorithm !== "artifact complexity");
+      const series = candidate.telemetry.find((entry) => entry.algorithm !== "Model size");
       const work = series ? [...series.points].reverse().find((point) => ["generated", "expanded", "iteration", "sample"].includes(point.kind)) : undefined;
       return <tr key={candidate.id} className={candidate.id === selected ? "selected" : undefined}>
         <td><button type="button" onClick={() => onSelect(candidate.id)}>{candidate.title.replace(`${artifact.problem.title} · `, "")}</button></td>

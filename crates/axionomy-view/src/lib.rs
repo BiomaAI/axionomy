@@ -1434,9 +1434,9 @@ where
 fn frame_cues(exchange: &ExchangeView, receipt: &ReceiptView) -> Vec<FrameCueView> {
     let mut cues = vec![FrameCueView {
         kind: FrameCueKindView::AtomicExchange,
-        label: format!("{} applied atomically", exchange.rate.label),
+        label: exchange.rate.label.clone(),
         details: vec![format!(
-            "{} role bindings · {} account deltas",
+            "applied atomically · {} roles bound · {} accounts changed",
             exchange.bindings.len(),
             receipt.deltas.len()
         )],
@@ -1453,14 +1453,19 @@ fn frame_cues(exchange: &ExchangeView, receipt: &ReceiptView) -> Vec<FrameCueVie
         for (kind, verb, assets) in [
             (FrameCueKindView::Consumed, "consumed", &delta.consumed),
             (FrameCueKindView::Produced, "produced", &delta.produced),
-            (FrameCueKindView::Preserved, "verified", &delta.preserved),
+            (FrameCueKindView::Preserved, "preserved", &delta.preserved),
         ] {
             if assets.is_empty() {
                 continue;
             }
             cues.push(FrameCueView {
                 kind,
-                label: format!("{} {verb} {}", delta.account.label, assets.len()),
+                label: format!(
+                    "{} {verb} {} {}",
+                    delta.account.label,
+                    assets.len(),
+                    if assets.len() == 1 { "asset" } else { "assets" }
+                ),
                 details: assets
                     .iter()
                     .map(|asset| format!("{} {}", asset.quantity.0, asset.asset.label))

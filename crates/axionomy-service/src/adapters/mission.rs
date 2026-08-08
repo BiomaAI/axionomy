@@ -95,7 +95,7 @@ pub(super) fn build(
     let mut documents = Vec::new();
     for (strategy, policy) in policies {
         let rollout = mission::run_policy(&model, policy, sample_index);
-        let mut view = document(DocumentSpec { problem: "mission", strategy, title: if policy == Policy::ShareAndCoordinate { "Mission · share and coordinate" } else { "Mission · direct north" }, description: if policy == Policy::ShareAndCoordinate { "Scout observation, belief filtering, information sharing, coordinated movement, hazards, and treatment remain economic transitions." } else { "The direct policy commits both agents without information; the replay retains failures and resource consequences." }, source_label: "Hidden-information mission" }, &model, &mission::goal(), rollout.trace(), vec![
+        let mut view = document(DocumentSpec { problem: "mission", strategy, title: if policy == Policy::ShareAndCoordinate { "Mission · scout, share, then move" } else { "Mission · both go north" }, description: if policy == Policy::ShareAndCoordinate { "Looking, updating what you believe, telling the other agent, moving, hitting hazards, and treating injuries are all ordinary transitions." } else { "Both agents commit without looking or sharing. The replay keeps every failure and what it cost." }, source_label: "Hidden-information mission" }, &model, &mission::goal(), rollout.trace(), vec![
             ObjectiveView { key: "success".into(), label: "Succeeded".into(), direction: ObjectiveDirectionView::Maximize, value: u8::from(rollout.succeeded()).to_string() },
             ObjectiveView { key: "time".into(), label: "Elapsed time".into(), direction: ObjectiveDirectionView::Minimize, value: rollout.elapsed_time().to_string() },
             ObjectiveView { key: "medical".into(), label: "Medical kit used".into(), direction: ObjectiveDirectionView::Minimize, value: u8::from(rollout.used_medical_kit()).to_string() },
@@ -133,7 +133,7 @@ pub(super) fn build(
         ];
         if let Some(candidate) = mission::candidates(&model).first() {
             let malformed = Exchange::new(*candidate.rate(), *candidate.units());
-            view.proposals.push(proposal("mission", ProposalSpec { id: "action-without-actors", label: "Mission action without roles", description: "Actor, Nature, mission, and goal roles are explicit; omitting them yields a structured invalid assessment." }, &model, &malformed));
+            view.proposals.push(proposal("mission", ProposalSpec { id: "action-without-actors", label: "Mission action without roles", description: "Every mission action names an actor, Nature, the mission, and the goal. Leaving them out is rejected with the specific role missing." }, &model, &malformed));
         }
         documents.push(view);
     }
@@ -153,14 +153,14 @@ fn observation(world: &World, agent: AgentId) -> ObservationView {
         .map(|account| AccountView {
             account: ViewId::new(
                 format!("mission:account:{account:?}"),
-                format!("{account:?}"),
+                account.studio_label(),
             ),
             balances: key
                 .balances()
                 .iter()
                 .filter(|(owner, _, _)| owner == account)
                 .map(|(_, asset, quantity)| AssetQuantityView {
-                    asset: ViewId::new(format!("mission:asset:{asset:?}"), format!("{asset:?}")),
+                    asset: ViewId::new(format!("mission:asset:{asset:?}"), asset.studio_label()),
                     quantity: ExactQuantity(quantity.to_string()),
                 })
                 .collect(),
@@ -176,7 +176,7 @@ fn observation(world: &World, agent: AgentId) -> ObservationView {
 
 fn policy_front(front: &mission::PolicyFront, selected: Policy) -> ParetoFrontView {
     ParetoFrontView {
-        title: "Sampled reliability / time / medical-use frontier".into(),
+        title: "Reliability vs. time vs. medical kit — sampled, not exact".into(),
         completeness: FrontierCompletenessView::Approximate,
         axes: vec![
             ObjectiveAxisView {
@@ -306,36 +306,31 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         entity
     });
     Some(
-        Scene::graph(
-            "Actor positions, hidden Nature, and information flow",
-            nodes,
-            edges,
-            None,
-        )
-        .with_entities(agent_entities)
-        .with_metrics([
-            visual_metric(
-                "time",
-                "Mission time remaining",
-                world.balance(&AccountId::Mission, &Asset::TimeRemaining),
-                Some("ticks"),
-            ),
-            visual_metric(
-                "shared-intel",
-                "Shared intel",
-                [Location::North, Location::South]
-                    .into_iter()
-                    .filter(|location| {
-                        !world
-                            .balance(
-                                &AccountId::Agent(AgentId::Medic),
-                                &Asset::SharedIntel(*location),
-                            )
-                            .is_zero()
-                    })
-                    .count(),
-                Some("reports"),
-            ),
-        ]),
+        Scene::graph("Where each agent is, and what it knows", nodes, edges, None)
+            .with_entities(agent_entities)
+            .with_metrics([
+                visual_metric(
+                    "time",
+                    "Mission time remaining",
+                    world.balance(&AccountId::Mission, &Asset::TimeRemaining),
+                    Some("ticks"),
+                ),
+                visual_metric(
+                    "shared-intel",
+                    "Shared intel",
+                    [Location::North, Location::South]
+                        .into_iter()
+                        .filter(|location| {
+                            !world
+                                .balance(
+                                    &AccountId::Agent(AgentId::Medic),
+                                    &Asset::SharedIntel(*location),
+                                )
+                                .is_zero()
+                        })
+                        .count(),
+                    Some("reports"),
+                ),
+            ]),
     )
 }

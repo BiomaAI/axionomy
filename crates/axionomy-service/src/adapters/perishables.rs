@@ -27,7 +27,7 @@ pub(super) fn build(
         .map_err(|error| problem_error("perishables", error))?;
     let inventory_trace = frontier_trace(&front, true)?;
     let energy_trace = frontier_trace(&front, false)?;
-    let mut outage_view = document(DocumentSpec { problem: "perishables", strategy: "outage", title: "Perishables · power outage", description: "Ten thousand fungible claims share two non-fungible cohort condition facts; time and power effects update cohorts rather than individual units.", source_label: "Perishable inventory" }, &initial, &perishables::goal(), outage.trace(), vec![
+    let mut outage_view = document(DocumentSpec { problem: "perishables", strategy: "outage", title: "Perishables · power outage", description: "Ten thousand interchangeable units belong to two batches. Time and power act on the batch, so one change ages thousands of units at once.", source_label: "Perishable inventory" }, &initial, &perishables::goal(), outage.trace(), vec![
         ObjectiveView { key: "claims".into(), label: "Total claims".into(), direction: ObjectiveDirectionView::Maximize, value: outage.claim_index().total_claims().to_string() },
         ObjectiveView { key: "usable".into(), label: "Usable claims".into(), direction: ObjectiveDirectionView::Maximize, value: outage.claim_index().usable_total(outage.world()).to_string() },
     ], scene).map_err(|error| problem_error("perishables", error))?;
@@ -60,20 +60,20 @@ pub(super) fn build(
             ),
         ],
     ));
-    outage_view.proposals.push(proposal("perishables", ProposalSpec { id: "oversized-transfer", label: "Move 8,000 claims to fridge", description: "The warehouse has only 7,000 ambient claims, so the assessment returns the exact missing amount without mutating inventory." }, &initial, &perishables::move_to_fridge(8_000)));
+    outage_view.proposals.push(proposal("perishables", ProposalSpec { id: "oversized-transfer", label: "Move 8,000 claims to fridge", description: "The warehouse holds only 7,000 units. The check reports the exact shortfall and moves nothing." }, &initial, &perishables::move_to_fridge(8_000)));
 
     let mut documents = vec![outage_view];
     for (strategy, title, description, trace) in [
         (
             "pareto_inventory",
-            "Perishables Pareto · preserve inventory",
-            "The exact storage commitment maximizing usable inventory before simulated decay.",
+            "Perishables Pareto · save stock",
+            "The storage plan that keeps the most usable stock.",
             inventory_trace,
         ),
         (
             "pareto_energy",
             "Perishables Pareto · save cooling energy",
-            "The exact storage commitment minimizing cooling energy while retaining a non-dominated outcome.",
+            "The storage plan that spends the least cooling energy.",
             energy_trace,
         ),
     ] {
@@ -116,7 +116,7 @@ pub(super) fn build(
                 (
                     TelemetryKindView::Expanded,
                     front.progress().expanded() as u64,
-                    "states expanded".into(),
+                    "states explored".into(),
                 ),
                 (
                     TelemetryKindView::Generated,
@@ -172,7 +172,7 @@ fn front_view(result: &perishables::ParetoResult, selected: &ViewDocument) -> Pa
         .map(|o| o.value.as_str())
         .collect::<Vec<_>>();
     ParetoFrontView {
-        title: "Usable inventory / cooling energy frontier".into(),
+        title: "Usable stock vs. cooling energy".into(),
         completeness: FrontierCompletenessView::Exact,
         axes: vec![
             ObjectiveAxisView {
@@ -313,7 +313,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         },
     ];
     Some(Scene::timeline(
-        "Cohort conditions, claims, storage, and event time",
+        "Batches, storage, and the spoilage clock",
         lanes,
         spans,
         Some(moment),

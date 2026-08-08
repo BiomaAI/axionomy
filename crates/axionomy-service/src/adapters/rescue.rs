@@ -36,7 +36,7 @@ pub(super) fn build(
         let rollout = rescue::run_sampled_policy(&model, &sample, policy)
             .ok_or_else(|| problem_error("rescue", "sampled rollout failed"))?;
         let mut view = document(
-            DocumentSpec { problem: "rescue", strategy, title: if policy == Policy::ObserveThenFollow { "Rescue · observe then follow" } else { "Rescue · direct north" }, description: if policy == Policy::ObserveThenFollow { "The agent spends a sensor, receives a Nature-authored observation, then follows evidence." } else { "The agent commits north without observing; the selected south scenario exposes the failed branch." }, source_label: "Uncertain rescue" },
+            DocumentSpec { problem: "rescue", strategy, title: if policy == Policy::ObserveThenFollow { "Rescue · sense, then move" } else { "Rescue · go north immediately" }, description: if policy == Policy::ObserveThenFollow { "The agent spends the sensor, receives a reading, and follows it." } else { "The agent commits north without looking. In this scenario the survivor is south, and the replay keeps the failure." }, source_label: "Uncertain rescue" },
             &model, &rescue::goal(), rollout.trace(), vec![
                 ObjectiveView { key: "success".into(), label: "Succeeded".into(), direction: ObjectiveDirectionView::Maximize, value: u8::from(rollout.succeeded()).to_string() },
                 ObjectiveView { key: "sensor".into(), label: "Sensor used".into(), direction: ObjectiveDirectionView::Minimize, value: u8::from(rollout.used_sensor()).to_string() },
@@ -51,7 +51,7 @@ pub(super) fn build(
                 (
                     TelemetryKindView::Sample,
                     comparison.samples() as u64,
-                    "encoded scenarios sampled".into(),
+                    "scenarios sampled".into(),
                 ),
                 (
                     TelemetryKindView::Generated,
@@ -62,7 +62,7 @@ pub(super) fn build(
         ));
         view.observations.push(observation(&model));
         if let Some(candidate) = rescue::candidates(&model).first() {
-            view.proposals.push(proposal("rescue", ProposalSpec { id: "unresolved-action", label: "Act before Nature resolves", description: "A public action assessed against the unresolved prior exposes which facts must first be supplied by Nature." }, &model, candidate));
+            view.proposals.push(proposal("rescue", ProposalSpec { id: "unresolved-action", label: "Act before Nature resolves", description: "Acting before Nature has decided what is true shows exactly which facts are still missing." }, &model, candidate));
         }
         documents.push(view);
     }
@@ -82,14 +82,14 @@ fn observation(world: &World) -> ObservationView {
         .map(|account| AccountView {
             account: ViewId::new(
                 format!("rescue:account:{account:?}"),
-                format!("{account:?}"),
+                account.studio_label(),
             ),
             balances: key
                 .balances()
                 .iter()
                 .filter(|(owner, _, _)| owner == account)
                 .map(|(_, asset, quantity)| AssetQuantityView {
-                    asset: ViewId::new(format!("rescue:asset:{asset:?}"), format!("{asset:?}")),
+                    asset: ViewId::new(format!("rescue:asset:{asset:?}"), asset.studio_label()),
                     quantity: ExactQuantity(quantity.to_string()),
                 })
                 .collect(),
@@ -105,7 +105,7 @@ fn observation(world: &World) -> ObservationView {
 
 fn policy_front(front: &rescue::PolicyFront, selected: Policy) -> ParetoFrontView {
     ParetoFrontView {
-        title: "Sampled success / sensing / energy frontier".into(),
+        title: "Success vs. sensor use vs. energy — sampled, not exact".into(),
         completeness: FrontierCompletenessView::Approximate,
         axes: vec![
             ObjectiveAxisView {
@@ -249,7 +249,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
     });
     Some(
         Scene::graph(
-            "Actor view over hidden rescue truth",
+            "What the agent can see (the truth is hidden)",
             nodes,
             edges,
             focus.map(|location| format!("location:{location:?}")),

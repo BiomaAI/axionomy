@@ -30,16 +30,16 @@ pub(super) fn build(
     let traces = [
         (
             "best_first",
-            "Scheduling · best-first",
-            "Generic search minimizes the encoded makespan.",
+            "Scheduling · shortest makespan",
+            "A generic search for the earliest overall finish time.",
             best.trace().clone(),
             "best-first search",
             Some(best.expanded() as u64),
         ),
         (
             "bounded_optimizer",
-            "Scheduling · bounded optimizer",
-            "A caller-owned depth-first branch optimizer proposes a replay-verified schedule.",
+            "Scheduling · branch optimizer",
+            "Branch-and-bound proposes a schedule; the economy replays every step before accepting it.",
             bounded.trace().clone(),
             "bounded branch optimization",
             None,
@@ -47,7 +47,7 @@ pub(super) fn build(
         (
             "pareto_job_one",
             "Scheduling Pareto · Job One first",
-            "The exact frontier allocation favoring Job One completion.",
+            "The frontier schedule that gets Job One done soonest — at Job Two's expense.",
             one,
             "exact Pareto search",
             Some(pareto.progress().expanded() as u64),
@@ -55,7 +55,7 @@ pub(super) fn build(
         (
             "pareto_job_two",
             "Scheduling Pareto · Job Two first",
-            "The exact frontier allocation favoring Job Two completion.",
+            "The frontier schedule that gets Job Two done soonest — at Job One's expense.",
             two,
             "exact Pareto search",
             Some(pareto.progress().expanded() as u64),
@@ -91,7 +91,7 @@ pub(super) fn build(
                     (
                         TelemetryKindView::Expanded,
                         value,
-                        "branches/states expanded".into(),
+                        "branches and states explored".into(),
                     )
                 })
                 .chain([(
@@ -102,7 +102,7 @@ pub(super) fn build(
         ));
         if let Some(candidate) = scheduling::candidates(&initial).first() {
             let malformed = Exchange::new(*candidate.rate(), Quantity::new(1));
-            view.proposals.push(proposal("scheduling", ProposalSpec { id: "unbound-operation", label: "Schedule without slots", description: "The operation rate exists, but required job, slot, and schedule roles are unbound." }, &initial, &malformed));
+            view.proposals.push(proposal("scheduling", ProposalSpec { id: "unbound-operation", label: "Schedule without slots", description: "The operation exists, but no job, slot, or schedule was named for it." }, &initial, &malformed));
         }
         documents.push(view);
     }
@@ -111,7 +111,7 @@ pub(super) fn build(
     } else {
         scheduling::impossible()
     };
-    let mut impossible_view = document(DocumentSpec { problem: "scheduling", strategy: "infeasible_horizon", title: "Scheduling · insufficient horizon", description: "A two-slot horizon is a replayable unschedulable model instance, not an exception hidden by the optimizer.", source_label: "Job-shop scheduling" }, &impossible, &scheduling::goal(), &Trace::new(), Vec::new(), scene).map_err(|error| problem_error("scheduling", error))?;
+    let mut impossible_view = document(DocumentSpec { problem: "scheduling", strategy: "infeasible_horizon", title: "Scheduling · not enough time slots", description: "With only two slots the work cannot fit. That is an answer you can inspect, not an error the optimizer swallowed.", source_label: "Job-shop scheduling" }, &impossible, &scheduling::goal(), &Trace::new(), Vec::new(), scene).map_err(|error| problem_error("scheduling", error))?;
     impossible_view.telemetry.push(telemetry(
         "exhaustive feasibility",
         true,
@@ -177,7 +177,7 @@ fn front_view(result: &scheduling::ParetoResult, selected: &ViewDocument) -> Par
         .map(|o| o.value.as_str())
         .collect::<Vec<_>>();
     ParetoFrontView {
-        title: "Replay-verified completion allocation frontier".into(),
+        title: "Job One finish vs. Job Two finish".into(),
         completeness: FrontierCompletenessView::Exact,
         axes: vec![
             ObjectiveAxisView {
@@ -302,7 +302,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
     let pending_count = pending.count();
     Some(
         Scene::timeline(
-            "Encoded machine reservations",
+            "Machine timeline",
             lanes,
             spans,
             Some(scheduling::encoded_makespan(world)),

@@ -64,7 +64,7 @@ pub(super) fn build(
         .map_err(|error| problem_error("connect_four", error))?;
     let terminal = connect_four::terminal_values(&final_world)
         .ok_or_else(|| problem_error("connect_four", "game did not terminate"))?;
-    let mut view = document(DocumentSpec { problem: "connect_four", strategy: "mcts_game", title: "Connect Four · complete MCTS game", description: "Both adversarial players choose vector-valued MCTS actions until encoded winner or draw truth is produced.", source_label: "Connect Four" }, &initial, &axionomy::Goal::new(), &trace, vec![
+    let mut view = document(DocumentSpec { problem: "connect_four", strategy: "mcts_game", title: "Connect Four · MCTS self-play", description: "Both players use MCTS, each maximising its own score, until the rules declare a winner or a draw.", source_label: "Connect Four" }, &initial, &axionomy::Goal::new(), &trace, vec![
         ObjectiveView { key: "red".into(), label: "Red terminal value".into(), direction: ObjectiveDirectionView::Maximize, value: format!("{:.1}", terminal[0]) },
         ObjectiveView { key: "yellow".into(), label: "Yellow terminal value".into(), direction: ObjectiveDirectionView::Maximize, value: format!("{:.1}", terminal[1]) },
     ], scene).map_err(|error| problem_error("connect_four", error))?;
@@ -86,7 +86,7 @@ pub(super) fn build(
     ));
     if let Some(first) = trace.exchanges().first() {
         let malformed = Exchange::new(*first.rate(), *first.units());
-        view.proposals.push(proposal("connect_four", ProposalSpec { id: "move-without-board", label: "Move without board bindings", description: "Gravity and line-count updates require game, column, cell, and result accounts; an unbound move is invalid." }, &initial, &malformed));
+        view.proposals.push(proposal("connect_four", ProposalSpec { id: "move-without-board", label: "Move without board bindings", description: "A drop must name the game, column, landing cell, and result. Without them, gravity has nothing to act on." }, &initial, &malformed));
     }
     artifact(
         request,
@@ -124,7 +124,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         }
     }
     Some(Scene::grid(
-        "Encoded board, gravity, and pieces",
+        "Board and pieces",
         u32::from(width),
         u32::from(height),
         cells,

@@ -31,21 +31,21 @@ pub(super) fn build(
         (
             "market_clearing",
             "Marketplace · compatible clearing",
-            "A compatible set of buyer, seller, carrier, platform, tax, and order bindings settles atomically.",
+            "A set of orders that can all settle together; buyer, seller, carrier, platform, and tax move in one step.",
             clearing.trace().clone(),
             "market clearing",
         ),
         (
             "pareto_buyers",
             "Marketplace Pareto · buyer utility",
-            "The exact non-dominated clearing favoring aggregate buyer utility.",
+            "The clearing on the frontier with the greatest total gain for buyers.",
             buyer_trace,
             "exact Pareto clearing",
         ),
         (
             "pareto_sellers",
             "Marketplace Pareto · seller utility",
-            "The exact non-dominated clearing favoring aggregate seller utility.",
+            "The clearing on the frontier with the greatest total gain for sellers.",
             seller_trace,
             "exact Pareto clearing",
         ),
@@ -94,7 +94,7 @@ pub(super) fn build(
             .take(3)
             .enumerate()
         {
-            view.proposals.push(proposal("marketplace", ProposalSpec { id: &format!("near-match-{index}"), label: &format!("Near match {}", index + 1), description: "A complete multi-party binding ranked by caller policy; exact account shortfalls remain core-derived." }, &initial, assessed_match.exchange()));
+            view.proposals.push(proposal("marketplace", ProposalSpec { id: &format!("near-match-{index}"), label: &format!("Near match {}", index + 1), description: "A complete set of participants that almost settles; the rejection names the exact account and amount that came up short." }, &initial, assessed_match.exchange()));
         }
         documents.push(view);
     }
@@ -154,7 +154,7 @@ fn front_view(result: &marketplace::ParetoResult, selected: &ViewDocument) -> Pa
         .map(|o| o.value.as_str())
         .collect::<Vec<_>>();
     ParetoFrontView {
-        title: "Participant utility frontier".into(),
+        title: "Buyer gain vs. seller gain".into(),
         completeness: FrontierCompletenessView::Exact,
         axes: ["Buyer A", "Buyer B", "Seller A", "Seller B"]
             .into_iter()
@@ -357,30 +357,25 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         })
         .count();
     Some(
-        Scene::graph(
-            "Candidate participants and atomic settlement flows",
-            nodes,
-            edges,
-            None,
-        )
-        .with_entities(order_entities)
-        .with_metrics([
-            visual_metric(
-                "open",
-                "Open orders",
-                orders.len() - settled,
-                Some("orders"),
-            ),
-            visual_metric("settled", "Settled orders", settled, Some("orders")),
-            visual_metric(
-                "feasible",
-                "Feasible bindings",
-                assessed
-                    .iter()
-                    .filter(|entry| entry.assessment().is_applicable())
-                    .count(),
-                Some("matches"),
-            ),
-        ]),
+        Scene::graph("Who pays whom, if this clears", nodes, edges, None)
+            .with_entities(order_entities)
+            .with_metrics([
+                visual_metric(
+                    "open",
+                    "Open orders",
+                    orders.len() - settled,
+                    Some("orders"),
+                ),
+                visual_metric("settled", "Settled orders", settled, Some("orders")),
+                visual_metric(
+                    "feasible",
+                    "Feasible bindings",
+                    assessed
+                        .iter()
+                        .filter(|entry| entry.assessment().is_applicable())
+                        .count(),
+                    Some("matches"),
+                ),
+            ]),
     )
 }

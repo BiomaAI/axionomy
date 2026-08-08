@@ -16,7 +16,7 @@ pub(super) fn build(
     let solution = sokoban::solve(&initial)
         .ok_or_else(|| problem_error("sokoban", "puzzle has no solution"))?;
     let mut solved = document(
-        DocumentSpec { problem: "sokoban", strategy: "breadth_first", title: "Sokoban · solved pushes", description: "Every move and three-cell push is an atomic exchange across encoded cell accounts.", source_label: "Sokoban" },
+        DocumentSpec { problem: "sokoban", strategy: "breadth_first", title: "Sokoban · solved pushes", description: "Each move and each three-cell push happens as one indivisible change across the cells involved.", source_label: "Sokoban" },
         &initial, &sokoban::goal(), solution.trace(), Vec::new(), scene,
     ).map_err(|error| problem_error("sokoban", error))?;
     solved.telemetry.push(telemetry(
@@ -26,7 +26,7 @@ pub(super) fn build(
             (
                 TelemetryKindView::Expanded,
                 solution.expanded() as u64,
-                "states expanded".into(),
+                "states explored".into(),
             ),
             (
                 TelemetryKindView::Generated,
@@ -47,7 +47,7 @@ pub(super) fn build(
     .bind(Role::From, AccountId::Cell(1))
     .bind(Role::Middle, AccountId::Cell(2))
     .bind(Role::To, AccountId::Cell(3));
-    solved.proposals.push(proposal("sokoban", ProposalSpec { id: "push-without-crate", label: "Push empty cell", description: "The roles are structurally valid, but the bound middle cell does not hold a crate." }, &initial, &blocked_push));
+    solved.proposals.push(proposal("sokoban", ProposalSpec { id: "push-without-crate", label: "Push empty cell", description: "The roles are fine, but the middle cell is empty — there is no crate to push." }, &initial, &blocked_push));
 
     let deadlocked = if matches!(profile, InstanceProfile::Micro) {
         sokoban::deadlocked()
@@ -55,7 +55,7 @@ pub(super) fn build(
         sokoban::deadlocked_showcase()
     };
     let mut deadlock = document(
-        DocumentSpec { problem: "sokoban", strategy: "deadlock", title: "Sokoban · deadlocked state", description: "A replayable zero-step counterexample: no sequence can move the crate from the corner to the goal.", source_label: "Sokoban" },
+        DocumentSpec { problem: "sokoban", strategy: "deadlock", title: "Sokoban · deadlocked state", description: "A dead position, kept as evidence: from this corner no sequence of pushes can reach the goal.", source_label: "Sokoban" },
         &deadlocked, &sokoban::goal(), &Trace::new(), Vec::new(), scene,
     ).map_err(|error| problem_error("sokoban", error))?;
     deadlock.telemetry.push(telemetry(
@@ -102,7 +102,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         })
         .collect();
     Some(Scene::grid(
-        "Encoded cells, player, crate, and goal",
+        "Board: player, crates, goals",
         u32::from(width),
         u32::from(height),
         cells,

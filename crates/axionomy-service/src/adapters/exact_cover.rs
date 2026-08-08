@@ -21,8 +21,8 @@ pub(super) fn build(
     for (strategy, title, description, trace, algorithm, expanded) in [
         (
             "breadth_first",
-            "Exact cover · generic BFS",
-            "Generic graph search treats the economy as a state machine.",
+            "Exact cover · plain search",
+            "A search with no knowledge of the problem, treating each selection as a state change.",
             bfs.trace().clone(),
             "breadth-first search",
             Some(bfs.expanded() as u64),
@@ -30,7 +30,7 @@ pub(super) fn build(
         (
             "algorithm_x",
             "Exact cover · Algorithm X",
-            "A traditional exact-cover algorithm reads the encoded set membership and proposes the same core-valid transitions.",
+            "Algorithm X reads set membership directly and proposes moves; the economy accepts exactly the same ones.",
             algorithm_x,
             "Algorithm X",
             None,
@@ -54,7 +54,7 @@ pub(super) fn build(
         let mut points = vec![(
             TelemetryKindView::Generated,
             trace.exchanges().len() as u64,
-            "proposal exchanges".into(),
+            "exchanges proposed".into(),
         )];
         if let Some(expanded) = expanded {
             points.insert(
@@ -62,7 +62,7 @@ pub(super) fn build(
                 (
                     TelemetryKindView::Expanded,
                     expanded,
-                    "states expanded".into(),
+                    "states explored".into(),
                 ),
             );
         }
@@ -75,7 +75,7 @@ pub(super) fn build(
             Quantity::new(1),
         )
         .bind(Role::Problem, AccountId::Problem);
-        view.proposals.push(proposal("exact_cover", ProposalSpec { id: "wrong-progress", label: "Select AB at progress 2", description: "The set is available, but the encoded progress token and already-covered elements make this infeasible." }, &initial, &overlapping));
+        view.proposals.push(proposal("exact_cover", ProposalSpec { id: "wrong-progress", label: "Select AB at progress 2", description: "The subset is still available, but its elements are already covered, so it cannot be added." }, &initial, &overlapping));
         documents.push(view);
     }
     let unsatisfiable = match profile {
@@ -83,9 +83,9 @@ pub(super) fn build(
         InstanceProfile::Showcase => exact_cover::unsatisfiable_showcase(),
         InstanceProfile::Stress => exact_cover::unsatisfiable_stress(),
     };
-    let mut unsat = document(DocumentSpec { problem: "exact_cover", strategy: "unsatisfiable", title: "Exact cover · unsatisfiable instance", description: "The same model surface exposes a replayable instance whose available sets cannot cover the universe exactly.", source_label: "Exact cover" }, &unsatisfiable, &exact_cover::goal(), &Trace::new(), Vec::new(), scene).map_err(|error| problem_error("exact_cover", error))?;
+    let mut unsat = document(DocumentSpec { problem: "exact_cover", strategy: "unsatisfiable", title: "Exact cover · no solution exists", description: "Same rules, different subsets: no combination covers every element exactly once. The impossibility is a result, not an error.", source_label: "Exact cover" }, &unsatisfiable, &exact_cover::goal(), &Trace::new(), Vec::new(), scene).map_err(|error| problem_error("exact_cover", error))?;
     unsat.telemetry.push(telemetry(
-        "exhaustive search",
+        "exhaustive search (proved no solution)",
         true,
         [(TelemetryKindView::Message, 0, "no exact cover".into())],
     ));
@@ -137,7 +137,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         })
         .collect();
     Some(Scene::matrix(
-        "Encoded set × universe incidence",
+        "Which subset contains which element",
         rows,
         columns,
         cells,

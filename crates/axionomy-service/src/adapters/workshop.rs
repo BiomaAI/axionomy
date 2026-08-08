@@ -26,16 +26,16 @@ pub(super) fn build(
     let traces = [
         (
             "breadth_first",
-            "Workshop · fewest recipes",
-            "Breadth-first search minimizes transition count, not encoded waste.",
+            "Workshop · fewest steps",
+            "Breadth-first search minimises the number of steps, ignoring how much material is wasted.",
             bfs.trace().clone(),
             "breadth-first search",
             bfs.expanded() as u64,
         ),
         (
             "minimum_waste",
-            "Workshop · minimum waste",
-            "Best-first search uses waste accumulated in the authoritative account.",
+            "Workshop · least waste",
+            "Best-first search follows the scrap accumulating in the workshop account.",
             best.trace().clone(),
             "best-first search",
             best.expanded() as u64,
@@ -43,7 +43,7 @@ pub(super) fn build(
         (
             "pareto_waste",
             "Workshop Pareto · least waste",
-            "Waste-first exact production frontier member.",
+            "The least wasteful plan on the frontier.",
             waste_trace,
             "exact Pareto search",
             pareto.progress().expanded() as u64,
@@ -51,7 +51,7 @@ pub(super) fn build(
         (
             "pareto_time",
             "Workshop Pareto · least time",
-            "Time-first exact production frontier member.",
+            "The fastest plan on the frontier.",
             time_trace,
             "exact Pareto search",
             pareto.progress().expanded() as u64,
@@ -85,7 +85,7 @@ pub(super) fn build(
                 (
                     TelemetryKindView::Expanded,
                     expanded,
-                    "states expanded".into(),
+                    "states explored".into(),
                 ),
                 (
                     TelemetryKindView::Generated,
@@ -95,7 +95,7 @@ pub(super) fn build(
             ],
         ));
         let counterfeit = workshop::action(RateId::CounterfeitChair);
-        view.proposals.push(proposal("workshop", ProposalSpec { id: "counterfeit", label: "Counterfeit chair", description: "The encoded rate would manufacture material and is rejected by the conservation invariant." }, &initial, &counterfeit));
+        view.proposals.push(proposal("workshop", ProposalSpec { id: "counterfeit", label: "Counterfeit chair", description: "This rule would create material out of nothing, and the conservation law rejects it." }, &initial, &counterfeit));
         documents.push(view);
     }
     artifact(
@@ -158,7 +158,7 @@ fn front_view(result: &workshop::ParetoResult, selected: &ViewDocument) -> Paret
         .map(|objective| objective.value.as_str())
         .collect::<Vec<_>>();
     ParetoFrontView {
-        title: "Replay-verified waste/time frontier".into(),
+        title: "Waste vs. time — every non-dominated plan".into(),
         completeness: FrontierCompletenessView::Exact,
         axes: vec![
             ObjectiveAxisView {
@@ -252,7 +252,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         },
     ];
     Some(Scene::graph(
-        "Encoded material and recipe flow",
+        "Materials and recipe flow",
         nodes,
         edges,
         None,

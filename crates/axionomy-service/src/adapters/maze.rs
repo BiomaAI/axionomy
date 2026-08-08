@@ -25,8 +25,8 @@ pub(super) fn build(
     let traces = [
         (
             "breadth_first",
-            "Maze · fewest exchanges",
-            "Breadth-first search selects the shallow detour.",
+            "Maze · fewest moves",
+            "Breadth-first search takes the detour: fewer moves, but more energy.",
             bfs.trace().clone(),
             "breadth-first search",
             bfs.expanded(),
@@ -34,7 +34,7 @@ pub(super) fn build(
         (
             "a_star",
             "Maze · least energy",
-            "A* follows the longer key-and-door route because encoded energy is lower.",
+            "A* takes the longer key-and-door route because it costs less energy overall.",
             astar.trace().clone(),
             "A*",
             astar.expanded(),
@@ -42,7 +42,7 @@ pub(super) fn build(
         (
             "pareto_energy",
             "Maze Pareto · least energy",
-            "The energy-first member of the exact replay-verified frontier.",
+            "The cheapest route on the frontier; every step was replayed to confirm it.",
             energy_trace,
             "exact Pareto search",
             pareto.progress().expanded(),
@@ -50,7 +50,7 @@ pub(super) fn build(
         (
             "pareto_time",
             "Maze Pareto · least time",
-            "The time-first member of the exact replay-verified frontier.",
+            "The fastest route on the frontier; every step was replayed to confirm it.",
             time_trace,
             "exact Pareto search",
             pareto.progress().expanded(),
@@ -84,7 +84,7 @@ pub(super) fn build(
                 (
                     TelemetryKindView::Expanded,
                     expanded as u64,
-                    "states expanded".into(),
+                    "states explored".into(),
                 ),
                 (
                     TelemetryKindView::Generated,
@@ -112,7 +112,7 @@ pub(super) fn build(
                 ProposalSpec {
                     id: "locked-door",
                     label: "Cross locked door",
-                    description: "Structurally valid, but the initial state lacks both the key-room position and open-door fact.",
+                    description: "Well-formed, but the agent is not at the door and the door is not open.",
                 },
                 &initial,
                 &locked,
@@ -122,7 +122,7 @@ pub(super) fn build(
                 ProposalSpec {
                     id: "missing-environment",
                     label: "Take key without World",
-                    description: "Malformed because the Environment role is intentionally unbound.",
+                    description: "Deliberately missing the World role, so there is nothing to take the key from.",
                 },
                 &initial,
                 &malformed,
@@ -190,7 +190,7 @@ fn front_view(result: &maze::ParetoResult, selected: &ViewDocument) -> ParetoFro
         .map(|objective| objective.value.as_str())
         .collect::<Vec<_>>();
     ParetoFrontView {
-        title: "Replay-verified energy/time frontier".into(),
+        title: "Energy vs. time — every non-dominated route".into(),
         completeness: FrontierCompletenessView::Exact,
         axes: vec![
             ObjectiveAxisView {
@@ -309,7 +309,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         })
         .collect();
     Some(Scene::graph(
-        "Encoded maze topology",
+        "Rooms and passages",
         graph_nodes,
         graph_edges,
         focus.map(node_key),
