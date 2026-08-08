@@ -13,7 +13,7 @@ test("runs a search, receives events, and scrubs its replay", async ({ page }) =
 
 test("shows incremental stochastic progress and responsive pause control", async ({ page }) => {
   await page.goto("/");
-  await page.getByLabel("Problem").selectOption("logistics");
+  await page.getByRole("combobox", { name: "Problem", exact: true }).selectOption("logistics");
   await page.getByLabel("Seed").fill("42");
   await page.getByLabel("Budget").fill("64");
   await page.getByRole("button", { name: "Run", exact: true }).click();
@@ -32,7 +32,7 @@ test("shows incremental stochastic progress and responsive pause control", async
 
 test("loads a distinct static problem and its specialized renderer", async ({ page }) => {
   await page.goto("/");
-  await page.getByLabel("Problem").selectOption("exact_cover");
+  await page.getByRole("combobox", { name: "Problem", exact: true }).selectOption("exact_cover");
   await expect(page.getByRole("heading", { name: /Exact cover · Algorithm X/ })).toBeVisible();
   await expect(page.locator(".matrix-scene")).toBeVisible();
   await expect(page.getByText("Which subset contains which element", { exact: false })).toBeVisible();
