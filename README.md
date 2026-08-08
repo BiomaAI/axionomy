@@ -27,6 +27,10 @@ simulation, and learned policies without duplicating domain logic; exact forks
 enable counterfactual exploration, while replayable traces make decisions
 auditable, comparable, and independently verifiable.
 
+[![Axionomy Studio comparing and replaying stochastic logistics strategies](assets/studio-gallery/logistics.webp)](https://biomaai.github.io/axionomy/)
+
+<p align="center"><sub>Axionomy Studio compares stochastic logistics strategies, then replays the selected solution one verified exchange at a time. <a href="https://biomaai.github.io/axionomy/">Open the live Studio</a>.</sub></p>
+
 Axionomy is a Rust engine for encoding bounded problem spaces through four
 primitives:
 
@@ -232,6 +236,39 @@ cargo run -p axionomy-cli -- catalog
 cargo run -p axionomy-cli -- describe logistics
 cargo run -p axionomy-cli -- run logistics --instance showcase --strategy reliable
 ```
+
+## Studio gallery
+
+Each view below is derived from the same accounts, assets, rates, exchanges,
+receipts, and replay contract used by the engine—never from a parallel
+simulation model. Click any image for the full-resolution view.
+
+<table>
+  <tr>
+    <td width="50%">
+      <a href="assets/studio-gallery/logistics.webp"><img src="assets/studio-gallery/logistics.webp" alt="Axionomy Studio replaying a stochastic logistics route"></a><br>
+      <strong>Stochastic logistics</strong><br>
+      Monte Carlo policy comparison, MCTS evidence, random travel events, and a replayed route through four deliveries.
+    </td>
+    <td width="50%">
+      <a href="assets/studio-gallery/marketplace.webp"><img src="assets/studio-gallery/marketplace.webp" alt="Axionomy Studio replaying an atomic multi-party marketplace clearing"></a><br>
+      <strong>Multi-party marketplace</strong><br>
+      Atomic settlement across buyers, sellers, carriers, platform, and tax, with exact Pareto utility tradeoffs.
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <a href="assets/studio-gallery/mission.webp"><img src="assets/studio-gallery/mission.webp" alt="Axionomy Studio replaying a hidden-information multi-agent mission"></a><br>
+      <strong>Hidden-information mission</strong><br>
+      Private observations, shared beliefs, random hazards, and information-set search across cooperating agents.
+    </td>
+    <td width="50%">
+      <a href="assets/studio-gallery/perishables.webp"><img src="assets/studio-gallery/perishables.webp" alt="Axionomy Studio replaying perishable inventory decay during a power outage"></a><br>
+      <strong>Perishable inventory</strong><br>
+      Ten thousand fungible claims, cohort-level decay, cooling energy, timed effects, and exact inventory tradeoffs.
+    </td>
+  </tr>
+</table>
 
 ## Core example
 
