@@ -28,7 +28,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List canonical problems, strategies, and capabilities */
+        /** List problems, strategies, and capabilities */
         get: operations["listProblems"];
         put?: never;
         post?: never;
@@ -494,8 +494,8 @@ export interface components {
             total?: number | null;
         };
         /**
-         * @description Optional domain projection derived from authoritative economic state.
-         *     Scenes explain and animate; they never decide whether an exchange applies.
+         * @description Optional problem picture derived from the economic state.
+         *     Pictures explain and animate; they never decide whether an exchange applies.
          */
         Scene: {
             /** @default [] */

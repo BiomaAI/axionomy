@@ -92,7 +92,7 @@ Every service-visible problem exposes the same explicit profile contract:
   by unit tests and quick integration checks.
 - **Showcase** is the Studio, CLI, HTTP, and MCP default. It adds decision
   density: longer plans, competing actions, coupled resources, more accounts,
-  richer constraints, or broader uncertainty.
+  additional constraints, or broader uncertainty.
 - **Stress** increases a problem-appropriate dimension such as board size,
   sample work, scheduling horizon, production target, or fungible inventory.
 
@@ -102,7 +102,9 @@ truth into the service or viewer. Instance identity is carried in
 `RunRequest` and `RunArtifact`, so a result cannot be compared or replayed as
 though it came from a different workload.
 
-The committed Showcase artifacts currently apply this pressure:
+The committed Showcase artifacts currently apply this pressure. This table is
+also the source for the per-problem Showcase descriptions in the service
+catalog, so those two public explanations must change together:
 
 | Problem | Default Showcase pressure |
 | --- | --- |
@@ -119,9 +121,9 @@ The committed Showcase artifacts currently apply this pressure:
 | Mission | 16 hidden joint scenarios, private observations, belief filtering, information exchange, hazard response, Monte Carlo, and ISMCTS |
 | Perishables | 10,000 fungible claims, cohort-level decay, refrigeration, outage effects, indexed deadlines, and an eight-point storage frontier |
 
-Artifact complexity telemetry records modeled accounts, encoded rates,
-accepted transitions, rejection proofs, and compared outcomes for every
-document. The service test also enforces per-problem minimum pressure (and a
+**Model size** telemetry records accounts, rules, trace steps, rule-check
+probes, and compared alternatives for every result. The service test also
+enforces per-problem minimum pressure (and a
 maximum compact-rate bound for standard Connect Four), preventing future
 refactors from silently collapsing Showcase back into a toy.
 

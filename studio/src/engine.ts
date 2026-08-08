@@ -83,7 +83,7 @@ export const nativeEngine: EngineClient = {
 };
 
 function unsupported(): never {
-  throw new Error("Static playback cannot execute a search. Start the native engine or use the browser engine.");
+  throw new Error("Saved results can be replayed but not re-run. Start an engine to compute new ones.");
 }
 
 export const staticEngine: EngineClient = {
@@ -101,8 +101,8 @@ export const staticEngine: EngineClient = {
 };
 
 export function connectionLabel(kind: EngineKind, connectivity: EngineConnectivity): string {
-  if (kind === "browser") return connectivity === "connected" ? "browser engine ready" : "browser engine unavailable";
-  if (kind === "static") return "static playback";
-  if (connectivity === "checking") return "checking native engine";
-  return connectivity === "connected" ? "native engine connected" : "native engine disconnected";
+  if (kind === "browser") return connectivity === "connected" ? "Running in your browser" : "Browser engine unavailable";
+  if (kind === "static") return "Replay only";
+  if (connectivity === "checking") return "Checking for an engine";
+  return connectivity === "connected" ? "Engine connected" : "Engine disconnected";
 }

@@ -390,8 +390,8 @@ pub enum SceneSurfaceView {
     },
 }
 
-/// Optional domain projection derived from authoritative economic state.
-/// Scenes explain and animate; they never decide whether an exchange applies.
+/// Optional problem picture derived from the economic state.
+/// Pictures explain and animate; they never decide whether an exchange applies.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct Scene {
     pub title: String,

@@ -70,10 +70,11 @@ multi-agent evaluation and rating design.
 
 The twelve reference problems expose explicit **Micro**, **Showcase**, and
 **Stress** instances. Micro keeps exact fixtures and independent oracles fast;
-Showcase is the substantial default used by Studio and generated artifacts;
-Stress scales a domain-relevant dimension. This keeps examples honest without
-turning arbitrary size into a product claim, and it lets CLI, HTTP, MCP, and
-Studio identify exactly which closed economy produced an outcome.
+Showcase is the default that Studio and the generated artifacts use. Stress
+raises a domain-relevant dimension—sampling, topology, board size, horizon,
+uncertainty, coupled participants, or inventory. This keeps examples honest
+without turning arbitrary size into a product claim, and it lets CLI, HTTP,
+MCP, and Studio identify exactly which closed economy produced an outcome.
 
 ## Workspace
 
@@ -116,62 +117,34 @@ adapters.
 
 ## What is implemented
 
-- User-defined asset, account, rate-ID, and role types.
-- Atomic multi-account rewrite rates.
-- Separate consume, produce, and preserved/read-only baskets per role.
-- Explicit exchange role bindings and multiplicity.
-- Generic checked `Quantity<N = u64>` arithmetic with `u64` and optional
-  non-`Copy` `BigUint` support.
-- Stable insertion-ordered model collections and direct Serde support for
-  economies, rates, accounts, baskets, exchanges, receipts, traces, and goals.
-- Structured construction, validation, arithmetic, and invariant errors.
-- Asset-qualified `AssetAmount` values, self-describing unit-aware asset keys,
-  model-wide denomination validation, and exact `uom` and Jiff adapters.
-- Explanatory exchange assessments with complete multi-account shortfalls and
-  projected receipt deltas.
-- Boolean `is_applicable` checks and bulk `applicable` candidate filtering.
-- Global declared linear invariants checked on every firing.
-- Successful application prepares and commits only touched account contents;
-  linear conservation is checked from exchange deltas without scanning
-  unrelated balances.
-- Asset-configured goals.
-- Isolated forks, speculative execution, and deterministic trace replay.
-- Account-restricted economic views with canonical observation identities.
-- Generic BFS, Dijkstra, A*, best-first search, replayable rollouts, weighted
-  sampling, exact replayable Pareto fronts, approximate sampled policy fronts,
-  Monte Carlo statistics, vector-valued MCTS,
-  observation-scoped ISMCTS, and RL trajectory projections.
-- Reproducible ChaCha sampling and established statistical estimators for
-  means, variance, quantiles, tail risk, and Bernoulli credible intervals.
-- Lazy action sources that derive concrete proposals from a full economy or an
-  actor observation before core applicability filtering.
-- Runtime-neutral resumable BFS, exhaustive Pareto, Monte Carlo, MCTS, and
-  ISMCTS sessions with deterministic work budgets, progress snapshots, and
-  cooperative observer interruption; a running Pareto front remains explicitly
-  approximate until the reachable state space is exhausted.
-- Forks share immutable laws and untouched account contents, with compact
-  model-scoped state fingerprints for search caches.
-- A strict MCP 2026-07-28 Streamable HTTP reference server with
-  content-addressed immutable economy snapshots, a caller-provided storage
-  boundary, an in-memory default, schema-backed tools, polling, progress, and
-  cooperative cancellation through `rmcp::TaskManager`.
-- Twelve closed benchmark encodings in `axionomy-problems`, each with explicit
-  Micro/Showcase/Stress identity, distinct solver strategies, independent
-  reference oracles, and encoded stochastic priors.
-- One interface-neutral problem service used by CLI, HTTP/Studio, and MCP,
-  with twelve discoverable canonical problems, explicit instance selection,
-  reproducible strategy requests, cooperative run control, bounded
-  Monte Carlo/MCTS progress, alternatives, and portable artifacts.
-- Axionomy Studio's Rust-owned `ViewDocument` contract, replay-derived account
-  snapshots, assessments and receipts, exact string quantities, graph, grid,
-  matrix, and timeline surfaces, semantic entities, paths, exact metrics,
-  transition cues, curated Tabler glyphs, alternative traces, Pareto fronts,
-  stochastic telemetry, retained and live solver observations, uniform
-  complexity evidence, cross-strategy comparison, partial observations, model
-  inspection, native SSE runs, an isolated Rust/Wasm Worker engine, truthful
-  connection health, responsive cancellation, persistent run feedback,
-  structured expected rejection proofs, OpenAPI-generated TypeScript, static
-  JSON for all twelve problems, and automatic GitHub Pages deployment.
+### Kernel
+
+- User-defined asset, account, rate-ID, role, and checked `Quantity<N = u64>` types.
+- Atomic multi-account exchanges with consume, produce, and preserve baskets.
+- Explanatory assessments, complete shortfalls, projected deltas, and receipts.
+- Declared invariants, asset-configured goals, isolated forks, and deterministic replay.
+- Stable Serde models plus optional `BigUint`, dimension-safe `uom`, and Jiff authoring.
+
+### Search
+
+- BFS, Dijkstra, A*, best-first, branch-and-bound, rollouts, and weighted sampling.
+- Exact Pareto search and sampled multi-objective policy comparison.
+- Reproducible Monte Carlo, vector-valued MCTS, and observation-scoped ISMCTS.
+- Resumable sessions with work budgets, progress, interruption, and RL trajectories.
+
+### Interfaces
+
+- One service contract shared by CLI, HTTP/SSE, MCP, Studio, and browser Wasm.
+- Twelve discoverable problems with explicit Micro, Showcase, and Stress instances.
+- A strict stateless MCP 2026-07-28 server with caller-owned snapshot storage.
+- Rust-owned OpenAPI, generated TypeScript, portable artifacts, and cross-interface tests.
+
+### Studio
+
+- Live search progress plus saved solver observations for fast and slow runs.
+- Replay-derived accounts, assessments, receipts, rule inspection, and actor views.
+- Graph, grid, matrix, and timeline pictures with semantic icons and exact metrics.
+- Strategy comparison, Pareto tradeoffs, rule checks, native SSE, and Web Worker Wasm.
 
 The core contains no application ontology or search algorithm. Problem assets
 and specialized solvers compile against the same public kernel API available
@@ -188,10 +161,10 @@ inventory—not invented by the search. The search-layer schema supplies names
 and minimize/maximize direction as disposable decision policy; it cannot make
 an invalid exchange valid or alter an outcome.
 
-This produces a more useful decision surface for allocation, planning, and
+This produces a more useful tradeoff view for allocation, planning, and
 learning. Callers can inspect who benefits, defer the final tradeoff until
 preferences are known, preserve discrete or non-convex alternatives that a
-weighted sum can miss, and use the retained set as richer supervision for a
+weighted sum can miss, and use the retained set as dense supervision for a
 policy or reinforcement learner. Every exact entry carries a trace that is
 replayed from the source economy. Exhaustive finite search is labeled `Exact`
 only after completion; interrupted search and Monte Carlo policy fronts remain
@@ -202,18 +175,25 @@ visibly `Approximate`.
 Axionomy Studio is a universal economic debugger and trace player, not a
 second simulator. It scrubs a trace by replaying accepted exchanges through
 the Rust core, then shows the resulting accounts, assets, assessments,
-receipt deltas, objectives, semantic transition cues, and optional read-only
-domain projection. Its separate Solve view follows bounded solver observations
+receipt deltas, objectives, semantic transition cues, and an optional read-only
+picture. Its separate Solve view follows bounded solver observations
 live and retains them in the artifact, so even a sub-second run remains
-inspectable. The Maze
-graph, Sokoban and Connect Four grids, Exact Cover matrix, scheduling and
-perishables timelines, market and logistics networks, stochastic telemetry,
+inspectable. The Maze graph, Sokoban and Connect Four grids, Exact Cover
+matrix, scheduling and perishables timelines, market and logistics networks,
+stochastic telemetry,
 Pareto alternatives, rejected proposals, and actor-relative observations are
-all projections over that same truth; none can make an exchange valid.
-Deliberately invalid or infeasible proposals appear as **expected rejection
-proofs**, with structured role, account, asset, and rate diagnostics. They
-demonstrate that encoded constraints are active and are kept visually separate
+all views over that same truth; none can make an exchange valid.
+Deliberately invalid or infeasible proposals appear under **Moves that should
+be refused**, with structured role, account, asset, and rate diagnostics. They
+demonstrate that the rules are active and are kept visually separate
 from genuine run or transport failures.
+
+### Reading Studio
+
+- Assets and accounts appear under **Source of truth**.
+- Rates, roles, goals, and invariants appear under **The rules**.
+- Each applied exchange appears under **One step** and in the replay scrubber.
+- Goals become outcome objectives; competing outcomes appear under **Tradeoffs**.
 
 Studio, the CLI, the HTTP API, and MCP deliberately call the same
 interface-neutral service. Their different usability demands pressure one

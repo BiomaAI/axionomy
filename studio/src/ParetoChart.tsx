@@ -72,7 +72,7 @@ export default function ParetoChart({ document, onSelect }: { document: ViewDocu
     };
   }, [front, onSelect]);
   if (!front) {
-    return <div className="empty-state">This document does not include a Pareto analysis.</div>;
+    return <div className="empty-state">This outcome has no tradeoff curve.</div>;
   }
   return <>
     <div className="analysis-meta">

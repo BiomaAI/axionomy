@@ -1,14 +1,18 @@
 # Axionomy Studio
 
 Axionomy Studio is the browser trace player and economic debugger for Axionomy.
-All twelve canonical problems are discoverable and runnable. Universal panels
-inspect balances, exchange bindings, assessments, projected and committed
-deltas, encoded rates and invariants, objectives, alternatives, telemetry, and
-actor-relative observations. Graph, grid, matrix, and timeline scenes are
-derived conveniences; they never become a second simulation model. Their
-shared Rust contract separates geometry from semantic entities, paths, exact
-metrics, annotations, and transition cues. Tabler icons render a constrained
-semantic glyph registry instead of embedding arbitrary SVG in artifacts.
+All twelve problems are discoverable and runnable. **Source of truth** shows
+accounts and assets; **The rules** shows rates, roles, goals, and invariants;
+**One step** explains the selected exchange and its exact effects.
+
+Graph, grid, matrix, and timeline pictures help people read a result, but they
+never become a second simulation model. Geometry, semantic entities, paths,
+metrics, annotations, and transition cues all come from the same Rust contract.
+
+**How it was solved** retains search progress, **Step-by-step replay** scrubs
+accepted exchanges, and **Tradeoffs** compares non-dominated outcomes. Tabler
+icons come from a constrained semantic glyph registry rather than arbitrary SVG
+inside artifacts.
 
 Each problem advertises Micro, Showcase, and Stress instances. Showcase is the
 default and is also the committed offline artifact; Micro and Stress are live
@@ -57,7 +61,7 @@ cargo run -p axionomy-studio-server --bin axionomy-studio
 ```
 
 Vite proxies `/api` to `127.0.0.1:3000`. Turn the server off and the badge will
-fall back to `browser engine ready` after the next health check; Run remains
+fall back to `Running in your browser` after the next health check; Run remains
 available. The Rust-generated catalog and artifacts in `public/artifacts`
 remain the final fallback if Worker initialization fails.
 

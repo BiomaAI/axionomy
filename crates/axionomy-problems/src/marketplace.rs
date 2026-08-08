@@ -315,39 +315,15 @@ fn build(size: MarketSize) -> World {
         .account(
             AccountId::Seller(SellerId::C),
             Account::from(basket([
-                (
-                    Asset::Item(Item::Gadget),
-                    if stress {
-                        2
-                    } else if showcase {
-                        2
-                    } else {
-                        1
-                    },
-                ),
-                (
-                    Asset::SaleOffer(Item::Gadget),
-                    if stress {
-                        2
-                    } else if showcase {
-                        2
-                    } else {
-                        1
-                    },
-                ),
+                (Asset::Item(Item::Gadget), if showcase { 2 } else { 1 }),
+                (Asset::SaleOffer(Item::Gadget), if showcase { 2 } else { 1 }),
             ])),
         )
         .account(
             AccountId::Carrier(CarrierId::A),
             Account::from(basket([(
                 Asset::ShippingCapacity,
-                if stress {
-                    3
-                } else if showcase {
-                    3
-                } else {
-                    2
-                },
+                if showcase { 3 } else { 2 },
             )])),
         )
         .account(

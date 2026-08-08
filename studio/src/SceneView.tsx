@@ -14,7 +14,7 @@ import { SceneIcon } from "./SceneIcon";
 
 export function SceneView({ scene, onAccount }: { scene?: Scene | null; onAccount?: (account: string) => void }) {
   if (!scene) {
-    return <div className="empty-state">No domain projection supplied; the accounts remain fully inspectable.</div>;
+    return <div className="empty-state">No picture for this problem — the accounts below still show everything.</div>;
   }
   return <div className="scene-composition">
     <SceneChrome scene={scene} />

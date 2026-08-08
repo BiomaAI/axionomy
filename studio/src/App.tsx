@@ -185,16 +185,21 @@ export function App() {
     if (match) setDocumentId(match.id);
   };
   const active = launching || Boolean(run);
+  const modelSize = document?.telemetry.find((entry) => entry.algorithm === "Model size");
+  const modelCounts = modelSize?.points
+    .filter((point) => point.kind === "accounts" || point.kind === "rates")
+    .map((point) => `${point.value} ${point.label}`)
+    .join(" · ");
 
   return <div className="app-shell">
     <header className="topbar">
-      <div className="brand"><picture><source media="(prefers-color-scheme: light)" srcSet={logoLight} /><img src={logoDark} alt="Axionomy" /></picture><div><div className="brand-name">Studio</div><div className="brand-subtitle">Economic reasoning workbench</div></div></div>
+      <div className="brand"><picture><source media="(prefers-color-scheme: light)" srcSet={logoLight} /><img src={logoDark} alt="Axionomy" /></picture><div><div className="brand-name">Studio</div><div className="brand-subtitle">Inspect and replay how a problem was solved</div></div></div>
       <div className="connection" title={engine.kind === "native" ? "Verified by a live health check" : engine.kind === "browser" ? "Rust/WASM engine isolated in a Web Worker" : "No executable engine is available"}><span className={`status-dot ${engine.canRun ? "online" : "static"}`} />{connectionLabel(engine.kind, connectivity)}</div>
     </header>
 
     <section className="command-bar" aria-label="Problem controls">
-      <label className="field problem-field"><span>Canonical problem</span><select value={problemKey} onChange={(event) => setProblemKey(event.target.value)} disabled={active}>{catalog.data?.map((candidate) => <option value={candidate.key} key={candidate.key}>{candidate.title}</option>)}</select></label>
-      <label className="field instance-field"><span>Instance</span><select value={instanceKey} onChange={(event) => { setInstanceKey(event.target.value); setCompletion(undefined); }} disabled={active}>{problem?.instances.map((candidate) => <option value={candidate.key} key={candidate.key}>{candidate.label}</option>)}</select></label>
+      <label className="field problem-field"><span>Problem</span><select value={problemKey} onChange={(event) => setProblemKey(event.target.value)} disabled={active}>{catalog.data?.map((candidate) => <option value={candidate.key} key={candidate.key}>{candidate.title}</option>)}</select></label>
+      <label className="field instance-field"><span>Instance (size)</span><select value={instanceKey} onChange={(event) => { setInstanceKey(event.target.value); setCompletion(undefined); }} disabled={active}>{problem?.instances.map((candidate) => <option value={candidate.key} key={candidate.key}>{candidate.label}</option>)}</select></label>
       <label className="field strategy-field"><span>Strategy</span><select value={strategyKey} onChange={(event) => { const key = event.target.value; setStrategyKey(key); const match = artifact?.documents.find((candidate) => candidate.id === `${problemKey}:${key}`); if (match) setDocumentId(match.id); }} disabled={active}>{problem?.strategies.map((strategy) => <option value={strategy.key} key={strategy.key}>{strategy.label}</option>)}</select></label>
       <label className="field numeric-field"><span>Seed</span><input type="number" min="0" value={seed} disabled={active} onChange={(event) => setSeed(Number(event.target.value))} /></label>
       <label className="field numeric-field"><span>Budget</span><input type="number" min="1" value={budget} disabled={active} onChange={(event) => setBudget(Math.max(1, Number(event.target.value)))} /></label>
@@ -203,42 +208,42 @@ export function App() {
       {engine.canPause && run?.status === "paused" && <button onClick={resume}>Resume</button>}
       {run && <button className="danger" onClick={cancel}>Cancel</button>}
       <label className="file-button">Load artifact<input type="file" accept="application/json,.json" onChange={(event) => loadFile(event.target.files?.[0])} /></label>
-      <div className="run-message">{active ? "A new replay-verified artifact will replace the current view." : engine.canRun ? "CLI, HTTP, MCP, and Studio share this artifact contract." : "Native engine unavailable; deterministic Rust-generated artifacts remain playable."}</div>
+      <div className="run-message">{active ? "A newly computed result will replace the current view." : engine.canRun ? "The CLI, HTTP API, MCP server, and Studio all run this same problem the same way." : "No engine running — you can still replay the saved results."}</div>
     </section>
 
     {active && <RunActivity launching={launching} run={run} events={events} elapsedMs={elapsedMs} />}
     {completion && <CompletionBanner notice={completion} onDismiss={() => setCompletion(undefined)} />}
 
-    {problem && <section className="problem-context"><div><span>{problem.family.replaceAll("_", " ")}</span><p>{problem.summary}<small>{instance?.label ?? artifact?.instance.label}: {instance?.description ?? artifact?.instance.description}</small></p></div><div>{problem.capabilities.map((capability) => <span key={capability}>{capability.replaceAll("_", " ")}</span>)}</div></section>}
+    {problem && <section className="problem-context"><div><span>{familyLabel(problem.family)}</span><div className="problem-copy"><p>{problem.summary}</p><small><strong>{instance?.label ?? artifact?.instance.label}</strong>{instance?.description ?? artifact?.instance.description}{modelCounts && <em>{modelCounts}</em>}</small></div></div><div>{problem.capabilities.map((capability) => <span key={capability}>{capabilityLabel(capability)}</span>)}</div></section>}
     {error && <div className="error-banner" role="alert">{error}</div>}
 
     {artifact && document && snapshot ? <main className={freshArtifactId === artifact.id ? "fresh-artifact" : undefined}>
-      <section className="alternative-bar"><div><span>Artifact alternatives</span><strong>{artifact.documents.length} replayable outcomes</strong></div><div role="tablist">{artifact.documents.map((candidate) => <button key={candidate.id} role="tab" aria-selected={candidate.id === document.id} onClick={() => setDocumentId(candidate.id)}>{candidate.title.replace(`${artifact.problem.title} · `, "")}</button>)}</div></section>
+      <section className="alternative-bar"><div><span>Alternatives</span><strong>{artifact.documents.length} outcomes you can replay</strong></div><div role="tablist">{artifact.documents.map((candidate) => <button key={candidate.id} role="tab" aria-selected={candidate.id === document.id} onClick={() => setDocumentId(candidate.id)}>{candidate.title.replace(`${artifact.problem.title} · `, "")}</button>)}</div></section>
       <StrategyComparison artifact={artifact} selected={document.id} onSelect={setDocumentId} />
-      <section className="document-heading"><div><span className="eyebrow">{artifact.instance.label} · {document.source.label} · {document.id}{freshArtifactId === artifact.id ? " · newly computed" : ""}</span><h1>{document.title}</h1><p>{document.description}</p></div><div className="objective-pills">{document.objectives.map((objective) => <div className="objective" key={objective.key}><span>{objective.label}</span><strong>{objective.value}</strong><small>{objective.direction}</small></div>)}</div></section>
-      <div className="view-tabs" role="tablist" aria-label="Studio evidence mode"><button type="button" role="tab" aria-selected={viewMode === "solve"} onClick={() => setViewMode("solve")}>Solve evidence <small>{active ? "live" : document.solve_observations.length}</small></button><button type="button" role="tab" aria-selected={viewMode === "replay"} onClick={() => setViewMode("replay")}>Verified replay <small>{document.frames.length}</small></button></div>
+      <section className="document-heading"><div><span className="eyebrow">{artifact.instance.label} · {document.source.label} · {document.id}{freshArtifactId === artifact.id ? " · just computed" : ""}</span><h1>{document.title}</h1><p>{document.description}</p></div><div className="objective-pills">{document.objectives.map((objective) => <div className="objective" key={objective.key}><span>{objective.label}</span><strong>{objective.value}</strong><small>{objective.direction}</small></div>)}</div></section>
+      <div className="view-tabs" role="tablist" aria-label="Studio evidence mode"><button type="button" role="tab" aria-selected={viewMode === "solve"} onClick={() => setViewMode("solve")}>How it was solved <small>{active ? "live" : document.solve_observations.length}</small></button><button type="button" role="tab" aria-selected={viewMode === "replay"} onClick={() => setViewMode("replay")}>Step-by-step replay <small>{document.frames.length}</small></button></div>
       {viewMode === "solve" ? <SolveWorkspace observations={active ? events.flatMap((event) => event.kind === "search_observation" ? [event.observation] : []) : document.solve_observations} active={active} /> : <>
       <PlaybackControls position={position} count={document.frames.length} playing={playing} delay={playbackDelay} onDelay={setPlaybackDelay} onPosition={setPosition} onPlaying={(next) => { if (next && position >= document.frames.length) setPosition(0); setPlaying(next); }} frame={frame} />
 
       <section className="workspace-grid">
-        <div className="panel world-panel"><PanelHeading kicker="Derived projection" title={snapshot.scene?.title ?? "Economic world"} aside={snapshot.scene?.surface.kind} /><SceneView scene={snapshot.scene} onAccount={setFocusedAccount} /></div>
-        <div className="panel accounts-panel"><PanelHeading kicker="Authoritative state" title="Accounts & assets" aside={focusedAccount ? "linked from scene" : `${snapshot.accounts.length} accounts`} /><Accounts snapshot={snapshot} previous={previous} focus={focusedAccount} /></div>
+        <div className="panel world-panel"><PanelHeading kicker="Picture (illustration only)" title={snapshot.scene?.title ?? "Problem picture"} aside={snapshot.scene?.surface.kind} /><SceneView scene={snapshot.scene} onAccount={setFocusedAccount} /></div>
+        <div className="panel accounts-panel"><PanelHeading kicker="Source of truth" title="Accounts & assets" aside={focusedAccount ? "linked from picture" : `${snapshot.accounts.length} accounts`} /><Accounts snapshot={snapshot} previous={previous} focus={focusedAccount} /></div>
       </section>
 
       <section className="evidence-grid">
-        <div className="panel transition-panel"><PanelHeading kicker="Atomic transition" title={frame?.exchange.rate.label ?? "Initial snapshot"} /><Transition frame={frame} /></div>
-        <div className="panel proposal-panel"><PanelHeading kicker="Constraint probes" title="Expected rejection proofs" aside={`${document.proposals.length} ${document.proposals.length === 1 ? "proof" : "proofs"}`} /><ProposalInspector proposals={document.proposals} /></div>
-        <div className="panel analysis-panel"><PanelHeading kicker="Decision surface" title={document.pareto_fronts[0]?.title ?? "Search evidence"} /><Suspense fallback={<div className="empty-state">Loading analysis…</div>}><ParetoChart document={document} onSelect={selectPareto} /></Suspense><Telemetry document={document} /></div>
+        <div className="panel transition-panel"><PanelHeading kicker="One step" title={frame?.exchange.rate.label ?? "Initial state"} /><Transition frame={frame} /></div>
+        <div className="panel proposal-panel"><PanelHeading kicker="Rule checks" title="Moves that should be refused" aside={`${document.proposals.length} ${document.proposals.length === 1 ? "check" : "checks"}`} /><ProposalInspector proposals={document.proposals} /></div>
+        <div className="panel analysis-panel"><PanelHeading kicker="Tradeoffs" title={document.pareto_fronts[0]?.title ?? "Search evidence"} /><Suspense fallback={<div className="empty-state">Loading analysis…</div>}><ParetoChart document={document} onSelect={selectPareto} /></Suspense><Telemetry document={document} /></div>
       </section>
 
       <section className="definition-grid">
-        <div className="panel model-panel"><PanelHeading kicker="Closed model" title="Rates, roles, goals & invariants" aside={`${document.model?.rates.length ?? 0} rates`} /><ModelExplorer document={document} /></div>
-        <div className="panel observation-panel"><PanelHeading kicker="Information boundary" title="Actor-relative observations" aside={`${document.observations.length} views`} /><Observations document={document} /></div>
+        <div className="panel model-panel"><PanelHeading kicker="The rules" title="Rates, roles, goals & invariants" aside={`${document.model?.rates.length ?? 0} rates`} /><ModelExplorer document={document} /></div>
+        <div className="panel observation-panel"><PanelHeading kicker="Who can see what" title="Actor-relative observations" aside={`${document.observations.length} views`} /><Observations document={document} /></div>
       </section>
       </>}
-    </main> : <div className="loading">Loading replay-derived problem artifact…</div>}
+    </main> : <div className="loading">Loading saved problem result…</div>}
 
-    <footer>Scenes explain. Accounts, assets, rates, bindings, assessment, and replay prove.</footer>
+    <footer>The picture explains. The accounts, rules, and replay prove.</footer>
   </div>;
 }
 
@@ -271,10 +276,10 @@ function SolveWorkspace({ observations, active }: { observations: SearchObservat
   const latest = observations.at(-1);
   const kinds = [...new Set(observations.map((observation) => observation.kind))];
   return <section className={`solve-workspace ${active ? "live" : "retained"}`} aria-label="Solver evidence">
-    <header><div><span className={active ? "spinner" : "solve-complete"} aria-hidden="true">{active ? "" : "✓"}</span><div><strong>{active ? "Live solver observations" : "Retained solver observations"}</strong><small>{active ? "Bounded updates from cooperative search checkpoints" : "Saved in the portable artifact for offline inspection"}</small></div></div><span>{observations.length} observations</span></header>
-    {latest && <div className="solve-summary"><div><span>Current phase</span><strong>{latest.phase.replaceAll("_", " ")}</strong></div><div><span>Algorithm</span><strong>{latest.algorithm.replaceAll("_", " ")}</strong></div><div><span>Progress</span><strong>{latest.completed} / {latest.total}</strong></div><div><span>Evidence</span><strong>{kinds.join(" · ").replaceAll("_", " ")}</strong></div></div>}
+    <header><div><span className={active ? "spinner" : "solve-complete"} aria-hidden="true">{active ? "" : "✓"}</span><div><strong>{active ? "Live solver observations" : "Saved solver observations"}</strong><small>{active ? "Progress reported by the search as it runs" : "Saved with the result, so you can review it later"}</small></div></div><span>{observations.length} observations</span></header>
+    {latest && <div className="solve-summary"><div><span>Current phase</span><strong>{phaseLabel(latest.phase)}</strong></div><div><span>Algorithm</span><strong>{latest.algorithm.replaceAll("_", " ")}</strong></div><div><span>Progress</span><strong>{latest.completed} / {latest.total}</strong></div><div><span>Evidence</span><strong>{kinds.join(" · ").replaceAll("_", " ")}</strong></div></div>}
     {latest && latest.total > 0 && <progress max={latest.total} value={Math.min(latest.completed, latest.total)} aria-label="Solver observation progress" />}
-    <div className="solve-stream">{observations.length === 0 ? <div className="empty-state">Waiting for the first solver checkpoint…</div> : observations.map((observation) => <article key={`${observation.sequence}:${observation.phase}`} className={`observation-${observation.kind}`}><div className="solve-observation-icon"><SceneIcon glyph={observationGlyph(observation.kind)} size={20} /></div><div><strong>{observation.label}</strong><span>{observation.phase.replaceAll("_", " ")} · {observation.completed} / {observation.total}</span></div><div>{observation.metrics.map((metric) => <span key={metric.key}><small>{metric.label}</small><b>{metric.value}</b></span>)}</div></article>)}</div>
+    <div className="solve-stream">{observations.length === 0 ? <div className="empty-state">Waiting for the first solver checkpoint…</div> : observations.map((observation) => <article key={`${observation.sequence}:${observation.phase}`} className={`observation-${observation.kind}`}><div className="solve-observation-icon"><SceneIcon glyph={observationGlyph(observation.kind)} size={20} /></div><div><strong>{observation.label}</strong><span>{phaseLabel(observation.phase)} · {observation.completed} / {observation.total}</span></div><div>{observation.metrics.map((metric) => <span key={metric.key}><small>{metric.label}</small><b>{metric.value}</b></span>)}</div></article>)}</div>
   </section>;
 }
 
@@ -292,16 +297,69 @@ function observationGlyph(kind: SearchObservation["kind"]): Parameters<typeof Sc
   }
 }
 
+function familyLabel(family: NonNullable<RunArtifact["problem"]>["family"]): string {
+  const labels: Record<typeof family, string> = {
+    pathfinding: "Pathfinding",
+    constraint: "Constraint satisfaction",
+    production: "Production",
+    scheduling: "Scheduling",
+    allocation: "Allocation",
+    market: "Market clearing",
+    stochastic_planning: "Planning under uncertainty",
+    adversarial_game: "Adversarial game",
+    partial_observation: "Hidden information",
+    temporal_simulation: "Time and decay",
+  };
+  return labels[family];
+}
+
+function capabilityLabel(capability: RunArtifact["problem"]["capabilities"][number]): string {
+  const labels: Record<typeof capability, string> = {
+    deterministic_search: "Deterministic search",
+    weighted_search: "Cost-guided search",
+    specialized_algorithm: "Specialised algorithm",
+    exact_pareto: "Exact Pareto frontier",
+    approximate_pareto: "Sampled Pareto frontier",
+    feasibility_assessment: "Explains why something is impossible",
+    multi_account_exchange: "Multi-account atomic changes",
+    atomic_settlement: "Atomic settlement",
+    branch_optimization: "Branch and bound",
+    monte_carlo: "Monte Carlo",
+    mcts: "MCTS",
+    information_set_search: "Information-set search (ISMCTS)",
+    partial_observation: "Partial observation",
+    chance: "Random events",
+    temporal_effects: "Time-triggered effects",
+    fungible_cohorts: "Interchangeable batches",
+    non_fungible_facts: "Unique facts",
+    rl_projection: "Reinforcement-learning training data",
+  };
+  return labels[capability];
+}
+
+function phaseLabel(phase: string): string {
+  const labels: Record<string, string> = {
+    prepare: "Preparing",
+    artifact: "Building the result",
+    monte_carlo: "Monte Carlo sampling",
+    pareto_sampling: "Sampling the frontier",
+    mcts: "MCTS",
+    mcts_game: "MCTS",
+    ismcts: "ISMCTS",
+  };
+  return labels[phase] ?? phase.replaceAll("_", " ");
+}
+
 function StrategyComparison({ artifact, selected, onSelect }: { artifact: RunArtifact; selected: string; onSelect: (id: string) => void }) {
   return <section className="strategy-comparison" aria-label="Outcome comparison">
-    <div className="comparison-heading"><span>Outcome comparison</span><strong>Strategies and tradeoffs on one evidence surface</strong></div>
+    <div className="comparison-heading"><span>Compare outcomes</span><strong>Every strategy and what it cost, side by side</strong></div>
     <div className="comparison-scroll"><table><thead><tr><th>Outcome</th><th>Result</th><th>Trace</th><th>Search evidence</th></tr></thead><tbody>{artifact.documents.map((candidate) => {
       const series = candidate.telemetry.find((entry) => entry.algorithm !== "Model size");
       const work = series ? [...series.points].reverse().find((point) => ["generated", "expanded", "iteration", "sample"].includes(point.kind)) : undefined;
       return <tr key={candidate.id} className={candidate.id === selected ? "selected" : undefined}>
         <td><button type="button" onClick={() => onSelect(candidate.id)}>{candidate.title.replace(`${artifact.problem.title} · `, "")}</button></td>
         <td>{candidate.objectives.length > 0 ? candidate.objectives.map((objective) => `${objective.label}: ${objective.value}`).join(" · ") : "Feasibility outcome"}</td>
-        <td>{candidate.frames.length} atomic {candidate.frames.length === 1 ? "transition" : "transitions"}</td>
+        <td>{candidate.frames.length} {candidate.frames.length === 1 ? "step" : "steps"}</td>
         <td>{series ? `${series.algorithm} · ${series.exact ? "exact" : "sampled"}${work ? ` · ${work.value} ${work.kind.replaceAll("_", " ")}` : ""}` : "Replay only"}</td>
       </tr>;
     })}</tbody></table></div>

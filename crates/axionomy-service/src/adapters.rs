@@ -120,14 +120,16 @@ where
 pub(crate) fn catalog() -> Vec<ProblemDescriptor> {
     vec![
         problem(
-            "maze",
-            "Key-door maze",
-            "Reach the exit on limited energy and time. The key route costs less energy, the detour takes fewer moves, and no single weighting picks between them.",
-            [
-                "The smallest maze with a key, a locked door, and a real route choice",
-                "14 rooms, 16 one-way passages, and four competing route families",
-                "22 rooms, 29 passages, five route families, and cross-route choices",
-            ],
+            ProblemCopy {
+                key: "maze",
+                title: "Key-door maze",
+                summary: "Reach the exit on limited energy and time. The key route costs less energy, the detour takes fewer moves, and no single weighting picks between them.",
+                instances: [
+                    "The smallest maze with a key, a locked door, and a real route choice",
+                    "14 rooms, 16 one-way passages, and four competing route families",
+                    "22 rooms, 29 passages, five route families, and cross-route choices",
+                ],
+            },
             ProblemFamily::Pathfinding,
             "a_star",
             &[
@@ -164,14 +166,16 @@ pub(crate) fn catalog() -> Vec<ProblemDescriptor> {
             ],
         ),
         problem(
-            "sokoban",
-            "Sokoban",
-            "Push crates onto their goal squares. Every push rewrites three cells at once, and some positions can never be recovered.",
-            [
-                "Five cells and two pushes",
-                "A 7×5 board with 35 cells and a ten-step solution",
-                "An 8×6 board with a longer route and a larger cell economy",
-            ],
+            ProblemCopy {
+                key: "sokoban",
+                title: "Sokoban",
+                summary: "Push crates onto their goal squares. Every push rewrites three cells at once, and some positions can never be recovered.",
+                instances: [
+                    "Five cells and two pushes",
+                    "A 7×5 board with 35 cells and a ten-step solution",
+                    "An 8×6 board with a longer route and a larger cell economy",
+                ],
+            },
             ProblemFamily::Pathfinding,
             "breadth_first",
             &[(
@@ -187,14 +191,16 @@ pub(crate) fn catalog() -> Vec<ProblemDescriptor> {
             ],
         ),
         problem(
-            "exact_cover",
-            "Exact cover",
-            "Choose subsets that cover every element exactly once. A plain search and Algorithm X reach the same answer by different routes.",
-            [
-                "Four elements and four competing subsets",
-                "Eight elements and twelve subsets arranged as two interacting blocks",
-                "Twelve elements and eighteen subsets with 27 competing exact covers",
-            ],
+            ProblemCopy {
+                key: "exact_cover",
+                title: "Exact cover",
+                summary: "Choose subsets that cover every element exactly once. A plain search and Algorithm X reach the same answer by different routes.",
+                instances: [
+                    "Four elements and four competing subsets",
+                    "Eight elements and twelve subsets arranged as two interacting blocks",
+                    "Twelve elements and eighteen subsets with 27 competing exact covers",
+                ],
+            },
             ProblemFamily::Constraint,
             "algorithm_x",
             &[
@@ -218,14 +224,16 @@ pub(crate) fn catalog() -> Vec<ProblemDescriptor> {
             ],
         ),
         problem(
-            "workshop",
-            "Workshop",
-            "Build the order from raw stock without creating or destroying material. The fastest plan and the least wasteful plan are not the same plan.",
-            [
-                "One chair made from raw stock",
-                "A six-chair order with competing fast and low-waste recipes",
-                "A ten-chair order with more material, labor, and production choices",
-            ],
+            ProblemCopy {
+                key: "workshop",
+                title: "Workshop",
+                summary: "Build the order from raw stock without creating or destroying material. The fastest plan and the least wasteful plan are not the same plan.",
+                instances: [
+                    "One chair made from raw stock",
+                    "A six-chair order with competing fast and low-waste recipes",
+                    "A ten-chair order with more material, labor, and production choices",
+                ],
+            },
             ProblemFamily::Production,
             "minimum_waste",
             &[
@@ -262,14 +270,16 @@ pub(crate) fn catalog() -> Vec<ProblemDescriptor> {
             ],
         ),
         problem(
-            "scheduling",
-            "Job-shop scheduling",
-            "Fit every operation onto a machine without double-booking one or running a job out of order. Finishing one job early delays the other.",
-            [
-                "Two jobs on the smallest horizon that still forces a machine conflict",
-                "Six ordered operations across three machines and 18 time slots",
-                "The same operations across a longer eight-slot decision horizon",
-            ],
+            ProblemCopy {
+                key: "scheduling",
+                title: "Job-shop scheduling",
+                summary: "Fit every operation onto a machine without double-booking one or running a job out of order. Finishing one job early delays the other.",
+                instances: [
+                    "Two jobs on the smallest horizon that still forces a machine conflict",
+                    "Six ordered operations across three machines and 18 time slots",
+                    "The same operations across a longer eight-slot decision horizon",
+                ],
+            },
             ProblemFamily::Scheduling,
             "bounded_optimizer",
             &[
@@ -306,14 +316,16 @@ pub(crate) fn catalog() -> Vec<ProblemDescriptor> {
             ],
         ),
         problem(
-            "rescue",
-            "Uncertain rescue",
-            "The survivor's location is unknown. Spend the sensor first, or commit immediately and risk searching the wrong site.",
-            [
-                "Two possible sites and eight hidden location/sensor outcomes",
-                "Four possible sites, 32 outcomes, an unreliable sensor, and an evacuation leg",
-                "Six possible sites, 72 outcomes, and at least 256 policy samples",
-            ],
+            ProblemCopy {
+                key: "rescue",
+                title: "Uncertain rescue",
+                summary: "The survivor's location is unknown. Spend the sensor first, or commit immediately and risk searching the wrong site.",
+                instances: [
+                    "Two possible sites and eight hidden location/sensor outcomes",
+                    "Four possible sites, 32 outcomes, an unreliable sensor, and an evacuation leg",
+                    "Six possible sites, 72 outcomes, and at least 256 policy samples",
+                ],
+            },
             ProblemFamily::PartialObservation,
             "observe_then_follow",
             &[
@@ -338,14 +350,16 @@ pub(crate) fn catalog() -> Vec<ProblemDescriptor> {
             ],
         ),
         problem(
-            "bridge",
-            "Bridge allocation",
-            "One lane, two agents, both need it. Compare first-come priority against an auction that settles bids and access in indivisible steps.",
-            [
-                "One crossing round for two agents and one lane",
-                "Two allocation rounds with escrow, recharge, and retained credit",
-                "Three bounded rounds where priority and spending affect later choices",
-            ],
+            ProblemCopy {
+                key: "bridge",
+                title: "Bridge allocation",
+                summary: "One lane, two agents, both need it. Compare first-come priority against an auction that settles bids and access in indivisible steps.",
+                instances: [
+                    "One crossing round for two agents and one lane",
+                    "Two allocation rounds with escrow, recharge, and retained credit",
+                    "Three bounded rounds where priority and spending affect later choices",
+                ],
+            },
             ProblemFamily::Allocation,
             "auction",
             &[
@@ -394,14 +408,16 @@ pub(crate) fn catalog() -> Vec<ProblemDescriptor> {
             ],
         ),
         problem(
-            "marketplace",
-            "Multi-party marketplace",
-            "Settle orders across buyers, sellers, carriers, the platform, and tax in one indivisible step. When it fails, you see exactly which account fell short and by how much.",
-            [
-                "Two orders across three buyers, three sellers, and one active carrier",
-                "Four linked orders across 14 accounts sharing budget, stock, shipping capacity, and tax",
-                "Six linked orders across 16 accounts with exactly enough stock and shipping capacity",
-            ],
+            ProblemCopy {
+                key: "marketplace",
+                title: "Multi-party marketplace",
+                summary: "Settle orders across buyers, sellers, carriers, the platform, and tax in one indivisible step. When it fails, you see exactly which account fell short and by how much.",
+                instances: [
+                    "Two orders across three buyers, three sellers, and one active carrier",
+                    "Four linked orders across 14 accounts sharing budget, stock, shipping capacity, and tax",
+                    "Six linked orders across 16 accounts with exactly enough stock and shipping capacity",
+                ],
+            },
             ProblemFamily::Market,
             "market_clearing",
             &[
@@ -432,14 +448,16 @@ pub(crate) fn catalog() -> Vec<ProblemDescriptor> {
             ],
         ),
         problem(
-            "logistics",
-            "Stochastic logistics",
-            "Deliver four orders through weather and breakdowns. The short route wins when nothing goes wrong; the long one finishes more often when things do.",
-            [
-                "Two deliveries with a compact route and a small sample budget",
-                "Four deliveries with recurring weather and breakdowns",
-                "The four-delivery network evaluated with at least 256 stochastic rollouts",
-            ],
+            ProblemCopy {
+                key: "logistics",
+                title: "Stochastic logistics",
+                summary: "Deliver four orders through weather and breakdowns. The short route wins when nothing goes wrong; the long one finishes more often when things do.",
+                instances: [
+                    "Two deliveries with a compact route and a small sample budget",
+                    "Four deliveries with recurring weather and breakdowns",
+                    "The four-delivery network evaluated with at least 256 stochastic rollouts",
+                ],
+            },
             ProblemFamily::StochasticPlanning,
             "reliable",
             &[
@@ -470,14 +488,16 @@ pub(crate) fn catalog() -> Vec<ProblemDescriptor> {
             ],
         ),
         problem(
-            "connect_four",
-            "Connect Four",
-            "A full game of Connect Four played by MCTS on both sides, with gravity and every winning line written as rules.",
-            [
-                "A compact board with a short game and few rollouts",
-                "The full 7×6 board and all 69 winning lines",
-                "The full board with four times the MCTS work per move",
-            ],
+            ProblemCopy {
+                key: "connect_four",
+                title: "Connect Four",
+                summary: "A full game of Connect Four played by MCTS on both sides, with gravity and every winning line written as rules.",
+                instances: [
+                    "A compact board with a short game and few rollouts",
+                    "The full 7×6 board and all 69 winning lines",
+                    "The full board with four times the MCTS work per move",
+                ],
+            },
             ProblemFamily::AdversarialGame,
             "mcts_game",
             &[(
@@ -489,14 +509,16 @@ pub(crate) fn catalog() -> Vec<ProblemDescriptor> {
             &[Capability::Mcts, Capability::MultiAccountExchange],
         ),
         problem(
-            "mission",
-            "Hidden-information mission",
-            "Two agents each see only part of the map. Compare sharing what they see before acting against both moving straight in.",
-            [
-                "Two hidden scenarios and one private sighting",
-                "Sixteen hidden scenarios with private sightings, belief updates, and hazards",
-                "The same mission evaluated with at least 256 belief-conditioned simulations",
-            ],
+            ProblemCopy {
+                key: "mission",
+                title: "Hidden-information mission",
+                summary: "Two agents each see only part of the map. Compare sharing what they see before acting against both moving straight in.",
+                instances: [
+                    "Two hidden scenarios and one private sighting",
+                    "Sixteen hidden scenarios with private sightings, belief updates, and hazards",
+                    "The same mission evaluated with at least 256 belief-conditioned simulations",
+                ],
+            },
             ProblemFamily::PartialObservation,
             "coordinated",
             &[
@@ -523,14 +545,16 @@ pub(crate) fn catalog() -> Vec<ProblemDescriptor> {
             ],
         ),
         problem(
-            "perishables",
-            "Perishable inventory",
-            "Ten thousand units spoil by batch, not one at a time. Cooling costs energy, and a power outage forces the tradeoff.",
-            [
-                "One hundred units split between two batches",
-                "Ten thousand units with cooling, deadlines, and a power outage",
-                "One million units using the same two batch-level condition facts",
-            ],
+            ProblemCopy {
+                key: "perishables",
+                title: "Perishable inventory",
+                summary: "Ten thousand units spoil by batch, not one at a time. Cooling costs energy, and a power outage forces the tradeoff.",
+                instances: [
+                    "One hundred units split between two batches",
+                    "Ten thousand units with cooling, deadlines, and a power outage",
+                    "One million units using the same two batch-level condition facts",
+                ],
+            },
             ProblemFamily::TemporalSimulation,
             "outage",
             &[
@@ -563,39 +587,43 @@ pub(crate) fn catalog() -> Vec<ProblemDescriptor> {
     ]
 }
 
+struct ProblemCopy<'a> {
+    key: &'a str,
+    title: &'a str,
+    summary: &'a str,
+    instances: [&'a str; 3],
+}
+
 fn problem(
-    key: &str,
-    title: &str,
-    summary: &str,
-    instance_descriptions: [&str; 3],
+    copy: ProblemCopy<'_>,
     family: ProblemFamily,
     default_strategy: &str,
     strategies: &[(&str, &str, &str, &str)],
     capabilities: &[Capability],
 ) -> ProblemDescriptor {
     ProblemDescriptor {
-        key: key.into(),
-        title: title.into(),
-        summary: summary.into(),
+        key: copy.key.into(),
+        title: copy.title.into(),
+        summary: copy.summary.into(),
         family,
         default_instance: "showcase".into(),
         instances: vec![
             InstanceDescriptor {
                 key: "micro".into(),
                 label: "Micro".into(),
-                description: instance_descriptions[0].into(),
+                description: copy.instances[0].into(),
                 profile: InstanceProfile::Micro,
             },
             InstanceDescriptor {
                 key: "showcase".into(),
                 label: "Showcase".into(),
-                description: instance_descriptions[1].into(),
+                description: copy.instances[1].into(),
                 profile: InstanceProfile::Showcase,
             },
             InstanceDescriptor {
                 key: "stress".into(),
                 label: "Stress".into(),
-                description: instance_descriptions[2].into(),
+                description: copy.instances[2].into(),
                 profile: InstanceProfile::Stress,
             },
         ],

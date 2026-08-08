@@ -14,7 +14,7 @@ const problem = {
   summary: "A fixture problem",
   family: "pathfinding",
   default_instance: "showcase",
-  instances: [{ key: "showcase", label: "Substantial showcase", description: "A richer interactive workload", profile: "showcase" }],
+  instances: [{ key: "showcase", label: "Showcase", description: "A default interactive workload", profile: "showcase" }],
   default_strategy: "a_star",
   strategies: [{ key: "a_star", label: "Least energy", description: "A*", algorithm: "a*" }],
   capabilities: ["weighted_search"],

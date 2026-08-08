@@ -34,7 +34,7 @@ export function Accounts({ snapshot, previous, focus }: { snapshot: ViewSnapshot
 }
 
 export function Transition({ frame }: { frame?: ExchangeFrame }) {
-  if (!frame) return <div className="empty-state">Move the scrubber to inspect the assessment, projected deltas, and receipt.</div>;
+  if (!frame) return <div className="empty-state">Move the scrubber to see what a step checked, predicted, and actually changed.</div>;
   return <div className="transition">
     <div className="frame-cues" aria-label="Transition cues">
       {frame.cues.map((cue, index) => <article key={`${cue.kind}:${index}`} className={`cue-${cue.kind}`}><strong>{cue.label}</strong>{cue.details.map((detail) => <span key={detail}>{detail}</span>)}</article>)}
@@ -57,10 +57,10 @@ export function Transition({ frame }: { frame?: ExchangeFrame }) {
 export function ProposalInspector({ proposals }: { proposals: ProposalView[] }) {
   const [selectedId, setSelectedId] = useState(proposals[0]?.id);
   useEffect(() => setSelectedId(proposals[0]?.id), [proposals]);
-  if (proposals.length === 0) return <div className="empty-state">This adapter does not publish a rejected proposal.</div>;
+  if (proposals.length === 0) return <div className="empty-state">This problem has no rule-check probe.</div>;
   const selected = proposals.find((proposal) => proposal.id === selectedId) ?? proposals[0];
   return <div className="proposal-inspector">
-    <div className="counterexample-note"><strong>Expected rejection</strong><span>These probes are intentionally malformed or infeasible. Their rejection proves that the encoded constraints are active; they are not run failures.</span></div>
+    <div className="counterexample-note"><strong>Expected rejection</strong><span>These probes are deliberately invalid or impossible. Their rejection proves the rules are doing their job; they are not failed runs.</span></div>
     <div className="proposal-tabs" role="tablist">
       {proposals.map((proposal) => <button type="button" role="tab" aria-selected={proposal.id === selected.id} key={proposal.id} onClick={() => setSelectedId(proposal.id)}>{proposal.label}</button>)}
     </div>
@@ -80,7 +80,7 @@ function Assessment({ assessment, expectedRejection = false }: { assessment: Exc
       {shortfall.account.label} lacks {shortfall.missing.map((missing) => `${missing.quantity} ${missing.asset.label}`).join(", ")}
     </div>)}
     {assessment.issues.map((issue, index) => <div className="assessment-issue" key={`${issue.kind}:${index}`}><span>{issue.message}</span><small>{issue.kind.replaceAll("_", " ")}</small></div>)}
-    {assessment.status === "applicable" && <div>{assessment.projected_deltas.length} account deltas projected without mutation</div>}
+    {assessment.status === "applicable" && <div>{assessment.projected_deltas.length} accounts would change — predicted, nothing changed yet</div>}
   </div>;
 }
 
@@ -106,13 +106,13 @@ export function ModelExplorer({ document }: { document: ViewDocument }) {
   const [filter, setFilter] = useState("");
   useEffect(() => { setSelectedRate(model?.rates[0]?.rate.key); setFilter(""); }, [document.id, model]);
   const rate = model?.rates.find((candidate) => candidate.rate.key === selectedRate) ?? model?.rates[0];
-  if (!model) return <div className="empty-state">This document predates model-definition projection.</div>;
+  if (!model) return <div className="empty-state">This result was produced before rule inspection existed.</div>;
   const matchingRates = model.rates.filter((candidate) => `${candidate.rate.label} ${candidate.rate.key}`.toLowerCase().includes(filter.toLowerCase()));
   const visibleRates = matchingRates.slice(0, 200);
   if (rate && !visibleRates.some((candidate) => candidate.rate.key === rate.rate.key)) visibleRates.unshift(rate);
   return <div className="model-explorer">
     <section className="rate-browser">
-      <div className="rate-controls"><label><span>Filter {model.rates.length} encoded rates</span><input type="search" value={filter} onChange={(event) => setFilter(event.target.value)} placeholder="Rate, action, route, operation…" /></label><label><span>Encoded rate</span><select value={rate?.rate.key ?? ""} onChange={(event) => setSelectedRate(event.target.value)}>{visibleRates.map((candidate) => <option key={candidate.rate.key} value={candidate.rate.key}>{candidate.rate.label}</option>)}</select></label></div>
+      <div className="rate-controls"><label><span>Filter {model.rates.length} rates</span><input type="search" value={filter} onChange={(event) => setFilter(event.target.value)} placeholder="Rate, action, route, operation…" /></label><label><span>Rate</span><select value={rate?.rate.key ?? ""} onChange={(event) => setSelectedRate(event.target.value)}>{visibleRates.map((candidate) => <option key={candidate.rate.key} value={candidate.rate.key}>{candidate.rate.label}</option>)}</select></label></div>
       {matchingRates.length > visibleRates.length && <p className="muted">Showing the first 200 matches; refine the filter to inspect the rest.</p>}
       {rate && <div className="rate-contract">
         {rate.roles.map((role) => <article key={role.role.key}><h3>{role.role.label}</h3><RateBasket label="Consume" values={role.consumed} /><RateBasket label="Produce" values={role.produced} /><RateBasket label="Preserve" values={role.preserved} /></article>)}

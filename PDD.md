@@ -655,6 +655,18 @@ and fungible inventory magnitude for Perishables. Showcase growth must add
 branching, constraints, roles, uncertainty, or tradeoffs—not merely repeat a
 forced exchange.
 
+Every advertised Stress profile must differ observably from Showcase. For a
+deterministic problem that means a larger closed economy, horizon, or coupled
+state space; for a stochastic problem it may mean a larger encoded scenario
+set or a higher enforced work budget. A differently named request that builds
+the same economy and performs the same work is a product defect. Service-level
+regressions compare deterministic model structure, while problem-level tests
+verify each intended structural, scenario, or work-budget dimension directly.
+Maze expands topology, Exact Cover expands its incidence matrix, Bridge adds a
+bounded allocation round, Marketplace couples six orders, and Rescue expands
+to 72 hidden scenarios; the other seven profiles retain their board, horizon,
+target, inventory, or sampling pressure.
+
 Profiles remain closed problem definitions. Their accounts, assets, rates,
 invariants, goals, and initial quantities are ordinary model data; the
 `InstanceDescriptor` is interface identity, not semantic authority. Every
@@ -663,10 +675,10 @@ oracles even when exhaustive search over Showcase would be inappropriate, and
 an approximate or candidate-bounded Showcase frontier must be labeled as such.
 
 The conformance service enforces minimum Showcase pressure for all twelve
-problems. Every document also receives transport-neutral complexity evidence:
-modeled accounts, encoded rates, accepted atomic transitions, explained
-rejections, and replayable alternatives. These measurements are explanatory,
-not objectives, and cannot affect validity. Studio uses them with a generic
+problems. Every result also receives transport-neutral **Model size** evidence:
+accounts, rules, steps in the trace, rule-check probes, and alternatives. These
+measurements are explanatory, not objectives, and cannot affect validity.
+Studio uses them with a generic
 outcome-comparison table so API awkwardness and accidental toy regressions are
 visible early across unrelated domains.
 
@@ -701,6 +713,14 @@ authority channel. Exact quantities cross JSON as strings because JSON and
 JavaScript numbers cannot preserve every `u64` or wider exact integer. Charts
 may convert a value for screen coordinates, but labels and tooltips retain the
 exact text and no plotted approximation is fed back into the economy.
+
+Stable keys and human labels are deliberately separate. Reference adapters
+implement typed labels for their account, asset, rate, and role enums while
+retaining the same Debug-derived keys used by artifacts and scene links.
+User-defined economies keep the generic Debug-label fallback unless their
+adapter supplies a presentation ontology. Labels stay outside the problem and
+kernel crates, wording never becomes semantic identity, and adapters do not
+parse formatted Debug strings to recover domain meaning.
 
 There is one generated contract pipeline:
 
@@ -748,8 +768,8 @@ claim that the engine is still connected. The browser adapter runs
 `axionomy-service` compiled to Rust/Wasm inside a dedicated Worker, and static
 playback advertises that it cannot execute. Local playback position and play/pause state
 stay in a component reducer/state boundary rather than becoming server or
-economic state. React Flow renders graph projections; Apache ECharts renders
-decision surfaces; specialized grids remain ordinary React/SVG until measured
+economic state. React Flow renders graph pictures; Apache ECharts renders
+tradeoff views; specialized grids remain ordinary React/SVG until measured
 scale requires Canvas. TanStack Query owns server-cache behavior. Vite,
 Vitest, and Playwright provide build, component-contract, and real-server
 browser verification. Tabler supplies the curated implementation of semantic
@@ -773,7 +793,7 @@ timelines; markets expose multi-party settlement and rejected shortfalls;
 stochastic and partially observed domains expose telemetry, sampled policy
 evidence, and actor-relative views. Every artifact includes replayable strategy
 alternatives where the domain supplies them. The universal model explorer
-exposes encoded rates, roles, goals, and invariants even when a specialized
+exposes rates, roles, goals, and invariants even when a specialized
 scene is absent. The shared scene vocabulary renders stable semantic entities,
 paths, statuses, exact metrics, annotations, and transition cues across all
 four geometric surfaces. A transition remains visible through its receipt-
@@ -781,11 +801,11 @@ derived cue even when before/after geometry is identical. An instance selector
 makes Micro and Stress available to either executable engine, while static
 fallback deliberately serves the committed Showcase artifacts.
 
-Assessed proposals in conformance documents are constraint probes. Some are
-deliberately malformed or infeasible, and their rejection proves that encoded
+Assessed proposals in conformance documents are rule checks. Some are
+deliberately malformed or infeasible, and their rejection proves that the
 roles, balances, and invariants are active. The view contract preserves a
 structured issue kind plus involved role, account, asset, or rate identities;
-Studio labels these as expected rejection proofs and keeps them separate from
+Studio labels these as moves that should be refused and keeps them separate from
 operational run and transport failures.
 
 Portable artifacts prove offline playback for the full catalog. The native

@@ -286,6 +286,62 @@ mod tests {
                         InstanceProfile::Stress,
                     ])
         }));
+        assert!(catalog.iter().all(|problem| {
+            problem
+                .instances
+                .iter()
+                .map(|instance| instance.label.as_str())
+                .eq(["Micro", "Showcase", "Stress"])
+                && problem.instances.iter().all(|instance| {
+                    !instance.description.is_empty()
+                        && !instance.description.contains("Larger seeded workload")
+                })
+                && problem.strategies.iter().all(|strategy| {
+                    !strategy.algorithm.is_empty()
+                        && strategy.algorithm != strategy.description.to_lowercase()
+                })
+        }));
+    }
+
+    #[test]
+    fn formerly_aliased_stress_models_are_structurally_distinct() {
+        use axionomy_problems::{bridge, exact_cover, marketplace, maze, rescue};
+
+        let maze_showcase = maze::initial_showcase();
+        let maze_stress = maze::initial_stress();
+        assert_ne!(maze_showcase.state_key(), maze_stress.state_key());
+        assert_ne!(
+            maze_showcase.rate_ids().count(),
+            maze_stress.rate_ids().count()
+        );
+
+        let cover_showcase = exact_cover::initial_showcase();
+        let cover_stress = exact_cover::initial_stress();
+        assert_ne!(cover_showcase.state_key(), cover_stress.state_key());
+        assert_ne!(
+            cover_showcase.rate_ids().count(),
+            cover_stress.rate_ids().count()
+        );
+
+        let bridge_showcase = bridge::initial_showcase();
+        let bridge_stress = bridge::initial_stress();
+        assert_ne!(bridge_showcase.state_key(), bridge_stress.state_key());
+
+        let market_showcase = marketplace::initial_showcase();
+        let market_stress = marketplace::initial_stress();
+        assert_ne!(market_showcase.state_key(), market_stress.state_key());
+        assert_ne!(
+            market_showcase.rate_ids().count(),
+            market_stress.rate_ids().count()
+        );
+
+        let rescue_showcase = rescue::uniform_uncertain_showcase();
+        let rescue_stress = rescue::uniform_uncertain_stress();
+        assert_ne!(rescue_showcase.state_key(), rescue_stress.state_key());
+        assert_ne!(
+            rescue_showcase.rate_ids().count(),
+            rescue_stress.rate_ids().count()
+        );
     }
 
     #[test]
@@ -300,7 +356,15 @@ mod tests {
                 .run(request)
                 .unwrap_or_else(|error| panic!("{} micro failed: {error}", problem.key));
             assert_eq!(artifact.instance.profile, InstanceProfile::Micro);
-            assert!(artifact.selected_document().is_some());
+            let selected = artifact.selected_document().expect("selected document");
+            assert!(selected.frames.iter().all(|frame| {
+                !frame.exchange.rate.label.contains('{')
+                    && !frame.exchange.rate.label.contains("encoded")
+                    && frame
+                        .cues
+                        .first()
+                        .is_some_and(|cue| cue.label == frame.exchange.rate.label)
+            }));
         }
     }
 

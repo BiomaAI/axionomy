@@ -32,7 +32,7 @@
         "tags": [
           "problems"
         ],
-        "summary": "List canonical problems, strategies, and capabilities",
+        "summary": "List problems, strategies, and capabilities",
         "operationId": "listProblems",
         "responses": {
           "200": {
@@ -1692,7 +1692,7 @@
         ]
       },
       "Scene": {
-        "description": "Optional domain projection derived from authoritative economic state.\nScenes explain and animate; they never decide whether an exchange applies.",
+        "description": "Optional problem picture derived from the economic state.\nPictures explain and animate; they never decide whether an exchange applies.",
         "type": "object",
         "properties": {
           "annotations": {

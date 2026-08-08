@@ -75,8 +75,11 @@ button.danger { color: var(--red); }
 .problem-context { display: flex; justify-content: space-between; gap: 30px; padding: 12px 0; border-bottom: 1px solid var(--line); }
 .problem-context > div:first-child { display: flex; align-items: center; gap: 13px; min-width: 0; }
 .problem-context > div:first-child > span { color: var(--blue); font: 10px var(--mono); text-transform: uppercase; white-space: nowrap; }
-.problem-context p { color: var(--muted); margin: 0; font-size: 12px; }
-.problem-context p small { display: block; margin-top: 4px; color: var(--text); font: 8px var(--mono); }
+.problem-copy { min-width: 0; }
+.problem-copy p { color: var(--muted); margin: 0; font-size: 12px; }
+.problem-copy small { display: flex; flex-wrap: wrap; gap: 5px 9px; margin-top: 5px; color: var(--text); font: 8px var(--mono); }
+.problem-copy small strong { color: var(--lime); text-transform: uppercase; }
+.problem-copy small em { color: var(--blue); font-style: normal; }
 .problem-context > div:last-child { display: flex; flex-wrap: wrap; justify-content: end; gap: 5px; }
 .problem-context > div:last-child span { border: 1px solid var(--line); padding: 4px 6px; color: var(--muted); font: 8px var(--mono); text-transform: uppercase; }
 .error-banner { margin: 14px 0; padding: 11px 14px; border: 1px solid #71343a; background: #261418; color: #ff9a9e; }

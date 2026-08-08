@@ -304,7 +304,7 @@ pub fn api(state: StudioState) -> (Router, OpenApi) {
             routing::get_with(list_problems, |operation| {
                 operation
                     .id("listProblems")
-                    .summary("List canonical problems, strategies, and capabilities")
+                    .summary("List problems, strategies, and capabilities")
                     .tag("problems")
             }),
         )
