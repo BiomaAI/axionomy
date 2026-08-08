@@ -25,6 +25,15 @@ pub enum Location {
     South,
     East,
     West,
+    Harbor,
+    Hills,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RescueSize {
+    Micro,
+    Showcase,
+    Stress,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -158,33 +167,49 @@ pub enum PolicyObjective {
 /// Builds one already-resolved deterministic world.
 pub fn scenario(truth: Location, seed: u8) -> World {
     assert_rescue_location(truth);
-    let extended = matches!(truth, Location::East | Location::West) || seed >= 4;
+    let size = if matches!(truth, Location::Harbor | Location::Hills) || seed >= 8 {
+        RescueSize::Stress
+    } else if matches!(truth, Location::East | Location::West) || seed >= 4 {
+        RescueSize::Showcase
+    } else {
+        RescueSize::Micro
+    };
     assert!(
-        seed < if extended { 8 } else { 4 },
+        seed < seed_count(size),
         "seed is outside the encoded sensor states"
     );
     build(
         Account::from(basket([(Asset::Truth(truth), 1), (Asset::Seed(seed), 1)])),
-        extended,
+        size,
     )
 }
 
 /// Builds an unresolved world from user-provided, core-encoded prior weights.
 pub fn uncertain(prior: impl IntoIterator<Item = (Location, u8, u64)>) -> World {
     let prior = prior.into_iter().collect::<Vec<_>>();
-    let extended = prior
+    let size = if prior
         .iter()
-        .any(|(truth, seed, _)| matches!(truth, Location::East | Location::West) || *seed >= 4);
+        .any(|(truth, seed, _)| matches!(truth, Location::Harbor | Location::Hills) || *seed >= 8)
+    {
+        RescueSize::Stress
+    } else if prior
+        .iter()
+        .any(|(truth, seed, _)| matches!(truth, Location::East | Location::West) || *seed >= 4)
+    {
+        RescueSize::Showcase
+    } else {
+        RescueSize::Micro
+    };
     let mut nature = Basket::from([(Asset::Unresolved, Quantity::new(1))]);
     for (truth, seed, weight) in prior {
         assert_rescue_location(truth);
         assert!(
-            seed < if extended { 8 } else { 4 },
+            seed < seed_count(size),
             "seed is outside the encoded sensor states"
         );
         nature.insert(Asset::ScenarioWeight(truth, seed), Quantity::new(weight));
     }
-    build(Account::from(nature), extended)
+    build(Account::from(nature), size)
 }
 
 pub fn uniform_uncertain() -> World {
@@ -209,21 +234,53 @@ pub fn uniform_uncertain_showcase() -> World {
             nature.insert(Asset::ScenarioWeight(truth, seed), Quantity::new(1));
         }
     }
-    build(Account::from(nature), true)
+    build(Account::from(nature), RescueSize::Showcase)
 }
 
-fn build(nature: Account<Asset>, extended: bool) -> World {
-    let destinations: &[Location] = if extended {
-        &[
+/// Six possible sites and twelve sensor states per site pressure policy
+/// evaluation across 72 explicit Nature scenarios.
+pub fn uniform_uncertain_stress() -> World {
+    let mut nature = Basket::from([(Asset::Unresolved, Quantity::new(1))]);
+    for truth in destinations(RescueSize::Stress) {
+        for seed in 0..seed_count(RescueSize::Stress) {
+            nature.insert(Asset::ScenarioWeight(*truth, seed), Quantity::new(1));
+        }
+    }
+    build(Account::from(nature), RescueSize::Stress)
+}
+
+fn destinations(size: RescueSize) -> &'static [Location] {
+    match size {
+        RescueSize::Micro => &[Location::North, Location::South],
+        RescueSize::Showcase => &[
             Location::North,
             Location::South,
             Location::East,
             Location::West,
-        ]
-    } else {
-        &[Location::North, Location::South]
-    };
-    let seed_count = if extended { 8 } else { 4 };
+        ],
+        RescueSize::Stress => &[
+            Location::North,
+            Location::South,
+            Location::East,
+            Location::West,
+            Location::Harbor,
+            Location::Hills,
+        ],
+    }
+}
+
+const fn seed_count(size: RescueSize) -> u8 {
+    match size {
+        RescueSize::Micro => 4,
+        RescueSize::Showcase => 8,
+        RescueSize::Stress => 12,
+    }
+}
+
+fn build(nature: Account<Asset>, size: RescueSize) -> World {
+    let destinations = destinations(size);
+    let seed_count = seed_count(size);
+    let extended = !matches!(size, RescueSize::Micro);
     let mut builder = EconomyBuilder::new()
         .account(
             AccountId::Agent,
@@ -659,6 +716,8 @@ fn public_policy_action(view: &AgentView<'_>, policy: Policy) -> Option<Action> 
         Location::South,
         Location::East,
         Location::West,
+        Location::Harbor,
+        Location::Hills,
     ] {
         if view_has(view, Asset::At(location)) {
             return Some(action(RateId::Rescue { location }));
@@ -680,6 +739,8 @@ fn public_policy_action(view: &AgentView<'_>, policy: Policy) -> Option<Action> 
             Location::South,
             Location::East,
             Location::West,
+            Location::Harbor,
+            Location::Hills,
         ]
         .into_iter()
         .find(|location| view_has(view, Asset::Belief(*location)))?,
@@ -702,6 +763,8 @@ fn signal(truth: Location, seed: u8) -> Location {
             Location::South => Location::East,
             Location::East => Location::West,
             Location::West => Location::North,
+            Location::Harbor => Location::Hills,
+            Location::Hills => Location::North,
             Location::Base => unreachable!("base is not a rescue truth"),
         }
     } else {
@@ -713,7 +776,12 @@ fn assert_rescue_location(location: Location) {
     assert!(
         matches!(
             location,
-            Location::North | Location::South | Location::East | Location::West
+            Location::North
+                | Location::South
+                | Location::East
+                | Location::West
+                | Location::Harbor
+                | Location::Hills
         ),
         "base is not a possible rescue truth"
     );
@@ -847,5 +915,14 @@ mod tests {
             .expect("sample and policy must replay together");
         assert!(replay.matches(&goal()));
         assert!(candidates(&replay).is_empty());
+    }
+
+    #[test]
+    fn stress_profile_encodes_more_hidden_scenarios() {
+        let showcase = uniform_uncertain_showcase();
+        let stress = uniform_uncertain_stress();
+        assert_eq!(encoded_scenarios(&showcase).len(), 32);
+        assert_eq!(encoded_scenarios(&stress).len(), 72);
+        assert_eq!(monte_carlo(&stress, 96, 41), monte_carlo(&stress, 96, 41));
     }
 }

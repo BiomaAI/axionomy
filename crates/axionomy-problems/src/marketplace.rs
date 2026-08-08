@@ -24,10 +24,27 @@ pub enum OrderId {
     B,
     C,
     D,
+    E,
+    F,
 }
 
 const MICRO_ORDERS: [OrderId; 2] = [OrderId::A, OrderId::B];
 const SHOWCASE_ORDERS: [OrderId; 4] = [OrderId::A, OrderId::B, OrderId::C, OrderId::D];
+const STRESS_ORDERS: [OrderId; 6] = [
+    OrderId::A,
+    OrderId::B,
+    OrderId::C,
+    OrderId::D,
+    OrderId::E,
+    OrderId::F,
+];
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum MarketSize {
+    Micro,
+    Showcase,
+    Stress,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Item {
@@ -194,35 +211,82 @@ impl AssessedMatch {
 }
 
 pub fn initial() -> World {
-    build(false)
+    build(MarketSize::Micro)
 }
 
 /// A four-order market day with shared buyer budgets, seller inventory, and
 /// carrier capacity coupling otherwise individually feasible settlements.
 pub fn initial_showcase() -> World {
-    build(true)
+    build(MarketSize::Showcase)
 }
 
-fn build(showcase: bool) -> World {
-    let orders: &[OrderId] = if showcase {
-        &SHOWCASE_ORDERS
-    } else {
-        &MICRO_ORDERS
+/// A six-order market whose total inventory and shipping capacity are exactly
+/// sufficient, coupling every settlement choice to the remaining market.
+pub fn initial_stress() -> World {
+    build(MarketSize::Stress)
+}
+
+fn build(size: MarketSize) -> World {
+    let orders: &[OrderId] = match size {
+        MarketSize::Micro => &MICRO_ORDERS,
+        MarketSize::Showcase => &SHOWCASE_ORDERS,
+        MarketSize::Stress => &STRESS_ORDERS,
     };
+    let showcase = !matches!(size, MarketSize::Micro);
+    let stress = matches!(size, MarketSize::Stress);
     let mut buyer_a = basket([
-        (Asset::Money, if showcase { 300 } else { 190 }),
+        (
+            Asset::Money,
+            if stress {
+                330
+            } else if showcase {
+                300
+            } else {
+                190
+            },
+        ),
         (Asset::PurchaseIntent(OrderId::A), 1),
-        (Asset::PurchaseIntent(OrderId::B), 1),
+        (
+            Asset::PurchaseIntent(if stress { OrderId::C } else { OrderId::B }),
+            1,
+        ),
     ]);
     let mut buyer_b = basket([
-        (Asset::Money, if showcase { 210 } else { 100 }),
-        (Asset::PurchaseIntent(OrderId::A), 1),
+        (
+            Asset::Money,
+            if stress {
+                300
+            } else if showcase {
+                210
+            } else {
+                100
+            },
+        ),
+        (
+            Asset::PurchaseIntent(if stress { OrderId::B } else { OrderId::A }),
+            1,
+        ),
     ]);
     let mut buyer_c = basket([
-        (Asset::Money, if showcase { 190 } else { 75 }),
-        (Asset::PurchaseIntent(OrderId::A), 1),
+        (
+            Asset::Money,
+            if stress {
+                350
+            } else if showcase {
+                190
+            } else {
+                75
+            },
+        ),
+        (
+            Asset::PurchaseIntent(if stress { OrderId::D } else { OrderId::A }),
+            1,
+        ),
     ]);
-    if showcase {
+    if stress {
+        buyer_a.insert(Asset::PurchaseIntent(OrderId::E), Quantity::new(1));
+        buyer_b.insert(Asset::PurchaseIntent(OrderId::F), Quantity::new(1));
+    } else if showcase {
         buyer_a.insert(Asset::PurchaseIntent(OrderId::C), Quantity::new(1));
         buyer_b.insert(Asset::PurchaseIntent(OrderId::C), Quantity::new(1));
         buyer_c.insert(Asset::PurchaseIntent(OrderId::B), Quantity::new(1));
@@ -251,20 +315,47 @@ fn build(showcase: bool) -> World {
         .account(
             AccountId::Seller(SellerId::C),
             Account::from(basket([
-                (Asset::Item(Item::Gadget), if showcase { 2 } else { 1 }),
-                (Asset::SaleOffer(Item::Gadget), if showcase { 2 } else { 1 }),
+                (
+                    Asset::Item(Item::Gadget),
+                    if stress {
+                        2
+                    } else if showcase {
+                        2
+                    } else {
+                        1
+                    },
+                ),
+                (
+                    Asset::SaleOffer(Item::Gadget),
+                    if stress {
+                        2
+                    } else if showcase {
+                        2
+                    } else {
+                        1
+                    },
+                ),
             ])),
         )
         .account(
             AccountId::Carrier(CarrierId::A),
             Account::from(basket([(
                 Asset::ShippingCapacity,
-                if showcase { 3 } else { 2 },
+                if stress {
+                    3
+                } else if showcase {
+                    3
+                } else {
+                    2
+                },
             )])),
         )
         .account(
             AccountId::Carrier(CarrierId::B),
-            Account::from(basket([(Asset::ShippingCapacity, u64::from(showcase))])),
+            Account::from(basket([(
+                Asset::ShippingCapacity,
+                if stress { 3 } else { u64::from(showcase) },
+            )])),
         )
         .account(
             AccountId::Platform,
@@ -333,6 +424,10 @@ pub fn goal() -> Goal<AccountId, Asset> {
 
 pub fn goal_showcase() -> Goal<AccountId, Asset> {
     goal_for(&SHOWCASE_ORDERS)
+}
+
+pub fn goal_stress() -> Goal<AccountId, Asset> {
+    goal_for(&STRESS_ORDERS)
 }
 
 fn goal_for(orders: &[OrderId]) -> Goal<AccountId, Asset> {
@@ -457,11 +552,7 @@ pub fn clear_market(world: &World) -> ClearingProposal {
 /// Exhaustively exposes non-dominated participant-utility allocations among
 /// complete, atomic market clearings.
 pub fn pareto_front(world: &World) -> Result<ParetoResult, ParetoError> {
-    let goal = if orders(world).len() > MICRO_ORDERS.len() {
-        goal_showcase()
-    } else {
-        goal()
-    };
+    let goal = goal_for(&orders(world));
     pareto::search(world, &goal, exact_matches, objectives)
 }
 
@@ -554,6 +645,8 @@ const fn utility_terms(order: OrderId) -> (u64, u64) {
         OrderId::B => (25, 18),
         OrderId::C => (34, 17),
         OrderId::D => (22, 24),
+        OrderId::E => (28, 21),
+        OrderId::F => (31, 19),
     }
 }
 
@@ -570,6 +663,8 @@ const fn order_terms(order: OrderId) -> (Item, u64, u64, u64, u64, u64) {
         OrderId::B => (Item::Gadget, SECOND_GROSS_PAYMENT, 72, 9, 5, 4),
         OrderId::C => (Item::Widget, 110, 86, 11, 7, 6),
         OrderId::D => (Item::Gadget, 95, 75, 10, 5, 5),
+        OrderId::E => (Item::Widget, 105, 83, 10, 6, 6),
+        OrderId::F => (Item::Gadget, 115, 90, 12, 7, 6),
     }
 }
 
@@ -678,7 +773,7 @@ mod tests {
                         Some(&AccountId::Seller(SellerId::C))
                     );
                 }
-                RateId::SettleOrder(OrderId::C | OrderId::D) => {
+                RateId::SettleOrder(OrderId::C | OrderId::D | OrderId::E | OrderId::F) => {
                     unreachable!("micro fixture only has two orders")
                 }
             }
@@ -902,6 +997,21 @@ mod tests {
                 (55, 0, 20, 0),
             ]
         );
+    }
+
+    #[test]
+    fn stress_market_couples_six_orders_and_replays_the_clearing() {
+        let showcase = initial_showcase();
+        let stress = initial_stress();
+        assert!(orders(&stress).len() > orders(&showcase).len());
+        assert!(candidate_matches(&stress).len() > candidate_matches(&showcase).len());
+
+        let clearing = clear_market(&stress);
+        assert_eq!(clearing.settled_orders(), STRESS_ORDERS.len());
+        let replayed = stress
+            .replayed(clearing.trace())
+            .expect("stress clearing must replay");
+        assert!(replayed.matches(&goal_stress()));
     }
 
     fn weighted_shortfall(

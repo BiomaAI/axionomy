@@ -47,6 +47,7 @@ pub enum Asset {
     Waiting,
     Crossed,
     CompletedTrip,
+    RoundsRemaining,
     CapacityFree,
     Active,
     Solved,
@@ -102,17 +103,33 @@ pub enum ObjectiveKey {
 }
 
 pub fn initial() -> World {
-    build(false)
+    build(1)
 }
 
 /// Two consecutive capacity allocations force policies to reason about
 /// repeated fairness, retained credit, and an atomic multi-agent round reset.
 pub fn initial_showcase() -> World {
-    build(true)
+    build(2)
 }
 
-fn build(repeated: bool) -> World {
-    let credit = if repeated { 4 } else { 2 };
+/// Three consecutive allocations make retained credit and repeated priority
+/// materially affect later rounds while keeping the state space finite.
+pub fn initial_stress() -> World {
+    build(3)
+}
+
+fn build(rounds: u64) -> World {
+    assert!(rounds > 0, "a bridge problem needs at least one round");
+    let credit = rounds * 2;
+    let mut bridge = axionomy::Basket::from([
+        (Asset::BridgeIdentity, Quantity::new(1)),
+        (Asset::CapacityFree, Quantity::new(1)),
+        (Asset::FirstTurn, Quantity::new(1)),
+        (Asset::Active, Quantity::new(1)),
+    ]);
+    if rounds > 1 {
+        bridge.insert(Asset::RoundsRemaining, Quantity::new(rounds - 1));
+    }
     let mut builder = EconomyBuilder::new()
         .account(
             AccountId::Agent(AgentId::A),
@@ -134,15 +151,7 @@ fn build(repeated: bool) -> World {
                 (Asset::CanBid, 1),
             ])),
         )
-        .account(
-            AccountId::Bridge,
-            Account::from(basket([
-                (Asset::BridgeIdentity, 1),
-                (Asset::CapacityFree, 1),
-                (Asset::FirstTurn, 1),
-                (Asset::Active, 1),
-            ])),
-        );
+        .account(AccountId::Bridge, Account::from(bridge));
 
     for agent in [AgentId::A, AgentId::B] {
         for amount in 1..=2 {
@@ -320,7 +329,7 @@ fn build(repeated: bool) -> World {
         }
     }
 
-    if repeated {
+    if rounds > 1 {
         builder = builder.rate(
             RateId::ResetRound,
             Rate::new()
@@ -370,7 +379,10 @@ fn build(repeated: bool) -> World {
                         (Asset::Energy, 1),
                     ]),
                 )
-                .consume(Role::Bridge, basket([(Asset::SecondTurn, 1)]))
+                .consume(
+                    Role::Bridge,
+                    basket([(Asset::SecondTurn, 1), (Asset::RoundsRemaining, 1)]),
+                )
                 .produce(Role::Bridge, basket([(Asset::FirstTurn, 1)]))
                 .distinct(Role::AgentA, Role::AgentB)
                 .distinct(Role::AgentA, Role::Bridge)
@@ -397,10 +409,10 @@ fn build(repeated: bool) -> World {
             Role::AgentB,
             basket([(Asset::AgentIdentity(AgentId::B), 1), (Asset::Crossed, 1)]),
         );
-    if repeated {
+    if rounds > 1 {
         finish = finish
-            .preserve(Role::AgentA, basket([(Asset::CompletedTrip, 1)]))
-            .preserve(Role::AgentB, basket([(Asset::CompletedTrip, 1)]));
+            .preserve(Role::AgentA, basket([(Asset::CompletedTrip, rounds - 1)]))
+            .preserve(Role::AgentB, basket([(Asset::CompletedTrip, rounds - 1)]));
     }
     finish = finish
         .preserve(Role::Bridge, basket([(Asset::BridgeIdentity, 1)]))
@@ -538,71 +550,81 @@ pub fn auction_proposal(bid_a: u8, bid_b: u8) -> Option<Proposal> {
 }
 
 pub fn first_come_showcase(first: AgentId) -> Option<Proposal> {
-    let second = other(first);
-    validated_trace_from(
-        initial_showcase(),
-        [
-            RateId::ClaimFirst { agent: first },
-            RateId::Cross { agent: first },
-            RateId::ClaimSecond { agent: second },
-            RateId::Cross { agent: second },
-            RateId::ResetRound,
-            RateId::ClaimFirst { agent: first },
-            RateId::Cross { agent: first },
-            RateId::ClaimSecond { agent: second },
-            RateId::Cross { agent: second },
-            RateId::Finish,
-        ],
-    )
+    first_come_rounds(initial_showcase(), first, 2)
+}
+
+pub fn first_come_stress(first: AgentId) -> Option<Proposal> {
+    first_come_rounds(initial_stress(), first, 3)
 }
 
 pub fn auction_showcase() -> Option<Proposal> {
-    validated_trace_from(
-        initial_showcase(),
-        [
+    auction_rounds(initial_showcase(), 2)
+}
+
+pub fn auction_stress() -> Option<Proposal> {
+    auction_rounds(initial_stress(), 3)
+}
+
+fn first_come_rounds(world: World, first: AgentId, rounds: usize) -> Option<Proposal> {
+    let second = other(first);
+    let mut rates = Vec::new();
+    for round in 0..rounds {
+        rates.extend([
+            RateId::ClaimFirst { agent: first },
+            RateId::Cross { agent: first },
+            RateId::ClaimSecond { agent: second },
+            RateId::Cross { agent: second },
+        ]);
+        if round + 1 < rounds {
+            rates.push(RateId::ResetRound);
+        }
+    }
+    rates.push(RateId::Finish);
+    validated_trace_from(world, rates)
+}
+
+fn auction_rounds(world: World, rounds: usize) -> Option<Proposal> {
+    let mut rates = Vec::new();
+    for round in 0..rounds {
+        let (bid_a, bid_b, winner, loser) = if round % 2 == 0 {
+            (2, 1, AgentId::A, AgentId::B)
+        } else {
+            (1, 2, AgentId::B, AgentId::A)
+        };
+        rates.extend([
             RateId::SubmitBid {
                 agent: AgentId::A,
-                amount: 2,
+                amount: bid_a,
             },
             RateId::SubmitBid {
                 agent: AgentId::B,
-                amount: 1,
+                amount: bid_b,
             },
             RateId::Resolve {
-                winner: AgentId::A,
+                winner,
                 winning_bid: 2,
                 losing_bid: 1,
             },
-            RateId::Cross { agent: AgentId::A },
-            RateId::YieldToWaiting { agent: AgentId::B },
-            RateId::Cross { agent: AgentId::B },
-            RateId::ResetRound,
-            RateId::SubmitBid {
-                agent: AgentId::A,
-                amount: 1,
-            },
-            RateId::SubmitBid {
-                agent: AgentId::B,
-                amount: 2,
-            },
-            RateId::Resolve {
-                winner: AgentId::B,
-                winning_bid: 2,
-                losing_bid: 1,
-            },
-            RateId::Cross { agent: AgentId::B },
-            RateId::YieldToWaiting { agent: AgentId::A },
-            RateId::Cross { agent: AgentId::A },
-            RateId::Finish,
-        ],
-    )
+            RateId::Cross { agent: winner },
+            RateId::YieldToWaiting { agent: loser },
+            RateId::Cross { agent: loser },
+        ]);
+        if round + 1 < rounds {
+            rates.push(RateId::ResetRound);
+        }
+    }
+    rates.push(RateId::Finish);
+    validated_trace_from(world, rates)
 }
 
 fn validated_trace<const N: usize>(rates: [RateId; N]) -> Option<Proposal> {
     validated_trace_from(initial(), rates)
 }
 
-fn validated_trace_from<const N: usize>(mut world: World, rates: [RateId; N]) -> Option<Proposal> {
+fn validated_trace_from(
+    mut world: World,
+    rates: impl IntoIterator<Item = RateId>,
+) -> Option<Proposal> {
     let mut trace = Trace::new();
     for rate in rates {
         let exchange = action(rate);
@@ -748,5 +770,25 @@ mod tests {
 
         outcomes.sort_unstable();
         assert_eq!(outcomes, [(0, 1, 2, 2), (1, 0, 2, 2)]);
+    }
+
+    #[test]
+    fn stress_profile_requires_a_bounded_third_round() {
+        let showcase = first_come_showcase(AgentId::A).expect("showcase proposal");
+        let stress = first_come_stress(AgentId::A).expect("stress proposal");
+        assert!(stress.exchanges().len() > showcase.exchanges().len());
+
+        for trace in [stress, auction_stress().expect("stress auction proposal")] {
+            let replayed = initial_stress()
+                .replayed(&trace)
+                .expect("stress mechanism replays");
+            assert!(replayed.matches(&goal()));
+            assert_eq!(
+                replayed
+                    .balance(&AccountId::Bridge, &Asset::RoundsRemaining)
+                    .get(),
+                0
+            );
+        }
     }
 }

@@ -12,36 +12,33 @@ pub(super) fn build(
     request: &RunRequest,
     descriptor: &ProblemDescriptor,
 ) -> Result<RunArtifact, ServiceError> {
-    let showcase = !matches!(
-        instance_profile(request, descriptor),
-        InstanceProfile::Micro
-    );
-    let initial = if showcase {
-        bridge::initial_showcase()
-    } else {
-        bridge::initial()
+    let profile = instance_profile(request, descriptor);
+    let initial = match profile {
+        InstanceProfile::Micro => bridge::initial(),
+        InstanceProfile::Showcase => bridge::initial_showcase(),
+        InstanceProfile::Stress => bridge::initial_stress(),
     };
     let bfs = bridge::solve(&initial)
         .ok_or_else(|| problem_error("bridge", "BFS found no allocation"))?;
-    let first_a = if showcase {
-        bridge::first_come_showcase(AgentId::A)
-    } else {
-        bridge::first_come_proposal(AgentId::A)
+    let first_a = match profile {
+        InstanceProfile::Micro => bridge::first_come_proposal(AgentId::A),
+        InstanceProfile::Showcase => bridge::first_come_showcase(AgentId::A),
+        InstanceProfile::Stress => bridge::first_come_stress(AgentId::A),
     }
     .ok_or_else(|| problem_error("bridge", "first-come A failed"))?;
-    let first_b = if showcase {
-        bridge::first_come_showcase(AgentId::B)
-    } else {
-        bridge::first_come_proposal(AgentId::B)
+    let first_b = match profile {
+        InstanceProfile::Micro => bridge::first_come_proposal(AgentId::B),
+        InstanceProfile::Showcase => bridge::first_come_showcase(AgentId::B),
+        InstanceProfile::Stress => bridge::first_come_stress(AgentId::B),
     }
     .ok_or_else(|| problem_error("bridge", "first-come B failed"))?;
-    let auction = if showcase {
-        bridge::auction_showcase()
-    } else {
-        bridge::auction_proposal(2, 1)
+    let auction = match profile {
+        InstanceProfile::Micro => bridge::auction_proposal(2, 1),
+        InstanceProfile::Showcase => bridge::auction_showcase(),
+        InstanceProfile::Stress => bridge::auction_stress(),
     }
     .ok_or_else(|| problem_error("bridge", "auction failed"))?;
-    let pareto = (!showcase)
+    let pareto = matches!(profile, InstanceProfile::Micro)
         .then(|| bridge::pareto_front(&initial))
         .transpose()
         .map_err(|error| problem_error("bridge", error))?;

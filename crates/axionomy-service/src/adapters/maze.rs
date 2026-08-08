@@ -13,7 +13,8 @@ pub(super) fn build(
 ) -> Result<RunArtifact, ServiceError> {
     let initial = match instance_profile(request, descriptor) {
         InstanceProfile::Micro => maze::initial(),
-        InstanceProfile::Showcase | InstanceProfile::Stress => maze::initial_showcase(),
+        InstanceProfile::Showcase => maze::initial_showcase(),
+        InstanceProfile::Stress => maze::initial_stress(),
     };
     let bfs = maze::solve_bfs(&initial).ok_or_else(|| problem_error("maze", "no BFS route"))?;
     let astar = maze::solve_astar(&initial).ok_or_else(|| problem_error("maze", "no A* route"))?;
@@ -236,19 +237,27 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
     });
     let positions = |node| match node {
         Node::Start => (70.0, 155.0),
-        Node::Gallery => (185.0, 35.0),
-        Node::Archive => (315.0, 35.0),
-        Node::KeyRoom => (445.0, 35.0),
-        Node::Door => (575.0, 35.0),
-        Node::Garden => (170.0, 110.0),
-        Node::Market => (290.0, 110.0),
-        Node::Canal => (410.0, 110.0),
-        Node::Tower => (535.0, 110.0),
-        Node::Tunnel => (210.0, 205.0),
-        Node::Ridge => (360.0, 205.0),
-        Node::Bridge => (520.0, 205.0),
+        Node::Atrium => (150.0, 20.0),
+        Node::Gallery => (240.0, 20.0),
+        Node::Archive => (330.0, 20.0),
+        Node::Scriptorium => (420.0, 20.0),
+        Node::KeyRoom => (510.0, 20.0),
+        Node::Door => (600.0, 20.0),
+        Node::Vault => (690.0, 20.0),
+        Node::Garden => (150.0, 100.0),
+        Node::Market => (240.0, 100.0),
+        Node::Canal => (330.0, 100.0),
+        Node::Docks => (420.0, 100.0),
+        Node::Foundry => (510.0, 100.0),
+        Node::Tower => (600.0, 100.0),
+        Node::Observatory => (690.0, 100.0),
+        Node::Tunnel => (170.0, 205.0),
+        Node::Ridge => (280.0, 205.0),
+        Node::Ruins => (390.0, 205.0),
+        Node::Bridge => (500.0, 205.0),
+        Node::Chapel => (610.0, 205.0),
         Node::Detour => (350.0, 285.0),
-        Node::Exit => (720.0, 155.0),
+        Node::Exit => (800.0, 155.0),
     };
     let node_key = |node| format!("node:{node:?}").to_lowercase();
     let graph_nodes = nodes

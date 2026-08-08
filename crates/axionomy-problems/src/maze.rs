@@ -11,17 +11,25 @@ use axionomy_search::{
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Node {
     Start,
+    Atrium,
     Gallery,
     Archive,
+    Scriptorium,
     KeyRoom,
     Door,
+    Vault,
     Garden,
     Market,
     Canal,
+    Docks,
+    Foundry,
     Tower,
+    Observatory,
     Tunnel,
     Ridge,
+    Ruins,
     Bridge,
+    Chapel,
     Detour,
     Exit,
 }
@@ -106,6 +114,38 @@ const SHOWCASE_EDGES: [(Node, Node, u64, bool); 16] = [
     (Node::Detour, Node::Exit, 6, false),
 ];
 
+const STRESS_EDGES: [(Node, Node, u64, bool); 29] = [
+    (Node::Start, Node::Atrium, 1, false),
+    (Node::Atrium, Node::Gallery, 1, false),
+    (Node::Gallery, Node::Archive, 1, false),
+    (Node::Archive, Node::Scriptorium, 1, false),
+    (Node::Scriptorium, Node::KeyRoom, 1, false),
+    (Node::KeyRoom, Node::Door, 1, true),
+    (Node::Door, Node::Vault, 1, false),
+    (Node::Vault, Node::Exit, 1, false),
+    (Node::Start, Node::Garden, 1, false),
+    (Node::Garden, Node::Market, 1, false),
+    (Node::Market, Node::Canal, 1, false),
+    (Node::Canal, Node::Docks, 1, false),
+    (Node::Docks, Node::Foundry, 1, false),
+    (Node::Foundry, Node::Tower, 1, false),
+    (Node::Tower, Node::Observatory, 1, false),
+    (Node::Observatory, Node::Exit, 2, false),
+    (Node::Start, Node::Tunnel, 2, false),
+    (Node::Tunnel, Node::Ridge, 2, false),
+    (Node::Ridge, Node::Ruins, 2, false),
+    (Node::Ruins, Node::Bridge, 2, false),
+    (Node::Bridge, Node::Chapel, 2, false),
+    (Node::Chapel, Node::Exit, 2, false),
+    (Node::Start, Node::Detour, 7, false),
+    (Node::Detour, Node::Exit, 7, false),
+    (Node::Gallery, Node::Garden, 2, false),
+    (Node::Market, Node::Archive, 2, false),
+    (Node::Canal, Node::Ridge, 2, false),
+    (Node::Tunnel, Node::Foundry, 3, false),
+    (Node::Ruins, Node::Tower, 2, false),
+];
+
 /// Builds the complete closed problem. Topology, lock state, energy, target,
 /// and heuristic values are all assets held by accounts.
 pub fn initial() -> World {
@@ -143,6 +183,40 @@ pub fn initial_showcase() -> World {
             (Node::Ridge, 4),
             (Node::Bridge, 2),
             (Node::Detour, 6),
+            (Node::Exit, 0),
+        ],
+    )
+}
+
+/// A larger acyclic topology with five route families, cross-route choices,
+/// a longer key-and-door chain, and enough horizon to pressure exact search.
+pub fn initial_stress() -> World {
+    build(
+        &STRESS_EDGES,
+        18,
+        14,
+        &[
+            (Node::Start, 8),
+            (Node::Atrium, 7),
+            (Node::Gallery, 6),
+            (Node::Archive, 5),
+            (Node::Scriptorium, 4),
+            (Node::KeyRoom, 3),
+            (Node::Door, 2),
+            (Node::Vault, 1),
+            (Node::Garden, 8),
+            (Node::Market, 7),
+            (Node::Canal, 6),
+            (Node::Docks, 5),
+            (Node::Foundry, 4),
+            (Node::Tower, 3),
+            (Node::Observatory, 2),
+            (Node::Tunnel, 7),
+            (Node::Ridge, 7),
+            (Node::Ruins, 5),
+            (Node::Bridge, 4),
+            (Node::Chapel, 2),
+            (Node::Detour, 7),
             (Node::Exit, 0),
         ],
     )
@@ -418,5 +492,26 @@ mod tests {
 
         outcomes.sort_unstable();
         assert_eq!(outcomes, [(6, 6), (9, 3)]);
+    }
+
+    #[test]
+    fn stress_profile_adds_routes_and_keeps_search_replayable() {
+        let showcase = initial_showcase();
+        let stress = initial_stress();
+        assert!(nodes(&stress).len() > nodes(&showcase).len());
+        assert!(stress.rate_ids().count() > showcase.rate_ids().count());
+
+        for solution in [
+            solve_bfs(&stress).expect("stress maze has a shortest route"),
+            solve_astar(&stress).expect("stress maze has an energy route"),
+        ] {
+            let replayed = stress
+                .replayed(solution.trace())
+                .expect("stress route must replay");
+            assert!(replayed.matches(&goal()));
+        }
+
+        let frontier = pareto_front(&stress).expect("stress frontier is finite");
+        assert!(frontier.front().len() >= 2);
     }
 }

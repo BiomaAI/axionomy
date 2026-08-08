@@ -17,6 +17,10 @@ pub enum Element {
     F,
     G,
     H,
+    I,
+    J,
+    K,
+    L,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -33,6 +37,12 @@ pub enum SetId {
     Bc,
     Eh,
     Fg,
+    Ij,
+    Kl,
+    Ik,
+    Jl,
+    Il,
+    Jk,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -93,6 +103,40 @@ const SHOWCASE_ELEMENTS: [Element; 8] = [
     Element::G,
     Element::H,
 ];
+const STRESS_SETS: [SetId; 18] = [
+    SetId::Ab,
+    SetId::Cd,
+    SetId::Ef,
+    SetId::Gh,
+    SetId::Ij,
+    SetId::Kl,
+    SetId::Ac,
+    SetId::Bd,
+    SetId::Eg,
+    SetId::Fh,
+    SetId::Ik,
+    SetId::Jl,
+    SetId::Ad,
+    SetId::Bc,
+    SetId::Eh,
+    SetId::Fg,
+    SetId::Il,
+    SetId::Jk,
+];
+const STRESS_ELEMENTS: [Element; 12] = [
+    Element::A,
+    Element::B,
+    Element::C,
+    Element::D,
+    Element::E,
+    Element::F,
+    Element::G,
+    Element::H,
+    Element::I,
+    Element::J,
+    Element::K,
+    Element::L,
+];
 
 pub fn initial() -> World {
     build(&MICRO_ELEMENTS, &MICRO_SETS)
@@ -107,6 +151,12 @@ pub fn initial_showcase() -> World {
     build(&SHOWCASE_ELEMENTS, &SHOWCASE_SETS)
 }
 
+/// A twelve-element matrix whose three independent incidence blocks create
+/// substantially more partial covers for generic search to distinguish.
+pub fn initial_stress() -> World {
+    build(&STRESS_ELEMENTS, &STRESS_SETS)
+}
+
 pub fn unsatisfiable_showcase() -> World {
     build(
         &SHOWCASE_ELEMENTS,
@@ -119,6 +169,24 @@ pub fn unsatisfiable_showcase() -> World {
             SetId::Eg,
             SetId::Ad,
             SetId::Bc,
+        ],
+    )
+}
+
+pub fn unsatisfiable_stress() -> World {
+    build(
+        &STRESS_ELEMENTS,
+        &[
+            SetId::Ab,
+            SetId::Cd,
+            SetId::Ef,
+            SetId::Gh,
+            SetId::Ac,
+            SetId::Bd,
+            SetId::Eg,
+            SetId::Fh,
+            SetId::Ik,
+            SetId::Il,
         ],
     )
 }
@@ -265,6 +333,12 @@ fn declared_members(set: SetId) -> [Element; 2] {
         SetId::Bc => [Element::B, Element::C],
         SetId::Eh => [Element::E, Element::H],
         SetId::Fg => [Element::F, Element::G],
+        SetId::Ij => [Element::I, Element::J],
+        SetId::Kl => [Element::K, Element::L],
+        SetId::Ik => [Element::I, Element::K],
+        SetId::Jl => [Element::J, Element::L],
+        SetId::Il => [Element::I, Element::L],
+        SetId::Jk => [Element::J, Element::K],
     }
 }
 
@@ -282,7 +356,7 @@ fn encoded_members(world: &World, set: SetId) -> BTreeSet<Element> {
 }
 
 pub fn elements(world: &World) -> Vec<Element> {
-    SHOWCASE_ELEMENTS
+    STRESS_ELEMENTS
         .into_iter()
         .filter(|element| {
             !world
@@ -374,6 +448,32 @@ mod tests {
         let world = unsatisfiable();
         assert!(solve_bfs(&world).is_none());
         assert!(algorithm_x(&world).is_none());
+    }
+
+    #[test]
+    fn stress_profile_expands_the_incidence_problem_and_remains_solvable() {
+        let showcase = initial_showcase();
+        let stress = initial_stress();
+
+        assert!(elements(&stress).len() > elements(&showcase).len());
+        assert!(sets(&stress).len() > sets(&showcase).len());
+
+        for trace in [
+            solve_bfs(&stress)
+                .expect("stress cover exists")
+                .trace()
+                .clone(),
+            algorithm_x(&stress).expect("Algorithm X finds the stress cover"),
+        ] {
+            let replayed = stress
+                .replayed(&trace)
+                .expect("stress proposal must replay");
+            assert!(replayed.matches(&goal()));
+        }
+
+        let unsatisfiable = unsatisfiable_stress();
+        assert!(solve_bfs(&unsatisfiable).is_none());
+        assert!(algorithm_x(&unsatisfiable).is_none());
     }
 
     #[test]

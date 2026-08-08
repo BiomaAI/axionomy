@@ -10,19 +10,22 @@ pub(super) fn build(
     request: &RunRequest,
     descriptor: &ProblemDescriptor,
 ) -> Result<RunArtifact, ServiceError> {
-    let model = if matches!(
-        instance_profile(request, descriptor),
-        InstanceProfile::Micro
-    ) {
-        rescue::uniform_uncertain()
-    } else {
-        rescue::uniform_uncertain_showcase()
+    let profile = instance_profile(request, descriptor);
+    let model = match profile {
+        InstanceProfile::Micro => rescue::uniform_uncertain(),
+        InstanceProfile::Showcase => rescue::uniform_uncertain_showcase(),
+        InstanceProfile::Stress => rescue::uniform_uncertain_stress(),
     };
+    let samples = if matches!(profile, InstanceProfile::Stress) {
+        request.budget.max(256)
+    } else {
+        request.budget.max(2)
+    } as usize;
     let sample = rescue::instantiate(&model, Location::South, 1)
         .ok_or_else(|| problem_error("rescue", "scenario could not be instantiated"))?;
-    let front = rescue::policy_front(&model, request.budget.max(2) as usize, request.seed)
+    let front = rescue::policy_front(&model, samples, request.seed)
         .ok_or_else(|| problem_error("rescue", "policy front failed"))?;
-    let comparison = rescue::monte_carlo(&model, request.budget.max(2) as usize, request.seed)
+    let comparison = rescue::monte_carlo(&model, samples, request.seed)
         .ok_or_else(|| problem_error("rescue", "Monte Carlo failed"))?;
     let policies = [
         ("observe_then_follow", Policy::ObserveThenFollow),
@@ -149,6 +152,8 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         (Location::South, 480.0, 60.0),
         (Location::East, 570.0, 170.0),
         (Location::West, 30.0, 170.0),
+        (Location::Harbor, 120.0, 360.0),
+        (Location::Hills, 480.0, 360.0),
     ];
     let focus = locations
         .into_iter()
@@ -176,6 +181,8 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         Location::South,
         Location::East,
         Location::West,
+        Location::Harbor,
+        Location::Hills,
     ]
     .into_iter()
     .map(|location| GraphEdgeView {
@@ -219,6 +226,8 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         Location::South,
         Location::East,
         Location::West,
+        Location::Harbor,
+        Location::Hills,
     ]
     .into_iter()
     .filter(|location| {

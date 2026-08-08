@@ -11,19 +11,16 @@ pub(super) fn build(
     request: &RunRequest,
     descriptor: &ProblemDescriptor,
 ) -> Result<RunArtifact, ServiceError> {
-    let showcase = !matches!(
-        instance_profile(request, descriptor),
-        InstanceProfile::Micro
-    );
-    let initial = if showcase {
-        marketplace::initial_showcase()
-    } else {
-        marketplace::initial()
+    let profile = instance_profile(request, descriptor);
+    let initial = match profile {
+        InstanceProfile::Micro => marketplace::initial(),
+        InstanceProfile::Showcase => marketplace::initial_showcase(),
+        InstanceProfile::Stress => marketplace::initial_stress(),
     };
-    let goal = if showcase {
-        marketplace::goal_showcase()
-    } else {
-        marketplace::goal()
+    let goal = match profile {
+        InstanceProfile::Micro => marketplace::goal(),
+        InstanceProfile::Showcase => marketplace::goal_showcase(),
+        InstanceProfile::Stress => marketplace::goal_stress(),
     };
     let clearing = marketplace::clear_market(&initial);
     let pareto =

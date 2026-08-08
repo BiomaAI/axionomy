@@ -7,14 +7,11 @@ pub(super) fn build(
     request: &RunRequest,
     descriptor: &ProblemDescriptor,
 ) -> Result<RunArtifact, ServiceError> {
-    let showcase = !matches!(
-        instance_profile(request, descriptor),
-        InstanceProfile::Micro
-    );
-    let initial = if showcase {
-        exact_cover::initial_showcase()
-    } else {
-        exact_cover::initial()
+    let profile = instance_profile(request, descriptor);
+    let initial = match profile {
+        InstanceProfile::Micro => exact_cover::initial(),
+        InstanceProfile::Showcase => exact_cover::initial_showcase(),
+        InstanceProfile::Stress => exact_cover::initial_stress(),
     };
     let bfs = exact_cover::solve_bfs(&initial)
         .ok_or_else(|| problem_error("exact_cover", "BFS found no cover"))?;
@@ -81,10 +78,10 @@ pub(super) fn build(
         view.proposals.push(proposal("exact_cover", ProposalSpec { id: "wrong-progress", label: "Select AB at progress 2", description: "The set is available, but the encoded progress token and already-covered elements make this infeasible." }, &initial, &overlapping));
         documents.push(view);
     }
-    let unsatisfiable = if showcase {
-        exact_cover::unsatisfiable_showcase()
-    } else {
-        exact_cover::unsatisfiable()
+    let unsatisfiable = match profile {
+        InstanceProfile::Micro => exact_cover::unsatisfiable(),
+        InstanceProfile::Showcase => exact_cover::unsatisfiable_showcase(),
+        InstanceProfile::Stress => exact_cover::unsatisfiable_stress(),
     };
     let mut unsat = document(DocumentSpec { problem: "exact_cover", strategy: "unsatisfiable", title: "Exact cover · unsatisfiable instance", description: "The same model surface exposes a replayable instance whose available sets cannot cover the universe exactly.", source_label: "Exact cover" }, &unsatisfiable, &exact_cover::goal(), &Trace::new(), Vec::new(), scene).map_err(|error| problem_error("exact_cover", error))?;
     unsat.telemetry.push(telemetry(
