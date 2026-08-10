@@ -69,8 +69,11 @@ single cohort or pool account carries the authoritative condition or epoch.
 
 See [PDD.md](PDD.md) for the product and technical contract,
 [PROBLEMS.md](PROBLEMS.md) for the conformance problems that drive the API,
-and [AGENT_BENCHMARK.md](AGENT_BENCHMARK.md) for the future single- and
-multi-agent evaluation and rating design.
+[AGENT_BENCHMARK.md](AGENT_BENCHMARK.md) for the future single- and multi-agent
+evaluation and rating design, and
+[CONTINUOUS_AGENT_SYSTEMS.md](CONTINUOUS_AGENT_SYSTEMS.md) for the boundary
+between the Work Utility System and the Autonomy Harness that owns agents,
+learning, deployment, and assurance.
 
 The twelve reference problems expose explicit **Micro**, **Showcase**, and
 **Stress** instances. Micro keeps exact fixtures and independent oracles fast;
