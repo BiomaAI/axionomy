@@ -25,6 +25,7 @@ pub enum ProblemFamily {
     AdversarialGame,
     PartialObservation,
     TemporalSimulation,
+    MultiAgentCompetition,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -48,6 +49,7 @@ pub enum Capability {
     FungibleCohorts,
     NonFungibleFacts,
     RlProjection,
+    ReplayDerivedLeaderboards,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -281,7 +283,7 @@ mod tests {
     #[test]
     fn catalog_covers_every_canonical_problem() {
         let catalog = ReferenceService.catalog();
-        assert_eq!(catalog.len(), 12);
+        assert_eq!(catalog.len(), 13);
         assert!(catalog.iter().all(|problem| !problem.strategies.is_empty()));
         assert!(catalog.iter().all(|problem| {
             problem.default_instance == "showcase"

@@ -1,6 +1,6 @@
 use axionomy_problems::{
     bridge, connect_four, exact_cover, logistics, marketplace, maze, mission, perishables, rescue,
-    scheduling, sokoban, workshop,
+    scheduling, sokoban, work_league, workshop,
 };
 use std::fmt::Debug;
 
@@ -679,3 +679,85 @@ impl StudioLabel for perishables::RateId {
 }
 
 debug_labels!(perishables::Role);
+
+impl StudioLabel for work_league::AccountId {
+    fn studio_label(&self) -> String {
+        match self {
+            Self::Agent(agent) => format!("Worker {agent:?}"),
+            Self::Job(job) => format!("Job {}", job.0),
+            Self::Facility(facility) => format!("{facility:?} facility"),
+            Self::Nature => "Disruption model".into(),
+        }
+    }
+}
+
+impl StudioLabel for work_league::Asset {
+    fn studio_label(&self) -> String {
+        match self {
+            Self::AgentIdentity(agent) => format!("Identity: {agent:?}"),
+            Self::JobIdentity(job) => format!("Identity: job {}", job.0),
+            Self::Policy(policy) => format!("Policy: {policy:?}"),
+            Self::At(location) => format!("At {location:?}"),
+            Self::Operational => "Operational".into(),
+            Self::Energy => "Energy left".into(),
+            Self::TimeRemaining => "Time left".into(),
+            Self::Material => "Material left".into(),
+            Self::Available => "Available for claim".into(),
+            Self::Assigned(agent) => format!("Assigned to {agent:?}"),
+            Self::Claimed(job) => format!("Claim on job {}", job.0),
+            Self::Pending => "Waiting for work".into(),
+            Self::InProgress => "Work in progress".into(),
+            Self::Awaiting(job, mode) => format!("Job {} awaiting {mode:?} outcome", job.0),
+            Self::Resolved(job, mode, outcome) => {
+                format!("Job {} {mode:?} outcome: {outcome:?}", job.0)
+            }
+            Self::Completed => "Jobs completed".into(),
+            Self::Value => "Contract value earned".into(),
+            Self::Attempts => "Work attempts".into(),
+            Self::Successes => "Successful attempts".into(),
+            Self::Failures => "Failed attempts".into(),
+            Self::SpentEnergy => "Energy spent".into(),
+            Self::ElapsedTime => "Elapsed time".into(),
+            Self::MaterialSpent => "Material spent".into(),
+            Self::Waste => "Residual waste".into(),
+            Self::RecycledWaste => "Waste recycled".into(),
+            Self::Damage => "Damage requiring repair".into(),
+            Self::RepairSupply => "Repair supply".into(),
+            Self::SpentRepairSupply => "Repair supply used".into(),
+            Self::ChargeSupply => "Charging energy supply".into(),
+            Self::RecyclerCapacity => "Recycler available".into(),
+            Self::OutcomeWeight(job, mode, outcome) => {
+                format!("Job {} {mode:?} {outcome:?} weight", job.0)
+            }
+        }
+    }
+}
+
+impl StudioLabel for work_league::RateId {
+    fn studio_label(&self) -> String {
+        match self {
+            Self::Claim { agent, job } => format!("{agent:?} claims job {}", job.0),
+            Self::Move { agent, from, to } => format!("{agent:?} moves {from:?} → {to:?}"),
+            Self::Begin { agent, job, mode } => {
+                format!("{agent:?} begins job {} in {mode:?} mode", job.0)
+            }
+            Self::Resolve {
+                agent,
+                job,
+                outcome,
+                ..
+            } => format!("Resolve {agent:?} on job {}: {outcome:?}", job.0),
+            Self::Finish {
+                agent,
+                job,
+                outcome,
+                ..
+            } => format!("{agent:?} records job {} as {outcome:?}", job.0),
+            Self::Repair { agent } => format!("Repair {agent:?}"),
+            Self::Recharge { agent } => format!("Recharge {agent:?}"),
+            Self::Recycle { agent } => format!("{agent:?} recycles one waste unit"),
+        }
+    }
+}
+
+debug_labels!(work_league::Role);

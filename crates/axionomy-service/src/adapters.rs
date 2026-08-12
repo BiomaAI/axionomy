@@ -5,11 +5,11 @@ use crate::{
 };
 use axionomy::{Economy, Goal, QuantityScalar, Trace};
 use axionomy_view::{
-    DebugOntology, ObjectiveView, PlaybackError, ProposalView, Scene, SceneAnchorView,
-    SceneEntityView, SceneGlyphView, SceneMetricView, SceneToneView, SearchObservationKindView,
-    SearchObservationView, SearchTelemetryView, TelemetryKindView, TelemetryPointView,
-    ViewDocument, ViewDocumentMetadata, ViewId, ViewOntology, ViewSource, derive_document,
-    derive_model, derive_proposal,
+    DebugOntology, LeaderboardView, ObjectiveView, PlaybackError, ProposalView, Scene,
+    SceneAnchorView, SceneEntityView, SceneGlyphView, SceneMetricView, SceneToneView,
+    SearchObservationKindView, SearchObservationView, SearchTelemetryView, TelemetryKindView,
+    TelemetryPointView, ViewDocument, ViewDocumentMetadata, ViewId, ViewOntology, ViewSource,
+    derive_document, derive_model, derive_proposal,
 };
 use std::{fmt::Debug, hash::Hash, ops::ControlFlow};
 
@@ -59,16 +59,20 @@ mod perishables;
 mod rescue;
 mod scheduling;
 mod sokoban;
+mod work_league;
 mod workshop;
 
 use labels::StudioLabel;
 
 type StudioScene<AccountId, A, RateId, Role, N> =
     fn(u64, &Economy<AccountId, A, RateId, Role, N>) -> Option<Scene>;
+type StudioLeaderboards<AccountId, A, RateId, Role, N> =
+    fn(u64, &Economy<AccountId, A, RateId, Role, N>) -> Vec<LeaderboardView>;
 
 struct StudioOntology<AccountId, A, RateId, Role, N = u64> {
     fallback: DebugOntology<AccountId, A, RateId, Role, N>,
     scene: Option<StudioScene<AccountId, A, RateId, Role, N>>,
+    leaderboards: Option<StudioLeaderboards<AccountId, A, RateId, Role, N>>,
 }
 
 impl<AccountId, A, RateId, Role, N> StudioOntology<AccountId, A, RateId, Role, N> {
@@ -79,7 +83,16 @@ impl<AccountId, A, RateId, Role, N> StudioOntology<AccountId, A, RateId, Role, N
         Self {
             fallback: DebugOntology::new(namespace),
             scene,
+            leaderboards: None,
         }
+    }
+
+    fn with_leaderboards(
+        mut self,
+        leaderboards: StudioLeaderboards<AccountId, A, RateId, Role, N>,
+    ) -> Self {
+        self.leaderboards = Some(leaderboards);
+        self
     }
 
     fn relabel<T: StudioLabel>(mut id: ViewId, value: &T) -> ViewId {
@@ -114,6 +127,15 @@ where
 
     fn scene(&self, index: u64, economy: &Economy<AccountId, A, RateId, Role, N>) -> Option<Scene> {
         self.scene.and_then(|scene| scene(index, economy))
+    }
+
+    fn leaderboards(
+        &self,
+        index: u64,
+        economy: &Economy<AccountId, A, RateId, Role, N>,
+    ) -> Vec<LeaderboardView> {
+        self.leaderboards
+            .map_or_else(Vec::new, |leaderboards| leaderboards(index, economy))
     }
 }
 
@@ -510,6 +532,48 @@ pub(crate) fn catalog() -> Vec<ProblemDescriptor> {
         ),
         problem(
             ProblemCopy {
+                key: "work_league",
+                title: "Autonomous Work League",
+                summary: "Four autonomous workers compete for a finite job pool while spending energy, time, and materials under disruption. There is no single winner: value, speed, efficiency, waste, reliability, and Pareto standing can disagree after every move.",
+                instances: [
+                    "Two agents contest four jobs in a short but complete match",
+                    "Four distinct policies contest 12 jobs across eight locations and shared facilities",
+                    "Four agents contest 24 jobs with a materially longer economic replay",
+                ],
+            },
+            ProblemFamily::MultiAgentCompetition,
+            "mixed_field",
+            &[
+                (
+                    "mixed_field",
+                    "Mixed policy field",
+                    "A sprinter, steward, value hunter, and resilient worker reveal genuine cross-objective tradeoffs.",
+                    "deterministic policy league with seeded chance",
+                ),
+                (
+                    "throughput_field",
+                    "Throughput field",
+                    "Most workers prioritize short jobs and fast execution; one still chases contract value.",
+                    "throughput-biased policy league with seeded chance",
+                ),
+                (
+                    "sustainable_field",
+                    "Sustainable field",
+                    "Most workers minimize material loss and recycle, while one specializes in reliability.",
+                    "resource-biased policy league with seeded chance",
+                ),
+            ],
+            &[
+                Capability::MultiAccountExchange,
+                Capability::AtomicSettlement,
+                Capability::Chance,
+                Capability::ReplayDerivedLeaderboards,
+                Capability::ApproximatePareto,
+                Capability::RlProjection,
+            ],
+        ),
+        problem(
+            ProblemCopy {
                 key: "mission",
                 title: "Hidden-information mission",
                 summary: "Two agents each see only part of the map. Compare sharing what they see before acting against both moving straight in.",
@@ -698,6 +762,7 @@ pub(crate) fn run(
         "connect_four" => connect_four::build(request, &descriptor, &mut progress),
         "mission" => mission::build(request, &descriptor, &mut progress),
         "perishables" => perishables::build(request, &descriptor),
+        "work_league" => work_league::build(request, &descriptor, &mut progress),
         _ => unreachable!("catalog and dispatch must agree"),
     }?;
     progress.ensure()?;
@@ -846,6 +911,43 @@ where
     N: QuantityScalar,
 {
     let ontology = StudioOntology::<AccountId, A, RateId, Role, N>::new(spec.problem, Some(scene));
+    let mut document = derive_document(
+        ViewDocumentMetadata {
+            id: format!("{}:{}", spec.problem, spec.strategy),
+            title: spec.title.into(),
+            description: spec.description.into(),
+            source: ViewSource {
+                key: spec.problem.into(),
+                label: spec.source_label.into(),
+            },
+        },
+        initial,
+        trace,
+        &ontology,
+        objectives,
+    )?;
+    document.model = Some(derive_model(initial, goal, &ontology));
+    Ok(document)
+}
+
+pub(super) fn document_with_leaderboards<AccountId, A, RateId, Role, N>(
+    spec: DocumentSpec<'_>,
+    initial: &Economy<AccountId, A, RateId, Role, N>,
+    goal: &Goal<AccountId, A, N>,
+    trace: &Trace<RateId, Role, AccountId, N>,
+    objectives: Vec<ObjectiveView>,
+    scene: StudioScene<AccountId, A, RateId, Role, N>,
+    leaderboards: StudioLeaderboards<AccountId, A, RateId, Role, N>,
+) -> Result<ViewDocument, PlaybackError>
+where
+    AccountId: Clone + Debug + Eq + Hash + Ord + StudioLabel,
+    A: Clone + Debug + Eq + Hash + Ord + StudioLabel,
+    RateId: Clone + Debug + Eq + Hash + Ord + StudioLabel,
+    Role: Clone + Debug + Ord + StudioLabel,
+    N: QuantityScalar,
+{
+    let ontology = StudioOntology::<AccountId, A, RateId, Role, N>::new(spec.problem, Some(scene))
+        .with_leaderboards(leaderboards);
     let mut document = derive_document(
         ViewDocumentMetadata {
             id: format!("{}:{}", spec.problem, spec.strategy),

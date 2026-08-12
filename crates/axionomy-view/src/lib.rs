@@ -895,6 +895,37 @@ pub struct ViewSnapshot {
     pub accounts: Vec<AccountView>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub scene: Option<Scene>,
+    /// Disposable rankings derived from this exact replay-verified state.
+    /// They explain comparative outcomes; they never authorize an exchange.
+    #[serde(default)]
+    pub leaderboards: Vec<LeaderboardView>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct LeaderboardView {
+    pub key: String,
+    pub label: String,
+    pub description: String,
+    pub direction: ObjectiveDirectionView,
+    #[serde(default)]
+    pub entries: Vec<LeaderboardEntryView>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct LeaderboardEntryView {
+    /// Eligible entries use one-based competition ranking. Ineligible entries
+    /// remain visible but deliberately have no rank.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rank: Option<u64>,
+    pub participant: ViewId,
+    /// Exact display text. Ratios should be reduced before projection rather
+    /// than rounded into semantic state.
+    pub value: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub unit: Option<String>,
+    pub eligible: bool,
+    #[serde(default)]
+    pub components: Vec<SceneMetricView>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -1215,6 +1246,14 @@ pub trait ViewOntology<AccountId, A, RateId, Role, N = u64> {
         _economy: &Economy<AccountId, A, RateId, Role, N>,
     ) -> Option<Scene> {
         None
+    }
+
+    fn leaderboards(
+        &self,
+        _index: u64,
+        _economy: &Economy<AccountId, A, RateId, Role, N>,
+    ) -> Vec<LeaderboardView> {
+        Vec::new()
     }
 }
 
@@ -1660,6 +1699,7 @@ where
         index,
         accounts,
         scene,
+        leaderboards: ontology.leaderboards(index, economy),
     }
 }
 
