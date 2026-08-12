@@ -429,8 +429,6 @@ export function App() {
         const hasBoards = snapshot.leaderboards.length > 0;
         const hasAnalysis = document.pareto_fronts.length > 0 || document.telemetry.length > 0;
         const hasObservations = document.observations.length > 0;
-        // Token travel keeps pace with the playhead instead of a fixed 280ms.
-        const travelMs = Math.max(160, Math.min(560, Math.round(playbackDelay * 0.55)));
         const toggleTheater = () => {
           const node = worldPanel.current;
           if (!node) return;
@@ -441,7 +439,7 @@ export function App() {
         return <>
       <PlaybackControls position={position} count={document.frames.length} playing={playing} delay={playbackDelay} onDelay={setPlaybackDelay} onPosition={setPosition} onPlaying={(next) => { if (next && position >= document.frames.length) setPosition(0); setPlaying(next); }} frame={frame} onShare={copyLink} shared={copied} />
 
-      <section className={`stage${hasBoards ? "" : " no-boards"}${sparseScene ? " scene-sparse" : ""}`} style={{ "--travel-ms": `${travelMs}ms` } as CSSProperties}>
+      <section className={`stage${hasBoards ? "" : " no-boards"}${sparseScene ? " scene-sparse" : ""}`}>
         <div className="panel world-panel" ref={worldPanel}>
           <PanelHeading kicker="Picture (illustration only)" title={snapshot.scene?.title ?? "Problem picture"} aside={snapshot.scene?.surface.kind} action={<button type="button" className="theater-btn" onClick={toggleTheater} title="Theater mode" aria-label="Toggle theater mode"><IconMaximize size={16} stroke={1.8} aria-hidden="true" /></button>} />
           <SceneView scene={snapshot.scene} onAccount={setFocusedAccount} />

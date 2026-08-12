@@ -105,22 +105,22 @@ test("keeps the replay cockpit within a narrow viewport", async ({ page }) => {
   expect(overflow).toBeLessThanOrEqual(1);
 });
 
-test("animates a graph entity between replayed economic positions", async ({ page }) => {
-  await page.goto("/?problem=work_league&instance=showcase&strategy=mixed_field&document=work_league%3Amixed_field&view=replay&step=1&leaderboard=contract_value&seed=17&budget=128");
-  await page.addStyleTag({ content: ".stage { --travel-ms: 1200ms !important; }" });
-  const atlas = page.locator('.react-flow__node[data-id="entity:league:agent:atlas"]');
-  await expect(atlas).toBeVisible();
-  const before = await atlas.boundingBox();
+test("keeps Logistics graph travel smooth when the OS requests reduced motion", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/?problem=logistics&instance=showcase&strategy=reliable&document=logistics%3Areliable&view=replay&step=1&seed=0&budget=128");
+  const vehicle = page.locator('.react-flow__node[data-id="entity:vehicle:fleet-1"]');
+  await expect(vehicle).toBeVisible();
+  const before = await vehicle.boundingBox();
   await page.getByRole("button", { name: "Next exchange" }).click();
-  await page.waitForTimeout(100);
-  const during = await atlas.boundingBox();
-  const animations = await atlas.evaluate((element) => element.getAnimations().filter((animation) => animation.playState === "running").length);
+  await page.waitForTimeout(60);
+  const during = await vehicle.boundingBox();
+  const animations = await vehicle.evaluate((element) => element.getAnimations().filter((animation) => animation.playState === "running").length);
   expect(animations).toBeGreaterThan(0);
-  expect(during?.y).not.toBe(before?.y);
-  await page.waitForTimeout(1_200);
-  const after = await atlas.boundingBox();
-  expect(after?.y).not.toBe(before?.y);
-  expect(after?.y).not.toBe(during?.y);
+  expect(during?.x).not.toBe(before?.x);
+  await page.waitForTimeout(300);
+  const after = await vehicle.boundingBox();
+  expect(after?.x).not.toBe(before?.x);
+  expect(after?.x).not.toBe(during?.x);
 });
 
 test("browser history restores a prior problem deep link", async ({ page }) => {
