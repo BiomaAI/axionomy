@@ -155,7 +155,8 @@ h1 { font-size: clamp(22px, 2.4vw, 32px); line-height: 1.05; letter-spacing: -.0
 /* The transport stays reachable for the whole replay (sticky). */
 .playback { position: sticky; top: 0; z-index: 70; display: grid; grid-template-columns: auto 1fr auto auto auto auto; align-items: center; gap: 16px; background: #0b1117; border: 1px solid var(--line); padding: 11px 14px; margin-bottom: 14px; box-shadow: 0 10px 26px #0007; }
 .transport { display: flex; gap: 4px; }
-.transport button { min-height: 32px; padding: 0; width: 32px; font-family: var(--mono); }
+.transport button { min-height: 32px; padding: 0; width: 32px; display: grid; place-items: center; font-family: var(--mono); }
+.transport button svg { display: block; }
 .transport button.play { color: var(--lime); }
 .scrubber-label { display: flex; justify-content: space-between; font-size: 10px; margin-bottom: 3px; }
 .scrubber-label strong { color: var(--muted); font-family: var(--mono); font-variant-numeric: tabular-nums; }
