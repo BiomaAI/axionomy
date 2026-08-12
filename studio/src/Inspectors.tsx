@@ -8,9 +8,10 @@ export function PanelHeading({ kicker, title, aside, action }: { kicker: string;
 type QuantityValue = { asset: { key: string; label: string }; quantity: string };
 type BalanceRow = { balance: QuantityValue; prior?: string; changed: boolean; added: boolean; live: boolean };
 
-// liveKeys: `${account}|${asset}` pairs that ever change across the whole trace.
-// null means the document has no trace, so no live/config split applies.
-export function Accounts({ snapshot, previous, focus, liveKeys }: { snapshot: ViewSnapshot; previous?: ViewSnapshot; focus?: string; liveKeys?: Set<string> | null }) {
+// changingBalanceKeys contains `${account}|${asset}` pairs that change somewhere
+// in the trace. It controls disclosure only; unchanged assets remain equally
+// authoritative and must not be reclassified as configuration by the viewer.
+export function Accounts({ snapshot, previous, focus, changingBalanceKeys }: { snapshot: ViewSnapshot; previous?: ViewSnapshot; focus?: string; changingBalanceKeys?: Set<string> | null }) {
   useEffect(() => {
     if (!focus) return;
     document.getElementById(`account-${encodeURIComponent(focus)}`)?.scrollIntoView({ behavior: "smooth", block: "nearest" });
@@ -25,16 +26,16 @@ export function Accounts({ snapshot, previous, focus, liveKeys }: { snapshot: Vi
           prior,
           changed: prior !== undefined && prior !== balance.quantity,
           added: prior === undefined && snapshot.index > 0,
-          live: !liveKeys || liveKeys.has(`${account.account.key}|${balance.asset.key}`),
+          live: !changingBalanceKeys || changingBalanceKeys.has(`${account.account.key}|${balance.asset.key}`),
         };
       });
       const ghosts = (prevAccount?.balances ?? []).filter((prev) => !account.balances.some((candidate) => candidate.asset.key === prev.asset.key));
       return { account: account.account, rows, ghosts };
     });
-    if (!liveKeys) return mapped;
+    if (!changingBalanceKeys) return mapped;
     const weight = (card: (typeof mapped)[number]) => (card.rows.some((row) => row.live) || card.ghosts.length > 0 ? 0 : 1);
     return [...mapped].sort((a, b) => weight(a) - weight(b));
-  }, [snapshot, previous, liveKeys]);
+  }, [snapshot, previous, changingBalanceKeys]);
   const row = (entry: BalanceRow) => <div className={`balance ${entry.changed || entry.added ? "changed" : ""}`} key={entry.balance.asset.key}>
     <span title={entry.balance.asset.key}>{entry.balance.asset.label}</span>
     <strong>{entry.balance.quantity}</strong>
@@ -44,9 +45,9 @@ export function Accounts({ snapshot, previous, focus, liveKeys }: { snapshot: Vi
   return <div className="accounts-list">
     {cards.map(({ account, rows, ghosts }) => {
       const live = rows.filter((entry) => entry.live);
-      const config = rows.filter((entry) => !entry.live);
-      const configOnly = live.length === 0 && ghosts.length === 0 && config.length > 0;
-      return <article id={`account-${encodeURIComponent(account.key)}`} className={`account-card ${focus === account.key ? "focused" : ""} ${configOnly ? "config-only" : ""}`} key={account.key}>
+      const unchanged = rows.filter((entry) => !entry.live);
+      const unchangedOnly = live.length === 0 && ghosts.length === 0 && unchanged.length > 0;
+      return <article id={`account-${encodeURIComponent(account.key)}`} className={`account-card ${focus === account.key ? "focused" : ""} ${unchangedOnly ? "unchanged-only" : ""}`} key={account.key}>
         <h3><span className="account-icon">{account.label.slice(0, 1)}</span>{account.label}</h3>
         <div className="balances">
           {live.map(row)}
@@ -55,9 +56,9 @@ export function Accounts({ snapshot, previous, focus, liveKeys }: { snapshot: Vi
             <strong>0</strong>
             <small>{ghost.quantity} →</small>
           </div>)}
-          {config.length > 0 && <details className="config-assets">
-            <summary>{config.length} configuration {config.length === 1 ? "asset" : "assets"}</summary>
-            {config.map(row)}
+          {unchanged.length > 0 && <details className="unchanged-assets">
+            <summary>{unchanged.length} unchanged {unchanged.length === 1 ? "asset" : "assets"} in this replay</summary>
+            {unchanged.map(row)}
           </details>}
           {rows.length === 0 && ghosts.length === 0 && <div className="muted">No balances</div>}
         </div>
@@ -72,7 +73,7 @@ export function StepTicker({ frame, onProof }: { frame?: ExchangeFrame; onProof?
     <div className="ticker-feed" key={frame.index}>
       {frame.cues.map((cue, index) => <article key={`${cue.kind}:${index}`} className={`cue-${cue.kind}`} style={{ "--cue-i": index } as CSSProperties}>
         <strong>{cue.label}</strong>
-        {cue.details.map((detail) => <span key={detail}>{detail}</span>)}
+        {cue.details.map((detail, detailIndex) => <span key={`${detail}:${detailIndex}`}>{detail}</span>)}
       </article>)}
     </div>
     <div className="ticker-foot">

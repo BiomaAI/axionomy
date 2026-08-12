@@ -38,16 +38,89 @@ test("loads a distinct static problem and its specialized renderer", async ({ pa
   await expect(page.getByText("Which subset contains which element", { exact: false })).toBeVisible();
 });
 
+test("renders the generic cockpit for every canonical problem without browser errors", async ({ page }) => {
+  test.setTimeout(60_000);
+  const browserErrors: string[] = [];
+  page.on("pageerror", (error) => browserErrors.push(error.message));
+  await page.goto("/");
+  const problems = [
+    "maze", "sokoban", "exact_cover", "bridge", "scheduling", "workshop",
+    "marketplace", "logistics", "connect_four", "rescue", "mission",
+    "perishables", "work_league",
+  ];
+  for (const problem of problems) {
+    await page.getByRole("combobox", { name: "Problem", exact: true }).selectOption(problem);
+    await expect(page.locator(".document-heading .eyebrow")).toContainText(problem);
+    await expect(page.locator(".stage .world-panel")).toBeVisible();
+    await expect(page.locator(".stage .accounts-panel")).toBeVisible();
+    await expect(page.getByText("Rates, roles, goals & invariants")).toBeVisible();
+  }
+  expect(browserErrors).toEqual([]);
+});
+
 test("opens a shared Work League replay at the exact leaderboard and step", async ({ page }) => {
   await page.goto("/?problem=work_league&instance=showcase&strategy=mixed_field&document=work_league%3Amixed_field&view=replay&step=12&leaderboard=resource_efficiency&seed=17&budget=128");
   await expect(page.getByRole("combobox", { name: "Problem", exact: true })).toHaveValue("work_league");
   await expect(page.getByRole("heading", { name: "Work League · Mixed policy field" })).toBeVisible();
-  await expect(page.getByRole("tab", { name: /Resource efficiency/ })).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByRole("combobox", { name: "Leaderboard ranking dimension" })).toHaveValue("resource_efficiency");
   await expect(page.locator(".leaderboard-step")).toContainText("12");
   await expect(page.locator(".leaderboard-entries article")).toHaveCount(4);
+  await page.getByRole("combobox", { name: "Leaderboard ranking dimension" }).selectOption("least_waste");
+  await expect(page).toHaveURL(/leaderboard=least_waste/);
   await page.getByRole("button", { name: "Next exchange" }).click();
   await expect(page).toHaveURL(/step=13/);
   await expect(page.locator(".leaderboard-step")).toContainText("13");
+});
+
+test("keeps replay shortcuts scoped to the cockpit and preserves economic wording", async ({ page }) => {
+  await page.goto("/?problem=work_league&instance=showcase&strategy=mixed_field&document=work_league%3Amixed_field&view=replay&step=12&leaderboard=resource_efficiency&seed=17&budget=128");
+  await expect(page.locator(".stage .world-panel")).toBeVisible();
+  await expect(page.locator(".stage .accounts-panel")).toBeVisible();
+  await expect(page.getByText(/unchanged assets? in this replay/).first()).toBeVisible();
+  await expect(page.getByText(/configuration assets?/)).toHaveCount(0);
+
+  await page.keyboard.press("ArrowRight");
+  await expect(page.locator(".leaderboard-step")).toContainText("13");
+  await page.getByRole("tab", { name: /How it was solved/ }).click();
+  await page.keyboard.press("ArrowRight");
+  await expect(page).toHaveURL(/step=13/);
+
+  await page.getByRole("tab", { name: /Step-by-step replay/ }).click();
+  const comparison = page.locator(".strategy-comparison");
+  const summary = comparison.locator("summary");
+  await summary.focus();
+  await page.keyboard.press("Space");
+  await expect(page.getByRole("button", { name: "Play" })).toBeVisible();
+  await page.keyboard.press("Enter");
+  await expect(comparison).toHaveAttribute("open", "");
+});
+
+test("keeps the replay cockpit within a narrow viewport", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/?problem=work_league&instance=showcase&strategy=mixed_field&document=work_league%3Amixed_field&view=replay&step=12&leaderboard=resource_efficiency&seed=17&budget=128");
+  await expect(page.locator(".stage .world-panel")).toBeVisible();
+  await expect(page.locator(".stage .accounts-panel")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Next exchange" })).toBeVisible();
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+  expect(overflow).toBeLessThanOrEqual(1);
+});
+
+test("animates a graph entity between replayed economic positions", async ({ page }) => {
+  await page.goto("/?problem=work_league&instance=showcase&strategy=mixed_field&document=work_league%3Amixed_field&view=replay&step=1&leaderboard=contract_value&seed=17&budget=128");
+  await page.addStyleTag({ content: ".stage { --travel-ms: 1200ms !important; }" });
+  const atlas = page.locator('.react-flow__node[data-id="entity:league:agent:atlas"]');
+  await expect(atlas).toBeVisible();
+  const before = await atlas.boundingBox();
+  await page.getByRole("button", { name: "Next exchange" }).click();
+  await page.waitForTimeout(100);
+  const during = await atlas.boundingBox();
+  const animations = await atlas.evaluate((element) => element.getAnimations().filter((animation) => animation.playState === "running").length);
+  expect(animations).toBeGreaterThan(0);
+  expect(during?.y).not.toBe(before?.y);
+  await page.waitForTimeout(1_200);
+  const after = await atlas.boundingBox();
+  expect(after?.y).not.toBe(before?.y);
+  expect(after?.y).not.toBe(during?.y);
 });
 
 test("browser history restores a prior problem deep link", async ({ page }) => {

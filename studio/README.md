@@ -14,6 +14,14 @@ accepted exchanges, and **Tradeoffs** compares non-dominated outcomes. Tabler
 icons come from a constrained semantic glyph registry rather than arbitrary SVG
 inside artifacts.
 
+Replay uses one generic cockpit across every problem: the disposable scene,
+replay-derived standings, current-step narration, and authoritative account
+ledger remain visible together on wide screens and stack without page overflow
+on narrow screens. Balances that never change in the selected trace may be
+folded for density, but remain explicitly labeled as unchanged assets and are
+always inspectable. The viewer does not reinterpret them as configuration or
+remove them from the source-of-truth ledger.
+
 Each problem advertises Micro, Showcase, and Stress instances. Showcase is the
 default and is also the committed offline artifact; Micro and Stress are live
 engine choices. The comparison surface puts replayable outcomes, objective
@@ -24,8 +32,9 @@ and alternatives across every domain.
 The Work League adds six replay-derived leaderboards. Contract value,
 throughput, resource efficiency, residual waste, reliability, and Pareto
 standing are recomputed from each verified snapshot, so the lead can change as
-the scrubber moves. Rank evidence links back to the participant account; it is
-never a second score store.
+the scrubber moves. A compact ranking-dimension selector exposes every board
+without hiding choices in a horizontal scroller. Rank evidence links back to
+the participant account; it is never a second score store.
 
 Problem, instance, strategy, document, evidence view, replay step, selected
 leaderboard, seed, and budget are encoded in the query string. **Copy link**

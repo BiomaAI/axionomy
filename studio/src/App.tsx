@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { IconMaximize } from "@tabler/icons-react";
 import "@xyflow/react/dist/style.css";
 import logoDark from "../../assets/axionomy-logo-dark.webp";
 import logoLight from "../../assets/axionomy-logo-light.webp";
@@ -149,9 +150,10 @@ export function App() {
   const frame = position > 0 ? document?.frames[position - 1] : undefined;
   const worldPanel = useRef<HTMLDivElement>(null);
 
-  // `${account}|${asset}` pairs that ever change across this document's trace.
-  // Everything else is configuration and folds away in the ledger.
-  const liveKeys = useMemo(() => {
+  // `${account}|${asset}` pairs that change somewhere in this document's trace.
+  // This is only a display hint: lack of change does not redefine an asset's
+  // economic meaning or make it non-authoritative.
+  const changingBalanceKeys = useMemo(() => {
     if (!document || document.frames.length === 0) return null;
     const flatten = (snap: ViewSnapshot) => {
       const map = new Map<string, string>();
@@ -281,15 +283,24 @@ export function App() {
 
   useEffect(() => {
     const keyboard = (event: KeyboardEvent) => {
-      if (!document || (event.target instanceof HTMLElement && event.target.matches("input, select, textarea, button"))) return;
+      const target = event.target;
+      const interactive = target instanceof Element
+        && target.closest("input, select, textarea, button, a, summary, [contenteditable='true']");
+      if (viewMode !== "replay" || !document || interactive) return;
       if (event.key === "ArrowLeft") setPosition((current) => Math.max(0, current - 1));
       else if (event.key === "ArrowRight") setPosition((current) => Math.min(document.frames.length, current + 1));
-      else if (event.key === " ") { event.preventDefault(); setPlaying((current) => !current); }
+      else if (event.key === " ") {
+        event.preventDefault();
+        setPlaying((current) => {
+          if (!current) setPosition((step) => step >= document.frames.length ? 0 : step);
+          return !current;
+        });
+      }
       else return;
     };
     window.addEventListener("keydown", keyboard);
     return () => window.removeEventListener("keydown", keyboard);
-  }, [document]);
+  }, [document, viewMode]);
 
   const start = async () => {
     const submittedProblem = problem?.title ?? problemKey;
@@ -432,7 +443,7 @@ export function App() {
 
       <section className={`stage${hasBoards ? "" : " no-boards"}${sparseScene ? " scene-sparse" : ""}`} style={{ "--travel-ms": `${travelMs}ms` } as CSSProperties}>
         <div className="panel world-panel" ref={worldPanel}>
-          <PanelHeading kicker="Picture (illustration only)" title={snapshot.scene?.title ?? "Problem picture"} aside={snapshot.scene?.surface.kind} action={<button type="button" className="theater-btn" onClick={toggleTheater} title="Theater mode" aria-label="Toggle theater mode">⛶</button>} />
+          <PanelHeading kicker="Picture (illustration only)" title={snapshot.scene?.title ?? "Problem picture"} aside={snapshot.scene?.surface.kind} action={<button type="button" className="theater-btn" onClick={toggleTheater} title="Theater mode" aria-label="Toggle theater mode"><IconMaximize size={16} stroke={1.8} aria-hidden="true" /></button>} />
           <SceneView scene={snapshot.scene} onAccount={setFocusedAccount} />
         </div>
         {hasBoards && <LeaderboardDock document={document} snapshot={snapshot} previous={previous} position={position} selectedKey={leaderboardKey} onSelect={(key) => { writeUrl(urlState({ leaderboard: key }), "push"); setLeaderboardKey(key); }} onParticipant={setFocusedAccount} />}
@@ -443,7 +454,7 @@ export function App() {
           </div>
           <div className="panel accounts-panel">
             <PanelHeading kicker="Source of truth" title="Accounts & assets" aside={focusedAccount ? "linked from picture" : `${snapshot.accounts.length} accounts`} />
-            <Accounts snapshot={snapshot} previous={previous} focus={focusedAccount} liveKeys={liveKeys} />
+            <Accounts snapshot={snapshot} previous={previous} focus={focusedAccount} changingBalanceKeys={changingBalanceKeys} />
           </div>
         </div>
       </section>
@@ -597,7 +608,7 @@ function LeaderboardDock({ document, snapshot, previous, position, selectedKey, 
   const snapshots = [document.initial, ...document.frames.slice(0, position).map((frame) => frame.after)];
   return <section className="leaderboard-dock rail" aria-label="Replay-derived leaderboards">
     <header><div><span>Live comparative outcomes</span><strong>Who is winning depends on what you value</strong></div><div className="leaderboard-step">Economic step <b>{snapshot.index}</b></div></header>
-    <div className="leaderboard-tabs" role="tablist">{snapshot.leaderboards.map((leaderboard) => <button type="button" role="tab" aria-selected={leaderboard.key === selected.key} key={leaderboard.key} onClick={() => onSelect(leaderboard.key)}>{leaderboard.label}<small>{leaderboard.direction}</small></button>)}</div>
+    <label className="leaderboard-selector"><span>Ranking dimension</span><select aria-label="Leaderboard ranking dimension" value={selected.key} onChange={(event) => onSelect(event.target.value)}>{snapshot.leaderboards.map((leaderboard) => <option key={leaderboard.key} value={leaderboard.key}>{leaderboard.label} · {leaderboard.direction}</option>)}</select></label>
     <div className="leaderboard-explanation"><strong>{selected.label}</strong><span>{selected.description}</span></div>
     <div className="leaderboard-entries">{selected.entries.map((entry) => {
       const prior = previousBoard?.entries.find((candidate) => candidate.participant.key === entry.participant.key);
