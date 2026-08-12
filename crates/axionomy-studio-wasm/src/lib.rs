@@ -95,7 +95,7 @@ impl RunObserver for WorkerObserver<'_> {
             sequence,
             document_id: document_id.into(),
             frame_index: frame.index,
-            frame,
+            frame: Box::new(frame),
         });
     }
 }

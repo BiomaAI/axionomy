@@ -1169,7 +1169,7 @@ pub enum StudioEvent {
         sequence: u64,
         document_id: String,
         frame_index: u64,
-        frame: ExchangeFrame,
+        frame: Box<ExchangeFrame>,
     },
     ArtifactPublished {
         run_id: String,

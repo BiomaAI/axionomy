@@ -68,6 +68,10 @@ type StudioScene<AccountId, A, RateId, Role, N> =
     fn(u64, &Economy<AccountId, A, RateId, Role, N>) -> Option<Scene>;
 type StudioLeaderboards<AccountId, A, RateId, Role, N> =
     fn(u64, &Economy<AccountId, A, RateId, Role, N>) -> Vec<LeaderboardView>;
+type StudioProjections<AccountId, A, RateId, Role, N> = (
+    StudioScene<AccountId, A, RateId, Role, N>,
+    StudioLeaderboards<AccountId, A, RateId, Role, N>,
+);
 
 struct StudioOntology<AccountId, A, RateId, Role, N = u64> {
     fallback: DebugOntology<AccountId, A, RateId, Role, N>,
@@ -956,8 +960,7 @@ pub(super) fn document_with_leaderboards_observed<AccountId, A, RateId, Role, N>
     goal: &Goal<AccountId, A, N>,
     trace: &Trace<RateId, Role, AccountId, N>,
     objectives: Vec<ObjectiveView>,
-    scene: StudioScene<AccountId, A, RateId, Role, N>,
-    leaderboards: StudioLeaderboards<AccountId, A, RateId, Role, N>,
+    projections: StudioProjections<AccountId, A, RateId, Role, N>,
     mut on_frame: impl FnMut(&ExchangeFrame),
 ) -> Result<ViewDocument, PlaybackError>
 where
@@ -967,6 +970,7 @@ where
     Role: Clone + Debug + Ord + StudioLabel,
     N: QuantityScalar,
 {
+    let (scene, leaderboards) = projections;
     let ontology = StudioOntology::<AccountId, A, RateId, Role, N>::new(spec.problem, Some(scene))
         .with_leaderboards(leaderboards);
     let mut document = derive_document_with_frames(

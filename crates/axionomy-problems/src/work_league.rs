@@ -773,7 +773,7 @@ fn policy_of(world: &World, agent: AgentId) -> Option<Policy> {
 }
 
 fn choose_job(available: &[JobId], policy: Policy) -> JobId {
-    let mut jobs = available.iter().copied().collect::<Vec<_>>();
+    let mut jobs = available.to_vec();
     jobs.sort_by_key(|job| {
         let spec = job_spec(*job);
         match policy {

@@ -169,7 +169,7 @@ enum WorkerUpdate {
     Observation(SearchObservationView),
     Frame {
         document_id: String,
-        frame: axionomy_view::ExchangeFrame,
+        frame: Box<axionomy_view::ExchangeFrame>,
     },
 }
 
@@ -191,7 +191,7 @@ impl RunObserver for ChannelObserver {
     fn frame(&mut self, document_id: &str, frame: axionomy_view::ExchangeFrame) {
         let _ = self.updates.blocking_send(WorkerUpdate::Frame {
             document_id: document_id.into(),
-            frame,
+            frame: Box::new(frame),
         });
     }
 }

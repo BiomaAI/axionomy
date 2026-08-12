@@ -94,8 +94,7 @@ pub(super) fn build(
                     value: waste.to_string(),
                 },
             ],
-            scene,
-            leaderboards,
+            (scene, leaderboards),
             |frame| {
                 if strategy == selected {
                     progress.frame(&document_id, frame);
@@ -329,13 +328,9 @@ fn ranking(
         .enumerate()
         .map(|(offset, standing)| {
             let score = (standing.numerator, standing.denominator);
-            let rank = if !standing.eligible {
-                None
-            } else if previous.is_some_and(|known| ratios_equal(known, score)) {
-                None // replaced below from the preceding entry
-            } else {
-                Some(offset as u64 + 1)
-            };
+            let rank = (standing.eligible
+                && !previous.is_some_and(|known| ratios_equal(known, score)))
+            .then_some(offset as u64 + 1);
             previous = standing.eligible.then_some(score);
             (rank, standing)
         })
