@@ -190,7 +190,11 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         source: "location:Base".into(),
         target: format!("location:{location:?}"),
         label: Some("hidden victim prior".into()),
-        classes: vec!["uncertain".into()],
+        classes: if focus == Some(location) {
+            vec!["current".into(), "uncertain".into()]
+        } else {
+            vec!["uncertain".into()]
+        },
     })
     .collect();
     let mut agent = link_account(
@@ -253,6 +257,19 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             format!("rescue:asset:belief-{location:?}").to_ascii_lowercase(),
         )
     });
+    let nature = link_account(
+        visual_entity(
+            "system:nature",
+            "Hidden victim state",
+            SceneGlyphView::Information,
+            SceneAnchorView::GraphNode {
+                node: "location:Base".into(),
+            },
+            SceneToneView::Uncertain,
+            Some("not visible to actor".into()),
+        ),
+        "rescue:account:nature",
+    );
     Some(
         Scene::graph(
             "What the agent can see (the truth is hidden)",
@@ -260,7 +277,11 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             edges,
             focus.map(|location| format!("location:{location:?}")),
         )
-        .with_entities(std::iter::once(agent).chain(belief_entities))
+        .with_entities(
+            std::iter::once(agent)
+                .chain(belief_entities)
+                .chain(std::iter::once(nature)),
+        )
         .with_metrics([
             visual_metric(
                 "energy",

@@ -468,7 +468,14 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         source: format!("league:location:{from:?}").to_ascii_lowercase(),
         target: format!("league:location:{to:?}").to_ascii_lowercase(),
         label: Some("1 energy · 1 tick".into()),
-        classes: Vec::new(),
+        classes: if AGENTS.into_iter().any(|agent| {
+            world.account(&AccountId::Agent(agent)).is_some()
+                && work_league::location(world, agent) == Some(to)
+        }) {
+            vec!["current".into()]
+        } else {
+            Vec::new()
+        },
     })
     .collect();
     let agents = AGENTS

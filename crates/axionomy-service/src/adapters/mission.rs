@@ -260,7 +260,15 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             source: "location:Base".into(),
             target: format!("location:{location:?}"),
             label: Some("hidden truth + hazard".into()),
-            classes: vec!["uncertain".into()],
+            classes: if [AgentId::Scout, AgentId::Medic].into_iter().any(|agent| {
+                !world
+                    .balance(&AccountId::Agent(agent), &Asset::At(location))
+                    .is_zero()
+            }) {
+                vec!["current".into(), "uncertain".into()]
+            } else {
+                vec!["uncertain".into()]
+            },
         })
         .collect();
     let agent_entities = [AgentId::Scout, AgentId::Medic].into_iter().map(|agent| {
@@ -307,9 +315,50 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         )];
         entity
     });
+    let system_entities = [
+        link_account(
+            visual_entity(
+                "system:mission",
+                "Mission control",
+                SceneGlyphView::Task,
+                SceneAnchorView::GraphNode {
+                    node: "location:Base".into(),
+                },
+                SceneToneView::Neutral,
+                Some("shared state".into()),
+            ),
+            "mission:account:mission",
+        ),
+        link_account(
+            visual_entity(
+                "system:nature",
+                "Hidden scenario",
+                SceneGlyphView::Weather,
+                SceneAnchorView::GraphNode {
+                    node: "location:North".into(),
+                },
+                SceneToneView::Uncertain,
+                Some("private truth".into()),
+            ),
+            "mission:account:nature",
+        ),
+        link_account(
+            visual_entity(
+                "system:success",
+                "Mission outcome",
+                SceneGlyphView::Goal,
+                SceneAnchorView::GraphNode {
+                    node: "location:South".into(),
+                },
+                SceneToneView::Goal,
+                Some("outcome account".into()),
+            ),
+            "mission:account:success",
+        ),
+    ];
     Some(
         Scene::graph("Where each agent is, and what it knows", nodes, edges, None)
-            .with_entities(agent_entities)
+            .with_entities(agent_entities.chain(system_entities))
             .with_metrics([
                 visual_metric(
                     "time",

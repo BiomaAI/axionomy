@@ -390,6 +390,34 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         );
         entity
     });
+    let system_entities = [
+        link_account(
+            visual_entity(
+                "system:fuel-station",
+                "Fuel station",
+                SceneGlyphView::Fuel,
+                SceneAnchorView::GraphNode {
+                    node: "location:Depot".into(),
+                },
+                SceneToneView::Neutral,
+                Some("refuel supply".into()),
+            ),
+            "logistics:account:fuelstation",
+        ),
+        link_account(
+            visual_entity(
+                "system:nature",
+                "Travel conditions",
+                SceneGlyphView::Weather,
+                SceneAnchorView::GraphNode {
+                    node: "location:Junction".into(),
+                },
+                SceneToneView::Uncertain,
+                Some("sampled chance".into()),
+            ),
+            "logistics:account:nature",
+        ),
+    ];
     let delivered = logistics::ORDERS
         .into_iter()
         .filter(|order| {
@@ -405,7 +433,11 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             edges,
             focus.map(|location| format!("location:{location:?}")),
         )
-        .with_entities(std::iter::once(vehicle).chain(order_entities))
+        .with_entities(
+            std::iter::once(vehicle)
+                .chain(order_entities)
+                .chain(system_entities),
+        )
         .with_metrics([
             visual_metric("delivered", "Orders delivered", delivered, Some("orders")),
             visual_metric(
