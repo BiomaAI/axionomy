@@ -218,7 +218,8 @@ export function App() {
   }, [artifact?.id, documentId, problemKey]);
 
   useEffect(() => {
-    if (!snapshot?.leaderboards.length) {
+    if (!snapshot) return;
+    if (!snapshot.leaderboards.length) {
       setLeaderboardKey(undefined);
       return;
     }

@@ -27,3 +27,14 @@ test("cancels browser computation by terminating its isolated Worker", async ({ 
   await expect(page.getByRole("button", { name: "Run", exact: true })).toBeEnabled();
   await expect(page.getByText("Running in your browser", { exact: true })).toBeVisible();
 });
+
+test("browser Worker streams the same verified Work League frames", async ({ page }) => {
+  await page.goto("/?problem=work_league&instance=micro&strategy=mixed_field&view=solve&step=0&seed=17&budget=32");
+  await expect(page.getByText("Running in your browser", { exact: true })).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByRole("heading", { name: "Work League · Mixed policy field" })).toBeVisible();
+  await page.getByRole("button", { name: "Run", exact: true }).click();
+  await expect(page.locator(".live-standings")).toContainText("Live verified frame", { timeout: 30_000 });
+  await expect(page.getByText("New artifact computed and loaded")).toBeVisible({ timeout: 60_000 });
+  await page.getByRole("tab", { name: /Step-by-step replay/ }).click();
+  await expect(page.getByText("Who is winning depends on what you value")).toBeVisible();
+});

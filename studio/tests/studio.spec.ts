@@ -59,3 +59,12 @@ test("browser history restores a prior problem deep link", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "Work League · Mixed policy field" })).toBeVisible();
   await expect(page.locator(".leaderboard-step")).toContainText("7");
 });
+
+test("streams replay-verified Work League standings before publishing the artifact", async ({ page }) => {
+  await page.goto("/?problem=work_league&instance=micro&strategy=mixed_field&view=solve&step=0&seed=17&budget=32");
+  await expect(page.getByRole("heading", { name: "Work League · Mixed policy field" })).toBeVisible();
+  await page.getByRole("button", { name: "Run", exact: true }).click();
+  await expect(page.locator(".live-standings")).toContainText("Live verified frame", { timeout: 15_000 });
+  await expect(page.locator(".live-standings")).toContainText("Contract value");
+  await expect(page.getByText("New artifact computed and loaded")).toBeVisible({ timeout: 30_000 });
+});

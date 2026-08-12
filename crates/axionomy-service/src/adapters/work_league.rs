@@ -1,6 +1,8 @@
 use super::*;
+use axionomy::{Exchange, Quantity};
 use axionomy_problems::work_league::{
-    self, AGENTS, AccountId, AgentId, Asset, Facility, Location, Policy, Profile, World,
+    self, AGENTS, AccountId, AgentId, Asset, Facility, JobId, Location, Policy, Profile, RateId,
+    Role, World,
 };
 use axionomy_view::{
     GraphEdgeView, GraphNodeView, LeaderboardEntryView, LeaderboardView, ObjectiveDirectionView,
@@ -38,6 +40,7 @@ pub(super) fn build(
             "A resource-conscious field recycles aggressively and exposes the opportunity cost of minimizing residual waste.",
         ),
     ];
+    let selected = selected_strategy(request, descriptor).to_owned();
     let mut documents = Vec::new();
     for (offset, (strategy, lineup, title, description)) in configurations.into_iter().enumerate() {
         let league = work_league::league(profile, lineup);
@@ -93,7 +96,11 @@ pub(super) fn build(
             ],
             scene,
             leaderboards,
-            |frame| progress.frame(&document_id, frame),
+            |frame| {
+                if strategy == selected {
+                    progress.frame(&document_id, frame);
+                }
+            },
         )
         .map_err(|error| problem_error("work_league", error))?;
         view.telemetry.push(telemetry(
@@ -117,6 +124,25 @@ pub(super) fn build(
                 ),
             ],
         ));
+        let wrong_worker = Exchange::new(
+            RateId::Claim {
+                agent: AgentId::Atlas,
+                job: JobId(1),
+            },
+            Quantity::new(1),
+        )
+        .bind(Role::Agent, AccountId::Agent(AgentId::Bolt))
+        .bind(Role::Job, AccountId::Job(JobId(1)));
+        view.proposals.push(proposal(
+            "work_league",
+            ProposalSpec {
+                id: "claim-with-wrong-worker",
+                label: "Atlas claim rebound to Bolt",
+                description: "The rate names Atlas, but the proposed role binding points at Bolt. Identity assets must reject the mismatch.",
+            },
+            league.initial(),
+            &wrong_worker,
+        ));
         documents.push(view);
         let _ = progress.emit(
             "multi_agent_match",
@@ -129,12 +155,7 @@ pub(super) fn build(
         );
         progress.ensure()?;
     }
-    artifact(
-        request,
-        descriptor,
-        selected_strategy(request, descriptor),
-        documents,
-    )
+    artifact(request, descriptor, &selected, documents)
 }
 
 fn balance(world: &World, agent: AgentId, asset: Asset) -> u64 {
@@ -603,6 +624,24 @@ mod tests {
                 .frames
                 .iter()
                 .any(|frame| frame.after.leaderboards != document.initial.leaderboards)
+        );
+        let value_leaders = document
+            .frames
+            .iter()
+            .filter_map(|frame| {
+                frame
+                    .after
+                    .leaderboards
+                    .iter()
+                    .find(|board| board.key == "contract_value")?
+                    .entries
+                    .first()
+                    .map(|entry| entry.participant.key.as_str())
+            })
+            .collect::<std::collections::HashSet<_>>();
+        assert!(
+            value_leaders.len() >= 2,
+            "the contract-value lead should change during replay"
         );
         assert!(
             document

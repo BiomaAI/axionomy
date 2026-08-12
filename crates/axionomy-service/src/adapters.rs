@@ -766,11 +766,11 @@ pub(crate) fn run(
         _ => unreachable!("catalog and dispatch must agree"),
     }?;
     progress.ensure()?;
-    for document in &artifact.documents {
-        if !progress.has_frames(&document.id) {
-            for frame in &document.frames {
-                progress.frame(&document.id, frame);
-            }
+    if let Some(document) = artifact.selected_document()
+        && !progress.has_frames(&document.id)
+    {
+        for frame in &document.frames {
+            progress.frame(&document.id, frame);
         }
     }
     for (offset, document) in artifact.documents.iter().enumerate() {

@@ -275,6 +275,21 @@ mod tests {
     use axionomy_view::SceneSurfaceView;
     use std::collections::HashSet;
 
+    #[derive(Default)]
+    struct FrameObserver {
+        documents: Vec<String>,
+        frames: Vec<ExchangeFrame>,
+    }
+
+    impl RunObserver for FrameObserver {
+        fn progress(&mut self, _: ServiceProgress) {}
+
+        fn frame(&mut self, document_id: &str, frame: ExchangeFrame) {
+            self.documents.push(document_id.into());
+            self.frames.push(frame);
+        }
+    }
+
     fn assert_unique<'a>(problem: &str, kind: &str, ids: impl Iterator<Item = &'a str>) {
         let mut seen = HashSet::new();
         for id in ids {
@@ -314,6 +329,32 @@ mod tests {
                         && strategy.algorithm != strategy.description.to_lowercase()
                 })
         }));
+    }
+
+    #[test]
+    fn selected_replay_frames_stream_with_the_same_snapshot_contract() {
+        let request = RunRequest::new("work_league")
+            .with_instance("micro")
+            .with_strategy("mixed_field");
+        let mut observer = FrameObserver::default();
+        let artifact = ReferenceService
+            .run_with(&request, &RunControl::default(), &mut observer)
+            .unwrap();
+        let selected = artifact.selected_document().unwrap();
+        assert_eq!(observer.frames.len(), selected.frames.len());
+        assert!(
+            observer
+                .documents
+                .iter()
+                .all(|document| document == &selected.id)
+        );
+        assert!(
+            observer
+                .frames
+                .iter()
+                .all(|frame| !frame.after.leaderboards.is_empty())
+        );
+        assert_eq!(observer.frames.last(), selected.frames.last());
     }
 
     #[test]
