@@ -1,4 +1,5 @@
 /target
+/output
 **/*.rs.bk
 studio/node_modules/
 studio/dist/
