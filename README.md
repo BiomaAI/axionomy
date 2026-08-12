@@ -4,7 +4,7 @@
   <img alt="Axionomy" src="assets/axionomy-logo-light.webp">
 </picture>
 
-> A closed economic state machine for verifiable problem solving.
+> A closed economy for verifiable problem solving.
 
 **Everything is an asset. Every change is an exchange.**
 

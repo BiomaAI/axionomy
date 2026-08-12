@@ -390,7 +390,7 @@ export function App() {
 
   return <div className="app-shell">
     <header className="topbar">
-      <div className="brand"><picture><source media="(prefers-color-scheme: light)" srcSet={logoLight} /><img src={logoDark} alt="Axionomy" /></picture><div><div className="brand-name">Studio</div><div className="brand-subtitle">Inspect and replay how a problem was solved</div></div></div>
+      <div className="brand"><picture><source media="(prefers-color-scheme: light)" srcSet={logoLight} /><img src={logoDark} alt="Axionomy" /></picture><div><div className="brand-name">Studio</div><div className="brand-subtitle">Economic reasoning workbench</div></div></div>
       <div className="connection" title={engine.kind === "native" ? "Verified by a live health check" : engine.kind === "browser" ? "Rust/WASM engine isolated in a Web Worker" : "No executable engine is available"}><span className={`status-dot ${engine.canRun ? "online" : "static"}`} />{connectionLabel(engine.kind, connectivity)}</div>
     </header>
 
