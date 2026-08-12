@@ -139,7 +139,6 @@ export function App() {
   const [copied, setCopied] = useState(false);
   const eventSource = useRef<EngineRunSubscription | null>(null);
   const runStartedAt = useRef<number | undefined>(undefined);
-  const pendingUrlStep = useRef<number | undefined>(initialUrl.step);
 
   const problem = catalog.data?.find((candidate) => candidate.key === problemKey);
   const instance = problem?.instances.find((candidate) => candidate.key === instanceKey);
@@ -203,8 +202,7 @@ export function App() {
 
   useEffect(() => {
     if (!document) return;
-    setPosition(Math.min(pendingUrlStep.current ?? 0, document.frames.length));
-    pendingUrlStep.current = undefined;
+    setPosition((current) => Math.min(current, document.frames.length));
     setPlaying(false);
     setFocusedAccount(undefined);
   }, [document?.id]);
@@ -236,7 +234,6 @@ export function App() {
   useEffect(() => {
     const restore = () => {
       const linked = readUrlState();
-      pendingUrlStep.current = linked.step;
       if (linked.problem) setProblemKey(linked.problem);
       if (linked.instance) setInstanceKey(linked.instance);
       if (linked.strategy) setStrategyKey(linked.strategy);
@@ -327,7 +324,6 @@ export function App() {
     if (!next) return;
     const nextState = urlState({ problem: key, instance: next.default_instance, strategy: next.default_strategy, document: undefined, step: 0, leaderboard: undefined });
     writeUrl(nextState, "push");
-    pendingUrlStep.current = 0;
     setProblemKey(key);
     setInstanceKey(next.default_instance);
     setStrategyKey(next.default_strategy);
