@@ -59,7 +59,8 @@ pub(super) fn build(
             .iter()
             .map(|agent| balance(final_world, *agent, Asset::Waste))
             .sum::<u64>();
-        let mut view = document_with_leaderboards(
+        let document_id = format!("work_league:{strategy}");
+        let mut view = document_with_leaderboards_observed(
             DocumentSpec {
                 problem: "work_league",
                 strategy,
@@ -92,6 +93,7 @@ pub(super) fn build(
             ],
             scene,
             leaderboards,
+            |frame| progress.frame(&document_id, frame),
         )
         .map_err(|error| problem_error("work_league", error))?;
         view.telemetry.push(telemetry(
@@ -536,7 +538,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             tone,
             Some(status),
         );
-        entity.account = Some(format!("work_league:account:job-job-id-{}", job.0));
+        entity.account = Some(format!("work_league:account:job-jobid-{}", job.0));
         entity.metrics = vec![
             visual_metric("value", "Value", spec.value, Some("credits")),
             visual_metric("risk", "Failure weight", spec.risk, Some("of 10")),

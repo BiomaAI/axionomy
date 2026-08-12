@@ -5,13 +5,13 @@ use crate::{
 };
 use axionomy::{Economy, Goal, QuantityScalar, Trace};
 use axionomy_view::{
-    DebugOntology, LeaderboardView, ObjectiveView, PlaybackError, ProposalView, Scene,
-    SceneAnchorView, SceneEntityView, SceneGlyphView, SceneMetricView, SceneToneView,
+    DebugOntology, ExchangeFrame, LeaderboardView, ObjectiveView, PlaybackError, ProposalView,
+    Scene, SceneAnchorView, SceneEntityView, SceneGlyphView, SceneMetricView, SceneToneView,
     SearchObservationKindView, SearchObservationView, SearchTelemetryView, TelemetryKindView,
     TelemetryPointView, ViewDocument, ViewDocumentMetadata, ViewId, ViewOntology, ViewSource,
-    derive_document, derive_model, derive_proposal,
+    derive_document, derive_document_with_frames, derive_model, derive_proposal,
 };
-use std::{fmt::Debug, hash::Hash, ops::ControlFlow};
+use std::{collections::BTreeSet, fmt::Debug, hash::Hash, ops::ControlFlow};
 
 pub(super) fn visual_entity(
     key: impl Into<String>,
@@ -766,6 +766,13 @@ pub(crate) fn run(
         _ => unreachable!("catalog and dispatch must agree"),
     }?;
     progress.ensure()?;
+    for document in &artifact.documents {
+        if !progress.has_frames(&document.id) {
+            for frame in &document.frames {
+                progress.frame(&document.id, frame);
+            }
+        }
+    }
     for (offset, document) in artifact.documents.iter().enumerate() {
         let _ = progress.emit(
             "artifact",
@@ -798,6 +805,7 @@ pub(super) struct ProgressSink<'a> {
     sequence: u64,
     error: Option<ServiceError>,
     observations: Vec<SearchObservationView>,
+    framed_documents: BTreeSet<String>,
 }
 
 impl<'a> ProgressSink<'a> {
@@ -808,6 +816,7 @@ impl<'a> ProgressSink<'a> {
             sequence: 0,
             error: None,
             observations: Vec::new(),
+            framed_documents: BTreeSet::new(),
         }
     }
 
@@ -871,6 +880,17 @@ impl<'a> ProgressSink<'a> {
     pub fn observations(&self) -> &[SearchObservationView] {
         &self.observations
     }
+
+    pub fn frame(&mut self, document_id: &str, frame: &ExchangeFrame) {
+        if self.error.is_none() {
+            self.framed_documents.insert(document_id.into());
+            self.observer.frame(document_id, frame.clone());
+        }
+    }
+
+    fn has_frames(&self, document_id: &str) -> bool {
+        self.framed_documents.contains(document_id)
+    }
 }
 
 fn observation_kind(phase: &str) -> SearchObservationKindView {
@@ -930,7 +950,7 @@ where
     Ok(document)
 }
 
-pub(super) fn document_with_leaderboards<AccountId, A, RateId, Role, N>(
+pub(super) fn document_with_leaderboards_observed<AccountId, A, RateId, Role, N>(
     spec: DocumentSpec<'_>,
     initial: &Economy<AccountId, A, RateId, Role, N>,
     goal: &Goal<AccountId, A, N>,
@@ -938,6 +958,7 @@ pub(super) fn document_with_leaderboards<AccountId, A, RateId, Role, N>(
     objectives: Vec<ObjectiveView>,
     scene: StudioScene<AccountId, A, RateId, Role, N>,
     leaderboards: StudioLeaderboards<AccountId, A, RateId, Role, N>,
+    mut on_frame: impl FnMut(&ExchangeFrame),
 ) -> Result<ViewDocument, PlaybackError>
 where
     AccountId: Clone + Debug + Eq + Hash + Ord + StudioLabel,
@@ -948,7 +969,7 @@ where
 {
     let ontology = StudioOntology::<AccountId, A, RateId, Role, N>::new(spec.problem, Some(scene))
         .with_leaderboards(leaderboards);
-    let mut document = derive_document(
+    let mut document = derive_document_with_frames(
         ViewDocumentMetadata {
             id: format!("{}:{}", spec.problem, spec.strategy),
             title: spec.title.into(),
@@ -962,6 +983,7 @@ where
         trace,
         &ontology,
         objectives,
+        &mut on_frame,
     )?;
     document.model = Some(derive_model(initial, goal, &ontology));
     Ok(document)

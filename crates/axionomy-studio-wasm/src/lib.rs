@@ -5,7 +5,7 @@
 //! Rust-owned contracts. The JavaScript Worker only schedules and transports.
 
 use axionomy_service::{ReferenceService, RunControl, RunObserver, RunRequest, ServiceProgress};
-use axionomy_view::{SearchObservationView, StudioEvent};
+use axionomy_view::{ExchangeFrame, SearchObservationView, StudioEvent};
 use js_sys::Function;
 use wasm_bindgen::prelude::*;
 
@@ -85,6 +85,17 @@ impl RunObserver for WorkerObserver<'_> {
             run_id: self.run_id.into(),
             sequence,
             observation,
+        });
+    }
+
+    fn frame(&mut self, document_id: &str, frame: ExchangeFrame) {
+        let sequence = self.sequence();
+        let _ = self.event(StudioEvent::FrameAppended {
+            run_id: self.run_id.into(),
+            sequence,
+            document_id: document_id.into(),
+            frame_index: frame.index,
+            frame,
         });
     }
 }

@@ -167,6 +167,10 @@ struct RunRecord {
 enum WorkerUpdate {
     Progress(ServiceProgress),
     Observation(SearchObservationView),
+    Frame {
+        document_id: String,
+        frame: axionomy_view::ExchangeFrame,
+    },
 }
 
 struct ChannelObserver {
@@ -182,6 +186,13 @@ impl RunObserver for ChannelObserver {
         let _ = self
             .updates
             .blocking_send(WorkerUpdate::Observation(observation));
+    }
+
+    fn frame(&mut self, document_id: &str, frame: axionomy_view::ExchangeFrame) {
+        let _ = self.updates.blocking_send(WorkerUpdate::Frame {
+            document_id: document_id.into(),
+            frame,
+        });
     }
 }
 
@@ -561,6 +572,18 @@ async fn execute_run(
                     })
                     .await;
             }
+            WorkerUpdate::Frame { document_id, frame } => {
+                let frame_index = frame.index;
+                record
+                    .emit(StudioEvent::FrameAppended {
+                        run_id: run_id.clone(),
+                        sequence: record.sequence(),
+                        document_id,
+                        frame_index,
+                        frame,
+                    })
+                    .await;
+            }
         }
     }
 
@@ -595,17 +618,6 @@ async fn publish_artifact(
         .iter()
         .map(|document| document.frames.len() as u64)
         .sum();
-    for document in &artifact.documents {
-        for frame in &document.frames {
-            record
-                .emit(StudioEvent::FrameAppended {
-                    run_id: run_id.into(),
-                    sequence: record.sequence(),
-                    frame_index: frame.index,
-                })
-                .await;
-        }
-    }
     state
         .artifacts
         .write()
@@ -925,7 +937,7 @@ mod tests {
             .await
             .unwrap();
         let catalog: ProblemList = response_json(response).await;
-        assert_eq!(catalog.problems.len(), 12);
+        assert_eq!(catalog.problems.len(), 13);
     }
 
     #[test]

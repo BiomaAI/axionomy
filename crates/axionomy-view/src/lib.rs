@@ -1167,7 +1167,9 @@ pub enum StudioEvent {
     FrameAppended {
         run_id: String,
         sequence: u64,
+        document_id: String,
         frame_index: u64,
+        frame: ExchangeFrame,
     },
     ArtifactPublished {
         run_id: String,
@@ -1423,6 +1425,28 @@ where
     N: QuantityScalar,
     O: ViewOntology<AccountId, A, RateId, Role, N>,
 {
+    derive_document_with_frames(metadata, initial, trace, ontology, objectives, |_| {})
+}
+
+/// Replays a trace and reports each verified frame as soon as it is derived.
+/// The callback is transport-neutral and cannot influence economic state.
+pub fn derive_document_with_frames<AccountId, A, RateId, Role, N, O, F>(
+    metadata: ViewDocumentMetadata,
+    initial: &Economy<AccountId, A, RateId, Role, N>,
+    trace: &Trace<RateId, Role, AccountId, N>,
+    ontology: &O,
+    objectives: Vec<ObjectiveView>,
+    mut on_frame: F,
+) -> Result<ViewDocument, PlaybackError>
+where
+    AccountId: Clone + Eq + Hash + Ord,
+    A: Clone + Eq + Hash + Ord,
+    RateId: Clone + Eq + Hash + Ord,
+    Role: Clone + Ord,
+    N: QuantityScalar,
+    O: ViewOntology<AccountId, A, RateId, Role, N>,
+    F: FnMut(&ExchangeFrame),
+{
     let mut economy = initial.fork();
     let initial = snapshot(0, &economy, ontology);
     let mut frames = Vec::with_capacity(trace.exchanges().len());
@@ -1441,7 +1465,7 @@ where
         let exchange = exchange_view(exchange, ontology);
         let receipt = receipt_view(&receipt, ontology);
         let cues = frame_cues(&exchange, &receipt);
-        frames.push(ExchangeFrame {
+        let frame = ExchangeFrame {
             index,
             exchange,
             assessment,
@@ -1450,7 +1474,9 @@ where
             after,
             cues,
             observations: Vec::new(),
-        });
+        };
+        on_frame(&frame);
+        frames.push(frame);
     }
 
     Ok(ViewDocument {

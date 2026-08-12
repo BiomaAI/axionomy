@@ -6,7 +6,7 @@
 
 mod adapters;
 
-use axionomy_view::{ProposalView, SearchObservationView, ViewDocument};
+use axionomy_view::{ExchangeFrame, ProposalView, SearchObservationView, ViewDocument};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -166,6 +166,8 @@ pub trait RunObserver {
     fn progress(&mut self, progress: ServiceProgress);
 
     fn observation(&mut self, _observation: SearchObservationView) {}
+
+    fn frame(&mut self, _document_id: &str, _frame: ExchangeFrame) {}
 }
 
 impl<F> RunObserver for F
@@ -429,6 +431,7 @@ mod tests {
                 "connect_four" => (15, 50, 200),
                 "mission" => (6, 5, 39),
                 "perishables" => (10, 5, 13),
+                "work_league" => (60, 20, 900),
                 other => panic!("missing showcase pressure threshold for {other}"),
             };
             assert!(
