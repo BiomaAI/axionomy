@@ -15,6 +15,9 @@ cargo run -p axionomy-studio-server --bin axionomy-studio
 ```
 
 The default address is `127.0.0.1:3000`; override it with `AXIONOMY_STUDIO_BIND`. If `studio/dist` exists, the server hosts it with an SPA fallback. The OpenAPI contract is available at `/api/openapi.json`.
+On startup the command prints clickable Studio, health, and OpenAPI URLs using
+the address and port the operating system actually bound. It also reports when
+the frontend has not been built and prints the command needed to build it.
 
 Regenerate the committed browser contract and the complete static catalog with:
 
