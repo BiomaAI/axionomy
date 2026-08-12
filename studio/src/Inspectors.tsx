@@ -1,35 +1,84 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import type { ExchangeFrame, ProposalView, ViewDocument, ViewSnapshot } from "./api";
 
-export function PanelHeading({ kicker, title, aside }: { kicker: string; title: string; aside?: string }) {
-  return <div className="panel-heading"><div><span>{kicker}</span><h2>{title}</h2></div>{aside && <small>{aside}</small>}</div>;
+export function PanelHeading({ kicker, title, aside, action }: { kicker: string; title: string; aside?: string; action?: ReactNode }) {
+  return <div className="panel-heading"><div><span>{kicker}</span><h2>{title}</h2></div><div className="panel-heading-side">{aside && <small>{aside}</small>}{action}</div></div>;
 }
 
-export function Accounts({ snapshot, previous, focus }: { snapshot: ViewSnapshot; previous?: ViewSnapshot; focus?: string }) {
+type QuantityValue = { asset: { key: string; label: string }; quantity: string };
+type BalanceRow = { balance: QuantityValue; prior?: string; changed: boolean; added: boolean; live: boolean };
+
+// liveKeys: `${account}|${asset}` pairs that ever change across the whole trace.
+// null means the document has no trace, so no live/config split applies.
+export function Accounts({ snapshot, previous, focus, liveKeys }: { snapshot: ViewSnapshot; previous?: ViewSnapshot; focus?: string; liveKeys?: Set<string> | null }) {
   useEffect(() => {
     if (!focus) return;
     document.getElementById(`account-${encodeURIComponent(focus)}`)?.scrollIntoView({ behavior: "smooth", block: "nearest" });
   }, [focus, snapshot.index]);
+  const cards = useMemo(() => {
+    const mapped = snapshot.accounts.map((account) => {
+      const prevAccount = previous?.accounts.find((candidate) => candidate.account.key === account.account.key);
+      const rows: BalanceRow[] = account.balances.map((balance) => {
+        const prior = prevAccount?.balances.find((candidate) => candidate.asset.key === balance.asset.key)?.quantity;
+        return {
+          balance,
+          prior,
+          changed: prior !== undefined && prior !== balance.quantity,
+          added: prior === undefined && snapshot.index > 0,
+          live: !liveKeys || liveKeys.has(`${account.account.key}|${balance.asset.key}`),
+        };
+      });
+      const ghosts = (prevAccount?.balances ?? []).filter((prev) => !account.balances.some((candidate) => candidate.asset.key === prev.asset.key));
+      return { account: account.account, rows, ghosts };
+    });
+    if (!liveKeys) return mapped;
+    const weight = (card: (typeof mapped)[number]) => (card.rows.some((row) => row.live) || card.ghosts.length > 0 ? 0 : 1);
+    return [...mapped].sort((a, b) => weight(a) - weight(b));
+  }, [snapshot, previous, liveKeys]);
+  const row = (entry: BalanceRow) => <div className={`balance ${entry.changed || entry.added ? "changed" : ""}`} key={entry.balance.asset.key}>
+    <span title={entry.balance.asset.key}>{entry.balance.asset.label}</span>
+    <strong>{entry.balance.quantity}</strong>
+    {entry.changed && <small>{entry.prior} →</small>}
+    {entry.added && <small>new</small>}
+  </div>;
   return <div className="accounts-list">
-    {snapshot.accounts.map((account) => (
-      <article id={`account-${encodeURIComponent(account.account.key)}`} className={`account-card ${focus === account.account.key ? "focused" : ""}`} key={account.account.key}>
-        <h3><span className="account-icon">{account.account.label.slice(0, 1)}</span>{account.account.label}</h3>
+    {cards.map(({ account, rows, ghosts }) => {
+      const live = rows.filter((entry) => entry.live);
+      const config = rows.filter((entry) => !entry.live);
+      const configOnly = live.length === 0 && ghosts.length === 0 && config.length > 0;
+      return <article id={`account-${encodeURIComponent(account.key)}`} className={`account-card ${focus === account.key ? "focused" : ""} ${configOnly ? "config-only" : ""}`} key={account.key}>
+        <h3><span className="account-icon">{account.label.slice(0, 1)}</span>{account.label}</h3>
         <div className="balances">
-          {account.balances.map((balance) => {
-            const prior = previous?.accounts.find((candidate) => candidate.account.key === account.account.key)?.balances.find((candidate) => candidate.asset.key === balance.asset.key)?.quantity;
-            const changed = prior !== undefined && prior !== balance.quantity;
-            const added = prior === undefined && snapshot.index > 0;
-            return <div className={`balance ${changed || added ? "changed" : ""}`} key={balance.asset.key}>
-              <span title={balance.asset.key}>{balance.asset.label}</span>
-              <strong>{balance.quantity}</strong>
-              {changed && <small>{prior} →</small>}
-              {added && <small>new</small>}
-            </div>;
-          })}
-          {account.balances.length === 0 && <div className="muted">No balances</div>}
+          {live.map(row)}
+          {ghosts.map((ghost) => <div className="balance ghost" key={`ghost:${ghost.asset.key}`}>
+            <span title={ghost.asset.key}>{ghost.asset.label}</span>
+            <strong>0</strong>
+            <small>{ghost.quantity} →</small>
+          </div>)}
+          {config.length > 0 && <details className="config-assets">
+            <summary>{config.length} configuration {config.length === 1 ? "asset" : "assets"}</summary>
+            {config.map(row)}
+          </details>}
+          {rows.length === 0 && ghosts.length === 0 && <div className="muted">No balances</div>}
         </div>
-      </article>
-    ))}
+      </article>;
+    })}
+  </div>;
+}
+
+export function StepTicker({ frame, onProof }: { frame?: ExchangeFrame; onProof?: () => void }) {
+  if (!frame) return <div className="empty-state">This is the initial state. Press play and every exchange narrates here as it applies.</div>;
+  return <div className="step-ticker">
+    <div className="ticker-feed" key={frame.index}>
+      {frame.cues.map((cue, index) => <article key={`${cue.kind}:${index}`} className={`cue-${cue.kind}`} style={{ "--cue-i": index } as CSSProperties}>
+        <strong>{cue.label}</strong>
+        {cue.details.map((detail) => <span key={detail}>{detail}</span>)}
+      </article>)}
+    </div>
+    <div className="ticker-foot">
+      <span>{frame.exchange.rate.label} · {frame.exchange.units} {String(frame.exchange.units) === "1" ? "unit" : "units"}</span>
+      {onProof && <button type="button" onClick={onProof}>Full proof ↓</button>}
+    </div>
   </div>;
 }
 
@@ -84,7 +133,6 @@ function Assessment({ assessment, expectedRejection = false }: { assessment: Exc
   </div>;
 }
 
-type QuantityValue = { asset: { key: string; label: string }; quantity: string };
 function DeltaGroup({ label, kind, values }: { label: string; kind: string; values: QuantityValue[] }) {
   if (values.length === 0) return null;
   return <div className={`delta-group ${kind}`}><span>{label}</span><div>{values.map((value) => <b key={value.asset.key}>{value.asset.label} <em>×{value.quantity}</em></b>)}</div></div>;

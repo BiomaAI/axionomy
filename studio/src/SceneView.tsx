@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from "react";
 import {
   Background,
   Controls,
@@ -8,6 +9,7 @@ import {
   type Edge,
   type Node,
   type NodeProps,
+  type ReactFlowInstance,
 } from "@xyflow/react";
 import type { Scene, SceneEntity, SceneSurface } from "./api";
 import { SceneIcon } from "./SceneIcon";
@@ -57,6 +59,20 @@ function RichNode({ data }: NodeProps) {
 const nodeTypes = { rich: RichNode };
 
 function GraphScene({ scene, surface, onAccount }: { scene: Scene; surface: GraphSurface; onAccount?: (account: string) => void }) {
+  const host = useRef<HTMLDivElement>(null);
+  const [flow, setFlow] = useState<ReactFlowInstance | null>(null);
+  // The stage sizes the canvas (viewport height, theater mode, breakpoints),
+  // so the picture re-fits whenever its container changes size.
+  useEffect(() => {
+    if (!flow || !host.current) return;
+    let pending = 0;
+    const observer = new ResizeObserver(() => {
+      cancelAnimationFrame(pending);
+      pending = requestAnimationFrame(() => { void flow.fitView({ padding: 0.15 }); });
+    });
+    observer.observe(host.current);
+    return () => { observer.disconnect(); cancelAnimationFrame(pending); };
+  }, [flow]);
   const positions = new Map(surface.nodes.map((node) => [node.id.key, { x: node.x ?? 0, y: node.y ?? 0 }]));
   const entityAtNode = (key: string) => scene.entities.find((entity) => entity.anchor.kind === "graph_node" && entity.anchor.node === key && entity.id.key === key)
     ?? scene.entities.find((entity) => entity.anchor.kind === "graph_node" && entity.anchor.node === key);
@@ -109,8 +125,8 @@ function GraphScene({ scene, surface, onAccount }: { scene: Scene; surface: Grap
       markerEnd: { type: MarkerType.ArrowClosed },
     };
   });
-  return <div className="graph-scene" role="img" aria-label={scene.title}>
-    <ReactFlow nodes={nodes} edges={edges} nodeTypes={nodeTypes} fitView minZoom={0.25} maxZoom={2} nodesConnectable={false} nodesDraggable={false} elementsSelectable onNodeClick={(_, node) => { const account = (node.data as RichNodeData).entity?.account; if (account) onAccount?.(account); }}>
+  return <div className="graph-scene" ref={host} role="img" aria-label={scene.title}>
+    <ReactFlow nodes={nodes} edges={edges} nodeTypes={nodeTypes} fitView fitViewOptions={{ padding: 0.15 }} minZoom={0.25} maxZoom={2} nodesConnectable={false} nodesDraggable={false} elementsSelectable onInit={setFlow} onNodeClick={(_, node) => { const account = (node.data as RichNodeData).entity?.account; if (account) onAccount?.(account); }}>
       <Background gap={22} size={1} />
       <Controls showInteractive={false} />
     </ReactFlow>

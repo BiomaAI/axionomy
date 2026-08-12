@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useRef, useState, type CSSProperties } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useQuery } from "@tanstack/react-query";
 import "@xyflow/react/dist/style.css";
 import logoDark from "../../assets/axionomy-logo-dark.webp";
@@ -23,6 +23,7 @@ import {
   Observations,
   PanelHeading,
   ProposalInspector,
+  StepTicker,
   Telemetry,
   Transition,
   useSnapshot,
@@ -146,6 +147,27 @@ export function App() {
   const snapshot = useSnapshot(document, position);
   const previous = useSnapshot(document, Math.max(0, position - 1));
   const frame = position > 0 ? document?.frames[position - 1] : undefined;
+  const worldPanel = useRef<HTMLDivElement>(null);
+
+  // `${account}|${asset}` pairs that ever change across this document's trace.
+  // Everything else is configuration and folds away in the ledger.
+  const liveKeys = useMemo(() => {
+    if (!document || document.frames.length === 0) return null;
+    const flatten = (snap: ViewSnapshot) => {
+      const map = new Map<string, string>();
+      for (const account of snap.accounts) for (const balance of account.balances) map.set(`${account.account.key}|${balance.asset.key}`, balance.quantity);
+      return map;
+    };
+    const keys = new Set<string>();
+    let prior = flatten(document.initial);
+    for (const step of document.frames) {
+      const next = flatten(step.after);
+      for (const [key, value] of next) if (prior.get(key) !== value) keys.add(key);
+      for (const key of prior.keys()) if (!next.has(key)) keys.add(key);
+      prior = next;
+    }
+    return keys;
+  }, [document]);
 
   const urlState = (overrides: StudioUrlState = {}) => ({
     problem: overrides.problem ?? problemKey,
@@ -376,9 +398,11 @@ export function App() {
       <div className="run-message">{active ? "A newly computed result will replace the current view." : engine.canRun ? "The CLI, HTTP API, MCP server, and Studio all run this same problem the same way." : "No engine running — you can still replay the saved results."}</div>
     </section>
 
-    {active && <RunActivity launching={launching} run={run} events={events} elapsedMs={elapsedMs} />}
-    {completion && <CompletionBanner notice={completion} onDismiss={() => setCompletion(undefined)} />}
-    {linkNotice && <div className="link-notice" role="status">{linkNotice}<button type="button" onClick={() => setLinkNotice(undefined)}>Dismiss</button></div>}
+    {(active || completion || linkNotice) && <div className="status-layer">
+      {active && <RunActivity launching={launching} run={run} events={events} elapsedMs={elapsedMs} />}
+      {completion && <CompletionBanner notice={completion} onDismiss={() => setCompletion(undefined)} />}
+      {linkNotice && <div className="link-notice" role="status">{linkNotice}<button type="button" onClick={() => setLinkNotice(undefined)}>Dismiss</button></div>}
+    </div>}
 
     {problem && <section className="problem-context"><div><span>{familyLabel(problem.family)}</span><div className="problem-copy"><p>{problem.summary}</p><small><strong>{instance?.label ?? artifact?.instance.label}</strong>{instance?.description ?? artifact?.instance.description}{modelCounts && <em>{modelCounts}</em>}</small></div></div><div>{problem.capabilities.map((capability) => <span key={capability}>{capabilityLabel(capability)}</span>)}</div></section>}
     {error && <div className="error-banner" role="alert">{error}</div>}
@@ -388,27 +412,54 @@ export function App() {
       <StrategyComparison artifact={artifact} selected={document.id} onSelect={selectDocument} />
       <section className="document-heading"><div><span className="eyebrow">{artifact.instance.label} · {document.source.label} · {document.id}{freshArtifactId === artifact.id ? " · just computed" : ""}</span><h1>{document.title}</h1><p>{document.description}</p></div><div className="objective-pills">{document.objectives.map((objective) => <div className="objective" key={objective.key}><span>{objective.label}</span><strong>{objective.value}</strong><small>{objective.direction}</small></div>)}</div></section>
       <div className="view-tabs" role="tablist" aria-label="Studio evidence mode"><button type="button" role="tab" aria-selected={viewMode === "solve"} onClick={() => selectView("solve")}>How it was solved <small>{active ? "live" : document.solve_observations.length}</small></button><button type="button" role="tab" aria-selected={viewMode === "replay"} onClick={() => selectView("replay")}>Step-by-step replay <small>{document.frames.length}</small></button></div>
-      {viewMode === "solve" ? <SolveWorkspace observations={active ? events.flatMap((event) => event.kind === "search_observation" ? [event.observation] : []) : document.solve_observations} active={active} /> : <>
-      <PlaybackControls position={position} count={document.frames.length} playing={playing} delay={playbackDelay} onDelay={setPlaybackDelay} onPosition={setPosition} onPlaying={(next) => { if (next && position >= document.frames.length) setPosition(0); setPlaying(next); }} frame={frame} />
+      {viewMode === "solve" ? <SolveWorkspace observations={active ? events.flatMap((event) => event.kind === "search_observation" ? [event.observation] : []) : document.solve_observations} active={active} /> : (() => {
+        const surface = snapshot.scene?.surface;
+        const sparseScene = surface?.kind === "graph" && surface.nodes.length <= 6;
+        const hasBoards = snapshot.leaderboards.length > 0;
+        const hasAnalysis = document.pareto_fronts.length > 0 || document.telemetry.length > 0;
+        const hasObservations = document.observations.length > 0;
+        // Token travel keeps pace with the playhead instead of a fixed 280ms.
+        const travelMs = Math.max(160, Math.min(560, Math.round(playbackDelay * 0.55)));
+        const toggleTheater = () => {
+          const node = worldPanel.current;
+          if (!node) return;
+          if (window.document.fullscreenElement) void window.document.exitFullscreen();
+          else void node.requestFullscreen().catch(() => undefined);
+        };
+        const showProof = () => window.document.querySelector(".transition-panel")?.scrollIntoView({ behavior: "smooth", block: "start" });
+        return <>
+      <PlaybackControls position={position} count={document.frames.length} playing={playing} delay={playbackDelay} onDelay={setPlaybackDelay} onPosition={setPosition} onPlaying={(next) => { if (next && position >= document.frames.length) setPosition(0); setPlaying(next); }} frame={frame} onShare={copyLink} shared={copied} />
 
-      {snapshot.leaderboards.length > 0 && <LeaderboardDock document={document} snapshot={snapshot} previous={previous} position={position} selectedKey={leaderboardKey} onSelect={(key) => { writeUrl(urlState({ leaderboard: key }), "push"); setLeaderboardKey(key); }} onParticipant={setFocusedAccount} />}
-
-      <section className="workspace-grid">
-        <div className="panel world-panel"><PanelHeading kicker="Picture (illustration only)" title={snapshot.scene?.title ?? "Problem picture"} aside={snapshot.scene?.surface.kind} /><SceneView scene={snapshot.scene} onAccount={setFocusedAccount} /></div>
-        <div className="panel accounts-panel"><PanelHeading kicker="Source of truth" title="Accounts & assets" aside={focusedAccount ? "linked from picture" : `${snapshot.accounts.length} accounts`} /><Accounts snapshot={snapshot} previous={previous} focus={focusedAccount} /></div>
+      <section className={`stage${hasBoards ? "" : " no-boards"}${sparseScene ? " scene-sparse" : ""}`} style={{ "--travel-ms": `${travelMs}ms` } as CSSProperties}>
+        <div className="panel world-panel" ref={worldPanel}>
+          <PanelHeading kicker="Picture (illustration only)" title={snapshot.scene?.title ?? "Problem picture"} aside={snapshot.scene?.surface.kind} action={<button type="button" className="theater-btn" onClick={toggleTheater} title="Theater mode" aria-label="Toggle theater mode">⛶</button>} />
+          <SceneView scene={snapshot.scene} onAccount={setFocusedAccount} />
+        </div>
+        {hasBoards && <LeaderboardDock document={document} snapshot={snapshot} previous={previous} position={position} selectedKey={leaderboardKey} onSelect={(key) => { writeUrl(urlState({ leaderboard: key }), "push"); setLeaderboardKey(key); }} onParticipant={setFocusedAccount} />}
+        <div className="truth-rail">
+          <div className="panel ticker-panel">
+            <PanelHeading kicker="This step" title={position === 0 ? "Initial state" : frame?.cues[0]?.label ?? frame?.exchange.rate.label ?? "Exchange"} aside={`${position} / ${document.frames.length}`} />
+            <StepTicker frame={frame} onProof={showProof} />
+          </div>
+          <div className="panel accounts-panel">
+            <PanelHeading kicker="Source of truth" title="Accounts & assets" aside={focusedAccount ? "linked from picture" : `${snapshot.accounts.length} accounts`} />
+            <Accounts snapshot={snapshot} previous={previous} focus={focusedAccount} liveKeys={liveKeys} />
+          </div>
+        </div>
       </section>
 
-      <section className="evidence-grid">
+      <section className={`evidence-grid${hasAnalysis ? "" : " no-analysis"}`}>
         <div className="panel transition-panel"><PanelHeading kicker="One step" title={frame?.exchange.rate.label ?? "Initial state"} /><Transition frame={frame} /></div>
         <div className="panel proposal-panel"><PanelHeading kicker="Rule checks" title="Moves that should be refused" aside={`${document.proposals.length} ${document.proposals.length === 1 ? "check" : "checks"}`} /><ProposalInspector proposals={document.proposals} /></div>
-        <div className="panel analysis-panel"><PanelHeading kicker="Tradeoffs" title={document.pareto_fronts[0]?.title ?? "Search evidence"} /><Suspense fallback={<div className="empty-state">Loading analysis…</div>}><ParetoChart document={document} onSelect={selectPareto} /></Suspense><Telemetry document={document} /></div>
+        {hasAnalysis && <div className="panel analysis-panel"><PanelHeading kicker="Tradeoffs" title={document.pareto_fronts[0]?.title ?? "Search evidence"} /><Suspense fallback={<div className="empty-state">Loading analysis…</div>}><ParetoChart document={document} onSelect={selectPareto} /></Suspense><Telemetry document={document} /></div>}
       </section>
 
-      <section className="definition-grid">
+      <section className={`definition-grid${hasObservations ? "" : " no-observations"}`}>
         <div className="panel model-panel"><PanelHeading kicker="The rules" title="Rates, roles, goals & invariants" aside={`${document.model?.rates.length ?? 0} rates`} /><ModelExplorer document={document} /></div>
-        <div className="panel observation-panel"><PanelHeading kicker="Who can see what" title="Actor-relative observations" aside={`${document.observations.length} views`} /><Observations document={document} /></div>
+        {hasObservations && <div className="panel observation-panel"><PanelHeading kicker="Who can see what" title="Actor-relative observations" aside={`${document.observations.length} views`} /><Observations document={document} /></div>}
       </section>
-      </>}
+      </>;
+      })()}
     </main> : <div className="loading">Loading saved problem result…</div>}
 
     <footer>The picture explains. The accounts, rules, and replay prove.</footer>
@@ -524,8 +575,8 @@ function phaseLabel(phase: string): string {
 }
 
 function StrategyComparison({ artifact, selected, onSelect }: { artifact: RunArtifact; selected: string; onSelect: (id: string) => void }) {
-  return <section className="strategy-comparison" aria-label="Outcome comparison">
-    <div className="comparison-heading"><span>Compare outcomes</span><strong>Every strategy and what it cost, side by side</strong></div>
+  return <details className="strategy-comparison" aria-label="Outcome comparison">
+    <summary><span>Compare outcomes</span><strong>Every strategy and what it cost, side by side</strong><i aria-hidden="true">▸</i></summary>
     <div className="comparison-scroll"><table><thead><tr><th>Outcome</th><th>Result</th><th>Trace</th><th>Search evidence</th></tr></thead><tbody>{artifact.documents.map((candidate) => {
       const series = candidate.telemetry.find((entry) => entry.algorithm !== "Model size");
       const work = series ? [...series.points].reverse().find((point) => ["generated", "expanded", "iteration", "sample"].includes(point.kind)) : undefined;
@@ -536,7 +587,7 @@ function StrategyComparison({ artifact, selected, onSelect }: { artifact: RunArt
         <td>{series ? `${series.algorithm} · ${series.exact ? "exact" : "sampled"}${work ? ` · ${work.value} ${work.kind.replaceAll("_", " ")}` : ""}` : "Replay only"}</td>
       </tr>;
     })}</tbody></table></div>
-  </section>;
+  </details>;
 }
 
 function LeaderboardDock({ document, snapshot, previous, position, selectedKey, onSelect, onParticipant }: { document: ViewDocument; snapshot: ViewSnapshot; previous?: ViewSnapshot; position: number; selectedKey?: string; onSelect: (key: string) => void; onParticipant: (account: string) => void }) {
@@ -544,7 +595,7 @@ function LeaderboardDock({ document, snapshot, previous, position, selectedKey, 
   if (!selected) return null;
   const previousBoard = previous?.leaderboards.find((leaderboard) => leaderboard.key === selected.key);
   const snapshots = [document.initial, ...document.frames.slice(0, position).map((frame) => frame.after)];
-  return <section className="leaderboard-dock" aria-label="Replay-derived leaderboards">
+  return <section className="leaderboard-dock rail" aria-label="Replay-derived leaderboards">
     <header><div><span>Live comparative outcomes</span><strong>Who is winning depends on what you value</strong></div><div className="leaderboard-step">Economic step <b>{snapshot.index}</b></div></header>
     <div className="leaderboard-tabs" role="tablist">{snapshot.leaderboards.map((leaderboard) => <button type="button" role="tab" aria-selected={leaderboard.key === selected.key} key={leaderboard.key} onClick={() => onSelect(leaderboard.key)}>{leaderboard.label}<small>{leaderboard.direction}</small></button>)}</div>
     <div className="leaderboard-explanation"><strong>{selected.label}</strong><span>{selected.description}</span></div>
@@ -603,8 +654,8 @@ function formatDuration(milliseconds: number): string {
   return seconds < 10 ? `${seconds.toFixed(1)} s` : `${Math.round(seconds)} s`;
 }
 
-function PlaybackControls({ position, count, playing, delay, onDelay, onPosition, onPlaying, frame }: { position: number; count: number; playing: boolean; delay: number; onDelay: (delay: number) => void; onPosition: (position: number) => void; onPlaying: (playing: boolean) => void; frame?: ExchangeFrame }) {
-  return <section className="playback"><div className="transport"><button aria-label="Previous exchange" onClick={() => onPosition(Math.max(0, position - 1))}>←</button><button className="play" aria-label={playing ? "Pause" : "Play"} onClick={() => onPlaying(!playing)}>{playing ? "Ⅱ" : "▶"}</button><button aria-label="Next exchange" onClick={() => onPosition(Math.min(count, position + 1))}>→</button></div><div className="scrubber"><div className="scrubber-label"><span>{position === 0 ? "Initial state" : frame?.cues[0]?.label ?? frame?.exchange.rate.label}</span><strong>{position} / {count}</strong></div><input aria-label="Trace position" type="range" min="0" max={count} value={position} onChange={(event) => onPosition(Number(event.target.value))} /></div><label className="playback-speed"><span>Speed</span><select aria-label="Playback speed" value={delay} onChange={(event) => onDelay(Number(event.target.value))}><option value={1600}>0.5×</option><option value={900}>0.75×</option><option value={650}>1×</option><option value={325}>2×</option><option value={160}>4×</option></select></label><div className="replay-proof"><span>✓</span> replay verified</div></section>;
+function PlaybackControls({ position, count, playing, delay, onDelay, onPosition, onPlaying, frame, onShare, shared }: { position: number; count: number; playing: boolean; delay: number; onDelay: (delay: number) => void; onPosition: (position: number) => void; onPlaying: (playing: boolean) => void; frame?: ExchangeFrame; onShare?: () => void; shared?: boolean }) {
+  return <section className="playback"><div className="transport"><button aria-label="Previous exchange" onClick={() => onPosition(Math.max(0, position - 1))}>←</button><button className="play" aria-label={playing ? "Pause" : "Play"} onClick={() => onPlaying(!playing)}>{playing ? "Ⅱ" : "▶"}</button><button aria-label="Next exchange" onClick={() => onPosition(Math.min(count, position + 1))}>→</button></div><div className="scrubber"><div className="scrubber-label"><span>{position === 0 ? "Initial state" : frame?.cues[0]?.label ?? frame?.exchange.rate.label}</span><strong>{position} / {count}</strong></div><input aria-label="Trace position" type="range" min="0" max={count} value={position} onChange={(event) => onPosition(Number(event.target.value))} /></div><label className="playback-speed"><span>Speed</span><select aria-label="Playback speed" value={delay} onChange={(event) => onDelay(Number(event.target.value))}><option value={1600}>0.5×</option><option value={900}>0.75×</option><option value={650}>1×</option><option value={325}>2×</option><option value={160}>4×</option></select></label><div className="kbd-hint" aria-hidden="true"><b>Space</b> play · <b>←</b><b>→</b> step</div>{onShare && <button type="button" className="share-mini" onClick={onShare}>{shared ? "Link copied ✓" : "Copy link"}</button>}<div className="replay-proof"><span>✓</span> replay verified</div></section>;
 }
 
 function eventMessage(event: StudioEvent): string {
