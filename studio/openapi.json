@@ -1972,6 +1972,12 @@
           "anchor": {
             "$ref": "#/components/schemas/SceneAnchorView"
           },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SceneEvidenceRefView"
+            }
+          },
           "glyph": {
             "$ref": "#/components/schemas/SceneGlyphView"
           },
@@ -2000,6 +2006,47 @@
           "glyph",
           "anchor",
           "tone"
+        ]
+      },
+      "SceneEvidenceRefView": {
+        "description": "Exact economic evidence illustrated by a disposable scene entity.\n\nThese references never create state or authorize a transition. They let a\nrenderer connect replay-derived motion and emphasis back to the accounts\nand balances that prove why the picture changed.",
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "account": {
+                "type": "string"
+              },
+              "kind": {
+                "type": "string",
+                "const": "account"
+              }
+            },
+            "required": [
+              "kind",
+              "account"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "account": {
+                "type": "string"
+              },
+              "asset": {
+                "type": "string"
+              },
+              "kind": {
+                "type": "string",
+                "const": "balance"
+              }
+            },
+            "required": [
+              "kind",
+              "account",
+              "asset"
+            ]
+          }
         ]
       },
       "SceneGlyphView": {

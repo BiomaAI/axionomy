@@ -578,12 +578,30 @@ export interface components {
         SceneEntityView: {
             account?: string | null;
             anchor: components["schemas"]["SceneAnchorView"];
+            evidence?: components["schemas"]["SceneEvidenceRefView"][];
             glyph: components["schemas"]["SceneGlyphView"];
             id: components["schemas"]["ViewId"];
             /** @default [] */
             metrics: components["schemas"]["SceneMetricView"][];
             status?: string | null;
             tone: components["schemas"]["SceneToneView"];
+        };
+        /**
+         * @description Exact economic evidence illustrated by a disposable scene entity.
+         *
+         *     These references never create state or authorize a transition. They let a
+         *     renderer connect replay-derived motion and emphasis back to the accounts
+         *     and balances that prove why the picture changed.
+         */
+        SceneEvidenceRefView: {
+            account: string;
+            /** @constant */
+            kind: "account";
+        } | {
+            account: string;
+            asset: string;
+            /** @constant */
+            kind: "balance";
         };
         /**
          * @description A semantic icon key owned by the portable Rust contract. The browser maps

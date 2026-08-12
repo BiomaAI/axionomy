@@ -309,6 +309,18 @@ pub struct SceneMetricView {
     pub previous: Option<String>,
 }
 
+/// Exact economic evidence illustrated by a disposable scene entity.
+///
+/// These references never create state or authorize a transition. They let a
+/// renderer connect replay-derived motion and emphasis back to the accounts
+/// and balances that prove why the picture changed.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum SceneEvidenceRefView {
+    Account { account: String },
+    Balance { account: String, asset: String },
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct SceneEntityView {
     pub id: ViewId,
@@ -319,6 +331,8 @@ pub struct SceneEntityView {
     pub status: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub account: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub evidence: Vec<SceneEvidenceRefView>,
     #[serde(default)]
     pub metrics: Vec<SceneMetricView>,
 }
@@ -462,6 +476,7 @@ impl Scene {
                 tone: inferred_tone(&node.classes),
                 status: node.classes.first().cloned(),
                 account: None,
+                evidence: Vec::new(),
                 metrics: Vec::new(),
             })
             .collect::<Vec<_>>();
@@ -522,6 +537,7 @@ impl Scene {
                 tone: inferred_tone(&cell.classes),
                 status: cell.classes.first().cloned(),
                 account: None,
+                evidence: Vec::new(),
                 metrics: Vec::new(),
             })
             .collect::<Vec<_>>();
@@ -562,6 +578,7 @@ impl Scene {
                 tone: inferred_tone(&cell.classes),
                 status: cell.classes.first().cloned(),
                 account: None,
+                evidence: Vec::new(),
                 metrics: Vec::new(),
             })
             .collect::<Vec<_>>();
@@ -598,6 +615,7 @@ impl Scene {
                 tone: inferred_tone(&span.classes),
                 status: span.classes.first().cloned(),
                 account: None,
+                evidence: Vec::new(),
                 metrics: vec![SceneMetricView {
                     key: "duration".into(),
                     label: "Duration".into(),
@@ -720,6 +738,41 @@ impl Scene {
         Ok(())
     }
 
+    /// Verifies that every presentation-only evidence link resolves into the
+    /// replayed snapshot that owns this scene.
+    pub fn validate_evidence(&self, accounts: &[AccountView]) -> Result<(), SceneValidationError> {
+        for reference in self.entities.iter().flat_map(|entity| &entity.evidence) {
+            match reference {
+                SceneEvidenceRefView::Account { account } => {
+                    if !accounts
+                        .iter()
+                        .any(|candidate| candidate.account.key == *account)
+                    {
+                        return Err(SceneValidationError::UnknownEvidence(account.clone()));
+                    }
+                }
+                SceneEvidenceRefView::Balance { account, asset } => {
+                    let Some(owner) = accounts
+                        .iter()
+                        .find(|candidate| candidate.account.key == *account)
+                    else {
+                        return Err(SceneValidationError::UnknownEvidence(account.clone()));
+                    };
+                    if !owner
+                        .balances
+                        .iter()
+                        .any(|balance| balance.asset.key == *asset)
+                    {
+                        return Err(SceneValidationError::UnknownEvidence(format!(
+                            "{account}/{asset}"
+                        )));
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
     fn validate_anchor(&self, anchor: &SceneAnchorView) -> Result<(), SceneValidationError> {
         let valid = match (anchor, &self.surface) {
             (SceneAnchorView::Unanchored, _) => true,
@@ -764,6 +817,8 @@ pub enum SceneValidationError {
     UnknownAnchor(String),
     #[error("scene contains an out-of-bounds coordinate")]
     OutOfBounds,
+    #[error("scene contains an unknown economic evidence reference: {0}")]
+    UnknownEvidence(String),
 }
 
 fn inferred_glyph(label: &str, classes: &[String]) -> SceneGlyphView {
@@ -2119,6 +2174,44 @@ mod tests {
             "Missing account binding for role `Actor`."
         );
         assert_eq!(proposal.assessment.issues[0].subjects[0].key, "role:actor");
+    }
+
+    #[test]
+    fn scene_evidence_must_resolve_to_an_exact_snapshot_balance() {
+        let accounts = vec![AccountView {
+            account: ViewId::new("account:agent", "Agent"),
+            balances: vec![AssetQuantityView {
+                asset: ViewId::new("asset:ready", "Ready"),
+                quantity: ExactQuantity("1".into()),
+            }],
+        }];
+        let mut scene = Scene::graph(
+            "Evidence",
+            vec![GraphNodeView {
+                id: ViewId::new("node:agent", "Agent"),
+                classes: Vec::new(),
+                x: Some(0.0),
+                y: Some(0.0),
+            }],
+            Vec::new(),
+            None,
+        );
+        scene.entities[0].evidence = vec![SceneEvidenceRefView::Balance {
+            account: "account:agent".into(),
+            asset: "asset:ready".into(),
+        }];
+        assert_eq!(scene.validate_evidence(&accounts), Ok(()));
+
+        scene.entities[0].evidence = vec![SceneEvidenceRefView::Balance {
+            account: "account:agent".into(),
+            asset: "asset:missing".into(),
+        }];
+        assert_eq!(
+            scene.validate_evidence(&accounts),
+            Err(SceneValidationError::UnknownEvidence(
+                "account:agent/asset:missing".into()
+            ))
+        );
     }
 
     #[test]

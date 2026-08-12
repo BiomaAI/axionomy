@@ -28,6 +28,7 @@ pub(super) fn visual_entity(
         tone,
         status,
         account: None,
+        evidence: Vec::new(),
         metrics: Vec::new(),
     }
 }
@@ -1068,6 +1069,15 @@ pub(super) fn artifact(
                     problem: descriptor.key.clone(),
                     message: format!("invalid scene at snapshot {}: {error}", snapshot.index),
                 })?;
+                scene
+                    .validate_evidence(&snapshot.accounts)
+                    .map_err(|error| ServiceError::Problem {
+                        problem: descriptor.key.clone(),
+                        message: format!(
+                            "invalid scene evidence at snapshot {}: {error}",
+                            snapshot.index
+                        ),
+                    })?;
             }
         }
         if document.frames.iter().any(|frame| frame.cues.is_empty()) {
