@@ -6,7 +6,8 @@
 //! economy or manufacture a score.
 
 use axionomy::{
-    Account, Basket, Economy, EconomyBuilder, Exchange, Goal, Quantity, Rate, Trace, basket,
+    Account, Basket, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Quantity, Rate,
+    Trace, basket,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -608,6 +609,34 @@ pub fn league(profile: Profile, lineup: [Policy; 4]) -> League {
                     .distinct(Role::Agent, Role::Facility),
             );
     }
+
+    builder = builder
+        .invariant(
+            LinearInvariant::new("league energy accounting")
+                .weight(Asset::Energy, 1)
+                .weight(Asset::SpentEnergy, 1)
+                .weight(Asset::ChargeSupply, 1),
+        )
+        .invariant(
+            LinearInvariant::new("league material accounting")
+                .weight(Asset::Material, 1)
+                .weight(Asset::MaterialSpent, 1),
+        )
+        .invariant(
+            LinearInvariant::new("league time accounting")
+                .weight(Asset::TimeRemaining, 1)
+                .weight(Asset::ElapsedTime, 1),
+        )
+        .invariant(
+            LinearInvariant::new("worker operational condition")
+                .weight(Asset::Operational, 1)
+                .weight(Asset::Damage, 1),
+        )
+        .invariant(
+            LinearInvariant::new("repair supply accounting")
+                .weight(Asset::RepairSupply, 1)
+                .weight(Asset::SpentRepairSupply, 1),
+        );
 
     League {
         initial: builder.build().expect("work league model is valid"),

@@ -33,23 +33,24 @@ they bypass the example's trusted action helper.
 
 ## Conformance matrix
 
-| Capability | Maze | Sokoban | Exact cover | Workshop | Job shop | Rescue | Bridge | Marketplace | Logistics | Connect Four | Mission | Perishables |
-| --- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| Multi-account atomic rewrite | ✓ | ✓ |  |  | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| Preserved facts/catalysts | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| Declared invariants | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| Resource objective | ✓ |  |  | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |  | ✓ | ✓ |
-| Exact Pareto front | ✓ |  |  | ✓ | ✓ |  | ✓ | ✓ |  |  |  | ✓ |
-| Approximate policy front |  |  |  |  |  | ✓ |  |  | ✓ |  | ✓ |  |
-| Infeasible instance |  | ✓ | ✓ |  | ✓ |  |  | ✓ | ✓ |  | ✓ | ✓ |
-| Specialized proposer |  |  | Algorithm X |  | Branch optimizer | Scenario/MC evaluator | Auction | Assessment clearing | Monte Carlo/MCTS | MCTS/minimax oracle | ISMCTS/scenario evaluator | Event agenda/index |
-| Generic algorithm | BFS/A*/Dijkstra/Pareto | BFS | BFS | BFS/best-first/Pareto | Best-first/Pareto | Rollout/MC/Pareto | BFS/Pareto | Pareto | Rollout/MC/Pareto | MCTS | ISMCTS/Rollout/MC/Pareto/RL | Pareto |
-| Hidden or stochastic state |  |  |  |  |  | ✓ |  |  | ✓ |  | ✓ |  |
-| Multi-agent resolution |  |  |  |  |  |  | ✓ | ✓ |  | ✓ | ✓ |  |
-| Long-horizon trajectory |  |  |  |  |  |  |  |  | ✓ | ✓ |  | ✓ |
-| Learning trajectory |  |  |  |  |  |  |  |  |  |  | ✓ |  |
-| Observation-scoped tree |  |  |  |  |  |  |  |  |  |  | ✓ |  |
-| Deterministic replay test | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Capability | Maze | Sokoban | Exact cover | Workshop | Job shop | Rescue | Bridge | Marketplace | Logistics | Connect Four | Mission | Perishables | Work League |
+| --- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| Multi-account atomic rewrite | ✓ | ✓ |  |  | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Preserved facts/catalysts | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Declared invariants | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |  |
+| Resource objective | ✓ |  |  | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |  | ✓ | ✓ | ✓ |
+| Exact Pareto front | ✓ |  |  | ✓ | ✓ |  | ✓ | ✓ |  |  |  | ✓ |  |
+| Approximate or derived Pareto comparison |  |  |  |  |  | ✓ |  |  | ✓ |  | ✓ |  | ✓ |
+| Infeasible instance |  | ✓ | ✓ |  | ✓ |  |  | ✓ | ✓ |  | ✓ | ✓ |  |
+| Specialized proposer |  |  | Algorithm X |  | Branch optimizer | Scenario/MC evaluator | Auction | Assessment clearing | Monte Carlo/MCTS | MCTS/minimax oracle | ISMCTS/scenario evaluator | Event agenda/index | Competing seeded policies |
+| Generic algorithm | BFS/A*/Dijkstra/Pareto | BFS | BFS | BFS/best-first/Pareto | Best-first/Pareto | Rollout/MC/Pareto | BFS/Pareto | Pareto | Rollout/MC/Pareto | MCTS | ISMCTS/Rollout/MC/Pareto/RL | Pareto | Replay-derived vector comparison |
+| Hidden or stochastic state |  |  |  |  |  | ✓ |  |  | ✓ |  | ✓ |  | ✓ |
+| Multi-agent resolution |  |  |  |  |  |  | ✓ | ✓ |  | ✓ | ✓ |  | ✓ |
+| Long-horizon trajectory |  |  |  |  |  |  |  |  | ✓ | ✓ |  | ✓ | ✓ |
+| Per-step leaderboards |  |  |  |  |  |  |  |  |  |  |  |  | ✓ |
+| Learning trajectory |  |  |  |  |  |  |  |  |  |  | ✓ |  |  |
+| Observation-scoped tree |  |  |  |  |  |  |  |  |  |  | ✓ |  |  |
+| Deterministic replay test | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 
 ## Runnable examples
 
@@ -70,6 +71,7 @@ cargo run -p axionomy-problems --example logistics
 cargo run -p axionomy-problems --example connect_four
 cargo run -p axionomy-problems --example mission
 cargo run -p axionomy-problems --example perishables
+cargo run -p axionomy-problems --example work_league
 ```
 
 The examples emit structured `tracing` events at `INFO` by default. Set
@@ -120,6 +122,7 @@ catalog, so those two public explanations must change together:
 | Connect Four | Standard 7×6 board and 69 four-cell win certificates; 226 concrete rates replace the old 1,282-rate 4×4 projection |
 | Mission | 16 hidden joint scenarios, private observations, belief filtering, information exchange, hazard response, Monte Carlo, and ISMCTS |
 | Perishables | 10,000 fungible claims, cohort-level decay, refrigeration, outage effects, indexed deadlines, and an eight-point storage frontier |
+| Work League | Four autonomous workers, 12 finite jobs, eight locations, shared repair/recycling facilities, seeded failures, 60+ atomic transitions, and six replay-derived standings |
 
 **Model size** telemetry records accounts, rules, trace steps, rule-check
 probes, and compared alternatives for every result. The service test also
@@ -740,6 +743,82 @@ facts and only proposes ordinary spoil exchanges.
 - Bounded policy discretization can coexist with an arbitrary-unit fungible
   exchange rate.
 
+## 13. Autonomous Work League
+
+Source: `crates/axionomy-problems/src/work_league.rs`
+
+### Specification
+
+Four autonomous workers—Atlas, Bolt, Coda, and Delta—contend for twelve jobs
+distributed across four work sites and three shared facilities. A mixed field
+assigns a different proposal policy to each worker: Sprinter, Steward, Value
+Hunter, and Resilient. Policy identity is itself an asset. It may guide the
+caller's proposals, but it grants no authority and cannot directly install an
+outcome.
+
+Every job account owns a unique identity and one availability token. Claiming
+a job atomically consumes availability, assigns the job to one identified
+worker, and gives that worker the corresponding claim. Work then requires
+location, energy, time, material, operational condition, and the live claim.
+Rush, Lean, and Safe modes consume different resource baskets and expose
+different encoded success/failure weights. Nature resolves an attempted job
+through an ordinary multi-account exchange. Success transfers contract value
+and completion assets; failure records the attempt, converts `Operational`
+into `Damage`, and returns the still-assigned job to a pending state.
+
+A damaged worker must travel to the workshop and atomically exchange shared
+repair supply for restored condition. Steward policies may travel to the
+recycler and convert residual waste into recycled waste while consuming time
+and energy. Movement, repair, charging, and recycling are all rates; there is
+no external vehicle position, job owner, facility lock, resource meter, random
+result, or score store.
+
+The Showcase match produces at least sixty replay-verified exchanges. At every
+snapshot, the presentation ontology independently derives six standings:
+
+- Contract value.
+- Jobs completed per elapsed tick.
+- Value per energy-plus-material unit.
+- Least residual waste, with no-work agents ineligible.
+- Successful jobs per attempt.
+- Non-dominance over value, completions, waste, and elapsed time.
+
+Those rankings are intentionally allowed to disagree. Earned value, elapsed
+time, resource expenditure, waste, attempts, and completions are authoritative
+assets because they affect and result from mechanics. Rank, eligibility,
+trend, and Pareto membership are disposable comparisons over the selected
+replayed snapshot.
+
+### Required results
+
+- Showcase contains four agents, twelve finite jobs, eight locations, and at
+  least fifty accepted exchanges; Stress doubles the job pool and materially
+  lengthens the replay.
+- Every job is claimed once and every terminal job account satisfies the
+  encoded completion goal.
+- Agent and job identity assets reject rebinding a valid-looking claim to the
+  wrong participant.
+- Failure, repair, retry, recycling, and shared-facility effects replay through
+  ordinary atomic exchanges.
+- Energy, material, time, worker condition, and repair supply invariants hold
+  across the complete match.
+- Every snapshot carries all six leaderboards, and at least two different
+  agents lead the final set of objectives.
+- Native SSE and browser Wasm publish each derived frame with the same
+  leaderboard state retained by the completed portable artifact.
+
+### API pressure
+
+- Competitive multi-agent allocation without a privileged scheduler.
+- Several honest definitions of winning instead of one universal utility.
+- Eligibility, exact ratios, ties, rank changes, and Pareto comparison as a
+  generic view contract.
+- Live frame publication without moving transport state into the economy.
+- Shared URLs that restore a precise problem, outcome, replay step, and
+  leaderboard on both a server and static GitHub Pages.
+- Concrete-rate expansion pressure that strengthens the case for future typed
+  parameterized rate schemas without prematurely changing kernel semantics.
+
 ## Cross-problem acceptance tests
 
 The repository test suite additionally verifies:
@@ -820,5 +899,5 @@ limits clearly:
    or domain-proven pruning; approximate epsilon dominance must never be
    mislabeled as exhaustive Pareto truth.
 
-Any future abstraction must continue to pass all twelve problems without
+Any future abstraction must continue to pass all thirteen problems without
 moving authoritative meaning into solver callbacks or an external world.

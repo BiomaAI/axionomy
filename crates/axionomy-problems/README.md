@@ -35,6 +35,7 @@ cargo run -p axionomy-problems --example logistics
 cargo run -p axionomy-problems --example connect_four
 cargo run -p axionomy-problems --example mission
 cargo run -p axionomy-problems --example perishables
+cargo run -p axionomy-problems --example work_league
 ```
 
 The perishables fixture also demonstrates structural fungibility: thousands of
@@ -55,7 +56,7 @@ RUST_LOG=debug cargo run -p axionomy-problems --example maze
 Logging is initialized only by these example binaries. Problem modules,
 search, and kernel libraries never install a global subscriber.
 
-Replay-derived presentation adapters for all twelve problems live uniformly
+Replay-derived presentation adapters for all thirteen problems live uniformly
 in `axionomy-service`. Keeping them out of this crate prevents a singled-out
 viewer from becoming part of a problem's semantics: these modules remain pure
 domain encodings and strategy helpers usable without Studio.
