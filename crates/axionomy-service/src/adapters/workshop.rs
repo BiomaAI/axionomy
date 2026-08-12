@@ -3,7 +3,8 @@ use axionomy_problems::workshop::{self, AccountId, Asset, ObjectiveKey, RateId, 
 use axionomy_search::pareto::Objective;
 use axionomy_view::{
     FrontierCompletenessView, GraphEdgeView, GraphNodeView, ObjectiveAxisView,
-    ObjectiveDirectionView, ParetoFrontView, ParetoPointView, TelemetryKindView, ViewId,
+    ObjectiveDirectionView, ParetoFrontView, ParetoPointView, SceneAnchorView, SceneGlyphView,
+    SceneToneView, TelemetryKindView, ViewId,
 };
 
 pub(super) fn build(
@@ -234,7 +235,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             source: "wood".into(),
             target: "chair".into(),
             label: Some("batch recipe".into()),
-            classes: vec!["selected".into()],
+            classes: Vec::new(),
         },
         GraphEdgeView {
             id: "waste".into(),
@@ -251,10 +252,36 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             classes: Vec::new(),
         },
     ];
-    Some(Scene::graph(
-        "Materials and recipe flow",
-        nodes,
-        edges,
-        None,
-    ))
+    let stocks = assets.into_iter().filter_map(|(key, label, asset)| {
+        let quantity = world.balance(&AccountId::Workshop, &asset);
+        if quantity.is_zero() {
+            return None;
+        }
+        let mut entity = link_balance(
+            visual_entity(
+                format!("stock:{key}"),
+                label,
+                match asset {
+                    Asset::Tool => SceneGlyphView::Tool,
+                    Asset::Chair => SceneGlyphView::Product,
+                    Asset::Waste => SceneGlyphView::Material,
+                    _ => SceneGlyphView::Material,
+                },
+                SceneAnchorView::GraphNode { node: key.into() },
+                if matches!(asset, Asset::Chair) {
+                    SceneToneView::Success
+                } else if matches!(asset, Asset::Waste) {
+                    SceneToneView::Warning
+                } else {
+                    SceneToneView::Active
+                },
+                Some(format!("{quantity} available")),
+            ),
+            "workshop:account:workshop",
+            format!("workshop:asset:{asset:?}").to_ascii_lowercase(),
+        );
+        entity.metrics = vec![visual_metric(key, label, quantity, Some("units"))];
+        Some(entity)
+    });
+    Some(Scene::graph("Materials and recipe flow", nodes, edges, None).with_entities(stocks))
 }

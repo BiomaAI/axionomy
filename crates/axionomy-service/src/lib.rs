@@ -297,6 +297,36 @@ mod tests {
         }
     }
 
+    fn has_linked_entity_change(document: &ViewDocument) -> bool {
+        document.frames.iter().any(|frame| {
+            let Some(before) = frame.before.scene.as_ref() else {
+                return false;
+            };
+            let Some(after) = frame.after.scene.as_ref() else {
+                return false;
+            };
+            before.entities.iter().any(|left| {
+                !left.evidence.is_empty()
+                    && after
+                        .entities
+                        .iter()
+                        .find(|right| right.id.key == left.id.key)
+                        .map_or(true, |right| {
+                            left.anchor != right.anchor
+                                || left.status != right.status
+                                || left.tone != right.tone
+                                || left.metrics != right.metrics
+                        })
+            }) || after.entities.iter().any(|right| {
+                !right.evidence.is_empty()
+                    && !before
+                        .entities
+                        .iter()
+                        .any(|left| left.id.key == right.id.key)
+            })
+        })
+    }
+
     #[test]
     fn catalog_covers_every_canonical_problem() {
         let catalog = ReferenceService.catalog();
@@ -419,6 +449,32 @@ mod tests {
                         .first()
                         .is_some_and(|cue| cue.label == frame.exchange.rate.label)
             }));
+            if matches!(
+                problem.key.as_str(),
+                "maze"
+                    | "bridge"
+                    | "workshop"
+                    | "marketplace"
+                    | "logistics"
+                    | "mission"
+                    | "rescue"
+                    | "work_league"
+            ) {
+                assert!(
+                    std::iter::once(&selected.initial)
+                        .chain(selected.frames.iter().map(|frame| &frame.after))
+                        .filter_map(|snapshot| snapshot.scene.as_ref())
+                        .flat_map(|scene| &scene.entities)
+                        .any(|entity| !entity.evidence.is_empty()),
+                    "{} graph has no entity linked to economic evidence",
+                    problem.key
+                );
+                assert!(
+                    has_linked_entity_change(selected),
+                    "{} graph has no replay-visible linked entity change",
+                    problem.key
+                );
+            }
         }
     }
 

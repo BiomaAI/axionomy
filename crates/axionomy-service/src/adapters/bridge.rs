@@ -5,7 +5,8 @@ use axionomy_problems::bridge::{
 };
 use axionomy_view::{
     FrontierCompletenessView, GraphEdgeView, GraphNodeView, ObjectiveAxisView,
-    ObjectiveDirectionView, ParetoFrontView, ParetoPointView, TelemetryKindView, ViewId,
+    ObjectiveDirectionView, ParetoFrontView, ParetoPointView, SceneAnchorView, SceneGlyphView,
+    SceneToneView, TelemetryKindView, ViewId,
 };
 
 pub(super) fn build(
@@ -330,29 +331,71 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         y: Some(130.0),
     })
     .collect();
-    let edges = [AgentId::A, AgentId::B]
-        .into_iter()
-        .map(|agent| {
-            let east = !world
-                .balance(&AccountId::Agent(agent), &Asset::At(Side::East))
-                .is_zero();
-            GraphEdgeView {
-                id: format!("agent:{agent:?}"),
-                source: if east { "bridge".into() } else { "west".into() },
-                target: if east { "east".into() } else { "bridge".into() },
-                label: Some(format!("Agent {agent:?}")),
-                classes: if east {
-                    vec!["completed".into()]
-                } else {
-                    Vec::new()
+    let completed = [AgentId::A, AgentId::B].into_iter().any(|agent| {
+        !world
+            .balance(&AccountId::Agent(agent), &Asset::At(Side::East))
+            .is_zero()
+    });
+    let edges = vec![
+        GraphEdgeView {
+            id: "crossing:enter".into(),
+            source: "west".into(),
+            target: "bridge".into(),
+            label: Some("claim capacity".into()),
+            classes: if completed {
+                vec!["completed".into()]
+            } else {
+                Vec::new()
+            },
+        },
+        GraphEdgeView {
+            id: "crossing:exit".into(),
+            source: "bridge".into(),
+            target: "east".into(),
+            label: Some("cross atomically".into()),
+            classes: if completed {
+                vec!["completed".into()]
+            } else {
+                Vec::new()
+            },
+        },
+    ];
+    let agents = [AgentId::A, AgentId::B].into_iter().map(|agent| {
+        let east = !world
+            .balance(&AccountId::Agent(agent), &Asset::At(Side::East))
+            .is_zero();
+        let mut entity = link_account(
+            visual_entity(
+                format!("traveler:{agent:?}"),
+                format!("Agent {agent:?}"),
+                SceneGlyphView::Agent,
+                SceneAnchorView::GraphNode {
+                    node: if east { "east".into() } else { "west".into() },
                 },
-            }
-        })
-        .collect();
-    Some(Scene::graph(
-        "Agents competing for one lane",
-        nodes,
-        edges,
-        None,
-    ))
+                if east {
+                    SceneToneView::Success
+                } else {
+                    SceneToneView::Active
+                },
+                Some(if east { "crossed" } else { "waiting" }.into()),
+            ),
+            format!("bridge:account:agent-{agent:?}").to_ascii_lowercase(),
+        );
+        entity.metrics = vec![
+            visual_metric(
+                "credit",
+                "Credit",
+                bridge::credit(world, agent),
+                Some("credits"),
+            ),
+            visual_metric(
+                "energy",
+                "Energy",
+                world.balance(&AccountId::Agent(agent), &Asset::Energy),
+                Some("units"),
+            ),
+        ];
+        entity
+    });
+    Some(Scene::graph("Agents competing for one lane", nodes, edges, None).with_entities(agents))
 }

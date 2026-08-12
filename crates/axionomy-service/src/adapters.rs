@@ -6,10 +6,11 @@ use crate::{
 use axionomy::{Economy, Goal, QuantityScalar, Trace};
 use axionomy_view::{
     DebugOntology, ExchangeFrame, LeaderboardView, ObjectiveView, PlaybackError, ProposalView,
-    Scene, SceneAnchorView, SceneEntityView, SceneGlyphView, SceneMetricView, SceneToneView,
-    SearchObservationKindView, SearchObservationView, SearchTelemetryView, TelemetryKindView,
-    TelemetryPointView, ViewDocument, ViewDocumentMetadata, ViewId, ViewOntology, ViewSource,
-    derive_document, derive_document_with_frames, derive_model, derive_proposal,
+    Scene, SceneAnchorView, SceneEntityView, SceneEvidenceRefView, SceneGlyphView, SceneMetricView,
+    SceneToneView, SearchObservationKindView, SearchObservationView, SearchTelemetryView,
+    TelemetryKindView, TelemetryPointView, ViewDocument, ViewDocumentMetadata, ViewId,
+    ViewOntology, ViewSource, derive_document, derive_document_with_frames, derive_model,
+    derive_proposal,
 };
 use std::{collections::BTreeSet, fmt::Debug, hash::Hash, ops::ControlFlow};
 
@@ -46,6 +47,32 @@ pub(super) fn visual_metric(
         unit: unit.map(str::to_owned),
         previous: None,
     }
+}
+
+pub(super) fn link_account(
+    mut entity: SceneEntityView,
+    account: impl Into<String>,
+) -> SceneEntityView {
+    let account = account.into();
+    entity.account = Some(account.clone());
+    entity
+        .evidence
+        .push(SceneEvidenceRefView::Account { account });
+    entity
+}
+
+pub(super) fn link_balance(
+    mut entity: SceneEntityView,
+    account: impl Into<String>,
+    asset: impl Into<String>,
+) -> SceneEntityView {
+    let account = account.into();
+    entity.account = Some(account.clone());
+    entity.evidence.push(SceneEvidenceRefView::Balance {
+        account,
+        asset: asset.into(),
+    });
+    entity
 }
 
 mod bridge;

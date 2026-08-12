@@ -193,28 +193,30 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         classes: vec!["uncertain".into()],
     })
     .collect();
-    let mut agent = visual_entity(
-        "agent:responder",
-        "Responder",
-        SceneGlyphView::Agent,
-        focus.map_or(SceneAnchorView::Unanchored, |location| {
-            SceneAnchorView::GraphNode {
-                node: format!("location:{location:?}"),
-            }
-        }),
-        SceneToneView::Active,
-        Some(
-            if world
-                .balance(&AccountId::Agent, &Asset::AwaitingObservation)
-                .is_zero()
-            {
-                "acting".into()
-            } else {
-                "awaiting observation".into()
-            },
+    let mut agent = link_account(
+        visual_entity(
+            "agent:responder",
+            "Responder",
+            SceneGlyphView::Agent,
+            focus.map_or(SceneAnchorView::Unanchored, |location| {
+                SceneAnchorView::GraphNode {
+                    node: format!("location:{location:?}"),
+                }
+            }),
+            SceneToneView::Active,
+            Some(
+                if world
+                    .balance(&AccountId::Agent, &Asset::AwaitingObservation)
+                    .is_zero()
+                {
+                    "acting".into()
+                } else {
+                    "awaiting observation".into()
+                },
+            ),
         ),
+        "rescue:account:agent",
     );
-    agent.account = Some("rescue:account:agent".into());
     agent.metrics = vec![visual_metric(
         "energy",
         "Energy",
@@ -236,15 +238,19 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             .is_zero()
     })
     .map(|location| {
-        visual_entity(
-            format!("belief:{location:?}"),
-            format!("Belief: {location:?}"),
-            SceneGlyphView::Information,
-            SceneAnchorView::GraphNode {
-                node: format!("location:{location:?}"),
-            },
-            SceneToneView::Uncertain,
-            Some("actor belief".into()),
+        link_balance(
+            visual_entity(
+                format!("belief:{location:?}"),
+                format!("Belief: {location:?}"),
+                SceneGlyphView::Information,
+                SceneAnchorView::GraphNode {
+                    node: format!("location:{location:?}"),
+                },
+                SceneToneView::Uncertain,
+                Some("actor belief".into()),
+            ),
+            "rescue:account:agent",
+            format!("rescue:asset:belief-{location:?}").to_ascii_lowercase(),
         )
     });
     Some(

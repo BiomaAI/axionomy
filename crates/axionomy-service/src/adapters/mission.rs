@@ -271,32 +271,34 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                     .balance(&AccountId::Agent(agent), &Asset::At(*location))
                     .is_zero()
             });
-        let mut entity = visual_entity(
-            format!("agent:{agent:?}"),
-            format!("{agent:?}"),
-            if agent == AgentId::Scout {
-                SceneGlyphView::Sensor
-            } else {
-                SceneGlyphView::Agent
-            },
-            location.map_or(SceneAnchorView::Unanchored, |location| {
-                SceneAnchorView::GraphNode {
-                    node: format!("location:{location:?}"),
-                }
-            }),
-            SceneToneView::Active,
-            Some(
-                if world
-                    .balance(&AccountId::Agent(agent), &Asset::Injured)
-                    .is_zero()
-                {
-                    "ready".into()
+        let mut entity = link_account(
+            visual_entity(
+                format!("agent:{agent:?}"),
+                format!("{agent:?}"),
+                if agent == AgentId::Scout {
+                    SceneGlyphView::Sensor
                 } else {
-                    "injured".into()
+                    SceneGlyphView::Agent
                 },
+                location.map_or(SceneAnchorView::Unanchored, |location| {
+                    SceneAnchorView::GraphNode {
+                        node: format!("location:{location:?}"),
+                    }
+                }),
+                SceneToneView::Active,
+                Some(
+                    if world
+                        .balance(&AccountId::Agent(agent), &Asset::Injured)
+                        .is_zero()
+                    {
+                        "ready".into()
+                    } else {
+                        "injured".into()
+                    },
+                ),
             ),
+            format!("mission:account:agent-{agent:?}").to_ascii_lowercase(),
         );
-        entity.account = Some(format!("mission:account:agent-{agent:?}").to_ascii_lowercase());
         entity.metrics = vec![visual_metric(
             format!("energy-{agent:?}"),
             "Energy",

@@ -4,7 +4,8 @@ use axionomy_problems::maze::{self, AccountId, Asset, Node, ObjectiveKey, RateId
 use axionomy_search::pareto::Objective;
 use axionomy_view::{
     FrontierCompletenessView, GraphEdgeView, GraphNodeView, ObjectiveAxisView,
-    ObjectiveDirectionView, ParetoFrontView, ParetoPointView, TelemetryKindView, ViewId,
+    ObjectiveDirectionView, ParetoFrontView, ParetoPointView, SceneAnchorView, SceneGlyphView,
+    SceneToneView, TelemetryKindView, ViewId,
 };
 
 pub(super) fn build(
@@ -308,10 +309,54 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             _ => None,
         })
         .collect();
-    Some(Scene::graph(
-        "Rooms and passages",
-        graph_nodes,
-        graph_edges,
-        focus.map(node_key),
-    ))
+    let agent = focus.map(|node| {
+        let mut entity = link_account(
+            visual_entity(
+                "agent:explorer",
+                "Explorer",
+                SceneGlyphView::Agent,
+                SceneAnchorView::GraphNode {
+                    node: node_key(node),
+                },
+                if node == Node::Exit {
+                    SceneToneView::Success
+                } else {
+                    SceneToneView::Active
+                },
+                Some(
+                    if node == Node::Exit {
+                        "escaped"
+                    } else {
+                        "exploring"
+                    }
+                    .into(),
+                ),
+            ),
+            "maze:account:agent",
+        );
+        entity.metrics = vec![
+            visual_metric(
+                "energy",
+                "Energy",
+                world.balance(&AccountId::Agent, &Asset::Energy),
+                Some("units"),
+            ),
+            visual_metric(
+                "time",
+                "Time",
+                world.balance(&AccountId::Agent, &Asset::Time),
+                Some("ticks"),
+            ),
+        ];
+        entity
+    });
+    Some(
+        Scene::graph(
+            "Rooms and passages",
+            graph_nodes,
+            graph_edges,
+            focus.map(node_key),
+        )
+        .with_entities(agent),
+    )
 }

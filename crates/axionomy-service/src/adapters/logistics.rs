@@ -324,15 +324,17 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
     } else {
         SceneAnchorView::Unanchored
     };
-    let mut vehicle = visual_entity(
-        "vehicle:fleet-1",
-        "Vehicle 1",
-        SceneGlyphView::Vehicle,
-        vehicle_anchor.clone(),
-        SceneToneView::Active,
-        traveling.map(|route| format!("traveling {route:?}")),
+    let mut vehicle = link_account(
+        visual_entity(
+            "vehicle:fleet-1",
+            "Vehicle 1",
+            SceneGlyphView::Vehicle,
+            vehicle_anchor.clone(),
+            SceneToneView::Active,
+            traveling.map(|route| format!("traveling {route:?}")),
+        ),
+        "logistics:account:vehicle",
     );
-    vehicle.account = Some("logistics:account:vehicle".into());
     vehicle.metrics = vec![
         visual_metric(
             "fuel",
@@ -375,15 +377,17 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 "waiting",
             )
         };
-        let mut entity = visual_entity(
-            format!("order:{order:?}"),
-            format!("Order {order:?}"),
-            SceneGlyphView::Package,
-            anchor,
-            tone,
-            Some(status.into()),
+        let entity = link_account(
+            visual_entity(
+                format!("order:{order:?}"),
+                format!("Order {order:?}"),
+                SceneGlyphView::Package,
+                anchor,
+                tone,
+                Some(status.into()),
+            ),
+            format!("logistics:account:order-{order:?}").to_ascii_lowercase(),
         );
-        entity.account = Some(format!("logistics:account:order-{order:?}").to_ascii_lowercase());
         entity
     });
     let delivered = logistics::ORDERS

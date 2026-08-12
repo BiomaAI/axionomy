@@ -195,7 +195,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         nodes.push(GraphNodeView {
             id: ViewId::new(format!("buyer:{buyer:?}"), format!("Buyer {buyer:?}")),
             classes: vec!["buyer".into()],
-            x: Some(60.0),
+            x: Some(30.0),
             y: Some(60.0 + (buyer as u8 as f64) * 95.0),
         });
     }
@@ -203,15 +203,21 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         nodes.push(GraphNodeView {
             id: ViewId::new(format!("seller:{seller:?}"), format!("Seller {seller:?}")),
             classes: vec!["seller".into()],
-            x: Some(560.0),
+            x: Some(760.0),
             y: Some(60.0 + (seller as u8 as f64) * 95.0),
         });
     }
     nodes.push(GraphNodeView {
-        id: ViewId::new("platform", "Platform + tax"),
+        id: ViewId::new("platform", "Platform"),
         classes: vec!["resource".into()],
-        x: Some(310.0),
-        y: Some(80.0),
+        x: Some(510.0),
+        y: Some(30.0),
+    });
+    nodes.push(GraphNodeView {
+        id: ViewId::new("tax", "Tax authority"),
+        classes: vec!["resource".into()],
+        x: Some(650.0),
+        y: Some(30.0),
     });
     for carrier in [CarrierId::A, CarrierId::B] {
         nodes.push(GraphNodeView {
@@ -220,7 +226,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 format!("Carrier {carrier:?}"),
             ),
             classes: vec!["carrier".into()],
-            x: Some(310.0),
+            x: Some(510.0),
             y: Some(200.0 + (carrier as u8 as f64) * 85.0),
         });
     }
@@ -239,8 +245,8 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             } else {
                 vec!["resource".into()]
             },
-            x: Some(310.0),
-            y: Some(75.0 + index as f64 * 72.0),
+            x: Some(265.0),
+            y: Some(55.0 + index as f64 * 78.0),
         });
     }
     let assessed = marketplace::assessed_matches(world);
@@ -324,6 +330,25 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             }),
             classes,
         });
+        if settled {
+            for (suffix, target, label) in [
+                ("platform", "platform".to_owned(), "commission"),
+                ("tax", "tax".to_owned(), "tax"),
+                (
+                    "carrier",
+                    format!("carrier:{:?}", candidate.carrier()),
+                    "shipping fee",
+                ),
+            ] {
+                edges.push(GraphEdgeView {
+                    id: format!("settlement:{:?}:{suffix}", candidate.order()),
+                    source: format!("order:{:?}", candidate.order()),
+                    target,
+                    label: Some(label.into()),
+                    classes: vec!["completed".into()],
+                });
+            }
+        }
     }
     let order_entities = orders.iter().map(|order| {
         let settled = !world
@@ -332,21 +357,116 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 &marketplace::Asset::SettledOrder(*order),
             )
             .is_zero();
-        visual_entity(
-            format!("order-token:{order:?}"),
-            format!("Order {order:?}"),
-            SceneGlyphView::Package,
-            SceneAnchorView::GraphNode {
-                node: format!("order:{order:?}"),
-            },
-            if settled {
-                SceneToneView::Success
-            } else {
-                SceneToneView::Active
-            },
-            Some(if settled { "settled" } else { "open" }.into()),
+        link_account(
+            visual_entity(
+                format!("order-token:{order:?}"),
+                format!("Order {order:?}"),
+                SceneGlyphView::Package,
+                SceneAnchorView::GraphNode {
+                    node: if settled {
+                        "platform".into()
+                    } else {
+                        format!("order:{order:?}")
+                    },
+                },
+                if settled {
+                    SceneToneView::Success
+                } else {
+                    SceneToneView::Active
+                },
+                Some(
+                    if settled {
+                        "cleared atomically"
+                    } else {
+                        "awaiting match"
+                    }
+                    .into(),
+                ),
+            ),
+            format!("marketplace:account:order-{order:?}").to_ascii_lowercase(),
         )
     });
+    let participant_entities = [BuyerId::A, BuyerId::B, BuyerId::C]
+        .into_iter()
+        .map(|buyer| {
+            link_account(
+                visual_entity(
+                    format!("actor:buyer:{buyer:?}"),
+                    format!("Buyer {buyer:?}"),
+                    SceneGlyphView::Person,
+                    SceneAnchorView::GraphNode {
+                        node: format!("buyer:{buyer:?}"),
+                    },
+                    SceneToneView::Neutral,
+                    Some("demand".into()),
+                ),
+                format!("marketplace:account:buyer-{buyer:?}").to_ascii_lowercase(),
+            )
+        })
+        .chain(
+            [SellerId::A, SellerId::B, SellerId::C]
+                .into_iter()
+                .map(|seller| {
+                    link_account(
+                        visual_entity(
+                            format!("actor:seller:{seller:?}"),
+                            format!("Seller {seller:?}"),
+                            SceneGlyphView::Organization,
+                            SceneAnchorView::GraphNode {
+                                node: format!("seller:{seller:?}"),
+                            },
+                            SceneToneView::Neutral,
+                            Some("supply".into()),
+                        ),
+                        format!("marketplace:account:seller-{seller:?}").to_ascii_lowercase(),
+                    )
+                }),
+        )
+        .chain([CarrierId::A, CarrierId::B].into_iter().map(|carrier| {
+            link_account(
+                visual_entity(
+                    format!("actor:carrier:{carrier:?}"),
+                    format!("Carrier {carrier:?}"),
+                    SceneGlyphView::Vehicle,
+                    SceneAnchorView::GraphNode {
+                        node: format!("carrier:{carrier:?}"),
+                    },
+                    SceneToneView::Neutral,
+                    Some("capacity".into()),
+                ),
+                format!("marketplace:account:carrier-{carrier:?}").to_ascii_lowercase(),
+            )
+        }))
+        .chain(
+            [
+                (
+                    "actor:platform",
+                    "Platform",
+                    "platform",
+                    "marketplace:account:platform",
+                ),
+                (
+                    "actor:tax",
+                    "Tax authority",
+                    "tax",
+                    "marketplace:account:taxauthority",
+                ),
+            ]
+            .into_iter()
+            .map(|(id, label, node, account)| {
+                link_account(
+                    visual_entity(
+                        id,
+                        label,
+                        SceneGlyphView::Organization,
+                        SceneAnchorView::GraphNode { node: node.into() },
+                        SceneToneView::Neutral,
+                        Some("settlement role".into()),
+                    ),
+                    account,
+                )
+            }),
+        );
     let settled = orders
         .iter()
         .filter(|order| {
@@ -360,7 +480,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         .count();
     Some(
         Scene::graph("Who pays whom, if this clears", nodes, edges, None)
-            .with_entities(order_entities)
+            .with_entities(order_entities.chain(participant_entities))
             .with_metrics([
                 visual_metric(
                     "open",

@@ -477,26 +477,27 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         .map(|agent| {
             let location = work_league::location(world, agent).unwrap_or(Location::Depot);
             let policy = work_league::policy(world, agent).unwrap_or(Policy::Sprinter);
-            let mut entity = visual_entity(
-                format!("league:agent:{agent:?}").to_ascii_lowercase(),
-                format!("{agent:?} · {policy:?}"),
-                SceneGlyphView::Robot,
-                SceneAnchorView::GraphNode {
-                    node: format!("league:location:{location:?}").to_ascii_lowercase(),
-                },
-                if balance(world, agent, Asset::Damage) > 0 {
-                    SceneToneView::Danger
-                } else {
-                    SceneToneView::Active
-                },
-                Some(format!(
-                    "{} jobs · {} value",
-                    balance(world, agent, Asset::Completed),
-                    balance(world, agent, Asset::Value)
-                )),
+            let mut entity = link_account(
+                visual_entity(
+                    format!("league:agent:{agent:?}").to_ascii_lowercase(),
+                    format!("{agent:?} · {policy:?}"),
+                    SceneGlyphView::Robot,
+                    SceneAnchorView::GraphNode {
+                        node: format!("league:location:{location:?}").to_ascii_lowercase(),
+                    },
+                    if balance(world, agent, Asset::Damage) > 0 {
+                        SceneToneView::Danger
+                    } else {
+                        SceneToneView::Active
+                    },
+                    Some(format!(
+                        "{} jobs · {} value",
+                        balance(world, agent, Asset::Completed),
+                        balance(world, agent, Asset::Value)
+                    )),
+                ),
+                format!("work_league:account:agent-{agent:?}").to_ascii_lowercase(),
             );
-            entity.account =
-                Some(format!("work_league:account:agent-{agent:?}").to_ascii_lowercase());
             entity.metrics = vec![
                 visual_metric(
                     "value",
@@ -544,17 +545,19 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 format!("{} credits · risk {}", spec.value, spec.risk),
             )
         };
-        let mut entity = visual_entity(
-            format!("league:job:{}", job.0),
-            format!("Job {}", job.0),
-            SceneGlyphView::Task,
-            SceneAnchorView::GraphNode {
-                node: format!("league:location:{:?}", spec.location).to_ascii_lowercase(),
-            },
-            tone,
-            Some(status),
+        let mut entity = link_account(
+            visual_entity(
+                format!("league:job:{}", job.0),
+                format!("Job {}", job.0),
+                SceneGlyphView::Task,
+                SceneAnchorView::GraphNode {
+                    node: format!("league:location:{:?}", spec.location).to_ascii_lowercase(),
+                },
+                tone,
+                Some(status),
+            ),
+            format!("work_league:account:job-jobid-{}", job.0),
         );
-        entity.account = Some(format!("work_league:account:job-jobid-{}", job.0));
         entity.metrics = vec![
             visual_metric("value", "Value", spec.value, Some("credits")),
             visual_metric("risk", "Failure weight", spec.risk, Some("of 10")),
