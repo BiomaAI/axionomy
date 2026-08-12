@@ -5,7 +5,9 @@
 //! exchange. Policies only propose those exchanges; they cannot bypass the
 //! economy or manufacture a score.
 
-use axionomy::{Account, Basket, Economy, EconomyBuilder, Exchange, Goal, Quantity, Rate, Trace, basket};
+use axionomy::{
+    Account, Basket, Economy, EconomyBuilder, Exchange, Goal, Quantity, Rate, Trace, basket,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum AgentId {
@@ -124,14 +126,41 @@ pub enum Role {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum RateId {
-    Claim { agent: AgentId, job: JobId },
-    Move { agent: AgentId, from: Location, to: Location },
-    Begin { agent: AgentId, job: JobId, mode: WorkMode },
-    Resolve { agent: AgentId, job: JobId, mode: WorkMode, outcome: Outcome },
-    Finish { agent: AgentId, job: JobId, mode: WorkMode, outcome: Outcome },
-    Repair { agent: AgentId },
-    Recharge { agent: AgentId },
-    Recycle { agent: AgentId },
+    Claim {
+        agent: AgentId,
+        job: JobId,
+    },
+    Move {
+        agent: AgentId,
+        from: Location,
+        to: Location,
+    },
+    Begin {
+        agent: AgentId,
+        job: JobId,
+        mode: WorkMode,
+    },
+    Resolve {
+        agent: AgentId,
+        job: JobId,
+        mode: WorkMode,
+        outcome: Outcome,
+    },
+    Finish {
+        agent: AgentId,
+        job: JobId,
+        mode: WorkMode,
+        outcome: Outcome,
+    },
+    Repair {
+        agent: AgentId,
+    },
+    Recharge {
+        agent: AgentId,
+    },
+    Recycle {
+        agent: AgentId,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -178,10 +207,18 @@ pub struct League {
 }
 
 impl League {
-    pub const fn initial(&self) -> &World { &self.initial }
-    pub const fn goal(&self) -> &Goal<AccountId, Asset> { &self.goal }
-    pub fn agents(&self) -> &[AgentId] { &self.agents }
-    pub fn jobs(&self) -> &[JobSpec] { &self.jobs }
+    pub const fn initial(&self) -> &World {
+        &self.initial
+    }
+    pub const fn goal(&self) -> &Goal<AccountId, Asset> {
+        &self.goal
+    }
+    pub fn agents(&self) -> &[AgentId] {
+        &self.agents
+    }
+    pub fn jobs(&self) -> &[JobSpec] {
+        &self.jobs
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -191,23 +228,42 @@ pub struct MatchOutcome {
 }
 
 impl MatchOutcome {
-    pub const fn trace(&self) -> &Trace<RateId, Role, AccountId> { &self.trace }
-    pub const fn final_world(&self) -> &World { &self.final_world }
+    pub const fn trace(&self) -> &Trace<RateId, Role, AccountId> {
+        &self.trace
+    }
+    pub const fn final_world(&self) -> &World {
+        &self.final_world
+    }
 }
 
 pub type World = Economy<AccountId, Asset, RateId, Role>;
 pub type Action = Exchange<RateId, Role, AccountId>;
 
 pub fn mixed_lineup() -> [Policy; 4] {
-    [Policy::Sprinter, Policy::Steward, Policy::ValueHunter, Policy::Resilient]
+    [
+        Policy::Sprinter,
+        Policy::Steward,
+        Policy::ValueHunter,
+        Policy::Resilient,
+    ]
 }
 
 pub fn throughput_lineup() -> [Policy; 4] {
-    [Policy::Sprinter, Policy::Sprinter, Policy::ValueHunter, Policy::Sprinter]
+    [
+        Policy::Sprinter,
+        Policy::Sprinter,
+        Policy::ValueHunter,
+        Policy::Sprinter,
+    ]
 }
 
 pub fn sustainable_lineup() -> [Policy; 4] {
-    [Policy::Steward, Policy::Steward, Policy::Resilient, Policy::Steward]
+    [
+        Policy::Steward,
+        Policy::Steward,
+        Policy::Resilient,
+        Policy::Steward,
+    ]
 }
 
 pub fn league(profile: Profile, lineup: [Policy; 4]) -> League {
@@ -225,9 +281,18 @@ pub fn league(profile: Profile, lineup: [Policy; 4]) -> League {
                 (Asset::Policy(lineup[index]), 1),
                 (Asset::At(Location::Depot), 1),
                 (Asset::Operational, 1),
-                (Asset::Energy, if profile == Profile::Stress { 180 } else { 96 }),
-                (Asset::TimeRemaining, if profile == Profile::Stress { 420 } else { 220 }),
-                (Asset::Material, if profile == Profile::Stress { 120 } else { 64 }),
+                (
+                    Asset::Energy,
+                    if profile == Profile::Stress { 180 } else { 96 },
+                ),
+                (
+                    Asset::TimeRemaining,
+                    if profile == Profile::Stress { 420 } else { 220 },
+                ),
+                (
+                    Asset::Material,
+                    if profile == Profile::Stress { 120 } else { 64 },
+                ),
             ])),
         );
     }
@@ -236,8 +301,14 @@ pub fn league(profile: Profile, lineup: [Policy; 4]) -> League {
     for spec in &jobs {
         for mode in [WorkMode::Rush, WorkMode::Lean, WorkMode::Safe] {
             let failure = failure_weight(spec.risk, mode);
-            nature.push((Asset::OutcomeWeight(spec.id, mode, Outcome::Failure), failure));
-            nature.push((Asset::OutcomeWeight(spec.id, mode, Outcome::Success), 10 - failure));
+            nature.push((
+                Asset::OutcomeWeight(spec.id, mode, Outcome::Failure),
+                failure,
+            ));
+            nature.push((
+                Asset::OutcomeWeight(spec.id, mode, Outcome::Success),
+                10 - failure,
+            ));
         }
     }
     builder = builder
@@ -245,18 +316,26 @@ pub fn league(profile: Profile, lineup: [Policy; 4]) -> League {
             AccountId::Nature,
             Account::from(
                 Basket::try_from_entries(
-                    nature.into_iter().map(|(asset, quantity)| (asset, Quantity::new(quantity))),
+                    nature
+                        .into_iter()
+                        .map(|(asset, quantity)| (asset, Quantity::new(quantity))),
                 )
                 .expect("nature weights are unique"),
             ),
         )
         .account(
             AccountId::Facility(Facility::Workshop),
-            Account::from(basket([(Asset::RepairSupply, (profile.job_count() * 2) as u64)])),
+            Account::from(basket([(
+                Asset::RepairSupply,
+                (profile.job_count() * 2) as u64,
+            )])),
         )
         .account(
             AccountId::Facility(Facility::Charger),
-            Account::from(basket([(Asset::ChargeSupply, (profile.job_count() * 20) as u64)])),
+            Account::from(basket([(
+                Asset::ChargeSupply,
+                (profile.job_count() * 20) as u64,
+            )])),
         )
         .account(
             AccountId::Facility(Facility::Recycler),
@@ -267,25 +346,38 @@ pub fn league(profile: Profile, lineup: [Policy; 4]) -> League {
     for spec in &jobs {
         builder = builder.account(
             AccountId::Job(spec.id),
-            Account::from(basket([(Asset::JobIdentity(spec.id), 1), (Asset::Available, 1)])),
+            Account::from(basket([
+                (Asset::JobIdentity(spec.id), 1),
+                (Asset::Available, 1),
+            ])),
         );
         goal = goal.require(AccountId::Job(spec.id), basket([(Asset::Completed, 1)]));
 
         for agent in agents.iter().copied() {
             builder = builder.rate(
-                RateId::Claim { agent, job: spec.id },
+                RateId::Claim {
+                    agent,
+                    job: spec.id,
+                },
                 Rate::new()
                     .preserve(Role::Agent, basket([(Asset::AgentIdentity(agent), 1)]))
                     .produce(Role::Agent, basket([(Asset::Claimed(spec.id), 1)]))
                     .preserve(Role::Job, basket([(Asset::JobIdentity(spec.id), 1)]))
                     .consume(Role::Job, basket([(Asset::Available, 1)]))
-                    .produce(Role::Job, basket([(Asset::Assigned(agent), 1), (Asset::Pending, 1)]))
+                    .produce(
+                        Role::Job,
+                        basket([(Asset::Assigned(agent), 1), (Asset::Pending, 1)]),
+                    )
                     .distinct(Role::Agent, Role::Job),
             );
             for mode in [WorkMode::Rush, WorkMode::Lean, WorkMode::Safe] {
                 let cost = work_cost(*spec, mode);
                 builder = builder.rate(
-                    RateId::Begin { agent, job: spec.id, mode },
+                    RateId::Begin {
+                        agent,
+                        job: spec.id,
+                        mode,
+                    },
                     Rate::new()
                         .preserve(
                             Role::Agent,
@@ -317,7 +409,10 @@ pub fn league(profile: Profile, lineup: [Policy; 4]) -> League {
                         )
                         .preserve(
                             Role::Job,
-                            basket([(Asset::JobIdentity(spec.id), 1), (Asset::Assigned(agent), 1)]),
+                            basket([
+                                (Asset::JobIdentity(spec.id), 1),
+                                (Asset::Assigned(agent), 1),
+                            ]),
                         )
                         .consume(Role::Job, basket([(Asset::Pending, 1)]))
                         .produce(Role::Job, basket([(Asset::InProgress, 1)]))
@@ -325,11 +420,19 @@ pub fn league(profile: Profile, lineup: [Policy; 4]) -> League {
                 );
                 for outcome in [Outcome::Success, Outcome::Failure] {
                     builder = builder.rate(
-                        RateId::Resolve { agent, job: spec.id, mode, outcome },
+                        RateId::Resolve {
+                            agent,
+                            job: spec.id,
+                            mode,
+                            outcome,
+                        },
                         Rate::new()
                             .preserve(Role::Agent, basket([(Asset::AgentIdentity(agent), 1)]))
                             .consume(Role::Agent, basket([(Asset::Awaiting(spec.id, mode), 1)]))
-                            .produce(Role::Agent, basket([(Asset::Resolved(spec.id, mode, outcome), 1)]))
+                            .produce(
+                                Role::Agent,
+                                basket([(Asset::Resolved(spec.id, mode, outcome), 1)]),
+                            )
                             .preserve(
                                 Role::Nature,
                                 basket([(Asset::OutcomeWeight(spec.id, mode, outcome), 1)]),
@@ -376,17 +479,28 @@ pub fn league(profile: Profile, lineup: [Policy; 4]) -> League {
                                     (Asset::Operational, 1),
                                 ]),
                             )
-                            .produce(Role::Agent, basket([(Asset::Failures, 1), (Asset::Damage, 1)]))
+                            .produce(
+                                Role::Agent,
+                                basket([(Asset::Failures, 1), (Asset::Damage, 1)]),
+                            )
                             .preserve(
                                 Role::Job,
-                                basket([(Asset::JobIdentity(spec.id), 1), (Asset::Assigned(agent), 1)]),
+                                basket([
+                                    (Asset::JobIdentity(spec.id), 1),
+                                    (Asset::Assigned(agent), 1),
+                                ]),
                             )
                             .consume(Role::Job, basket([(Asset::InProgress, 1)]))
                             .produce(Role::Job, basket([(Asset::Pending, 1)]))
                             .distinct(Role::Agent, Role::Job),
                     };
                     builder = builder.rate(
-                        RateId::Finish { agent, job: spec.id, mode, outcome },
+                        RateId::Finish {
+                            agent,
+                            job: spec.id,
+                            mode,
+                            outcome,
+                        },
                         finish,
                     );
                 }
@@ -397,18 +511,28 @@ pub fn league(profile: Profile, lineup: [Policy; 4]) -> League {
     for agent in agents.iter().copied() {
         for from in LOCATIONS {
             for to in LOCATIONS {
-                if from == to { continue; }
+                if from == to {
+                    continue;
+                }
                 builder = builder.rate(
                     RateId::Move { agent, from, to },
                     Rate::new()
                         .preserve(Role::Agent, basket([(Asset::AgentIdentity(agent), 1)]))
                         .consume(
                             Role::Agent,
-                            basket([(Asset::At(from), 1), (Asset::Energy, 1), (Asset::TimeRemaining, 1)]),
+                            basket([
+                                (Asset::At(from), 1),
+                                (Asset::Energy, 1),
+                                (Asset::TimeRemaining, 1),
+                            ]),
                         )
                         .produce(
                             Role::Agent,
-                            basket([(Asset::At(to), 1), (Asset::SpentEnergy, 1), (Asset::ElapsedTime, 1)]),
+                            basket([
+                                (Asset::At(to), 1),
+                                (Asset::SpentEnergy, 1),
+                                (Asset::ElapsedTime, 1),
+                            ]),
                         ),
                 );
             }
@@ -419,10 +543,19 @@ pub fn league(profile: Profile, lineup: [Policy; 4]) -> League {
                 Rate::new()
                     .preserve(
                         Role::Agent,
-                        basket([(Asset::AgentIdentity(agent), 1), (Asset::At(Location::Workshop), 1)]),
+                        basket([
+                            (Asset::AgentIdentity(agent), 1),
+                            (Asset::At(Location::Workshop), 1),
+                        ]),
                     )
-                    .consume(Role::Agent, basket([(Asset::Damage, 1), (Asset::TimeRemaining, 3)]))
-                    .produce(Role::Agent, basket([(Asset::Operational, 1), (Asset::ElapsedTime, 3)]))
+                    .consume(
+                        Role::Agent,
+                        basket([(Asset::Damage, 1), (Asset::TimeRemaining, 3)]),
+                    )
+                    .produce(
+                        Role::Agent,
+                        basket([(Asset::Operational, 1), (Asset::ElapsedTime, 3)]),
+                    )
                     .consume(Role::Facility, basket([(Asset::RepairSupply, 1)]))
                     .produce(Role::Facility, basket([(Asset::SpentRepairSupply, 1)]))
                     .distinct(Role::Agent, Role::Facility),
@@ -432,10 +565,16 @@ pub fn league(profile: Profile, lineup: [Policy; 4]) -> League {
                 Rate::new()
                     .preserve(
                         Role::Agent,
-                        basket([(Asset::AgentIdentity(agent), 1), (Asset::At(Location::Charger), 1)]),
+                        basket([
+                            (Asset::AgentIdentity(agent), 1),
+                            (Asset::At(Location::Charger), 1),
+                        ]),
                     )
                     .consume(Role::Agent, basket([(Asset::TimeRemaining, 2)]))
-                    .produce(Role::Agent, basket([(Asset::Energy, 12), (Asset::ElapsedTime, 2)]))
+                    .produce(
+                        Role::Agent,
+                        basket([(Asset::Energy, 12), (Asset::ElapsedTime, 2)]),
+                    )
                     .consume(Role::Facility, basket([(Asset::ChargeSupply, 12)]))
                     .distinct(Role::Agent, Role::Facility),
             )
@@ -444,15 +583,26 @@ pub fn league(profile: Profile, lineup: [Policy; 4]) -> League {
                 Rate::new()
                     .preserve(
                         Role::Agent,
-                        basket([(Asset::AgentIdentity(agent), 1), (Asset::At(Location::Recycler), 1)]),
+                        basket([
+                            (Asset::AgentIdentity(agent), 1),
+                            (Asset::At(Location::Recycler), 1),
+                        ]),
                     )
                     .consume(
                         Role::Agent,
-                        basket([(Asset::Waste, 1), (Asset::Energy, 1), (Asset::TimeRemaining, 1)]),
+                        basket([
+                            (Asset::Waste, 1),
+                            (Asset::Energy, 1),
+                            (Asset::TimeRemaining, 1),
+                        ]),
                     )
                     .produce(
                         Role::Agent,
-                        basket([(Asset::RecycledWaste, 1), (Asset::SpentEnergy, 1), (Asset::ElapsedTime, 1)]),
+                        basket([
+                            (Asset::RecycledWaste, 1),
+                            (Asset::SpentEnergy, 1),
+                            (Asset::ElapsedTime, 1),
+                        ]),
                     )
                     .preserve(Role::Facility, basket([(Asset::RecyclerCapacity, 1)]))
                     .distinct(Role::Agent, Role::Facility),
@@ -475,7 +625,8 @@ pub fn run(league: &League, seed: u64) -> Result<MatchOutcome, String> {
 
     while !available.is_empty() {
         let agent = league.agents[turn % league.agents.len()];
-        let policy = policy_of(&world, agent).ok_or_else(|| format!("missing policy for {agent:?}"))?;
+        let policy =
+            policy_of(&world, agent).ok_or_else(|| format!("missing policy for {agent:?}"))?;
         let job = choose_job(&available, policy);
         available.retain(|candidate| *candidate != job);
         let spec = job_spec(job);
@@ -486,46 +637,74 @@ pub fn run(league: &League, seed: u64) -> Result<MatchOutcome, String> {
         let mut attempt = 0u64;
         loop {
             attempt += 1;
-            apply(&mut world, &mut trace, action(RateId::Begin { agent, job, mode }))?;
+            apply(
+                &mut world,
+                &mut trace,
+                action(RateId::Begin { agent, job, mode }),
+            )?;
             let outcome = sampled_outcome(seed, agent, job, mode, attempt, spec.risk);
             apply(
                 &mut world,
                 &mut trace,
-                action(RateId::Resolve { agent, job, mode, outcome }),
+                action(RateId::Resolve {
+                    agent,
+                    job,
+                    mode,
+                    outcome,
+                }),
             )?;
             apply(
                 &mut world,
                 &mut trace,
-                action(RateId::Finish { agent, job, mode, outcome }),
+                action(RateId::Finish {
+                    agent,
+                    job,
+                    mode,
+                    outcome,
+                }),
             )?;
-            if outcome == Outcome::Success { break; }
+            if outcome == Outcome::Success {
+                break;
+            }
             move_to(&mut world, &mut trace, agent, Location::Workshop)?;
             apply(
                 &mut world,
                 &mut trace,
-                action(RateId::Repair { agent }).bind(Role::Facility, AccountId::Facility(Facility::Workshop)),
+                action(RateId::Repair { agent })
+                    .bind(Role::Facility, AccountId::Facility(Facility::Workshop)),
             )?;
             move_to(&mut world, &mut trace, agent, spec.location)?;
             mode = WorkMode::Safe;
         }
 
-        if policy == Policy::Steward && world.balance(&AccountId::Agent(agent), &Asset::Waste).get() > 0 {
+        if policy == Policy::Steward
+            && world.balance(&AccountId::Agent(agent), &Asset::Waste).get() > 0
+        {
             move_to(&mut world, &mut trace, agent, Location::Recycler)?;
             apply(
                 &mut world,
                 &mut trace,
-                action(RateId::Recycle { agent }).bind(Role::Facility, AccountId::Facility(Facility::Recycler)),
+                action(RateId::Recycle { agent })
+                    .bind(Role::Facility, AccountId::Facility(Facility::Recycler)),
             )?;
         }
         turn += 1;
     }
 
-    Ok(MatchOutcome { trace, final_world: world })
+    Ok(MatchOutcome {
+        trace,
+        final_world: world,
+    })
 }
 
 pub fn job_spec(job: JobId) -> JobSpec {
     let index = u64::from(job.0.saturating_sub(1));
-    let locations = [Location::North, Location::East, Location::South, Location::West];
+    let locations = [
+        Location::North,
+        Location::East,
+        Location::South,
+        Location::West,
+    ];
     JobSpec {
         id: job,
         location: locations[index as usize % locations.len()],
@@ -537,18 +716,31 @@ pub fn job_spec(job: JobId) -> JobSpec {
     }
 }
 
-pub fn policy(world: &World, agent: AgentId) -> Option<Policy> { policy_of(world, agent) }
+pub fn policy(world: &World, agent: AgentId) -> Option<Policy> {
+    policy_of(world, agent)
+}
 
 pub fn location(world: &World, agent: AgentId) -> Option<Location> {
     LOCATIONS.into_iter().find(|location| {
-        !world.balance(&AccountId::Agent(agent), &Asset::At(*location)).is_zero()
+        !world
+            .balance(&AccountId::Agent(agent), &Asset::At(*location))
+            .is_zero()
     })
 }
 
 fn policy_of(world: &World, agent: AgentId) -> Option<Policy> {
-    [Policy::Sprinter, Policy::Steward, Policy::ValueHunter, Policy::Resilient]
-        .into_iter()
-        .find(|policy| !world.balance(&AccountId::Agent(agent), &Asset::Policy(*policy)).is_zero())
+    [
+        Policy::Sprinter,
+        Policy::Steward,
+        Policy::ValueHunter,
+        Policy::Resilient,
+    ]
+    .into_iter()
+    .find(|policy| {
+        !world
+            .balance(&AccountId::Agent(agent), &Asset::Policy(*policy))
+            .is_zero()
+    })
 }
 
 fn choose_job(available: &[JobId], policy: Policy) -> JobId {
@@ -556,10 +748,25 @@ fn choose_job(available: &[JobId], policy: Policy) -> JobId {
     jobs.sort_by_key(|job| {
         let spec = job_spec(*job);
         match policy {
-            Policy::Sprinter => (spec.time, u64::MAX - spec.value, spec.risk, u64::from(job.0)),
+            Policy::Sprinter => (
+                spec.time,
+                u64::MAX - spec.value,
+                spec.risk,
+                u64::from(job.0),
+            ),
             Policy::Steward => (spec.material, spec.energy, spec.risk, u64::from(job.0)),
-            Policy::ValueHunter => (u64::MAX - spec.value, spec.risk, spec.time, u64::from(job.0)),
-            Policy::Resilient => (spec.risk, spec.energy, u64::MAX - spec.value, u64::from(job.0)),
+            Policy::ValueHunter => (
+                u64::MAX - spec.value,
+                spec.risk,
+                spec.time,
+                u64::from(job.0),
+            ),
+            Policy::Resilient => (
+                spec.risk,
+                spec.energy,
+                u64::MAX - spec.value,
+                u64::from(job.0),
+            ),
         }
     });
     jobs[0]
@@ -574,7 +781,12 @@ fn mode_for(policy: Policy) -> WorkMode {
 }
 
 #[derive(Debug, Clone, Copy)]
-struct WorkCost { energy: u64, time: u64, material: u64, waste: u64 }
+struct WorkCost {
+    energy: u64,
+    time: u64,
+    material: u64,
+    waste: u64,
+}
 
 fn work_cost(spec: JobSpec, mode: WorkMode) -> WorkCost {
     match mode {
@@ -599,7 +811,9 @@ fn work_cost(spec: JobSpec, mode: WorkMode) -> WorkCost {
     }
 }
 
-const fn index_parity(job: JobId) -> u64 { (job.0 as u64) % 2 }
+const fn index_parity(job: JobId) -> u64 {
+    (job.0 as u64) % 2
+}
 
 fn failure_weight(risk: u64, mode: WorkMode) -> u64 {
     match mode {
@@ -620,19 +834,25 @@ fn sampled_outcome(
     // SplitMix64 gives deterministic, platform-independent tickets without
     // making an RNG part of authoritative state. Nature's weight assets remain
     // the inspectable distribution the caller samples from.
-    let mut value = seed
-        ^ (u64::from(job.0) << 17)
-        ^ ((agent as u64) << 9)
-        ^ ((mode as u64) << 5)
-        ^ attempt;
+    let mut value =
+        seed ^ (u64::from(job.0) << 17) ^ ((agent as u64) << 9) ^ ((mode as u64) << 5) ^ attempt;
     value = value.wrapping_add(0x9e37_79b9_7f4a_7c15);
     value = (value ^ (value >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
     value = (value ^ (value >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
     let ticket = (value ^ (value >> 31)) % 10;
-    if ticket < failure_weight(risk, mode) { Outcome::Failure } else { Outcome::Success }
+    if ticket < failure_weight(risk, mode) {
+        Outcome::Failure
+    } else {
+        Outcome::Success
+    }
 }
 
-fn move_to(world: &mut World, trace: &mut Trace<RateId, Role, AccountId>, agent: AgentId, to: Location) -> Result<(), String> {
+fn move_to(
+    world: &mut World,
+    trace: &mut Trace<RateId, Role, AccountId>,
+    agent: AgentId,
+    to: Location,
+) -> Result<(), String> {
     let from = location(world, agent).ok_or_else(|| format!("{agent:?} has no location"))?;
     if from != to {
         apply(world, trace, action(RateId::Move { agent, from, to }))?;
@@ -643,17 +863,30 @@ fn move_to(world: &mut World, trace: &mut Trace<RateId, Role, AccountId>, agent:
 fn action(rate: RateId) -> Action {
     let mut exchange = Exchange::new(rate, Quantity::new(1));
     let (agent, job, nature) = match rate {
-        RateId::Claim { agent, job } | RateId::Begin { agent, job, .. } | RateId::Finish { agent, job, .. } => (agent, Some(job), false),
+        RateId::Claim { agent, job }
+        | RateId::Begin { agent, job, .. }
+        | RateId::Finish { agent, job, .. } => (agent, Some(job), false),
         RateId::Resolve { agent, .. } => (agent, None, true),
-        RateId::Move { agent, .. } | RateId::Repair { agent } | RateId::Recharge { agent } | RateId::Recycle { agent } => (agent, None, false),
+        RateId::Move { agent, .. }
+        | RateId::Repair { agent }
+        | RateId::Recharge { agent }
+        | RateId::Recycle { agent } => (agent, None, false),
     };
     exchange = exchange.bind(Role::Agent, AccountId::Agent(agent));
-    if let Some(job) = job { exchange = exchange.bind(Role::Job, AccountId::Job(job)); }
-    if nature { exchange = exchange.bind(Role::Nature, AccountId::Nature); }
+    if let Some(job) = job {
+        exchange = exchange.bind(Role::Job, AccountId::Job(job));
+    }
+    if nature {
+        exchange = exchange.bind(Role::Nature, AccountId::Nature);
+    }
     exchange
 }
 
-fn apply(world: &mut World, trace: &mut Trace<RateId, Role, AccountId>, exchange: Action) -> Result<(), String> {
+fn apply(
+    world: &mut World,
+    trace: &mut Trace<RateId, Role, AccountId>,
+    exchange: Action,
+) -> Result<(), String> {
     world
         .apply(exchange.clone())
         .map_err(|error| format!("{:?}: {error:?}", exchange.rate()))?;
@@ -673,17 +906,33 @@ mod tests {
         assert!(outcome.final_world().matches(league.goal()));
         let mut replay = league.initial().fork();
         replay.replay(outcome.trace()).unwrap();
-        assert_eq!(replay.state_fingerprint(), outcome.final_world().state_fingerprint());
-        assert!(AGENTS.into_iter().filter(|agent| {
-            outcome.final_world().balance(&AccountId::Agent(*agent), &Asset::Completed).get() > 0
-        }).count() >= 3);
+        assert_eq!(
+            replay.state_fingerprint(),
+            outcome.final_world().state_fingerprint()
+        );
+        assert!(
+            AGENTS
+                .into_iter()
+                .filter(|agent| {
+                    outcome
+                        .final_world()
+                        .balance(&AccountId::Agent(*agent), &Asset::Completed)
+                        .get()
+                        > 0
+                })
+                .count()
+                >= 3
+        );
     }
 
     #[test]
     fn identity_assets_reject_rebinding_a_claim_to_the_wrong_agent() {
         let league = league(Profile::Micro, mixed_lineup());
         let wrong = Exchange::new(
-            RateId::Claim { agent: AgentId::Atlas, job: JobId(1) },
+            RateId::Claim {
+                agent: AgentId::Atlas,
+                job: JobId(1),
+            },
             Quantity::new(1),
         )
         .bind(Role::Agent, AccountId::Agent(AgentId::Bolt))
