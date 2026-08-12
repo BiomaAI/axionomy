@@ -66,7 +66,14 @@ function GraphScene({ scene, surface, onAccount }: { scene: Scene; surface: Grap
   useEffect(() => {
     if (!flow || !host.current) return;
     let pending = 0;
-    const observer = new ResizeObserver(() => {
+    let lastWidth = 0;
+    let lastHeight = 0;
+    const observer = new ResizeObserver((entries) => {
+      const box = entries[0]?.contentRect;
+      if (!box || box.width < 40 || box.height < 40) return;
+      if (Math.abs(box.width - lastWidth) < 1 && Math.abs(box.height - lastHeight) < 1) return;
+      lastWidth = box.width;
+      lastHeight = box.height;
       cancelAnimationFrame(pending);
       pending = requestAnimationFrame(() => { void flow.fitView({ padding: 0.15 }); });
     });
