@@ -297,6 +297,13 @@ floor, and values above one reveal that a non-exact reference was beaten.
 
 ## Leaderboards and ratings
 
+The implemented Autonomous Work League is the mechanics-level reference for
+this boundary. It derives value, throughput, efficiency, residual-waste,
+reliability, and Pareto standings at every verified economic step. It is not
+yet a population benchmark or durable rating service; it proves that several
+honest leaderboards can be reconstructed from one authoritative replay without
+installing a universal score in the engine.
+
 The initial public leaderboard should expose a capability profile rather than
 an arbitrary single number:
 

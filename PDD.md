@@ -609,6 +609,7 @@ ProblemDescriptor = identity + family + instance profiles + strategies + capabil
 RunRequest         = problem + instance + strategy + deterministic seed + work budget
 RunControl         = cooperative pause + resume + cancel
 ServiceProgress    = ordered phase + completed/total work + message
+RunObserver        = progress + solver observation + replay-verified frame
 RunArtifact        = request + resolved instance + selected document + replayable alternatives
                      + assessed constraint probes
 ```
@@ -674,7 +675,7 @@ artifact resolves and records that identity. Micro continues to support exact
 oracles even when exhaustive search over Showcase would be inappropriate, and
 an approximate or candidate-bounded Showcase frontier must be labeled as such.
 
-The conformance service enforces minimum Showcase pressure for all twelve
+The conformance service enforces minimum Showcase pressure for all thirteen
 problems. Every result also receives transport-neutral **Model size** evidence:
 accounts, rules, steps in the trace, rule-check probes, and alternatives. These
 measurements are explanatory, not objectives, and cannot affect validity.
@@ -701,7 +702,9 @@ a TypeScript build, so the Rust adapter lowers them into:
 ViewId        = stable presentation key + human label + optional JSON context
 ExactQuantity = decimal text
 ViewSnapshot  = ordered accounts and balances + optional derived scene
+                + replay-derived leaderboards
 Scene         = surface + semantic entities + paths + annotations + metrics
+Leaderboard   = direction + ordered participants + exact score + rank evidence
 ExchangeFrame = before + assessment + exchange + receipt + after + cues
 ViewDocument  = metadata + model + initial snapshot + replay frames
                 + proposals + objectives + Pareto fronts + telemetry
@@ -713,6 +716,16 @@ authority channel. Exact quantities cross JSON as strings because JSON and
 JavaScript numbers cannot preserve every `u64` or wider exact integer. Charts
 may convert a value for screen coordinates, but labels and tooltips retain the
 exact text and no plotted approximation is fed back into the economy.
+
+Leaderboards obey the same boundary as scenes. Score-bearing assets such as
+earned value, elapsed time, waste, attempts, and completed work participate in
+the mechanics and remain authoritative. Rank, dominance, eligibility, trend,
+and the choice of which objective to display are disposable projections
+derived again at every replay snapshot. Removing a leaderboard may make
+comparison harder, but cannot change a balance, validate an exchange, or
+declare a task complete. Ratios are reduced and transported as exact text; an
+agent with no meaningful work remains visible but ineligible instead of
+receiving a misleading first-place zero.
 
 Stable keys and human labels are deliberately separate. Reference adapters
 implement typed labels for their account, asset, rate, and role enums while
@@ -742,6 +755,11 @@ pauses, resumes, or cancels computation cooperatively, serves completed
 artifacts, documents, and paginated frames, and streams tagged `StudioEvent`
 values through Server-Sent Events.
 The service emits one monotonic event sequence across adapter phases.
+`FrameAppended` carries the complete newly verified frame and its document
+identity, so native SSE and browser Wasm can show authoritative progress while
+the artifact is still being built. The event is produced by replay derivation,
+not by a timer or an invented animation, and completed artifacts retain the
+same frames for later inspection.
 Logistics, Connect Four, and Mission advance their resumable Monte Carlo,
 MCTS, and ISMCTS sessions in bounded work chunks, publishing phase-local
 samples, iterations, nodes, and moves while observing pause or cancellation at
@@ -786,7 +804,15 @@ Completion leaves a dismissible receipt containing duration and request
 identity and visibly marks the replacement artifact, so even a sub-second run
 has an inspectable result.
 
-The implemented Studio exposes the complete twelve-problem Showcase
+Every meaningful Studio selection is encoded in a static-host-compatible query
+URL: problem, instance, strategy, document, solve/replay view, replay step,
+leaderboard, seed, and budget. Major selections create browser history;
+scrubbing replaces the current entry; `popstate` restores the corresponding
+artifact and frame. Invalid identities visibly fall back to a catalog default,
+and shared links never auto-run computation. The same URL therefore works
+against the native server, the browser Wasm engine, and GitHub Pages.
+
+The implemented Studio exposes the complete thirteen-problem Showcase
 surface: pathfinding and networks use graphs; Sokoban and Connect Four use
 grids; Exact Cover uses a constraint matrix; scheduling and perishables use
 timelines; markets expose multi-party settlement and rejected shortfalls;
@@ -811,7 +837,7 @@ operational run and transport failures.
 Portable artifacts prove offline playback for the full catalog. The native
 path proves generated OpenAPI calls, resumable SSE, pause/resume/cancel hooks,
 artifact and frame retrieval, and scrubbing. Browser tests prove that the same
-twelve-problem Rust service initializes, runs, streams observations, publishes
+thirteen-problem Rust service initializes, runs, streams observations, publishes
 artifacts, and cancels inside an isolated Worker. The Pages build uses a
 repository-relative Vite base, includes its Wasm binary and `.nojekyll`, and
 deploys from `main` without a server. Specialized projections are added
@@ -1111,7 +1137,7 @@ compatible set or sequence of those resolutions, but it cannot bypass them.
 
 ## 10. Executable conformance suite
 
-The project now validates the thesis with twelve deliberately different
+The project now validates the thesis with thirteen deliberately different
 problems. Full formal specifications live in [PROBLEMS.md](PROBLEMS.md).
 
 | Problem | What it demonstrates |
@@ -1128,6 +1154,7 @@ problems. Full formal specifications live in [PROBLEMS.md](PROBLEMS.md).
 | Connect Four | Standard 7×6 geometry, compact 69-line win certificates, encoded gravity and terminal truth, adversarial MCTS, and plain-board oracles |
 | Mission | Canonical private observations, caller-owned posterior beliefs, repeated ISMCTS, approximate policy front, causal intelligence exchange, and RL trajectory projection |
 | Perishables | Fungible cohort claims, shared condition facts, explicit time, refrigeration, exact preservation/energy front, outage effects, stale-event rejection, and an independent oracle |
+| Work League | Four autonomous workers contending for 12 finite jobs across shared facilities, seeded disruptions and recovery, exact resource accounting, six per-step standings, and multiple defensible winners |
 
 These are not unrelated demos. Together they test:
 
@@ -1138,6 +1165,8 @@ These are not unrelated demos. Together they test:
 - Feasible and infeasible instances.
 - Specialized algorithms over the same core semantics.
 - Replay of every accepted solution.
+- Competitive outcomes where value, speed, efficiency, waste, reliability,
+  and Pareto standing can select different leaders without one universal score.
 
 They are deliberately concrete examples and conformance fixtures, not reusable
 domain frameworks. Users should construct their own economies rather than
@@ -1513,7 +1542,7 @@ factor.
 13. Add persisted search checkpoints, worker leases, task notifications, and
     tenant-aware authorization only when the MCP reference boundary is moved
     into a real multi-process deployment.
-14. Measure full-artifact transfer and rendering across the twelve Studio
+14. Measure full-artifact transfer and rendering across the thirteen Studio
     adapters; add paged model projection, incremental Pareto/Monte Carlo
     publication, or compact rate schemas only where measured pressure warrants
     them.
@@ -1571,7 +1600,7 @@ encoded rather than supplied by opaque callbacks.
 
 ### D-009: Bounded structured expressiveness precedes universality claims
 
-Twelve executable problems provide stronger product evidence than a vacuous
+Thirteen executable problems provide stronger product evidence than a vacuous
 one-token-per-world construction. Turing completeness is not a current goal.
 
 ### D-010: Conformance problems stay in-tree
@@ -1778,6 +1807,16 @@ published. This permits rich animation and linked inspection while preserving
 the rule that deleting every visual projection changes no valid exchange,
 balance, goal, or replay result.
 
+### D-037: Competitive standings are replay-derived, plural, and shareable
+
+The engine does not own one universal winner. A problem may expose several
+typed `LeaderboardView` projections at every `ViewSnapshot`; their entries
+retain exact values, eligibility, ties, participant identity, and explanatory
+components. Score-bearing mechanics remain assets, while ordering and Pareto
+membership remain disposable policy. Studio URLs capture the selected problem,
+outcome, replay step, and leaderboard so an explanation is reproducible on
+native HTTP, browser Wasm, and static Pages without auto-running a task.
+
 ## 16. Success criteria
 
 Axionomy succeeds when:
@@ -1799,7 +1838,7 @@ Axionomy succeeds when:
   the same Rust service in a Worker; they can inspect retained solver evidence,
   scrub every accepted exchange, and inspect exact balances and deltas without
   a parallel mutable world model or handwritten cross-language contract.
-- All twelve canonical problems are discoverable, runnable, replayable, and
+- All thirteen canonical problems are discoverable, runnable, replayable, and
   meaningfully inspectable through Studio and static Showcase artifacts, with
   explicit Micro and Stress selection on live interfaces.
 - CLI, HTTP, MCP, and the browser Worker return the same semantic problem

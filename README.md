@@ -31,6 +31,11 @@ auditable, comparable, and independently verifiable.
 
 <p align="center"><sub>Axionomy Studio compares stochastic logistics strategies, then replays the selected solution one verified exchange at a time. <a href="https://biomaai.github.io/axionomy/">Open the live Studio</a>.</sub></p>
 
+Try the
+[Autonomous Work League](https://biomaai.github.io/axionomy/?problem=work_league&instance=showcase&strategy=mixed_field&document=work_league%3Amixed_field&view=replay&step=24&leaderboard=resource_efficiency&seed=17&budget=128)
+to see several agents lead different replay-derived rankings at the same
+economic step.
+
 Axionomy is a Rust engine for encoding bounded problem spaces through four
 primitives:
 
@@ -75,7 +80,7 @@ evaluation and rating design, and
 between the Work Utility System and the Autonomy Harness that owns agents,
 learning, deployment, and assurance.
 
-The twelve reference problems expose explicit **Micro**, **Showcase**, and
+The thirteen reference problems expose explicit **Micro**, **Showcase**, and
 **Stress** instances. Micro keeps exact fixtures and independent oracles fast;
 Showcase is the default that Studio and the generated artifacts use. Stress
 raises a domain-relevant dimension—sampling, topology, board size, horizon,
@@ -142,7 +147,8 @@ adapters.
 ### Interfaces
 
 - One service contract shared by CLI, HTTP/SSE, MCP, Studio, and browser Wasm.
-- Twelve discoverable problems with explicit Micro, Showcase, and Stress instances.
+- Thirteen discoverable problems with explicit Micro, Showcase, and Stress instances.
+- Snapshot leaderboards whose exact ranks, tradeoffs, and evidence update during replay.
 - A strict stateless MCP 2026-07-28 server with caller-owned snapshot storage.
 - Rust-owned OpenAPI, generated TypeScript, portable artifacts, and cross-interface tests.
 
@@ -152,6 +158,7 @@ adapters.
 - Replay-derived accounts, assessments, receipts, rule inspection, and actor views.
 - Graph, grid, matrix, and timeline pictures with semantic icons and exact metrics.
 - Strategy comparison, Pareto tradeoffs, rule checks, native SSE, and Web Worker Wasm.
+- Shareable deep links to any problem, strategy, evidence view, replay step, and leaderboard.
 
 The core contains no application ontology or search algorithm. Problem assets
 and specialized solvers compile against the same public kernel API available
@@ -220,7 +227,7 @@ pnpm dev
 Open `http://127.0.0.1:5173`. The native server is optional: when it is healthy,
 Studio uses HTTP/SSE and exposes pause, resume, and cancellation; otherwise it
 loads the same Rust service as WebAssembly in an isolated Worker and keeps Run
-enabled for all twelve problems. Worker cancellation is immediate by
+enabled for all thirteen problems. Worker cancellation is immediate by
 terminating that disposable worker. If WebAssembly cannot initialize, the
 committed Showcase artifacts still provide read-only playback. The status badge
 is backed by a current health/initialization check rather than by a catalog that
@@ -454,6 +461,7 @@ contract, deployment limits, and integration details.
 | Connect Four | Identified cells, gravity, turns, line counts, wins, draw | Vector-valued MCTS with plain-board/minimax oracles |
 | Mission | Private views, caller-owned beliefs, causal shared intelligence, hazard, treatment | Repeated observation-scoped ISMCTS, scenario/MC evaluation, approximate policy front, RL trajectories |
 | Perishables | Fungible cohort claims, unique condition facts, deadlines, refrigeration, power loss, cooling energy | Receipt-maintained index, event agenda, exact storage Pareto front, independent oracle |
+| Work League | Autonomous workers, finite jobs, travel, shared facilities, resources, recycling, failures and repairs | Competing seeded policies; value, throughput, efficiency, waste, reliability, and Pareto standings after every step |
 
 Every accepted result is an exchange trace replayed by the same core. The
 specialized algorithms are proposers, not alternate execution engines.
@@ -483,6 +491,7 @@ cargo run -p axionomy-problems --example logistics
 cargo run -p axionomy-problems --example connect_four
 cargo run -p axionomy-problems --example mission
 cargo run -p axionomy-problems --example perishables
+cargo run -p axionomy-problems --example work_league
 ```
 
 All runnable examples use structured console logging. `INFO` presents model

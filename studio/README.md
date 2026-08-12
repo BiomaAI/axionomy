@@ -1,7 +1,7 @@
 # Axionomy Studio
 
 Axionomy Studio is the browser trace player and economic debugger for Axionomy.
-All twelve problems are discoverable and runnable. **Source of truth** shows
+All thirteen problems are discoverable and runnable. **Source of truth** shows
 accounts and assets; **The rules** shows rates, roles, goals, and invariants;
 **One step** explains the selected exchange and its exact effects.
 
@@ -20,6 +20,19 @@ engine choices. The comparison surface puts replayable outcomes, objective
 values, trace lengths, and algorithm evidence side by side, while uniform
 complexity telemetry exposes accounts, rates, transitions, rejection proofs,
 and alternatives across every domain.
+
+The Work League adds six replay-derived leaderboards. Contract value,
+throughput, resource efficiency, residual waste, reliability, and Pareto
+standing are recomputed from each verified snapshot, so the lead can change as
+the scrubber moves. Rank evidence links back to the participant account; it is
+never a second score store.
+
+Problem, instance, strategy, document, evidence view, replay step, selected
+leaderboard, seed, and budget are encoded in the query string. **Copy link**
+therefore shares the exact inspection state on the native server, browser Wasm,
+or GitHub Pages. Major selections participate in Back/Forward history, while
+autoplay and scrubbing replace the current history entry. A link never starts
+compute automatically.
 
 `Run` asks the selected engine for a new reproducible artifact; the playback
 transport only scrubs the selected artifact's already verified exchange trace.
@@ -52,7 +65,7 @@ pnpm install
 pnpm dev
 ```
 
-Open `http://127.0.0.1:5173`. `predev` builds the Worker engine, so all twelve
+Open `http://127.0.0.1:5173`. `predev` builds the Worker engine, so all thirteen
 problems can run without a server. To use native HTTP/SSE and resumable pause,
 start this optional command from the repository root:
 
@@ -97,7 +110,7 @@ The Playwright tests launch both servers, start a real run, follow its SSE
 stream, observe fine-grained logistics progress and pause/resume behavior,
 fetch and scrub its replay-verified artifact, verify structured rejection
 proofs, and inspect a structurally different static Exact Cover matrix. Rust
-adapter tests build all twelve problem artifacts.
+adapter tests build all thirteen problem artifacts.
 
 The Wasm suite launches Studio with native probes disabled, runs stochastic
 logistics through the Worker, verifies live and retained solver evidence,
