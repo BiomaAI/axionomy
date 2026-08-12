@@ -1,5 +1,6 @@
 /target
 /output
+.DS_Store
 **/*.rs.bk
 studio/node_modules/
 studio/dist/
