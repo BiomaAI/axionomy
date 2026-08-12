@@ -156,7 +156,7 @@ adapters.
 
 - Live search progress plus saved solver observations for fast and slow runs.
 - Replay-derived accounts, assessments, receipts, rule inspection, and actor views.
-- Graph, grid, matrix, and timeline pictures with semantic icons and exact metrics.
+- Graph, grid, matrix, and timeline pictures with semantic icons, exact metrics, and replay-derived motion linked to accounts and receipts.
 - Strategy comparison, Pareto tradeoffs, rule checks, native SSE, and Web Worker Wasm.
 - Shareable deep links to any problem, strategy, evidence view, replay step, and leaderboard.
 
@@ -197,6 +197,11 @@ matrix, scheduling and perishables timelines, market and logistics networks,
 stochastic telemetry,
 Pareto alternatives, rejected proposals, and actor-relative observations are
 all views over that same truth; none can make an exchange valid.
+Graph entities carry typed links to the accounts or balances they illustrate,
+so one generic renderer can animate travel, arrival, production, consumption,
+preservation, and route flow directly from adjacent replay snapshots and the
+successful receipt. Stepping shows the real transition; seeking jumps directly
+to the requested state without fabricating motion across skipped exchanges.
 Deliberately invalid or infeasible proposals appear under **Moves that should
 be refused**, with structured role, account, asset, and rate diagnostics. They
 demonstrate that the rules are active and are kept visually separate

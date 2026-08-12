@@ -223,9 +223,24 @@ input[type="range"] { width: 100%; accent-color: var(--lime); }
 .rich-node { width: 100%; display: grid; place-items: center; gap: 3px; }
 .rich-node svg { color: var(--blue); }
 .rich-node small { color: var(--muted); max-width: 76px; font-size: 6px; text-transform: uppercase; }
-.react-flow__node.entity-overlay { width: auto; min-width: 70px; min-height: 34px; padding: 5px 8px; border-radius: 18px; z-index: 4 !important; transition: transform .28s ease, left .28s ease, top .28s ease; }
+.react-flow__node.entity-overlay { width: auto; min-width: 70px; min-height: 34px; padding: 5px 8px; border-radius: 18px; z-index: 4 !important; will-change: transform; }
+.react-flow__node.entity-overlay.motion-step { transition: transform .58s cubic-bezier(.2,.8,.2,1), left .58s cubic-bezier(.2,.8,.2,1), top .58s cubic-bezier(.2,.8,.2,1); }
+.react-flow__node.entity-overlay.motion-seek { transition: none; }
 .entity-token { grid-auto-flow: column; grid-template-columns: auto 1fr; text-align: left; }
 .entity-token small { grid-column: 1 / -1; }
+.rich-node.effect-produced, .rich-node.effect-consumed, .rich-node.effect-preserved, .rich-node.effect-changed { position: relative; }
+.rich-node.effect-produced::after, .rich-node.effect-consumed::after, .rich-node.effect-preserved::after, .rich-node.effect-changed::after { position: absolute; right: -11px; top: -11px; padding: 2px 4px; border: 1px solid currentColor; background: var(--surface); font: 7px var(--mono); letter-spacing: .04em; text-transform: uppercase; }
+.rich-node.effect-produced::after { content: "+"; color: var(--lime); }
+.rich-node.effect-consumed::after { content: "−"; color: var(--red); }
+.rich-node.effect-preserved::after { content: "↺"; color: var(--blue); }
+.rich-node.effect-changed::after { content: "∆"; color: var(--orange); }
+.motion-step .rich-node.effect-produced { animation: entity-produced .62s ease both; }
+.motion-step .rich-node.effect-consumed { animation: entity-consumed .62s ease both; }
+.motion-step .rich-node.effect-preserved { animation: entity-preserved .62s ease both; }
+.motion-step .rich-node.effect-changed { animation: entity-changed .62s ease both; }
+.motion-step .rich-node.is-entering { animation: entity-enter .48s cubic-bezier(.2,.9,.3,1.25) both; }
+.motion-step .rich-node.is-exiting { pointer-events: none; animation: entity-exit .48s ease both; }
+.motion-step .rich-node.is-moving svg { animation: entity-travel .58s ease both; }
 .react-flow__node.current { background: var(--lime); border-color: var(--lime); color: #0a0f13; box-shadow: 0 0 0 7px #d8ff3e17, 0 8px 30px #000; animation: node-arrive .65s ease; }
 .react-flow__node.goal { border-style: double; border-width: 3px; }
 .react-flow__node.resource { border-radius: 5px; }
@@ -240,6 +255,13 @@ input[type="range"] { width: 100%; accent-color: var(--lime); }
 .react-flow__controls { background: var(--surface); border-color: var(--line); }
 .react-flow__controls button { background: var(--surface); border-color: var(--line); fill: var(--text); }
 @keyframes node-arrive { 0% { box-shadow: 0 0 0 16px color-mix(in srgb, var(--lime) 38%, transparent), 0 8px 30px #000; } 100% { box-shadow: 0 0 0 7px #d8ff3e17, 0 8px 30px #000; } }
+@keyframes entity-enter { from { opacity: 0; transform: scale(.45); } 70% { transform: scale(1.12); } }
+@keyframes entity-exit { to { opacity: 0; transform: scale(.45); } }
+@keyframes entity-produced { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--lime) 45%, transparent); } 45% { box-shadow: 0 0 0 12px color-mix(in srgb, var(--lime) 18%, transparent); } }
+@keyframes entity-consumed { 45% { border-color: var(--red); box-shadow: 0 0 0 9px color-mix(in srgb, var(--red) 16%, transparent); } }
+@keyframes entity-preserved { 45% { border-color: var(--blue); box-shadow: 0 0 0 9px color-mix(in srgb, var(--blue) 14%, transparent); } }
+@keyframes entity-changed { 45% { border-color: var(--orange); box-shadow: 0 0 0 9px color-mix(in srgb, var(--orange) 14%, transparent); } }
+@keyframes entity-travel { 45% { transform: translateY(-5px) scale(1.12); filter: drop-shadow(0 8px 8px color-mix(in srgb, var(--blue) 45%, transparent)); } }
 
 .grid-scene { flex: 1; min-height: 0; display: grid; gap: 5px; padding: 44px 28px 28px; align-content: center; justify-content: center; overflow: auto; background: radial-gradient(circle, #15202a, #0d1319); }
 .grid-scene > div { min-width: 48px; min-height: 48px; border: 1px solid var(--line); background: var(--surface-2); display: grid; place-items: center; position: relative; font: 10px var(--mono); }
@@ -510,6 +532,7 @@ footer { padding: 25px 0 36px; color: var(--muted); text-align: center; font: 8p
   .spinner, .indeterminate-progress::after { animation: none; }
   .react-flow__node.current { animation: none; }
   .react-flow__edge.animated .react-flow__edge-path { animation: none !important; stroke-dasharray: none !important; }
+  .motion-step .rich-node.effect-produced, .motion-step .rich-node.effect-consumed, .motion-step .rich-node.effect-preserved, .motion-step .rich-node.effect-changed, .motion-step .rich-node.is-entering, .motion-step .rich-node.is-exiting, .motion-step .rich-node.is-moving svg { animation-duration: .01ms; }
   .ticker-feed article, .grid-entity, .matrix-entity, .timeline-span { animation: none; }
   .leaderboard-entries article.lead-change { animation: none; }
   .strategy-comparison summary i { transition: none; }

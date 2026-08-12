@@ -311,7 +311,7 @@ mod tests {
                         .entities
                         .iter()
                         .find(|right| right.id.key == left.id.key)
-                        .map_or(true, |right| {
+                        .is_none_or(|right| {
                             left.anchor != right.anchor
                                 || left.status != right.status
                                 || left.tone != right.tone

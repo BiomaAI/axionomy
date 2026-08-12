@@ -123,6 +123,21 @@ test("keeps Logistics graph travel smooth when the OS requests reduced motion", 
   expect(after?.x).not.toBe(during?.x);
 });
 
+test("uses the generic motion compositor across every graph problem", async ({ page }) => {
+  test.setTimeout(60_000);
+  const browserErrors: string[] = [];
+  page.on("pageerror", (error) => browserErrors.push(error.message));
+  const problems = ["maze", "bridge", "workshop", "marketplace", "logistics", "mission", "rescue", "work_league"];
+  for (const problem of problems) {
+    await page.goto(`/?problem=${problem}&instance=micro&view=replay&step=0&seed=17&budget=8`);
+    await expect(page.locator(".graph-scene")).toBeVisible();
+    await expect(page.locator(".react-flow__node.entity-overlay").first()).toBeVisible();
+    await page.getByRole("button", { name: "Next exchange" }).click();
+    await expect(page.locator('.graph-scene[data-motion="step"]')).toBeVisible();
+  }
+  expect(browserErrors).toEqual([]);
+});
+
 test("browser history restores a prior problem deep link", async ({ page }) => {
   await page.goto("/?problem=work_league&instance=showcase&strategy=mixed_field&view=replay&step=7&leaderboard=contract_value&seed=17&budget=128");
   await expect(page.getByRole("heading", { name: "Work League · Mixed policy field" })).toBeVisible();

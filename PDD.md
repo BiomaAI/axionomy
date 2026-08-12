@@ -703,7 +703,8 @@ ViewId        = stable presentation key + human label + optional JSON context
 ExactQuantity = decimal text
 ViewSnapshot  = ordered accounts and balances + optional derived scene
                 + replay-derived leaderboards
-Scene         = surface + semantic entities + paths + annotations + metrics
+Scene         = surface + semantic entities + typed economic evidence links
+                + paths + annotations + metrics
 Leaderboard   = direction + ordered participants + exact score + rank evidence
 ExchangeFrame = before + assessment + exchange + receipt + after + cues
 ViewDocument  = metadata + model + initial snapshot + replay frames
@@ -794,6 +795,19 @@ browser verification. Tabler supplies the curated implementation of semantic
 glyph keys, but the portable contract contains neither React component names
 nor arbitrary SVG.
 
+Graph motion is composed generically from stable entity identity, adjacent
+scene anchors, typed account/balance evidence, and the replayed receipt. The
+browser therefore does not contain branches for a maze explorer, vehicle,
+robot, package, or workshop material. The same compositor turns an anchor
+change into travel, entity appearance/disappearance into entry/exit, exact
+receipt deltas into consumed/produced/preserved emphasis, and path status into
+route flow. Playback buttons and autoplay declare adjacent-step intent so
+semantic movement remains visible; scrubber jumps declare seek intent and do
+not invent long travel across skipped exchanges. Stable canvas geometry and
+deterministic co-location slots prevent unrelated nodes from jumping between
+frames. Reduced-motion preferences remove decorative repetition without
+hiding the essential state transition.
+
 Solve evidence and trace playback are deliberately distinct controls. `Run`
 creates a new artifact; the transport controls only replay its accepted
 exchanges. The Solve surface exposes live or retained phase, rollout, tree,
@@ -821,8 +835,11 @@ evidence, and actor-relative views. Every artifact includes replayable strategy
 alternatives where the domain supplies them. The universal model explorer
 exposes rates, roles, goals, and invariants even when a specialized
 scene is absent. The shared scene vocabulary renders stable semantic entities,
-paths, statuses, exact metrics, annotations, and transition cues across all
-four geometric surfaces. A transition remains visible through its receipt-
+typed links to their proving accounts or balances, paths, statuses, exact
+metrics, annotations, and transition cues across all four geometric surfaces.
+Graph adapters for Maze, Bridge, Workshop, Marketplace, Logistics, Mission,
+Rescue, and Work League all expose replay-changing linked entities through one
+generic motion system. A transition remains visible through its receipt-
 derived cue even when before/after geometry is identical. An instance selector
 makes Micro and Stress available to either executable engine, while static
 fallback deliberately serves the committed Showcase artifacts.
@@ -1799,11 +1816,14 @@ capability rather than inferring liveness from cached data.
 
 ### D-036: Visual richness is typed explanation, not extra truth
 
-A scene has a geometric surface plus stable semantic entities, anchors, paths,
-annotations, exact metrics, and a constrained glyph vocabulary. Tabler is a
-replaceable browser rendering dependency. Frame cues are derived from the
-exchange and receipt, and scene references are validated before an artifact is
-published. This permits rich animation and linked inspection while preserving
+A scene has a geometric surface plus stable semantic entities, anchors, typed
+account/balance evidence links, paths, annotations, exact metrics, and a
+constrained glyph vocabulary. Tabler is a replaceable browser rendering
+dependency. Frame cues are derived from the exchange and receipt, and scene
+anchors plus evidence references are validated before an artifact is
+published. A generic renderer composes deterministic adjacent-step motion and
+receipt effects without knowing the problem domain. This permits rich
+animation and linked inspection while preserving
 the rule that deleting every visual projection changes no valid exchange,
 balance, goal, or replay result.
 

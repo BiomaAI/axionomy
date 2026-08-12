@@ -388,7 +388,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 "waiting",
             )
         };
-        let entity = link_account(
+        link_account(
             visual_entity(
                 format!("order:{order:?}"),
                 format!("Order {order:?}"),
@@ -398,8 +398,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 Some(status.into()),
             ),
             format!("logistics:account:order-{order:?}").to_ascii_lowercase(),
-        );
-        entity
+        )
     });
     let system_entities = [
         link_account(
