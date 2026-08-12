@@ -12,3 +12,4 @@ pub mod rescue;
 pub mod scheduling;
 pub mod sokoban;
 pub mod workshop;
+pub mod work_league;
