@@ -324,7 +324,17 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
     } else {
         SceneAnchorView::Unanchored
     };
-    let mut vehicle = link_account(
+    let vehicle_asset = focus.map_or_else(
+        || {
+            format!(
+                "logistics:asset:traveling-{:?}",
+                traveling.expect("vehicle is located or traveling")
+            )
+            .to_ascii_lowercase()
+        },
+        |location| format!("logistics:asset:at-{location:?}").to_ascii_lowercase(),
+    );
+    let mut vehicle = link_balance(
         visual_entity(
             "vehicle:fleet-1",
             "Vehicle 1",
@@ -334,6 +344,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             traveling.map(|route| format!("traveling {route:?}")),
         ),
         "logistics:account:vehicle",
+        vehicle_asset,
     );
     vehicle.metrics = vec![
         visual_metric(

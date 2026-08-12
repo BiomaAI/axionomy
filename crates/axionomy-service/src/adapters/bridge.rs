@@ -364,7 +364,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         let east = !world
             .balance(&AccountId::Agent(agent), &Asset::At(Side::East))
             .is_zero();
-        let mut entity = link_account(
+        let mut entity = link_balance(
             visual_entity(
                 format!("traveler:{agent:?}"),
                 format!("Agent {agent:?}"),
@@ -380,6 +380,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 Some(if east { "crossed" } else { "waiting" }.into()),
             ),
             format!("bridge:account:agent-{agent:?}").to_ascii_lowercase(),
+            format!("bridge:asset:at-{}", if east { "east" } else { "west" }),
         );
         entity.metrics = vec![
             visual_metric(

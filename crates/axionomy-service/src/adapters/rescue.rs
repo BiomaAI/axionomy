@@ -197,16 +197,15 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         },
     })
     .collect();
-    let mut agent = link_account(
+    let agent_location = focus.expect("the responder remains at an encoded location");
+    let mut agent = link_balance(
         visual_entity(
             "agent:responder",
             "Responder",
             SceneGlyphView::Agent,
-            focus.map_or(SceneAnchorView::Unanchored, |location| {
-                SceneAnchorView::GraphNode {
-                    node: format!("location:{location:?}"),
-                }
-            }),
+            SceneAnchorView::GraphNode {
+                node: format!("location:{agent_location:?}"),
+            },
             SceneToneView::Active,
             Some(
                 if world
@@ -220,6 +219,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             ),
         ),
         "rescue:account:agent",
+        format!("rescue:asset:at-{agent_location:?}").to_ascii_lowercase(),
     );
     agent.metrics = vec![visual_metric(
         "energy",

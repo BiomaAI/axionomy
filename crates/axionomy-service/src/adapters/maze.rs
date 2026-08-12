@@ -310,7 +310,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         })
         .collect();
     let agent = focus.map(|node| {
-        let mut entity = link_account(
+        let mut entity = link_balance(
             visual_entity(
                 "agent:explorer",
                 "Explorer",
@@ -333,6 +333,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 ),
             ),
             "maze:account:agent",
+            format!("maze:asset:at-{node:?}").to_ascii_lowercase(),
         );
         entity.metrics = vec![
             visual_metric(

@@ -278,8 +278,9 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 !world
                     .balance(&AccountId::Agent(agent), &Asset::At(*location))
                     .is_zero()
-            });
-        let mut entity = link_account(
+            })
+            .expect("mission agents remain at an encoded location");
+        let mut entity = link_balance(
             visual_entity(
                 format!("agent:{agent:?}"),
                 format!("{agent:?}"),
@@ -288,11 +289,9 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 } else {
                     SceneGlyphView::Agent
                 },
-                location.map_or(SceneAnchorView::Unanchored, |location| {
-                    SceneAnchorView::GraphNode {
-                        node: format!("location:{location:?}"),
-                    }
-                }),
+                SceneAnchorView::GraphNode {
+                    node: format!("location:{location:?}"),
+                },
                 SceneToneView::Active,
                 Some(
                     if world
@@ -306,6 +305,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 ),
             ),
             format!("mission:account:agent-{agent:?}").to_ascii_lowercase(),
+            format!("mission:asset:at-{location:?}").to_ascii_lowercase(),
         );
         entity.metrics = vec![visual_metric(
             format!("energy-{agent:?}"),

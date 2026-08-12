@@ -484,7 +484,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         .map(|agent| {
             let location = work_league::location(world, agent).unwrap_or(Location::Depot);
             let policy = work_league::policy(world, agent).unwrap_or(Policy::Sprinter);
-            let mut entity = link_account(
+            let mut entity = link_balance(
                 visual_entity(
                     format!("league:agent:{agent:?}").to_ascii_lowercase(),
                     format!("{agent:?} · {policy:?}"),
@@ -504,6 +504,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                     )),
                 ),
                 format!("work_league:account:agent-{agent:?}").to_ascii_lowercase(),
+                format!("work_league:asset:at-{location:?}").to_ascii_lowercase(),
             );
             entity.metrics = vec![
                 visual_metric(
