@@ -33,7 +33,7 @@ const artifact = {
     description: "Replay fixture",
     source: { key: "maze", label: "Key-door maze" },
     model: { rates: [], goal: [], invariants: [] },
-    initial: { index: 0, accounts: [], scene: null },
+    initial: { index: 0, accounts: [], scene: null, leaderboards: [] },
     frames: [],
     objectives: [],
     pareto_fronts: [],

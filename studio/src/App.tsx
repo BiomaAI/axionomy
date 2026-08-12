@@ -1,10 +1,11 @@
-import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState, type CSSProperties } from "react";
 import { useQuery } from "@tanstack/react-query";
 import "@xyflow/react/dist/style.css";
 import logoDark from "../../assets/axionomy-logo-dark.webp";
 import logoLight from "../../assets/axionomy-logo-light.webp";
 import {
   type ExchangeFrame,
+  type LeaderboardView,
   type RunArtifact,
   type RunSummary,
   type SearchObservation,
@@ -28,6 +29,53 @@ import {
 } from "./Inspectors";
 
 const ParetoChart = lazy(() => import("./ParetoChart"));
+type StudioViewMode = "solve" | "replay";
+type StudioUrlState = {
+  problem?: string;
+  instance?: string;
+  strategy?: string;
+  document?: string;
+  view?: StudioViewMode;
+  step?: number;
+  leaderboard?: string;
+  seed?: number;
+  budget?: number;
+};
+
+function readUrlState(): StudioUrlState {
+  const query = new URLSearchParams(window.location.search);
+  const number = (key: string, minimum = 0) => {
+    const value = Number(query.get(key));
+    return Number.isSafeInteger(value) && value >= minimum ? value : undefined;
+  };
+  const view = query.get("view");
+  return {
+    problem: query.get("problem") ?? undefined,
+    instance: query.get("instance") ?? undefined,
+    strategy: query.get("strategy") ?? undefined,
+    document: query.get("document") ?? undefined,
+    view: view === "solve" || view === "replay" ? view : undefined,
+    step: number("step"),
+    leaderboard: query.get("leaderboard") ?? undefined,
+    seed: number("seed"),
+    budget: number("budget", 1),
+  };
+}
+
+function writeUrl(state: Required<Pick<StudioUrlState, "problem" | "instance" | "strategy" | "view" | "step" | "seed" | "budget">> & Pick<StudioUrlState, "document" | "leaderboard">, mode: "push" | "replace") {
+  const query = new URLSearchParams();
+  query.set("problem", state.problem);
+  query.set("instance", state.instance);
+  query.set("strategy", state.strategy);
+  if (state.document) query.set("document", state.document);
+  query.set("view", state.view);
+  query.set("step", String(state.step));
+  if (state.leaderboard) query.set("leaderboard", state.leaderboard);
+  query.set("seed", String(state.seed));
+  query.set("budget", String(state.budget));
+  window.history[mode === "push" ? "pushState" : "replaceState"]({}, "", `${window.location.pathname}?${query}${window.location.hash}`);
+}
+
 type CompletionNotice = {
   artifactId: string;
   problem: string;
@@ -40,6 +88,7 @@ type CompletionNotice = {
 };
 
 export function App() {
+  const initialUrl = useRef(readUrlState()).current;
   const nativeProbeEnabled = import.meta.env.VITE_AXIONOMY_ENGINE !== "browser" && !window.location.hostname.endsWith(".github.io");
   const nativeHealth = useQuery({
     queryKey: ["native-engine-health"],
@@ -66,17 +115,18 @@ export function App() {
     retry: false,
     queryFn: () => engine.catalog(),
   });
-  const [problemKey, setProblemKey] = useState("maze");
-  const [instanceKey, setInstanceKey] = useState("showcase");
-  const [strategyKey, setStrategyKey] = useState("a_star");
-  const [seed, setSeed] = useState(17);
-  const [budget, setBudget] = useState(128);
+  const [problemKey, setProblemKey] = useState(initialUrl.problem ?? "maze");
+  const [instanceKey, setInstanceKey] = useState(initialUrl.instance ?? "showcase");
+  const [strategyKey, setStrategyKey] = useState(initialUrl.strategy ?? "a_star");
+  const [seed, setSeed] = useState(initialUrl.seed ?? 17);
+  const [budget, setBudget] = useState(initialUrl.budget ?? 128);
   const [artifact, setArtifact] = useState<RunArtifact>();
-  const [documentId, setDocumentId] = useState<string>();
-  const [position, setPosition] = useState(0);
+  const [documentId, setDocumentId] = useState<string | undefined>(initialUrl.document);
+  const [position, setPosition] = useState(initialUrl.step ?? 0);
   const [playing, setPlaying] = useState(false);
   const [playbackDelay, setPlaybackDelay] = useState(650);
-  const [viewMode, setViewMode] = useState<"solve" | "replay">("replay");
+  const [viewMode, setViewMode] = useState<StudioViewMode>(initialUrl.view ?? "replay");
+  const [leaderboardKey, setLeaderboardKey] = useState<string | undefined>(initialUrl.leaderboard);
   const [focusedAccount, setFocusedAccount] = useState<string>();
   const [run, setRun] = useState<RunSummary>();
   const [launching, setLaunching] = useState(false);
@@ -85,8 +135,11 @@ export function App() {
   const [elapsedMs, setElapsedMs] = useState(0);
   const [completion, setCompletion] = useState<CompletionNotice>();
   const [freshArtifactId, setFreshArtifactId] = useState<string>();
+  const [linkNotice, setLinkNotice] = useState<string>();
+  const [copied, setCopied] = useState(false);
   const eventSource = useRef<EngineRunSubscription | null>(null);
   const runStartedAt = useRef<number | undefined>(undefined);
+  const pendingUrlStep = useRef<number | undefined>(initialUrl.step);
 
   const problem = catalog.data?.find((candidate) => candidate.key === problemKey);
   const instance = problem?.instances.find((candidate) => candidate.key === instanceKey);
@@ -94,6 +147,18 @@ export function App() {
   const snapshot = useSnapshot(document, position);
   const previous = useSnapshot(document, Math.max(0, position - 1));
   const frame = position > 0 ? document?.frames[position - 1] : undefined;
+
+  const urlState = (overrides: StudioUrlState = {}) => ({
+    problem: overrides.problem ?? problemKey,
+    instance: overrides.instance ?? instanceKey,
+    strategy: overrides.strategy ?? strategyKey,
+    document: Object.hasOwn(overrides, "document") ? overrides.document : documentId,
+    view: overrides.view ?? viewMode,
+    step: overrides.step ?? position,
+    leaderboard: Object.hasOwn(overrides, "leaderboard") ? overrides.leaderboard : leaderboardKey,
+    seed: overrides.seed ?? seed,
+    budget: overrides.budget ?? budget,
+  });
 
   useEffect(() => () => eventSource.current?.close(), []);
 
@@ -106,18 +171,84 @@ export function App() {
   }, [launching, run]);
 
   useEffect(() => {
+    if (!catalog.data || problem) return;
+    const fallback = catalog.data.find((candidate) => candidate.key === "maze") ?? catalog.data[0];
+    if (!fallback) return;
+    setLinkNotice(`The linked problem “${problemKey}” does not exist; opened ${fallback.title} instead.`);
+    setProblemKey(fallback.key);
+    setInstanceKey(fallback.default_instance);
+    setStrategyKey(fallback.default_strategy);
+    setDocumentId(undefined);
+  }, [catalog.data, problem, problemKey]);
+
+  useEffect(() => {
     if (!problem) return;
-    setInstanceKey(problem.default_instance);
-    setStrategyKey(problem.default_strategy);
+    const requestedInstance = problem.instances.some((candidate) => candidate.key === instanceKey) ? instanceKey : problem.default_instance;
+    const requestedStrategy = problem.strategies.some((candidate) => candidate.key === strategyKey) ? strategyKey : problem.default_strategy;
+    if (requestedInstance !== instanceKey || requestedStrategy !== strategyKey) {
+      setLinkNotice(`Some linked options were not valid for ${problem.title}; Studio selected its defaults.`);
+    }
+    setInstanceKey(requestedInstance);
+    setStrategyKey(requestedStrategy);
     setError(undefined);
     setFreshArtifactId(undefined);
     engine.defaultArtifact(problem.key).then((next) => {
+      const requestedDocument = next.documents.find((candidate) => candidate.id === documentId)?.id
+        ?? next.documents.find((candidate) => candidate.id === `${problem.key}:${requestedStrategy}`)?.id
+        ?? next.selected_document_id;
       setArtifact(next);
-      setDocumentId(next.selected_document_id);
+      setDocumentId(requestedDocument);
     }).catch((cause: unknown) => setError(cause instanceof Error ? cause.message : String(cause)));
   }, [problem?.key, engine.kind]);
 
-  useEffect(() => { setPosition(0); setPlaying(false); setFocusedAccount(undefined); }, [document?.id]);
+  useEffect(() => {
+    if (!document) return;
+    setPosition(Math.min(pendingUrlStep.current ?? 0, document.frames.length));
+    pendingUrlStep.current = undefined;
+    setPlaying(false);
+    setFocusedAccount(undefined);
+  }, [document?.id]);
+
+  useEffect(() => {
+    if (!artifact || artifact.problem.key !== problemKey || !documentId) return;
+    if (!artifact.documents.some((candidate) => candidate.id === documentId)) {
+      setLinkNotice(`The linked outcome “${documentId}” does not exist in ${artifact.problem.title}; opened the default outcome instead.`);
+      setDocumentId(artifact.selected_document_id);
+    }
+  }, [artifact?.id, documentId, problemKey]);
+
+  useEffect(() => {
+    if (!snapshot?.leaderboards.length) {
+      setLeaderboardKey(undefined);
+      return;
+    }
+    if (!snapshot.leaderboards.some((leaderboard) => leaderboard.key === leaderboardKey)) {
+      setLeaderboardKey(snapshot.leaderboards[0].key);
+    }
+  }, [snapshot?.index, document?.id]);
+
+  useEffect(() => {
+    if (!problem || !problem.instances.some((candidate) => candidate.key === instanceKey) || !problem.strategies.some((candidate) => candidate.key === strategyKey)) return;
+    writeUrl(urlState(), "replace");
+  }, [problemKey, instanceKey, strategyKey, documentId, viewMode, position, leaderboardKey, seed, budget]);
+
+  useEffect(() => {
+    const restore = () => {
+      const linked = readUrlState();
+      pendingUrlStep.current = linked.step;
+      if (linked.problem) setProblemKey(linked.problem);
+      if (linked.instance) setInstanceKey(linked.instance);
+      if (linked.strategy) setStrategyKey(linked.strategy);
+      setDocumentId(linked.document);
+      if (linked.view) setViewMode(linked.view);
+      setLeaderboardKey(linked.leaderboard);
+      if (linked.seed !== undefined) setSeed(linked.seed);
+      if (linked.budget !== undefined) setBudget(linked.budget);
+      setPosition(linked.step ?? 0);
+    };
+    window.addEventListener("popstate", restore);
+    return () => window.removeEventListener("popstate", restore);
+  }, []);
 
   useEffect(() => {
     if (!playing || !document) return;
@@ -190,6 +321,42 @@ export function App() {
     .filter((point) => point.kind === "accounts" || point.kind === "rates")
     .map((point) => `${point.value} ${point.label}`)
     .join(" · ");
+  const selectProblem = (key: string) => {
+    const next = catalog.data?.find((candidate) => candidate.key === key);
+    if (!next) return;
+    const nextState = urlState({ problem: key, instance: next.default_instance, strategy: next.default_strategy, document: undefined, step: 0, leaderboard: undefined });
+    writeUrl(nextState, "push");
+    pendingUrlStep.current = 0;
+    setProblemKey(key);
+    setInstanceKey(next.default_instance);
+    setStrategyKey(next.default_strategy);
+    setDocumentId(undefined);
+    setLeaderboardKey(undefined);
+    setLinkNotice(undefined);
+  };
+  const selectInstance = (key: string) => {
+    writeUrl(urlState({ instance: key, step: 0 }), "push");
+    setInstanceKey(key); setPosition(0); setCompletion(undefined);
+  };
+  const selectStrategy = (key: string) => {
+    const match = artifact?.documents.find((candidate) => candidate.id === `${problemKey}:${key}`);
+    writeUrl(urlState({ strategy: key, document: match?.id, step: 0 }), "push");
+    setStrategyKey(key); setPosition(0); if (match) setDocumentId(match.id);
+  };
+  const selectDocument = (id: string) => {
+    writeUrl(urlState({ document: id, step: 0 }), "push");
+    setDocumentId(id); setPosition(0);
+  };
+  const selectView = (view: StudioViewMode) => {
+    writeUrl(urlState({ view }), "push");
+    setViewMode(view);
+  };
+  const copyLink = async () => {
+    writeUrl(urlState(), "replace");
+    await navigator.clipboard.writeText(window.location.href);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1_500);
+  };
 
   return <div className="app-shell">
     <header className="topbar">
@@ -198,9 +365,9 @@ export function App() {
     </header>
 
     <section className="command-bar" aria-label="Problem controls">
-      <label className="field problem-field"><span>Problem</span><select value={problemKey} onChange={(event) => setProblemKey(event.target.value)} disabled={active}>{catalog.data?.map((candidate) => <option value={candidate.key} key={candidate.key}>{candidate.title}</option>)}</select></label>
-      <label className="field instance-field"><span>Instance (size)</span><select value={instanceKey} onChange={(event) => { setInstanceKey(event.target.value); setCompletion(undefined); }} disabled={active}>{problem?.instances.map((candidate) => <option value={candidate.key} key={candidate.key}>{candidate.label}</option>)}</select></label>
-      <label className="field strategy-field"><span>Strategy</span><select value={strategyKey} onChange={(event) => { const key = event.target.value; setStrategyKey(key); const match = artifact?.documents.find((candidate) => candidate.id === `${problemKey}:${key}`); if (match) setDocumentId(match.id); }} disabled={active}>{problem?.strategies.map((strategy) => <option value={strategy.key} key={strategy.key}>{strategy.label}</option>)}</select></label>
+      <label className="field problem-field"><span>Problem</span><select value={problemKey} onChange={(event) => selectProblem(event.target.value)} disabled={active}>{catalog.data?.map((candidate) => <option value={candidate.key} key={candidate.key}>{candidate.title}</option>)}</select></label>
+      <label className="field instance-field"><span>Instance (size)</span><select value={instanceKey} onChange={(event) => selectInstance(event.target.value)} disabled={active}>{problem?.instances.map((candidate) => <option value={candidate.key} key={candidate.key}>{candidate.label}</option>)}</select></label>
+      <label className="field strategy-field"><span>Strategy</span><select value={strategyKey} onChange={(event) => selectStrategy(event.target.value)} disabled={active}>{problem?.strategies.map((strategy) => <option value={strategy.key} key={strategy.key}>{strategy.label}</option>)}</select></label>
       <label className="field numeric-field"><span>Seed</span><input type="number" min="0" value={seed} disabled={active} onChange={(event) => setSeed(Number(event.target.value))} /></label>
       <label className="field numeric-field"><span>Budget</span><input type="number" min="1" value={budget} disabled={active} onChange={(event) => setBudget(Math.max(1, Number(event.target.value)))} /></label>
       <button className="primary" onClick={start} disabled={active || !engine.canRun}>{launching ? "Starting…" : run?.status === "paused" ? "Paused" : run ? "Running…" : "Run"}</button>
@@ -208,22 +375,26 @@ export function App() {
       {engine.canPause && run?.status === "paused" && <button onClick={resume}>Resume</button>}
       {run && <button className="danger" onClick={cancel}>Cancel</button>}
       <label className="file-button">Load artifact<input type="file" accept="application/json,.json" onChange={(event) => loadFile(event.target.files?.[0])} /></label>
+      <button type="button" className="share-link" onClick={copyLink}>{copied ? "Link copied ✓" : "Copy link"}</button>
       <div className="run-message">{active ? "A newly computed result will replace the current view." : engine.canRun ? "The CLI, HTTP API, MCP server, and Studio all run this same problem the same way." : "No engine running — you can still replay the saved results."}</div>
     </section>
 
     {active && <RunActivity launching={launching} run={run} events={events} elapsedMs={elapsedMs} />}
     {completion && <CompletionBanner notice={completion} onDismiss={() => setCompletion(undefined)} />}
+    {linkNotice && <div className="link-notice" role="status">{linkNotice}<button type="button" onClick={() => setLinkNotice(undefined)}>Dismiss</button></div>}
 
     {problem && <section className="problem-context"><div><span>{familyLabel(problem.family)}</span><div className="problem-copy"><p>{problem.summary}</p><small><strong>{instance?.label ?? artifact?.instance.label}</strong>{instance?.description ?? artifact?.instance.description}{modelCounts && <em>{modelCounts}</em>}</small></div></div><div>{problem.capabilities.map((capability) => <span key={capability}>{capabilityLabel(capability)}</span>)}</div></section>}
     {error && <div className="error-banner" role="alert">{error}</div>}
 
     {artifact && document && snapshot ? <main className={freshArtifactId === artifact.id ? "fresh-artifact" : undefined}>
-      <section className="alternative-bar"><div><span>Alternatives</span><strong>{artifact.documents.length} outcomes you can replay</strong></div><div role="tablist">{artifact.documents.map((candidate) => <button key={candidate.id} role="tab" aria-selected={candidate.id === document.id} onClick={() => setDocumentId(candidate.id)}>{candidate.title.replace(`${artifact.problem.title} · `, "")}</button>)}</div></section>
-      <StrategyComparison artifact={artifact} selected={document.id} onSelect={setDocumentId} />
+      <section className="alternative-bar"><div><span>Alternatives</span><strong>{artifact.documents.length} outcomes you can replay</strong></div><div role="tablist">{artifact.documents.map((candidate) => <button key={candidate.id} role="tab" aria-selected={candidate.id === document.id} onClick={() => selectDocument(candidate.id)}>{candidate.title.replace(`${artifact.problem.title} · `, "")}</button>)}</div></section>
+      <StrategyComparison artifact={artifact} selected={document.id} onSelect={selectDocument} />
       <section className="document-heading"><div><span className="eyebrow">{artifact.instance.label} · {document.source.label} · {document.id}{freshArtifactId === artifact.id ? " · just computed" : ""}</span><h1>{document.title}</h1><p>{document.description}</p></div><div className="objective-pills">{document.objectives.map((objective) => <div className="objective" key={objective.key}><span>{objective.label}</span><strong>{objective.value}</strong><small>{objective.direction}</small></div>)}</div></section>
-      <div className="view-tabs" role="tablist" aria-label="Studio evidence mode"><button type="button" role="tab" aria-selected={viewMode === "solve"} onClick={() => setViewMode("solve")}>How it was solved <small>{active ? "live" : document.solve_observations.length}</small></button><button type="button" role="tab" aria-selected={viewMode === "replay"} onClick={() => setViewMode("replay")}>Step-by-step replay <small>{document.frames.length}</small></button></div>
+      <div className="view-tabs" role="tablist" aria-label="Studio evidence mode"><button type="button" role="tab" aria-selected={viewMode === "solve"} onClick={() => selectView("solve")}>How it was solved <small>{active ? "live" : document.solve_observations.length}</small></button><button type="button" role="tab" aria-selected={viewMode === "replay"} onClick={() => selectView("replay")}>Step-by-step replay <small>{document.frames.length}</small></button></div>
       {viewMode === "solve" ? <SolveWorkspace observations={active ? events.flatMap((event) => event.kind === "search_observation" ? [event.observation] : []) : document.solve_observations} active={active} /> : <>
       <PlaybackControls position={position} count={document.frames.length} playing={playing} delay={playbackDelay} onDelay={setPlaybackDelay} onPosition={setPosition} onPlaying={(next) => { if (next && position >= document.frames.length) setPosition(0); setPlaying(next); }} frame={frame} />
+
+      {snapshot.leaderboards.length > 0 && <LeaderboardDock document={document} snapshot={snapshot} previous={previous} position={position} selectedKey={leaderboardKey} onSelect={(key) => { writeUrl(urlState({ leaderboard: key }), "push"); setLeaderboardKey(key); }} onParticipant={setFocusedAccount} />}
 
       <section className="workspace-grid">
         <div className="panel world-panel"><PanelHeading kicker="Picture (illustration only)" title={snapshot.scene?.title ?? "Problem picture"} aside={snapshot.scene?.surface.kind} /><SceneView scene={snapshot.scene} onAccount={setFocusedAccount} /></div>
@@ -254,6 +425,7 @@ function RunActivity({ launching, run, events, elapsedMs }: { launching: boolean
   const total = progress?.total ?? run?.total ?? undefined;
   const status = launching ? "Starting engine run" : run?.status === "paused" ? "Run paused" : "Running computation";
   const message = latest ? eventMessage(latest) : "Submitting reproducible run request…";
+  const liveFrame = [...events].reverse().find((event): event is Extract<StudioEvent, { kind: "frame_appended" }> => event.kind === "frame_appended");
   return <section className={`run-activity ${run?.status === "paused" ? "paused" : ""}`} role="status" aria-live="polite">
     <div className="run-activity-heading"><span className="spinner" aria-hidden="true" /><div><strong>{status}</strong><span>{message}</span></div></div>
     <div className="run-activity-progress">
@@ -261,6 +433,7 @@ function RunActivity({ launching, run, events, elapsedMs }: { launching: boolean
       <span>{total !== undefined ? `${completed} / ${total}` : "waiting for first checkpoint"}</span>
     </div>
     <div className="run-activity-meta"><span>{formatDuration(elapsedMs)} elapsed</span>{run && <><span>{run.request.instance ?? "default"} instance</span><span>seed {run.request.seed}</span><span>budget {run.request.budget}</span><code>{run.id}</code></>}</div>
+    {liveFrame?.frame.after.leaderboards[0] && <div className="live-standings"><span>Live verified frame {liveFrame.frame_index + 1} · {liveFrame.frame.after.leaderboards[0].label}</span>{liveFrame.frame.after.leaderboards[0].entries.slice(0, 4).map((entry) => <strong key={entry.participant.key}>{entry.rank ? `#${entry.rank}` : "—"} {entry.participant.label} <b>{entry.value}</b></strong>)}</div>}
   </section>;
 }
 
@@ -309,6 +482,7 @@ function familyLabel(family: NonNullable<RunArtifact["problem"]>["family"]): str
     adversarial_game: "Adversarial game",
     partial_observation: "Hidden information",
     temporal_simulation: "Time and decay",
+    multi_agent_competition: "Multi-agent competition",
   };
   return labels[family];
 }
@@ -333,6 +507,7 @@ function capabilityLabel(capability: RunArtifact["problem"]["capabilities"][numb
     fungible_cohorts: "Interchangeable batches",
     non_fungible_facts: "Unique facts",
     rl_projection: "Reinforcement-learning training data",
+    replay_derived_leaderboards: "Replay-derived leaderboards",
   };
   return labels[capability];
 }
@@ -346,6 +521,7 @@ function phaseLabel(phase: string): string {
     mcts: "MCTS",
     mcts_game: "MCTS",
     ismcts: "ISMCTS",
+    multi_agent_match: "Multi-agent match",
   };
   return labels[phase] ?? phase.replaceAll("_", " ");
 }
@@ -364,6 +540,64 @@ function StrategyComparison({ artifact, selected, onSelect }: { artifact: RunArt
       </tr>;
     })}</tbody></table></div>
   </section>;
+}
+
+function LeaderboardDock({ document, snapshot, previous, position, selectedKey, onSelect, onParticipant }: { document: ViewDocument; snapshot: ViewSnapshot; previous?: ViewSnapshot; position: number; selectedKey?: string; onSelect: (key: string) => void; onParticipant: (account: string) => void }) {
+  const selected = snapshot.leaderboards.find((leaderboard) => leaderboard.key === selectedKey) ?? snapshot.leaderboards[0];
+  if (!selected) return null;
+  const previousBoard = previous?.leaderboards.find((leaderboard) => leaderboard.key === selected.key);
+  const snapshots = [document.initial, ...document.frames.slice(0, position).map((frame) => frame.after)];
+  return <section className="leaderboard-dock" aria-label="Replay-derived leaderboards">
+    <header><div><span>Live comparative outcomes</span><strong>Who is winning depends on what you value</strong></div><div className="leaderboard-step">Economic step <b>{snapshot.index}</b></div></header>
+    <div className="leaderboard-tabs" role="tablist">{snapshot.leaderboards.map((leaderboard) => <button type="button" role="tab" aria-selected={leaderboard.key === selected.key} key={leaderboard.key} onClick={() => onSelect(leaderboard.key)}>{leaderboard.label}<small>{leaderboard.direction}</small></button>)}</div>
+    <div className="leaderboard-explanation"><strong>{selected.label}</strong><span>{selected.description}</span></div>
+    <div className="leaderboard-entries">{selected.entries.map((entry) => {
+      const prior = previousBoard?.entries.find((candidate) => candidate.participant.key === entry.participant.key);
+      const movement = rankMovement(entry.rank ?? undefined, prior?.rank ?? undefined);
+      const tookLead = entry.rank === 1 && prior?.rank != null && prior.rank !== 1;
+      const history = snapshots.map((candidate) => candidate.leaderboards.find((board) => board.key === selected.key)?.entries.find((candidateEntry) => candidateEntry.participant.key === entry.participant.key)?.value).filter((value): value is string => value !== undefined);
+      return <article key={entry.participant.key} className={`${entry.eligible ? "eligible" : "ineligible"} ${tookLead ? "lead-change" : ""}`} style={{ "--participant-color": participantColor(entry.participant.key) } as CSSProperties}>
+        <button type="button" className="leaderboard-participant" onClick={() => onParticipant(entry.participant.key)}>
+          <span className="rank">{entry.rank ? `#${entry.rank}` : "—"}</span><span className="participant-dot" /><span><strong>{entry.participant.label}</strong><small>{entry.eligible ? movement : "not yet eligible"}{tookLead ? " · took the lead" : ""}</small></span>
+        </button>
+        <div className="leaderboard-score"><strong>{entry.value}</strong><small>{entry.unit ?? (entry.eligible ? "standing" : "waiting for work")}</small></div>
+        <Sparkline values={history} />
+        <details><summary>Why this rank?</summary><div>{entry.components.map((metric) => <span key={metric.key}><small>{metric.label}</small><b>{metric.value}{metric.unit ? ` ${metric.unit}` : ""}</b></span>)}</div></details>
+      </article>;
+    })}</div>
+    <footer>Ranks are disposable projections of this replayed snapshot. The accounts and applied exchanges remain authoritative.</footer>
+  </section>;
+}
+
+function Sparkline({ values }: { values: string[] }) {
+  const numeric = values.map(scoreNumber);
+  if (numeric.length < 2 || numeric.some((value) => !Number.isFinite(value))) return <div className="sparkline empty" aria-hidden="true" />;
+  const low = Math.min(...numeric);
+  const high = Math.max(...numeric);
+  const range = high - low || 1;
+  const points = numeric.map((value, index) => `${numeric.length === 1 ? 50 : index * 100 / (numeric.length - 1)},${26 - (value - low) * 22 / range}`).join(" ");
+  return <svg className="sparkline" viewBox="0 0 100 30" preserveAspectRatio="none" aria-label={`Score history over ${numeric.length} replay states`}><polyline points={points} /></svg>;
+}
+
+function scoreNumber(value: string): number {
+  if (value === "non-dominated") return 1;
+  if (value === "dominated") return 0;
+  const [numerator, denominator] = value.split("/").map(Number);
+  return denominator === undefined ? numerator : numerator / denominator;
+}
+
+function rankMovement(current?: number, previous?: number): string {
+  if (current === undefined) return "unranked";
+  if (previous === undefined) return "entered ranking";
+  if (current < previous) return `↑ up ${previous - current}`;
+  if (current > previous) return `↓ down ${current - previous}`;
+  return "— held position";
+}
+
+function participantColor(key: string): string {
+  let hash = 0;
+  for (const character of key) hash = (hash * 31 + character.charCodeAt(0)) >>> 0;
+  return `hsl(${hash % 360} 72% 58%)`;
 }
 
 function formatDuration(milliseconds: number): string {

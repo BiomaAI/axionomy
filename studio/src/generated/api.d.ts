@@ -236,7 +236,7 @@ export interface components {
             quantity: components["schemas"]["ExactQuantity"];
         };
         /** @enum {string} */
-        Capability: "deterministic_search" | "weighted_search" | "specialized_algorithm" | "exact_pareto" | "approximate_pareto" | "feasibility_assessment" | "multi_account_exchange" | "atomic_settlement" | "branch_optimization" | "monte_carlo" | "mcts" | "information_set_search" | "partial_observation" | "chance" | "temporal_effects" | "fungible_cohorts" | "non_fungible_facts" | "rl_projection";
+        Capability: "deterministic_search" | "weighted_search" | "specialized_algorithm" | "exact_pareto" | "approximate_pareto" | "feasibility_assessment" | "multi_account_exchange" | "atomic_settlement" | "branch_optimization" | "monte_carlo" | "mcts" | "information_set_search" | "partial_observation" | "chance" | "temporal_effects" | "fungible_cohorts" | "non_fungible_facts" | "rl_projection" | "replay_derived_leaderboards";
         ErrorResponse: {
             error: string;
         };
@@ -354,6 +354,32 @@ export interface components {
             name: string;
             terms: components["schemas"]["InvariantTermView"][];
         };
+        LeaderboardEntryView: {
+            /** @default [] */
+            components: components["schemas"]["SceneMetricView"][];
+            eligible: boolean;
+            participant: components["schemas"]["ViewId"];
+            /**
+             * Format: uint64
+             * @description Eligible entries use one-based competition ranking. Ineligible entries
+             *     remain visible but deliberately have no rank.
+             */
+            rank?: number | null;
+            unit?: string | null;
+            /**
+             * @description Exact display text. Ratios should be reduced before projection rather
+             *     than rounded into semantic state.
+             */
+            value: string;
+        };
+        LeaderboardView: {
+            description: string;
+            direction: components["schemas"]["ObjectiveDirectionView"];
+            /** @default [] */
+            entries: components["schemas"]["LeaderboardEntryView"][];
+            key: string;
+            label: string;
+        };
         MatrixCellView: {
             /** @default [] */
             classes: string[];
@@ -416,7 +442,7 @@ export interface components {
             title: string;
         };
         /** @enum {string} */
-        ProblemFamily: "pathfinding" | "constraint" | "production" | "scheduling" | "allocation" | "market" | "stochastic_planning" | "adversarial_game" | "partial_observation" | "temporal_simulation";
+        ProblemFamily: "pathfinding" | "constraint" | "production" | "scheduling" | "allocation" | "market" | "stochastic_planning" | "adversarial_game" | "partial_observation" | "temporal_simulation" | "multi_agent_competition";
         ProblemList: {
             problems: components["schemas"]["ProblemDescriptor"][];
         };
@@ -686,6 +712,8 @@ export interface components {
             /** Format: uint64 */
             sequence: number;
         } | {
+            document_id: string;
+            frame: components["schemas"]["ExchangeFrame"];
             /** Format: uint64 */
             frame_index: number;
             /** @constant */
@@ -806,6 +834,12 @@ export interface components {
             accounts: components["schemas"]["AccountView"][];
             /** Format: uint64 */
             index: number;
+            /**
+             * @description Disposable rankings derived from this exact replay-verified state.
+             *     They explain comparative outcomes; they never authorize an exchange.
+             * @default []
+             */
+            leaderboards: components["schemas"]["LeaderboardView"][];
             scene?: components["schemas"]["Scene"] | null;
         };
         ViewSource: {

@@ -18,6 +18,8 @@ export type SceneEntity = components["schemas"]["SceneEntityView"];
 export type SceneSurface = components["schemas"]["SceneSurfaceView"];
 export type ProposalView = components["schemas"]["ProposalView"];
 export type SearchObservation = components["schemas"]["SearchObservationView"];
+export type LeaderboardView = components["schemas"]["LeaderboardView"];
+export type LeaderboardEntry = components["schemas"]["LeaderboardEntryView"];
 
 export async function fetchProblems(): Promise<ProblemDescriptor[]> {
   const { data, error } = await api.GET("/api/problems");

@@ -37,3 +37,25 @@ test("loads a distinct static problem and its specialized renderer", async ({ pa
   await expect(page.locator(".matrix-scene")).toBeVisible();
   await expect(page.getByText("Which subset contains which element", { exact: false })).toBeVisible();
 });
+
+test("opens a shared Work League replay at the exact leaderboard and step", async ({ page }) => {
+  await page.goto("/?problem=work_league&instance=showcase&strategy=mixed_field&document=work_league%3Amixed_field&view=replay&step=12&leaderboard=resource_efficiency&seed=17&budget=128");
+  await expect(page.getByRole("combobox", { name: "Problem", exact: true })).toHaveValue("work_league");
+  await expect(page.getByRole("heading", { name: "Work League · Mixed policy field" })).toBeVisible();
+  await expect(page.getByRole("tab", { name: /Resource efficiency/ })).toHaveAttribute("aria-selected", "true");
+  await expect(page.locator(".leaderboard-step")).toContainText("12");
+  await expect(page.locator(".leaderboard-entries article")).toHaveCount(4);
+  await page.getByRole("button", { name: "Next exchange" }).click();
+  await expect(page).toHaveURL(/step=13/);
+  await expect(page.locator(".leaderboard-step")).toContainText("13");
+});
+
+test("browser history restores a prior problem deep link", async ({ page }) => {
+  await page.goto("/?problem=work_league&instance=showcase&strategy=mixed_field&view=replay&step=7&leaderboard=contract_value&seed=17&budget=128");
+  await expect(page.getByRole("heading", { name: "Work League · Mixed policy field" })).toBeVisible();
+  await page.getByRole("combobox", { name: "Problem", exact: true }).selectOption("maze");
+  await expect(page.getByRole("heading", { name: /Maze · least energy/ })).toBeVisible();
+  await page.goBack();
+  await expect(page.getByRole("heading", { name: "Work League · Mixed policy field" })).toBeVisible();
+  await expect(page.locator(".leaderboard-step")).toContainText("7");
+});

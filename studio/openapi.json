@@ -757,7 +757,8 @@
           "temporal_effects",
           "fungible_cohorts",
           "non_fungible_facts",
-          "rl_projection"
+          "rl_projection",
+          "replay_derived_leaderboards"
         ]
       },
       "ErrorResponse": {
@@ -1138,6 +1139,78 @@
           "terms"
         ]
       },
+      "LeaderboardEntryView": {
+        "type": "object",
+        "properties": {
+          "components": {
+            "type": "array",
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/SceneMetricView"
+            }
+          },
+          "eligible": {
+            "type": "boolean"
+          },
+          "participant": {
+            "$ref": "#/components/schemas/ViewId"
+          },
+          "rank": {
+            "description": "Eligible entries use one-based competition ranking. Ineligible entries\nremain visible but deliberately have no rank.",
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "uint64",
+            "minimum": 0
+          },
+          "unit": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "value": {
+            "description": "Exact display text. Ratios should be reduced before projection rather\nthan rounded into semantic state.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "participant",
+          "value",
+          "eligible"
+        ]
+      },
+      "LeaderboardView": {
+        "type": "object",
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "direction": {
+            "$ref": "#/components/schemas/ObjectiveDirectionView"
+          },
+          "entries": {
+            "type": "array",
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/LeaderboardEntryView"
+            }
+          },
+          "key": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "description",
+          "direction"
+        ]
+      },
       "MatrixCellView": {
         "type": "object",
         "properties": {
@@ -1388,7 +1461,8 @@
           "stochastic_planning",
           "adversarial_game",
           "partial_observation",
-          "temporal_simulation"
+          "temporal_simulation",
+          "multi_agent_competition"
         ]
       },
       "ProblemList": {
@@ -2413,6 +2487,12 @@
           {
             "type": "object",
             "properties": {
+              "document_id": {
+                "type": "string"
+              },
+              "frame": {
+                "$ref": "#/components/schemas/ExchangeFrame"
+              },
               "frame_index": {
                 "type": "integer",
                 "format": "uint64",
@@ -2435,7 +2515,9 @@
               "kind",
               "run_id",
               "sequence",
-              "frame_index"
+              "document_id",
+              "frame_index",
+              "frame"
             ]
           },
           {
@@ -2809,6 +2891,14 @@
             "type": "integer",
             "format": "uint64",
             "minimum": 0
+          },
+          "leaderboards": {
+            "description": "Disposable rankings derived from this exact replay-verified state.\nThey explain comparative outcomes; they never authorize an exchange.",
+            "type": "array",
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/LeaderboardView"
+            }
           },
           "scene": {
             "anyOf": [
