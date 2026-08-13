@@ -2103,6 +2103,34 @@ mod tests {
     }
 
     #[test]
+    fn grid_cells_are_terrain_not_inferred_moving_entities() {
+        let scene = Scene::grid(
+            "Warehouse",
+            2,
+            1,
+            vec![
+                GridCellView {
+                    x: 0,
+                    y: 0,
+                    label: "Floor with player".into(),
+                    classes: vec!["floor".into()],
+                    account: Some("cell:0".into()),
+                },
+                GridCellView {
+                    x: 1,
+                    y: 0,
+                    label: "Floor".into(),
+                    classes: vec!["floor".into()],
+                    account: Some("cell:1".into()),
+                },
+            ],
+        );
+
+        assert!(scene.entities.is_empty());
+        assert!(matches!(scene.surface, SceneSurfaceView::Grid { .. }));
+    }
+
+    #[test]
     fn replayed_frames_expose_exact_balances_and_receipt_deltas() {
         let economy = EconomyBuilder::new()
             .account(AccountId::Agent, Account::from(basket([(Asset::Ready, 1)])))

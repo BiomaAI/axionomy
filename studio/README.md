@@ -15,6 +15,13 @@ scenario-wide uncertainty occupies a separate context lane. Shapes, grouping,
 and relationship lines therefore communicate what belongs where without
 inventing presentation-only mechanics.
 
+Grid scenes use the same identity discipline. Cells describe terrain and link
+to their authoritative accounts; players, crates, and pieces are explicit
+entities layered above them. A stable entity ID lets the generic renderer move
+the same object between anchors, emphasize receipt-derived effects, and settle
+it onto goals. The playback bar offers System, Full, and Reduced motion modes,
+and remembers the local choice without adding it to the artifact or economy.
+
 **How it was solved** retains search progress, **Step-by-step replay** scrubs
 accepted exchanges, and **Tradeoffs** compares non-dominated outcomes. Tabler
 icons come from a constrained semantic glyph registry rather than arbitrary SVG

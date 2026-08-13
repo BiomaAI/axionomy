@@ -61,4 +61,6 @@ test("loads a full portable artifact and exposes the model workbench", async () 
   expect(screen.getByText("Rates, roles, goals & invariants")).toBeInTheDocument();
   expect(screen.getByText("replay verified")).toBeInTheDocument();
   expect(screen.getByRole("img", { name: "Axionomy" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Go to initial state" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Go to final state" })).toBeInTheDocument();
 });

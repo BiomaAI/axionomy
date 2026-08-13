@@ -1031,6 +1031,13 @@
       "GridCellView": {
         "type": "object",
         "properties": {
+          "account": {
+            "description": "Optional authoritative account represented by this cell. This makes\nreceipt-derived cell emphasis and account inspection portable without\nturning the grid projection into state of its own.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "classes": {
             "type": "array",
             "default": [],
@@ -1039,6 +1046,7 @@
             }
           },
           "label": {
+            "description": "Human-readable terrain or cell state. Renderers may keep repetitive\nlabels (for example, `Floor`) accessible without drawing them in every\ncell.",
             "type": "string"
           },
           "x": {

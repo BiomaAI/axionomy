@@ -320,8 +320,19 @@ export interface components {
             y?: number | null;
         };
         GridCellView: {
+            /**
+             * @description Optional authoritative account represented by this cell. This makes
+             *     receipt-derived cell emphasis and account inspection portable without
+             *     turning the grid projection into state of its own.
+             */
+            account?: string | null;
             /** @default [] */
             classes: string[];
+            /**
+             * @description Human-readable terrain or cell state. Renderers may keep repetitive
+             *     labels (for example, `Floor`) accessible without drawing them in every
+             *     cell.
+             */
             label: string;
             /** Format: uint32 */
             x: number;

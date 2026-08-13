@@ -22,7 +22,7 @@ pub(super) fn build(
     };
     let strategy = selected_strategy(request, descriptor);
     let chunk = usize::try_from(request.budget.clamp(8, 256)).unwrap_or(64);
-    let (solution, search) = search(&initial, &strategy, chunk, progress)?;
+    let (solution, search) = search(&initial, strategy, chunk, progress)?;
     let strategy_label = if strategy == "a_star" {
         "A* with crate-to-goal lower bound"
     } else {
@@ -31,7 +31,7 @@ pub(super) fn build(
     let mut solved = document(
         DocumentSpec {
             problem: "sokoban",
-            strategy: &strategy,
+            strategy,
             title: "Sokoban · warehouse solved",
             description: "Stable crates travel through a walled warehouse. Every walk and every three-cell push is replayed as an indivisible economic exchange.",
             source_label: "Sokoban",

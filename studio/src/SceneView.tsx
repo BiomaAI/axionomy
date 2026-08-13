@@ -15,12 +15,13 @@ import type { ExchangeFrame, Scene, SceneEntity, SceneSurface } from "./api";
 import { SceneIcon } from "./SceneIcon";
 
 export type ReplayMotionMode = "step" | "seek";
+export type SceneMotionPreference = "system" | "full" | "reduced";
 
-export function SceneView({ scene, previousScene, frame, motion = "step", onAccount }: { scene?: Scene | null; previousScene?: Scene | null; frame?: ExchangeFrame; motion?: ReplayMotionMode; onAccount?: (account: string) => void }) {
+export function SceneView({ scene, previousScene, frame, motion = "step", motionPreference = "system", onAccount }: { scene?: Scene | null; previousScene?: Scene | null; frame?: ExchangeFrame; motion?: ReplayMotionMode; motionPreference?: SceneMotionPreference; onAccount?: (account: string) => void }) {
   if (!scene) {
     return <div className="empty-state">No picture for this problem — the accounts below still show everything.</div>;
   }
-  return <div className="scene-composition">
+  return <div className={`scene-composition motion-pref-${motionPreference}`}>
     <SceneChrome scene={scene} />
     <SceneSurfaceView scene={scene} previousScene={previousScene} frame={frame} motion={motion} onAccount={onAccount} />
   </div>;
@@ -29,7 +30,7 @@ export function SceneView({ scene, previousScene, frame, motion = "step", onAcco
 function SceneSurfaceView({ scene, previousScene, frame, motion, onAccount }: { scene: Scene; previousScene?: Scene | null; frame?: ExchangeFrame; motion: ReplayMotionMode; onAccount?: (account: string) => void }) {
   switch (scene.surface.kind) {
     case "graph": return <GraphScene scene={scene} previousScene={previousScene} frame={frame} motion={motion} surface={scene.surface} onAccount={onAccount} />;
-    case "grid": return <GridScene scene={scene} surface={scene.surface} onAccount={onAccount} />;
+    case "grid": return <GridScene scene={scene} previousScene={previousScene} frame={frame} motion={motion} surface={scene.surface} onAccount={onAccount} />;
     case "matrix": return <MatrixScene scene={scene} surface={scene.surface} onAccount={onAccount} />;
     case "timeline": return <TimelineScene scene={scene} surface={scene.surface} onAccount={onAccount} />;
   }
@@ -447,14 +448,46 @@ function composedEntityEffect(entity: SceneEntity, previous: SceneEntity | undef
 
 type GridSurface = Extract<SceneSurface, { kind: "grid" }>;
 
-function GridScene({ scene, surface, onAccount }: { scene: Scene; surface: GridSurface; onAccount?: (account: string) => void }) {
-  const entities = (x: number, y: number) => scene.entities.filter((entity) => entity.anchor.kind === "grid_cell" && entity.anchor.x === x && entity.anchor.y === y);
-  return <div className="grid-scene" role="grid" aria-label={scene.title} style={{ gridTemplateColumns: `repeat(${surface.width}, minmax(42px, 1fr))`, gridTemplateRows: `repeat(${surface.height}, minmax(42px, 1fr))` }}>
-    {surface.cells.map((cell) => <div role="gridcell" aria-label={`${cell.x}, ${cell.y}: ${cell.label}`} key={`${cell.x}:${cell.y}`} className={cell.classes.join(" ")} style={{ gridColumn: cell.x + 1, gridRow: cell.y + 1 }}>
-      <div className="grid-entities">{entities(cell.x, cell.y).map((entity) => <button type="button" key={entity.id.key} className={`grid-entity tone-${entity.tone}`} title={entity.id.label} disabled={!entity.account} onClick={() => entity.account && onAccount?.(entity.account)}><SceneIcon glyph={entity.glyph} size={24} /><b>{entity.id.label}</b></button>)}</div>
-      {entities(cell.x, cell.y).length === 0 && <span>{cell.label}</span>}
-      <small>{cell.x},{cell.y}</small>
-    </div>)}
+function GridScene({ scene, previousScene, frame, motion, surface, onAccount }: { scene: Scene; previousScene?: Scene | null; frame?: ExchangeFrame; motion: ReplayMotionMode; surface: GridSurface; onAccount?: (account: string) => void }) {
+  const current = scene.entities.filter((entity) => entity.anchor.kind === "grid_cell");
+  const previous = previousScene?.entities.filter((entity) => entity.anchor.kind === "grid_cell") ?? [];
+  const currentById = new Map(current.map((entity) => [entity.id.key, entity]));
+  const previousById = new Map(previous.map((entity) => [entity.id.key, entity]));
+  const entities = [...current, ...previous.filter((entity) => !currentById.has(entity.id.key))];
+  const changedAccounts = new Set(frame?.receipt.deltas.filter((delta) => delta.consumed.length > 0 || delta.produced.length > 0).map((delta) => delta.account.key) ?? []);
+  const paths = scene.paths.flatMap((path) => {
+    const points = path.anchors.flatMap((anchor) => anchor.kind === "grid_cell" ? [`${anchor.x + .5},${anchor.y + .5}`] : []);
+    return points.length > 1 ? [{ ...path, points: points.join(" ") }] : [];
+  });
+  const boardStyle = {
+    "--grid-width": surface.width,
+    "--grid-height": surface.height,
+    gridTemplateColumns: `repeat(${surface.width}, minmax(0, 1fr))`,
+    gridTemplateRows: `repeat(${surface.height}, minmax(0, 1fr))`,
+  } as CSSProperties;
+  return <div className="grid-scene">
+    <div className="grid-board" role="grid" aria-label={scene.title} style={boardStyle}>
+      {surface.cells.map((cell) => <button type="button" role="gridcell" aria-label={`${cell.label} at column ${cell.x + 1}, row ${cell.y + 1}`} key={`${cell.x}:${cell.y}`} className={`grid-cell ${cell.classes.join(" ")} ${cell.account && changedAccounts.has(cell.account) ? "is-changing" : ""}`} style={{ gridColumn: cell.x + 1, gridRow: cell.y + 1 }} disabled={!cell.account} onClick={() => cell.account && onAccount?.(cell.account)} />)}
+      {paths.length > 0 && <svg className="grid-paths" viewBox={`0 0 ${surface.width} ${surface.height}`} preserveAspectRatio="none" aria-label="Paths through the grid">{paths.map((path) => <polyline key={path.id} points={path.points} className={`grid-path path-${path.status}`} vectorEffect="non-scaling-stroke"><title>{path.label}</title></polyline>)}</svg>}
+      <div className="grid-entities-layer">
+        {entities.map((entity) => {
+          const shown = currentById.get(entity.id.key) ?? entity;
+          const prior = previousById.get(entity.id.key);
+          const anchor = shown.anchor.kind === "grid_cell" ? shown.anchor : prior?.anchor.kind === "grid_cell" ? prior.anchor : undefined;
+          if (!anchor) return null;
+          const entering = !prior && currentById.has(entity.id.key);
+          const exiting = !currentById.has(entity.id.key);
+          const moving = prior?.anchor.kind === "grid_cell" && (prior.anchor.x !== anchor.x || prior.anchor.y !== anchor.y);
+          const effect = composedEntityEffect(shown, prior, frame);
+          const status = shown.status ? `status-${shown.status.replaceAll(/[^a-zA-Z0-9_-]/g, "-").toLowerCase()}` : "";
+          const style = {
+            left: `${((anchor.x + .5) / surface.width) * 100}%`,
+            top: `${((anchor.y + .5) / surface.height) * 100}%`,
+          };
+          return <button type="button" key={entity.id.key} aria-label={shown.id.label} className={`grid-entity tone-${shown.tone} ${status} motion-${motion} ${effectClass(effect)} ${entering ? "is-entering" : ""} ${exiting ? "is-exiting" : ""} ${moving ? "is-moving" : ""}`} style={style} disabled={!shown.account} onClick={() => shown.account && onAccount?.(shown.account)}><SceneIcon glyph={shown.glyph} size={25} /><b>{shown.id.label}</b>{shown.status && <small>{shown.status.replaceAll("_", " ")}</small>}</button>;
+        })}
+      </div>
+    </div>
   </div>;
 }
 
