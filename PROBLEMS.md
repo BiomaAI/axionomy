@@ -377,6 +377,8 @@ match.
 - Reproducible priors and chance through an encoded Nature participant.
 - Exact finite-support evaluation and genuine seeded Monte Carlo over isolated
   forks.
+- Counterfactual policy comparison over identical encoded scenarios rather
+  than independent stochastic runs.
 - Approximate multi-objective estimates keep sampling uncertainty visible.
 
 ## 7. Single-lane bridge negotiation
@@ -657,8 +659,8 @@ outcome exchanges. The selected live action is core-revalidated.
 - Lazy public proposal generation followed by core applicability filtering.
 - Multi-agent communication as economic state change.
 - Hidden truth, belief, hazard, and deadline in one model.
-- Exact 16-scenario comparison plus genuine seeded Monte Carlo over partially
-  observed policies.
+- Exact 16-scenario counterfactual comparison plus genuine seeded Monte Carlo
+  over partially observed policies.
 - Caller-owned belief evolution and repeated information-set planning.
 - Assessment-derived masks and replay-derived learning trajectories.
 - Approximate fronts provide set-valued policy supervision without claiming
