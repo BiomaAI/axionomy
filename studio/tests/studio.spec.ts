@@ -108,6 +108,7 @@ test("keeps the replay cockpit within a narrow viewport", async ({ page }) => {
 test("keeps Logistics graph travel smooth when the OS requests reduced motion", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto("/?problem=logistics&instance=showcase&strategy=reliable&document=logistics%3Areliable&view=replay&step=1&seed=0&budget=128");
+  await page.getByRole("combobox", { name: "Playback motion" }).selectOption("full");
   const vehicle = page.locator('.react-flow__node[data-id="entity:vehicle:fleet-1"]');
   await expect(vehicle).toBeVisible();
   const before = await vehicle.boundingBox();
