@@ -653,10 +653,14 @@ function rankMovement(current?: number, previous?: number): string {
   return "— held position";
 }
 
+/* Ledger participant inks: brass first, then muted register tones that hold
+   on both the ink and paper grounds. */
+const PARTICIPANT_INKS = ["#b3924e", "#75828e", "#97896f", "#6d977e", "#a07852", "#84895e"];
+
 function participantColor(key: string): string {
   let hash = 0;
   for (const character of key) hash = (hash * 31 + character.charCodeAt(0)) >>> 0;
-  return `hsl(${hash % 360} 72% 58%)`;
+  return PARTICIPANT_INKS[hash % PARTICIPANT_INKS.length];
 }
 
 function formatDuration(milliseconds: number): string {

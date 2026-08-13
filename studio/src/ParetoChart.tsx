@@ -14,8 +14,8 @@ export default function ParetoChart({ document, onSelect }: { document: ViewDocu
     if (!container.current || !front || front.axes.length < 2) return;
     const chart = echarts.init(container.current);
     const style = getComputedStyle(container.current);
-    const selectedColor = style.getPropertyValue("--lime").trim();
-    const peerColor = style.getPropertyValue("--blue").trim();
+    const selectedColor = style.getPropertyValue("--accent").trim();
+    const peerColor = style.getPropertyValue("--steel").trim();
     const backgroundColor = style.getPropertyValue("--bg").trim();
     chart.setOption({
       animationDuration: 450,
