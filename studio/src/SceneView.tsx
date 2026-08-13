@@ -15,13 +15,12 @@ import type { ExchangeFrame, Scene, SceneEntity, SceneSurface } from "./api";
 import { SceneIcon } from "./SceneIcon";
 
 export type ReplayMotionMode = "step" | "seek";
-export type SceneMotionPreference = "system" | "full" | "reduced";
 
-export function SceneView({ scene, previousScene, frame, motion = "step", motionPreference = "system", onAccount }: { scene?: Scene | null; previousScene?: Scene | null; frame?: ExchangeFrame; motion?: ReplayMotionMode; motionPreference?: SceneMotionPreference; onAccount?: (account: string) => void }) {
+export function SceneView({ scene, previousScene, frame, motion = "step", onAccount }: { scene?: Scene | null; previousScene?: Scene | null; frame?: ExchangeFrame; motion?: ReplayMotionMode; onAccount?: (account: string) => void }) {
   if (!scene) {
     return <div className="empty-state">No picture for this problem — the accounts below still show everything.</div>;
   }
-  return <div className={`scene-composition motion-pref-${motionPreference}`}>
+  return <div className="scene-composition">
     <SceneChrome scene={scene} />
     <SceneSurfaceView scene={scene} previousScene={previousScene} frame={frame} motion={motion} onAccount={onAccount} />
   </div>;

@@ -105,16 +105,17 @@ test("keeps the replay cockpit within a narrow viewport", async ({ page }) => {
   expect(overflow).toBeLessThanOrEqual(1);
 });
 
-test("keeps Logistics graph travel smooth when the OS requests reduced motion", async ({ page }) => {
-  await page.emulateMedia({ reducedMotion: "reduce" });
+test("animates Logistics travel without reflowing the replay layout", async ({ page }) => {
   await page.goto("/?problem=logistics&instance=showcase&strategy=reliable&document=logistics%3Areliable&view=replay&step=1&seed=0&budget=128");
-  await page.getByRole("combobox", { name: "Playback motion" }).selectOption("full");
   const vehicle = page.locator('.react-flow__node[data-id="entity:vehicle:fleet-1"]');
+  const stage = page.locator(".stage");
   await expect(vehicle).toBeVisible();
   const before = await vehicle.boundingBox();
+  const stageBefore = await stage.boundingBox();
   await page.getByRole("button", { name: "Next exchange" }).click();
   await page.waitForTimeout(60);
   const during = await vehicle.boundingBox();
+  const stageDuring = await stage.boundingBox();
   const motion = await vehicle.evaluate((element) => ({
     animations: element.getAnimations().filter((animation) => animation.playState === "running").length,
     duration: getComputedStyle(element).transitionDuration,
@@ -126,8 +127,19 @@ test("keeps Logistics graph travel smooth when the OS requests reduced motion", 
   expect(during?.x).not.toBe(before?.x);
   await page.waitForTimeout(300);
   const after = await vehicle.boundingBox();
+  const stageAfter = await stage.boundingBox();
   expect(after?.x).not.toBe(before?.x);
   expect(after?.x).not.toBe(during?.x);
+  for (const current of [stageDuring, stageAfter]) {
+    expect(current).not.toBeNull();
+    expect(stageBefore).not.toBeNull();
+    if (current && stageBefore) {
+      expect(Math.abs(current.x - stageBefore.x)).toBeLessThan(1);
+      expect(Math.abs(current.y - stageBefore.y)).toBeLessThan(1);
+      expect(Math.abs(current.width - stageBefore.width)).toBeLessThan(1);
+      expect(Math.abs(current.height - stageBefore.height)).toBeLessThan(1);
+    }
+  }
 });
 
 test("gives graph semantics depth, distinct shapes, and direction-aware ports", async ({ page }) => {

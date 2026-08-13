@@ -813,10 +813,11 @@ not invent long travel across skipped exchanges. Stable canvas geometry and
 higher-order composition prevent related records from becoming an unstructured
 cloud or jumping between frames. A grid cell describes terrain and optionally
 links to its authoritative account; occupants are explicit entities whose IDs
-survive anchor changes. The playback control offers System, Full, and Reduced
-motion modes, so accessibility defaults are respected while explanatory motion
-can still be requested deliberately. Reduced motion removes decorative
-repetition without hiding the essential state transition.
+survive anchor changes. Studio always renders the full replay choreography: entity
+travel, entry, exit, receipt effects, and route flow are part of its explanatory
+language. That intentional animation is distinct from incidental layout motion;
+canvas, panel, and control geometry must remain stable while their economic
+contents change.
 
 Solve evidence and trace playback are deliberately distinct controls. `Run`
 creates a new artifact; the transport controls only replay its accepted

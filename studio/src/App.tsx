@@ -17,7 +17,7 @@ import {
 import { browserEngine } from "./browserEngine";
 import { connectionLabel, nativeEngine, staticEngine, type EngineConnectivity, type EngineRunSubscription } from "./engine";
 import { SceneIcon } from "./SceneIcon";
-import { SceneView, type ReplayMotionMode, type SceneMotionPreference } from "./SceneView";
+import { SceneView, type ReplayMotionMode } from "./SceneView";
 import {
   Accounts,
   ModelExplorer,
@@ -89,15 +89,6 @@ type CompletionNotice = {
   documents: number;
 };
 
-function readMotionPreference(): SceneMotionPreference {
-  try {
-    const saved = window.localStorage.getItem("axionomy-studio-motion");
-    return saved === "full" || saved === "reduced" ? saved : "system";
-  } catch {
-    return "system";
-  }
-}
-
 export function App() {
   const initialUrl = useRef(readUrlState()).current;
   const nativeProbeEnabled = import.meta.env.VITE_AXIONOMY_ENGINE !== "browser" && !window.location.hostname.endsWith(".github.io");
@@ -135,7 +126,6 @@ export function App() {
   const [documentId, setDocumentId] = useState<string | undefined>(initialUrl.document);
   const [position, setPosition] = useState(initialUrl.step ?? 0);
   const [replayMotion, setReplayMotion] = useState<ReplayMotionMode>("seek");
-  const [motionPreference, setMotionPreference] = useState<SceneMotionPreference>(readMotionPreference);
   const [playing, setPlaying] = useState(false);
   const [playbackDelay, setPlaybackDelay] = useState(650);
   const [viewMode, setViewMode] = useState<StudioViewMode>(initialUrl.view ?? "replay");
@@ -451,12 +441,12 @@ export function App() {
         };
         const showProof = () => window.document.querySelector(".transition-panel")?.scrollIntoView({ behavior: "smooth", block: "start" });
         return <>
-      <PlaybackControls position={position} count={document.frames.length} playing={playing} delay={playbackDelay} onDelay={setPlaybackDelay} motionPreference={motionPreference} onMotionPreference={(preference) => { setMotionPreference(preference); try { window.localStorage.setItem("axionomy-studio-motion", preference); } catch { /* A private browser may disable storage. */ } }} onPosition={(next, motion) => { setReplayMotion(motion); setPosition(next); }} onPlaying={(next) => { if (next && position >= document.frames.length) { setReplayMotion("seek"); setPosition(0); } setPlaying(next); }} frame={frame} onShare={copyLink} shared={copied} />
+      <PlaybackControls position={position} count={document.frames.length} playing={playing} delay={playbackDelay} onDelay={setPlaybackDelay} onPosition={(next, motion) => { setReplayMotion(motion); setPosition(next); }} onPlaying={(next) => { if (next && position >= document.frames.length) { setReplayMotion("seek"); setPosition(0); } setPlaying(next); }} frame={frame} onShare={copyLink} shared={copied} />
 
       <section className={`stage${hasBoards ? "" : " no-boards"}${sparseScene ? " scene-sparse" : ""}`}>
         <div className="panel world-panel" ref={worldPanel}>
           <PanelHeading kicker="Picture (illustration only)" title={snapshot.scene?.title ?? "Problem picture"} aside={snapshot.scene?.surface.kind} action={<button type="button" className="theater-btn" onClick={toggleTheater} title="Theater mode" aria-label="Toggle theater mode"><IconMaximize size={16} stroke={1.8} aria-hidden="true" /></button>} />
-          <SceneView scene={snapshot.scene} previousScene={previous?.scene} frame={frame} motion={replayMotion} motionPreference={motionPreference} onAccount={setFocusedAccount} />
+          <SceneView scene={snapshot.scene} previousScene={previous?.scene} frame={frame} motion={replayMotion} onAccount={setFocusedAccount} />
         </div>
         {hasBoards && <LeaderboardDock document={document} snapshot={snapshot} previous={previous} position={position} selectedKey={leaderboardKey} onSelect={(key) => { writeUrl(urlState({ leaderboard: key }), "push"); setLeaderboardKey(key); }} onParticipant={setFocusedAccount} />}
         <div className="truth-rail">
@@ -681,8 +671,8 @@ function formatDuration(milliseconds: number): string {
   return seconds < 10 ? `${seconds.toFixed(1)} s` : `${Math.round(seconds)} s`;
 }
 
-function PlaybackControls({ position, count, playing, delay, onDelay, motionPreference, onMotionPreference, onPosition, onPlaying, frame, onShare, shared }: { position: number; count: number; playing: boolean; delay: number; onDelay: (delay: number) => void; motionPreference: SceneMotionPreference; onMotionPreference: (preference: SceneMotionPreference) => void; onPosition: (position: number, motion: ReplayMotionMode) => void; onPlaying: (playing: boolean) => void; frame?: ExchangeFrame; onShare?: () => void; shared?: boolean }) {
-  return <section className="playback"><div className="transport"><button type="button" aria-label="Go to initial state" disabled={position === 0} onClick={() => { onPlaying(false); onPosition(0, "seek"); }}><IconPlayerSkipBack size={19} stroke={2} aria-hidden="true" /></button><button type="button" aria-label="Previous exchange" disabled={position === 0} onClick={() => { onPlaying(false); onPosition(Math.max(0, position - 1), "step"); }}><IconChevronLeft size={20} stroke={2.1} aria-hidden="true" /></button><button type="button" className="play" aria-label={playing ? "Pause" : "Play"} onClick={() => onPlaying(!playing)}>{playing ? <IconPlayerPauseFilled size={18} aria-hidden="true" /> : <IconPlayerPlayFilled size={18} aria-hidden="true" />}</button><button type="button" aria-label="Next exchange" disabled={position === count} onClick={() => { onPlaying(false); onPosition(Math.min(count, position + 1), "step"); }}><IconChevronRight size={20} stroke={2.1} aria-hidden="true" /></button><button type="button" aria-label="Go to final state" disabled={position === count} onClick={() => { onPlaying(false); onPosition(count, "seek"); }}><IconPlayerSkipForward size={19} stroke={2} aria-hidden="true" /></button></div><div className="scrubber"><div className="scrubber-label"><span>{position === 0 ? "Initial state" : frame?.cues[0]?.label ?? frame?.exchange.rate.label}</span><strong>{position} / {count}</strong></div><input aria-label="Trace position" type="range" min="0" max={count} value={position} onChange={(event) => onPosition(Number(event.target.value), "seek")} /></div><label className="playback-speed"><span>Speed</span><select aria-label="Playback speed" value={delay} onChange={(event) => onDelay(Number(event.target.value))}><option value={1600}>0.5×</option><option value={900}>0.75×</option><option value={650}>1×</option><option value={325}>2×</option><option value={160}>4×</option></select></label><label className="playback-speed"><span>Motion</span><select aria-label="Playback motion" value={motionPreference} onChange={(event) => onMotionPreference(event.target.value as SceneMotionPreference)}><option value="system">System</option><option value="full">Full</option><option value="reduced">Reduced</option></select></label><div className="kbd-hint" aria-hidden="true"><b>Space</b> play · <b>←</b><b>→</b> step</div>{onShare && <button type="button" className="share-mini" onClick={onShare}>{shared ? "Link copied ✓" : "Copy link"}</button>}<div className="replay-proof"><span>✓</span> replay verified</div></section>;
+function PlaybackControls({ position, count, playing, delay, onDelay, onPosition, onPlaying, frame, onShare, shared }: { position: number; count: number; playing: boolean; delay: number; onDelay: (delay: number) => void; onPosition: (position: number, motion: ReplayMotionMode) => void; onPlaying: (playing: boolean) => void; frame?: ExchangeFrame; onShare?: () => void; shared?: boolean }) {
+  return <section className="playback"><div className="transport"><button type="button" aria-label="Go to initial state" disabled={position === 0} onClick={() => { onPlaying(false); onPosition(0, "seek"); }}><IconPlayerSkipBack size={19} stroke={2} aria-hidden="true" /></button><button type="button" aria-label="Previous exchange" disabled={position === 0} onClick={() => { onPlaying(false); onPosition(Math.max(0, position - 1), "step"); }}><IconChevronLeft size={20} stroke={2.1} aria-hidden="true" /></button><button type="button" className="play" aria-label={playing ? "Pause" : "Play"} onClick={() => onPlaying(!playing)}>{playing ? <IconPlayerPauseFilled size={18} aria-hidden="true" /> : <IconPlayerPlayFilled size={18} aria-hidden="true" />}</button><button type="button" aria-label="Next exchange" disabled={position === count} onClick={() => { onPlaying(false); onPosition(Math.min(count, position + 1), "step"); }}><IconChevronRight size={20} stroke={2.1} aria-hidden="true" /></button><button type="button" aria-label="Go to final state" disabled={position === count} onClick={() => { onPlaying(false); onPosition(count, "seek"); }}><IconPlayerSkipForward size={19} stroke={2} aria-hidden="true" /></button></div><div className="scrubber"><div className="scrubber-label"><span>{position === 0 ? "Initial state" : frame?.cues[0]?.label ?? frame?.exchange.rate.label}</span><strong>{position} / {count}</strong></div><input aria-label="Trace position" type="range" min="0" max={count} value={position} onChange={(event) => onPosition(Number(event.target.value), "seek")} /></div><label className="playback-speed"><span>Speed</span><select aria-label="Playback speed" value={delay} onChange={(event) => onDelay(Number(event.target.value))}><option value={1600}>0.5×</option><option value={900}>0.75×</option><option value={650}>1×</option><option value={325}>2×</option><option value={160}>4×</option></select></label><div className="kbd-hint" aria-hidden="true"><b>Space</b> play · <b>←</b><b>→</b> step</div>{onShare && <button type="button" className="share-mini" onClick={onShare}>{shared ? "Link copied ✓" : "Copy link"}</button>}<div className="replay-proof"><span>✓</span> replay verified</div></section>;
 }
 
 function eventMessage(event: StudioEvent): string {

@@ -162,7 +162,7 @@ h1 { font: 400 clamp(22px, 2.4vw, 32px)/1.1 var(--serif); letter-spacing: 0; mar
 .solve-stream article > div:last-child b { margin-top: 2px; color: var(--brass); font: 11px var(--mono); }
 
 /* The transport stays reachable for the whole replay (sticky). */
-.playback { position: sticky; top: 0; z-index: 70; display: grid; grid-template-columns: auto minmax(180px, 1fr) repeat(5, auto); align-items: center; gap: 12px; background: var(--surface); border: 1px solid var(--line); padding: 11px 14px; margin-bottom: 14px; box-shadow: 0 8px 20px #0006; }
+.playback { position: sticky; top: 0; z-index: 70; display: grid; grid-template-columns: auto minmax(180px, 1fr) repeat(4, auto); align-items: center; gap: 12px; background: var(--surface); border: 1px solid var(--line); padding: 11px 14px; margin-bottom: 14px; box-shadow: 0 8px 20px #0006; }
 .transport { display: flex; gap: 4px; }
 .transport button { min-height: 32px; padding: 0; width: 32px; display: grid; place-items: center; font-family: var(--mono); }
 .transport button svg { display: block; }
@@ -598,21 +598,6 @@ footer { padding: 25px 0 36px; color: var(--muted); text-align: center; font: 8p
   .timeline-lane { grid-template-columns: 100px 1fr; }
   .timeline-axis { margin-left: 115px; }
 }
-
-@media (prefers-reduced-motion: reduce) {
-  .spinner, .indeterminate-progress::after { animation: none; }
-  .motion-pref-system .react-flow__node.current { animation: none; }
-  .motion-pref-system .react-flow__edge.animated .react-flow__edge-path { animation: none !important; stroke-dasharray: none !important; }
-  .motion-pref-system .motion-step .rich-node-effect.effect-produced, .motion-pref-system .motion-step .rich-node-effect.effect-consumed, .motion-pref-system .motion-step .rich-node-effect.effect-preserved, .motion-pref-system .motion-step .rich-node-effect.effect-changed, .motion-pref-system .motion-step .rich-node-lifecycle.is-entering, .motion-pref-system .motion-step .rich-node-lifecycle.is-exiting, .motion-pref-system .motion-step .rich-node-content.is-moving { animation-duration: .01ms; }
-  .motion-pref-system .react-flow__node.occupant-overlay.motion-step, .motion-pref-system .react-flow__node.attachment-group.motion-step, .motion-pref-system .grid-entity.motion-step { transition: none; }
-  .ticker-feed article, .motion-pref-system .grid-entity, .motion-pref-system .matrix-entity, .motion-pref-system .timeline-span { animation: none; }
-  .leaderboard-entries article.lead-change { animation: none; }
-  .strategy-comparison summary i { transition: none; }
-}
-
-.motion-pref-reduced .react-flow__node.current, .motion-pref-reduced .grid-entity, .motion-pref-reduced .matrix-entity, .motion-pref-reduced .timeline-span, .motion-pref-reduced .rich-node-effect, .motion-pref-reduced .rich-node-lifecycle, .motion-pref-reduced .rich-node-content { animation: none !important; }
-.motion-pref-reduced .react-flow__edge.animated .react-flow__edge-path { animation: none !important; stroke-dasharray: none !important; }
-.motion-pref-reduced .react-flow__node.occupant-overlay.motion-step, .motion-pref-reduced .react-flow__node.attachment-group.motion-step, .motion-pref-reduced .grid-entity.motion-step { transition: none; }
 
 @media (prefers-color-scheme: light) {
   :root { color-scheme: light; --bg: #f6f4ef; --surface: #fffdf8; --surface-2: #f6f3ec; --surface-3: #fffdf8; --line: #ddd8cc; --line-strong: #c7c0af; --muted: #6f6a5f; --text: #201e1a; --accent: #201e1a; --accent-contrast: #f6f4ef; --brass: #8a6d2f; --credit: #3f7354; --debit: #96423b; --hold: #8a6430; --steel: #5c6670; }
