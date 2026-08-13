@@ -271,17 +271,11 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 .scene-context b, .scene-context small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .scene-context b { font: 8px var(--mono); }
 .scene-context small { margin-top: 2px; color: var(--muted); font: 6px var(--mono); text-transform: uppercase; }
-.rich-node-effect.effect-produced, .rich-node-effect.effect-consumed, .rich-node-effect.effect-preserved, .rich-node-effect.effect-changed { border-radius: inherit; }
-.rich-node-effect:not(.grid-entity).effect-produced, .rich-node-effect:not(.grid-entity).effect-consumed, .rich-node-effect:not(.grid-entity).effect-preserved, .rich-node-effect:not(.grid-entity).effect-changed { position: relative; }
-.rich-node-effect.effect-produced::after, .rich-node-effect.effect-consumed::after, .rich-node-effect.effect-preserved::after, .rich-node-effect.effect-changed::after { position: absolute; right: -11px; top: -11px; z-index: 2; padding: 2px 4px; border: 1px solid currentColor; background: var(--surface); box-shadow: 0 3px 9px #0008; font: 7px var(--mono); letter-spacing: .04em; text-transform: uppercase; }
-.rich-node-effect.effect-produced::after { content: "+"; color: var(--credit); }
-.rich-node-effect.effect-consumed::after { content: "−"; color: var(--debit); }
-.rich-node-effect.effect-preserved::after { content: "↺"; color: var(--steel); }
-.rich-node-effect.effect-changed::after { content: "∆"; color: var(--hold); }
-.motion-step .rich-node-effect.effect-produced { animation: entity-produced .68s ease both; }
-.motion-step .rich-node-effect.effect-consumed { animation: entity-consumed .68s ease both; }
-.motion-step .rich-node-effect.effect-preserved { animation: entity-preserved .68s ease both; }
-.motion-step .rich-node-effect.effect-changed { animation: entity-changed .68s ease both; }
+.react-flow__node.effect-produced::after, .react-flow__node.effect-consumed::after, .react-flow__node.effect-preserved::after, .react-flow__node.effect-changed::after, .grid-entity.effect-produced::after, .grid-entity.effect-consumed::after, .grid-entity.effect-preserved::after, .grid-entity.effect-changed::after { position: absolute; right: -5px; top: -5px; z-index: 7; width: 15px; height: 15px; display: grid; place-items: center; padding: 0; border: 1px solid currentColor; border-radius: 999px; background: var(--surface); box-shadow: 0 3px 9px #0008; font: 7px var(--mono); line-height: 1; pointer-events: none; }
+.react-flow__node.effect-produced::after, .grid-entity.effect-produced::after { content: "+"; color: var(--credit); }
+.react-flow__node.effect-consumed::after, .grid-entity.effect-consumed::after { content: "−"; color: var(--debit); }
+.react-flow__node.effect-preserved::after, .grid-entity.effect-preserved::after { content: "↺"; color: var(--steel); }
+.react-flow__node.effect-changed::after, .grid-entity.effect-changed::after { content: "∆"; color: var(--hold); }
 .motion-step .rich-node-lifecycle.is-entering { animation: entity-enter .46s cubic-bezier(.2,.9,.3,1.1) both; }
 .motion-step .rich-node-lifecycle.is-exiting { pointer-events: none; animation: entity-exit .4s ease both; }
 .motion-step .rich-node-content.is-moving { animation: entity-travel .62s cubic-bezier(.2,.8,.2,1) both; }
@@ -301,11 +295,15 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 @keyframes node-arrive { 0% { box-shadow: 0 0 0 16px color-mix(in srgb, var(--accent) 34%, transparent), 0 10px 30px #000c; } 100% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent) 10%, transparent), 0 10px 30px #000c; } }
 @keyframes entity-enter { from { opacity: 0; transform: scale(.62); } 72% { transform: scale(1.06); } }
 @keyframes entity-exit { to { opacity: 0; transform: translateY(3px) scale(.68); } }
-@keyframes entity-produced { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--credit) 40%, transparent); } 45% { box-shadow: 0 0 0 9px color-mix(in srgb, var(--credit) 16%, transparent); } }
-@keyframes entity-consumed { 45% { border-color: var(--debit); box-shadow: 0 0 0 8px color-mix(in srgb, var(--debit) 14%, transparent); } }
-@keyframes entity-preserved { 45% { border-color: var(--steel); box-shadow: 0 0 0 8px color-mix(in srgb, var(--steel) 12%, transparent); } }
-@keyframes entity-changed { 45% { border-color: var(--hold); box-shadow: 0 0 0 8px color-mix(in srgb, var(--hold) 12%, transparent); } }
 @keyframes entity-travel { 45% { transform: translateY(-5px) scale(1.08); filter: drop-shadow(0 9px 8px color-mix(in srgb, var(--steel) 48%, transparent)); } }
+@keyframes node-effect-produced { 45% { box-shadow: 0 0 0 8px color-mix(in srgb, var(--credit) 16%, transparent), 0 10px 28px #000b; } }
+@keyframes node-effect-consumed { 45% { box-shadow: 0 0 0 8px color-mix(in srgb, var(--debit) 14%, transparent), 0 10px 28px #000b; } }
+@keyframes node-effect-preserved { 45% { box-shadow: 0 0 0 8px color-mix(in srgb, var(--steel) 12%, transparent), 0 10px 28px #000b; } }
+@keyframes node-effect-changed { 45% { box-shadow: 0 0 0 8px color-mix(in srgb, var(--hold) 12%, transparent), 0 10px 28px #000b; } }
+.react-flow__node:not(.attachment-group).motion-step.effect-produced, .react-flow__node.attachment-group.motion-step.effect-produced .attachment-collection { animation: node-effect-produced .68s ease both; }
+.react-flow__node:not(.attachment-group).motion-step.effect-consumed, .react-flow__node.attachment-group.motion-step.effect-consumed .attachment-collection { animation: node-effect-consumed .68s ease both; }
+.react-flow__node:not(.attachment-group).motion-step.effect-preserved, .react-flow__node.attachment-group.motion-step.effect-preserved .attachment-collection { animation: node-effect-preserved .68s ease both; }
+.react-flow__node:not(.attachment-group).motion-step.effect-changed, .react-flow__node.attachment-group.motion-step.effect-changed .attachment-collection { animation: node-effect-changed .68s ease both; }
 
 .grid-scene { flex: 1; min-height: 0; display: grid; place-items: center; padding: 42px 28px 28px; overflow: auto; background: #131315; }
 .grid-board { position: relative; width: min(100%, calc(var(--grid-width) * 96px)); aspect-ratio: var(--grid-width) / var(--grid-height); display: grid; gap: var(--grid-gap); isolation: isolate; }

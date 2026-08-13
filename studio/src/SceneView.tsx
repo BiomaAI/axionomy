@@ -180,7 +180,9 @@ function GraphScene({ scene, previousScene, frame, motion, surface, onAccount }:
     occupied.push({ ...point, width: ATTACHMENT_WIDTH, height });
     const nodeId = `attachments:${key}`;
     const label = attachmentLabel(anchor, surface, entities.length);
-    nodes.push({ id: nodeId, type: "attachments", position: point, data: { kind: "attachments", label, entities, effects: Object.fromEntries(entities.map((entity) => [entity.id.key, composedEntityEffect(entity, previousById.get(entity.id.key), frame)])), focusAccount: entities.find((entity) => entity.account)?.account ?? undefined, onAccount } satisfies AttachmentNodeData, draggable: false, selectable: true, className: `attachment-group motion-${motion}` });
+    const effects = Object.fromEntries(entities.map((entity) => [entity.id.key, composedEntityEffect(entity, previousById.get(entity.id.key), frame)]));
+    const effect = strongestEffect(Object.values(effects));
+    nodes.push({ id: nodeId, type: "attachments", position: point, data: { kind: "attachments", label, entities, effects, focusAccount: entities.find((entity) => entity.account)?.account ?? undefined, onAccount } satisfies AttachmentNodeData, draggable: false, selectable: true, className: `attachment-group motion-${motion} effect-${effect}` });
     if (anchor.kind === "graph_node") addRelation(anchor.node, nodeId, point, "attachment", relationHandles, relationEdges, positions);
   }
 
@@ -202,7 +204,8 @@ function GraphScene({ scene, previousScene, frame, motion, surface, onAccount }:
     const point = semanticOccupantPosition(view.entity, slot, surface, positions);
     if (!point) continue;
     const nodeId = `entity:${view.entity.id.key}`;
-    nodes.push({ id: nodeId, type: "occupant", position: point, data: { kind: "occupant", entity: view.entity, effect: composedEntityEffect(view.entity, previousById.get(view.entity.id.key), frame), entering: view.entering, exiting: view.exiting, moving: view.moving, focusAccount: view.entity.account ?? undefined } satisfies OccupantNodeData, draggable: false, selectable: true, className: `occupant-overlay motion-${motion}` });
+    const effect = composedEntityEffect(view.entity, previousById.get(view.entity.id.key), frame);
+    nodes.push({ id: nodeId, type: "occupant", position: point, data: { kind: "occupant", entity: view.entity, effect, entering: view.entering, exiting: view.exiting, moving: view.moving, focusAccount: view.entity.account ?? undefined } satisfies OccupantNodeData, draggable: false, selectable: true, className: `occupant-overlay motion-${motion} effect-${effect}` });
     if (view.entity.anchor.kind === "graph_node") addRelation(view.entity.anchor.node, nodeId, point, "occupant", relationHandles, relationEdges, positions);
   }
 
@@ -210,12 +213,13 @@ function GraphScene({ scene, previousScene, frame, motion, surface, onAccount }:
     const structure = structureById.get(node.id.key);
     const states = statesByNode.get(node.id.key) ?? [];
     const effects = [structure, ...states].filter((entity): entity is SceneEntity => Boolean(entity)).map((entity) => composedEntityEffect(entity, previousById.get(entity.id.key), frame));
+    const effect = strongestEffect(effects);
     nodes.push({
       id: node.id.key,
       type: "structure",
       position: { x: node.x ?? 0, y: node.y ?? 0 },
-      data: { kind: "structure", label: node.id.label, entity: structure, states, effect: strongestEffect(effects), handles: [...(handles.get(node.id.key) ?? []), ...(relationHandles.get(node.id.key) ?? [])], focusAccount: states.find((entity) => entity.account)?.account ?? structure?.account ?? undefined } satisfies StructureNodeData,
-      className: ["structure-node", ...node.classes].join(" "),
+      data: { kind: "structure", label: node.id.label, entity: structure, states, effect, handles: [...(handles.get(node.id.key) ?? []), ...(relationHandles.get(node.id.key) ?? [])], focusAccount: states.find((entity) => entity.account)?.account ?? structure?.account ?? undefined } satisfies StructureNodeData,
+      className: ["structure-node", `motion-${motion}`, `effect-${effect}`, ...node.classes].join(" "),
       draggable: false,
     });
   }

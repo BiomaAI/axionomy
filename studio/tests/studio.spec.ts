@@ -108,8 +108,10 @@ test("keeps the replay cockpit within a narrow viewport", async ({ page }) => {
 test("animates Logistics travel without reflowing the replay layout", async ({ page }) => {
   await page.goto("/?problem=logistics&instance=showcase&strategy=reliable&document=logistics%3Areliable&view=replay&step=1&seed=0&budget=128");
   const vehicle = page.locator('.react-flow__node[data-id="entity:vehicle:fleet-1"]');
+  const depot = page.locator('.react-flow__node[data-id="location:Depot"]');
   const stage = page.locator(".stage");
   await expect(vehicle).toBeVisible();
+  await expect(depot).toBeVisible();
   const before = await vehicle.boundingBox();
   const stageBefore = await stage.boundingBox();
   await page.getByRole("button", { name: "Next exchange" }).click();
@@ -118,12 +120,32 @@ test("animates Logistics travel without reflowing the replay layout", async ({ p
   const stageDuring = await stage.boundingBox();
   const motion = await vehicle.evaluate((element) => ({
     animations: element.getAnimations().filter((animation) => animation.playState === "running").length,
+    animationNames: element.getAnimations().map((animation) => animation instanceof CSSAnimation ? animation.animationName : ""),
     duration: getComputedStyle(element).transitionDuration,
     easing: getComputedStyle(element).transitionTimingFunction,
+    radius: getComputedStyle(element).borderRadius,
+    markerRadius: getComputedStyle(element, "::after").borderRadius,
+    marker: getComputedStyle(element, "::after").content,
+  }));
+  const depotEffect = await depot.evaluate((element) => ({
+    animationNames: element.getAnimations().map((animation) => animation instanceof CSSAnimation ? animation.animationName : ""),
+    radius: getComputedStyle(element).borderRadius,
+  }));
+  const innerEffect = await vehicle.locator(".rich-node-effect").evaluate((element) => ({
+    animations: element.getAnimations().length,
+    shadow: getComputedStyle(element).boxShadow,
   }));
   expect(motion.animations).toBeGreaterThan(0);
+  expect(motion.animationNames).toContain("node-effect-produced");
   expect(motion.duration).toContain("0.62s");
   expect(motion.easing).toContain("cubic-bezier(0.2, 0.8, 0.2, 1)");
+  expect(motion.radius).toBe("999px");
+  expect(motion.markerRadius).toBe("999px");
+  expect(motion.marker).toBe('"+"');
+  expect(depotEffect.animationNames).toContain("node-effect-changed");
+  expect(depotEffect.radius).toBe("50%");
+  expect(innerEffect.animations).toBe(0);
+  expect(innerEffect.shadow).toBe("none");
   expect(during?.x).not.toBe(before?.x);
   await page.waitForTimeout(300);
   const after = await vehicle.boundingBox();
