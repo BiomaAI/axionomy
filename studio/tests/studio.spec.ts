@@ -142,6 +142,45 @@ test("animates Logistics travel without reflowing the replay layout", async ({ p
   }
 });
 
+test("keeps every Sokoban replay entity centered on its authoritative cell", async ({ page }) => {
+  test.setTimeout(30_000);
+  await page.goto("/?problem=sokoban&instance=showcase&strategy=a_star&document=sokoban%3Aa_star&view=replay&step=0&seed=0&budget=128");
+
+  for (let step = 0; step <= 15; step += 1) {
+    if (step > 0) {
+      await page.getByRole("button", { name: "Next exchange" }).click();
+      await page.waitForTimeout(720);
+    }
+
+    const alignment = await page.locator(".grid-entity").evaluateAll((entities) => {
+      const cells = [...document.querySelectorAll<HTMLElement>(".grid-cell")];
+      const board = document.querySelector<HTMLElement>(".grid-board");
+      const width = Number(board && getComputedStyle(board).getPropertyValue("--grid-width"));
+      return entities.map((entity) => {
+        const element = entity as HTMLElement;
+        const x = Number(element.dataset.gridX);
+        const y = Number(element.dataset.gridY);
+        const cell = cells[y * width + x];
+        const entityRect = element.getBoundingClientRect();
+        const cellRect = cell.getBoundingClientRect();
+        return {
+          label: element.getAttribute("aria-label"),
+          position: getComputedStyle(element).position,
+          error: Math.hypot(
+            entityRect.left + entityRect.width / 2 - (cellRect.left + cellRect.width / 2),
+            entityRect.top + entityRect.height / 2 - (cellRect.top + cellRect.height / 2),
+          ),
+        };
+      });
+    });
+
+    for (const entity of alignment) {
+      expect(entity.position, `step ${step}: ${entity.label} must remain out of document flow`).toBe("absolute");
+      expect(entity.error, `step ${step}: ${entity.label} must be centered on its cell`).toBeLessThan(0.1);
+    }
+  }
+});
+
 test("gives graph semantics depth, distinct shapes, and direction-aware ports", async ({ page }) => {
   await page.goto("/?problem=logistics&instance=showcase&strategy=reliable&document=logistics%3Areliable&view=replay&step=2&seed=0&budget=128");
   const depot = page.locator('.react-flow__node[data-id="location:Depot"]');

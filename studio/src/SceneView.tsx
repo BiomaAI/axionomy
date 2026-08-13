@@ -447,6 +447,14 @@ function composedEntityEffect(entity: SceneEntity, previous: SceneEntity | undef
 
 type GridSurface = Extract<SceneSurface, { kind: "grid" }>;
 
+const GRID_GAP_PX = 3;
+
+function gridCellCenter(index: number, count: number) {
+  const percentage = ((index + .5) / count) * 100;
+  const gapCorrection = GRID_GAP_PX * (index - (count - 1) / 2) / count;
+  return `calc(${percentage}% + ${gapCorrection}px)`;
+}
+
 function GridScene({ scene, previousScene, frame, motion, surface, onAccount }: { scene: Scene; previousScene?: Scene | null; frame?: ExchangeFrame; motion: ReplayMotionMode; surface: GridSurface; onAccount?: (account: string) => void }) {
   const current = scene.entities.filter((entity) => entity.anchor.kind === "grid_cell");
   const previous = previousScene?.entities.filter((entity) => entity.anchor.kind === "grid_cell") ?? [];
@@ -461,6 +469,7 @@ function GridScene({ scene, previousScene, frame, motion, surface, onAccount }: 
   const boardStyle = {
     "--grid-width": surface.width,
     "--grid-height": surface.height,
+    "--grid-gap": `${GRID_GAP_PX}px`,
     gridTemplateColumns: `repeat(${surface.width}, minmax(0, 1fr))`,
     gridTemplateRows: `repeat(${surface.height}, minmax(0, 1fr))`,
   } as CSSProperties;
@@ -480,10 +489,10 @@ function GridScene({ scene, previousScene, frame, motion, surface, onAccount }: 
           const effect = composedEntityEffect(shown, prior, frame);
           const status = shown.status ? `status-${shown.status.replaceAll(/[^a-zA-Z0-9_-]/g, "-").toLowerCase()}` : "";
           const style = {
-            left: `${((anchor.x + .5) / surface.width) * 100}%`,
-            top: `${((anchor.y + .5) / surface.height) * 100}%`,
+            left: gridCellCenter(anchor.x, surface.width),
+            top: gridCellCenter(anchor.y, surface.height),
           };
-          return <button type="button" key={entity.id.key} aria-label={shown.id.label} className={`grid-entity tone-${shown.tone} ${status} motion-${motion} ${effectClass(effect)} ${entering ? "is-entering" : ""} ${exiting ? "is-exiting" : ""} ${moving ? "is-moving" : ""}`} style={style} disabled={!shown.account} onClick={() => shown.account && onAccount?.(shown.account)}><SceneIcon glyph={shown.glyph} size={25} /><b>{shown.id.label}</b>{shown.status && <small>{shown.status.replaceAll("_", " ")}</small>}</button>;
+          return <button type="button" key={entity.id.key} aria-label={shown.id.label} data-grid-x={anchor.x} data-grid-y={anchor.y} className={`grid-entity tone-${shown.tone} ${status} motion-${motion} ${effectClass(effect)} ${entering ? "is-entering" : ""} ${exiting ? "is-exiting" : ""} ${moving ? "is-moving" : ""}`} style={style} disabled={!shown.account} onClick={() => shown.account && onAccount?.(shown.account)}><SceneIcon glyph={shown.glyph} size={25} /><b>{shown.id.label}</b>{shown.status && <small>{shown.status.replaceAll("_", " ")}</small>}</button>;
         })}
       </div>
     </div>
