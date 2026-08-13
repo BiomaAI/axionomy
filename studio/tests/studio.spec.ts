@@ -114,13 +114,39 @@ test("keeps Logistics graph travel smooth when the OS requests reduced motion", 
   await page.getByRole("button", { name: "Next exchange" }).click();
   await page.waitForTimeout(60);
   const during = await vehicle.boundingBox();
-  const animations = await vehicle.evaluate((element) => element.getAnimations().filter((animation) => animation.playState === "running").length);
-  expect(animations).toBeGreaterThan(0);
+  const motion = await vehicle.evaluate((element) => ({
+    animations: element.getAnimations().filter((animation) => animation.playState === "running").length,
+    duration: getComputedStyle(element).transitionDuration,
+    easing: getComputedStyle(element).transitionTimingFunction,
+  }));
+  expect(motion.animations).toBeGreaterThan(0);
+  expect(motion.duration).toContain("0.62s");
+  expect(motion.easing).toContain("cubic-bezier(0.2, 0.8, 0.2, 1)");
   expect(during?.x).not.toBe(before?.x);
   await page.waitForTimeout(300);
   const after = await vehicle.boundingBox();
   expect(after?.x).not.toBe(before?.x);
   expect(after?.x).not.toBe(during?.x);
+});
+
+test("gives graph semantics depth, distinct shapes, and direction-aware ports", async ({ page }) => {
+  await page.goto("/?problem=logistics&instance=showcase&strategy=reliable&document=logistics%3Areliable&view=replay&step=2&seed=0&budget=128");
+  const depot = page.locator('.react-flow__node[data-id="location:Depot"]');
+  const vehicle = page.locator('.react-flow__node[data-id="entity:vehicle:fleet-1"]');
+  await expect(depot).toBeVisible();
+  await expect(vehicle).toBeVisible();
+  const appearance = await depot.evaluate((element) => ({
+    radius: getComputedStyle(element).borderRadius,
+    shadow: getComputedStyle(element).boxShadow,
+  }));
+  expect(appearance.radius).toBe("50%");
+  expect(appearance.shadow).not.toBe("none");
+  await expect(depot.locator('[data-handleid="source:route:DirectOut"]')).toHaveAttribute("data-handlepos", "right");
+  await expect(depot.locator('[data-handleid="target:route:DirectBack"]')).toHaveAttribute("data-handlepos", "right");
+  await expect(vehicle).toHaveCSS("border-radius", "999px");
+  const outbound = await page.locator('.react-flow__edge[data-id="route:DirectOut"] .react-flow__edge-path').getAttribute("d");
+  const inbound = await page.locator('.react-flow__edge[data-id="route:DirectBack"] .react-flow__edge-path').getAttribute("d");
+  expect(outbound).not.toBe(inbound);
 });
 
 test("uses the generic motion compositor across every graph problem", async ({ page }) => {

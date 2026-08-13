@@ -229,57 +229,60 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 .tone-warning, .tone-uncertain { color: var(--hold) !important; }
 .tone-danger { color: var(--debit) !important; }
 .tone-muted { opacity: .55; }
-.graph-scene { flex: 1; min-height: 0; background: #131315; }
-.react-flow__node { background: var(--surface-3); color: var(--text); border: 1px solid #3e3c40; border-radius: 0; width: 88px; min-height: 72px; display: grid; place-items: center; padding: 8px; text-align: center; font: 500 10px var(--mono); }
-.rich-node { width: 100%; display: grid; place-items: center; gap: 3px; }
-.rich-node svg { color: var(--steel); }
-.rich-node small { color: var(--muted); max-width: 76px; font-size: 6px; text-transform: uppercase; }
-.react-flow__node.entity-overlay { width: auto; min-width: 70px; min-height: 34px; padding: 5px 8px; border-radius: 0; z-index: 4 !important; will-change: transform; }
-.react-flow__node.entity-overlay.motion-step { transition: transform .58s ease-out, left .58s ease-out, top .58s ease-out; }
-.react-flow__node.entity-overlay.motion-seek { transition: none; }
-.entity-token { grid-auto-flow: column; grid-template-columns: auto 1fr; text-align: left; }
-.entity-token small { grid-column: 1 / -1; }
-.rich-node.effect-produced, .rich-node.effect-consumed, .rich-node.effect-preserved, .rich-node.effect-changed { position: relative; }
-.rich-node.effect-produced::after, .rich-node.effect-consumed::after, .rich-node.effect-preserved::after, .rich-node.effect-changed::after { position: absolute; right: -11px; top: -11px; padding: 2px 4px; border: 1px solid currentColor; background: var(--surface); font: 7px var(--mono); letter-spacing: .04em; text-transform: uppercase; }
-.rich-node.effect-produced::after { content: "+"; color: var(--credit); }
-.rich-node.effect-consumed::after { content: "−"; color: var(--debit); }
-.rich-node.effect-preserved::after { content: "↺"; color: var(--steel); }
-.rich-node.effect-changed::after { content: "∆"; color: var(--hold); }
-.motion-step .rich-node.effect-produced { animation: entity-produced .62s ease both; }
-.motion-step .rich-node.effect-consumed { animation: entity-consumed .62s ease both; }
-.motion-step .rich-node.effect-preserved { animation: entity-preserved .62s ease both; }
-.motion-step .rich-node.effect-changed { animation: entity-changed .62s ease both; }
-.motion-step .rich-node.is-entering { animation: entity-enter .32s ease-out both; }
-.motion-step .rich-node.is-exiting { pointer-events: none; animation: entity-exit .3s ease both; }
-.motion-step .rich-node.is-moving svg { animation: entity-travel .58s ease both; }
-.react-flow__node.current { background: var(--accent); border-color: var(--accent); color: var(--accent-contrast); animation: node-arrive .45s ease; }
+.graph-scene { flex: 1; min-height: 0; background: radial-gradient(circle at 50% 44%, #202126 0, #131315 70%); }
+.react-flow__node { background: var(--surface-3); color: var(--text); border: 1px solid #595862; border-radius: 50%; width: 88px; min-height: 72px; display: grid; place-items: center; padding: 8px; text-align: center; font: 500 10px var(--mono); box-shadow: 0 8px 24px #0009, inset 0 1px #ffffff0b; }
+.react-flow__node.resource, .react-flow__node.facility, .react-flow__node.buyer, .react-flow__node.seller, .react-flow__node.carrier { border-radius: 7px; }
 .react-flow__node.goal { border-style: double; border-width: 3px; }
-.react-flow__node.resource { border-radius: 0; }
-.react-flow__edge-path { stroke: #55524b; stroke-width: 1.5; }
+.rich-node, .rich-node-lifecycle, .rich-node-effect { width: 100%; display: grid; place-items: center; }
+.rich-node-content { width: 100%; display: grid; place-items: center; gap: 3px; }
+.rich-node-content svg { color: var(--steel); }
+.rich-node-content small { color: var(--muted); max-width: 92px; font-size: 6px; text-transform: uppercase; }
+.graph-node-handle { width: 5px; height: 5px; min-width: 5px; min-height: 5px; border: 1px solid color-mix(in srgb, var(--accent) 72%, var(--line)); background: var(--surface-3); opacity: .42; transition: opacity .2s ease, background .2s ease; }
+.react-flow__node:hover .graph-node-handle, .react-flow__node.current .graph-node-handle { background: var(--accent); opacity: .92; }
+.react-flow__node.entity-overlay { width: 112px; min-height: 46px; padding: 5px 9px; border-radius: 999px; z-index: 4 !important; box-shadow: 0 10px 24px #000b, 0 0 0 1px #ffffff0a; will-change: transform; }
+.react-flow__node.entity-overlay.motion-step { transition: transform .62s cubic-bezier(.2,.8,.2,1), left .62s cubic-bezier(.2,.8,.2,1), top .62s cubic-bezier(.2,.8,.2,1); }
+.react-flow__node.entity-overlay.motion-seek { transition: none; }
+.entity-token { grid-auto-flow: column; grid-template-columns: auto minmax(0, 1fr); text-align: left; }
+.entity-token span { max-width: 78px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.entity-token small { grid-column: 1 / -1; }
+.rich-node-effect.effect-produced, .rich-node-effect.effect-consumed, .rich-node-effect.effect-preserved, .rich-node-effect.effect-changed { position: relative; border-radius: inherit; }
+.rich-node-effect.effect-produced::after, .rich-node-effect.effect-consumed::after, .rich-node-effect.effect-preserved::after, .rich-node-effect.effect-changed::after { position: absolute; right: -11px; top: -11px; z-index: 2; padding: 2px 4px; border: 1px solid currentColor; background: var(--surface); box-shadow: 0 3px 9px #0008; font: 7px var(--mono); letter-spacing: .04em; text-transform: uppercase; }
+.rich-node-effect.effect-produced::after { content: "+"; color: var(--credit); }
+.rich-node-effect.effect-consumed::after { content: "−"; color: var(--debit); }
+.rich-node-effect.effect-preserved::after { content: "↺"; color: var(--steel); }
+.rich-node-effect.effect-changed::after { content: "∆"; color: var(--hold); }
+.motion-step .rich-node-effect.effect-produced { animation: entity-produced .68s ease both; }
+.motion-step .rich-node-effect.effect-consumed { animation: entity-consumed .68s ease both; }
+.motion-step .rich-node-effect.effect-preserved { animation: entity-preserved .68s ease both; }
+.motion-step .rich-node-effect.effect-changed { animation: entity-changed .68s ease both; }
+.motion-step .rich-node-lifecycle.is-entering { animation: entity-enter .46s cubic-bezier(.2,.9,.3,1.1) both; }
+.motion-step .rich-node-lifecycle.is-exiting { pointer-events: none; animation: entity-exit .4s ease both; }
+.motion-step .rich-node-content.is-moving { animation: entity-travel .62s cubic-bezier(.2,.8,.2,1) both; }
+.react-flow__node.current { background: var(--accent); border-color: var(--accent); color: var(--accent-contrast); box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent) 10%, transparent), 0 10px 30px #000c; animation: node-arrive .68s ease; }
+.react-flow__edge-path { stroke: #74716b; stroke-width: 1.65; }
 .react-flow__edge.locked .react-flow__edge-path, .react-flow__edge.failed .react-flow__edge-path { stroke: var(--debit); stroke-dasharray: 5 5; }
 .react-flow__edge.uncertain .react-flow__edge-path { stroke: var(--hold); stroke-dasharray: 3 4; }
 .react-flow__edge.completed .react-flow__edge-path { stroke: var(--accent); }
-.react-flow__edge.path-current .react-flow__edge-path, .react-flow__edge.path-incumbent .react-flow__edge-path, .react-flow__edge.path-traversed .react-flow__edge-path { stroke: var(--accent); stroke-width: 2.5; }
+.react-flow__edge.path-current .react-flow__edge-path, .react-flow__edge.path-incumbent .react-flow__edge-path, .react-flow__edge.path-traversed .react-flow__edge-path { stroke: var(--accent); stroke-width: 2.5; filter: drop-shadow(0 0 3px color-mix(in srgb, var(--accent) 48%, transparent)); }
 .react-flow__edge.path-rejected .react-flow__edge-path, .react-flow__edge.path-blocked .react-flow__edge-path { stroke: var(--debit); stroke-dasharray: 4 4; }
 .react-flow__edge-text { font: 9px var(--mono); fill: var(--muted); }
 .react-flow__edge-textbg { fill: var(--surface); }
 .react-flow__controls { background: var(--surface); border-color: var(--line); }
 .react-flow__controls button { background: var(--surface); border-color: var(--line); fill: var(--text); }
-/* Arrival is a ring tick, not a glow. */
-@keyframes node-arrive { 0% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent) 30%, transparent); } 100% { box-shadow: 0 0 0 0 transparent; } }
-@keyframes entity-enter { from { opacity: 0; transform: scale(.94); } }
-@keyframes entity-exit { to { opacity: 0; transform: scale(.94); } }
+@keyframes node-arrive { 0% { box-shadow: 0 0 0 16px color-mix(in srgb, var(--accent) 34%, transparent), 0 10px 30px #000c; } 100% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent) 10%, transparent), 0 10px 30px #000c; } }
+@keyframes entity-enter { from { opacity: 0; transform: scale(.62); } 72% { transform: scale(1.06); } }
+@keyframes entity-exit { to { opacity: 0; transform: translateY(3px) scale(.68); } }
 @keyframes entity-produced { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--credit) 40%, transparent); } 45% { box-shadow: 0 0 0 9px color-mix(in srgb, var(--credit) 16%, transparent); } }
 @keyframes entity-consumed { 45% { border-color: var(--debit); box-shadow: 0 0 0 8px color-mix(in srgb, var(--debit) 14%, transparent); } }
 @keyframes entity-preserved { 45% { border-color: var(--steel); box-shadow: 0 0 0 8px color-mix(in srgb, var(--steel) 12%, transparent); } }
 @keyframes entity-changed { 45% { border-color: var(--hold); box-shadow: 0 0 0 8px color-mix(in srgb, var(--hold) 12%, transparent); } }
-@keyframes entity-travel { 45% { transform: translateY(-3px) scale(1.03); } }
+@keyframes entity-travel { 45% { transform: translateY(-5px) scale(1.08); filter: drop-shadow(0 9px 8px color-mix(in srgb, var(--steel) 48%, transparent)); } }
 
 .grid-scene { flex: 1; min-height: 0; display: grid; gap: 5px; padding: 44px 28px 28px; align-content: center; justify-content: center; overflow: auto; background: #131315; }
-.grid-scene > div { min-width: 48px; min-height: 48px; border: 1px solid var(--line); background: var(--surface-2); display: grid; place-items: center; position: relative; font: 10px var(--mono); }
+.grid-scene > div { min-width: 48px; min-height: 48px; border: 1px solid var(--line); background: var(--surface-2); display: grid; place-items: center; position: relative; font: 10px var(--mono); box-shadow: inset 0 1px #ffffff08; }
 .grid-scene > div small { position: absolute; right: 3px; bottom: 2px; color: var(--muted); font-size: 7px; }
 .grid-entities { display: flex; align-items: center; justify-content: center; gap: 3px; flex-wrap: wrap; }
-.grid-entity { min-height: 0; padding: 0; border: 0; background: transparent; display: grid; place-items: center; gap: 1px; animation: pop-in .24s ease-out both; }
+.grid-entity { min-height: 0; padding: 0; border: 0; background: transparent; display: grid; place-items: center; gap: 1px; animation: pop-in .36s cubic-bezier(.2,.9,.3,1.08) both; }
 .grid-entity:disabled, .matrix-entity:disabled, .timeline-queue button:disabled { opacity: 1; cursor: default; }
 .grid-entity b { max-width: 74px; overflow: hidden; font-size: 7px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
 .grid-scene > div.goal { box-shadow: inset 0 0 0 2px var(--accent); }
@@ -288,14 +291,14 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 /* Game pieces stay discs; they are content, not chrome. */
 .grid-scene > div.red { border-radius: 50%; background: #a8524b; color: #f2ece0; }
 .grid-scene > div.yellow { border-radius: 50%; background: #b39b4a; color: #1a1917; }
-@keyframes pop-in { from { transform: scale(.96); opacity: 0; } }
+@keyframes pop-in { from { transform: translateY(3px) scale(.62); opacity: 0; } 72% { transform: scale(1.05); } }
 
 .matrix-scene { flex: 1; min-height: 0; overflow: auto; display: grid; place-items: center; padding: 44px 25px 25px; }
 .matrix-scene table { border-collapse: collapse; font: 12px var(--mono); }
 .matrix-scene th, .matrix-scene td { min-width: 68px; height: 54px; padding: 7px; text-align: center; border: 1px solid var(--line); }
 .matrix-scene th { color: var(--muted); font-weight: 500; }
 .matrix-scene td.selected { background: color-mix(in srgb, var(--accent) 12%, var(--surface)); color: var(--accent); }
-.matrix-entity { min-height: 0; padding: 0; border: 0; background: transparent; display: inline-grid; place-items: center; animation: pop-in .24s ease-out both; }
+.matrix-entity { min-height: 0; padding: 0; border: 0; background: transparent; display: inline-grid; place-items: center; animation: pop-in .36s cubic-bezier(.2,.9,.3,1.08) both; }
 
 .timeline-scene { flex: 1; min-height: 0; overflow: auto; padding: 44px 22px 28px; }
 .timeline-queue { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; padding: 8px 10px; border: 1px solid var(--line); }
@@ -305,12 +308,12 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 .timeline-lane { display: grid; grid-template-columns: 145px 1fr; gap: 15px; align-items: center; min-height: 56px; border-bottom: 1px solid var(--line); }
 .timeline-lane > strong { font-size: 10px; font-weight: 500; }
 .timeline-track { height: 34px; position: relative; background: repeating-linear-gradient(90deg, transparent 0, transparent calc(20% - 1px), var(--line) 20%); }
-.timeline-span { position: absolute; top: 6px; height: 22px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; padding: 3px 6px; background: color-mix(in srgb, var(--steel) 18%, var(--surface)); border-left: 2px solid var(--steel); font: 9px var(--mono); display: flex; align-items: center; gap: 4px; transform-origin: left center; animation: span-in .3s ease both; }
+.timeline-span { position: absolute; top: 6px; height: 22px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; padding: 3px 6px; background: color-mix(in srgb, var(--steel) 18%, var(--surface)); border-left: 2px solid var(--steel); font: 9px var(--mono); display: flex; align-items: center; gap: 4px; transform-origin: left center; transition: left .58s cubic-bezier(.2,.8,.2,1), width .58s cubic-bezier(.2,.8,.2,1); animation: span-in .36s ease both; }
 .timeline-span.selected { background: color-mix(in srgb, var(--accent) 14%, var(--surface)); border-color: var(--accent); }
 .timeline-span.failed { background: color-mix(in srgb, var(--debit) 18%, var(--surface)); border-color: var(--debit); }
 .timeline-span.uncertain { background: color-mix(in srgb, var(--hold) 16%, var(--surface)); border-color: var(--hold); }
 .timeline-cursor { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--accent); }
-@keyframes span-in { from { transform: scaleX(.9); opacity: 0; } }
+@keyframes span-in { from { transform: scaleX(.45); opacity: 0; } }
 
 /* ------------------------------------------------------- standings rail --
    The full leaderboard lives beside the picture during replay: every entry,
@@ -545,7 +548,7 @@ footer { padding: 25px 0 36px; color: var(--muted); text-align: center; font: 8p
   .spinner, .indeterminate-progress::after { animation: none; }
   .react-flow__node.current { animation: none; }
   .react-flow__edge.animated .react-flow__edge-path { animation: none !important; stroke-dasharray: none !important; }
-  .motion-step .rich-node.effect-produced, .motion-step .rich-node.effect-consumed, .motion-step .rich-node.effect-preserved, .motion-step .rich-node.effect-changed, .motion-step .rich-node.is-entering, .motion-step .rich-node.is-exiting, .motion-step .rich-node.is-moving svg { animation-duration: .01ms; }
+  .motion-step .rich-node-effect.effect-produced, .motion-step .rich-node-effect.effect-consumed, .motion-step .rich-node-effect.effect-preserved, .motion-step .rich-node-effect.effect-changed, .motion-step .rich-node-lifecycle.is-entering, .motion-step .rich-node-lifecycle.is-exiting, .motion-step .rich-node-content.is-moving { animation-duration: .01ms; }
   .ticker-feed article, .grid-entity, .matrix-entity, .timeline-span { animation: none; }
   .leaderboard-entries article.lead-change { animation: none; }
   .strategy-comparison summary i { transition: none; }
@@ -554,7 +557,7 @@ footer { padding: 25px 0 36px; color: var(--muted); text-align: center; font: 8p
 @media (prefers-color-scheme: light) {
   :root { color-scheme: light; --bg: #f6f4ef; --surface: #fffdf8; --surface-2: #f6f3ec; --surface-3: #fffdf8; --line: #ddd8cc; --line-strong: #c7c0af; --muted: #6f6a5f; --text: #201e1a; --accent: #201e1a; --accent-contrast: #f6f4ef; --brass: #8a6d2f; --credit: #3f7354; --debit: #96423b; --hold: #8a6430; --steel: #5c6670; }
   .playback { background: #fffdf8; box-shadow: 0 8px 20px #2a251a14; }
-  .graph-scene, .grid-scene { background: #f1efe8; }
+  .graph-scene, .grid-scene { background: radial-gradient(circle at 50% 44%, #fffdf8 0, #f1efe8 72%); }
   .delta-group b, .telemetry-list article { background: #f1eee6; }
   .account-icon { background: #efe9dc; color: var(--brass); }
   .balance { border-bottom-color: #e7e2d6; }
@@ -566,7 +569,9 @@ footer { padding: 25px 0 36px; color: var(--muted); text-align: center; font: 8p
   .error-banner { background: #f7ebe9; border-color: #dcbab4; color: #8a3a33; }
   .delta-group.consumed b { color: #96423b; }
   .react-flow__edge-path { stroke: #a39d8f; }
-  .react-flow__node { border-color: #c7c0af; }
+  .react-flow__node { border-color: #aaa18f; box-shadow: 0 8px 22px #2a251a24, inset 0 1px #fff; }
+  .react-flow__node.current { box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent) 9%, transparent), 0 9px 24px #2a251a2b; }
+  .react-flow__node.entity-overlay { box-shadow: 0 9px 22px #2a251a30, 0 0 0 1px #ffffffb3; }
   .grid-scene > div.red { background: #a8524b; }
   .grid-scene > div.yellow { background: #ac9344; color: #23200f; }
 }

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import type { ExchangeFrame, SceneEntity } from "./api";
-import { sceneEntityEffect } from "./SceneView";
+import { graphEdgeSides, sceneEntityEffect } from "./SceneView";
 
 const entity = {
   id: { key: "stock:wood", label: "Wood" },
@@ -34,5 +34,17 @@ describe("sceneEntityEffect", () => {
   test("distinguishes produced and preserved economic evidence", () => {
     expect(sceneEntityEffect(entity, frame([], ["workshop:asset:wood"]))).toBe("produced");
     expect(sceneEntityEffect(entity, frame([], [], ["workshop:asset:wood"]))).toBe("preserved");
+  });
+});
+
+describe("graphEdgeSides", () => {
+  test("routes horizontal edges through the facing sides of their nodes", () => {
+    expect(graphEdgeSides({ x: 40, y: 100 }, { x: 300, y: 120 })).toEqual({ source: "right", target: "left" });
+    expect(graphEdgeSides({ x: 300, y: 120 }, { x: 40, y: 100 })).toEqual({ source: "left", target: "right" });
+  });
+
+  test("routes vertical edges through the facing sides of their nodes", () => {
+    expect(graphEdgeSides({ x: 100, y: 20 }, { x: 120, y: 280 })).toEqual({ source: "bottom", target: "top" });
+    expect(graphEdgeSides({ x: 120, y: 280 }, { x: 100, y: 20 })).toEqual({ source: "top", target: "bottom" });
   });
 });
