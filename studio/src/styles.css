@@ -244,12 +244,12 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 .structure-state-count { opacity: .8; }
 .graph-node-handle { width: 5px; height: 5px; min-width: 5px; min-height: 5px; border: 1px solid color-mix(in srgb, var(--accent) 72%, var(--line)); background: var(--surface-3); opacity: .42; transition: opacity .2s ease, background .2s ease; }
 .react-flow__node:hover .graph-node-handle, .react-flow__node.current .graph-node-handle { background: var(--accent); opacity: .92; }
-.react-flow__node.occupant-overlay { width: 108px; min-height: 42px; padding: 5px 9px; border: 1px solid color-mix(in srgb, var(--steel) 78%, var(--line)); border-radius: 999px; background: color-mix(in srgb, var(--surface-3) 94%, transparent); color: var(--text); z-index: 5 !important; box-shadow: 0 10px 24px #000b, 0 0 0 1px #ffffff0a; will-change: transform; }
+.react-flow__node.occupant-overlay { width: 116px; min-height: 42px; padding: 5px 9px; border: 1px solid color-mix(in srgb, var(--steel) 78%, var(--line)); border-radius: 999px; background: color-mix(in srgb, var(--surface-3) 94%, transparent); color: var(--text); z-index: 5 !important; box-shadow: 0 10px 24px #000b, 0 0 0 1px #ffffff0a; will-change: transform; }
 .react-flow__node.occupant-overlay.motion-step, .react-flow__node.attachment-group.motion-step { transition: transform .62s cubic-bezier(.2,.8,.2,1), left .62s cubic-bezier(.2,.8,.2,1), top .62s cubic-bezier(.2,.8,.2,1); }
 .react-flow__node.occupant-overlay.motion-seek, .react-flow__node.attachment-group.motion-seek { transition: none; }
-.occupant-content { grid-auto-flow: column; grid-template-columns: auto minmax(0, 1fr); text-align: left; }
+.occupant-content { grid-auto-flow: column; grid-template-columns: auto minmax(0, 1fr); column-gap: 7px; row-gap: 2px; text-align: left; }
 .occupant-content span { max-width: 76px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.occupant-content small { grid-column: 1 / -1; }
+.occupant-content small { grid-column: 2; }
 .relation-handle { width: 3px; height: 3px; min-width: 3px; min-height: 3px; border: 0; background: var(--steel); opacity: .65; }
 .react-flow__node.attachment-group { width: 168px; padding: 0; border: 0; background: transparent; color: var(--text); z-index: 4 !important; box-shadow: none; }
 .attachment-collection { width: 100%; border: 1px solid color-mix(in srgb, var(--line-strong) 78%, transparent); border-radius: 6px; background: color-mix(in srgb, var(--surface-3) 94%, transparent); box-shadow: 0 9px 22px #0008; overflow: hidden; }

@@ -252,7 +252,7 @@ type GraphEdgeRoute = { source: string; target: string; sourceHandle: string; ta
 
 const GRAPH_NODE_WIDTH = 88;
 const GRAPH_NODE_HEIGHT = 72;
-const OCCUPANT_WIDTH = 108;
+const OCCUPANT_WIDTH = 116;
 const OCCUPANT_HEIGHT = 42;
 const ATTACHMENT_WIDTH = 168;
 
