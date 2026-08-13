@@ -1,6 +1,6 @@
 use axionomy::{Account, Economy, EconomyBuilder, Exchange, Goal, Quantity, Rate, basket};
 use axionomy_search::session::{Continue, SearchStatus, WorkBudget};
-use axionomy_search::{BfsSession, GraphSearchProgress, bfs};
+use axionomy_search::{AStarSession, BfsSession, GraphSearchProgress, astar, bfs};
 use std::ops::ControlFlow;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -68,6 +68,18 @@ fn candidates(world: &World) -> Vec<Action> {
         .collect()
 }
 
+fn remaining(world: &World) -> u64 {
+    if !world.balance(&AccountId::Actor, &Asset::Step(0)).is_zero() {
+        3
+    } else if !world.balance(&AccountId::Actor, &Asset::Step(1)).is_zero() {
+        2
+    } else if !world.balance(&AccountId::Actor, &Asset::Step(2)).is_zero() {
+        1
+    } else {
+        0
+    }
+}
+
 #[test]
 fn chunking_does_not_change_breadth_first_results() {
     let initial = world();
@@ -122,4 +134,20 @@ fn interruption_is_resumable_and_does_not_mutate_the_source() {
             .unwrap()
             .matches(&goal())
     );
+}
+
+#[test]
+fn chunking_does_not_change_a_star_results() {
+    let initial = world();
+    let expected = astar(&initial, &goal(), candidates, |_, _, _| 1, remaining).unwrap();
+    let mut session = AStarSession::new(&initial, goal(), candidates, |_, _, _| 1, remaining);
+    let mut observer = Continue;
+    while !session.status().is_terminal() {
+        session.advance(WorkBudget::new(1), &mut observer);
+    }
+
+    let solution = session.into_solution().unwrap();
+    assert_eq!(solution.cost(), expected.cost());
+    assert_eq!(solution.trace(), expected.trace());
+    assert!(initial.replayed(solution.trace()).unwrap().matches(&goal()));
 }

@@ -703,7 +703,8 @@ ViewId        = stable presentation key + human label + optional JSON context
 ExactQuantity = decimal text
 ViewSnapshot  = ordered accounts and balances + optional derived scene
                 + replay-derived leaderboards
-Scene         = surface + role-bearing semantic entities + typed economic evidence links
+Scene         = terrain/topology surface + stable role-bearing semantic entities
+                + typed economic evidence links
                 + paths + annotations + metrics
 Leaderboard   = direction + ordered participants + exact score + rank evidence
 ExchangeFrame = before + assessment + exchange + receipt + after + cues
@@ -795,8 +796,8 @@ browser verification. Tabler supplies the curated implementation of semantic
 glyph keys, but the portable contract contains neither React component names
 nor arbitrary SVG.
 
-Graph motion is composed generically from stable entity identity, adjacent
-scene anchors, typed account/balance evidence, and the replayed receipt. The
+Graph and grid motion are composed generically from stable entity identity,
+adjacent scene anchors, typed account/balance evidence, and the replayed receipt. The
 browser therefore does not contain branches for a maze explorer, vehicle,
 robot, package, or workshop material. The same compositor turns an anchor
 change into travel, entity appearance/disappearance into entry/exit, exact
@@ -810,8 +811,12 @@ autoplay declare adjacent-step intent so
 semantic movement remains visible; scrubber jumps declare seek intent and do
 not invent long travel across skipped exchanges. Stable canvas geometry and
 higher-order composition prevent related records from becoming an unstructured
-cloud or jumping between frames. Reduced-motion preferences remove decorative repetition without
-hiding the essential state transition.
+cloud or jumping between frames. A grid cell describes terrain and optionally
+links to its authoritative account; occupants are explicit entities whose IDs
+survive anchor changes. The playback control offers System, Full, and Reduced
+motion modes, so accessibility defaults are respected while explanatory motion
+can still be requested deliberately. Reduced motion removes decorative
+repetition without hiding the essential state transition.
 
 Solve evidence and trace playback are deliberately distinct controls. `Run`
 creates a new artifact; the transport controls only replay its accepted
@@ -1165,7 +1170,7 @@ problems. Full formal specifications live in [PROBLEMS.md](PROBLEMS.md).
 | Problem | What it demonstrates |
 | --- | --- |
 | Key-door maze | A 14-node closed graph, explicit key/lock state, four encoded energy/time routes, exact Pareto front, and different BFS versus A* choices |
-| Sokoban | A 7×5 spatial search, atomic three-account rewrites, repositioning choices, occupancy, and core-observed infeasibility |
+| Sokoban | A 9×7 walled warehouse, stable crate identities, atomic three-account rewrites, resumable BFS/A*, and a replayable legal deadlock |
 | Exact cover | An 8-element/12-subset logical constraint surface plus Algorithm X as an untrusted proposal generator |
 | Workshop | Six-chair multi-batch stoichiometric transformation, reusable catalysts, encoded waste/time front, and invariant rejection |
 | Job shop | Six operations, three machines, identified capacity slots, precedence tokens, completion front, makespan, and direct-oracle agreement |

@@ -111,7 +111,7 @@ catalog, so those two public explanations must change together:
 | Problem | Default Showcase pressure |
 | --- | --- |
 | Maze | 14 nodes, 16 directed edges, four energy/time route families, and an eight-transition low-energy plan |
-| Sokoban | 7×5 board, 35 cell accounts, two-dimensional repositioning, and a ten-transition solution |
+| Sokoban | 9×7 walled warehouse, 64 accounts, two stable crates, a 15-exchange solution, and a replayable legal deadlock |
 | Exact cover | 8 universe elements, 12 competing subsets, four selections, and an independently proposed Algorithm X trace |
 | Workshop | Six-chair multi-batch target with seven-step fast and four-step efficient extremes |
 | Job shop | Six precedence-constrained operations across three machines and 18 capacity slots |
@@ -186,32 +186,45 @@ Source: `crates/axionomy-problems/src/sokoban.rs`
 
 ### Specification
 
-Five cell accounts each preserve their coordinate identity and hold exactly
-one of `Player`, `Crate`, or `Empty`.
-One cell also owns `GoalCell`. A move atomically exchanges player and empty
-tokens between two adjacent cells. A push atomically rewrites three accounts:
+Every board cell is an account that preserves its coordinate identity and
+owns either `Floor` or `Wall`. Walkable cells hold exactly one occupancy asset:
+`Player`, `Empty`, or a stable `Crate(id)`. Goal squares own `GoalCell` in
+addition to their occupant. Board dimensions are ordinary assets on the puzzle
+account, so neither the search nor viewer needs hidden geometry state. A move
+atomically exchanges player and empty tokens between adjacent floor accounts.
+A push atomically rewrites three accounts while preserving crate identity:
 
 ```text
-[Player][Crate][Empty] → [Empty][Player][Crate]
+[Player][Crate(0)][Empty] → [Empty][Player][Crate(0)]
 ```
 
-The solvable instance requires two pushes. The deadlocked instance places the
-crate against a wall from which no legal push can move it to the goal.
+The Showcase warehouse has boundary walls, an internal obstruction, two crates,
+two goals, and legal moves that do not advance the objective. Completion binds
+every stable crate to a distinct goal in one final exchange. A second trace
+starts from that same economy and replays a short sequence ending in a legal
+push into a non-goal corner, making the difference between validity and
+decision quality directly inspectable.
 
 ### Required results
 
-- BFS produces two pushes and a finish exchange.
-- Every cell retains exactly one occupancy token.
-- The deadlocked instance returns no solution.
-- Failed search leaves the source economy unchanged.
+- Resumable BFS and A* both traverse only core-applicable exchanges.
+- A* uses an admissible crate-to-goal lower bound and reports expanded,
+  generated, frontier, and visited state counts without inventing a percentage.
+- Every floor retains exactly one occupancy token and every crate identity is
+  conserved across the full replay.
 - Rebinding a legal move rate to nonadjacent cells is rejected.
-- Completion consumes the active puzzle lifecycle and is quiescent.
+- Completion binds all crates to distinct goals, consumes the active puzzle
+  lifecycle, and is quiescent.
+- The losing alternative replays a legal push and ends with a crate on a
+  structurally identified non-goal dead square.
 
 ### API pressure
 
 - Atomic effects over three locations.
 - Explicit emptiness rather than a hidden absence test.
-- Spatial invariants and infeasibility.
+- Stable object identity across spatial motion.
+- Terrain/occupant separation for generic grid projections.
+- Spatial invariants, admissible search policy, and deadlock evidence.
 
 ## 3. Exact cover
 

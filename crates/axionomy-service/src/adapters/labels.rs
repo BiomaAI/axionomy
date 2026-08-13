@@ -117,8 +117,12 @@ impl StudioLabel for sokoban::Asset {
     fn studio_label(&self) -> String {
         match self {
             Self::CellIdentity(cell) => format!("This is cell {cell}"),
+            Self::BoardWidth(width) => format!("Board width is {width}"),
+            Self::BoardHeight(height) => format!("Board height is {height}"),
+            Self::Floor => "Walkable floor".into(),
+            Self::Wall => "Wall".into(),
             Self::Player => "Player".into(),
-            Self::Crate => "Crate".into(),
+            Self::Crate(crate_id) => format!("Crate {}", crate_id + 1),
             Self::Empty => "Empty cell".into(),
             Self::GoalCell => "Goal square".into(),
             Self::Active => "Puzzle in progress".into(),
@@ -135,8 +139,15 @@ impl StudioLabel for sokoban::RateId {
                 behind,
                 crate_at,
                 to,
-            } => format!("Push crate from cell {crate_at} to cell {to} (stand at {behind})"),
-            Self::Finish { cell } => format!("Finish with the crate on goal cell {cell}"),
+                crate_id,
+            } => format!(
+                "Push crate {} from cell {crate_at} to cell {to} (stand at {behind})",
+                crate_id + 1
+            ),
+            Self::Finish { assignment } => format!(
+                "Finish with {} stable crates on their assigned goals",
+                assignment.len()
+            ),
         }
     }
 }

@@ -197,11 +197,15 @@ matrix, scheduling and perishables timelines, market and logistics networks,
 stochastic telemetry,
 Pareto alternatives, rejected proposals, and actor-relative observations are
 all views over that same truth; none can make an exchange valid.
-Graph entities carry typed links to the accounts or balances they illustrate,
-so one generic renderer can animate travel, arrival, production, consumption,
-preservation, and route flow directly from adjacent replay snapshots and the
-successful receipt. Stepping shows the real transition; seeking jumps directly
-to the requested state without fabricating motion across skipped exchanges.
+Graph and grid entities carry stable identities plus typed links to the accounts
+or balances they illustrate, so one generic renderer can animate travel,
+arrival, production, consumption, preservation, and route flow directly from
+adjacent replay snapshots and the successful receipt. Grid terrain remains a
+separate static surface: a crate or player moves between cells instead of being
+recreated from a cell label. Stepping shows the real transition; seeking jumps
+directly to the requested state without fabricating motion across skipped
+exchanges. The playback bar can follow the system motion preference, force full
+explanatory motion, or reduce it explicitly.
 Deliberately invalid or infeasible proposals appear under **Moves that should
 be refused**, with structured role, account, asset, and rate diagnostics. They
 demonstrate that the rules are active and are kept visually separate
@@ -455,7 +459,7 @@ contract, deployment limits, and integration details.
 | Problem | Encoded concepts | Compared strategies |
 | --- | --- | --- |
 | Key-door maze | Topology, position, lock, key, energy, time, heuristic, goal | BFS, Dijkstra, A*, exact energy/time Pareto front |
-| Sokoban | Cell occupancy, push legality, deadlock | BFS and infeasibility |
+| Sokoban | Walls, stable crate identities, cell occupancy, atomic pushes, goals, dead squares | Resumable BFS, admissible A*, and replayable deadlock evidence |
 | Exact cover | Universe, subsets, coverage, selection | BFS and Algorithm X |
 | Workshop | Recipes, catalysts, material, labor, waste, process time | BFS, waste minimization, exact waste/time Pareto front |
 | Job shop | Precedence, identified machine slots, makespan, per-job completion | Best-first, branch search, direct oracle, exact allocation Pareto front |

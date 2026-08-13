@@ -442,9 +442,17 @@ pub struct Scene {
 pub struct GridCellView {
     pub x: u32,
     pub y: u32,
+    /// Human-readable terrain or cell state. Renderers may keep repetitive
+    /// labels (for example, `Floor`) accessible without drawing them in every
+    /// cell.
     pub label: String,
     #[serde(default)]
     pub classes: Vec<String>,
+    /// Optional authoritative account represented by this cell. This makes
+    /// receipt-derived cell emphasis and account inspection portable without
+    /// turning the grid projection into state of its own.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub account: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -534,31 +542,10 @@ impl Scene {
         height: u32,
         cells: Vec<GridCellView>,
     ) -> Self {
-        let entities = cells
-            .iter()
-            .filter(|cell| {
-                !cell.label.trim().is_empty()
-                    && cell.label != "·"
-                    && !cell.label.eq_ignore_ascii_case("empty")
-            })
-            .map(|cell| SceneEntityView {
-                id: ViewId::new(
-                    format!("cell:{}:{}:{}", cell.x, cell.y, debug_key(&cell.label)),
-                    cell.label.clone(),
-                ),
-                glyph: inferred_glyph(&cell.label, &cell.classes),
-                anchor: SceneAnchorView::GridCell {
-                    x: cell.x,
-                    y: cell.y,
-                },
-                role: SceneEntityRoleView::Structure,
-                tone: inferred_tone(&cell.classes),
-                status: cell.classes.first().cloned(),
-                account: None,
-                evidence: Vec::new(),
-                metrics: Vec::new(),
-            })
-            .collect::<Vec<_>>();
+        // Cells describe stable terrain. Occupants are explicit entities with
+        // caller-owned identities so a renderer can track one thing moving
+        // between anchors instead of seeing unrelated coordinate-derived IDs.
+        let entities = Vec::new();
         Self {
             title: title.into(),
             surface: SceneSurfaceView::Grid {

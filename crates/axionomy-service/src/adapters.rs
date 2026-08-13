@@ -4,6 +4,7 @@ use crate::{
     ServiceProgress, StrategyDescriptor,
 };
 use axionomy::{Economy, Goal, QuantityScalar, Trace};
+use axionomy_search::GraphSearchProgress;
 use axionomy_view::{
     DebugOntology, ExchangeFrame, LeaderboardView, ObjectiveView, PlaybackError, ProposalView,
     Scene, SceneAnchorView, SceneEntityRoleView, SceneEntityView, SceneEvidenceRefView,
@@ -227,19 +228,27 @@ pub(crate) fn catalog() -> Vec<ProblemDescriptor> {
                 title: "Sokoban",
                 summary: "Push crates onto their goal squares. Every push rewrites three cells at once, and some positions can never be recovered.",
                 instances: [
-                    "Five cells and two pushes",
-                    "A 7×5 board with 35 cells and a ten-step solution",
-                    "An 8×6 board with a longer route and a larger cell economy",
+                    "A bounded one-crate teaching puzzle",
+                    "A 9×7 warehouse with walls, two stable crates, and competing legal moves",
+                    "A 10×8 warehouse with three crates and a substantially larger search frontier",
                 ],
             },
             ProblemFamily::Pathfinding,
-            "breadth_first",
-            &[(
-                "breadth_first",
-                "Solve puzzle",
-                "Breadth-first search over single moves and crate pushes.",
-                "breadth-first search",
-            )],
+            "a_star",
+            &[
+                (
+                    "a_star",
+                    "Goal-directed A*",
+                    "A* prioritises states using an admissible crate-to-goal distance bound.",
+                    "A*",
+                ),
+                (
+                    "breadth_first",
+                    "Fewest exchanges",
+                    "Breadth-first search explores every shorter replay before accepting a solution.",
+                    "breadth-first search",
+                ),
+            ],
             &[
                 Capability::DeterministicSearch,
                 Capability::MultiAccountExchange,
@@ -785,7 +794,7 @@ pub(crate) fn run(
     progress.ensure()?;
     let mut artifact = match request.problem.as_str() {
         "maze" => maze::build(request, &descriptor),
-        "sokoban" => sokoban::build(request, &descriptor),
+        "sokoban" => sokoban::build(request, &descriptor, &mut progress),
         "exact_cover" => exact_cover::build(request, &descriptor),
         "workshop" => workshop::build(request, &descriptor),
         "scheduling" => scheduling::build(request, &descriptor),
@@ -893,6 +902,57 @@ impl<'a> ProgressSink<'a> {
                     total.saturating_sub(completed),
                     None,
                 ),
+            ],
+        };
+        self.observer.observation(observation.clone());
+        if self.observations.len() == 256 {
+            self.observations.remove(0);
+        }
+        self.observations.push(observation);
+        self.sequence += 1;
+        ControlFlow::Continue(())
+    }
+
+    /// Publish graph-search work without pretending that an implicit frontier
+    /// has a knowable completion percentage.
+    pub fn graph(
+        &mut self,
+        phase: impl Into<String>,
+        progress: GraphSearchProgress,
+        message: impl Into<String>,
+    ) -> ControlFlow<()> {
+        if self.error.is_some() {
+            return ControlFlow::Break(());
+        }
+        if let Err(error) = self.control.checkpoint() {
+            self.error = Some(error);
+            return ControlFlow::Break(());
+        }
+        let phase = phase.into();
+        let message = message.into();
+        let completed = progress.expanded() as u64;
+        self.observer.progress(ServiceProgress {
+            sequence: self.sequence,
+            phase: phase.clone(),
+            completed,
+            // Zero means the frontier has no honest fixed denominator. The UI
+            // renders an indeterminate bar and the exact counters below.
+            total: 0,
+            message: message.clone(),
+        });
+        let observation = SearchObservationView {
+            sequence: self.sequence,
+            algorithm: phase.clone(),
+            kind: SearchObservationKindView::Frontier,
+            phase,
+            label: message,
+            completed,
+            total: 0,
+            metrics: vec![
+                visual_metric("expanded", "States expanded", progress.expanded(), None),
+                visual_metric("generated", "States generated", progress.generated(), None),
+                visual_metric("frontier", "Frontier", progress.frontier(), None),
+                visual_metric("visited", "States visited", progress.visited(), None),
             ],
         };
         self.observer.observation(observation.clone());

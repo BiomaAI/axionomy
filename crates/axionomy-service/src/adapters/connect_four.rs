@@ -1,7 +1,10 @@
 use super::*;
 use axionomy::Exchange;
 use axionomy_problems::connect_four::{self, AccountId, Asset, Player, World};
-use axionomy_view::{GridCellView, ObjectiveDirectionView, TelemetryKindView};
+use axionomy_view::{
+    GridCellView, ObjectiveDirectionView, SceneAnchorView, SceneEntityRoleView, SceneGlyphView,
+    SceneToneView, TelemetryKindView,
+};
 
 pub(super) fn build(
     request: &RunRequest,
@@ -98,35 +101,64 @@ pub(super) fn build(
 
 fn scene(_: u64, world: &World) -> Option<Scene> {
     let mut cells = Vec::new();
+    let mut pieces = Vec::new();
     let (width, height) = connect_four::board_dimensions(world);
     for column in 0..width {
         for row in 0..height {
             let account = AccountId::Cell { column, row };
-            let (label, classes) = if !world
+            let player = if !world
                 .balance(&account, &Asset::Piece(Player::Red))
                 .is_zero()
             {
-                ("Red", vec!["red".into()])
+                Some(Player::Red)
             } else if !world
                 .balance(&account, &Asset::Piece(Player::Yellow))
                 .is_zero()
             {
-                ("Yellow", vec!["yellow".into()])
+                Some(Player::Yellow)
             } else {
-                ("Empty", Vec::new())
+                None
             };
+            let y = height - row - 1;
+            let account_key = format!("connect_four:account:cell-column-{column}-row-{row}");
             cells.push(GridCellView {
                 x: u32::from(column),
-                y: u32::from(height - row - 1),
-                label: label.into(),
-                classes,
+                y: u32::from(y),
+                label: player
+                    .map_or_else(|| "Open slot".into(), |player| format!("{player:?} piece")),
+                classes: vec!["connect-slot".into()],
+                account: Some(account_key.clone()),
             });
+            if let Some(player) = player {
+                pieces.push(link_balance(
+                    visual_entity(
+                        format!("piece:{player:?}:{column}:{row}").to_ascii_lowercase(),
+                        format!("{player:?}"),
+                        SceneGlyphView::Token,
+                        SceneAnchorView::GridCell {
+                            x: u32::from(column),
+                            y: u32::from(y),
+                        },
+                        SceneEntityRoleView::Occupant,
+                        match player {
+                            Player::Red => SceneToneView::Danger,
+                            Player::Yellow => SceneToneView::Warning,
+                        },
+                        Some(format!("{player:?}").to_ascii_lowercase()),
+                    ),
+                    account_key,
+                    format!("connect_four:asset:piece-{player:?}").to_ascii_lowercase(),
+                ));
+            }
         }
     }
-    Some(Scene::grid(
-        "Board and pieces",
-        u32::from(width),
-        u32::from(height),
-        cells,
-    ))
+    Some(
+        Scene::grid(
+            "Board and pieces",
+            u32::from(width),
+            u32::from(height),
+            cells,
+        )
+        .with_entities(pieces),
+    )
 }

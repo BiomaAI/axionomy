@@ -86,6 +86,194 @@ where
     exhausted: bool,
 }
 
+struct AStarState<AccountId, A, RateId, Role, N>
+where
+    N: QuantityScalar,
+{
+    world: Economy<AccountId, A, RateId, Role, N>,
+    trace: Trace<RateId, Role, AccountId, N>,
+}
+
+/// Resumable A* search over implicit, core-validated successors.
+///
+/// The step cost and heuristic remain disposable solver policy. Only exchanges
+/// accepted by the economy enter the frontier.
+pub struct AStarSession<AccountId, A, RateId, Role, N, Candidates, StepCost, Heuristic>
+where
+    N: QuantityScalar,
+{
+    goal: Goal<AccountId, A, N>,
+    candidates: Candidates,
+    step_cost: StepCost,
+    heuristic: Heuristic,
+    states: Vec<AStarState<AccountId, A, RateId, Role, N>>,
+    frontier: BinaryHeap<QueueEntry>,
+    best: HashMap<Vec<(AccountId, A, Quantity<N>)>, u64>,
+    expanded: usize,
+    generated: usize,
+    sequence: u64,
+    solution: Option<SearchSolution<RateId, Role, AccountId, N>>,
+    exhausted: bool,
+}
+
+impl<AccountId, A, RateId, Role, N, Candidates, StepCost, Heuristic>
+    AStarSession<AccountId, A, RateId, Role, N, Candidates, StepCost, Heuristic>
+where
+    AccountId: Clone + Eq + Hash + Ord,
+    A: Clone + Eq + Hash + Ord,
+    RateId: Clone + Eq + Hash + Ord,
+    Role: Clone + Ord,
+    N: QuantityScalar,
+    Candidates:
+        FnMut(&Economy<AccountId, A, RateId, Role, N>) -> Vec<Exchange<RateId, Role, AccountId, N>>,
+    StepCost: FnMut(
+        &Economy<AccountId, A, RateId, Role, N>,
+        &Exchange<RateId, Role, AccountId, N>,
+        &Economy<AccountId, A, RateId, Role, N>,
+    ) -> u64,
+    Heuristic: FnMut(&Economy<AccountId, A, RateId, Role, N>) -> u64,
+{
+    pub fn new(
+        initial: &Economy<AccountId, A, RateId, Role, N>,
+        goal: Goal<AccountId, A, N>,
+        candidates: Candidates,
+        step_cost: StepCost,
+        mut heuristic: Heuristic,
+    ) -> Self {
+        let initial = initial.fork();
+        let key = initial.state_key();
+        let solved = initial.matches(&goal).then(|| SearchSolution {
+            trace: Trace::new(),
+            cost: 0,
+            expanded: 0,
+        });
+        let priority = heuristic(&initial);
+        Self {
+            goal,
+            candidates,
+            step_cost,
+            heuristic,
+            states: vec![AStarState {
+                world: initial,
+                trace: Trace::new(),
+            }],
+            frontier: BinaryHeap::from([QueueEntry {
+                priority,
+                cost: 0,
+                sequence: 0,
+                index: 0,
+            }]),
+            best: HashMap::from([(key, 0)]),
+            expanded: 0,
+            generated: 0,
+            sequence: 1,
+            solution: solved,
+            exhausted: false,
+        }
+    }
+
+    pub fn progress(&self) -> GraphSearchProgress {
+        GraphSearchProgress {
+            expanded: self.expanded,
+            generated: self.generated,
+            frontier: self.frontier.len(),
+            visited: self.best.len(),
+            solution_depth: self.solution.as_ref().map(SearchSolution::cost),
+        }
+    }
+
+    pub fn status(&self) -> SearchStatus {
+        if self.solution.is_some() {
+            SearchStatus::Solved
+        } else if self.exhausted {
+            SearchStatus::Exhausted
+        } else {
+            SearchStatus::Running
+        }
+    }
+
+    pub fn solution(&self) -> Option<&SearchSolution<RateId, Role, AccountId, N>> {
+        self.solution.as_ref()
+    }
+
+    pub fn into_solution(self) -> Option<SearchSolution<RateId, Role, AccountId, N>> {
+        self.solution
+    }
+
+    pub fn advance(
+        &mut self,
+        budget: WorkBudget,
+        observer: &mut impl SearchObserver<GraphSearchProgress>,
+    ) -> AdvanceReport<GraphSearchProgress> {
+        if self.status().is_terminal() {
+            return AdvanceReport::new(self.status(), 0, self.progress());
+        }
+
+        let mut completed = 0;
+        while completed < budget.units() {
+            if observer.observe(&self.progress()).is_break() {
+                return AdvanceReport::new(SearchStatus::Interrupted, completed, self.progress());
+            }
+
+            let Some(entry) = self.frontier.pop() else {
+                self.exhausted = true;
+                return AdvanceReport::new(SearchStatus::Exhausted, completed, self.progress());
+            };
+            let key = self.states[entry.index].world.state_key();
+            if self
+                .best
+                .get(&key)
+                .is_some_and(|known| *known != entry.cost)
+            {
+                continue;
+            }
+            if self.states[entry.index].world.matches(&self.goal) {
+                self.solution = Some(SearchSolution {
+                    trace: self.states[entry.index].trace.clone(),
+                    cost: entry.cost,
+                    expanded: self.expanded,
+                });
+                return AdvanceReport::new(SearchStatus::Solved, completed, self.progress());
+            }
+
+            self.expanded += 1;
+            completed += 1;
+            let exchanges = (self.candidates)(&self.states[entry.index].world);
+            for exchange in exchanges {
+                let mut next = self.states[entry.index].world.fork();
+                if next.apply(exchange.clone()).is_err() {
+                    continue;
+                }
+                let step = (self.step_cost)(&self.states[entry.index].world, &exchange, &next);
+                let next_cost = entry.cost.saturating_add(step);
+                let key = next.state_key();
+                if self.best.get(&key).is_some_and(|known| *known <= next_cost) {
+                    continue;
+                }
+                self.best.insert(key, next_cost);
+                self.generated += 1;
+                let mut trace = self.states[entry.index].trace.clone();
+                trace.push(exchange);
+                let priority = next_cost.saturating_add((self.heuristic)(&next));
+                let index = self.states.len();
+                self.states.push(AStarState { world: next, trace });
+                self.frontier.push(QueueEntry {
+                    priority,
+                    cost: next_cost,
+                    sequence: self.sequence,
+                    index,
+                });
+                self.sequence += 1;
+            }
+        }
+
+        if self.frontier.is_empty() {
+            self.exhausted = true;
+        }
+        AdvanceReport::new(self.status(), completed, self.progress())
+    }
+}
+
 impl<AccountId, A, RateId, Role, N, Candidates>
     BfsSession<AccountId, A, RateId, Role, N, Candidates>
 where
