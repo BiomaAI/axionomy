@@ -318,6 +318,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 SceneAnchorView::GraphNode {
                     node: node_key(node),
                 },
+                SceneEntityRoleView::Occupant,
                 if node == Node::Exit {
                     SceneToneView::Success
                 } else {

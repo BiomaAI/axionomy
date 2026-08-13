@@ -209,14 +209,11 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         .into_iter()
         .enumerate()
         .map(|(index, (key, label, asset))| GraphNodeView {
-            id: ViewId::new(
-                key,
-                format!("{label} · {}", world.balance(&AccountId::Workshop, &asset)),
-            ),
+            id: ViewId::new(key, label),
             classes: if matches!(asset, Asset::Chair) {
                 vec!["goal".into()]
             } else {
-                Vec::new()
+                vec!["resource".into()]
             },
             x: Some((index as f64 % 3.0) * 220.0 + 80.0),
             y: Some((index / 3) as f64 * 150.0 + 70.0),
@@ -268,6 +265,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                     _ => SceneGlyphView::Material,
                 },
                 SceneAnchorView::GraphNode { node: key.into() },
+                SceneEntityRoleView::State,
                 if matches!(asset, Asset::Chair) {
                     SceneToneView::Success
                 } else if matches!(asset, Asset::Waste) {

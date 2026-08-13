@@ -369,6 +369,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                         format!("order:{order:?}")
                     },
                 },
+                SceneEntityRoleView::State,
                 if settled {
                     SceneToneView::Success
                 } else {
@@ -397,6 +398,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                     SceneAnchorView::GraphNode {
                         node: format!("buyer:{buyer:?}"),
                     },
+                    SceneEntityRoleView::State,
                     SceneToneView::Neutral,
                     Some("demand".into()),
                 ),
@@ -415,6 +417,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                             SceneAnchorView::GraphNode {
                                 node: format!("seller:{seller:?}"),
                             },
+                            SceneEntityRoleView::State,
                             SceneToneView::Neutral,
                             Some("supply".into()),
                         ),
@@ -431,6 +434,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                     SceneAnchorView::GraphNode {
                         node: format!("carrier:{carrier:?}"),
                     },
+                    SceneEntityRoleView::State,
                     SceneToneView::Neutral,
                     Some("capacity".into()),
                 ),
@@ -460,6 +464,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                         label,
                         SceneGlyphView::Organization,
                         SceneAnchorView::GraphNode { node: node.into() },
+                        SceneEntityRoleView::State,
                         SceneToneView::Neutral,
                         Some("settlement role".into()),
                     ),

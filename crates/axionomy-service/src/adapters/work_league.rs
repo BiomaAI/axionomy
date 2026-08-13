@@ -492,6 +492,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                     SceneAnchorView::GraphNode {
                         node: format!("league:location:{location:?}").to_ascii_lowercase(),
                     },
+                    SceneEntityRoleView::Occupant,
                     if balance(world, agent, Asset::Damage) > 0 {
                         SceneToneView::Danger
                     } else {
@@ -561,6 +562,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 SceneAnchorView::GraphNode {
                     node: format!("league:location:{:?}", spec.location).to_ascii_lowercase(),
                 },
+                SceneEntityRoleView::Attachment,
                 tone,
                 Some(status),
             ),

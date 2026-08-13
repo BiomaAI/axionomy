@@ -12,7 +12,7 @@ test("runs the Rust engine in a Worker and loads its verified artifact", async (
   await page.getByRole("tab", { name: /Step-by-step replay/ }).click();
   await expect(page.getByText("Vehicle 1", { exact: true }).first()).toBeVisible();
   await expect(page.locator(".graph-scene")).toBeVisible();
-  await page.locator(".react-flow__node.entity-overlay").filter({ hasText: "Vehicle 1" }).click();
+  await page.locator(".react-flow__node.occupant-overlay").filter({ hasText: "Vehicle 1" }).click();
   await expect(page.locator(".account-card.focused")).toContainText("Vehicle");
 });
 

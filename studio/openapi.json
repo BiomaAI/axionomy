@@ -1960,6 +1960,17 @@
           "tone"
         ]
       },
+      "SceneEntityRoleView": {
+        "description": "How a semantic entity relates to the geometric surface it is anchored to.\n\nThis is presentation metadata only. It lets generic viewers distinguish a\nplace from something occupying it, a task attached to it, state describing\nit, or scenario context that should remain outside the topology.",
+        "type": "string",
+        "enum": [
+          "structure",
+          "occupant",
+          "attachment",
+          "state",
+          "context"
+        ]
+      },
       "SceneEntityView": {
         "type": "object",
         "properties": {
@@ -1991,6 +2002,9 @@
               "$ref": "#/components/schemas/SceneMetricView"
             }
           },
+          "role": {
+            "$ref": "#/components/schemas/SceneEntityRoleView"
+          },
           "status": {
             "type": [
               "string",
@@ -2005,6 +2019,7 @@
           "id",
           "glyph",
           "anchor",
+          "role",
           "tone"
         ]
       },

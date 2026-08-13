@@ -157,11 +157,29 @@ test("uses the generic motion compositor across every graph problem", async ({ p
   for (const problem of problems) {
     await page.goto(`/?problem=${problem}&instance=micro&view=replay&step=0&seed=17&budget=8`);
     await expect(page.locator(".graph-scene")).toBeVisible();
-    await expect(page.locator(".react-flow__node.entity-overlay").first()).toBeVisible();
+    await expect(page.locator(".react-flow__node.structure-node").first()).toBeVisible();
+    await expect(page.locator(".occupant-overlay, .attachment-group, .structure-state, .scene-context").first()).toBeVisible();
+    await expect(page.locator(".react-flow__node.entity-overlay")).toHaveCount(0);
     await page.getByRole("button", { name: "Next exchange" }).click();
     await expect(page.locator('.graph-scene[data-motion="step"]')).toBeVisible();
   }
   expect(browserErrors).toEqual([]);
+});
+
+test("composes state, attachments, occupants, and context by relationship", async ({ page }) => {
+  await page.goto("/?problem=workshop&instance=showcase&strategy=minimum_waste&document=workshop%3Aminimum_waste&view=replay&step=0&seed=17&budget=128");
+  const wood = page.locator('.react-flow__node[data-id="wood"]');
+  await expect(wood).toContainText(/18 units wood/i);
+  await expect(page.locator('.react-flow__node[data-id="entity:stock:wood"]')).toHaveCount(0);
+
+  await page.goto("/?problem=work_league&instance=showcase&strategy=mixed_field&document=work_league%3Amixed_field&view=replay&step=0&seed=17&budget=128");
+  await expect(page.locator(".attachment-group").filter({ hasText: "North · items" })).toContainText("Job 1");
+  await expect(page.locator(".react-flow__edge.attachment-relation").first()).toBeVisible();
+  await expect(page.locator(".occupant-overlay").filter({ hasText: "Atlas" })).toBeVisible();
+
+  await page.goto("/?problem=logistics&instance=showcase&strategy=reliable&document=logistics%3Areliable&view=replay&step=0&seed=17&budget=128");
+  await expect(page.locator(".scene-context")).toContainText("Travel conditions");
+  await expect(page.locator(".attachment-group").filter({ hasText: "Depot · items" })).toContainText("Order A");
 });
 
 test("browser history restores a prior problem deep link", async ({ page }) => {

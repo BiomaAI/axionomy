@@ -271,6 +271,21 @@ pub enum SceneToneView {
     Muted,
 }
 
+/// How a semantic entity relates to the geometric surface it is anchored to.
+///
+/// This is presentation metadata only. It lets generic viewers distinguish a
+/// place from something occupying it, a task attached to it, state describing
+/// it, or scenario context that should remain outside the topology.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum SceneEntityRoleView {
+    Structure,
+    Occupant,
+    Attachment,
+    State,
+    Context,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum SceneAnchorView {
@@ -326,6 +341,7 @@ pub struct SceneEntityView {
     pub id: ViewId,
     pub glyph: SceneGlyphView,
     pub anchor: SceneAnchorView,
+    pub role: SceneEntityRoleView,
     pub tone: SceneToneView,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub status: Option<String>,
@@ -473,6 +489,7 @@ impl Scene {
                 anchor: SceneAnchorView::GraphNode {
                     node: node.id.key.clone(),
                 },
+                role: SceneEntityRoleView::Structure,
                 tone: inferred_tone(&node.classes),
                 status: node.classes.first().cloned(),
                 account: None,
@@ -534,6 +551,7 @@ impl Scene {
                     x: cell.x,
                     y: cell.y,
                 },
+                role: SceneEntityRoleView::Structure,
                 tone: inferred_tone(&cell.classes),
                 status: cell.classes.first().cloned(),
                 account: None,
@@ -575,6 +593,7 @@ impl Scene {
                     row: cell.row.clone(),
                     column: cell.column.clone(),
                 },
+                role: SceneEntityRoleView::Structure,
                 tone: inferred_tone(&cell.classes),
                 status: cell.classes.first().cloned(),
                 account: None,
@@ -612,6 +631,7 @@ impl Scene {
                     lane: span.lane.clone(),
                     at: span.start,
                 },
+                role: SceneEntityRoleView::Structure,
                 tone: inferred_tone(&span.classes),
                 status: span.classes.first().cloned(),
                 account: None,
@@ -2211,6 +2231,27 @@ mod tests {
             Err(SceneValidationError::UnknownEvidence(
                 "account:agent/asset:missing".into()
             ))
+        );
+    }
+
+    #[test]
+    fn scene_entity_roles_are_explicit_portable_presentation_metadata() {
+        let scene = Scene::graph(
+            "Roles",
+            vec![GraphNodeView {
+                id: ViewId::new("node:depot", "Depot"),
+                classes: Vec::new(),
+                x: Some(0.0),
+                y: Some(0.0),
+            }],
+            Vec::new(),
+            None,
+        );
+
+        assert_eq!(scene.entities[0].role, SceneEntityRoleView::Structure);
+        assert_eq!(
+            serde_json::to_value(scene.entities[0].role).unwrap(),
+            json!("structure")
         );
     }
 

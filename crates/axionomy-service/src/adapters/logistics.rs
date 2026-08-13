@@ -340,6 +340,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             "Vehicle 1",
             SceneGlyphView::Vehicle,
             vehicle_anchor.clone(),
+            SceneEntityRoleView::Occupant,
             SceneToneView::Active,
             traveling.map(|route| format!("traveling {route:?}")),
         ),
@@ -394,6 +395,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 format!("Order {order:?}"),
                 SceneGlyphView::Package,
                 anchor,
+                SceneEntityRoleView::Attachment,
                 tone,
                 Some(status.into()),
             ),
@@ -409,6 +411,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 SceneAnchorView::GraphNode {
                     node: "location:Depot".into(),
                 },
+                SceneEntityRoleView::State,
                 SceneToneView::Neutral,
                 Some("refuel supply".into()),
             ),
@@ -422,6 +425,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 SceneAnchorView::GraphNode {
                     node: "location:Junction".into(),
                 },
+                SceneEntityRoleView::Context,
                 SceneToneView::Uncertain,
                 Some("sampled chance".into()),
             ),

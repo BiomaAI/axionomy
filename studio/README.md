@@ -8,6 +8,12 @@ accounts and assets; **The rules** shows rates, roles, goals, and invariants;
 Graph, grid, matrix, and timeline pictures help people read a result, but they
 never become a second simulation model. Geometry, semantic entities, paths,
 metrics, annotations, and transition cues all come from the same Rust contract.
+Graph scenes use one semantic grammar across domains: topology is the stable
+structure, account state is folded into its owner, agents and vehicles dock to
+locations or move on routes, jobs and orders form tethered collections, and
+scenario-wide uncertainty occupies a separate context lane. Shapes, grouping,
+and relationship lines therefore communicate what belongs where without
+inventing presentation-only mechanics.
 
 **How it was solved** retains search progress, **Step-by-step replay** scrubs
 accepted exchanges, and **Tradeoffs** compares non-dominated outcomes. Tabler

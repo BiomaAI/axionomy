@@ -295,6 +295,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             format!("{operation:?}"),
             SceneGlyphView::Task,
             SceneAnchorView::Unanchored,
+            SceneEntityRoleView::Attachment,
             SceneToneView::Warning,
             Some("ready queue".into()),
         )

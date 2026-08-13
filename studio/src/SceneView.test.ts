@@ -6,6 +6,7 @@ const entity = {
   id: { key: "stock:wood", label: "Wood" },
   glyph: "material",
   anchor: { kind: "graph_node", node: "wood" },
+  role: "state",
   tone: "active",
   evidence: [{ kind: "balance", account: "workshop:account:workshop", asset: "workshop:asset:wood" }],
   metrics: [],

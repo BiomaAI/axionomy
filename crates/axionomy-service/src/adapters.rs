@@ -6,11 +6,11 @@ use crate::{
 use axionomy::{Economy, Goal, QuantityScalar, Trace};
 use axionomy_view::{
     DebugOntology, ExchangeFrame, LeaderboardView, ObjectiveView, PlaybackError, ProposalView,
-    Scene, SceneAnchorView, SceneEntityView, SceneEvidenceRefView, SceneGlyphView, SceneMetricView,
-    SceneToneView, SearchObservationKindView, SearchObservationView, SearchTelemetryView,
-    TelemetryKindView, TelemetryPointView, ViewDocument, ViewDocumentMetadata, ViewId,
-    ViewOntology, ViewSource, derive_document, derive_document_with_frames, derive_model,
-    derive_proposal,
+    Scene, SceneAnchorView, SceneEntityRoleView, SceneEntityView, SceneEvidenceRefView,
+    SceneGlyphView, SceneMetricView, SceneToneView, SearchObservationKindView,
+    SearchObservationView, SearchTelemetryView, TelemetryKindView, TelemetryPointView,
+    ViewDocument, ViewDocumentMetadata, ViewId, ViewOntology, ViewSource, derive_document,
+    derive_document_with_frames, derive_model, derive_proposal,
 };
 use std::{collections::BTreeSet, fmt::Debug, hash::Hash, ops::ControlFlow};
 
@@ -19,6 +19,7 @@ pub(super) fn visual_entity(
     label: impl Into<String>,
     glyph: SceneGlyphView,
     anchor: SceneAnchorView,
+    role: SceneEntityRoleView,
     tone: SceneToneView,
     status: Option<String>,
 ) -> SceneEntityView {
@@ -26,6 +27,7 @@ pub(super) fn visual_entity(
         id: ViewId::new(key, label),
         glyph,
         anchor,
+        role,
         tone,
         status,
         account: None,

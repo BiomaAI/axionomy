@@ -229,22 +229,48 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 .tone-warning, .tone-uncertain { color: var(--hold) !important; }
 .tone-danger { color: var(--debit) !important; }
 .tone-muted { opacity: .55; }
-.graph-scene { flex: 1; min-height: 0; background: radial-gradient(circle at 50% 44%, #202126 0, #131315 70%); }
-.react-flow__node { background: var(--surface-3); color: var(--text); border: 1px solid #595862; border-radius: 50%; width: 88px; min-height: 72px; display: grid; place-items: center; padding: 8px; text-align: center; font: 500 10px var(--mono); box-shadow: 0 8px 24px #0009, inset 0 1px #ffffff0b; }
-.react-flow__node.resource, .react-flow__node.facility, .react-flow__node.buyer, .react-flow__node.seller, .react-flow__node.carrier { border-radius: 7px; }
-.react-flow__node.goal { border-style: double; border-width: 3px; }
+.graph-scene { flex: 1; min-height: 0; position: relative; background: radial-gradient(circle at 50% 44%, #202126 0, #131315 70%); }
+/* The map has a strict visual grammar: structures define topology; occupants
+   dock to it; attachments hang from it; state is folded into its owner. */
+.react-flow__node.structure-node { background: var(--surface-3); color: var(--text); border: 1px solid #595862; border-radius: 50%; width: 88px; min-height: 72px; display: grid; place-items: center; padding: 8px; text-align: center; font: 500 10px var(--mono); box-shadow: 0 8px 24px #0009, inset 0 1px #ffffff0b; z-index: 2 !important; }
+.react-flow__node.structure-node.resource, .react-flow__node.structure-node.facility, .react-flow__node.structure-node.buyer, .react-flow__node.structure-node.seller, .react-flow__node.structure-node.carrier { border-radius: 7px; }
+.react-flow__node.structure-node.goal { border-style: double; border-width: 3px; }
 .rich-node, .rich-node-lifecycle, .rich-node-effect { width: 100%; display: grid; place-items: center; }
 .rich-node-content { width: 100%; display: grid; place-items: center; gap: 3px; }
 .rich-node-content svg { color: var(--steel); }
 .rich-node-content small { color: var(--muted); max-width: 92px; font-size: 6px; text-transform: uppercase; }
+.structure-content .rich-node-content > span { max-width: 76px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.structure-state { color: var(--brass) !important; font-variant-numeric: tabular-nums; line-height: 1.15; }
+.structure-state-count { opacity: .8; }
 .graph-node-handle { width: 5px; height: 5px; min-width: 5px; min-height: 5px; border: 1px solid color-mix(in srgb, var(--accent) 72%, var(--line)); background: var(--surface-3); opacity: .42; transition: opacity .2s ease, background .2s ease; }
 .react-flow__node:hover .graph-node-handle, .react-flow__node.current .graph-node-handle { background: var(--accent); opacity: .92; }
-.react-flow__node.entity-overlay { width: 112px; min-height: 46px; padding: 5px 9px; border-radius: 999px; z-index: 4 !important; box-shadow: 0 10px 24px #000b, 0 0 0 1px #ffffff0a; will-change: transform; }
-.react-flow__node.entity-overlay.motion-step { transition: transform .62s cubic-bezier(.2,.8,.2,1), left .62s cubic-bezier(.2,.8,.2,1), top .62s cubic-bezier(.2,.8,.2,1); }
-.react-flow__node.entity-overlay.motion-seek { transition: none; }
-.entity-token { grid-auto-flow: column; grid-template-columns: auto minmax(0, 1fr); text-align: left; }
-.entity-token span { max-width: 78px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.entity-token small { grid-column: 1 / -1; }
+.react-flow__node.occupant-overlay { width: 108px; min-height: 42px; padding: 5px 9px; border: 1px solid color-mix(in srgb, var(--steel) 78%, var(--line)); border-radius: 999px; background: color-mix(in srgb, var(--surface-3) 94%, transparent); color: var(--text); z-index: 5 !important; box-shadow: 0 10px 24px #000b, 0 0 0 1px #ffffff0a; will-change: transform; }
+.react-flow__node.occupant-overlay.motion-step, .react-flow__node.attachment-group.motion-step { transition: transform .62s cubic-bezier(.2,.8,.2,1), left .62s cubic-bezier(.2,.8,.2,1), top .62s cubic-bezier(.2,.8,.2,1); }
+.react-flow__node.occupant-overlay.motion-seek, .react-flow__node.attachment-group.motion-seek { transition: none; }
+.occupant-content { grid-auto-flow: column; grid-template-columns: auto minmax(0, 1fr); text-align: left; }
+.occupant-content span { max-width: 76px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.occupant-content small { grid-column: 1 / -1; }
+.relation-handle { width: 3px; height: 3px; min-width: 3px; min-height: 3px; border: 0; background: var(--steel); opacity: .65; }
+.react-flow__node.attachment-group { width: 168px; padding: 0; border: 0; background: transparent; color: var(--text); z-index: 4 !important; box-shadow: none; }
+.attachment-collection { width: 100%; border: 1px solid color-mix(in srgb, var(--line-strong) 78%, transparent); border-radius: 6px; background: color-mix(in srgb, var(--surface-3) 94%, transparent); box-shadow: 0 9px 22px #0008; overflow: hidden; }
+.attachment-collection > header { min-height: 29px; padding: 5px 7px; display: flex; align-items: center; justify-content: space-between; gap: 7px; border-bottom: 1px solid var(--line); color: var(--muted); font: 7px var(--mono); letter-spacing: .06em; text-transform: uppercase; }
+.attachment-collection > header b { min-width: 17px; height: 17px; display: grid; place-items: center; border: 1px solid var(--line); color: var(--text); font-weight: 500; }
+.attachment-rows { display: grid; }
+.attachment-rows button { min-height: 29px; padding: 4px 7px; display: grid; grid-template-columns: 17px minmax(0, 1fr) auto; align-items: center; gap: 5px; border: 0; border-bottom: 1px solid color-mix(in srgb, var(--line) 72%, transparent); background: transparent; color: inherit; text-align: left; font: 8px var(--mono); }
+.attachment-rows button:last-child { border-bottom: 0; }
+.attachment-rows button:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 7%, transparent); }
+.attachment-rows button:disabled { opacity: 1; cursor: default; }
+.attachment-rows button span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.attachment-rows button small { color: var(--muted); font-size: 6px; text-transform: uppercase; white-space: nowrap; }
+.attachment-overflow { min-height: 22px; display: grid; place-items: center; color: var(--muted); font: 7px var(--mono); text-transform: uppercase; }
+.scene-context { position: absolute; top: 47px; right: 10px; z-index: 6; width: min(190px, calc(100% - 72px)); border-left: 2px solid var(--hold); background: color-mix(in srgb, var(--surface) 88%, transparent); backdrop-filter: blur(4px); box-shadow: 0 8px 20px #0008; }
+.scene-context > header { padding: 5px 8px; border-bottom: 1px solid var(--line); color: var(--hold); font: 7px var(--mono); letter-spacing: .08em; text-transform: uppercase; }
+.scene-context button { width: 100%; min-height: 36px; padding: 5px 8px; display: grid; grid-template-columns: 18px minmax(0, 1fr); align-items: center; gap: 6px; border: 0; border-bottom: 1px solid var(--line); background: transparent; color: var(--text); text-align: left; }
+.scene-context button:last-child { border-bottom: 0; }
+.scene-context button:disabled { opacity: 1; cursor: default; }
+.scene-context b, .scene-context small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.scene-context b { font: 8px var(--mono); }
+.scene-context small { margin-top: 2px; color: var(--muted); font: 6px var(--mono); text-transform: uppercase; }
 .rich-node-effect.effect-produced, .rich-node-effect.effect-consumed, .rich-node-effect.effect-preserved, .rich-node-effect.effect-changed { position: relative; border-radius: inherit; }
 .rich-node-effect.effect-produced::after, .rich-node-effect.effect-consumed::after, .rich-node-effect.effect-preserved::after, .rich-node-effect.effect-changed::after { position: absolute; right: -11px; top: -11px; z-index: 2; padding: 2px 4px; border: 1px solid currentColor; background: var(--surface); box-shadow: 0 3px 9px #0008; font: 7px var(--mono); letter-spacing: .04em; text-transform: uppercase; }
 .rich-node-effect.effect-produced::after { content: "+"; color: var(--credit); }
@@ -258,8 +284,10 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 .motion-step .rich-node-lifecycle.is-entering { animation: entity-enter .46s cubic-bezier(.2,.9,.3,1.1) both; }
 .motion-step .rich-node-lifecycle.is-exiting { pointer-events: none; animation: entity-exit .4s ease both; }
 .motion-step .rich-node-content.is-moving { animation: entity-travel .62s cubic-bezier(.2,.8,.2,1) both; }
-.react-flow__node.current { background: var(--accent); border-color: var(--accent); color: var(--accent-contrast); box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent) 10%, transparent), 0 10px 30px #000c; animation: node-arrive .68s ease; }
+.react-flow__node.structure-node.current { background: var(--accent); border-color: var(--accent); color: var(--accent-contrast); box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent) 10%, transparent), 0 10px 30px #000c; animation: node-arrive .68s ease; }
 .react-flow__edge-path { stroke: #74716b; stroke-width: 1.65; }
+.react-flow__edge.relation-edge .react-flow__edge-path { stroke: color-mix(in srgb, var(--steel) 65%, transparent); stroke-width: 1; stroke-dasharray: 3 4; }
+.react-flow__edge.occupant-relation .react-flow__edge-path { stroke-dasharray: 2 3; }
 .react-flow__edge.locked .react-flow__edge-path, .react-flow__edge.failed .react-flow__edge-path { stroke: var(--debit); stroke-dasharray: 5 5; }
 .react-flow__edge.uncertain .react-flow__edge-path { stroke: var(--hold); stroke-dasharray: 3 4; }
 .react-flow__edge.completed .react-flow__edge-path { stroke: var(--accent); }
@@ -569,9 +597,11 @@ footer { padding: 25px 0 36px; color: var(--muted); text-align: center; font: 8p
   .error-banner { background: #f7ebe9; border-color: #dcbab4; color: #8a3a33; }
   .delta-group.consumed b { color: #96423b; }
   .react-flow__edge-path { stroke: #a39d8f; }
-  .react-flow__node { border-color: #aaa18f; box-shadow: 0 8px 22px #2a251a24, inset 0 1px #fff; }
-  .react-flow__node.current { box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent) 9%, transparent), 0 9px 24px #2a251a2b; }
-  .react-flow__node.entity-overlay { box-shadow: 0 9px 22px #2a251a30, 0 0 0 1px #ffffffb3; }
+  .react-flow__node.structure-node { border-color: #aaa18f; box-shadow: 0 8px 22px #2a251a24, inset 0 1px #fff; }
+  .react-flow__node.structure-node.current { box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent) 9%, transparent), 0 9px 24px #2a251a2b; }
+  .react-flow__node.occupant-overlay { box-shadow: 0 9px 22px #2a251a30, 0 0 0 1px #ffffffb3; }
+  .attachment-collection { box-shadow: 0 8px 18px #2a251a24; }
+  .scene-context { box-shadow: 0 8px 18px #2a251a20; }
   .grid-scene > div.red { background: #a8524b; }
   .grid-scene > div.yellow { background: #ac9344; color: #23200f; }
 }

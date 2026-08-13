@@ -575,6 +575,15 @@ export interface components {
             label: string;
             tone: components["schemas"]["SceneToneView"];
         };
+        /**
+         * @description How a semantic entity relates to the geometric surface it is anchored to.
+         *
+         *     This is presentation metadata only. It lets generic viewers distinguish a
+         *     place from something occupying it, a task attached to it, state describing
+         *     it, or scenario context that should remain outside the topology.
+         * @enum {string}
+         */
+        SceneEntityRoleView: "structure" | "occupant" | "attachment" | "state" | "context";
         SceneEntityView: {
             account?: string | null;
             anchor: components["schemas"]["SceneAnchorView"];
@@ -583,6 +592,7 @@ export interface components {
             id: components["schemas"]["ViewId"];
             /** @default [] */
             metrics: components["schemas"]["SceneMetricView"][];
+            role: components["schemas"]["SceneEntityRoleView"];
             status?: string | null;
             tone: components["schemas"]["SceneToneView"];
         };

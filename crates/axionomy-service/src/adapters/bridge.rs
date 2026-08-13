@@ -372,6 +372,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 SceneAnchorView::GraphNode {
                     node: if east { "east".into() } else { "west".into() },
                 },
+                SceneEntityRoleView::Occupant,
                 if east {
                     SceneToneView::Success
                 } else {

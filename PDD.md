@@ -703,7 +703,7 @@ ViewId        = stable presentation key + human label + optional JSON context
 ExactQuantity = decimal text
 ViewSnapshot  = ordered accounts and balances + optional derived scene
                 + replay-derived leaderboards
-Scene         = surface + semantic entities + typed economic evidence links
+Scene         = surface + role-bearing semantic entities + typed economic evidence links
                 + paths + annotations + metrics
 Leaderboard   = direction + ordered participants + exact score + rank evidence
 ExchangeFrame = before + assessment + exchange + receipt + after + cues
@@ -801,11 +801,16 @@ browser therefore does not contain branches for a maze explorer, vehicle,
 robot, package, or workshop material. The same compositor turns an anchor
 change into travel, entity appearance/disappearance into entry/exit, exact
 receipt deltas into consumed/produced/preserved emphasis, and path status into
-route flow. Playback buttons and autoplay declare adjacent-step intent so
+route flow. A small presentation-only role vocabulary removes visual
+ambiguity without adding domain semantics: `structure` defines topology,
+`occupant` docks to or travels through it, `attachment` is grouped and tethered
+to its owner, `state` is integrated into the structure it describes, and
+`context` is separated as scenario-wide influence. Playback buttons and
+autoplay declare adjacent-step intent so
 semantic movement remains visible; scrubber jumps declare seek intent and do
 not invent long travel across skipped exchanges. Stable canvas geometry and
-deterministic co-location slots prevent unrelated nodes from jumping between
-frames. Reduced-motion preferences remove decorative repetition without
+higher-order composition prevent related records from becoming an unstructured
+cloud or jumping between frames. Reduced-motion preferences remove decorative repetition without
 hiding the essential state transition.
 
 Solve evidence and trace playback are deliberately distinct controls. `Run`
@@ -1816,13 +1821,18 @@ capability rather than inferring liveness from cached data.
 
 ### D-036: Visual richness is typed explanation, not extra truth
 
-A scene has a geometric surface plus stable semantic entities, anchors, typed
+A scene has a geometric surface plus stable, role-bearing semantic entities,
+anchors, typed
 account/balance evidence links, paths, annotations, exact metrics, and a
 constrained glyph vocabulary. Tabler is a replaceable browser rendering
 dependency. Frame cues are derived from the exchange and receipt, and scene
 anchors plus evidence references are validated before an artifact is
 published. A generic renderer composes deterministic adjacent-step motion and
-receipt effects without knowing the problem domain. This permits rich
+receipt effects without knowing the problem domain. Entity roles distinguish
+structure, occupants, attachments, owned state, and global context so a viewer
+can show containment and relationships rather than a flat collection. The
+roles change only composition; they cannot authorize or alter an exchange.
+This permits rich
 animation and linked inspection while preserving
 the rule that deleting every visual projection changes no valid exchange,
 balance, goal, or replay result.

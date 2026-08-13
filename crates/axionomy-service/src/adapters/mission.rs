@@ -225,28 +225,17 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
     let nodes = locations
         .into_iter()
         .map(|(location, x, y)| {
-            let agents = [AgentId::Scout, AgentId::Medic]
-                .into_iter()
-                .filter(|agent| {
-                    !world
-                        .balance(&AccountId::Agent(*agent), &Asset::At(location))
-                        .is_zero()
-                })
-                .map(|agent| format!("{agent:?}"))
-                .collect::<Vec<_>>();
+            let occupied = [AgentId::Scout, AgentId::Medic].into_iter().any(|agent| {
+                !world
+                    .balance(&AccountId::Agent(agent), &Asset::At(location))
+                    .is_zero()
+            });
             GraphNodeView {
-                id: ViewId::new(
-                    format!("location:{location:?}"),
-                    if agents.is_empty() {
-                        format!("{location:?}")
-                    } else {
-                        format!("{location:?} · {}", agents.join(" + "))
-                    },
-                ),
-                classes: if agents.is_empty() {
-                    Vec::new()
-                } else {
+                id: ViewId::new(format!("location:{location:?}"), format!("{location:?}")),
+                classes: if occupied {
                     vec!["current".into()]
+                } else {
+                    Vec::new()
                 },
                 x: Some(x),
                 y: Some(y),
@@ -292,6 +281,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 SceneAnchorView::GraphNode {
                     node: format!("location:{location:?}"),
                 },
+                SceneEntityRoleView::Occupant,
                 SceneToneView::Active,
                 Some(
                     if world
@@ -324,6 +314,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 SceneAnchorView::GraphNode {
                     node: "location:Base".into(),
                 },
+                SceneEntityRoleView::State,
                 SceneToneView::Neutral,
                 Some("shared state".into()),
             ),
@@ -337,6 +328,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 SceneAnchorView::GraphNode {
                     node: "location:North".into(),
                 },
+                SceneEntityRoleView::Context,
                 SceneToneView::Uncertain,
                 Some("private truth".into()),
             ),
@@ -350,6 +342,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 SceneAnchorView::GraphNode {
                     node: "location:South".into(),
                 },
+                SceneEntityRoleView::State,
                 SceneToneView::Goal,
                 Some("outcome account".into()),
             ),

@@ -206,6 +206,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             SceneAnchorView::GraphNode {
                 node: format!("location:{agent_location:?}"),
             },
+            SceneEntityRoleView::Occupant,
             SceneToneView::Active,
             Some(
                 if world
@@ -250,6 +251,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 SceneAnchorView::GraphNode {
                     node: format!("location:{location:?}"),
                 },
+                SceneEntityRoleView::State,
                 SceneToneView::Uncertain,
                 Some("actor belief".into()),
             ),
@@ -265,6 +267,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             SceneAnchorView::GraphNode {
                 node: "location:Base".into(),
             },
+            SceneEntityRoleView::Context,
             SceneToneView::Uncertain,
             Some("not visible to actor".into()),
         ),
