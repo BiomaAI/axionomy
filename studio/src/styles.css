@@ -301,6 +301,14 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 .motion-step .rich-node-lifecycle.is-exiting { pointer-events: none; animation: entity-exit .4s ease both; }
 .motion-step .rich-node-content.is-moving { animation: entity-travel .62s cubic-bezier(.2,.8,.2,1) both; }
 .react-flow__node.structure-node.current { background: var(--accent); border-color: var(--accent); color: var(--accent-contrast); box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent) 10%, transparent), 0 10px 30px #000c; animation: node-arrive .68s ease; }
+/* A current structure inverts its surface. Semantic tones describe the entity
+   on ordinary surfaces, but must not override the foreground required by the
+   active surface: dark mode's accent is deliberately almost white. */
+.react-flow__node.structure-node.current .structure-content,
+.react-flow__node.structure-node.current .rich-node-content > svg,
+.react-flow__node.structure-node.current .structure-label,
+.react-flow__node.structure-node.current .structure-state,
+.react-flow__node.structure-node.current .structure-state-count { color: var(--accent-contrast) !important; }
 .react-flow__edge-path { stroke: #74716b; stroke-width: 1.65; }
 .react-flow__edge.relation-edge .react-flow__edge-path { stroke: color-mix(in srgb, var(--steel) 65%, transparent); stroke-width: 1; stroke-dasharray: 3 4; }
 .react-flow__edge.occupant-relation .react-flow__edge-path { stroke-dasharray: 2 3; }

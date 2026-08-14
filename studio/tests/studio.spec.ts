@@ -386,6 +386,79 @@ test("uses the generic motion compositor across every graph problem", async ({ p
   expect(browserErrors).toEqual([]);
 });
 
+test("keeps active graph structures legible across every problem and replay frame", async ({ page }) => {
+  test.setTimeout(180_000);
+  await page.emulateMedia({ colorScheme: "dark" });
+  const problems = ["maze", "bridge", "workshop", "marketplace", "logistics", "mission", "rescue", "work_league"];
+  let auditedNodes = 0;
+
+  for (const problem of problems) {
+    const response = await page.request.get(`/artifacts/${problem}.json`);
+    expect(response.ok(), `${problem} artifact must be available`).toBe(true);
+    const artifact = await response.json() as {
+      documents: Array<{ id: string; frames: unknown[]; initial: { scene: { surface: { kind: string } } } }>;
+    };
+
+    for (const document of artifact.documents.filter((candidate) => candidate.initial.scene.surface.kind === "graph")) {
+      const strategy = document.id.slice(document.id.indexOf(":") + 1);
+      await page.goto(`/?problem=${problem}&instance=showcase&strategy=${strategy}&document=${encodeURIComponent(document.id)}&view=replay&step=0&seed=17&budget=128`);
+      await expect(page.locator(".graph-scene")).toBeVisible();
+
+      for (let step = 0; step <= document.frames.length; step += 1) {
+        const audit = await page.evaluate(async (position) => {
+          const slider = document.querySelector<HTMLInputElement>('input[aria-label="Trace position"]');
+          if (!slider) throw new Error("Trace position slider is missing");
+          const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+          setter?.call(slider, String(position));
+          slider.dispatchEvent(new Event("input", { bubbles: true }));
+          slider.dispatchEvent(new Event("change", { bubbles: true }));
+          await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+
+          const channels = (value: string): [number, number, number] => {
+            const match = value.match(/[\d.]+/g);
+            if (!match || match.length < 3) throw new Error(`Cannot parse color ${value}`);
+            return [Number(match[0]), Number(match[1]), Number(match[2])];
+          };
+          const luminance = (value: string): number => {
+            const linear = channels(value).map((channel) => {
+              const normalized = channel / 255;
+              return normalized <= 0.04045 ? normalized / 12.92 : ((normalized + 0.055) / 1.055) ** 2.4;
+            });
+            return linear[0] * 0.2126 + linear[1] * 0.7152 + linear[2] * 0.0722;
+          };
+          const contrast = (foreground: string, background: string): number => {
+            const lighter = Math.max(luminance(foreground), luminance(background));
+            const darker = Math.min(luminance(foreground), luminance(background));
+            return (lighter + 0.05) / (darker + 0.05);
+          };
+
+          const failures: string[] = [];
+          const nodes = [...document.querySelectorAll<HTMLElement>(".react-flow__node.structure-node.current")];
+          for (const node of nodes) {
+            const background = getComputedStyle(node).backgroundColor;
+            const targets = [
+              ...node.querySelectorAll<HTMLElement>(".structure-label, .structure-state, .structure-state-count"),
+              ...node.querySelectorAll<SVGElement>(".rich-node-content > svg"),
+            ];
+            for (const target of targets) {
+              const ratio = contrast(getComputedStyle(target).color, background);
+              const minimum = target instanceof SVGElement ? 3 : 4.5;
+              const className = typeof target.className === "string" ? target.className : target.className.baseVal;
+              if (ratio < minimum) failures.push(`${node.dataset.id ?? "node"} ${className} ${ratio.toFixed(2)}:1`);
+            }
+          }
+          return { nodeCount: nodes.length, failures };
+        }, step);
+
+        auditedNodes += audit.nodeCount;
+        expect(audit.failures, `${document.id} replay step ${step}`).toEqual([]);
+      }
+    }
+  }
+
+  expect(auditedNodes, "the audit must exercise light-filled active structures").toBeGreaterThan(0);
+});
+
 test("composes state, attachments, occupants, and context by relationship", async ({ page }) => {
   await page.goto("/?problem=workshop&instance=showcase&strategy=minimum_waste&document=workshop%3Aminimum_waste&view=replay&step=0&seed=17&budget=128");
   const wood = page.locator('.react-flow__node[data-id="wood"]');
