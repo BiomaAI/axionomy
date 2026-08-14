@@ -27,9 +27,9 @@ simulation, and learned policies without duplicating domain logic; exact forks
 enable counterfactual exploration, while replayable traces make decisions
 auditable, comparable, and independently verifiable.
 
-[![Axionomy Studio comparing and replaying stochastic logistics strategies](assets/studio-gallery/logistics.webp)](https://biomaai.github.io/axionomy/)
+[![Axionomy Studio visualizing autonomous agents, jobs, facilities, and economic relationships in the Work League](assets/studio-gallery/work_league.webp)](https://biomaai.github.io/axionomy/?problem=work_league&instance=showcase&strategy=mixed_field&document=work_league%3Amixed_field&view=replay&step=0&leaderboard=contract_value&seed=17&budget=128)
 
-<p align="center"><sub>Axionomy Studio compares stochastic logistics strategies, then replays the selected solution one verified exchange at a time. <a href="https://biomaai.github.io/axionomy/">Open the live Studio</a>.</sub></p>
+<p align="center"><sub>Autonomous Work League makes topology, agents, jobs, facilities, relationships, and economic state readable in one verified replay. <a href="https://biomaai.github.io/axionomy/?problem=work_league&instance=showcase&strategy=mixed_field&document=work_league%3Amixed_field&view=replay&step=0&leaderboard=contract_value&seed=17&budget=128">Open this view in the live Studio</a>.</sub></p>
 
 Try the
 [Autonomous Work League](https://biomaai.github.io/axionomy/?problem=work_league&instance=showcase&strategy=mixed_field&document=work_league%3Amixed_field&view=replay&step=24&leaderboard=resource_efficiency&seed=17&budget=128)
@@ -74,6 +74,8 @@ single cohort or pool account carries the authoritative condition or epoch.
 
 See [PDD.md](PDD.md) for the product and technical contract,
 [PROBLEMS.md](PROBLEMS.md) for the conformance problems that drive the API,
+[STUDIO_VISUAL_LANGUAGE.md](STUDIO_VISUAL_LANGUAGE.md) for the normative Studio
+visual grammar and canonical renderer references,
 [AGENT_BENCHMARK.md](AGENT_BENCHMARK.md) for the future single- and multi-agent
 evaluation and rating design, and
 [CONTINUOUS_AGENT_SYSTEMS.md](CONTINUOUS_AGENT_SYSTEMS.md) for the boundary
@@ -260,30 +262,44 @@ cargo run -p axionomy-cli -- run logistics --instance showcase --strategy reliab
 
 Each view below is derived from the same accounts, assets, rates, exchanges,
 receipts, and replay contract used by the engine—never from a parallel
-simulation model. Click any image for the full-resolution view.
+simulation model. They also serve as checked-in examples of the
+[Studio visual language](STUDIO_VISUAL_LANGUAGE.md). Click any image for the
+full-resolution view; follow its title to open the exact live replay.
 
 <table>
   <tr>
     <td width="50%">
-      <a href="assets/studio-gallery/logistics.webp"><img src="assets/studio-gallery/logistics.webp" alt="Axionomy Studio replaying a stochastic logistics route"></a><br>
-      <strong>Stochastic logistics</strong><br>
-      Monte Carlo policy comparison, MCTS evidence, random travel events, and a replayed route through four deliveries.
+      <a href="assets/studio-gallery/work_league.webp"><img src="assets/studio-gallery/work_league.webp" alt="Axionomy Studio visualizing autonomous agents, jobs, facilities, and economic relationships in the Work League"></a><br>
+      <strong><a href="https://biomaai.github.io/axionomy/?problem=work_league&amp;instance=showcase&amp;strategy=mixed_field&amp;document=work_league%3Amixed_field&amp;view=replay&amp;step=0&amp;leaderboard=contract_value&amp;seed=17&amp;budget=128">Autonomous Work League</a></strong><br>
+      The canonical graph scene: four agents, finite jobs, shared facilities, resource costs, stable relationships, and several replay-derived rankings.
     </td>
     <td width="50%">
+      <a href="assets/studio-gallery/logistics.webp"><img src="assets/studio-gallery/logistics.webp" alt="Axionomy Studio replaying a stochastic logistics route"></a><br>
+      <strong><a href="https://biomaai.github.io/axionomy/?problem=logistics&amp;instance=showcase&amp;strategy=reliable&amp;document=logistics%3Areliable&amp;view=replay&amp;step=27&amp;seed=0&amp;budget=128">Stochastic logistics</a></strong><br>
+      Monte Carlo policy comparison, MCTS evidence, random travel events, and a replayed route through four deliveries.
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
       <a href="assets/studio-gallery/marketplace.webp"><img src="assets/studio-gallery/marketplace.webp" alt="Axionomy Studio replaying an atomic multi-party marketplace clearing"></a><br>
-      <strong>Multi-party marketplace</strong><br>
+      <strong><a href="https://biomaai.github.io/axionomy/?problem=marketplace&amp;instance=showcase&amp;strategy=market_clearing&amp;document=marketplace%3Amarket_clearing&amp;view=replay&amp;step=4&amp;seed=17&amp;budget=128">Multi-party marketplace</a></strong><br>
       Atomic settlement across buyers, sellers, carriers, platform, and tax, with exact Pareto utility tradeoffs.
+    </td>
+    <td width="50%">
+      <a href="assets/studio-gallery/sokoban.webp"><img src="assets/studio-gallery/sokoban.webp" alt="Axionomy Studio replaying stable crates and a player moving through a Sokoban warehouse"></a><br>
+      <strong><a href="https://biomaai.github.io/axionomy/?problem=sokoban&amp;instance=showcase&amp;strategy=a_star&amp;document=sokoban%3Aa_star&amp;view=replay&amp;step=8&amp;seed=17&amp;budget=128">Sokoban</a></strong><br>
+      The canonical grid scene: stable terrain, independently animated entities, exact cell anchoring, dead squares, and atomic multi-cell pushes.
     </td>
   </tr>
   <tr>
     <td width="50%">
       <a href="assets/studio-gallery/mission.webp"><img src="assets/studio-gallery/mission.webp" alt="Axionomy Studio replaying a hidden-information multi-agent mission"></a><br>
-      <strong>Hidden-information mission</strong><br>
+      <strong><a href="https://biomaai.github.io/axionomy/?problem=mission&amp;instance=showcase&amp;view=replay&amp;step=3&amp;seed=17&amp;budget=128">Hidden-information mission</a></strong><br>
       Private observations, shared beliefs, random hazards, and information-set search across cooperating agents.
     </td>
     <td width="50%">
       <a href="assets/studio-gallery/perishables.webp"><img src="assets/studio-gallery/perishables.webp" alt="Axionomy Studio replaying perishable inventory decay during a power outage"></a><br>
-      <strong>Perishable inventory</strong><br>
+      <strong><a href="https://biomaai.github.io/axionomy/?problem=perishables&amp;instance=showcase&amp;view=replay&amp;step=4&amp;seed=17&amp;budget=128">Perishable inventory</a></strong><br>
       Ten thousand fungible claims, cohort-level decay, cooling energy, timed effects, and exact inventory tradeoffs.
     </td>
   </tr>

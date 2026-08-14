@@ -15,6 +15,12 @@ scenario-wide uncertainty occupies a separate context lane. Shapes, grouping,
 and relationship lines therefore communicate what belongs where without
 inventing presentation-only mechanics.
 
+[`STUDIO_VISUAL_LANGUAGE.md`](../STUDIO_VISUAL_LANGUAGE.md) is the normative
+design reference. It names Work League as the canonical graph scene, Sokoban
+as the canonical grid, scheduling as the canonical timeline, and Exact Cover
+as the canonical matrix, and defines the geometric checks expected before a
+new visualization is accepted.
+
 Grid scenes use the same identity discipline. Cells describe terrain and link
 to their authoritative accounts; players, crates, and pieces are explicit
 entities layered above them. A stable entity ID lets the generic renderer move
