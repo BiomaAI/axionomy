@@ -1,7 +1,7 @@
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/axionomy-logo-dark.webp">
-  <source media="(prefers-color-scheme: light)" srcset="assets/axionomy-logo-light.webp">
-  <img alt="Axionomy" src="assets/axionomy-logo-light.webp">
+  <source media="(prefers-color-scheme: dark)" srcset="assets/axionomy-logo-dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="assets/axionomy-logo-light.png">
+  <img alt="Axionomy" src="assets/axionomy-logo-light.png">
 </picture>
 
 > A closed economy for verifiable problem solving.

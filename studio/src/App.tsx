@@ -2,8 +2,8 @@ import { lazy, Suspense, useEffect, useMemo, useRef, useState, type CSSPropertie
 import { useQuery } from "@tanstack/react-query";
 import { IconChevronLeft, IconChevronRight, IconMaximize, IconPlayerPauseFilled, IconPlayerPlayFilled, IconPlayerSkipBack, IconPlayerSkipForward } from "@tabler/icons-react";
 import "@xyflow/react/dist/style.css";
-import logoDark from "../../assets/axionomy-logo-dark.webp";
-import logoLight from "../../assets/axionomy-logo-light.webp";
+import logoDark from "../../assets/axionomy-logo-dark.png";
+import logoLight from "../../assets/axionomy-logo-light.png";
 import {
   type ExchangeFrame,
   type LeaderboardView,
@@ -550,6 +550,7 @@ function solverEvidenceScene(scene: Scene | null | undefined, observations: Sear
     title: "Solver expansion over the encoded maze",
     metrics: [],
     annotations: [],
+    legend: scene.legend.filter((entry) => !["Planned next", "Traversed route", "Current move"].includes(entry.label)),
     entities,
     paths: scene.paths.map((path) => ({
       ...path,

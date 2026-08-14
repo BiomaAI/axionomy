@@ -35,6 +35,9 @@ test("turns saved Maze search evidence into a truthful, scrubbable expansion map
   await expect(page.locator(".solve-summary")).toContainText("A* solution");
   await expect(page.locator(".react-flow__node.search-explored")).not.toHaveCount(0);
   await expect(page.locator(".react-flow__node.search-current")).toHaveCount(1);
+  await expect(page.locator(".solve-map")).not.toContainText("Planned next");
+  await expect(page.locator(".solve-map")).not.toContainText("Traversed route");
+  await expect(page.locator(".solve-map")).not.toContainText("Current move");
 
   const scrubber = page.getByRole("slider", { name: "Solver observation position" });
   await scrubber.fill("0");
