@@ -12,11 +12,12 @@ use axionomy_search::{
 pub enum Node {
     Start,
     Atrium,
+    Library,
     Gallery,
     Archive,
     Scriptorium,
     KeyRoom,
-    Door,
+    Gate,
     Vault,
     Garden,
     Market,
@@ -30,6 +31,7 @@ pub enum Node {
     Ruins,
     Bridge,
     Chapel,
+    Workshop,
     Detour,
     Exit,
 }
@@ -71,8 +73,12 @@ pub enum RateId {
         energy: u64,
         needs_open_door: bool,
     },
-    TakeKey,
-    UnlockDoor,
+    TakeKey {
+        at: Node,
+    },
+    UnlockDoor {
+        at: Node,
+    },
     Finish,
 }
 
@@ -89,61 +95,87 @@ pub enum ObjectiveKey {
 
 const MICRO_EDGES: [(Node, Node, u64, bool); 5] = [
     (Node::Start, Node::KeyRoom, 2, false),
-    (Node::KeyRoom, Node::Door, 2, true),
-    (Node::Door, Node::Exit, 2, false),
+    (Node::KeyRoom, Node::Gate, 2, true),
+    (Node::Gate, Node::Exit, 2, false),
     (Node::Start, Node::Detour, 4, false),
     (Node::Detour, Node::Exit, 5, false),
 ];
 
-const SHOWCASE_EDGES: [(Node, Node, u64, bool); 16] = [
-    (Node::Start, Node::Gallery, 1, false),
-    (Node::Gallery, Node::Archive, 1, false),
-    (Node::Archive, Node::KeyRoom, 1, false),
-    (Node::KeyRoom, Node::Door, 1, true),
-    (Node::Door, Node::Exit, 1, false),
-    (Node::Start, Node::Garden, 1, false),
-    (Node::Garden, Node::Market, 1, false),
-    (Node::Market, Node::Canal, 1, false),
-    (Node::Canal, Node::Tower, 1, false),
-    (Node::Tower, Node::Exit, 2, false),
-    (Node::Start, Node::Tunnel, 2, false),
-    (Node::Tunnel, Node::Ridge, 2, false),
-    (Node::Ridge, Node::Bridge, 2, false),
+const SHOWCASE_EDGES: [(Node, Node, u64, bool); 24] = [
+    // The efficient route deliberately revisits the library after collecting
+    // the key. Search must reason over position, inventory, and gate state;
+    // room alone is not a sufficient state key.
+    (Node::Start, Node::Atrium, 1, false),
+    (Node::Atrium, Node::Library, 1, false),
+    (Node::Library, Node::KeyRoom, 1, false),
+    (Node::KeyRoom, Node::Library, 1, false),
+    (Node::Library, Node::Gallery, 1, false),
+    (Node::Atrium, Node::Gallery, 4, false),
+    (Node::Gallery, Node::Gate, 1, false),
+    (Node::Gate, Node::Vault, 1, true),
+    (Node::Vault, Node::Exit, 1, false),
+    // A balanced route through the public district.
+    (Node::Start, Node::Garden, 3, false),
+    (Node::Garden, Node::Market, 2, false),
+    (Node::Market, Node::Canal, 2, false),
+    (Node::Canal, Node::Bridge, 2, false),
     (Node::Bridge, Node::Exit, 2, false),
-    (Node::Start, Node::Detour, 5, false),
-    (Node::Detour, Node::Exit, 6, false),
+    // Cross-links and reversible passages create decisions after the entrance
+    // without making the onboarding map visually noisy.
+    (Node::Market, Node::Gallery, 3, false),
+    (Node::Gallery, Node::Market, 2, false),
+    (Node::Garden, Node::Workshop, 3, false),
+    (Node::Workshop, Node::Canal, 2, false),
+    (Node::Start, Node::Tunnel, 6, false),
+    (Node::Tunnel, Node::Workshop, 3, false),
+    (Node::Tunnel, Node::Bridge, 4, false),
+    (Node::Bridge, Node::Canal, 2, false),
+    // The shortest sequence is intentionally the most expensive route.
+    (Node::Start, Node::Detour, 8, false),
+    (Node::Detour, Node::Exit, 7, false),
 ];
 
-const STRESS_EDGES: [(Node, Node, u64, bool); 29] = [
-    (Node::Start, Node::Atrium, 1, false),
-    (Node::Atrium, Node::Gallery, 1, false),
-    (Node::Gallery, Node::Archive, 1, false),
+const STRESS_EDGES: [(Node, Node, u64, bool); 40] = [
+    SHOWCASE_EDGES[0],
+    SHOWCASE_EDGES[1],
+    SHOWCASE_EDGES[2],
+    SHOWCASE_EDGES[3],
+    SHOWCASE_EDGES[4],
+    SHOWCASE_EDGES[5],
+    SHOWCASE_EDGES[6],
+    SHOWCASE_EDGES[7],
+    SHOWCASE_EDGES[8],
+    SHOWCASE_EDGES[9],
+    SHOWCASE_EDGES[10],
+    SHOWCASE_EDGES[11],
+    SHOWCASE_EDGES[12],
+    SHOWCASE_EDGES[13],
+    SHOWCASE_EDGES[14],
+    SHOWCASE_EDGES[15],
+    SHOWCASE_EDGES[16],
+    SHOWCASE_EDGES[17],
+    SHOWCASE_EDGES[18],
+    SHOWCASE_EDGES[19],
+    SHOWCASE_EDGES[20],
+    SHOWCASE_EDGES[21],
+    SHOWCASE_EDGES[22],
+    SHOWCASE_EDGES[23],
+    (Node::Atrium, Node::Archive, 2, false),
     (Node::Archive, Node::Scriptorium, 1, false),
     (Node::Scriptorium, Node::KeyRoom, 1, false),
-    (Node::KeyRoom, Node::Door, 1, true),
-    (Node::Door, Node::Vault, 1, false),
-    (Node::Vault, Node::Exit, 1, false),
-    (Node::Start, Node::Garden, 1, false),
-    (Node::Garden, Node::Market, 1, false),
-    (Node::Market, Node::Canal, 1, false),
-    (Node::Canal, Node::Docks, 1, false),
-    (Node::Docks, Node::Foundry, 1, false),
-    (Node::Foundry, Node::Tower, 1, false),
-    (Node::Tower, Node::Observatory, 1, false),
-    (Node::Observatory, Node::Exit, 2, false),
-    (Node::Start, Node::Tunnel, 2, false),
+    (Node::KeyRoom, Node::Scriptorium, 1, false),
+    (Node::Scriptorium, Node::Archive, 1, false),
+    (Node::Archive, Node::Gallery, 2, false),
+    (Node::Market, Node::Docks, 2, false),
+    (Node::Docks, Node::Foundry, 2, false),
+    (Node::Foundry, Node::Tower, 2, false),
+    (Node::Tower, Node::Observatory, 2, false),
+    (Node::Observatory, Node::Exit, 3, false),
+    (Node::Foundry, Node::Canal, 2, false),
     (Node::Tunnel, Node::Ridge, 2, false),
     (Node::Ridge, Node::Ruins, 2, false),
-    (Node::Ruins, Node::Bridge, 2, false),
-    (Node::Bridge, Node::Chapel, 2, false),
-    (Node::Chapel, Node::Exit, 2, false),
-    (Node::Start, Node::Detour, 7, false),
-    (Node::Detour, Node::Exit, 7, false),
-    (Node::Gallery, Node::Garden, 2, false),
-    (Node::Market, Node::Archive, 2, false),
-    (Node::Canal, Node::Ridge, 2, false),
-    (Node::Tunnel, Node::Foundry, 3, false),
-    (Node::Ruins, Node::Tower, 2, false),
+    (Node::Ruins, Node::Chapel, 2, false),
+    (Node::Chapel, Node::Bridge, 2, false),
 ];
 
 /// Builds the complete closed problem. Topology, lock state, energy, target,
@@ -156,69 +188,78 @@ pub fn initial() -> World {
         &[
             (Node::Start, 6),
             (Node::KeyRoom, 4),
-            (Node::Door, 2),
+            (Node::Gate, 2),
             (Node::Detour, 5),
             (Node::Exit, 0),
         ],
+        Node::KeyRoom,
+        Node::KeyRoom,
     )
 }
 
-/// A decision-dense maze with four route families and a longer key/door plan.
+/// A compact cyclic maze whose room, inventory, and gate state all matter.
 pub fn initial_showcase() -> World {
     build(
         &SHOWCASE_EDGES,
-        11,
-        8,
-        &[
-            (Node::Start, 5),
-            (Node::Gallery, 4),
-            (Node::Archive, 3),
-            (Node::KeyRoom, 2),
-            (Node::Door, 1),
-            (Node::Garden, 5),
-            (Node::Market, 4),
-            (Node::Canal, 3),
-            (Node::Tower, 2),
-            (Node::Tunnel, 6),
-            (Node::Ridge, 4),
-            (Node::Bridge, 2),
-            (Node::Detour, 6),
-            (Node::Exit, 0),
-        ],
-    )
-}
-
-/// A larger acyclic topology with five route families, cross-route choices,
-/// a longer key-and-door chain, and enough horizon to pressure exact search.
-pub fn initial_stress() -> World {
-    build(
-        &STRESS_EDGES,
         18,
         14,
         &[
-            (Node::Start, 8),
-            (Node::Atrium, 7),
-            (Node::Gallery, 6),
-            (Node::Archive, 5),
-            (Node::Scriptorium, 4),
-            (Node::KeyRoom, 3),
-            (Node::Door, 2),
+            (Node::Start, 6),
+            (Node::Atrium, 5),
+            (Node::Library, 4),
+            (Node::KeyRoom, 5),
+            (Node::Gallery, 3),
+            (Node::Gate, 2),
             (Node::Vault, 1),
             (Node::Garden, 8),
-            (Node::Market, 7),
-            (Node::Canal, 6),
-            (Node::Docks, 5),
-            (Node::Foundry, 4),
-            (Node::Tower, 3),
-            (Node::Observatory, 2),
-            (Node::Tunnel, 7),
-            (Node::Ridge, 7),
-            (Node::Ruins, 5),
-            (Node::Bridge, 4),
-            (Node::Chapel, 2),
+            (Node::Market, 6),
+            (Node::Canal, 4),
+            (Node::Bridge, 2),
+            (Node::Workshop, 6),
+            (Node::Tunnel, 6),
             (Node::Detour, 7),
             (Node::Exit, 0),
         ],
+        Node::KeyRoom,
+        Node::Gate,
+    )
+}
+
+/// The showcase topology plus a second cyclic district that substantially
+/// increases the exact-search frontier without changing the problem's rules.
+pub fn initial_stress() -> World {
+    build(
+        &STRESS_EDGES,
+        24,
+        18,
+        &[
+            (Node::Start, 6),
+            (Node::Atrium, 5),
+            (Node::Library, 4),
+            (Node::Gallery, 3),
+            (Node::Archive, 5),
+            (Node::Scriptorium, 6),
+            (Node::KeyRoom, 5),
+            (Node::Gate, 2),
+            (Node::Vault, 1),
+            (Node::Garden, 8),
+            (Node::Market, 6),
+            (Node::Canal, 4),
+            (Node::Docks, 8),
+            (Node::Foundry, 6),
+            (Node::Tower, 5),
+            (Node::Observatory, 3),
+            (Node::Workshop, 6),
+            (Node::Tunnel, 6),
+            (Node::Ridge, 8),
+            (Node::Ruins, 6),
+            (Node::Bridge, 2),
+            (Node::Chapel, 4),
+            (Node::Detour, 7),
+            (Node::Exit, 0),
+        ],
+        Node::KeyRoom,
+        Node::Gate,
     )
 }
 
@@ -227,6 +268,8 @@ fn build(
     energy: u64,
     time: u64,
     distances: &[(Node, u64)],
+    key_at: Node,
+    unlock_at: Node,
 ) -> World {
     let mut environment = axionomy::Basket::new();
     for (from, to, _, _) in edges {
@@ -307,11 +350,11 @@ fn build(
 
     builder
         .rate(
-            RateId::TakeKey,
+            RateId::TakeKey { at: key_at },
             Rate::new()
                 .preserve(
                     Role::Actor,
-                    basket([(Asset::At(Node::KeyRoom), 1), (Asset::Active, 1)]),
+                    basket([(Asset::At(key_at), 1), (Asset::Active, 1)]),
                 )
                 .consume(Role::Actor, basket([(Asset::Time, 1)]))
                 .produce(Role::Actor, basket([(Asset::SpentTime, 1)]))
@@ -320,9 +363,12 @@ fn build(
                 .distinct(Role::Actor, Role::Environment),
         )
         .rate(
-            RateId::UnlockDoor,
+            RateId::UnlockDoor { at: unlock_at },
             Rate::new()
-                .preserve(Role::Actor, basket([(Asset::Active, 1)]))
+                .preserve(
+                    Role::Actor,
+                    basket([(Asset::At(unlock_at), 1), (Asset::Active, 1)]),
+                )
                 .consume(Role::Actor, basket([(Asset::Key, 1), (Asset::Time, 1)]))
                 .produce(Role::Actor, basket([(Asset::SpentTime, 1)]))
                 .consume(Role::Environment, basket([(Asset::Locked, 1)]))
@@ -513,5 +559,70 @@ mod tests {
 
         let frontier = pareto_front(&stress).expect("stress frontier is finite");
         assert!(frontier.front().len() >= 2);
+    }
+
+    #[test]
+    fn showcase_has_four_exact_tradeoffs_and_guidance_reduces_search() {
+        let world = initial_showcase();
+        let dijkstra = solve_dijkstra(&world).expect("showcase has an energy-optimal route");
+        let astar = solve_astar(&world).expect("showcase has a guided energy-optimal route");
+        assert_eq!(dijkstra.cost(), 8);
+        assert_eq!(astar.cost(), dijkstra.cost());
+        assert!(astar.expanded() < dijkstra.expanded());
+
+        let mut outcomes = pareto_front(&world)
+            .unwrap()
+            .front()
+            .entries()
+            .iter()
+            .map(|entry| {
+                let replayed = world.replayed(entry.payload()).unwrap();
+                assert!(replayed.matches(&goal()));
+                (spent_energy(&replayed), spent_time(&replayed))
+            })
+            .collect::<Vec<_>>();
+        outcomes.sort_unstable();
+        assert_eq!(outcomes, [(8, 11), (11, 6), (12, 4), (15, 3)]);
+    }
+
+    #[test]
+    fn gate_cannot_be_unlocked_remotely() {
+        let mut world = initial_showcase();
+        for rate in [
+            RateId::Move {
+                from: Node::Start,
+                to: Node::Atrium,
+                energy: 1,
+                needs_open_door: false,
+            },
+            RateId::Move {
+                from: Node::Atrium,
+                to: Node::Library,
+                energy: 1,
+                needs_open_door: false,
+            },
+            RateId::Move {
+                from: Node::Library,
+                to: Node::KeyRoom,
+                energy: 1,
+                needs_open_door: false,
+            },
+            RateId::TakeKey { at: Node::KeyRoom },
+        ] {
+            world.apply(action(rate)).unwrap();
+        }
+
+        let remote_unlock = action(RateId::UnlockDoor { at: Node::Gate });
+        let assessment = world.assess(&remote_unlock);
+        assert!(!assessment.is_applicable());
+        assert_eq!(
+            assessment
+                .shortfalls()
+                .iter()
+                .flat_map(|shortfall| shortfall.missing().iter())
+                .find(|(asset, _)| *asset == &Asset::At(Node::Gate))
+                .map(|(_, quantity)| quantity.get()),
+            Some(1),
+        );
     }
 }

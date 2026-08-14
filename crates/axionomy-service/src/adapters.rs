@@ -183,8 +183,8 @@ pub(crate) fn catalog() -> Vec<ProblemDescriptor> {
                 summary: "Reach the exit on limited energy and time. The key route costs less energy, the detour takes fewer moves, and no single weighting picks between them.",
                 instances: [
                     "The smallest maze with a key, a locked door, and a real route choice",
-                    "14 rooms, 16 one-way passages, and four competing route families",
-                    "22 rooms, 29 passages, five route families, and cross-route choices",
+                    "15 rooms, 24 passages, cycles, backtracking, a stateful gate, and four exact tradeoffs",
+                    "24 rooms and 40 passages across two cyclic districts",
                 ],
             },
             ProblemFamily::Pathfinding,
@@ -197,9 +197,15 @@ pub(crate) fn catalog() -> Vec<ProblemDescriptor> {
                     "breadth-first search",
                 ),
                 (
+                    "dijkstra",
+                    "Least energy · uninformed",
+                    "Dijkstra proves the lowest-energy route without a heuristic.",
+                    "Dijkstra",
+                ),
+                (
                     "a_star",
                     "Least energy",
-                    "A*, guided by a distance estimate stored in the economy itself.",
+                    "A*, guided by an admissible distance estimate stored in the economy itself.",
                     "A*",
                 ),
                 (

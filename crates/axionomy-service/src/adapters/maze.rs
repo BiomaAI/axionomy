@@ -5,7 +5,8 @@ use axionomy_search::pareto::Objective;
 use axionomy_view::{
     FrontierCompletenessView, GraphEdgeView, GraphNodeView, ObjectiveAxisView,
     ObjectiveDirectionView, ParetoFrontView, ParetoPointView, SceneAnchorView, SceneGlyphView,
-    SceneToneView, TelemetryKindView, ViewId,
+    SceneLegendView, ScenePathStatusView, SceneSurfaceView, SceneToneView, TelemetryKindView,
+    ViewId,
 };
 
 pub(super) fn build(
@@ -18,6 +19,8 @@ pub(super) fn build(
         InstanceProfile::Stress => maze::initial_stress(),
     };
     let bfs = maze::solve_bfs(&initial).ok_or_else(|| problem_error("maze", "no BFS route"))?;
+    let dijkstra =
+        maze::solve_dijkstra(&initial).ok_or_else(|| problem_error("maze", "no Dijkstra route"))?;
     let astar = maze::solve_astar(&initial).ok_or_else(|| problem_error("maze", "no A* route"))?;
     let pareto = maze::pareto_front(&initial).map_err(|error| problem_error("maze", error))?;
     let energy_trace = frontier_trace(&pareto, true)?;
@@ -33,9 +36,17 @@ pub(super) fn build(
             bfs.expanded(),
         ),
         (
+            "dijkstra",
+            "Maze · least energy without guidance",
+            "Dijkstra proves the cheapest key-and-gate route while exploring without a heuristic.",
+            dijkstra.trace().clone(),
+            "Dijkstra",
+            dijkstra.expanded(),
+        ),
+        (
             "a_star",
             "Maze · least energy",
-            "A* takes the longer key-and-door route because it costs less energy overall.",
+            "A* uses the encoded distance estimate to find the efficient key-and-gate route with less search.",
             astar.trace().clone(),
             "A*",
             astar.expanded(),
@@ -77,6 +88,7 @@ pub(super) fn build(
             scene,
         )
         .map_err(|error| problem_error("maze", error))?;
+        decorate_route_evidence(&mut document, &trace);
         document.pareto_fronts.push(front_view(&pareto, &document));
         document.telemetry.push(telemetry(
             algorithm,
@@ -94,26 +106,31 @@ pub(super) fn build(
                 ),
             ],
         ));
-        let locked = Exchange::new(
-            RateId::Move {
-                from: Node::KeyRoom,
-                to: Node::Door,
-                energy: 2,
-                needs_open_door: true,
-            },
-            Quantity::new(1),
-        )
-        .bind(Role::Actor, AccountId::Agent)
-        .bind(Role::Environment, AccountId::World);
-        let malformed =
-            Exchange::new(RateId::TakeKey, Quantity::new(1)).bind(Role::Actor, AccountId::Agent);
+        let locked_rate = initial
+            .rate_ids()
+            .find(|rate| {
+                matches!(
+                    rate,
+                    RateId::Move {
+                        needs_open_door: true,
+                        ..
+                    }
+                )
+            })
+            .copied()
+            .ok_or_else(|| problem_error("maze", "missing locked passage"))?;
+        let locked = Exchange::new(locked_rate, Quantity::new(1))
+            .bind(Role::Actor, AccountId::Agent)
+            .bind(Role::Environment, AccountId::World);
+        let malformed = Exchange::new(RateId::TakeKey { at: Node::KeyRoom }, Quantity::new(1))
+            .bind(Role::Actor, AccountId::Agent);
         document.proposals = vec![
             proposal(
                 "maze",
                 ProposalSpec {
                     id: "locked-door",
                     label: "Cross locked door",
-                    description: "Well-formed, but the agent is not at the door and the door is not open.",
+                    description: "Well-formed, but the Explorer is not at the gate and the gate is still locked.",
                 },
                 &initial,
                 &locked,
@@ -231,34 +248,48 @@ fn front_view(result: &maze::ParetoResult, selected: &ViewDocument) -> ParetoFro
 
 fn scene(_: u64, world: &World) -> Option<Scene> {
     let nodes = maze::nodes(world);
+    let stress = nodes.contains(&Node::Archive);
     let focus = nodes.iter().copied().find(|node| {
         !world
             .balance(&AccountId::Agent, &Asset::At(*node))
             .is_zero()
     });
-    let positions = |node| match node {
-        Node::Start => (70.0, 155.0),
-        Node::Atrium => (150.0, 20.0),
-        Node::Gallery => (240.0, 20.0),
-        Node::Archive => (330.0, 20.0),
-        Node::Scriptorium => (420.0, 20.0),
-        Node::KeyRoom => (510.0, 20.0),
-        Node::Door => (600.0, 20.0),
-        Node::Vault => (690.0, 20.0),
-        Node::Garden => (150.0, 100.0),
-        Node::Market => (240.0, 100.0),
-        Node::Canal => (330.0, 100.0),
-        Node::Docks => (420.0, 100.0),
-        Node::Foundry => (510.0, 100.0),
-        Node::Tower => (600.0, 100.0),
-        Node::Observatory => (690.0, 100.0),
-        Node::Tunnel => (170.0, 205.0),
-        Node::Ridge => (280.0, 205.0),
-        Node::Ruins => (390.0, 205.0),
-        Node::Bridge => (500.0, 205.0),
-        Node::Chapel => (610.0, 205.0),
-        Node::Detour => (350.0, 285.0),
-        Node::Exit => (800.0, 155.0),
+    let positions = |node| match (stress, node) {
+        (_, Node::Start) => (40.0, 300.0),
+        (_, Node::Atrium) => (220.0, 260.0),
+        (_, Node::Library) => (400.0, 90.0),
+        (_, Node::KeyRoom) => (590.0, 40.0),
+        (_, Node::Gallery) => (500.0, 260.0),
+        (_, Node::Gate) => (690.0, 260.0),
+        (_, Node::Vault) => (870.0, 260.0),
+        (_, Node::Exit) => (1060.0, 300.0),
+        (_, Node::Garden) => (220.0, 460.0),
+        (_, Node::Market) => (410.0, 460.0),
+        (_, Node::Canal) => (610.0, 460.0),
+        (_, Node::Bridge) => (820.0, 460.0),
+        (_, Node::Workshop) => (410.0, 650.0),
+        (_, Node::Tunnel) => (110.0, 650.0),
+        (_, Node::Detour) => (720.0, 650.0),
+        (true, Node::Archive) => (220.0, 50.0),
+        (true, Node::Scriptorium) => (400.0, -90.0),
+        (true, Node::Docks) => (300.0, 840.0),
+        (true, Node::Foundry) => (500.0, 840.0),
+        (true, Node::Tower) => (700.0, 840.0),
+        (true, Node::Observatory) => (980.0, 650.0),
+        (true, Node::Ridge) => (80.0, 850.0),
+        (true, Node::Ruins) => (180.0, 1030.0),
+        (true, Node::Chapel) => (600.0, 1030.0),
+        // Nodes outside a profile are never rendered, but retaining a total
+        // match keeps the projection robust if another profile is introduced.
+        (false, Node::Archive) => (220.0, 50.0),
+        (false, Node::Scriptorium) => (400.0, -90.0),
+        (false, Node::Docks) => (300.0, 840.0),
+        (false, Node::Foundry) => (500.0, 840.0),
+        (false, Node::Tower) => (700.0, 840.0),
+        (false, Node::Observatory) => (980.0, 650.0),
+        (false, Node::Ridge) => (80.0, 850.0),
+        (false, Node::Ruins) => (180.0, 1030.0),
+        (false, Node::Chapel) => (600.0, 1030.0),
     };
     let node_key = |node| format!("node:{node:?}").to_lowercase();
     let graph_nodes = nodes
@@ -266,7 +297,11 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         .copied()
         .map(|node| {
             let (x, y) = positions(node);
-            let mut classes = Vec::new();
+            let mut classes = if node == Node::Gate {
+                vec!["facility".into()]
+            } else {
+                vec!["location".into()]
+            };
             if focus == Some(node) {
                 classes.push("current".into());
             }
@@ -274,7 +309,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 classes.push("goal".into());
             }
             GraphNodeView {
-                id: ViewId::new(node_key(node), format!("{node:?}")),
+                id: ViewId::new(node_key(node), node.studio_label()),
                 classes,
                 x: Some(x),
                 y: Some(y),
@@ -294,7 +329,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 source: node_key(*from),
                 target: node_key(*to),
                 label: Some(if *needs_open_door {
-                    format!("{energy} energy · door")
+                    format!("{energy} energy · gate must be open")
                 } else {
                     format!("{energy} energy")
                 }),
@@ -310,6 +345,8 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         })
         .collect();
     let agent = focus.map(|node| {
+        let energy = world.balance(&AccountId::Agent, &Asset::Energy);
+        let time = world.balance(&AccountId::Agent, &Asset::Time);
         let mut entity = link_balance(
             visual_entity(
                 "agent:explorer",
@@ -324,41 +361,209 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 } else {
                     SceneToneView::Active
                 },
-                Some(
-                    if node == Node::Exit {
-                        "escaped"
-                    } else {
-                        "exploring"
-                    }
-                    .into(),
-                ),
+                Some(if node == Node::Exit {
+                    format!("escaped · E {} · T {}", energy, time)
+                } else {
+                    format!("E {} · T {}", energy, time)
+                }),
             ),
             "maze:account:agent",
             format!("maze:asset:at-{node:?}").to_ascii_lowercase(),
         );
         entity.metrics = vec![
-            visual_metric(
-                "energy",
-                "Energy",
-                world.balance(&AccountId::Agent, &Asset::Energy),
-                Some("units"),
-            ),
-            visual_metric(
-                "time",
-                "Time",
-                world.balance(&AccountId::Agent, &Asset::Time),
-                Some("ticks"),
-            ),
+            visual_metric("energy", "Energy", energy, Some("units")),
+            visual_metric("time", "Time", time, Some("ticks")),
         ];
         entity
     });
-    Some(
-        Scene::graph(
-            "Rooms and passages",
-            graph_nodes,
-            graph_edges,
-            focus.map(node_key),
-        )
-        .with_entities(agent),
+    let key = if !world.balance(&AccountId::World, &Asset::Key).is_zero() {
+        Some(link_balance(
+            visual_entity(
+                "maze:key:brass",
+                "Brass key",
+                SceneGlyphView::Key,
+                SceneAnchorView::GraphNode {
+                    node: node_key(Node::KeyRoom),
+                },
+                SceneEntityRoleView::Attachment,
+                SceneToneView::Warning,
+                Some("available".into()),
+            ),
+            "maze:account:world",
+            "maze:asset:key",
+        ))
+    } else if !world.balance(&AccountId::Agent, &Asset::Key).is_zero() {
+        Some(link_balance(
+            visual_entity(
+                "maze:key:brass",
+                "Brass key",
+                SceneGlyphView::Key,
+                SceneAnchorView::Entity {
+                    entity: "agent:explorer".into(),
+                },
+                SceneEntityRoleView::Attachment,
+                SceneToneView::Active,
+                Some("carried".into()),
+            ),
+            "maze:account:agent",
+            "maze:asset:key",
+        ))
+    } else {
+        None
+    };
+    let gate_open = !world.balance(&AccountId::World, &Asset::Open).is_zero();
+    let gate = link_balance(
+        visual_entity(
+            "maze:gate:state",
+            "Vault gate",
+            SceneGlyphView::Door,
+            SceneAnchorView::GraphNode {
+                node: node_key(Node::Gate),
+            },
+            SceneEntityRoleView::State,
+            if gate_open {
+                SceneToneView::Success
+            } else {
+                SceneToneView::Danger
+            },
+            Some(if gate_open { "open" } else { "locked" }.into()),
+        ),
+        "maze:account:world",
+        if gate_open {
+            "maze:asset:open"
+        } else {
+            "maze:asset:locked"
+        },
+    );
+    let mut scene = Scene::graph(
+        "The Vault District — routes, key, and gate",
+        graph_nodes,
+        graph_edges,
+        focus.map(node_key),
     )
+    .with_entities(agent.into_iter().chain(key).chain([gate]))
+    .with_metrics([
+        visual_metric(
+            "energy_left",
+            "Explorer energy",
+            world.balance(&AccountId::Agent, &Asset::Energy),
+            Some("units"),
+        ),
+        visual_metric(
+            "time_left",
+            "Time remaining",
+            world.balance(&AccountId::Agent, &Asset::Time),
+            Some("ticks"),
+        ),
+        visual_metric(
+            "key_state",
+            "Key",
+            if world.balance(&AccountId::World, &Asset::Key).is_zero() {
+                if world.balance(&AccountId::Agent, &Asset::Key).is_zero() {
+                    "used"
+                } else {
+                    "carried"
+                }
+            } else {
+                "waiting"
+            },
+            None,
+        ),
+        visual_metric(
+            "gate_state",
+            "Vault gate",
+            if gate_open { "open" } else { "locked" },
+            None,
+        ),
+    ]);
+    scene.legend = vec![
+        SceneLegendView {
+            label: "Room".into(),
+            glyph: SceneGlyphView::Location,
+            tone: SceneToneView::Neutral,
+        },
+        SceneLegendView {
+            label: "Explorer".into(),
+            glyph: SceneGlyphView::Agent,
+            tone: SceneToneView::Active,
+        },
+        SceneLegendView {
+            label: "Key".into(),
+            glyph: SceneGlyphView::Key,
+            tone: SceneToneView::Warning,
+        },
+        SceneLegendView {
+            label: if gate_open {
+                "Open gate"
+            } else {
+                "Locked gate"
+            }
+            .into(),
+            glyph: SceneGlyphView::Door,
+            tone: if gate_open {
+                SceneToneView::Success
+            } else {
+                SceneToneView::Danger
+            },
+        },
+        SceneLegendView {
+            label: "Exit".into(),
+            glyph: SceneGlyphView::Goal,
+            tone: SceneToneView::Goal,
+        },
+    ];
+    Some(scene)
+}
+
+fn route_id(rate: &RateId) -> Option<String> {
+    match rate {
+        RateId::Move { from, to, .. } => Some(format!("edge:{from:?}:{to:?}")),
+        _ => None,
+    }
+}
+
+fn decorate_route_evidence(
+    document: &mut ViewDocument,
+    trace: &axionomy::Trace<RateId, Role, AccountId>,
+) {
+    let mut traversed = std::collections::BTreeSet::new();
+    decorate_scene_paths(document.initial.scene.as_mut(), &traversed, None);
+    for (frame, exchange) in document.frames.iter_mut().zip(trace.exchanges()) {
+        decorate_scene_paths(frame.before.scene.as_mut(), &traversed, None);
+        let current = route_id(exchange.rate());
+        decorate_scene_paths(frame.after.scene.as_mut(), &traversed, current.as_deref());
+        if let Some(current) = current {
+            traversed.insert(current);
+        }
+    }
+}
+
+fn decorate_scene_paths(
+    scene: Option<&mut Scene>,
+    traversed: &std::collections::BTreeSet<String>,
+    current: Option<&str>,
+) {
+    let Some(scene) = scene else { return };
+    if let SceneSurfaceView::Graph { edges, .. } = &mut scene.surface {
+        for edge in edges {
+            edge.classes
+                .retain(|class| class != "current" && class != "traversed");
+            if current == Some(edge.id.as_str()) {
+                edge.classes.push("current".into());
+            } else if traversed.contains(&edge.id) {
+                edge.classes.push("traversed".into());
+            }
+        }
+    }
+    for path in &mut scene.paths {
+        path.status = if current == Some(path.id.as_str()) {
+            ScenePathStatusView::Current
+        } else if traversed.contains(&path.id) {
+            ScenePathStatusView::Traversed
+        } else if matches!(path.status, ScenePathStatusView::Blocked) {
+            ScenePathStatusView::Blocked
+        } else {
+            ScenePathStatusView::Available
+        };
+    }
 }

@@ -309,6 +309,12 @@ pub enum SceneAnchorView {
         lane: String,
         at: u64,
     },
+    /// Attach presentation state to another stable scene entity. This is used
+    /// for inventory, cargo, equipment, and similar ownership relationships
+    /// that would be misleading if attached only to a shared location.
+    Entity {
+        entity: String,
+    },
     Unanchored,
 }
 
@@ -806,6 +812,10 @@ impl Scene {
             (SceneAnchorView::Timeline { lane, .. }, SceneSurfaceView::Timeline { lanes, .. }) => {
                 lanes.iter().any(|candidate| candidate.id.key == *lane)
             }
+            (SceneAnchorView::Entity { entity }, _) => self
+                .entities
+                .iter()
+                .any(|candidate| candidate.id.key == *entity),
             _ => false,
         };
         if valid {
@@ -830,7 +840,16 @@ pub enum SceneValidationError {
 
 fn inferred_glyph(label: &str, classes: &[String]) -> SceneGlyphView {
     let words = format!("{} {}", label, classes.join(" ")).to_ascii_lowercase();
-    if words.contains("vehicle") || words.contains("truck") || words.contains("carrier") {
+    // Explicit Rust-owned semantic classes win over label heuristics. A room
+    // called "Key Room" is still a location; the key itself must be a distinct
+    // asset-backed entity rather than an icon inferred from prose.
+    if classes.iter().any(|class| class == "location") {
+        SceneGlyphView::Location
+    } else if classes.iter().any(|class| class == "facility")
+        && (words.contains("door") || words.contains("gate"))
+    {
+        SceneGlyphView::Door
+    } else if words.contains("vehicle") || words.contains("truck") || words.contains("carrier") {
         SceneGlyphView::Vehicle
     } else if words.contains("robot") {
         SceneGlyphView::Robot

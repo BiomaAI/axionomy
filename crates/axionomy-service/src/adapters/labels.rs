@@ -45,6 +45,12 @@ fn maze_node(node: maze::Node) -> String {
     words(&node)
 }
 
+impl StudioLabel for maze::Node {
+    fn studio_label(&self) -> String {
+        maze_node(*self)
+    }
+}
+
 impl StudioLabel for maze::AccountId {
     fn studio_label(&self) -> String {
         match self {
@@ -95,8 +101,8 @@ impl StudioLabel for maze::RateId {
                     ""
                 }
             ),
-            Self::TakeKey => "Pick up the key".into(),
-            Self::UnlockDoor => "Unlock the door".into(),
+            Self::TakeKey { at } => format!("Pick up the key in {}", maze_node(at)),
+            Self::UnlockDoor { at } => format!("Unlock the gate from {}", maze_node(at)),
             Self::Finish => "Reach the exit".into(),
         }
     }
