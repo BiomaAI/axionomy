@@ -1932,6 +1932,23 @@
             ]
           },
           {
+            "description": "Attach presentation state to another stable scene entity. This is used\nfor inventory, cargo, equipment, and similar ownership relationships\nthat would be misleading if attached only to a shared location.",
+            "type": "object",
+            "properties": {
+              "entity": {
+                "type": "string"
+              },
+              "kind": {
+                "type": "string",
+                "const": "entity"
+              }
+            },
+            "required": [
+              "kind",
+              "entity"
+            ]
+          },
+          {
             "type": "object",
             "properties": {
               "kind": {
@@ -2393,6 +2410,13 @@
             "type": "integer",
             "format": "uint64",
             "minimum": 0
+          },
+          "subjects": {
+            "description": "Stable Rust-owned scene subjects affected by this observation. Generic\nviewers may emphasize matching nodes or entities without understanding\nthe problem's domain model.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ViewId"
+            }
           },
           "total": {
             "type": "integer",

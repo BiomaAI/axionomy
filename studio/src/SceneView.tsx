@@ -49,7 +49,8 @@ type EntityEffect = "consumed" | "produced" | "preserved" | "changed" | "none";
 type HandleSide = "top" | "right" | "bottom" | "left";
 type GraphHandle = { id: string; type: "source" | "target"; side: HandleSide; offset: number };
 type StructureNodeData = { kind: "structure"; label: string; entity?: SceneEntity; states: SceneEntity[]; effect: EntityEffect; handles?: GraphHandle[]; focusAccount?: string };
-type OccupantNodeData = { kind: "occupant"; entity: SceneEntity; effect: EntityEffect; entering: boolean; exiting: boolean; moving: boolean; focusAccount?: string };
+type EntityAttachment = { entity: SceneEntity; effect: EntityEffect };
+type OccupantNodeData = { kind: "occupant"; entity: SceneEntity; attachments: EntityAttachment[]; effect: EntityEffect; entering: boolean; exiting: boolean; moving: boolean; focusAccount?: string };
 type AttachmentNodeData = { kind: "attachments"; label: string; entities: SceneEntity[]; effects: Record<string, EntityEffect>; focusAccount?: string; onAccount?: (account: string) => void };
 type SceneNodeData = StructureNodeData | OccupantNodeData | AttachmentNodeData;
 
@@ -97,7 +98,8 @@ function StructureNode({ data }: NodeProps) {
 function OccupantNode({ data }: NodeProps) {
   const view = data as OccupantNodeData;
   const metrics = view.entity.metrics.map((metric) => `${metric.label}: ${metric.value}${metric.unit ? ` ${metric.unit}` : ""}`).join(" · ");
-  const title = [view.entity.id.label, metrics].filter(Boolean).join(" · ");
+  const inventory = view.attachments.map(({ entity }) => `${entity.id.label}${entity.status ? ` (${entity.status})` : ""}`).join(" · ");
+  const title = [view.entity.id.label, metrics, inventory].filter(Boolean).join(" · ");
   return <div title={title || undefined} className={`rich-node tone-${view.entity.tone}`}>
     {view.entity.anchor.kind === "graph_node" && RELATION_SIDES.map((side) => <Handle key={side} id={`relation-target:${side}`} type="target" position={HANDLE_POSITION[side]} className="relation-handle" isConnectable={false} />)}
     <div className={`rich-node-lifecycle ${view.entering ? "is-entering" : ""} ${view.exiting ? "is-exiting" : ""}`}>
@@ -106,6 +108,7 @@ function OccupantNode({ data }: NodeProps) {
           <SceneIcon glyph={view.entity.glyph} size={16} />
           <span className="occupant-label">{view.entity.id.label}</span>
           {view.entity.status && <small className="occupant-status">{view.entity.status.replaceAll("_", " ")}</small>}
+          {view.attachments.length > 0 && <div className="occupant-inventory" aria-label={`${view.entity.id.label} inventory`}>{view.attachments.map(({ entity }) => <span key={entity.id.key} title={`${entity.id.label}${entity.status ? ` · ${entity.status}` : ""}`} className={`tone-${entity.tone}`}><SceneIcon glyph={entity.glyph} size={14} /><small>{entity.id.label}</small></span>)}</div>}
         </div>
       </div>
     </div>
@@ -172,7 +175,7 @@ function GraphScene({ scene, previousScene, frame, motion, surface, onAccount }:
   const relationHandles = new Map<string, GraphHandle[]>();
   const nodes: Node[] = [];
 
-  const attachments = groupBy(scene.entities.filter((entity) => entity.role === "attachment"), (entity) => anchorKey(entity.anchor));
+  const attachments = groupBy(scene.entities.filter((entity) => entity.role === "attachment" && entity.anchor.kind !== "entity"), (entity) => anchorKey(entity.anchor));
   for (const [key, entities] of [...attachments.entries()].sort(([left], [right]) => left.localeCompare(right))) {
     const anchor = entities[0]?.anchor;
     if (!anchor) continue;
@@ -188,6 +191,19 @@ function GraphScene({ scene, previousScene, frame, motion, surface, onAccount }:
     if (anchor.kind === "graph_node") addRelation(anchor.node, nodeId, point, "attachment", relationHandles, relationEdges, positions);
   }
 
+  // Preserve the outgoing attachment's docking footprint for one transition.
+  // Otherwise an occupant can snap into the vacated space on the same frame
+  // that the attachment is picked up, producing avoidable layout motion.
+  const previousAttachments = groupBy(previousScene?.entities.filter((entity) => entity.role === "attachment" && entity.anchor.kind !== "entity") ?? [], (entity) => anchorKey(entity.anchor));
+  for (const [key, entities] of previousAttachments) {
+    if (attachments.has(key)) continue;
+    const anchor = entities[0]?.anchor;
+    if (!anchor) continue;
+    const height = attachmentHeight(entities.length);
+    const point = semanticAttachmentPosition(anchor, surface, positions, occupied, ATTACHMENT_WIDTH, height);
+    if (point) occupied.push({ ...point, width: ATTACHMENT_WIDTH, height });
+  }
+
   const occupants: Array<{ entity: SceneEntity; entering: boolean; exiting: boolean; moving: boolean }> = scene.entities.filter((entity) => entity.role === "occupant").map((entity) => {
     const previous = previousById.get(entity.id.key);
     return { entity, entering: Boolean(previousScene && !previous), exiting: false, moving: Boolean(previous && anchorKey(previous.anchor) !== anchorKey(entity.anchor)) };
@@ -198,16 +214,21 @@ function GraphScene({ scene, previousScene, frame, motion, surface, onAccount }:
     }
   }
   occupants.sort((left, right) => left.entity.id.key.localeCompare(right.entity.id.key));
+  const entityAttachments = groupBy(scene.entities.filter((entity) => entity.role === "attachment" && entity.anchor.kind === "entity"), (entity) => entity.anchor.kind === "entity" ? entity.anchor.entity : "");
+  const previousEntityAttachments = groupBy(previousScene?.entities.filter((entity) => entity.role === "attachment" && entity.anchor.kind === "entity") ?? [], (entity) => entity.anchor.kind === "entity" ? entity.anchor.entity : "");
   const occupantSlots = new Map<string, number>();
   for (const view of occupants) {
     const baseKey = anchorKey(view.entity.anchor);
     const slot = occupantSlots.get(baseKey) ?? 0;
     occupantSlots.set(baseKey, slot + 1);
-    const point = semanticOccupantPosition(view.entity, slot, surface, positions);
+    const point = semanticOccupantPosition(view.entity, slot, surface, positions, occupied);
     if (!point) continue;
+    occupied.push({ ...point, width: OCCUPANT_WIDTH, height: OCCUPANT_HEIGHT });
     const nodeId = `entity:${view.entity.id.key}`;
-    const effect = composedEntityEffect(view.entity, previousById.get(view.entity.id.key), frame);
-    nodes.push({ id: nodeId, type: "occupant", position: point, data: { kind: "occupant", entity: view.entity, effect, entering: view.entering, exiting: view.exiting, moving: view.moving, focusAccount: view.entity.account ?? undefined } satisfies OccupantNodeData, draggable: false, selectable: true, className: `occupant-overlay motion-${motion} effect-${effect}` });
+    const attached = (entityAttachments.get(view.entity.id.key) ?? []).map((entity) => ({ entity, effect: composedEntityEffect(entity, previousById.get(entity.id.key), frame) }));
+    const removedAttachmentEffects = (previousEntityAttachments.get(view.entity.id.key) ?? []).filter((entity) => !attached.some((candidate) => candidate.entity.id.key === entity.id.key)).map((entity) => sceneEntityEffect(entity, frame));
+    const effect = strongestEffect([composedEntityEffect(view.entity, previousById.get(view.entity.id.key), frame), ...attached.map((candidate) => candidate.effect), ...removedAttachmentEffects]);
+    nodes.push({ id: nodeId, type: "occupant", position: point, data: { kind: "occupant", entity: view.entity, attachments: attached, effect, entering: view.entering, exiting: view.exiting, moving: view.moving, focusAccount: view.entity.account ?? undefined } satisfies OccupantNodeData, draggable: false, selectable: true, className: `occupant-overlay motion-${motion} effect-${effect}` });
     if (view.entity.anchor.kind === "graph_node") addRelation(view.entity.anchor.node, nodeId, point, "occupant", relationHandles, relationEdges, positions);
   }
 
@@ -299,6 +320,7 @@ function graphEdgeRoutes(surface: GraphSurface, positions: Map<string, GraphPoin
 function anchorKey(anchor: SceneEntity["anchor"]): string {
   if (anchor.kind === "graph_node") return `node:${anchor.node}`;
   if (anchor.kind === "graph_edge") return `edge:${anchor.edge}:${anchor.progress ?? 0.5}`;
+  if (anchor.kind === "entity") return `entity:${anchor.entity}`;
   return JSON.stringify(anchor);
 }
 
@@ -373,7 +395,7 @@ function semanticAttachmentPosition(anchor: SceneEntity["anchor"], surface: Grap
   return candidates.find((candidate) => !occupied.some((rect) => rectanglesOverlap({ ...candidate, width, height }, rect, 12))) ?? candidates[0];
 }
 
-function semanticOccupantPosition(entity: SceneEntity, slot: number, surface: GraphSurface, positions: Map<string, GraphPoint>): GraphPoint | undefined {
+function semanticOccupantPosition(entity: SceneEntity, slot: number, surface: GraphSurface, positions: Map<string, GraphPoint>, occupied: GraphRect[]): GraphPoint | undefined {
   const point = graphAnchorPoint(entity.anchor, surface, positions);
   if (!point) return undefined;
   if (entity.anchor.kind === "graph_edge") {
@@ -382,11 +404,18 @@ function semanticOccupantPosition(entity: SceneEntity, slot: number, surface: Gr
     const source = edge ? positions.get(edge.source) : undefined;
     const target = edge ? positions.get(edge.target) : undefined;
     const angle = source && target ? Math.atan2(target.y - source.y, target.x - source.x) - Math.PI / 2 : -Math.PI / 2;
-    return { x: Math.round(point.x + Math.cos(angle) * 34 - OCCUPANT_WIDTH / 2), y: Math.round(point.y + Math.sin(angle) * 34 - OCCUPANT_HEIGHT / 2) };
+    const preferred = { x: Math.round(point.x + Math.cos(angle) * 34 - OCCUPANT_WIDTH / 2), y: Math.round(point.y + Math.sin(angle) * 34 - OCCUPANT_HEIGHT / 2) };
+    if (!occupied.some((rect) => rectanglesOverlap({ ...preferred, width: OCCUPANT_WIDTH, height: OCCUPANT_HEIGHT }, rect, 8))) return preferred;
   }
-  const angle = -Math.PI / 2 + slot * Math.PI / 2;
-  const radius = slot < 4 ? 100 : 135;
-  return { x: Math.round(point.x + Math.cos(angle) * radius - OCCUPANT_WIDTH / 2), y: Math.round(point.y + Math.sin(angle) * radius - OCCUPANT_HEIGHT / 2) };
+  const baseAngle = -Math.PI / 2 + slot * Math.PI / 2;
+  const candidates: GraphPoint[] = [];
+  for (const radius of [100, 145, 190]) {
+    for (const offset of [0, Math.PI / 2, -Math.PI / 2, Math.PI]) {
+      const angle = baseAngle + offset;
+      candidates.push({ x: Math.round(point.x + Math.cos(angle) * radius - OCCUPANT_WIDTH / 2), y: Math.round(point.y + Math.sin(angle) * radius - OCCUPANT_HEIGHT / 2) });
+    }
+  }
+  return candidates.find((candidate) => !occupied.some((rect) => rectanglesOverlap({ ...candidate, width: OCCUPANT_WIDTH, height: OCCUPANT_HEIGHT }, rect, 8))) ?? candidates[0];
 }
 
 function addRelation(source: string, target: string, targetPosition: GraphPoint, role: "occupant" | "attachment", relationHandles: Map<string, GraphHandle[]>, edges: Edge[], positions: Map<string, GraphPoint>): void {
@@ -414,6 +443,7 @@ function contextRelation(entity: SceneEntity, surface: GraphSurface): string {
     const edgeId = entity.anchor.edge;
     return `Affects ${surface.edges.find((edge) => edge.id === edgeId)?.label ?? edgeId}`;
   }
+  if (entity.anchor.kind === "entity") return `Attached to ${entity.anchor.entity}`;
   return "Applies to this scenario";
 }
 

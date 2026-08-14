@@ -435,18 +435,29 @@ pub fn spent_time(world: &World) -> u64 {
 }
 
 pub fn heuristic(world: &World) -> u64 {
-    nodes(world)
-        .into_iter()
-        .find(|node| {
-            !world
-                .balance(&AccountId::Agent, &Asset::At(*node))
-                .is_zero()
-        })
-        .map_or(0, |node| {
-            world
-                .balance(&AccountId::World, &Asset::Distance(node))
-                .get()
-        })
+    position(world).map_or(0, |node| {
+        world
+            .balance(&AccountId::World, &Asset::Distance(node))
+            .get()
+    })
+}
+
+/// Returns the Explorer's authoritative room, if the lifecycle still carries
+/// a position token.
+pub fn position(world: &World) -> Option<Node> {
+    nodes(world).into_iter().find(|node| {
+        !world
+            .balance(&AccountId::Agent, &Asset::At(*node))
+            .is_zero()
+    })
+}
+
+pub fn has_key(world: &World) -> bool {
+    !world.balance(&AccountId::Agent, &Asset::Key).is_zero()
+}
+
+pub fn gate_is_open(world: &World) -> bool {
+    !world.balance(&AccountId::World, &Asset::Open).is_zero()
 }
 
 /// Returns the topology nodes encoded by the world's edge assets.
@@ -472,7 +483,7 @@ fn nodes_from_edges(edges: &[(Node, Node, u64, bool)]) -> Vec<Node> {
     nodes.into_iter().collect()
 }
 
-fn move_energy(before: &World, _: &Action, after: &World) -> u64 {
+pub fn move_energy(before: &World, _: &Action, after: &World) -> u64 {
     spent_energy(after).saturating_sub(spent_energy(before))
 }
 

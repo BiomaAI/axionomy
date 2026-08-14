@@ -799,7 +799,7 @@ pub(crate) fn run(
     );
     progress.ensure()?;
     let mut artifact = match request.problem.as_str() {
-        "maze" => maze::build(request, &descriptor),
+        "maze" => maze::build(request, &descriptor, &mut progress),
         "sokoban" => sokoban::build(request, &descriptor, &mut progress),
         "exact_cover" => exact_cover::build(request, &descriptor),
         "workshop" => workshop::build(request, &descriptor),
@@ -838,7 +838,12 @@ pub(crate) fn run(
         .collect();
     let solve_observations = progress.observations().to_vec();
     for document in &mut artifact.documents {
-        document.solve_observations = solve_observations.clone();
+        // Problem adapters may retain richer, strategy-specific evidence. The
+        // live stream is the transport fallback, not permission to relabel one
+        // algorithm's observations as every alternative in the artifact.
+        if document.solve_observations.is_empty() {
+            document.solve_observations = solve_observations.clone();
+        }
         for frame in &mut document.frames {
             if frame.observations.is_empty() {
                 frame.observations = document.observations.clone();
@@ -900,6 +905,7 @@ impl<'a> ProgressSink<'a> {
             label: message,
             completed,
             total,
+            subjects: Vec::new(),
             metrics: vec![
                 visual_metric("completed", "Work completed", completed, None),
                 visual_metric(
@@ -926,6 +932,18 @@ impl<'a> ProgressSink<'a> {
         phase: impl Into<String>,
         progress: GraphSearchProgress,
         message: impl Into<String>,
+    ) -> ControlFlow<()> {
+        self.graph_with_subjects(phase, progress, message, std::iter::empty())
+    }
+
+    /// Publish exact graph-search counters together with the Rust-owned scene
+    /// subjects expanded during this checkpoint.
+    pub fn graph_with_subjects(
+        &mut self,
+        phase: impl Into<String>,
+        progress: GraphSearchProgress,
+        message: impl Into<String>,
+        subjects: impl IntoIterator<Item = ViewId>,
     ) -> ControlFlow<()> {
         if self.error.is_some() {
             return ControlFlow::Break(());
@@ -954,6 +972,7 @@ impl<'a> ProgressSink<'a> {
             label: message,
             completed,
             total: 0,
+            subjects: subjects.into_iter().collect(),
             metrics: vec![
                 visual_metric("expanded", "States expanded", progress.expanded(), None),
                 visual_metric("generated", "States generated", progress.generated(), None),

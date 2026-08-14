@@ -9,6 +9,7 @@ import {
   type LeaderboardView,
   type RunArtifact,
   type RunSummary,
+  type Scene,
   type SearchObservation,
   type StudioEvent,
   type ViewDocument,
@@ -427,7 +428,7 @@ export function App() {
       <StrategyComparison artifact={artifact} selected={document.id} onSelect={selectDocument} />
       <section className="document-heading"><div><span className="eyebrow">{artifact.instance.label} · {document.source.label} · {document.id}{freshArtifactId === artifact.id ? " · just computed" : ""}</span><h1>{document.title}</h1><p>{document.description}</p></div><div className="objective-pills">{document.objectives.map((objective) => <div className="objective" key={objective.key}><span>{objective.label}</span><strong>{objective.value}</strong><small>{objective.direction}</small></div>)}</div></section>
       <div className="view-tabs" role="tablist" aria-label="Studio evidence mode"><button type="button" role="tab" aria-selected={viewMode === "solve"} onClick={() => selectView("solve")}>How it was solved <small>{active ? "live" : document.solve_observations.length}</small></button><button type="button" role="tab" aria-selected={viewMode === "replay"} onClick={() => selectView("replay")}>Step-by-step replay <small>{document.frames.length}</small></button></div>
-      {viewMode === "solve" ? <SolveWorkspace observations={active ? events.flatMap((event) => event.kind === "search_observation" ? [event.observation] : []) : document.solve_observations} active={active} /> : (() => {
+      {viewMode === "solve" ? <SolveWorkspace key={document.id} scene={document.initial.scene} observations={active ? events.flatMap((event) => event.kind === "search_observation" ? [event.observation] : []) : document.solve_observations} active={active} /> : (() => {
         const surface = snapshot.scene?.surface;
         const sparseScene = surface?.kind === "graph" && surface.nodes.length <= 6;
         const hasBoards = snapshot.leaderboards.length > 0;
@@ -506,15 +507,52 @@ function CompletionBanner({ notice, onDismiss }: { notice: CompletionNotice; onD
   </section>;
 }
 
-function SolveWorkspace({ observations, active }: { observations: SearchObservation[]; active: boolean }) {
-  const latest = observations.at(-1);
+function SolveWorkspace({ scene, observations, active }: { scene?: Scene | null; observations: SearchObservation[]; active: boolean }) {
+  const [cursor, setCursor] = useState(Math.max(0, observations.length - 1));
+  useEffect(() => {
+    if (active || cursor >= observations.length) setCursor(Math.max(0, observations.length - 1));
+  }, [active, cursor, observations.length]);
+  const visibleObservations = observations.slice(0, Math.min(cursor + 1, observations.length));
+  const latest = visibleObservations.at(-1);
   const kinds = [...new Set(observations.map((observation) => observation.kind))];
+  const solverScene = useMemo(() => solverEvidenceScene(scene, visibleObservations), [scene, visibleObservations]);
   return <section className={`solve-workspace ${active ? "live" : "retained"}`} aria-label="Solver evidence">
     <header><div><span className={active ? "spinner" : "solve-complete"} aria-hidden="true">{active ? "" : "✓"}</span><div><strong>{active ? "Live solver observations" : "Saved solver observations"}</strong><small>{active ? "Progress reported by the search as it runs" : "Saved with the result, so you can review it later"}</small></div></div><span>{observations.length} observations</span></header>
     {latest && <div className="solve-summary"><div><span>Current phase</span><strong>{phaseLabel(latest.phase)}</strong></div><div><span>Algorithm</span><strong>{latest.algorithm.replaceAll("_", " ")}</strong></div><div><span>Progress</span><strong>{latest.total === 0 ? `${latest.completed} expanded` : `${latest.completed} / ${latest.total}`}</strong></div><div><span>Evidence</span><strong>{kinds.join(" · ").replaceAll("_", " ")}</strong></div></div>}
     {latest && latest.total > 0 && <progress max={latest.total} value={Math.min(latest.completed, latest.total)} aria-label="Solver observation progress" />}
-    <div className="solve-stream">{observations.length === 0 ? <div className="empty-state">Waiting for the first solver checkpoint…</div> : observations.map((observation) => <article key={`${observation.sequence}:${observation.phase}`} className={`observation-${observation.kind}`}><div className="solve-observation-icon"><SceneIcon glyph={observationGlyph(observation.kind)} size={20} /></div><div><strong>{observation.label}</strong><span>{phaseLabel(observation.phase)} · {observation.total === 0 ? `${observation.completed} expanded` : `${observation.completed} / ${observation.total}`}</span></div><div>{observation.metrics.map((metric) => <span key={metric.key}><small>{metric.label}</small><b>{metric.value}</b></span>)}</div></article>)}</div>
+    {observations.length > 1 && <div className="solve-scrubber"><label><span>Exploration checkpoint</span><strong>{Math.min(cursor + 1, observations.length)} / {observations.length}</strong></label><input type="range" min="0" max={observations.length - 1} value={Math.min(cursor, observations.length - 1)} onChange={(event) => setCursor(Number(event.target.value))} aria-label="Solver observation position" /></div>}
+    <div className={`solve-body ${solverScene ? "with-map" : "stream-only"}`}>
+      {solverScene && <section className="solve-map" aria-label="Search expansion map"><header><span>Search over encoded state</span><strong>{latest?.label ?? "Waiting for an expansion"}</strong></header><SceneView scene={solverScene} motion="seek" /></section>}
+      <div className="solve-stream">{observations.length === 0 ? <div className="empty-state">Waiting for the first solver checkpoint…</div> : observations.map((observation, index) => <button type="button" key={`${observation.sequence}:${observation.phase}`} onClick={() => setCursor(index)} aria-current={index === cursor ? "step" : undefined} className={`solve-observation-card observation-${observation.kind}`}><div className="solve-observation-icon"><SceneIcon glyph={observationGlyph(observation.kind)} size={20} /></div><div><strong>{observation.label}</strong><span>{phaseLabel(observation.phase)} · {observation.total === 0 ? `${observation.completed} expanded` : `${observation.completed} / ${observation.total}`}</span></div><div>{observation.metrics.map((metric) => <span key={metric.key}><small>{metric.label}</small><b>{metric.value}</b></span>)}</div></button>)}</div>
+    </div>
   </section>;
+}
+
+function solverEvidenceScene(scene: Scene | null | undefined, observations: SearchObservation[]): Scene | undefined {
+  if (!scene || scene.surface.kind !== "graph") return undefined;
+  const withSubjects = observations.filter((observation) => (observation.subjects?.length ?? 0) > 0);
+  if (withSubjects.length === 0) return undefined;
+  const explored = new Set(withSubjects.flatMap((observation) => observation.subjects?.map((subject) => subject.key) ?? []));
+  const current = new Set(withSubjects.at(-1)?.subjects?.map((subject) => subject.key) ?? []);
+  const entities = scene.entities.filter((entity) => entity.role !== "occupant" && !(entity.anchor.kind === "entity"));
+  return {
+    ...scene,
+    title: "Solver expansion over the encoded maze",
+    metrics: [],
+    annotations: [],
+    entities,
+    surface: {
+      ...scene.surface,
+      nodes: scene.surface.nodes.map((node) => ({
+        ...node,
+        classes: [
+          ...node.classes.filter((value) => value !== "current" && value !== "search-explored" && value !== "search-current"),
+          ...(explored.has(node.id.key) ? ["search-explored"] : []),
+          ...(current.has(node.id.key) ? ["search-current"] : []),
+        ],
+      })),
+    },
+  };
 }
 
 function observationGlyph(kind: SearchObservation["kind"]): Parameters<typeof SceneIcon>[0]["glyph"] {
@@ -583,6 +621,10 @@ function phaseLabel(phase: string): string {
     mcts_game: "MCTS",
     ismcts: "ISMCTS",
     multi_agent_match: "Multi-agent match",
+    breadth_first_frontier: "Breadth-first frontier",
+    dijkstra_frontier: "Dijkstra frontier",
+    a_star_frontier: "A* frontier",
+    pareto_frontier: "Exact Pareto frontier",
   };
   return labels[phase] ?? phase.replaceAll("_", " ");
 }

@@ -11,6 +11,69 @@ test("runs a search, receives events, and scrubs its replay", async ({ page }) =
   await expect(page.locator(".replay-proof")).toContainText("replay verified");
 });
 
+test("turns saved Maze search evidence into a truthful, scrubbable expansion map", async ({ page }) => {
+  await page.goto("/?problem=maze&instance=showcase&strategy=a_star&document=maze%3Aa_star&view=solve&step=0&seed=0&budget=128");
+  await expect(page.locator(".solve-map")).toBeVisible();
+  await expect(page.locator(".solve-summary")).toContainText("A* frontier");
+  await expect(page.locator(".react-flow__node.search-explored")).not.toHaveCount(0);
+  await expect(page.locator(".react-flow__node.search-current")).toHaveCount(1);
+
+  const scrubber = page.getByRole("slider", { name: "Solver observation position" });
+  await scrubber.fill("0");
+  await expect(page.locator('.react-flow__node[data-id="node:start"]')).toHaveClass(/search-current/);
+  await expect(page.locator(".solve-map > header")).toContainText("Expanded Start");
+
+  await page.goto("/?problem=maze&instance=showcase&strategy=dijkstra&document=maze%3Adijkstra&view=solve&step=0&seed=0&budget=128");
+  await expect(page.locator(".solve-summary")).toContainText("Dijkstra frontier");
+  await expect(page.locator(".solve-observation-card").first()).toContainText("Expanded Start");
+});
+
+test("keeps every Maze replay frame aligned and tells the key-and-gate story", async ({ page }) => {
+  test.setTimeout(45_000);
+  await page.goto("/?problem=maze&instance=showcase&strategy=a_star&document=maze%3Aa_star&view=replay&step=0&seed=0&budget=128");
+  const scrubber = page.getByRole("slider", { name: "Trace position" });
+  const frameCount = Number(await scrubber.getAttribute("max"));
+  expect(frameCount).toBeGreaterThanOrEqual(10);
+  await expect(page.locator(".react-flow__node.structure-node")).toHaveCount(15);
+
+  for (let step = 0; step <= frameCount; step += 1) {
+    await scrubber.fill(String(step));
+    await page.waitForTimeout(80);
+    const geometry = await page.locator(".graph-scene").evaluate(() => {
+      const elements = [...document.querySelectorAll<HTMLElement>(".react-flow__node.structure-node, .react-flow__node.occupant-overlay, .react-flow__node.attachment-group")];
+      const boxes = elements.map((element) => ({ id: element.dataset.id ?? element.textContent ?? "node", box: element.getBoundingClientRect() }));
+      const overlaps: string[] = [];
+      for (let left = 0; left < boxes.length; left += 1) {
+        for (let right = left + 1; right < boxes.length; right += 1) {
+          const a = boxes[left]; const b = boxes[right];
+          if (a.box.left < b.box.right - 1 && a.box.right > b.box.left + 1 && a.box.top < b.box.bottom - 1 && a.box.bottom > b.box.top + 1) overlaps.push(`${a.id} / ${b.id}`);
+        }
+      }
+      const clipped = [...document.querySelectorAll<HTMLElement>(".structure-label, .occupant-label, .occupant-status")]
+        .filter((element) => element.scrollWidth > element.clientWidth + 1 || element.scrollHeight > element.clientHeight + 1)
+        .map((element) => element.textContent ?? "label");
+      return { overlaps, clipped };
+    });
+    expect(geometry.overlaps, `step ${step} nodes must not collide`).toEqual([]);
+    expect(geometry.clipped, `step ${step} labels must fit`).toEqual([]);
+  }
+
+  await scrubber.fill("0");
+  await expect(page.locator(".attachment-group").filter({ hasText: "Brass key" })).toBeVisible();
+  await expect(page.locator(".occupant-inventory")).toHaveCount(0);
+  await scrubber.fill("4");
+  await expect(page.locator(".occupant-inventory")).toContainText("Brass key");
+  await scrubber.fill("8");
+  await expect(page.locator(".occupant-inventory")).toHaveCount(0);
+  await expect(page.locator('.react-flow__node[data-id="node:gate"]')).toContainText("open");
+
+  await scrubber.fill("1");
+  await expect(page.locator(".react-flow__edge.current")).toHaveCount(1);
+  await scrubber.fill("4");
+  await expect(page.locator(".react-flow__edge.current")).toHaveCount(0);
+  await expect(page.locator(".react-flow__edge.traversed")).not.toHaveCount(0);
+});
+
 test("shows incremental stochastic progress and responsive pause control", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("combobox", { name: "Problem", exact: true }).selectOption("logistics");

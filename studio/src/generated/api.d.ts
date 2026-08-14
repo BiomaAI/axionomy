@@ -577,6 +577,10 @@ export interface components {
             kind: "timeline";
             lane: string;
         } | {
+            entity: string;
+            /** @constant */
+            kind: "entity";
+        } | {
             /** @constant */
             kind: "unanchored";
         };
@@ -705,6 +709,12 @@ export interface components {
             phase: string;
             /** Format: uint64 */
             sequence: number;
+            /**
+             * @description Stable Rust-owned scene subjects affected by this observation. Generic
+             *     viewers may emphasize matching nodes or entities without understanding
+             *     the problem's domain model.
+             */
+            subjects?: components["schemas"]["ViewId"][];
             /** Format: uint64 */
             total: number;
         };

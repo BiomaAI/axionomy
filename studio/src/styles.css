@@ -148,18 +148,29 @@ h1 { font: 400 clamp(22px, 2.4vw, 32px)/1.1 var(--serif); letter-spacing: 0; mar
 .solve-summary span { color: var(--muted); font: 8px var(--mono); text-transform: uppercase; }
 .solve-summary strong { margin-top: 7px; font: 12px var(--mono); color: var(--brass); text-transform: capitalize; }
 .solve-workspace > progress { display: block; width: calc(100% - 30px); height: 7px; margin: 14px 15px 0; accent-color: var(--accent); }
-.solve-stream { max-height: 410px; overflow: auto; scrollbar-gutter: stable; padding: 14px 15px; display: grid; gap: 6px; }
-.solve-stream article { display: grid; grid-template-columns: auto minmax(180px, 1fr) auto; align-items: center; gap: 10px; min-height: 54px; padding: 8px 10px; border: 1px solid var(--line); background: var(--surface-2); }
-.solve-stream article:last-child { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+.solve-scrubber { display: grid; grid-template-columns: 170px minmax(0, 1fr); align-items: center; gap: 14px; padding: 10px 15px; border-bottom: 1px solid var(--line); }
+.solve-scrubber label { display: flex; justify-content: space-between; gap: 10px; color: var(--muted); font: 8px var(--mono); text-transform: uppercase; }
+.solve-scrubber strong { color: var(--brass); font-weight: 500; }
+.solve-body.with-map { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(360px, .8fr); min-height: 500px; }
+.solve-map { min-width: 0; display: grid; grid-template-rows: auto minmax(430px, 1fr); border-right: 1px solid var(--line); }
+.solve-map > header { min-height: 47px; padding: 8px 12px; border-bottom: 1px solid var(--line); }
+.solve-map > header span, .solve-map > header strong { display: block; }
+.solve-map > header span { color: var(--muted); font: 7px var(--mono); letter-spacing: .07em; text-transform: uppercase; }
+.solve-map > header strong { margin-top: 4px; overflow: hidden; color: var(--text); font: 9px var(--mono); text-overflow: ellipsis; white-space: nowrap; }
+.solve-map > .scene-composition { min-height: 430px; }
+.solve-stream { max-height: 500px; overflow: auto; scrollbar-gutter: stable; padding: 12px; display: grid; align-content: start; gap: 6px; }
+.solve-body.stream-only .solve-stream { max-height: 410px; padding: 14px 15px; }
+.solve-observation-card { width: 100%; display: grid; grid-template-columns: auto minmax(180px, 1fr) auto; align-items: center; gap: 10px; min-height: 54px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 0; background: var(--surface-2); color: var(--text); text-align: left; }
+.solve-observation-card[aria-current="step"] { border-color: color-mix(in srgb, var(--accent) 58%, var(--line)); background: color-mix(in srgb, var(--accent) 5%, var(--surface-2)); }
 .solve-observation-icon { width: 32px; height: 32px; display: grid; place-items: center; color: var(--steel); background: color-mix(in srgb, var(--steel) 9%, transparent); }
-.solve-stream article > div:nth-child(2) strong, .solve-stream article > div:nth-child(2) span { display: block; }
-.solve-stream article > div:nth-child(2) strong { font-size: 10px; }
-.solve-stream article > div:nth-child(2) span { margin-top: 3px; color: var(--muted); font: 8px var(--mono); text-transform: uppercase; }
-.solve-stream article > div:last-child { display: flex; gap: 14px; }
-.solve-stream article > div:last-child span { min-width: 75px; }
-.solve-stream article > div:last-child small, .solve-stream article > div:last-child b { display: block; text-align: right; }
-.solve-stream article > div:last-child small { color: var(--muted); font: 7px var(--mono); text-transform: uppercase; }
-.solve-stream article > div:last-child b { margin-top: 2px; color: var(--brass); font: 11px var(--mono); }
+.solve-observation-card > div:nth-child(2) strong, .solve-observation-card > div:nth-child(2) span { display: block; }
+.solve-observation-card > div:nth-child(2) strong { font-size: 9px; }
+.solve-observation-card > div:nth-child(2) span { margin-top: 3px; color: var(--muted); font: 7px var(--mono); text-transform: uppercase; }
+.solve-observation-card > div:last-child { display: flex; gap: 10px; }
+.solve-observation-card > div:last-child span { min-width: 58px; }
+.solve-observation-card > div:last-child small, .solve-observation-card > div:last-child b { display: block; text-align: right; }
+.solve-observation-card > div:last-child small { color: var(--muted); font: 6px var(--mono); text-transform: uppercase; }
+.solve-observation-card > div:last-child b { margin-top: 2px; color: var(--brass); font: 9px var(--mono); }
 
 /* The transport stays reachable for the whole replay (sticky). */
 .playback { position: sticky; top: 0; z-index: 70; display: grid; grid-template-columns: auto minmax(180px, 1fr) repeat(4, auto); align-items: center; gap: 12px; background: var(--surface); border: 1px solid var(--line); padding: 11px 14px; margin-bottom: 14px; box-shadow: 0 8px 20px #0006; }
@@ -235,6 +246,10 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 .react-flow__node.structure-node { box-sizing: border-box; background: var(--surface-3); color: var(--text); border: 1px solid #595862; border-radius: 50%; width: 88px; min-height: 72px; display: grid; place-items: center; padding: 6px; text-align: center; font: 500 8px/1.12 var(--mono); box-shadow: 0 8px 24px #0009, inset 0 1px #ffffff0b; z-index: 2 !important; }
 .react-flow__node.structure-node.resource, .react-flow__node.structure-node.facility, .react-flow__node.structure-node.buyer, .react-flow__node.structure-node.seller, .react-flow__node.structure-node.carrier { border-radius: 7px; }
 .react-flow__node.structure-node.goal { border-style: double; border-width: 3px; }
+.react-flow__node.structure-node.search-explored { border-color: color-mix(in srgb, var(--steel) 86%, var(--line)); box-shadow: 0 8px 24px #0009, inset 0 0 0 2px color-mix(in srgb, var(--steel) 22%, transparent); }
+.react-flow__node.structure-node.search-current { border-color: var(--accent); box-shadow: 0 8px 24px #0009, 0 0 0 4px color-mix(in srgb, var(--accent) 13%, transparent), inset 0 0 0 2px color-mix(in srgb, var(--accent) 26%, transparent); }
+.react-flow__node.structure-node.search-current .rich-node-effect { animation: search-checkpoint .7s cubic-bezier(.2,.8,.2,1) both; }
+@keyframes search-checkpoint { from { transform: scale(.92); filter: brightness(1.6); } to { transform: scale(1); filter: brightness(1); } }
 .rich-node, .rich-node-lifecycle, .rich-node-effect { width: 100%; display: grid; place-items: center; }
 .rich-node-content { width: 100%; min-width: 0; display: grid; place-items: center; gap: 2px; }
 .rich-node-content svg { color: var(--steel); }
@@ -247,10 +262,13 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 .react-flow__node.occupant-overlay { box-sizing: border-box; width: 132px; min-height: 42px; padding: 5px 9px; border: 1px solid color-mix(in srgb, var(--steel) 78%, var(--line)); border-radius: 999px; background: color-mix(in srgb, var(--surface-3) 94%, transparent); color: var(--text); font: 500 8px/1.1 var(--mono); z-index: 5 !important; box-shadow: 0 10px 24px #000b, 0 0 0 1px #ffffff0a; will-change: transform; }
 .react-flow__node.occupant-overlay.motion-step, .react-flow__node.attachment-group.motion-step { transition: transform .62s cubic-bezier(.2,.8,.2,1), left .62s cubic-bezier(.2,.8,.2,1), top .62s cubic-bezier(.2,.8,.2,1); }
 .react-flow__node.occupant-overlay.motion-seek, .react-flow__node.attachment-group.motion-seek { transition: none; }
-.occupant-content { grid-template-areas: "icon title" "icon status"; grid-template-columns: 16px minmax(0, 1fr); grid-template-rows: auto auto; column-gap: 6px; row-gap: 2px; text-align: left; }
+.occupant-content { grid-template-areas: "icon title cargo" "icon status cargo"; grid-template-columns: 16px minmax(0, 1fr) auto; grid-template-rows: auto auto; column-gap: 6px; row-gap: 2px; text-align: left; }
 .occupant-content svg { grid-area: icon; align-self: center; }
 .occupant-label { grid-area: title; width: 100%; min-width: 0; overflow: hidden; font: 500 8px/1.1 var(--mono); text-overflow: ellipsis; white-space: nowrap; }
 .occupant-status { grid-area: status; width: 100%; min-width: 0; max-width: none !important; overflow: hidden; font: 5.5px/1.1 var(--mono) !important; text-overflow: ellipsis; white-space: nowrap; }
+.occupant-inventory { grid-area: cargo; align-self: center; display: flex; align-items: center; gap: 2px; }
+.occupant-inventory > span { width: 22px; height: 22px; display: grid; place-items: center; border: 1px solid currentColor; border-radius: 999px; background: color-mix(in srgb, var(--surface) 86%, transparent); box-shadow: 0 3px 8px #0008; }
+.occupant-inventory small { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .relation-handle { width: 3px; height: 3px; min-width: 3px; min-height: 3px; border: 0; background: var(--steel); opacity: .65; }
 .react-flow__node.attachment-group { width: 168px; padding: 0; border: 0; background: transparent; color: var(--text); z-index: 4 !important; box-shadow: none; }
 .attachment-collection { width: 100%; border: 1px solid color-mix(in srgb, var(--line-strong) 78%, transparent); border-radius: 6px; background: color-mix(in srgb, var(--surface-3) 94%, transparent); box-shadow: 0 9px 22px #0008; overflow: hidden; }
@@ -577,8 +595,10 @@ footer { padding: 25px 0 36px; color: var(--muted); text-align: center; font: 8p
   .playback { grid-template-columns: auto 1fr; }
   .replay-proof { display: none; }
   .solve-summary { grid-template-columns: repeat(2, 1fr); }
-  .solve-stream article { grid-template-columns: auto 1fr; }
-  .solve-stream article > div:last-child { grid-column: 2; }
+  .solve-body.with-map { grid-template-columns: 1fr; }
+  .solve-map { border-right: 0; border-bottom: 1px solid var(--line); }
+  .solve-observation-card { grid-template-columns: auto 1fr; }
+  .solve-observation-card > div:last-child { grid-column: 2; }
   .status-layer { right: 10px; bottom: 10px; }
 }
 

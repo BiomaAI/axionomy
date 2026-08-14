@@ -1177,6 +1177,11 @@ pub struct SearchObservationView {
     pub label: String,
     pub completed: u64,
     pub total: u64,
+    /// Stable Rust-owned scene subjects affected by this observation. Generic
+    /// viewers may emphasize matching nodes or entities without understanding
+    /// the problem's domain model.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub subjects: Vec<ViewId>,
     #[serde(default)]
     pub metrics: Vec<SceneMetricView>,
 }
