@@ -92,6 +92,7 @@ export function Transition({ frame }: { frame?: ExchangeFrame }) {
     <div className="binding-row">
       {frame.exchange.bindings.map((binding) => <span key={binding.role.key}><small>{binding.role.label}</small>{binding.account.label}</span>)}
       <span><small>Units</small>{frame.exchange.units}</span>
+      {frame.exchange.parameters?.map((parameter) => <span key={parameter.name}><small>{parameter.name.replaceAll("_", " ")}</small>{parameter.value}</span>)}
     </div>
     <Assessment assessment={frame.assessment} />
     <div className="proof-line">Projected deltas {JSON.stringify(frame.assessment.projected_deltas) === JSON.stringify(frame.receipt.deltas) ? "match" : "do not match"} the receipt</div>
@@ -118,6 +119,7 @@ export function ProposalInspector({ proposals }: { proposals: ProposalView[] }) 
     <div className="binding-row">
       <span><small>Rate</small>{selected.exchange.rate.label}</span>
       {selected.exchange.bindings.map((binding) => <span key={binding.role.key}><small>{binding.role.label}</small>{binding.account.label}</span>)}
+      {selected.exchange.parameters?.map((parameter) => <span key={parameter.name}><small>{parameter.name.replaceAll("_", " ")}</small>{parameter.value}</span>)}
     </div>
     <Assessment assessment={selected.assessment} expectedRejection />
   </div>;
@@ -161,10 +163,14 @@ export function ModelExplorer({ document }: { document: ViewDocument }) {
   if (rate && !visibleRates.some((candidate) => candidate.rate.key === rate.rate.key)) visibleRates.unshift(rate);
   return <div className="model-explorer">
     <section className="rate-browser">
-      <div className="rate-controls"><label><span>Filter {model.rates.length} rates</span><input type="search" value={filter} onChange={(event) => setFilter(event.target.value)} placeholder="Rate, action, route, operation…" /></label><label><span>Rate</span><select value={rate?.rate.key ?? ""} onChange={(event) => setSelectedRate(event.target.value)}>{visibleRates.map((candidate) => <option key={candidate.rate.key} value={candidate.rate.key}>{candidate.rate.label}</option>)}</select></label></div>
+      <div className="rate-controls"><label><span>Filter {model.rates.length} rates</span><input name="rate-filter" type="search" value={filter} onChange={(event) => setFilter(event.target.value)} placeholder="Rate, action, route, operation…" /></label><label><span>Rate</span><select name="rate" value={rate?.rate.key ?? ""} onChange={(event) => setSelectedRate(event.target.value)}>{visibleRates.map((candidate) => <option key={candidate.rate.key} value={candidate.rate.key}>{candidate.rate.label}</option>)}</select></label></div>
       {matchingRates.length > visibleRates.length && <p className="muted">Showing the first 200 matches; refine the filter to inspect the rest.</p>}
       {rate && <div className="rate-contract">
         {rate.roles.map((role) => <article key={role.role.key}><h3>{role.role.label}</h3><RateBasket label="Consume" values={role.consumed} /><RateBasket label="Produce" values={role.produced} /><RateBasket label="Preserve" values={role.preserved} /></article>)}
+        {rate.computed_consumed?.map((amount, index) => <ComputedRateAmount key={`consume:${amount.role.key}:${amount.asset.key}:${index}`} label="Computed consume" amount={amount} />)}
+        {rate.computed_produced?.map((amount, index) => <ComputedRateAmount key={`produce:${amount.role.key}:${amount.asset.key}:${index}`} label="Computed produce" amount={amount} />)}
+        {rate.computed_preserved?.map((amount, index) => <ComputedRateAmount key={`preserve:${amount.role.key}:${amount.asset.key}:${index}`} label="Computed preserve" amount={amount} />)}
+        {rate.conditions?.map((condition) => <article className="rate-condition" key={condition.name}><h3>{condition.name}</h3><code>{condition.left} {condition.comparison} {condition.right}</code></article>)}
         {rate.distinct_roles.length > 0 && <p>Distinct accounts: {rate.distinct_roles.map((pair) => pair.map((role) => role.label).join(" ≠ ")).join(", ")}</p>}
       </div>}
     </section>
@@ -180,6 +186,10 @@ export function ModelExplorer({ document }: { document: ViewDocument }) {
 function RateBasket({ label, values }: { label: string; values: QuantityValue[] }) {
   if (values.length === 0) return null;
   return <div className="rate-basket"><span>{label}</span>{values.map((value) => <b key={value.asset.key}>{value.asset.label} ×{value.quantity}</b>)}</div>;
+}
+
+function ComputedRateAmount({ label, amount }: { label: string; amount: { role: { key: string; label: string }; asset: { key: string; label: string }; quantity: string } }) {
+  return <article className="computed-rate-amount"><h3>{amount.role.label}</h3><div className="rate-basket"><span>{label}</span><b>{amount.asset.label}</b><code>{amount.quantity}</code></div></article>;
 }
 
 export function Observations({ document }: { document: ViewDocument }) {

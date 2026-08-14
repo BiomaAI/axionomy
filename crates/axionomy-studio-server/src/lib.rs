@@ -937,7 +937,7 @@ mod tests {
             .await
             .unwrap();
         let catalog: ProblemList = response_json(response).await;
-        assert_eq!(catalog.problems.len(), 13);
+        assert_eq!(catalog.problems.len(), 14);
     }
 
     #[test]

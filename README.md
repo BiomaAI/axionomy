@@ -82,7 +82,7 @@ evaluation and rating design, and
 between the Work Utility System and the Autonomy Harness that owns agents,
 learning, deployment, and assurance.
 
-The thirteen reference problems expose explicit **Micro**, **Showcase**, and
+The fourteen reference problems expose explicit **Micro**, **Showcase**, and
 **Stress** instances. Micro keeps exact fixtures and independent oracles fast;
 Showcase is the default that Studio and the generated artifacts use. Stress
 raises a domain-relevant dimension—sampling, topology, board size, horizon,
@@ -135,6 +135,8 @@ adapters.
 
 - User-defined asset, account, rate-ID, role, and checked `Quantity<N = u64>` types.
 - Atomic multi-account exchanges with consume, produce, and preserve baskets.
+- Serializable state-evaluated rate laws with exact integer expressions,
+  named exchange parameters, and authoritative conditions for nonlinear rules.
 - Explanatory assessments, complete shortfalls, projected deltas, and receipts.
 - Declared invariants, asset-configured goals, isolated forks, and deterministic replay.
 - Stable Serde models plus optional `BigUint`, dimension-safe `uom`, and Jiff authoring.
@@ -239,7 +241,7 @@ pnpm dev
 Open `http://127.0.0.1:5173`. The native server is optional: when it is healthy,
 Studio uses HTTP/SSE and exposes pause, resume, and cancellation; otherwise it
 loads the same Rust service as WebAssembly in an isolated Worker and keeps Run
-enabled for all thirteen problems. Worker cancellation is immediate by
+  enabled for all fourteen problems. Worker cancellation is immediate by
 terminating that disposable worker. If WebAssembly cannot initialize, the
 committed Showcase artifacts still provide read-only playback. The status badge
 is backed by a current health/initialization check rather than by a catalog that
@@ -489,6 +491,7 @@ contract, deployment limits, and integration details.
 | Job shop | Precedence, identified machine slots, makespan, per-job completion | Best-first, branch search, direct oracle, exact allocation Pareto front |
 | Rescue | Hidden truth, seed, observation, belief, chance, sensor use | Exact scenario evaluation, seeded Monte Carlo, approximate policy front |
 | Bridge | Capacity, bids, escrow, priority, joint resolution | BFS, first-come, auction, exact priority/credit Pareto front |
+| Living Market AMM | Closed energy/credit economy, exact constant-product swaps, fees, liquidity shares, real needs, obligations, information, actor price attribution | Market-day replay, no-whale and thin-liquidity counterfactuals, exact coalition Shapley attribution |
 | Marketplace | Buyers, sellers, carriers, tax, commission, competing orders, participant utility | Assessment matching, replayable clearing, exact allocation Pareto front |
 | Logistics | Orders, routes, fuel, time, weather, breakdown, repair | Long rollouts, risk-aware Monte Carlo, route MCTS, approximate policy front |
 | Connect Four | Identified cells, gravity, turns, line counts, wins, draw | Vector-valued MCTS with plain-board/minimax oracles |

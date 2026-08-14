@@ -209,7 +209,7 @@ export interface components {
             artifact_id: string;
         };
         /** @enum {string} */
-        AssessmentIssueKindView: "missing_rate" | "missing_binding" | "unknown_binding" | "roles_must_differ" | "missing_account" | "zero_units" | "rate_overflow" | "infeasible" | "balance_overflow" | "invariant_overflow" | "invariant_violation";
+        AssessmentIssueKindView: "missing_rate" | "missing_binding" | "unknown_binding" | "roles_must_differ" | "missing_account" | "zero_units" | "missing_parameter" | "unknown_parameter" | "rate_overflow" | "rate_law_evaluation" | "rate_condition_failed" | "infeasible" | "balance_overflow" | "invariant_overflow" | "invariant_violation";
         /**
          * @description One structured reason why a proposal is invalid.
          *
@@ -237,6 +237,11 @@ export interface components {
         };
         /** @enum {string} */
         Capability: "deterministic_search" | "weighted_search" | "specialized_algorithm" | "exact_pareto" | "approximate_pareto" | "feasibility_assessment" | "multi_account_exchange" | "atomic_settlement" | "branch_optimization" | "monte_carlo" | "mcts" | "information_set_search" | "partial_observation" | "chance" | "temporal_effects" | "fungible_cohorts" | "non_fungible_facts" | "rl_projection" | "replay_derived_leaderboards";
+        ComputedRateAmountView: {
+            asset: components["schemas"]["ViewId"];
+            quantity: string;
+            role: components["schemas"]["ViewId"];
+        };
         ErrorResponse: {
             error: string;
         };
@@ -255,8 +260,13 @@ export interface components {
             observations: components["schemas"]["ObservationView"][];
             receipt: components["schemas"]["ReceiptView"];
         };
+        ExchangeParameterView: {
+            name: string;
+            value: components["schemas"]["ExactQuantity"];
+        };
         ExchangeView: {
             bindings: components["schemas"]["RoleBindingView"][];
+            parameters?: components["schemas"]["ExchangeParameterView"][];
             rate: components["schemas"]["ViewId"];
             units: components["schemas"]["ExactQuantity"];
         };
@@ -391,6 +401,45 @@ export interface components {
             key: string;
             label: string;
         };
+        /**
+         * @description One participant positioned around a market pool. Balances and status are
+         *     replay-derived presentation data linked back to the represented account.
+         */
+        MarketActorView: {
+            account: string;
+            credit: components["schemas"]["ExactQuantity"];
+            energy: components["schemas"]["ExactQuantity"];
+            glyph: components["schemas"]["SceneGlyphView"];
+            id: components["schemas"]["ViewId"];
+            liquidity: components["schemas"]["ExactQuantity"];
+            status?: string | null;
+            tone: components["schemas"]["SceneToneView"];
+            utility: components["schemas"]["ExactQuantity"];
+            /** Format: double */
+            x: number;
+            /** Format: double */
+            y: number;
+        };
+        /**
+         * @description One constant-product pool projected from an authoritative replay snapshot.
+         *     Values remain exact text so renderers cannot silently round economic state.
+         */
+        MarketPoolView: {
+            account: string;
+            base_asset: components["schemas"]["ViewId"];
+            base_reserve: components["schemas"]["ExactQuantity"];
+            /** Format: uint64 */
+            fee_denominator: number;
+            /** Format: uint64 */
+            fee_numerator: number;
+            id: components["schemas"]["ViewId"];
+            issued_liquidity: components["schemas"]["ExactQuantity"];
+            /** @description Quote per base, scaled by 1,000. */
+            price_milli: components["schemas"]["ExactQuantity"];
+            product: components["schemas"]["ExactQuantity"];
+            quote_asset: components["schemas"]["ViewId"];
+            quote_reserve: components["schemas"]["ExactQuantity"];
+        };
         MatrixCellView: {
             /** @default [] */
             classes: string[];
@@ -467,6 +516,12 @@ export interface components {
             /** Format: uint64 */
             snapshot_index: number;
         };
+        RateConditionView: {
+            comparison: string;
+            left: string;
+            name: string;
+            right: string;
+        };
         /** @description A rate role's complete consume/produce/preserve contract. */
         RateRoleView: {
             consumed: components["schemas"]["AssetQuantityView"][];
@@ -476,6 +531,10 @@ export interface components {
         };
         /** @description One immutable transition rule in the closed model. */
         RateView: {
+            computed_consumed?: components["schemas"]["ComputedRateAmountView"][];
+            computed_preserved?: components["schemas"]["ComputedRateAmountView"][];
+            computed_produced?: components["schemas"]["ComputedRateAmountView"][];
+            conditions?: components["schemas"]["RateConditionView"][];
             distinct_roles: components["schemas"]["ViewId"][][];
             rate: components["schemas"]["ViewId"];
             roles: components["schemas"]["RateRoleView"][];
@@ -688,6 +747,11 @@ export interface components {
             kind: "timeline";
             lanes: components["schemas"]["TimelineLaneView"][];
             spans: components["schemas"]["TimelineSpanView"][];
+        } | {
+            actors: components["schemas"]["MarketActorView"][];
+            /** @constant */
+            kind: "market";
+            pool: components["schemas"]["MarketPoolView"];
         };
         /** @enum {string} */
         SceneToneView: "neutral" | "active" | "goal" | "success" | "warning" | "danger" | "uncertain" | "muted";

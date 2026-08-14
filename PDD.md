@@ -675,7 +675,7 @@ artifact resolves and records that identity. Micro continues to support exact
 oracles even when exhaustive search over Showcase would be inappropriate, and
 an approximate or candidate-bounded Showcase frontier must be labeled as such.
 
-The conformance service enforces minimum Showcase pressure for all thirteen
+The conformance service enforces minimum Showcase pressure for all fourteen
 problems. Every result also receives transport-neutral **Model size** evidence:
 accounts, rules, steps in the trace, rule-check probes, and alternatives. These
 measurements are explanatory, not objectives, and cannot affect validity.
@@ -844,7 +844,7 @@ artifact and frame. Invalid identities visibly fall back to a catalog default,
 and shared links never auto-run computation. The same URL therefore works
 against the native server, the browser Wasm engine, and GitHub Pages.
 
-The implemented Studio exposes the complete thirteen-problem Showcase
+The implemented Studio exposes the complete fourteen-problem Showcase
 surface: pathfinding and networks use graphs; Sokoban and Connect Four use
 grids; Exact Cover uses a constraint matrix; scheduling and perishables use
 timelines; markets expose multi-party settlement and rejected shortfalls;
@@ -872,7 +872,7 @@ operational run and transport failures.
 Portable artifacts prove offline playback for the full catalog. The native
 path proves generated OpenAPI calls, resumable SSE, pause/resume/cancel hooks,
 artifact and frame retrieval, and scrubbing. Browser tests prove that the same
-thirteen-problem Rust service initializes, runs, streams observations, publishes
+fourteen-problem Rust service initializes, runs, streams observations, publishes
 artifacts, and cancels inside an isolated Worker. The Pages build uses a
 repository-relative Vite base, includes its Wasm binary and `.nojekyll`, and
 deploys from `main` without a server. Specialized projections are added
@@ -1172,7 +1172,7 @@ compatible set or sequence of those resolutions, but it cannot bypass them.
 
 ## 10. Executable conformance suite
 
-The project now validates the thesis with thirteen deliberately different
+The project now validates the thesis with fourteen deliberately different
 problems. Full formal specifications live in [PROBLEMS.md](PROBLEMS.md).
 
 | Problem | What it demonstrates |
@@ -1184,6 +1184,7 @@ problems. Full formal specifications live in [PROBLEMS.md](PROBLEMS.md).
 | Job shop | Six operations, three machines, identified capacity slots, precedence tokens, completion front, makespan, and direct-oracle agreement |
 | Rescue | Four hidden sites, 32 encoded scenarios, restricted views, sensing and evacuation, seeded Monte Carlo, approximate success/resource front, and replay |
 | Bridge | Repeated multi-agent bids, escrow, capacity, atomic round reset, alternative mechanisms, and fairness/credit frontier |
+| Living Market | Exact state-evaluated constant-product swaps, endogenous energy/credit value, liquidity depth, heterogeneous actors, counterfactual replays, and exact Shapley price attribution |
 | Marketplace | Account-derived matching, complete shortfalls, four coupled six-party settlements, clearing, and participant-utility front |
 | Logistics | Recurrent encoded chance, long rollouts, repair loops, risk projections, approximate policy front, and MCTS route planning |
 | Connect Four | Standard 7×6 geometry, compact 69-line win certificates, encoded gravity and terminal truth, adversarial MCTS, and plain-board oracles |
@@ -1577,7 +1578,7 @@ factor.
 13. Add persisted search checkpoints, worker leases, task notifications, and
     tenant-aware authorization only when the MCP reference boundary is moved
     into a real multi-process deployment.
-14. Measure full-artifact transfer and rendering across the thirteen Studio
+14. Measure full-artifact transfer and rendering across the fourteen Studio
     adapters; add paged model projection, incremental Pareto/Monte Carlo
     publication, or compact rate schemas only where measured pressure warrants
     them.
@@ -1881,7 +1882,7 @@ Axionomy succeeds when:
   the same Rust service in a Worker; they can inspect retained solver evidence,
   scrub every accepted exchange, and inspect exact balances and deltas without
   a parallel mutable world model or handwritten cross-language contract.
-- All thirteen canonical problems are discoverable, runnable, replayable, and
+- All fourteen canonical problems are discoverable, runnable, replayable, and
   meaningfully inspectable through Studio and static Showcase artifacts, with
   explicit Micro and Stress selection on live interfaces.
 - CLI, HTTP, MCP, and the browser Worker return the same semantic problem

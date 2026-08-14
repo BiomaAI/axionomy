@@ -9,6 +9,270 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::hash::Hash;
 use thiserror::Error;
 
+/// An exact, serializable quantity expression evaluated against the economy's
+/// pre-exchange snapshot.
+///
+/// This keeps state-dependent exchange laws inside Axionomy authority without
+/// embedding domain callbacks in the kernel. Expressions intentionally expose
+/// only exact integer arithmetic; division is floor division.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(
+    tag = "kind",
+    rename_all = "snake_case",
+    bound(
+        serialize = "Role: Serialize, A: Serialize, N: Serialize",
+        deserialize = "Role: Deserialize<'de>, A: Deserialize<'de>, N: Deserialize<'de> + QuantityScalar"
+    )
+)]
+pub enum QuantityExpression<Role, A, N = u64> {
+    Constant {
+        value: Quantity<N>,
+    },
+    Units,
+    Parameter {
+        name: String,
+    },
+    Balance {
+        role: Role,
+        asset: A,
+    },
+    Add {
+        left: Box<Self>,
+        right: Box<Self>,
+    },
+    Subtract {
+        left: Box<Self>,
+        right: Box<Self>,
+    },
+    Multiply {
+        left: Box<Self>,
+        right: Box<Self>,
+    },
+    DivideFloor {
+        numerator: Box<Self>,
+        denominator: Box<Self>,
+    },
+    Minimum {
+        left: Box<Self>,
+        right: Box<Self>,
+    },
+    Maximum {
+        left: Box<Self>,
+        right: Box<Self>,
+    },
+}
+
+impl<Role, A> QuantityExpression<Role, A> {
+    pub const fn constant(value: u64) -> Self {
+        Self::Constant {
+            value: Quantity::new(value),
+        }
+    }
+}
+
+impl<Role, A, N> std::ops::Add for QuantityExpression<Role, A, N> {
+    type Output = Self;
+
+    fn add(self, right: Self) -> Self::Output {
+        Self::Add {
+            left: Box::new(self),
+            right: Box::new(right),
+        }
+    }
+}
+
+impl<Role, A, N> QuantityExpression<Role, A, N> {
+    pub const fn units() -> Self {
+        Self::Units
+    }
+
+    pub fn parameter(name: impl Into<String>) -> Self {
+        Self::Parameter { name: name.into() }
+    }
+
+    pub const fn balance(role: Role, asset: A) -> Self {
+        Self::Balance { role, asset }
+    }
+
+    pub fn plus(left: Self, right: Self) -> Self {
+        Self::Add {
+            left: Box::new(left),
+            right: Box::new(right),
+        }
+    }
+
+    pub fn subtract(left: Self, right: Self) -> Self {
+        Self::Subtract {
+            left: Box::new(left),
+            right: Box::new(right),
+        }
+    }
+
+    pub fn multiply(left: Self, right: Self) -> Self {
+        Self::Multiply {
+            left: Box::new(left),
+            right: Box::new(right),
+        }
+    }
+
+    pub fn divide_floor(numerator: Self, denominator: Self) -> Self {
+        Self::DivideFloor {
+            numerator: Box::new(numerator),
+            denominator: Box::new(denominator),
+        }
+    }
+
+    pub fn minimum(left: Self, right: Self) -> Self {
+        Self::Minimum {
+            left: Box::new(left),
+            right: Box::new(right),
+        }
+    }
+
+    pub fn maximum(left: Self, right: Self) -> Self {
+        Self::Maximum {
+            left: Box::new(left),
+            right: Box::new(right),
+        }
+    }
+
+    fn collect_roles<'a>(&'a self, roles: &mut BTreeSet<&'a Role>)
+    where
+        Role: Ord,
+    {
+        match self {
+            Self::Balance { role, .. } => {
+                roles.insert(role);
+            }
+            Self::Add { left, right }
+            | Self::Subtract { left, right }
+            | Self::Multiply { left, right }
+            | Self::Minimum { left, right }
+            | Self::Maximum { left, right } => {
+                left.collect_roles(roles);
+                right.collect_roles(roles);
+            }
+            Self::DivideFloor {
+                numerator,
+                denominator,
+            } => {
+                numerator.collect_roles(roles);
+                denominator.collect_roles(roles);
+            }
+            Self::Constant { .. } | Self::Units | Self::Parameter { .. } => {}
+        }
+    }
+
+    fn collect_assets<'a>(&'a self, assets: &mut Vec<&'a A>) {
+        match self {
+            Self::Balance { asset, .. } => assets.push(asset),
+            Self::Add { left, right }
+            | Self::Subtract { left, right }
+            | Self::Multiply { left, right }
+            | Self::Minimum { left, right }
+            | Self::Maximum { left, right } => {
+                left.collect_assets(assets);
+                right.collect_assets(assets);
+            }
+            Self::DivideFloor {
+                numerator,
+                denominator,
+            } => {
+                numerator.collect_assets(assets);
+                denominator.collect_assets(assets);
+            }
+            Self::Constant { .. } | Self::Units | Self::Parameter { .. } => {}
+        }
+    }
+
+    fn collect_parameters<'a>(&'a self, parameters: &mut BTreeSet<&'a str>) {
+        match self {
+            Self::Parameter { name } => {
+                parameters.insert(name);
+            }
+            Self::Add { left, right }
+            | Self::Subtract { left, right }
+            | Self::Multiply { left, right }
+            | Self::Minimum { left, right }
+            | Self::Maximum { left, right } => {
+                left.collect_parameters(parameters);
+                right.collect_parameters(parameters);
+            }
+            Self::DivideFloor {
+                numerator,
+                denominator,
+            } => {
+                numerator.collect_parameters(parameters);
+                denominator.collect_parameters(parameters);
+            }
+            Self::Constant { .. } | Self::Units | Self::Balance { .. } => {}
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(bound(
+    serialize = "Role: Serialize, A: Serialize, N: Serialize",
+    deserialize = "Role: Deserialize<'de>, A: Deserialize<'de>, N: Deserialize<'de> + QuantityScalar"
+))]
+pub struct ComputedAmount<Role, A, N = u64> {
+    role: Role,
+    asset: A,
+    quantity: QuantityExpression<Role, A, N>,
+}
+
+impl<Role, A, N> ComputedAmount<Role, A, N> {
+    pub const fn role(&self) -> &Role {
+        &self.role
+    }
+
+    pub const fn asset(&self) -> &A {
+        &self.asset
+    }
+
+    pub const fn quantity(&self) -> &QuantityExpression<Role, A, N> {
+        &self.quantity
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum QuantityComparison {
+    Equal,
+    GreaterThanOrEqual,
+    LessThanOrEqual,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(bound(
+    serialize = "Role: Serialize, A: Serialize, N: Serialize",
+    deserialize = "Role: Deserialize<'de>, A: Deserialize<'de>, N: Deserialize<'de> + QuantityScalar"
+))]
+pub struct RateCondition<Role, A, N = u64> {
+    name: String,
+    left: QuantityExpression<Role, A, N>,
+    comparison: QuantityComparison,
+    right: QuantityExpression<Role, A, N>,
+}
+
+impl<Role, A, N> RateCondition<Role, A, N> {
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    pub const fn left(&self) -> &QuantityExpression<Role, A, N> {
+        &self.left
+    }
+
+    pub const fn comparison(&self) -> QuantityComparison {
+        self.comparison
+    }
+
+    pub const fn right(&self) -> &QuantityExpression<Role, A, N> {
+        &self.right
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Rate<Role, A, N = u64> {
     consume: BTreeMap<Role, Basket<A, N>>,
@@ -16,6 +280,10 @@ pub struct Rate<Role, A, N = u64> {
     preserve: BTreeMap<Role, Basket<A, N>>,
     roles: BTreeSet<Role>,
     distinct: BTreeSet<(Role, Role)>,
+    computed_consume: Vec<ComputedAmount<Role, A, N>>,
+    computed_produce: Vec<ComputedAmount<Role, A, N>>,
+    computed_preserve: Vec<ComputedAmount<Role, A, N>>,
+    conditions: Vec<RateCondition<Role, A, N>>,
 }
 
 impl<Role, A, N> Rate<Role, A, N>
@@ -31,6 +299,10 @@ where
             preserve: BTreeMap::new(),
             roles: BTreeSet::new(),
             distinct: BTreeSet::new(),
+            computed_consume: Vec::new(),
+            computed_produce: Vec::new(),
+            computed_preserve: Vec::new(),
+            conditions: Vec::new(),
         }
     }
 
@@ -100,6 +372,82 @@ where
         self
     }
 
+    pub fn consume_computed(
+        mut self,
+        role: Role,
+        asset: A,
+        quantity: QuantityExpression<Role, A, N>,
+    ) -> Self {
+        self.register_expression_roles(&role, &quantity);
+        self.computed_consume.push(ComputedAmount {
+            role,
+            asset,
+            quantity,
+        });
+        self
+    }
+
+    pub fn produce_computed(
+        mut self,
+        role: Role,
+        asset: A,
+        quantity: QuantityExpression<Role, A, N>,
+    ) -> Self {
+        self.register_expression_roles(&role, &quantity);
+        self.computed_produce.push(ComputedAmount {
+            role,
+            asset,
+            quantity,
+        });
+        self
+    }
+
+    pub fn preserve_computed(
+        mut self,
+        role: Role,
+        asset: A,
+        quantity: QuantityExpression<Role, A, N>,
+    ) -> Self {
+        self.register_expression_roles(&role, &quantity);
+        self.computed_preserve.push(ComputedAmount {
+            role,
+            asset,
+            quantity,
+        });
+        self
+    }
+
+    pub fn condition(
+        mut self,
+        name: impl Into<String>,
+        left: QuantityExpression<Role, A, N>,
+        comparison: QuantityComparison,
+        right: QuantityExpression<Role, A, N>,
+    ) -> Self {
+        let mut expression_roles = BTreeSet::new();
+        left.collect_roles(&mut expression_roles);
+        right.collect_roles(&mut expression_roles);
+        self.roles.extend(expression_roles.into_iter().cloned());
+        self.conditions.push(RateCondition {
+            name: name.into(),
+            left,
+            comparison,
+            right,
+        });
+        self
+    }
+
+    fn register_expression_roles(
+        &mut self,
+        target: &Role,
+        expression: &QuantityExpression<Role, A, N>,
+    ) {
+        self.roles.insert(target.clone());
+        let mut expression_roles = BTreeSet::new();
+        expression.collect_roles(&mut expression_roles);
+        self.roles.extend(expression_roles.into_iter().cloned());
+    }
+
     pub fn roles(&self) -> impl Iterator<Item = &Role> {
         self.roles.iter()
     }
@@ -118,6 +466,57 @@ where
 
     pub fn distinct_roles(&self) -> impl Iterator<Item = &(Role, Role)> {
         self.distinct.iter()
+    }
+
+    pub fn computed_consumed(&self) -> &[ComputedAmount<Role, A, N>] {
+        &self.computed_consume
+    }
+
+    pub fn computed_produced(&self) -> &[ComputedAmount<Role, A, N>] {
+        &self.computed_produce
+    }
+
+    pub fn computed_preserved(&self) -> &[ComputedAmount<Role, A, N>] {
+        &self.computed_preserve
+    }
+
+    pub fn conditions(&self) -> &[RateCondition<Role, A, N>] {
+        &self.conditions
+    }
+
+    pub fn parameter_names(&self) -> BTreeSet<&str> {
+        let mut parameters = BTreeSet::new();
+        for amount in self
+            .computed_consume
+            .iter()
+            .chain(&self.computed_produce)
+            .chain(&self.computed_preserve)
+        {
+            amount.quantity.collect_parameters(&mut parameters);
+        }
+        for condition in &self.conditions {
+            condition.left.collect_parameters(&mut parameters);
+            condition.right.collect_parameters(&mut parameters);
+        }
+        parameters
+    }
+
+    pub fn computed_asset_keys(&self) -> Vec<&A> {
+        let mut assets = Vec::new();
+        for amount in self
+            .computed_consume
+            .iter()
+            .chain(&self.computed_produce)
+            .chain(&self.computed_preserve)
+        {
+            assets.push(&amount.asset);
+            amount.quantity.collect_assets(&mut assets);
+        }
+        for condition in &self.conditions {
+            condition.left.collect_assets(&mut assets);
+            condition.right.collect_assets(&mut assets);
+        }
+        assets
     }
 }
 
@@ -155,11 +554,15 @@ where
     where
         S: Serializer,
     {
-        let mut state = serializer.serialize_struct("Rate", 4)?;
+        let mut state = serializer.serialize_struct("Rate", 8)?;
         state.serialize_field("consume", &self.consume.iter().collect::<Vec<_>>())?;
         state.serialize_field("produce", &self.produce.iter().collect::<Vec<_>>())?;
         state.serialize_field("preserve", &self.preserve.iter().collect::<Vec<_>>())?;
         state.serialize_field("distinct", &self.distinct.iter().collect::<Vec<_>>())?;
+        state.serialize_field("computed_consume", &self.computed_consume)?;
+        state.serialize_field("computed_produce", &self.computed_produce)?;
+        state.serialize_field("computed_preserve", &self.computed_preserve)?;
+        state.serialize_field("conditions", &self.conditions)?;
         state.end()
     }
 }
@@ -173,6 +576,14 @@ struct RateData<Role, A, N> {
     produce: Vec<(Role, Basket<A, N>)>,
     preserve: Vec<(Role, Basket<A, N>)>,
     distinct: Vec<(Role, Role)>,
+    #[serde(default)]
+    computed_consume: Vec<ComputedAmount<Role, A, N>>,
+    #[serde(default)]
+    computed_produce: Vec<ComputedAmount<Role, A, N>>,
+    #[serde(default)]
+    computed_preserve: Vec<ComputedAmount<Role, A, N>>,
+    #[serde(default)]
+    conditions: Vec<RateCondition<Role, A, N>>,
 }
 
 impl<'de, Role, A, N> Deserialize<'de> for Rate<Role, A, N>
@@ -205,6 +616,23 @@ where
         for (left, right) in data.distinct {
             rate = rate.distinct(left, right);
         }
+        for amount in data.computed_consume {
+            rate = rate.consume_computed(amount.role, amount.asset, amount.quantity);
+        }
+        for amount in data.computed_produce {
+            rate = rate.produce_computed(amount.role, amount.asset, amount.quantity);
+        }
+        for amount in data.computed_preserve {
+            rate = rate.preserve_computed(amount.role, amount.asset, amount.quantity);
+        }
+        for condition in data.conditions {
+            rate = rate.condition(
+                condition.name,
+                condition.left,
+                condition.comparison,
+                condition.right,
+            );
+        }
         Ok(rate)
     }
 }
@@ -233,6 +661,10 @@ where
             produce: Vec<(Role, Basket<A, N>)>,
             preserve: Vec<(Role, Basket<A, N>)>,
             distinct: Vec<(Role, Role)>,
+            computed_consume: Vec<ComputedAmount<Role, A, N>>,
+            computed_produce: Vec<ComputedAmount<Role, A, N>>,
+            computed_preserve: Vec<ComputedAmount<Role, A, N>>,
+            conditions: Vec<RateCondition<Role, A, N>>,
         }
 
         generator.subschema_for::<RateSchema<Role, A, N>>()

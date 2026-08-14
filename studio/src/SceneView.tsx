@@ -16,23 +16,156 @@ import { SceneIcon } from "./SceneIcon";
 
 export type ReplayMotionMode = "step" | "seek";
 
-export function SceneView({ scene, previousScene, frame, motion = "step", onAccount }: { scene?: Scene | null; previousScene?: Scene | null; frame?: ExchangeFrame; motion?: ReplayMotionMode; onAccount?: (account: string) => void }) {
+export function SceneView({ scene, previousScene, history = [], frame, motion = "step", onAccount }: { scene?: Scene | null; previousScene?: Scene | null; history?: Scene[]; frame?: ExchangeFrame; motion?: ReplayMotionMode; onAccount?: (account: string) => void }) {
   if (!scene) {
     return <div className="empty-state">No picture for this problem — the accounts below still show everything.</div>;
   }
   return <div className="scene-composition">
     <SceneChrome scene={scene} />
-    <SceneSurfaceView scene={scene} previousScene={previousScene} frame={frame} motion={motion} onAccount={onAccount} />
+    <SceneSurfaceView scene={scene} previousScene={previousScene} history={history} frame={frame} motion={motion} onAccount={onAccount} />
   </div>;
 }
 
-function SceneSurfaceView({ scene, previousScene, frame, motion, onAccount }: { scene: Scene; previousScene?: Scene | null; frame?: ExchangeFrame; motion: ReplayMotionMode; onAccount?: (account: string) => void }) {
+function SceneSurfaceView({ scene, previousScene, history, frame, motion, onAccount }: { scene: Scene; previousScene?: Scene | null; history: Scene[]; frame?: ExchangeFrame; motion: ReplayMotionMode; onAccount?: (account: string) => void }) {
   switch (scene.surface.kind) {
     case "graph": return <GraphScene scene={scene} previousScene={previousScene} frame={frame} motion={motion} surface={scene.surface} onAccount={onAccount} />;
     case "grid": return <GridScene scene={scene} previousScene={previousScene} frame={frame} motion={motion} surface={scene.surface} onAccount={onAccount} />;
     case "matrix": return <MatrixScene scene={scene} surface={scene.surface} onAccount={onAccount} />;
     case "timeline": return <TimelineScene scene={scene} surface={scene.surface} onAccount={onAccount} />;
+    case "market": return <MarketScene scene={scene} history={history} frame={frame} surface={scene.surface} onAccount={onAccount} />;
   }
+}
+
+type MarketSurface = Extract<SceneSurface, { kind: "market" }>;
+
+function marketSurfaces(scenes: Scene[]): MarketSurface[] {
+  return scenes.flatMap((candidate) => candidate.surface.kind === "market" ? [candidate.surface] : []);
+}
+
+function exactNumber(value: string): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function MarketScene({ scene, history, frame, surface, onAccount }: { scene: Scene; history: Scene[]; frame?: ExchangeFrame; surface: MarketSurface; onAccount?: (account: string) => void }) {
+  const previousMarkets = marketSurfaces(history);
+  const markets = previousMarkets.at(-1)?.pool.price_milli === surface.pool.price_milli
+    ? previousMarkets
+    : [...previousMarkets, surface];
+  const energy = exactNumber(surface.pool.base_reserve);
+  const credit = exactNumber(surface.pool.quote_reserve);
+  const price = exactNumber(surface.pool.price_milli) / 1000;
+  const energyMax = Math.max(1, ...markets.map((market) => exactNumber(market.pool.base_reserve)));
+  const creditMax = Math.max(1, ...markets.map((market) => exactNumber(market.pool.quote_reserve)));
+  const activeBinding = frame?.exchange.bindings.find((binding) => binding.role.label === "Trader" || binding.role.label === "Liquidity Provider");
+  const activeAccount = activeBinding?.account.key;
+  const rateKey = frame?.exchange.rate.key ?? "";
+  const direction = rateKey.includes("buyenergy") ? "buy" : rateKey.includes("sellenergy") ? "sell" : rateKey.includes("liquidity") ? "liquidity" : "state";
+  const activeActor = surface.actors.find((actor) => actor.account === activeAccount);
+  const previousPool = frame?.before.scene?.surface.kind === "market" ? frame.before.scene.surface.pool : undefined;
+  const energyDelta = previousPool ? energy - exactNumber(previousPool.base_reserve) : 0;
+  const creditDelta = previousPool ? credit - exactNumber(previousPool.quote_reserve) : 0;
+  const poolStyle = {
+    "--energy-fill": `${Math.max(18, energy / energyMax * 100)}%`,
+    "--credit-fill": `${Math.max(18, credit / creditMax * 100)}%`,
+  } as CSSProperties;
+  const stepLabel = activeActor
+    ? `${activeActor.id.label} · ${direction === "buy" ? "buys energy" : direction === "sell" ? "sells energy" : "changes market depth"}`
+    : frame?.exchange.rate.label ?? "Opening reserve ratio establishes the first price hypothesis";
+
+  return <div className={`market-scene market-${direction}`} aria-label={scene.title}>
+    <div className="market-world">
+      <svg className="market-links" viewBox="0 0 1000 600" role="img" aria-label="Actors connected to the authoritative AMM pool">
+        <title>Closed-economy market relationships</title>
+        {surface.actors.map((actor) => <line key={actor.id.key} x1={actor.x * 10} y1={actor.y * 6} x2="500" y2="285" className={actor.account === activeAccount ? "is-active" : undefined} />)}
+      </svg>
+      <div className="market-step-line" role="status"><span>{stepLabel}</span>{frame && <strong>{energyDelta !== 0 ? `${energyDelta > 0 ? "+" : ""}${energyDelta.toLocaleString()} E` : ""}{energyDelta !== 0 && creditDelta !== 0 ? " · " : ""}{creditDelta !== 0 ? `${creditDelta > 0 ? "+" : ""}${creditDelta.toLocaleString()} C` : ""}</strong>}</div>
+      {surface.actors.map((actor) => <button
+        type="button"
+        key={actor.id.key}
+        className={`market-actor tone-${actor.tone}${actor.account === activeAccount ? " is-active" : ""}`}
+        style={{ left: `${actor.x}%`, top: `${actor.y}%` }}
+        onClick={() => onAccount?.(actor.account)}
+        aria-label={`${actor.id.label}: ${actor.energy} energy, ${actor.credit} credit${actor.status ? `, ${actor.status}` : ""}`}
+      >
+        <SceneIcon glyph={actor.glyph} size={17} />
+        <span><b>{actor.id.label}</b><small>{Number(actor.energy).toLocaleString()} E · {Number(actor.credit).toLocaleString()} C</small></span>
+      </button>)}
+      <button type="button" className="market-pool" style={poolStyle} onClick={() => onAccount?.(surface.pool.account)}>
+        <span className="market-pool-kicker">AMM pool · x · y = k</span>
+        <strong>{price.toFixed(3)}</strong>
+        <small>credit / energy</small>
+        <div className="market-reserves">
+          <span className="market-reserve energy"><i /><b>{energy.toLocaleString()}</b><small>Energy</small></span>
+          <span className="market-reserve credit"><i /><b>{credit.toLocaleString()}</b><small>Credit</small></span>
+        </div>
+      </button>
+    </div>
+    <div className="market-analysis">
+      <MarketPriceHistory markets={markets} />
+      <MarketBondingCurve surface={surface} />
+    </div>
+  </div>;
+}
+
+function MarketPriceHistory({ markets }: { markets: MarketSurface[] }) {
+  const width = 520;
+  const height = 132;
+  const padding = { left: 42, right: 18, top: 20, bottom: 25 };
+  const values = markets.map((market) => exactNumber(market.pool.price_milli) / 1000);
+  const low = Math.min(...values);
+  const high = Math.max(...values);
+  const spread = Math.max(.001, high - low);
+  const x = (index: number) => padding.left + (values.length <= 1 ? 0 : index / (values.length - 1) * (width - padding.left - padding.right));
+  const y = (value: number) => padding.top + (high - value) / spread * (height - padding.top - padding.bottom);
+  const path = values.map((value, index) => `${index === 0 ? "M" : "L"}${x(index).toFixed(1)},${y(value).toFixed(1)}`).join(" ");
+  const current = values.at(-1) ?? 0;
+  return <svg className="market-price-history" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`Discovered price history, currently ${current.toFixed(3)} credit per energy`}>
+    <title>Discovered price through accepted exchanges</title>
+    <desc>The reserve ratio is the closed economy's only public marginal price.</desc>
+    <text x="12" y="14" className="chart-title">Discovered price</text>
+    <line x1={padding.left} y1={padding.top} x2={padding.left} y2={height - padding.bottom} className="market-axis" />
+    <line x1={padding.left} y1={height - padding.bottom} x2={width - padding.right} y2={height - padding.bottom} className="market-axis" />
+    <text x={padding.left - 6} y={padding.top + 4} textAnchor="end">{high.toFixed(1)}</text>
+    <text x={padding.left - 6} y={height - padding.bottom + 4} textAnchor="end">{low.toFixed(1)}</text>
+    <text x={padding.left} y={height - 7}>opening</text>
+    <text x={width - padding.right} y={height - 7} textAnchor="end">step {Math.max(0, values.length - 1)}</text>
+    <path d={path} className="market-price-path" />
+    {values.map((value, index) => <circle key={index} cx={x(index)} cy={y(value)} r={index === values.length - 1 ? 4 : 2} className={index === values.length - 1 ? "is-current" : undefined} />)}
+    <text x={Math.min(width - 54, x(values.length - 1) + 8)} y={Math.max(28, y(current) - 7)} className="chart-value">{current.toFixed(3)}</text>
+  </svg>;
+}
+
+function MarketBondingCurve({ surface }: { surface: MarketSurface }) {
+  const width = 420;
+  const height = 132;
+  const padding = { left: 38, right: 20, top: 20, bottom: 25 };
+  const reserve = Math.max(1, exactNumber(surface.pool.base_reserve));
+  const quote = Math.max(1, exactNumber(surface.pool.quote_reserve));
+  const product = Math.max(1, exactNumber(surface.pool.product));
+  const minX = reserve * .42;
+  const maxX = reserve * 1.85;
+  const samples = Array.from({ length: 48 }, (_, index) => minX + index / 47 * (maxX - minX));
+  const quotes = samples.map((value) => product / value);
+  const minY = Math.min(...quotes);
+  const maxY = Math.max(...quotes);
+  const sx = (value: number) => padding.left + (value - minX) / (maxX - minX) * (width - padding.left - padding.right);
+  const sy = (value: number) => padding.top + (maxY - value) / (maxY - minY) * (height - padding.top - padding.bottom);
+  const path = samples.map((value, index) => `${index === 0 ? "M" : "L"}${sx(value).toFixed(1)},${sy(quotes[index]).toFixed(1)}`).join(" ");
+  return <svg className="market-bonding-curve" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`Constant-product bonding curve at ${reserve} energy and ${quote} credit`}>
+    <title>Constant-product reserve curve</title>
+    <desc>The point moves along the curve as actors exchange energy and credit.</desc>
+    <text x="12" y="14" className="chart-title">Reserve curve · xy = k</text>
+    <line x1={padding.left} y1={padding.top} x2={padding.left} y2={height - padding.bottom} className="market-axis" />
+    <line x1={padding.left} y1={height - padding.bottom} x2={width - padding.right} y2={height - padding.bottom} className="market-axis" />
+    <text x="4" y={padding.top + 4}>Credit</text>
+    <text x={width - padding.right} y={height - 7} textAnchor="end">Energy reserve</text>
+    <path d={path} className="market-curve-path" />
+    <line x1={sx(reserve)} x2={sx(reserve)} y1={sy(quote)} y2={height - padding.bottom} className="market-guide" />
+    <line x1={padding.left} x2={sx(reserve)} y1={sy(quote)} y2={sy(quote)} className="market-guide" />
+    <circle cx={sx(reserve)} cy={sy(quote)} r="5" className="is-current" />
+    <text x={Math.min(width - 92, sx(reserve) + 9)} y={Math.max(29, sy(quote) - 7)} className="chart-value">{reserve.toLocaleString()} E · {quote.toLocaleString()} C</text>
+  </svg>;
 }
 
 function SceneChrome({ scene }: { scene: Scene }) {

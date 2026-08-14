@@ -14,6 +14,7 @@ and honest about what the engine actually proved.
 | Surface | Canonical problem | What it establishes |
 | --- | --- | --- |
 | Graph | **Autonomous Work League** | Topology, mobile agents, attached work queues, shared facilities, relationship lines, dense replay state, and live comparative outcomes |
+| Market | **The Living Market** | Central pool dominance, exact reserves, endogenous price history, constant-product curve position, actor flows, liquidity depth, and causal attribution |
 | Onboarding graph | **Key-door Maze** | Immediate comprehension, competing routes, solver expansion playback, inventory transfer, a stateful gate, planned/traversed route evidence, and rejected-move explanation |
 | Grid | **Sokoban** | Stable terrain, independently animated occupants, cell anchoring, goals, and exact replay motion |
 | Timeline | **Job-shop scheduling** | Resource lanes, bounded spans, ordering, duration, and temporal progress |
@@ -35,6 +36,29 @@ frame are release-blocking even when another graph scene still looks correct.
 The other canonical problems are equally normative for their surface types.
 Graph conventions must not be forced onto a grid, matrix, or timeline when the
 surface itself communicates the problem more clearly.
+
+## Market grammar
+
+The Living Market is the canonical market surface. A market scene explains how
+replay-verified exchanges change one public reserve ratio; it never imports an
+oracle price or recomputes an authoritative quote in TypeScript.
+
+- The pool is the dominant central object and links directly to its economic
+  account.
+- Reserve quantities, liquidity supply, fee terms, product, and price are exact
+  Rust-owned projection fields.
+- Participants surround the pool and link to their authoritative accounts.
+- The selected exchange emphasizes only the bound trader or liquidity provider
+  and derives its direction and deltas from the receipt.
+- Price history is assembled from the sequence of replay-derived market
+  snapshots. It is not stored as independent market state.
+- The bonding curve uses the snapshot's exact reserve product and marks the
+  current reserve point. It explains sensitivity but cannot authorize a swap.
+- Proportional liquidity changes depth without visually implying a price move.
+- Direct attribution is accumulated from adjacent reserve-price changes;
+  counterfactual attribution must state whether it is exact or sampled.
+- No external comparison line may appear unless an external venue is itself
+  encoded as accounts, assets, rates, and exchanges in the closed economy.
 
 ## Truth boundary
 

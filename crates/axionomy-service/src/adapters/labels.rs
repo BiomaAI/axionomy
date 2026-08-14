@@ -1,6 +1,6 @@
 use axionomy_problems::{
-    bridge, connect_four, exact_cover, logistics, marketplace, maze, mission, perishables, rescue,
-    scheduling, sokoban, work_league, workshop,
+    amm, bridge, connect_four, exact_cover, logistics, marketplace, maze, mission, perishables,
+    rescue, scheduling, sokoban, work_league, workshop,
 };
 use std::fmt::Debug;
 
@@ -228,6 +228,77 @@ impl StudioLabel for workshop::RateId {
 }
 
 debug_labels!(workshop::Role);
+
+impl StudioLabel for amm::Actor {
+    fn studio_label(&self) -> String {
+        match self {
+            Self::Founder => "Founding LP",
+            Self::Generator => "Solar Generator",
+            Self::Factory => "Factory",
+            Self::Household => "Household",
+            Self::Speculator => "Informed Speculator",
+            Self::AdaptiveLp => "Adaptive LP",
+            Self::Arbitrageur => "Internal Arbitrageur",
+            Self::Whale => "Demand Whale",
+        }
+        .into()
+    }
+}
+
+impl StudioLabel for amm::AccountId {
+    fn studio_label(&self) -> String {
+        match self {
+            Self::Pool => "Energy / Credit AMM".into(),
+            Self::Treasury => "Closed-economy Treasury".into(),
+            Self::Information => "Scarcity Information".into(),
+            Self::Actor(actor) => actor.studio_label(),
+        }
+    }
+}
+
+impl StudioLabel for amm::Asset {
+    fn studio_label(&self) -> String {
+        match self {
+            Self::Energy => "Usable energy".into(),
+            Self::Credit => "Settlement credit".into(),
+            Self::SolarPotential => "Unharvested solar potential".into(),
+            Self::SpentEnergy => "Energy consumed toward goals".into(),
+            Self::LpShare => "AMM liquidity share".into(),
+            Self::UnissuedLpShare => "Unissued liquidity share".into(),
+            Self::Need(actor) => format!("{} energy need", actor.studio_label()),
+            Self::SatisfiedNeed(actor) => format!("{} need satisfied", actor.studio_label()),
+            Self::Obligation(actor) => format!("{} credit obligation", actor.studio_label()),
+            Self::SettledObligation(actor) => {
+                format!("{} obligation settled", actor.studio_label())
+            }
+            Self::Uninformed(actor) => format!("{} has no shortage signal", actor.studio_label()),
+            Self::Informed(actor) => format!("{} knows about the shortage", actor.studio_label()),
+            Self::ShortageSignal => "Verified energy shortage signal".into(),
+            Self::Utility => "Realized utility".into(),
+        }
+    }
+}
+
+impl StudioLabel for amm::RateId {
+    fn studio_label(&self) -> String {
+        match self {
+            Self::BuyEnergy => "Buy energy from the AMM".into(),
+            Self::SellEnergy => "Sell energy into the AMM".into(),
+            Self::AddLiquidity => "Deepen AMM liquidity".into(),
+            Self::RemoveLiquidity => "Withdraw AMM liquidity".into(),
+            Self::ProduceEnergy => "Harvest solar energy".into(),
+            Self::UseEnergy(actor) => format!("{} uses energy", actor.studio_label()),
+            Self::SettleObligation(actor) => {
+                format!("{} settles a credit obligation", actor.studio_label())
+            }
+            Self::LearnShortage(actor) => {
+                format!("{} receives the shortage signal", actor.studio_label())
+            }
+        }
+    }
+}
+
+debug_labels!(amm::Role);
 
 fn job(job: scheduling::Job) -> &'static str {
     match job {

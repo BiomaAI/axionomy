@@ -6,7 +6,7 @@
 
 use axionomy::{
     AccountAssessment, AccountDelta, ApplyError, Basket, Economy, Exchange, ExchangeAssessment,
-    Goal, Quantity, QuantityScalar, Receipt, Trace,
+    Goal, Quantity, QuantityComparison, QuantityExpression, QuantityScalar, Receipt, Trace,
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -79,6 +79,14 @@ pub struct ExchangeView {
     pub rate: ViewId,
     pub units: ExactQuantity,
     pub bindings: Vec<RoleBindingView>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub parameters: Vec<ExchangeParameterView>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct ExchangeParameterView {
+    pub name: String,
+    pub value: ExactQuantity,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -116,7 +124,11 @@ pub enum AssessmentIssueKindView {
     RolesMustDiffer,
     MissingAccount,
     ZeroUnits,
+    MissingParameter,
+    UnknownParameter,
     RateOverflow,
+    RateLawEvaluation,
+    RateConditionFailed,
     Infeasible,
     BalanceOverflow,
     InvariantOverflow,
@@ -164,12 +176,35 @@ pub struct RateRoleView {
     pub preserved: Vec<AssetQuantityView>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct ComputedRateAmountView {
+    pub role: ViewId,
+    pub asset: ViewId,
+    pub quantity: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct RateConditionView {
+    pub name: String,
+    pub left: String,
+    pub comparison: String,
+    pub right: String,
+}
+
 /// One immutable transition rule in the closed model.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct RateView {
     pub rate: ViewId,
     pub roles: Vec<RateRoleView>,
     pub distinct_roles: Vec<[ViewId; 2]>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub computed_consumed: Vec<ComputedRateAmountView>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub computed_produced: Vec<ComputedRateAmountView>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub computed_preserved: Vec<ComputedRateAmountView>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub conditions: Vec<RateConditionView>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -396,6 +431,42 @@ pub struct SceneLegendView {
     pub tone: SceneToneView,
 }
 
+/// One constant-product pool projected from an authoritative replay snapshot.
+/// Values remain exact text so renderers cannot silently round economic state.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct MarketPoolView {
+    pub id: ViewId,
+    pub base_asset: ViewId,
+    pub quote_asset: ViewId,
+    pub base_reserve: ExactQuantity,
+    pub quote_reserve: ExactQuantity,
+    /// Quote per base, scaled by 1,000.
+    pub price_milli: ExactQuantity,
+    pub product: ExactQuantity,
+    pub issued_liquidity: ExactQuantity,
+    pub fee_numerator: u64,
+    pub fee_denominator: u64,
+    pub account: String,
+}
+
+/// One participant positioned around a market pool. Balances and status are
+/// replay-derived presentation data linked back to the represented account.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct MarketActorView {
+    pub id: ViewId,
+    pub account: String,
+    pub glyph: SceneGlyphView,
+    pub tone: SceneToneView,
+    pub x: f64,
+    pub y: f64,
+    pub energy: ExactQuantity,
+    pub credit: ExactQuantity,
+    pub liquidity: ExactQuantity,
+    pub utility: ExactQuantity,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub status: Option<String>,
+}
+
 /// The geometric substrate for a derived scene. Surface geometry and semantic
 /// entities are deliberately separate so one vehicle can move through a graph,
 /// grid, matrix, or timeline without inventing four domain models.
@@ -423,6 +494,10 @@ pub enum SceneSurfaceView {
         spans: Vec<TimelineSpanView>,
         #[serde(skip_serializing_if = "Option::is_none")]
         cursor: Option<u64>,
+    },
+    Market {
+        pool: Box<MarketPoolView>,
+        actors: Vec<MarketActorView>,
     },
 }
 
@@ -738,6 +813,7 @@ impl Scene {
                     return Err(SceneValidationError::UnknownAnchor("timeline span".into()));
                 }
             }
+            SceneSurfaceView::Market { .. } => {}
         }
         for anchor in self
             .entities
@@ -1667,10 +1743,37 @@ where
                 .distinct_roles()
                 .map(|(left, right)| [ontology.role(left), ontology.role(right)])
                 .collect();
+            let computed_amounts = |amounts: &[axionomy::ComputedAmount<Role, A, N>]| {
+                amounts
+                    .iter()
+                    .map(|amount| ComputedRateAmountView {
+                        role: ontology.role(amount.role()),
+                        asset: ontology.asset(amount.asset()),
+                        quantity: expression_view(amount.quantity(), ontology),
+                    })
+                    .collect::<Vec<_>>()
+            };
             Some(RateView {
                 rate: ontology.rate(id),
                 roles,
                 distinct_roles,
+                computed_consumed: computed_amounts(rate.computed_consumed()),
+                computed_produced: computed_amounts(rate.computed_produced()),
+                computed_preserved: computed_amounts(rate.computed_preserved()),
+                conditions: rate
+                    .conditions()
+                    .iter()
+                    .map(|condition| RateConditionView {
+                        name: condition.name().into(),
+                        left: expression_view(condition.left(), ontology),
+                        comparison: match condition.comparison() {
+                            QuantityComparison::Equal => "=".into(),
+                            QuantityComparison::GreaterThanOrEqual => "≥".into(),
+                            QuantityComparison::LessThanOrEqual => "≤".into(),
+                        },
+                        right: expression_view(condition.right(), ontology),
+                    })
+                    .collect(),
             })
         })
         .collect::<Vec<_>>();
@@ -1707,6 +1810,61 @@ where
         rates,
         goal,
         invariants,
+    }
+}
+
+fn expression_view<AccountId, A, RateId, Role, N, O>(
+    expression: &QuantityExpression<Role, A, N>,
+    ontology: &O,
+) -> String
+where
+    N: QuantityScalar,
+    O: ViewOntology<AccountId, A, RateId, Role, N>,
+{
+    match expression {
+        QuantityExpression::Constant { value } => value.to_string(),
+        QuantityExpression::Units => "exchange units".into(),
+        QuantityExpression::Parameter { name } => format!("${name}"),
+        QuantityExpression::Balance { role, asset } => {
+            format!(
+                "{}.{}",
+                ontology.role(role).label,
+                ontology.asset(asset).label
+            )
+        }
+        QuantityExpression::Add { left, right } => format!(
+            "({} + {})",
+            expression_view(left, ontology),
+            expression_view(right, ontology)
+        ),
+        QuantityExpression::Subtract { left, right } => format!(
+            "({} − {})",
+            expression_view(left, ontology),
+            expression_view(right, ontology)
+        ),
+        QuantityExpression::Multiply { left, right } => format!(
+            "({} × {})",
+            expression_view(left, ontology),
+            expression_view(right, ontology)
+        ),
+        QuantityExpression::DivideFloor {
+            numerator,
+            denominator,
+        } => format!(
+            "floor({} ÷ {})",
+            expression_view(numerator, ontology),
+            expression_view(denominator, ontology)
+        ),
+        QuantityExpression::Minimum { left, right } => format!(
+            "min({}, {})",
+            expression_view(left, ontology),
+            expression_view(right, ontology)
+        ),
+        QuantityExpression::Maximum { left, right } => format!(
+            "max({}, {})",
+            expression_view(left, ontology),
+            expression_view(right, ontology)
+        ),
     }
 }
 
@@ -1781,29 +1939,31 @@ where
         .map(|account| account.balances.len())
         .sum::<usize>();
     let scene = ontology.scene(index, economy).map(|mut scene| {
-        scene.metrics.extend([
-            SceneMetricView {
-                key: "snapshot".into(),
-                label: "Economic step".into(),
-                value: index.to_string(),
-                unit: Some("exchanges".into()),
-                previous: index.checked_sub(1).map(|value| value.to_string()),
-            },
-            SceneMetricView {
-                key: "accounts".into(),
-                label: "Accounts".into(),
-                value: accounts.len().to_string(),
-                unit: None,
-                previous: None,
-            },
-            SceneMetricView {
-                key: "balances".into(),
-                label: "Non-zero balances".into(),
-                value: balance_entries.to_string(),
-                unit: None,
-                previous: None,
-            },
-        ]);
+        if !matches!(scene.surface, SceneSurfaceView::Market { .. }) {
+            scene.metrics.extend([
+                SceneMetricView {
+                    key: "snapshot".into(),
+                    label: "Economic step".into(),
+                    value: index.to_string(),
+                    unit: Some("exchanges".into()),
+                    previous: index.checked_sub(1).map(|value| value.to_string()),
+                },
+                SceneMetricView {
+                    key: "accounts".into(),
+                    label: "Accounts".into(),
+                    value: accounts.len().to_string(),
+                    unit: None,
+                    previous: None,
+                },
+                SceneMetricView {
+                    key: "balances".into(),
+                    label: "Non-zero balances".into(),
+                    value: balance_entries.to_string(),
+                    unit: None,
+                    previous: None,
+                },
+            ]);
+        }
         scene
     });
 
@@ -1852,6 +2012,14 @@ where
             .map(|(role, account)| RoleBindingView {
                 role: ontology.role(role),
                 account: ontology.account(account),
+            })
+            .collect(),
+        parameters: exchange
+            .parameters()
+            .iter()
+            .map(|(name, value)| ExchangeParameterView {
+                name: name.clone(),
+                value: value.into(),
             })
             .collect(),
     }
@@ -2023,6 +2191,16 @@ where
             "Exchange units must be greater than zero.".into(),
             Vec::new(),
         ),
+        ApplyError::MissingParameter { name } => (
+            AssessmentIssueKindView::MissingParameter,
+            format!("Missing required exchange parameter `{name}`."),
+            Vec::new(),
+        ),
+        ApplyError::UnknownParameter { name } => (
+            AssessmentIssueKindView::UnknownParameter,
+            format!("Parameter `{name}` is not declared by this rate."),
+            Vec::new(),
+        ),
         ApplyError::RateOverflow { rate, asset } => {
             let rate = ontology.rate(rate);
             let asset = ontology.asset(asset);
@@ -2033,6 +2211,25 @@ where
                     rate.label, asset.label
                 ),
                 vec![rate, asset],
+            )
+        }
+        ApplyError::RateLawEvaluation { rate, message } => {
+            let rate = ontology.rate(rate);
+            (
+                AssessmentIssueKindView::RateLawEvaluation,
+                format!(
+                    "Rate `{}` could not evaluate its exchange law: {message}.",
+                    rate.label
+                ),
+                vec![rate],
+            )
+        }
+        ApplyError::RateConditionFailed { rate, condition } => {
+            let rate = ontology.rate(rate);
+            (
+                AssessmentIssueKindView::RateConditionFailed,
+                format!("Rate `{}` refused condition `{condition}`.", rate.label),
+                vec![rate],
             )
         }
         ApplyError::Infeasible { shortfalls } => {

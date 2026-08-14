@@ -5,7 +5,7 @@ capabilities, accepts reproducible run requests, and returns replay-derived
 artifacts without depending on HTTP, CLI, MCP, async runtimes, databases, or a
 browser.
 
-`ReferenceService` adapts the thirteen canonical conformance problems. External
+`ReferenceService` adapts the fourteen canonical conformance problems. External
 interfaces call the same service and are tested for semantic parity.
 
 Its deliberately small vocabulary is `ProblemDescriptor`, `RunRequest`,

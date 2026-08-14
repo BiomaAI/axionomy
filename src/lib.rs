@@ -18,4 +18,7 @@ pub use economy::{
 };
 pub use exchange::{AccountDelta, Exchange, Receipt, Trace};
 pub use quantity::{Quantity, QuantityError, QuantityScalar};
-pub use rate::{LinearInvariant, Rate, RateError, basket};
+pub use rate::{
+    ComputedAmount, LinearInvariant, QuantityComparison, QuantityExpression, Rate, RateCondition,
+    RateError, basket,
+};

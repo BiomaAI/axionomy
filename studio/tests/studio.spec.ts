@@ -127,13 +127,29 @@ test("loads a distinct static problem and its specialized renderer", async ({ pa
   await expect(page.getByText("Which subset contains which element", { exact: false })).toBeVisible();
 });
 
+test("shows endogenous AMM price discovery, exact curve evidence, and causal attribution", async ({ page }) => {
+  await page.goto("/?problem=amm&instance=showcase&strategy=market_day&document=amm%3Amarket_day&view=replay&step=15&leaderboard=causal_price_contribution&seed=17&budget=128");
+  await expect(page.getByRole("heading", { name: "Living Market · endogenous price discovery" })).toBeVisible();
+  await expect(page.locator(".market-scene")).toBeVisible();
+  await expect(page.getByRole("img", { name: /Discovered price history/ })).toBeVisible();
+  await expect(page.getByRole("img", { name: /Constant-product bonding curve/ })).toBeVisible();
+  await expect(page.getByRole("combobox", { name: "Leaderboard ranking dimension" })).toHaveValue("causal_price_contribution");
+  await expect(page.locator(".leaderboard-entries article")).toHaveCount(7);
+  await expect(page.locator(".market-price-history circle")).toHaveCount(16);
+
+  await page.getByRole("button", { name: /Factory:/ }).click();
+  await expect(page.locator(".account-card.focused")).toContainText("Factory");
+  await expect(page.getByText("Demand more than the curve returns")).toBeVisible();
+  await expect(page.getByText(/minimum output/).last()).toBeVisible();
+});
+
 test("renders the generic cockpit for every canonical problem without browser errors", async ({ page }) => {
   test.setTimeout(60_000);
   const browserErrors: string[] = [];
   page.on("pageerror", (error) => browserErrors.push(error.message));
   await page.goto("/");
   const problems = [
-    "maze", "sokoban", "exact_cover", "bridge", "scheduling", "workshop",
+    "maze", "sokoban", "exact_cover", "bridge", "scheduling", "workshop", "amm",
     "marketplace", "logistics", "connect_four", "rescue", "mission",
     "perishables", "work_league",
   ];

@@ -1,4 +1,4 @@
-use num_traits::{CheckedAdd, CheckedMul, CheckedSub, Zero};
+use num_traits::{CheckedAdd, CheckedDiv, CheckedMul, CheckedSub, Zero};
 use schemars::{JsonSchema, Schema, SchemaGenerator};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::borrow::Cow;
@@ -13,7 +13,17 @@ use thiserror::Error;
 /// boundary. Floating-point implementations are intentionally unsupported:
 /// authoritative balances require exact equality and total ordering.
 pub trait QuantityScalar:
-    Clone + Eq + Ord + Hash + fmt::Debug + fmt::Display + Zero + CheckedAdd + CheckedSub + CheckedMul
+    Clone
+    + Eq
+    + Ord
+    + Hash
+    + fmt::Debug
+    + fmt::Display
+    + Zero
+    + CheckedAdd
+    + CheckedSub
+    + CheckedMul
+    + CheckedDiv
 {
     /// Signed exact type used while evaluating linear invariants.
     type SignedMeasure: Clone + Eq + fmt::Debug + fmt::Display + Zero + CheckedAdd;
@@ -117,6 +127,12 @@ where
     pub fn checked_mul(&self, rhs: &Self) -> Option<Self> {
         self.0
             .checked_mul(&rhs.0)
+            .and_then(|value| Self::try_from_scalar(value).ok())
+    }
+
+    pub fn checked_div(&self, rhs: &Self) -> Option<Self> {
+        self.0
+            .checked_div(&rhs.0)
             .and_then(|value| Self::try_from_scalar(value).ok())
     }
 }

@@ -13,6 +13,8 @@ pub struct Exchange<RateId, Role, AccountId, N = u64> {
     rate: RateId,
     bindings: BTreeMap<Role, AccountId>,
     units: Quantity<N>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    parameters: BTreeMap<String, Quantity<N>>,
 }
 
 impl<RateId, Role, AccountId, N> Exchange<RateId, Role, AccountId, N>
@@ -24,11 +26,22 @@ where
             rate,
             bindings: BTreeMap::new(),
             units,
+            parameters: BTreeMap::new(),
         }
     }
 
     pub fn bind(mut self, role: Role, account: AccountId) -> Self {
         self.bindings.insert(role, account);
+        self
+    }
+
+    /// Supplies a named exact quantity to a state-evaluated rate law.
+    ///
+    /// Parameters belong to the exchange proposal and are interpreted only by
+    /// the bound rate. A common example is an AMM caller's `minimum_output`
+    /// protection. Unknown and missing parameters are rejected by the economy.
+    pub fn parameter(mut self, name: impl Into<String>, value: Quantity<N>) -> Self {
+        self.parameters.insert(name.into(), value);
         self
     }
 
@@ -42,6 +55,10 @@ where
 
     pub fn units(&self) -> &Quantity<N> {
         &self.units
+    }
+
+    pub fn parameters(&self) -> &BTreeMap<String, Quantity<N>> {
+        &self.parameters
     }
 }
 

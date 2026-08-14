@@ -33,24 +33,24 @@ they bypass the example's trusted action helper.
 
 ## Conformance matrix
 
-| Capability | Maze | Sokoban | Exact cover | Workshop | Job shop | Rescue | Bridge | Marketplace | Logistics | Connect Four | Mission | Perishables | Work League |
-| --- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| Multi-account atomic rewrite | ✓ | ✓ |  |  | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| Preserved facts/catalysts | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| Declared invariants | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |  |
-| Resource objective | ✓ |  |  | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |  | ✓ | ✓ | ✓ |
-| Exact Pareto front | ✓ |  |  | ✓ | ✓ |  | ✓ | ✓ |  |  |  | ✓ |  |
-| Approximate or derived Pareto comparison |  |  |  |  |  | ✓ |  |  | ✓ |  | ✓ |  | ✓ |
-| Infeasible instance |  | ✓ | ✓ |  | ✓ |  |  | ✓ | ✓ |  | ✓ | ✓ |  |
-| Specialized proposer |  |  | Algorithm X |  | Branch optimizer | Scenario/MC evaluator | Auction | Assessment clearing | Monte Carlo/MCTS | MCTS/minimax oracle | ISMCTS/scenario evaluator | Event agenda/index | Competing seeded policies |
-| Generic algorithm | BFS/A*/Dijkstra/Pareto | BFS | BFS | BFS/best-first/Pareto | Best-first/Pareto | Rollout/MC/Pareto | BFS/Pareto | Pareto | Rollout/MC/Pareto | MCTS | ISMCTS/Rollout/MC/Pareto/RL | Pareto | Replay-derived vector comparison |
-| Hidden or stochastic state |  |  |  |  |  | ✓ |  |  | ✓ |  | ✓ |  | ✓ |
-| Multi-agent resolution |  |  |  |  |  |  | ✓ | ✓ |  | ✓ | ✓ |  | ✓ |
-| Long-horizon trajectory |  |  |  |  |  |  |  |  | ✓ | ✓ |  | ✓ | ✓ |
-| Per-step leaderboards |  |  |  |  |  |  |  |  |  |  |  |  | ✓ |
-| Learning trajectory |  |  |  |  |  |  |  |  |  |  | ✓ |  |  |
-| Observation-scoped tree |  |  |  |  |  |  |  |  |  |  | ✓ |  |  |
-| Deterministic replay test | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Capability | Maze | Sokoban | Exact cover | Workshop | Job shop | Rescue | Bridge | Marketplace | Logistics | Connect Four | Mission | Perishables | Work League | Living Market |
+| --- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| Multi-account atomic rewrite | ✓ | ✓ |  |  | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Preserved facts/catalysts | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Declared invariants | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |  | ✓ |
+| Resource objective | ✓ |  |  | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |  | ✓ | ✓ | ✓ | ✓ |
+| Exact Pareto front | ✓ |  |  | ✓ | ✓ |  | ✓ | ✓ |  |  |  | ✓ |  |  |
+| Approximate or derived Pareto comparison |  |  |  |  |  | ✓ |  |  | ✓ |  | ✓ |  | ✓ |  |
+| Infeasible instance |  | ✓ | ✓ |  | ✓ |  |  | ✓ | ✓ |  | ✓ | ✓ |  | ✓ |
+| Specialized proposer |  |  | Algorithm X |  | Branch optimizer | Scenario/MC evaluator | Auction | Assessment clearing | Monte Carlo/MCTS | MCTS/minimax oracle | ISMCTS/scenario evaluator | Event agenda/index | Competing seeded policies | Seeded actors/Shapley |
+| Generic algorithm | BFS/A*/Dijkstra/Pareto | BFS | BFS | BFS/best-first/Pareto | Best-first/Pareto | Rollout/MC/Pareto | BFS/Pareto | Pareto | Rollout/MC/Pareto | MCTS | ISMCTS/Rollout/MC/Pareto/RL | Pareto | Replay-derived vector comparison | Exact coalition replay |
+| Hidden or stochastic state |  |  |  |  |  | ✓ |  |  | ✓ |  | ✓ |  | ✓ |  |
+| Multi-agent resolution |  |  |  |  |  |  | ✓ | ✓ |  | ✓ | ✓ |  | ✓ | ✓ |
+| Long-horizon trajectory |  |  |  |  |  |  |  |  | ✓ | ✓ |  | ✓ | ✓ | ✓ |
+| Per-step leaderboards |  |  |  |  |  |  |  |  |  |  |  |  | ✓ | ✓ |
+| Learning trajectory |  |  |  |  |  |  |  |  |  |  | ✓ |  |  |  |
+| Observation-scoped tree |  |  |  |  |  |  |  |  |  |  | ✓ |  |  |  |
+| Deterministic replay test | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 
 ## Runnable examples
 
@@ -66,6 +66,7 @@ cargo run -p axionomy-problems --example workshop
 cargo run -p axionomy-problems --example scheduling
 cargo run -p axionomy-problems --example rescue
 cargo run -p axionomy-problems --example bridge
+cargo run -p axionomy-problems --example amm
 cargo run -p axionomy-problems --example marketplace
 cargo run -p axionomy-problems --example logistics
 cargo run -p axionomy-problems --example connect_four
@@ -117,6 +118,7 @@ catalog, so those two public explanations must change together:
 | Job shop | Six precedence-constrained operations across three machines and 18 capacity slots |
 | Rescue | Four hidden sites, 32 encoded Nature scenarios, noisy sensing, contact, and return evacuation |
 | Bridge | Two consecutive auctions/allocations with escrow, recharge, atomic round reset, and fairness tradeoffs |
+| Living Market | Eight actors, exact nonlinear AMM laws, real needs and obligations, liquidity changes, information, a demand shock, internal supply response, three replayable realities, and 128 exact actor coalitions |
 | Marketplace | Four coupled orders across 14 accounts with shared budgets, inventory, shipping capacity, taxes, and commissions |
 | Logistics | Four deliveries, recurrent weather and breakdowns, refueling/repair loops, up to 53 accepted transitions, Monte Carlo, and MCTS |
 | Connect Four | Standard 7×6 board and 69 four-cell win certificates; 226 concrete rates replace the old 1,282-rate 4×4 projection |
@@ -843,8 +845,56 @@ replayed snapshot.
 - Live frame publication without moving transport state into the economy.
 - Shared URLs that restore a precise problem, outcome, replay step, and
   leaderboard on both a server and static GitHub Pages.
-- Concrete-rate expansion pressure that strengthens the case for future typed
-  parameterized rate schemas without prematurely changing kernel semantics.
+- Concrete-rate expansion pressure that keeps the new exact scalar
+  parameter/law schema intentionally narrower than a general callback system.
+
+## 14. Living Market AMM
+
+Source: `crates/axionomy-problems/src/amm.rs`
+
+### Specification
+
+Energy and settlement credit trade through a constant-product pool. The
+founding reserve ratio is only an opening hypothesis: a generator supplies
+energy, a factory and household buy it to satisfy encoded needs, an informed
+speculator and demand whale buy for different reasons, an adaptive provider
+changes market depth, and an internal arbitrageur sells into the resulting
+scarcity. Credit remains useful because it settles encoded obligations;
+energy remains useful because consuming it produces goal and utility assets.
+There is no external market, stablecoin peg, or oracle.
+
+Every swap is an exact state-evaluated rate law. The kernel reads pre-exchange
+reserves, evaluates integer floor division with a 0.3% fee, checks the caller's
+minimum output, applies both reserve and trader deltas atomically, and emits a
+replayable receipt. Proportional liquidity deposits preserve price while
+changing depth. Withdrawals burn shares against exact pre-state ownership.
+
+### Acceptance laws
+
+- Independent `u128` quotes agree with kernel-computed swap receipts.
+- Asset, energy lifecycle, credit, liquidity-share, actor-goal, and information
+  invariants hold across every replay.
+- Constant product never decreases during a swap and round trips cannot create
+  credit.
+- Quotes are monotone in input and remain strictly below the output reserve.
+- Market Day reaches the factory, household, generator, and information goals.
+- The no-whale and thin-liquidity counterfactuals produce different discovered
+  prices without changing the AMM law.
+- Direct per-actor price changes sum exactly to total reserve-price movement.
+- Exact Shapley allocation replays all 128 coalitions of the seven active price
+  actors and sums exactly to the full counterfactual price difference.
+- Studio price history, reserve curve, actors, rule expressions, rejected
+  slippage probes, and leaderboards derive only from replay evidence.
+
+### API pressure
+
+- Serializable state-dependent rates without opaque domain callbacks.
+- Exact named exchange parameters and authoritative inequality conditions.
+- Nonlinear effects while retaining assets, accounts, rates, and exchanges as
+  the only semantic primitives.
+- Causal attribution through isolated replay forks rather than external
+  analytics state.
+- A dedicated market surface that remains a projection of Rust-owned truth.
 
 ## Cross-problem acceptance tests
 
@@ -905,7 +955,7 @@ cargo test --workspace --all-targets --all-features
 The benchmarks support the generalized kernel, but they also show its next
 limits clearly:
 
-1. Scheduling and stochastic outcomes need typed parameterized rate schemas to
+1. Scheduling and stochastic outcomes need richer typed parameter schemas to
    avoid eager concrete expansion.
 2. Solvers need a standard finite binding enumerator derived from schemas and
    account capabilities.
@@ -926,5 +976,5 @@ limits clearly:
    or domain-proven pruning; approximate epsilon dominance must never be
    mislabeled as exhaustive Pareto truth.
 
-Any future abstraction must continue to pass all thirteen problems without
+Any future abstraction must continue to pass all fourteen problems without
 moving authoritative meaning into solver callbacks or an external world.

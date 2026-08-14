@@ -645,7 +645,11 @@
           "roles_must_differ",
           "missing_account",
           "zero_units",
+          "missing_parameter",
+          "unknown_parameter",
           "rate_overflow",
+          "rate_law_evaluation",
+          "rate_condition_failed",
           "infeasible",
           "balance_overflow",
           "invariant_overflow",
@@ -761,6 +765,25 @@
           "replay_derived_leaderboards"
         ]
       },
+      "ComputedRateAmountView": {
+        "type": "object",
+        "properties": {
+          "asset": {
+            "$ref": "#/components/schemas/ViewId"
+          },
+          "quantity": {
+            "type": "string"
+          },
+          "role": {
+            "$ref": "#/components/schemas/ViewId"
+          }
+        },
+        "required": [
+          "role",
+          "asset",
+          "quantity"
+        ]
+      },
       "ErrorResponse": {
         "type": "object",
         "properties": {
@@ -823,6 +846,21 @@
           "after"
         ]
       },
+      "ExchangeParameterView": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "value": {
+            "$ref": "#/components/schemas/ExactQuantity"
+          }
+        },
+        "required": [
+          "name",
+          "value"
+        ]
+      },
       "ExchangeView": {
         "type": "object",
         "properties": {
@@ -830,6 +868,12 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/RoleBindingView"
+            }
+          },
+          "parameters": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ExchangeParameterView"
             }
           },
           "rate": {
@@ -1219,6 +1263,123 @@
           "direction"
         ]
       },
+      "MarketActorView": {
+        "description": "One participant positioned around a market pool. Balances and status are\nreplay-derived presentation data linked back to the represented account.",
+        "type": "object",
+        "properties": {
+          "account": {
+            "type": "string"
+          },
+          "credit": {
+            "$ref": "#/components/schemas/ExactQuantity"
+          },
+          "energy": {
+            "$ref": "#/components/schemas/ExactQuantity"
+          },
+          "glyph": {
+            "$ref": "#/components/schemas/SceneGlyphView"
+          },
+          "id": {
+            "$ref": "#/components/schemas/ViewId"
+          },
+          "liquidity": {
+            "$ref": "#/components/schemas/ExactQuantity"
+          },
+          "status": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "tone": {
+            "$ref": "#/components/schemas/SceneToneView"
+          },
+          "utility": {
+            "$ref": "#/components/schemas/ExactQuantity"
+          },
+          "x": {
+            "type": "number",
+            "format": "double"
+          },
+          "y": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "required": [
+          "id",
+          "account",
+          "glyph",
+          "tone",
+          "x",
+          "y",
+          "energy",
+          "credit",
+          "liquidity",
+          "utility"
+        ]
+      },
+      "MarketPoolView": {
+        "description": "One constant-product pool projected from an authoritative replay snapshot.\nValues remain exact text so renderers cannot silently round economic state.",
+        "type": "object",
+        "properties": {
+          "account": {
+            "type": "string"
+          },
+          "base_asset": {
+            "$ref": "#/components/schemas/ViewId"
+          },
+          "base_reserve": {
+            "$ref": "#/components/schemas/ExactQuantity"
+          },
+          "fee_denominator": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          },
+          "fee_numerator": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          },
+          "id": {
+            "$ref": "#/components/schemas/ViewId"
+          },
+          "issued_liquidity": {
+            "$ref": "#/components/schemas/ExactQuantity"
+          },
+          "price_milli": {
+            "description": "Quote per base, scaled by 1,000.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ExactQuantity"
+              }
+            ]
+          },
+          "product": {
+            "$ref": "#/components/schemas/ExactQuantity"
+          },
+          "quote_asset": {
+            "$ref": "#/components/schemas/ViewId"
+          },
+          "quote_reserve": {
+            "$ref": "#/components/schemas/ExactQuantity"
+          }
+        },
+        "required": [
+          "id",
+          "base_asset",
+          "quote_asset",
+          "base_reserve",
+          "quote_reserve",
+          "price_milli",
+          "product",
+          "issued_liquidity",
+          "fee_numerator",
+          "fee_denominator",
+          "account"
+        ]
+      },
       "MatrixCellView": {
         "type": "object",
         "properties": {
@@ -1521,6 +1682,29 @@
           "assessment"
         ]
       },
+      "RateConditionView": {
+        "type": "object",
+        "properties": {
+          "comparison": {
+            "type": "string"
+          },
+          "left": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "right": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "left",
+          "comparison",
+          "right"
+        ]
+      },
       "RateRoleView": {
         "description": "A rate role's complete consume/produce/preserve contract.",
         "type": "object",
@@ -1558,6 +1742,30 @@
         "description": "One immutable transition rule in the closed model.",
         "type": "object",
         "properties": {
+          "computed_consumed": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ComputedRateAmountView"
+            }
+          },
+          "computed_preserved": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ComputedRateAmountView"
+            }
+          },
+          "computed_produced": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ComputedRateAmountView"
+            }
+          },
+          "conditions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RateConditionView"
+            }
+          },
           "distinct_roles": {
             "type": "array",
             "items": {
@@ -2347,6 +2555,29 @@
               "kind",
               "lanes",
               "spans"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "actors": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/MarketActorView"
+                }
+              },
+              "kind": {
+                "type": "string",
+                "const": "market"
+              },
+              "pool": {
+                "$ref": "#/components/schemas/MarketPoolView"
+              }
+            },
+            "required": [
+              "kind",
+              "pool",
+              "actors"
             ]
           }
         ]

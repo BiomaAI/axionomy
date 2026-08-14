@@ -1,6 +1,6 @@
 use crate::{
     Account, AccountDelta, AccountError, Basket, Exchange, LinearInvariant, Quantity,
-    QuantityScalar, Rate, Receipt, Trace,
+    QuantityComparison, QuantityExpression, QuantityScalar, Rate, Receipt, Trace,
 };
 use indexmap::IndexMap;
 use schemars::{JsonSchema, Schema, SchemaGenerator};
@@ -545,6 +545,7 @@ where
                     assets.extend(basket.iter().map(|(asset, _)| asset));
                 }
             }
+            assets.extend(rate.computed_asset_keys());
         }
         for invariant in self.invariants.iter() {
             assets.extend(invariant.weights().map(|(asset, _)| asset));
@@ -711,6 +712,20 @@ where
                 issues.push(ApplyError::UnknownBinding { role: role.clone() });
             }
         }
+
+        let parameter_names = rate.parameter_names();
+        for name in &parameter_names {
+            if !exchange.parameters().contains_key(*name) {
+                issues.push(ApplyError::MissingParameter {
+                    name: (*name).to_owned(),
+                });
+            }
+        }
+        for name in exchange.parameters().keys() {
+            if !parameter_names.contains(name.as_str()) {
+                issues.push(ApplyError::UnknownParameter { name: name.clone() });
+            }
+        }
         for (left, right) in rate.distinct_roles() {
             if let (Some(left_account), Some(right_account)) = (
                 exchange.bindings().get(left),
@@ -736,6 +751,38 @@ where
 
         if !issues.is_empty() {
             return invalid_analysis(issues);
+        }
+
+        for condition in rate.conditions() {
+            let left = match evaluate_expression(condition.left(), exchange, &self.accounts) {
+                Ok(value) => value,
+                Err(message) => {
+                    return invalid_analysis(vec![ApplyError::RateLawEvaluation {
+                        rate: exchange.rate().clone(),
+                        message,
+                    }]);
+                }
+            };
+            let right = match evaluate_expression(condition.right(), exchange, &self.accounts) {
+                Ok(value) => value,
+                Err(message) => {
+                    return invalid_analysis(vec![ApplyError::RateLawEvaluation {
+                        rate: exchange.rate().clone(),
+                        message,
+                    }]);
+                }
+            };
+            let satisfied = match condition.comparison() {
+                QuantityComparison::Equal => left == right,
+                QuantityComparison::GreaterThanOrEqual => left >= right,
+                QuantityComparison::LessThanOrEqual => left <= right,
+            };
+            if !satisfied {
+                return invalid_analysis(vec![ApplyError::RateConditionFailed {
+                    rate: exchange.rate().clone(),
+                    condition: condition.name().to_owned(),
+                }]);
+            }
         }
 
         let mut effects: BTreeMap<AccountId, Effect<A, N>> = BTreeMap::new();
@@ -769,6 +816,42 @@ where
                     rate: exchange.rate().clone(),
                     asset,
                 }]);
+            }
+        }
+
+        for (amounts, direction) in [
+            (rate.computed_consumed(), ComputedDirection::Consume),
+            (rate.computed_produced(), ComputedDirection::Produce),
+            (rate.computed_preserved(), ComputedDirection::Preserve),
+        ] {
+            for amount in amounts {
+                let quantity =
+                    match evaluate_expression(amount.quantity(), exchange, &self.accounts) {
+                        Ok(value) => value,
+                        Err(message) => {
+                            return invalid_analysis(vec![ApplyError::RateLawEvaluation {
+                                rate: exchange.rate().clone(),
+                                message,
+                            }]);
+                        }
+                    };
+                let account_id = exchange
+                    .bindings()
+                    .get(amount.role())
+                    .expect("computed rate roles were checked")
+                    .clone();
+                let effect = effects.entry(account_id).or_default();
+                let target = match direction {
+                    ComputedDirection::Consume => &mut effect.consume,
+                    ComputedDirection::Produce => &mut effect.produce,
+                    ComputedDirection::Preserve => &mut effect.preserve,
+                };
+                if merge_quantity(target, amount.asset().clone(), quantity).is_err() {
+                    return invalid_analysis(vec![ApplyError::RateOverflow {
+                        rate: exchange.rate().clone(),
+                        asset: amount.asset().clone(),
+                    }]);
+                }
             }
         }
 
@@ -992,8 +1075,16 @@ where
     MissingAccount { account: AccountId },
     #[error("exchange units must be greater than zero")]
     ZeroUnits,
+    #[error("exchange is missing a required rate parameter")]
+    MissingParameter { name: String },
+    #[error("exchange contains an unknown rate parameter")]
+    UnknownParameter { name: String },
     #[error("scaled rate overflow")]
     RateOverflow { rate: RateId, asset: A },
+    #[error("state-evaluated rate law could not be evaluated: {message}")]
+    RateLawEvaluation { rate: RateId, message: String },
+    #[error("state-evaluated rate condition failed")]
+    RateConditionFailed { rate: RateId, condition: String },
     #[error("exchange is infeasible")]
     Infeasible {
         shortfalls: Vec<AccountShortfall<AccountId, A, N>>,
@@ -1015,6 +1106,13 @@ struct Effect<A, N> {
     consume: Basket<A, N>,
     produce: Basket<A, N>,
     preserve: Basket<A, N>,
+}
+
+#[derive(Debug, Clone, Copy)]
+enum ComputedDirection {
+    Consume,
+    Produce,
+    Preserve,
 }
 
 impl<A, N> Default for Effect<A, N> {
@@ -1048,6 +1146,114 @@ where
 {
     let scaled = source.checked_scale(units)?;
     target.checked_add(&scaled)
+}
+
+fn merge_quantity<A, N>(target: &mut Basket<A, N>, asset: A, quantity: Quantity<N>) -> Result<(), A>
+where
+    A: Clone + Eq + Hash,
+    N: QuantityScalar,
+{
+    let Some(total) = target.quantity(&asset).checked_add(&quantity) else {
+        return Err(asset);
+    };
+    target.insert(asset, total);
+    Ok(())
+}
+
+fn evaluate_expression<AccountId, A, RateId, Role, N>(
+    expression: &QuantityExpression<Role, A, N>,
+    exchange: &Exchange<RateId, Role, AccountId, N>,
+    accounts: &IndexMap<AccountId, Arc<Account<A, N>>>,
+) -> Result<Quantity<N>, String>
+where
+    AccountId: Eq + Hash,
+    A: Eq + Hash,
+    Role: Ord,
+    N: QuantityScalar,
+{
+    match expression {
+        QuantityExpression::Constant { value } => Ok(value.clone()),
+        QuantityExpression::Units => Ok(exchange.units().clone()),
+        QuantityExpression::Parameter { name } => exchange
+            .parameters()
+            .get(name)
+            .cloned()
+            .ok_or_else(|| format!("missing parameter `{name}`")),
+        QuantityExpression::Balance { role, asset } => {
+            let account_id = exchange
+                .bindings()
+                .get(role)
+                .ok_or_else(|| "expression references an unbound role".to_owned())?;
+            let account = accounts
+                .get(account_id)
+                .ok_or_else(|| "expression references a missing account".to_owned())?;
+            Ok(account.balance(asset))
+        }
+        QuantityExpression::Add { left, right } => evaluate_binary(
+            left,
+            right,
+            exchange,
+            accounts,
+            "addition overflow",
+            |left, right| left.checked_add(right),
+        ),
+        QuantityExpression::Subtract { left, right } => evaluate_binary(
+            left,
+            right,
+            exchange,
+            accounts,
+            "subtraction underflow",
+            |left, right| left.checked_sub(right),
+        ),
+        QuantityExpression::Multiply { left, right } => evaluate_binary(
+            left,
+            right,
+            exchange,
+            accounts,
+            "multiplication overflow",
+            |left, right| left.checked_mul(right),
+        ),
+        QuantityExpression::DivideFloor {
+            numerator,
+            denominator,
+        } => evaluate_binary(
+            numerator,
+            denominator,
+            exchange,
+            accounts,
+            "division by zero",
+            |left, right| left.checked_div(right),
+        ),
+        QuantityExpression::Minimum { left, right } => {
+            let left = evaluate_expression(left, exchange, accounts)?;
+            let right = evaluate_expression(right, exchange, accounts)?;
+            Ok(std::cmp::min(left, right))
+        }
+        QuantityExpression::Maximum { left, right } => {
+            let left = evaluate_expression(left, exchange, accounts)?;
+            let right = evaluate_expression(right, exchange, accounts)?;
+            Ok(std::cmp::max(left, right))
+        }
+    }
+}
+
+fn evaluate_binary<AccountId, A, RateId, Role, N>(
+    left: &QuantityExpression<Role, A, N>,
+    right: &QuantityExpression<Role, A, N>,
+    exchange: &Exchange<RateId, Role, AccountId, N>,
+    accounts: &IndexMap<AccountId, Arc<Account<A, N>>>,
+    error: &str,
+    operation: impl FnOnce(&Quantity<N>, &Quantity<N>) -> Option<Quantity<N>>,
+) -> Result<Quantity<N>, String>
+where
+    AccountId: Eq + Hash,
+    A: Eq + Hash,
+    Role: Ord,
+    N: QuantityScalar,
+{
+    let left = evaluate_expression(left, exchange, accounts)?;
+    let right = evaluate_expression(right, exchange, accounts)?;
+    operation(&left, &right).ok_or_else(|| error.to_owned())
 }
 
 fn invalid_analysis<AccountId, A, RateId, Role, N>(

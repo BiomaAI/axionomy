@@ -78,6 +78,7 @@ pub(super) fn link_balance(
     entity
 }
 
+mod amm;
 mod bridge;
 mod connect_four;
 mod exact_cover;
@@ -480,6 +481,47 @@ pub(crate) fn catalog() -> Vec<ProblemDescriptor> {
         ),
         problem(
             ProblemCopy {
+                key: "amm",
+                title: "The Living Market",
+                summary: "Watch a closed economy discover its only public price. Production, real needs, beliefs, liquidity, speculation, and internal arbitrage move an exact constant-product AMM with no oracle or outside market.",
+                instances: [
+                    "A compact closed market that exposes every reserve calculation and refusal",
+                    "Eight heterogeneous actors discover value through production, consumption, liquidity, information, and exchange",
+                    "A four-times-deeper economy with proportionally larger flows and the same exact replay guarantees",
+                ],
+            },
+            ProblemFamily::Market,
+            "market_day",
+            &[
+                (
+                    "market_day",
+                    "Endogenous market day",
+                    "The complete closed-economy price-discovery story, including a demand shock and supply response.",
+                    "verified autonomous market replay",
+                ),
+                (
+                    "no_whale",
+                    "Counterfactual: no whale",
+                    "Replay the same economy without its largest buyer and inspect the causal price difference.",
+                    "counterfactual replay",
+                ),
+                (
+                    "thin_liquidity",
+                    "Counterfactual: thin liquidity",
+                    "Withdraw half the founding liquidity before trading and observe amplified price impact.",
+                    "counterfactual replay",
+                ),
+            ],
+            &[
+                Capability::AtomicSettlement,
+                Capability::MultiAccountExchange,
+                Capability::FeasibilityAssessment,
+                Capability::ReplayDerivedLeaderboards,
+                Capability::NonFungibleFacts,
+            ],
+        ),
+        problem(
+            ProblemCopy {
                 key: "marketplace",
                 title: "Multi-party marketplace",
                 summary: "Settle orders across buyers, sellers, carriers, the platform, and tax in one indivisible step. When it fails, you see exactly which account fell short and by how much.",
@@ -806,6 +848,7 @@ pub(crate) fn run(
         "scheduling" => scheduling::build(request, &descriptor),
         "rescue" => rescue::build(request, &descriptor),
         "bridge" => bridge::build(request, &descriptor),
+        "amm" => amm::build(request, &descriptor),
         "marketplace" => marketplace::build(request, &descriptor),
         "logistics" => logistics::build(request, &descriptor, &mut progress),
         "connect_four" => connect_four::build(request, &descriptor, &mut progress),

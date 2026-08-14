@@ -1,7 +1,7 @@
 # axionomy-studio-server
 
 This crate is the native reference backend for Axionomy Studio. It adapts the
-same `axionomy-service` used by CLI and MCP into a thirteen-problem catalog,
+same `axionomy-service` used by CLI and MCP into a fourteen-problem catalog,
 pausable/resumable/cancellable in-memory runs, replay-derived artifacts,
 paginated frames, Server-Sent Events, and an OpenAPI 3.1 contract. It
 intentionally has no database: a run is operational UI state, while a portable
