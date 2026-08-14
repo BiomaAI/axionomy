@@ -80,12 +80,13 @@ function StructureNode({ data }: NodeProps) {
   const state = view.states[0];
   const entity = state ?? view.entity;
   const metrics = view.states.flatMap((item) => item.metrics.map((metric) => `${item.id.label} · ${metric.label}: ${metric.value}${metric.unit ? ` ${metric.unit}` : ""}`)).join(" · ");
-  return <div title={metrics || undefined} className={`rich-node structure-content ${entity ? `tone-${entity.tone}` : ""}`}>
+  const title = [view.label, metrics].filter(Boolean).join(" · ");
+  return <div title={title || undefined} className={`rich-node structure-content ${entity ? `tone-${entity.tone}` : ""}`}>
     {view.handles?.map((handle) => <Handle key={handle.id} id={handle.id} type={handle.type} position={HANDLE_POSITION[handle.side]} style={handleStyle(handle.side, handle.offset)} className="graph-node-handle" isConnectable={false} />)}
     <div className={effectClass(view.effect)}>
       <div className="rich-node-content">
-        {entity && <SceneIcon glyph={entity.glyph} size={25} />}
-        <span>{view.label}</span>
+        {entity && <SceneIcon glyph={entity.glyph} size={21} />}
+        <span className="structure-label">{view.label}</span>
         {state && <small className="structure-state">{entityDetail(state)}</small>}
         {view.states.length > 1 && <small className="structure-state-count">+{view.states.length - 1} linked</small>}
       </div>
@@ -96,14 +97,15 @@ function StructureNode({ data }: NodeProps) {
 function OccupantNode({ data }: NodeProps) {
   const view = data as OccupantNodeData;
   const metrics = view.entity.metrics.map((metric) => `${metric.label}: ${metric.value}${metric.unit ? ` ${metric.unit}` : ""}`).join(" · ");
-  return <div title={metrics || undefined} className={`rich-node tone-${view.entity.tone}`}>
+  const title = [view.entity.id.label, metrics].filter(Boolean).join(" · ");
+  return <div title={title || undefined} className={`rich-node tone-${view.entity.tone}`}>
     {view.entity.anchor.kind === "graph_node" && RELATION_SIDES.map((side) => <Handle key={side} id={`relation-target:${side}`} type="target" position={HANDLE_POSITION[side]} className="relation-handle" isConnectable={false} />)}
     <div className={`rich-node-lifecycle ${view.entering ? "is-entering" : ""} ${view.exiting ? "is-exiting" : ""}`}>
       <div className={effectClass(view.effect)}>
         <div className={`rich-node-content occupant-content ${view.moving ? "is-moving" : ""}`}>
-          <SceneIcon glyph={view.entity.glyph} size={19} />
-          <span>{view.entity.id.label}</span>
-          {view.entity.status && <small>{view.entity.status.replaceAll("_", " ")}</small>}
+          <SceneIcon glyph={view.entity.glyph} size={16} />
+          <span className="occupant-label">{view.entity.id.label}</span>
+          {view.entity.status && <small className="occupant-status">{view.entity.status.replaceAll("_", " ")}</small>}
         </div>
       </div>
     </div>
@@ -256,7 +258,7 @@ type GraphEdgeRoute = { source: string; target: string; sourceHandle: string; ta
 
 const GRAPH_NODE_WIDTH = 88;
 const GRAPH_NODE_HEIGHT = 72;
-const OCCUPANT_WIDTH = 116;
+const OCCUPANT_WIDTH = 132;
 const OCCUPANT_HEIGHT = 42;
 const ATTACHMENT_WIDTH = 168;
 

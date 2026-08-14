@@ -232,24 +232,25 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 .graph-scene { flex: 1; min-height: 0; position: relative; background: radial-gradient(circle at 50% 44%, #202126 0, #131315 70%); }
 /* The map has a strict visual grammar: structures define topology; occupants
    dock to it; attachments hang from it; state is folded into its owner. */
-.react-flow__node.structure-node { background: var(--surface-3); color: var(--text); border: 1px solid #595862; border-radius: 50%; width: 88px; min-height: 72px; display: grid; place-items: center; padding: 8px; text-align: center; font: 500 10px var(--mono); box-shadow: 0 8px 24px #0009, inset 0 1px #ffffff0b; z-index: 2 !important; }
+.react-flow__node.structure-node { box-sizing: border-box; background: var(--surface-3); color: var(--text); border: 1px solid #595862; border-radius: 50%; width: 88px; min-height: 72px; display: grid; place-items: center; padding: 6px; text-align: center; font: 500 8px/1.12 var(--mono); box-shadow: 0 8px 24px #0009, inset 0 1px #ffffff0b; z-index: 2 !important; }
 .react-flow__node.structure-node.resource, .react-flow__node.structure-node.facility, .react-flow__node.structure-node.buyer, .react-flow__node.structure-node.seller, .react-flow__node.structure-node.carrier { border-radius: 7px; }
 .react-flow__node.structure-node.goal { border-style: double; border-width: 3px; }
 .rich-node, .rich-node-lifecycle, .rich-node-effect { width: 100%; display: grid; place-items: center; }
-.rich-node-content { width: 100%; display: grid; place-items: center; gap: 3px; }
+.rich-node-content { width: 100%; min-width: 0; display: grid; place-items: center; gap: 2px; }
 .rich-node-content svg { color: var(--steel); }
-.rich-node-content small { color: var(--muted); max-width: 92px; font-size: 6px; text-transform: uppercase; }
-.structure-content .rich-node-content > span { max-width: 76px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rich-node-content small { color: var(--muted); max-width: 76px; overflow: hidden; font: 5.5px/1.1 var(--mono); text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
+.structure-label { max-width: 76px; overflow: hidden; display: -webkit-box; font: 500 8px/1.12 var(--mono); overflow-wrap: anywhere; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 .structure-state { color: var(--brass) !important; font-variant-numeric: tabular-nums; line-height: 1.15; }
 .structure-state-count { opacity: .8; }
 .graph-node-handle { width: 5px; height: 5px; min-width: 5px; min-height: 5px; border: 1px solid color-mix(in srgb, var(--accent) 72%, var(--line)); background: var(--surface-3); opacity: .42; transition: opacity .2s ease, background .2s ease; }
 .react-flow__node:hover .graph-node-handle, .react-flow__node.current .graph-node-handle { background: var(--accent); opacity: .92; }
-.react-flow__node.occupant-overlay { width: 116px; min-height: 42px; padding: 5px 9px; border: 1px solid color-mix(in srgb, var(--steel) 78%, var(--line)); border-radius: 999px; background: color-mix(in srgb, var(--surface-3) 94%, transparent); color: var(--text); z-index: 5 !important; box-shadow: 0 10px 24px #000b, 0 0 0 1px #ffffff0a; will-change: transform; }
+.react-flow__node.occupant-overlay { box-sizing: border-box; width: 132px; min-height: 42px; padding: 5px 9px; border: 1px solid color-mix(in srgb, var(--steel) 78%, var(--line)); border-radius: 999px; background: color-mix(in srgb, var(--surface-3) 94%, transparent); color: var(--text); font: 500 8px/1.1 var(--mono); z-index: 5 !important; box-shadow: 0 10px 24px #000b, 0 0 0 1px #ffffff0a; will-change: transform; }
 .react-flow__node.occupant-overlay.motion-step, .react-flow__node.attachment-group.motion-step { transition: transform .62s cubic-bezier(.2,.8,.2,1), left .62s cubic-bezier(.2,.8,.2,1), top .62s cubic-bezier(.2,.8,.2,1); }
 .react-flow__node.occupant-overlay.motion-seek, .react-flow__node.attachment-group.motion-seek { transition: none; }
-.occupant-content { grid-auto-flow: column; grid-template-columns: auto minmax(0, 1fr); column-gap: 7px; row-gap: 2px; text-align: left; }
-.occupant-content span { max-width: 76px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.occupant-content small { grid-column: 2; }
+.occupant-content { grid-template-areas: "icon title" "icon status"; grid-template-columns: 16px minmax(0, 1fr); grid-template-rows: auto auto; column-gap: 6px; row-gap: 2px; text-align: left; }
+.occupant-content svg { grid-area: icon; align-self: center; }
+.occupant-label { grid-area: title; width: 100%; min-width: 0; overflow: hidden; font: 500 8px/1.1 var(--mono); text-overflow: ellipsis; white-space: nowrap; }
+.occupant-status { grid-area: status; width: 100%; min-width: 0; max-width: none !important; overflow: hidden; font: 5.5px/1.1 var(--mono) !important; text-overflow: ellipsis; white-space: nowrap; }
 .relation-handle { width: 3px; height: 3px; min-width: 3px; min-height: 3px; border: 0; background: var(--steel); opacity: .65; }
 .react-flow__node.attachment-group { width: 168px; padding: 0; border: 0; background: transparent; color: var(--text); z-index: 4 !important; box-shadow: none; }
 .attachment-collection { width: 100%; border: 1px solid color-mix(in srgb, var(--line-strong) 78%, transparent); border-radius: 6px; background: color-mix(in srgb, var(--surface-3) 94%, transparent); box-shadow: 0 9px 22px #0008; overflow: hidden; }

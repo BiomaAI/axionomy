@@ -223,6 +223,63 @@ test("gives graph semantics depth, distinct shapes, and direction-aware ports", 
   expect(outbound).not.toBe(inbound);
 });
 
+test("keeps graph node titles and metadata in separate readable regions", async ({ page }) => {
+  await page.goto("/?problem=work_league&instance=showcase&strategy=mixed_field&document=work_league%3Amixed_field&view=replay&step=12&seed=17&budget=128");
+
+  const occupants = page.locator(".react-flow__node.occupant-overlay");
+  await expect(occupants.first()).toBeVisible();
+  const occupantLayout = await occupants.evaluateAll((nodes) => {
+    const rect = (element: Element | null) => {
+      if (!element) return null;
+      const box = element.getBoundingClientRect();
+      return { x: box.x, y: box.y, width: box.width, height: box.height };
+    };
+    const intersects = (left: ReturnType<typeof rect>, right: ReturnType<typeof rect>) => Boolean(
+      left && right
+      && left.x < right.x + right.width && left.x + left.width > right.x
+      && left.y < right.y + right.height && left.y + left.height > right.y
+    );
+
+    return nodes.map((node) => {
+      const icon = node.querySelector(".occupant-content > svg");
+      const label = node.querySelector<HTMLElement>(".occupant-label");
+      const status = node.querySelector<HTMLElement>(".occupant-status");
+      const iconBox = rect(icon);
+      const labelBox = rect(label);
+      const statusBox = rect(status);
+      return {
+        label: label?.textContent,
+        labelFont: label ? getComputedStyle(label).fontSize : null,
+        labelClipped: Boolean(label && label.scrollWidth > label.clientWidth + 1),
+        overlaps: intersects(iconBox, labelBox) || intersects(iconBox, statusBox) || intersects(labelBox, statusBox),
+      };
+    });
+  });
+
+  expect(occupantLayout).toHaveLength(4);
+  for (const occupant of occupantLayout) {
+    expect(occupant.labelFont, `${occupant.label} must use diagram typography`).toBe("8px");
+    expect(occupant.labelClipped, `${occupant.label} must remain readable`).toBe(false);
+    expect(occupant.overlaps, `${occupant.label} content regions must not overlap`).toBe(false);
+  }
+
+  await page.goto("/?problem=marketplace&instance=showcase&strategy=market_clearing&document=marketplace%3Amarket_clearing&view=replay&step=4&seed=17&budget=128");
+  const labels = page.locator(".structure-label");
+  await expect(labels.first()).toBeVisible();
+  const structureLabels = await labels.evaluateAll((labels) => labels.map((label) => {
+    const element = label as HTMLElement;
+    return {
+      label: element.textContent,
+      font: getComputedStyle(element).fontSize,
+      clipped: element.scrollWidth > element.clientWidth + 1 || element.scrollHeight > element.clientHeight + 1,
+    };
+  }));
+  for (const structure of structureLabels) {
+    expect(structure.font, `${structure.label} must use diagram typography`).toBe("8px");
+    expect(structure.clipped, `${structure.label} must fit its node`).toBe(false);
+  }
+});
+
 test("uses the generic motion compositor across every graph problem", async ({ page }) => {
   test.setTimeout(60_000);
   const browserErrors: string[] = [];
