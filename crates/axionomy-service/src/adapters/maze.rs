@@ -202,7 +202,7 @@ fn zero_heuristic(_: &World) -> u64 {
 
 fn expansion_label(expansion: MazeExpansion) -> String {
     format!(
-        "Expanded {} · {} · gate {} · E {} · T {}",
+        "Expanded {} · {} · gate {} · E left {} · T left {}",
         expansion.node.studio_label(),
         if expansion.has_key {
             "carrying key"
@@ -249,6 +249,53 @@ fn saved_graph_observation(
     }
 }
 
+fn solution_label(expansion: MazeExpansion) -> String {
+    format!(
+        "Solution accepted at {} · E left {} · T left {}",
+        expansion.node.studio_label(),
+        expansion.energy,
+        expansion.time,
+    )
+}
+
+fn saved_solution_observation(
+    phase: &str,
+    state: axionomy_search::GraphSearchProgress,
+    expansion: MazeExpansion,
+) -> SearchObservationView {
+    SearchObservationView {
+        sequence: state.expanded() as u64 + 1,
+        phase: phase.into(),
+        algorithm: phase.trim_end_matches("_solution").into(),
+        kind: SearchObservationKindView::Incumbent,
+        label: solution_label(expansion),
+        completed: state.expanded() as u64,
+        total: state.expanded() as u64,
+        subjects: vec![expansion_subject(expansion)],
+        metrics: vec![
+            visual_metric("expanded", "States expanded", state.expanded(), None),
+            visual_metric("generated", "States generated", state.generated(), None),
+            visual_metric("visited", "States visited", state.visited(), None),
+            visual_metric(
+                "solution_cost",
+                "Solution cost",
+                state.solution_depth().unwrap_or_default(),
+                None,
+            ),
+        ],
+    }
+}
+
+fn solved_expansion(
+    initial: &World,
+    trace: &axionomy::Trace<RateId, Role, AccountId>,
+) -> Result<MazeExpansion, ServiceError> {
+    let solved = initial
+        .replayed(trace)
+        .map_err(|error| problem_error("maze", error))?;
+    capture_expansion(&solved).ok_or_else(|| problem_error("maze", "solution lost its room"))
+}
+
 fn retain_observation(
     observations: &mut Vec<SearchObservationView>,
     observation: SearchObservationView,
@@ -283,6 +330,12 @@ fn saved_graph_observations(
                 retain_observation(&mut observations, observation);
             }
         }
+        if let Some(solution) = session.solution() {
+            let expansion = solved_expansion(initial, solution.trace())?;
+            let observation =
+                saved_solution_observation("breadth_first_solution", session.progress(), expansion);
+            retain_observation(&mut observations, observation);
+        }
     } else {
         let capture = std::rc::Rc::clone(&expanded);
         let (phase, heuristic): (&str, fn(&World) -> u64) = if strategy == "dijkstra" {
@@ -307,6 +360,19 @@ fn saved_graph_observations(
                 let observation = saved_graph_observation(phase, session.progress(), expansion);
                 retain_observation(&mut observations, observation);
             }
+        }
+        if let Some(solution) = session.solution() {
+            let expansion = solved_expansion(initial, solution.trace())?;
+            let observation = saved_solution_observation(
+                if strategy == "dijkstra" {
+                    "dijkstra_solution"
+                } else {
+                    "a_star_solution"
+                },
+                session.progress(),
+                expansion,
+            );
+            retain_observation(&mut observations, observation);
         }
     }
     if observations.is_empty() {
@@ -367,6 +433,21 @@ fn emit_expansion(
     progress.ensure()
 }
 
+fn emit_solution(
+    phase: &str,
+    state: axionomy_search::GraphSearchProgress,
+    expansion: MazeExpansion,
+    progress: &mut ProgressSink<'_>,
+) -> Result<(), ServiceError> {
+    let _ = progress.graph_with_subjects(
+        phase,
+        state,
+        solution_label(expansion),
+        [expansion_subject(expansion)],
+    );
+    progress.ensure()
+}
+
 fn observe_selected_search(
     initial: &World,
     strategy: &str,
@@ -393,6 +474,14 @@ fn observe_selected_search(
                     progress,
                 )?;
             }
+        }
+        if let Some(solution) = session.solution() {
+            emit_solution(
+                "breadth_first_solution",
+                session.progress(),
+                solved_expansion(initial, solution.trace())?,
+                progress,
+            )?;
         }
     } else {
         let capture = std::rc::Rc::clone(&expanded);
@@ -426,6 +515,18 @@ fn observe_selected_search(
                     progress,
                 )?;
             }
+        }
+        if let Some(solution) = session.solution() {
+            emit_solution(
+                if strategy == "dijkstra" {
+                    "dijkstra_solution"
+                } else {
+                    "a_star_solution"
+                },
+                session.progress(),
+                solved_expansion(initial, solution.trace())?,
+                progress,
+            )?;
         }
     }
     Ok(())
@@ -604,9 +705,9 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 source: node_key(*from),
                 target: node_key(*to),
                 label: Some(if *needs_open_door {
-                    format!("{energy} energy · gate must be open")
+                    format!("{energy} E · gate")
                 } else {
-                    format!("{energy} energy")
+                    format!("{energy} E")
                 }),
                 classes: if *needs_open_door
                     && world.balance(&AccountId::World, &Asset::Open).is_zero()
@@ -711,7 +812,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         },
     );
     let mut scene = Scene::graph(
-        "The Vault District — routes, key, and gate",
+        "The Vault District — find the key, open the gate, reach the exit",
         graph_nodes,
         graph_edges,
         focus.map(node_key),
@@ -801,12 +902,22 @@ fn decorate_route_evidence(
     document: &mut ViewDocument,
     trace: &axionomy::Trace<RateId, Role, AccountId>,
 ) {
+    let planned = trace
+        .exchanges()
+        .iter()
+        .filter_map(|exchange| route_id(exchange.rate()))
+        .collect::<std::collections::BTreeSet<_>>();
     let mut traversed = std::collections::BTreeSet::new();
-    decorate_scene_paths(document.initial.scene.as_mut(), &traversed, None);
+    decorate_scene_paths(document.initial.scene.as_mut(), &planned, &traversed, None);
     for (frame, exchange) in document.frames.iter_mut().zip(trace.exchanges()) {
-        decorate_scene_paths(frame.before.scene.as_mut(), &traversed, None);
+        decorate_scene_paths(frame.before.scene.as_mut(), &planned, &traversed, None);
         let current = route_id(exchange.rate());
-        decorate_scene_paths(frame.after.scene.as_mut(), &traversed, current.as_deref());
+        decorate_scene_paths(
+            frame.after.scene.as_mut(),
+            &planned,
+            &traversed,
+            current.as_deref(),
+        );
         if let Some(current) = current {
             traversed.insert(current);
         }
@@ -815,18 +926,50 @@ fn decorate_route_evidence(
 
 fn decorate_scene_paths(
     scene: Option<&mut Scene>,
+    planned: &std::collections::BTreeSet<String>,
     traversed: &std::collections::BTreeSet<String>,
     current: Option<&str>,
 ) {
     let Some(scene) = scene else { return };
+    scene.legend.retain(|entry| {
+        entry.label != "Planned next"
+            && entry.label != "Traversed route"
+            && entry.label != "Current move"
+    });
+    let remaining = planned
+        .iter()
+        .any(|path| !traversed.contains(path) && current != Some(path.as_str()));
+    if remaining {
+        scene.legend.push(SceneLegendView {
+            label: "Planned next".into(),
+            glyph: SceneGlyphView::Move,
+            tone: SceneToneView::Warning,
+        });
+    }
+    if !traversed.is_empty() {
+        scene.legend.push(SceneLegendView {
+            label: "Traversed route".into(),
+            glyph: SceneGlyphView::Move,
+            tone: SceneToneView::Active,
+        });
+    }
+    if current.is_some() {
+        scene.legend.push(SceneLegendView {
+            label: "Current move".into(),
+            glyph: SceneGlyphView::Move,
+            tone: SceneToneView::Success,
+        });
+    }
     if let SceneSurfaceView::Graph { edges, .. } = &mut scene.surface {
         for edge in edges {
             edge.classes
-                .retain(|class| class != "current" && class != "traversed");
+                .retain(|class| class != "current" && class != "traversed" && class != "candidate");
             if current == Some(edge.id.as_str()) {
                 edge.classes.push("current".into());
             } else if traversed.contains(&edge.id) {
                 edge.classes.push("traversed".into());
+            } else if planned.contains(&edge.id) {
+                edge.classes.push("candidate".into());
             }
         }
     }
@@ -835,6 +978,8 @@ fn decorate_scene_paths(
             ScenePathStatusView::Current
         } else if traversed.contains(&path.id) {
             ScenePathStatusView::Traversed
+        } else if planned.contains(&path.id) {
+            ScenePathStatusView::Candidate
         } else if matches!(path.status, ScenePathStatusView::Blocked) {
             ScenePathStatusView::Blocked
         } else {

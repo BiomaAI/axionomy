@@ -776,7 +776,10 @@ build their own outer run service without changing the core.
 `SearchObservationView` is the presentation lowering of disposable solver
 state. It records phase, algorithm, evidence kind, bounded progress, and exact
 metrics without turning a queue, rollout tree, frontier, or belief cache into
-economic truth. The service sends observations through a bounded observer
+economic truth. An observation may also name stable Rust-owned scene subjects,
+allowing a generic viewer to emphasize the expanded room, candidate, agent, or
+other projected entity without learning the domain ontology in TypeScript.
+The service sends observations through a bounded observer
 channel and retains at most its configured history in every completed
 document. Live execution and a saved artifact therefore expose the same
 evidence surface; transport speed does not decide whether a run is explainable.
@@ -822,7 +825,11 @@ contents change.
 Solve evidence and trace playback are deliberately distinct controls. `Run`
 creates a new artifact; the transport controls only replay its accepted
 exchanges. The Solve surface exposes live or retained phase, rollout, tree,
-frontier, and artifact observations. An active run immediately exposes a
+frontier, incumbent, and artifact observations. When observations identify
+scene subjects, Studio derives a scrubbable exploration map from the same
+Rust-owned initial scene; accumulated subjects show explored structures and
+the selected checkpoint shows the current expansion. It never fabricates an
+edge between consecutive expansions. An active run immediately exposes a
 spinner, phase message, elapsed time, deterministic request parameters, and
 the latest bounded-work counter.
 Completion leaves a dismissible receipt containing duration and request
@@ -1170,7 +1177,7 @@ problems. Full formal specifications live in [PROBLEMS.md](PROBLEMS.md).
 
 | Problem | What it demonstrates |
 | --- | --- |
-| Key-door maze | A 14-node closed graph, explicit key/lock state, four encoded energy/time routes, exact Pareto front, and different BFS versus A* choices |
+| Key-door maze | A 15-room/24-passage cyclic Showcase, explicit key inventory and gate lifecycle, four exact energy/time tradeoffs, distinct BFS/Dijkstra/A* expansion histories, and a replayed 11-exchange least-energy route |
 | Sokoban | A 9×7 walled warehouse, stable crate identities, atomic three-account rewrites, resumable BFS/A*, and a replayable legal deadlock |
 | Exact cover | An 8-element/12-subset logical constraint surface plus Algorithm X as an untrusted proposal generator |
 | Workshop | Six-chair multi-batch stoichiometric transformation, reusable catalysts, encoded waste/time front, and invariant rejection |

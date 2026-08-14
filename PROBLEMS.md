@@ -110,7 +110,7 @@ catalog, so those two public explanations must change together:
 
 | Problem | Default Showcase pressure |
 | --- | --- |
-| Maze | 14 nodes, 16 directed edges, four energy/time route families, and an eight-transition low-energy plan |
+| Maze | 15 rooms, 24 directed passages, cycles, backtracking, explicit key/gate state, four exact energy/time tradeoffs, and an 11-exchange low-energy plan |
 | Sokoban | 9×7 walled warehouse, 64 accounts, two stable crates, a 15-exchange solution, and a replayable legal deadlock |
 | Exact cover | 8 universe elements, 12 competing subsets, four selections, and an independently proposed Algorithm X trace |
 | Workshop | Six-chair multi-batch target with seven-step fast and four-step efficient extremes |
@@ -140,14 +140,14 @@ Source: `crates/axionomy-problems/src/maze.rs`
 
 ### Specification
 
-The agent starts at `Start` with nine energy and six time. The world owns directed edge
-facts, a key in `KeyRoom`, a locked door, a target at `Exit`, and one encoded
+The Micro agent starts at `Start` with nine energy and six time. The world owns directed edge
+facts, a key in `KeyRoom`, a locked gate, a target at `Exit`, and one encoded
 distance estimate per node.
 
 Two routes exist:
 
 ```text
-Key route:    Start --2--> KeyRoom --2--> Door --2--> Exit
+Key route:    Start --2--> KeyRoom --2--> Gate --2--> Exit
 Detour route: Start --4--> Detour --5--> Exit
 ```
 
@@ -172,6 +172,15 @@ produces `Solved`, leaving no post-terminal moves applicable.
 - Actor/environment role swapping is rejected by encoded requirements.
 - A solved maze has no applicable actions.
 
+The Showcase keeps those laws but expands them into the 15-room Vault
+District: 24 directed passages form cyclic route families with real
+backtracking, the key visibly transfers from the district to the Explorer,
+and the gate can only be unlocked while the Explorer is standing there. Its
+exact frontier contains `(8,11)`, `(11,6)`, `(12,4)`, and `(15,3)`. Dijkstra
+and A* agree on the least-energy result while A* expands materially fewer
+states; Studio retains each algorithm's own expansion history rather than
+relabeling one shared log.
+
 ### API pressure
 
 - Structured graph facts without an external graph state.
@@ -179,6 +188,9 @@ produces `Solved`, leaving no post-terminal moves applicable.
 - Objective and admissible heuristic values encoded as assets.
 - One state graph served by multiple traversal strategies.
 - Exact multi-objective comparison without weighted-sum scalarization.
+- Stable scene subjects for generic search-frontier visualization.
+- Truthful inventory attachment, gate lifecycle, planned route, and replayed
+  traversal without a browser-side maze model.
 
 ## 2. Sokoban
 

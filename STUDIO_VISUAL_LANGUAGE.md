@@ -14,6 +14,7 @@ and honest about what the engine actually proved.
 | Surface | Canonical problem | What it establishes |
 | --- | --- | --- |
 | Graph | **Autonomous Work League** | Topology, mobile agents, attached work queues, shared facilities, relationship lines, dense replay state, and live comparative outcomes |
+| Onboarding graph | **Key-door Maze** | Immediate comprehension, competing routes, solver expansion playback, inventory transfer, a stateful gate, planned/traversed route evidence, and rejected-move explanation |
 | Grid | **Sokoban** | Stable terrain, independently animated occupants, cell anchoring, goals, and exact replay motion |
 | Timeline | **Job-shop scheduling** | Resource lanes, bounded spans, ordering, duration, and temporal progress |
 | Matrix | **Exact Cover** | Row/column meaning, sparse incidence, selection state, and exact combinatorial structure |
@@ -22,6 +23,14 @@ Work League is the primary stylistic reference for graph-backed problems. A
 new graph scene does not need its ontology or arrangement, but it should be
 compared against Work League before acceptance whenever it contains locations,
 agents, vehicles, jobs, orders, inventory, or facilities.
+
+Key-door Maze is the acceptance reference for the first-run experience. A new
+visitor should be able to read its objective from the title, distinguish the
+planned route from alternatives, watch the Explorer acquire and consume the
+key, see the gate change from locked to open, compare solver work, and connect
+each animation to account and receipt evidence without prior Axionomy
+knowledge. Because it is the default Studio problem, regressions in any replay
+frame are release-blocking even when another graph scene still looks correct.
 
 The other canonical problems are equally normative for their surface types.
 Graph conventions must not be forced onto a grid, matrix, or timeline when the
@@ -64,6 +73,9 @@ problem's topology readable before any animation begins.
   and target ports.
 - Edge labels describe costs, duration, conditions, or other authoritative
   transition facts.
+- A retained solution may distinguish its remaining planned passages from
+  unrelated alternatives; current and traversed statuses remain visibly
+  distinct and are derived from the selected replay trace.
 
 Shape is semantic. Two nodes with the same role should not receive unrelated
 shapes, and two materially different roles should not be made indistinguishable
@@ -205,6 +217,9 @@ Before a new or materially changed scene is accepted:
 - Confirm the picture is derivable from the Rust-owned scene and replay
   contracts.
 - Add geometric browser assertions for any regression that could recur.
+- For Key-door Maze, inspect every Showcase replay frame plus the retained
+  BFS, Dijkstra, A*, and Pareto evidence surfaces; representative frames are
+  insufficient for the default onboarding problem.
 
 The gallery images in the root README are snapshots of these canonical
 expectations. They should be refreshed whenever a visual-system change makes

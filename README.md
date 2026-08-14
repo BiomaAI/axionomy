@@ -194,7 +194,8 @@ the Rust core, then shows the resulting accounts, assets, assessments,
 receipt deltas, objectives, semantic transition cues, and an optional read-only
 picture. Its separate Solve view follows bounded solver observations
 live and retains them in the artifact, so even a sub-second run remains
-inspectable. The Maze graph, Sokoban and Connect Four grids, Exact Cover
+inspectable. The Maze exposes a scrubbable BFS, Dijkstra, or A* expansion map
+before its verified replay, while Sokoban and Connect Four grids, Exact Cover
 matrix, scheduling and perishables timelines, market and logistics networks,
 stochastic telemetry,
 Pareto alternatives, rejected proposals, and actor-relative observations are
@@ -206,8 +207,8 @@ adjacent replay snapshots and the successful receipt. Grid terrain remains a
 separate static surface: a crate or player moves between cells instead of being
 recreated from a cell label. Stepping shows the real transition; seeking jumps
 directly to the requested state without fabricating motion across skipped
-exchanges. The playback bar can follow the system motion preference, force full
-explanatory motion, or reduce it explicitly.
+exchanges. Playback speed changes the time available to inspect that evidence
+without suppressing it.
 Deliberately invalid or infeasible proposals appear under **Moves that should
 be refused**, with structured role, account, asset, and rate diagnostics. They
 demonstrate that the rules are active and are kept visually separate
@@ -267,6 +268,13 @@ simulation model. They also serve as checked-in examples of the
 full-resolution view; follow its title to open the exact live replay.
 
 <table>
+  <tr>
+    <td colspan="2">
+      <a href="assets/studio-gallery/maze.webp"><img src="assets/studio-gallery/maze.webp" alt="Axionomy Studio replaying the Vault District maze as the Explorer opens its gate"></a><br>
+      <strong><a href="https://biomaai.github.io/axionomy/?problem=maze&amp;instance=showcase&amp;strategy=a_star&amp;document=maze%3Aa_star&amp;view=replay&amp;step=8&amp;seed=0&amp;budget=128">Key-door Maze · Vault District</a></strong><br>
+      The default onboarding graph: 15 rooms, cyclic alternatives, an explicit key transfer, a stateful gate, planned and traversed route evidence, and a replay-verified A* result.
+    </td>
+  </tr>
   <tr>
     <td width="50%">
       <a href="assets/studio-gallery/work_league.webp"><img src="assets/studio-gallery/work_league.webp" alt="Axionomy Studio visualizing autonomous agents, jobs, facilities, and economic relationships in the Work League"></a><br>
@@ -474,7 +482,7 @@ contract, deployment limits, and integration details.
 
 | Problem | Encoded concepts | Compared strategies |
 | --- | --- | --- |
-| Key-door maze | Topology, position, lock, key, energy, time, heuristic, goal | BFS, Dijkstra, A*, exact energy/time Pareto front |
+| Key-door maze | 15-room cyclic topology, position, explicit key inventory, stateful gate, energy, time, heuristic, goal | Scrubbable BFS, Dijkstra, and A* frontiers; four-point exact energy/time Pareto front |
 | Sokoban | Walls, stable crate identities, cell occupancy, atomic pushes, goals, dead squares | Resumable BFS, admissible A*, and replayable deadlock evidence |
 | Exact cover | Universe, subsets, coverage, selection | BFS and Algorithm X |
 | Workshop | Recipes, catalysts, material, labor, waste, process time | BFS, waste minimization, exact waste/time Pareto front |

@@ -180,9 +180,9 @@ pub(crate) fn catalog() -> Vec<ProblemDescriptor> {
             ProblemCopy {
                 key: "maze",
                 title: "Key-door maze",
-                summary: "Reach the exit on limited energy and time. The key route costs less energy, the detour takes fewer moves, and no single weighting picks between them.",
+                summary: "Reach the exit under limited energy and time. The key-and-gate route saves energy, direct routes save time, and the exact frontier preserves four tradeoffs that one score would hide.",
                 instances: [
-                    "The smallest maze with a key, a locked door, and a real route choice",
+                    "The smallest maze with a key, a locked gate, and a real route choice",
                     "15 rooms, 24 passages, cycles, backtracking, a stateful gate, and four exact tradeoffs",
                     "24 rooms and 40 passages across two cyclic districts",
                 ],
@@ -899,7 +899,10 @@ impl<'a> ProgressSink<'a> {
         });
         let observation = SearchObservationView {
             sequence: self.sequence,
-            algorithm: phase.clone(),
+            algorithm: phase
+                .trim_end_matches("_frontier")
+                .trim_end_matches("_solution")
+                .into(),
             kind: observation_kind(&phase),
             phase,
             label: message,
@@ -967,7 +970,7 @@ impl<'a> ProgressSink<'a> {
         let observation = SearchObservationView {
             sequence: self.sequence,
             algorithm: phase.clone(),
-            kind: SearchObservationKindView::Frontier,
+            kind: observation_kind(&phase),
             phase,
             label: message,
             completed,
@@ -1013,7 +1016,9 @@ impl<'a> ProgressSink<'a> {
 }
 
 fn observation_kind(phase: &str) -> SearchObservationKindView {
-    if phase.contains("pareto") || phase.contains("frontier") {
+    if phase.contains("solution") || phase.contains("incumbent") {
+        SearchObservationKindView::Incumbent
+    } else if phase.contains("pareto") || phase.contains("frontier") {
         SearchObservationKindView::Frontier
     } else if phase.contains("monte") || phase.contains("rollout") {
         SearchObservationKindView::Rollout

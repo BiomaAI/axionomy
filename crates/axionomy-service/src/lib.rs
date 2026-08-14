@@ -362,6 +362,88 @@ mod tests {
     }
 
     #[test]
+    fn maze_retains_strategy_specific_search_and_route_evidence() {
+        use axionomy_view::{AssessmentStatusView, ScenePathStatusView, SearchObservationKindView};
+
+        let artifact = ReferenceService
+            .run(
+                RunRequest::new("maze")
+                    .with_instance("showcase")
+                    .with_strategy("a_star"),
+            )
+            .unwrap();
+        for (document_id, algorithm) in [
+            ("maze:breadth_first", "breadth_first"),
+            ("maze:dijkstra", "dijkstra"),
+            ("maze:a_star", "a_star"),
+        ] {
+            let document = artifact
+                .documents
+                .iter()
+                .find(|document| document.id == document_id)
+                .unwrap();
+            assert!(
+                document
+                    .solve_observations
+                    .iter()
+                    .all(|observation| observation.algorithm == algorithm)
+            );
+            let accepted = document.solve_observations.last().unwrap();
+            assert_eq!(accepted.kind, SearchObservationKindView::Incumbent);
+            assert!(accepted.label.starts_with("Solution accepted at Exit"));
+            assert_eq!(accepted.subjects[0].key, "node:exit");
+        }
+        for document_id in ["maze:pareto_energy", "maze:pareto_time"] {
+            let document = artifact
+                .documents
+                .iter()
+                .find(|document| document.id == document_id)
+                .unwrap();
+            let observation = document.solve_observations.last().unwrap();
+            assert_eq!(observation.algorithm, "exact_pareto_search");
+            assert_eq!(observation.kind, SearchObservationKindView::Frontier);
+            assert!(observation.label.contains("4 non-dominated tradeoffs"));
+        }
+
+        let selected = artifact.selected_document().unwrap();
+        assert!(
+            selected
+                .initial
+                .scene
+                .as_ref()
+                .unwrap()
+                .paths
+                .iter()
+                .any(|path| path.status == ScenePathStatusView::Candidate)
+        );
+        assert_eq!(
+            selected.frames[0]
+                .after
+                .scene
+                .as_ref()
+                .unwrap()
+                .paths
+                .iter()
+                .filter(|path| path.status == ScenePathStatusView::Current)
+                .count(),
+            1
+        );
+        assert_eq!(
+            selected.proposals[0].assessment.status,
+            AssessmentStatusView::Infeasible
+        );
+        let missing = selected.proposals[0]
+            .assessment
+            .shortfalls
+            .iter()
+            .flat_map(|shortfall| shortfall.missing.iter())
+            .map(|asset| asset.asset.label.as_str())
+            .collect::<Vec<_>>();
+        assert!(missing.contains(&"Standing in Gate"));
+        assert!(missing.contains(&"Vault gate open"));
+    }
+
+    #[test]
     fn selected_replay_frames_stream_with_the_same_snapshot_contract() {
         let request = RunRequest::new("work_league")
             .with_instance("micro")

@@ -424,7 +424,7 @@ export function App() {
     {error && <div className="error-banner" role="alert">{error}</div>}
 
     {artifact && document && snapshot ? <main className={freshArtifactId === artifact.id ? "fresh-artifact" : undefined}>
-      <section className="alternative-bar"><div><span>Alternatives</span><strong>{artifact.documents.length} outcomes you can replay</strong></div><div role="tablist">{artifact.documents.map((candidate) => <button key={candidate.id} role="tab" aria-selected={candidate.id === document.id} onClick={() => selectDocument(candidate.id)}>{candidate.title.replace(`${artifact.problem.title} · `, "")}</button>)}</div></section>
+      <section className="alternative-bar"><div><span>Alternatives</span><strong>{artifact.documents.length} replayable results</strong></div><div role="tablist">{artifact.documents.map((candidate) => <button key={candidate.id} role="tab" aria-selected={candidate.id === document.id} onClick={() => selectDocument(candidate.id)}>{candidate.title.replace(`${artifact.problem.title} · `, "")}</button>)}</div></section>
       <StrategyComparison artifact={artifact} selected={document.id} onSelect={selectDocument} />
       <section className="document-heading"><div><span className="eyebrow">{artifact.instance.label} · {document.source.label} · {document.id}{freshArtifactId === artifact.id ? " · just computed" : ""}</span><h1>{document.title}</h1><p>{document.description}</p></div><div className="objective-pills">{document.objectives.map((objective) => <div className="objective" key={objective.key}><span>{objective.label}</span><strong>{objective.value}</strong><small>{objective.direction}</small></div>)}</div></section>
       <div className="view-tabs" role="tablist" aria-label="Studio evidence mode"><button type="button" role="tab" aria-selected={viewMode === "solve"} onClick={() => selectView("solve")}>How it was solved <small>{active ? "live" : document.solve_observations.length}</small></button><button type="button" role="tab" aria-selected={viewMode === "replay"} onClick={() => selectView("replay")}>Step-by-step replay <small>{document.frames.length}</small></button></div>
@@ -446,7 +446,7 @@ export function App() {
 
       <section className={`stage${hasBoards ? "" : " no-boards"}${sparseScene ? " scene-sparse" : ""}`}>
         <div className="panel world-panel" ref={worldPanel}>
-          <PanelHeading kicker="Picture (illustration only)" title={snapshot.scene?.title ?? "Problem picture"} aside={snapshot.scene?.surface.kind} action={<button type="button" className="theater-btn" onClick={toggleTheater} title="Theater mode" aria-label="Toggle theater mode"><IconMaximize size={16} stroke={1.8} aria-hidden="true" /></button>} />
+          <PanelHeading kicker="Encoded state projection" title={snapshot.scene?.title ?? "Problem state"} aside={snapshot.scene?.surface.kind} action={<button type="button" className="theater-btn" onClick={toggleTheater} title="Theater mode" aria-label="Toggle theater mode"><IconMaximize size={16} stroke={1.8} aria-hidden="true" /></button>} />
           <SceneView scene={snapshot.scene} previousScene={previous?.scene} frame={frame} motion={replayMotion} onAccount={setFocusedAccount} />
         </div>
         {hasBoards && <LeaderboardDock document={document} snapshot={snapshot} previous={previous} position={position} selectedKey={leaderboardKey} onSelect={(key) => { writeUrl(urlState({ leaderboard: key }), "push"); setLeaderboardKey(key); }} onParticipant={setFocusedAccount} />}
@@ -518,14 +518,24 @@ function SolveWorkspace({ scene, observations, active }: { scene?: Scene | null;
   const solverScene = useMemo(() => solverEvidenceScene(scene, visibleObservations), [scene, visibleObservations]);
   return <section className={`solve-workspace ${active ? "live" : "retained"}`} aria-label="Solver evidence">
     <header><div><span className={active ? "spinner" : "solve-complete"} aria-hidden="true">{active ? "" : "✓"}</span><div><strong>{active ? "Live solver observations" : "Saved solver observations"}</strong><small>{active ? "Progress reported by the search as it runs" : "Saved with the result, so you can review it later"}</small></div></div><span>{observations.length} observations</span></header>
-    {latest && <div className="solve-summary"><div><span>Current phase</span><strong>{phaseLabel(latest.phase)}</strong></div><div><span>Algorithm</span><strong>{latest.algorithm.replaceAll("_", " ")}</strong></div><div><span>Progress</span><strong>{latest.total === 0 ? `${latest.completed} expanded` : `${latest.completed} / ${latest.total}`}</strong></div><div><span>Evidence</span><strong>{kinds.join(" · ").replaceAll("_", " ")}</strong></div></div>}
+    {latest && <div className="solve-summary"><div><span>Current phase</span><strong>{phaseLabel(latest.phase)}</strong></div><div><span>Algorithm</span><strong>{algorithmLabel(latest.algorithm)}</strong></div><div><span>Progress</span><strong>{latest.total === 0 ? `${latest.completed} expanded` : `${latest.completed} / ${latest.total}`}</strong></div><div><span>Evidence</span><strong>{kinds.join(" · ").replaceAll("_", " ")}</strong></div></div>}
     {latest && latest.total > 0 && <progress max={latest.total} value={Math.min(latest.completed, latest.total)} aria-label="Solver observation progress" />}
     {observations.length > 1 && <div className="solve-scrubber"><label><span>Exploration checkpoint</span><strong>{Math.min(cursor + 1, observations.length)} / {observations.length}</strong></label><input type="range" min="0" max={observations.length - 1} value={Math.min(cursor, observations.length - 1)} onChange={(event) => setCursor(Number(event.target.value))} aria-label="Solver observation position" /></div>}
     <div className={`solve-body ${solverScene ? "with-map" : "stream-only"}`}>
-      {solverScene && <section className="solve-map" aria-label="Search expansion map"><header><span>Search over encoded state</span><strong>{latest?.label ?? "Waiting for an expansion"}</strong></header><SceneView scene={solverScene} motion="seek" /></section>}
+      {solverScene && <section className="solve-map" aria-label="Search expansion map"><header><span>Search through encoded economic states</span><strong>{latest?.label ?? "Waiting for an expansion"}</strong></header><SceneView scene={solverScene} motion="seek" /></section>}
       <div className="solve-stream">{observations.length === 0 ? <div className="empty-state">Waiting for the first solver checkpoint…</div> : observations.map((observation, index) => <button type="button" key={`${observation.sequence}:${observation.phase}`} onClick={() => setCursor(index)} aria-current={index === cursor ? "step" : undefined} className={`solve-observation-card observation-${observation.kind}`}><div className="solve-observation-icon"><SceneIcon glyph={observationGlyph(observation.kind)} size={20} /></div><div><strong>{observation.label}</strong><span>{phaseLabel(observation.phase)} · {observation.total === 0 ? `${observation.completed} expanded` : `${observation.completed} / ${observation.total}`}</span></div><div>{observation.metrics.map((metric) => <span key={metric.key}><small>{metric.label}</small><b>{metric.value}</b></span>)}</div></button>)}</div>
     </div>
   </section>;
+}
+
+function algorithmLabel(algorithm: string): string {
+  const labels: Record<string, string> = {
+    a_star: "A*",
+    breadth_first: "Breadth-first search",
+    dijkstra: "Dijkstra",
+    exact_pareto_search: "Exact Pareto search",
+  };
+  return labels[algorithm] ?? algorithm.replaceAll("_", " ");
 }
 
 function solverEvidenceScene(scene: Scene | null | undefined, observations: SearchObservation[]): Scene | undefined {
@@ -541,6 +551,10 @@ function solverEvidenceScene(scene: Scene | null | undefined, observations: Sear
     metrics: [],
     annotations: [],
     entities,
+    paths: scene.paths.map((path) => ({
+      ...path,
+      status: path.status === "blocked" ? "blocked" : "available",
+    })),
     surface: {
       ...scene.surface,
       nodes: scene.surface.nodes.map((node) => ({
@@ -550,6 +564,10 @@ function solverEvidenceScene(scene: Scene | null | undefined, observations: Sear
           ...(explored.has(node.id.key) ? ["search-explored"] : []),
           ...(current.has(node.id.key) ? ["search-current"] : []),
         ],
+      })),
+      edges: scene.surface.edges.map((edge) => ({
+        ...edge,
+        classes: edge.classes.filter((value) => value !== "current" && value !== "traversed" && value !== "candidate"),
       })),
     },
   };
@@ -625,6 +643,9 @@ function phaseLabel(phase: string): string {
     dijkstra_frontier: "Dijkstra frontier",
     a_star_frontier: "A* frontier",
     pareto_frontier: "Exact Pareto frontier",
+    breadth_first_solution: "Breadth-first solution",
+    dijkstra_solution: "Dijkstra solution",
+    a_star_solution: "A* solution",
   };
   return labels[phase] ?? phase.replaceAll("_", " ");
 }

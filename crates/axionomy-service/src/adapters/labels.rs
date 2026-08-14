@@ -55,7 +55,7 @@ impl StudioLabel for maze::AccountId {
     fn studio_label(&self) -> String {
         match self {
             Self::Agent => "Agent".into(),
-            Self::World => "Maze".into(),
+            Self::World => "Vault District".into(),
         }
     }
 }
@@ -68,16 +68,16 @@ impl StudioLabel for maze::Asset {
                 format!("Passage {} → {}", maze_node(from), maze_node(to))
             }
             Self::Key => "Key".into(),
-            Self::Locked => "Door locked".into(),
-            Self::Open => "Door open".into(),
+            Self::Locked => "Vault gate locked".into(),
+            Self::Open => "Vault gate open".into(),
             Self::Energy => "Energy left".into(),
             Self::SpentEnergy => "Energy spent".into(),
             Self::Time => "Time left".into(),
             Self::SpentTime => "Time spent".into(),
             Self::Target(node) => format!("Goal: reach {}", maze_node(node)),
             Self::Distance(node) => format!("Distance from {} to the exit", maze_node(node)),
-            Self::Active => "Maze in progress".into(),
-            Self::Solved => "Maze solved".into(),
+            Self::Active => "Expedition in progress".into(),
+            Self::Solved => "Explorer escaped".into(),
         }
     }
 }
@@ -96,7 +96,7 @@ impl StudioLabel for maze::RateId {
                 maze_node(to),
                 energy,
                 if needs_open_door {
-                    ", needs the door open"
+                    ", needs the vault gate open"
                 } else {
                     ""
                 }
