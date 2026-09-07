@@ -220,14 +220,20 @@ test("animates Logistics travel without reflowing the replay layout", async ({ p
   const vehicle = page.locator('.react-flow__node[data-id="entity:vehicle:fleet-1"]');
   const depot = page.locator('.react-flow__node[data-id="location:Depot"]');
   const stage = page.locator(".stage");
+  // Expanded comparisons may put playback below the fold. Clicking Next can
+  // scroll it into view; measure document geometry, not viewport scrolling.
+  const stageLayout = () => stage.evaluate((element) => {
+    const box = element.getBoundingClientRect();
+    return { x: box.x + window.scrollX, y: box.y + window.scrollY, width: box.width, height: box.height };
+  });
   await expect(vehicle).toBeVisible();
   await expect(depot).toBeVisible();
   const before = await vehicle.boundingBox();
-  const stageBefore = await stage.boundingBox();
+  const stageBefore = await stageLayout();
   await page.getByRole("button", { name: "Next exchange" }).click();
   await page.waitForTimeout(60);
   const during = await vehicle.boundingBox();
-  const stageDuring = await stage.boundingBox();
+  const stageDuring = await stageLayout();
   const motion = await vehicle.evaluate((element) => ({
     animations: element.getAnimations().filter((animation) => animation.playState === "running").length,
     animationNames: element.getAnimations().map((animation) => animation instanceof CSSAnimation ? animation.animationName : ""),
@@ -259,7 +265,7 @@ test("animates Logistics travel without reflowing the replay layout", async ({ p
   expect(during?.x).not.toBe(before?.x);
   await page.waitForTimeout(300);
   const after = await vehicle.boundingBox();
-  const stageAfter = await stage.boundingBox();
+  const stageAfter = await stageLayout();
   expect(after?.x).not.toBe(before?.x);
   expect(after?.x).not.toBe(during?.x);
   for (const current of [stageDuring, stageAfter]) {
