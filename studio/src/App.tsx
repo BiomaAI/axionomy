@@ -470,7 +470,7 @@ export function App() {
 
       <section className={`definition-grid${hasObservations ? "" : " no-observations"}`}>
         <div className="panel model-panel"><PanelHeading kicker="The rules" title="Rates, roles, goals & invariants" aside={`${document.model?.rates.length ?? 0} rates`} /><ModelExplorer document={document} /></div>
-        {hasObservations && <div className="panel observation-panel"><PanelHeading kicker="Who can see what" title="Actor-relative observations" aside={`${document.observations.length} views`} /><Observations document={document} /></div>}
+        {hasObservations && <div className="panel observation-panel"><PanelHeading kicker="Who can see what" title="Actor-relative observations" aside={`Step ${position} · ${document.observations.length} views`} /><Observations document={document} frame={frame} /></div>}
       </section>
       </>;
       })()}
@@ -652,14 +652,19 @@ function phaseLabel(phase: string): string {
 }
 
 function StrategyComparison({ artifact, selected, onSelect }: { artifact: RunArtifact; selected: string; onSelect: (id: string) => void }) {
-  return <details className="strategy-comparison" aria-label="Outcome comparison">
+  return <details className="strategy-comparison" aria-label="Outcome comparison" open>
     <summary><span>Compare outcomes</span><strong>Every strategy and what it cost, side by side</strong><i aria-hidden="true">▸</i></summary>
-    <div className="comparison-scroll"><table><thead><tr><th>Outcome</th><th>Result</th><th>Trace</th><th>Search evidence</th></tr></thead><tbody>{artifact.documents.map((candidate) => {
+    <div className="comparison-scroll"><table><thead><tr><th>Outcome</th><th>Result</th><th>Initial → final state</th><th>Trace</th><th>Search evidence</th></tr></thead><tbody>{artifact.documents.map((candidate) => {
       const series = candidate.telemetry.find((entry) => entry.algorithm !== "Model size");
       const work = series ? [...series.points].reverse().find((point) => ["generated", "expanded", "iteration", "sample"].includes(point.kind)) : undefined;
+      const finalMetrics = (candidate.frames.at(-1)?.after.scene ?? candidate.initial.scene)?.metrics.slice(0, 3) ?? [];
       return <tr key={candidate.id} className={candidate.id === selected ? "selected" : undefined}>
         <td><button type="button" onClick={() => onSelect(candidate.id)}>{candidate.title.replace(`${artifact.problem.title} · `, "")}</button></td>
         <td>{candidate.objectives.length > 0 ? candidate.objectives.map((objective) => `${objective.label}: ${objective.value}`).join(" · ") : "Feasibility outcome"}</td>
+        <td>{finalMetrics.map((metric) => {
+          const initial = candidate.initial.scene?.metrics.find((entry) => entry.key === metric.key);
+          return <div key={metric.key}>{metric.label}: {initial && initial.value !== metric.value ? `${initial.value} → ` : ""}{metric.value}{metric.unit ? ` ${metric.unit}` : ""}</div>;
+        })}</td>
         <td>{candidate.frames.length} {candidate.frames.length === 1 ? "step" : "steps"}</td>
         <td>{series ? `${series.algorithm} · ${series.exact ? "exact" : "sampled"}${work ? ` · ${work.value} ${work.kind.replaceAll("_", " ")}` : ""}` : "Replay only"}</td>
       </tr>;

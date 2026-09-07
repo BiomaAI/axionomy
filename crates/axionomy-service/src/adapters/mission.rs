@@ -16,8 +16,6 @@ pub(super) fn build(
     let profile = instance_profile(request, descriptor);
     let model = mission::initial();
     let sample_index = (request.seed as usize) % 16;
-    let actual = mission::instantiate(&model, sample_index)
-        .ok_or_else(|| problem_error("mission", "scenario could not be instantiated"))?;
     let samples = match profile {
         InstanceProfile::Micro => request.budget.clamp(2, 16),
         InstanceProfile::Showcase => request.budget.max(2),
@@ -63,56 +61,98 @@ pub(super) fn build(
     );
     progress.ensure()?;
     let front = front.ok_or_else(|| problem_error("mission", "policy front failed"))?;
-    let beliefs = mission::initial_beliefs(&model);
-    let decision = mission::plan_with_progress(
-        &actual,
-        &beliefs,
+    let baseline_observations = progress
+        .observations()
+        .iter()
+        .filter(|item| item.phase == "monte_carlo")
+        .cloned()
+        .collect::<Vec<_>>();
+    let planned = mission::run_planned_with_progress(
+        &model,
+        sample_index,
         MctsConfig::new(samples, 12).with_seed(request.seed),
         samples.clamp(1, 8),
-        |state| {
+        |decision, state| {
             progress.emit(
                 "ismcts",
                 state.iterations() as u64,
                 state.target_iterations() as u64,
                 format!(
-                    "{}/{} ISMCTS iterations · {} information sets · {} root actions",
+                    "Decision {} · {}/{} ISMCTS iterations · {} information sets",
+                    decision + 1,
                     state.iterations(),
                     state.target_iterations(),
-                    state.information_sets(),
-                    state.root_children()
+                    state.information_sets()
                 ),
             )
         },
     )
-    .map_err(|error| problem_error("mission", format!("{error:?}")))?;
+    .map_err(|error| problem_error("mission", error))?;
     progress.ensure()?;
-    let decision =
-        decision.ok_or_else(|| problem_error("mission", "ISMCTS planning was interrupted"))?;
+    let planned = planned.ok_or_else(|| problem_error("mission", "planning was interrupted"))?;
+    let planning_observations = progress
+        .observations()
+        .iter()
+        .filter(|item| item.phase == "ismcts")
+        .cloned()
+        .collect::<Vec<_>>();
     let policies = [
         ("coordinated", Policy::ShareAndCoordinate),
         ("direct_north", Policy::NorthTogether),
     ];
     let mut documents = Vec::new();
     for (strategy, policy) in policies {
-        let rollout = mission::run_policy(&model, policy, sample_index);
-        let mut view = document(DocumentSpec { problem: "mission", strategy, title: if policy == Policy::ShareAndCoordinate { "Mission · scout, share, then move" } else { "Mission · both go north" }, description: if policy == Policy::ShareAndCoordinate { "Looking, updating what you believe, telling the other agent, moving, hitting hazards, and treating injuries are all ordinary transitions." } else { "Both agents commit without looking or sharing. The replay keeps every failure and what it cost." }, source_label: "Hidden-information mission" }, &model, &mission::goal(), rollout.trace(), vec![
+        let rollout = if policy == Policy::ShareAndCoordinate {
+            planned.rollout.clone()
+        } else {
+            mission::run_policy(&model, policy, sample_index)
+        };
+        let mut view = document(DocumentSpec { problem: "mission", strategy, title: if policy == Policy::ShareAndCoordinate { "Mission · observe, decide, replan" } else { "Mission · both go north" }, description: if policy == Policy::ShareAndCoordinate { "ISMCTS chooses every public action from the Scout’s observation. After each action and Nature response, compatible belief worlds are retained and the next decision is searched again. Compare the resulting costs with committing north without information." } else { "Both agents commit without looking or sharing. The replay keeps every failure and what it cost." }, source_label: "Hidden-information mission" }, &model, &mission::goal(), rollout.trace(), vec![
             ObjectiveView { key: "success".into(), label: "Succeeded".into(), direction: ObjectiveDirectionView::Maximize, value: u8::from(rollout.succeeded()).to_string() },
             ObjectiveView { key: "time".into(), label: "Elapsed time".into(), direction: ObjectiveDirectionView::Minimize, value: rollout.elapsed_time().to_string() },
             ObjectiveView { key: "medical".into(), label: "Medical kit used".into(), direction: ObjectiveDirectionView::Minimize, value: u8::from(rollout.used_medical_kit()).to_string() },
         ], scene).map_err(|error| problem_error("mission", error))?;
-        view.pareto_fronts.push(policy_front(&front, policy));
+        view.pareto_fronts.push(policy_front(
+            &front,
+            (policy == Policy::NorthTogether).then_some(policy),
+        ));
+        view.solve_observations = if policy == Policy::ShareAndCoordinate {
+            planning_observations.clone()
+        } else {
+            baseline_observations.clone()
+        };
         view.telemetry.push(telemetry(
-            "information-set MCTS + Monte Carlo",
+            if policy == Policy::ShareAndCoordinate {
+                "Receding-horizon ISMCTS"
+            } else {
+                "Fixed-policy Monte Carlo"
+            },
             false,
             [
                 (
                     TelemetryKindView::Iteration,
-                    decision.iterations() as u64,
+                    if policy == Policy::ShareAndCoordinate {
+                        planned
+                            .decisions
+                            .iter()
+                            .map(|step| step.decision.iterations() as u64)
+                            .sum()
+                    } else {
+                        0
+                    },
                     "ISMCTS iterations".into(),
                 ),
                 (
                     TelemetryKindView::InformationSet,
-                    decision.information_sets() as u64,
+                    if policy == Policy::ShareAndCoordinate {
+                        planned
+                            .decisions
+                            .iter()
+                            .map(|step| step.decision.information_sets() as u64)
+                            .sum()
+                    } else {
+                        0
+                    },
                     "information sets".into(),
                 ),
                 (
@@ -128,9 +168,98 @@ pub(super) fn build(
             ],
         ));
         view.observations = vec![
-            observation(&actual, AgentId::Scout),
-            observation(&actual, AgentId::Medic),
+            observation(&model, AgentId::Scout),
+            observation(&model, AgentId::Medic),
         ];
+        let mut replay = model.fork();
+        for (index, frame) in view.frames.iter_mut().enumerate() {
+            replay
+                .apply(rollout.trace().exchanges()[index].clone())
+                .map_err(|error| problem_error("mission", format!("{error:?}")))?;
+            frame.observations = vec![
+                observation(&replay, AgentId::Scout),
+                observation(&replay, AgentId::Medic),
+            ];
+            if matches!(
+                rollout.trace().exchanges()[index].rate(),
+                mission::RateId::ResolveScan { .. }
+            ) {
+                let location = [Location::North, Location::South]
+                    .into_iter()
+                    .find(|location| {
+                        !replay
+                            .balance(&AccountId::Agent(AgentId::Scout), &Asset::Intel(*location))
+                            .is_zero()
+                    })
+                    .expect("scan produced intelligence");
+                let premature = Exchange::new(
+                    mission::RateId::MoveTogether(location),
+                    axionomy::Quantity::new(1),
+                )
+                .bind(mission::Role::Scout, AccountId::Agent(AgentId::Scout))
+                .bind(mission::Role::Medic, AccountId::Agent(AgentId::Medic))
+                .bind(mission::Role::Mission, AccountId::Mission);
+                view.proposals.push(proposal("mission", ProposalSpec {
+                    id: "move-before-sharing",
+                    label: "Move together before sharing the sighting",
+                    description: "The Scout has seen a location, but the Medic has no intelligence yet. Assessing this move at the post-scan snapshot exposes the missing shared information; sharing is a causal prerequisite for coordinated movement.",
+                }, &replay, &premature));
+            }
+            if policy == Policy::ShareAndCoordinate {
+                if let Some(step) = planned
+                    .decisions
+                    .iter()
+                    .find(|step| step.trace_index == index)
+                {
+                    frame.cues.push(axionomy_view::FrameCueView {
+                        kind: axionomy_view::FrameCueKindView::Information,
+                        label: "Chosen by ISMCTS from the Scout’s observation".into(),
+                        details: vec![format!(
+                            "{} compatible belief worlds · {} iterations · {} public alternatives",
+                            step.prior_worlds,
+                            step.decision.iterations(),
+                            step.decision.children().len()
+                        )],
+                        subjects: Vec::new(),
+                    });
+                }
+                if let Some(step) = planned.decisions.iter().find(|step| {
+                    let next = planned
+                        .decisions
+                        .iter()
+                        .find(|next| next.trace_index > step.trace_index)
+                        .map_or(rollout.trace().exchanges().len(), |next| next.trace_index);
+                    index + 1 == next
+                }) {
+                    frame.cues.push(axionomy_view::FrameCueView {
+                        kind: axionomy_view::FrameCueKindView::Information,
+                        label: "Beliefs conditioned on the new observation".into(),
+                        details: vec![format!(
+                            "{} → {} compatible worlds. The next decision uses this posterior.",
+                            step.prior_worlds, step.posterior_worlds
+                        )],
+                        subjects: Vec::new(),
+                    });
+                }
+            }
+        }
+        if !rollout.succeeded()
+            && let Some(last) = view.frames.last_mut()
+        {
+            last.cues.push(axionomy_view::FrameCueView {
+                    kind: axionomy_view::FrameCueKindView::Information,
+                    label: "The mission did not reach its goal".into(),
+                    details: vec!["A private sighting can be wrong. Replay validity proves that the actions obeyed the model; it does not promise that a decision under uncertainty succeeds.".into()],
+                    subjects: Vec::new(),
+                });
+        }
+        for frame in &mut view.frames {
+            frame.cues.sort_by_key(|cue| match cue.kind {
+                axionomy_view::FrameCueKindView::AtomicExchange => 0,
+                axionomy_view::FrameCueKindView::Information => 1,
+                _ => 2,
+            });
+        }
         if let Some(candidate) = mission::candidates(&model).first() {
             let malformed = Exchange::new(*candidate.rate(), *candidate.units());
             view.proposals.push(proposal("mission", ProposalSpec { id: "action-without-actors", label: "Mission action without roles", description: "Every mission action names an actor, Nature, the mission, and the goal. Leaving them out is rejected with the specific role missing." }, &model, &malformed));
@@ -170,13 +299,32 @@ fn observation(world: &World, agent: AgentId) -> ObservationView {
         actor: ViewId::new(format!("mission:actor:{agent:?}"), format!("{agent:?}")),
         label: format!("{agent:?}-visible economic state; Nature remains hidden"),
         visible_accounts: accounts,
-        facts: Vec::new(),
+        facts: key
+            .balances()
+            .iter()
+            .filter(|(owner, asset, _)| {
+                *owner == AccountId::Agent(agent)
+                    && matches!(
+                        asset,
+                        Asset::Intel(_)
+                            | Asset::SharedIntel(_)
+                            | Asset::Injured
+                            | Asset::UsedMedicalKit
+                    )
+            })
+            .map(|(_, asset, quantity)| AssetQuantityView {
+                asset: ViewId::new(format!("mission:asset:{asset:?}"), asset.studio_label()),
+                quantity: ExactQuantity(quantity.to_string()),
+            })
+            .collect(),
     }
 }
 
-fn policy_front(front: &mission::PolicyFront, selected: Policy) -> ParetoFrontView {
+fn policy_front(front: &mission::PolicyFront, selected: Option<Policy>) -> ParetoFrontView {
     ParetoFrontView {
-        title: "Reliability vs. time vs. medical kit — sampled, not exact".into(),
+        title:
+            "Fixed-policy baselines · reliability, time, medical kit (planner not evaluated here)"
+                .into(),
         completeness: FrontierCompletenessView::Approximate,
         axes: vec![
             ObjectiveAxisView {
@@ -209,7 +357,7 @@ fn policy_front(front: &mission::PolicyFront, selected: Policy) -> ParetoFrontVi
                 ParetoPointView {
                     label: format!("{policy:?}"),
                     values,
-                    selected: policy == selected,
+                    selected: Some(policy) == selected,
                 }
             })
             .collect(),
@@ -377,4 +525,68 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 ),
             ]),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{ReferenceService, RunRequest};
+
+    #[test]
+    fn mission_replays_actual_search_and_private_information_transfer() {
+        let mut request = RunRequest::new("mission");
+        request.seed = 11;
+        let artifact = ReferenceService.run(request).unwrap();
+        let planned = &artifact.documents[0];
+        let direct = &artifact.documents[1];
+        assert_eq!(planned.objectives[0].value, "1");
+        assert_eq!(direct.objectives[0].value, "0");
+        assert_eq!(planned.frames[0].after, direct.frames[0].after);
+        assert!(
+            planned
+                .solve_observations
+                .iter()
+                .all(|item| item.phase == "ismcts")
+        );
+        assert!(
+            direct
+                .solve_observations
+                .iter()
+                .all(|item| item.phase == "monte_carlo")
+        );
+        let scan = planned
+            .frames
+            .iter()
+            .find(|frame| frame.exchange.rate.label == "Scout sees South")
+            .unwrap();
+        assert!(!scan.observations[0].facts.is_empty());
+        assert!(scan.observations[1].facts.is_empty());
+        let share = planned
+            .frames
+            .iter()
+            .find(|frame| frame.exchange.rate.label == "Scout shares sighting: South")
+            .unwrap();
+        assert!(!share.observations[1].facts.is_empty());
+        for frame in &planned.frames {
+            for observation in &frame.observations {
+                assert!(
+                    observation
+                        .visible_accounts
+                        .iter()
+                        .all(|account| !account.account.key.contains("Nature"))
+                );
+            }
+        }
+        assert!(
+            planned
+                .proposals
+                .iter()
+                .any(|proposal| proposal.label == "Move together before sharing the sighting")
+        );
+        assert!(planned.frames.iter().any(|frame| {
+            frame
+                .cues
+                .iter()
+                .any(|cue| cue.label == "Chosen by ISMCTS from the Scout’s observation")
+        }));
+    }
 }

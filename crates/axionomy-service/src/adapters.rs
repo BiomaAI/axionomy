@@ -667,9 +667,9 @@ pub(crate) fn catalog() -> Vec<ProblemDescriptor> {
             ProblemCopy {
                 key: "mission",
                 title: "Hidden-information mission",
-                summary: "Two agents each see only part of the map. Compare sharing what they see before acting against both moving straight in.",
+                summary: "Can two agents act on incomplete information? Watch the Scout observe, share, and replan against a blind commitment to the north.",
                 instances: [
-                    "Two hidden scenarios and one private sighting",
+                    "Sixteen hidden scenarios with a small per-decision search budget",
                     "Sixteen hidden scenarios with private sightings, belief updates, and hazards",
                     "The same mission evaluated with at least 256 belief-conditioned simulations",
                 ],
@@ -679,9 +679,9 @@ pub(crate) fn catalog() -> Vec<ProblemDescriptor> {
             &[
                 (
                     "coordinated",
-                    "Scout, share, then move",
-                    "One agent looks, tells the other, and both act on the updated picture.",
-                    "information-set policy evaluation",
+                    "Observe, decide, replan",
+                    "ISMCTS chooses each action, conditions beliefs on the result, and replans through the mission.",
+                    "receding-horizon information-set MCTS",
                 ),
                 (
                     "direct_north",

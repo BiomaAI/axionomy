@@ -192,12 +192,17 @@ function ComputedRateAmount({ label, amount }: { label: string; amount: { role: 
   return <article className="computed-rate-amount"><h3>{amount.role.label}</h3><div className="rate-basket"><span>{label}</span><b>{amount.asset.label}</b><code>{amount.quantity}</code></div></article>;
 }
 
-export function Observations({ document }: { document: ViewDocument }) {
-  if (document.observations.length === 0) return <div className="empty-state">This problem has no actor-relative observation boundary.</div>;
+export function Observations({ document, frame }: { document: ViewDocument; frame?: ExchangeFrame }) {
+  const observations = frame?.observations.length ? frame.observations : document.observations;
+  if (observations.length === 0) return <div className="empty-state">This problem has no actor-relative observation boundary.</div>;
   return <div className="observations">
-    {document.observations.map((observation) => <article key={observation.actor.key}>
+    {observations.map((observation) => <article key={observation.actor.key}>
       <h3>{observation.actor.label}</h3><p>{observation.label}</p>
-      {observation.visible_accounts.map((account) => <div key={account.account.key}><strong>{account.account.label}</strong><span>{account.balances.length} visible balances</span></div>)}
+      {observation.facts.map((fact) => <div className="observation-fact" key={fact.asset.key}><strong>{fact.asset.label}</strong><span>{fact.quantity}</span></div>)}
+      {observation.visible_accounts.map((account) => <details key={account.account.key} className="observation-account" open>
+        <summary>{account.account.label}<span>{account.balances.length} balances</span></summary>
+        {account.balances.map((balance) => <div className="observation-balance" key={balance.asset.key}><span>{balance.asset.label}</span><strong>{balance.quantity}</strong></div>)}
+      </details>)}
     </article>)}
   </div>;
 }

@@ -91,7 +91,26 @@ fn main() {
             "non-dominated sampled policy"
         );
     }
-    let rollout = mission::run_policy(&model, estimate.chosen(), 3);
+    let planned = mission::run_planned_with_progress(
+        &model,
+        3,
+        MctsConfig::new(128, 12).with_seed(17),
+        32,
+        |_, _| std::ops::ControlFlow::Continue(()),
+    )
+    .expect("mission can be replanned")
+    .expect("planning was not interrupted");
+    for step in &planned.decisions {
+        info!(
+            exchange = step.trace_index,
+            action = ?step.decision.action().rate(),
+            prior_worlds = step.prior_worlds,
+            posterior_worlds = step.posterior_worlds,
+            iterations = step.decision.iterations(),
+            "search choice committed; beliefs conditioned before replanning"
+        );
+    }
+    let rollout = &planned.rollout;
     let replayed = model
         .replayed(rollout.trace())
         .expect("coordinated mission must replay");
@@ -132,7 +151,7 @@ fn main() {
     .expect("mission trace becomes learning transitions");
 
     info!(
-        policy = ?estimate.chosen(),
+        planner = "receding-horizon ISMCTS",
         exchanges = rollout.trace().exchanges().len(),
         encoded_time = rollout.elapsed_time(),
         learning_transitions = learning_trajectory.len(),

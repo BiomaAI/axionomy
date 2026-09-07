@@ -709,3 +709,10 @@ footer { padding: 25px 0 36px; color: var(--muted); text-align: center; font: 8p
   .grid-scene > div.red { background: #a8524b; }
   .grid-scene > div.yellow { background: #ac9344; color: #23200f; }
 }
+
+.observation-account { border-top: 1px solid var(--line); padding: 7px 0; }
+.observation-account summary { cursor: pointer; font-size: 10px; font-weight: 600; }
+.observation-account summary > span { float: right; color: var(--muted); font-weight: 400; }
+.observation-balance { display: flex; justify-content: space-between; gap: 12px; padding: 4px 0 0 12px; font-size: 10px; }
+.observation-balance > span { color: var(--muted); }
+.observation-balance > strong { font-variant-numeric: tabular-nums; }
