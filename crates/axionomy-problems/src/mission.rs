@@ -152,6 +152,22 @@ pub struct MissionRollout {
     used_medical_kit: bool,
 }
 
+/// Search evidence for an action that was actually committed to the mission.
+#[derive(Debug, Clone)]
+pub struct ReplanningStep {
+    /// Zero-based exchange index, including scenario instantiation.
+    pub trace_index: usize,
+    pub decision: PlanningDecision,
+    pub prior_worlds: usize,
+    pub posterior_worlds: usize,
+}
+
+#[derive(Debug, Clone)]
+pub struct PlannedMission {
+    pub rollout: MissionRollout,
+    pub decisions: Vec<ReplanningStep>,
+}
+
 impl MissionRollout {
     pub const fn trace(&self) -> &Trace<RateId, Role, AccountId> {
         &self.trace
@@ -806,6 +822,86 @@ pub fn run_policy(model: &World, policy: Policy, sample_index: usize) -> Mission
     run_policy_with_scenario(model, policy, scenario)
 }
 
+/// Replans after every public decision and encoded Nature response. Search
+/// sees only Scout information and caller-owned belief worlds; the live core
+/// validates every selected action. Unsuccessful missions retain their trace.
+pub fn run_planned_with_progress(
+    model: &World,
+    sample_index: usize,
+    config: MctsConfig,
+    chunk_size: usize,
+    mut observer: impl FnMut(usize, IsmctsProgress) -> ControlFlow<()>,
+) -> Result<Option<PlannedMission>, String> {
+    let support = scenarios(model);
+    let total = total_weight(&support).map_err(|error| format!("{error:?}"))?;
+    let scenario = choose_by_ticket(&support, systematic_ticket(sample_index, total))
+        .map_err(|error| format!("{error:?}"))?
+        .clone();
+    let mut actual = model.fork();
+    actual
+        .apply(scenario.clone())
+        .map_err(|error| format!("{error:?}"))?;
+    let mut trace = Trace::new();
+    trace.push(scenario);
+    let mut beliefs = initial_beliefs(model);
+    let mut decisions = Vec::new();
+    while trace.exchanges().len() < HORIZON && !actual.matches(&goal()) {
+        // A wrong destination can leave the encoded mission without a Nature
+        // response or a public action. Preserve that failure instead of
+        // consulting hidden truth to manufacture a recovery.
+        let decision = match plan_with_progress(
+            &actual,
+            &beliefs,
+            config.with_seed(config.seed().wrapping_add(decisions.len() as u64)),
+            chunk_size,
+            |state| observer(decisions.len(), state),
+        ) {
+            Ok(Some(decision)) => decision,
+            Ok(None) => return Ok(None),
+            Err(IsmctsError::NoRootActions) => break,
+            Err(error) => return Err(format!("{error:?}")),
+        };
+        let trace_index = trace.exchanges().len();
+        let prior_worlds = beliefs.len();
+        actual
+            .apply(decision.action().clone())
+            .map_err(|error| format!("{error:?}"))?;
+        trace.push(decision.action().clone());
+        if let Some(response) = required_nature_response(&actual) {
+            actual
+                .apply(response.clone())
+                .map_err(|error| format!("{error:?}"))?;
+            trace.push(response);
+        }
+        beliefs = update_beliefs(&beliefs, decision.action(), &scout_information(&actual));
+        decisions.push(ReplanningStep {
+            trace_index,
+            decision,
+            prior_worlds,
+            posterior_worlds: beliefs.len(),
+        });
+    }
+    let replayed = model
+        .replayed(&trace)
+        .map_err(|error| format!("{error:?}"))?;
+    if replayed.state_key() != actual.state_key() {
+        return Err("planned mission replay diverged".into());
+    }
+    Ok(Some(PlannedMission {
+        rollout: MissionRollout {
+            trace,
+            succeeded: replayed.matches(&goal()),
+            elapsed_time: replayed
+                .balance(&AccountId::Mission, &Asset::ElapsedTime)
+                .get(),
+            used_medical_kit: !replayed
+                .balance(&AccountId::Agent(AgentId::Medic), &Asset::UsedMedicalKit)
+                .is_zero(),
+        },
+        decisions,
+    }))
+}
+
 fn run_policy_with_scenario(model: &World, policy: Policy, scenario: Action) -> MissionRollout {
     let goal = goal();
     let mut scenario = Some(scenario);
@@ -1360,6 +1456,71 @@ mod tests {
         .expect("posterior information set can be replanned");
         assert!(matches!(second.action().rate(), RateId::Share(_)));
         assert!(actual.is_applicable(second.action()));
+    }
+
+    #[test]
+    fn planned_mission_commits_search_choices_and_conditions_each_observation() {
+        let model = initial();
+        let before = model.state_key();
+        let run = || {
+            run_planned_with_progress(
+                &model,
+                3,
+                MctsConfig::new(128, HORIZON).with_seed(17),
+                32,
+                |_, _| ControlFlow::Continue(()),
+            )
+            .unwrap()
+            .unwrap()
+        };
+        let result = run();
+        assert!(result.rollout.succeeded());
+        assert!(result.decisions.len() >= 5);
+        assert_eq!(model.state_key(), before);
+        assert_eq!(
+            result.rollout.trace().exchanges(),
+            run().rollout.trace().exchanges()
+        );
+        let mut actual = model.fork();
+        let mut beliefs = initial_beliefs(&model);
+        for (index, exchange) in result.rollout.trace().exchanges().iter().enumerate() {
+            actual.apply(exchange.clone()).unwrap();
+            if let Some(step) = result
+                .decisions
+                .iter()
+                .find(|step| step.trace_index == index)
+            {
+                assert_eq!(step.decision.action(), exchange);
+                assert_eq!(step.prior_worlds, beliefs.len());
+                let mut observed = actual.fork();
+                if let Some(response) = required_nature_response(&observed) {
+                    observed.apply(response).unwrap();
+                }
+                beliefs = update_beliefs(&beliefs, exchange, &scout_information(&observed));
+                assert_eq!(step.posterior_worlds, beliefs.len());
+                assert!(!beliefs.is_empty());
+            }
+        }
+        assert!(actual.matches(&goal()));
+        assert!(
+            result
+                .decisions
+                .iter()
+                .any(|step| step.posterior_worlds < step.prior_worlds)
+        );
+    }
+
+    #[test]
+    fn planned_mission_can_be_interrupted_without_mutating_the_source() {
+        let model = initial();
+        let before = model.state_key();
+        let result =
+            run_planned_with_progress(&model, 3, MctsConfig::new(128, HORIZON), 8, |_, _| {
+                ControlFlow::Break(())
+            })
+            .unwrap();
+        assert!(result.is_none());
+        assert_eq!(model.state_key(), before);
     }
 
     #[test]
