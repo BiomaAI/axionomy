@@ -48,6 +48,18 @@ values, trace lengths, and algorithm evidence side by side, while uniform
 complexity telemetry exposes accounts, rates, transitions, rejection proofs,
 and alternatives across every domain.
 
+The Mission's coordinated replay executes repeated ISMCTS decisions, conditions
+beliefs after each public action and required Nature response, and retains the
+search evidence for those committed actions. Actor observations are derived
+from each replay frame; the viewer shows the Scout's private sighting before
+it reaches the Medic. A post-scan constraint probe explains why coordinated
+movement requires sharing first. The sampled Pareto view is explicitly labeled
+as fixed-policy baseline evaluation, since it does not evaluate the planner.
+
+Outcome comparisons open by default and show initial-to-final scene metrics
+alongside objectives and search evidence, making the existing alternatives
+readable before opening an individual trace.
+
 The Living Market adds an exact reserve curve, replayed price path, direct
 per-actor price attribution, three counterfactual realities, and final exact
 Shapley attribution across every coalition of active actors. No external price

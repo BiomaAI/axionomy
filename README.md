@@ -151,7 +151,7 @@ adapters.
 ### Interfaces
 
 - One service contract shared by CLI, HTTP/SSE, MCP, Studio, and browser Wasm.
-- Thirteen discoverable problems with explicit Micro, Showcase, and Stress instances.
+- Fourteen discoverable problems with explicit Micro, Showcase, and Stress instances.
 - Snapshot leaderboards whose exact ranks, tradeoffs, and evidence update during replay.
 - A strict stateless MCP 2026-07-28 server with caller-owned snapshot storage.
 - Rust-owned OpenAPI, generated TypeScript, portable artifacts, and cross-interface tests.
@@ -260,6 +260,34 @@ cargo run -p axionomy-cli -- catalog
 cargo run -p axionomy-cli -- describe logistics
 cargo run -p axionomy-cli -- run logistics --instance showcase --strategy reliable
 ```
+
+## Three questions the examples can answer
+
+**What changes when an agent learns something?** In the
+[Mission](https://biomaai.github.io/axionomy/?problem=mission&strategy=coordinated&seed=11&budget=128),
+press **Run**, then follow the private sighting, belief update, explicit sharing,
+and subsequent decisions. Each public action in the coordinated replay is
+chosen by ISMCTS. Compare it with the direct North commitment in the same
+scenario. Try seed 17 afterward: a misleading sighting shows why valid actions
+can still lead to failure. Actor observations follow the replay step, and the
+premature coordinated move is rejected for missing shared information.
+
+**How much does one participant change the outcome?** The
+[Living Market](https://biomaai.github.io/axionomy/?problem=amm&strategy=market_day)
+compares its market day with the same economy without the whale and with thin
+liquidity. Read initial-to-final price and reserves side by side, then inspect
+individual effects and exact coalition attribution. Its Rust example also
+proves that a trader demanding more than the quote receives nothing and leaves
+all accounts unchanged.
+
+**Who wins, and what does winning cost?** In the
+[Work League](https://biomaai.github.io/axionomy/?problem=work_league&strategy=mixed_field&step=24&leaderboard=resource_efficiency),
+change the ranking dimension at the same economic step. Value, throughput,
+resource efficiency, waste, and reliability expose different consequences of
+competing for the same finite work.
+
+See [EXAMPLE_REVIEW.md](EXAMPLE_REVIEW.md) for the review of the existing suite
+and the next improvements that deepen each demonstration.
 
 ## Studio gallery
 
@@ -522,6 +550,7 @@ cargo run -p axionomy-problems --example workshop
 cargo run -p axionomy-problems --example scheduling
 cargo run -p axionomy-problems --example rescue
 cargo run -p axionomy-problems --example bridge
+cargo run -p axionomy-problems --example amm
 cargo run -p axionomy-problems --example marketplace
 cargo run -p axionomy-problems --example logistics
 cargo run -p axionomy-problems --example connect_four
