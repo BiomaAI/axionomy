@@ -193,11 +193,16 @@ test("keeps replay shortcuts scoped to the cockpit and preserves economic wordin
   await page.getByRole("tab", { name: /Step-by-step replay/ }).click();
   const comparison = page.locator(".strategy-comparison");
   const summary = comparison.locator("summary");
+  await expect(comparison).toHaveAttribute("open", "");
+  await expect(comparison).toContainText("Initial → final state");
   await summary.focus();
   await page.keyboard.press("Space");
   await expect(page.getByRole("button", { name: "Play" })).toBeVisible();
   await page.keyboard.press("Enter");
+  await expect(comparison).not.toHaveAttribute("open", "");
+  await page.keyboard.press("Enter");
   await expect(comparison).toHaveAttribute("open", "");
+  await expect(page.getByRole("button", { name: "Play" })).toBeVisible();
 });
 
 test("keeps the replay cockpit within a narrow viewport", async ({ page }) => {
