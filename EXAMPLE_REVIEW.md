@@ -24,6 +24,10 @@ consequences a visitor can understand and verify.
   observations after each replayed exchange, and the viewer follows the
   selected frame. The Scout's sighting and its transfer to the Medic are
   inspectable as actual balances.
+- **Scene labels need the same evidence discipline as the ledger.** Visual
+  inspection caught a shared-intelligence metric reading the wrong agent and
+  global scenario/goal state anchored to fixed compass locations. Those are
+  corrected, and agent statuses now expose their actual sighting or briefing.
 - **A malformed API call is a weak demonstration of a domain constraint.**
   Mission now includes a fully bound proposal to move together before sharing.
   Its assessment exposes the Scout's missing shared sighting and the Medic's

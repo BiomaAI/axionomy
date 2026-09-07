@@ -363,6 +363,7 @@ export function App() {
     const nextState = urlState({ problem: key, instance: next.default_instance, strategy: next.default_strategy, document: undefined, step: 0, leaderboard: undefined });
     writeUrl(nextState, "push");
     setProblemKey(key);
+    setCompletion(undefined);
     setInstanceKey(next.default_instance);
     setStrategyKey(next.default_strategy);
     setDocumentId(undefined);

@@ -417,6 +417,30 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                     .is_zero()
             })
             .expect("mission agents remain at an encoded location");
+        let known = [Location::North, Location::South]
+            .into_iter()
+            .find_map(|location| {
+                if !world
+                    .balance(&AccountId::Agent(agent), &Asset::SharedIntel(location))
+                    .is_zero()
+                {
+                    Some(format!("shared {location:?}"))
+                } else if !world
+                    .balance(&AccountId::Agent(agent), &Asset::Intel(location))
+                    .is_zero()
+                {
+                    Some(format!(
+                        "{} {location:?}",
+                        if agent == AgentId::Scout {
+                            "saw"
+                        } else {
+                            "briefed"
+                        }
+                    ))
+                } else {
+                    None
+                }
+            });
         let mut entity = link_balance(
             visual_entity(
                 format!("agent:{agent:?}"),
@@ -436,7 +460,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                         .balance(&AccountId::Agent(agent), &Asset::Injured)
                         .is_zero()
                     {
-                        "ready".into()
+                        known.unwrap_or_else(|| "ready".into())
                     } else {
                         "injured".into()
                     },
@@ -473,9 +497,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 "system:nature",
                 "Hidden scenario",
                 SceneGlyphView::Weather,
-                SceneAnchorView::GraphNode {
-                    node: "location:North".into(),
-                },
+                SceneAnchorView::Unanchored,
                 SceneEntityRoleView::Context,
                 SceneToneView::Uncertain,
                 Some("private truth".into()),
@@ -487,12 +509,17 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 "system:success",
                 "Mission outcome",
                 SceneGlyphView::Goal,
-                SceneAnchorView::GraphNode {
-                    node: "location:South".into(),
-                },
-                SceneEntityRoleView::State,
+                SceneAnchorView::Unanchored,
+                SceneEntityRoleView::Context,
                 SceneToneView::Goal,
-                Some("outcome account".into()),
+                Some(
+                    if world.matches(&mission::goal()) {
+                        "complete"
+                    } else {
+                        "rescue objective"
+                    }
+                    .into(),
+                ),
             ),
             "mission:account:success",
         ),
@@ -515,7 +542,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                         .filter(|location| {
                             !world
                                 .balance(
-                                    &AccountId::Agent(AgentId::Medic),
+                                    &AccountId::Agent(AgentId::Scout),
                                     &Asset::SharedIntel(*location),
                                 )
                                 .is_zero()
@@ -566,6 +593,25 @@ mod tests {
             .find(|frame| frame.exchange.rate.label == "Scout shares sighting: South")
             .unwrap();
         assert!(!share.observations[1].facts.is_empty());
+        let scene = share.after.scene.as_ref().unwrap();
+        assert_eq!(
+            scene
+                .metrics
+                .iter()
+                .find(|metric| metric.key == "shared-intel")
+                .unwrap()
+                .value,
+            "1"
+        );
+        assert!(
+            scene
+                .entities
+                .iter()
+                .filter(
+                    |entity| entity.id.key == "system:nature" || entity.id.key == "system:success"
+                )
+                .all(|entity| matches!(entity.anchor, axionomy_view::SceneAnchorView::Unanchored))
+        );
         for frame in &planned.frames {
             for observation in &frame.observations {
                 assert!(
