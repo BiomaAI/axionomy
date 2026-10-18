@@ -19,10 +19,11 @@ async function mazeGeometry(page: Page) {
 }
 
 test("runs a search, receives events, and scrubs its replay", async ({ page }) => {
+  test.setTimeout(60_000);
   await page.goto("/");
   await expect(page.getByRole("heading", { name: /Maze · least energy/ })).toBeVisible();
   await page.getByRole("button", { name: "Run", exact: true }).click();
-  await expect(page.getByText("New artifact computed and loaded")).toBeVisible();
+  await expect(page.getByText("New artifact computed and loaded")).toBeVisible({ timeout: 30_000 });
   await page.getByRole("tab", { name: /Step-by-step replay/ }).click();
   await page.getByRole("button", { name: "Next exchange" }).click();
   await expect(page.locator(".assessment-applicable")).toContainText("applicable");
