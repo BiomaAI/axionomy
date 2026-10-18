@@ -3,6 +3,8 @@
 use axionomy::{
     Account, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Quantity, Rate, basket,
 };
+mod dynamics;
+
 use axionomy_search::{
     SearchSolution, astar, bfs, dijkstra,
     pareto::{self, Objective, ObjectiveVector, ParetoError, ParetoSearchResult},
@@ -47,6 +49,14 @@ pub enum Asset {
     At(Node),
     Edge(Node, Node),
     Key,
+    PowerTransit,
+    PowerVault,
+    Health,
+    Injury,
+    Shield,
+    UsedShield,
+    Medicine,
+    UsedMedicine,
     Locked,
     Open,
     Energy,
@@ -67,6 +77,21 @@ pub enum Role {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum RateId {
+    DivertPower {
+        at: Node,
+        to_vault: bool,
+    },
+    TakeProtection {
+        at: Node,
+    },
+    Treat {
+        at: Node,
+    },
+    ProtectedMove {
+        from: Node,
+        to: Node,
+        energy: u64,
+    },
     Move {
         from: Node,
         to: Node,
@@ -101,7 +126,7 @@ const MICRO_EDGES: [(Node, Node, u64, bool); 5] = [
     (Node::Detour, Node::Exit, 5, false),
 ];
 
-const SHOWCASE_EDGES: [(Node, Node, u64, bool); 24] = [
+const SHOWCASE_EDGES: [(Node, Node, u64, bool); 25] = [
     // The efficient route deliberately revisits the library after collecting
     // the key. Search must reason over position, inventory, and gate state;
     // room alone is not a sufficient state key.
@@ -133,9 +158,10 @@ const SHOWCASE_EDGES: [(Node, Node, u64, bool); 24] = [
     // The shortest sequence is intentionally the most expensive route.
     (Node::Start, Node::Detour, 8, false),
     (Node::Detour, Node::Exit, 7, false),
+    (Node::Workshop, Node::Garden, 1, false),
 ];
 
-const STRESS_EDGES: [(Node, Node, u64, bool); 40] = [
+const STRESS_EDGES: [(Node, Node, u64, bool); 42] = [
     SHOWCASE_EDGES[0],
     SHOWCASE_EDGES[1],
     SHOWCASE_EDGES[2],
@@ -160,6 +186,7 @@ const STRESS_EDGES: [(Node, Node, u64, bool); 40] = [
     SHOWCASE_EDGES[21],
     SHOWCASE_EDGES[22],
     SHOWCASE_EDGES[23],
+    SHOWCASE_EDGES[24],
     (Node::Atrium, Node::Archive, 2, false),
     (Node::Archive, Node::Scriptorium, 1, false),
     (Node::Scriptorium, Node::KeyRoom, 1, false),
@@ -176,6 +203,7 @@ const STRESS_EDGES: [(Node, Node, u64, bool); 40] = [
     (Node::Ridge, Node::Ruins, 2, false),
     (Node::Ruins, Node::Chapel, 2, false),
     (Node::Chapel, Node::Bridge, 2, false),
+    (Node::Ruins, Node::Garden, 2, false),
 ];
 
 /// Builds the complete closed problem. Topology, lock state, energy, target,
@@ -199,7 +227,7 @@ pub fn initial() -> World {
 
 /// A compact cyclic maze whose room, inventory, and gate state all matter.
 pub fn initial_showcase() -> World {
-    build(
+    dynamics::build(build(
         &SHOWCASE_EDGES,
         18,
         14,
@@ -222,13 +250,13 @@ pub fn initial_showcase() -> World {
         ],
         Node::KeyRoom,
         Node::Gate,
-    )
+    ))
 }
 
 /// The showcase topology plus a second cyclic district that substantially
 /// increases the exact-search frontier without changing the problem's rules.
 pub fn initial_stress() -> World {
-    build(
+    dynamics::build(build(
         &STRESS_EDGES,
         24,
         18,
@@ -260,7 +288,7 @@ pub fn initial_stress() -> World {
         ],
         Node::KeyRoom,
         Node::Gate,
-    )
+    ))
 }
 
 fn build(
@@ -487,7 +515,7 @@ pub fn move_energy(before: &World, _: &Action, after: &World) -> u64 {
     spent_energy(after).saturating_sub(spent_energy(before))
 }
 
-fn action(rate: RateId) -> Action {
+pub fn action(rate: RateId) -> Action {
     Exchange::new(rate, Quantity::new(1))
         .bind(Role::Actor, AccountId::Agent)
         .bind(Role::Environment, AccountId::World)
@@ -573,11 +601,11 @@ mod tests {
     }
 
     #[test]
-    fn showcase_has_four_exact_tradeoffs_and_guidance_reduces_search() {
+    fn showcase_tradeoffs_include_power_and_protection() {
         let world = initial_showcase();
         let dijkstra = solve_dijkstra(&world).expect("showcase has an energy-optimal route");
         let astar = solve_astar(&world).expect("showcase has a guided energy-optimal route");
-        assert_eq!(dijkstra.cost(), 8);
+        assert_eq!(dijkstra.cost(), 9);
         assert_eq!(astar.cost(), dijkstra.cost());
         assert!(astar.expanded() < dijkstra.expanded());
 
@@ -593,7 +621,7 @@ mod tests {
             })
             .collect::<Vec<_>>();
         outcomes.sort_unstable();
-        assert_eq!(outcomes, [(8, 11), (11, 6), (12, 4), (15, 3)]);
+        assert_eq!(outcomes, [(9, 12), (11, 6), (12, 5), (15, 4)]);
     }
 
     #[test]

@@ -143,6 +143,7 @@ export function App() {
   const [copied, setCopied] = useState(false);
   const eventSource = useRef<EngineRunSubscription | null>(null);
   const runStartedAt = useRef<number | undefined>(undefined);
+  const previewGeneration = useRef(0);
 
   const problem = catalog.data?.find((candidate) => candidate.key === problemKey);
   const instance = problem?.instances.find((candidate) => candidate.key === instanceKey);
@@ -217,13 +218,19 @@ export function App() {
     setStrategyKey(requestedStrategy);
     setError(undefined);
     setFreshArtifactId(undefined);
+    const generation = ++previewGeneration.current;
+    let disposed = false;
     engine.defaultArtifact(problem.key).then((next) => {
+      if (disposed || generation !== previewGeneration.current) return;
       const requestedDocument = next.documents.find((candidate) => candidate.id === documentId)?.id
         ?? next.documents.find((candidate) => candidate.id === `${problem.key}:${requestedStrategy}`)?.id
         ?? next.selected_document_id;
       setArtifact(next);
       setDocumentId(requestedDocument);
-    }).catch((cause: unknown) => setError(cause instanceof Error ? cause.message : String(cause)));
+    }).catch((cause: unknown) => {
+      if (!disposed && generation === previewGeneration.current) setError(cause instanceof Error ? cause.message : String(cause));
+    });
+    return () => { disposed = true; };
   }, [problem?.key, engine.kind]);
 
   useEffect(() => {
@@ -308,6 +315,7 @@ export function App() {
   }, [document, viewMode]);
 
   const start = async () => {
+    previewGeneration.current += 1;
     const submittedProblem = problem?.title ?? problemKey;
     const submittedInstance = problem?.instances.find((candidate) => candidate.key === instanceKey)?.label ?? instanceKey;
     const submittedStrategy = problem?.strategies.find((candidate) => candidate.key === strategyKey)?.label ?? strategyKey;
@@ -321,6 +329,7 @@ export function App() {
           eventSource.current?.close();
           const next = await engine.artifact(event.artifact_id);
           const durationMs = runStartedAt.current === undefined ? 0 : performance.now() - runStartedAt.current;
+          previewGeneration.current += 1;
           setArtifact(next); setDocumentId(event.document_id); setFreshArtifactId(event.artifact_id);
           setCompletion({ artifactId: event.artifact_id, problem: submittedProblem, instance: submittedInstance, strategy: submittedStrategy, seed, budget, durationMs, documents: next.documents.length });
           setElapsedMs(durationMs); setRun(undefined);
@@ -340,6 +349,7 @@ export function App() {
 
   const loadFile = async (file?: File) => {
     if (!file) return;
+    previewGeneration.current += 1;
     try {
       const next = JSON.parse(await file.text()) as RunArtifact;
       if (!Array.isArray(next.documents) || !next.selected_document_id) throw new Error("missing artifact documents");
@@ -417,7 +427,7 @@ export function App() {
 
     {(active || completion || linkNotice) && <div className="status-layer">
       {active && <RunActivity launching={launching} run={run} events={events} elapsedMs={elapsedMs} />}
-      {completion && <CompletionBanner notice={completion} onDismiss={() => setCompletion(undefined)} />}
+      {completion && <><CompletionBanner notice={completion} onDismiss={() => setCompletion(undefined)} /><VerifiedStandings events={events} live={false} /></>}
       {linkNotice && <div className="link-notice" role="status">{linkNotice}<button type="button" onClick={() => setLinkNotice(undefined)}>Dismiss</button></div>}
     </div>}
 
@@ -488,7 +498,6 @@ function RunActivity({ launching, run, events, elapsedMs }: { launching: boolean
   const total = progress?.total ?? run?.total ?? undefined;
   const status = launching ? "Starting engine run" : run?.status === "paused" ? "Run paused" : "Running computation";
   const message = latest ? eventMessage(latest) : "Submitting reproducible run request…";
-  const liveFrame = [...events].reverse().find((event): event is Extract<StudioEvent, { kind: "frame_appended" }> => event.kind === "frame_appended");
   return <section className={`run-activity ${run?.status === "paused" ? "paused" : ""}`} role="status" aria-live="polite">
     <div className="run-activity-heading"><span className="spinner" aria-hidden="true" /><div><strong>{status}</strong><span>{message}</span></div></div>
     <div className="run-activity-progress">
@@ -496,8 +505,15 @@ function RunActivity({ launching, run, events, elapsedMs }: { launching: boolean
       <span>{total === 0 ? `${completed} states expanded` : total !== undefined ? `${completed} / ${total}` : "waiting for first checkpoint"}</span>
     </div>
     <div className="run-activity-meta"><span>{formatDuration(elapsedMs)} elapsed</span>{run && <><span>{run.request.instance ?? "default"} instance</span><span>seed {run.request.seed}</span><span>budget {run.request.budget}</span><code>{run.id}</code></>}</div>
-    {liveFrame?.frame.after.leaderboards[0] && <div className="live-standings"><span>Live verified frame {liveFrame.frame_index + 1} · {liveFrame.frame.after.leaderboards[0].label}</span>{liveFrame.frame.after.leaderboards[0].entries.slice(0, 4).map((entry) => <strong key={entry.participant.key}>{entry.rank ? `#${entry.rank}` : "—"} {entry.participant.label} <b>{entry.value}</b></strong>)}</div>}
+    <VerifiedStandings events={events} live />
   </section>;
+}
+
+function VerifiedStandings({ events, live }: { events: StudioEvent[]; live: boolean }) {
+  const last = [...events].reverse().find((event): event is Extract<StudioEvent, { kind: "frame_appended" }> => event.kind === "frame_appended");
+  const board = last?.frame.after.leaderboards[0];
+  if (!last || !board) return null;
+  return <div className="live-standings"><span>{live ? "Live" : "Last"} verified frame {last.frame_index + 1} · {board.label}</span>{board.entries.slice(0, 4).map((entry) => <strong key={entry.participant.key}>{entry.rank ? `#${entry.rank}` : "—"} {entry.participant.label} <b>{entry.value}</b></strong>)}</div>;
 }
 
 function CompletionBanner({ notice, onDismiss }: { notice: CompletionNotice; onDismiss: () => void }) {

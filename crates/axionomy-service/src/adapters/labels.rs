@@ -41,6 +41,302 @@ macro_rules! debug_labels {
     )+};
 }
 
+debug_labels!(
+    perishables::cold_chain::Asset,
+    perishables::cold_chain::Role,
+    rescue::incident::Asset,
+    rescue::incident::Role,
+    mission::expedition::Asset,
+    mission::expedition::Role,
+    logistics::fleet::Asset,
+    logistics::fleet::Role
+);
+impl StudioLabel for logistics::fleet::AccountId {
+    fn studio_label(&self) -> String {
+        match self {
+            Self::World => "Fleet clock, budget and road capacity".into(),
+            Self::Station => "Fuel, repair and towing operator".into(),
+            Self::Nature => "Seeded vehicle and route tickets".into(),
+            Self::Vehicle(van) => format!("{van:?} van"),
+            Self::Order(id) => format!("Order {}", id + 1),
+        }
+    }
+}
+impl StudioLabel for logistics::fleet::RateId {
+    fn studio_label(&self) -> String {
+        match self {
+            Self::Release(id) => format!("Order {} becomes available", id + 1),
+            Self::Load { van, order, at } => {
+                format!("{van:?} van loads Order {} at {at:?}", order + 1)
+            }
+            Self::Stage { van, order } => {
+                format!("{van:?} van stages Order {} at the shared hub", order + 1)
+            }
+            Self::Transfer {
+                from, to, order, ..
+            } => format!("Transfer Order {} from {from:?} to {to:?}", order + 1),
+            Self::Depart { van, from, to } => format!("{van:?} van departs {from:?} → {to:?}"),
+            Self::Resolve { van, outcome, .. } => {
+                format!("{van:?} van's trip resolves: {outcome:?}")
+            }
+            Self::Arrive { van, to, .. } => format!("{van:?} van arrives at {to:?}"),
+            Self::Deliver { van, order, late } => format!(
+                "{van:?} delivers Order {} {}",
+                order + 1,
+                if *late {
+                    "late for half payment"
+                } else {
+                    "within its window"
+                }
+            ),
+            Self::Expire { order, .. } => format!("Order {} expires undelivered", order + 1),
+            Self::Refuel(van) => format!("{van:?} occupies the pump and purchases 3 fuel"),
+            Self::EndRefuel(van) => format!("{van:?} finishes refueling and releases the pump"),
+            Self::Repair { van, damaged } => format!(
+                "{van:?} starts {} in the repair bay",
+                if *damaged {
+                    "breakdown repair"
+                } else {
+                    "preventive maintenance"
+                }
+            ),
+            Self::EndRepair { van, .. } => {
+                format!("{van:?} finishes service and releases the repair bay")
+            }
+            Self::Tow { van, from } => {
+                format!("Dispatch the shared tow truck for {van:?} at {from:?}")
+            }
+            Self::EndTow(van) => format!("Tow {van:?} to depot and release the tow truck"),
+            Self::Tick => "Advance shared fleet time one tick".into(),
+            Self::Close => {
+                "Close the fleet run with all orders and occupied services settled".into()
+            }
+        }
+    }
+}
+impl StudioLabel for mission::expedition::AccountId {
+    fn studio_label(&self) -> String {
+        match self {
+            Self::World => "Team clock, weather and supplies".into(),
+            Self::Nature => "Hidden mission sites and reports".into(),
+            Self::Agent(agent) => format!("{agent:?}"),
+            Self::Objective(id) => {
+                if mission::expedition::patient(*id) {
+                    format!("Casualty {}", id / 2 + 1)
+                } else {
+                    "Research archive".into()
+                }
+            }
+        }
+    }
+}
+impl StudioLabel for mission::expedition::RateId {
+    fn studio_label(&self) -> String {
+        match self {
+            Self::Depart { agent, from, to } => {
+                format!("{agent:?} starts travel {from:?} → {to:?}")
+            }
+            Self::Arrive {
+                agent,
+                to,
+                hazardous,
+            } => format!(
+                "{agent:?} arrives at {to:?}{}",
+                if *hazardous {
+                    " and is injured by the hazard"
+                } else {
+                    ""
+                }
+            ),
+            Self::Survey(location) => format!("Scout surveys {location:?}"),
+            Self::Discover {
+                objective,
+                location,
+            } => format!(
+                "Scout discovers {} at {location:?}",
+                mission::expedition::AccountId::Objective(*objective).studio_label()
+            ),
+            Self::Scan => "Scout requests a fallible sensor report".into(),
+            Self::Report { location, .. } => format!("Private sensor report suggests {location:?}"),
+            Self::Share {
+                objective,
+                location,
+                remote,
+            } => format!(
+                "Brief Medic on {} at {location:?} {}",
+                mission::expedition::AccountId::Objective(*objective).studio_label(),
+                if *remote {
+                    "by radio"
+                } else {
+                    "at a rendezvous"
+                }
+            ),
+            Self::Collect { .. } => "Scout starts three-tick archive recovery".into(),
+            Self::FinishCollect(_) => "Scout finishes recovery and carries the archive".into(),
+            Self::TreatPatient { objective, .. } => format!(
+                "Medic stabilizes {}",
+                mission::expedition::AccountId::Objective(*objective).studio_label()
+            ),
+            Self::Extract { .. } => "Scout and Medic begin two-tick joint extraction".into(),
+            Self::FinishExtract(_) => "Joint extraction ends; Medic carries the casualty".into(),
+            Self::Deliver(objective) => format!(
+                "Deliver {} safely to base",
+                mission::expedition::AccountId::Objective(*objective).studio_label()
+            ),
+            Self::TreatAgent { target, .. } => format!("Medic treats {target:?}'s injury"),
+            Self::Resupply(agent) => {
+                format!(
+                    "{agent:?} takes finite base energy{}",
+                    if *agent == mission::expedition::Agent::Medic {
+                        " and a medical kit"
+                    } else {
+                        ""
+                    }
+                )
+            }
+            Self::Weather { location, opening } => format!(
+                "{location:?} {}",
+                if *opening {
+                    "reopens as the hazard clears"
+                } else {
+                    "closes as the hazard arrives"
+                }
+            ),
+            Self::Clinical {
+                objective, active, ..
+            } => format!(
+                "{}: {}",
+                mission::expedition::AccountId::Objective(*objective).studio_label(),
+                if *active {
+                    "condition deteriorates"
+                } else {
+                    "outcome already settled"
+                }
+            ),
+            Self::FinishClinical(_) => "Finish the scheduled casualty assessment".into(),
+            Self::Fail {
+                objective, dead, ..
+            } => format!(
+                "{} {}",
+                mission::expedition::AccountId::Objective(*objective).studio_label(),
+                if *dead {
+                    "dies before evacuation"
+                } else {
+                    "misses the mission deadline"
+                }
+            ),
+            Self::Tick(day) => format!("Advance shared mission time to {}", day + 1),
+            Self::Close => "Close the mission with every objective accounted for".into(),
+        }
+    }
+}
+impl StudioLabel for rescue::incident::AccountId {
+    fn studio_label(&self) -> String {
+        match self {
+            Self::World => "Incident clock and hospital".into(),
+            Self::Responder => "Evacuation crew".into(),
+            Self::Nature => "Hidden patient locations and sensor reports".into(),
+            Self::Patient(id) => format!("Patient {}", id + 1),
+        }
+    }
+}
+impl StudioLabel for rescue::incident::RateId {
+    fn studio_label(&self) -> String {
+        match self {
+            Self::Drive { from, to, fast } => format!(
+                "Drive {from:?} → {to:?}{}",
+                if *fast {
+                    " at emergency speed"
+                } else {
+                    " conserving fuel"
+                }
+            ),
+            Self::Search(location) => format!("Search {location:?} for casualties"),
+            Self::Scan => "Spend a sensor charge on a new location hint".into(),
+            Self::Report { location, .. } => {
+                format!("Sensor suggests {location:?}; hint may be wrong")
+            }
+            Self::Discover { patient, location } => {
+                format!("Discover Patient {} at {location:?}", patient + 1)
+            }
+            Self::Deteriorate(patient) => format!("Patient {} loses vitality", patient + 1),
+            Self::Stabilize { patient, .. } => format!(
+                "Stabilize Patient {} and extend the evacuation window",
+                patient + 1
+            ),
+            Self::Load { patient, .. } => {
+                format!("Load Patient {} into the evacuation seat", patient + 1)
+            }
+            Self::Unload(patient) => format!("Admit Patient {} to the hospital", patient + 1),
+            Self::Lose { patient, cause, .. } => {
+                format!("Resolve Patient {}: {cause:?}", patient + 1)
+            }
+            Self::Resupply => "Take the hospital's finite fuel, energy and medical reserve".into(),
+            Self::Wait => "Advance incident time by one tick".into(),
+            Self::Close => "Close the incident with all patient outcomes recorded".into(),
+        }
+    }
+}
+impl StudioLabel for perishables::cold_chain::AccountId {
+    fn studio_label(&self) -> String {
+        match self {
+            Self::World => "Cold-chain resources".into(),
+            Self::Buyer => "Funded food deliveries".into(),
+            Self::Batch(id) => format!("Cohort {}", id + 1),
+        }
+    }
+}
+impl StudioLabel for perishables::cold_chain::RateId {
+    fn studio_label(&self) -> String {
+        match self {
+            Self::Split {
+                source,
+                destination,
+                ..
+            } => format!(
+                "Split Cohort {} into Cohort {} with the same heat history",
+                source + 1,
+                destination + 1
+            ),
+            Self::Move { batch, to, .. } => format!("Move Cohort {} to {to:?}", batch + 1),
+            Self::Process(batch) => format!("Preserve fresh food in Cohort {}", batch + 1),
+            Self::Deliver {
+                batch, preserved, ..
+            } => format!(
+                "Deliver {} food from Cohort {}",
+                if *preserved { "preserved" } else { "fresh" },
+                batch + 1
+            ),
+            Self::Discard { batch, .. } => format!(
+                "Discard spoiled food from Cohort {} and release space",
+                batch + 1
+            ),
+            Self::Cool => "Power refrigeration for today".into(),
+            Self::Generate => "Burn shared fuel for backup electricity".into(),
+            Self::EndDay => "Close today's decisions and settle thermal exposure".into(),
+            Self::AgeEmpty(batch) => format!("Cohort {} has no fresh food to age", batch + 1),
+            Self::AgeCold(batch) => format!(
+                "Cohort {} stays cold without resetting its prior heat",
+                batch + 1
+            ),
+            Self::AgeWarm { batch, spoil, .. } => format!(
+                "Cohort {} {}",
+                batch + 1,
+                if *spoil {
+                    "crosses the spoilage threshold"
+                } else {
+                    "accumulates heat"
+                }
+            ),
+            Self::OpenDay(day) => format!(
+                "Open day {} with the encoded grid supply and new obligations",
+                day + 1
+            ),
+            Self::Close => "Close the cold-chain horizon and record unmet demand".into(),
+        }
+    }
+}
+
 fn maze_node(node: maze::Node) -> String {
     words(&node)
 }
@@ -63,6 +359,14 @@ impl StudioLabel for maze::AccountId {
 impl StudioLabel for maze::Asset {
     fn studio_label(&self) -> String {
         match *self {
+            Self::PowerTransit => "Power routed to the canal crossing".into(),
+            Self::PowerVault => "Power routed to the vault shutter".into(),
+            Self::Health => "Health reserve".into(),
+            Self::Injury => "Injuries slowing each action".into(),
+            Self::Shield => "Protective equipment charges".into(),
+            Self::UsedShield => "Spent protection".into(),
+            Self::Medicine => "Available medicine".into(),
+            Self::UsedMedicine => "Medicine used".into(),
             Self::At(node) => format!("Standing in {}", maze_node(node)),
             Self::Edge(from, to) => {
                 format!("Passage {} → {}", maze_node(from), maze_node(to))
@@ -85,6 +389,20 @@ impl StudioLabel for maze::Asset {
 impl StudioLabel for maze::RateId {
     fn studio_label(&self) -> String {
         match *self {
+            Self::DivertPower { at, to_vault } => format!(
+                "Divert power at {} to {}",
+                maze_node(at),
+                if to_vault { "vault" } else { "canal" }
+            ),
+            Self::TakeProtection { at } => {
+                format!("Collect protective equipment at {}", maze_node(at))
+            }
+            Self::Treat { at } => format!("Treat injuries at {}", maze_node(at)),
+            Self::ProtectedMove { from, to, energy } => format!(
+                "Protected crossing {} → {} ({energy} energy)",
+                maze_node(from),
+                maze_node(to)
+            ),
             Self::Move {
                 from,
                 to,
@@ -122,6 +440,17 @@ impl StudioLabel for sokoban::AccountId {
 impl StudioLabel for sokoban::Asset {
     fn studio_label(&self) -> String {
         match self {
+            Self::DeadSquare => "A crate cannot reach a goal from here".into(),
+            Self::ExitCell => "Warehouse exit".into(),
+            Self::AtExit => "Player at the exit".into(),
+            Self::AwayFromExit => "Player inside the warehouse".into(),
+            Self::Plate(id) => format!("Pressure plate {}", id + 1),
+            Self::Door(id) => format!("Door {}", id + 1),
+            Self::Panel(id) => format!("Latch panel {}", id + 1),
+            Self::Pressed(id) => format!("Plate {} has a crate", id + 1),
+            Self::Released(id) => format!("Plate {} is released", id + 1),
+            Self::LatchReady(id) => format!("Door {} can be latched", id + 1),
+            Self::Latched(id) => format!("Door {} latched open", id + 1),
             Self::CellIdentity(cell) => format!("This is cell {cell}"),
             Self::BoardWidth(width) => format!("Board width is {width}"),
             Self::BoardHeight(height) => format!("Board height is {height}"),
@@ -140,6 +469,9 @@ impl StudioLabel for sokoban::Asset {
 impl StudioLabel for sokoban::RateId {
     fn studio_label(&self) -> String {
         match self {
+            Self::Latch { circuit, at } => {
+                format!("Latch door {} from panel at cell {at}", circuit + 1)
+            }
             Self::Move { from, to } => format!("Move from cell {from} to cell {to}"),
             Self::Push {
                 behind,
@@ -195,13 +527,36 @@ debug_labels!(exact_cover::Role);
 
 impl StudioLabel for workshop::AccountId {
     fn studio_label(&self) -> String {
-        "Workshop".into()
+        match self {
+            Self::Workshop => "Workshop".into(),
+            Self::Customer(id) => format!("Customer {}", id + 1),
+        }
     }
 }
 
 impl StudioLabel for workshop::Asset {
     fn studio_label(&self) -> String {
         match self {
+            Self::CustomerIdentity(id) => format!("Customer {} identity", id + 1),
+            Self::Credit => "Credit".into(),
+            Self::Frame => "Prepared frames".into(),
+            Self::Panel => "Prepared panel material".into(),
+            Self::Offcut => "Recyclable offcuts".into(),
+            Self::Table => "Finished tables".into(),
+            Self::Durability => "Tool durability".into(),
+            Self::Wear => "Tool wear".into(),
+            Self::ToolPotential => "Upgrade capacity".into(),
+            Self::RepairKit => "Repair kits".into(),
+            Self::UsedRepairKit => "Used repair kits".into(),
+            Self::UpgradeKit => "Available upgrade".into(),
+            Self::Upgraded => "Precision tool upgrade".into(),
+            Self::Idle => "Workbench available".into(),
+            Self::Contract(id) => format!("Contract {} available", id + 1),
+            Self::Raw(id) => format!("Contract {} awaiting components", id + 1),
+            Self::Prepared(id) => format!("Contract {} components prepared", id + 1),
+            Self::Assembled(id) => format!("Contract {} ready to deliver", id + 1),
+            Self::Fulfilled(id) => format!("Contract {} fulfilled", id + 1),
+            Self::Completed => "Contracts delivered".into(),
             Self::Wood => "Wood left".into(),
             Self::Labor => "Labor left".into(),
             Self::SpentLabor => "Labor used".into(),
@@ -219,6 +574,27 @@ impl StudioLabel for workshop::Asset {
 impl StudioLabel for workshop::RateId {
     fn studio_label(&self) -> String {
         match self {
+            Self::Accept(id) => format!("Accept contract {}", id + 1),
+            Self::Prepare {
+                order,
+                precise,
+                upgraded,
+            } => format!(
+                "Prepare components for contract {} ({})",
+                order + 1,
+                if *upgraded {
+                    "upgraded tool"
+                } else if *precise {
+                    "precision cut"
+                } else {
+                    "fast cut"
+                }
+            ),
+            Self::Assemble(id) => format!("Assemble contract {}", id + 1),
+            Self::Deliver(id) => format!("Deliver contract {} and collect payment", id + 1),
+            Self::Repair => "Restore worn tool with a repair kit".into(),
+            Self::Upgrade => "Install the precision tool upgrade".into(),
+            Self::Recycle => "Recover wood from two offcuts".into(),
             Self::BasicChair => "Build one chair (fast, more scrap)".into(),
             Self::EfficientBatch => "Build two chairs (slower, less scrap)".into(),
             Self::CounterfeitChair => "Counterfeit chair proposal".into(),
@@ -252,6 +628,7 @@ impl StudioLabel for amm::AccountId {
             Self::Treasury => "Closed-economy Treasury".into(),
             Self::Information => "Scarcity Information".into(),
             Self::Actor(actor) => actor.studio_label(),
+            Self::World => "Market calendar and production conditions".into(),
         }
     }
 }
@@ -259,6 +636,43 @@ impl StudioLabel for amm::AccountId {
 impl StudioLabel for amm::Asset {
     fn studio_label(&self) -> String {
         match self {
+            Self::ActorIdentity(actor) => format!("Identity: {}", actor.studio_label()),
+            Self::PoolIdentity => "Identity: energy pool".into(),
+            Self::TreasuryIdentity => "Identity: procurement treasury".into(),
+            Self::WorldIdentity => "Identity: market calendar".into(),
+            Self::MarketActive => "Market season active".into(),
+            Self::MarketEnded => "Market season closed".into(),
+            Self::Day => "Completed market days".into(),
+            Self::AtDay(day) => format!("Market day {}", day + 1),
+            Self::Days => "Days in season".into(),
+            Self::Scale => "Production scale".into(),
+            Self::MarketOpen => "Market access open".into(),
+            Self::Trading => "Still trading today".into(),
+            Self::Done => "Trading finished for today".into(),
+            Self::Decisions => "Decisions remaining today".into(),
+            Self::StorageCapacity => "Energy storage capacity".into(),
+            Self::ProductionCapacity => "Daily generating capacity".into(),
+            Self::ProductionAllowance => "Remaining production today".into(),
+            Self::FutureCapacity => "Available capacity expansion".into(),
+            Self::PendingCapacity => "Capacity under construction".into(),
+            Self::ConstructionDue => "Construction completes at day index".into(),
+            Self::ReferencePrice => "Smoothed prior closing price (milli)".into(),
+            Self::Sunlight(day) => format!("Day {} sunlight percent", day + 1),
+            Self::CurrentSunlight => "Current sunlight percent".into(),
+            Self::LiquidityDecision => "Liquidity adjustment available".into(),
+            Self::FutureNeed(actor) => format!("{} future energy needs", actor.studio_label()),
+            Self::MissedNeed(actor) => format!("{} unmet energy needs", actor.studio_label()),
+            Self::FutureObligation(actor) => format!("{} future obligations", actor.studio_label()),
+            Self::DefaultedObligation(actor) => {
+                format!("{} missed obligations", actor.studio_label())
+            }
+            Self::UnmadeGoods => "Remaining production contracts".into(),
+            Self::Goods => "Manufactured goods awaiting sale".into(),
+            Self::DeliveredGoods => "Goods delivered to procurement".into(),
+            Self::IncomeDue => "Household income available".into(),
+            Self::FutureIncome => "Future income entitlements".into(),
+            Self::ReceivedIncome => "Income payments received".into(),
+            Self::MissedIncome => "Unpaid income entitlements".into(),
             Self::Energy => "Usable energy".into(),
             Self::Credit => "Settlement credit".into(),
             Self::SolarPotential => "Unharvested solar potential".into(),
@@ -282,6 +696,14 @@ impl StudioLabel for amm::Asset {
 impl StudioLabel for amm::RateId {
     fn studio_label(&self) -> String {
         match self {
+            Self::EndTrading(actor) => format!("{} finishes trading today", actor.studio_label()),
+            Self::AdvanceDay(day) => format!("Close day {} and open day {}", day + 1, day + 2),
+            Self::CloseMarket => "Close the market season and record unmet needs".into(),
+            Self::InvestProduction => "Fund new generating capacity".into(),
+            Self::CommissionProduction => "Bring completed generating capacity online".into(),
+            Self::DeliverGoods => "Factory sells manufactured goods".into(),
+            Self::CollectIncome => "Household collects its daily income".into(),
+            Self::FundLiquidity => "Add liquidity at current reserves with bounded rounding".into(),
             Self::BuyEnergy => "Buy energy from the AMM".into(),
             Self::SellEnergy => "Sell energy into the AMM".into(),
             Self::AddLiquidity => "Deepen AMM liquidity".into(),
@@ -320,6 +742,7 @@ impl StudioLabel for scheduling::AccountId {
         match self {
             Self::Job(value) => job(*value).into(),
             Self::Slot(value, slot) => format!("{} at slot {slot}", machine(*value)),
+            Self::Machine(value) => machine(*value).into(),
             Self::Success => "Schedule".into(),
         }
     }
@@ -337,6 +760,40 @@ impl StudioLabel for scheduling::Asset {
             Self::Makespan(slot) => format!("Overall finish at slot {slot}"),
             Self::Active => "Schedule in progress".into(),
             Self::Solved => "Schedule complete".into(),
+            Self::MachineIdentity(value) => format!("Identity: {}", machine(*value)),
+            Self::Ready(op) => format!("{op:?} ready for routing"),
+            Self::Queued(op, value) => format!("{op:?} queued on {}", machine(*value)),
+            Self::Running(op, value) => format!("{op:?} running on {}", machine(*value)),
+            Self::Paused(op, value) => format!("{op:?} paused on {}", machine(*value)),
+            Self::QueueFree => "Queue space".into(),
+            Self::QueueTicket(op) => format!("Queue reservation for {op:?}"),
+            Self::Idle => "Machine idle".into(),
+            Self::Busy => "Machine occupied".into(),
+            Self::Online => "Machine online".into(),
+            Self::Broken => "Machine broken".into(),
+            Self::Repairing => "Repair underway".into(),
+            Self::Configured(value) => format!("Configured for {}", job(*value)),
+            Self::Labor => "Available crew".into(),
+            Self::BusyLabor => "Occupied crew".into(),
+            Self::RepairKit => "Repair kit".into(),
+            Self::UsedRepairKit => "Repair kit used".into(),
+            Self::Arrival => "Job release time".into(),
+            Self::Due => "Activity completes at".into(),
+            Self::WorkRemaining => "Interrupted work remaining".into(),
+            Self::Done => "Job completed".into(),
+            Self::CompletionTime => "Actual completion time".into(),
+            Self::Now => "World time".into(),
+            Self::TimeRemaining => "Workday remaining".into(),
+            Self::FaultAt => "Scheduled disruption time".into(),
+            Self::FaultPending => "Disruption pending".into(),
+            Self::FaultOccurred => "Disruption occurred".into(),
+            Self::RepairDuration => "Repair duration".into(),
+            Self::NotStarted(op) => format!("{op:?} has not started"),
+            Self::Started(op) => format!("{op:?} execution started"),
+            Self::StartTime(op) => format!("{op:?} actual start"),
+            Self::EndTime(op) => format!("{op:?} actual completion"),
+            Self::ExecutedOn(op, value) => format!("{op:?} uses {}", machine(*value)),
+            Self::Interrupted(op) => format!("{op:?} was interrupted"),
         }
     }
 }
@@ -356,6 +813,33 @@ impl StudioLabel for scheduling::RateId {
             } => format!(
                 "Finish schedule (Job One {job_one_end}, Job Two {job_two_end}, makespan {makespan})"
             ),
+            Self::Queue {
+                operation,
+                machine: value,
+            } => format!("Queue {operation:?} on {}", machine(*value)),
+            Self::CancelQueue {
+                operation,
+                machine: value,
+            } => format!("Release {operation:?}'s queue on {}", machine(*value)),
+            Self::Start {
+                operation,
+                machine: value,
+                configured,
+            } => format!(
+                "Start {operation:?} on {} (configured for {})",
+                machine(*value),
+                job(*configured)
+            ),
+            Self::Complete { operation, .. } => format!("Complete {operation:?}"),
+            Self::Resume { operation, .. } => format!("Resume interrupted {operation:?}"),
+            Self::Fault { operation } => format!(
+                "Machine Two fails{}",
+                operation.map_or(String::new(), |op| format!(" during {op:?}"))
+            ),
+            Self::Repair => "Begin Machine Two repair".into(),
+            Self::CompleteRepair => "Complete Machine Two repair".into(),
+            Self::Advance { to } => format!("Advance workday to {to}"),
+            Self::Close => "Close the completed workday".into(),
         }
     }
 }
@@ -450,6 +934,19 @@ impl StudioLabel for bridge::Asset {
             Self::CapacityFree => "Lane available".into(),
             Self::Active => "Allocation in progress".into(),
             Self::Solved => "Allocation complete".into(),
+            Self::Now => "World time".into(),
+            Self::TimeRemaining => "Time remaining".into(),
+            Self::Arrival => "Arrival time".into(),
+            Self::Deadline => "Arrival deadline".into(),
+            Self::LeaseUntil => "Reservation valid through".into(),
+            Self::ReadyAt => "Travel completes at".into(),
+            Self::InTransit => "On the bridge".into(),
+            Self::OnDetour => "On the alternate route".into(),
+            Self::Detouring => "Detouring".into(),
+            Self::OnTime => "On-time trips".into(),
+            Self::Late => "Late trips".into(),
+            Self::MissedReservation => "Expired reservations".into(),
+            Self::Round => "Prior traffic waves".into(),
         }
     }
 }
@@ -469,6 +966,23 @@ impl StudioLabel for bridge::RateId {
             Self::Cross { agent } => format!("Agent {agent:?} crosses"),
             Self::ResetRound => "Start the next allocation round".into(),
             Self::Finish => "Complete all crossing rounds".into(),
+            Self::Advance { to } => format!("Advance world time to {to}"),
+            Self::Complete {
+                agent,
+                detour,
+                late,
+            } => format!(
+                "Agent {agent:?} finishes {} {}",
+                if *detour { "detour" } else { "crossing" },
+                if *late { "late" } else { "on time" }
+            ),
+            Self::Detour { agent, .. } => format!("Agent {agent:?} pays for the alternate route"),
+            Self::ExpireReservation { agent } => {
+                format!("Release Agent {agent:?}'s expired reservation")
+            }
+            Self::WithdrawBid { agent, amount } => {
+                format!("Agent {agent:?} withdraws bid {amount}")
+            }
         }
     }
 }
@@ -505,6 +1019,28 @@ impl StudioLabel for marketplace::Asset {
             Self::SettledOrder(order) => format!("Order {order:?} settled"),
             Self::SettledValue(value) => format!("Settled value {value}"),
             Self::Utility => "Participant benefit".into(),
+            Self::BuyerLicense => "Buyer identity".into(),
+            Self::SellerLicense => "Seller identity".into(),
+            Self::CarrierLicense => "Carrier identity".into(),
+            Self::Contract(order) => format!("Order {order:?} reserved"),
+            Self::InShipment(order) => format!("Order {order:?} in transit"),
+            Self::PurchaseLocked(order) => format!("Buyer committed to {order:?}"),
+            Self::SaleReserved(order) => format!("Seller committed to {order:?}"),
+            Self::Booking(order) => format!("Carrier booked for {order:?}"),
+            Self::DeliveredBy(order) => format!("Delivered Order {order:?}"),
+            Self::AgreedPrice(price) => format!("Agreed price {price}"),
+            Self::Arrival => "Order release time".into(),
+            Self::Deadline => "Delivery deadline".into(),
+            Self::LeaseUntil => "Dispatch reservation expires at".into(),
+            Self::ReadyAt => "Delivery available at".into(),
+            Self::Now => "World time".into(),
+            Self::TimeRemaining => "Time remaining".into(),
+            Self::TransitTime => "Base shipping duration".into(),
+            Self::DelayRisk => "Exposure to route delays".into(),
+            Self::RouteDelay => "Route delay".into(),
+            Self::OnTime => "On-time deliveries".into(),
+            Self::Late => "Late deliveries".into(),
+            Self::Refunded => "Expired reservations refunded".into(),
         }
     }
 }
@@ -513,8 +1049,18 @@ impl StudioLabel for marketplace::RateId {
     fn studio_label(&self) -> String {
         match self {
             Self::SettleOrder(order) => {
-                format!("Settle Order {order:?} (buyer, seller, carrier, platform, and tax)")
+                format!("Agree Order {order:?} (Micro: settle; larger markets: reserve)")
             }
+            Self::DiscountedContract(order) => {
+                format!("Agree Order {order:?} with a 10-credit concession")
+            }
+            Self::Dispatch(order) => format!("Dispatch Order {order:?}"),
+            Self::Deliver { order, late, .. } => format!(
+                "Deliver Order {order:?} {}",
+                if *late { "late with rebate" } else { "on time" }
+            ),
+            Self::Cancel { order, .. } => format!("Refund expired reservation for {order:?}"),
+            Self::Advance { to } => format!("Advance market time to {to}"),
         }
     }
 }
@@ -588,6 +1134,8 @@ impl StudioLabel for connect_four::AccountId {
 impl StudioLabel for connect_four::Asset {
     fn studio_label(&self) -> String {
         match self {
+            Self::SegmentVacancies(segment) => format!("Unoccupied cells in line {segment}"),
+            Self::SegmentPieces(player, segment) => format!("{player:?} pieces in line {segment}"),
             Self::GameIdentity => "Game identity".into(),
             Self::ColumnIdentity(column) => format!("This is column {column}"),
             Self::CellIdentity { column, row } => format!("This is cell ({column},{row})"),
@@ -775,6 +1323,7 @@ impl StudioLabel for work_league::AccountId {
             Self::Job(job) => format!("Job {}", job.0),
             Self::Facility(facility) => format!("{facility:?} facility"),
             Self::Nature => "Disruption model".into(),
+            Self::World => "Shared work clock and contracts".into(),
         }
     }
 }
@@ -782,6 +1331,39 @@ impl StudioLabel for work_league::AccountId {
 impl StudioLabel for work_league::Asset {
     fn studio_label(&self) -> String {
         match self {
+            Self::WorldIdentity => "Identity: work economy".into(),
+            Self::SeasonActive => "Season active".into(),
+            Self::SeasonEnded => "Season ended".into(),
+            Self::Tick => "World time".into(),
+            Self::Horizon => "Season horizon".into(),
+            Self::ContractsOpen => "Unresolved contracts".into(),
+            Self::ContractsClosed => "Resolved contracts".into(),
+            Self::Activities => "Activities in progress".into(),
+            Self::Permit(agent) => format!("{agent:?} may decide this tick"),
+            Self::Acted(agent) => format!("{agent:?} has decided this tick"),
+            Self::Idle => "Ready for work".into(),
+            Self::Busy => "Activity in progress".into(),
+            Self::FreeContract => "Can accept a contract".into(),
+            Self::ReadyAt => "Activity finishes at tick".into(),
+            Self::ReleaseAt => "Contract opens at tick".into(),
+            Self::Deadline => "Delivery deadline".into(),
+            Self::LeaseUntil => "Claim reserved through tick".into(),
+            Self::Expired => "Expired without delivery".into(),
+            Self::Transferable => "Handoff available".into(),
+            Self::HandedOff => "Contract handed off".into(),
+            Self::Assists => "Paid handoffs".into(),
+            Self::CompletedJob(job) => format!("Dependency completed: job {}", job.0),
+            Self::Credit => "Spendable credit".into(),
+            Self::Wear => "Equipment wear".into(),
+            Self::Repairing => "Under repair".into(),
+            Self::FacilityIdentity(facility) => format!("Identity: {facility:?}"),
+            Self::Vacant(facility) => format!("{facility:?} service slot free"),
+            Self::Occupied(facility, agent) => format!("{facility:?} occupied by {agent:?}"),
+            Self::Servicing(facility) => format!("Receiving {facility:?} service"),
+            Self::ChargingEnergy => "Energy reserved for charging".into(),
+            Self::ReclaimingMaterial => "Material being reclaimed".into(),
+            Self::EmbodiedMaterial => "Material incorporated into work".into(),
+            Self::RecyclingLoss => "Material lost during recycling".into(),
             Self::AgentIdentity(agent) => format!("Identity: {agent:?}"),
             Self::JobIdentity(job) => format!("Identity: job {}", job.0),
             Self::Policy(policy) => format!("Policy: {policy:?}"),
@@ -824,6 +1406,47 @@ impl StudioLabel for work_league::Asset {
 impl StudioLabel for work_league::RateId {
     fn studio_label(&self) -> String {
         match self {
+            Self::Tick => "Advance the shared work clock".into(),
+            Self::Wait { agent } => format!("{agent:?} waits this tick"),
+            Self::BeginService {
+                agent,
+                facility,
+                maintenance,
+            } => format!(
+                "{agent:?} starts {} at {facility:?}",
+                if *maintenance {
+                    "preventive maintenance"
+                } else {
+                    "service"
+                }
+            ),
+            Self::EndService { agent, facility } => {
+                format!("{agent:?} finishes service and frees {facility:?}")
+            }
+            Self::Handoff {
+                agent,
+                recipient,
+                job,
+                ..
+            } => format!(
+                "{agent:?} hands job {} to {recipient:?} for 2 credits",
+                job.0
+            ),
+            Self::ReleaseClaim {
+                agent,
+                job,
+                expired,
+            } => format!(
+                "{agent:?} releases job {}{}",
+                job.0,
+                if *expired {
+                    ": claim lease expired"
+                } else {
+                    " for another worker"
+                }
+            ),
+            Self::Expire { job, .. } => format!("Job {} misses its delivery deadline", job.0),
+            Self::EndSeason => "Close the resolved work season".into(),
             Self::Claim { agent, job } => format!("{agent:?} claims job {}", job.0),
             Self::Move { agent, from, to } => format!("{agent:?} moves {from:?} → {to:?}"),
             Self::Begin { agent, job, mode } => {

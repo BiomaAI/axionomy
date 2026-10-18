@@ -10,10 +10,10 @@ test("runs the Rust engine in a Worker and loads its verified artifact", async (
   await expect(page.getByText("New artifact computed and loaded")).toBeVisible({ timeout: 60_000 });
   await expect(page.getByText("Saved solver observations")).toBeVisible();
   await page.getByRole("tab", { name: /Step-by-step replay/ }).click();
-  await expect(page.getByText("Vehicle 1", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("Cold van", { exact: true }).first()).toBeVisible();
   await expect(page.locator(".graph-scene")).toBeVisible();
-  await page.locator(".react-flow__node.occupant-overlay").filter({ hasText: "Vehicle 1" }).click();
-  await expect(page.locator(".account-card.focused")).toContainText("Vehicle");
+  await page.locator(".react-flow__node.occupant-overlay").filter({ hasText: "Cold van" }).click();
+  await expect(page.locator(".account-card.focused")).toContainText("Cold van");
 });
 
 test("cancels browser computation by terminating its isolated Worker", async ({ page }) => {
@@ -33,8 +33,10 @@ test("browser Worker streams the same verified Work League frames", async ({ pag
   await expect(page.getByText("Running in your browser", { exact: true })).toBeVisible({ timeout: 30_000 });
   await expect(page.getByRole("heading", { name: "Work League · Mixed policy field" })).toBeVisible();
   await page.getByRole("button", { name: "Run", exact: true }).click();
-  await expect(page.locator(".live-standings")).toContainText("Live verified frame", { timeout: 30_000 });
+  await expect(page.locator(".live-standings")).toContainText(/(?:Live|Last) verified frame/, { timeout: 30_000 });
   await expect(page.getByText("New artifact computed and loaded")).toBeVisible({ timeout: 60_000 });
   await page.getByRole("tab", { name: /Step-by-step replay/ }).click();
   await expect(page.getByText("Who is winning depends on what you value")).toBeVisible();
+  await expect(page.locator(".document-heading .eyebrow")).toContainText("Micro");
+  expect(Number(await page.getByRole("slider", { name: "Trace position" }).getAttribute("max"))).toBeLessThan(100);
 });

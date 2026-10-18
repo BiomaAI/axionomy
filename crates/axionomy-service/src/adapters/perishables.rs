@@ -8,11 +8,16 @@ use axionomy_view::{
     ParetoPointView, TelemetryKindView, TimelineLaneView, TimelineSpanView, ViewId,
 };
 
+mod cold_chain;
+
 pub(super) fn build(
     request: &RunRequest,
     descriptor: &ProblemDescriptor,
 ) -> Result<RunArtifact, ServiceError> {
     let profile = instance_profile(request, descriptor);
+    if !matches!(profile, InstanceProfile::Micro) {
+        return cold_chain::build(request, descriptor, profile);
+    }
     let (initial, transfer) = match profile {
         InstanceProfile::Micro => (perishables::initial_with_inventory(70, 30), 10),
         InstanceProfile::Showcase => (perishables::initial(), perishables::DEFAULT_TRANSFER),

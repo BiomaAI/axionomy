@@ -1,0 +1,457 @@
+use super::*;
+use axionomy_problems::logistics::fleet::{
+    self as fleet, AccountId, Asset, LOCATIONS, Location, Policy, ROADS, RateId, VANS, Van, World,
+};
+
+pub(super) fn build(
+    request: &RunRequest,
+    descriptor: &ProblemDescriptor,
+    profile: InstanceProfile,
+    progress: &mut ProgressSink<'_>,
+) -> Result<RunArtifact, ServiceError> {
+    let initial = fleet::initial(matches!(profile, InstanceProfile::Stress), request.seed);
+    let mut documents = Vec::new();
+    for (strategy, title, description, policy) in [
+        (
+            "direct",
+            "Logistics · fastest-route fleet",
+            "Dispatch two different vans through the shortest available road paths. Express links save hops but consume extra fuel and can cause breakdowns; the fleet responds with shared towing and repair.",
+            Policy::Fastest,
+        ),
+        (
+            "reliable",
+            "Logistics · reliable-route fleet",
+            "Avoid the risky express link, respect the single occupied trunk road, and revisit delivery, refueling and maintenance choices as orders arrive. Heavy freight and cold cargo require different vehicle capacity.",
+            Policy::Reliable,
+        ),
+        (
+            "mcts",
+            "Logistics · adaptive delivery",
+            "Use responsive fleet dispatch and hub relays: pack spare cold-van capacity, stage compatible freight in the finite hub, and let the other van collect it. Every shipment, service and payment is a core exchange. This larger-profile policy is not MCTS; the Micro fixture retains receding-horizon MCTS.",
+            Policy::Relay,
+        ),
+    ] {
+        let _ = progress.emit(
+            "fleet_dispatch",
+            documents.len() as u64,
+            3,
+            format!(
+                "Computing fleet policy {} of 3: {title}",
+                documents.len() + 1
+            ),
+        );
+        progress.ensure()?;
+        let trace = fleet::run(&initial, policy);
+        let final_world = initial
+            .replayed(&trace)
+            .map_err(|error| problem_error("logistics", error))?;
+        let mut view = document(
+            DocumentSpec {
+                problem: "logistics",
+                strategy,
+                title,
+                description,
+                source_label: "Heterogeneous delivery fleet",
+            },
+            &initial,
+            &fleet::goal(),
+            &trace,
+            objectives(&final_world),
+            scene,
+        )
+        .map_err(|error| problem_error("logistics", error))?;
+        view.telemetry.push(telemetry(
+            "responsive fleet dispatch with public route planning",
+            true,
+            [(
+                TelemetryKindView::Generated,
+                trace.exchanges().len() as u64,
+                "verified fleet decisions and realized route tickets".into(),
+            )],
+        ));
+        view.proposals.push(proposal("logistics", ProposalSpec { id: "wrong-vehicle", label: "Put refrigerated cargo in the freight van", description: "The freight van has more payload space but no refrigerated slot. Cargo compatibility is enforced by the exchange, alongside arrival and physical location." }, &initial, &fleet::action(RateId::Load { van: Van::Freight, order: 0, at: Location::Depot })));
+        documents.push(view);
+    }
+    let _ = progress.emit(
+        "fleet_dispatch",
+        3,
+        3,
+        "Three fleet policies completed and replay verified",
+    );
+    progress.ensure()?;
+    for index in 0..documents.len() {
+        let front = evaluated_integer_front(
+            &documents,
+            &documents[index],
+            "Fleet policies on the same orders and vehicle-route tickets",
+        );
+        documents[index].pareto_fronts.push(front);
+    }
+    artifact(
+        request,
+        descriptor,
+        selected_strategy(request, descriptor),
+        documents,
+    )
+}
+fn objectives(world: &World) -> Vec<ObjectiveView> {
+    let val = |account, asset| fleet::value(world, account, asset);
+    [
+        (
+            "delivered",
+            "Orders delivered",
+            val(AccountId::World, Asset::DeliveredCount),
+            ObjectiveDirectionView::Maximize,
+        ),
+        (
+            "on_time",
+            "Orders on time",
+            val(AccountId::World, Asset::OnTimeCount),
+            ObjectiveDirectionView::Maximize,
+        ),
+        (
+            "expired",
+            "Orders expired",
+            val(AccountId::World, Asset::ExpiredCount),
+            ObjectiveDirectionView::Minimize,
+        ),
+        (
+            "cash",
+            "Fleet cash remaining",
+            val(AccountId::World, Asset::Money),
+            ObjectiveDirectionView::Maximize,
+        ),
+        (
+            "fuel",
+            "Fuel used",
+            VANS.into_iter()
+                .map(|van| val(AccountId::Vehicle(van), Asset::SpentFuel))
+                .sum(),
+            ObjectiveDirectionView::Minimize,
+        ),
+        (
+            "time",
+            "Elapsed fleet time",
+            fleet::now(world),
+            ObjectiveDirectionView::Minimize,
+        ),
+    ]
+    .into_iter()
+    .map(|(key, label, value, direction)| ObjectiveView {
+        key: key.into(),
+        label: label.into(),
+        value: value.to_string(),
+        direction,
+    })
+    .collect()
+}
+fn scene(_: u64, world: &World) -> Option<Scene> {
+    let val = |account, asset| fleet::value(world, account, asset);
+    let nodes = [
+        (Location::Depot, "Depot and service yard", 120.0, 300.0),
+        (Location::Hub, "Shared relay hub", 430.0, 300.0),
+        (Location::North, "North customer", 430.0, 50.0),
+        (Location::South, "South customer", 430.0, 590.0),
+        (Location::East, "East customer", 780.0, 300.0),
+    ]
+    .into_iter()
+    .map(|(location, label, x, y)| GraphNodeView {
+        id: ViewId::new(format!("{location:?}"), label),
+        classes: vec!["location".into()],
+        x: Some(x),
+        y: Some(y),
+    })
+    .collect();
+    let edges = ROADS
+        .into_iter()
+        .map(|(from, to)| GraphEdgeView {
+            id: format!("road:{from:?}:{to:?}"),
+            source: format!("{from:?}"),
+            target: format!("{to:?}"),
+            label: Some(
+                if fleet::main_road(from, to) {
+                    "one vehicle at a time"
+                } else if fleet::express(from, to) {
+                    "express · 2 fuel · breakdown risk"
+                } else {
+                    "2 ticks + possible delay"
+                }
+                .into(),
+            ),
+            classes: vec![],
+        })
+        .collect();
+    let mut entities = Vec::new();
+    for van in VANS {
+        let own = AccountId::Vehicle(van);
+        let at = fleet::location(world, van);
+        let travel = ROADS
+            .into_iter()
+            .flat_map(|(a, b)| [(a, b), (b, a)])
+            .find(|(from, to)| val(own, Asset::Travelling(*from, *to)) > 0);
+        let anchor = if let Some(at) = at {
+            SceneAnchorView::GraphNode {
+                node: format!("{at:?}"),
+            }
+        } else if let Some((from, to)) = travel {
+            let (a, b) = ROADS
+                .into_iter()
+                .find(|(a, b)| (*a == from && *b == to) || (*a == to && *b == from))
+                .unwrap();
+            let start = val(own, Asset::DepartedAt);
+            let end = val(own, Asset::ReadyAt);
+            let progress = if end > start {
+                (fleet::now(world).saturating_sub(start) as f64 / (end - start) as f64)
+                    .clamp(0.0, 1.0)
+            } else {
+                0.0
+            };
+            SceneAnchorView::GraphEdge {
+                edge: format!("road:{a:?}:{b:?}"),
+                progress: Some(if a == from { progress } else { 1.0 - progress }),
+            }
+        } else {
+            SceneAnchorView::Unanchored
+        };
+        let status = if let Some((_, to)) = travel {
+            if val(own, Asset::AwaitingOutcome) > 0 {
+                format!("To {to:?} · awaiting route outcome")
+            } else {
+                format!("To {to:?} · arrives {}", val(own, Asset::ReadyAt))
+            }
+        } else if val(own, Asset::Refueling) > 0 {
+            format!("Pump occupied until {}", val(own, Asset::ReadyAt))
+        } else if val(own, Asset::Repairing) > 0 {
+            format!("Repair bay occupied until {}", val(own, Asset::ReadyAt))
+        } else if val(own, Asset::Towing) > 0 {
+            format!("Being towed until {}", val(own, Asset::ReadyAt))
+        } else if val(own, Asset::Damage) > 0 {
+            "Broken down · transfer cargo or tow".into()
+        } else {
+            "Ready for dispatch".into()
+        };
+        let mut entity = link_account(
+            visual_entity(
+                format!("van:{van:?}"),
+                format!("{van:?} van"),
+                SceneGlyphView::Vehicle,
+                anchor,
+                if at.is_some() || travel.is_some() {
+                    SceneEntityRoleView::Occupant
+                } else {
+                    SceneEntityRoleView::Context
+                },
+                if val(own, Asset::Damage) > 0 {
+                    SceneToneView::Danger
+                } else {
+                    SceneToneView::Active
+                },
+                Some(status),
+            ),
+            format!(
+                "logistics:account:vehicle-{}",
+                if van == Van::Cold { "cold" } else { "freight" }
+            ),
+        );
+        entity.metrics = vec![
+            visual_metric("fuel", "Fuel", val(own, Asset::Fuel), Some("/ 8")),
+            visual_metric("space", "Free payload space", val(own, Asset::Space), None),
+            visual_metric("wear", "Wear", val(own, Asset::Wear), Some("/ 6")),
+        ];
+        entities.push(entity);
+        for id in 0..val(AccountId::World, Asset::Count) as u8 {
+            if val(own, Asset::Cargo(id)) > 0 {
+                let mut cargo = link_account(
+                    visual_entity(
+                        format!("cargo:{id}"),
+                        format!("Order {} cargo", id + 1),
+                        SceneGlyphView::Package,
+                        SceneAnchorView::Entity {
+                            entity: format!("van:{van:?}"),
+                        },
+                        SceneEntityRoleView::Attachment,
+                        SceneToneView::Neutral,
+                        Some(
+                            if fleet::cold(id) {
+                                "Refrigerated"
+                            } else if fleet::weight(id) == 3 {
+                                "Heavy freight"
+                            } else {
+                                "Standard freight"
+                            }
+                            .into(),
+                        ),
+                    ),
+                    format!("logistics:account:order-{id}"),
+                );
+                cargo.metrics = vec![visual_metric(
+                    "weight",
+                    "Payload",
+                    fleet::weight(id),
+                    Some("units"),
+                )];
+                entities.push(cargo);
+            }
+        }
+    }
+    for id in 0..val(AccountId::World, Asset::Count) as u8 {
+        let own = AccountId::Order(id);
+        let delivered = val(own, Asset::Delivered) > 0;
+        let expired = val(own, Asset::Expired) > 0;
+        let staged = val(own, Asset::DockUsed) > 0;
+        let status = if delivered {
+            "Delivered and paid"
+        } else if expired {
+            "Expired undelivered"
+        } else if staged {
+            "Staged at hub for another van"
+        } else if val(own, Asset::InTransit) > 0 {
+            "Cargo assigned to vehicle"
+        } else if val(own, Asset::Scheduled) > 0 {
+            "Customer order arriving later"
+        } else {
+            "Cargo waiting at depot"
+        };
+        let mut entity = link_account(
+            visual_entity(
+                format!("order:{id}"),
+                format!(
+                    "Order {} · {}",
+                    id + 1,
+                    if fleet::cold(id) {
+                        "cold"
+                    } else if fleet::weight(id) == 3 {
+                        "heavy"
+                    } else {
+                        "standard"
+                    }
+                ),
+                SceneGlyphView::Task,
+                SceneAnchorView::GraphNode {
+                    node: format!(
+                        "{:?}",
+                        if staged {
+                            Location::Hub
+                        } else {
+                            fleet::destination(id)
+                        }
+                    ),
+                },
+                SceneEntityRoleView::Attachment,
+                if delivered {
+                    SceneToneView::Success
+                } else if expired {
+                    SceneToneView::Danger
+                } else {
+                    SceneToneView::Neutral
+                },
+                Some(status.into()),
+            ),
+            format!("logistics:account:order-{id}"),
+        );
+        entity.metrics = vec![
+            visual_metric(
+                "deadline",
+                "Delivery window",
+                val(own, Asset::Deadline),
+                Some("tick"),
+            ),
+            visual_metric(
+                "arrival",
+                "Order release",
+                val(own, Asset::Arrival),
+                Some("tick"),
+            ),
+        ];
+        entities.push(entity);
+    }
+    let mut scene = Scene::graph(
+        "Fleet cargo, shared roads and occupied service capacity",
+        nodes,
+        edges,
+        None,
+    )
+    .with_entities(entities)
+    .with_metrics([
+        visual_metric("time", "Fleet time", fleet::now(world), None),
+        visual_metric(
+            "delivered",
+            "Orders delivered",
+            val(AccountId::World, Asset::DeliveredCount),
+            None,
+        ),
+        visual_metric(
+            "on_time",
+            "Orders on time",
+            val(AccountId::World, Asset::OnTimeCount),
+            None,
+        ),
+        visual_metric(
+            "expired",
+            "Orders expired",
+            val(AccountId::World, Asset::ExpiredCount),
+            None,
+        ),
+        visual_metric(
+            "staged",
+            "Hub handoffs staged",
+            val(AccountId::World, Asset::StagedCount),
+            None,
+        ),
+        visual_metric(
+            "cash",
+            "Fleet cash",
+            val(AccountId::World, Asset::Money),
+            Some("credits"),
+        ),
+    ]);
+    for location in LOCATIONS {
+        if let Some(entity) = scene
+            .entities
+            .iter_mut()
+            .find(|entity| entity.id.key == format!("{location:?}"))
+        {
+            if location == Location::Depot {
+                entity.status = Some("Shared paid services".into());
+                entity.metrics = vec![
+                    visual_metric(
+                        "pump",
+                        "Free fuel pump",
+                        val(AccountId::Station, Asset::FuelPump),
+                        Some("/ 1"),
+                    ),
+                    visual_metric(
+                        "bay",
+                        "Free repair bay",
+                        val(AccountId::Station, Asset::RepairBay),
+                        Some("/ 1"),
+                    ),
+                    visual_metric(
+                        "fuel",
+                        "Station fuel",
+                        val(AccountId::Station, Asset::Fuel),
+                        None,
+                    ),
+                ];
+            }
+            if location == Location::Hub {
+                entity.status = Some("Finite cargo relay".into());
+                entity.metrics = vec![
+                    visual_metric(
+                        "dock",
+                        "Free staging space",
+                        val(AccountId::World, Asset::DockSpace),
+                        Some("/ 2"),
+                    ),
+                    visual_metric(
+                        "road",
+                        "Trunk road available",
+                        val(AccountId::World, Asset::RoadSpace),
+                        Some("/ 1"),
+                    ),
+                ];
+            }
+        }
+    }
+    Some(scene)
+}

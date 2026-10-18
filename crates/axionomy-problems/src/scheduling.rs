@@ -10,6 +10,8 @@ use axionomy_search::{
 };
 use std::collections::HashSet;
 
+pub mod execution;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Job {
     One,
@@ -38,6 +40,7 @@ pub enum AccountId {
     Job(Job),
     Slot(Machine, u8),
     Success,
+    Machine(Machine),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -51,6 +54,40 @@ pub enum Asset {
     Makespan(u8),
     Active,
     Solved,
+    MachineIdentity(Machine),
+    Ready(Operation),
+    Queued(Operation, Machine),
+    Running(Operation, Machine),
+    Paused(Operation, Machine),
+    QueueFree,
+    QueueTicket(Operation),
+    Idle,
+    Busy,
+    Online,
+    Broken,
+    Repairing,
+    Configured(Job),
+    Labor,
+    BusyLabor,
+    RepairKit,
+    UsedRepairKit,
+    Arrival,
+    Due,
+    WorkRemaining,
+    Done,
+    CompletionTime,
+    Now,
+    TimeRemaining,
+    FaultAt,
+    FaultPending,
+    FaultOccurred,
+    RepairDuration,
+    NotStarted(Operation),
+    Started(Operation),
+    StartTime(Operation),
+    EndTime(Operation),
+    ExecutedOn(Operation, Machine),
+    Interrupted(Operation),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -60,6 +97,7 @@ pub enum Role {
     Slot0,
     Slot1,
     Schedule,
+    Machine,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -74,6 +112,36 @@ pub enum RateId {
         job_two_end: u8,
         makespan: u8,
     },
+    Queue {
+        operation: Operation,
+        machine: Machine,
+    },
+    CancelQueue {
+        operation: Operation,
+        machine: Machine,
+    },
+    Start {
+        operation: Operation,
+        machine: Machine,
+        configured: Job,
+    },
+    Complete {
+        operation: Operation,
+        machine: Machine,
+    },
+    Resume {
+        operation: Operation,
+        machine: Machine,
+    },
+    Fault {
+        operation: Option<Operation>,
+    },
+    Repair,
+    CompleteRepair,
+    Advance {
+        to: u8,
+    },
+    Close,
 }
 
 pub type World = Economy<AccountId, Asset, RateId, Role>;
@@ -113,11 +181,11 @@ pub fn impossible() -> World {
 
 /// Two three-operation jobs competing across three discrete-capacity machines.
 pub fn initial_showcase() -> World {
-    build(6, true)
+    execution::build(false)
 }
 
 pub fn initial_stress() -> World {
-    build(8, true)
+    execution::build(true)
 }
 
 pub fn impossible_showcase() -> World {
@@ -129,6 +197,9 @@ pub fn goal() -> Goal<AccountId, Asset> {
 }
 
 pub fn candidates(world: &World) -> Vec<Action> {
+    if execution::enabled(world) {
+        return execution::candidates(world);
+    }
     let mut ids: Vec<_> = world.rate_ids().copied().collect();
     ids.sort();
     world.applicable(ids.into_iter().map(action))
@@ -158,6 +229,11 @@ pub fn objectives(world: &World) -> ObjectiveVector<ObjectiveKey, u64> {
 }
 
 pub fn completion_time(world: &World, job: Job) -> u64 {
+    if execution::enabled(world) {
+        return world
+            .balance(&AccountId::Job(job), &Asset::CompletionTime)
+            .get();
+    }
     let operations = match job {
         Job::One => [Operation::OneC, Operation::OneB],
         Job::Two => [Operation::TwoC, Operation::TwoB],
@@ -192,6 +268,9 @@ pub fn branch_optimize(world: &World) -> Option<OptimizedProposal> {
 }
 
 pub fn encoded_makespan(world: &World) -> u64 {
+    if execution::enabled(world) {
+        return execution::now(world);
+    }
     (0..=16)
         .find(|makespan| {
             !world
@@ -211,6 +290,13 @@ fn optimize_branch(
     best: &mut Option<OptimizedProposal>,
 ) {
     if !visited.insert(world.state_key()) {
+        return;
+    }
+    if execution::enabled(&world)
+        && best
+            .as_ref()
+            .is_some_and(|known| encoded_makespan(&world) >= u64::from(known.makespan))
+    {
         return;
     }
     if world.matches(&goal()) {
@@ -458,7 +544,7 @@ fn successor(operation: Operation) -> Option<Operation> {
     }
 }
 
-fn action(rate: RateId) -> Action {
+pub fn action(rate: RateId) -> Action {
     let exchange = Exchange::new(rate, Quantity::new(1)).bind(Role::Schedule, AccountId::Success);
     match rate {
         RateId::Schedule {
@@ -474,6 +560,36 @@ fn action(rate: RateId) -> Action {
             exchange
         }
         RateId::Finish { .. } => exchange
+            .bind(Role::PrimaryJob, AccountId::Job(Job::One))
+            .bind(Role::SecondaryJob, AccountId::Job(Job::Two)),
+        RateId::Queue { operation, machine }
+        | RateId::CancelQueue { operation, machine }
+        | RateId::Start {
+            operation, machine, ..
+        }
+        | RateId::Complete { operation, machine }
+        | RateId::Resume { operation, machine } => exchange
+            .bind(
+                Role::PrimaryJob,
+                AccountId::Job(operation_spec(operation).0),
+            )
+            .bind(Role::Machine, AccountId::Machine(machine)),
+        RateId::Fault { operation } => {
+            let exchange = exchange.bind(Role::Machine, AccountId::Machine(Machine::Two));
+            if let Some(operation) = operation {
+                exchange.bind(
+                    Role::PrimaryJob,
+                    AccountId::Job(operation_spec(operation).0),
+                )
+            } else {
+                exchange
+            }
+        }
+        RateId::Repair | RateId::CompleteRepair => {
+            exchange.bind(Role::Machine, AccountId::Machine(Machine::Two))
+        }
+        RateId::Advance { .. } => exchange,
+        RateId::Close => exchange
             .bind(Role::PrimaryJob, AccountId::Job(Job::One))
             .bind(Role::SecondaryJob, AccountId::Job(Job::Two)),
     }

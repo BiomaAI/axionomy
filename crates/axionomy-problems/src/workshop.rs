@@ -4,6 +4,8 @@ use axionomy::{
     Account, ApplyError, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Quantity, Rate,
     basket,
 };
+mod production;
+
 use axionomy_search::{
     SearchSolution, best_first, bfs,
     pareto::{self, Objective, ObjectiveVector, ParetoError, ParetoSearchResult},
@@ -12,11 +14,32 @@ use axionomy_search::{
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum AccountId {
     Workshop,
+    Customer(u8),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Asset {
     Wood,
+    CustomerIdentity(u8),
+    Credit,
+    Frame,
+    Panel,
+    Offcut,
+    Table,
+    Durability,
+    Wear,
+    ToolPotential,
+    RepairKit,
+    UsedRepairKit,
+    UpgradeKit,
+    Upgraded,
+    Idle,
+    Contract(u8),
+    Raw(u8),
+    Prepared(u8),
+    Assembled(u8),
+    Fulfilled(u8),
+    Completed,
     Labor,
     SpentLabor,
     Tool,
@@ -31,10 +54,22 @@ pub enum Asset {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Role {
     Shop,
+    Customer,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum RateId {
+    Accept(u8),
+    Prepare {
+        order: u8,
+        precise: bool,
+        upgraded: bool,
+    },
+    Assemble(u8),
+    Deliver(u8),
+    Repair,
+    Upgrade,
+    Recycle,
     BasicChair,
     EfficientBatch,
     CounterfeitChair,
@@ -51,6 +86,7 @@ pub type ParetoResult = ParetoSearchResult<RateId, Role, AccountId, u64, Objecti
 pub enum ObjectiveKey {
     Waste,
     Time,
+    Revenue,
 }
 
 pub fn initial() -> World {
@@ -59,11 +95,11 @@ pub fn initial() -> World {
 
 /// Requires a multi-batch production plan with visible time/waste tradeoffs.
 pub fn initial_showcase() -> World {
-    build(18, 12, 18, 6)
+    production::build(false)
 }
 
 pub fn initial_stress() -> World {
-    build(30, 20, 30, 10)
+    production::build(true)
 }
 
 fn build(wood: u64, labor: u64, time: u64, target: u64) -> World {
@@ -184,11 +220,17 @@ pub fn pareto_front(world: &World) -> Result<ParetoResult, ParetoError> {
 }
 
 pub fn objectives(world: &World) -> ObjectiveVector<ObjectiveKey, u64> {
-    ObjectiveVector::try_new([
+    let mut values = vec![
         Objective::minimize(ObjectiveKey::Waste, waste(world)),
         Objective::minimize(ObjectiveKey::Time, spent_time(world)),
-    ])
-    .expect("workshop objective schema is static and unique")
+    ];
+    if world.account(&AccountId::Customer(0)).is_some() {
+        values.push(Objective::maximize(
+            ObjectiveKey::Revenue,
+            world.balance(&AccountId::Workshop, &Asset::Credit).get(),
+        ));
+    }
+    ObjectiveVector::try_new(values).expect("workshop objective schema is static and unique")
 }
 
 pub fn waste(world: &World) -> u64 {
@@ -200,7 +242,12 @@ pub fn spent_time(world: &World) -> u64 {
 }
 
 pub fn action(rate: RateId) -> Action {
-    Exchange::new(rate, Quantity::new(1)).bind(Role::Shop, AccountId::Workshop)
+    let action = Exchange::new(rate, Quantity::new(1)).bind(Role::Shop, AccountId::Workshop);
+    if let RateId::Deliver(order) = rate {
+        action.bind(Role::Customer, AccountId::Customer(order))
+    } else {
+        action
+    }
 }
 
 #[cfg(test)]

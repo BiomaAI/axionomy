@@ -621,7 +621,9 @@ mod tests {
 
     #[tokio::test]
     async fn problem_task_returns_the_shared_service_artifact() {
-        let request = RunRequest::new("maze").with_strategy("a_star");
+        let request = RunRequest::new("maze")
+            .with_instance("micro")
+            .with_strategy("a_star");
         let tasks = TaskManager::new();
         let task_request = request.clone();
         let task = tasks.spawn(TaskOptions::new(), move |context| {

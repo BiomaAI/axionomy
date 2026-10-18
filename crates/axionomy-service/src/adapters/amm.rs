@@ -14,15 +14,15 @@ pub(super) fn build(
 ) -> Result<RunArtifact, ServiceError> {
     let initial = match instance_profile(request, descriptor) {
         InstanceProfile::Micro => amm::initial(),
-        InstanceProfile::Showcase => amm::initial_showcase(),
-        InstanceProfile::Stress => amm::initial_stress(),
+        InstanceProfile::Showcase => amm::initial_showcase_with_seed(request.seed),
+        InstanceProfile::Stress => amm::initial_stress_with_seed(request.seed),
     };
     let scenarios = [
         (
             "market_day",
             Scenario::MarketDay,
             "Living Market · endogenous price discovery",
-            "A founding price hypothesis meets production, real consumption, informed speculation, a demand whale, adaptive liquidity, and internal arbitrage. No external price exists.",
+            "Actors repeatedly reconsider trades as production, inventory, daily needs and obligations change. Capacity investment takes two days; scarce storage and cloudy days change the cost of waiting. No external price exists.",
         ),
         (
             "no_whale",
@@ -34,7 +34,7 @@ pub(super) fn build(
             "thin_liquidity",
             Scenario::ThinLiquidity,
             "Living Market · thin-liquidity reality",
-            "Half the founding liquidity exits before the market opens. Identical needs and beliefs now move price further because the economy has less depth.",
+            "Half the founding liquidity exits at the opening. Actors respond to the changed prices and depth across the same production conditions and daily obligations.",
         ),
     ];
 
@@ -54,7 +54,7 @@ pub(super) fn build(
                 source_label: "Closed endogenous market",
             },
             &initial,
-            &amm::goal(),
+            &amm::market_goal(&initial),
             &trace,
             vec![
                 ObjectiveView {
@@ -74,6 +74,18 @@ pub(super) fn build(
                     label: "Energy liquidity".into(),
                     direction: ObjectiveDirectionView::Maximize,
                     value: final_pool.energy.to_string(),
+                },
+                ObjectiveView {
+                    key: "unmet".into(),
+                    label: "Unmet daily needs".into(),
+                    direction: ObjectiveDirectionView::Minimize,
+                    value: unmet_needs(&final_world).to_string(),
+                },
+                ObjectiveView {
+                    key: "defaults".into(),
+                    label: "Missed obligations".into(),
+                    direction: ObjectiveDirectionView::Minimize,
+                    value: defaults(&final_world).to_string(),
                 },
             ],
             scene,
@@ -153,6 +165,7 @@ fn account_key(account: AccountId) -> String {
         AccountId::Pool => "amm:account:pool".into(),
         AccountId::Treasury => "amm:account:treasury".into(),
         AccountId::Information => "amm:account:information".into(),
+        AccountId::World => "amm:account:world".into(),
         AccountId::Actor(actor) => format!("amm:account:actor-{}", actor_debug_key(actor)),
     }
 }
@@ -204,6 +217,28 @@ fn actor_glyph(actor: Actor) -> SceneGlyphView {
 
 fn actor_status(world: &World, actor: Actor) -> Option<String> {
     let account = AccountId::Actor(actor);
+    if world.account(&AccountId::World).is_some() {
+        let read = |asset| world.balance(&account, &asset).get();
+        return Some(match actor {
+            Actor::Generator => format!(
+                "{} capacity · {} building",
+                read(Asset::ProductionCapacity),
+                read(Asset::PendingCapacity)
+            ),
+            Actor::Factory | Actor::Household => format!(
+                "{} needs met · {} missed",
+                read(Asset::SatisfiedNeed(actor)),
+                read(Asset::MissedNeed(actor))
+            ),
+            Actor::Founder | Actor::AdaptiveLp => {
+                format!("{} liquidity shares", read(Asset::LpShare))
+            }
+            Actor::Speculator if read(Asset::Informed(actor)) > 0 => {
+                "next-day shortage observed".into()
+            }
+            _ => format!("{} stored energy", read(Asset::Energy)),
+        });
+    }
     if world.balance(&account, &Asset::SatisfiedNeed(actor)).get() > 0 {
         Some("need satisfied".into())
     } else if world.balance(&account, &Asset::Informed(actor)).get() > 0 {
@@ -222,7 +257,14 @@ fn actor_status(world: &World, actor: Actor) -> Option<String> {
 }
 
 fn actor_tone(world: &World, actor: Actor) -> SceneToneView {
-    if actor_status(world, actor).is_some() {
+    let account = AccountId::Actor(actor);
+    if !world.balance(&account, &Asset::MissedNeed(actor)).is_zero()
+        || !world
+            .balance(&account, &Asset::DefaultedObligation(actor))
+            .is_zero()
+    {
+        SceneToneView::Warning
+    } else if actor_status(world, actor).is_some() {
         SceneToneView::Success
     } else if matches!(actor, Actor::Whale | Actor::Speculator) {
         SceneToneView::Warning
@@ -285,7 +327,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             ],
         })
         .collect();
-    Some(Scene {
+    let mut scene = Scene {
         title: "The Living Market".into(),
         surface: SceneSurfaceView::Market {
             pool: Box::new(MarketPoolView {
@@ -327,7 +369,71 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             ),
         ],
         legend: Vec::new(),
-    })
+    };
+    if world.account(&AccountId::World).is_some() {
+        scene.metrics.insert(
+            0,
+            visual_metric("day", "Market day", amm::period(world) + 1, Some("day")),
+        );
+        scene.metrics.extend([
+            visual_metric(
+                "unmet",
+                "Unmet daily needs",
+                unmet_needs(world),
+                Some("needs"),
+            ),
+            visual_metric(
+                "defaults",
+                "Missed obligations",
+                defaults(world),
+                Some("payments"),
+            ),
+            visual_metric(
+                "sunlight",
+                "Sunlight",
+                world.balance(&AccountId::World, &Asset::CurrentSunlight),
+                Some("%"),
+            ),
+            visual_metric(
+                "capacity",
+                "Generating capacity",
+                world.balance(
+                    &AccountId::Actor(Actor::Generator),
+                    &Asset::ProductionCapacity,
+                ),
+                Some("energy / day"),
+            ),
+            visual_metric(
+                "goods",
+                "Goods delivered",
+                world.balance(&AccountId::Treasury, &Asset::DeliveredGoods),
+                Some("units"),
+            ),
+        ]);
+    }
+    Some(scene)
+}
+
+fn unmet_needs(world: &World) -> u64 {
+    [Actor::Factory, Actor::Household]
+        .into_iter()
+        .map(|actor| {
+            world
+                .balance(&AccountId::Actor(actor), &Asset::MissedNeed(actor))
+                .get()
+        })
+        .sum()
+}
+
+fn defaults(world: &World) -> u64 {
+    [Actor::Factory, Actor::Generator]
+        .into_iter()
+        .map(|actor| {
+            world
+                .balance(&AccountId::Actor(actor), &Asset::DefaultedObligation(actor))
+                .get()
+        })
+        .sum()
 }
 
 fn format_price(price_milli: u64) -> String {
@@ -371,10 +477,8 @@ fn attach_contribution_leaderboards(
             .apply(exchange.clone())
             .map_err(|error| problem_error("amm", format!("{error:?}")))?;
         let after = i128::from(amm::pool_state(&world).price_milli);
-        if matches!(exchange.rate(), RateId::BuyEnergy | RateId::SellEnergy)
-            && let Some(AccountId::Actor(actor)) = exchange.bindings().get(&Role::Trader)
-        {
-            *contributions.entry(*actor).or_default() += after - before;
+        if let Some(actor) = amm::price_actor(exchange) {
+            *contributions.entry(actor).or_default() += after - before;
         }
         let frame = &mut document.frames[index];
         frame.before.leaderboards = vec![board_before];

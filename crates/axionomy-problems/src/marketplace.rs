@@ -11,6 +11,8 @@ use axionomy::{
 use axionomy_search::pareto::{self, Objective, ObjectiveVector, ParetoError, ParetoSearchResult};
 use std::collections::HashSet;
 
+pub mod fulfillment;
+
 pub const GROSS_PAYMENT: u64 = 100;
 pub const SELLER_PROCEEDS: u64 = 80;
 pub const TAX: u64 = 10;
@@ -99,6 +101,28 @@ pub enum Asset {
     SettledValue(u64),
     /// Participant benefit declared by settlement terms, distinct from cash flow.
     Utility,
+    BuyerLicense,
+    SellerLicense,
+    CarrierLicense,
+    Contract(OrderId),
+    InShipment(OrderId),
+    PurchaseLocked(OrderId),
+    SaleReserved(OrderId),
+    Booking(OrderId),
+    DeliveredBy(OrderId),
+    AgreedPrice(u64),
+    Arrival,
+    Deadline,
+    LeaseUntil,
+    ReadyAt,
+    Now,
+    TimeRemaining,
+    TransitTime,
+    DelayRisk,
+    RouteDelay,
+    OnTime,
+    Late,
+    Refunded,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -114,6 +138,20 @@ pub enum Role {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum RateId {
     SettleOrder(OrderId),
+    DiscountedContract(OrderId),
+    Dispatch(OrderId),
+    Deliver {
+        order: OrderId,
+        discounted: bool,
+        late: bool,
+    },
+    Cancel {
+        order: OrderId,
+        discounted: bool,
+    },
+    Advance {
+        to: u8,
+    },
 }
 
 pub type World = Economy<AccountId, Asset, RateId, Role>;
@@ -217,13 +255,13 @@ pub fn initial() -> World {
 /// A four-order market day with shared buyer budgets, seller inventory, and
 /// carrier capacity coupling otherwise individually feasible settlements.
 pub fn initial_showcase() -> World {
-    build(MarketSize::Showcase)
+    fulfillment::build(build(MarketSize::Showcase))
 }
 
 /// A six-order market whose total inventory and shipping capacity are exactly
 /// sufficient, coupling every settlement choice to the remaining market.
 pub fn initial_stress() -> World {
-    build(MarketSize::Stress)
+    fulfillment::build(build(MarketSize::Stress))
 }
 
 fn build(size: MarketSize) -> World {
@@ -449,8 +487,9 @@ pub fn candidate_matches(world: &World) -> Vec<MarketMatch> {
 pub fn orders(world: &World) -> Vec<OrderId> {
     let mut orders = world
         .rate_ids()
-        .map(|rate| match rate {
-            RateId::SettleOrder(order) => *order,
+        .filter_map(|rate| match rate {
+            RateId::SettleOrder(order) => Some(*order),
+            _ => None,
         })
         .collect::<Vec<_>>();
     orders.sort();
@@ -459,6 +498,9 @@ pub fn orders(world: &World) -> Vec<OrderId> {
 }
 
 pub fn candidates(world: &World) -> Vec<Action> {
+    if fulfillment::enabled(world) {
+        return fulfillment::candidates(world);
+    }
     candidate_matches(world)
         .into_iter()
         .map(MarketMatch::exchange)
@@ -509,6 +551,16 @@ pub fn rank_near_matches(
 /// The search state is disposable. Every edge is still a core-assessed
 /// settlement exchange, and the returned trace is replay-validated.
 pub fn clear_market(world: &World) -> ClearingProposal {
+    if fulfillment::enabled(world) {
+        let trace = fulfillment::plan(world, fulfillment::Preference::Volume)
+            .expect("bounded fulfillment plan");
+        let final_world = world.replayed(&trace).expect("fulfillment trace replays");
+        return ClearingProposal {
+            settled_orders: settled_orders(&final_world),
+            gross_value: gross_value(&final_world),
+            trace,
+        };
+    }
     let mut visited = HashSet::new();
     let mut best = ClearingProposal {
         trace: Trace::new(),
@@ -685,10 +737,15 @@ fn gross_value(world: &World) -> u64 {
         .into_iter()
         .map(|order| {
             let gross = order_terms(order).1;
-            world
-                .balance(&AccountId::Order(order), &Asset::SettledValue(gross))
-                .get()
-                * gross
+            [gross, gross - 10, gross - 20]
+                .into_iter()
+                .map(|value| {
+                    world
+                        .balance(&AccountId::Order(order), &Asset::SettledValue(value))
+                        .get()
+                        * value
+                })
+                .sum::<u64>()
         })
         .sum()
 }
@@ -751,6 +808,7 @@ mod tests {
                 RateId::SettleOrder(OrderId::C | OrderId::D | OrderId::E | OrderId::F) => {
                     unreachable!("micro fixture only has two orders")
                 }
+                _ => unreachable!("Micro settles directly"),
             }
             assert_eq!(
                 exchange.bindings().get(&Role::Carrier),

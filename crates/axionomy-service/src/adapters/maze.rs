@@ -51,7 +51,7 @@ pub(super) fn build(
         (
             "breadth_first",
             "Maze · fewest moves",
-            "Breadth-first search takes the detour: fewer moves, but more energy.",
+            "Breadth-first search minimizes exchange count. In larger mazes, untreated injuries can make a short sequence take longer than a prepared route.",
             bfs.trace().clone(),
             "breadth-first search",
             bfs.expanded(),
@@ -184,6 +184,9 @@ struct MazeExpansion {
     gate_open: bool,
     energy: u64,
     time: u64,
+    injury: u64,
+    protection: u64,
+    vault_power: bool,
 }
 
 fn capture_expansion(world: &World) -> Option<MazeExpansion> {
@@ -193,6 +196,11 @@ fn capture_expansion(world: &World) -> Option<MazeExpansion> {
         gate_open: maze::gate_is_open(world),
         energy: world.balance(&AccountId::Agent, &Asset::Energy).get(),
         time: world.balance(&AccountId::Agent, &Asset::Time).get(),
+        injury: world.balance(&AccountId::Agent, &Asset::Injury).get(),
+        protection: world.balance(&AccountId::Agent, &Asset::Shield).get(),
+        vault_power: !world
+            .balance(&AccountId::World, &Asset::PowerVault)
+            .is_zero(),
     })
 }
 
@@ -202,7 +210,7 @@ fn zero_heuristic(_: &World) -> u64 {
 
 fn expansion_label(expansion: MazeExpansion) -> String {
     format!(
-        "Expanded {} · {} · gate {} · E left {} · T left {}",
+        "Expanded {} · {} · gate {} · E left {} · T left {} · injury {} · protection {} · vault power {}",
         expansion.node.studio_label(),
         if expansion.has_key {
             "carrying key"
@@ -216,6 +224,9 @@ fn expansion_label(expansion: MazeExpansion) -> String {
         },
         expansion.energy,
         expansion.time,
+        expansion.injury,
+        expansion.protection,
+        expansion.vault_power,
     )
 }
 
@@ -709,8 +720,17 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 } else {
                     format!("{energy} E")
                 }),
-                classes: if *needs_open_door
-                    && world.balance(&AccountId::World, &Asset::Open).is_zero()
+                classes: if (*needs_open_door
+                    && (world.balance(&AccountId::World, &Asset::Open).is_zero()
+                        || (!world.balance(&AccountId::Agent, &Asset::Health).is_zero()
+                            && world
+                                .balance(&AccountId::World, &Asset::PowerVault)
+                                .is_zero())))
+                    || ((*from, *to) == (Node::Canal, Node::Bridge)
+                        && world
+                            .balance(&AccountId::World, &Asset::PowerTransit)
+                            .is_zero()
+                        && !world.balance(&AccountId::Agent, &Asset::Health).is_zero())
                 {
                     vec!["locked".into()]
                 } else {
@@ -787,7 +807,19 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
     } else {
         None
     };
-    let gate_open = !world.balance(&AccountId::World, &Asset::Open).is_zero();
+    let enhanced = !world.balance(&AccountId::Agent, &Asset::Health).is_zero();
+    let vault_power = !world
+        .balance(&AccountId::World, &Asset::PowerVault)
+        .is_zero();
+    let unlocked = !world.balance(&AccountId::World, &Asset::Open).is_zero();
+    let gate_open = unlocked && (!enhanced || vault_power);
+    let gate_status = if gate_open {
+        "open"
+    } else if unlocked {
+        "unlocked · needs power"
+    } else {
+        "locked"
+    };
     let gate = link_balance(
         visual_entity(
             "maze:gate:state",
@@ -802,7 +834,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             } else {
                 SceneToneView::Danger
             },
-            Some(if gate_open { "open" } else { "locked" }.into()),
+            Some(gate_status.into()),
         ),
         "maze:account:world",
         if gate_open {
@@ -845,13 +877,92 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             },
             None,
         ),
-        visual_metric(
-            "gate_state",
-            "Vault gate",
-            if gate_open { "open" } else { "locked" },
-            None,
-        ),
+        visual_metric("gate_state", "Vault gate", gate_status, None),
     ]);
+    if enhanced {
+        scene.metrics.extend([
+            visual_metric(
+                "power",
+                "Shared power",
+                if vault_power {
+                    "vault shutter"
+                } else {
+                    "canal crossing"
+                },
+                None,
+            ),
+            visual_metric(
+                "injury",
+                "Injury delay per action",
+                world.balance(&AccountId::Agent, &Asset::Injury),
+                Some("ticks"),
+            ),
+            visual_metric(
+                "shield",
+                "Protection remaining",
+                world.balance(&AccountId::Agent, &Asset::Shield),
+                Some("charges"),
+            ),
+            visual_metric(
+                "health",
+                "Health",
+                world.balance(&AccountId::Agent, &Asset::Health),
+                None,
+            ),
+        ]);
+        for (key, label, at, glyph, state) in [
+            (
+                "power-library",
+                "Power switch",
+                Node::Library,
+                SceneGlyphView::Energy,
+                if vault_power {
+                    "vault powered"
+                } else {
+                    "canal powered"
+                },
+            ),
+            (
+                "power-workshop",
+                "Power switch",
+                Node::Workshop,
+                SceneGlyphView::Energy,
+                if vault_power {
+                    "vault powered"
+                } else {
+                    "canal powered"
+                },
+            ),
+            (
+                "medical",
+                "Aid station",
+                Node::Garden,
+                SceneGlyphView::Repair,
+                "treat injuries · 2 ticks",
+            ),
+            (
+                "protection",
+                "Protective equipment",
+                Node::Start,
+                SceneGlyphView::Shield,
+                if world.balance(&AccountId::World, &Asset::Shield).is_zero() {
+                    "collected"
+                } else {
+                    "2 charges · 1 tick"
+                },
+            ),
+        ] {
+            scene.entities.push(visual_entity(
+                key,
+                label,
+                glyph,
+                SceneAnchorView::GraphNode { node: node_key(at) },
+                SceneEntityRoleView::Attachment,
+                SceneToneView::Neutral,
+                Some(state.into()),
+            ));
+        }
+    }
     scene.legend = vec![
         SceneLegendView {
             label: "Room".into(),
@@ -893,7 +1004,9 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
 
 fn route_id(rate: &RateId) -> Option<String> {
     match rate {
-        RateId::Move { from, to, .. } => Some(format!("edge:{from:?}:{to:?}")),
+        RateId::Move { from, to, .. } | RateId::ProtectedMove { from, to, .. } => {
+            Some(format!("edge:{from:?}:{to:?}"))
+        }
         _ => None,
     }
 }

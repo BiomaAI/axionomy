@@ -66,7 +66,7 @@ these three as the deeper demonstration of why the architecture matters.
 6. End with evidence a visitor can inspect: a receipt, an invariant, a private
    observation, a counterfactual trace, or a non-dominated alternative.
 
-For Mission, run **seed 11, budget 128**: the planner follows the South sighting,
+For the **Micro Mission**, run **seed 11, budget 128**: the planner follows the South sighting,
 shares it, responds to injury, and succeeds while the direct North baseline
 fails in the same instantiated scenario. Then run **seed 17**: the misleading
 sighting sends the planner South while the objective is North. Valid execution
@@ -75,39 +75,62 @@ sampled frontier evaluates the two fixed-policy baselines; it does not estimate
 the new planner's success probability. Links select controls; press **Run** to
 compute a different seed.
 
-For the Showcase Living Market, the existing market-day replay closes at
-12.966 credits per energy, the no-whale replay at 8.612, and thin liquidity at
-10.080. These are endogenous reserve ratios. Final price alone does not prove
-that every thin-liquidity trade has a larger effect; inspect the path and
-individual receipts as well. Direct per-actor changes and coalition-based
-Shapley contributions answer different attribution questions.
+The Living Market now evaluates a multi-day economy. Closing prices depend on
+seeded sunlight and responsive consumption, investment, and liquidity choices.
+Compare the complete paths and unmet obligations, not only the closing price.
+Direct per-actor changes and coalition-based Shapley contributions answer
+different attribution questions.
 
-## Next depth improvements, in priority order
+## Game-depth implementation
 
-These are proposed follow-up changes, not capabilities added by this pass.
+All fourteen games now have substantive interacting mechanics in Showcase and
+Stress. Micro remains the compact correctness and algorithm fixture. The table
+separates this implemented redesign from possible subsequent extensions.
 
-| Existing example | Next substantive improvement | Acceptance evidence |
+| Domain | Implemented mechanics | Further extensions |
 | --- | --- | --- |
-| Work League | Put a contested job or facility, a failure, and the recovery decision at the center of the replay. Compare policies under a documented common scenario protocol. | Exactly one valid claim; failed contenders cannot debit resources; repair changes future feasible work; leaders differ at the same snapshot. Current alternative fields use different seed offsets, so they are not isolated causal comparisons. |
-| Logistics | Execute the route planner repeatedly through delivery and disruption. The current MCTS artifact stops after loading and its first route decision. | Chosen route is actually executed; a breakdown causes a new assessment and decision; full delivery or explicit failure replays; compare completion risk and fuel/time costs. |
-| Marketplace | Make a blocked competing order and its successful alternative the main story. | One settlement moves goods, payment, carrier fee, commission, and tax atomically; an infeasible settlement changes none of them; participant utility tradeoffs remain visible. |
-| Perishables | Follow a power-loss decision through a deadline and its inventory consequences. | Cooling spends encoded energy; the condition changes once at cohort level; claims and conserved quantities reconcile; show which alternative saves inventory and what it costs. |
-| Maze | Explain why the shortest-looking route loses under another objective. | Key acquisition and gate opening are causal; BFS/A*/Dijkstra retain their own work; each exact Pareto route replays with its energy/time balance. |
-| Sokoban | Explain a tempting push that creates an irreversible deadlock. | A push is atomic, deadlock evidence identifies the lost continuation, and a successful alternative avoids it. |
-| Job shop | Make a bottleneck and competing job completion priorities visible. | Machine capacity is never double-booked; precedence is preserved; different schedules expose makespan versus individual completion tradeoffs. |
-| Workshop | Put a catalyst and a material/waste/time tradeoff into one short chain. | Catalyst survives reuse, consumed inputs reconcile with output and waste, and non-dominated recipes retain their traces. |
-| Bridge | Follow a losing bid through escrow and resolution. | Priority allocation differs from first-come; credits and capacity reconcile; losing bids cannot create a hidden debit. |
-| Rescue | Show the value and cost of sensing against direct commitment. | Exact scenario comparison explains the decision; noisy observations remain uncertain; belief-conditioned actions do not read hidden truth. |
-| Connect Four | Explain a forced defensive move rather than showing a long game. | Root alternatives expose the threat; the selected move is replayed; the existing board/minimax oracle checks the result. |
-| Exact Cover | Follow one attractive subset to a contradiction and another to a cover. | Each element is covered exactly once; Algorithm X and generic search agree on feasibility and replay through the same core. |
+| Work League | Shared time, overlapping activities, occupied service bays, arriving/dependent contracts, claim leases, deadlines, wear, credit-funded recovery, material recycling, paid handoffs, real road topology and shortest-route costs, common job-attempt chance tickets, replay-derived scene evidence | Interactive decisions/forks; broader role and seat evaluation; larger policy populations |
+| Logistics | Two heterogeneous vans, three customers, arriving heavy/cold/standard orders, deadline pricing and spoilage, concurrent trips, one occupied trunk road, finite hub staging and cargo transfers, shared paid fuel/repair/towing, wear, seeded vehicle/attempt/route outcomes and responsive fleet dispatch; Micro retains repeated MCTS | Interactive fleet control; broader traffic and failure distributions |
+| Living Market | Eight/twelve-day responsive economy, recurring needs and obligations, finite procurement/income, storage and production limits, two-day investment, adaptive liquidity, shared seeded sunlight, honest default and attribution evidence | Interactive intervention/forks and broader policy sensitivity evaluation |
+| Mission | Independent timed Scout/Medic movement and work, hidden archive and casualties, private observations, scarce radio or local briefing, joint extraction, one evacuation seat, sector closure, injury delays, clinical pulses, deadlines and finite resupply; Micro retains ISMCTS | Interactive team control; broader communication and hazard distributions |
+| Rescue | Three/four hidden casualties, continuing clinical decline, repeatable sector search, fallible hints, stabilization and restoration, one evacuation seat, speed/fuel tradeoffs, finite base resupply and observation-only policies | Interactive incident control; broader sensor and casualty distributions |
+| Perishables | Six-cohort cold chain with physical storage limits, inherited heat on split, daily grid outages, finite electricity/fuel/labor, processing, paid transport, backup generation, spoilage disposal and recurring food obligations; four policies share the outage schedule | Interactive storage/processing decisions and forks; broader outage distributions |
+| Marketplace | Standard/concession offers, funded reservations, contract/fulfillment separation, two occupied carriers, arriving orders, known route delays, delivery deadlines, late rebates and atomic reservation refunds; bounded buyer/seller plan comparisons | Interactive contract decisions and forks; additional reliability scenarios |
+| Workshop | Competing funded contracts, frame/panel production chains, tool wear and finite repair, upgrade investment, offcut recycling, separate delivery/payment and exact waste/time/revenue frontier | Interactive production decisions and forks; broader scenario evaluation |
+| Scheduling | Queue reservations distinct from actual execution, arriving jobs, alternative machines, setup costs, shared crews, paused work, finite repair and resume; a single-crew Stress workload | Interactive machine routing and recovery decisions; broader job populations |
+| Bridge | Shared time, staggered traffic waves, occupied 2–3 tick crossings, expiring lane reservations, deadlines, responsive bids and a paid concurrent detour; common traffic across policies | Interactive routing and forks; broader traffic and seat evaluation |
+| Maze | Shared vault/transit power circuit, injury delays, finite protective gear, treatment and recovery routes; four exact tradeoffs and scene evidence | Interactive route decisions and forks |
+| Sokoban | Crate-weight plates, doors, remote latches, far-side exit, two-circuit Stress warehouse, reverse-push dead-square proofs | Interactive pushes and replay forks; broader generated warehouse evaluation |
+| Exact Cover | Connected irregular pairs/triples/quadruples, legal dead ends, different-size exact covers, continuation from partial covers, globally impossible instances with no missing elements | Interactive subset choice and forks |
+| Connect Four | Core-enforced post-win terminal truth, tactical MCTS, forced blocks and double threats, positional rollouts, center-first and depth-five opponents, per-frame threat evidence | Human moves/forks and broader paired opening/seat evaluation |
 
-Mission should next compare the executed planner across all sixteen encoded
-scenarios, including its budget sensitivity. Living Market should next make a
-single actor's direct effect and its coalition contribution inspectable together.
-Neither requires another domain.
+Micro fixtures remain the compact conformance surface. Showcase must demonstrate
+interacting mechanics; Stress must vary structure and constraints as well as
+quantity. Generic Studio decision control and replay forking are separate future
+extensions; this implementation presents computed runs and their consequences.
+New mutable mechanics must remain authoritative balances and
+exchanges; policies may propose but never bypass them.
 
 The architectural boundary remains the one in
 [CONTINUOUS_AGENT_SYSTEMS.md](CONTINUOUS_AGENT_SYSTEMS.md): the harness owns
 agents, learning, and deployment; Axionomy owns the rules, consequences, and
 replay. These bounded reference policies demonstrate that boundary. They do
 not yet demonstrate a continuously learning agent population.
+
+### Validation of the implemented redesign
+
+- Full Rust workspace, all targets and features: 265 tests passed. Focused
+  Mission, Rescue and fleet regressions also passed after the final refinements,
+  including an additional check against remote medical resupply.
+- Studio: 8 unit tests, 32 native-browser tests and 3 browser-only Wasm tests
+  passed. The production UI build and workspace check passed.
+- All fourteen default artifacts were regenerated and checked against the
+  current catalog. Tests exercise deterministic replay, resource conservation,
+  actual occupancy, deadlines, private observations and common seeded scenarios.
+- Visual checks cover every Maze frame, warehouse cells, graph legibility across
+  all graph-domain replays, temporal vehicle movement, and the new domain scenes.
+
+The larger Mission and Logistics profiles explicitly report responsive policies;
+their Micro fixtures retain ISMCTS and MCTS. Evaluated policy comparisons are
+labeled approximate and are not presented as exhaustive optima or estimates of
+an untested planner's success probability.

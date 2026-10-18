@@ -33,7 +33,7 @@ pub(super) fn build(
             problem: "sokoban",
             strategy,
             title: "Sokoban · warehouse solved",
-            description: "Stable crates travel through a walled warehouse. Every walk and every three-cell push is replayed as an indivisible economic exchange.",
+            description: "Crates hold pressure plates to open doors. Cross into the next chamber, latch the door, recover the staged crate, and reach the far exit after completing every goal. Each move and mechanism is an atomic economic exchange.",
             source_label: "Sokoban",
         },
         &initial,
@@ -92,7 +92,7 @@ pub(super) fn build(
                 problem: "sokoban",
                 strategy: "deadlock",
                 title: "Sokoban · legal plan, losing outcome",
-                description: "Starting from the same warehouse, replay a sequence that is valid under every rule yet strands a stable crate in a non-goal corner. Valid is not the same as wise.",
+                description: "Starting from the same warehouse, replay a sequence that is valid under every rule yet strands a stable crate in a square from which no goal is reachable. Valid is not the same as wise.",
                 source_label: "Sokoban",
             },
             &initial,
@@ -107,7 +107,7 @@ pub(super) fn build(
             .filter(|(_, cell)| sokoban::is_dead_square(&deadlocked, *cell))
             .count();
         deadlock.telemetry.push(telemetry(
-            "structural corner-deadlock proof",
+            "reverse-push reachability proof",
             true,
             [(
                 TelemetryKindView::Message,
@@ -131,7 +131,7 @@ fn search(
         let mut session = AStarSession::new(
             initial,
             sokoban::goal(),
-            sokoban::candidates,
+            sokoban::search_candidates,
             |_, _, _| 1,
             sokoban::crate_goal_distance,
         );
@@ -157,7 +157,7 @@ fn search(
             .ok_or_else(|| problem_error("sokoban", "puzzle has no solution"))?;
         Ok((solution, state))
     } else {
-        let mut session = BfsSession::new(initial, sokoban::goal(), sokoban::candidates);
+        let mut session = BfsSession::new(initial, sokoban::goal(), sokoban::search_candidates);
         let mut observer = Continue;
         while !session.status().is_terminal() {
             session.advance(WorkBudget::new(chunk), &mut observer);
@@ -210,7 +210,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             } else if goal {
                 "Goal floor".into()
             } else if dead {
-                "Non-goal corner".into()
+                "No crate route to any goal".into()
             } else {
                 "Warehouse floor".into()
             },
@@ -218,6 +218,82 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             account: Some(account_key.clone()),
         });
 
+        if !world.balance(&account, &Asset::ExitCell).is_zero() {
+            entities.push(visual_entity(
+                "exit",
+                "Exit",
+                SceneGlyphView::Goal,
+                SceneAnchorView::GridCell {
+                    x: u32::from(cell % width),
+                    y: u32::from(cell / width),
+                },
+                SceneEntityRoleView::Structure,
+                SceneToneView::Goal,
+                Some("leave after all deliveries".into()),
+            ));
+        }
+        for circuit in 0..2 {
+            for (asset, name, glyph) in [
+                (Asset::Plate(circuit), "Plate", SceneGlyphView::Constraint),
+                (Asset::Door(circuit), "Door", SceneGlyphView::Door),
+                (
+                    Asset::Panel(circuit),
+                    "Latch panel",
+                    SceneGlyphView::Constraint,
+                ),
+            ] {
+                if world.balance(&account, &asset).is_zero() {
+                    continue;
+                }
+                let pressed = !world
+                    .balance(&AccountId::Success, &Asset::Pressed(circuit))
+                    .is_zero();
+                let latched = !world
+                    .balance(&AccountId::Success, &Asset::Latched(circuit))
+                    .is_zero();
+                let state = match asset {
+                    Asset::Plate(_) => {
+                        if pressed {
+                            "holding door open"
+                        } else {
+                            "needs a crate"
+                        }
+                    }
+                    Asset::Door(_) => {
+                        if latched {
+                            "latched open"
+                        } else if pressed {
+                            "open under pressure"
+                        } else {
+                            "closed"
+                        }
+                    }
+                    _ => {
+                        if latched {
+                            "latched"
+                        } else {
+                            "ready to latch"
+                        }
+                    }
+                };
+                entities.push(visual_entity(
+                    format!("mechanism:{name}:{circuit}"),
+                    format!("{name} {}", circuit + 1),
+                    glyph,
+                    SceneAnchorView::GridCell {
+                        x: u32::from(cell % width),
+                        y: u32::from(cell / width),
+                    },
+                    SceneEntityRoleView::Structure,
+                    if latched || pressed {
+                        SceneToneView::Success
+                    } else {
+                        SceneToneView::Warning
+                    },
+                    Some(state.into()),
+                ));
+            }
+        }
         if player == Some(cell) {
             entities.push(link_balance(
                 visual_entity(
@@ -277,6 +353,45 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             u32::from(height),
             cells,
         )
-        .with_entities(entities),
+        .with_entities(entities)
+        .with_metrics([
+            visual_metric(
+                "held_plates",
+                "Crates holding plates",
+                (0..2)
+                    .filter(|circuit| {
+                        !world
+                            .balance(&AccountId::Success, &Asset::Pressed(*circuit))
+                            .is_zero()
+                    })
+                    .count(),
+                None,
+            ),
+            visual_metric(
+                "latched",
+                "Doors latched open",
+                (0..2)
+                    .filter(|circuit| {
+                        !world
+                            .balance(&AccountId::Success, &Asset::Latched(*circuit))
+                            .is_zero()
+                    })
+                    .count(),
+                None,
+            ),
+            visual_metric(
+                "goals",
+                "Crates on goals",
+                crates
+                    .iter()
+                    .filter(|(_, at)| {
+                        !world
+                            .balance(&AccountId::Cell(*at), &Asset::GoalCell)
+                            .is_zero()
+                    })
+                    .count(),
+                None,
+            ),
+        ]),
     )
 }

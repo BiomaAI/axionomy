@@ -1,4 +1,5 @@
 use super::*;
+mod expedition;
 use axionomy::Exchange;
 use axionomy_problems::mission::{self, AccountId, AgentId, Asset, Location, Policy, World};
 use axionomy_search::mcts::MctsConfig;
@@ -14,6 +15,9 @@ pub(super) fn build(
     progress: &mut ProgressSink<'_>,
 ) -> Result<RunArtifact, ServiceError> {
     let profile = instance_profile(request, descriptor);
+    if !matches!(profile, InstanceProfile::Micro) {
+        return expedition::build(request, descriptor, profile);
+    }
     let model = mission::initial();
     let sample_index = (request.seed as usize) % 16;
     let samples = match profile {
@@ -560,7 +564,7 @@ mod tests {
 
     #[test]
     fn mission_replays_actual_search_and_private_information_transfer() {
-        let mut request = RunRequest::new("mission");
+        let mut request = RunRequest::new("mission").with_instance("micro");
         request.seed = 11;
         let artifact = ReferenceService.run(request).unwrap();
         let planned = &artifact.documents[0];

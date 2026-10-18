@@ -1,4 +1,5 @@
 use super::*;
+mod incident;
 use axionomy_problems::rescue::{self, AccountId, Asset, Location, Policy, World};
 use axionomy_view::{
     AccountView, AssetQuantityView, ExactQuantity, FrontierCompletenessView, GraphEdgeView,
@@ -11,6 +12,9 @@ pub(super) fn build(
     descriptor: &ProblemDescriptor,
 ) -> Result<RunArtifact, ServiceError> {
     let profile = instance_profile(request, descriptor);
+    if !matches!(profile, InstanceProfile::Micro) {
+        return incident::build(request, descriptor, profile);
+    }
     let model = match profile {
         InstanceProfile::Micro => rescue::uniform_uncertain(),
         InstanceProfile::Showcase => rescue::uniform_uncertain_showcase(),

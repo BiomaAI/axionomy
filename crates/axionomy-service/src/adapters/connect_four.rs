@@ -67,7 +67,7 @@ pub(super) fn build(
         .map_err(|error| problem_error("connect_four", error))?;
     let terminal = connect_four::terminal_values(&final_world)
         .ok_or_else(|| problem_error("connect_four", "game did not terminate"))?;
-    let mut view = document(DocumentSpec { problem: "connect_four", strategy: "mcts_game", title: "Connect Four · MCTS self-play", description: "Both players use MCTS, each maximising its own score, until the rules declare a winner or a draw.", source_label: "Connect Four" }, &initial, &axionomy::Goal::new(), &trace, vec![
+    let mut view = document(DocumentSpec { problem: "connect_four", strategy: "mcts_game", title: "Connect Four · MCTS self-play", description: "Both players use tactical MCTS: immediate wins, forced blocks and double threats guide search. The economy declares the winner.", source_label: "Connect Four" }, &initial, &axionomy::Goal::new(), &trace, vec![
         ObjectiveView { key: "red".into(), label: "Red terminal value".into(), direction: ObjectiveDirectionView::Maximize, value: format!("{:.1}", terminal[0]) },
         ObjectiveView { key: "yellow".into(), label: "Yellow terminal value".into(), direction: ObjectiveDirectionView::Maximize, value: format!("{:.1}", terminal[1]) },
     ], scene).map_err(|error| problem_error("connect_four", error))?;
@@ -91,15 +91,72 @@ pub(super) fn build(
         let malformed = Exchange::new(*first.rate(), *first.units());
         view.proposals.push(proposal("connect_four", ProposalSpec { id: "move-without-board", label: "Move without board bindings", description: "A drop must name the game, column, landing cell, and result. Without them, gravity has nothing to act on." }, &initial, &malformed));
     }
+    let mut documents = vec![view];
+    {
+        for (strategy, title, opponent) in [
+            (
+                "center_opponent",
+                "Connect Four · against a center-first opponent",
+                connect_four::Opponent::CenterFirst,
+            ),
+            (
+                "search_opponent",
+                "Connect Four · against a depth-five opponent",
+                connect_four::Opponent::AlphaBeta,
+            ),
+        ] {
+            let trace = connect_four::play_opponent_game_from_with_progress(
+                initial.clone(),
+                iterations,
+                request.seed,
+                opponent,
+                |turn| {
+                    progress.emit(
+                        strategy,
+                        turn as u64,
+                        85,
+                        format!("{opponent:?} comparison · action {turn}"),
+                    )
+                },
+            );
+            progress.ensure()?;
+            let trace = trace
+                .ok_or_else(|| problem_error("connect_four", "opponent comparison interrupted"))?;
+            let final_world = initial
+                .replayed(&trace)
+                .map_err(|error| problem_error("connect_four", error))?;
+            let terminal = connect_four::terminal_values(&final_world)
+                .ok_or_else(|| problem_error("connect_four", "comparison did not terminate"))?;
+            documents.push(document(DocumentSpec {
+                problem: "connect_four", strategy, title,
+                description: "Red uses tactical MCTS. Yellow uses the named independent policy on the same empty board. One game is an inspectable matchup, not a win-rate estimate.", source_label: "Connect Four",
+            }, &initial, &axionomy::Goal::new(), &trace, vec![
+                ObjectiveView { key: "red".into(), label: "Red terminal value".into(), direction: ObjectiveDirectionView::Maximize, value: format!("{:.1}", terminal[0]) },
+                ObjectiveView { key: "yellow".into(), label: "Yellow terminal value".into(), direction: ObjectiveDirectionView::Maximize, value: format!("{:.1}", terminal[1]) },
+            ], scene).map_err(|error| problem_error("connect_four", error))?);
+        }
+    }
     artifact(
         request,
         descriptor,
         selected_strategy(request, descriptor),
-        vec![view],
+        documents,
     )
 }
 
 fn scene(_: u64, world: &World) -> Option<Scene> {
+    let evidence = connect_four::tactical_evidence(world);
+    let columns = |values: &[u8]| {
+        if values.is_empty() {
+            "none".to_string()
+        } else {
+            values
+                .iter()
+                .map(|column| (column + 1).to_string())
+                .collect::<Vec<_>>()
+                .join(", ")
+        }
+    };
     let mut cells = Vec::new();
     let mut pieces = Vec::new();
     let (width, height) = connect_four::board_dimensions(world);
@@ -159,6 +216,47 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             u32::from(height),
             cells,
         )
-        .with_entities(pieces),
+        .with_entities(pieces)
+        .with_metrics([
+            visual_metric(
+                "turn",
+                "Next player",
+                evidence.player.map_or_else(
+                    || {
+                        if connect_four::terminal_values(world).is_some() {
+                            "finished".into()
+                        } else {
+                            "adjudicating".into()
+                        }
+                    },
+                    |player| format!("{player:?}"),
+                ),
+                None,
+            ),
+            visual_metric(
+                "wins",
+                "Winning columns",
+                columns(&evidence.winning_columns),
+                None,
+            ),
+            visual_metric(
+                "opponent_wins",
+                "Opponent threats",
+                columns(&evidence.opponent_winning_columns),
+                None,
+            ),
+            visual_metric(
+                "forks",
+                "Double-threat moves",
+                columns(&evidence.fork_columns),
+                None,
+            ),
+            visual_metric(
+                "safe",
+                "Safe next columns",
+                columns(&evidence.safe_columns),
+                None,
+            ),
+        ]),
     )
 }

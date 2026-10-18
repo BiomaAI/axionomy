@@ -1,15 +1,21 @@
 //! Compact adversarial Connect Four with encoded gravity and terminal truth.
 
 use axionomy::{
-    Account, Basket, Economy, EconomyBuilder, Exchange, LinearInvariant, Quantity, Rate, Trace,
-    basket,
+    Account, Basket, Economy, EconomyBuilder, Exchange, LinearInvariant, Quantity,
+    QuantityComparison as C, QuantityExpression as Q, Rate, Trace, basket,
 };
 use axionomy_search::{
     action_source::eager_actions,
-    mcts::{MctsConfig, MctsDecision, MctsError, MctsSession, MctsStatus, random_action, search},
+    mcts::{MctsConfig, MctsDecision, MctsError, MctsSession, MctsStatus, search},
     session::{Continue, WorkBudget},
 };
 use std::ops::ControlFlow;
+
+mod tactics;
+pub use tactics::{
+    Opponent, TacticalEvidence, play_opponent_game, play_opponent_game_from_with_progress,
+    play_opponent_game_with_progress, tactical_candidates, tactical_evidence,
+};
 
 pub const WIDTH: u8 = 4;
 pub const HEIGHT: u8 = 4;
@@ -84,6 +90,8 @@ pub enum Asset {
     Draw,
     BoardSize { width: u8, height: u8 },
     Pending(Player),
+    SegmentVacancies(u8),
+    SegmentPieces(Player, u8),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -337,24 +345,25 @@ pub fn initial() -> World {
 }
 
 /// A standard 7×6 board using compact move rates and explicit four-cell win
-/// certificates. Candidate generation admits `Continue` only when no encoded
-/// win certificate is applicable, avoiding the old counter cross-product.
+/// certificates. Segment balances prevent continuing or drawing after a win
+/// in the core economy, including exchanges supplied outside candidate generation.
 pub fn initial_standard() -> World {
+    let mut game = basket([
+        (Asset::GameIdentity, 1),
+        (Asset::Turn(Player::Red), 1),
+        (
+            Asset::BoardSize {
+                width: STANDARD_WIDTH,
+                height: STANDARD_HEIGHT,
+            },
+            1,
+        ),
+    ]);
+    for segment in 0..winning_segments().len() {
+        game.insert(Asset::SegmentVacancies(segment as u8), Quantity::new(4));
+    }
     let mut builder = EconomyBuilder::new()
-        .account(
-            AccountId::Game,
-            Account::from(basket([
-                (Asset::GameIdentity, 1),
-                (
-                    Asset::BoardSize {
-                        width: STANDARD_WIDTH,
-                        height: STANDARD_HEIGHT,
-                    },
-                    1,
-                ),
-                (Asset::Turn(Player::Red), 1),
-            ])),
-        )
+        .account(AccountId::Game, Account::from(game))
         .account(
             AccountId::Result,
             Account::from(basket([(Asset::ResultIdentity, 1)])),
@@ -391,10 +400,13 @@ pub fn initial_standard() -> World {
         builder = builder
             .rate(
                 RateId::Continue(player),
-                Rate::new()
-                    .preserve(Role::Game, basket([(Asset::GameIdentity, 1)]))
-                    .consume(Role::Game, basket([(Asset::Pending(player), 1)]))
-                    .produce(Role::Game, basket([(Asset::Turn(player.other()), 1)])),
+                no_standard_win(
+                    Rate::new()
+                        .preserve(Role::Game, basket([(Asset::GameIdentity, 1)]))
+                        .consume(Role::Game, basket([(Asset::Pending(player), 1)]))
+                        .produce(Role::Game, basket([(Asset::Turn(player.other()), 1)])),
+                    player,
+                ),
             )
             .rate(RateId::StandardDraw(player), standard_draw_rate(player));
         for (segment, cells) in winning_segments().into_iter().enumerate() {
@@ -407,6 +419,14 @@ pub fn initial_standard() -> World {
             );
         }
     }
+    let mut segment_invariant = LinearInvariant::new("winning-line occupancy");
+    for segment in 0..winning_segments().len() {
+        segment_invariant = segment_invariant
+            .weight(Asset::SegmentVacancies(segment as u8), 1)
+            .weight(Asset::SegmentPieces(Player::Red, segment as u8), 1)
+            .weight(Asset::SegmentPieces(Player::Yellow, segment as u8), 1);
+    }
+    builder = builder.invariant(segment_invariant);
     builder
         .invariant(
             LinearInvariant::new("cell occupancy")
@@ -461,14 +481,26 @@ pub fn candidates(world: &World) -> Vec<Action> {
 
 fn standard_candidates(world: &World) -> Vec<Action> {
     if let Some(player) = pending_player(world) {
-        let claims = world.applicable(winning_segments().into_iter().enumerate().map(
-            |(segment, _)| {
-                action(RateId::ClaimWin {
-                    player,
-                    segment: segment as u8,
+        let claims = world.applicable(
+            winning_segments()
+                .into_iter()
+                .enumerate()
+                .filter(|(segment, _)| {
+                    world
+                        .balance(
+                            &AccountId::Game,
+                            &Asset::SegmentPieces(player, *segment as u8),
+                        )
+                        .get()
+                        == 4
                 })
-            },
-        ));
+                .map(|(segment, _)| {
+                    action(RateId::ClaimWin {
+                        player,
+                        segment: segment as u8,
+                    })
+                }),
+        );
         if !claims.is_empty() {
             return claims;
         }
@@ -518,12 +550,12 @@ pub fn mcts(world: &World, iterations: usize, seed: u64) -> Result<Decision, Dec
         world,
         MctsConfig::new(iterations, 20).with_seed(seed),
         2,
-        candidates,
+        tactical_candidates,
         |_| Vec::new(),
         |world| current_player(world).map_or(0, Player::index),
         terminal_values,
-        |_| vec![0.5, 0.5],
-        random_action,
+        tactics::cutoff,
+        tactics::rollout,
     )
 }
 
@@ -587,18 +619,35 @@ fn play_from_with_progress(
         if terminal_values(&world).is_some() {
             break;
         }
-        let config = MctsConfig::new(iterations_per_move, maximum_moves)
+        let legal = candidates(&world);
+        if legal.len() == 1 {
+            if observer(GameProgress {
+                moves_completed: turn,
+                maximum_moves,
+                iterations_completed: 0,
+                iterations_per_move,
+                nodes: 1,
+            })
+            .is_break()
+            {
+                return None;
+            }
+            world.apply(legal[0].clone()).ok()?;
+            trace.push(legal[0].clone());
+            continue;
+        }
+        let config = MctsConfig::new(iterations_per_move, 20)
             .with_seed(seed + u64::try_from(turn).unwrap_or(u64::MAX));
         let mut session = MctsSession::new(
             &world,
             config,
             2,
-            eager_actions(candidates),
+            eager_actions(tactical_candidates),
             |_| Vec::new(),
             |world| current_player(world).map_or(0, Player::index),
             terminal_values,
-            |_| vec![0.5, 0.5],
-            random_action,
+            tactics::cutoff,
+            tactics::rollout,
         )
         .ok()?;
         while session.status() == MctsStatus::Running {
@@ -687,7 +736,7 @@ fn move_rate(player: Player, column: u8, row: u8, counts: LineCounts) -> Rate<Ro
 }
 
 fn standard_move_rate(player: Player, column: u8, row: u8) -> Rate<Role, Asset> {
-    Rate::new()
+    let mut rate = Rate::new()
         .preserve(Role::Game, basket([(Asset::GameIdentity, 1)]))
         .consume(Role::Game, basket([(Asset::Turn(player), 1)]))
         .produce(Role::Game, basket([(Asset::Pending(player), 1)]))
@@ -709,7 +758,33 @@ fn standard_move_rate(player: Player, column: u8, row: u8) -> Rate<Role, Asset> 
         .produce(Role::Cell, basket([(Asset::Piece(player), 1)]))
         .distinct(Role::Game, Role::Column)
         .distinct(Role::Game, Role::Cell)
-        .distinct(Role::Column, Role::Cell)
+        .distinct(Role::Column, Role::Cell);
+    for (segment, cells) in winning_segments().into_iter().enumerate() {
+        if cells.contains(&(column, row)) {
+            rate = rate
+                .consume(
+                    Role::Game,
+                    basket([(Asset::SegmentVacancies(segment as u8), 1)]),
+                )
+                .produce(
+                    Role::Game,
+                    basket([(Asset::SegmentPieces(player, segment as u8), 1)]),
+                );
+        }
+    }
+    rate
+}
+
+fn no_standard_win(mut rate: Rate<Role, Asset>, player: Player) -> Rate<Role, Asset> {
+    for segment in 0..winning_segments().len() {
+        rate = rate.condition(
+            format!("segment {segment} is not a win"),
+            Q::balance(Role::Game, Asset::SegmentPieces(player, segment as u8)),
+            C::LessThanOrEqual,
+            Q::constant(3),
+        );
+    }
+    rate
 }
 
 fn claim_win_rate(player: Player, cells: [(u8, u8); 4]) -> Rate<Role, Asset> {
@@ -778,7 +853,7 @@ fn standard_draw_rate(player: Player) -> Rate<Role, Asset> {
             rate = rate.distinct(*left, *right);
         }
     }
-    rate
+    no_standard_win(rate, player)
 }
 
 fn winning_segments() -> Vec<[(u8, u8); 4]> {
@@ -1153,6 +1228,9 @@ mod tests {
             world.apply(movement).expect("piece placement applies");
             let adjudication = candidates(&world);
             if index == 6 {
+                let before = world.state_key();
+                assert!(world.apply(action(RateId::Continue(Player::Red))).is_err());
+                assert_eq!(before, world.state_key());
                 assert!(matches!(
                     adjudication[0].rate(),
                     RateId::ClaimWin {

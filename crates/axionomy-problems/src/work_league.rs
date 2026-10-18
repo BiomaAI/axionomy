@@ -10,6 +10,9 @@ use axionomy::{
     Trace, basket,
 };
 
+mod continuous;
+pub use continuous::{clock, decision, proposal};
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum AgentId {
     Atlas,
@@ -80,10 +83,44 @@ pub enum AccountId {
     Job(JobId),
     Facility(Facility),
     Nature,
+    World,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Asset {
+    WorldIdentity,
+    SeasonActive,
+    SeasonEnded,
+    Tick,
+    Horizon,
+    ContractsOpen,
+    ContractsClosed,
+    Activities,
+    Permit(AgentId),
+    Acted(AgentId),
+    Idle,
+    Busy,
+    FreeContract,
+    ReadyAt,
+    ReleaseAt,
+    Deadline,
+    LeaseUntil,
+    Expired,
+    Transferable,
+    HandedOff,
+    Assists,
+    CompletedJob(JobId),
+    Credit,
+    Wear,
+    Repairing,
+    FacilityIdentity(Facility),
+    Vacant(Facility),
+    Occupied(Facility, AgentId),
+    Servicing(Facility),
+    ChargingEnergy,
+    ReclaimingMaterial,
+    EmbodiedMaterial,
+    RecyclingLoss,
     AgentIdentity(AgentId),
     JobIdentity(JobId),
     Policy(Policy),
@@ -123,10 +160,42 @@ pub enum Role {
     Job,
     Nature,
     Facility,
+    World,
+    Partner,
+    Worker(AgentId),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum RateId {
+    Tick,
+    Wait {
+        agent: AgentId,
+    },
+    BeginService {
+        agent: AgentId,
+        facility: Facility,
+        maintenance: bool,
+    },
+    EndService {
+        agent: AgentId,
+        facility: Facility,
+    },
+    Handoff {
+        agent: AgentId,
+        recipient: AgentId,
+        job: JobId,
+    },
+    ReleaseClaim {
+        agent: AgentId,
+        job: JobId,
+        expired: bool,
+    },
+    Expire {
+        job: JobId,
+        agent: Option<AgentId>,
+        mode: Option<WorkMode>,
+    },
+    EndSeason,
     Claim {
         agent: AgentId,
         job: JobId,
@@ -268,6 +337,9 @@ pub fn sustainable_lineup() -> [Policy; 4] {
 }
 
 pub fn league(profile: Profile, lineup: [Policy; 4]) -> League {
+    if profile != Profile::Micro {
+        return continuous::build(profile, lineup);
+    }
     let agents = AGENTS[..profile.agent_count()].to_vec();
     let jobs = (0..profile.job_count())
         .map(|index| job_spec(JobId(index as u8 + 1)))
@@ -647,6 +719,9 @@ pub fn league(profile: Profile, lineup: [Policy; 4]) -> League {
 }
 
 pub fn run(league: &League, seed: u64) -> Result<MatchOutcome, String> {
+    if league.initial.account(&AccountId::World).is_some() {
+        return continuous::run(league, seed);
+    }
     let mut world = league.initial.fork();
     let mut trace = Trace::new();
     let mut available = league.jobs.iter().map(|spec| spec.id).collect::<Vec<_>>();
@@ -738,7 +813,7 @@ pub fn job_spec(job: JobId) -> JobSpec {
         id: job,
         location: locations[index as usize % locations.len()],
         value: 8 + (index * 7 % 17),
-        energy: 3 + (index * 5 % 5),
+        energy: 3 + (index * 3 % 5),
         time: 3 + (index * 3 % 6),
         material: 2 + (index * 2 % 4),
         risk: 1 + (index * 3 % 4),
@@ -900,6 +975,7 @@ fn action(rate: RateId) -> Action {
         | RateId::Repair { agent }
         | RateId::Recharge { agent }
         | RateId::Recycle { agent } => (agent, None, false),
+        _ => return continuous::proposal(rate),
     };
     exchange = exchange.bind(Role::Agent, AccountId::Agent(agent));
     if let Some(job) = job {

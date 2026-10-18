@@ -23,7 +23,7 @@ fn main() {
         .replayed(&trace)
         .expect("the canonical market day must replay");
     let closing = amm::pool_state(&final_world);
-    assert!(final_world.matches(&amm::goal()));
+    assert!(final_world.matches(&amm::market_goal(&initial)));
     info!(
         exchanges = trace.exchanges().len(),
         closing_price_milli = closing.price_milli,
@@ -38,7 +38,7 @@ fn main() {
         let alternative = initial
             .replayed(&alternative_trace)
             .expect("counterfactual must replay");
-        assert!(alternative.matches(&amm::goal()));
+        assert!(alternative.matches(&amm::market_goal(&initial)));
         let pool = amm::pool_state(&alternative);
         info!(
             ?scenario,

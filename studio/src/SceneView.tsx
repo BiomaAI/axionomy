@@ -211,10 +211,12 @@ function entityDetail(entity: SceneEntity): string | undefined {
 
 function StructureNode({ data }: NodeProps) {
   const view = data as StructureNodeData;
-  const state = view.states[0];
+  const intrinsic = view.entity && (view.entity.metrics.length > 0 || (view.entity.status && !["location", "resource", "place", "node", "machine", "facility"].includes(view.entity.status))) ? view.entity : undefined;
+  const state = view.states[0] ?? intrinsic;
   const entity = state ?? view.entity;
-  const metrics = view.states.flatMap((item) => item.metrics.map((metric) => `${item.id.label} · ${metric.label}: ${metric.value}${metric.unit ? ` ${metric.unit}` : ""}`)).join(" · ");
-  const title = [view.label, metrics].filter(Boolean).join(" · ");
+  const visibleStates = [...view.states, ...(intrinsic ? [intrinsic] : [])];
+  const metrics = visibleStates.flatMap((item) => item.metrics.map((metric) => `${item.id.label} · ${metric.label}: ${metric.value}${metric.unit ? ` ${metric.unit}` : ""}`)).join(" · ");
+  const title = [view.label, ...visibleStates.map((item) => item.status), metrics].filter(Boolean).join(" · ");
   return <div title={title || undefined} className={`rich-node structure-content ${entity ? `tone-${entity.tone}` : ""}`}>
     {view.handles?.map((handle) => <Handle key={handle.id} id={handle.id} type={handle.type} position={HANDLE_POSITION[handle.side]} style={handleStyle(handle.side, handle.offset)} className="graph-node-handle" isConnectable={false} />)}
     <div className={effectClass(view.effect)}>
@@ -222,6 +224,7 @@ function StructureNode({ data }: NodeProps) {
         {entity && <SceneIcon glyph={entity.glyph} size={21} />}
         <span className="structure-label">{view.label}</span>
         {state && <small className="structure-state">{entityDetail(state)}</small>}
+        {state?.metrics.length && state.status ? <small className="structure-state structure-phase">{state.status}</small> : null}
         {view.states.length > 1 && <small className="structure-state-count">+{view.states.length - 1} linked</small>}
       </div>
     </div>
@@ -257,7 +260,7 @@ function AttachmentNode({ data }: NodeProps) {
       {view.entities.slice(0, 4).map((entity) => <button type="button" key={entity.id.key} className={`${effectClass(view.effects[entity.id.key] ?? "none")} tone-${entity.tone}`} disabled={!entity.account} onClick={(event) => { event.stopPropagation(); if (entity.account) view.onAccount?.(entity.account); }}>
         <SceneIcon glyph={entity.glyph} size={15} />
         <span>{entity.id.label}</span>
-        <small>{entityDetail(entity)}</small>
+        <small title={[entity.status?.replaceAll("_", " "), entity.metrics.length ? entityDetail(entity) : undefined].filter(Boolean).join(" · ")}>{[entity.status?.replaceAll("_", " "), entity.metrics.length ? entityDetail(entity) : undefined].filter(Boolean).join(" · ")}</small>
       </button>)}
       {view.entities.length > 4 && <div className="attachment-overflow">+{view.entities.length - 4} more</div>}
     </div>
@@ -284,7 +287,7 @@ function GraphScene({ scene, previousScene, frame, motion, surface, onAccount }:
       lastWidth = box.width;
       lastHeight = box.height;
       cancelAnimationFrame(pending);
-      pending = requestAnimationFrame(() => { void flow.fitView({ padding: 0.15 }); });
+      pending = requestAnimationFrame(() => { void flow.fitView({ padding: { top: "64px", right: "24px", bottom: "24px", left: "24px" } }); });
     });
     observer.observe(host.current);
     return () => { observer.disconnect(); cancelAnimationFrame(pending); };
@@ -397,12 +400,32 @@ function GraphScene({ scene, previousScene, frame, motion, surface, onAccount }:
     };
   });
   const context = scene.entities.filter((entity) => entity.role === "context");
+  const layoutKey = nodes.map((node) => `${node.id}:${node.position.x}:${node.position.y}:${node.type === "attachments" ? attachmentHeight((node.data as AttachmentNodeData).entities.length) : ""}`).join("|");
+  useEffect(() => {
+    if (!flow || !host.current) return;
+    let pending = requestAnimationFrame(() => {
+      pending = requestAnimationFrame(() => {
+        const box = host.current?.getBoundingClientRect();
+        if (!box) return;
+        const viewport = flow.getViewport();
+        const clipped = flow.getNodes().some((node) => {
+          const x = node.position.x * viewport.zoom + viewport.x;
+          const y = node.position.y * viewport.zoom + viewport.y;
+          const width = (node.measured?.width ?? GRAPH_NODE_WIDTH) * viewport.zoom;
+          const height = (node.measured?.height ?? GRAPH_NODE_HEIGHT) * viewport.zoom;
+          return x < 8 || y < 56 || x + width > box.width - 8 || y + height > box.height - 8;
+        });
+        if (clipped) void flow.fitView({ padding: { top: "64px", right: "24px", bottom: "24px", left: "24px" }, duration: motion === "step" ? 180 : 0 });
+      });
+    });
+    return () => cancelAnimationFrame(pending);
+  }, [flow, layoutKey, motion]);
   return <div className={`graph-scene motion-${motion}`} data-motion={motion} ref={host} aria-label={scene.title}>
-    <ReactFlow nodes={nodes} edges={[...edges, ...relationEdges]} nodeTypes={nodeTypes} fitView fitViewOptions={{ padding: 0.18 }} minZoom={0.25} maxZoom={2} nodesConnectable={false} nodesDraggable={false} elementsSelectable onInit={setFlow} onNodeClick={(_, node) => { const account = (node.data as SceneNodeData).focusAccount; if (account) onAccount?.(account); }}>
+    <ReactFlow nodes={nodes} edges={[...edges, ...relationEdges]} nodeTypes={nodeTypes} fitView fitViewOptions={{ padding: { top: "64px", right: "24px", bottom: "24px", left: "24px" } }} minZoom={0.2} maxZoom={2} nodesConnectable={false} nodesDraggable={false} elementsSelectable onInit={setFlow} onNodeClick={(_, node) => { const account = (node.data as SceneNodeData).focusAccount; if (account) onAccount?.(account); }}>
       <Background gap={22} size={1} />
-      <Controls showInteractive={false} />
+      <Controls showInteractive={false} fitViewOptions={{ padding: { top: "64px", right: "24px", bottom: "24px", left: "24px" } }} />
     </ReactFlow>
-    {context.length > 0 && <aside className="scene-context" aria-label="Scenario context"><header>Scenario context</header>{context.map((entity) => <button type="button" key={entity.id.key} className={`tone-${entity.tone}`} disabled={!entity.account} onClick={() => entity.account && onAccount?.(entity.account)}><SceneIcon glyph={entity.glyph} size={15} /><span><b>{entity.id.label}</b><small>{contextRelation(entity, surface)} · {entityDetail(entity)}</small></span></button>)}</aside>}
+    {context.length > 0 && <aside className="scene-context" aria-label="Scenario context"><header>Scenario context</header>{context.map((entity) => <button type="button" key={entity.id.key} className={`tone-${entity.tone}`} title={[entity.status, ...entity.metrics.map((metric) => `${metric.label}: ${metric.value}${metric.unit ? ` ${metric.unit}` : ""}`)].filter(Boolean).join(" · ")} disabled={!entity.account} onClick={() => entity.account && onAccount?.(entity.account)}><SceneIcon glyph={entity.glyph} size={15} /><span><b>{entity.id.label}</b>{entity.status && <small>{entity.status}</small>}<small>{contextRelation(entity, surface)} · {entityDetail(entity)}</small></span></button>)}</aside>}
   </div>;
 }
 
@@ -473,7 +496,7 @@ function groupBy<T>(items: T[], key: (item: T) => string): Map<string, T[]> {
 }
 
 function attachmentHeight(count: number): number {
-  return 30 + Math.min(count, 4) * 29 + (count > 4 ? 22 : 0);
+  return 30 + Math.min(count, 4) * 42 + (count > 4 ? 22 : 0);
 }
 
 function attachmentLabel(anchor: SceneEntity["anchor"], surface: GraphSurface, count: number): string {
@@ -687,12 +710,12 @@ function TimelineScene({ scene, surface, onAccount }: { scene: Scene; surface: T
   const maximum = Math.max(1, ...surface.spans.map((span) => span.end), surface.cursor ?? 0);
   const entity = (id: string) => scene.entities.find((candidate) => candidate.id.key === id);
   const queued = scene.entities.filter((candidate) => candidate.anchor.kind === "unanchored");
-  return <div className="timeline-scene" role="img" aria-label={scene.title}>
-    {queued.length > 0 && <div className="timeline-queue"><strong>Ready queue</strong>{queued.map((item) => <button type="button" key={item.id.key} className={`tone-${item.tone}`} disabled={!item.account} onClick={() => item.account && onAccount?.(item.account)}><SceneIcon glyph={item.glyph} size={15} />{item.id.label}</button>)}</div>}
+  return <div className="timeline-scene" role="group" aria-label={scene.title}>
+    {queued.length > 0 && <div className="timeline-queue"><strong>Waiting work</strong>{queued.map((item) => <button type="button" key={item.id.key} className={`tone-${item.tone}`} title={item.status ?? undefined} disabled={!item.account} onClick={() => item.account && onAccount?.(item.account)}><SceneIcon glyph={item.glyph} size={15} /><span>{item.id.label}{item.status && <small>{item.status}</small>}</span></button>)}</div>}
     <div className="timeline-axis"><span>0</span><span>{maximum}</span></div>
     {surface.lanes.map((lane) => <div className="timeline-lane" key={lane.id.key}><strong>{lane.id.label}</strong><div className="timeline-track">
-      {surface.spans.filter((span) => span.lane === lane.id.key).map((span) => { const item = entity(span.id); return <div key={span.id} className={`timeline-span ${span.classes.join(" ")} ${item ? `tone-${item.tone}` : ""}`} style={{ left: `${(span.start / maximum) * 100}%`, width: `${Math.max(2, ((span.end - span.start) / maximum) * 100)}%` }}>{item && <SceneIcon glyph={item.glyph} size={15} />}{span.label}</div>; })}
+      {surface.spans.filter((span) => span.lane === lane.id.key).map((span) => { const item = entity(span.id); return <div key={span.id} title={`${span.label} · ${span.start}–${span.end}${item?.status ? ` · ${item.status}` : ""}`} className={`timeline-span ${span.classes.join(" ")} ${item ? `tone-${item.tone}` : ""}`} style={{ left: `${(span.start / maximum) * 100}%`, width: `${Math.max(2, ((span.end - span.start) / maximum) * 100)}%` }}>{item && <SceneIcon glyph={item.glyph} size={15} />}{span.label}</div>; })}
       {surface.cursor !== null && surface.cursor !== undefined && <i className="timeline-cursor" style={{ left: `${(surface.cursor / maximum) * 100}%` }} aria-label={`Current time ${surface.cursor}`} />}
-    </div></div>)}
+    </div><div className="timeline-state-list">{scene.entities.filter((item) => item.anchor.kind === "timeline" && item.anchor.lane === lane.id.key).map((item) => <button type="button" key={item.id.key} className={`tone-${item.tone}`} disabled={!item.account} onClick={() => item.account && onAccount?.(item.account)}><SceneIcon glyph={item.glyph} size={14} /><span>{item.id.label}</span><small>{item.status}</small></button>)}</div></div>)}
   </div>;
 }

@@ -6,8 +6,8 @@
 //! the same object through a replay.
 
 use axionomy::{
-    Account, Basket, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Quantity, Rate,
-    Trace, basket,
+    Account, Basket, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Quantity,
+    QuantityComparison as C, QuantityExpression as Q, Rate, Trace, basket,
 };
 use axionomy_search::{SearchSolution, astar, bfs};
 
@@ -28,6 +28,17 @@ pub enum Asset {
     Crate(u8),
     Empty,
     GoalCell,
+    DeadSquare,
+    ExitCell,
+    AtExit,
+    AwayFromExit,
+    Plate(u8),
+    Door(u8),
+    Panel(u8),
+    Pressed(u8),
+    Released(u8),
+    LatchReady(u8),
+    Latched(u8),
     Active,
     Solved,
 }
@@ -43,6 +54,10 @@ pub enum Role {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum RateId {
+    Latch {
+        circuit: u8,
+        at: u8,
+    },
     Move {
         from: u8,
         to: u8,
@@ -65,22 +80,21 @@ pub type Solution = SearchSolution<RateId, Role, AccountId>;
 const MICRO: &[&str] = &["#######", "#@ $. #", "#######"];
 const SHOWCASE: &[&str] = &[
     "#########",
-    "# .   . #",
-    "#       #",
-    "#  $ $  #",
-    "#   @   #",
-    "#   #   #",
+    "##.###.##",
+    "# s #   #",
+    "# $ d $ #",
+    "# @ # l #",
+    "######x##",
     "#########",
 ];
 const STRESS: &[&str] = &[
-    "##########",
-    "# .  . . #",
-    "#        #",
-    "# $$ $   #",
-    "#   @    #",
-    "#  ##    #",
-    "#        #",
-    "##########",
+    "#############",
+    "##.###.###.##",
+    "# s # t #   #",
+    "# $ d $ e $ #",
+    "# @ # l # m #",
+    "##########x##",
+    "#############",
 ];
 const DEADLOCKED: &[&str] = &["#######", "#$ @ .#", "#     #", "#######"];
 
@@ -92,13 +106,13 @@ pub fn deadlocked() -> World {
     build_board(DEADLOCKED)
 }
 
-/// A bounded warehouse with two distinguishable crates, two goals, an
-/// internal wall, and enough room for legal moves that do not make progress.
+/// A crate must hold the pressure plate while the player crosses the door
+/// and latches it from the other chamber, before retrieving the staged crate.
 pub fn initial_showcase() -> World {
     build_board(SHOWCASE)
 }
 
-/// A larger three-crate warehouse intended to pressure heuristic search.
+/// Two coupled plate/door/panel circuits require ordered staging of three crates.
 pub fn initial_stress() -> World {
     build_board(STRESS)
 }
@@ -156,15 +170,43 @@ pub fn candidates(world: &World) -> Vec<Action> {
     {
         proposals.push(exchange(RateId::Finish { assignment: crates }));
     }
+    for circuit in 0..2 {
+        if !world
+            .balance(&AccountId::Cell(player), &Asset::Panel(circuit))
+            .is_zero()
+        {
+            proposals.push(exchange(RateId::Latch {
+                circuit,
+                at: player,
+            }));
+        }
+    }
     world.applicable(proposals)
 }
 
+/// Search may omit provably losing pushes; the economy still permits them.
+pub fn search_candidates(world: &World) -> Vec<Action> {
+    candidates(world)
+        .into_iter()
+        .filter(|action| match action.rate() {
+            RateId::Push { to, .. } => !is_dead_square(world, *to),
+            _ => true,
+        })
+        .collect()
+}
+
 pub fn solve(world: &World) -> Option<Solution> {
-    bfs(world, &goal(), candidates)
+    bfs(world, &goal(), search_candidates)
 }
 
 pub fn solve_astar(world: &World) -> Option<Solution> {
-    astar(world, &goal(), candidates, |_, _, _| 1, crate_goal_distance)
+    astar(
+        world,
+        &goal(),
+        search_candidates,
+        |_, _, _| 1,
+        crate_goal_distance,
+    )
 }
 
 /// Finds a legal replay from this exact source board that strands a crate on a
@@ -246,25 +288,9 @@ pub fn is_wall(world: &World, cell: u8) -> bool {
 }
 
 pub fn is_dead_square(world: &World, index: u8) -> bool {
-    if is_wall(world, index)
-        || !world
-            .balance(&AccountId::Cell(index), &Asset::GoalCell)
-            .is_zero()
-    {
-        return false;
-    }
-    let (width, height) = dimensions(world);
-    let x = index % width;
-    let y = index / width;
-    let wall = |x: i16, y: i16| {
-        x < 0
-            || y < 0
-            || x >= i16::from(width)
-            || y >= i16::from(height)
-            || is_wall(world, cell(width, x as u8, y as u8))
-    };
-    (wall(i16::from(x) - 1, i16::from(y)) || wall(i16::from(x) + 1, i16::from(y)))
-        && (wall(i16::from(x), i16::from(y) - 1) || wall(i16::from(x), i16::from(y) + 1))
+    !world
+        .balance(&AccountId::Cell(index), &Asset::DeadSquare)
+        .is_zero()
 }
 
 fn build_board(rows: &[&str]) -> World {
@@ -279,14 +305,51 @@ fn build_board(rows: &[&str]) -> World {
     let mut next_crate = 0_u8;
     let mut crate_ids = Vec::new();
     let mut goal_cells = Vec::new();
-    let mut builder = EconomyBuilder::new().account(
-        AccountId::Success,
-        Account::from(basket([
-            (Asset::Active, 1),
-            (Asset::BoardWidth(width), 1),
-            (Asset::BoardHeight(height), 1),
-        ])),
-    );
+    let tile_at =
+        |index: u8| rows[(index / width) as usize].as_bytes()[(index % width) as usize] as char;
+    let circuit_of = |tile| match tile {
+        's' | 'd' | 'l' => Some(0),
+        't' | 'e' | 'm' => Some(1),
+        _ => None,
+    };
+    // Reverse-push reachability assumes every door is open and no other crate
+    // exists. A square outside this optimistic set cannot reach any goal.
+    let floors: std::collections::BTreeSet<_> = (0..width * height)
+        .filter(|index| tile_at(*index) != '#')
+        .collect();
+    let mut reachable: std::collections::BTreeSet<_> = floors
+        .iter()
+        .copied()
+        .filter(|index| matches!(tile_at(*index), '.' | '*' | '+'))
+        .collect();
+    loop {
+        let before = reachable.len();
+        for (behind, middle, to) in push_lines(width, height) {
+            if floors.contains(&behind) && floors.contains(&middle) && reachable.contains(&to) {
+                reachable.insert(middle);
+            }
+        }
+        if before == reachable.len() {
+            break;
+        }
+    }
+    let mut puzzle = basket([
+        (Asset::Active, 1),
+        (Asset::BoardWidth(width), 1),
+        (Asset::BoardHeight(height), 1),
+    ]);
+    for index in 0..width * height {
+        if matches!(tile_at(index), 's' | 't') {
+            let circuit = circuit_of(tile_at(index)).unwrap();
+            puzzle.insert(Asset::Released(circuit), Quantity::new(1));
+            puzzle.insert(Asset::LatchReady(circuit), Quantity::new(1));
+        }
+    }
+    let has_exit = rows.iter().any(|row| row.contains('x'));
+    if has_exit {
+        puzzle.insert(Asset::AwayFromExit, Quantity::new(1));
+    }
+    let mut builder = EconomyBuilder::new().account(AccountId::Success, Account::from(puzzle));
 
     for (y, row) in rows.iter().enumerate() {
         for (x, tile) in row.chars().enumerate() {
@@ -296,6 +359,9 @@ fn build_board(rows: &[&str]) -> World {
                 assets.insert(Asset::Wall, Quantity::new(1));
             } else {
                 assets.insert(Asset::Floor, Quantity::new(1));
+                if !reachable.contains(&index) {
+                    assets.insert(Asset::DeadSquare, Quantity::new(1));
+                }
                 match tile {
                     '@' | '+' => {
                         assets.insert(Asset::Player, Quantity::new(1));
@@ -308,6 +374,17 @@ fn build_board(rows: &[&str]) -> World {
                     _ => {
                         assets.insert(Asset::Empty, Quantity::new(1));
                     }
+                }
+                if tile == 'x' {
+                    assets.insert(Asset::ExitCell, Quantity::new(1));
+                }
+                if let Some(circuit) = circuit_of(tile) {
+                    let asset = match tile {
+                        's' | 't' => Asset::Plate(circuit),
+                        'd' | 'e' => Asset::Door(circuit),
+                        _ => Asset::Panel(circuit),
+                    };
+                    assets.insert(asset, Quantity::new(1));
                 }
                 if matches!(tile, '.' | '*' | '+') {
                     assets.insert(Asset::GoalCell, Quantity::new(1));
@@ -328,6 +405,48 @@ fn build_board(rows: &[&str]) -> World {
             rows[usize::from(*index / width)].as_bytes()[usize::from(*index % width)] != b'#'
         })
         .collect();
+    let exit_state = |mut rate: Rate<Role, Asset>, from: u8, to: u8| {
+        if tile_at(from) == 'x' {
+            rate = rate
+                .consume(Role::Puzzle, basket([(Asset::AtExit, 1)]))
+                .produce(Role::Puzzle, basket([(Asset::AwayFromExit, 1)]));
+        }
+        if tile_at(to) == 'x' {
+            rate = rate
+                .consume(Role::Puzzle, basket([(Asset::AwayFromExit, 1)]))
+                .produce(Role::Puzzle, basket([(Asset::AtExit, 1)]));
+        }
+        rate
+    };
+    let gate = |mut rate: Rate<Role, Asset>, to: u8| {
+        if matches!(tile_at(to), 'd' | 'e') {
+            let circuit = circuit_of(tile_at(to)).unwrap();
+            rate = rate.condition(
+                "door has pressure or a permanent latch",
+                Q::balance(Role::Puzzle, Asset::Pressed(circuit))
+                    + Q::balance(Role::Puzzle, Asset::Latched(circuit)),
+                C::GreaterThanOrEqual,
+                Q::constant(1),
+            );
+        }
+        rate
+    };
+    let pressure = |mut rate: Rate<Role, Asset>, from: u8, to: u8| {
+        for (index, entering) in [(from, false), (to, true)] {
+            if matches!(tile_at(index), 's' | 't') {
+                let circuit = circuit_of(tile_at(index)).unwrap();
+                let (consume, produce) = if entering {
+                    (Asset::Released(circuit), Asset::Pressed(circuit))
+                } else {
+                    (Asset::Pressed(circuit), Asset::Released(circuit))
+                };
+                rate = rate
+                    .consume(Role::Puzzle, basket([(consume, 1)]))
+                    .produce(Role::Puzzle, basket([(produce, 1)]));
+            }
+        }
+        rate
+    };
     for &from in &floors {
         for to in neighbors(from, width, height)
             .into_iter()
@@ -335,15 +454,22 @@ fn build_board(rows: &[&str]) -> World {
         {
             builder = builder.rate(
                 RateId::Move { from, to },
-                Rate::new()
-                    .preserve(Role::Puzzle, basket([(Asset::Active, 1)]))
-                    .preserve(Role::From, basket([(Asset::CellIdentity(from), 1)]))
-                    .preserve(Role::To, basket([(Asset::CellIdentity(to), 1)]))
-                    .consume(Role::From, basket([(Asset::Player, 1)]))
-                    .consume(Role::To, basket([(Asset::Empty, 1)]))
-                    .produce(Role::From, basket([(Asset::Empty, 1)]))
-                    .produce(Role::To, basket([(Asset::Player, 1)]))
-                    .distinct(Role::From, Role::To),
+                exit_state(
+                    gate(
+                        Rate::new()
+                            .preserve(Role::Puzzle, basket([(Asset::Active, 1)]))
+                            .preserve(Role::From, basket([(Asset::CellIdentity(from), 1)]))
+                            .preserve(Role::To, basket([(Asset::CellIdentity(to), 1)]))
+                            .consume(Role::From, basket([(Asset::Player, 1)]))
+                            .consume(Role::To, basket([(Asset::Empty, 1)]))
+                            .produce(Role::From, basket([(Asset::Empty, 1)]))
+                            .produce(Role::To, basket([(Asset::Player, 1)]))
+                            .distinct(Role::From, Role::To),
+                        to,
+                    ),
+                    from,
+                    to,
+                ),
             );
         }
     }
@@ -362,27 +488,82 @@ fn build_board(rows: &[&str]) -> World {
                     to,
                     crate_id,
                 },
+                exit_state(
+                    pressure(
+                        gate(
+                            gate(
+                                Rate::new()
+                                    .preserve(Role::Puzzle, basket([(Asset::Active, 1)]))
+                                    .preserve(
+                                        Role::From,
+                                        basket([(Asset::CellIdentity(behind), 1)]),
+                                    )
+                                    .preserve(
+                                        Role::Middle,
+                                        basket([(Asset::CellIdentity(middle), 1)]),
+                                    )
+                                    .preserve(Role::To, basket([(Asset::CellIdentity(to), 1)]))
+                                    .consume(Role::From, basket([(Asset::Player, 1)]))
+                                    .consume(Role::Middle, basket([(Asset::Crate(crate_id), 1)]))
+                                    .consume(Role::To, basket([(Asset::Empty, 1)]))
+                                    .produce(Role::From, basket([(Asset::Empty, 1)]))
+                                    .produce(Role::Middle, basket([(Asset::Player, 1)]))
+                                    .produce(Role::To, basket([(Asset::Crate(crate_id), 1)]))
+                                    .distinct(Role::From, Role::Middle)
+                                    .distinct(Role::Middle, Role::To)
+                                    .distinct(Role::From, Role::To),
+                                middle,
+                            ),
+                            to,
+                        ),
+                        middle,
+                        to,
+                    ),
+                    behind,
+                    middle,
+                ),
+            );
+        }
+    }
+    for &at in &floors {
+        if matches!(tile_at(at), 'l' | 'm') {
+            let circuit = circuit_of(tile_at(at)).unwrap();
+            builder = builder.rate(
+                RateId::Latch { circuit, at },
                 Rate::new()
                     .preserve(Role::Puzzle, basket([(Asset::Active, 1)]))
-                    .preserve(Role::From, basket([(Asset::CellIdentity(behind), 1)]))
-                    .preserve(Role::Middle, basket([(Asset::CellIdentity(middle), 1)]))
-                    .preserve(Role::To, basket([(Asset::CellIdentity(to), 1)]))
-                    .consume(Role::From, basket([(Asset::Player, 1)]))
-                    .consume(Role::Middle, basket([(Asset::Crate(crate_id), 1)]))
-                    .consume(Role::To, basket([(Asset::Empty, 1)]))
-                    .produce(Role::From, basket([(Asset::Empty, 1)]))
-                    .produce(Role::Middle, basket([(Asset::Player, 1)]))
-                    .produce(Role::To, basket([(Asset::Crate(crate_id), 1)]))
-                    .distinct(Role::From, Role::Middle)
-                    .distinct(Role::Middle, Role::To)
-                    .distinct(Role::From, Role::To),
+                    .preserve(
+                        Role::From,
+                        basket([
+                            (Asset::CellIdentity(at), 1),
+                            (Asset::Player, 1),
+                            (Asset::Panel(circuit), 1),
+                        ]),
+                    )
+                    .consume(Role::Puzzle, basket([(Asset::LatchReady(circuit), 1)]))
+                    .produce(Role::Puzzle, basket([(Asset::Latched(circuit), 1)]))
+                    .distinct(Role::Puzzle, Role::From),
             );
+            builder = builder
+                .invariant(
+                    LinearInvariant::new(format!("circuit {circuit} pressure"))
+                        .weight(Asset::Pressed(circuit), 1)
+                        .weight(Asset::Released(circuit), 1),
+                )
+                .invariant(
+                    LinearInvariant::new(format!("circuit {circuit} latch"))
+                        .weight(Asset::LatchReady(circuit), 1)
+                        .weight(Asset::Latched(circuit), 1),
+                );
         }
     }
     for assignment in assignments(&crate_ids, &goal_cells) {
         let mut finish = Rate::new()
             .consume(Role::Puzzle, basket([(Asset::Active, 1)]))
             .produce(Role::Puzzle, basket([(Asset::Solved, 1)]));
+        if has_exit {
+            finish = finish.preserve(Role::Puzzle, basket([(Asset::AtExit, 1)]));
+        }
         for (crate_id, goal_cell) in &assignment {
             finish = finish
                 .preserve(
@@ -403,6 +584,13 @@ fn build_board(rows: &[&str]) -> World {
         builder = builder.rate(RateId::Finish { assignment }, finish);
     }
 
+    if has_exit {
+        builder = builder.invariant(
+            LinearInvariant::new("player exit position")
+                .weight(Asset::AtExit, 1)
+                .weight(Asset::AwayFromExit, 1),
+        );
+    }
     let mut occupancy = LinearInvariant::new("one occupant per floor")
         .weight(Asset::Player, 1)
         .weight(Asset::Empty, 1);
@@ -557,6 +745,11 @@ pub fn dimensions(world: &World) -> (u8, u8) {
 
 pub fn exchange(rate: RateId) -> Action {
     match rate {
+        RateId::Latch { circuit, at } => {
+            Exchange::new(RateId::Latch { circuit, at }, Quantity::new(1))
+                .bind(Role::Puzzle, AccountId::Success)
+                .bind(Role::From, AccountId::Cell(at))
+        }
         RateId::Move { from, to } => Exchange::new(RateId::Move { from, to }, Quantity::new(1))
             .bind(Role::Puzzle, AccountId::Success)
             .bind(Role::From, AccountId::Cell(from))
@@ -653,5 +846,100 @@ mod tests {
             .replayed(solution.trace())
             .expect("solution must replay");
         assert!(candidates(&solved).is_empty());
+    }
+
+    #[test]
+    fn pressure_needs_a_crate_and_latching_preserves_access_after_retrieval() {
+        let mut world = initial_showcase();
+        let walk = |world: &mut World, to| {
+            world
+                .apply(exchange(RateId::Move {
+                    from: player_cell(world).unwrap(),
+                    to,
+                }))
+                .unwrap();
+        };
+        walk(&mut world, 39);
+        walk(&mut world, 30);
+        let before = world.state_key();
+        assert!(
+            world
+                .apply(exchange(RateId::Move { from: 30, to: 31 }))
+                .is_err()
+        );
+        assert_eq!(world.state_key(), before);
+        walk(&mut world, 21);
+        walk(&mut world, 20); // a player on the plate does not supply crate pressure
+        assert!(
+            world
+                .balance(&AccountId::Success, &Asset::Pressed(0))
+                .is_zero()
+        );
+        walk(&mut world, 21);
+        walk(&mut world, 30);
+        walk(&mut world, 39);
+        walk(&mut world, 38);
+        world
+            .apply(exchange(RateId::Push {
+                behind: 38,
+                crate_at: 29,
+                to: 20,
+                crate_id: 0,
+            }))
+            .unwrap();
+        assert_eq!(
+            world.balance(&AccountId::Success, &Asset::Pressed(0)).get(),
+            1
+        );
+        for to in [30, 31, 32, 41, 42] {
+            walk(&mut world, to);
+        }
+        world
+            .apply(exchange(RateId::Latch { circuit: 0, at: 42 }))
+            .unwrap();
+        for to in [41, 32, 31, 30, 29] {
+            walk(&mut world, to);
+        }
+        world
+            .apply(exchange(RateId::Push {
+                behind: 29,
+                crate_at: 20,
+                to: 11,
+                crate_id: 0,
+            }))
+            .unwrap();
+        assert!(
+            world
+                .balance(&AccountId::Success, &Asset::Pressed(0))
+                .is_zero()
+        );
+        assert_eq!(
+            world.balance(&AccountId::Success, &Asset::Latched(0)).get(),
+            1
+        );
+        for to in [21, 30, 31] {
+            walk(&mut world, to);
+        }
+    }
+
+    #[test]
+    fn two_circuits_compose_and_every_solved_trace_latches_both() {
+        let world = initial_stress();
+        let solution = solve_astar(&world).expect("two circuits are solvable");
+        let final_world = world.replayed(solution.trace()).unwrap();
+        assert!(final_world.matches(&goal()));
+        for circuit in 0..2 {
+            assert_eq!(
+                final_world
+                    .balance(&AccountId::Success, &Asset::Latched(circuit))
+                    .get(),
+                1
+            );
+            assert!(
+                final_world
+                    .balance(&AccountId::Success, &Asset::Pressed(circuit))
+                    .is_zero()
+            );
+        }
     }
 }

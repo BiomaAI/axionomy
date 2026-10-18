@@ -48,7 +48,7 @@ values, trace lengths, and algorithm evidence side by side, while uniform
 complexity telemetry exposes accounts, rates, transitions, rejection proofs,
 and alternatives across every domain.
 
-The Mission's coordinated replay executes repeated ISMCTS decisions, conditions
+The Micro Mission's coordinated replay executes repeated ISMCTS decisions, conditions
 beliefs after each public action and required Nature response, and retains the
 search evidence for those committed actions. Actor observations are derived
 from each replay frame; the viewer shows the Scout's private sighting before
@@ -65,6 +65,55 @@ per-actor price attribution, three counterfactual realities, and final exact
 Shapley attribution across every coalition of active actors. No external price
 or oracle enters the artifact; every displayed price comes from replayed pool
 reserves.
+
+Showcase Work League now advances a shared world clock: multiple activities
+can overlap, repair and charging bays remain occupied until their due time,
+and contracts can expire or transfer to another worker for payment. The scene
+shows world time, active work, service occupants, claim deadlines, missed jobs,
+spendable credit, material, and wear. Each comparison field uses the same
+job-attempt Nature tickets. The small Micro fixture remains available.
+
+The Micro Logistics MCTS alternative executes an entire adaptive journey, retaining
+its actual deliveries or explicit failure and the search choices that were
+committed. Its fixed-policy Monte Carlo frontier is not attributed to the
+planner. Search and environment random streams are separate.
+
+Larger Logistics profiles run two vehicles with different cargo capacities,
+three customers, arriving orders, delivery windows, shared road occupancy,
+finite fuel and repair parts, paid service bays, towing and hub relays.
+Showcase and Stress use responsive fleet policies; the catalog and telemetry
+distinguish them from Micro's MCTS. Route outcomes are encoded as compact hidden
+integer balances, and each trace applies the same seed/vehicle/trip/road tickets.
+
+Larger Mission profiles give Scout and Medic independent travel and work
+timelines. Private discoveries, finite radio charges, in-person briefings,
+joint extraction, archive recovery, evolving hazards and clinical deterioration
+shape their decisions. Rescue independently models several hidden casualties,
+fallible hints, stabilization, finite resupply and one evacuation seat. Both
+derive actor observations at each replay frame and retain failed objectives.
+
+Bridge traffic holds the lane for the full crossing duration and compares
+deadline-responsive auctions and concurrent paid detours against fixed
+priority. Marketplace reserves real funds, inventory, and carrier capacity
+before shipping; settlement, price concessions, late rebates, and refunds
+remain visible as separate exchanges. Scheduling distinguishes queuing from
+executing, with alternative machines, setup costs, shared crews and resumable
+work after a timed machine repair. Their larger comparisons use the same
+initial scenario for every alternative and state search limits explicitly.
+
+Perishables now follows cohorts through scarce cold storage, warm exposure,
+splitting, processing, delivery and spoilage. A child cohort retains its
+parent's heat history. Backup generation and transport spend the same fuel;
+refrigeration and preservation spend the same electricity. Four policies
+share the seeded outage schedule, with unfulfilled food obligations visible at
+the end of the horizon.
+
+The Living Market's Showcase and Stress profiles run eight and twelve market
+days. Actors revisit trade, production, capacity investment, and liquidity
+under shared seeded sunlight. Daily needs, obligations, material output,
+finite Treasury funding, storage limits, and delayed investment interact.
+The scene shows unmet needs and missed obligations alongside price and depth;
+a closed season is not a claim that every actor succeeded.
 
 The Work League adds six replay-derived leaderboards. Contract value,
 throughput, resource efficiency, residual waste, reliability, and Pareto
@@ -100,6 +149,16 @@ are active, not a failed run. Structured issue kinds and subjects preserve the
 specific missing role, account, asset, or rate instead of collapsing distinct
 causes into duplicate messages. Actual execution and transport failures appear
 separately as error banners.
+
+
+The larger Maze profiles now expose shared vault/canal power, protective gear,
+persistent injury delays, and medical recovery. Sokoban uses crates to hold
+pressure plates, remote latches to preserve door access, and a far-side exit;
+Stress composes two circuits. Exact Cover uses irregular globally overlapping
+sets with legal dead ends and different-size solutions. Connect Four exposes
+forced wins, blocks and double threats, and compares tactical MCTS with two
+independent opponents. These remain replayable economic exchanges, with the
+new state visible in scene metrics and account inspection.
 
 ## Run locally
 
@@ -153,7 +212,7 @@ pnpm test:e2e:wasm
 ```
 
 The Playwright tests launch both servers, start a real run, follow its SSE
-stream, observe fine-grained logistics progress and pause/resume behavior,
+stream, observe tactical search progress and pause/resume behavior,
 fetch and scrub its replay-verified artifact, verify structured rejection
 proofs, and inspect a structurally different static Exact Cover matrix. Rust
 adapter tests build all fourteen problem artifacts.

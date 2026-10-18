@@ -52,6 +52,70 @@ pub(super) fn visual_metric(
     }
 }
 
+/// Compare replayed integer outcomes without claiming an exhaustive frontier.
+pub(super) fn evaluated_integer_front(
+    documents: &[ViewDocument],
+    selected: &ViewDocument,
+    title: &str,
+) -> axionomy_view::ParetoFrontView {
+    use axionomy_view::{
+        FrontierCompletenessView, ObjectiveAxisView, ObjectiveDirectionView, ParetoFrontView,
+        ParetoPointView,
+    };
+    let rows: Vec<_> = documents
+        .iter()
+        .map(|document| {
+            (
+                document,
+                document
+                    .objectives
+                    .iter()
+                    .map(|o| o.value.parse::<u128>().expect("integer outcome"))
+                    .collect::<Vec<_>>(),
+            )
+        })
+        .collect();
+    let dominates = |left: &[u128], right: &[u128]| {
+        left.iter()
+            .zip(right)
+            .zip(&selected.objectives)
+            .all(|((l, r), axis)| match axis.direction {
+                ObjectiveDirectionView::Maximize => l >= r,
+                ObjectiveDirectionView::Minimize => l <= r,
+            })
+            && left
+                .iter()
+                .zip(right)
+                .zip(&selected.objectives)
+                .any(|((l, r), axis)| match axis.direction {
+                    ObjectiveDirectionView::Maximize => l > r,
+                    ObjectiveDirectionView::Minimize => l < r,
+                })
+    };
+    ParetoFrontView {
+        title: title.into(),
+        completeness: FrontierCompletenessView::Approximate,
+        axes: selected
+            .objectives
+            .iter()
+            .map(|o| ObjectiveAxisView {
+                key: o.key.clone(),
+                label: o.label.clone(),
+                direction: o.direction,
+            })
+            .collect(),
+        points: rows
+            .iter()
+            .filter(|(_, candidate)| !rows.iter().any(|(_, other)| dominates(other, candidate)))
+            .map(|(document, values)| ParetoPointView {
+                label: document.title.clone(),
+                selected: document.id == selected.id,
+                values: values.iter().map(ToString::to_string).collect(),
+            })
+            .collect(),
+    }
+}
+
 pub(super) fn link_account(
     mut entity: SceneEntityView,
     account: impl Into<String>,
@@ -184,8 +248,8 @@ pub(crate) fn catalog() -> Vec<ProblemDescriptor> {
                 summary: "Reach the exit under limited energy and time. The key-and-gate route saves energy, direct routes save time, and the exact frontier preserves four tradeoffs that one score would hide.",
                 instances: [
                     "The smallest maze with a key, a locked gate, and a real route choice",
-                    "15 rooms, 24 passages, cycles, backtracking, a stateful gate, and four exact tradeoffs",
-                    "24 rooms and 40 passages across two cyclic districts",
+                    "15 rooms and 25 passages with shared power, protection, persistent injury delays and recovery",
+                    "24 rooms and 42 passages with more hazards and a second recovery route",
                 ],
             },
             ProblemFamily::Pathfinding,
@@ -236,8 +300,8 @@ pub(crate) fn catalog() -> Vec<ProblemDescriptor> {
                 summary: "Push crates onto their goal squares. Every push rewrites three cells at once, and some positions can never be recovered.",
                 instances: [
                     "A bounded one-crate teaching puzzle",
-                    "A 9×7 warehouse with walls, two stable crates, and competing legal moves",
-                    "A 10×8 warehouse with three crates and a substantially larger search frontier",
+                    "Two crates, a pressure plate, a gated chamber, and a remote latch",
+                    "Three crates and two coupled door circuits across three chambers",
                 ],
             },
             ProblemFamily::Pathfinding,
@@ -269,8 +333,8 @@ pub(crate) fn catalog() -> Vec<ProblemDescriptor> {
                 summary: "Choose subsets that cover every element exactly once. A plain search and Algorithm X reach the same answer by different routes.",
                 instances: [
                     "Four elements and four competing subsets",
-                    "Eight elements and twelve subsets arranged as two interacting blocks",
-                    "Twelve elements and eighteen subsets with 27 competing exact covers",
+                    "Eight coupled elements, fourteen irregular subsets, legal dead ends and covers of different sizes",
+                    "Twelve globally coupled elements and twenty-five pairs, triples and quadruples",
                 ],
             },
             ProblemFamily::Constraint,
@@ -299,11 +363,11 @@ pub(crate) fn catalog() -> Vec<ProblemDescriptor> {
             ProblemCopy {
                 key: "workshop",
                 title: "Workshop",
-                summary: "Build the order from raw stock without creating or destroying material. The fastest plan and the least wasteful plan are not the same plan.",
+                summary: "Choose funded contracts, prepare components, manage tool wear and deliver products. Exact tradeoffs expose faster work, lower waste and higher revenue.",
                 instances: [
-                    "One chair made from raw stock",
-                    "A six-chair order with competing fast and low-waste recipes",
-                    "A ten-chair order with more material, labor, and production choices",
+                    "Two chairs made from raw stock",
+                    "Choose two of three chair/table contracts with components, tool wear, repair, upgrades and salvage",
+                    "Choose at least three of five contracts under shared wood, time, labor and repair constraints",
                 ],
             },
             ProblemFamily::Production,
@@ -345,11 +409,11 @@ pub(crate) fn catalog() -> Vec<ProblemDescriptor> {
             ProblemCopy {
                 key: "scheduling",
                 title: "Job-shop scheduling",
-                summary: "Fit every operation onto a machine without double-booking one or running a job out of order. Finishing one job early delays the other.",
+                summary: "Route arriving jobs through queues and actual execution. Alternative machines, setup changes, shared crews and a recoverable machine failure change which schedule finishes first.",
                 instances: [
                     "Two jobs on the smallest horizon that still forces a machine conflict",
-                    "Six ordered operations across three machines and 18 time slots",
-                    "The same operations across a longer eight-slot decision horizon",
+                    "Six operations, three alternative machines, two crews and a recoverable disruption at tick three",
+                    "One shared crew, later job arrival and a longer repair create a different execution bottleneck",
                 ],
             },
             ProblemFamily::Scheduling,
@@ -391,11 +455,11 @@ pub(crate) fn catalog() -> Vec<ProblemDescriptor> {
             ProblemCopy {
                 key: "rescue",
                 title: "Uncertain rescue",
-                summary: "The survivor's location is unknown. Spend the sensor first, or commit immediately and risk searching the wrong site.",
+                summary: "Search for several hidden casualties while their condition worsens. Trade treatment time, limited medicine, noisy hints and transport fuel against one evacuation seat.",
                 instances: [
                     "Two possible sites and eight hidden location/sensor outcomes",
-                    "Four possible sites, 32 outcomes, an unreliable sensor, and an evacuation leg",
-                    "Six possible sites, 72 outcomes, and at least 256 policy samples",
+                    "Three casualties across four sites, continuing deterioration, two sensor charges, stabilization and finite resupply",
+                    "Four casualties across five sites, tighter fuel and crew energy, one evacuation seat and varied deadlines",
                 ],
             },
             ProblemFamily::PartialObservation,
@@ -403,15 +467,15 @@ pub(crate) fn catalog() -> Vec<ProblemDescriptor> {
             &[
                 (
                     "observe_then_follow",
-                    "Sense, then move",
-                    "Spend the sensor, read what Nature reports, then head for the reported site.",
-                    "Monte Carlo policy evaluation",
+                    "Observe and triage",
+                    "Micro evaluates the single search gamble; larger incidents repeatedly scan, search, triage, stabilize and evacuate from public observations.",
+                    "Responsive triage; Micro Monte Carlo",
                 ),
                 (
                     "direct_north",
-                    "Go north immediately",
-                    "Skip the sensor and commit; the drawn scenario decides whether that pays off.",
-                    "Monte Carlo policy evaluation",
+                    "Rapid sector sweep",
+                    "Start north without sensing, then revisit search and evacuation decisions as the incident evolves.",
+                    "Responsive rapid sweep; Micro Monte Carlo",
                 ),
             ],
             &[
@@ -425,11 +489,11 @@ pub(crate) fn catalog() -> Vec<ProblemDescriptor> {
             ProblemCopy {
                 key: "bridge",
                 title: "Bridge allocation",
-                summary: "One lane, two agents, both need it. Compare first-come priority against an auction that settles bids and access in indivisible steps.",
+                summary: "Timed traffic competes for one occupied lane. Compare fixed priority, urgency-based bids and a paid concurrent detour against arrivals, deadlines and expiring reservations.",
                 instances: [
                     "One crossing round for two agents and one lane",
-                    "Two allocation rounds with escrow, recharge, and retained credit",
-                    "Three bounded rounds where priority and spending affect later choices",
+                    "Two traffic waves with staggered arrivals, 2–3 tick crossings, deadlines and a paid detour",
+                    "Three traffic waves with persistent credit and changing deadline pressure",
                 ],
             },
             ProblemFamily::Allocation,
@@ -438,19 +502,19 @@ pub(crate) fn catalog() -> Vec<ProblemDescriptor> {
                 (
                     "breadth_first",
                     "Plain search",
-                    "Breadth-first search for any valid crossing order.",
+                    "Breadth-first routing search with immediate ready completions; timed search excludes bidding and deliberate lease expiry.",
                     "breadth-first search",
                 ),
                 (
                     "first_come_a",
                     "First come: A",
-                    "Agent A gets the first crossing right by arrival order, not by bid.",
+                    "Wait for Agent A, give A first priority, then serve B.",
                     "first-come allocation",
                 ),
                 (
                     "first_come_b",
                     "First come: B",
-                    "Agent B gets the first crossing right by arrival order, not by bid.",
+                    "Wait for Agent B, give B first priority, then serve A.",
                     "first-come allocation",
                 ),
                 (
@@ -462,13 +526,13 @@ pub(crate) fn catalog() -> Vec<ProblemDescriptor> {
                 (
                     "pareto_a",
                     "Pareto: favors A",
-                    "The point on the exact frontier that is best for Agent A.",
+                    "Micro: exact frontier. Timed traffic: A's preference among the evaluated routing and auction policies.",
                     "exact Pareto search",
                 ),
                 (
                     "pareto_b",
                     "Pareto: favors B",
-                    "The point on the exact frontier that is best for Agent B.",
+                    "Micro: exact frontier. Timed traffic: B's preference among the evaluated routing and auction policies.",
                     "exact Pareto search",
                 ),
             ],
@@ -483,11 +547,11 @@ pub(crate) fn catalog() -> Vec<ProblemDescriptor> {
             ProblemCopy {
                 key: "amm",
                 title: "The Living Market",
-                summary: "Watch a closed economy discover its only public price. Production, real needs, beliefs, liquidity, speculation, and internal arbitrage move an exact constant-product AMM with no oracle or outside market.",
+                summary: "Watch repeated production and trade reshape a closed economy. Daily needs and obligations, cloudy periods, limited storage, delayed capacity investment, and responsive liquidity interact through an exact constant-product AMM. Missed needs and defaults remain visible.",
                 instances: [
                     "A compact closed market that exposes every reserve calculation and refusal",
-                    "Eight heterogeneous actors discover value through production, consumption, liquidity, information, and exchange",
-                    "A four-times-deeper economy with proportionally larger flows and the same exact replay guarantees",
+                    "Eight market days with recurring needs, finite credit, production investment, and responsive trading",
+                    "Twelve market days at four times the production scale with the same seeded sunlight across counterfactuals",
                 ],
             },
             ProblemFamily::Market,
@@ -495,8 +559,8 @@ pub(crate) fn catalog() -> Vec<ProblemDescriptor> {
             &[
                 (
                     "market_day",
-                    "Endogenous market day",
-                    "The complete closed-economy price-discovery story, including a demand shock and supply response.",
+                    "Responsive market",
+                    "Actors revisit production, trade, investment, and liquidity decisions throughout the market season.",
                     "verified autonomous market replay",
                 ),
                 (
@@ -508,7 +572,7 @@ pub(crate) fn catalog() -> Vec<ProblemDescriptor> {
                 (
                     "thin_liquidity",
                     "Counterfactual: thin liquidity",
-                    "Withdraw half the founding liquidity before trading and observe amplified price impact.",
+                    "Withdraw half the founding liquidity and inspect how the same actors adapt to different depth and prices.",
                     "counterfactual replay",
                 ),
             ],
@@ -524,11 +588,11 @@ pub(crate) fn catalog() -> Vec<ProblemDescriptor> {
             ProblemCopy {
                 key: "marketplace",
                 title: "Multi-party marketplace",
-                summary: "Settle orders across buyers, sellers, carriers, the platform, and tax in one indivisible step. When it fails, you see exactly which account fell short and by how much.",
+                summary: "Negotiate funded contracts, reserve scarce shipping capacity and fulfill deliveries over time. Route delays, price concessions, late rebates and refundable reservations couple buyer and seller outcomes.",
                 instances: [
                     "Two orders across three buyers, three sellers, and one active carrier",
-                    "Four linked orders across 14 accounts sharing budget, stock, shipping capacity, and tax",
-                    "Six linked orders across 16 accounts with exactly enough stock and shipping capacity",
+                    "Four arriving orders with escrow, two occupied carriers, delivery deadlines and price concessions",
+                    "Six arriving orders with scarce stock, persistent budgets, route delays and reusable carrier capacity",
                 ],
             },
             ProblemFamily::Market,
@@ -543,13 +607,13 @@ pub(crate) fn catalog() -> Vec<ProblemDescriptor> {
                 (
                     "pareto_buyers",
                     "Pareto: favors buyers",
-                    "The clearing on the exact frontier with the highest total buyer benefit.",
+                    "Micro: exact clearing frontier. Larger markets: bounded fulfillment search favoring buyer benefit.",
                     "exact Pareto clearing",
                 ),
                 (
                     "pareto_sellers",
                     "Pareto: favors sellers",
-                    "The clearing on the exact frontier with the highest total seller benefit.",
+                    "Micro: exact clearing frontier. Larger markets: bounded fulfillment search favoring seller benefit.",
                     "exact Pareto clearing",
                 ),
             ],
@@ -564,11 +628,11 @@ pub(crate) fn catalog() -> Vec<ProblemDescriptor> {
             ProblemCopy {
                 key: "logistics",
                 title: "Stochastic logistics",
-                summary: "Deliver four orders through weather and breakdowns. The short route wins when nothing goes wrong; the long one finishes more often when things do.",
+                summary: "Coordinate refrigerated and heavy-freight vans across three customers. Arriving orders, delivery windows, a shared trunk road, finite fuel, occupied service bays and hub handoffs interact with route disruptions.",
                 instances: [
                     "Two deliveries with a compact route and a small sample budget",
-                    "Four deliveries with recurring weather and breakdowns",
-                    "The four-delivery network evaluated with at least 256 stochastic rollouts",
+                    "Two vans, four heterogeneous orders, three customers, one trunk-road slot, two-unit relay hub and finite services",
+                    "Six arriving orders, more route delays, a longer horizon, finite fuel and three repair parts",
                 ],
             },
             ProblemFamily::StochasticPlanning,
@@ -576,21 +640,21 @@ pub(crate) fn catalog() -> Vec<ProblemDescriptor> {
             &[
                 (
                     "direct",
-                    "Direct route",
-                    "The shortest route, fastest when weather and breakdowns cooperate.",
-                    "Monte Carlo policy evaluation",
+                    "Fastest routes",
+                    "Use express routes and respond to realized breakdowns; Micro retains sampled single-vehicle evaluation.",
+                    "Responsive fleet dispatch; Micro Monte Carlo",
                 ),
                 (
                     "reliable",
-                    "Reliable route",
-                    "A longer route that completes more often when they do not.",
-                    "Monte Carlo policy evaluation",
+                    "Reliable routes",
+                    "Avoid the express link and coordinate deliveries around shared road and service capacity.",
+                    "Responsive fleet dispatch; Micro Monte Carlo",
                 ),
                 (
                     "mcts",
-                    "MCTS",
-                    "Monte Carlo tree search plans the next move by sampling how chance could unfold.",
-                    "Monte Carlo tree search",
+                    "Relay fleet / Micro MCTS",
+                    "Larger fleets bundle compatible cargo and hand it off through the hub; Micro retains full receding-horizon Monte Carlo tree search.",
+                    "Responsive hub relay; Micro Monte Carlo tree search",
                 ),
             ],
             &[
@@ -604,32 +668,46 @@ pub(crate) fn catalog() -> Vec<ProblemDescriptor> {
             ProblemCopy {
                 key: "connect_four",
                 title: "Connect Four",
-                summary: "A full game of Connect Four played by MCTS on both sides, with gravity and every winning line written as rules.",
+                summary: "Tactical Connect Four with forced blocks, double threats, positional search, and distinct opponents; gravity and terminal outcomes are core rules.",
                 instances: [
                     "A compact board with a short game and few rollouts",
-                    "The full 7×6 board and all 69 winning lines",
+                    "The full 7×6 board, all 69 lines, tactical self-play and two distinct opponents",
                     "The full board with four times the MCTS work per move",
                 ],
             },
             ProblemFamily::AdversarialGame,
             "mcts_game",
-            &[(
-                "mcts_game",
-                "MCTS self-play",
-                "Monte Carlo tree search plays both colours until someone wins or the board fills.",
-                "Monte Carlo tree search",
-            )],
+            &[
+                (
+                    "mcts_game",
+                    "Tactical MCTS self-play",
+                    "Both players recognize wins, forced blocks and double threats before exploring positional continuations.",
+                    "tactical Monte Carlo tree search",
+                ),
+                (
+                    "center_opponent",
+                    "Center-first opponent",
+                    "Red uses tactical MCTS against a center-first Yellow baseline on the standard board.",
+                    "tactical MCTS versus positional baseline",
+                ),
+                (
+                    "search_opponent",
+                    "Depth-five opponent",
+                    "Red uses tactical MCTS against depth-five alpha-beta Yellow on the standard board.",
+                    "tactical MCTS versus alpha-beta",
+                ),
+            ],
             &[Capability::Mcts, Capability::MultiAccountExchange],
         ),
         problem(
             ProblemCopy {
                 key: "work_league",
                 title: "Autonomous Work League",
-                summary: "Four autonomous workers compete for a finite job pool while spending energy, time, and materials under disruption. There is no single winner: value, speed, efficiency, waste, reliability, and Pareto standing can disagree after every move.",
+                summary: "Four workers share one clock: jobs overlap, repair and charging bays fill, claims expire, and deadlines can be missed. Earned credit funds recovery; recycling restores material; a worker can pay to take over another's contract. Outcomes compare the same job-attempt disruptions across policy fields.",
                 instances: [
                     "Two agents contest four jobs in a short but complete match",
-                    "Four distinct policies contest 12 jobs across eight locations and shared facilities",
-                    "Four agents contest 24 jobs with a materially longer economic replay",
+                    "Four policies contest 12 arriving contracts with deadlines, dependencies, occupied facilities, and paid handoffs",
+                    "24 contracts over six arrival waves with shared finite supplies and equipment wear",
                 ],
             },
             ProblemFamily::MultiAgentCompetition,
@@ -667,11 +745,11 @@ pub(crate) fn catalog() -> Vec<ProblemDescriptor> {
             ProblemCopy {
                 key: "mission",
                 title: "Hidden-information mission",
-                summary: "Can two agents act on incomplete information? Watch the Scout observe, share, and replan against a blind commitment to the north.",
+                summary: "Coordinate independent Scout and Medic timelines. Share private discoveries, recover archives, stabilize casualties and rendezvous for extraction as hazards close sectors and resources run short.",
                 instances: [
                     "Sixteen hidden scenarios with a small per-decision search budget",
-                    "Sixteen hidden scenarios with private sightings, belief updates, and hazards",
-                    "The same mission evaluated with at least 256 belief-conditioned simulations",
+                    "A hidden archive and casualty, independent travel, timed recovery, radio or local briefing, sector hazards and clinical decline",
+                    "A second casualty, one radio charge, lower energy, finite resupply and one evacuation seat",
                 ],
             },
             ProblemFamily::PartialObservation,
@@ -679,15 +757,15 @@ pub(crate) fn catalog() -> Vec<ProblemDescriptor> {
             &[
                 (
                     "coordinated",
-                    "Observe, decide, replan",
-                    "ISMCTS chooses each action, conditions beliefs on the result, and replans through the mission.",
-                    "receding-horizon information-set MCTS",
+                    "Coordinate independent agents",
+                    "Larger missions use separate observation-responsive policies with radio briefing; Micro retains belief-conditioned ISMCTS.",
+                    "Private-view policies; Micro information-set MCTS",
                 ),
                 (
                     "direct_north",
-                    "Both go north",
-                    "Neither agent looks or shares; replay keeps whatever goes wrong.",
-                    "Monte Carlo policy evaluation",
+                    "Search north first",
+                    "Larger missions begin north, then coordinate through local briefings. Micro retains the blind joint-movement baseline.",
+                    "North-first local coordination; Micro Monte Carlo",
                 ),
             ],
             &[
@@ -703,11 +781,11 @@ pub(crate) fn catalog() -> Vec<ProblemDescriptor> {
             ProblemCopy {
                 key: "perishables",
                 title: "Perishable inventory",
-                summary: "Ten thousand units spoil by batch, not one at a time. Cooling costs energy, and a power outage forces the tradeoff.",
+                summary: "Manage scarce refrigerated space, thermal history and daily food obligations. Cooling and processing compete for electricity; backup generation and deliveries compete for fuel.",
                 instances: [
                     "One hundred units split between two batches",
-                    "Ten thousand units with cooling, deadlines, and a power outage",
-                    "One million units using the same two batch-level condition facts",
+                    "Ten crates across six possible cohorts, six days, finite cold storage and a two-day outage",
+                    "Twelve crates, tighter cold storage, less fuel, eight days and a three-day outage",
                 ],
             },
             ProblemFamily::TemporalSimulation,
@@ -716,19 +794,19 @@ pub(crate) fn catalog() -> Vec<ProblemDescriptor> {
                 (
                     "outage",
                     "Power outage",
-                    "Refrigeration fails, and every batch past its deadline spoils at once.",
+                    "Prioritize refrigeration, then revisit shipment, processing and backup decisions each day.",
                     "indexed temporal effects",
                 ),
                 (
                     "pareto_inventory",
                     "Pareto: save stock",
-                    "The storage plan on the exact frontier that keeps the most usable units.",
+                    "Micro: exact storage frontier. Larger cold chains: a processing-first policy on the same outage schedule.",
                     "exact Pareto search",
                 ),
                 (
                     "pareto_energy",
                     "Pareto: save energy",
-                    "The storage plan that spends the least cooling energy.",
+                    "Micro: minimum-energy storage frontier. Larger cold chains: alternate-day shipping to conserve fuel, with missed demand kept visible.",
                     "exact Pareto search",
                 ),
             ],

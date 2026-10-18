@@ -471,7 +471,7 @@ mod tests {
 
     #[test]
     fn formerly_aliased_stress_models_are_structurally_distinct() {
-        use axionomy_problems::{bridge, exact_cover, marketplace, maze, rescue};
+        use axionomy_problems::{bridge, exact_cover, marketplace, maze, rescue, sokoban};
 
         let maze_showcase = maze::initial_showcase();
         let maze_stress = maze::initial_stress();
@@ -487,6 +487,28 @@ mod tests {
         assert_ne!(
             cover_showcase.rate_ids().count(),
             cover_stress.rate_ids().count()
+        );
+
+        let warehouse_showcase = sokoban::initial_showcase();
+        let warehouse_stress = sokoban::initial_stress();
+        assert_eq!(
+            warehouse_showcase
+                .rate_ids()
+                .filter(|rate| matches!(rate, sokoban::RateId::Latch { .. }))
+                .count(),
+            1
+        );
+        assert_eq!(
+            warehouse_stress
+                .rate_ids()
+                .filter(|rate| matches!(rate, sokoban::RateId::Latch { .. }))
+                .count(),
+            2
+        );
+        assert!(
+            warehouse_showcase
+                .accounts()
+                .any(|(_, account)| account.balance(&sokoban::Asset::ExitCell).get() == 1)
         );
 
         let bridge_showcase = bridge::initial_showcase();
@@ -599,10 +621,10 @@ mod tests {
                 .unwrap_or(0);
             let (minimum_frames, minimum_accounts, minimum_rates) = match problem.key.as_str() {
                 "maze" => (8, 2, 19),
-                "sokoban" => (10, 36, 200),
+                "sokoban" => (20, 36, 100),
                 "exact_cover" => (5, 1, 40),
                 "workshop" => (7, 1, 4),
-                "scheduling" => (7, 20, 100),
+                "scheduling" => (20, 6, 80),
                 "rescue" => (7, 2, 70),
                 "bridge" => (10, 3, 18),
                 "marketplace" => (4, 14, 4),
@@ -736,7 +758,7 @@ mod tests {
         let result = ReferenceService.run_with(
             &RunRequest {
                 problem: "logistics".into(),
-                instance: None,
+                instance: Some("micro".into()),
                 strategy: Some("reliable".into()),
                 seed: 42,
                 budget: 64,
@@ -761,7 +783,7 @@ mod tests {
                 .windows(2)
                 .all(|pair| pair[0].completed < pair[1].completed)
         );
-        assert!(monte_carlo.iter().all(|progress| progress.total == 128));
+        assert!(monte_carlo.iter().all(|progress| progress.total == 32));
     }
 
     #[test]
@@ -779,7 +801,7 @@ mod tests {
         let result = ReferenceService.run_with(
             &RunRequest {
                 problem: "logistics".into(),
-                instance: None,
+                instance: Some("micro".into()),
                 strategy: Some("reliable".into()),
                 seed: 42,
                 budget: 16,

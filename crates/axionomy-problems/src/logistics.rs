@@ -17,6 +17,7 @@ use axionomy_search::{
     session::{Continue, WorkBudget},
 };
 use std::ops::ControlFlow;
+pub mod fleet;
 
 const REFUEL_AMOUNT: u64 = 4;
 const REPAIR_TIME: u64 = 2;
@@ -151,6 +152,26 @@ pub struct MissionRollout {
     delivered: usize,
     elapsed_time: u64,
     steps: usize,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PlanningStop {
+    DeliveredAllOrders,
+    NoFeasibleAction,
+    Horizon,
+}
+
+#[derive(Debug, Clone)]
+pub struct ReplanningStep {
+    pub trace_index: usize,
+    pub decision: PlanningDecision,
+}
+
+#[derive(Debug, Clone)]
+pub struct PlannedLogistics {
+    pub rollout: MissionRollout,
+    pub decisions: Vec<ReplanningStep>,
+    pub stop: PlanningStop,
 }
 
 impl MissionRollout {
@@ -646,62 +667,159 @@ pub fn plan_action_with_progress(
     Ok(session.into_decision())
 }
 
+/// Executes a receding-horizon planner through delivery or an explicit failure.
+/// Search consumes a separate random stream from actual Nature events, so a
+/// larger planning budget cannot itself change the realized weather sequence.
+pub fn run_planned_with_progress(
+    initial: &World,
+    iterations: usize,
+    environment_seed: u64,
+    planning_seed: u64,
+    chunk_size: usize,
+    mut observer: impl FnMut(usize, MctsProgress) -> ControlFlow<()>,
+) -> Result<Option<PlannedLogistics>, String> {
+    let mut world = initial.fork();
+    let mut trace = Trace::new();
+    let mut decisions = Vec::new();
+    let mut nature = SeededSampler::new(environment_seed);
+    let stop = loop {
+        if world.matches(&goal()) {
+            break PlanningStop::DeliveredAllOrders;
+        }
+        if trace.exchanges().len() >= ROLLOUT_HORIZON {
+            break PlanningStop::Horizon;
+        }
+        let outcomes = planning_outcomes(&world);
+        let action = if !outcomes.is_empty() {
+            sample(&outcomes, &mut nature)
+                .map_err(|error| format!("Nature sampling: {error:?}"))?
+                .clone()
+        } else {
+            let actions = planning_candidates(&world);
+            if actions.is_empty() {
+                break PlanningStop::NoFeasibleAction;
+            }
+            if actions.len() == 1 {
+                actions[0].clone()
+            } else {
+                let index = decisions.len();
+                let decision = plan_action_with_progress(
+                    &world,
+                    iterations.max(1),
+                    planning_seed.wrapping_add(index as u64),
+                    chunk_size,
+                    |state| observer(index, state),
+                )
+                .map_err(|error| format!("logistics planning: {error:?}"))?;
+                let Some(decision) = decision else {
+                    return Ok(None);
+                };
+                let action = decision.action().clone();
+                decisions.push(ReplanningStep {
+                    trace_index: trace.exchanges().len(),
+                    decision,
+                });
+                action
+            }
+        };
+        world
+            .apply(action.clone())
+            .map_err(|error| format!("logistics execution: {error:?}"))?;
+        trace.push(action);
+    };
+    let replayed = initial
+        .replayed(&trace)
+        .map_err(|error| format!("logistics replay: {error:?}"))?;
+    if replayed.state_key() != world.state_key() {
+        return Err("logistics replay diverged".into());
+    }
+    let rollout = MissionRollout {
+        completed: world.matches(&goal()),
+        delivered: delivered(&world),
+        elapsed_time: world
+            .balance(&AccountId::Vehicle, &Asset::ElapsedTime)
+            .get(),
+        steps: trace.exchanges().len(),
+        trace,
+    };
+    Ok(Some(PlannedLogistics {
+        rollout,
+        decisions,
+        stop,
+    }))
+}
+
 fn planning_candidates(world: &World) -> Vec<Action> {
-    let actions = candidates(world);
-    if active_route(world).is_some() {
-        return actions
-            .into_iter()
-            .filter(|exchange| !matches!(exchange.rate(), RateId::Resolve(_, _)))
-            .collect();
-    }
-    let carrying = carried_order(world);
-    match current_location(world) {
-        Some(Location::Depot) if carrying.is_some() => {
-            let needs_fuel = world.balance(&AccountId::Vehicle, &Asset::Fuel).is_zero();
-            actions
+    // Derive a small proposal set from encoded state, then assess every binding.
+    // Scanning every concrete rate at every rollout step dominated full journeys.
+    let rates = if let Some(route) = active_route(world) {
+        if !world
+            .balance(&AccountId::Nature, &Asset::WeatherReady)
+            .is_zero()
+        {
+            Vec::new()
+        } else if !world
+            .balance(
+                &AccountId::Nature,
+                &Asset::Outcome(route, TravelOutcome::Breakdown),
+            )
+            .is_zero()
+        {
+            vec![RateId::Repair(route)]
+        } else {
+            [TravelOutcome::Clear, TravelOutcome::Delayed]
                 .into_iter()
-                .filter(|exchange| {
-                    matches!(
-                        exchange.rate(),
-                        RateId::Depart(Route::DirectOut | Route::SafeOutFirst)
-                    ) || (needs_fuel && matches!(exchange.rate(), RateId::Refuel))
+                .filter(|outcome| {
+                    !world
+                        .balance(&AccountId::Nature, &Asset::Outcome(route, *outcome))
+                        .is_zero()
                 })
+                .map(|outcome| RateId::Arrive(route, outcome))
                 .collect()
         }
-        Some(Location::Depot) => {
-            let needs_fuel = world.balance(&AccountId::Vehicle, &Asset::Fuel).get() < REFUEL_AMOUNT;
-            actions
-                .into_iter()
-                .filter(|exchange| {
-                    matches!(exchange.rate(), RateId::Load(_))
-                        || (needs_fuel && matches!(exchange.rate(), RateId::Refuel))
-                })
-                .collect()
+    } else {
+        let carrying = carried_order(world);
+        match current_location(world) {
+            Some(Location::Depot) => {
+                let mut rates = if carrying.is_some() {
+                    vec![
+                        RateId::Depart(Route::DirectOut),
+                        RateId::Depart(Route::SafeOutFirst),
+                    ]
+                } else {
+                    ORDERS
+                        .into_iter()
+                        .filter(|order| {
+                            !world
+                                .balance(&AccountId::Order(*order), &Asset::Waiting)
+                                .is_zero()
+                        })
+                        .map(RateId::Load)
+                        .collect()
+                };
+                if world.balance(&AccountId::Vehicle, &Asset::Fuel).get() < REFUEL_AMOUNT {
+                    rates.push(RateId::Refuel);
+                }
+                rates
+            }
+            Some(Location::Customer) => carrying.map_or_else(
+                || {
+                    vec![
+                        RateId::Depart(Route::DirectBack),
+                        RateId::Depart(Route::SafeBackFirst),
+                    ]
+                },
+                |order| vec![RateId::Deliver(order)],
+            ),
+            Some(Location::Junction) => vec![RateId::Depart(if carrying.is_some() {
+                Route::SafeOutSecond
+            } else {
+                Route::SafeBackSecond
+            })],
+            None => Vec::new(),
         }
-        Some(Location::Customer) if carrying.is_some() => actions
-            .into_iter()
-            .filter(|exchange| matches!(exchange.rate(), RateId::Deliver(_)))
-            .collect(),
-        Some(Location::Customer) => actions
-            .into_iter()
-            .filter(|exchange| {
-                matches!(
-                    exchange.rate(),
-                    RateId::Depart(Route::DirectBack | Route::SafeBackFirst)
-                )
-            })
-            .collect(),
-        Some(Location::Junction) => actions
-            .into_iter()
-            .filter(|exchange| {
-                matches!(
-                    exchange.rate(),
-                    RateId::Depart(Route::SafeOutSecond | Route::SafeBackSecond)
-                )
-            })
-            .collect(),
-        None => Vec::new(),
-    }
+    };
+    world.applicable(rates.into_iter().map(action))
 }
 
 fn planning_outcomes(world: &World) -> Vec<WeightedExchange<Action>> {
@@ -791,6 +909,12 @@ fn policy_action(world: &World, policy: Policy, sampler: &mut impl TicketSource)
 }
 
 fn nature_outcomes(world: &World, route: Route) -> Vec<WeightedExchange<Action>> {
+    if world
+        .balance(&AccountId::Nature, &Asset::WeatherReady)
+        .is_zero()
+    {
+        return Vec::new();
+    }
     OUTCOMES
         .into_iter()
         .filter_map(|outcome| {
@@ -985,6 +1109,53 @@ mod tests {
             decision.action().rate(),
             RateId::Depart(Route::DirectOut | Route::SafeOutFirst)
         ));
+    }
+
+    #[test]
+    fn repeated_planning_executes_through_delivery_and_replays_every_choice() {
+        let initial = initial();
+        let mut saw_delivery = false;
+        let mut saw_replanning_after_breakdown = false;
+        for seed in [0, 7, 17] {
+            let planned = run_planned_with_progress(&initial, 32, seed, 31, 8, |_, _| {
+                ControlFlow::Continue(())
+            })
+            .unwrap()
+            .unwrap();
+            let trace = planned.rollout.trace();
+            let replayed = initial.replayed(trace).unwrap();
+            assert!(trace.exchanges().len() > 2);
+            assert!(planned.decisions.len() > 1);
+            assert_eq!(delivered(&replayed), planned.rollout.delivered());
+            assert_eq!(replayed.matches(&goal()), planned.rollout.completed());
+            saw_delivery |= planned.rollout.delivered() > 0;
+            for step in &planned.decisions {
+                assert_eq!(&trace.exchanges()[step.trace_index], step.decision.action());
+                saw_replanning_after_breakdown |= trace.exchanges()[..step.trace_index]
+                    .iter()
+                    .any(|action| matches!(action.rate(), RateId::Repair(_)));
+            }
+            match planned.stop {
+                PlanningStop::DeliveredAllOrders => assert!(replayed.matches(&goal())),
+                PlanningStop::NoFeasibleAction => assert!(
+                    planning_candidates(&replayed).is_empty()
+                        && planning_outcomes(&replayed).is_empty()
+                ),
+                PlanningStop::Horizon => assert_eq!(trace.exchanges().len(), ROLLOUT_HORIZON),
+            }
+        }
+        assert!(saw_delivery && saw_replanning_after_breakdown);
+    }
+
+    #[test]
+    fn repeated_planning_cancels_without_mutating_the_source() {
+        let initial = initial();
+        let before = initial.state_key();
+        let result =
+            run_planned_with_progress(&initial, 32, 17, 31, 8, |_, _| ControlFlow::Break(()))
+                .unwrap();
+        assert!(result.is_none());
+        assert_eq!(initial.state_key(), before);
     }
 
     #[test]

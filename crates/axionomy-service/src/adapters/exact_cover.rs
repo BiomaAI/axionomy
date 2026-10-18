@@ -22,7 +22,7 @@ pub(super) fn build(
         (
             "breadth_first",
             "Exact cover · plain search",
-            "A search with no knowledge of the problem, treating each selection as a state change.",
+            "Breadth-first search finds a cover with the fewest selections. Larger sets can beat a cover made from pairs.",
             bfs.trace().clone(),
             "breadth-first search",
             Some(bfs.expanded() as u64),
@@ -30,7 +30,7 @@ pub(super) fn build(
         (
             "algorithm_x",
             "Exact cover · Algorithm X",
-            "Algorithm X reads set membership directly and proposes moves; the economy accepts exactly the same ones.",
+            "Algorithm X branches on the most constrained uncovered element. It can select a different complete cover than shortest-path search.",
             algorithm_x,
             "Algorithm X",
             None,
@@ -75,7 +75,7 @@ pub(super) fn build(
             Quantity::new(1),
         )
         .bind(Role::Problem, AccountId::Problem);
-        view.proposals.push(proposal("exact_cover", ProposalSpec { id: "wrong-progress", label: "Select AB at progress 2", description: "The subset is still available, but its elements are already covered, so it cannot be added." }, &initial, &overlapping));
+        view.proposals.push(proposal("exact_cover", ProposalSpec { id: "wrong-progress", label: "Select AB at progress 2", description: "This proposal claims two elements are already covered, but the initial state has zero covered elements." }, &initial, &overlapping));
         documents.push(view);
     }
     let unsatisfiable = match profile {
@@ -84,6 +84,14 @@ pub(super) fn build(
         InstanceProfile::Stress => exact_cover::unsatisfiable_stress(),
     };
     let mut unsat = document(DocumentSpec { problem: "exact_cover", strategy: "unsatisfiable", title: "Exact cover · no solution exists", description: "Same rules, different subsets: no combination covers every element exactly once. The impossibility is a result, not an error.", source_label: "Exact cover" }, &unsatisfiable, &exact_cover::goal(), &Trace::new(), Vec::new(), scene).map_err(|error| problem_error("exact_cover", error))?;
+    if exact_cover::algorithm_x(&unsatisfiable).is_some()
+        || exact_cover::solve_bfs(&unsatisfiable).is_some()
+    {
+        return Err(problem_error(
+            "exact_cover",
+            "supposed unsatisfiable instance has a cover",
+        ));
+    }
     unsat.telemetry.push(telemetry(
         "exhaustive search (proved no solution)",
         true,
@@ -123,12 +131,20 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                     let selected = !world
                         .balance(&AccountId::Problem, &Asset::Selected(set))
                         .is_zero();
+                    let blocked = !selected
+                        && exact_cover::members(world, set).iter().any(|member| {
+                            !world
+                                .balance(&AccountId::Problem, &Asset::Covered(*member))
+                                .is_zero()
+                        });
                     MatrixCellView {
                         row: format!("set:{set:?}"),
                         column: format!("element:{element:?}"),
                         label: "×".into(),
                         classes: if selected {
                             vec!["selected".into()]
+                        } else if blocked {
+                            vec!["blocked".into()]
                         } else {
                             Vec::new()
                         },
@@ -136,10 +152,52 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 })
         })
         .collect();
-    Some(Scene::matrix(
-        "Which subset contains which element",
-        rows,
-        columns,
-        cells,
-    ))
+    Some(
+        Scene::matrix("Which subset contains which element", rows, columns, cells).with_metrics([
+            visual_metric(
+                "covered",
+                "Elements covered",
+                elements
+                    .iter()
+                    .filter(|element| {
+                        !world
+                            .balance(&AccountId::Problem, &Asset::Covered(**element))
+                            .is_zero()
+                    })
+                    .count(),
+                None,
+            ),
+            visual_metric(
+                "selected",
+                "Sets selected",
+                sets.iter()
+                    .filter(|set| {
+                        !world
+                            .balance(&AccountId::Problem, &Asset::Selected(**set))
+                            .is_zero()
+                    })
+                    .count(),
+                None,
+            ),
+            visual_metric(
+                "choices",
+                "Legal next selections",
+                exact_cover::candidates(world)
+                    .iter()
+                    .filter(|action| matches!(action.rate(), RateId::Select { .. }))
+                    .count(),
+                None,
+            ),
+            visual_metric(
+                "completion",
+                "Completion possible",
+                if exact_cover::algorithm_x(world).is_some() {
+                    "yes"
+                } else {
+                    "no"
+                },
+                None,
+            ),
+        ]),
+    )
 }

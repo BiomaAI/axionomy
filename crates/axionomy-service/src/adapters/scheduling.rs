@@ -216,6 +216,9 @@ fn front_view(result: &scheduling::ParetoResult, selected: &ViewDocument) -> Par
 }
 
 fn scene(_: u64, world: &World) -> Option<Scene> {
+    if scheduling::execution::enabled(world) {
+        return Some(execution_scene(world));
+    }
     let lanes = [Machine::One, Machine::Two, Machine::Three]
         .into_iter()
         .map(|machine| TimelineLaneView {
@@ -330,4 +333,171 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             ),
         ]),
     )
+}
+
+fn execution_scene(world: &World) -> Scene {
+    use scheduling::execution::{MACHINES, OPERATIONS};
+    let now = scheduling::execution::now(world);
+    let value = |account, asset| world.balance(&account, &asset).get();
+    let lanes = MACHINES
+        .into_iter()
+        .map(|machine| TimelineLaneView {
+            id: ViewId::new(
+                format!("machine:{machine:?}"),
+                format!("Machine {machine:?}"),
+            ),
+            classes: if value(AccountId::Machine(machine), Asset::Broken) > 0 {
+                vec!["blocked".into()]
+            } else {
+                vec![]
+            },
+        })
+        .collect();
+    let mut spans = Vec::new();
+    let mut entities = Vec::new();
+    for operation in OPERATIONS {
+        let job = if matches!(
+            operation,
+            Operation::OneA | Operation::OneB | Operation::OneC
+        ) {
+            Job::One
+        } else {
+            Job::Two
+        };
+        let account = AccountId::Job(job);
+        let started = value(AccountId::Success, Asset::Started(operation)) > 0;
+        let completed_at = value(AccountId::Success, Asset::EndTime(operation));
+        let queued = MACHINES
+            .into_iter()
+            .find(|machine| value(account, Asset::Queued(operation, *machine)) > 0);
+        let running = MACHINES
+            .into_iter()
+            .find(|machine| value(account, Asset::Running(operation, *machine)) > 0);
+        let paused = MACHINES
+            .into_iter()
+            .find(|machine| value(account, Asset::Paused(operation, *machine)) > 0);
+        let executed = MACHINES
+            .into_iter()
+            .find(|machine| value(AccountId::Success, Asset::ExecutedOn(operation, *machine)) > 0);
+        let status = if completed_at > 0 {
+            format!("completed at {completed_at}")
+        } else if paused.is_some() {
+            format!(
+                "paused · {} ticks remain",
+                value(account, Asset::WorkRemaining)
+            )
+        } else if running.is_some() {
+            format!("running until {}", value(account, Asset::Due))
+        } else if queued.is_some() {
+            "reserved in machine queue".into()
+        } else if now < value(account, Asset::Arrival) {
+            format!("job arrives at {}", value(account, Asset::Arrival))
+        } else if value(account, Asset::Ready(operation)) > 0 {
+            "ready for machine choice".into()
+        } else {
+            "predecessor unfinished".into()
+        };
+        if let Some(machine) = executed.filter(|_| started) {
+            let start = value(AccountId::Success, Asset::StartTime(operation));
+            let end = if completed_at > 0 {
+                completed_at
+            } else if running.is_some() {
+                value(account, Asset::Due)
+            } else {
+                now.max(start + 1)
+            };
+            let interrupted = value(AccountId::Success, Asset::Interrupted(operation)) > 0;
+            spans.push(TimelineSpanView {
+                id: format!("operation:{operation:?}"),
+                lane: format!("machine:{machine:?}"),
+                start,
+                end,
+                label: format!(
+                    "{operation:?}{}",
+                    if interrupted { " · interrupted" } else { "" }
+                ),
+                classes: vec![
+                    format!("job-{job:?}").to_lowercase(),
+                    if completed_at > 0 {
+                        "completed".into()
+                    } else {
+                        "active".into()
+                    },
+                ],
+            });
+        }
+        entities.push(link_account(
+            visual_entity(
+                format!("operation:{operation:?}"),
+                format!("{operation:?}"),
+                SceneGlyphView::Task,
+                queued.or(running).or(paused).or(executed).map_or(
+                    SceneAnchorView::Unanchored,
+                    |machine| SceneAnchorView::Timeline {
+                        lane: format!("machine:{machine:?}"),
+                        at: now,
+                    },
+                ),
+                SceneEntityRoleView::Attachment,
+                if completed_at > 0 {
+                    SceneToneView::Success
+                } else if paused.is_some() {
+                    SceneToneView::Warning
+                } else {
+                    SceneToneView::Active
+                },
+                Some(status),
+            ),
+            format!("scheduling:account:job-{job:?}").to_lowercase(),
+        ));
+    }
+    let machine_two = AccountId::Machine(Machine::Two);
+    let condition = if value(machine_two, Asset::Broken) > 0 {
+        "broken"
+    } else if value(machine_two, Asset::Repairing) > 0 {
+        "repair underway"
+    } else {
+        "online"
+    };
+    let mut timeline = Scene::timeline(
+        "Executed work, setup and machine occupancy",
+        lanes,
+        spans,
+        Some(now),
+    );
+    timeline.entities.clear();
+    timeline.with_entities(entities).with_metrics([
+        visual_metric("world_time", "World time", now, Some("ticks")),
+        visual_metric(
+            "labor",
+            "Available crew",
+            value(AccountId::Success, Asset::Labor),
+            None,
+        ),
+        visual_metric(
+            "busy_labor",
+            "Occupied crew",
+            value(AccountId::Success, Asset::BusyLabor),
+            None,
+        ),
+        visual_metric("machine_two", "Machine Two", condition, None),
+        visual_metric(
+            "repair_kits",
+            "Repair kits left",
+            value(AccountId::Success, Asset::RepairKit),
+            None,
+        ),
+        visual_metric(
+            "one_done",
+            "Job One completion",
+            scheduling::completion_time(world, Job::One),
+            Some("ticks"),
+        ),
+        visual_metric(
+            "two_done",
+            "Job Two completion",
+            scheduling::completion_time(world, Job::Two),
+            Some("ticks"),
+        ),
+    ])
 }

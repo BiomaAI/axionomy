@@ -1,8 +1,7 @@
 use super::*;
-use axionomy::{Exchange, Quantity, Trace};
-use axionomy_problems::logistics::{
-    self, AccountId, Asset, Location, Policy, RateId, Route, World,
-};
+mod fleet;
+use axionomy::{Exchange, Quantity};
+use axionomy_problems::logistics::{self, AccountId, Asset, Location, Policy, Route, World};
 use axionomy_view::{
     FrontierCompletenessView, GraphEdgeView, GraphNodeView, ObjectiveAxisView,
     ObjectiveDirectionView, ParetoFrontView, ParetoPointView, TelemetryKindView, ViewId,
@@ -13,6 +12,10 @@ pub(super) fn build(
     descriptor: &ProblemDescriptor,
     progress: &mut ProgressSink<'_>,
 ) -> Result<RunArtifact, ServiceError> {
+    let profile = instance_profile(request, descriptor);
+    if !matches!(profile, InstanceProfile::Micro) {
+        return fleet::build(request, descriptor, profile, progress);
+    }
     let initial = if matches!(
         instance_profile(request, descriptor),
         InstanceProfile::Micro
@@ -123,26 +126,20 @@ pub(super) fn build(
         documents.push(view);
     }
 
-    let mut loaded = initial.fork();
-    let load = logistics::candidates(&loaded)
-        .into_iter()
-        .find(|exchange| matches!(exchange.rate(), RateId::Load(_)))
-        .ok_or_else(|| problem_error("logistics", "no load action"))?;
-    loaded
-        .apply(load.clone())
-        .map_err(|error| problem_error("logistics", format!("{error:?}")))?;
-    let decision = logistics::plan_action_with_progress(
-        &loaded,
+    let planned = logistics::run_planned_with_progress(
+        &initial,
         samples,
         request.seed,
+        request.seed ^ 0x4c4f_4749_5354_4943,
         samples.clamp(1, 8),
-        |state| {
+        |decision, state| {
             progress.emit(
                 "mcts",
                 state.iterations() as u64,
                 state.target_iterations() as u64,
                 format!(
-                    "{}/{} MCTS iterations · {} nodes · {} root actions",
+                    "Decision {} · {}/{} MCTS iterations · {} nodes · {} root actions",
+                    decision + 1,
                     state.iterations(),
                     state.target_iterations(),
                     state.nodes(),
@@ -151,32 +148,54 @@ pub(super) fn build(
             )
         },
     )
-    .map_err(|error| problem_error("logistics", format!("{error:?}")))?;
+    .map_err(|error| problem_error("logistics", error))?;
     progress.ensure()?;
-    let decision =
-        decision.ok_or_else(|| problem_error("logistics", "MCTS planning was interrupted"))?;
-    let mut prefix = Trace::new();
-    prefix.push(load);
-    prefix.push(decision.action().clone());
-    let mut mcts = document(DocumentSpec { problem: "logistics", strategy: "mcts", title: "Logistics · live MCTS decision", description: "A load, then the route MCTS currently prefers. This stops mid-journey on purpose: it is a decision in progress, not a finished delivery.", source_label: "Stochastic logistics" }, &initial, &logistics::goal(), &prefix, Vec::new(), scene).map_err(|error| problem_error("logistics", error))?;
+    let planned =
+        planned.ok_or_else(|| problem_error("logistics", "MCTS planning was interrupted"))?;
+    let description = format!(
+        "Replan after deliveries and disruptions, execute every selected action, and retain the final outcome: {:?}. Search randomness is separate from realized weather. The sampled frontier compares the two fixed-policy baselines, not this planner.",
+        planned.stop
+    );
+    let mut mcts = document(
+        DocumentSpec {
+            problem: "logistics",
+            strategy: "mcts",
+            title: "Logistics · adaptive delivery",
+            description: &description,
+            source_label: "Stochastic logistics",
+        },
+        &initial,
+        &logistics::goal(),
+        planned.rollout.trace(),
+        objectives(&planned.rollout),
+        scene,
+    )
+    .map_err(|error| problem_error("logistics", error))?;
     mcts.telemetry.push(telemetry(
-        "Monte Carlo tree search",
+        "Repeated Monte Carlo tree search",
         false,
         [
             (
                 TelemetryKindView::Iteration,
-                decision.iterations() as u64,
-                "tree iterations".into(),
+                planned
+                    .decisions
+                    .iter()
+                    .map(|step| step.decision.iterations() as u64)
+                    .sum(),
+                "iterations for committed decisions".into(),
             ),
             (
                 TelemetryKindView::Generated,
-                decision.children().len() as u64,
-                "root actions".into(),
+                planned.decisions.len() as u64,
+                "search decisions actually executed".into(),
+            ),
+            (
+                TelemetryKindView::Transitions,
+                planned.rollout.steps() as u64,
+                "exchanges through delivery or explicit failure".into(),
             ),
         ],
     ));
-    mcts.pareto_fronts
-        .push(policy_front(&front, estimate.chosen()));
     documents.push(mcts);
     artifact(
         request,

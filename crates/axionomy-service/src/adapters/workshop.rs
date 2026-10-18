@@ -24,7 +24,7 @@ pub(super) fn build(
         workshop::pareto_front(&initial).map_err(|error| problem_error("workshop", error))?;
     let waste_trace = frontier_trace(&pareto, true)?;
     let time_trace = frontier_trace(&pareto, false)?;
-    let traces = [
+    let mut traces = vec![
         (
             "breadth_first",
             "Workshop · fewest steps",
@@ -36,7 +36,7 @@ pub(super) fn build(
         (
             "minimum_waste",
             "Workshop · least waste",
-            "Best-first search follows the scrap accumulating in the workshop account.",
+            "Best-first search minimizes irreversible scrap; unused offcuts become scrap when the shift closes.",
             best.trace().clone(),
             "best-first search",
             best.expanded() as u64,
@@ -44,7 +44,7 @@ pub(super) fn build(
         (
             "pareto_waste",
             "Workshop Pareto · least waste",
-            "The least wasteful plan on the frontier.",
+            "A least-waste plan on the frontier of scrap, time and earned revenue.",
             waste_trace,
             "exact Pareto search",
             pareto.progress().expanded() as u64,
@@ -52,12 +52,25 @@ pub(super) fn build(
         (
             "pareto_time",
             "Workshop Pareto · least time",
-            "The fastest plan on the frontier.",
+            "A fastest plan on the frontier, including setup, component production, repair and delivery.",
             time_trace,
             "exact Pareto search",
             pareto.progress().expanded() as u64,
         ),
     ];
+    if initial.account(&AccountId::Customer(0)).is_some() {
+        let entry = pareto
+            .front()
+            .entries()
+            .iter()
+            .max_by_key(|entry| {
+                objective_value(entry.objectives().objectives(), ObjectiveKey::Revenue)
+            })
+            .unwrap();
+        traces.push(("pareto_revenue", "Workshop Pareto · highest revenue",
+            "The highest contract revenue on the exact frontier; tables require more material, labor and tooling than chairs.",
+            entry.payload().clone(), "exact Pareto search", pareto.progress().expanded() as u64));
+    }
     let mut documents = Vec::new();
     for (strategy, title, description, trace, algorithm, expanded) in traces {
         let final_world = initial
@@ -136,43 +149,48 @@ fn objective_value(values: &[Objective<ObjectiveKey, u64>], key: ObjectiveKey) -
 }
 
 fn objectives(world: &World) -> Vec<ObjectiveView> {
-    vec![
-        ObjectiveView {
-            key: "waste".into(),
-            label: "Waste".into(),
-            direction: ObjectiveDirectionView::Minimize,
-            value: workshop::waste(world).to_string(),
-        },
-        ObjectiveView {
-            key: "time".into(),
-            label: "Process time".into(),
-            direction: ObjectiveDirectionView::Minimize,
-            value: workshop::spent_time(world).to_string(),
-        },
-    ]
+    workshop::objectives(world)
+        .objectives()
+        .iter()
+        .map(|objective| {
+            let (key, label, direction) = match objective.key() {
+                ObjectiveKey::Waste => ("waste", "Waste", ObjectiveDirectionView::Minimize),
+                ObjectiveKey::Time => ("time", "Process time", ObjectiveDirectionView::Minimize),
+                ObjectiveKey::Revenue => (
+                    "revenue",
+                    "Contract revenue",
+                    ObjectiveDirectionView::Maximize,
+                ),
+            };
+            ObjectiveView {
+                key: key.into(),
+                label: label.into(),
+                direction,
+                value: objective.value().to_string(),
+            }
+        })
+        .collect()
 }
 
 fn front_view(result: &workshop::ParetoResult, selected: &ViewDocument) -> ParetoFrontView {
+    let axes = selected
+        .objectives
+        .iter()
+        .map(|objective| ObjectiveAxisView {
+            key: objective.key.clone(),
+            label: objective.label.clone(),
+            direction: objective.direction,
+        })
+        .collect();
     let selected = selected
         .objectives
         .iter()
         .map(|objective| objective.value.as_str())
         .collect::<Vec<_>>();
     ParetoFrontView {
-        title: "Waste vs. time — every non-dominated plan".into(),
+        title: "Production tradeoffs — every non-dominated plan".into(),
         completeness: FrontierCompletenessView::Exact,
-        axes: vec![
-            ObjectiveAxisView {
-                key: "waste".into(),
-                label: "Waste".into(),
-                direction: ObjectiveDirectionView::Minimize,
-            },
-            ObjectiveAxisView {
-                key: "time".into(),
-                label: "Time".into(),
-                direction: ObjectiveDirectionView::Minimize,
-            },
-        ],
+        axes,
         points: result
             .front()
             .entries()
@@ -185,7 +203,14 @@ fn front_view(result: &workshop::ParetoResult, selected: &ViewDocument) -> Paret
                     .map(|objective| objective.value().to_string())
                     .collect::<Vec<_>>();
                 ParetoPointView {
-                    label: format!("{} waste · {} time", values[0], values[1]),
+                    label: if values.len() == 3 {
+                        format!(
+                            "{} waste · {} time · {} credit",
+                            values[0], values[1], values[2]
+                        )
+                    } else {
+                        format!("{} waste · {} time", values[0], values[1])
+                    },
                     selected: values
                         .iter()
                         .map(String::as_str)
@@ -198,15 +223,27 @@ fn front_view(result: &workshop::ParetoResult, selected: &ViewDocument) -> Paret
 }
 
 fn scene(_: u64, world: &World) -> Option<Scene> {
-    let assets = [
+    let mut assets = vec![
         ("wood", "Wood", Asset::Wood),
         ("labor", "Labor", Asset::Labor),
         ("tool", "Tool", Asset::Tool),
         ("chair", "Chair", Asset::Chair),
         ("waste", "Waste", Asset::Waste),
     ];
+    if world.account(&AccountId::Customer(0)).is_some() {
+        assets.extend([
+            ("frame", "Frames", Asset::Frame),
+            ("panel", "Panels", Asset::Panel),
+            ("table", "Tables", Asset::Table),
+            ("offcut", "Offcuts", Asset::Offcut),
+            ("durability", "Durability", Asset::Durability),
+            ("wear", "Wear", Asset::Wear),
+            ("credit", "Revenue", Asset::Credit),
+        ]);
+    }
     let nodes = assets
-        .into_iter()
+        .iter()
+        .copied()
         .enumerate()
         .map(|(index, (key, label, asset))| GraphNodeView {
             id: ViewId::new(key, label),
@@ -219,36 +256,41 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             y: Some((index / 3) as f64 * 150.0 + 70.0),
         })
         .collect();
-    let edges = vec![
-        GraphEdgeView {
-            id: "basic:wood".into(),
-            source: "wood".into(),
-            target: "chair".into(),
-            label: Some("basic recipe".into()),
-            classes: Vec::new(),
-        },
-        GraphEdgeView {
-            id: "efficient:wood".into(),
-            source: "wood".into(),
-            target: "chair".into(),
-            label: Some("batch recipe".into()),
-            classes: Vec::new(),
-        },
-        GraphEdgeView {
-            id: "waste".into(),
-            source: "wood".into(),
-            target: "waste".into(),
-            label: Some("by-product".into()),
-            classes: Vec::new(),
-        },
-        GraphEdgeView {
-            id: "tool".into(),
-            source: "tool".into(),
-            target: "chair".into(),
-            label: Some("preserved catalyst".into()),
-            classes: Vec::new(),
-        },
-    ];
+    let routes = if world.account(&AccountId::Customer(0)).is_some() {
+        vec![
+            ("wood", "frame", "cut"),
+            ("wood", "panel", "cut"),
+            ("wood", "offcut", "fast-cut residue"),
+            ("frame", "chair", "assemble"),
+            ("panel", "chair", "assemble"),
+            ("frame", "table", "assemble"),
+            ("panel", "table", "assemble"),
+            ("offcut", "wood", "recycle with loss"),
+            ("offcut", "waste", "recycling loss"),
+            ("durability", "wear", "production"),
+            ("wear", "durability", "repair"),
+            ("chair", "credit", "deliver"),
+            ("table", "credit", "deliver"),
+        ]
+    } else {
+        vec![
+            ("wood", "chair", "basic recipe"),
+            ("wood", "chair", "batch recipe"),
+            ("wood", "waste", "by-product"),
+            ("tool", "chair", "preserved catalyst"),
+        ]
+    };
+    let edges = routes
+        .into_iter()
+        .enumerate()
+        .map(|(index, (from, to, label))| GraphEdgeView {
+            id: format!("recipe:{index}"),
+            source: from.into(),
+            target: to.into(),
+            label: Some(label.into()),
+            classes: vec![],
+        })
+        .collect();
     let stocks = assets.into_iter().filter_map(|(key, label, asset)| {
         let quantity = world.balance(&AccountId::Workshop, &asset);
         if quantity.is_zero() {
@@ -281,5 +323,119 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         entity.metrics = vec![visual_metric(key, label, quantity, Some("units"))];
         Some(entity)
     });
-    Some(Scene::graph("Materials and recipe flow", nodes, edges, None).with_entities(stocks))
+    let contracts = world.accounts().filter_map(|(id, _)| {
+        let AccountId::Customer(order) = id else {
+            return None;
+        };
+        let state = if !world
+            .balance(&AccountId::Workshop, &Asset::Fulfilled(*order))
+            .is_zero()
+        {
+            "delivered and paid"
+        } else if !world
+            .balance(&AccountId::Workshop, &Asset::Assembled(*order))
+            .is_zero()
+        {
+            "ready for delivery"
+        } else if !world
+            .balance(&AccountId::Workshop, &Asset::Prepared(*order))
+            .is_zero()
+        {
+            "components ready"
+        } else if !world
+            .balance(&AccountId::Workshop, &Asset::Raw(*order))
+            .is_zero()
+        {
+            "accepted · awaiting components"
+        } else {
+            "available"
+        };
+        let mut entity = link_balance(
+            visual_entity(
+                format!("contract:{order}"),
+                format!("Contract {}", order + 1),
+                SceneGlyphView::Task,
+                SceneAnchorView::GraphNode {
+                    node: "credit".into(),
+                },
+                SceneEntityRoleView::Attachment,
+                if state == "delivered and paid" {
+                    SceneToneView::Success
+                } else {
+                    SceneToneView::Neutral
+                },
+                Some(state.into()),
+            ),
+            format!("workshop:account:customer-{order}"),
+            format!("workshop:asset:customeridentity-{order}"),
+        );
+        entity.metrics = vec![visual_metric(
+            "escrow",
+            "Customer funds",
+            world.balance(id, &Asset::Credit),
+            Some("credit"),
+        )];
+        Some(entity)
+    });
+    let metrics = if world.account(&AccountId::Customer(0)).is_some() {
+        vec![
+            visual_metric(
+                "completed",
+                "Contracts delivered",
+                world.balance(&AccountId::Workshop, &Asset::Completed),
+                None,
+            ),
+            visual_metric(
+                "revenue",
+                "Revenue",
+                world.balance(&AccountId::Workshop, &Asset::Credit),
+                Some("credit"),
+            ),
+            visual_metric(
+                "durability",
+                "Tool durability",
+                world.balance(&AccountId::Workshop, &Asset::Durability),
+                None,
+            ),
+            visual_metric(
+                "repairs",
+                "Repair kits remaining",
+                world.balance(&AccountId::Workshop, &Asset::RepairKit),
+                None,
+            ),
+            visual_metric(
+                "upgrade",
+                "Precision upgrade",
+                if world
+                    .balance(&AccountId::Workshop, &Asset::Upgraded)
+                    .is_zero()
+                {
+                    "available"
+                } else {
+                    "installed"
+                },
+                None,
+            ),
+        ]
+    } else {
+        vec![
+            visual_metric("waste", "Waste", workshop::waste(world), None),
+            visual_metric(
+                "time",
+                "Process time",
+                workshop::spent_time(world),
+                Some("ticks"),
+            ),
+        ]
+    };
+    Some(
+        Scene::graph(
+            "Materials, tooling and contract production",
+            nodes,
+            edges,
+            None,
+        )
+        .with_entities(stocks.chain(contracts))
+        .with_metrics(metrics),
+    )
 }

@@ -11,6 +11,9 @@ use axionomy::{
 };
 use std::collections::{BTreeMap, BTreeSet};
 
+mod season;
+pub use season::{market_goal, period, seasonal_decision};
+
 pub const FEE_DENOMINATOR: u64 = 1_000;
 pub const FEE_NUMERATOR: u64 = 997;
 pub const MAX_LP_SHARES: u64 = 1_000_000;
@@ -57,10 +60,46 @@ pub enum AccountId {
     Treasury,
     Information,
     Actor(Actor),
+    World,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Asset {
+    ActorIdentity(Actor),
+    PoolIdentity,
+    TreasuryIdentity,
+    WorldIdentity,
+    MarketActive,
+    MarketEnded,
+    Day,
+    AtDay(u8),
+    Days,
+    Scale,
+    MarketOpen,
+    Trading,
+    Done,
+    Decisions,
+    StorageCapacity,
+    ProductionCapacity,
+    ProductionAllowance,
+    FutureCapacity,
+    PendingCapacity,
+    ConstructionDue,
+    ReferencePrice,
+    Sunlight(u8),
+    CurrentSunlight,
+    LiquidityDecision,
+    FutureNeed(Actor),
+    MissedNeed(Actor),
+    FutureObligation(Actor),
+    DefaultedObligation(Actor),
+    UnmadeGoods,
+    Goods,
+    DeliveredGoods,
+    IncomeDue,
+    FutureIncome,
+    ReceivedIncome,
+    MissedIncome,
     Energy,
     Credit,
     SolarPotential,
@@ -87,10 +126,20 @@ pub enum Role {
     Treasury,
     Information,
     Observer,
+    World,
+    Participant(Actor),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum RateId {
+    EndTrading(Actor),
+    AdvanceDay(u8),
+    CloseMarket,
+    InvestProduction,
+    CommissionProduction,
+    DeliverGoods,
+    CollectIncome,
+    FundLiquidity,
     BuyEnergy,
     SellEnergy,
     AddLiquidity,
@@ -141,11 +190,19 @@ pub fn initial() -> World {
 }
 
 pub fn initial_showcase() -> World {
-    build(MarketSize::Showcase)
+    initial_showcase_with_seed(0)
 }
 
 pub fn initial_stress() -> World {
-    build(MarketSize::Stress)
+    initial_stress_with_seed(0)
+}
+
+pub fn initial_showcase_with_seed(seed: u64) -> World {
+    season::build(build(MarketSize::Showcase), 8, 1, seed)
+}
+
+pub fn initial_stress_with_seed(seed: u64) -> World {
+    season::build(build(MarketSize::Stress), 12, 4, seed)
 }
 
 fn build(size: MarketSize) -> World {
@@ -624,6 +681,9 @@ fn trace_with_actors(
     scenario: Scenario,
     included: &BTreeSet<Actor>,
 ) -> Trace<RateId, Role, AccountId> {
+    if initial.account(&AccountId::World).is_some() {
+        return season::run(initial, scenario, included);
+    }
     let mut world = initial.fork();
     let mut trace = Trace::new();
     let stress = pool_state(initial).energy >= 40_000;
@@ -761,13 +821,26 @@ pub fn direct_price_contributions(
             .apply(exchange.clone())
             .expect("trace was already valid");
         let after = i128::from(pool_state(&world).price_milli);
-        if matches!(exchange.rate(), RateId::BuyEnergy | RateId::SellEnergy)
-            && let Some(AccountId::Actor(actor)) = exchange.bindings().get(&Role::Trader)
-        {
-            *contributions.entry(*actor).or_default() += after - before;
+        if let Some(actor) = price_actor(exchange) {
+            *contributions.entry(actor).or_default() += after - before;
         }
     }
     contributions
+}
+
+/// Includes integer-rounding price effects of liquidity operations as well as swaps.
+pub fn price_actor(exchange: &Action) -> Option<Actor> {
+    let role = match exchange.rate() {
+        RateId::BuyEnergy | RateId::SellEnergy => Role::Trader,
+        RateId::AddLiquidity | RateId::RemoveLiquidity | RateId::FundLiquidity => {
+            Role::LiquidityProvider
+        }
+        _ => return None,
+    };
+    match exchange.bindings().get(&role) {
+        Some(AccountId::Actor(actor)) => Some(*actor),
+        _ => None,
+    }
 }
 
 #[cfg(test)]
@@ -807,7 +880,7 @@ mod tests {
 
     #[test]
     fn market_day_is_closed_replayable_and_reaches_real_actor_goals() {
-        let initial = initial_showcase();
+        let initial = initial();
         let trace = trace(&initial, Scenario::MarketDay);
         let final_world = initial.replayed(&trace).unwrap();
 

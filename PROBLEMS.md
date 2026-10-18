@@ -111,19 +111,19 @@ catalog, so those two public explanations must change together:
 
 | Problem | Default Showcase pressure |
 | --- | --- |
-| Maze | 15 rooms, 24 directed passages, cycles, backtracking, explicit key/gate state, four exact energy/time tradeoffs, and an 11-exchange low-energy plan |
-| Sokoban | 9×7 walled warehouse, 64 accounts, two stable crates, a 15-exchange solution, and a replayable legal deadlock |
-| Exact cover | 8 universe elements, 12 competing subsets, four selections, and an independently proposed Algorithm X trace |
-| Workshop | Six-chair multi-batch target with seven-step fast and four-step efficient extremes |
+| Maze | Cyclic district with a shared power circuit, finite protective gear, persistent injury delays, treatment, and four exact energy/time tradeoffs |
+| Sokoban | Two crates controlling a pressure plate, remote door latch, far-side exit and a legal deadlock; Stress composes two circuits |
+| Exact cover | Eight globally coupled elements, fourteen mixed-size sets, legal dead ends and complete covers with two to four selections |
+| Workshop | Competing chair/table contracts, intermediates, persistent tool wear, finite repair/upgrades, recycling and three exact waste/time/revenue tradeoffs |
 | Job shop | Six precedence-constrained operations across three machines and 18 capacity slots |
 | Rescue | Four hidden sites, 32 encoded Nature scenarios, noisy sensing, contact, and return evacuation |
-| Bridge | Two consecutive auctions/allocations with escrow, recharge, atomic round reset, and fairness tradeoffs |
+| Bridge | Timed traffic waves, occupied crossings, staggered arrivals, deadlines, reservation expiry, responsive auctions and a paid concurrent detour |
 | Living Market | Eight actors, exact nonlinear AMM laws, real needs and obligations, liquidity changes, information, a demand shock, internal supply response, three replayable realities, and 128 exact actor coalitions |
-| Marketplace | Four coupled orders across 14 accounts with shared budgets, inventory, shipping capacity, taxes, and commissions |
-| Logistics | Four deliveries, recurrent weather and breakdowns, refueling/repair loops, up to 53 accepted transitions, Monte Carlo, and MCTS |
-| Connect Four | Standard 7×6 board and 69 four-cell win certificates; 226 concrete rates replace the old 1,282-rate 4×4 projection |
+| Marketplace | Arriving contracts with escrow, price concessions, occupied carriers, route delays, delivery deadlines, late rebates and refundable reservations |
+| Logistics | Four deliveries, recurrent weather and breakdowns, refueling/repair loops, Monte Carlo baselines and repeated committed MCTS decisions |
+| Connect Four | Standard 7×6 board, conserved win-line counts, tactical search, forced-block/fork evidence and two independent opponent comparisons |
 | Mission | 16 hidden joint scenarios, private observations, belief filtering, information exchange, hazard response, Monte Carlo, and ISMCTS |
-| Perishables | 10,000 fungible claims, cohort-level decay, refrigeration, outage effects, indexed deadlines, and an eight-point storage frontier |
+| Perishables | Ten crates across six potential cohorts, inherited thermal history, finite cold space, competing energy/fuel uses, processing, deliveries and a seeded outage schedule |
 | Work League | Four autonomous workers, 12 finite jobs, eight locations, shared repair/recycling facilities, seeded failures, 60+ atomic transitions, and six replay-derived standings |
 
 **Model size** telemetry records accounts, rules, trace steps, rule-check
@@ -137,6 +137,14 @@ unless a larger profile is named explicitly. Showcase builds on those same
 laws; it does not replace the exact fixtures that make correctness auditable.
 
 ## 1. Key-door energy maze
+
+Showcase and Stress add shared vault/transit power, finite protective equipment,
+persistent injuries that slow later actions, and medicine-funded recovery. An
+unlocked vault still requires power, and diverting power disables the canal
+crossing. The exact Showcase frontier is `(energy, time) = (9,12), (11,6),
+(12,5), (15,4)`. The fewest-exchanges detour takes five ticks with untreated
+injuries; collecting protection adds an exchange but reduces time to four.
+Micro retains the original rules.
 
 Source: `crates/axionomy-problems/src/maze.rs`
 
@@ -196,6 +204,15 @@ relabeling one shared log.
 
 ## 2. Sokoban
 
+The larger warehouses contain crate-weight pressure plates, corresponding
+doors, remote latch panels, and an exit beyond the doors. The player must stage
+a crate to cross, latch the door, recover the crate, complete the goals, and
+reach the exit. Walking onto a plate does not activate it. All mechanism and
+exit state changes are balances in the same atomic move/push exchanges. Stress
+composes two circuits across three chambers. Search excludes statically proven
+dead squares using reverse-push reachability with every door optimistically open;
+those losing pushes remain legal for counterexample replays. Micro is unchanged.
+
 Source: `crates/axionomy-problems/src/sokoban.rs`
 
 ### Specification
@@ -242,6 +259,13 @@ decision quality directly inspectable.
 
 ## 3. Exact cover
 
+Showcase uses fourteen globally overlapping pairs, triples, and quadruples over
+eight elements. Complete covers require two, three, or four selections, and some
+locally legal choices block completion. Stress couples twelve elements through
+twenty-five sets. Algorithm X can continue from a partial cover. Larger
+unsatisfiable fixtures include every element but cannot cover them together.
+Progress now advances by each selected set's actual cardinality.
+
 Source: `crates/axionomy-problems/src/exact_cover.rs`
 
 ### Specification
@@ -275,6 +299,18 @@ tokens.
 - Solver output translated back to the shared execution language.
 
 ## 4. Stoichiometric workshop
+
+Showcase requires two of three funded contracts; Stress requires three of five.
+Accepting a contract reserves the single workbench. Alternative cuts produce
+frames and panels; assembly produces a chair or table; delivery transfers the
+product to its customer and transfers the customer's finite payment back.
+Tool durability becomes wear during production. Repair consumes kits, labor and
+time; a one-time upgrade increases capacity and enables faster precise cuts.
+Two offcuts can recover one wood unit with one irrecoverable unit of loss;
+remaining offcuts become waste when the shift closes. Material, credit, tooling,
+contract phases and labor/time are conserved. The exact Showcase frontier is
+`(waste,time,revenue) = (2,10,22), (0,12,22), (0,13,35)`. Micro retains its original
+two-recipe mass-conservation proof.
 
 Source: `crates/axionomy-problems/src/workshop.rs`
 
@@ -316,6 +352,18 @@ The rate book deliberately includes a malformed proposal:
 - Process tradeoffs remain terminal assets and replayable plans.
 
 ## 5. Discrete job-shop scheduling
+
+Showcase and Stress now use `scheduling/execution.rs`. A queue reservation
+does not complete work or unlock a successor. Starting requires an idle,
+working machine and a free crew; changing the machine's job configuration
+adds one tick. Every operation has a faster preferred machine and a slower
+alternative. The shared clock cannot skip the scheduled Machine Two failure.
+Interrupted work keeps its remaining duration, releases its crew, and resumes
+only after a finite-kit repair finishes. Stress has one crew instead of two,
+a later second job, and a longer repair. Timelines show actual occupancy,
+including interruption, with future running completion shown as a projection.
+Exact searches omit equivalent early queue reservations and process ready
+completions before dispatch. The static slot fixture below remains Micro.
 
 Source: `crates/axionomy-problems/src/scheduling.rs`
 
@@ -359,6 +407,24 @@ Finish preserves both completion tokens and produces `Makespan(n)` and
 ## 6. Stochastic rescue
 
 Source: `crates/axionomy-problems/src/rescue.rs`
+
+Showcase and Stress use `rescue/incident.rs`: three/four hidden casualties across
+four/five sectors, a bounded shared incident clock, clinical decline, hard
+evacuation deadlines, two noisy sensor reports, finite medicine and base
+resupply, and a single evacuation seat. Search reveals a patient; a hint alone
+does not. Stabilization restores vitality and delays decline, but consumes
+time while other patients worsen. Emergency driving uses twice the fuel per
+road hop. Patients continue to deteriorate during transport and only count as
+saved after hospital admission. Closing an incident records every outcome,
+including deaths and people left behind; closure is not universal success.
+
+Three responsive policies run the same seeded hidden scenario and read only
+their own account, public incident state and discovered patients. Their
+replayed outcome comparison is approximate, not an estimated success
+probability. Tests cover 24 policy/scenario combinations, equal-observation
+decisions, finite treatment, required clinical updates, one-seat capacity,
+closed resource invariants and deterministic replay. The original Micro
+Monte Carlo specification below remains intact.
 
 ### Specification
 
@@ -412,6 +478,16 @@ match.
 
 Source: `crates/axionomy-problems/src/bridge.rs`
 
+Showcase and Stress use `bridge/timed.rs`: a shared bounded clock, staggered
+arrivals, deadlines, a two-tick reservation lease, and crossings that hold the
+lane for two or three ticks. A paid three-tick detour can overlap bridge traffic.
+Later traffic waves change deadline pressure while retaining credit. Fixed
+priority, slack-responsive auctions, and adaptive detours run against identical
+traffic. Completion records on-time and late trips; a late trip still completes.
+Larger comparison fronts cover evaluated policies, not all possible mechanisms.
+The routing BFS resolves ready completions and excludes bidding/lease-expiry
+branches. The compact direct-settlement semantics below describe Micro.
+
 ### Specification
 
 Two agents begin west of a bridge with energy, credits, and bidding status.
@@ -457,6 +533,17 @@ asset, making the terminal economy quiescent.
 ## 8. Multi-party marketplace settlement
 
 Source: `crates/axionomy-problems/src/marketplace.rs`
+
+Showcase and Stress use `marketplace/fulfillment.rs`. Contracts hold the actual
+goods and buyer funds in an order account. Buyer, seller, and carrier commitment
+tokens bind later dispatch, delivery, and refund to those same participants.
+Each carrier holds one shipment at a time and regains capacity on delivery.
+Orders arrive in waves; fast shipping is exposed to known route delays, while
+the slower carrier avoids them. A ten-credit price concession increases buyer
+benefit and reduces seller benefit. Late delivery returns ten credits to the
+buyer from the seller's proceeds. An unshipped reservation expires and can be
+atomically refunded and rebooked. The larger planner is a bounded beam of 24
+states with evaluated buyer/seller tradeoffs; Micro retains exact clearing.
 
 ### Specification
 
@@ -526,6 +613,29 @@ ordinary replayable exchange trace, not a second market state.
 
 Source: `crates/axionomy-problems/src/logistics.rs`
 
+Showcase and Stress use `logistics/fleet.rs`: a two-slot refrigerated van and
+a three-slot freight van serve three customers. Four/six arriving orders include
+one-slot cold goods, three-slot heavy loads and transferable standard freight.
+Cold loads expire after their window; late standard/heavy deliveries earn half
+payment. All customer payments and service fees move existing money.
+
+Trips overlap on a common clock. The depot–hub trunk holds one vehicle until
+arrival. Express travel consumes extra fuel and can break down; Nature outcomes
+are fixed by seed, vehicle, trip number and directed road, independently of policy
+evaluation order. Arrival time is based on the recorded departure time, including
+when an environmental response is applied later. The dispatcher never selects
+the weather result. A finite two-slot hub supports asynchronous cargo handoffs;
+direct transfers require actual co-location and free compatible capacity.
+
+One fuel pump, one repair bay and one tow truck remain occupied for their whole
+service duration. Fuel and repair parts are finite, maintenance clears actual
+wear, and breakdown recovery consumes time and operating funds. Three responsive
+fleet policies run identical initial orders and route tickets; the larger-profile
+comparison is an evaluated policy frontier. Micro retains the original stochastic
+model and full repeated MCTS execution. Tests cover 24 fleet/scenario combinations,
+replay, cargo compatibility, paid service occupancy, handoff conservation, and
+dispatch independence from unrealized weather tickets.
+
 ### Specification
 
 One vehicle must deliver four identified packages. Orders encode waiting,
@@ -556,8 +666,11 @@ delivery, refueling, travel, repair, and order completion are all rates.
 - Encoded reliability makes the reliable policy's mean utility higher.
 - Mean and lower-decile selection both use caller-chosen projections of the
   same sampled encoded outcomes.
-- MCTS selects a live applicable route while deriving chance branches from
-  Nature's encoded weights.
+- MCTS repeatedly selects and executes actions through deliveries and
+  disruptions, retaining each searched decision at its actual trace index.
+  Completion, no feasible action, and horizon exhaustion are distinct outcomes.
+  Search randomness is independent of realized Nature sampling; cancellation
+  discards the fork. Fleet coordination is not implemented yet.
 - A vector Monte Carlo evaluation exposes completion probability, mean
   deliveries, and mean elapsed time as an explicitly approximate policy front.
 - A repeatable workload reports rollouts and exchanges per second.
@@ -619,6 +732,26 @@ action is revalidated by the live economy.
 ## 11. Partially observed team mission
 
 Source: `crates/axionomy-problems/src/mission.rs`
+
+Showcase and Stress use `mission/expedition.rs`. Scout and Medic move and work
+independently on one bounded clock. Travel and recovery occupy each agent until
+their recorded completion time. Scout privately discovers an archive and one
+or two casualties. Confirmed information reaches Medic only through a charged
+radio exchange or an actual in-person rendezvous. Sensor hints can be wrong.
+Archive recovery takes three ticks; casualty extraction needs both teammates,
+a stabilized patient and the Medic's single evacuation seat. Carried objectives
+must reach base before their deadlines.
+
+A seeded sector hazard closes access at tick five and clears at tick ten;
+arrivals already in flight can cause injury that slows future travel. Scheduled
+clinical pulses reduce casualty health and invalidate stabilization. The core
+blocks further public work until those events settle. Medicine, energy, radio,
+sensor charges and base resupply are finite conserved resources. Failures are
+retained. Three policies share each scenario and receive only their own view,
+public team positions and explicitly learned objective accounts. Studio exposes
+those views at every frame. Their outcome frontier compares evaluated policies,
+not an exhaustive optimum or a success-probability estimate. The Micro
+information-set search fixture below remains available and tested.
 
 ### Specification
 
@@ -696,6 +829,21 @@ outcome exchanges. The selected live action is core-revalidated.
 ## 12. Cohort-indexed perishables
 
 Source: `crates/axionomy-problems/src/perishables.rs`
+
+The larger profiles use `perishables/cold_chain.rs`. Cohorts hold fresh,
+preserved, and spoiled crates. Splitting copies accumulated heat and lineage;
+moving into refrigeration never resets prior exposure. Cold capacity is a
+conserved physical resource, including space occupied by spoiled food until
+disposal. Daily cooling costs electricity. Processing consumes electricity
+and labor; deliveries consume transport capacity and fuel. Backup generation
+converts that same fuel into stored electricity, so recovery can reduce later
+delivery capacity. Buyers fund fresh/preserved food at different prices.
+Every day settles each cohort's exposure before advancing the clock and
+records unfilled food obligations. Showcase spans six days with a two-day
+outage; Stress tightens storage/fuel over eight days with a three-day outage.
+Four responsive policies share the same seeded outage schedule. Their front
+is explicitly the evaluated policy set, while Micro retains the exact storage
+fixture described below.
 
 ### Specification
 
@@ -778,29 +926,32 @@ Source: `crates/axionomy-problems/src/work_league.rs`
 
 ### Specification
 
-Four autonomous workers—Atlas, Bolt, Coda, and Delta—contend for twelve jobs
-distributed across four work sites and three shared facilities. A mixed field
-assigns a different proposal policy to each worker: Sprinter, Steward, Value
-Hunter, and Resilient. Policy identity is itself an asset. It may guide the
-caller's proposals, but it grants no authority and cannot directly install an
-outcome.
+Micro retains the compact serial correctness fixture. Showcase and Stress use
+`work_league/continuous.rs`: four workers share a world clock and make one
+joint or individual decision per tick. Work, repair, charging, and recycling
+can overlap; busy workers cannot move or start another activity. Each facility
+has one identity-checked occupied slot, released only when its service is due.
 
-Every job account owns a unique identity and one availability token. Claiming
-a job atomically consumes availability, assigns the job to one identified
-worker, and gives that worker the corresponding claim. Work then requires
-location, energy, time, material, operational condition, and the live claim.
-Rush, Lean, and Safe modes consume different resource baskets and expose
-different encoded success/failure weights. Nature resolves an attempted job
-through an ordinary multi-account exchange. Success transfers contract value
-and completion assets; failure records the attempt, converts `Operational`
-into `Damage`, and returns the still-assigned job to a pending state.
+Twelve Showcase contracts arrive in three waves; Stress has six waves and 24
+contracts. Claims are exclusive, expire after six unstarted ticks, and can be
+released voluntarily. Dependent contracts require another job's encoded
+completion. Work must fit a delivery deadline. Expiry releases any claim and
+activity without paying for late output. The season goal means every contract
+has resolved and every activity has settled; it does not assert every job was
+delivered. Completed and expired counts remain separately visible.
 
-A damaged worker must travel to the workshop and atomically exchange shared
-repair supply for restored condition. Steward policies may travel to the
-recycler and convert residual waste into recycled waste while consuming time
-and energy. Movement, repair, charging, and recycling are all rates; there is
-no external vehicle position, job owner, facility lock, resource meter, random
-result, or score store.
+Rush, Lean, and Safe modes trade time, materials, energy, wear, and failure
+risk. Workers reconsider modes and recovery from their latest state. Repairs
+and charging spend earned settlement credit. Recycling converts two waste
+units into one usable material unit and one explicit loss. A joint handoff
+moves a pending claim and two credits atomically, spends both workers' current
+decision permissions, and can occur only once per contract.
+
+All policy fields use the same scenario seed. Nature tickets are keyed by job
+and attempt, independently of worker, mode, or proposal ordering. Modes apply
+their encoded failure weights to that common latent ticket. Rotating the first
+worker each tick reduces fixed-seat access advantages. Role/policy permutations
+and broader held-out evaluation remain future benchmark work.
 
 The Showcase match produces at least sixty replay-verified exchanges. At every
 snapshot, the presentation ontology independently derives six standings:
@@ -823,8 +974,9 @@ replayed snapshot.
 - Showcase contains four agents, twelve finite jobs, eight locations, and at
   least fifty accepted exchanges; Stress doubles the job pool and materially
   lengthens the replay.
-- Every job is claimed once and every terminal job account satisfies the
-  encoded completion goal.
+- Each contract has at most one live claim and ends completed or expired.
+  Early outcomes, occupied service bays, duplicate handoffs, and late payments
+  are rejected without mutation. Worker time advances on the shared clock.
 - Agent and job identity assets reject rebinding a valid-looking claim to the
   wrong participant.
 - Failure, repair, retry, recycling, and shared-facility effects replay through
@@ -869,6 +1021,21 @@ minimum output, applies both reserve and trader deltas atomically, and emits a
 replayable receipt. Proportional liquidity deposits preserve price while
 changing depth. Withdrawals burn shares against exact pre-state ownership.
 
+Showcase and Stress use `amm/season.rs`. Actors repeatedly choose from live
+reserves, stock, remaining credit, current needs, and encoded closing-price
+memory. Each has six economic decisions per day and may finish trading early.
+Days advance only after every participant has finished. Unmet needs and unpaid
+obligations are recorded before future entitlements become current.
+
+Sunlight limits daily production. Investment pays credit now and increases
+capacity two days later. Energy storage is bounded. Factory output produces
+sellable goods and procurement pays from finite Treasury credit; household
+income also has a finite counterparty. Liquidity providers may adjust once per
+day, including deposits computed at the current ratio with at most one atom of
+rounding per reserve. Direct attribution includes these rounding effects.
+Counterfactuals and coalition replays retain the same seeded sunlight and
+entitlements while the remaining actors respond to changed market conditions.
+
 ### Acceptance laws
 
 - Independent `u128` quotes agree with kernel-computed swap receipts.
@@ -877,7 +1044,9 @@ changing depth. Withdrawals burn shares against exact pre-state ownership.
 - Constant product never decreases during a swap and round trips cannot create
   credit.
 - Quotes are monotone in input and remain strictly below the output reserve.
-- Market Day reaches the factory, household, generator, and information goals.
+- Micro Market Day reaches the original actor goals. Showcase runs eight
+  periods and Stress twelve; every recurring need and obligation ends satisfied
+  or explicitly missed. Closing a season does not imply universal success.
 - The no-whale and thin-liquidity counterfactuals produce different discovered
   prices without changing the AMM law.
 - Direct per-actor price changes sum exactly to total reserve-price movement.

@@ -14,6 +14,8 @@ use axionomy_search::pareto::{self, Objective, ObjectiveVector, ParetoError, Par
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BinaryHeap};
 
+pub mod cold_chain;
+
 pub const DEFAULT_WAREHOUSE_CLAIMS: u64 = 7_000;
 pub const DEFAULT_FRIDGE_CLAIMS: u64 = 3_000;
 pub const DEFAULT_TRANSFER: u64 = 1_000;

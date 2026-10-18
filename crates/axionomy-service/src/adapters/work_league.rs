@@ -44,7 +44,7 @@ pub(super) fn build(
     let mut documents = Vec::new();
     for (offset, (strategy, lineup, title, description)) in configurations.into_iter().enumerate() {
         let league = work_league::league(profile, lineup);
-        let outcome = work_league::run(&league, request.seed.wrapping_add(offset as u64 * 10_007))
+        let outcome = work_league::run(&league, request.seed)
             .map_err(|error| problem_error("work_league", error))?;
         let final_world = outcome.final_world();
         let total_value = league
@@ -119,7 +119,7 @@ pub(super) fn build(
                 (
                     TelemetryKindView::Constraints,
                     league.jobs().len() as u64,
-                    "finite jobs claimed exactly once".into(),
+                    "finite contracts with exclusive live claims".into(),
                 ),
             ],
         ));
@@ -421,6 +421,8 @@ fn gcd(mut left: u64, mut right: u64) -> u64 {
 }
 
 fn scene(_: u64, world: &World) -> Option<Scene> {
+    let continuous = world.account(&AccountId::World).is_some();
+    let tick = work_league::clock(world);
     let locations = [
         (Location::Depot, 360.0, 210.0),
         (Location::North, 360.0, 40.0),
@@ -450,34 +452,31 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             y: Some(y),
         })
         .collect::<Vec<_>>();
-    let edges = [
-        (Location::Depot, Location::North),
-        (Location::Depot, Location::East),
-        (Location::Depot, Location::South),
-        (Location::Depot, Location::West),
-        (Location::West, Location::Workshop),
-        (Location::East, Location::Charger),
-        (Location::North, Location::Recycler),
-        (Location::South, Location::Workshop),
-        (Location::South, Location::Charger),
-    ]
-    .into_iter()
-    .enumerate()
-    .map(|(index, (from, to))| GraphEdgeView {
-        id: format!("league:route:{index}"),
-        source: format!("league:location:{from:?}").to_ascii_lowercase(),
-        target: format!("league:location:{to:?}").to_ascii_lowercase(),
-        label: Some("1 energy · 1 tick".into()),
-        classes: if AGENTS.into_iter().any(|agent| {
-            world.account(&AccountId::Agent(agent)).is_some()
-                && work_league::location(world, agent) == Some(to)
-        }) {
-            vec!["current".into()]
-        } else {
-            Vec::new()
-        },
-    })
-    .collect();
+    let routes: std::collections::BTreeSet<_> = world
+        .rate_ids()
+        .filter_map(|id| match id {
+            RateId::Move { from, to, .. } if from < to => Some((*from, *to)),
+            _ => None,
+        })
+        .collect();
+    let edges = routes
+        .into_iter()
+        .enumerate()
+        .map(|(index, (from, to))| GraphEdgeView {
+            id: format!("league:route:{index}"),
+            source: format!("league:location:{from:?}").to_ascii_lowercase(),
+            target: format!("league:location:{to:?}").to_ascii_lowercase(),
+            label: Some("1 energy · 1 tick".into()),
+            classes: if AGENTS.into_iter().any(|agent| {
+                world.account(&AccountId::Agent(agent)).is_some()
+                    && work_league::location(world, agent) == Some(to)
+            }) {
+                vec!["current".into()]
+            } else {
+                Vec::new()
+            },
+        })
+        .collect();
     let agents = AGENTS
         .into_iter()
         .filter(|agent| world.account(&AccountId::Agent(*agent)).is_some())
@@ -498,11 +497,30 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                     } else {
                         SceneToneView::Active
                     },
-                    Some(format!(
-                        "{} jobs · {} value",
-                        balance(world, agent, Asset::Completed),
-                        balance(world, agent, Asset::Value)
-                    )),
+                    Some(if balance(world, agent, Asset::Busy) > 0 {
+                        format!(
+                            "{} · ready at {}",
+                            [Facility::Workshop, Facility::Charger, Facility::Recycler]
+                                .into_iter()
+                                .find(
+                                    |facility| balance(world, agent, Asset::Servicing(*facility))
+                                        > 0
+                                )
+                                .map_or_else(
+                                    || "working".into(),
+                                    |facility| format!("{facility:?} service")
+                                ),
+                            balance(world, agent, Asset::ReadyAt)
+                        )
+                    } else if balance(world, agent, Asset::Damage) > 0 {
+                        "damaged · repair or handoff needed".into()
+                    } else {
+                        format!(
+                            "{} jobs · {} value",
+                            balance(world, agent, Asset::Completed),
+                            balance(world, agent, Asset::Value)
+                        )
+                    }),
                 ),
                 format!("work_league:account:agent-{agent:?}").to_ascii_lowercase(),
                 format!("work_league:asset:at-{location:?}").to_ascii_lowercase(),
@@ -533,6 +551,34 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                     Some("units"),
                 ),
             ];
+            if continuous {
+                entity.metrics.extend([
+                    visual_metric(
+                        "credit",
+                        "Spendable credit",
+                        balance(world, agent, Asset::Credit),
+                        Some("credits"),
+                    ),
+                    visual_metric(
+                        "material",
+                        "Material left",
+                        balance(world, agent, Asset::Material),
+                        Some("units"),
+                    ),
+                    visual_metric(
+                        "wear",
+                        "Equipment wear",
+                        balance(world, agent, Asset::Wear),
+                        None,
+                    ),
+                    visual_metric(
+                        "handoffs",
+                        "Paid handoffs",
+                        balance(world, agent, Asset::Assists),
+                        Some("contracts"),
+                    ),
+                ]);
+            }
             entity
         });
     let jobs = (1u8..=24).filter_map(|number| {
@@ -546,8 +592,25 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             .find(|agent| balance_job(world, job, Asset::Assigned(*agent)) > 0);
         let (tone, status) = if completed {
             (SceneToneView::Success, "completed".into())
+        } else if balance_job(world, job, Asset::Expired) > 0 {
+            (SceneToneView::Danger, "deadline missed".into())
+        } else if continuous && tick < balance_job(world, job, Asset::ReleaseAt) {
+            (
+                SceneToneView::Neutral,
+                format!("opens at {}", balance_job(world, job, Asset::ReleaseAt)),
+            )
         } else if let Some(agent) = assigned {
-            (SceneToneView::Active, format!("claimed by {agent:?}"))
+            (
+                SceneToneView::Active,
+                format!(
+                    "{} by {agent:?}",
+                    if balance_job(world, job, Asset::InProgress) > 0 {
+                        "being worked"
+                    } else {
+                        "claimed"
+                    }
+                ),
+            )
         } else {
             (
                 SceneToneView::Neutral,
@@ -572,35 +635,128 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             visual_metric("value", "Value", spec.value, Some("credits")),
             visual_metric("risk", "Failure weight", spec.risk, Some("of 10")),
         ];
+        if continuous {
+            entity.metrics.push(visual_metric(
+                "deadline",
+                "Deadline",
+                balance_job(world, job, Asset::Deadline),
+                Some("tick"),
+            ));
+            if assigned.is_some() && balance_job(world, job, Asset::Pending) > 0 {
+                entity.metrics.push(visual_metric(
+                    "lease",
+                    "Claim expires after",
+                    balance_job(world, job, Asset::LeaseUntil),
+                    Some("tick"),
+                ));
+            }
+        }
         Some(entity)
     });
+    let facilities = [Facility::Workshop, Facility::Charger, Facility::Recycler]
+        .into_iter()
+        .filter_map(|facility| {
+            if !continuous {
+                return None;
+            }
+            let occupant = AGENTS.into_iter().find(|agent| {
+                !world
+                    .balance(
+                        &AccountId::Facility(facility),
+                        &Asset::Occupied(facility, *agent),
+                    )
+                    .is_zero()
+            });
+            let location = match facility {
+                Facility::Workshop => Location::Workshop,
+                Facility::Charger => Location::Charger,
+                Facility::Recycler => Location::Recycler,
+            };
+            let mut entity = link_account(
+                visual_entity(
+                    format!("league:facility:{facility:?}").to_ascii_lowercase(),
+                    format!("{facility:?} bay"),
+                    SceneGlyphView::Task,
+                    SceneAnchorView::GraphNode {
+                        node: format!("league:location:{location:?}").to_ascii_lowercase(),
+                    },
+                    SceneEntityRoleView::Attachment,
+                    if occupant.is_some() {
+                        SceneToneView::Active
+                    } else {
+                        SceneToneView::Neutral
+                    },
+                    Some(occupant.map_or_else(
+                        || "free".into(),
+                        |agent| {
+                            format!("{agent:?} until {}", balance(world, agent, Asset::ReadyAt))
+                        },
+                    )),
+                ),
+                format!("work_league:account:facility-{facility:?}").to_ascii_lowercase(),
+            );
+            entity.metrics.push(visual_metric(
+                "waiting",
+                "Workers waiting",
+                AGENTS
+                    .into_iter()
+                    .filter(|agent| {
+                        work_league::location(world, *agent) == Some(location)
+                            && balance(world, *agent, Asset::Idle) > 0
+                    })
+                    .count(),
+                Some("workers"),
+            ));
+            Some(entity)
+        });
     let completed = (1u8..=24)
         .filter(|number| balance_job(world, work_league::JobId(*number), Asset::Completed) > 0)
         .count();
+    let mut metrics = vec![
+        visual_metric("completed", "Jobs completed", completed, Some("jobs")),
+        visual_metric(
+            "active_agents",
+            "Competing agents",
+            AGENTS
+                .into_iter()
+                .filter(|agent| world.account(&AccountId::Agent(*agent)).is_some())
+                .count(),
+            Some("agents"),
+        ),
+        visual_metric(
+            "repair_supply",
+            "Repair supply",
+            world.balance(
+                &AccountId::Facility(Facility::Workshop),
+                &Asset::RepairSupply,
+            ),
+            Some("units"),
+        ),
+    ];
+    if continuous {
+        metrics.insert(0, visual_metric("clock", "World time", tick, Some("ticks")));
+        metrics.insert(
+            2,
+            visual_metric(
+                "expired",
+                "Missed deadlines",
+                (1u8..=24)
+                    .filter(|number| balance_job(world, JobId(*number), Asset::Expired) > 0)
+                    .count(),
+                Some("jobs"),
+            ),
+        );
+        metrics.push(visual_metric(
+            "activities",
+            "Simultaneous activities",
+            world.balance(&AccountId::World, &Asset::Activities),
+            Some("workers"),
+        ));
+    }
     Some(
         Scene::graph("Autonomous work network", nodes, edges, None)
-            .with_entities(agents.chain(jobs))
-            .with_metrics([
-                visual_metric("completed", "Jobs completed", completed, Some("jobs")),
-                visual_metric(
-                    "active_agents",
-                    "Competing agents",
-                    AGENTS
-                        .into_iter()
-                        .filter(|agent| world.account(&AccountId::Agent(*agent)).is_some())
-                        .count(),
-                    Some("agents"),
-                ),
-                visual_metric(
-                    "repair_supply",
-                    "Repair supply",
-                    world.balance(
-                        &AccountId::Facility(Facility::Workshop),
-                        &Asset::RepairSupply,
-                    ),
-                    Some("units"),
-                ),
-            ]),
+            .with_entities(agents.chain(jobs).chain(facilities))
+            .with_metrics(metrics),
     )
 }
 

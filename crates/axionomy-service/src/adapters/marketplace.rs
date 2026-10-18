@@ -23,31 +23,56 @@ pub(super) fn build(
         InstanceProfile::Stress => marketplace::goal_stress(),
     };
     let clearing = marketplace::clear_market(&initial);
-    let pareto =
-        marketplace::pareto_front(&initial).map_err(|error| problem_error("marketplace", error))?;
-    let buyer_trace = pareto_trace(&pareto, true)?;
-    let seller_trace = pareto_trace(&pareto, false)?;
+    let timed = marketplace::fulfillment::enabled(&initial);
+    let pareto = (!timed)
+        .then(|| marketplace::pareto_front(&initial))
+        .transpose()
+        .map_err(|error| problem_error("marketplace", error))?;
+    let buyer_trace = if let Some(front) = &pareto {
+        pareto_trace(front, true)?
+    } else {
+        marketplace::fulfillment::plan(&initial, marketplace::fulfillment::Preference::Buyers)
+            .ok_or_else(|| problem_error("marketplace", "buyer fulfillment search exhausted"))?
+    };
+    let seller_trace = if let Some(front) = &pareto {
+        pareto_trace(front, false)?
+    } else {
+        marketplace::fulfillment::plan(&initial, marketplace::fulfillment::Preference::Sellers)
+            .ok_or_else(|| problem_error("marketplace", "seller fulfillment search exhausted"))?
+    };
     let traces = [
         (
             "market_clearing",
             "Marketplace · compatible clearing",
-            "A set of orders that can all settle together; buyer, seller, carrier, platform, and tax move in one step.",
+            "Micro settles directly. Larger markets reserve funds and goods, dispatch through occupied carriers, then settle on delivery. Delays can trigger buyer rebates.",
             clearing.trace().clone(),
-            "market clearing",
+            if timed {
+                "bounded fulfillment search"
+            } else {
+                "market clearing"
+            },
         ),
         (
             "pareto_buyers",
             "Marketplace Pareto · buyer utility",
-            "The clearing on the frontier with the greatest total gain for buyers.",
+            "Choose price concessions and delivery allocations for buyer benefit. Larger markets use a bounded beam of 24 states and compare evaluated plans.",
             buyer_trace,
-            "exact Pareto clearing",
+            if timed {
+                "bounded fulfillment search"
+            } else {
+                "exact Pareto clearing"
+            },
         ),
         (
             "pareto_sellers",
             "Marketplace Pareto · seller utility",
-            "The clearing on the frontier with the greatest total gain for sellers.",
+            "Choose contract prices and delivery allocations for seller benefit under the same arrivals, routes and available funds.",
             seller_trace,
-            "exact Pareto clearing",
+            if timed {
+                "bounded fulfillment search"
+            } else {
+                "exact Pareto clearing"
+            },
         ),
     ];
     let assessed = marketplace::assessed_matches(&initial);
@@ -71,7 +96,9 @@ pub(super) fn build(
             scene,
         )
         .map_err(|error| problem_error("marketplace", error))?;
-        view.pareto_fronts.push(front_view(&pareto, &view));
+        if let Some(front) = &pareto {
+            view.pareto_fronts.push(front_view(front, &view));
+        }
         view.telemetry.push(telemetry(
             algorithm,
             true,
@@ -84,7 +111,7 @@ pub(super) fn build(
                 (
                     TelemetryKindView::Expanded,
                     trace.exchanges().len() as u64,
-                    "settled orders".into(),
+                    "verified exchanges".into(),
                 ),
             ],
         ));
@@ -97,6 +124,12 @@ pub(super) fn build(
             view.proposals.push(proposal("marketplace", ProposalSpec { id: &format!("near-match-{index}"), label: &format!("Near match {}", index + 1), description: "A complete set of participants that almost settles; the rejection names the exact account and amount that came up short." }, &initial, assessed_match.exchange()));
         }
         documents.push(view);
+    }
+    if timed {
+        for index in 0..documents.len() {
+            let front = evaluated_front(&documents, &documents[index]);
+            documents[index].pareto_fronts.push(front);
+        }
     }
     artifact(
         request,
@@ -132,7 +165,7 @@ fn pareto_trace(
         .ok_or_else(|| problem_error("marketplace", "empty Pareto frontier"))
 }
 fn objectives(world: &World) -> Vec<ObjectiveView> {
-    [
+    let mut values: Vec<_> = [
         ("buyer_a", "Buyer A", AccountId::Buyer(BuyerId::A)),
         ("buyer_b", "Buyer B", AccountId::Buyer(BuyerId::B)),
         ("seller_a", "Seller A", AccountId::Seller(SellerId::A)),
@@ -145,7 +178,99 @@ fn objectives(world: &World) -> Vec<ObjectiveView> {
         direction: ObjectiveDirectionView::Maximize,
         value: marketplace::utility(world, account).to_string(),
     })
-    .collect()
+    .collect();
+    if marketplace::fulfillment::enabled(world) {
+        for (key, label, account) in [
+            ("buyer_c", "Buyer C utility", AccountId::Buyer(BuyerId::C)),
+            (
+                "seller_c",
+                "Seller C utility",
+                AccountId::Seller(SellerId::C),
+            ),
+        ] {
+            values.push(ObjectiveView {
+                key: key.into(),
+                label: label.into(),
+                direction: ObjectiveDirectionView::Maximize,
+                value: marketplace::utility(world, account).to_string(),
+            });
+        }
+        values.push(ObjectiveView {
+            key: "ontime".into(),
+            label: "On-time deliveries".into(),
+            direction: ObjectiveDirectionView::Maximize,
+            value: marketplace::orders(world)
+                .into_iter()
+                .map(|order| {
+                    world
+                        .balance(&AccountId::Order(order), &marketplace::Asset::OnTime)
+                        .get()
+                })
+                .sum::<u64>()
+                .to_string(),
+        });
+        values.push(ObjectiveView {
+            key: "elapsed".into(),
+            label: "Elapsed time".into(),
+            direction: ObjectiveDirectionView::Minimize,
+            value: marketplace::fulfillment::now(world).to_string(),
+        });
+    }
+    values
+}
+fn evaluated_front(documents: &[ViewDocument], selected: &ViewDocument) -> ParetoFrontView {
+    let rows: Vec<_> = documents
+        .iter()
+        .map(|document| {
+            (
+                document,
+                document
+                    .objectives
+                    .iter()
+                    .map(|o| o.value.parse::<u64>().unwrap())
+                    .collect::<Vec<_>>(),
+            )
+        })
+        .collect();
+    let dominates = |left: &[u64], right: &[u64]| {
+        left.iter()
+            .zip(right)
+            .zip(&selected.objectives)
+            .all(|((l, r), axis)| match axis.direction {
+                ObjectiveDirectionView::Maximize => l >= r,
+                ObjectiveDirectionView::Minimize => l <= r,
+            })
+            && left
+                .iter()
+                .zip(right)
+                .zip(&selected.objectives)
+                .any(|((l, r), axis)| match axis.direction {
+                    ObjectiveDirectionView::Maximize => l > r,
+                    ObjectiveDirectionView::Minimize => l < r,
+                })
+    };
+    ParetoFrontView {
+        title: "Non-dominated evaluated fulfillment plans".into(),
+        completeness: FrontierCompletenessView::Approximate,
+        axes: selected
+            .objectives
+            .iter()
+            .map(|o| ObjectiveAxisView {
+                key: o.key.clone(),
+                label: o.label.clone(),
+                direction: o.direction,
+            })
+            .collect(),
+        points: rows
+            .iter()
+            .filter(|(_, candidate)| !rows.iter().any(|(_, other)| dominates(other, candidate)))
+            .map(|(document, values)| ParetoPointView {
+                label: document.title.clone(),
+                selected: document.id == selected.id,
+                values: values.iter().map(ToString::to_string).collect(),
+            })
+            .collect(),
+    }
 }
 fn front_view(result: &marketplace::ParetoResult, selected: &ViewDocument) -> ParetoFrontView {
     let selected = selected
@@ -190,6 +315,7 @@ fn front_view(result: &marketplace::ParetoResult, selected: &ViewDocument) -> Pa
 }
 
 fn scene(_: u64, world: &World) -> Option<Scene> {
+    let timed = marketplace::fulfillment::enabled(world);
     let mut nodes = Vec::new();
     for buyer in [BuyerId::A, BuyerId::B, BuyerId::C] {
         nodes.push(GraphNodeView {
@@ -256,6 +382,9 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         .map(|entry| entry.candidate())
         .collect::<Vec<_>>();
     for order in &orders {
+        if let Some(booking) = marketplace::fulfillment::booking(world, *order) {
+            matches.push(booking);
+        }
         let buyer = [BuyerId::A, BuyerId::B, BuyerId::C]
             .into_iter()
             .find(|buyer| {
@@ -281,7 +410,18 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 *order,
                 buyer,
                 seller,
-                CarrierId::A,
+                [CarrierId::A, CarrierId::B]
+                    .into_iter()
+                    .find(|carrier| {
+                        world
+                            .balance(
+                                &AccountId::Carrier(*carrier),
+                                &marketplace::Asset::DeliveredBy(*order),
+                            )
+                            .get()
+                            > 0
+                    })
+                    .unwrap_or(CarrierId::A),
             ));
         }
     }
@@ -357,13 +497,13 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 &marketplace::Asset::SettledOrder(*order),
             )
             .is_zero();
-        link_account(
+        let mut entity = link_account(
             visual_entity(
                 format!("order-token:{order:?}"),
                 format!("Order {order:?}"),
                 SceneGlyphView::Package,
                 SceneAnchorView::GraphNode {
-                    node: if settled {
+                    node: if settled && !timed {
                         "platform".into()
                     } else {
                         format!("order:{order:?}")
@@ -377,7 +517,25 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 },
                 Some(
                     if settled {
-                        "cleared atomically"
+                        "delivered and settled"
+                    } else if world
+                        .balance(
+                            &AccountId::Order(*order),
+                            &marketplace::Asset::InShipment(*order),
+                        )
+                        .get()
+                        > 0
+                    {
+                        "in transit; funds held"
+                    } else if world
+                        .balance(
+                            &AccountId::Order(*order),
+                            &marketplace::Asset::Contract(*order),
+                        )
+                        .get()
+                        > 0
+                    {
+                        "reserved; awaiting dispatch"
                     } else {
                         "awaiting match"
                     }
@@ -385,7 +543,24 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 ),
             ),
             format!("marketplace:account:order-{order:?}").to_ascii_lowercase(),
-        )
+        );
+        if timed {
+            entity.metrics = vec![
+                visual_metric(
+                    "escrow",
+                    "Funds held",
+                    world.balance(&AccountId::Order(*order), &marketplace::Asset::Money),
+                    None,
+                ),
+                visual_metric(
+                    "deadline",
+                    "Deadline",
+                    world.balance(&AccountId::Order(*order), &marketplace::Asset::Deadline),
+                    Some("ticks"),
+                ),
+            ];
+        }
+        entity
     });
     let participant_entities = [BuyerId::A, BuyerId::B, BuyerId::C]
         .into_iter()
@@ -483,26 +658,90 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 .is_zero()
         })
         .count();
-    Some(
-        Scene::graph("Who pays whom, if this clears", nodes, edges, None)
-            .with_entities(order_entities.chain(participant_entities))
-            .with_metrics([
-                visual_metric(
-                    "open",
-                    "Open orders",
-                    orders.len() - settled,
-                    Some("orders"),
-                ),
-                visual_metric("settled", "Settled orders", settled, Some("orders")),
-                visual_metric(
-                    "feasible",
-                    "Feasible bindings",
-                    assessed
-                        .iter()
-                        .filter(|entry| entry.assessment().is_applicable())
-                        .count(),
-                    Some("matches"),
-                ),
-            ]),
-    )
+    let mut scene = Scene::graph("Contracts, shipping and settlement", nodes, edges, None)
+        .with_entities(order_entities.chain(participant_entities))
+        .with_metrics([
+            visual_metric(
+                "open",
+                "Open orders",
+                orders.len() - settled,
+                Some("orders"),
+            ),
+            visual_metric("settled", "Settled orders", settled, Some("orders")),
+            visual_metric(
+                "feasible",
+                "Feasible bindings",
+                assessed
+                    .iter()
+                    .filter(|entry| entry.assessment().is_applicable())
+                    .count(),
+                Some("matches"),
+            ),
+        ]);
+    if timed {
+        scene.metrics.extend([
+            visual_metric(
+                "world_time",
+                "World time",
+                marketplace::fulfillment::now(world),
+                Some("ticks"),
+            ),
+            visual_metric(
+                "escrow",
+                "Funds held in contracts",
+                orders
+                    .iter()
+                    .map(|order| {
+                        world
+                            .balance(&AccountId::Order(*order), &marketplace::Asset::Money)
+                            .get()
+                    })
+                    .sum::<u64>(),
+                None,
+            ),
+            visual_metric(
+                "in_transit",
+                "Shipments underway",
+                orders
+                    .iter()
+                    .map(|order| {
+                        world
+                            .balance(
+                                &AccountId::Order(*order),
+                                &marketplace::Asset::InShipment(*order),
+                            )
+                            .get()
+                    })
+                    .sum::<u64>(),
+                None,
+            ),
+            visual_metric(
+                "ontime",
+                "On-time deliveries",
+                orders
+                    .iter()
+                    .map(|order| {
+                        world
+                            .balance(&AccountId::Order(*order), &marketplace::Asset::OnTime)
+                            .get()
+                    })
+                    .sum::<u64>(),
+                None,
+            ),
+            visual_metric(
+                "late",
+                "Late deliveries",
+                orders
+                    .iter()
+                    .map(|order| {
+                        world
+                            .balance(&AccountId::Order(*order), &marketplace::Asset::Late)
+                            .get()
+                    })
+                    .sum::<u64>(),
+                None,
+            ),
+        ]);
+    }
+    Some(scene)
 }

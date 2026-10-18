@@ -9,6 +9,8 @@ use axionomy_search::{
     pareto::{self, Objective, ObjectiveVector, ParetoError, ParetoSearchResult},
 };
 
+pub mod timed;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum AgentId {
     A,
@@ -51,6 +53,19 @@ pub enum Asset {
     CapacityFree,
     Active,
     Solved,
+    Now,
+    TimeRemaining,
+    Arrival,
+    Deadline,
+    LeaseUntil,
+    ReadyAt,
+    InTransit,
+    OnDetour,
+    Detouring,
+    OnTime,
+    Late,
+    MissedReservation,
+    Round,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -88,6 +103,25 @@ pub enum RateId {
     },
     ResetRound,
     Finish,
+    Advance {
+        to: u8,
+    },
+    Complete {
+        agent: AgentId,
+        detour: bool,
+        late: bool,
+    },
+    Detour {
+        agent: AgentId,
+        waiting: bool,
+    },
+    ExpireReservation {
+        agent: AgentId,
+    },
+    WithdrawBid {
+        agent: AgentId,
+        amount: u8,
+    },
 }
 
 pub type World = Economy<AccountId, Asset, RateId, Role>;
@@ -109,13 +143,13 @@ pub fn initial() -> World {
 /// Two consecutive capacity allocations force policies to reason about
 /// repeated fairness, retained credit, and an atomic multi-agent round reset.
 pub fn initial_showcase() -> World {
-    build(2)
+    timed::build(build(2))
 }
 
 /// Three consecutive allocations make retained credit and repeated priority
 /// materially affect later rounds while keeping the state space finite.
 pub fn initial_stress() -> World {
-    build(3)
+    timed::build(build(3))
 }
 
 fn build(rounds: u64) -> World {
@@ -462,13 +496,22 @@ pub fn goal() -> Goal<AccountId, Asset> {
 }
 
 pub fn candidates(world: &World) -> Vec<Action> {
+    if timed::enabled(world) {
+        return timed::candidates(world);
+    }
     let mut ids: Vec<_> = world.rate_ids().copied().collect();
     ids.sort();
     world.applicable(ids.into_iter().map(action))
 }
 
 pub fn solve(world: &World) -> Option<Solution> {
-    bfs(world, &goal(), candidates)
+    bfs(world, &goal(), |world| {
+        if timed::enabled(world) {
+            timed::search_candidates(world)
+        } else {
+            candidates(world)
+        }
+    })
 }
 
 /// Exhaustively compares valid allocation mechanisms using participant
@@ -550,71 +593,19 @@ pub fn auction_proposal(bid_a: u8, bid_b: u8) -> Option<Proposal> {
 }
 
 pub fn first_come_showcase(first: AgentId) -> Option<Proposal> {
-    first_come_rounds(initial_showcase(), first, 2)
+    timed::run(&initial_showcase(), timed::Policy::Priority(first))
 }
 
 pub fn first_come_stress(first: AgentId) -> Option<Proposal> {
-    first_come_rounds(initial_stress(), first, 3)
+    timed::run(&initial_stress(), timed::Policy::Priority(first))
 }
 
 pub fn auction_showcase() -> Option<Proposal> {
-    auction_rounds(initial_showcase(), 2)
+    timed::run(&initial_showcase(), timed::Policy::Auction)
 }
 
 pub fn auction_stress() -> Option<Proposal> {
-    auction_rounds(initial_stress(), 3)
-}
-
-fn first_come_rounds(world: World, first: AgentId, rounds: usize) -> Option<Proposal> {
-    let second = other(first);
-    let mut rates = Vec::new();
-    for round in 0..rounds {
-        rates.extend([
-            RateId::ClaimFirst { agent: first },
-            RateId::Cross { agent: first },
-            RateId::ClaimSecond { agent: second },
-            RateId::Cross { agent: second },
-        ]);
-        if round + 1 < rounds {
-            rates.push(RateId::ResetRound);
-        }
-    }
-    rates.push(RateId::Finish);
-    validated_trace_from(world, rates)
-}
-
-fn auction_rounds(world: World, rounds: usize) -> Option<Proposal> {
-    let mut rates = Vec::new();
-    for round in 0..rounds {
-        let (bid_a, bid_b, winner, loser) = if round % 2 == 0 {
-            (2, 1, AgentId::A, AgentId::B)
-        } else {
-            (1, 2, AgentId::B, AgentId::A)
-        };
-        rates.extend([
-            RateId::SubmitBid {
-                agent: AgentId::A,
-                amount: bid_a,
-            },
-            RateId::SubmitBid {
-                agent: AgentId::B,
-                amount: bid_b,
-            },
-            RateId::Resolve {
-                winner,
-                winning_bid: 2,
-                losing_bid: 1,
-            },
-            RateId::Cross { agent: winner },
-            RateId::YieldToWaiting { agent: loser },
-            RateId::Cross { agent: loser },
-        ]);
-        if round + 1 < rounds {
-            rates.push(RateId::ResetRound);
-        }
-    }
-    rates.push(RateId::Finish);
-    validated_trace_from(world, rates)
+    timed::run(&initial_stress(), timed::Policy::Auction)
 }
 
 fn validated_trace<const N: usize>(rates: [RateId; N]) -> Option<Proposal> {
@@ -647,7 +638,11 @@ pub fn action(rate: RateId) -> Action {
         | RateId::ClaimFirst { agent }
         | RateId::ClaimSecond { agent }
         | RateId::YieldToWaiting { agent }
-        | RateId::Cross { agent } => Exchange::new(rate, Quantity::new(1))
+        | RateId::Cross { agent }
+        | RateId::Complete { agent, .. }
+        | RateId::Detour { agent, .. }
+        | RateId::ExpireReservation { agent }
+        | RateId::WithdrawBid { agent, .. } => Exchange::new(rate, Quantity::new(1))
             .bind(Role::Traveler, AccountId::Agent(agent))
             .bind(Role::Bridge, AccountId::Bridge),
         RateId::Resolve { winner, .. } => Exchange::new(rate, Quantity::new(1))
@@ -658,6 +653,9 @@ pub fn action(rate: RateId) -> Action {
             .bind(Role::AgentA, AccountId::Agent(AgentId::A))
             .bind(Role::AgentB, AccountId::Agent(AgentId::B))
             .bind(Role::Bridge, AccountId::Bridge),
+        RateId::Advance { .. } => {
+            Exchange::new(rate, Quantity::new(1)).bind(Role::Bridge, AccountId::Bridge)
+        }
     }
 }
 

@@ -43,6 +43,27 @@ pub enum SetId {
     Jl,
     Il,
     Jk,
+    Ace,
+    Bfg,
+    Dh,
+    Adg,
+    Beh,
+    Cf,
+    Abef,
+    Cdgh,
+    Ae,
+    Fgh,
+    Aei,
+    Bfj,
+    Cgk,
+    Dhl,
+    Abij,
+    Cdk,
+    Efl,
+    Ai,
+    Aj,
+    Ak,
+    Al,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -79,19 +100,21 @@ pub type Proposal = Trace<RateId, Role, AccountId>;
 
 const MICRO_SETS: [SetId; 4] = [SetId::Ab, SetId::Cd, SetId::Ac, SetId::Bd];
 const MICRO_ELEMENTS: [Element; 4] = [Element::A, Element::B, Element::C, Element::D];
-const SHOWCASE_SETS: [SetId; 12] = [
+const SHOWCASE_SETS: [SetId; 14] = [
     SetId::Ab,
     SetId::Cd,
     SetId::Ef,
     SetId::Gh,
-    SetId::Ac,
-    SetId::Bd,
-    SetId::Eg,
-    SetId::Fh,
-    SetId::Ad,
-    SetId::Bc,
-    SetId::Eh,
-    SetId::Fg,
+    SetId::Ace,
+    SetId::Bfg,
+    SetId::Dh,
+    SetId::Adg,
+    SetId::Beh,
+    SetId::Cf,
+    SetId::Abef,
+    SetId::Cdgh,
+    SetId::Ae,
+    SetId::Fgh,
 ];
 const SHOWCASE_ELEMENTS: [Element; 8] = [
     Element::A,
@@ -103,25 +126,32 @@ const SHOWCASE_ELEMENTS: [Element; 8] = [
     Element::G,
     Element::H,
 ];
-const STRESS_SETS: [SetId; 18] = [
+const STRESS_SETS: [SetId; 25] = [
     SetId::Ab,
     SetId::Cd,
     SetId::Ef,
     SetId::Gh,
     SetId::Ij,
     SetId::Kl,
-    SetId::Ac,
-    SetId::Bd,
-    SetId::Eg,
-    SetId::Fh,
-    SetId::Ik,
-    SetId::Jl,
-    SetId::Ad,
-    SetId::Bc,
-    SetId::Eh,
-    SetId::Fg,
-    SetId::Il,
-    SetId::Jk,
+    SetId::Ace,
+    SetId::Bfg,
+    SetId::Dh,
+    SetId::Adg,
+    SetId::Beh,
+    SetId::Cf,
+    SetId::Abef,
+    SetId::Cdgh,
+    SetId::Ae,
+    SetId::Fgh,
+    SetId::Aei,
+    SetId::Bfj,
+    SetId::Cgk,
+    SetId::Dhl,
+    SetId::Abij,
+    SetId::Cdk,
+    SetId::Efl,
+    SetId::Ai,
+    SetId::Al,
 ];
 const STRESS_ELEMENTS: [Element; 12] = [
     Element::A,
@@ -146,30 +176,22 @@ pub fn unsatisfiable() -> World {
     build(&MICRO_ELEMENTS, &[SetId::Ab, SetId::Ac])
 }
 
-/// An eight-element incidence matrix with several competing exact covers.
+/// One connected incidence matrix with pairs, triples, and quadruples.
+/// Legal selections can dead-end, and complete covers have different sizes.
 pub fn initial_showcase() -> World {
     build(&SHOWCASE_ELEMENTS, &SHOWCASE_SETS)
 }
 
-/// A twelve-element matrix whose three independent incidence blocks create
-/// substantially more partial covers for generic search to distinguish.
+/// Cross-region triples and quadruples couple all twelve elements.
 pub fn initial_stress() -> World {
     build(&STRESS_ELEMENTS, &STRESS_SETS)
 }
 
 pub fn unsatisfiable_showcase() -> World {
+    // Every element occurs, but covering B, C, D, and E would reuse A.
     build(
         &SHOWCASE_ELEMENTS,
-        &[
-            SetId::Ab,
-            SetId::Cd,
-            SetId::Ef,
-            SetId::Ac,
-            SetId::Bd,
-            SetId::Eg,
-            SetId::Ad,
-            SetId::Bc,
-        ],
+        &[SetId::Ab, SetId::Ac, SetId::Ad, SetId::Ae, SetId::Fgh],
     )
 }
 
@@ -178,15 +200,14 @@ pub fn unsatisfiable_stress() -> World {
         &STRESS_ELEMENTS,
         &[
             SetId::Ab,
-            SetId::Cd,
-            SetId::Ef,
-            SetId::Gh,
             SetId::Ac,
-            SetId::Bd,
-            SetId::Eg,
-            SetId::Fh,
-            SetId::Ik,
-            SetId::Il,
+            SetId::Ad,
+            SetId::Ae,
+            SetId::Fgh,
+            SetId::Ai,
+            SetId::Aj,
+            SetId::Ak,
+            SetId::Al,
         ],
     )
 }
@@ -210,7 +231,18 @@ pub fn solve_bfs(world: &World) -> Option<Solution> {
 /// It is deliberately only a proposer: the resulting trace still has to pass
 /// `Economy::replay`.
 pub fn algorithm_x(world: &World) -> Option<Proposal> {
-    let remaining = elements(world).into_iter().collect();
+    if world.matches(&goal()) {
+        return Some(Trace::new());
+    }
+    let remaining: BTreeSet<_> = elements(world)
+        .into_iter()
+        .filter(|element| {
+            !world
+                .balance(&AccountId::Problem, &Asset::Uncovered(*element))
+                .is_zero()
+        })
+        .collect();
+    let covered = elements(world).len() - remaining.len();
     let available = sets(world)
         .into_iter()
         .filter(|set| {
@@ -221,7 +253,7 @@ pub fn algorithm_x(world: &World) -> Option<Proposal> {
         .collect();
     let selected = cover(world, remaining, available)?;
     let mut trace = Trace::new();
-    let mut before = 0_u8;
+    let mut before = covered as u8;
     for set in selected {
         trace.push(action(RateId::Select { set, before }));
         before = before.checked_add(u8::try_from(members(world, set).len()).ok()?)?;
@@ -247,16 +279,17 @@ fn build(elements: &[Element], available: &[SetId]) -> World {
     let mut builder = EconomyBuilder::new().account(AccountId::Problem, Account::from(problem));
 
     for &set in available {
-        for before in (0..elements.len()).step_by(2).map(|value| value as u8) {
+        let width = declared_members(set).len();
+        for before in (0..=elements.len() - width).map(|value| value as u8) {
             let mut consume = Basket::from([
                 (Asset::Available(set), Quantity::new(1)),
                 (Asset::Progress(before), Quantity::new(1)),
             ]);
             let mut produce = Basket::from([
                 (Asset::Selected(set), Quantity::new(1)),
-                (Asset::Progress(before + 2), Quantity::new(1)),
+                (Asset::Progress(before + width as u8), Quantity::new(1)),
             ]);
-            for element in declared_members(set) {
+            for &element in declared_members(set) {
                 consume.insert(Asset::Uncovered(element), Quantity::new(1));
                 produce.insert(Asset::Covered(element), Quantity::new(1));
             }
@@ -286,7 +319,7 @@ fn build(elements: &[Element], available: &[SetId]) -> World {
                 .weight(Asset::Selected(set), 1)
         },
     );
-    let progress_invariant = (0..=elements.len()).step_by(2).fold(
+    let progress_invariant = (0..=elements.len()).fold(
         LinearInvariant::new("one progress token"),
         |invariant, progress| invariant.weight(Asset::Progress(progress as u8), 1),
     );
@@ -319,26 +352,47 @@ fn build(elements: &[Element], available: &[SetId]) -> World {
         .expect("exact-cover model is valid")
 }
 
-fn declared_members(set: SetId) -> [Element; 2] {
+fn declared_members(set: SetId) -> &'static [Element] {
     match set {
-        SetId::Ab => [Element::A, Element::B],
-        SetId::Cd => [Element::C, Element::D],
-        SetId::Ac => [Element::A, Element::C],
-        SetId::Bd => [Element::B, Element::D],
-        SetId::Ef => [Element::E, Element::F],
-        SetId::Gh => [Element::G, Element::H],
-        SetId::Eg => [Element::E, Element::G],
-        SetId::Fh => [Element::F, Element::H],
-        SetId::Ad => [Element::A, Element::D],
-        SetId::Bc => [Element::B, Element::C],
-        SetId::Eh => [Element::E, Element::H],
-        SetId::Fg => [Element::F, Element::G],
-        SetId::Ij => [Element::I, Element::J],
-        SetId::Kl => [Element::K, Element::L],
-        SetId::Ik => [Element::I, Element::K],
-        SetId::Jl => [Element::J, Element::L],
-        SetId::Il => [Element::I, Element::L],
-        SetId::Jk => [Element::J, Element::K],
+        SetId::Ab => &[Element::A, Element::B],
+        SetId::Cd => &[Element::C, Element::D],
+        SetId::Ac => &[Element::A, Element::C],
+        SetId::Bd => &[Element::B, Element::D],
+        SetId::Ef => &[Element::E, Element::F],
+        SetId::Gh => &[Element::G, Element::H],
+        SetId::Eg => &[Element::E, Element::G],
+        SetId::Fh => &[Element::F, Element::H],
+        SetId::Ad => &[Element::A, Element::D],
+        SetId::Bc => &[Element::B, Element::C],
+        SetId::Eh => &[Element::E, Element::H],
+        SetId::Fg => &[Element::F, Element::G],
+        SetId::Ij => &[Element::I, Element::J],
+        SetId::Kl => &[Element::K, Element::L],
+        SetId::Ik => &[Element::I, Element::K],
+        SetId::Jl => &[Element::J, Element::L],
+        SetId::Il => &[Element::I, Element::L],
+        SetId::Jk => &[Element::J, Element::K],
+        SetId::Ace => &[Element::A, Element::C, Element::E],
+        SetId::Bfg => &[Element::B, Element::F, Element::G],
+        SetId::Dh => &[Element::D, Element::H],
+        SetId::Adg => &[Element::A, Element::D, Element::G],
+        SetId::Beh => &[Element::B, Element::E, Element::H],
+        SetId::Cf => &[Element::C, Element::F],
+        SetId::Abef => &[Element::A, Element::B, Element::E, Element::F],
+        SetId::Cdgh => &[Element::C, Element::D, Element::G, Element::H],
+        SetId::Ae => &[Element::A, Element::E],
+        SetId::Fgh => &[Element::F, Element::G, Element::H],
+        SetId::Aei => &[Element::A, Element::E, Element::I],
+        SetId::Bfj => &[Element::B, Element::F, Element::J],
+        SetId::Cgk => &[Element::C, Element::G, Element::K],
+        SetId::Dhl => &[Element::D, Element::H, Element::L],
+        SetId::Abij => &[Element::A, Element::B, Element::I, Element::J],
+        SetId::Cdk => &[Element::C, Element::D, Element::K],
+        SetId::Efl => &[Element::E, Element::F, Element::L],
+        SetId::Ai => &[Element::A, Element::I],
+        SetId::Aj => &[Element::A, Element::J],
+        SetId::Ak => &[Element::A, Element::K],
+        SetId::Al => &[Element::A, Element::L],
     }
 }
 
@@ -489,6 +543,76 @@ mod tests {
 
             assert_eq!(solve_bfs(&world).is_some(), expected, "mask {mask:04b}");
             assert_eq!(algorithm_x(&world).is_some(), expected, "mask {mask:04b}");
+        }
+    }
+
+    #[test]
+    fn irregular_matrix_has_global_coupling_different_covers_and_legal_dead_ends() {
+        let initial = initial_showcase();
+        let available = sets(&initial);
+        let mut widths = BTreeSet::new();
+        let mut cover_sizes = BTreeSet::new();
+        for set in &available {
+            widths.insert(members(&initial, *set).len());
+        }
+        assert_eq!(widths, BTreeSet::from([2, 3, 4]));
+        // An independent subset oracle checks every cover, not the solver's implementation.
+        for mask in 0_u32..(1 << available.len()) {
+            if elements(&initial).iter().all(|element| {
+                available
+                    .iter()
+                    .enumerate()
+                    .filter(|(index, set)| {
+                        mask & (1 << index) != 0 && declared_members(**set).contains(element)
+                    })
+                    .count()
+                    == 1
+            }) {
+                cover_sizes.insert(mask.count_ones());
+            }
+        }
+        assert_eq!(cover_sizes, BTreeSet::from([2, 3, 4]));
+        let mut connected = BTreeSet::from([Element::A]);
+        loop {
+            let before = connected.len();
+            for set in &available {
+                let members = encoded_members(&initial, *set);
+                if !members.is_disjoint(&connected) {
+                    connected.extend(members);
+                }
+            }
+            if connected.len() == before {
+                break;
+            }
+        }
+        assert_eq!(connected.len(), elements(&initial).len());
+        let mut dead_ends = 0;
+        for candidate in candidates(&initial) {
+            let mut fork = initial.clone();
+            fork.apply(candidate).unwrap();
+            if let Some(continuation) = algorithm_x(&fork) {
+                let final_world = fork.replayed(&continuation).unwrap();
+                assert!(final_world.matches(&goal()));
+            } else {
+                dead_ends += 1;
+            }
+        }
+        assert!(
+            dead_ends > 0,
+            "some locally legal choices must block a cover"
+        );
+    }
+
+    #[test]
+    fn every_element_can_occur_even_when_no_global_cover_exists() {
+        for world in [unsatisfiable_showcase(), unsatisfiable_stress()] {
+            assert!(elements(&world).iter().all(|element| {
+                sets(&world)
+                    .iter()
+                    .any(|set| members(&world, *set).contains(element))
+            }));
+            assert!(algorithm_x(&world).is_none());
+            assert!(solve_bfs(&world).is_none());
         }
     }
 

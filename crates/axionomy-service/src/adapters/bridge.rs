@@ -43,24 +43,45 @@ pub(super) fn build(
         .then(|| bridge::pareto_front(&initial))
         .transpose()
         .map_err(|error| problem_error("bridge", error))?;
+    let adaptive = bridge::timed::enabled(&initial).then(|| {
+        bridge::timed::run(&initial, bridge::timed::Policy::Adaptive)
+            .expect("adaptive traffic completes")
+    });
+    let preferred = |favored: AgentId| {
+        [&first_a, &first_b, &auction]
+            .into_iter()
+            .chain(adaptive.as_ref())
+            .max_by_key(|trace| {
+                let final_world = initial.replayed(trace).expect("validated traffic");
+                (
+                    final_world
+                        .balance(&AccountId::Agent(favored), &Asset::OnTime)
+                        .get(),
+                    bridge::priority(&final_world, favored),
+                    bridge::credit(&final_world, favored),
+                )
+            })
+            .unwrap()
+            .clone()
+    };
     let pareto_a = if let Some(result) = &pareto {
         pareto_trace(result, AgentId::A)?
     } else {
-        first_a.clone()
+        preferred(AgentId::A)
     };
     let pareto_b = if let Some(result) = &pareto {
         pareto_trace(result, AgentId::B)?
     } else {
-        first_b.clone()
+        preferred(AgentId::B)
     };
     let pareto_expanded = pareto
         .as_ref()
         .map(|result| result.progress().expanded() as u64);
-    let traces = [
+    let mut traces = vec![
         (
             "breadth_first",
             "Bridge · plain search",
-            "A generic search finds one valid order for a lane that fits a single agent.",
+            "Breadth-first search over routing choices; timed traffic resolves ready completions immediately and excludes auctions and deliberate reservation expiry.",
             bfs.trace().clone(),
             "breadth-first search",
             Some(bfs.expanded() as u64),
@@ -68,7 +89,7 @@ pub(super) fn build(
         (
             "first_come_a",
             "Bridge · Agent A first",
-            "First-come priority: Agent A crosses first regardless of what either agent would pay.",
+            "Fixed priority waits for Agent A, then gives the other traveler the lane. Arrival times and deadlines remain identical across policies.",
             first_a,
             "first-come mechanism",
             None,
@@ -76,7 +97,7 @@ pub(super) fn build(
         (
             "first_come_b",
             "Bridge · Agent B first",
-            "First-come priority: Agent B crosses first regardless of what either agent would pay.",
+            "Fixed priority waits for Agent B, then gives the other traveler the lane. The wait can waste capacity and make later arrivals late.",
             first_b,
             "first-come mechanism",
             None,
@@ -84,28 +105,47 @@ pub(super) fn build(
         (
             "auction",
             "Bridge · auction",
-            "Escrowing bids, picking the winner, granting the lane, and refunding losers happen as indivisible steps.",
+            "In timed traffic, bids respond to deadline slack and retained funds. Both travelers must arrive before settlement; the winner occupies the lane for the crossing duration.",
             auction,
             "auction mechanism",
             None,
         ),
         (
             "pareto_a",
-            "Bridge Pareto · Agent A",
-            "The frontier outcome that treats Agent A best.",
+            if pareto.is_some() {
+                "Bridge Pareto · Agent A"
+            } else {
+                "Bridge preference · Agent A"
+            },
+            "Micro uses the exact frontier. Larger traffic chooses the best evaluated policy for A, prioritizing on-time trips, then priority and retained credit.",
             pareto_a,
-            "exact Pareto search",
+            if pareto.is_some() {
+                "exact Pareto search"
+            } else {
+                "evaluated policy preference"
+            },
             pareto_expanded,
         ),
         (
             "pareto_b",
-            "Bridge Pareto · Agent B",
-            "The frontier outcome that treats Agent B best.",
+            if pareto.is_some() {
+                "Bridge Pareto · Agent B"
+            } else {
+                "Bridge preference · Agent B"
+            },
+            "Micro uses the exact frontier. Larger traffic chooses the best evaluated policy for B, prioritizing on-time trips, then priority and retained credit.",
             pareto_b,
-            "exact Pareto search",
+            if pareto.is_some() {
+                "exact Pareto search"
+            } else {
+                "evaluated policy preference"
+            },
             pareto_expanded,
         ),
     ];
+    if let Some(trace) = adaptive {
+        traces.push(("adaptive", "Bridge · responsive routing", "Prioritize urgent arrivals and pay for a concurrent detour when bridge congestion would miss a deadline the alternate route can meet.", trace, "deadline-responsive routing", None));
+    }
     let mut documents = Vec::new();
     for (strategy, title, description, trace, algorithm, expanded) in traces {
         let final_world = initial
@@ -169,7 +209,6 @@ pub(super) fn build(
 fn candidate_front_view(documents: &[ViewDocument], selected: &ViewDocument) -> ParetoFrontView {
     let rows = documents
         .iter()
-        .filter(|document| document.objectives.len() == 4)
         .map(|document| {
             let values = document
                 .objectives
@@ -179,28 +218,32 @@ fn candidate_front_view(documents: &[ViewDocument], selected: &ViewDocument) -> 
             (document, values)
         })
         .collect::<Vec<_>>();
-    let non_dominated = rows.iter().filter(|(_, candidate)| {
-        !rows.iter().any(|(_, other)| {
-            other
-                .iter()
-                .zip(candidate)
-                .all(|(left, right)| left >= right)
-                && other
-                    .iter()
-                    .zip(candidate)
-                    .any(|(left, right)| left > right)
-        })
-    });
+    let non_dominated =
+        rows.iter().filter(|(_, candidate)| {
+            !rows.iter().any(|(_, other)| {
+                other.iter().zip(candidate).zip(&selected.objectives).all(
+                    |((left, right), axis)| match axis.direction {
+                        ObjectiveDirectionView::Maximize => left >= right,
+                        ObjectiveDirectionView::Minimize => left <= right,
+                    },
+                ) && other.iter().zip(candidate).zip(&selected.objectives).any(
+                    |((left, right), axis)| match axis.direction {
+                        ObjectiveDirectionView::Maximize => left > right,
+                        ObjectiveDirectionView::Minimize => left < right,
+                    },
+                )
+            })
+        });
     ParetoFrontView {
         title: "Every non-dominated evaluated mechanism outcome".into(),
         completeness: FrontierCompletenessView::Approximate,
-        axes: ["A priority", "A credit", "B priority", "B credit"]
-            .into_iter()
-            .enumerate()
-            .map(|(index, label)| ObjectiveAxisView {
-                key: format!("axis_{index}"),
-                label: label.into(),
-                direction: ObjectiveDirectionView::Maximize,
+        axes: selected
+            .objectives
+            .iter()
+            .map(|objective| ObjectiveAxisView {
+                key: objective.key.clone(),
+                label: objective.label.clone(),
+                direction: objective.direction,
             })
             .collect(),
         points: non_dominated
@@ -247,7 +290,7 @@ fn pareto_trace(
 }
 
 fn objectives(world: &World) -> Vec<ObjectiveView> {
-    [AgentId::A, AgentId::B]
+    let mut values: Vec<_> = [AgentId::A, AgentId::B]
         .into_iter()
         .flat_map(|agent| {
             [
@@ -265,7 +308,26 @@ fn objectives(world: &World) -> Vec<ObjectiveView> {
                 },
             ]
         })
-        .collect()
+        .collect();
+    if bridge::timed::enabled(world) {
+        for agent in [AgentId::A, AgentId::B] {
+            values.push(ObjectiveView {
+                key: format!("ontime_{agent:?}"),
+                label: format!("Agent {agent:?} on-time trips"),
+                direction: ObjectiveDirectionView::Maximize,
+                value: world
+                    .balance(&AccountId::Agent(agent), &Asset::OnTime)
+                    .to_string(),
+            });
+        }
+        values.push(ObjectiveView {
+            key: "elapsed".into(),
+            label: "Elapsed time".into(),
+            direction: ObjectiveDirectionView::Minimize,
+            value: bridge::timed::now(world).to_string(),
+        });
+    }
+    values
 }
 
 fn front_view(result: &bridge::ParetoResult, selected: &ViewDocument) -> ParetoFrontView {
@@ -291,12 +353,24 @@ fn front_view(result: &bridge::ParetoResult, selected: &ViewDocument) -> ParetoF
             .entries()
             .iter()
             .map(|entry| {
-                let values = entry
-                    .objectives()
-                    .objectives()
-                    .iter()
-                    .map(|o| o.value().to_string())
-                    .collect::<Vec<_>>();
+                let values = [
+                    ObjectiveKey::Priority(AgentId::A),
+                    ObjectiveKey::Credit(AgentId::A),
+                    ObjectiveKey::Priority(AgentId::B),
+                    ObjectiveKey::Credit(AgentId::B),
+                ]
+                .into_iter()
+                .map(|key| {
+                    entry
+                        .objectives()
+                        .objectives()
+                        .iter()
+                        .find(|objective| objective.key() == &key)
+                        .expect("bridge objective exists")
+                        .value()
+                        .to_string()
+                })
+                .collect::<Vec<_>>();
                 ParetoPointView {
                     label: format!(
                         "A {}/{} · B {}/{}",
@@ -314,90 +388,223 @@ fn front_view(result: &bridge::ParetoResult, selected: &ViewDocument) -> ParetoF
 }
 
 fn scene(_: u64, world: &World) -> Option<Scene> {
-    let nodes = [
-        ("west", "West bank", 70.0),
-        ("bridge", "Capacity-one bridge", 320.0),
-        ("east", "East bank", 570.0),
-    ]
-    .into_iter()
-    .map(|(key, label, x)| GraphNodeView {
-        id: ViewId::new(key, label),
-        classes: if key == "bridge" {
-            vec!["resource".into()]
-        } else {
-            Vec::new()
-        },
-        x: Some(x),
-        y: Some(130.0),
-    })
-    .collect();
-    let completed = [AgentId::A, AgentId::B].into_iter().any(|agent| {
-        !world
-            .balance(&AccountId::Agent(agent), &Asset::At(Side::East))
-            .is_zero()
-    });
-    let edges = vec![
-        GraphEdgeView {
-            id: "crossing:enter".into(),
-            source: "west".into(),
-            target: "bridge".into(),
-            label: Some("claim capacity".into()),
-            classes: if completed {
-                vec!["completed".into()]
-            } else {
-                Vec::new()
-            },
-        },
-        GraphEdgeView {
-            id: "crossing:exit".into(),
-            source: "bridge".into(),
-            target: "east".into(),
-            label: Some("cross atomically".into()),
-            classes: if completed {
-                vec!["completed".into()]
-            } else {
-                Vec::new()
-            },
-        },
+    let timed = bridge::timed::enabled(world);
+    let clock = bridge::timed::now(world);
+    let mut places = vec![
+        ("west", "West bank", 70.0, 100.0),
+        ("bridge", "Capacity-one bridge", 320.0, 100.0),
+        ("east", "East bank", 570.0, 100.0),
     ];
+    if timed {
+        places.push(("detour", "Paid alternate route", 320.0, 300.0));
+    }
+    let nodes = places
+        .into_iter()
+        .map(|(key, label, x, y)| GraphNodeView {
+            id: ViewId::new(key, label),
+            classes: if key == "bridge" {
+                vec!["resource".into()]
+            } else {
+                vec![]
+            },
+            x: Some(x),
+            y: Some(y),
+        })
+        .collect();
+    let mut routes = vec![
+        ("west", "bridge", "reserve lane".to_string()),
+        (
+            "bridge",
+            "east",
+            if timed {
+                "A: 3 ticks · B: 2 ticks".into()
+            } else {
+                "cross atomically".into()
+            },
+        ),
+    ];
+    if timed {
+        routes.extend([
+            ("west", "detour", "1 credit".into()),
+            ("detour", "east", "3 ticks · independent capacity".into()),
+        ]);
+    }
+    let edges = routes
+        .into_iter()
+        .map(|(from, to, label)| GraphEdgeView {
+            id: format!("route:{from}:{to}"),
+            source: from.into(),
+            target: to.into(),
+            label: Some(label),
+            classes: vec![],
+        })
+        .collect();
     let agents = [AgentId::A, AgentId::B].into_iter().map(|agent| {
-        let east = !world
-            .balance(&AccountId::Agent(agent), &Asset::At(Side::East))
-            .is_zero();
+        let value = |asset| world.balance(&AccountId::Agent(agent), &asset).get();
+        let east = value(Asset::At(Side::East)) > 0;
+        let crossing = value(Asset::InTransit) > 0;
+        let detour = value(Asset::OnDetour) > 0;
+        let (node, asset, status) = if crossing {
+            (
+                "bridge",
+                "intransit",
+                format!("crossing until {}", value(Asset::ReadyAt)),
+            )
+        } else if detour {
+            (
+                "detour",
+                "ondetour",
+                format!("detouring until {}", value(Asset::ReadyAt)),
+            )
+        } else if east {
+            ("east", "at-east", "arrived".into())
+        } else if timed && clock < value(Asset::Arrival) {
+            (
+                "west",
+                "at-west",
+                format!("arrives at {}", value(Asset::Arrival)),
+            )
+        } else if value(Asset::CrossingRight) > 0 {
+            (
+                "west",
+                "at-west",
+                format!("reserved through {}", value(Asset::LeaseUntil)),
+            )
+        } else if value(Asset::Submitted) > 0 {
+            ("west", "at-west", "bid in escrow".into())
+        } else {
+            ("west", "at-west", "waiting".into())
+        };
         let mut entity = link_balance(
             visual_entity(
                 format!("traveler:{agent:?}"),
                 format!("Agent {agent:?}"),
                 SceneGlyphView::Agent,
-                SceneAnchorView::GraphNode {
-                    node: if east { "east".into() } else { "west".into() },
-                },
+                SceneAnchorView::GraphNode { node: node.into() },
                 SceneEntityRoleView::Occupant,
                 if east {
                     SceneToneView::Success
                 } else {
                     SceneToneView::Active
                 },
-                Some(if east { "crossed" } else { "waiting" }.into()),
+                Some(status),
             ),
-            format!("bridge:account:agent-{agent:?}").to_ascii_lowercase(),
-            format!("bridge:asset:at-{}", if east { "east" } else { "west" }),
+            format!("bridge:account:agent-{agent:?}").to_lowercase(),
+            format!("bridge:asset:{asset}"),
         );
-        entity.metrics = vec![
-            visual_metric(
-                "credit",
-                "Credit",
-                bridge::credit(world, agent),
-                Some("credits"),
-            ),
-            visual_metric(
-                "energy",
-                "Energy",
-                world.balance(&AccountId::Agent(agent), &Asset::Energy),
-                Some("units"),
-            ),
-        ];
+        entity.metrics = vec![visual_metric(
+            "credit",
+            "Credit",
+            bridge::credit(world, agent),
+            None,
+        )];
+        if timed {
+            entity.metrics.extend([
+                visual_metric(
+                    "deadline",
+                    "Deadline",
+                    value(Asset::Deadline),
+                    Some("ticks"),
+                ),
+                visual_metric("ontime", "On time", value(Asset::OnTime), Some("trips")),
+                visual_metric("late", "Late", value(Asset::Late), Some("trips")),
+            ]);
+        }
         entity
     });
-    Some(Scene::graph("Agents competing for one lane", nodes, edges, None).with_entities(agents))
+    let mut scene = Scene::graph("Timed traffic and one shared lane", nodes, edges, None)
+        .with_entities(agents)
+        .with_metrics([
+            visual_metric(
+                "capacity",
+                "Bridge capacity",
+                if world
+                    .balance(&AccountId::Bridge, &Asset::CapacityFree)
+                    .is_zero()
+                {
+                    "reserved / occupied"
+                } else {
+                    "available"
+                },
+                None,
+            ),
+            visual_metric(
+                "priority_a",
+                "A priority",
+                bridge::priority(world, AgentId::A),
+                None,
+            ),
+            visual_metric(
+                "priority_b",
+                "B priority",
+                bridge::priority(world, AgentId::B),
+                None,
+            ),
+        ]);
+    if timed {
+        scene.metrics.extend([
+            visual_metric("world_time", "World time", clock, Some("ticks")),
+            visual_metric(
+                "wave",
+                "Traffic wave",
+                world.balance(&AccountId::Bridge, &Asset::Round).get() + 1,
+                None,
+            ),
+            visual_metric(
+                "ontime",
+                "On-time trips",
+                [AgentId::A, AgentId::B]
+                    .into_iter()
+                    .map(|agent| {
+                        world
+                            .balance(&AccountId::Agent(agent), &Asset::OnTime)
+                            .get()
+                    })
+                    .sum::<u64>(),
+                None,
+            ),
+            visual_metric(
+                "late",
+                "Late trips",
+                [AgentId::A, AgentId::B]
+                    .into_iter()
+                    .map(|agent| world.balance(&AccountId::Agent(agent), &Asset::Late).get())
+                    .sum::<u64>(),
+                None,
+            ),
+        ]);
+    }
+    Some(scene)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn exact_front_pairs_each_travelers_priority_with_their_credit() {
+        let artifact = ReferenceService
+            .run(RunRequest::new("bridge").with_instance("micro"))
+            .unwrap();
+        for document in artifact.documents {
+            for point in &document.pareto_fronts[0].points {
+                let values: Vec<u64> = point
+                    .values
+                    .iter()
+                    .map(|value| value.parse().unwrap())
+                    .collect();
+                assert_eq!(values[0] + values[2], 1);
+                assert_eq!((values[1], values[3]), (2, 2));
+                if point.selected {
+                    assert_eq!(
+                        point.values,
+                        document
+                            .objectives
+                            .iter()
+                            .map(|o| o.value.clone())
+                            .collect::<Vec<_>>()
+                    );
+                }
+            }
+        }
+    }
 }

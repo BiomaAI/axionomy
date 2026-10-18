@@ -18,6 +18,8 @@ use axionomy_search::{
     },
 };
 
+pub mod incident;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Location {
     Base,

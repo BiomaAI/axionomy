@@ -24,6 +24,7 @@ use axionomy_search::{
     session::{Continue, WorkBudget},
 };
 use std::ops::ControlFlow;
+pub mod expedition;
 
 const HORIZON: usize = 12;
 
