@@ -19,7 +19,7 @@ fn tooling(rate: Rate<Role, Asset>, wear: u64) -> Rate<Role, Asset> {
         .produce(Role::Shop, basket([(Asset::Wear, wear)]))
 }
 fn product(order: u8) -> (Asset, u64, u64) {
-    if order % 2 == 0 {
+    if order.is_multiple_of(2) {
         (Asset::Chair, 3, 8 + 3 * order as u64)
     } else {
         (Asset::Table, 5, 18 + 3 * order as u64)

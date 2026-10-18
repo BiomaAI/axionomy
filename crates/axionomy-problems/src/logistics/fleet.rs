@@ -200,7 +200,7 @@ pub fn now(world: &World) -> u64 {
     value(world, AccountId::World, Asset::Time)
 }
 pub fn cold(id: u8) -> bool {
-    id % 3 == 0
+    id.is_multiple_of(3)
 }
 pub fn weight(id: u8) -> u64 {
     if id % 3 == 1 { 3 } else { 1 }
@@ -1170,18 +1170,18 @@ pub fn decision(world: &World, van: Van, policy: Policy) -> Option<Action> {
         }
     }
     if from == Location::Depot {
-        if val(Asset::Damage) > 0 || val(Asset::Wear) >= 4 {
-            if let Some(repair) = propose(RateId::Repair {
+        if (val(Asset::Damage) > 0 || val(Asset::Wear) >= 4)
+            && let Some(repair) = propose(RateId::Repair {
                 van,
                 damaged: val(Asset::Damage) > 0,
-            }) {
-                return Some(repair);
-            }
+            })
+        {
+            return Some(repair);
         }
-        if val(Asset::Fuel) < 4 {
-            if let Some(refuel) = propose(RateId::Refuel(van)) {
-                return Some(refuel);
-            }
+        if val(Asset::Fuel) < 4
+            && let Some(refuel) = propose(RateId::Refuel(van))
+        {
+            return Some(refuel);
         }
     }
     // Relay packs the cold van's spare slot for hub staging. Other policies
@@ -1242,15 +1242,14 @@ pub fn decision(world: &World, van: Van, policy: Policy) -> Option<Action> {
                     && value(world, AccountId::Order(id), Asset::At(Location::Hub)) > 0
                     && !cold(id)
             })
+            && let Some(next) = drive(Location::Hub)
         {
-            if let Some(next) = drive(Location::Hub) {
-                return Some(next);
-            }
+            return Some(next);
         }
-        if from != Location::Depot {
-            if let Some(next) = drive(Location::Depot) {
-                return Some(next);
-            }
+        if from != Location::Depot
+            && let Some(next) = drive(Location::Depot)
+        {
+            return Some(next);
         }
     }
     // Recovery from exhausted fuel or wear can use the paid shared tow truck.

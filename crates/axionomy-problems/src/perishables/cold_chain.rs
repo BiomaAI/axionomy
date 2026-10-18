@@ -811,33 +811,31 @@ pub fn run(initial: &World, policy: Policy) -> Proposal {
                     },
                     1,
                 );
-            } else if fresh > space {
-                if let Some(child) = BATCHES
+            } else if fresh > space
+                && let Some(child) = BATCHES
                     .into_iter()
                     .find(|other| value(&world, AccountId::Batch(*other), Asset::Dormant) > 0)
-                {
-                    if record(
-                        &mut world,
-                        &mut trace,
-                        RateId::Split {
-                            source: id,
-                            destination: child,
-                            at: Place::Warehouse,
-                        },
-                        space,
-                    ) {
-                        record(
-                            &mut world,
-                            &mut trace,
-                            RateId::Move {
-                                batch: child,
-                                from: Place::Warehouse,
-                                to: Place::Fridge,
-                            },
-                            1,
-                        );
-                    }
-                }
+                && record(
+                    &mut world,
+                    &mut trace,
+                    RateId::Split {
+                        source: id,
+                        destination: child,
+                        at: Place::Warehouse,
+                    },
+                    space,
+                )
+            {
+                record(
+                    &mut world,
+                    &mut trace,
+                    RateId::Move {
+                        batch: child,
+                        from: Place::Warehouse,
+                        to: Place::Fridge,
+                    },
+                    1,
+                );
             }
         }
         if policy == Policy::RebalanceCold {

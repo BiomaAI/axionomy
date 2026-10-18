@@ -81,7 +81,7 @@ fn service_location(facility: Facility) -> Location {
     }
 }
 fn dependency(id: JobId) -> Option<JobId> {
-    (id.0 % 4 == 0).then(|| JobId(id.0 - 3))
+    id.0.is_multiple_of(4).then(|| JobId(id.0 - 3))
 }
 fn prerequisite(rate: Rate<Role, Asset>, id: JobId) -> Rate<Role, Asset> {
     if let Some(before) = dependency(id) {
@@ -810,9 +810,7 @@ fn can_finish(world: &World, agent: AgentId, spec: JobSpec, mode: WorkMode, over
     clock(world) + overhead + cost.time <= job_balance(world, spec.id, Asset::Deadline)
         && balance(world, agent, Asset::Material) >= cost.material
         && balance(world, agent, Asset::Energy)
-            >= cost.energy
-                + route(world, agent, spec.location).map_or(100, |(_, distance)| distance)
-                + 1
+            > cost.energy + route(world, agent, spec.location).map_or(100, |(_, distance)| distance)
 }
 fn route(world: &World, agent: AgentId, to: Location) -> Option<(Location, u64)> {
     let from = location(world, agent)?;

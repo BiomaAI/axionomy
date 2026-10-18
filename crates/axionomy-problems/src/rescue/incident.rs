@@ -293,11 +293,11 @@ pub fn initial(stress: bool, seed: u64) -> World {
     for (id, location) in locations.iter().enumerate() {
         nature.insert(Asset::Truth(id as u8, *location), Quantity::new(1));
     }
-    for round in 0..2 {
-        let report = if (seed % 4 + round as u64) % 4 == 0 {
+    for (round, location) in locations.iter().enumerate().take(2) {
+        let report = if (seed % 4 + round as u64).is_multiple_of(4) {
             sites[(offset + count) % sites.len()]
         } else {
-            locations[round]
+            *location
         };
         nature.insert(Asset::Signal(round as u8, report), Quantity::new(1));
     }
@@ -889,13 +889,12 @@ pub fn decision(view: &ResponderView<'_>, policy: Policy) -> Option<Action> {
             return Some(action(RateId::Scan));
         }
     }
-    if let Some(id) = found.first() {
-        if let Some(to) = LOCATIONS
+    if let Some(id) = found.first()
+        && let Some(to) = LOCATIONS
             .into_iter()
             .find(|location| val(AccountId::Patient(*id), Asset::At(*location)) > 0)
-        {
-            return Some(drive(to, true));
-        }
+    {
+        return Some(drive(to, true));
     }
     let mut destinations: Vec<_> = LOCATIONS
         .into_iter()

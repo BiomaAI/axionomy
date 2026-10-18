@@ -200,7 +200,7 @@ pub type Action = Exchange<RateId, Role, AccountId>;
 pub type Proposal = Trace<RateId, Role, AccountId>;
 pub type AgentView<'a> = EconomicView<'a, AccountId, Asset, RateId, Role>;
 pub fn patient(id: u8) -> bool {
-    id % 2 == 0
+    id.is_multiple_of(2)
 }
 pub fn value(world: &World, account: AccountId, asset: Asset) -> u64 {
     world.balance(&account, &asset).get()
@@ -348,7 +348,7 @@ pub fn initial(stress: bool, seed: u64) -> World {
         hidden.insert(
             Asset::Signal(
                 round,
-                if (seed % 4 + u64::from(round)) % 4 == 0 {
+                if (seed % 4 + u64::from(round)).is_multiple_of(4) {
                     sites[(offset + count as usize) % 4]
                 } else {
                     locations[usize::from(round)]

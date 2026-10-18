@@ -659,12 +659,11 @@ pub fn seasonal_decision(world: &World, actor: Actor) -> Option<Action> {
             {
                 return Some(action);
             }
-            if energy > 800 * scale
-                || (energy > 0 && (price > 9_000 || cash < obligation_cost(actor) * scale))
+            if (energy > 800 * scale
+                || (energy > 0 && (price > 9_000 || cash < obligation_cost(actor) * scale)))
+                && let Some(action) = sell(world, actor, 1_000 * scale)
             {
-                if let Some(action) = sell(world, actor, 1_000 * scale) {
-                    return Some(action);
-                }
+                return Some(action);
             }
             let allowance = balance(world, actor, Asset::ProductionAllowance);
             let amount = allowance
