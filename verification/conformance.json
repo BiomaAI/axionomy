@@ -1,0 +1,6217 @@
+{
+  "exchanges": [
+    {
+      "accepted": false,
+      "after": "0",
+      "before": "0",
+      "conserve": false,
+      "consumed": "0",
+      "preserved": "0",
+      "produced": "0",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "0",
+      "before": "0",
+      "conserve": true,
+      "consumed": "0",
+      "preserved": "0",
+      "produced": "0",
+      "units": "0"
+    },
+    {
+      "accepted": true,
+      "after": "0",
+      "before": "0",
+      "conserve": false,
+      "consumed": "0",
+      "preserved": "0",
+      "produced": "0",
+      "units": "1"
+    },
+    {
+      "accepted": true,
+      "after": "0",
+      "before": "0",
+      "conserve": true,
+      "consumed": "0",
+      "preserved": "0",
+      "produced": "0",
+      "units": "1"
+    },
+    {
+      "accepted": true,
+      "after": "0",
+      "before": "0",
+      "conserve": false,
+      "consumed": "0",
+      "preserved": "0",
+      "produced": "0",
+      "units": "2"
+    },
+    {
+      "accepted": true,
+      "after": "0",
+      "before": "0",
+      "conserve": true,
+      "consumed": "0",
+      "preserved": "0",
+      "produced": "0",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "0",
+      "before": "0",
+      "conserve": false,
+      "consumed": "0",
+      "preserved": "1",
+      "produced": "0",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "0",
+      "before": "0",
+      "conserve": true,
+      "consumed": "0",
+      "preserved": "1",
+      "produced": "0",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "0",
+      "before": "0",
+      "conserve": false,
+      "consumed": "0",
+      "preserved": "1",
+      "produced": "0",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "0",
+      "before": "0",
+      "conserve": true,
+      "consumed": "0",
+      "preserved": "1",
+      "produced": "0",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "0",
+      "before": "0",
+      "conserve": false,
+      "consumed": "0",
+      "preserved": "1",
+      "produced": "0",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "0",
+      "before": "0",
+      "conserve": true,
+      "consumed": "0",
+      "preserved": "1",
+      "produced": "0",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "0",
+      "before": "0",
+      "conserve": false,
+      "consumed": "0",
+      "preserved": "0",
+      "produced": "1",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "0",
+      "before": "0",
+      "conserve": true,
+      "consumed": "0",
+      "preserved": "0",
+      "produced": "1",
+      "units": "0"
+    },
+    {
+      "accepted": true,
+      "after": "1",
+      "before": "0",
+      "conserve": false,
+      "consumed": "0",
+      "preserved": "0",
+      "produced": "1",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "0",
+      "before": "0",
+      "conserve": true,
+      "consumed": "0",
+      "preserved": "0",
+      "produced": "1",
+      "units": "1"
+    },
+    {
+      "accepted": true,
+      "after": "2",
+      "before": "0",
+      "conserve": false,
+      "consumed": "0",
+      "preserved": "0",
+      "produced": "1",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "0",
+      "before": "0",
+      "conserve": true,
+      "consumed": "0",
+      "preserved": "0",
+      "produced": "1",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "0",
+      "before": "0",
+      "conserve": false,
+      "consumed": "0",
+      "preserved": "1",
+      "produced": "1",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "0",
+      "before": "0",
+      "conserve": true,
+      "consumed": "0",
+      "preserved": "1",
+      "produced": "1",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "0",
+      "before": "0",
+      "conserve": false,
+      "consumed": "0",
+      "preserved": "1",
+      "produced": "1",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "0",
+      "before": "0",
+      "conserve": true,
+      "consumed": "0",
+      "preserved": "1",
+      "produced": "1",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "0",
+      "before": "0",
+      "conserve": false,
+      "consumed": "0",
+      "preserved": "1",
+      "produced": "1",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "0",
+      "before": "0",
+      "conserve": true,
+      "consumed": "0",
+      "preserved": "1",
+      "produced": "1",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "0",
+      "before": "0",
+      "conserve": false,
+      "consumed": "0",
+      "preserved": "0",
+      "produced": "2",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "0",
+      "before": "0",
+      "conserve": true,
+      "consumed": "0",
+      "preserved": "0",
+      "produced": "2",
+      "units": "0"
+    },
+    {
+      "accepted": true,
+      "after": "2",
+      "before": "0",
+      "conserve": false,
+      "consumed": "0",
+      "preserved": "0",
+      "produced": "2",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "0",
+      "before": "0",
+      "conserve": true,
+      "consumed": "0",
+      "preserved": "0",
+      "produced": "2",
+      "units": "1"
+    },
+    {
+      "accepted": true,
+      "after": "4",
+      "before": "0",
+      "conserve": false,
+      "consumed": "0",
+      "preserved": "0",
+      "produced": "2",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "0",
+      "before": "0",
+      "conserve": true,
+      "consumed": "0",
+      "preserved": "0",
+      "produced": "2",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "0",
+      "before": "0",
+      "conserve": false,
+      "consumed": "0",
+      "preserved": "1",
+      "produced": "2",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "0",
+      "before": "0",
+      "conserve": true,
+      "consumed": "0",
+      "preserved": "1",
+      "produced": "2",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "0",
+      "before": "0",
+      "conserve": false,
+      "consumed": "0",
+      "preserved": "1",
+      "produced": "2",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "0",
+      "before": "0",
+      "conserve": true,
+      "consumed": "0",
+      "preserved": "1",
+      "produced": "2",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "0",
+      "before": "0",
+      "conserve": false,
+      "consumed": "0",
+      "preserved": "1",
+      "produced": "2",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "0",
+      "before": "0",
+      "conserve": true,
+      "consumed": "0",
+      "preserved": "1",
+      "produced": "2",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "0",
+      "before": "0",
+      "conserve": false,
+      "consumed": "1",
+      "preserved": "0",
+      "produced": "0",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "0",
+      "before": "0",
+      "conserve": true,
+      "consumed": "1",
+      "preserved": "0",
+      "produced": "0",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "0",
+      "before": "0",
+      "conserve": false,
+      "consumed": "1",
+      "preserved": "0",
+      "produced": "0",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "0",
+      "before": "0",
+      "conserve": true,
+      "consumed": "1",
+      "preserved": "0",
+      "produced": "0",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "0",
+      "before": "0",
+      "conserve": false,
+      "consumed": "1",
+      "preserved": "0",
+      "produced": "0",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "0",
+      "before": "0",
+      "conserve": true,
+      "consumed": "1",
+      "preserved": "0",
+      "produced": "0",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "0",
+      "before": "0",
+      "conserve": false,
+      "consumed": "1",
+      "preserved": "1",
+      "produced": "0",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "0",
+      "before": "0",
+      "conserve": true,
+      "consumed": "1",
+      "preserved": "1",
+      "produced": "0",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "0",
+      "before": "0",
+      "conserve": false,
+      "consumed": "1",
+      "preserved": "1",
+      "produced": "0",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "0",
+      "before": "0",
+      "conserve": true,
+      "consumed": "1",
+      "preserved": "1",
+      "produced": "0",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "0",
+      "before": "0",
+      "conserve": false,
+      "consumed": "1",
+      "preserved": "1",
+      "produced": "0",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "0",
+      "before": "0",
+      "conserve": true,
+      "consumed": "1",
+      "preserved": "1",
+      "produced": "0",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "0",
+      "before": "0",
+      "conserve": false,
+      "consumed": "1",
+      "preserved": "0",
+      "produced": "1",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "0",
+      "before": "0",
+      "conserve": true,
+      "consumed": "1",
+      "preserved": "0",
+      "produced": "1",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "0",
+      "before": "0",
+      "conserve": false,
+      "consumed": "1",
+      "preserved": "0",
+      "produced": "1",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "0",
+      "before": "0",
+      "conserve": true,
+      "consumed": "1",
+      "preserved": "0",
+      "produced": "1",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "0",
+      "before": "0",
+      "conserve": false,
+      "consumed": "1",
+      "preserved": "0",
+      "produced": "1",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "0",
+      "before": "0",
+      "conserve": true,
+      "consumed": "1",
+      "preserved": "0",
+      "produced": "1",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "0",
+      "before": "0",
+      "conserve": false,
+      "consumed": "1",
+      "preserved": "1",
+      "produced": "1",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "0",
+      "before": "0",
+      "conserve": true,
+      "consumed": "1",
+      "preserved": "1",
+      "produced": "1",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "0",
+      "before": "0",
+      "conserve": false,
+      "consumed": "1",
+      "preserved": "1",
+      "produced": "1",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "0",
+      "before": "0",
+      "conserve": true,
+      "consumed": "1",
+      "preserved": "1",
+      "produced": "1",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "0",
+      "before": "0",
+      "conserve": false,
+      "consumed": "1",
+      "preserved": "1",
+      "produced": "1",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "0",
+      "before": "0",
+      "conserve": true,
+      "consumed": "1",
+      "preserved": "1",
+      "produced": "1",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "0",
+      "before": "0",
+      "conserve": false,
+      "consumed": "1",
+      "preserved": "0",
+      "produced": "2",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "0",
+      "before": "0",
+      "conserve": true,
+      "consumed": "1",
+      "preserved": "0",
+      "produced": "2",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "0",
+      "before": "0",
+      "conserve": false,
+      "consumed": "1",
+      "preserved": "0",
+      "produced": "2",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "0",
+      "before": "0",
+      "conserve": true,
+      "consumed": "1",
+      "preserved": "0",
+      "produced": "2",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "0",
+      "before": "0",
+      "conserve": false,
+      "consumed": "1",
+      "preserved": "0",
+      "produced": "2",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "0",
+      "before": "0",
+      "conserve": true,
+      "consumed": "1",
+      "preserved": "0",
+      "produced": "2",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "0",
+      "before": "0",
+      "conserve": false,
+      "consumed": "1",
+      "preserved": "1",
+      "produced": "2",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "0",
+      "before": "0",
+      "conserve": true,
+      "consumed": "1",
+      "preserved": "1",
+      "produced": "2",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "0",
+      "before": "0",
+      "conserve": false,
+      "consumed": "1",
+      "preserved": "1",
+      "produced": "2",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "0",
+      "before": "0",
+      "conserve": true,
+      "consumed": "1",
+      "preserved": "1",
+      "produced": "2",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "0",
+      "before": "0",
+      "conserve": false,
+      "consumed": "1",
+      "preserved": "1",
+      "produced": "2",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "0",
+      "before": "0",
+      "conserve": true,
+      "consumed": "1",
+      "preserved": "1",
+      "produced": "2",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "0",
+      "before": "0",
+      "conserve": false,
+      "consumed": "2",
+      "preserved": "0",
+      "produced": "0",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "0",
+      "before": "0",
+      "conserve": true,
+      "consumed": "2",
+      "preserved": "0",
+      "produced": "0",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "0",
+      "before": "0",
+      "conserve": false,
+      "consumed": "2",
+      "preserved": "0",
+      "produced": "0",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "0",
+      "before": "0",
+      "conserve": true,
+      "consumed": "2",
+      "preserved": "0",
+      "produced": "0",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "0",
+      "before": "0",
+      "conserve": false,
+      "consumed": "2",
+      "preserved": "0",
+      "produced": "0",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "0",
+      "before": "0",
+      "conserve": true,
+      "consumed": "2",
+      "preserved": "0",
+      "produced": "0",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "0",
+      "before": "0",
+      "conserve": false,
+      "consumed": "2",
+      "preserved": "1",
+      "produced": "0",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "0",
+      "before": "0",
+      "conserve": true,
+      "consumed": "2",
+      "preserved": "1",
+      "produced": "0",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "0",
+      "before": "0",
+      "conserve": false,
+      "consumed": "2",
+      "preserved": "1",
+      "produced": "0",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "0",
+      "before": "0",
+      "conserve": true,
+      "consumed": "2",
+      "preserved": "1",
+      "produced": "0",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "0",
+      "before": "0",
+      "conserve": false,
+      "consumed": "2",
+      "preserved": "1",
+      "produced": "0",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "0",
+      "before": "0",
+      "conserve": true,
+      "consumed": "2",
+      "preserved": "1",
+      "produced": "0",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "0",
+      "before": "0",
+      "conserve": false,
+      "consumed": "2",
+      "preserved": "0",
+      "produced": "1",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "0",
+      "before": "0",
+      "conserve": true,
+      "consumed": "2",
+      "preserved": "0",
+      "produced": "1",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "0",
+      "before": "0",
+      "conserve": false,
+      "consumed": "2",
+      "preserved": "0",
+      "produced": "1",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "0",
+      "before": "0",
+      "conserve": true,
+      "consumed": "2",
+      "preserved": "0",
+      "produced": "1",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "0",
+      "before": "0",
+      "conserve": false,
+      "consumed": "2",
+      "preserved": "0",
+      "produced": "1",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "0",
+      "before": "0",
+      "conserve": true,
+      "consumed": "2",
+      "preserved": "0",
+      "produced": "1",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "0",
+      "before": "0",
+      "conserve": false,
+      "consumed": "2",
+      "preserved": "1",
+      "produced": "1",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "0",
+      "before": "0",
+      "conserve": true,
+      "consumed": "2",
+      "preserved": "1",
+      "produced": "1",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "0",
+      "before": "0",
+      "conserve": false,
+      "consumed": "2",
+      "preserved": "1",
+      "produced": "1",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "0",
+      "before": "0",
+      "conserve": true,
+      "consumed": "2",
+      "preserved": "1",
+      "produced": "1",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "0",
+      "before": "0",
+      "conserve": false,
+      "consumed": "2",
+      "preserved": "1",
+      "produced": "1",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "0",
+      "before": "0",
+      "conserve": true,
+      "consumed": "2",
+      "preserved": "1",
+      "produced": "1",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "0",
+      "before": "0",
+      "conserve": false,
+      "consumed": "2",
+      "preserved": "0",
+      "produced": "2",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "0",
+      "before": "0",
+      "conserve": true,
+      "consumed": "2",
+      "preserved": "0",
+      "produced": "2",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "0",
+      "before": "0",
+      "conserve": false,
+      "consumed": "2",
+      "preserved": "0",
+      "produced": "2",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "0",
+      "before": "0",
+      "conserve": true,
+      "consumed": "2",
+      "preserved": "0",
+      "produced": "2",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "0",
+      "before": "0",
+      "conserve": false,
+      "consumed": "2",
+      "preserved": "0",
+      "produced": "2",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "0",
+      "before": "0",
+      "conserve": true,
+      "consumed": "2",
+      "preserved": "0",
+      "produced": "2",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "0",
+      "before": "0",
+      "conserve": false,
+      "consumed": "2",
+      "preserved": "1",
+      "produced": "2",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "0",
+      "before": "0",
+      "conserve": true,
+      "consumed": "2",
+      "preserved": "1",
+      "produced": "2",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "0",
+      "before": "0",
+      "conserve": false,
+      "consumed": "2",
+      "preserved": "1",
+      "produced": "2",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "0",
+      "before": "0",
+      "conserve": true,
+      "consumed": "2",
+      "preserved": "1",
+      "produced": "2",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "0",
+      "before": "0",
+      "conserve": false,
+      "consumed": "2",
+      "preserved": "1",
+      "produced": "2",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "0",
+      "before": "0",
+      "conserve": true,
+      "consumed": "2",
+      "preserved": "1",
+      "produced": "2",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "1",
+      "before": "1",
+      "conserve": false,
+      "consumed": "0",
+      "preserved": "0",
+      "produced": "0",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "1",
+      "before": "1",
+      "conserve": true,
+      "consumed": "0",
+      "preserved": "0",
+      "produced": "0",
+      "units": "0"
+    },
+    {
+      "accepted": true,
+      "after": "1",
+      "before": "1",
+      "conserve": false,
+      "consumed": "0",
+      "preserved": "0",
+      "produced": "0",
+      "units": "1"
+    },
+    {
+      "accepted": true,
+      "after": "1",
+      "before": "1",
+      "conserve": true,
+      "consumed": "0",
+      "preserved": "0",
+      "produced": "0",
+      "units": "1"
+    },
+    {
+      "accepted": true,
+      "after": "1",
+      "before": "1",
+      "conserve": false,
+      "consumed": "0",
+      "preserved": "0",
+      "produced": "0",
+      "units": "2"
+    },
+    {
+      "accepted": true,
+      "after": "1",
+      "before": "1",
+      "conserve": true,
+      "consumed": "0",
+      "preserved": "0",
+      "produced": "0",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "1",
+      "before": "1",
+      "conserve": false,
+      "consumed": "0",
+      "preserved": "1",
+      "produced": "0",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "1",
+      "before": "1",
+      "conserve": true,
+      "consumed": "0",
+      "preserved": "1",
+      "produced": "0",
+      "units": "0"
+    },
+    {
+      "accepted": true,
+      "after": "1",
+      "before": "1",
+      "conserve": false,
+      "consumed": "0",
+      "preserved": "1",
+      "produced": "0",
+      "units": "1"
+    },
+    {
+      "accepted": true,
+      "after": "1",
+      "before": "1",
+      "conserve": true,
+      "consumed": "0",
+      "preserved": "1",
+      "produced": "0",
+      "units": "1"
+    },
+    {
+      "accepted": true,
+      "after": "1",
+      "before": "1",
+      "conserve": false,
+      "consumed": "0",
+      "preserved": "1",
+      "produced": "0",
+      "units": "2"
+    },
+    {
+      "accepted": true,
+      "after": "1",
+      "before": "1",
+      "conserve": true,
+      "consumed": "0",
+      "preserved": "1",
+      "produced": "0",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "1",
+      "before": "1",
+      "conserve": false,
+      "consumed": "0",
+      "preserved": "0",
+      "produced": "1",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "1",
+      "before": "1",
+      "conserve": true,
+      "consumed": "0",
+      "preserved": "0",
+      "produced": "1",
+      "units": "0"
+    },
+    {
+      "accepted": true,
+      "after": "2",
+      "before": "1",
+      "conserve": false,
+      "consumed": "0",
+      "preserved": "0",
+      "produced": "1",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "1",
+      "before": "1",
+      "conserve": true,
+      "consumed": "0",
+      "preserved": "0",
+      "produced": "1",
+      "units": "1"
+    },
+    {
+      "accepted": true,
+      "after": "3",
+      "before": "1",
+      "conserve": false,
+      "consumed": "0",
+      "preserved": "0",
+      "produced": "1",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "1",
+      "before": "1",
+      "conserve": true,
+      "consumed": "0",
+      "preserved": "0",
+      "produced": "1",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "1",
+      "before": "1",
+      "conserve": false,
+      "consumed": "0",
+      "preserved": "1",
+      "produced": "1",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "1",
+      "before": "1",
+      "conserve": true,
+      "consumed": "0",
+      "preserved": "1",
+      "produced": "1",
+      "units": "0"
+    },
+    {
+      "accepted": true,
+      "after": "2",
+      "before": "1",
+      "conserve": false,
+      "consumed": "0",
+      "preserved": "1",
+      "produced": "1",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "1",
+      "before": "1",
+      "conserve": true,
+      "consumed": "0",
+      "preserved": "1",
+      "produced": "1",
+      "units": "1"
+    },
+    {
+      "accepted": true,
+      "after": "3",
+      "before": "1",
+      "conserve": false,
+      "consumed": "0",
+      "preserved": "1",
+      "produced": "1",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "1",
+      "before": "1",
+      "conserve": true,
+      "consumed": "0",
+      "preserved": "1",
+      "produced": "1",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "1",
+      "before": "1",
+      "conserve": false,
+      "consumed": "0",
+      "preserved": "0",
+      "produced": "2",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "1",
+      "before": "1",
+      "conserve": true,
+      "consumed": "0",
+      "preserved": "0",
+      "produced": "2",
+      "units": "0"
+    },
+    {
+      "accepted": true,
+      "after": "3",
+      "before": "1",
+      "conserve": false,
+      "consumed": "0",
+      "preserved": "0",
+      "produced": "2",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "1",
+      "before": "1",
+      "conserve": true,
+      "consumed": "0",
+      "preserved": "0",
+      "produced": "2",
+      "units": "1"
+    },
+    {
+      "accepted": true,
+      "after": "5",
+      "before": "1",
+      "conserve": false,
+      "consumed": "0",
+      "preserved": "0",
+      "produced": "2",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "1",
+      "before": "1",
+      "conserve": true,
+      "consumed": "0",
+      "preserved": "0",
+      "produced": "2",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "1",
+      "before": "1",
+      "conserve": false,
+      "consumed": "0",
+      "preserved": "1",
+      "produced": "2",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "1",
+      "before": "1",
+      "conserve": true,
+      "consumed": "0",
+      "preserved": "1",
+      "produced": "2",
+      "units": "0"
+    },
+    {
+      "accepted": true,
+      "after": "3",
+      "before": "1",
+      "conserve": false,
+      "consumed": "0",
+      "preserved": "1",
+      "produced": "2",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "1",
+      "before": "1",
+      "conserve": true,
+      "consumed": "0",
+      "preserved": "1",
+      "produced": "2",
+      "units": "1"
+    },
+    {
+      "accepted": true,
+      "after": "5",
+      "before": "1",
+      "conserve": false,
+      "consumed": "0",
+      "preserved": "1",
+      "produced": "2",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "1",
+      "before": "1",
+      "conserve": true,
+      "consumed": "0",
+      "preserved": "1",
+      "produced": "2",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "1",
+      "before": "1",
+      "conserve": false,
+      "consumed": "1",
+      "preserved": "0",
+      "produced": "0",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "1",
+      "before": "1",
+      "conserve": true,
+      "consumed": "1",
+      "preserved": "0",
+      "produced": "0",
+      "units": "0"
+    },
+    {
+      "accepted": true,
+      "after": "0",
+      "before": "1",
+      "conserve": false,
+      "consumed": "1",
+      "preserved": "0",
+      "produced": "0",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "1",
+      "before": "1",
+      "conserve": true,
+      "consumed": "1",
+      "preserved": "0",
+      "produced": "0",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "1",
+      "before": "1",
+      "conserve": false,
+      "consumed": "1",
+      "preserved": "0",
+      "produced": "0",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "1",
+      "before": "1",
+      "conserve": true,
+      "consumed": "1",
+      "preserved": "0",
+      "produced": "0",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "1",
+      "before": "1",
+      "conserve": false,
+      "consumed": "1",
+      "preserved": "1",
+      "produced": "0",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "1",
+      "before": "1",
+      "conserve": true,
+      "consumed": "1",
+      "preserved": "1",
+      "produced": "0",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "1",
+      "before": "1",
+      "conserve": false,
+      "consumed": "1",
+      "preserved": "1",
+      "produced": "0",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "1",
+      "before": "1",
+      "conserve": true,
+      "consumed": "1",
+      "preserved": "1",
+      "produced": "0",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "1",
+      "before": "1",
+      "conserve": false,
+      "consumed": "1",
+      "preserved": "1",
+      "produced": "0",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "1",
+      "before": "1",
+      "conserve": true,
+      "consumed": "1",
+      "preserved": "1",
+      "produced": "0",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "1",
+      "before": "1",
+      "conserve": false,
+      "consumed": "1",
+      "preserved": "0",
+      "produced": "1",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "1",
+      "before": "1",
+      "conserve": true,
+      "consumed": "1",
+      "preserved": "0",
+      "produced": "1",
+      "units": "0"
+    },
+    {
+      "accepted": true,
+      "after": "1",
+      "before": "1",
+      "conserve": false,
+      "consumed": "1",
+      "preserved": "0",
+      "produced": "1",
+      "units": "1"
+    },
+    {
+      "accepted": true,
+      "after": "1",
+      "before": "1",
+      "conserve": true,
+      "consumed": "1",
+      "preserved": "0",
+      "produced": "1",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "1",
+      "before": "1",
+      "conserve": false,
+      "consumed": "1",
+      "preserved": "0",
+      "produced": "1",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "1",
+      "before": "1",
+      "conserve": true,
+      "consumed": "1",
+      "preserved": "0",
+      "produced": "1",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "1",
+      "before": "1",
+      "conserve": false,
+      "consumed": "1",
+      "preserved": "1",
+      "produced": "1",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "1",
+      "before": "1",
+      "conserve": true,
+      "consumed": "1",
+      "preserved": "1",
+      "produced": "1",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "1",
+      "before": "1",
+      "conserve": false,
+      "consumed": "1",
+      "preserved": "1",
+      "produced": "1",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "1",
+      "before": "1",
+      "conserve": true,
+      "consumed": "1",
+      "preserved": "1",
+      "produced": "1",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "1",
+      "before": "1",
+      "conserve": false,
+      "consumed": "1",
+      "preserved": "1",
+      "produced": "1",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "1",
+      "before": "1",
+      "conserve": true,
+      "consumed": "1",
+      "preserved": "1",
+      "produced": "1",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "1",
+      "before": "1",
+      "conserve": false,
+      "consumed": "1",
+      "preserved": "0",
+      "produced": "2",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "1",
+      "before": "1",
+      "conserve": true,
+      "consumed": "1",
+      "preserved": "0",
+      "produced": "2",
+      "units": "0"
+    },
+    {
+      "accepted": true,
+      "after": "2",
+      "before": "1",
+      "conserve": false,
+      "consumed": "1",
+      "preserved": "0",
+      "produced": "2",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "1",
+      "before": "1",
+      "conserve": true,
+      "consumed": "1",
+      "preserved": "0",
+      "produced": "2",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "1",
+      "before": "1",
+      "conserve": false,
+      "consumed": "1",
+      "preserved": "0",
+      "produced": "2",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "1",
+      "before": "1",
+      "conserve": true,
+      "consumed": "1",
+      "preserved": "0",
+      "produced": "2",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "1",
+      "before": "1",
+      "conserve": false,
+      "consumed": "1",
+      "preserved": "1",
+      "produced": "2",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "1",
+      "before": "1",
+      "conserve": true,
+      "consumed": "1",
+      "preserved": "1",
+      "produced": "2",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "1",
+      "before": "1",
+      "conserve": false,
+      "consumed": "1",
+      "preserved": "1",
+      "produced": "2",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "1",
+      "before": "1",
+      "conserve": true,
+      "consumed": "1",
+      "preserved": "1",
+      "produced": "2",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "1",
+      "before": "1",
+      "conserve": false,
+      "consumed": "1",
+      "preserved": "1",
+      "produced": "2",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "1",
+      "before": "1",
+      "conserve": true,
+      "consumed": "1",
+      "preserved": "1",
+      "produced": "2",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "1",
+      "before": "1",
+      "conserve": false,
+      "consumed": "2",
+      "preserved": "0",
+      "produced": "0",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "1",
+      "before": "1",
+      "conserve": true,
+      "consumed": "2",
+      "preserved": "0",
+      "produced": "0",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "1",
+      "before": "1",
+      "conserve": false,
+      "consumed": "2",
+      "preserved": "0",
+      "produced": "0",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "1",
+      "before": "1",
+      "conserve": true,
+      "consumed": "2",
+      "preserved": "0",
+      "produced": "0",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "1",
+      "before": "1",
+      "conserve": false,
+      "consumed": "2",
+      "preserved": "0",
+      "produced": "0",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "1",
+      "before": "1",
+      "conserve": true,
+      "consumed": "2",
+      "preserved": "0",
+      "produced": "0",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "1",
+      "before": "1",
+      "conserve": false,
+      "consumed": "2",
+      "preserved": "1",
+      "produced": "0",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "1",
+      "before": "1",
+      "conserve": true,
+      "consumed": "2",
+      "preserved": "1",
+      "produced": "0",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "1",
+      "before": "1",
+      "conserve": false,
+      "consumed": "2",
+      "preserved": "1",
+      "produced": "0",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "1",
+      "before": "1",
+      "conserve": true,
+      "consumed": "2",
+      "preserved": "1",
+      "produced": "0",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "1",
+      "before": "1",
+      "conserve": false,
+      "consumed": "2",
+      "preserved": "1",
+      "produced": "0",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "1",
+      "before": "1",
+      "conserve": true,
+      "consumed": "2",
+      "preserved": "1",
+      "produced": "0",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "1",
+      "before": "1",
+      "conserve": false,
+      "consumed": "2",
+      "preserved": "0",
+      "produced": "1",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "1",
+      "before": "1",
+      "conserve": true,
+      "consumed": "2",
+      "preserved": "0",
+      "produced": "1",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "1",
+      "before": "1",
+      "conserve": false,
+      "consumed": "2",
+      "preserved": "0",
+      "produced": "1",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "1",
+      "before": "1",
+      "conserve": true,
+      "consumed": "2",
+      "preserved": "0",
+      "produced": "1",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "1",
+      "before": "1",
+      "conserve": false,
+      "consumed": "2",
+      "preserved": "0",
+      "produced": "1",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "1",
+      "before": "1",
+      "conserve": true,
+      "consumed": "2",
+      "preserved": "0",
+      "produced": "1",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "1",
+      "before": "1",
+      "conserve": false,
+      "consumed": "2",
+      "preserved": "1",
+      "produced": "1",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "1",
+      "before": "1",
+      "conserve": true,
+      "consumed": "2",
+      "preserved": "1",
+      "produced": "1",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "1",
+      "before": "1",
+      "conserve": false,
+      "consumed": "2",
+      "preserved": "1",
+      "produced": "1",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "1",
+      "before": "1",
+      "conserve": true,
+      "consumed": "2",
+      "preserved": "1",
+      "produced": "1",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "1",
+      "before": "1",
+      "conserve": false,
+      "consumed": "2",
+      "preserved": "1",
+      "produced": "1",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "1",
+      "before": "1",
+      "conserve": true,
+      "consumed": "2",
+      "preserved": "1",
+      "produced": "1",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "1",
+      "before": "1",
+      "conserve": false,
+      "consumed": "2",
+      "preserved": "0",
+      "produced": "2",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "1",
+      "before": "1",
+      "conserve": true,
+      "consumed": "2",
+      "preserved": "0",
+      "produced": "2",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "1",
+      "before": "1",
+      "conserve": false,
+      "consumed": "2",
+      "preserved": "0",
+      "produced": "2",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "1",
+      "before": "1",
+      "conserve": true,
+      "consumed": "2",
+      "preserved": "0",
+      "produced": "2",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "1",
+      "before": "1",
+      "conserve": false,
+      "consumed": "2",
+      "preserved": "0",
+      "produced": "2",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "1",
+      "before": "1",
+      "conserve": true,
+      "consumed": "2",
+      "preserved": "0",
+      "produced": "2",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "1",
+      "before": "1",
+      "conserve": false,
+      "consumed": "2",
+      "preserved": "1",
+      "produced": "2",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "1",
+      "before": "1",
+      "conserve": true,
+      "consumed": "2",
+      "preserved": "1",
+      "produced": "2",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "1",
+      "before": "1",
+      "conserve": false,
+      "consumed": "2",
+      "preserved": "1",
+      "produced": "2",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "1",
+      "before": "1",
+      "conserve": true,
+      "consumed": "2",
+      "preserved": "1",
+      "produced": "2",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "1",
+      "before": "1",
+      "conserve": false,
+      "consumed": "2",
+      "preserved": "1",
+      "produced": "2",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "1",
+      "before": "1",
+      "conserve": true,
+      "consumed": "2",
+      "preserved": "1",
+      "produced": "2",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "3",
+      "before": "3",
+      "conserve": false,
+      "consumed": "0",
+      "preserved": "0",
+      "produced": "0",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "3",
+      "before": "3",
+      "conserve": true,
+      "consumed": "0",
+      "preserved": "0",
+      "produced": "0",
+      "units": "0"
+    },
+    {
+      "accepted": true,
+      "after": "3",
+      "before": "3",
+      "conserve": false,
+      "consumed": "0",
+      "preserved": "0",
+      "produced": "0",
+      "units": "1"
+    },
+    {
+      "accepted": true,
+      "after": "3",
+      "before": "3",
+      "conserve": true,
+      "consumed": "0",
+      "preserved": "0",
+      "produced": "0",
+      "units": "1"
+    },
+    {
+      "accepted": true,
+      "after": "3",
+      "before": "3",
+      "conserve": false,
+      "consumed": "0",
+      "preserved": "0",
+      "produced": "0",
+      "units": "2"
+    },
+    {
+      "accepted": true,
+      "after": "3",
+      "before": "3",
+      "conserve": true,
+      "consumed": "0",
+      "preserved": "0",
+      "produced": "0",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "3",
+      "before": "3",
+      "conserve": false,
+      "consumed": "0",
+      "preserved": "1",
+      "produced": "0",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "3",
+      "before": "3",
+      "conserve": true,
+      "consumed": "0",
+      "preserved": "1",
+      "produced": "0",
+      "units": "0"
+    },
+    {
+      "accepted": true,
+      "after": "3",
+      "before": "3",
+      "conserve": false,
+      "consumed": "0",
+      "preserved": "1",
+      "produced": "0",
+      "units": "1"
+    },
+    {
+      "accepted": true,
+      "after": "3",
+      "before": "3",
+      "conserve": true,
+      "consumed": "0",
+      "preserved": "1",
+      "produced": "0",
+      "units": "1"
+    },
+    {
+      "accepted": true,
+      "after": "3",
+      "before": "3",
+      "conserve": false,
+      "consumed": "0",
+      "preserved": "1",
+      "produced": "0",
+      "units": "2"
+    },
+    {
+      "accepted": true,
+      "after": "3",
+      "before": "3",
+      "conserve": true,
+      "consumed": "0",
+      "preserved": "1",
+      "produced": "0",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "3",
+      "before": "3",
+      "conserve": false,
+      "consumed": "0",
+      "preserved": "0",
+      "produced": "1",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "3",
+      "before": "3",
+      "conserve": true,
+      "consumed": "0",
+      "preserved": "0",
+      "produced": "1",
+      "units": "0"
+    },
+    {
+      "accepted": true,
+      "after": "4",
+      "before": "3",
+      "conserve": false,
+      "consumed": "0",
+      "preserved": "0",
+      "produced": "1",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "3",
+      "before": "3",
+      "conserve": true,
+      "consumed": "0",
+      "preserved": "0",
+      "produced": "1",
+      "units": "1"
+    },
+    {
+      "accepted": true,
+      "after": "5",
+      "before": "3",
+      "conserve": false,
+      "consumed": "0",
+      "preserved": "0",
+      "produced": "1",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "3",
+      "before": "3",
+      "conserve": true,
+      "consumed": "0",
+      "preserved": "0",
+      "produced": "1",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "3",
+      "before": "3",
+      "conserve": false,
+      "consumed": "0",
+      "preserved": "1",
+      "produced": "1",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "3",
+      "before": "3",
+      "conserve": true,
+      "consumed": "0",
+      "preserved": "1",
+      "produced": "1",
+      "units": "0"
+    },
+    {
+      "accepted": true,
+      "after": "4",
+      "before": "3",
+      "conserve": false,
+      "consumed": "0",
+      "preserved": "1",
+      "produced": "1",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "3",
+      "before": "3",
+      "conserve": true,
+      "consumed": "0",
+      "preserved": "1",
+      "produced": "1",
+      "units": "1"
+    },
+    {
+      "accepted": true,
+      "after": "5",
+      "before": "3",
+      "conserve": false,
+      "consumed": "0",
+      "preserved": "1",
+      "produced": "1",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "3",
+      "before": "3",
+      "conserve": true,
+      "consumed": "0",
+      "preserved": "1",
+      "produced": "1",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "3",
+      "before": "3",
+      "conserve": false,
+      "consumed": "0",
+      "preserved": "0",
+      "produced": "2",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "3",
+      "before": "3",
+      "conserve": true,
+      "consumed": "0",
+      "preserved": "0",
+      "produced": "2",
+      "units": "0"
+    },
+    {
+      "accepted": true,
+      "after": "5",
+      "before": "3",
+      "conserve": false,
+      "consumed": "0",
+      "preserved": "0",
+      "produced": "2",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "3",
+      "before": "3",
+      "conserve": true,
+      "consumed": "0",
+      "preserved": "0",
+      "produced": "2",
+      "units": "1"
+    },
+    {
+      "accepted": true,
+      "after": "7",
+      "before": "3",
+      "conserve": false,
+      "consumed": "0",
+      "preserved": "0",
+      "produced": "2",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "3",
+      "before": "3",
+      "conserve": true,
+      "consumed": "0",
+      "preserved": "0",
+      "produced": "2",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "3",
+      "before": "3",
+      "conserve": false,
+      "consumed": "0",
+      "preserved": "1",
+      "produced": "2",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "3",
+      "before": "3",
+      "conserve": true,
+      "consumed": "0",
+      "preserved": "1",
+      "produced": "2",
+      "units": "0"
+    },
+    {
+      "accepted": true,
+      "after": "5",
+      "before": "3",
+      "conserve": false,
+      "consumed": "0",
+      "preserved": "1",
+      "produced": "2",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "3",
+      "before": "3",
+      "conserve": true,
+      "consumed": "0",
+      "preserved": "1",
+      "produced": "2",
+      "units": "1"
+    },
+    {
+      "accepted": true,
+      "after": "7",
+      "before": "3",
+      "conserve": false,
+      "consumed": "0",
+      "preserved": "1",
+      "produced": "2",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "3",
+      "before": "3",
+      "conserve": true,
+      "consumed": "0",
+      "preserved": "1",
+      "produced": "2",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "3",
+      "before": "3",
+      "conserve": false,
+      "consumed": "1",
+      "preserved": "0",
+      "produced": "0",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "3",
+      "before": "3",
+      "conserve": true,
+      "consumed": "1",
+      "preserved": "0",
+      "produced": "0",
+      "units": "0"
+    },
+    {
+      "accepted": true,
+      "after": "2",
+      "before": "3",
+      "conserve": false,
+      "consumed": "1",
+      "preserved": "0",
+      "produced": "0",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "3",
+      "before": "3",
+      "conserve": true,
+      "consumed": "1",
+      "preserved": "0",
+      "produced": "0",
+      "units": "1"
+    },
+    {
+      "accepted": true,
+      "after": "1",
+      "before": "3",
+      "conserve": false,
+      "consumed": "1",
+      "preserved": "0",
+      "produced": "0",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "3",
+      "before": "3",
+      "conserve": true,
+      "consumed": "1",
+      "preserved": "0",
+      "produced": "0",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "3",
+      "before": "3",
+      "conserve": false,
+      "consumed": "1",
+      "preserved": "1",
+      "produced": "0",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "3",
+      "before": "3",
+      "conserve": true,
+      "consumed": "1",
+      "preserved": "1",
+      "produced": "0",
+      "units": "0"
+    },
+    {
+      "accepted": true,
+      "after": "2",
+      "before": "3",
+      "conserve": false,
+      "consumed": "1",
+      "preserved": "1",
+      "produced": "0",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "3",
+      "before": "3",
+      "conserve": true,
+      "consumed": "1",
+      "preserved": "1",
+      "produced": "0",
+      "units": "1"
+    },
+    {
+      "accepted": true,
+      "after": "1",
+      "before": "3",
+      "conserve": false,
+      "consumed": "1",
+      "preserved": "1",
+      "produced": "0",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "3",
+      "before": "3",
+      "conserve": true,
+      "consumed": "1",
+      "preserved": "1",
+      "produced": "0",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "3",
+      "before": "3",
+      "conserve": false,
+      "consumed": "1",
+      "preserved": "0",
+      "produced": "1",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "3",
+      "before": "3",
+      "conserve": true,
+      "consumed": "1",
+      "preserved": "0",
+      "produced": "1",
+      "units": "0"
+    },
+    {
+      "accepted": true,
+      "after": "3",
+      "before": "3",
+      "conserve": false,
+      "consumed": "1",
+      "preserved": "0",
+      "produced": "1",
+      "units": "1"
+    },
+    {
+      "accepted": true,
+      "after": "3",
+      "before": "3",
+      "conserve": true,
+      "consumed": "1",
+      "preserved": "0",
+      "produced": "1",
+      "units": "1"
+    },
+    {
+      "accepted": true,
+      "after": "3",
+      "before": "3",
+      "conserve": false,
+      "consumed": "1",
+      "preserved": "0",
+      "produced": "1",
+      "units": "2"
+    },
+    {
+      "accepted": true,
+      "after": "3",
+      "before": "3",
+      "conserve": true,
+      "consumed": "1",
+      "preserved": "0",
+      "produced": "1",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "3",
+      "before": "3",
+      "conserve": false,
+      "consumed": "1",
+      "preserved": "1",
+      "produced": "1",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "3",
+      "before": "3",
+      "conserve": true,
+      "consumed": "1",
+      "preserved": "1",
+      "produced": "1",
+      "units": "0"
+    },
+    {
+      "accepted": true,
+      "after": "3",
+      "before": "3",
+      "conserve": false,
+      "consumed": "1",
+      "preserved": "1",
+      "produced": "1",
+      "units": "1"
+    },
+    {
+      "accepted": true,
+      "after": "3",
+      "before": "3",
+      "conserve": true,
+      "consumed": "1",
+      "preserved": "1",
+      "produced": "1",
+      "units": "1"
+    },
+    {
+      "accepted": true,
+      "after": "3",
+      "before": "3",
+      "conserve": false,
+      "consumed": "1",
+      "preserved": "1",
+      "produced": "1",
+      "units": "2"
+    },
+    {
+      "accepted": true,
+      "after": "3",
+      "before": "3",
+      "conserve": true,
+      "consumed": "1",
+      "preserved": "1",
+      "produced": "1",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "3",
+      "before": "3",
+      "conserve": false,
+      "consumed": "1",
+      "preserved": "0",
+      "produced": "2",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "3",
+      "before": "3",
+      "conserve": true,
+      "consumed": "1",
+      "preserved": "0",
+      "produced": "2",
+      "units": "0"
+    },
+    {
+      "accepted": true,
+      "after": "4",
+      "before": "3",
+      "conserve": false,
+      "consumed": "1",
+      "preserved": "0",
+      "produced": "2",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "3",
+      "before": "3",
+      "conserve": true,
+      "consumed": "1",
+      "preserved": "0",
+      "produced": "2",
+      "units": "1"
+    },
+    {
+      "accepted": true,
+      "after": "5",
+      "before": "3",
+      "conserve": false,
+      "consumed": "1",
+      "preserved": "0",
+      "produced": "2",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "3",
+      "before": "3",
+      "conserve": true,
+      "consumed": "1",
+      "preserved": "0",
+      "produced": "2",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "3",
+      "before": "3",
+      "conserve": false,
+      "consumed": "1",
+      "preserved": "1",
+      "produced": "2",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "3",
+      "before": "3",
+      "conserve": true,
+      "consumed": "1",
+      "preserved": "1",
+      "produced": "2",
+      "units": "0"
+    },
+    {
+      "accepted": true,
+      "after": "4",
+      "before": "3",
+      "conserve": false,
+      "consumed": "1",
+      "preserved": "1",
+      "produced": "2",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "3",
+      "before": "3",
+      "conserve": true,
+      "consumed": "1",
+      "preserved": "1",
+      "produced": "2",
+      "units": "1"
+    },
+    {
+      "accepted": true,
+      "after": "5",
+      "before": "3",
+      "conserve": false,
+      "consumed": "1",
+      "preserved": "1",
+      "produced": "2",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "3",
+      "before": "3",
+      "conserve": true,
+      "consumed": "1",
+      "preserved": "1",
+      "produced": "2",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "3",
+      "before": "3",
+      "conserve": false,
+      "consumed": "2",
+      "preserved": "0",
+      "produced": "0",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "3",
+      "before": "3",
+      "conserve": true,
+      "consumed": "2",
+      "preserved": "0",
+      "produced": "0",
+      "units": "0"
+    },
+    {
+      "accepted": true,
+      "after": "1",
+      "before": "3",
+      "conserve": false,
+      "consumed": "2",
+      "preserved": "0",
+      "produced": "0",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "3",
+      "before": "3",
+      "conserve": true,
+      "consumed": "2",
+      "preserved": "0",
+      "produced": "0",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "3",
+      "before": "3",
+      "conserve": false,
+      "consumed": "2",
+      "preserved": "0",
+      "produced": "0",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "3",
+      "before": "3",
+      "conserve": true,
+      "consumed": "2",
+      "preserved": "0",
+      "produced": "0",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "3",
+      "before": "3",
+      "conserve": false,
+      "consumed": "2",
+      "preserved": "1",
+      "produced": "0",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "3",
+      "before": "3",
+      "conserve": true,
+      "consumed": "2",
+      "preserved": "1",
+      "produced": "0",
+      "units": "0"
+    },
+    {
+      "accepted": true,
+      "after": "1",
+      "before": "3",
+      "conserve": false,
+      "consumed": "2",
+      "preserved": "1",
+      "produced": "0",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "3",
+      "before": "3",
+      "conserve": true,
+      "consumed": "2",
+      "preserved": "1",
+      "produced": "0",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "3",
+      "before": "3",
+      "conserve": false,
+      "consumed": "2",
+      "preserved": "1",
+      "produced": "0",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "3",
+      "before": "3",
+      "conserve": true,
+      "consumed": "2",
+      "preserved": "1",
+      "produced": "0",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "3",
+      "before": "3",
+      "conserve": false,
+      "consumed": "2",
+      "preserved": "0",
+      "produced": "1",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "3",
+      "before": "3",
+      "conserve": true,
+      "consumed": "2",
+      "preserved": "0",
+      "produced": "1",
+      "units": "0"
+    },
+    {
+      "accepted": true,
+      "after": "2",
+      "before": "3",
+      "conserve": false,
+      "consumed": "2",
+      "preserved": "0",
+      "produced": "1",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "3",
+      "before": "3",
+      "conserve": true,
+      "consumed": "2",
+      "preserved": "0",
+      "produced": "1",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "3",
+      "before": "3",
+      "conserve": false,
+      "consumed": "2",
+      "preserved": "0",
+      "produced": "1",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "3",
+      "before": "3",
+      "conserve": true,
+      "consumed": "2",
+      "preserved": "0",
+      "produced": "1",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "3",
+      "before": "3",
+      "conserve": false,
+      "consumed": "2",
+      "preserved": "1",
+      "produced": "1",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "3",
+      "before": "3",
+      "conserve": true,
+      "consumed": "2",
+      "preserved": "1",
+      "produced": "1",
+      "units": "0"
+    },
+    {
+      "accepted": true,
+      "after": "2",
+      "before": "3",
+      "conserve": false,
+      "consumed": "2",
+      "preserved": "1",
+      "produced": "1",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "3",
+      "before": "3",
+      "conserve": true,
+      "consumed": "2",
+      "preserved": "1",
+      "produced": "1",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "3",
+      "before": "3",
+      "conserve": false,
+      "consumed": "2",
+      "preserved": "1",
+      "produced": "1",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "3",
+      "before": "3",
+      "conserve": true,
+      "consumed": "2",
+      "preserved": "1",
+      "produced": "1",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "3",
+      "before": "3",
+      "conserve": false,
+      "consumed": "2",
+      "preserved": "0",
+      "produced": "2",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "3",
+      "before": "3",
+      "conserve": true,
+      "consumed": "2",
+      "preserved": "0",
+      "produced": "2",
+      "units": "0"
+    },
+    {
+      "accepted": true,
+      "after": "3",
+      "before": "3",
+      "conserve": false,
+      "consumed": "2",
+      "preserved": "0",
+      "produced": "2",
+      "units": "1"
+    },
+    {
+      "accepted": true,
+      "after": "3",
+      "before": "3",
+      "conserve": true,
+      "consumed": "2",
+      "preserved": "0",
+      "produced": "2",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "3",
+      "before": "3",
+      "conserve": false,
+      "consumed": "2",
+      "preserved": "0",
+      "produced": "2",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "3",
+      "before": "3",
+      "conserve": true,
+      "consumed": "2",
+      "preserved": "0",
+      "produced": "2",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "3",
+      "before": "3",
+      "conserve": false,
+      "consumed": "2",
+      "preserved": "1",
+      "produced": "2",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "3",
+      "before": "3",
+      "conserve": true,
+      "consumed": "2",
+      "preserved": "1",
+      "produced": "2",
+      "units": "0"
+    },
+    {
+      "accepted": true,
+      "after": "3",
+      "before": "3",
+      "conserve": false,
+      "consumed": "2",
+      "preserved": "1",
+      "produced": "2",
+      "units": "1"
+    },
+    {
+      "accepted": true,
+      "after": "3",
+      "before": "3",
+      "conserve": true,
+      "consumed": "2",
+      "preserved": "1",
+      "produced": "2",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "3",
+      "before": "3",
+      "conserve": false,
+      "consumed": "2",
+      "preserved": "1",
+      "produced": "2",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "3",
+      "before": "3",
+      "conserve": true,
+      "consumed": "2",
+      "preserved": "1",
+      "produced": "2",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "6",
+      "before": "6",
+      "conserve": false,
+      "consumed": "0",
+      "preserved": "0",
+      "produced": "0",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "6",
+      "before": "6",
+      "conserve": true,
+      "consumed": "0",
+      "preserved": "0",
+      "produced": "0",
+      "units": "0"
+    },
+    {
+      "accepted": true,
+      "after": "6",
+      "before": "6",
+      "conserve": false,
+      "consumed": "0",
+      "preserved": "0",
+      "produced": "0",
+      "units": "1"
+    },
+    {
+      "accepted": true,
+      "after": "6",
+      "before": "6",
+      "conserve": true,
+      "consumed": "0",
+      "preserved": "0",
+      "produced": "0",
+      "units": "1"
+    },
+    {
+      "accepted": true,
+      "after": "6",
+      "before": "6",
+      "conserve": false,
+      "consumed": "0",
+      "preserved": "0",
+      "produced": "0",
+      "units": "2"
+    },
+    {
+      "accepted": true,
+      "after": "6",
+      "before": "6",
+      "conserve": true,
+      "consumed": "0",
+      "preserved": "0",
+      "produced": "0",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "6",
+      "before": "6",
+      "conserve": false,
+      "consumed": "0",
+      "preserved": "1",
+      "produced": "0",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "6",
+      "before": "6",
+      "conserve": true,
+      "consumed": "0",
+      "preserved": "1",
+      "produced": "0",
+      "units": "0"
+    },
+    {
+      "accepted": true,
+      "after": "6",
+      "before": "6",
+      "conserve": false,
+      "consumed": "0",
+      "preserved": "1",
+      "produced": "0",
+      "units": "1"
+    },
+    {
+      "accepted": true,
+      "after": "6",
+      "before": "6",
+      "conserve": true,
+      "consumed": "0",
+      "preserved": "1",
+      "produced": "0",
+      "units": "1"
+    },
+    {
+      "accepted": true,
+      "after": "6",
+      "before": "6",
+      "conserve": false,
+      "consumed": "0",
+      "preserved": "1",
+      "produced": "0",
+      "units": "2"
+    },
+    {
+      "accepted": true,
+      "after": "6",
+      "before": "6",
+      "conserve": true,
+      "consumed": "0",
+      "preserved": "1",
+      "produced": "0",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "6",
+      "before": "6",
+      "conserve": false,
+      "consumed": "0",
+      "preserved": "0",
+      "produced": "1",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "6",
+      "before": "6",
+      "conserve": true,
+      "consumed": "0",
+      "preserved": "0",
+      "produced": "1",
+      "units": "0"
+    },
+    {
+      "accepted": true,
+      "after": "7",
+      "before": "6",
+      "conserve": false,
+      "consumed": "0",
+      "preserved": "0",
+      "produced": "1",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "6",
+      "before": "6",
+      "conserve": true,
+      "consumed": "0",
+      "preserved": "0",
+      "produced": "1",
+      "units": "1"
+    },
+    {
+      "accepted": true,
+      "after": "8",
+      "before": "6",
+      "conserve": false,
+      "consumed": "0",
+      "preserved": "0",
+      "produced": "1",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "6",
+      "before": "6",
+      "conserve": true,
+      "consumed": "0",
+      "preserved": "0",
+      "produced": "1",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "6",
+      "before": "6",
+      "conserve": false,
+      "consumed": "0",
+      "preserved": "1",
+      "produced": "1",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "6",
+      "before": "6",
+      "conserve": true,
+      "consumed": "0",
+      "preserved": "1",
+      "produced": "1",
+      "units": "0"
+    },
+    {
+      "accepted": true,
+      "after": "7",
+      "before": "6",
+      "conserve": false,
+      "consumed": "0",
+      "preserved": "1",
+      "produced": "1",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "6",
+      "before": "6",
+      "conserve": true,
+      "consumed": "0",
+      "preserved": "1",
+      "produced": "1",
+      "units": "1"
+    },
+    {
+      "accepted": true,
+      "after": "8",
+      "before": "6",
+      "conserve": false,
+      "consumed": "0",
+      "preserved": "1",
+      "produced": "1",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "6",
+      "before": "6",
+      "conserve": true,
+      "consumed": "0",
+      "preserved": "1",
+      "produced": "1",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "6",
+      "before": "6",
+      "conserve": false,
+      "consumed": "0",
+      "preserved": "0",
+      "produced": "2",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "6",
+      "before": "6",
+      "conserve": true,
+      "consumed": "0",
+      "preserved": "0",
+      "produced": "2",
+      "units": "0"
+    },
+    {
+      "accepted": true,
+      "after": "8",
+      "before": "6",
+      "conserve": false,
+      "consumed": "0",
+      "preserved": "0",
+      "produced": "2",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "6",
+      "before": "6",
+      "conserve": true,
+      "consumed": "0",
+      "preserved": "0",
+      "produced": "2",
+      "units": "1"
+    },
+    {
+      "accepted": true,
+      "after": "10",
+      "before": "6",
+      "conserve": false,
+      "consumed": "0",
+      "preserved": "0",
+      "produced": "2",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "6",
+      "before": "6",
+      "conserve": true,
+      "consumed": "0",
+      "preserved": "0",
+      "produced": "2",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "6",
+      "before": "6",
+      "conserve": false,
+      "consumed": "0",
+      "preserved": "1",
+      "produced": "2",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "6",
+      "before": "6",
+      "conserve": true,
+      "consumed": "0",
+      "preserved": "1",
+      "produced": "2",
+      "units": "0"
+    },
+    {
+      "accepted": true,
+      "after": "8",
+      "before": "6",
+      "conserve": false,
+      "consumed": "0",
+      "preserved": "1",
+      "produced": "2",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "6",
+      "before": "6",
+      "conserve": true,
+      "consumed": "0",
+      "preserved": "1",
+      "produced": "2",
+      "units": "1"
+    },
+    {
+      "accepted": true,
+      "after": "10",
+      "before": "6",
+      "conserve": false,
+      "consumed": "0",
+      "preserved": "1",
+      "produced": "2",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "6",
+      "before": "6",
+      "conserve": true,
+      "consumed": "0",
+      "preserved": "1",
+      "produced": "2",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "6",
+      "before": "6",
+      "conserve": false,
+      "consumed": "1",
+      "preserved": "0",
+      "produced": "0",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "6",
+      "before": "6",
+      "conserve": true,
+      "consumed": "1",
+      "preserved": "0",
+      "produced": "0",
+      "units": "0"
+    },
+    {
+      "accepted": true,
+      "after": "5",
+      "before": "6",
+      "conserve": false,
+      "consumed": "1",
+      "preserved": "0",
+      "produced": "0",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "6",
+      "before": "6",
+      "conserve": true,
+      "consumed": "1",
+      "preserved": "0",
+      "produced": "0",
+      "units": "1"
+    },
+    {
+      "accepted": true,
+      "after": "4",
+      "before": "6",
+      "conserve": false,
+      "consumed": "1",
+      "preserved": "0",
+      "produced": "0",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "6",
+      "before": "6",
+      "conserve": true,
+      "consumed": "1",
+      "preserved": "0",
+      "produced": "0",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "6",
+      "before": "6",
+      "conserve": false,
+      "consumed": "1",
+      "preserved": "1",
+      "produced": "0",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "6",
+      "before": "6",
+      "conserve": true,
+      "consumed": "1",
+      "preserved": "1",
+      "produced": "0",
+      "units": "0"
+    },
+    {
+      "accepted": true,
+      "after": "5",
+      "before": "6",
+      "conserve": false,
+      "consumed": "1",
+      "preserved": "1",
+      "produced": "0",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "6",
+      "before": "6",
+      "conserve": true,
+      "consumed": "1",
+      "preserved": "1",
+      "produced": "0",
+      "units": "1"
+    },
+    {
+      "accepted": true,
+      "after": "4",
+      "before": "6",
+      "conserve": false,
+      "consumed": "1",
+      "preserved": "1",
+      "produced": "0",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "6",
+      "before": "6",
+      "conserve": true,
+      "consumed": "1",
+      "preserved": "1",
+      "produced": "0",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "6",
+      "before": "6",
+      "conserve": false,
+      "consumed": "1",
+      "preserved": "0",
+      "produced": "1",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "6",
+      "before": "6",
+      "conserve": true,
+      "consumed": "1",
+      "preserved": "0",
+      "produced": "1",
+      "units": "0"
+    },
+    {
+      "accepted": true,
+      "after": "6",
+      "before": "6",
+      "conserve": false,
+      "consumed": "1",
+      "preserved": "0",
+      "produced": "1",
+      "units": "1"
+    },
+    {
+      "accepted": true,
+      "after": "6",
+      "before": "6",
+      "conserve": true,
+      "consumed": "1",
+      "preserved": "0",
+      "produced": "1",
+      "units": "1"
+    },
+    {
+      "accepted": true,
+      "after": "6",
+      "before": "6",
+      "conserve": false,
+      "consumed": "1",
+      "preserved": "0",
+      "produced": "1",
+      "units": "2"
+    },
+    {
+      "accepted": true,
+      "after": "6",
+      "before": "6",
+      "conserve": true,
+      "consumed": "1",
+      "preserved": "0",
+      "produced": "1",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "6",
+      "before": "6",
+      "conserve": false,
+      "consumed": "1",
+      "preserved": "1",
+      "produced": "1",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "6",
+      "before": "6",
+      "conserve": true,
+      "consumed": "1",
+      "preserved": "1",
+      "produced": "1",
+      "units": "0"
+    },
+    {
+      "accepted": true,
+      "after": "6",
+      "before": "6",
+      "conserve": false,
+      "consumed": "1",
+      "preserved": "1",
+      "produced": "1",
+      "units": "1"
+    },
+    {
+      "accepted": true,
+      "after": "6",
+      "before": "6",
+      "conserve": true,
+      "consumed": "1",
+      "preserved": "1",
+      "produced": "1",
+      "units": "1"
+    },
+    {
+      "accepted": true,
+      "after": "6",
+      "before": "6",
+      "conserve": false,
+      "consumed": "1",
+      "preserved": "1",
+      "produced": "1",
+      "units": "2"
+    },
+    {
+      "accepted": true,
+      "after": "6",
+      "before": "6",
+      "conserve": true,
+      "consumed": "1",
+      "preserved": "1",
+      "produced": "1",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "6",
+      "before": "6",
+      "conserve": false,
+      "consumed": "1",
+      "preserved": "0",
+      "produced": "2",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "6",
+      "before": "6",
+      "conserve": true,
+      "consumed": "1",
+      "preserved": "0",
+      "produced": "2",
+      "units": "0"
+    },
+    {
+      "accepted": true,
+      "after": "7",
+      "before": "6",
+      "conserve": false,
+      "consumed": "1",
+      "preserved": "0",
+      "produced": "2",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "6",
+      "before": "6",
+      "conserve": true,
+      "consumed": "1",
+      "preserved": "0",
+      "produced": "2",
+      "units": "1"
+    },
+    {
+      "accepted": true,
+      "after": "8",
+      "before": "6",
+      "conserve": false,
+      "consumed": "1",
+      "preserved": "0",
+      "produced": "2",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "6",
+      "before": "6",
+      "conserve": true,
+      "consumed": "1",
+      "preserved": "0",
+      "produced": "2",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "6",
+      "before": "6",
+      "conserve": false,
+      "consumed": "1",
+      "preserved": "1",
+      "produced": "2",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "6",
+      "before": "6",
+      "conserve": true,
+      "consumed": "1",
+      "preserved": "1",
+      "produced": "2",
+      "units": "0"
+    },
+    {
+      "accepted": true,
+      "after": "7",
+      "before": "6",
+      "conserve": false,
+      "consumed": "1",
+      "preserved": "1",
+      "produced": "2",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "6",
+      "before": "6",
+      "conserve": true,
+      "consumed": "1",
+      "preserved": "1",
+      "produced": "2",
+      "units": "1"
+    },
+    {
+      "accepted": true,
+      "after": "8",
+      "before": "6",
+      "conserve": false,
+      "consumed": "1",
+      "preserved": "1",
+      "produced": "2",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "6",
+      "before": "6",
+      "conserve": true,
+      "consumed": "1",
+      "preserved": "1",
+      "produced": "2",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "6",
+      "before": "6",
+      "conserve": false,
+      "consumed": "2",
+      "preserved": "0",
+      "produced": "0",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "6",
+      "before": "6",
+      "conserve": true,
+      "consumed": "2",
+      "preserved": "0",
+      "produced": "0",
+      "units": "0"
+    },
+    {
+      "accepted": true,
+      "after": "4",
+      "before": "6",
+      "conserve": false,
+      "consumed": "2",
+      "preserved": "0",
+      "produced": "0",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "6",
+      "before": "6",
+      "conserve": true,
+      "consumed": "2",
+      "preserved": "0",
+      "produced": "0",
+      "units": "1"
+    },
+    {
+      "accepted": true,
+      "after": "2",
+      "before": "6",
+      "conserve": false,
+      "consumed": "2",
+      "preserved": "0",
+      "produced": "0",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "6",
+      "before": "6",
+      "conserve": true,
+      "consumed": "2",
+      "preserved": "0",
+      "produced": "0",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "6",
+      "before": "6",
+      "conserve": false,
+      "consumed": "2",
+      "preserved": "1",
+      "produced": "0",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "6",
+      "before": "6",
+      "conserve": true,
+      "consumed": "2",
+      "preserved": "1",
+      "produced": "0",
+      "units": "0"
+    },
+    {
+      "accepted": true,
+      "after": "4",
+      "before": "6",
+      "conserve": false,
+      "consumed": "2",
+      "preserved": "1",
+      "produced": "0",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "6",
+      "before": "6",
+      "conserve": true,
+      "consumed": "2",
+      "preserved": "1",
+      "produced": "0",
+      "units": "1"
+    },
+    {
+      "accepted": true,
+      "after": "2",
+      "before": "6",
+      "conserve": false,
+      "consumed": "2",
+      "preserved": "1",
+      "produced": "0",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "6",
+      "before": "6",
+      "conserve": true,
+      "consumed": "2",
+      "preserved": "1",
+      "produced": "0",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "6",
+      "before": "6",
+      "conserve": false,
+      "consumed": "2",
+      "preserved": "0",
+      "produced": "1",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "6",
+      "before": "6",
+      "conserve": true,
+      "consumed": "2",
+      "preserved": "0",
+      "produced": "1",
+      "units": "0"
+    },
+    {
+      "accepted": true,
+      "after": "5",
+      "before": "6",
+      "conserve": false,
+      "consumed": "2",
+      "preserved": "0",
+      "produced": "1",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "6",
+      "before": "6",
+      "conserve": true,
+      "consumed": "2",
+      "preserved": "0",
+      "produced": "1",
+      "units": "1"
+    },
+    {
+      "accepted": true,
+      "after": "4",
+      "before": "6",
+      "conserve": false,
+      "consumed": "2",
+      "preserved": "0",
+      "produced": "1",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "6",
+      "before": "6",
+      "conserve": true,
+      "consumed": "2",
+      "preserved": "0",
+      "produced": "1",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "6",
+      "before": "6",
+      "conserve": false,
+      "consumed": "2",
+      "preserved": "1",
+      "produced": "1",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "6",
+      "before": "6",
+      "conserve": true,
+      "consumed": "2",
+      "preserved": "1",
+      "produced": "1",
+      "units": "0"
+    },
+    {
+      "accepted": true,
+      "after": "5",
+      "before": "6",
+      "conserve": false,
+      "consumed": "2",
+      "preserved": "1",
+      "produced": "1",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "6",
+      "before": "6",
+      "conserve": true,
+      "consumed": "2",
+      "preserved": "1",
+      "produced": "1",
+      "units": "1"
+    },
+    {
+      "accepted": true,
+      "after": "4",
+      "before": "6",
+      "conserve": false,
+      "consumed": "2",
+      "preserved": "1",
+      "produced": "1",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "6",
+      "before": "6",
+      "conserve": true,
+      "consumed": "2",
+      "preserved": "1",
+      "produced": "1",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "6",
+      "before": "6",
+      "conserve": false,
+      "consumed": "2",
+      "preserved": "0",
+      "produced": "2",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "6",
+      "before": "6",
+      "conserve": true,
+      "consumed": "2",
+      "preserved": "0",
+      "produced": "2",
+      "units": "0"
+    },
+    {
+      "accepted": true,
+      "after": "6",
+      "before": "6",
+      "conserve": false,
+      "consumed": "2",
+      "preserved": "0",
+      "produced": "2",
+      "units": "1"
+    },
+    {
+      "accepted": true,
+      "after": "6",
+      "before": "6",
+      "conserve": true,
+      "consumed": "2",
+      "preserved": "0",
+      "produced": "2",
+      "units": "1"
+    },
+    {
+      "accepted": true,
+      "after": "6",
+      "before": "6",
+      "conserve": false,
+      "consumed": "2",
+      "preserved": "0",
+      "produced": "2",
+      "units": "2"
+    },
+    {
+      "accepted": true,
+      "after": "6",
+      "before": "6",
+      "conserve": true,
+      "consumed": "2",
+      "preserved": "0",
+      "produced": "2",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "6",
+      "before": "6",
+      "conserve": false,
+      "consumed": "2",
+      "preserved": "1",
+      "produced": "2",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "6",
+      "before": "6",
+      "conserve": true,
+      "consumed": "2",
+      "preserved": "1",
+      "produced": "2",
+      "units": "0"
+    },
+    {
+      "accepted": true,
+      "after": "6",
+      "before": "6",
+      "conserve": false,
+      "consumed": "2",
+      "preserved": "1",
+      "produced": "2",
+      "units": "1"
+    },
+    {
+      "accepted": true,
+      "after": "6",
+      "before": "6",
+      "conserve": true,
+      "consumed": "2",
+      "preserved": "1",
+      "produced": "2",
+      "units": "1"
+    },
+    {
+      "accepted": true,
+      "after": "6",
+      "before": "6",
+      "conserve": false,
+      "consumed": "2",
+      "preserved": "1",
+      "produced": "2",
+      "units": "2"
+    },
+    {
+      "accepted": true,
+      "after": "6",
+      "before": "6",
+      "conserve": true,
+      "consumed": "2",
+      "preserved": "1",
+      "produced": "2",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "18446744073709551615",
+      "before": "18446744073709551615",
+      "conserve": false,
+      "consumed": "0",
+      "preserved": "0",
+      "produced": "0",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "18446744073709551615",
+      "before": "18446744073709551615",
+      "conserve": true,
+      "consumed": "0",
+      "preserved": "0",
+      "produced": "0",
+      "units": "0"
+    },
+    {
+      "accepted": true,
+      "after": "18446744073709551615",
+      "before": "18446744073709551615",
+      "conserve": false,
+      "consumed": "0",
+      "preserved": "0",
+      "produced": "0",
+      "units": "1"
+    },
+    {
+      "accepted": true,
+      "after": "18446744073709551615",
+      "before": "18446744073709551615",
+      "conserve": true,
+      "consumed": "0",
+      "preserved": "0",
+      "produced": "0",
+      "units": "1"
+    },
+    {
+      "accepted": true,
+      "after": "18446744073709551615",
+      "before": "18446744073709551615",
+      "conserve": false,
+      "consumed": "0",
+      "preserved": "0",
+      "produced": "0",
+      "units": "2"
+    },
+    {
+      "accepted": true,
+      "after": "18446744073709551615",
+      "before": "18446744073709551615",
+      "conserve": true,
+      "consumed": "0",
+      "preserved": "0",
+      "produced": "0",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "18446744073709551615",
+      "before": "18446744073709551615",
+      "conserve": false,
+      "consumed": "0",
+      "preserved": "1",
+      "produced": "0",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "18446744073709551615",
+      "before": "18446744073709551615",
+      "conserve": true,
+      "consumed": "0",
+      "preserved": "1",
+      "produced": "0",
+      "units": "0"
+    },
+    {
+      "accepted": true,
+      "after": "18446744073709551615",
+      "before": "18446744073709551615",
+      "conserve": false,
+      "consumed": "0",
+      "preserved": "1",
+      "produced": "0",
+      "units": "1"
+    },
+    {
+      "accepted": true,
+      "after": "18446744073709551615",
+      "before": "18446744073709551615",
+      "conserve": true,
+      "consumed": "0",
+      "preserved": "1",
+      "produced": "0",
+      "units": "1"
+    },
+    {
+      "accepted": true,
+      "after": "18446744073709551615",
+      "before": "18446744073709551615",
+      "conserve": false,
+      "consumed": "0",
+      "preserved": "1",
+      "produced": "0",
+      "units": "2"
+    },
+    {
+      "accepted": true,
+      "after": "18446744073709551615",
+      "before": "18446744073709551615",
+      "conserve": true,
+      "consumed": "0",
+      "preserved": "1",
+      "produced": "0",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "18446744073709551615",
+      "before": "18446744073709551615",
+      "conserve": false,
+      "consumed": "0",
+      "preserved": "0",
+      "produced": "1",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "18446744073709551615",
+      "before": "18446744073709551615",
+      "conserve": true,
+      "consumed": "0",
+      "preserved": "0",
+      "produced": "1",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "18446744073709551615",
+      "before": "18446744073709551615",
+      "conserve": false,
+      "consumed": "0",
+      "preserved": "0",
+      "produced": "1",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "18446744073709551615",
+      "before": "18446744073709551615",
+      "conserve": true,
+      "consumed": "0",
+      "preserved": "0",
+      "produced": "1",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "18446744073709551615",
+      "before": "18446744073709551615",
+      "conserve": false,
+      "consumed": "0",
+      "preserved": "0",
+      "produced": "1",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "18446744073709551615",
+      "before": "18446744073709551615",
+      "conserve": true,
+      "consumed": "0",
+      "preserved": "0",
+      "produced": "1",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "18446744073709551615",
+      "before": "18446744073709551615",
+      "conserve": false,
+      "consumed": "0",
+      "preserved": "1",
+      "produced": "1",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "18446744073709551615",
+      "before": "18446744073709551615",
+      "conserve": true,
+      "consumed": "0",
+      "preserved": "1",
+      "produced": "1",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "18446744073709551615",
+      "before": "18446744073709551615",
+      "conserve": false,
+      "consumed": "0",
+      "preserved": "1",
+      "produced": "1",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "18446744073709551615",
+      "before": "18446744073709551615",
+      "conserve": true,
+      "consumed": "0",
+      "preserved": "1",
+      "produced": "1",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "18446744073709551615",
+      "before": "18446744073709551615",
+      "conserve": false,
+      "consumed": "0",
+      "preserved": "1",
+      "produced": "1",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "18446744073709551615",
+      "before": "18446744073709551615",
+      "conserve": true,
+      "consumed": "0",
+      "preserved": "1",
+      "produced": "1",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "18446744073709551615",
+      "before": "18446744073709551615",
+      "conserve": false,
+      "consumed": "0",
+      "preserved": "0",
+      "produced": "2",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "18446744073709551615",
+      "before": "18446744073709551615",
+      "conserve": true,
+      "consumed": "0",
+      "preserved": "0",
+      "produced": "2",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "18446744073709551615",
+      "before": "18446744073709551615",
+      "conserve": false,
+      "consumed": "0",
+      "preserved": "0",
+      "produced": "2",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "18446744073709551615",
+      "before": "18446744073709551615",
+      "conserve": true,
+      "consumed": "0",
+      "preserved": "0",
+      "produced": "2",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "18446744073709551615",
+      "before": "18446744073709551615",
+      "conserve": false,
+      "consumed": "0",
+      "preserved": "0",
+      "produced": "2",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "18446744073709551615",
+      "before": "18446744073709551615",
+      "conserve": true,
+      "consumed": "0",
+      "preserved": "0",
+      "produced": "2",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "18446744073709551615",
+      "before": "18446744073709551615",
+      "conserve": false,
+      "consumed": "0",
+      "preserved": "1",
+      "produced": "2",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "18446744073709551615",
+      "before": "18446744073709551615",
+      "conserve": true,
+      "consumed": "0",
+      "preserved": "1",
+      "produced": "2",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "18446744073709551615",
+      "before": "18446744073709551615",
+      "conserve": false,
+      "consumed": "0",
+      "preserved": "1",
+      "produced": "2",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "18446744073709551615",
+      "before": "18446744073709551615",
+      "conserve": true,
+      "consumed": "0",
+      "preserved": "1",
+      "produced": "2",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "18446744073709551615",
+      "before": "18446744073709551615",
+      "conserve": false,
+      "consumed": "0",
+      "preserved": "1",
+      "produced": "2",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "18446744073709551615",
+      "before": "18446744073709551615",
+      "conserve": true,
+      "consumed": "0",
+      "preserved": "1",
+      "produced": "2",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "18446744073709551615",
+      "before": "18446744073709551615",
+      "conserve": false,
+      "consumed": "1",
+      "preserved": "0",
+      "produced": "0",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "18446744073709551615",
+      "before": "18446744073709551615",
+      "conserve": true,
+      "consumed": "1",
+      "preserved": "0",
+      "produced": "0",
+      "units": "0"
+    },
+    {
+      "accepted": true,
+      "after": "18446744073709551614",
+      "before": "18446744073709551615",
+      "conserve": false,
+      "consumed": "1",
+      "preserved": "0",
+      "produced": "0",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "18446744073709551615",
+      "before": "18446744073709551615",
+      "conserve": true,
+      "consumed": "1",
+      "preserved": "0",
+      "produced": "0",
+      "units": "1"
+    },
+    {
+      "accepted": true,
+      "after": "18446744073709551613",
+      "before": "18446744073709551615",
+      "conserve": false,
+      "consumed": "1",
+      "preserved": "0",
+      "produced": "0",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "18446744073709551615",
+      "before": "18446744073709551615",
+      "conserve": true,
+      "consumed": "1",
+      "preserved": "0",
+      "produced": "0",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "18446744073709551615",
+      "before": "18446744073709551615",
+      "conserve": false,
+      "consumed": "1",
+      "preserved": "1",
+      "produced": "0",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "18446744073709551615",
+      "before": "18446744073709551615",
+      "conserve": true,
+      "consumed": "1",
+      "preserved": "1",
+      "produced": "0",
+      "units": "0"
+    },
+    {
+      "accepted": true,
+      "after": "18446744073709551614",
+      "before": "18446744073709551615",
+      "conserve": false,
+      "consumed": "1",
+      "preserved": "1",
+      "produced": "0",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "18446744073709551615",
+      "before": "18446744073709551615",
+      "conserve": true,
+      "consumed": "1",
+      "preserved": "1",
+      "produced": "0",
+      "units": "1"
+    },
+    {
+      "accepted": true,
+      "after": "18446744073709551613",
+      "before": "18446744073709551615",
+      "conserve": false,
+      "consumed": "1",
+      "preserved": "1",
+      "produced": "0",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "18446744073709551615",
+      "before": "18446744073709551615",
+      "conserve": true,
+      "consumed": "1",
+      "preserved": "1",
+      "produced": "0",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "18446744073709551615",
+      "before": "18446744073709551615",
+      "conserve": false,
+      "consumed": "1",
+      "preserved": "0",
+      "produced": "1",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "18446744073709551615",
+      "before": "18446744073709551615",
+      "conserve": true,
+      "consumed": "1",
+      "preserved": "0",
+      "produced": "1",
+      "units": "0"
+    },
+    {
+      "accepted": true,
+      "after": "18446744073709551615",
+      "before": "18446744073709551615",
+      "conserve": false,
+      "consumed": "1",
+      "preserved": "0",
+      "produced": "1",
+      "units": "1"
+    },
+    {
+      "accepted": true,
+      "after": "18446744073709551615",
+      "before": "18446744073709551615",
+      "conserve": true,
+      "consumed": "1",
+      "preserved": "0",
+      "produced": "1",
+      "units": "1"
+    },
+    {
+      "accepted": true,
+      "after": "18446744073709551615",
+      "before": "18446744073709551615",
+      "conserve": false,
+      "consumed": "1",
+      "preserved": "0",
+      "produced": "1",
+      "units": "2"
+    },
+    {
+      "accepted": true,
+      "after": "18446744073709551615",
+      "before": "18446744073709551615",
+      "conserve": true,
+      "consumed": "1",
+      "preserved": "0",
+      "produced": "1",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "18446744073709551615",
+      "before": "18446744073709551615",
+      "conserve": false,
+      "consumed": "1",
+      "preserved": "1",
+      "produced": "1",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "18446744073709551615",
+      "before": "18446744073709551615",
+      "conserve": true,
+      "consumed": "1",
+      "preserved": "1",
+      "produced": "1",
+      "units": "0"
+    },
+    {
+      "accepted": true,
+      "after": "18446744073709551615",
+      "before": "18446744073709551615",
+      "conserve": false,
+      "consumed": "1",
+      "preserved": "1",
+      "produced": "1",
+      "units": "1"
+    },
+    {
+      "accepted": true,
+      "after": "18446744073709551615",
+      "before": "18446744073709551615",
+      "conserve": true,
+      "consumed": "1",
+      "preserved": "1",
+      "produced": "1",
+      "units": "1"
+    },
+    {
+      "accepted": true,
+      "after": "18446744073709551615",
+      "before": "18446744073709551615",
+      "conserve": false,
+      "consumed": "1",
+      "preserved": "1",
+      "produced": "1",
+      "units": "2"
+    },
+    {
+      "accepted": true,
+      "after": "18446744073709551615",
+      "before": "18446744073709551615",
+      "conserve": true,
+      "consumed": "1",
+      "preserved": "1",
+      "produced": "1",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "18446744073709551615",
+      "before": "18446744073709551615",
+      "conserve": false,
+      "consumed": "1",
+      "preserved": "0",
+      "produced": "2",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "18446744073709551615",
+      "before": "18446744073709551615",
+      "conserve": true,
+      "consumed": "1",
+      "preserved": "0",
+      "produced": "2",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "18446744073709551615",
+      "before": "18446744073709551615",
+      "conserve": false,
+      "consumed": "1",
+      "preserved": "0",
+      "produced": "2",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "18446744073709551615",
+      "before": "18446744073709551615",
+      "conserve": true,
+      "consumed": "1",
+      "preserved": "0",
+      "produced": "2",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "18446744073709551615",
+      "before": "18446744073709551615",
+      "conserve": false,
+      "consumed": "1",
+      "preserved": "0",
+      "produced": "2",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "18446744073709551615",
+      "before": "18446744073709551615",
+      "conserve": true,
+      "consumed": "1",
+      "preserved": "0",
+      "produced": "2",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "18446744073709551615",
+      "before": "18446744073709551615",
+      "conserve": false,
+      "consumed": "1",
+      "preserved": "1",
+      "produced": "2",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "18446744073709551615",
+      "before": "18446744073709551615",
+      "conserve": true,
+      "consumed": "1",
+      "preserved": "1",
+      "produced": "2",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "18446744073709551615",
+      "before": "18446744073709551615",
+      "conserve": false,
+      "consumed": "1",
+      "preserved": "1",
+      "produced": "2",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "18446744073709551615",
+      "before": "18446744073709551615",
+      "conserve": true,
+      "consumed": "1",
+      "preserved": "1",
+      "produced": "2",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "18446744073709551615",
+      "before": "18446744073709551615",
+      "conserve": false,
+      "consumed": "1",
+      "preserved": "1",
+      "produced": "2",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "18446744073709551615",
+      "before": "18446744073709551615",
+      "conserve": true,
+      "consumed": "1",
+      "preserved": "1",
+      "produced": "2",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "18446744073709551615",
+      "before": "18446744073709551615",
+      "conserve": false,
+      "consumed": "2",
+      "preserved": "0",
+      "produced": "0",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "18446744073709551615",
+      "before": "18446744073709551615",
+      "conserve": true,
+      "consumed": "2",
+      "preserved": "0",
+      "produced": "0",
+      "units": "0"
+    },
+    {
+      "accepted": true,
+      "after": "18446744073709551613",
+      "before": "18446744073709551615",
+      "conserve": false,
+      "consumed": "2",
+      "preserved": "0",
+      "produced": "0",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "18446744073709551615",
+      "before": "18446744073709551615",
+      "conserve": true,
+      "consumed": "2",
+      "preserved": "0",
+      "produced": "0",
+      "units": "1"
+    },
+    {
+      "accepted": true,
+      "after": "18446744073709551611",
+      "before": "18446744073709551615",
+      "conserve": false,
+      "consumed": "2",
+      "preserved": "0",
+      "produced": "0",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "18446744073709551615",
+      "before": "18446744073709551615",
+      "conserve": true,
+      "consumed": "2",
+      "preserved": "0",
+      "produced": "0",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "18446744073709551615",
+      "before": "18446744073709551615",
+      "conserve": false,
+      "consumed": "2",
+      "preserved": "1",
+      "produced": "0",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "18446744073709551615",
+      "before": "18446744073709551615",
+      "conserve": true,
+      "consumed": "2",
+      "preserved": "1",
+      "produced": "0",
+      "units": "0"
+    },
+    {
+      "accepted": true,
+      "after": "18446744073709551613",
+      "before": "18446744073709551615",
+      "conserve": false,
+      "consumed": "2",
+      "preserved": "1",
+      "produced": "0",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "18446744073709551615",
+      "before": "18446744073709551615",
+      "conserve": true,
+      "consumed": "2",
+      "preserved": "1",
+      "produced": "0",
+      "units": "1"
+    },
+    {
+      "accepted": true,
+      "after": "18446744073709551611",
+      "before": "18446744073709551615",
+      "conserve": false,
+      "consumed": "2",
+      "preserved": "1",
+      "produced": "0",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "18446744073709551615",
+      "before": "18446744073709551615",
+      "conserve": true,
+      "consumed": "2",
+      "preserved": "1",
+      "produced": "0",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "18446744073709551615",
+      "before": "18446744073709551615",
+      "conserve": false,
+      "consumed": "2",
+      "preserved": "0",
+      "produced": "1",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "18446744073709551615",
+      "before": "18446744073709551615",
+      "conserve": true,
+      "consumed": "2",
+      "preserved": "0",
+      "produced": "1",
+      "units": "0"
+    },
+    {
+      "accepted": true,
+      "after": "18446744073709551614",
+      "before": "18446744073709551615",
+      "conserve": false,
+      "consumed": "2",
+      "preserved": "0",
+      "produced": "1",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "18446744073709551615",
+      "before": "18446744073709551615",
+      "conserve": true,
+      "consumed": "2",
+      "preserved": "0",
+      "produced": "1",
+      "units": "1"
+    },
+    {
+      "accepted": true,
+      "after": "18446744073709551613",
+      "before": "18446744073709551615",
+      "conserve": false,
+      "consumed": "2",
+      "preserved": "0",
+      "produced": "1",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "18446744073709551615",
+      "before": "18446744073709551615",
+      "conserve": true,
+      "consumed": "2",
+      "preserved": "0",
+      "produced": "1",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "18446744073709551615",
+      "before": "18446744073709551615",
+      "conserve": false,
+      "consumed": "2",
+      "preserved": "1",
+      "produced": "1",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "18446744073709551615",
+      "before": "18446744073709551615",
+      "conserve": true,
+      "consumed": "2",
+      "preserved": "1",
+      "produced": "1",
+      "units": "0"
+    },
+    {
+      "accepted": true,
+      "after": "18446744073709551614",
+      "before": "18446744073709551615",
+      "conserve": false,
+      "consumed": "2",
+      "preserved": "1",
+      "produced": "1",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "after": "18446744073709551615",
+      "before": "18446744073709551615",
+      "conserve": true,
+      "consumed": "2",
+      "preserved": "1",
+      "produced": "1",
+      "units": "1"
+    },
+    {
+      "accepted": true,
+      "after": "18446744073709551613",
+      "before": "18446744073709551615",
+      "conserve": false,
+      "consumed": "2",
+      "preserved": "1",
+      "produced": "1",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "18446744073709551615",
+      "before": "18446744073709551615",
+      "conserve": true,
+      "consumed": "2",
+      "preserved": "1",
+      "produced": "1",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "18446744073709551615",
+      "before": "18446744073709551615",
+      "conserve": false,
+      "consumed": "2",
+      "preserved": "0",
+      "produced": "2",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "18446744073709551615",
+      "before": "18446744073709551615",
+      "conserve": true,
+      "consumed": "2",
+      "preserved": "0",
+      "produced": "2",
+      "units": "0"
+    },
+    {
+      "accepted": true,
+      "after": "18446744073709551615",
+      "before": "18446744073709551615",
+      "conserve": false,
+      "consumed": "2",
+      "preserved": "0",
+      "produced": "2",
+      "units": "1"
+    },
+    {
+      "accepted": true,
+      "after": "18446744073709551615",
+      "before": "18446744073709551615",
+      "conserve": true,
+      "consumed": "2",
+      "preserved": "0",
+      "produced": "2",
+      "units": "1"
+    },
+    {
+      "accepted": true,
+      "after": "18446744073709551615",
+      "before": "18446744073709551615",
+      "conserve": false,
+      "consumed": "2",
+      "preserved": "0",
+      "produced": "2",
+      "units": "2"
+    },
+    {
+      "accepted": true,
+      "after": "18446744073709551615",
+      "before": "18446744073709551615",
+      "conserve": true,
+      "consumed": "2",
+      "preserved": "0",
+      "produced": "2",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "18446744073709551615",
+      "before": "18446744073709551615",
+      "conserve": false,
+      "consumed": "2",
+      "preserved": "1",
+      "produced": "2",
+      "units": "0"
+    },
+    {
+      "accepted": false,
+      "after": "18446744073709551615",
+      "before": "18446744073709551615",
+      "conserve": true,
+      "consumed": "2",
+      "preserved": "1",
+      "produced": "2",
+      "units": "0"
+    },
+    {
+      "accepted": true,
+      "after": "18446744073709551615",
+      "before": "18446744073709551615",
+      "conserve": false,
+      "consumed": "2",
+      "preserved": "1",
+      "produced": "2",
+      "units": "1"
+    },
+    {
+      "accepted": true,
+      "after": "18446744073709551615",
+      "before": "18446744073709551615",
+      "conserve": true,
+      "consumed": "2",
+      "preserved": "1",
+      "produced": "2",
+      "units": "1"
+    },
+    {
+      "accepted": true,
+      "after": "18446744073709551615",
+      "before": "18446744073709551615",
+      "conserve": false,
+      "consumed": "2",
+      "preserved": "1",
+      "produced": "2",
+      "units": "2"
+    },
+    {
+      "accepted": true,
+      "after": "18446744073709551615",
+      "before": "18446744073709551615",
+      "conserve": true,
+      "consumed": "2",
+      "preserved": "1",
+      "produced": "2",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "18446744073709551615",
+      "before": "18446744073709551615",
+      "conserve": false,
+      "consumed": "18446744073709551615",
+      "preserved": "0",
+      "produced": "0",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "0",
+      "before": "0",
+      "conserve": false,
+      "consumed": "0",
+      "preserved": "0",
+      "produced": "18446744073709551615",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "after": "18446744073709551615",
+      "before": "18446744073709551615",
+      "conserve": false,
+      "consumed": "18446744073709551615",
+      "preserved": "1",
+      "produced": "0",
+      "units": "1"
+    },
+    {
+      "accepted": true,
+      "after": "18446744073709551615",
+      "before": "18446744073709551615",
+      "conserve": false,
+      "consumed": "18446744073709551615",
+      "preserved": "0",
+      "produced": "18446744073709551615",
+      "units": "1"
+    }
+  ],
+  "expressions": [
+    {
+      "accepted": false,
+      "balance": "0",
+      "denominator": "0",
+      "evaluated": null,
+      "minimum": "0",
+      "sinkAfter": "0",
+      "sourceAfter": "0",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "balance": "0",
+      "denominator": "0",
+      "evaluated": null,
+      "minimum": "1",
+      "sinkAfter": "0",
+      "sourceAfter": "0",
+      "units": "1"
+    },
+    {
+      "accepted": true,
+      "balance": "0",
+      "denominator": "1",
+      "evaluated": "0",
+      "minimum": "0",
+      "sinkAfter": "0",
+      "sourceAfter": "0",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "balance": "0",
+      "denominator": "1",
+      "evaluated": "0",
+      "minimum": "1",
+      "sinkAfter": "0",
+      "sourceAfter": "0",
+      "units": "1"
+    },
+    {
+      "accepted": true,
+      "balance": "0",
+      "denominator": "3",
+      "evaluated": "0",
+      "minimum": "0",
+      "sinkAfter": "0",
+      "sourceAfter": "0",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "balance": "0",
+      "denominator": "3",
+      "evaluated": "0",
+      "minimum": "1",
+      "sinkAfter": "0",
+      "sourceAfter": "0",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "balance": "0",
+      "denominator": "0",
+      "evaluated": null,
+      "minimum": "0",
+      "sinkAfter": "0",
+      "sourceAfter": "0",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "balance": "0",
+      "denominator": "0",
+      "evaluated": null,
+      "minimum": "1",
+      "sinkAfter": "0",
+      "sourceAfter": "0",
+      "units": "2"
+    },
+    {
+      "accepted": true,
+      "balance": "0",
+      "denominator": "1",
+      "evaluated": "0",
+      "minimum": "0",
+      "sinkAfter": "0",
+      "sourceAfter": "0",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "balance": "0",
+      "denominator": "1",
+      "evaluated": "0",
+      "minimum": "1",
+      "sinkAfter": "0",
+      "sourceAfter": "0",
+      "units": "2"
+    },
+    {
+      "accepted": true,
+      "balance": "0",
+      "denominator": "3",
+      "evaluated": "0",
+      "minimum": "0",
+      "sinkAfter": "0",
+      "sourceAfter": "0",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "balance": "0",
+      "denominator": "3",
+      "evaluated": "0",
+      "minimum": "1",
+      "sinkAfter": "0",
+      "sourceAfter": "0",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "balance": "1",
+      "denominator": "0",
+      "evaluated": null,
+      "minimum": "0",
+      "sinkAfter": "0",
+      "sourceAfter": "1",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "balance": "1",
+      "denominator": "0",
+      "evaluated": null,
+      "minimum": "1",
+      "sinkAfter": "0",
+      "sourceAfter": "1",
+      "units": "1"
+    },
+    {
+      "accepted": true,
+      "balance": "1",
+      "denominator": "1",
+      "evaluated": "1",
+      "minimum": "0",
+      "sinkAfter": "1",
+      "sourceAfter": "0",
+      "units": "1"
+    },
+    {
+      "accepted": true,
+      "balance": "1",
+      "denominator": "1",
+      "evaluated": "1",
+      "minimum": "1",
+      "sinkAfter": "1",
+      "sourceAfter": "0",
+      "units": "1"
+    },
+    {
+      "accepted": true,
+      "balance": "1",
+      "denominator": "3",
+      "evaluated": "0",
+      "minimum": "0",
+      "sinkAfter": "0",
+      "sourceAfter": "1",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "balance": "1",
+      "denominator": "3",
+      "evaluated": "0",
+      "minimum": "1",
+      "sinkAfter": "0",
+      "sourceAfter": "1",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "balance": "1",
+      "denominator": "0",
+      "evaluated": null,
+      "minimum": "0",
+      "sinkAfter": "0",
+      "sourceAfter": "1",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "balance": "1",
+      "denominator": "0",
+      "evaluated": null,
+      "minimum": "1",
+      "sinkAfter": "0",
+      "sourceAfter": "1",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "balance": "1",
+      "denominator": "1",
+      "evaluated": "2",
+      "minimum": "0",
+      "sinkAfter": "0",
+      "sourceAfter": "1",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "balance": "1",
+      "denominator": "1",
+      "evaluated": "2",
+      "minimum": "1",
+      "sinkAfter": "0",
+      "sourceAfter": "1",
+      "units": "2"
+    },
+    {
+      "accepted": true,
+      "balance": "1",
+      "denominator": "3",
+      "evaluated": "0",
+      "minimum": "0",
+      "sinkAfter": "0",
+      "sourceAfter": "1",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "balance": "1",
+      "denominator": "3",
+      "evaluated": "0",
+      "minimum": "1",
+      "sinkAfter": "0",
+      "sourceAfter": "1",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "balance": "10",
+      "denominator": "0",
+      "evaluated": null,
+      "minimum": "0",
+      "sinkAfter": "0",
+      "sourceAfter": "10",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "balance": "10",
+      "denominator": "0",
+      "evaluated": null,
+      "minimum": "1",
+      "sinkAfter": "0",
+      "sourceAfter": "10",
+      "units": "1"
+    },
+    {
+      "accepted": true,
+      "balance": "10",
+      "denominator": "1",
+      "evaluated": "10",
+      "minimum": "0",
+      "sinkAfter": "10",
+      "sourceAfter": "0",
+      "units": "1"
+    },
+    {
+      "accepted": true,
+      "balance": "10",
+      "denominator": "1",
+      "evaluated": "10",
+      "minimum": "1",
+      "sinkAfter": "10",
+      "sourceAfter": "0",
+      "units": "1"
+    },
+    {
+      "accepted": true,
+      "balance": "10",
+      "denominator": "3",
+      "evaluated": "3",
+      "minimum": "0",
+      "sinkAfter": "3",
+      "sourceAfter": "7",
+      "units": "1"
+    },
+    {
+      "accepted": true,
+      "balance": "10",
+      "denominator": "3",
+      "evaluated": "3",
+      "minimum": "1",
+      "sinkAfter": "3",
+      "sourceAfter": "7",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "balance": "10",
+      "denominator": "0",
+      "evaluated": null,
+      "minimum": "0",
+      "sinkAfter": "0",
+      "sourceAfter": "10",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "balance": "10",
+      "denominator": "0",
+      "evaluated": null,
+      "minimum": "1",
+      "sinkAfter": "0",
+      "sourceAfter": "10",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "balance": "10",
+      "denominator": "1",
+      "evaluated": "20",
+      "minimum": "0",
+      "sinkAfter": "0",
+      "sourceAfter": "10",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "balance": "10",
+      "denominator": "1",
+      "evaluated": "20",
+      "minimum": "1",
+      "sinkAfter": "0",
+      "sourceAfter": "10",
+      "units": "2"
+    },
+    {
+      "accepted": true,
+      "balance": "10",
+      "denominator": "3",
+      "evaluated": "6",
+      "minimum": "0",
+      "sinkAfter": "6",
+      "sourceAfter": "4",
+      "units": "2"
+    },
+    {
+      "accepted": true,
+      "balance": "10",
+      "denominator": "3",
+      "evaluated": "6",
+      "minimum": "1",
+      "sinkAfter": "6",
+      "sourceAfter": "4",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "balance": "18446744073709551615",
+      "denominator": "0",
+      "evaluated": null,
+      "minimum": "0",
+      "sinkAfter": "0",
+      "sourceAfter": "18446744073709551615",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "balance": "18446744073709551615",
+      "denominator": "0",
+      "evaluated": null,
+      "minimum": "1",
+      "sinkAfter": "0",
+      "sourceAfter": "18446744073709551615",
+      "units": "1"
+    },
+    {
+      "accepted": true,
+      "balance": "18446744073709551615",
+      "denominator": "1",
+      "evaluated": "18446744073709551615",
+      "minimum": "0",
+      "sinkAfter": "18446744073709551615",
+      "sourceAfter": "0",
+      "units": "1"
+    },
+    {
+      "accepted": true,
+      "balance": "18446744073709551615",
+      "denominator": "1",
+      "evaluated": "18446744073709551615",
+      "minimum": "1",
+      "sinkAfter": "18446744073709551615",
+      "sourceAfter": "0",
+      "units": "1"
+    },
+    {
+      "accepted": true,
+      "balance": "18446744073709551615",
+      "denominator": "3",
+      "evaluated": "6148914691236517205",
+      "minimum": "0",
+      "sinkAfter": "6148914691236517205",
+      "sourceAfter": "12297829382473034410",
+      "units": "1"
+    },
+    {
+      "accepted": true,
+      "balance": "18446744073709551615",
+      "denominator": "3",
+      "evaluated": "6148914691236517205",
+      "minimum": "1",
+      "sinkAfter": "6148914691236517205",
+      "sourceAfter": "12297829382473034410",
+      "units": "1"
+    },
+    {
+      "accepted": false,
+      "balance": "18446744073709551615",
+      "denominator": "0",
+      "evaluated": null,
+      "minimum": "0",
+      "sinkAfter": "0",
+      "sourceAfter": "18446744073709551615",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "balance": "18446744073709551615",
+      "denominator": "0",
+      "evaluated": null,
+      "minimum": "1",
+      "sinkAfter": "0",
+      "sourceAfter": "18446744073709551615",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "balance": "18446744073709551615",
+      "denominator": "1",
+      "evaluated": null,
+      "minimum": "0",
+      "sinkAfter": "0",
+      "sourceAfter": "18446744073709551615",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "balance": "18446744073709551615",
+      "denominator": "1",
+      "evaluated": null,
+      "minimum": "1",
+      "sinkAfter": "0",
+      "sourceAfter": "18446744073709551615",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "balance": "18446744073709551615",
+      "denominator": "3",
+      "evaluated": null,
+      "minimum": "0",
+      "sinkAfter": "0",
+      "sourceAfter": "18446744073709551615",
+      "units": "2"
+    },
+    {
+      "accepted": false,
+      "balance": "18446744073709551615",
+      "denominator": "3",
+      "evaluated": null,
+      "minimum": "1",
+      "sinkAfter": "0",
+      "sourceAfter": "18446744073709551615",
+      "units": "2"
+    }
+  ],
+  "scalars": [
+    {
+      "add": "0",
+      "div": null,
+      "left": "0",
+      "mul": "0",
+      "right": "0",
+      "sub": "0"
+    },
+    {
+      "add": "1",
+      "div": "0",
+      "left": "0",
+      "mul": "0",
+      "right": "1",
+      "sub": null
+    },
+    {
+      "add": "2",
+      "div": "0",
+      "left": "0",
+      "mul": "0",
+      "right": "2",
+      "sub": null
+    },
+    {
+      "add": "3",
+      "div": "0",
+      "left": "0",
+      "mul": "0",
+      "right": "3",
+      "sub": null
+    },
+    {
+      "add": "18446744073709551614",
+      "div": "0",
+      "left": "0",
+      "mul": "0",
+      "right": "18446744073709551614",
+      "sub": null
+    },
+    {
+      "add": "18446744073709551615",
+      "div": "0",
+      "left": "0",
+      "mul": "0",
+      "right": "18446744073709551615",
+      "sub": null
+    },
+    {
+      "add": "1",
+      "div": null,
+      "left": "1",
+      "mul": "0",
+      "right": "0",
+      "sub": "1"
+    },
+    {
+      "add": "2",
+      "div": "1",
+      "left": "1",
+      "mul": "1",
+      "right": "1",
+      "sub": "0"
+    },
+    {
+      "add": "3",
+      "div": "0",
+      "left": "1",
+      "mul": "2",
+      "right": "2",
+      "sub": null
+    },
+    {
+      "add": "4",
+      "div": "0",
+      "left": "1",
+      "mul": "3",
+      "right": "3",
+      "sub": null
+    },
+    {
+      "add": "18446744073709551615",
+      "div": "0",
+      "left": "1",
+      "mul": "18446744073709551614",
+      "right": "18446744073709551614",
+      "sub": null
+    },
+    {
+      "add": null,
+      "div": "0",
+      "left": "1",
+      "mul": "18446744073709551615",
+      "right": "18446744073709551615",
+      "sub": null
+    },
+    {
+      "add": "2",
+      "div": null,
+      "left": "2",
+      "mul": "0",
+      "right": "0",
+      "sub": "2"
+    },
+    {
+      "add": "3",
+      "div": "2",
+      "left": "2",
+      "mul": "2",
+      "right": "1",
+      "sub": "1"
+    },
+    {
+      "add": "4",
+      "div": "1",
+      "left": "2",
+      "mul": "4",
+      "right": "2",
+      "sub": "0"
+    },
+    {
+      "add": "5",
+      "div": "0",
+      "left": "2",
+      "mul": "6",
+      "right": "3",
+      "sub": null
+    },
+    {
+      "add": null,
+      "div": "0",
+      "left": "2",
+      "mul": null,
+      "right": "18446744073709551614",
+      "sub": null
+    },
+    {
+      "add": null,
+      "div": "0",
+      "left": "2",
+      "mul": null,
+      "right": "18446744073709551615",
+      "sub": null
+    },
+    {
+      "add": "3",
+      "div": null,
+      "left": "3",
+      "mul": "0",
+      "right": "0",
+      "sub": "3"
+    },
+    {
+      "add": "4",
+      "div": "3",
+      "left": "3",
+      "mul": "3",
+      "right": "1",
+      "sub": "2"
+    },
+    {
+      "add": "5",
+      "div": "1",
+      "left": "3",
+      "mul": "6",
+      "right": "2",
+      "sub": "1"
+    },
+    {
+      "add": "6",
+      "div": "1",
+      "left": "3",
+      "mul": "9",
+      "right": "3",
+      "sub": "0"
+    },
+    {
+      "add": null,
+      "div": "0",
+      "left": "3",
+      "mul": null,
+      "right": "18446744073709551614",
+      "sub": null
+    },
+    {
+      "add": null,
+      "div": "0",
+      "left": "3",
+      "mul": null,
+      "right": "18446744073709551615",
+      "sub": null
+    },
+    {
+      "add": "18446744073709551614",
+      "div": null,
+      "left": "18446744073709551614",
+      "mul": "0",
+      "right": "0",
+      "sub": "18446744073709551614"
+    },
+    {
+      "add": "18446744073709551615",
+      "div": "18446744073709551614",
+      "left": "18446744073709551614",
+      "mul": "18446744073709551614",
+      "right": "1",
+      "sub": "18446744073709551613"
+    },
+    {
+      "add": null,
+      "div": "9223372036854775807",
+      "left": "18446744073709551614",
+      "mul": null,
+      "right": "2",
+      "sub": "18446744073709551612"
+    },
+    {
+      "add": null,
+      "div": "6148914691236517204",
+      "left": "18446744073709551614",
+      "mul": null,
+      "right": "3",
+      "sub": "18446744073709551611"
+    },
+    {
+      "add": null,
+      "div": "1",
+      "left": "18446744073709551614",
+      "mul": null,
+      "right": "18446744073709551614",
+      "sub": "0"
+    },
+    {
+      "add": null,
+      "div": "0",
+      "left": "18446744073709551614",
+      "mul": null,
+      "right": "18446744073709551615",
+      "sub": null
+    },
+    {
+      "add": "18446744073709551615",
+      "div": null,
+      "left": "18446744073709551615",
+      "mul": "0",
+      "right": "0",
+      "sub": "18446744073709551615"
+    },
+    {
+      "add": null,
+      "div": "18446744073709551615",
+      "left": "18446744073709551615",
+      "mul": "18446744073709551615",
+      "right": "1",
+      "sub": "18446744073709551614"
+    },
+    {
+      "add": null,
+      "div": "9223372036854775807",
+      "left": "18446744073709551615",
+      "mul": null,
+      "right": "2",
+      "sub": "18446744073709551613"
+    },
+    {
+      "add": null,
+      "div": "6148914691236517205",
+      "left": "18446744073709551615",
+      "mul": null,
+      "right": "3",
+      "sub": "18446744073709551612"
+    },
+    {
+      "add": null,
+      "div": "1",
+      "left": "18446744073709551615",
+      "mul": null,
+      "right": "18446744073709551614",
+      "sub": "1"
+    },
+    {
+      "add": null,
+      "div": "1",
+      "left": "18446744073709551615",
+      "mul": null,
+      "right": "18446744073709551615",
+      "sub": "0"
+    }
+  ],
+  "version": 1
+}

@@ -7,3 +7,5 @@ studio/dist/
 studio/playwright-report/
 studio/test-results/
 studio/src/generated/wasm/
+verification/lean/.lake/
+scripts/__pycache__/

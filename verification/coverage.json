@@ -1,0 +1,233 @@
+{
+  "version": 1,
+  "assurance": "Checked design specifications with finite Rust conformance; implementation refinement is not proved.",
+  "sources": {
+    "Cargo.toml": "f0065be3bd2e66fca2728a0e039b6a9ec9bc4812ede39ac9d810db35d906062c",
+    "Cargo.lock": "00ef263c160aeebaa49187874a4b11ec94fee9bc8fbea5a2f0cacc190607919c",
+    "src/account.rs": "f9ad6bbffdc893791a246cb480395607e80e2942867c3a116e2aeb8ee2b185e2",
+    "src/amount.rs": "4aa0f1432494aac0454890604e3addbd002fa6b9ded1f75f91fce7675540f9ee",
+    "src/basket.rs": "39dac2972bbdd4a2f826a0427097f1226521cd751b1a1b54744181ed707804f0",
+    "src/economy.rs": "e2f67048df59aae0ce3b92b146c81d29130ced1abd89faf14bab2458b3bef45a",
+    "src/exchange.rs": "aabae395148c0dd8703b2fc99aa177700eaffd0d8aac602f8a5ffbf7fb09a47b",
+    "src/lib.rs": "a4ec7c34fa7f3020ab494dfffd824e8655e63a5434f45fa190df28441f7e89e5",
+    "src/quantity.rs": "48eeb070d1eb0eeb32b82a46e1f238af6d097bdd86c2eed99ae54fc24b719515",
+    "src/rate.rs": "516f11fe309ff825f26a6f23b55a01afc6b6fd8cffb65017444a37a3d3bccf93"
+  },
+  "features": [
+    {
+      "id": "checked_quantities",
+      "status": "design_proved_rust_tested",
+      "sources": [
+        "src/quantity.rs"
+      ],
+      "theorems": [
+        "Axionomy.Quantity.checked_success",
+        "Axionomy.Quantity.add_exact",
+        "Axionomy.Quantity.mul_exact",
+        "Axionomy.Quantity.sub_exact",
+        "Axionomy.Quantity.div_exact",
+        "Axionomy.Quantity.underflow_rejected",
+        "Axionomy.Quantity.division_by_zero_rejected"
+      ],
+      "rust_tests": [
+        "tests/lean_conformance.rs",
+        "tests/properties.rs",
+        "tests/generic_quantity.rs"
+      ],
+      "limitations": [
+        "Proofs concern Nat operations with an explicit bound. Rust u64 conformance is tested; num_traits and custom QuantityScalar implementations are not formally refined.",
+        "BigUint/BigInt, signed weighted conversion, serialization, and user-defined trait laws remain legacy refinement gaps."
+      ]
+    },
+    {
+      "id": "asset_qualified_amounts",
+      "status": "design_proved_rust_tested",
+      "sources": [
+        "src/amount.rs"
+      ],
+      "theorems": [
+        "Axionomy.Quantity.amount_round_trip"
+      ],
+      "rust_tests": [
+        "src/amount.rs",
+        "tests/account.rs"
+      ],
+      "limitations": [
+        "Asset domains remain separate Lean and Rust type parameters. The round-trip theorem is about the Lean structure; Rust conversions are covered by tests and compiler checks."
+      ]
+    },
+    {
+      "id": "sparse_balances",
+      "status": "design_proved_rust_tested",
+      "sources": [
+        "src/basket.rs"
+      ],
+      "theorems": [
+        "Axionomy.State.sparse_round_trip",
+        "Axionomy.State.canonical_zero",
+        "Axionomy.State.shortfall_complete"
+      ],
+      "rust_tests": [
+        "tests/account.rs",
+        "tests/serde.rs"
+      ],
+      "limitations": [
+        "Entry-level canonicalization and scalar shortfall are proved. Whole finite-map canonicalization, duplicate rejection, IndexMap, iteration and serialization are not refined."
+      ]
+    },
+    {
+      "id": "account_updates",
+      "status": "design_proved_rust_tested",
+      "sources": [
+        "src/account.rs"
+      ],
+      "theorems": [
+        "Axionomy.State.set_selected",
+        "Axionomy.State.set_frame",
+        "Axionomy.Exchange.exact_balance_delta",
+        "Axionomy.Exchange.rejection_is_atomic"
+      ],
+      "rust_tests": [
+        "tests/account.rs",
+        "tests/lean_conformance.rs"
+      ],
+      "limitations": [
+        "Prepared mathematical updates and the extensional frame property are proved. Mutable Rust account operations, collection cloning, and internal expects require refinement."
+      ]
+    },
+    {
+      "id": "rate_expressions_and_effects",
+      "status": "design_proved_rust_tested",
+      "sources": [
+        "src/rate.rs",
+        "src/economy.rs"
+      ],
+      "theorems": [
+        "Axionomy.Rates.eval_refines_mathematical",
+        "Axionomy.Rates.merge_commutative",
+        "Axionomy.Rates.merge_associative",
+        "Axionomy.Rates.preservation_unscaled"
+      ],
+      "rust_tests": [
+        "tests/lean_conformance.rs",
+        "tests/state_evaluated_rates.rs",
+        "tests/economy.rs"
+      ],
+      "limitations": [
+        "Expression evaluation assumes a typed lookup context. Structural role/parameter validation, binding existence/distinctness and checked aggregate merging are not yet proved.",
+        "Effect merge algebra is over exact Nat; no claim is made that diagnostic order or bounded overflow is independent of insertion order."
+      ]
+    },
+    {
+      "id": "prepared_exchange_application",
+      "status": "design_proved_rust_tested",
+      "sources": [
+        "src/economy.rs"
+      ],
+      "theorems": [
+        "Axionomy.Exchange.preserved_survives",
+        "Axionomy.Exchange.shortfall_zero_iff_available",
+        "Axionomy.Exchange.assessment_agrees_with_apply",
+        "Axionomy.Exchange.rejection_is_atomic",
+        "Axionomy.Exchange.acceptance_applies_every_delta",
+        "Axionomy.Exchange.accepted_balances_bounded",
+        "Axionomy.Exchange.static_zero_units_rejected",
+        "Axionomy.Exchange.batching_requires_a_qualified_statement"
+      ],
+      "rust_tests": [
+        "tests/lean_conformance.rs",
+        "tests/economy.rs",
+        "tests/properties.rs"
+      ],
+      "limitations": [
+        "The proof begins with distinct account/asset entries whose effects have already been aggregated; Rust preflight, prepared-account completeness, error ordering and all internal expects are not refined.",
+        "The scalar static fixture adapter exercises u64 scaling and requirement overflow but is not a proof of the complete Rust rate evaluator."
+      ]
+    },
+    {
+      "id": "linear_conservation",
+      "status": "design_proved_rust_tested",
+      "sources": [
+        "src/rate.rs"
+      ],
+      "theorems": [
+        "Axionomy.Exchange.weighted_delta",
+        "Axionomy.Exchange.conservation_from_deltas",
+        "Axionomy.Exchange.accepted_exchange_conserves"
+      ],
+      "rust_tests": [
+        "tests/lean_conformance.rs",
+        "tests/economy.rs",
+        "tests/generic_quantity.rs"
+      ],
+      "limitations": [
+        "Arbitrary signed mathematical weights are proved. Checked i128 accumulation, intermediate overflow and runtime invariant diagnostic computation remain unproved."
+      ]
+    },
+    {
+      "id": "receipts_and_replay",
+      "status": "design_proved_rust_tested",
+      "sources": [
+        "src/exchange.rs",
+        "src/economy.rs"
+      ],
+      "theorems": [
+        "Axionomy.Exchange.acceptance_applies_every_delta",
+        "Axionomy.Replay.append",
+        "Axionomy.Replay.invariant_preserved",
+        "Axionomy.Replay.deterministic"
+      ],
+      "rust_tests": [
+        "tests/lean_conformance.rs",
+        "tests/economy.rs",
+        "tests/serde.rs"
+      ],
+      "limitations": [
+        "Replay induction explicitly assumes an invariant-preserving deterministic step. This premise is not a refinement theorem for Rust apply.",
+        "Receipt conformance is finite; Rust mutating replay prefix-on-error, Arc fork isolation and serialized trace refinement remain unproved."
+      ]
+    },
+    {
+      "id": "observations_and_goals",
+      "status": "design_proved_rust_tested",
+      "sources": [
+        "src/economy.rs"
+      ],
+      "theorems": [
+        "Axionomy.State.hidden_account",
+        "Axionomy.State.observation_noninterference",
+        "Axionomy.State.goal_monotone"
+      ],
+      "rust_tests": [
+        "tests/economy.rs",
+        "tests/serde.rs"
+      ],
+      "limitations": [
+        "The model treats account presence as a domain precondition and proves extensional projections. Missing-account distinctions, sorted observation keys, state fingerprints and Rust view refinement are not proved."
+      ]
+    },
+    {
+      "id": "typed_public_boundary",
+      "status": "design_proved_rust_tested",
+      "sources": [
+        "src/lib.rs",
+        "Cargo.toml",
+        "Cargo.lock"
+      ],
+      "theorems": [
+        "Axionomy.Quantity.amount_round_trip",
+        "Axionomy.State.set_frame"
+      ],
+      "rust_tests": [
+        "src/amount.rs",
+        "src/exchange.rs",
+        "src/economy.rs",
+        "tests/generic_quantity.rs"
+      ],
+      "limitations": [
+        "Lean keeps semantic domains typed; Rust compile-fail examples independently enforce asset/role identity and immutable inspection. This is not a theorem about rustc, dependency code, package resolution or generic backend laws.",
+        "Core dependency and lockfile edits invalidate this review, including transitive updates; their implementation correctness is outside the initial proof boundary."
+      ]
+    }
+  ]
+}

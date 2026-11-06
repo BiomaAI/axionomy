@@ -1,0 +1,13 @@
+name = "axionomy-proofs"
+version = "0.1.0"
+defaultTargets = ["Axionomy", "Audit", "conformance"]
+
+[[lean_lib]]
+name = "Axionomy"
+
+[[lean_lib]]
+name = "Audit"
+
+[[lean_exe]]
+name = "conformance"
+root = "Conformance"

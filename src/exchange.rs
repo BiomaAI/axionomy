@@ -4,6 +4,16 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::hash::Hash;
 
+/// A typed proposal keeps roles and account identities separate.
+///
+/// ```compile_fail,E0308
+/// use axionomy::{Exchange, Quantity};
+/// #[derive(PartialEq, Eq, PartialOrd, Ord)]
+/// enum Role { Source }
+/// enum AccountId { Source }
+/// let proposal = Exchange::<u8, Role, AccountId>::new(0, Quantity::new(1));
+/// let _ = proposal.bind(AccountId::Source, Role::Source);
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(bound(
     serialize = "RateId: Serialize, Role: Serialize + Ord, AccountId: Serialize, N: Serialize",

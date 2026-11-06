@@ -82,6 +82,13 @@ evaluation and rating design, and
 between the Work Utility System and the Autonomy Harness that owns agents,
 learning, deployment, and assurance.
 
+Core development is proof-bearing: every new or changed kernel feature must
+include a typed Lean specification, checked proofs, and Rust conformance evidence.
+Rust's ownership and ontology types remain part of the contract. The current
+baseline proves design properties and tests Rust against executable Lean examples;
+it does not yet prove the entire Rust implementation. See
+[the proof contract and coverage](verification/README.md) for exact boundaries.
+
 The fourteen reference problems expose explicit **Micro**, **Showcase**, and
 **Stress** instances. Micro keeps exact fixtures and independent oracles fast;
 Showcase is the default that Studio and the generated artifacts use. Stress
@@ -602,6 +609,13 @@ All quantities are checked. Every declared linear invariant must have the same
 measure before and after. A failure leaves the economy unchanged.
 
 ## Development
+
+For core work, follow [AGENTS.md](AGENTS.md) and run the proof gate alongside the
+Rust checks below (requires the pinned Lean toolchain through elan):
+
+```console
+python3 scripts/check_proofs.py
+```
 
 Axionomy uses Rust Edition 2024 and supports Rust 1.89 or newer. It relies on
 mature ecosystem crates for ordered maps, serialization, exact numeric traits,

@@ -6,6 +6,15 @@ use serde::{Deserialize, Serialize};
 ///
 /// `A` preserves what the value means and names its atomic basis. `N`
 /// determines how the exact non-negative coefficient is represented.
+/// Asset domains remain distinct at compile time:
+///
+/// ```compile_fail,E0308
+/// use axionomy::{AssetAmount, Quantity};
+/// struct Food;
+/// struct Fuel;
+/// fn prepare(_: AssetAmount<Food>) {}
+/// prepare(AssetAmount::new(Fuel, Quantity::new(1)));
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
 #[serde(bound(
     serialize = "A: Serialize, N: Serialize",

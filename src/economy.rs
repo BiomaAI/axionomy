@@ -488,6 +488,15 @@ where
     Role: Clone + Ord,
     N: QuantityScalar,
 {
+    /// Account inspection cannot bypass exchange validation by mutating balances.
+    ///
+    /// ```compile_fail,E0596
+    /// use axionomy::{Economy, basket};
+    /// fn unauthorized_write(world: &mut Economy<u8, u8, u8, u8>) {
+    ///     let account = world.account(&0).unwrap();
+    ///     account.deposit(&basket([(0, 1)])).unwrap();
+    /// }
+    /// ```
     pub fn account(&self, id: &AccountId) -> Option<&Account<A, N>> {
         self.accounts.get(id).map(Arc::as_ref)
     }

@@ -9,7 +9,7 @@
 | Version | `0.1.0` |
 | Rust edition | 2024 |
 | Minimum Rust | 1.89 |
-| Last updated | 2026-08-06 |
+| Last updated | 2026-11-06 |
 
 ## 1. Product thesis
 
@@ -43,6 +43,14 @@ But they have one role:
 
 The accepted answer is never a solver's private assignment. It is a trace of
 exchanges that the core can replay from the initial economy.
+
+The core is proof-bearing. Every new or changed kernel feature must have a
+typed Lean specification, checked proofs of the relevant contract, and Rust
+conformance evidence. Rust's strong ontology types, ownership, and private state
+remain required. [verification/README.md](verification/README.md) defines the
+proof workflow, CI gate, trust boundary, and existing refinement gaps. Current
+proofs establish mathematical design properties; they do not yet establish a
+universal refinement proof of the Rust implementation.
 
 ## 2. Why closure matters
 
@@ -215,6 +223,12 @@ Preserved baskets do not scale: they are read thresholds. This means a
 catalyst or immutable fact can support a batch just as it can support
 equivalent sequential firings.
 
+This reuse property is not universal equivalence of batch and sequential
+applicability. A consume-one/produce-one rate can fire twice from one token,
+while a two-unit batch requires two tokens upfront. State-evaluated expressions
+also observe the pre-exchange snapshot once; their effects are not automatically
+scaled by units. Any stronger batching theorem must state its conditions.
+
 When multiple roles bind to one account, their effects are merged before any
 balance is checked. This prevents role aliasing from creating order-dependent
 behavior. Rates can prohibit aliases with `distinct`.
@@ -227,7 +241,8 @@ Application has a prepare-and-commit boundary:
 2. Scale and merge all effects with checked arithmetic.
 3. Check complete consume-plus-preserve requirements.
 4. Apply withdrawals and deposits to cloned accounts.
-5. Measure every declared invariant before and after.
+5. Check each declared linear invariant using weighted consumed/produced deltas;
+   measure full before/after states when reporting a conservation violation.
 6. Commit all cloned accounts together.
 7. Return a receipt containing the bound exchange and every account delta.
 
@@ -1860,6 +1875,17 @@ components. Score-bearing mechanics remain assets, while ordering and Pareto
 membership remain disposable policy. Studio URLs capture the selected problem,
 outcome, replay step, and leaderboard so an explanation is reproducible on
 native HTTP, browser Wasm, and static Pages without auto-running a task.
+
+### D-038: Every core feature carries a typed Lean proof contract
+
+Specifications, checked proofs, Rust conformance evidence, and explicit source
+coverage are required parts of core development. Lean supplements Rust's type
+system; verification must not erase ontology types or weaken ownership and
+mutation boundaries. The initial design proofs and finite conformance cases are
+labeled separately from future Aeneas implementation refinement proofs. CI rejects
+unproved declarations, missing/stale coverage, and conformance drift. Source
+hashes establish review freshness, not semantic correspondence: reviewers must
+check that each theorem states the intended contract with adequate premises.
 
 ## 16. Success criteria
 
