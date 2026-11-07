@@ -130,7 +130,7 @@ class ProductionMutationTests(unittest.TestCase):
 
     def test_reversed_conservation_breaks_the_runtime_proof(self):
         self.check_mutation(
-            "src/rate.rs", "Some(consumed == produced)", "Some(consumed != produced)",
+            "src/rate.rs", "Some(consumed == produced)", "Some(!(consumed == produced))",
             "extract_account.py", "stale account model", "ConservationRefinement", "AccountExtraction")
 
     def test_ignored_rate_overflow_breaks_the_builder_proof(self):
