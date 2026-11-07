@@ -111,3 +111,44 @@ fn baskets_accept_asset_qualified_amounts_and_reject_duplicates() {
         })
     );
 }
+
+#[test]
+fn zero_entries_cannot_hide_duplicate_assets() {
+    for quantities in [[0, 0], [0, 7], [7, 0], [7, 9]] {
+        let entries = [
+            (Asset::Credits, Quantity::new(quantities[0])),
+            (Asset::Tokens, Quantity::new(3)),
+            (Asset::Credits, Quantity::new(quantities[1])),
+        ];
+        let expected = Err(BasketError::DuplicateAsset {
+            asset: Asset::Credits,
+        });
+        assert_eq!(Basket::try_from_entries(entries), expected);
+        assert_eq!(
+            Basket::try_from_amounts(entries.map(AssetAmount::from)),
+            expected
+        );
+    }
+}
+
+#[test]
+fn validated_baskets_remove_zeros_without_reordering_other_assets() {
+    let balances = Basket::try_from_entries([
+        ("first", Quantity::new(2)),
+        ("zero", Quantity::ZERO),
+        ("last", Quantity::new(5)),
+    ])
+    .unwrap();
+    assert_eq!(
+        balances
+            .iter()
+            .map(|(asset, amount)| (*asset, amount.get()))
+            .collect::<Vec<_>>(),
+        vec![("first", 2), ("last", 5)]
+    );
+    assert!(
+        Basket::try_from_entries([("zero", Quantity::ZERO)])
+            .unwrap()
+            .is_empty()
+    );
+}

@@ -1,8 +1,8 @@
 //! Finite cross-language regression checks against executable Lean definitions.
 //! This is not a proof that the Rust implementation refines those definitions.
 use axionomy::{
-    Account, EconomyBuilder, Exchange, LinearInvariant, Quantity, QuantityComparison,
-    QuantityExpression as Q, Rate, basket,
+    Account, AssetAmount, Basket, BasketError, EconomyBuilder, Exchange, LinearInvariant, Quantity,
+    QuantityComparison, QuantityExpression as Q, Rate, basket,
 };
 use serde::Deserialize;
 
@@ -12,6 +12,14 @@ struct Fixtures {
     scalars: Vec<ScalarCase>,
     exchanges: Vec<ExchangeCase>,
     expressions: Vec<ExpressionCase>,
+    baskets: Vec<BasketCase>,
+}
+
+#[derive(Debug, Deserialize)]
+struct BasketCase {
+    entries: Vec<(u64, String)>,
+    duplicate: Option<u64>,
+    canonical: Option<Vec<(u64, String)>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -98,6 +106,46 @@ fn checked_quantities_match_lean() {
                 expected.as_ref(),
                 "{case:?}"
             );
+        }
+    }
+}
+
+#[test]
+fn basket_construction_matches_lean() {
+    let cases = fixtures().baskets;
+    assert_eq!(cases.len(), 260);
+    for case in cases {
+        let entries = case
+            .entries
+            .iter()
+            .map(|(asset, amount)| (*asset, Quantity::new(number(amount))))
+            .collect::<Vec<_>>();
+        let actual = Basket::try_from_entries(entries.clone());
+        assert_eq!(
+            Basket::try_from_amounts(entries.iter().copied().map(AssetAmount::from)),
+            actual,
+            "{case:?}"
+        );
+        let decoded = serde_json::from_value::<Basket<u64>>(serde_json::json!(entries));
+        match (actual, case.duplicate, &case.canonical) {
+            (Err(BasketError::DuplicateAsset { asset }), Some(expected), None) => {
+                assert_eq!(asset, expected, "{case:?}");
+                assert!(decoded.is_err(), "{case:?}");
+            }
+            (Ok(basket), None, Some(expected)) => {
+                let observed = basket
+                    .iter()
+                    .map(|(asset, amount)| (*asset, amount.to_string()))
+                    .collect::<Vec<_>>();
+                assert_eq!(&observed, expected, "{case:?}");
+                let decoded = decoded.unwrap();
+                assert_eq!(
+                    decoded.iter().collect::<Vec<_>>(),
+                    basket.iter().collect::<Vec<_>>(),
+                    "{case:?}"
+                );
+            }
+            (actual, _, _) => panic!("basket disagrees with Lean: {case:?}: {actual:?}"),
         }
     }
 }

@@ -49,8 +49,9 @@ typed Lean specification, checked proofs of the relevant contract, and Rust
 conformance evidence. Rust's strong ontology types, ownership, and private state
 remain required. [verification/README.md](verification/README.md) defines the
 proof workflow, CI gate, trust boundary, and existing refinement gaps. Current
-proofs establish mathematical design properties; they do not yet establish a
-universal refinement proof of the Rust implementation.
+proofs establish mathematical design properties and partial implementation
+refinement for u64 checked arithmetic and basket construction under a collection
+model. They do not establish a universal refinement proof of the Rust implementation.
 
 ## 2. Why closure matters
 
@@ -1882,8 +1883,9 @@ Specifications, checked proofs, Rust conformance evidence, and explicit source
 coverage are required parts of core development. Lean supplements Rust's type
 system; verification must not erase ontology types or weaken ownership and
 mutation boundaries. Design proofs and finite conformance cases are labeled
-separately from Aeneas implementation refinement proofs. The first implementation
-proof covers the four u64 checked arithmetic operations; the rest of the core
+separately from Aeneas implementation refinement proofs. Implementation proofs
+cover the four u64 checked arithmetic operations and basket construction under
+an explicit collection abstraction; the rest of the core
 retains explicit refinement gaps. CI regenerates the implementation model from
 production Rust and rejects stale extraction, unproved declarations, missing/stale
 coverage, and conformance drift. Source hashes establish review freshness, not

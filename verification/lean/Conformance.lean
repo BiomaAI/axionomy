@@ -1,6 +1,7 @@
 import Lean
 import Axionomy.Exchange
 import Axionomy.Rates
+import Axionomy.Basket
 
 /-! Deterministic executable examples from the SAME definitions used in the
 proofs. Rust runs these examples through the public API. Agreement on these
@@ -37,6 +38,18 @@ structure ExpressionCase where
   sourceAfter : String
   sinkAfter : String
   deriving ToJson
+
+structure BasketCase where
+  entries : List (Nat × String)
+  duplicate : Option Nat
+  canonical : Option (List (Nat × String))
+  deriving ToJson
+
+def basketCase (entries : List (Nat × Nat)) : BasketCase :=
+  let strings := entries.map (fun (asset, amount) => (asset, toString amount))
+  match Basket.construct entries with
+  | .error asset => ⟨strings, some asset, none⟩
+  | .ok output => ⟨strings, none, some (output.map (fun (asset, amount) => (asset, toString amount)))⟩
 
 def expression : Rates.Expr Unit Unit Unit :=
   .binary .div (.binary .mul (.balance () ()) .units) (.parameter ())
@@ -82,6 +95,14 @@ def main : IO Unit := do
           expressions := expressions.push ⟨toString balance, toString units, toString denominator,
             toString minimum, evaluated.map toString, accepted, toString (balance - value),
             toString value⟩
+  let alphabet := [0, 1].flatMap (fun asset => [0, 1, limit].map (fun amount => (asset, amount)))
+  let mut level : List (List (Nat × Nat)) := [[]]
+  let mut baskets : Array BasketCase := #[]
+  for _ in [0:4] do
+    for entries in level do
+      baskets := baskets.push (basketCase entries)
+    level := level.flatMap (fun prior => alphabet.map (fun entry => prior ++ [entry]))
+  baskets := baskets.push (basketCase [(0, 0), (1, 2), (1, 0), (0, 1)])
   let document := Json.mkObj [("version", toJson (1 : Nat)), ("scalars", toJson scalars),
-    ("exchanges", toJson exchanges), ("expressions", toJson expressions)]
+    ("exchanges", toJson exchanges), ("expressions", toJson expressions), ("baskets", toJson baskets)]
   IO.println document.compress

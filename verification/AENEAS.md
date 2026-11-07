@@ -7,6 +7,10 @@ and equates its `Option` result to the existing mathematical specification.
 Overflow, underflow, and a zero divisor produce `None`; division rounds down.
 There are no input bounds beyond the u64 type itself.
 
+The separate [basket construction proof](BASKETS.md) extends this pipeline with
+shared-source extraction and an explicit collection abstraction. The arithmetic
+proof's intrinsic boundary described here remains unchanged.
+
 `Axionomy/QuantityRefinement.lean` contains the four refinement theorems. Its
 `Refines` predicate requires an actual `Result.ok` witness as well as equality
 of the decoded quantity and the specification. A panic or divergence cannot

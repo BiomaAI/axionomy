@@ -80,8 +80,14 @@ fn economy_and_trace_round_trip_directly_through_serde() {
 
 #[test]
 fn basket_deserialization_rejects_duplicates_and_canonicalizes_zero() {
-    let duplicate = r#"[["Raw",1],["Raw",2]]"#;
-    assert!(serde_json::from_str::<Basket<Asset>>(duplicate).is_err());
+    for duplicate in [
+        r#"[["Raw",1],["Raw",2]]"#,
+        r#"[["Raw",0],["Raw",2]]"#,
+        r#"[["Raw",0],["Raw",0]]"#,
+        r#"[["Raw",2],["Raw",0]]"#,
+    ] {
+        assert!(serde_json::from_str::<Basket<Asset>>(duplicate).is_err());
+    }
 
     let canonical: Basket<Asset> = serde_json::from_str(r#"[["Raw",0],["Tool",1]]"#).unwrap();
     assert_eq!(canonical.len(), 1);

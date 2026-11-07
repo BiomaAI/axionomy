@@ -56,6 +56,27 @@ class ExtractionBoundaryTests(unittest.TestCase):
 
 class ProductionMutationTests(unittest.TestCase):
     def test_reversing_rust_subtraction_breaks_the_refinement_proof(self):
+        self.check_mutation(
+            "src/quantity.rs", "Self::from_checked(self.0.checked_sub(&rhs.0))",
+            "Self::from_checked(rhs.0.checked_sub(&self.0))", "extract_quantity.py",
+            "stale generated model", "QuantityRefinement")
+
+    def test_zero_filtering_before_validation_breaks_the_basket_proof(self):
+        original = """for (asset, quantity) in entries {
+        if quantities.contains_key(&asset) {
+            return Err(BasketError::DuplicateAsset { asset });
+        }
+        quantities.insert(asset, quantity);
+    }"""
+        # Keep the new local call from shadowing the extracted `quantity`
+        # module; this mutation must reach the proof, not a name-resolution error.
+        replacement = original.replace("quantity", "value").replace(
+            "in entries {", "in entries {\n        if value.scalar_is_zero() { continue; }")
+        self.check_mutation(
+            "src/basket.rs", original, replacement,
+            "extract_basket.py", "stale basket model", "BasketRefinement")
+
+    def check_mutation(self, source_path, original, replacement, script, stale_message, module):
         # Copy only reviewed/unignored project files into an isolated checkout.
         # Never edit the user's working tree. Tools and dependency caches are
         # shared; proof artifacts and the mutated Rust source remain isolated.
@@ -79,11 +100,10 @@ class ProductionMutationTests(unittest.TestCase):
             lake.mkdir()
             (lake / "packages").symlink_to(LEAN / ".lake/packages", target_is_directory=True)
 
-            quantity = root / "src/quantity.rs"
-            source = quantity.read_text()
-            original = "Self::from_checked(self.0.checked_sub(&rhs.0))"
+            target = root / source_path
+            source = target.read_text()
             self.assertEqual(source.count(original), 1)
-            quantity.write_text(source.replace(original, "Self::from_checked(rhs.0.checked_sub(&self.0))"))
+            target.write_text(source.replace(original, replacement))
             environment = os.environ.copy()
             environment["LEAN_NUM_THREADS"] = "2"
 
@@ -91,14 +111,14 @@ class ProductionMutationTests(unittest.TestCase):
                 return subprocess.run(command, cwd=cwd, env=environment, text=True,
                                       stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=300)
 
-            stale = run(sys.executable, "scripts/extract_quantity.py")
+            stale = run(sys.executable, "scripts/" + script)
             self.assertNotEqual(stale.returncode, 0, stale.stdout)
-            self.assertIn("stale generated model", stale.stdout)
-            regenerate = run(sys.executable, "scripts/extract_quantity.py", "--write")
+            self.assertIn(stale_message, stale.stdout)
+            regenerate = run(sys.executable, "scripts/" + script, "--write")
             self.assertEqual(regenerate.returncode, 0, regenerate.stdout)
-            proof = run("lake", "build", "Axionomy.QuantityRefinement", cwd=root / "verification/lean")
+            proof = run("lake", "build", "Axionomy." + module, cwd=root / "verification/lean")
             self.assertNotEqual(proof.returncode, 0, proof.stdout)
-            self.assertIn("QuantityRefinement.lean", proof.stdout)
+            self.assertIn(module + ".lean", proof.stdout)
             self.assertIn("unsolved goals", proof.stdout)
 
 

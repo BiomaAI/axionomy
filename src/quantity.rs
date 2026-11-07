@@ -75,6 +75,14 @@ impl QuantityScalar for num_bigint::BigUint {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Quantity<N = u64>(N);
 
+impl<N: Zero> Quantity<N> {
+    // Internal operations need only the scalar behavior they actually use;
+    // the public API continues to require the complete QuantityScalar contract.
+    pub(crate) fn scalar_is_zero(&self) -> bool {
+        self.0.is_zero()
+    }
+}
+
 impl Quantity<u64> {
     pub const ZERO: Self = Self(0);
 
@@ -109,7 +117,7 @@ where
     }
 
     pub fn is_zero(&self) -> bool {
-        self.0.is_zero()
+        self.scalar_is_zero()
     }
 
     pub fn checked_add(&self, rhs: &Self) -> Option<Self> {

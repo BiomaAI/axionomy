@@ -1,19 +1,20 @@
 {
   "version": 1,
-  "assurance": "Aeneas-extracted u64 checked arithmetic is proved against Lean specifications, subject to the documented translation and primitive-model trust boundary. Other core contracts have design proofs and finite Rust conformance.",
+  "assurance": "Partial implementation verification: Aeneas-extracted production u64 checked arithmetic and basket construction refine Lean specifications. Basket construction uses an explicit trusted ordered-map model; compiler/translation and primitive models remain trusted. Other core contracts have design proofs and finite Rust conformance.",
   "sources": {
-    "Cargo.toml": "4bc9d7a0305bfd13a1ba0bea109ccf732dc11f2c88bccdef03050f313b7ab3da",
+    "Cargo.toml": "8d1026ddadc355457ba0da93ae5e2da7d0c621ee675de597314604f675c634c2",
     "Cargo.lock": "00ef263c160aeebaa49187874a4b11ec94fee9bc8fbea5a2f0cacc190607919c",
     "src/account.rs": "f9ad6bbffdc893791a246cb480395607e80e2942867c3a116e2aeb8ee2b185e2",
     "src/amount.rs": "4aa0f1432494aac0454890604e3addbd002fa6b9ded1f75f91fce7675540f9ee",
-    "src/basket.rs": "39dac2972bbdd4a2f826a0427097f1226521cd751b1a1b54744181ed707804f0",
+    "src/basket.rs": "c291028c6c2903367c16aa5125ef180358add0fc97d54e72681adde896a95fb7",
     "src/economy.rs": "e2f67048df59aae0ce3b92b146c81d29130ced1abd89faf14bab2458b3bef45a",
     "src/exchange.rs": "aabae395148c0dd8703b2fc99aa177700eaffd0d8aac602f8a5ffbf7fb09a47b",
     "src/lib.rs": "a4ec7c34fa7f3020ab494dfffd824e8655e63a5434f45fa190df28441f7e89e5",
-    "src/quantity.rs": "ce7f716473fa7cef2f5520de90ba0219bed94bfdb7aabe330b04ed622ab2ec97",
+    "src/quantity.rs": "5ccffa3e3b879691bd11bd41c7236ba597eeccbcc349596210c6a3d82a9bcca6",
     "src/rate.rs": "516f11fe309ff825f26a6f23b55a01afc6b6fd8cffb65017444a37a3d3bccf93",
     "verification/extract.rs": "415b34f5f4f8aa2679af860bd2a4092c96e113145919160fe7c81e33836de3e0",
-    "verification/aeneas-toolchain.json": "943b4c78adf0388582b8c3bc17abb2ffbafde15cb9f4529a8d8434f816102bef"
+    "verification/aeneas-toolchain.json": "943b4c78adf0388582b8c3bc17abb2ffbafde15cb9f4529a8d8434f816102bef",
+    "verification/extract_basket.rs": "dc2b3a2159704c24a5261d0069a2aac7b575f30a94ae35c4c1e96933638592dd"
   },
   "features": [
     {
@@ -68,6 +69,42 @@
       ]
     },
     {
+      "id": "basket_construction",
+      "status": "aeneas_refinement_proved",
+      "sources": [
+        "src/basket.rs",
+        "src/quantity.rs",
+        "src/amount.rs",
+        "verification/extract_basket.rs",
+        "verification/aeneas-toolchain.json"
+      ],
+      "extracted_module": "BasketExtraction.Funs",
+      "theorems": [
+        "Axionomy.Basket.firstDuplicate_none_iff",
+        "Axionomy.Basket.construction_succeeds_iff",
+        "Axionomy.Basket.zero_cannot_hide_duplicate",
+        "Axionomy.Basket.canonical_has_no_zero",
+        "Axionomy.Basket.canonical_preserves_entries",
+        "Axionomy.Basket.canonical_preserves_order",
+        "Axionomy.Basket.canonical_unique",
+        "Axionomy.BasketRefinement.construct_refines",
+        "Axionomy.BasketRefinement.duplicate_rejected",
+        "Axionomy.BasketRefinement.exactEquality_lawful"
+      ],
+      "rust_tests": [
+        "tests/account.rs",
+        "tests/serde.rs",
+        "tests/lean_conformance.rs"
+      ],
+      "limitations": [
+        "Proves termination and exact constructor results for all finite Vec inputs represented by Aeneas, all u64 quantities, and arbitrary typed assets with total equality agreeing with identity. First duplicate rejection includes zero quantities; successful output preserves nonzero values and order.",
+        "The shared-source harness compiles the exact production files before drop elaboration. Public forwarding and the thin retain adapter are checked syntactically. Rust MIR, Charon/Aeneas translation, compiler/codegen, primitive and Vec iterator semantics remain trusted. See verification/BASKETS.md.",
+        "IndexMap lookup, insertion, and ordered retention use explicit executable models. Their implementation, lawful/stable Eq and Hash, successful allocation, resizing, and destructor effects are outside the proof. Hash internals fail closed in the model and are never called by the logical map.",
+        "The theorem specializes the shared constructor to u64 vector inputs. Arbitrary iterators, BigUint/custom numeric backends, asset-qualified conversion, and serialization implementations are not refined. The public API retains its original strong types and trait bounds; adapters have finite conformance tests.",
+        "Does not establish basket mutation/shortfall refinement or account/exchange correctness. Those remain separate contracts."
+      ]
+    },
+    {
       "id": "asset_qualified_amounts",
       "status": "design_proved_rust_tested",
       "sources": [
@@ -100,7 +137,7 @@
         "tests/serde.rs"
       ],
       "limitations": [
-        "Entry-level canonicalization and scalar shortfall are proved. Whole finite-map canonicalization, duplicate rejection, IndexMap, iteration and serialization are not refined."
+        "Entry-level canonicalization and scalar shortfall are proved. The separate basket_construction contract refines construction under a collection model. Other basket mutations, physical IndexMap semantics, arbitrary iterators, and serialization are not refined."
       ]
     },
     {

@@ -63,3 +63,7 @@ required-features = ["bigint"]
 [[example]]
 name = "quantity_extraction"
 path = "verification/extract.rs"
+
+[[example]]
+name = "basket_extraction"
+path = "verification/extract_basket.rs"

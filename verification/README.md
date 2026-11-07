@@ -15,6 +15,12 @@ the specified result for every pair of u64 inputs, including checked rejection.
 This is conditional on the documented compiler, translation, and primitive-model
 trust boundary; it is not a machine-code verification claim.
 
+Basket construction also has an Aeneas refinement proof for u64 quantities and
+finite vector inputs with lawful asset equality, under an explicit ordered-map
+model. It proves duplicate rejection (including zeros), exact nonzero contents,
+and preserved insertion order. See [the basket proof](BASKETS.md) for the
+shared-source extraction and the trusted storage boundary.
+
 The other core contracts still have handwritten design proofs and finite Rust
 conformance tests. Neither an entire source module nor every existing core
 behavior is declared proved just because it has a coverage entry.
@@ -34,6 +40,8 @@ The current library covers:
 | Module | Checked properties |
 | --- | --- |
 | `QuantityRefinement` | Actual Aeneas-extracted u64 addition, subtraction, multiplication, and division refine `Quantity`, including all checked failures |
+| `BasketRefinement` | Extracted production construction refines `Basket` for u64 vector inputs, under lawful equality and the explicit collection model |
+| `Basket` | Success iff asset identifiers are unique; zeros cannot hide duplicates; canonical output preserves nonzero entries, uniqueness, and order |
 | `Quantity` | Exact checked addition/multiplication, subtraction without underflow, floor division, asset-qualified amount round trip |
 | `State` | Typed account/asset updates and frame property, zero canonicalization, complete scalar shortfall, hidden-account projection, observation noninterference, monotone goals |
 | `Rates` | Checked expression evaluation refines mathematical evaluation and bounds its result; effect merging is associative/commutative in exact arithmetic; preservation does not scale |
@@ -104,7 +112,9 @@ lake build
 Formatting of JSON is immaterial. Review the actual changed values. The cases
 include u64 boundaries, overflow, underflow, zero units/divisors, preserved
 thresholds, conservation, computed effects, parameter lookup, conditions and
-pre-exchange snapshots. Separate existing Rust tests cover additional behavior.
+pre-exchange snapshots. They also include 260 basket cases covering duplicates,
+zero quantities, order, and u64 boundaries. Separate existing Rust tests cover
+additional behavior.
 
 ## Explicit legacy refinement gaps
 
@@ -112,12 +122,13 @@ The following existed before this proof requirement and are not discharged by
 the initial theorems. They are a backfill plan, not an exemption for new behavior:
 
 - Charon/Aeneas extraction and refinement beyond the four `Quantity<u64>` checked
-  arithmetic operations, including account/exchange `expect` and termination obligations.
+  arithmetic operations and modeled-storage basket construction, including
+  account/exchange `expect` and termination obligations.
 - Correctness of `IndexMap`, `BTreeMap`, `Arc`, iterator order, allocation, cloning,
   and copy-on-write isolation; Rust compilation still enforces its ownership rules.
 - Full structural validation: required/unknown roles and parameters, account/rate
   existence, distinct bindings, duplicate model IDs, and aggregate overflow.
-- Sparse finite-map canonicalization as a whole, serialization/schema round trips,
+- Sparse finite-map operations beyond the proved constructor, serialization/schema round trips,
   canonical state/observation ordering, and fingerprints. Fingerprints are not
   collision-free identities and must not be given such a theorem.
 - Refinement of checked signed invariant accumulation to mathematical `Int`,
@@ -128,7 +139,7 @@ the initial theorems. They are a backfill plan, not an exemption for new behavio
   Rust `replay` retains an accepted prefix on failure; `replayed` protects its source.
 
 For further implementation proofs, extend the pinned Aeneas pipeline from u64
-arithmetic to the account boundary and connect extracted definitions to these
+arithmetic and basket construction to the account boundary and connect extracted definitions to these
 specifications. Model unavoidable external dependencies explicitly and
 report their trust status. Do not maintain a second Rust algorithm only for proofs
 or change the public API to an untyped representation to satisfy extraction.

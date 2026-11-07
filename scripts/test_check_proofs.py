@@ -18,6 +18,7 @@ class CoverageGateTests(unittest.TestCase):
             "Cargo.toml": "[package]\n",
             "Cargo.lock": "version = 4\n",
             "verification/extract.rs": "// extraction entry points\n",
+            "verification/extract_basket.rs": "// shared basket extraction entry point\n",
             "verification/aeneas-toolchain.json": "{}\n",
             "src/lib.rs": "pub struct TypedCore;\n",
             "tests/contract.rs": "// regression evidence\n",
@@ -28,7 +29,7 @@ class CoverageGateTests(unittest.TestCase):
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_text(content)
         sources = ["Cargo.toml", "Cargo.lock", "src/lib.rs", "verification/extract.rs",
-                   "verification/aeneas-toolchain.json"]
+                   "verification/extract_basket.rs", "verification/aeneas-toolchain.json"]
         self.coverage = {
             "version": 1,
             "sources": {name: hashlib.sha256((self.root / name).read_bytes()).hexdigest() for name in sources},
@@ -75,6 +76,18 @@ class CoverageGateTests(unittest.TestCase):
     def test_missing_rust_evidence_is_rejected(self):
         self.coverage["features"][0]["rust_tests"] = ["tests/missing.rs"]
         with self.assertRaisesRegex(ValueError, "missing Rust evidence"):
+            validate_coverage(self.root, self.coverage)
+
+    def test_unsupported_refinement_claim_is_rejected(self):
+        self.coverage["features"][0]["status"] = "aeneas_refinement_proved"
+        with self.assertRaisesRegex(ValueError, "no supported extraction pipeline"):
+            validate_coverage(self.root, self.coverage)
+
+    def test_incomplete_basket_refinement_is_rejected(self):
+        feature = self.coverage["features"][0]
+        feature.update(id="basket_construction", status="aeneas_refinement_proved",
+                       extracted_module="BasketExtraction.Funs")
+        with self.assertRaisesRegex(ValueError, "incomplete implementation refinement contract"):
             validate_coverage(self.root, self.coverage)
 
 

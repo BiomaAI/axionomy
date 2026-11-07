@@ -1,5 +1,6 @@
 use crate::{AssetAmount, Quantity, QuantityScalar};
 use indexmap::IndexMap;
+use num_traits::Zero;
 use schemars::{JsonSchema, Schema, SchemaGenerator};
 use serde::ser::SerializeSeq;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -12,6 +13,36 @@ use thiserror::Error;
 #[derive(Debug, Clone)]
 pub struct Basket<A, N = u64> {
     quantities: IndexMap<A, Quantity<N>>,
+}
+
+// Storage adapter: construction filters quantities without mutating them.
+// The proof models this thin IndexMap boundary explicitly.
+pub(crate) fn retain_quantities<A, N>(
+    quantities: &mut IndexMap<A, Quantity<N>>,
+    mut keep: impl FnMut(&Quantity<N>) -> bool,
+) {
+    quantities.retain(|_, quantity| keep(quantity));
+}
+
+// Shared production constructor. Its minimal internal bounds avoid bringing
+// unrelated scalar operations into the proof; public bounds remain unchanged.
+pub(crate) fn construct_entries<A, N>(
+    entries: impl IntoIterator<Item = (A, Quantity<N>)>,
+) -> Result<Basket<A, N>, BasketError<A>>
+where
+    A: Eq + Hash,
+    N: Zero,
+{
+    // Zero entries still establish that an asset has appeared in the input.
+    let mut quantities = IndexMap::new();
+    for (asset, quantity) in entries {
+        if quantities.contains_key(&asset) {
+            return Err(BasketError::DuplicateAsset { asset });
+        }
+        quantities.insert(asset, quantity);
+    }
+    retain_quantities(&mut quantities, |quantity| !quantity.scalar_is_zero());
+    Ok(Basket { quantities })
 }
 
 impl<A, N> Basket<A, N> {
@@ -53,14 +84,7 @@ where
     pub fn try_from_entries(
         entries: impl IntoIterator<Item = (A, Quantity<N>)>,
     ) -> Result<Self, BasketError<A>> {
-        let mut basket = Self::new();
-        for (asset, quantity) in entries {
-            if basket.quantities.contains_key(&asset) {
-                return Err(BasketError::DuplicateAsset { asset });
-            }
-            basket.insert(asset, quantity);
-        }
-        Ok(basket)
+        construct_entries(entries)
     }
 
     /// Builds a canonical basket from asset-qualified quantities.

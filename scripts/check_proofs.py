@@ -12,6 +12,7 @@ import sys
 import tempfile
 
 from extract_quantity import check_extraction
+from extract_basket import check_extraction as check_basket_extraction
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -19,7 +20,7 @@ ROOT = Path(__file__).resolve().parents[1]
 def validate_coverage(root, coverage):
     if coverage.get("version") != 1:
         raise ValueError("unsupported proof coverage version")
-    sources = {"Cargo.toml", "Cargo.lock", "verification/extract.rs",
+    sources = {"Cargo.toml", "Cargo.lock", "verification/extract.rs", "verification/extract_basket.rs",
                "verification/aeneas-toolchain.json"} | {
                    str(p.relative_to(root)) for p in (root / "src").rglob("*.rs")}
     recorded = coverage["sources"]
@@ -43,14 +44,23 @@ def validate_coverage(root, coverage):
         if feature["status"] not in {"design_proved_rust_tested", "aeneas_refinement_proved"}:
             raise ValueError(f"unsupported verification status: {feature['status']}")
         if feature["status"] == "aeneas_refinement_proved":
-            # This gate currently implements one extraction pipeline. Future
+            # These are the implemented extraction pipelines. Future
             # claims need their own regeneration and trust-boundary checks.
-            if feature["id"] != "u64_checked_arithmetic" or feature.get("extracted_module") != "QuantityExtraction.Funs":
+            pipelines = {
+                "u64_checked_arithmetic": ("QuantityExtraction.Funs", {
+                    f"Axionomy.QuantityRefinement.checked_{op}_refines"
+                    for op in ("add", "sub", "mul", "div")}),
+                "basket_construction": ("BasketExtraction.Funs", {
+                    "Axionomy.BasketRefinement.construct_refines",
+                    "Axionomy.BasketRefinement.duplicate_rejected",
+                    "Axionomy.BasketRefinement.exactEquality_lawful"}),
+            }
+            pipeline = pipelines.get(feature["id"])
+            if pipeline is None or feature.get("extracted_module") != pipeline[0]:
                 raise ValueError("refinement claim has no supported extraction pipeline")
-            required = {f"Axionomy.QuantityRefinement.checked_{op}_refines"
-                        for op in ("add", "sub", "mul", "div")}
+            required = pipeline[1]
             if not required <= set(feature["theorems"]):
-                raise ValueError("incomplete u64 implementation refinement contract")
+                raise ValueError(f"incomplete implementation refinement contract: {feature['id']}")
         if not feature["sources"] or not set(feature["sources"]) <= sources:
             raise ValueError(f"invalid source mapping: {feature['id']}")
         covered.update(feature["sources"])
@@ -92,6 +102,7 @@ def main():
     coverage = json.loads((ROOT / "verification/coverage.json").read_text())
     theorems = validate_coverage(ROOT, coverage)
     check_extraction()
+    check_basket_extraction()
     lean_root = ROOT / "verification/lean"
     run("lake", "build", cwd=lean_root)
     run("lake", "env", "leanchecker", "Axionomy", cwd=lean_root)
@@ -106,7 +117,8 @@ def main():
     run("cargo", "test", "-p", "axionomy", "--all-features", "--test", "lean_conformance")
     run("cargo", "test", "-p", "axionomy", "--all-features", "--doc")
     print(f"Verified {len(theorems)} registered theorems and their axiom dependencies, "
-          "fresh Aeneas extraction of u64 checked arithmetic, and Rust conformance/type checks. "
+          "fresh Aeneas extraction of u64 checked arithmetic and basket construction, "
+          "and Rust conformance/type checks. Basket storage uses an explicit trusted model. "
           "Other core implementation refinement remains unproved; see verification/README.md.")
 
 

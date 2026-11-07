@@ -15,6 +15,9 @@ name = "Audit"
 [[lean_lib]]
 name = "QuantityExtraction"
 
+[[lean_lib]]
+name = "BasketExtraction"
+
 [[lean_exe]]
 name = "conformance"
 root = "Conformance"

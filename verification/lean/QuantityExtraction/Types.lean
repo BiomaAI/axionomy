@@ -26,7 +26,7 @@ namespace Axionomy.Extracted
 def axionomy.quantity.Quantity (N : Type _) := N
 
 /-- [axionomy::quantity::QuantityError]
-    Source: 'src/quantity.rs', lines 214:0-214:22
+    Source: 'src/quantity.rs', lines 222:0-222:22
     Name pattern: [axionomy::quantity::QuantityError]
     Visibility: public -/
 @[discriminant isize, rust_type "axionomy::quantity::QuantityError"]
