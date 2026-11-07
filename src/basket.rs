@@ -45,6 +45,25 @@ where
     Ok(Basket { quantities })
 }
 
+// Convert one typed amount per next() call, preserving duplicate rejection's
+// short circuit even when the unused iterator tail panics or never terminates.
+struct AmountEntries<I>(I);
+
+impl<A, N, I> Iterator for AmountEntries<I>
+where
+    I: Iterator<Item = AssetAmount<A, N>>,
+{
+    type Item = (A, Quantity<N>);
+
+    #[allow(clippy::manual_map)] // Keep the primitive next/typed conversion explicit for extraction.
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.0.next() {
+            Some(value) => Some(value.into_parts()),
+            None => None,
+        }
+    }
+}
+
 impl<A, N> Basket<A, N> {
     pub fn new() -> Self {
         Self {
@@ -95,7 +114,7 @@ where
     pub fn try_from_amounts(
         amounts: impl IntoIterator<Item = AssetAmount<A, N>>,
     ) -> Result<Self, BasketError<A>> {
-        Self::try_from_entries(amounts.into_iter().map(AssetAmount::into_parts))
+        Self::try_from_entries(AmountEntries(amounts.into_iter()))
     }
 
     pub fn get(&self, asset: &A) -> Option<&Quantity<N>> {
@@ -227,7 +246,7 @@ where
     N: QuantityScalar,
 {
     fn from(entries: [(A, Quantity<N>); LEN]) -> Self {
-        entries.into_iter().collect()
+        Self::from_iter(entries)
     }
 }
 

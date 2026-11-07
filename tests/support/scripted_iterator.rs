@@ -52,6 +52,13 @@ impl<T> Iterator for Scripted<T> {
         panic!("consumer unexpectedly queried size_hint")
     }
 
+    fn map<B, F>(self, _convert: F) -> std::iter::Map<Self, F>
+    where
+        F: FnMut(Self::Item) -> B,
+    {
+        panic!("consumer unexpectedly invoked an overridden map")
+    }
+
     fn fold<B, F>(self, _initial: B, _combine: F) -> B
     where
         F: FnMut(B, Self::Item) -> B,

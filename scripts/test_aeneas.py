@@ -55,6 +55,19 @@ class ExtractionBoundaryTests(unittest.TestCase):
 
 
 class ProductionMutationTests(unittest.TestCase):
+    def test_skipped_typed_amount_breaks_collection_contract(self):
+        self.check_mutation(
+            "src/basket.rs", "match self.0.next() {", "let _ = self.0.next(); match self.0.next() {",
+            "extract_account.py", "stale account model", "BasketAmountsRefinement", "AccountExtraction")
+
+    def test_silenced_duplicate_panic_breaks_collection_contract(self):
+        # The isolated mutant calls Basket::new in the Err arm. Avoid the
+        # generated module name being shadowed by the other arm's local binder.
+        self.check_mutation(
+            "src/basket.rs", 'Ok(basket) => basket,\n            Err(_) => panic!("basket entries must have unique assets"),',
+            "Ok(value) => value,\n            Err(_) => Self::new(),",
+            "extract_account.py", "stale account model", "BasketCollectionRefinement", "AccountExtraction")
+
     def test_discarding_later_trace_entries_breaks_iterator_contract(self):
         self.check_mutation(
             "src/exchange.rs", "for proposal in exchanges {\n            self.exchanges.push(proposal);",

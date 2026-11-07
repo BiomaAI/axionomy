@@ -31,6 +31,24 @@ class AccountBridgeTests(unittest.TestCase):
         shutil.copyfile(ROOT / "verification/extract_account.rs", self.target)
         (self.root / "src").mkdir()
         shutil.copyfile(ROOT / "src/economy.rs", self.root / "src/economy.rs")
+        shutil.copyfile(ROOT / "src/basket.rs", self.root / "src/basket.rs")
+
+    def test_changed_retention_adapter_is_rejected(self):
+        source = self.root / "src/basket.rs"
+        source.write_text(source.read_text().replace("quantities.retain(|_, quantity| keep(quantity));", "quantities.clear();"))
+        with self.assertRaisesRegex(ValueError, "basket retention adapter changed"):
+            validate_bridge(self.root)
+
+    def test_changed_basket_constructor_entries_are_rejected(self):
+        original = self.target.read_text()
+        for name, call in (("basket_try_entries", "Basket::try_from_entries(entries)"),
+                           ("basket_try_amounts", "Basket::try_from_amounts(amounts)"),
+                           ("basket_collect", "Basket::from_iter(entries)"),
+                           ("basket_from_array", "Basket::from(entries)")):
+            with self.subTest(entry=name):
+                self.target.write_text(original.replace(call, "bypassed()"))
+                with self.assertRaisesRegex(ValueError, "not a forwarding call: " + name):
+                    validate_bridge(self.root)
 
     def test_production_sources_pass(self):
         validate_bridge(self.root)
@@ -165,6 +183,19 @@ class AccountExtractionTests(unittest.TestCase):
         original = path.read_text()
         for definition in ("exchange.Trace.extend", "exchange.Trace.extend_loop.body",
                            "economy.Economy.view_loop.body", "economy.Economy.applicable_loop.body"):
+            with self.subTest(definition=definition):
+                needle = "def " + definition + "\n"
+                self.assertEqual(original.count(needle), 1)
+                path.write_text(original.replace(needle, "def bypass\n"))
+                with self.assertRaisesRegex(ValueError, "missing account production definition"):
+                    validate_generated(self.directory)
+
+    def test_missing_basket_collection_definitions_are_rejected(self):
+        path = self.directory / "Funs.lean"
+        original = path.read_text()
+        for definition in ("basket.Basket.try_from_entries", "basket.Basket.try_from_amounts",
+                           "basket.Basket.Insts.CoreConvertFromArrayPairAQuantityLEN.from",
+                           "basket.AmountEntries.Insts.CoreIterTraitsIteratorIteratorPairAQuantity.next"):
             with self.subTest(definition=definition):
                 needle = "def " + definition + "\n"
                 self.assertEqual(original.count(needle), 1)

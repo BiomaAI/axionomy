@@ -47,8 +47,9 @@ The Lean specification generates 654 cases for the public Rust operations,
 covering both entry orders, empty/different-key baskets, zero scaling, u64
 boundaries, and late overflow. Isolated mutations that partially commit addition
 or ignore the scaling factor must compile after extraction and then fail the
-operation refinement proof. Arbitrary iterators, sorted views, serialization,
-custom backends, and the complete exchange evaluator remain separate contracts.
+operation refinement proof. Generic iterator construction is covered below.
+Sorted views, serialization and numeric backend arithmetic remain separate
+obligations; the complete u64 exchange evaluator is covered in [ACCOUNTS.md](ACCOUNTS.md).
 
 `Basket::try_from_entries` used to discard a zero entry before checking the next
 asset. As a result, `[(A, 0), (A, 1)]` and `[(A, 0), (A, 0)]` incorrectly succeeded
@@ -129,11 +130,11 @@ needs a new model and proof. The u64 addition dictionary inherited by `Zero`
 uses Aeneas's primitive addition and is likewise unused by construction.
 
 The public forwarding call is checked syntactically. The theorem specializes its
-shared implementation to vector inputs and u64 quantities. Asset-qualified
-construction and JSON deserialization also use that implementation, but their
-adapters have finite conformance evidence, not separate implementation proofs.
-The existing mutation, arithmetic, account, rate, exchange, serialization, and
-arbitrary numeric-backend gaps remain explicit in `coverage.json`.
+shared implementation to vector inputs and u64 quantities. The public-collection contracts below now connect generic entry/asset-qualified
+construction and convenience conversions directly to the AccountExtraction model.
+JSON deserialization still has finite conformance evidence and remains item 17.
+Remaining sorted-iteration, serialization/schema, derived/convenience API and
+numeric-backend gaps remain explicit in `coverage.json`.
 The subsequent [account proof](ACCOUNTS.md) covers deposit/withdrawal and their
 basket lookup, insertion, and shortfall paths under the same storage abstraction.
 
@@ -160,3 +161,79 @@ It verifies that stale extraction is rejected and that freshly extracting the
 buggy Rust makes the basket refinement proof fail. Other negative controls
 reject changed forwarding bodies, copied proof-only sources, altered storage
 interfaces, missing generated definitions, and fabricated axioms.
+
+## Public collection boundary
+
+`BasketCollection` generalizes the independent constructor specification to typed
+values and an explicit zero predicate. It proves success exactly for distinct
+asset identifiers, nonzero contents, insertion-order preservation and canonical
+uniqueness. The predicate describes a backend operation; it is not an assumption
+about the desired constructor result. The Nat specialization is proved equal to
+the existing `Basket.construct` specification.
+
+`BasketCollectionRefinement` connects the actual generic production constructor
+to that specification. `entries_contract` derives the successful representation
+and its `usize` size bound from distinct, bounded input. The helper refinements
+operate under the existing logical map model; actual allocation and physical map
+capacity remain dependency assumptions. Generic Zero laws are independent of the
+arithmetic laws still tracked in item 18. `BasketPublicRefinement.u64_entries_refines`
+discharges the concrete u64 zero predicate and returns the exact existing
+natural-number construction result.
+
+The independent `IteratorContract.Prefix` protocol records only successful
+primitive `next` calls, without any premise about the remaining iterator.
+`entries_reject_prefix` and `amounts_reject_prefix` therefore prove duplicate
+rejection even when the unused tail would panic or never terminate. Zero values
+still establish an asset's presence. These rejection paths do not invoke the zero
+predicate, so they need no zero-callback success premise. `FailsAfter` contracts
+propagate input failures if no earlier duplicate has already ended construction;
+separate public contracts handle conversion-to-iterator failures.
+
+`BasketAmountsRefinement` extracts the private `AmountEntries` iterator and proves
+that it converts precisely one asset-qualified amount per yielded value. The
+production implementation replaces the generic `.map` call with this explicit
+`next`/`into_parts` adapter. It does not precollect the input or impose new public
+trait bounds. This avoids assuming correctness of custom `map` overrides that the
+pinned Aeneas Iterator dictionary does not represent. Lawful default map behavior
+has the same result; custom override invocation can differ.
+
+FromIterator and owned-array conversion return exactly the canonical basket, or
+panic exactly on duplicate input under successful iterator/equality/zero laws.
+Early duplicate panic also needs only an observed prefix. Aeneas represents the
+panic class; the current message is checked by Rust conformance, not proved as a
+formatting contract. Array conversion now directly calls `Self::from_iter`,
+preserving its typed signature and duplicate policy.
+
+The only added dependency interfaces are the std owned-array iterator's type,
+`into_iter` and `next`, plus reuse of the source-guarded `retain_quantities` adapter
+already modeled in BasketExtraction. The array model is an executable ordered
+list of remaining initialized values. Review of the pinned nightly-2026-09-17
+`core/src/array/iter.rs` and `iter/iter_inner.rs` confirms initialization of the
+alive range to `0..N` and forward consumption of its first element. Physical
+MaybeUninit storage, unsafe moves, destructor effects, allocation and std internals
+remain trusted. The source guard checks retention in both extraction pipelines;
+its extracted zero predicate is proved. Compiler/translation and existing
+primitive/hash/collection boundaries remain unchanged.
+
+Basic new/default, len/is_empty, get and insertion-order borrowed iteration now
+have explicit production refinements. Length has a representable-size premise.
+Sorted borrowed iteration remains a separate open obligation: the pinned Aeneas
+backend cannot currently finish the nested slice borrow before the return. Its
+existing implementation, borrowed result and asset-only ordering bound are intact.
+
+The Lean generator adds 85 collection scenarios: all lists through length three
+from zero/nonzero/maximum-u64 values and overlapping typed asset identifiers.
+Rust exercises entry construction, typed amounts, FromIterator, fixed arrays,
+queries and borrowed iteration. Scripted non-fused inputs reject polling beyond
+None and override map/fold/size_hint with panics. Each case also runs with a
+panicking tail to check first-error precedence; non-Copy BigUint values exercise
+the typed-amount adapter without claiming BigUint arithmetic verification.
+Two production mutation controls skip a typed amount or silently accept duplicate
+collection input; both must translate successfully and then break the relevant
+implementation proof.
+
+This milestone passed the full proof gate with 388 registered contracts and
+3,378 audited Axionomy theorems, fresh extraction, all 311 workspace tests,
+90 boundary/gate controls and both new production mutation controls. Formatting,
+Clippy with warnings denied, documentation and compile-fail doctests also passed.
+The prior 44 production mutation controls remain in CI.

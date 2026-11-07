@@ -18,8 +18,8 @@ GENERATED = {
     "AccountExtraction.lean": "AccountExtraction.lean",
 }
 TEMPLATES = {
-    "TypesExternal_Template.lean": "5d799b1ee543006cebe6325df3382239259a305cd75139d39e816fb0122ccd6b",
-    "FunsExternal_Template.lean": "171a72da913bb2fdf3c2d1249a607c22b8bcb7883e4cd9cc93c431cc67fd2877",
+    "TypesExternal_Template.lean": "f6466e18f93d85ab84f19738621f25aeaf182050a96e19ad1c890e8174a68c8e",
+    "FunsExternal_Template.lean": "4b96a51374fad0b7228848e835f9576107f2cd86bb1d73a5d4f2b6e015edb2e4",
 }
 
 # Keep critical handoffs explicit alongside the complete caller extraction.
@@ -42,6 +42,16 @@ VALIDATION_CALL = """let rule = match self.validate_structure(proposal) {
         };"""
 
 ENTRY_CALLS = {
+    "basket_try_entries": "Basket::try_from_entries(entries)",
+    "basket_try_amounts": "Basket::try_from_amounts(amounts)",
+    "basket_collect": "Basket::from_iter(entries)",
+    "basket_from_array": "Basket::from(entries)",
+    "basket_new": "Basket::new()",
+    "basket_default": "Basket::default()",
+    "basket_len": "state.len()",
+    "basket_empty": "state.is_empty()",
+    "basket_entries": "state.iter()",
+    "basket_get": "state.get(asset)",
     "amount_new": "AssetAmount::new(asset,value)",
     "amount_asset": "value.asset()",
     "amount_quantity": "value.quantity()",
@@ -204,6 +214,10 @@ PUBLIC_DEFINITIONS = (
 
 def validate_bridge(root=ROOT):
     """Require the harness to forward to the unchanged production methods."""
+    basket = (root / "src/basket.rs").read_text()
+    retention = re.findall(r"\bfn retain_quantities\b[^{}]*\{([^{}]*)\}", basket)
+    if len(retention) != 1 or re.sub(r"\s+", "", retention[0]) != "quantities.retain(|_,quantity|keep(quantity));":
+        raise ValueError("basket retention adapter changed; review its storage boundary")
     harness = (root / "verification/extract_account.rs").read_text()
     paths = re.findall(r'#\[path\s*=\s*"([^"]+)"\]', harness)
     if sorted(paths) != ["../src/account.rs", "../src/amount.rs", "../src/basket.rs", "../src/economy.rs", "../src/exchange.rs",
@@ -238,6 +252,13 @@ def validate_generated(directory):
     functions = (directory / "Funs.lean").read_text()
     for entry in (*ENTRY_CALLS, *PUBLIC_DEFINITIONS, "account.Account.prepare_exchange",
                   "account.Account.Insts.CoreCloneClone.clone",
+                  "basket.construct_entries", "basket.construct_entries_loop.body",
+                  "basket.Basket.try_from_entries", "basket.Basket.try_from_amounts",
+                  "basket.AmountEntries.Insts.CoreIterTraitsIteratorIteratorPairAQuantity.next",
+                  "basket.Basket.Insts.CoreIterTraitsCollectFromIteratorPairAQuantity.from_iter",
+                  "basket.Basket.Insts.CoreConvertFromArrayPairAQuantityLEN.from",
+                  "basket.Basket.get", "basket.Basket.iter", "basket.Basket.new", "basket.Basket.len",
+                  "basket.Basket.is_empty", "basket.Basket.Insts.CoreDefaultDefault.default",
                   "account.Account.deposit", "account.Account.withdraw",
                   "account.Account.deposit_loop.body", "account.Account.withdraw_loop.body",
                   "basket.Basket.shortfall", "basket.Basket.shortfall_loop.body",
@@ -338,6 +359,7 @@ def check_extraction(write=False):
                    "--include", "account_extraction::rate", "--include", "account_extraction::exchange",
                    "--include", "account_extraction::economy",
                    "--include", "num_traits", "--opaque", "indexmap",
+                   "--opaque", "account_extraction::basket::retain_quantities",
                    "--dest-file", str(llbc), "--", "--locked", "-p", "axionomy",
                    "--example", "account_extraction", "--no-default-features"]
         print("Extracting the production account updates...", flush=True)

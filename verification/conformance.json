@@ -689519,5 +689519,1561 @@
         1
       ]
     }
+  ],
+  "basketCollections": [
+    {
+      "accepted": [],
+      "duplicate": null,
+      "entries": [],
+      "pulls": 1
+    },
+    {
+      "accepted": [],
+      "duplicate": null,
+      "entries": [
+        [
+          0,
+          "0"
+        ]
+      ],
+      "pulls": 2
+    },
+    {
+      "accepted": [
+        [
+          0,
+          "1"
+        ]
+      ],
+      "duplicate": null,
+      "entries": [
+        [
+          0,
+          "1"
+        ]
+      ],
+      "pulls": 2
+    },
+    {
+      "accepted": [
+        [
+          1,
+          "18446744073709551615"
+        ]
+      ],
+      "duplicate": null,
+      "entries": [
+        [
+          1,
+          "18446744073709551615"
+        ]
+      ],
+      "pulls": 2
+    },
+    {
+      "accepted": [],
+      "duplicate": null,
+      "entries": [
+        [
+          1,
+          "0"
+        ]
+      ],
+      "pulls": 2
+    },
+    {
+      "accepted": null,
+      "duplicate": 0,
+      "entries": [
+        [
+          0,
+          "0"
+        ],
+        [
+          0,
+          "0"
+        ]
+      ],
+      "pulls": 2
+    },
+    {
+      "accepted": null,
+      "duplicate": 0,
+      "entries": [
+        [
+          0,
+          "1"
+        ],
+        [
+          0,
+          "0"
+        ]
+      ],
+      "pulls": 2
+    },
+    {
+      "accepted": [
+        [
+          1,
+          "18446744073709551615"
+        ]
+      ],
+      "duplicate": null,
+      "entries": [
+        [
+          1,
+          "18446744073709551615"
+        ],
+        [
+          0,
+          "0"
+        ]
+      ],
+      "pulls": 3
+    },
+    {
+      "accepted": [],
+      "duplicate": null,
+      "entries": [
+        [
+          1,
+          "0"
+        ],
+        [
+          0,
+          "0"
+        ]
+      ],
+      "pulls": 3
+    },
+    {
+      "accepted": null,
+      "duplicate": 0,
+      "entries": [
+        [
+          0,
+          "0"
+        ],
+        [
+          0,
+          "1"
+        ]
+      ],
+      "pulls": 2
+    },
+    {
+      "accepted": null,
+      "duplicate": 0,
+      "entries": [
+        [
+          0,
+          "1"
+        ],
+        [
+          0,
+          "1"
+        ]
+      ],
+      "pulls": 2
+    },
+    {
+      "accepted": [
+        [
+          1,
+          "18446744073709551615"
+        ],
+        [
+          0,
+          "1"
+        ]
+      ],
+      "duplicate": null,
+      "entries": [
+        [
+          1,
+          "18446744073709551615"
+        ],
+        [
+          0,
+          "1"
+        ]
+      ],
+      "pulls": 3
+    },
+    {
+      "accepted": [
+        [
+          0,
+          "1"
+        ]
+      ],
+      "duplicate": null,
+      "entries": [
+        [
+          1,
+          "0"
+        ],
+        [
+          0,
+          "1"
+        ]
+      ],
+      "pulls": 3
+    },
+    {
+      "accepted": [
+        [
+          1,
+          "18446744073709551615"
+        ]
+      ],
+      "duplicate": null,
+      "entries": [
+        [
+          0,
+          "0"
+        ],
+        [
+          1,
+          "18446744073709551615"
+        ]
+      ],
+      "pulls": 3
+    },
+    {
+      "accepted": [
+        [
+          0,
+          "1"
+        ],
+        [
+          1,
+          "18446744073709551615"
+        ]
+      ],
+      "duplicate": null,
+      "entries": [
+        [
+          0,
+          "1"
+        ],
+        [
+          1,
+          "18446744073709551615"
+        ]
+      ],
+      "pulls": 3
+    },
+    {
+      "accepted": null,
+      "duplicate": 1,
+      "entries": [
+        [
+          1,
+          "18446744073709551615"
+        ],
+        [
+          1,
+          "18446744073709551615"
+        ]
+      ],
+      "pulls": 2
+    },
+    {
+      "accepted": null,
+      "duplicate": 1,
+      "entries": [
+        [
+          1,
+          "0"
+        ],
+        [
+          1,
+          "18446744073709551615"
+        ]
+      ],
+      "pulls": 2
+    },
+    {
+      "accepted": [],
+      "duplicate": null,
+      "entries": [
+        [
+          0,
+          "0"
+        ],
+        [
+          1,
+          "0"
+        ]
+      ],
+      "pulls": 3
+    },
+    {
+      "accepted": [
+        [
+          0,
+          "1"
+        ]
+      ],
+      "duplicate": null,
+      "entries": [
+        [
+          0,
+          "1"
+        ],
+        [
+          1,
+          "0"
+        ]
+      ],
+      "pulls": 3
+    },
+    {
+      "accepted": null,
+      "duplicate": 1,
+      "entries": [
+        [
+          1,
+          "18446744073709551615"
+        ],
+        [
+          1,
+          "0"
+        ]
+      ],
+      "pulls": 2
+    },
+    {
+      "accepted": null,
+      "duplicate": 1,
+      "entries": [
+        [
+          1,
+          "0"
+        ],
+        [
+          1,
+          "0"
+        ]
+      ],
+      "pulls": 2
+    },
+    {
+      "accepted": null,
+      "duplicate": 0,
+      "entries": [
+        [
+          0,
+          "0"
+        ],
+        [
+          0,
+          "0"
+        ],
+        [
+          0,
+          "0"
+        ]
+      ],
+      "pulls": 2
+    },
+    {
+      "accepted": null,
+      "duplicate": 0,
+      "entries": [
+        [
+          0,
+          "1"
+        ],
+        [
+          0,
+          "0"
+        ],
+        [
+          0,
+          "0"
+        ]
+      ],
+      "pulls": 2
+    },
+    {
+      "accepted": null,
+      "duplicate": 0,
+      "entries": [
+        [
+          1,
+          "18446744073709551615"
+        ],
+        [
+          0,
+          "0"
+        ],
+        [
+          0,
+          "0"
+        ]
+      ],
+      "pulls": 3
+    },
+    {
+      "accepted": null,
+      "duplicate": 0,
+      "entries": [
+        [
+          1,
+          "0"
+        ],
+        [
+          0,
+          "0"
+        ],
+        [
+          0,
+          "0"
+        ]
+      ],
+      "pulls": 3
+    },
+    {
+      "accepted": null,
+      "duplicate": 0,
+      "entries": [
+        [
+          0,
+          "0"
+        ],
+        [
+          0,
+          "1"
+        ],
+        [
+          0,
+          "0"
+        ]
+      ],
+      "pulls": 2
+    },
+    {
+      "accepted": null,
+      "duplicate": 0,
+      "entries": [
+        [
+          0,
+          "1"
+        ],
+        [
+          0,
+          "1"
+        ],
+        [
+          0,
+          "0"
+        ]
+      ],
+      "pulls": 2
+    },
+    {
+      "accepted": null,
+      "duplicate": 0,
+      "entries": [
+        [
+          1,
+          "18446744073709551615"
+        ],
+        [
+          0,
+          "1"
+        ],
+        [
+          0,
+          "0"
+        ]
+      ],
+      "pulls": 3
+    },
+    {
+      "accepted": null,
+      "duplicate": 0,
+      "entries": [
+        [
+          1,
+          "0"
+        ],
+        [
+          0,
+          "1"
+        ],
+        [
+          0,
+          "0"
+        ]
+      ],
+      "pulls": 3
+    },
+    {
+      "accepted": null,
+      "duplicate": 0,
+      "entries": [
+        [
+          0,
+          "0"
+        ],
+        [
+          1,
+          "18446744073709551615"
+        ],
+        [
+          0,
+          "0"
+        ]
+      ],
+      "pulls": 3
+    },
+    {
+      "accepted": null,
+      "duplicate": 0,
+      "entries": [
+        [
+          0,
+          "1"
+        ],
+        [
+          1,
+          "18446744073709551615"
+        ],
+        [
+          0,
+          "0"
+        ]
+      ],
+      "pulls": 3
+    },
+    {
+      "accepted": null,
+      "duplicate": 1,
+      "entries": [
+        [
+          1,
+          "18446744073709551615"
+        ],
+        [
+          1,
+          "18446744073709551615"
+        ],
+        [
+          0,
+          "0"
+        ]
+      ],
+      "pulls": 2
+    },
+    {
+      "accepted": null,
+      "duplicate": 1,
+      "entries": [
+        [
+          1,
+          "0"
+        ],
+        [
+          1,
+          "18446744073709551615"
+        ],
+        [
+          0,
+          "0"
+        ]
+      ],
+      "pulls": 2
+    },
+    {
+      "accepted": null,
+      "duplicate": 0,
+      "entries": [
+        [
+          0,
+          "0"
+        ],
+        [
+          1,
+          "0"
+        ],
+        [
+          0,
+          "0"
+        ]
+      ],
+      "pulls": 3
+    },
+    {
+      "accepted": null,
+      "duplicate": 0,
+      "entries": [
+        [
+          0,
+          "1"
+        ],
+        [
+          1,
+          "0"
+        ],
+        [
+          0,
+          "0"
+        ]
+      ],
+      "pulls": 3
+    },
+    {
+      "accepted": null,
+      "duplicate": 1,
+      "entries": [
+        [
+          1,
+          "18446744073709551615"
+        ],
+        [
+          1,
+          "0"
+        ],
+        [
+          0,
+          "0"
+        ]
+      ],
+      "pulls": 2
+    },
+    {
+      "accepted": null,
+      "duplicate": 1,
+      "entries": [
+        [
+          1,
+          "0"
+        ],
+        [
+          1,
+          "0"
+        ],
+        [
+          0,
+          "0"
+        ]
+      ],
+      "pulls": 2
+    },
+    {
+      "accepted": null,
+      "duplicate": 0,
+      "entries": [
+        [
+          0,
+          "0"
+        ],
+        [
+          0,
+          "0"
+        ],
+        [
+          0,
+          "1"
+        ]
+      ],
+      "pulls": 2
+    },
+    {
+      "accepted": null,
+      "duplicate": 0,
+      "entries": [
+        [
+          0,
+          "1"
+        ],
+        [
+          0,
+          "0"
+        ],
+        [
+          0,
+          "1"
+        ]
+      ],
+      "pulls": 2
+    },
+    {
+      "accepted": null,
+      "duplicate": 0,
+      "entries": [
+        [
+          1,
+          "18446744073709551615"
+        ],
+        [
+          0,
+          "0"
+        ],
+        [
+          0,
+          "1"
+        ]
+      ],
+      "pulls": 3
+    },
+    {
+      "accepted": null,
+      "duplicate": 0,
+      "entries": [
+        [
+          1,
+          "0"
+        ],
+        [
+          0,
+          "0"
+        ],
+        [
+          0,
+          "1"
+        ]
+      ],
+      "pulls": 3
+    },
+    {
+      "accepted": null,
+      "duplicate": 0,
+      "entries": [
+        [
+          0,
+          "0"
+        ],
+        [
+          0,
+          "1"
+        ],
+        [
+          0,
+          "1"
+        ]
+      ],
+      "pulls": 2
+    },
+    {
+      "accepted": null,
+      "duplicate": 0,
+      "entries": [
+        [
+          0,
+          "1"
+        ],
+        [
+          0,
+          "1"
+        ],
+        [
+          0,
+          "1"
+        ]
+      ],
+      "pulls": 2
+    },
+    {
+      "accepted": null,
+      "duplicate": 0,
+      "entries": [
+        [
+          1,
+          "18446744073709551615"
+        ],
+        [
+          0,
+          "1"
+        ],
+        [
+          0,
+          "1"
+        ]
+      ],
+      "pulls": 3
+    },
+    {
+      "accepted": null,
+      "duplicate": 0,
+      "entries": [
+        [
+          1,
+          "0"
+        ],
+        [
+          0,
+          "1"
+        ],
+        [
+          0,
+          "1"
+        ]
+      ],
+      "pulls": 3
+    },
+    {
+      "accepted": null,
+      "duplicate": 0,
+      "entries": [
+        [
+          0,
+          "0"
+        ],
+        [
+          1,
+          "18446744073709551615"
+        ],
+        [
+          0,
+          "1"
+        ]
+      ],
+      "pulls": 3
+    },
+    {
+      "accepted": null,
+      "duplicate": 0,
+      "entries": [
+        [
+          0,
+          "1"
+        ],
+        [
+          1,
+          "18446744073709551615"
+        ],
+        [
+          0,
+          "1"
+        ]
+      ],
+      "pulls": 3
+    },
+    {
+      "accepted": null,
+      "duplicate": 1,
+      "entries": [
+        [
+          1,
+          "18446744073709551615"
+        ],
+        [
+          1,
+          "18446744073709551615"
+        ],
+        [
+          0,
+          "1"
+        ]
+      ],
+      "pulls": 2
+    },
+    {
+      "accepted": null,
+      "duplicate": 1,
+      "entries": [
+        [
+          1,
+          "0"
+        ],
+        [
+          1,
+          "18446744073709551615"
+        ],
+        [
+          0,
+          "1"
+        ]
+      ],
+      "pulls": 2
+    },
+    {
+      "accepted": null,
+      "duplicate": 0,
+      "entries": [
+        [
+          0,
+          "0"
+        ],
+        [
+          1,
+          "0"
+        ],
+        [
+          0,
+          "1"
+        ]
+      ],
+      "pulls": 3
+    },
+    {
+      "accepted": null,
+      "duplicate": 0,
+      "entries": [
+        [
+          0,
+          "1"
+        ],
+        [
+          1,
+          "0"
+        ],
+        [
+          0,
+          "1"
+        ]
+      ],
+      "pulls": 3
+    },
+    {
+      "accepted": null,
+      "duplicate": 1,
+      "entries": [
+        [
+          1,
+          "18446744073709551615"
+        ],
+        [
+          1,
+          "0"
+        ],
+        [
+          0,
+          "1"
+        ]
+      ],
+      "pulls": 2
+    },
+    {
+      "accepted": null,
+      "duplicate": 1,
+      "entries": [
+        [
+          1,
+          "0"
+        ],
+        [
+          1,
+          "0"
+        ],
+        [
+          0,
+          "1"
+        ]
+      ],
+      "pulls": 2
+    },
+    {
+      "accepted": null,
+      "duplicate": 0,
+      "entries": [
+        [
+          0,
+          "0"
+        ],
+        [
+          0,
+          "0"
+        ],
+        [
+          1,
+          "18446744073709551615"
+        ]
+      ],
+      "pulls": 2
+    },
+    {
+      "accepted": null,
+      "duplicate": 0,
+      "entries": [
+        [
+          0,
+          "1"
+        ],
+        [
+          0,
+          "0"
+        ],
+        [
+          1,
+          "18446744073709551615"
+        ]
+      ],
+      "pulls": 2
+    },
+    {
+      "accepted": null,
+      "duplicate": 1,
+      "entries": [
+        [
+          1,
+          "18446744073709551615"
+        ],
+        [
+          0,
+          "0"
+        ],
+        [
+          1,
+          "18446744073709551615"
+        ]
+      ],
+      "pulls": 3
+    },
+    {
+      "accepted": null,
+      "duplicate": 1,
+      "entries": [
+        [
+          1,
+          "0"
+        ],
+        [
+          0,
+          "0"
+        ],
+        [
+          1,
+          "18446744073709551615"
+        ]
+      ],
+      "pulls": 3
+    },
+    {
+      "accepted": null,
+      "duplicate": 0,
+      "entries": [
+        [
+          0,
+          "0"
+        ],
+        [
+          0,
+          "1"
+        ],
+        [
+          1,
+          "18446744073709551615"
+        ]
+      ],
+      "pulls": 2
+    },
+    {
+      "accepted": null,
+      "duplicate": 0,
+      "entries": [
+        [
+          0,
+          "1"
+        ],
+        [
+          0,
+          "1"
+        ],
+        [
+          1,
+          "18446744073709551615"
+        ]
+      ],
+      "pulls": 2
+    },
+    {
+      "accepted": null,
+      "duplicate": 1,
+      "entries": [
+        [
+          1,
+          "18446744073709551615"
+        ],
+        [
+          0,
+          "1"
+        ],
+        [
+          1,
+          "18446744073709551615"
+        ]
+      ],
+      "pulls": 3
+    },
+    {
+      "accepted": null,
+      "duplicate": 1,
+      "entries": [
+        [
+          1,
+          "0"
+        ],
+        [
+          0,
+          "1"
+        ],
+        [
+          1,
+          "18446744073709551615"
+        ]
+      ],
+      "pulls": 3
+    },
+    {
+      "accepted": null,
+      "duplicate": 1,
+      "entries": [
+        [
+          0,
+          "0"
+        ],
+        [
+          1,
+          "18446744073709551615"
+        ],
+        [
+          1,
+          "18446744073709551615"
+        ]
+      ],
+      "pulls": 3
+    },
+    {
+      "accepted": null,
+      "duplicate": 1,
+      "entries": [
+        [
+          0,
+          "1"
+        ],
+        [
+          1,
+          "18446744073709551615"
+        ],
+        [
+          1,
+          "18446744073709551615"
+        ]
+      ],
+      "pulls": 3
+    },
+    {
+      "accepted": null,
+      "duplicate": 1,
+      "entries": [
+        [
+          1,
+          "18446744073709551615"
+        ],
+        [
+          1,
+          "18446744073709551615"
+        ],
+        [
+          1,
+          "18446744073709551615"
+        ]
+      ],
+      "pulls": 2
+    },
+    {
+      "accepted": null,
+      "duplicate": 1,
+      "entries": [
+        [
+          1,
+          "0"
+        ],
+        [
+          1,
+          "18446744073709551615"
+        ],
+        [
+          1,
+          "18446744073709551615"
+        ]
+      ],
+      "pulls": 2
+    },
+    {
+      "accepted": null,
+      "duplicate": 1,
+      "entries": [
+        [
+          0,
+          "0"
+        ],
+        [
+          1,
+          "0"
+        ],
+        [
+          1,
+          "18446744073709551615"
+        ]
+      ],
+      "pulls": 3
+    },
+    {
+      "accepted": null,
+      "duplicate": 1,
+      "entries": [
+        [
+          0,
+          "1"
+        ],
+        [
+          1,
+          "0"
+        ],
+        [
+          1,
+          "18446744073709551615"
+        ]
+      ],
+      "pulls": 3
+    },
+    {
+      "accepted": null,
+      "duplicate": 1,
+      "entries": [
+        [
+          1,
+          "18446744073709551615"
+        ],
+        [
+          1,
+          "0"
+        ],
+        [
+          1,
+          "18446744073709551615"
+        ]
+      ],
+      "pulls": 2
+    },
+    {
+      "accepted": null,
+      "duplicate": 1,
+      "entries": [
+        [
+          1,
+          "0"
+        ],
+        [
+          1,
+          "0"
+        ],
+        [
+          1,
+          "18446744073709551615"
+        ]
+      ],
+      "pulls": 2
+    },
+    {
+      "accepted": null,
+      "duplicate": 0,
+      "entries": [
+        [
+          0,
+          "0"
+        ],
+        [
+          0,
+          "0"
+        ],
+        [
+          1,
+          "0"
+        ]
+      ],
+      "pulls": 2
+    },
+    {
+      "accepted": null,
+      "duplicate": 0,
+      "entries": [
+        [
+          0,
+          "1"
+        ],
+        [
+          0,
+          "0"
+        ],
+        [
+          1,
+          "0"
+        ]
+      ],
+      "pulls": 2
+    },
+    {
+      "accepted": null,
+      "duplicate": 1,
+      "entries": [
+        [
+          1,
+          "18446744073709551615"
+        ],
+        [
+          0,
+          "0"
+        ],
+        [
+          1,
+          "0"
+        ]
+      ],
+      "pulls": 3
+    },
+    {
+      "accepted": null,
+      "duplicate": 1,
+      "entries": [
+        [
+          1,
+          "0"
+        ],
+        [
+          0,
+          "0"
+        ],
+        [
+          1,
+          "0"
+        ]
+      ],
+      "pulls": 3
+    },
+    {
+      "accepted": null,
+      "duplicate": 0,
+      "entries": [
+        [
+          0,
+          "0"
+        ],
+        [
+          0,
+          "1"
+        ],
+        [
+          1,
+          "0"
+        ]
+      ],
+      "pulls": 2
+    },
+    {
+      "accepted": null,
+      "duplicate": 0,
+      "entries": [
+        [
+          0,
+          "1"
+        ],
+        [
+          0,
+          "1"
+        ],
+        [
+          1,
+          "0"
+        ]
+      ],
+      "pulls": 2
+    },
+    {
+      "accepted": null,
+      "duplicate": 1,
+      "entries": [
+        [
+          1,
+          "18446744073709551615"
+        ],
+        [
+          0,
+          "1"
+        ],
+        [
+          1,
+          "0"
+        ]
+      ],
+      "pulls": 3
+    },
+    {
+      "accepted": null,
+      "duplicate": 1,
+      "entries": [
+        [
+          1,
+          "0"
+        ],
+        [
+          0,
+          "1"
+        ],
+        [
+          1,
+          "0"
+        ]
+      ],
+      "pulls": 3
+    },
+    {
+      "accepted": null,
+      "duplicate": 1,
+      "entries": [
+        [
+          0,
+          "0"
+        ],
+        [
+          1,
+          "18446744073709551615"
+        ],
+        [
+          1,
+          "0"
+        ]
+      ],
+      "pulls": 3
+    },
+    {
+      "accepted": null,
+      "duplicate": 1,
+      "entries": [
+        [
+          0,
+          "1"
+        ],
+        [
+          1,
+          "18446744073709551615"
+        ],
+        [
+          1,
+          "0"
+        ]
+      ],
+      "pulls": 3
+    },
+    {
+      "accepted": null,
+      "duplicate": 1,
+      "entries": [
+        [
+          1,
+          "18446744073709551615"
+        ],
+        [
+          1,
+          "18446744073709551615"
+        ],
+        [
+          1,
+          "0"
+        ]
+      ],
+      "pulls": 2
+    },
+    {
+      "accepted": null,
+      "duplicate": 1,
+      "entries": [
+        [
+          1,
+          "0"
+        ],
+        [
+          1,
+          "18446744073709551615"
+        ],
+        [
+          1,
+          "0"
+        ]
+      ],
+      "pulls": 2
+    },
+    {
+      "accepted": null,
+      "duplicate": 1,
+      "entries": [
+        [
+          0,
+          "0"
+        ],
+        [
+          1,
+          "0"
+        ],
+        [
+          1,
+          "0"
+        ]
+      ],
+      "pulls": 3
+    },
+    {
+      "accepted": null,
+      "duplicate": 1,
+      "entries": [
+        [
+          0,
+          "1"
+        ],
+        [
+          1,
+          "0"
+        ],
+        [
+          1,
+          "0"
+        ]
+      ],
+      "pulls": 3
+    },
+    {
+      "accepted": null,
+      "duplicate": 1,
+      "entries": [
+        [
+          1,
+          "18446744073709551615"
+        ],
+        [
+          1,
+          "0"
+        ],
+        [
+          1,
+          "0"
+        ]
+      ],
+      "pulls": 2
+    },
+    {
+      "accepted": null,
+      "duplicate": 1,
+      "entries": [
+        [
+          1,
+          "0"
+        ],
+        [
+          1,
+          "0"
+        ],
+        [
+          1,
+          "0"
+        ]
+      ],
+      "pulls": 2
+    }
   ]
 }

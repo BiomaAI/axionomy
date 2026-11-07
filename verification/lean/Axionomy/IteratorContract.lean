@@ -18,6 +18,13 @@ inductive FailsAfter {I T : Type} (next : I → Result (Option T × I))
   | step {state after value rest} (called : next state = .ok (some value, after))
       (tail : FailsAfter next error after rest) : FailsAfter next error state (value :: rest)
 
+/-- A finite observed prefix, with no assumption about what the iterator does
+after it. This permits early rejection before a panic or infinite unused tail. -/
+inductive Prefix {I T : Type} (next : I → Result (Option T × I)) : I → List T → I → Prop
+  | nil (state : I) : Prefix next state [] state
+  | step {state after value rest finalState} (called : next state = .ok (some value, after))
+      (tail : Prefix next after rest finalState) : Prefix next state (value :: rest) finalState
+
 theorem yields_unique {I T : Type} {next : I → Result (Option T × I)}
     {state : I} {left right : List T} (first : Yields next state left)
     (second : Yields next state right) : left = right := by

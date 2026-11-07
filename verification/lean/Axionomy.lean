@@ -80,3 +80,8 @@ import Axionomy.TraceExtensionRefinement
 import Axionomy.IteratorFilteringRefinement
 import Axionomy.IteratorViewRefinement
 import Axionomy.IteratorConformance
+import Axionomy.BasketCollection
+import Axionomy.BasketCollectionRefinement
+import Axionomy.BasketAmountsRefinement
+import Axionomy.BasketPublicRefinement
+import Axionomy.BasketCollectionConformance

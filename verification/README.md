@@ -183,7 +183,7 @@ to `origin/main`; theorem counts do not measure percentage completion.
 | 2 | 13 | Ordered traces, replay prefix-on-error, isolated replay, invariant composition | Implementation proved: first error, accepted prefix state, ordered receipts and derived caller invariants; generic trace extension also proved under explicit iterator laws |
 | 2 | 14 | Goals, visibility, hidden-state noninterference, missing/zero distinctions | Implementation proved and validated; finite-input iterator construction and documented collection models |
 | 2 | 15 | Canonical state/observation keys and deterministic fingerprints | Implementation proved and validated under documented sorting/hash models and native 64-bit little-endian scope |
-| 3. Public data boundary | 16 | Remaining typed constructors/accessors/conversions/iterators/equality | Partial: foundational typed data, expression construction and finite-input iterator consumers proved; remaining APIs listed below |
+| 3. Public data boundary | 16 | Remaining typed constructors/accessors/conversions/iterators/equality | Partial: foundational typed data, expression construction, iterator consumers and basket collection boundaries proved; remaining APIs listed below |
 | 3 | 17 | Serialization round trips, validation/canonicalization, accurate schema contracts | Open |
 | 4. Numeric backends | 18 | BigUint/BigInt and explicit algebraic requirements for custom backends | Open |
 
@@ -275,8 +275,9 @@ The remaining completion work is:
   amounts, quantity validation/conversion, account wrappers/equality, typed basket
   insertion, proposal builders, receipt/delta/assessment accessors and expression
   constructors. Generic trace extension, finite-input iterator views and candidate
-  filtering are also proved under independent iterator laws. Remaining work includes
-  basket construction from typed amounts, collection conversions and sorted
+  filtering are also proved under independent iterator laws. Basket construction
+  from entries and typed amounts, FromIterator/array conversions, and basic borrowed
+  iteration/queries are now covered as well. Remaining work includes sorted
   iteration; assessment lookup by account; remaining rate/invariant/model
   inspection APIs; remaining collection iterator and arbitrary callback contracts;
   derived equality/hash behavior and formatting; and the explicit panic contracts
@@ -307,6 +308,25 @@ establish state after Rust unwinding. This batch passed the full proof gate
 (350 registered contracts; 3,292 audited theorems), all 307 workspace tests,
 86 boundary/gate controls, the new production mutation control, formatting,
 Clippy, documentation and compile-fail doctests.
+
+The basket-collection batch adds 38 contracts for generic entry/typed-amount
+construction, FromIterator and owned-array conversions, and basic basket queries
+and borrowed iteration. It proves first-duplicate rejection from a finite prefix
+without requiring the unused tail to terminate, propagation of input-iterator
+failures, canonical nonzero contents in insertion order, and exact duplicate
+panic conditions for convenience conversions. The u64 constructor refines the
+existing natural-number specification; generic numeric instances require an
+independent successful Zero predicate law. Array iteration adds a reviewed std
+alive-range model. See [the collection boundary](BASKETS.md#public-collection-boundary).
+Sorted borrowed iteration remains open: extraction currently fails when returning
+the iterator after sorting the nested borrowed slice. No public bound or borrowed
+return type was changed to bypass that gap.
+
+This basket batch passed the full proof gate (388 registered contracts;
+3,378 audited Axionomy theorems), fresh extraction, all 311 workspace tests,
+90 boundary/gate controls and both new production mutation controls. Formatting,
+Clippy with warnings denied, documentation and compile-fail doctests also passed.
+The prior 44 production mutation controls remain in CI.
 
 Every internal `expect` needs a discharged precondition. Intentionally panicking
 convenience constructors need explicit contracts; do not claim unconditional

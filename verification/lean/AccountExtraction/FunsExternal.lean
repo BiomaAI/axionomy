@@ -6,6 +6,25 @@ open Aeneas Aeneas.Std
 set_option linter.dupNamespace false
 universe u v w
 
+-- Logical model of the pinned std array iterator's forward alive range.
+def core.array.iter.IntoIter.Insts.CoreIterTraitsIteratorIterator.next
+    {T : Type} {N : Std.Usize} : core.array.iter.IntoIter T N →
+      Result (Option T × core.array.iter.IntoIter T N)
+  | [] => .ok (none, [])
+  | value :: rest => .ok (some value, rest)
+
+def Array.Insts.CoreIterTraitsCollectIntoIteratorTIntoIter.into_iter
+    {T : Type} {N : Std.Usize} (values : Array T N) : Result (core.array.iter.IntoIter T N) :=
+  .ok values.val
+
+-- The same source-guarded shared-reference adapter used by BasketExtraction.
+-- It invokes the extracted zero predicate and propagates callback failure.
+def basket.retain_quantities {A N F : Type}
+    (predicate : core.ops.function.FnMut F (quantity.Quantity N) Bool)
+    (entries : indexmap.map.IndexMap A (quantity.Quantity N) std.hash.random.RandomState)
+    (state : F) : Result (indexmap.map.IndexMap A (quantity.Quantity N) std.hash.random.RandomState) :=
+  BasketExtracted.retainValues predicate.call_mut state entries
+
 -- Widening a u64 to i128 is exact. Formatting and DefaultHasher internals
 -- fail closed; fingerprint hashing uses the explicitly scoped adapters below.
 def widenU64 (value : Std.U64) : Std.I128 :=

@@ -38,6 +38,64 @@ pub fn withdraw<A: Clone + Eq + std::hash::Hash>(
     state.withdraw(assets)
 }
 
+pub fn basket_try_entries<A: Eq + std::hash::Hash, N: QuantityScalar, I>(
+    entries: I,
+) -> Result<Basket<A, N>, basket::BasketError<A>>
+where
+    I: IntoIterator<Item = (A, Quantity<N>)>,
+{
+    Basket::try_from_entries(entries)
+}
+
+pub fn basket_try_amounts<A: Eq + std::hash::Hash, N: QuantityScalar, I>(
+    amounts: I,
+) -> Result<Basket<A, N>, basket::BasketError<A>>
+where
+    I: IntoIterator<Item = AssetAmount<A, N>>,
+{
+    Basket::try_from_amounts(amounts)
+}
+
+pub fn basket_collect<A: Eq + std::hash::Hash, N: QuantityScalar, I>(entries: I) -> Basket<A, N>
+where
+    I: IntoIterator<Item = (A, Quantity<N>)>,
+{
+    Basket::from_iter(entries)
+}
+
+pub fn basket_from_array<A: Eq + std::hash::Hash, N: QuantityScalar, const LEN: usize>(
+    entries: [(A, Quantity<N>); LEN],
+) -> Basket<A, N> {
+    Basket::from(entries)
+}
+
+pub fn basket_new<A, N>() -> Basket<A, N> {
+    Basket::new()
+}
+
+pub fn basket_default<A, N>() -> Basket<A, N> {
+    Basket::default()
+}
+
+pub fn basket_len<A, N>(state: &Basket<A, N>) -> usize {
+    state.len()
+}
+
+pub fn basket_empty<A, N>(state: &Basket<A, N>) -> bool {
+    state.is_empty()
+}
+
+pub fn basket_entries<A, N>(state: &Basket<A, N>) -> impl Iterator<Item = (&A, &Quantity<N>)> {
+    state.iter()
+}
+
+pub fn basket_get<'a, A: Eq + std::hash::Hash, N: QuantityScalar>(
+    state: &'a Basket<A, N>,
+    asset: &A,
+) -> Option<&'a Quantity<N>> {
+    state.get(asset)
+}
+
 fn main() {}
 
 pub fn basket_add<A: Clone + Eq + std::hash::Hash>(

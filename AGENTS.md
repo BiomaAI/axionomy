@@ -32,7 +32,8 @@ into it), read `verification/README.md` and `verification/coverage.json` first.
   and finite-input iterator candidate filtering, fork/simulation/ordered replay, snapshot expressions/conditions,
   bounded effect aggregation, availability/preservation, preparation, atomic commit,
   receipts, generic trace extension, goals and finite-input iterator views, canonical keys and explicitly scoped fingerprints,
-  foundational typed data constructors/conversions/accessors and expression construction,
+  foundational typed data constructors/conversions/accessors, expression construction,
+  generic basket collection construction/conversions and basic borrowed iteration/queries,
   runtime signed conservation and whole-state diagnostic measurement
   against Lean specifications. Collections use
   explicit trusted models; other contracts have design proofs and finite Rust

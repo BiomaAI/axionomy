@@ -1,6 +1,9 @@
 import BasketExtraction.TypesExternal
 
 namespace Axionomy.AccountExtracted
+-- Owning array iteration exposes its remaining initialized elements in order.
+-- The physical alive range, uninitialized slots and destructor behavior are trusted.
+abbrev core.array.iter.IntoIter (T : Type) (_N : Aeneas.Std.Usize) := List T
 -- Same ordered-map abstraction as basket construction; physical storage is trusted.
 abbrev std.hash.random.RandomState := Unit
 abbrev std.hash.random.DefaultHasher := Unit

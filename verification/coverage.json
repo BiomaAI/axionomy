@@ -1,12 +1,12 @@
 {
   "version": 1,
-  "assurance": "Partial implementation verification: Aeneas-extracted production u64 arithmetic, basket/account operations, model/rate construction and discovery, complete transaction assessment/application, finite-input iterator filtering, fork/simulation/ordered replay, goals, finite-input iterator views, canonical state/observation keys and scoped deterministic fingerprints, generic trace extension, foundational typed data APIs and expression construction refine Lean specifications. Explicit collection/Arc/UTF-8/sorting/hashing models, lawful identifier operations, resource bounds, compiler/translation and primitive models remain trusted. Remaining public data APIs, serialization/schema contracts and other numeric backends remain open.",
+  "assurance": "Partial implementation verification: Aeneas-extracted production u64 arithmetic, basket/account operations, model/rate construction and discovery, complete transaction assessment/application, finite-input iterator filtering, fork/simulation/ordered replay, goals, finite-input iterator views, canonical state/observation keys and scoped deterministic fingerprints, generic trace extension, basket collection boundaries, foundational typed data APIs and expression construction refine Lean specifications. Explicit collection/Arc/UTF-8/sorting/hashing models, lawful identifier operations, resource bounds, compiler/translation and primitive models remain trusted. Remaining public data APIs, serialization/schema contracts and other numeric backends remain open.",
   "sources": {
     "Cargo.toml": "414a2b181e13225e4b76aa58e70d998064174dde2d8cee603ea3af648d61a7f3",
     "Cargo.lock": "00ef263c160aeebaa49187874a4b11ec94fee9bc8fbea5a2f0cacc190607919c",
     "src/account.rs": "0eaf66937c63de2993353828e42fcfea2b80f172f5cb74fc76a28cef79fd9ff6",
     "src/amount.rs": "4c6a0599d4e7697fadb6981b88cc01e832fa6c01a0b33d1b997ba5c5bb1c705d",
-    "src/basket.rs": "e1856f9473b09b6cf361db4058f92e23e93b118fbd0d5be9eeb1125b5622f849",
+    "src/basket.rs": "1f3b10fb7a63979f88ba9af658bb202025e58dbfbdf4f649e5ab607d8747df31",
     "src/economy.rs": "31d3c582bb73a17c2c6b2cd8efbac8bf5f2f0d1bec3a7e9c8a168757e05f54be",
     "src/exchange.rs": "234f6e6459d2fb97a1fbb802e14afed6e5ed50a023c8c2de745e6f6eac39b455",
     "src/lib.rs": "46d6f713693714650653128e2ceabf8a895b8ad98a38a7bdbeab4ea378a5cc06",
@@ -15,7 +15,7 @@
     "verification/extract.rs": "415b34f5f4f8aa2679af860bd2a4092c96e113145919160fe7c81e33836de3e0",
     "verification/aeneas-toolchain.json": "8676d7d11be51a6f41984d874b35910e8a1a3d0a18414998feb9402ef80932fb",
     "verification/extract_basket.rs": "dc2b3a2159704c24a5261d0069a2aac7b575f30a94ae35c4c1e96933638592dd",
-    "verification/extract_account.rs": "7168e357179adee890b6185b4692c84796bc3e6cabf4dde78f927bfa899752aa",
+    "verification/extract_account.rs": "29b38dedc366ea395e946fbea7b559e63686276ae4c35aad5be445f1859553b5",
     "verification/patches/aeneas-namespaced-discriminant.patch": "fabac7482deb3da6ecaca60c4060dfe9d2114efdd010699e736c4a91267f3bc9"
   },
   "features": [
@@ -102,7 +102,7 @@
         "Proves termination and exact constructor results for all finite Vec inputs represented by Aeneas, all u64 quantities, and arbitrary typed assets with total equality agreeing with identity. First duplicate rejection includes zero quantities; successful output preserves nonzero values and order.",
         "The shared-source harness compiles the exact production files before drop elaboration. Public forwarding and the thin retain adapter are checked syntactically. Rust MIR, Charon/Aeneas translation, compiler/codegen, primitive and Vec iterator semantics remain trusted. See verification/BASKETS.md.",
         "IndexMap lookup, insertion, and ordered retention use explicit executable models. Their implementation, lawful/stable Eq and Hash, successful allocation, resizing, and destructor effects are outside the proof. Hash internals fail closed in the model and are never called by the logical map.",
-        "The theorem specializes the shared constructor to u64 vector inputs. Arbitrary iterators, BigUint/custom numeric backends, asset-qualified conversion, and serialization implementations are not refined. The public API retains its original strong types and trait bounds; adapters have finite conformance tests.",
+        "The theorem specializes the shared constructor to u64 vector inputs. The separate basket_collection_boundary contract covers generic iterator and asset-qualified construction under independent Zero laws. Backend arithmetic and serialization implementations remain open. The public API retains its original strong types and trait bounds; adapters have finite conformance tests.",
         "Does not establish basket mutation/shortfall refinement or account/exchange correctness. Those remain separate contracts."
       ]
     },
@@ -989,6 +989,70 @@
         "IntoIterator failures and next failures after a finite successful prefix propagate under the documented lawful primitive callbacks and size bounds. No claim is made about arbitrary nonterminating callbacks, destructor effects, foreign side effects, allocator failure, or state observable after physical Rust unwinding.",
         "Trace::extend now explicitly loops over next and pushes, avoiding reliance on unmodelled Vec::extend specializations, custom size_hint or fold overrides. This retains logical output for lawful iterators; allocation strategy and callback invocation differ from the old standard-library delegation. The public generic signature and strong typing are preserved.",
         "Collection storage, ordering adapters, the primitive Vec/iterator model, and compiler/Charon/Aeneas remain explicit trusted dependencies. Output capacities and analysis readiness are explicit; proofs do not establish arbitrary iterator implementations or QuantityScalar algebraic laws."
+      ]
+    },
+    {
+      "id": "basket_collection_boundary",
+      "status": "aeneas_refinement_proved",
+      "sources": [
+        "src/basket.rs",
+        "src/amount.rs",
+        "src/quantity.rs",
+        "verification/extract_account.rs",
+        "verification/aeneas-toolchain.json"
+      ],
+      "extracted_module": "AccountExtraction.Funs",
+      "theorems": [
+        "Axionomy.BasketCollection.success_iff",
+        "Axionomy.BasketCollection.preserves_order",
+        "Axionomy.BasketCollection.nonzero_entries",
+        "Axionomy.BasketCollection.unique_entries",
+        "Axionomy.BasketCollection.zero_still_duplicates",
+        "Axionomy.BasketCollection.naturals",
+        "Axionomy.BasketCollectionRefinement.collected_panics_iff",
+        "Axionomy.BasketCollectionRefinement.loop_refines",
+        "Axionomy.BasketCollectionRefinement.reject_prefix",
+        "Axionomy.BasketCollectionRefinement.loop_failure",
+        "Axionomy.BasketCollectionRefinement.entries_refines",
+        "Axionomy.BasketCollectionRefinement.entries_contract",
+        "Axionomy.BasketCollectionRefinement.entries_reject_prefix",
+        "Axionomy.BasketCollectionRefinement.entries_failure",
+        "Axionomy.BasketCollectionRefinement.entries_start_failure",
+        "Axionomy.BasketCollectionRefinement.collect_refines",
+        "Axionomy.BasketCollectionRefinement.collect_duplicate_panics",
+        "Axionomy.BasketCollectionRefinement.collect_panics_iff",
+        "Axionomy.BasketCollectionRefinement.collect_failure",
+        "Axionomy.BasketCollectionRefinement.collect_start_failure",
+        "Axionomy.BasketAmountsRefinement.yields_parts",
+        "Axionomy.BasketAmountsRefinement.prefix_parts",
+        "Axionomy.BasketAmountsRefinement.failure_parts",
+        "Axionomy.BasketAmountsRefinement.amounts_refines",
+        "Axionomy.BasketAmountsRefinement.amounts_reject_prefix",
+        "Axionomy.BasketAmountsRefinement.amounts_failure",
+        "Axionomy.BasketAmountsRefinement.amounts_start_failure",
+        "Axionomy.BasketPublicRefinement.new_empty",
+        "Axionomy.BasketPublicRefinement.default_empty",
+        "Axionomy.BasketPublicRefinement.empty_refines",
+        "Axionomy.BasketPublicRefinement.length_refines",
+        "Axionomy.BasketPublicRefinement.lookup_refines",
+        "Axionomy.BasketPublicRefinement.iteration_refines",
+        "Axionomy.BasketPublicRefinement.array_yields",
+        "Axionomy.BasketPublicRefinement.array_refines",
+        "Axionomy.BasketPublicRefinement.array_panics_iff",
+        "Axionomy.BasketPublicRefinement.u64_zero_law",
+        "Axionomy.BasketPublicRefinement.u64_entries_refines"
+      ],
+      "rust_tests": [
+        "tests/basket_collection_conformance.rs",
+        "tests/support/scripted_iterator.rs"
+      ],
+      "limitations": [
+        "Generic production try_from_entries and try_from_amounts refine first-duplicate rejection followed by zero filtering in insertion order, under independent total identity-consistent equality and Zero::is_zero laws. The u64 specialization discharges the concrete zero law and refines the existing natural-number basket specification. This does not discharge arbitrary backend arithmetic laws.",
+        "Independent IntoIterator/next protocols cover finite successful streams, first-duplicate rejection from a finite prefix without any assumption on the unused tail, iterator failures before a duplicate, and into_iter failures. Failure and early-rejection proofs do not assume Zero callback success because the callback is never reached on those paths. Allocation, foreign side effects, destructors and physical unwinding remain outside these logical contracts.",
+        "FromIterator and owned fixed-array conversions return the exact canonical basket or panic on duplicate assets. Under successful iterator/equality/zero laws, duplicate keys are exactly the panic condition. Aeneas models the panic class rather than its text; Rust conformance checks the current panic message. Public constructors retain their typed identifiers and QuantityScalar bounds.",
+        "Basic new/default/len/is_empty/get/borrowed insertion-order iteration are refined. Length and the composed successful-construction contract have explicit usize bounds. IndexMap storage, hashing, allocation and the source-guarded shared-reference retain adapter remain trusted; the extracted zero callback itself is proved.",
+        "Owned array iteration uses a reviewed executable list model of the pinned Rust alive range and forward next operation; physical MaybeUninit storage, moves, drops and iterator internals remain dependency assumptions. Array conversion forwards directly to FromIterator. A private extracted AmountEntries iterator calls next and into_parts explicitly, avoiding erased custom map overrides and preserving early rejection without precollecting inputs.",
+        "Sorted borrowed iteration remains open because the pinned Aeneas translation cannot currently finish the nested slice borrow; its public implementation and bounds are unchanged. Serialization/schema, remaining inspection/convenience/derived APIs and numeric backend arithmetic remain open. Compiler/MIR/Charon/Aeneas and primitive semantics retain their documented trust boundaries."
       ]
     }
   ]

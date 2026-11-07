@@ -15,6 +15,7 @@ import Axionomy.TransactionConformance
 import Axionomy.ObservationConformance
 import Axionomy.PublicDataConformance
 import Axionomy.IteratorConformance
+import Axionomy.BasketCollectionConformance
 
 /-! Deterministic executable examples from the SAME definitions used in the
 proofs. Rust runs these examples through the public API. Agreement on these
@@ -608,5 +609,6 @@ def main : IO Unit := do
     ("executions", toJson (TransactionConformance.executionFixtures expressionJson)),
     ("observations", toJson ObservationConformance.fixtures),
     ("publicData", PublicDataConformance.fixtures),
-    ("iterators", toJson IteratorConformance.fixtures)]
+    ("iterators", toJson IteratorConformance.fixtures),
+    ("basketCollections", toJson BasketCollectionConformance.fixtures)]
   IO.println document.compress

@@ -50,6 +50,46 @@ def validate_coverage(root, coverage):
             # These are the implemented extraction pipelines. Future
             # claims need their own regeneration and trust-boundary checks.
             pipelines = {
+                "basket_collection_boundary": ("AccountExtraction.Funs", {
+                    "Axionomy.BasketCollection.success_iff",
+                    "Axionomy.BasketCollection.preserves_order",
+                    "Axionomy.BasketCollection.nonzero_entries",
+                    "Axionomy.BasketCollection.unique_entries",
+                    "Axionomy.BasketCollection.zero_still_duplicates",
+                    "Axionomy.BasketCollection.naturals",
+                    "Axionomy.BasketCollectionRefinement.collected_panics_iff",
+                    "Axionomy.BasketCollectionRefinement.loop_refines",
+                    "Axionomy.BasketCollectionRefinement.reject_prefix",
+                    "Axionomy.BasketCollectionRefinement.loop_failure",
+                    "Axionomy.BasketCollectionRefinement.entries_refines",
+                    "Axionomy.BasketCollectionRefinement.entries_contract",
+                    "Axionomy.BasketCollectionRefinement.entries_reject_prefix",
+                    "Axionomy.BasketCollectionRefinement.entries_failure",
+                    "Axionomy.BasketCollectionRefinement.entries_start_failure",
+                    "Axionomy.BasketCollectionRefinement.collect_refines",
+                    "Axionomy.BasketCollectionRefinement.collect_duplicate_panics",
+                    "Axionomy.BasketCollectionRefinement.collect_panics_iff",
+                    "Axionomy.BasketCollectionRefinement.collect_failure",
+                    "Axionomy.BasketCollectionRefinement.collect_start_failure",
+                    "Axionomy.BasketAmountsRefinement.yields_parts",
+                    "Axionomy.BasketAmountsRefinement.prefix_parts",
+                    "Axionomy.BasketAmountsRefinement.failure_parts",
+                    "Axionomy.BasketAmountsRefinement.amounts_refines",
+                    "Axionomy.BasketAmountsRefinement.amounts_reject_prefix",
+                    "Axionomy.BasketAmountsRefinement.amounts_failure",
+                    "Axionomy.BasketAmountsRefinement.amounts_start_failure",
+                    "Axionomy.BasketPublicRefinement.new_empty",
+                    "Axionomy.BasketPublicRefinement.default_empty",
+                    "Axionomy.BasketPublicRefinement.empty_refines",
+                    "Axionomy.BasketPublicRefinement.length_refines",
+                    "Axionomy.BasketPublicRefinement.lookup_refines",
+                    "Axionomy.BasketPublicRefinement.iteration_refines",
+                    "Axionomy.BasketPublicRefinement.array_yields",
+                    "Axionomy.BasketPublicRefinement.array_refines",
+                    "Axionomy.BasketPublicRefinement.array_panics_iff",
+                    "Axionomy.BasketPublicRefinement.u64_zero_law",
+                    "Axionomy.BasketPublicRefinement.u64_entries_refines",
+                }),
                 "iterator_consumers": ("AccountExtraction.Funs", {
                     "Axionomy.IteratorContract.yields_unique",
                     "Axionomy.IteratorContract.vector_yields",
@@ -286,12 +326,12 @@ def main():
     if generated != committed:
         raise ValueError("Lean conformance cases are stale; regenerate them from Conformance.lean and review the diff")
     run("cargo", "test", "-p", "axionomy", "--all-features", "--test", "lean_conformance",
-        "--test", "transaction_conformance", "--test", "observation_conformance", "--test", "public_data_conformance", "--test", "iterator_conformance")
+        "--test", "transaction_conformance", "--test", "observation_conformance", "--test", "public_data_conformance", "--test", "iterator_conformance", "--test", "basket_collection_conformance")
     run("cargo", "test", "-p", "axionomy", "--all-features", "--lib",
         "runtime_")
     run("cargo", "test", "-p", "axionomy", "--all-features", "--doc")
     print(f"Verified {len(theorems)} registered theorems and their axiom dependencies, "
-          "fresh Aeneas extraction of u64 arithmetic, basket construction/operations, account updates/staging, model/rate construction and metadata discovery, complete transaction assessment/application and finite-input iterator filtering, fork/simulation/ordered replay, goals/views/canonical keys and scoped fingerprints, typed data APIs, expression construction and generic trace extension, snapshot evaluation/conditions, signed conservation and measurement, "
+          "fresh Aeneas extraction of u64 arithmetic, basket construction/operations, account updates/staging, model/rate construction and metadata discovery, complete transaction assessment/application and finite-input iterator filtering, fork/simulation/ordered replay, goals/views/canonical keys and scoped fingerprints, typed data APIs, expression construction, generic trace extension and basket collection boundaries, snapshot evaluation/conditions, signed conservation and measurement, "
           "and Rust conformance/type checks. Collection storage uses an explicit trusted model. "
           "Other core implementation refinement remains unproved; see verification/README.md.")
 

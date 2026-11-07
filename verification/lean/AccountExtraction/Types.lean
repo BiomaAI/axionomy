@@ -224,6 +224,25 @@ structure amount.AssetAmount (A : Type _) (N : Type _) where
   asset : A
   quantity : quantity.Quantity N
 
+/-- [account_extraction::basket::BasketError]
+    Source: 'verification/../src/basket.rs', lines 299:0-302:1
+    Visibility: public -/
+@[discriminant isize]
+inductive basket.BasketError (A : Type _) where
+| DuplicateAsset : A → basket.BasketError A
+
+/-- [account_extraction::basket::construct_entries::{closure}]
+    Source: 'verification/../src/basket.rs', lines 44:39-44:76 -/
+@[reducible]
+def basket.construct_entries.closure (A : Type _) (N : Type _) (T2 : Type _)
+  (Clause3_IntoIter : Type _) :=
+Unit
+
+/-- [account_extraction::basket::AmountEntries]
+    Source: 'verification/../src/basket.rs', lines 50:0-50:27 -/
+@[reducible]
+def basket.AmountEntries (I : Type _) := I
+
 /-- [account_extraction::economy::Goal]
     Source: 'verification/../src/economy.rs', lines 21:0-23:1
     Visibility: public -/
