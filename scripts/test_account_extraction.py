@@ -10,6 +10,7 @@ from unittest.mock import patch
 from extract_account import (GENERATED, LEAN, ROOT, TEMPLATES, compare_generated,
                             validate_bridge, validate_generated, validate_fingerprint_target,
                             FILTERED_TRAIT_WARNING, INSPECTION_DEFINITIONS, CONVENIENCE_DEFINITIONS,
+                            DERIVED_DEFINITIONS, ENTRY_CALLS,
                             validate_extraction_diagnostics)
 
 
@@ -73,6 +74,23 @@ class AccountBridgeTests(unittest.TestCase):
 
     def test_production_sources_pass(self):
         validate_bridge(self.root)
+
+    def test_changed_derived_forwarders_are_rejected(self):
+        original = self.target.read_text()
+        entries = {name: call for name, call in ENTRY_CALLS.items()
+                   if name.startswith("derived_") or name == "clone_value"}
+        self.assertEqual(len(entries), 63)
+        for name, call in entries.items():
+            with self.subTest(entry=name):
+                pattern = r"(pub fn " + re.escape(name) + r"\b.*?\{)(.*?)(\n\})"
+                match = re.search(pattern, original, flags=re.DOTALL)
+                self.assertIsNotNone(match)
+                self.assertIn(call, re.sub(r"\s+", "", match[2]))
+                changed = original[:match.start(2)] + "\n    bypassed()" + original[match.end(2):]
+                self.target.write_text(changed)
+                with self.assertRaisesRegex(ValueError, "not a forwarding call: " + name):
+                    validate_bridge(self.root)
+        self.target.write_text(original)
 
     def test_copied_source_is_rejected(self):
         self.target.write_text(self.target.read_text().replace("../src/account.rs", "proof_only.rs"))
@@ -174,6 +192,20 @@ class AccountExtractionTests(unittest.TestCase):
 
     def test_current_generated_code_passes(self):
         validate_generated(self.directory)
+
+    def test_missing_derived_methods_are_rejected(self):
+        path = self.directory / "Funs.lean"
+        original = path.read_text()
+        self.assertEqual(len(DERIVED_DEFINITIONS), 54)
+        for name in DERIVED_DEFINITIONS:
+            with self.subTest(name=name):
+                changed, count = re.subn(r"(^def\s+)" + re.escape(name) + r"(?=\s)",
+                                        r"\1bypassed_derived", original, flags=re.MULTILINE)
+                self.assertEqual(count, 1)
+                path.write_text(changed)
+                with self.assertRaisesRegex(ValueError, "missing account production definition"):
+                    validate_generated(self.directory)
+        path.write_text(original)
 
     def test_missing_inspection_methods_or_loops_are_rejected(self):
         path = self.directory / "Funs.lean"

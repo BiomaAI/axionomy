@@ -561,10 +561,12 @@ use a fixed account domain when account-existence behavior matters.
 The new required serialized `existing_accounts` field intentionally rejects old
 keys. It cannot be reconstructed from a balance list. This is covered by Rust
 regressions and schema checks; a general validation contract for arbitrary
-serialized key fields remains item 17. Derived key PartialEq/Hash methods are also
-separate item 16 work: the proved equality is equality of produced typed fields.
-Unused tuple PartialEq/PartialOrd dictionary fields remain fail-closed in the
-external model; sorting uses Ord::cmp.
+serialized key fields remains item 17. Derived key PartialEq/Hash methods are covered by the derived-public-traits
+extension below; the earlier key-generation contract proves equality of produced
+typed fields and its relationship to actual visible queries.
+Unused tuple PartialOrd dictionary fields remain fail-closed in the external
+model; sorting uses Ord::cmp. The derived-public-traits extension below supplies
+the tuple equality model used by the actual ObservationKey PartialEq method.
 
 `FingerprintRefinement` proves the concrete new/write/finish implementation and
 complete state_fingerprint caller against mathematical FNV-1a. Every byte performs
@@ -865,3 +867,72 @@ non-Ord literal assets. Two controls change overflow rejection to success and
 replace literal values with zero; each must re-extract and compile, then fail its
 semantic proof. Panic messages and callback side-effect counts are finite Rust
 evidence; the Lean contracts establish the logical results and panic class.
+
+## Derived public traits
+
+The `Derived*Refinement` modules connect 62 forwarding probes to production
+methods: all 29 public derived Clone implementations, 17 derived PartialEq
+implementations, quantity/fingerprint cmp/partial_cmp and their four comparison
+predicates, and Quantity/AssetAmount/StateFingerprint/ObservationKey hashing.
+A generic clone forwarding helper keeps the recursive expression clone dictionary
+explicit for the pinned translator. The harness calls the actual Rust methods;
+production types, fields, ownership and numeric bounds are unchanged. Extraction
+guards require all 63 roots and 54 distinct production method definitions.
+
+`DerivedValueRefinement` preserves arbitrary modeled primitive callback results
+for quantity operations and the field-ordered amount comparisons, cloning and
+hashing. PartialOrd predicates use the derived defaults through partial_cmp,
+including None and failures, rather than invoking payload predicate overrides.
+`DerivedExpressionRefinement` proves structural equality and identity cloning by
+induction over every finite expression. `DerivedRecordRefinement` covers the
+error/status variants, computed amounts and conditions. `DerivedCompositeRefinement`
+composes map/vector behavior into proposal, trace and model-build-error equality
+and cloning, and proves early termination on unequal or failing rate comparisons.
+
+Whole-value equality requires independent total primitive equality laws against
+logical equality. Generic basket/account/account-error equality instead compares
+stored amounts by asset lookup, independently of insertion order, with explicit
+usize length bounds. Its specification retains explicit zero entries and also
+describes noncanonical logical inputs; it does not silently assume uniqueness or
+replace map equality with equality of the representation list. No arithmetic law
+is needed for these generic numeric payload contracts.
+
+`DerivedCloneRefinement` composes all remaining public clones. Primitive payload
+clones have independent total identity laws. Vec cloning uses the reviewed backend
+model; the contracts do not assert callback traversal order or foreign side
+effects. Tuple clones in rates and observation keys become Aeneas BuiltinClone,
+whose identity result requires compatible payload clone behavior when interpreting
+it in Rust. Economy cloning shares Arc payloads and clones account keys under the
+existing logical Arc model. Physical allocation, reference counts, copy-on-write,
+destructors, stack resources and storage representation remain dependencies.
+
+Two equality adapters are now live. Pinned Rust `alloc/src/collections/btree/map.rs`
+checks equal lengths and compares zipped entries with key equality before value
+equality. The model preserves this order and stops at the first false result or
+failure. Pinned `core/src/tuple.rs` expands tuple equality as left-to-right field
+comparisons joined by `&&`; the triple adapter follows that sequence. Sorting's
+unused tuple PartialOrd chaining hooks, including gt, still fail closed.
+These adapters do not verify physical trees or the dependency implementations.
+
+`DerivedKeyRefinement` proves equality of all three observation-key fields and
+fingerprint equality/order. Quantity and amount hash composition retains the
+supplied generic Hash/Hasher effects. Fingerprint and observation-key hashes use
+the existing native 64-bit little-endian adapter and default Hasher integer and
+length-prefix behavior. Observation account identifiers additionally require
+compatibility with default per-element Hash::hash_slice; tuples inherit that
+default. Arbitrary erased overrides are not covered. The composed observation
+hash theorem emits three separate length-prefixed sequences in declaration order
+and applies the proved FNV writer under independent identifier and numeric byte
+encoding laws. Determinism does not establish collision freedom.
+
+The Lean generator supplies 900 expression comparisons, 100 proposal comparisons,
+64 ordered trace comparisons, 121 observation-key comparisons, 36 numeric
+comparison/encoding cases and 49 basket comparisons. Rust exercises these through
+distinct identifier types and the public API, also checking computed amounts and
+conditions, all clone families, every error variant and large non-Copy BigUint
+payload transport. Serialization is used only to supply some public test inputs
+or observe records without PartialEq; this is not a serialization proof. That
+milestone, numeric arithmetic laws, formatting, remaining iterator adapters,
+inherited trait convenience methods (`clone_from`, `ne`, `min`/`max`/`clamp`,
+`hash_slice`) and arbitrary callback/destructor behavior remain separate
+completion obligations.

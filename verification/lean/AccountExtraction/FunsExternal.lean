@@ -139,6 +139,25 @@ def alloc.collections.btree.map.BTreeMap.Insts.CoreCloneClone.clone {K V A : Typ
     Result (alloc.collections.btree.map.BTreeMap K V A) :=
   cloneEntries keyInst valueInst entries
 
+-- Reviewed std BTreeMap equality compares lengths before any callback, then
+-- keys and values in traversal order, stopping at the first unequal pair.
+def equalMapEntries {K V : Type} (keyEq : core.cmp.PartialEq K K)
+    (valueEq : core.cmp.PartialEq V V) : List (K × V) → List (K × V) → Result Bool
+  | [], [] => .ok true
+  | (key, value) :: rest, (otherKey, otherValue) :: others => do
+    let sameKey ← keyEq.eq key otherKey
+    if sameKey then
+      let sameValue ← valueEq.eq value otherValue
+      if sameValue then equalMapEntries keyEq valueEq rest others else .ok false
+    else .ok false
+  | _, _ => .ok false
+
+def alloc.collections.btree.map.BTreeMap.Insts.CoreCmpPartialEqBTreeMap.eq
+    {K V A : Type} (keyEq : core.cmp.PartialEq K K) (valueEq : core.cmp.PartialEq V V)
+    (_ : core.alloc.AllocatorClone A) (left right : alloc.collections.btree.map.BTreeMap K V A) :
+    Result Bool :=
+  if left.length = right.length then equalMapEntries keyEq valueEq left right else .ok false
+
 def indexmap.map.IndexMapKVRandomState.new (K V : Type) :
     Result (indexmap.map.IndexMap K V std.hash.random.RandomState) := .ok []
 def indexmap.map.IndexMap.is_empty {K V S : Type}
@@ -445,6 +464,10 @@ def Pair.Insts.CoreCmpPartialOrdPair.le {U : Type u} {T : Type v}
     (_ : core.cmp.PartialOrd U U) (_ : core.cmp.PartialOrd T T)
     (_ _ : U × T) : Result Bool := .fail .panic
 
+def Pair.Insts.CoreCmpPartialOrdPair.gt {U : Type u} {T : Type v}
+    (_ : core.cmp.PartialOrd U U) (_ : core.cmp.PartialOrd T T)
+    (_ _ : U × T) : Result Bool := .fail .panic
+
 def Pair.Insts.CoreCmpPartialOrdPair.ge {U : Type u} {T : Type v}
     (_ : core.cmp.PartialOrd U U) (_ : core.cmp.PartialOrd T T)
     (_ _ : U × T) : Result Bool := .fail .panic
@@ -602,12 +625,23 @@ def TupleVUT.Insts.CoreCmpPartialOrdTupleVUT.lt {V U T : Type}
 def TupleVUT.Insts.CoreCmpPartialOrdTupleVUT.le {V U T : Type}
     (_ : core.cmp.PartialOrd V V) (_ : core.cmp.PartialOrd U U) (_ : core.cmp.PartialOrd T T)
     (_ _ : V × U × T) : Result Bool := .fail .panic
+def TupleVUT.Insts.CoreCmpPartialOrdTupleVUT.gt {V U T : Type}
+    (_ : core.cmp.PartialOrd V V) (_ : core.cmp.PartialOrd U U) (_ : core.cmp.PartialOrd T T)
+    (_ _ : V × U × T) : Result Bool := .fail .panic
+
 def TupleVUT.Insts.CoreCmpPartialOrdTupleVUT.ge {V U T : Type}
     (_ : core.cmp.PartialOrd V V) (_ : core.cmp.PartialOrd U U) (_ : core.cmp.PartialOrd T T)
     (_ _ : V × U × T) : Result Bool := .fail .panic
+-- Pinned core/src/tuple.rs expands equality as field comparisons joined by &&:
+-- left to right, stopping at the first unequal field or failed comparison.
 def TupleVUT.Insts.CoreCmpPartialEqTupleVUT.eq {V : Type u} {U : Type v} {T : Type w}
-    (_ : core.cmp.PartialEq V V) (_ : core.cmp.PartialEq U U) (_ : core.cmp.PartialEq T T)
-    (_ _ : V × U × T) : Result Bool := .fail .panic
+    (first : core.cmp.PartialEq V V) (second : core.cmp.PartialEq U U) (third : core.cmp.PartialEq T T)
+    (left right : V × U × T) : Result Bool := do
+  let firstEqual ← first.eq left.1 right.1
+  if firstEqual then
+    let secondEqual ← second.eq left.2.1 right.2.1
+    if secondEqual then third.eq left.2.2 right.2.2 else .ok false
+  else .ok false
 
 -- Stable logical sorting, using the supplied comparator and propagating its
 -- failures. Physical slice sorting and allocation are a dependency boundary.
@@ -671,8 +705,9 @@ def hashValues {T H : Type} (hashInst : core.hash.Hash T) (hasher : core.hash.Ha
     let next ← hashInst.hash hasher value state
     hashValues hashInst hasher rest next
 
--- Vec hashing is used only for three-tuples, whose Hash::hash_slice uses the
--- default ordered per-element implementation. Prefix and integer bytes match
+-- Vec hashing uses the default ordered per-element Hash::hash_slice model.
+-- Tuples inherit that default; other element types require that independent
+-- compatibility condition. Prefix and integer bytes match
 -- the default Hasher methods on the verified 64-bit little-endian targets.
 -- Custom hash_slice/Hasher convenience overrides are not represented here.
 def alloc.vec.Vec.Insts.CoreHashHash.hash {T : Type} (_ : Type) {H : Type}

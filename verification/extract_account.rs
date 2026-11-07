@@ -1304,3 +1304,405 @@ pub fn rate_condition_with<Role: Clone + Ord, A: Clone + Eq + std::hash::Hash, S
 ) -> Rate<Role, A> {
     rule.condition(label, left, comparison, right)
 }
+
+pub fn derived_quantity_eq<N: PartialEq>(left: &Quantity<N>, right: &Quantity<N>) -> bool {
+    left == right
+}
+
+pub fn derived_quantity_clone<N: Clone>(value: &Quantity<N>) -> Quantity<N> {
+    value.clone()
+}
+
+pub fn derived_amount_eq<A: PartialEq, N: PartialEq>(
+    left: &AssetAmount<A, N>,
+    right: &AssetAmount<A, N>,
+) -> bool {
+    left == right
+}
+
+pub fn derived_amount_clone<A: Clone, N: Clone>(value: &AssetAmount<A, N>) -> AssetAmount<A, N> {
+    value.clone()
+}
+
+pub fn derived_expression_eq<Role: PartialEq, A: PartialEq, N: PartialEq>(
+    left: &QuantityExpression<Role, A, N>,
+    right: &QuantityExpression<Role, A, N>,
+) -> bool {
+    left == right
+}
+
+pub fn derived_expression_clone<Role: Clone, A: Clone, N: Clone>(
+    value: &QuantityExpression<Role, A, N>,
+) -> QuantityExpression<Role, A, N> {
+    clone_value(value)
+}
+
+pub fn derived_computed_amount_eq<Role: PartialEq, A: PartialEq, N: PartialEq>(
+    left: &ComputedAmount<Role, A, N>,
+    right: &ComputedAmount<Role, A, N>,
+) -> bool {
+    left == right
+}
+
+pub fn derived_computed_amount_clone<Role: Clone, A: Clone, N: Clone>(
+    value: &ComputedAmount<Role, A, N>,
+) -> ComputedAmount<Role, A, N> {
+    value.clone()
+}
+
+pub fn derived_condition_eq<Role: PartialEq, A: PartialEq, N: PartialEq>(
+    left: &RateCondition<Role, A, N>,
+    right: &RateCondition<Role, A, N>,
+) -> bool {
+    left == right
+}
+
+pub fn derived_condition_clone<Role: Clone, A: Clone, N: Clone>(
+    value: &RateCondition<Role, A, N>,
+) -> RateCondition<Role, A, N> {
+    value.clone()
+}
+
+pub fn derived_comparison_eq(left: &QuantityComparison, right: &QuantityComparison) -> bool {
+    left == right
+}
+
+// Extract Clone explicitly even for Copy types.
+#[allow(clippy::clone_on_copy)]
+pub fn derived_comparison_clone(value: &QuantityComparison) -> QuantityComparison {
+    value.clone()
+}
+
+pub fn derived_fingerprint_eq(
+    left: &economy::StateFingerprint,
+    right: &economy::StateFingerprint,
+) -> bool {
+    left == right
+}
+
+// Extract Clone explicitly even for Copy types.
+#[allow(clippy::clone_on_copy)]
+pub fn derived_fingerprint_clone(value: &economy::StateFingerprint) -> economy::StateFingerprint {
+    value.clone()
+}
+
+pub fn derived_assessment_status_eq(
+    left: &economy::AssessmentStatus,
+    right: &economy::AssessmentStatus,
+) -> bool {
+    left == right
+}
+
+// Extract Clone explicitly even for Copy types.
+#[allow(clippy::clone_on_copy)]
+pub fn derived_assessment_status_clone(
+    value: &economy::AssessmentStatus,
+) -> economy::AssessmentStatus {
+    value.clone()
+}
+
+pub fn derived_model_issue_eq<AccountId: PartialEq, RateId: PartialEq>(
+    left: &economy::ModelIssue<AccountId, RateId>,
+    right: &economy::ModelIssue<AccountId, RateId>,
+) -> bool {
+    left == right
+}
+
+pub fn derived_model_issue_clone<AccountId: Clone, RateId: Clone>(
+    value: &economy::ModelIssue<AccountId, RateId>,
+) -> economy::ModelIssue<AccountId, RateId> {
+    value.clone()
+}
+
+pub fn derived_model_error_eq<AccountId: PartialEq, RateId: PartialEq>(
+    left: &economy::ModelBuildError<AccountId, RateId>,
+    right: &economy::ModelBuildError<AccountId, RateId>,
+) -> bool {
+    left == right
+}
+
+pub fn derived_model_error_clone<AccountId: Clone, RateId: Clone>(
+    value: &economy::ModelBuildError<AccountId, RateId>,
+) -> economy::ModelBuildError<AccountId, RateId> {
+    value.clone()
+}
+
+pub fn derived_basket_error_eq<A: PartialEq>(
+    left: &basket::BasketError<A>,
+    right: &basket::BasketError<A>,
+) -> bool {
+    left == right
+}
+
+pub fn derived_basket_error_clone<A: Clone>(
+    value: &basket::BasketError<A>,
+) -> basket::BasketError<A> {
+    value.clone()
+}
+
+pub fn derived_rate_error_eq<Role: PartialEq, A: PartialEq>(
+    left: &RateError<Role, A>,
+    right: &RateError<Role, A>,
+) -> bool {
+    left == right
+}
+
+pub fn derived_rate_error_clone<Role: Clone, A: Clone>(
+    value: &RateError<Role, A>,
+) -> RateError<Role, A> {
+    value.clone()
+}
+
+pub fn derived_quantity_error_eq(
+    left: &quantity::QuantityError,
+    right: &quantity::QuantityError,
+) -> bool {
+    left == right
+}
+
+// Extract Clone explicitly even for Copy types.
+#[allow(clippy::clone_on_copy)]
+pub fn derived_quantity_error_clone(value: &quantity::QuantityError) -> quantity::QuantityError {
+    value.clone()
+}
+
+pub fn derived_proposal_eq<
+    RateId: PartialEq,
+    Role: PartialEq,
+    AccountId: PartialEq,
+    N: PartialEq,
+>(
+    left: &Exchange<RateId, Role, AccountId, N>,
+    right: &Exchange<RateId, Role, AccountId, N>,
+) -> bool {
+    left == right
+}
+
+pub fn derived_proposal_clone<RateId: Clone, Role: Clone, AccountId: Clone, N: Clone>(
+    value: &Exchange<RateId, Role, AccountId, N>,
+) -> Exchange<RateId, Role, AccountId, N> {
+    value.clone()
+}
+
+pub fn derived_trace_eq<RateId: PartialEq, Role: PartialEq, AccountId: PartialEq, N: PartialEq>(
+    left: &Trace<RateId, Role, AccountId, N>,
+    right: &Trace<RateId, Role, AccountId, N>,
+) -> bool {
+    left == right
+}
+
+pub fn derived_trace_clone<RateId: Clone, Role: Clone, AccountId: Clone, N: Clone>(
+    value: &Trace<RateId, Role, AccountId, N>,
+) -> Trace<RateId, Role, AccountId, N> {
+    value.clone()
+}
+
+pub fn derived_observation_key_eq<AccountId: PartialEq, A: PartialEq, N: PartialEq>(
+    left: &economy::ObservationKey<AccountId, A, N>,
+    right: &economy::ObservationKey<AccountId, A, N>,
+) -> bool {
+    left == right
+}
+
+pub fn derived_observation_key_clone<AccountId: Clone, A: Clone, N: Clone>(
+    value: &economy::ObservationKey<AccountId, A, N>,
+) -> economy::ObservationKey<AccountId, A, N> {
+    value.clone()
+}
+
+pub fn derived_quantity_partial_cmp<N: PartialOrd>(
+    left: &Quantity<N>,
+    right: &Quantity<N>,
+) -> Option<std::cmp::Ordering> {
+    left.partial_cmp(right)
+}
+
+pub fn derived_quantity_lt<N: PartialOrd>(left: &Quantity<N>, right: &Quantity<N>) -> bool {
+    left.lt(right)
+}
+
+pub fn derived_quantity_le<N: PartialOrd>(left: &Quantity<N>, right: &Quantity<N>) -> bool {
+    left.le(right)
+}
+
+pub fn derived_quantity_gt<N: PartialOrd>(left: &Quantity<N>, right: &Quantity<N>) -> bool {
+    left.gt(right)
+}
+
+pub fn derived_quantity_ge<N: PartialOrd>(left: &Quantity<N>, right: &Quantity<N>) -> bool {
+    left.ge(right)
+}
+
+pub fn derived_quantity_cmp<N: Ord>(left: &Quantity<N>, right: &Quantity<N>) -> std::cmp::Ordering {
+    left.cmp(right)
+}
+
+pub fn derived_fingerprint_partial_cmp(
+    left: &economy::StateFingerprint,
+    right: &economy::StateFingerprint,
+) -> Option<std::cmp::Ordering> {
+    left.partial_cmp(right)
+}
+
+pub fn derived_fingerprint_lt(
+    left: &economy::StateFingerprint,
+    right: &economy::StateFingerprint,
+) -> bool {
+    left.lt(right)
+}
+
+pub fn derived_fingerprint_le(
+    left: &economy::StateFingerprint,
+    right: &economy::StateFingerprint,
+) -> bool {
+    left.le(right)
+}
+
+pub fn derived_fingerprint_gt(
+    left: &economy::StateFingerprint,
+    right: &economy::StateFingerprint,
+) -> bool {
+    left.gt(right)
+}
+
+pub fn derived_fingerprint_ge(
+    left: &economy::StateFingerprint,
+    right: &economy::StateFingerprint,
+) -> bool {
+    left.ge(right)
+}
+
+pub fn derived_fingerprint_cmp(
+    left: &economy::StateFingerprint,
+    right: &economy::StateFingerprint,
+) -> std::cmp::Ordering {
+    left.cmp(right)
+}
+
+pub fn derived_quantity_hash<N: std::hash::Hash, H: std::hash::Hasher>(
+    value: &Quantity<N>,
+    state: &mut H,
+) {
+    std::hash::Hash::hash(value, state)
+}
+
+pub fn derived_amount_hash<A: std::hash::Hash, N: std::hash::Hash, H: std::hash::Hasher>(
+    value: &AssetAmount<A, N>,
+    state: &mut H,
+) {
+    std::hash::Hash::hash(value, state)
+}
+
+pub fn derived_fingerprint_hash<H: std::hash::Hasher>(
+    value: &economy::StateFingerprint,
+    state: &mut H,
+) {
+    std::hash::Hash::hash(value, state)
+}
+
+pub fn derived_observation_key_hash<
+    AccountId: std::hash::Hash,
+    A: std::hash::Hash,
+    N: std::hash::Hash,
+    H: std::hash::Hasher,
+>(
+    value: &economy::ObservationKey<AccountId, A, N>,
+    state: &mut H,
+) {
+    std::hash::Hash::hash(value, state)
+}
+
+pub fn clone_value<T: Clone>(value: &T) -> T {
+    value.clone()
+}
+
+pub fn derived_basket_clone<A: Clone, N: Clone>(value: &Basket<A, N>) -> Basket<A, N> {
+    value.clone()
+}
+
+pub fn derived_account_clone<A: Clone, N: Clone>(value: &Account<A, N>) -> Account<A, N> {
+    value.clone()
+}
+
+pub fn derived_account_error_clone<A: Clone + Eq + std::hash::Hash, N: QuantityScalar>(
+    value: &AccountError<A, N>,
+) -> AccountError<A, N> {
+    value.clone()
+}
+
+pub fn derived_delta_clone<AccountId: Clone, A: Clone, N: Clone>(
+    value: &AccountDelta<AccountId, A, N>,
+) -> AccountDelta<AccountId, A, N> {
+    value.clone()
+}
+
+pub fn derived_receipt_clone<RateId: Clone, Role: Clone, AccountId: Clone, A: Clone, N: Clone>(
+    value: &Receipt<RateId, Role, AccountId, A, N>,
+) -> Receipt<RateId, Role, AccountId, A, N> {
+    value.clone()
+}
+
+pub fn derived_goal_clone<AccountId: Clone, A: Clone, N: Clone>(
+    value: &economy::Goal<AccountId, A, N>,
+) -> economy::Goal<AccountId, A, N> {
+    value.clone()
+}
+
+pub fn derived_rate_clone<Role: Clone, A: Clone, N: Clone>(
+    value: &Rate<Role, A, N>,
+) -> Rate<Role, A, N> {
+    value.clone()
+}
+
+pub fn derived_invariant_clone<A: Clone>(value: &LinearInvariant<A>) -> LinearInvariant<A> {
+    value.clone()
+}
+
+pub fn derived_economy_clone<AccountId: Clone, A: Clone, RateId: Clone, Role: Clone, N: Clone>(
+    value: &economy::Economy<AccountId, A, RateId, Role, N>,
+) -> economy::Economy<AccountId, A, RateId, Role, N> {
+    value.clone()
+}
+
+pub fn derived_account_assessment_clone<AccountId: Clone, A: Clone, N: Clone>(
+    value: &economy::AccountAssessment<AccountId, A, N>,
+) -> economy::AccountAssessment<AccountId, A, N> {
+    value.clone()
+}
+
+pub fn derived_shortfall_clone<AccountId: Clone, A: Clone, N: Clone>(
+    value: &economy::AccountShortfall<AccountId, A, N>,
+) -> economy::AccountShortfall<AccountId, A, N> {
+    value.clone()
+}
+
+pub fn derived_assessment_clone<
+    AccountId: Clone,
+    A: Clone,
+    RateId: Clone,
+    Role: Clone,
+    N: QuantityScalar,
+>(
+    value: &economy::ExchangeAssessment<AccountId, A, RateId, Role, N>,
+) -> economy::ExchangeAssessment<AccountId, A, RateId, Role, N> {
+    value.clone()
+}
+
+pub fn derived_apply_error_clone<
+    RateId: Clone,
+    Role: Clone,
+    AccountId: Clone,
+    A: Clone,
+    N: QuantityScalar,
+>(
+    value: &economy::ApplyError<RateId, Role, AccountId, A, N>,
+) -> economy::ApplyError<RateId, Role, AccountId, A, N> {
+    value.clone()
+}
+
+pub fn derived_account_error_eq<A: Eq + std::hash::Hash, N: QuantityScalar>(
+    left: &AccountError<A, N>,
+    right: &AccountError<A, N>,
+) -> bool {
+    left == right
+}

@@ -98,3 +98,13 @@ import Axionomy.InspectionConformance
 import Axionomy.ConvenienceRefinement
 import Axionomy.CallbackRefinement
 import Axionomy.ConvenienceConformance
+
+import Axionomy.DerivedAccountEqualityRefinement
+import Axionomy.DerivedCloneRefinement
+import Axionomy.DerivedCollectionRefinement
+import Axionomy.DerivedCompositeRefinement
+import Axionomy.DerivedExpressionRefinement
+import Axionomy.DerivedKeyRefinement
+import Axionomy.DerivedRecordRefinement
+import Axionomy.DerivedValueRefinement
+import Axionomy.DerivedConformance

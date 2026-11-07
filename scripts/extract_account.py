@@ -19,7 +19,7 @@ GENERATED = {
 }
 TEMPLATES = {
     "TypesExternal_Template.lean": "b8ad76496c678a024c5cde4fdabe7d3063f8c30f237d5aa3d12f527cad18b85a",
-    "FunsExternal_Template.lean": "0f192758fb6b2589dff3beef16359ff41c7bc72c86a8af2e63481acb3e9ec64f",
+    "FunsExternal_Template.lean": "9205518614a6dd01a4ad4e56d139f2c7c32797fa00ce64c244e7761d19e980e9",
 }
 
 # The pinned backend's Iterator dictionary omits size_hint. Its supported
@@ -59,6 +59,32 @@ CONVENIENCE_DEFINITIONS = (
     "exchange.Exchange.parameter", "rate.QuantityExpression.parameter", "rate.Rate.condition",
 )
 
+# Derived methods must be production definitions, not merely forwarding roots
+# that could resolve to an external stub or a copied specification.
+DERIVED_DEFINITIONS = (
+    *[f"{typ}.Insts.CoreCloneClone.clone" for typ in (
+        "quantity.Quantity", "amount.AssetAmount", "rate.QuantityExpression",
+        "rate.ComputedAmount", "rate.RateCondition", "rate.QuantityComparison",
+        "economy.StateFingerprint", "economy.AssessmentStatus", "economy.ModelIssue",
+        "economy.ModelBuildError", "basket.BasketError", "rate.RateError", "quantity.QuantityError",
+        "exchange.Exchange", "exchange.Trace", "economy.ObservationKey", "basket.Basket",
+        "account.Account", "account.AccountError", "exchange.AccountDelta", "exchange.Receipt",
+        "economy.Goal", "rate.Rate", "rate.LinearInvariant", "economy.Economy",
+        "economy.AccountAssessment", "economy.AccountShortfall", "economy.ExchangeAssessment",
+        "economy.ApplyError")],
+    *[f"{typ}.Insts.CoreCmpPartialEq{typ.split('.')[-1]}.eq" for typ in (
+        "quantity.Quantity", "amount.AssetAmount", "rate.QuantityExpression",
+        "rate.ComputedAmount", "rate.RateCondition", "rate.QuantityComparison",
+        "economy.StateFingerprint", "economy.AssessmentStatus", "economy.ModelIssue",
+        "economy.ModelBuildError", "basket.BasketError", "rate.RateError", "quantity.QuantityError",
+        "exchange.Exchange", "exchange.Trace", "economy.ObservationKey", "account.AccountError")],
+    *[f"{typ}.Insts.CoreCmpOrd.cmp" for typ in ("quantity.Quantity", "economy.StateFingerprint")],
+    *[f"{typ}.Insts.CoreCmpPartialOrd{typ.split('.')[-1]}.partial_cmp"
+      for typ in ("quantity.Quantity", "economy.StateFingerprint")],
+    *[f"{typ}.Insts.CoreHashHash.hash" for typ in (
+        "quantity.Quantity", "amount.AssetAmount", "economy.StateFingerprint", "economy.ObservationKey")],
+)
+
 
 def validate_extraction_diagnostics(output):
     plain = re.sub(r"\x1b\[[0-9;]*m", "", output)
@@ -86,6 +112,69 @@ VALIDATION_CALL = """let rule = match self.validate_structure(proposal) {
         };"""
 
 ENTRY_CALLS = {
+    "derived_basket_clone": "value.clone()",
+    "derived_account_clone": "value.clone()",
+    "derived_account_error_clone": "value.clone()",
+    "derived_delta_clone": "value.clone()",
+    "derived_receipt_clone": "value.clone()",
+    "derived_goal_clone": "value.clone()",
+    "derived_rate_clone": "value.clone()",
+    "derived_invariant_clone": "value.clone()",
+    "derived_economy_clone": "value.clone()",
+    "derived_account_assessment_clone": "value.clone()",
+    "derived_shortfall_clone": "value.clone()",
+    "derived_assessment_clone": "value.clone()",
+    "derived_apply_error_clone": "value.clone()",
+    "derived_account_error_eq": "left==right",
+    "clone_value": "value.clone()",
+    "derived_quantity_eq": "left==right",
+    "derived_quantity_clone": "value.clone()",
+    "derived_amount_eq": "left==right",
+    "derived_amount_clone": "value.clone()",
+    "derived_expression_eq": "left==right",
+    "derived_expression_clone": "clone_value(value)",
+    "derived_computed_amount_eq": "left==right",
+    "derived_computed_amount_clone": "value.clone()",
+    "derived_condition_eq": "left==right",
+    "derived_condition_clone": "value.clone()",
+    "derived_comparison_eq": "left==right",
+    "derived_comparison_clone": "value.clone()",
+    "derived_fingerprint_eq": "left==right",
+    "derived_fingerprint_clone": "value.clone()",
+    "derived_assessment_status_eq": "left==right",
+    "derived_assessment_status_clone": "value.clone()",
+    "derived_model_issue_eq": "left==right",
+    "derived_model_issue_clone": "value.clone()",
+    "derived_model_error_eq": "left==right",
+    "derived_model_error_clone": "value.clone()",
+    "derived_basket_error_eq": "left==right",
+    "derived_basket_error_clone": "value.clone()",
+    "derived_rate_error_eq": "left==right",
+    "derived_rate_error_clone": "value.clone()",
+    "derived_quantity_error_eq": "left==right",
+    "derived_quantity_error_clone": "value.clone()",
+    "derived_proposal_eq": "left==right",
+    "derived_proposal_clone": "value.clone()",
+    "derived_trace_eq": "left==right",
+    "derived_trace_clone": "value.clone()",
+    "derived_observation_key_eq": "left==right",
+    "derived_observation_key_clone": "value.clone()",
+    "derived_quantity_partial_cmp": "left.partial_cmp(right)",
+    "derived_quantity_lt": "left.lt(right)",
+    "derived_quantity_le": "left.le(right)",
+    "derived_quantity_gt": "left.gt(right)",
+    "derived_quantity_ge": "left.ge(right)",
+    "derived_quantity_cmp": "left.cmp(right)",
+    "derived_fingerprint_partial_cmp": "left.partial_cmp(right)",
+    "derived_fingerprint_lt": "left.lt(right)",
+    "derived_fingerprint_le": "left.le(right)",
+    "derived_fingerprint_gt": "left.gt(right)",
+    "derived_fingerprint_ge": "left.ge(right)",
+    "derived_fingerprint_cmp": "left.cmp(right)",
+    "derived_quantity_hash": "std::hash::Hash::hash(value,state)",
+    "derived_amount_hash": "std::hash::Hash::hash(value,state)",
+    "derived_fingerprint_hash": "std::hash::Hash::hash(value,state)",
+    "derived_observation_key_hash": "std::hash::Hash::hash(value,state)",
     "rate_consume_or_panic": "rule.consume(role,assets)",
     "rate_produce_or_panic": "rule.produce(role,assets)",
     "rate_preserve_or_panic": "rule.preserve(role,assets)",
@@ -329,7 +418,8 @@ def validate_generated(directory):
         if re.search(r"\b(sorry|admit|axiom)\b", (directory / name).read_text()):
             raise ValueError(f"unfinished or axiomatic account extraction: {name}")
     functions = (directory / "Funs.lean").read_text()
-    for entry in (*ENTRY_CALLS, *PUBLIC_DEFINITIONS, *INSPECTION_DEFINITIONS, *CONVENIENCE_DEFINITIONS, "account.Account.prepare_exchange",
+    for entry in (*ENTRY_CALLS, *PUBLIC_DEFINITIONS, *INSPECTION_DEFINITIONS, *CONVENIENCE_DEFINITIONS,
+                  *DERIVED_DEFINITIONS, "account.Account.prepare_exchange",
                   "account.Account.Insts.CoreCloneClone.clone",
                   "basket.construct_entries", "basket.construct_entries_loop.body",
                   "basket.Basket.try_from_entries", "basket.Basket.try_from_amounts",

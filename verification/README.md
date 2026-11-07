@@ -185,7 +185,7 @@ to `origin/main`; theorem counts do not measure percentage completion.
 | 2 | 13 | Ordered traces, replay prefix-on-error, isolated replay, invariant composition | Implementation proved: first error, accepted prefix state, ordered receipts and derived caller invariants; generic trace extension also proved under explicit iterator laws |
 | 2 | 14 | Goals, visibility, hidden-state noninterference, missing/zero distinctions | Implementation proved and validated; finite-input iterator construction and documented collection models |
 | 2 | 15 | Canonical state/observation keys and deterministic fingerprints | Implementation proved and validated under documented sorting/hash models and native 64-bit little-endian scope |
-| 3. Public data boundary | 16 | Remaining typed constructors/accessors/conversions/iterators/equality | Partial: foundational typed data, expression construction, iterator consumers, basket collection boundaries, core inspection and u64 convenience constructors proved; remaining APIs listed below |
+| 3. Public data boundary | 16 | Remaining typed constructors/accessors/conversions/iterators/equality | Partial: foundational typed data, expression construction, iterator consumers, basket collection boundaries, core inspection, u64 convenience constructors and derived traits proved under documented models; remaining APIs listed below |
 | 3 | 17 | Serialization round trips, validation/canonicalization, accurate schema contracts | Open |
 | 4. Numeric backends | 18 | BigUint/BigInt and explicit algebraic requirements for custom backends | Open |
 
@@ -273,6 +273,34 @@ doctests also passed. The prior 35 production mutation controls remain in CI.
 
 The remaining completion work is:
 
+**Completed item 16 derived-trait batch:** implementation contracts cover equality/clone on typed
+values, recursive expressions, conditions, proposals/traces, errors and observation
+keys, plus quantity/fingerprint ordering and typed hashing. All remaining public
+derived clone APIs and account-error equality are included: 62 new API probes and
+one generic clone forwarding helper. Fresh extraction and eight proof
+modules compile, with 90 registered contracts: typed values, recursive expressions,
+record/error payloads, generic basket/account equality, all public derived clones,
+proposal/trace/model-build-error/observation-key equality, numeric ordering and
+scoped hash composition. Reviewed BTreeMap and tuple equality models preserve
+field order, short-circuiting and callback failures. Hash contracts retain the
+native/default-method restrictions, and pure clone contracts retain the logical
+tuple/collection/Arc boundary; see [the exact scope](ACCOUNTS.md#derived-public-traits).
+Lean-generated comparisons and encoding cases pass seven Rust tests, including
+generic non-Copy BigUint payload transport. All 48 account-extraction boundary
+tests pass, including removal of each of 54 production methods and bypass of all
+63 forwarding roots. The full proof gate passed (577 registered contracts; 4,192
+audited Axionomy theorems), along with all 329 Rust 1.89 workspace tests in 58
+groups, formatting, Clippy with warnings denied, strict documentation builds and
+workspace doctests. All 102 boundary/gate controls passed. Both new re-extracted
+production mutants compiled and then broke their semantic proofs: reversed amount
+hash order and observation-key equality omitting existing accounts. The prior 52
+production mutation controls remain in CI; all 54 source targets were checked.
+Formatting and
+remaining iterator/callback adapters and inherited trait convenience methods
+(`clone_from`, `ne`, `min`/`max`/`clamp`, `hash_slice`) remain visible obligations
+alongside items 17–18. This batch covers the named derived methods, not every
+inherited method made available by their trait implementations.
+
 **Completed item 16 convenience-constructor batch:** implementation proofs cover
 `Rate::consume`/`produce`/`preserve` overflow panics, duplicate rejection by the
 `basket` literal helper, and `Into<String>` results in expression/proposal
@@ -318,7 +346,9 @@ See the
   from entries and typed amounts, FromIterator/array conversions, and basic borrowed
   iteration/queries including sorted views are now covered as well. Remaining work
   includes remaining collection iterator and arbitrary callback contracts;
-  derived equality/hash behavior and formatting. The u64 static-rate and basket
+  inherited trait conveniences
+  (`clone_from`, `ne`, `min`/`max`/`clamp`, `hash_slice`); arbitrary erased hash
+  overrides/portability beyond the scoped models; and formatting. The u64 static-rate and basket
   convenience panic contracts are covered by the batch above. See the [public data contracts](ACCOUNTS.md#typed-public-data-and-expression-construction)
   for the exact scope of this batch.
 - **17 — Serialization and schema:** connect production serialization and
@@ -504,7 +534,7 @@ the initial theorems. They are a backfill plan, not an exemption for new behavio
   validation, aggregation, preparation and commit; arbitrary deserialized metadata
   still needs its separate representation contract.
 - Remaining finite-map adapters, serialization/schema round trips,
-  remaining derived key equality/hash APIs, and portability of fingerprint encodings
+  remaining inherited trait methods, arbitrary erased hash overrides, and portability of fingerprint encodings
   beyond the documented targets. Fingerprints are not collision-free identities.
 - Other remaining public APIs and arbitrary callback contracts. Static u64 rate
   and basket convenience panics, string conversions, invariant construction and

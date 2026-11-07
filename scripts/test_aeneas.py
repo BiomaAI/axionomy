@@ -55,6 +55,47 @@ class ExtractionBoundaryTests(unittest.TestCase):
 
 
 class ProductionMutationTests(unittest.TestCase):
+    def test_reversed_amount_hash_breaks_field_order(self):
+        original = '''#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+#[serde(bound(
+    serialize = "A: Serialize, N: Serialize",
+    deserialize = "A: Deserialize<'de>, N: Deserialize<'de> + QuantityScalar"
+))]
+pub struct AssetAmount<A, N = u64> {
+    asset: A,
+    quantity: Quantity<N>,
+}'''
+        replacement = original.replace("Eq, Hash, Serialize", "Eq, Serialize") + '''
+impl<A: std::hash::Hash, N: std::hash::Hash> std::hash::Hash for AssetAmount<A, N> {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        std::hash::Hash::hash(&self.quantity, state);
+        std::hash::Hash::hash(&self.asset, state);
+    }
+}'''
+        self.check_mutation("src/amount.rs", original, replacement,
+                            "extract_account.py", "stale account model", "DerivedValueRefinement", "AccountExtraction",
+                            proof_failure="Not a definitional equality: the left-hand side\n  derived_amount_hash")
+
+    def test_ignored_key_existence_breaks_derived_equality(self):
+        original = '''#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+#[serde(bound(
+    serialize = "AccountId: Serialize, A: Serialize, N: Serialize",
+    deserialize = "AccountId: Deserialize<'de>, A: Deserialize<'de> + Eq + Hash, N: Deserialize<'de> + QuantityScalar"
+))]
+pub struct ObservationKey<AccountId, A, N = u64> {
+    visible_accounts: Vec<AccountId>,
+    existing_accounts: Vec<AccountId>,
+    balances: Vec<(AccountId, A, Quantity<N>)>,
+}'''
+        replacement = original.replace("Clone, PartialEq, Eq", "Clone, Eq") + '''
+impl<AccountId: PartialEq, A: PartialEq, N: PartialEq> PartialEq for ObservationKey<AccountId, A, N> {
+    fn eq(&self, other: &Self) -> bool {
+        self.visible_accounts == other.visible_accounts && self.balances == other.balances
+    }
+}'''
+        self.check_mutation("src/economy.rs", original, replacement,
+                            "extract_account.py", "stale account model", "DerivedKeyRefinement", "AccountExtraction")
+
     def test_silenced_rate_overflow_breaks_convenience_contract(self):
         self.check_mutation(
             "src/rate.rs", 'Ok(rate) => rate,\n            Err(_) => panic!("rate consume basket quantity overflow"),',
