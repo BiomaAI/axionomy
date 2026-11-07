@@ -183,7 +183,7 @@ to `origin/main`; theorem counts do not measure percentage completion.
 | 2 | 13 | Ordered traces, replay prefix-on-error, isolated replay, invariant composition | Implementation proved: first error, accepted prefix state, ordered receipts and derived caller invariants; generic trace extension remains in item 16 |
 | 2 | 14 | Goals, visibility, hidden-state noninterference, missing/zero distinctions | Implementation proved and validated; finite-vector construction and documented collection models |
 | 2 | 15 | Canonical state/observation keys and deterministic fingerprints | Implementation proved and validated under documented sorting/hash models and native 64-bit little-endian scope |
-| 3. Public data boundary | 16 | Remaining typed constructors/accessors/conversions/iterators/equality | Partial implementation proofs |
+| 3. Public data boundary | 16 | Remaining typed constructors/accessors/conversions/iterators/equality | Partial: foundational typed data and expression construction proved and validated; remaining APIs listed below |
 | 3 | 17 | Serialization round trips, validation/canonicalization, accurate schema contracts | Open |
 | 4. Numeric backends | 18 | BigUint/BigInt and explicit algebraic requirements for custom backends | Open |
 
@@ -270,12 +270,16 @@ doctests also passed. The prior 35 production mutation controls remain in CI.
 
 The remaining completion work is:
 
-- **16 — Typed public APIs:** finish constructor, accessor and conversion contracts
-  for amounts, quantities, accounts, baskets, exchanges, receipts, assessments,
-  rate expressions/conditions/invariants and model inspection. Cover sorted
-  iteration, generic trace extension and arbitrary iterator callbacks with explicit
-  iterator laws; cover derived equality/hash behavior and formatting. State the
-  panic conditions of intentionally panicking convenience constructors.
+- **16 — Typed public APIs:** the foundational batch now has composed proofs for
+  amounts, quantity validation/conversion, account wrappers/equality, typed basket
+  insertion, proposal builders, receipt/delta/assessment accessors and expression
+  constructors. This batch is validated. Remaining work includes
+  basket construction from typed amounts, collection conversions and sorted
+  iteration; assessment lookup by account; remaining rate/invariant/model
+  inspection APIs; generic trace extension and arbitrary iterator/callback laws;
+  derived equality/hash behavior and formatting; and the explicit panic contracts
+  of convenience constructors. See the [public data contracts](ACCOUNTS.md#typed-public-data-and-expression-construction)
+  for the exact scope of this batch.
 - **17 — Serialization and schema:** connect production serialization and
   deserialization to round-trip, rejection and canonicalization contracts. Cover
   quantity validation, duplicate basket entries, rate normalization, economy

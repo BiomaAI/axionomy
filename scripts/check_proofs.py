@@ -50,6 +50,35 @@ def validate_coverage(root, coverage):
             # These are the implemented extraction pipelines. Future
             # claims need their own regeneration and trust-boundary checks.
             pipelines = {
+                "typed_data_operations": ("AccountExtraction.Funs", {
+                    "Axionomy.TypedDataRefinement.quantity_validation", "Axionomy.TypedDataRefinement.quantity_validation_iff",
+                    "Axionomy.TypedDataRefinement.checked_validation", "Axionomy.TypedDataRefinement.quantity_new",
+                    "Axionomy.TypedDataRefinement.quantity_get", "Axionomy.TypedDataRefinement.quantity_u64_roundtrip",
+                    "Axionomy.TypedDataRefinement.quantity_from_u64", "Axionomy.TypedDataRefinement.quantity_from_u32",
+                    "Axionomy.TypedDataRefinement.quantity_borrow", "Axionomy.TypedDataRefinement.quantity_consume",
+                    "Axionomy.TypedDataRefinement.quantity_default", "Axionomy.TypedDataRefinement.amount_new",
+                    "Axionomy.TypedDataRefinement.amount_from_pair", "Axionomy.TypedDataRefinement.amount_to_pair",
+                    "Axionomy.TypedDataRefinement.amount_pair_roundtrip", "Axionomy.TypedDataRefinement.amount_value_roundtrip",
+                    "Axionomy.TypedDataRefinement.account_new", "Axionomy.TypedDataRefinement.account_default",
+                    "Axionomy.TypedDataRefinement.account_roundtrip", "Axionomy.TypedDataRefinement.account_equality",
+                    "Axionomy.TypedDataRefinement.insert_amount", "Axionomy.TypedDataRefinement.proposal_new",
+                    "Axionomy.TypedDataRefinement.proposal_bind", "Axionomy.TypedDataRefinement.proposal_parameter",
+                    "Axionomy.TypedDataRefinement.assessment_accessors", "Axionomy.TypedDataRefinement.condition_name",
+                    "Axionomy.TypedDataRefinement.amount_accessors", "Axionomy.TypedDataRefinement.account_accessors",
+                    "Axionomy.TypedDataRefinement.delta_accessors", "Axionomy.TypedDataRefinement.receipt_accessors",
+                    "Axionomy.TypedDataRefinement.account_assessment_accessors", "Axionomy.TypedDataRefinement.account_shortfall_accessors",
+                    "Axionomy.TypedDataRefinement.model_error_accessors", "Axionomy.TypedDataRefinement.computed_accessors",
+                    "Axionomy.TypedDataRefinement.condition_accessors", "Axionomy.TypedDataRefinement.proposal_accessors",
+                }),
+                "expression_construction": ("AccountExtraction.Funs", {
+                    "Axionomy.ExpressionConstructionRefinement.constant", "Axionomy.ExpressionConstructionRefinement.units",
+                    "Axionomy.ExpressionConstructionRefinement.balance", "Axionomy.ExpressionConstructionRefinement.parameter",
+                    "Axionomy.ExpressionConstructionRefinement.add_operator", "Axionomy.ExpressionConstructionRefinement.construct_refines",
+                    "Axionomy.ExpressionConstructionRefinement.decode_encode", "Axionomy.ExpressionConstructionRefinement.evaluate_constructed",
+                    "Axionomy.ExpressionConstructionRefinement.plus", "Axionomy.ExpressionConstructionRefinement.subtract",
+                    "Axionomy.ExpressionConstructionRefinement.multiply", "Axionomy.ExpressionConstructionRefinement.divide_floor",
+                    "Axionomy.ExpressionConstructionRefinement.minimum", "Axionomy.ExpressionConstructionRefinement.maximum",
+                }),
                 "observations_and_goals": ("AccountExtraction.Funs", {
                     "Axionomy.GoalRefinement.new_goal", "Axionomy.GoalRefinement.default_goal",
                     "Axionomy.GoalRefinement.require_goal", "Axionomy.GoalRefinement.requirements",
@@ -236,12 +265,12 @@ def main():
     if generated != committed:
         raise ValueError("Lean conformance cases are stale; regenerate them from Conformance.lean and review the diff")
     run("cargo", "test", "-p", "axionomy", "--all-features", "--test", "lean_conformance",
-        "--test", "transaction_conformance", "--test", "observation_conformance")
+        "--test", "transaction_conformance", "--test", "observation_conformance", "--test", "public_data_conformance")
     run("cargo", "test", "-p", "axionomy", "--all-features", "--lib",
         "runtime_")
     run("cargo", "test", "-p", "axionomy", "--all-features", "--doc")
     print(f"Verified {len(theorems)} registered theorems and their axiom dependencies, "
-          "fresh Aeneas extraction of u64 arithmetic, basket construction/operations, account updates/staging, model/rate construction and metadata discovery, complete transaction assessment/application and vector filtering, fork/simulation/ordered replay, goals/views/canonical keys and scoped fingerprints, snapshot evaluation/conditions, signed conservation and measurement, "
+          "fresh Aeneas extraction of u64 arithmetic, basket construction/operations, account updates/staging, model/rate construction and metadata discovery, complete transaction assessment/application and vector filtering, fork/simulation/ordered replay, goals/views/canonical keys and scoped fingerprints, typed data APIs and expression construction, snapshot evaluation/conditions, signed conservation and measurement, "
           "and Rust conformance/type checks. Collection storage uses an explicit trusted model. "
           "Other core implementation refinement remains unproved; see verification/README.md.")
 

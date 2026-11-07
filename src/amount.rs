@@ -50,7 +50,7 @@ impl<A, N> From<(A, Quantity<N>)> for AssetAmount<A, N> {
 }
 
 impl<A, N> From<AssetAmount<A, N>> for (A, Quantity<N>) {
-    fn from(amount: AssetAmount<A, N>) -> Self {
-        amount.into_parts()
+    fn from(value: AssetAmount<A, N>) -> Self {
+        value.into_parts()
     }
 }

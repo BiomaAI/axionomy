@@ -254,6 +254,21 @@ mod signed_scalar_tests {
     }
 
     #[test]
+    fn runtime_quantity_validation_matches_lean() {
+        let fixtures: serde_json::Value =
+            serde_json::from_str(include_str!("../verification/conformance.json")).unwrap();
+        let cases = fixtures["publicData"]["validation"].as_array().unwrap();
+        assert_eq!(cases.len(), 5);
+        for case in cases {
+            let input = case["input"].as_str().unwrap().parse::<i64>().unwrap();
+            let actual = Quantity::try_from_scalar(input)
+                .ok()
+                .map(|value| value.into_scalar().to_string());
+            assert_eq!(serde_json::json!(actual), case["accepted"]);
+        }
+    }
+
+    #[test]
     fn checked_results_still_enforce_nonnegativity_for_other_backends() {
         let one = Quantity::try_from_scalar(1_i64).unwrap();
         let two = Quantity::try_from_scalar(2_i64).unwrap();

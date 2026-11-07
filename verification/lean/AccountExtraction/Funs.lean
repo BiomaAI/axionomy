@@ -658,10 +658,28 @@ def account.Account.Insts.CoreCloneClone.clone
       corecloneCloneInst1 self.balances
   ok { balances := b }
 
+/-- [account_extraction::account::{account_extraction::account::Account<A, N>}::new]:
+    Source: 'verification/../src/account.rs', lines 17:4-19:5
+    Visibility: public -/
+def account.Account.new
+  {A : Type _} {N : Type _} (balances : basket.Basket A N) :
+  Result (account.Account A N)
+  := do
+  ok { balances }
+
 /-- [account_extraction::account::{account_extraction::account::Account<A, N>}::balances]:
     Source: 'verification/../src/account.rs', lines 21:4-23:5
     Visibility: public -/
 def account.Account.impl.balances
+  {A : Type _} {N : Type _} (self : account.Account A N) :
+  Result (basket.Basket A N)
+  := do
+  ok self.balances
+
+/-- [account_extraction::account::{account_extraction::account::Account<A, N>}::into_balances]:
+    Source: 'verification/../src/account.rs', lines 25:4-27:5
+    Visibility: public -/
+def account.Account.into_balances
   {A : Type _} {N : Type _} (self : account.Account A N) :
   Result (basket.Basket A N)
   := do
@@ -1175,12 +1193,194 @@ def account.Account.prepare_exchange
       (account.Account A N) (core.convert.FromSame (account.AccountError A N
       Clause3_SignedMeasure)) residual
 
+/-- [account_extraction::account::{impl core::default::Default for account_extraction::account::Account<A, N>}::default]:
+    Source: 'verification/../src/account.rs', lines 96:4-98:5
+    Visibility: public -/
+def account.Account.Insts.CoreDefaultDefault.default
+  (A : Type _) (N : Type _) : Result (account.Account A N) := do
+  let b ← basket.Basket.new A N
+  account.Account.new b
+
 /-- [account_extraction::basket::{account_extraction::basket::Basket<A, N>}::len]:
     Source: 'verification/../src/basket.rs', lines 55:4-57:5
     Visibility: public -/
 def basket.Basket.len
   {A : Type _} {N : Type _} (self : basket.Basket A N) : Result Std.Usize := do
   indexmap.map.IndexMap.len self.quantities
+
+/-- [account_extraction::basket::{impl core::cmp::PartialEq<account_extraction::basket::Basket<A, N>> for account_extraction::basket::Basket<A, N>}::eq]: loop body 0:
+    Source: 'verification/../src/basket.rs', lines 191:13-198:5
+    Visibility: public -/
+@[rust_loop_body]
+def basket.Basket.Insts.CoreCmpPartialEqBasket.eq_loop.body
+  {A : Type _} {N : Type _} (corecmpEqInst : core.cmp.Eq A) (corehashHashInst :
+  core.hash.Hash A) (corecmpPartialEqInst : core.cmp.PartialEq N N)
+  (other : basket.Basket A N)
+  (iter : indexmap.map.iter.Iter A (quantity.Quantity N)) :
+  Result (ControlFlow (indexmap.map.iter.Iter A (quantity.Quantity N)) Bool)
+  := do
+  let (o, iter1) ←
+    indexmap.map.iter.Iter.Insts.CoreIterTraitsIteratorIteratorPairSharedAKSharedAV.next
+      iter
+  match o with
+  | none => ok (done true)
+  | some p =>
+    let (asset, amount) := p
+    let o1 ←
+      indexmap.map.IndexMap.get
+        std.hash.random.RandomState.Insts.CoreHashBuildHasherDefaultHasher
+        corehashHashInst (equivalent.Equivalent.Blanket corecmpEqInst
+        (core.borrow.Borrow.Blanket A)) other.quantities asset
+    let b ←
+      core.option.Option.Insts.CoreCmpPartialEqOption.eq
+        (core.cmp.PartialEqShared
+        (quantity.Quantity.Insts.CoreCmpPartialEqQuantity
+        corecmpPartialEqInst)) o1 (some amount)
+    if b
+    then ok (cont iter1)
+    else ok (done false)
+
+/-- [account_extraction::basket::{impl core::cmp::PartialEq<account_extraction::basket::Basket<A, N>> for account_extraction::basket::Basket<A, N>}::eq]: loop 0:
+    Source: 'verification/../src/basket.rs', lines 191:13-198:5
+    Visibility: public -/
+@[rust_loop]
+def basket.Basket.Insts.CoreCmpPartialEqBasket.eq_loop
+  {A : Type _} {N : Type _} (corecmpEqInst : core.cmp.Eq A) (corehashHashInst :
+  core.hash.Hash A) (corecmpPartialEqInst : core.cmp.PartialEq N N)
+  (iter : indexmap.map.iter.Iter A (quantity.Quantity N))
+  (other : basket.Basket A N) :
+  Result Bool
+  := do
+  loop
+    (fun iter1 => basket.Basket.Insts.CoreCmpPartialEqBasket.eq_loop.body
+      corecmpEqInst corehashHashInst corecmpPartialEqInst other iter1)
+    iter
+
+/-- [account_extraction::basket::{impl core::cmp::PartialEq<account_extraction::basket::Basket<A, N>> for account_extraction::basket::Basket<A, N>}::eq]:
+    Source: 'verification/../src/basket.rs', lines 187:4-198:5
+    Visibility: public -/
+def basket.Basket.Insts.CoreCmpPartialEqBasket.eq
+  {A : Type _} {N : Type _} (corecmpEqInst : core.cmp.Eq A) (corehashHashInst :
+  core.hash.Hash A) (corecmpPartialEqInst : core.cmp.PartialEq N N)
+  (self : basket.Basket A N) (other : basket.Basket A N) :
+  Result Bool
+  := do
+  let i ← basket.Basket.len self
+  let i1 ← basket.Basket.len other
+  if i != i1
+  then ok false
+  else
+    let iter ← basket.Basket.iter self
+    basket.Basket.Insts.CoreCmpPartialEqBasket.eq_loop corecmpEqInst
+      corehashHashInst corecmpPartialEqInst iter other
+
+/-- [account_extraction::account::{impl core::cmp::PartialEq<account_extraction::account::Account<A, N>> for account_extraction::account::Account<A, N>}::eq]:
+    Source: 'verification/../src/account.rs', lines 106:4-108:5
+    Visibility: public -/
+def account.Account.Insts.CoreCmpPartialEqAccount.eq
+  {A : Type _} {N : Type _} (corecmpEqInst : core.cmp.Eq A) (corehashHashInst :
+  core.hash.Hash A) (corecmpPartialEqInst : core.cmp.PartialEq N N)
+  (self : account.Account A N) (other : account.Account A N) :
+  Result Bool
+  := do
+  basket.Basket.Insts.CoreCmpPartialEqBasket.eq corecmpEqInst corehashHashInst
+    corecmpPartialEqInst self.balances other.balances
+
+/-- Trait implementation: [account_extraction::account::{impl core::cmp::PartialEq<account_extraction::account::Account<A, N>> for account_extraction::account::Account<A, N>}]
+    Source: 'verification/../src/account.rs', lines 101:0-109:1 -/
+@[reducible]
+def account.Account.Insts.CoreCmpPartialEqAccount {A : Type _} {N : Type _}
+  (corecmpEqInst : core.cmp.Eq A) (corehashHashInst : core.hash.Hash A)
+  (corecmpPartialEqInst : core.cmp.PartialEq N N) : core.cmp.PartialEq
+  (account.Account A N) (account.Account A N) := {
+  eq := account.Account.Insts.CoreCmpPartialEqAccount.eq corecmpEqInst
+    corehashHashInst corecmpPartialEqInst
+}
+
+/-- [account_extraction::account::{impl core::convert::From<account_extraction::basket::Basket<A, N>> for account_extraction::account::Account<A, N>}::from]:
+    Source: 'verification/../src/account.rs', lines 119:4-121:5
+    Visibility: public -/
+def account.Account.Insts.CoreConvertFromBasket.from
+  {A : Type _} {N : Type _} (balances : basket.Basket A N) :
+  Result (account.Account A N)
+  := do
+  account.Account.new balances
+
+/-- [account_extraction::amount::{account_extraction::amount::AssetAmount<A, N>}::new]:
+    Source: 'verification/../src/amount.rs', lines 29:4-31:5
+    Visibility: public -/
+def amount.AssetAmount.new
+  {A : Type _} {N : Type _} (asset : A) (quantity : quantity.Quantity N) :
+  Result (amount.AssetAmount A N)
+  := do
+  ok { asset, quantity }
+
+/-- [account_extraction::amount::{account_extraction::amount::AssetAmount<A, N>}::asset]:
+    Source: 'verification/../src/amount.rs', lines 33:4-35:5
+    Visibility: public -/
+def amount.AssetAmount.impl.asset
+  {A : Type _} {N : Type _} (self : amount.AssetAmount A N) : Result A := do
+  ok self.asset
+
+/-- [account_extraction::amount::{account_extraction::amount::AssetAmount<A, N>}::quantity]:
+    Source: 'verification/../src/amount.rs', lines 37:4-39:5
+    Visibility: public -/
+def amount.AssetAmount.impl.quantity
+  {A : Type _} {N : Type _} (self : amount.AssetAmount A N) :
+  Result (quantity.Quantity N)
+  := do
+  ok self.quantity
+
+/-- [account_extraction::amount::{account_extraction::amount::AssetAmount<A, N>}::into_parts]:
+    Source: 'verification/../src/amount.rs', lines 41:4-43:5
+    Visibility: public -/
+def amount.AssetAmount.into_parts
+  {A : Type _} {N : Type _} (self : amount.AssetAmount A N) :
+  Result (A × (quantity.Quantity N))
+  := do
+  ok (self.asset, self.quantity)
+
+/-- [account_extraction::amount::{impl core::convert::From<(A, account_extraction::quantity::Quantity<N>)> for account_extraction::amount::AssetAmount<A, N>}::from]:
+    Source: 'verification/../src/amount.rs', lines 47:4-49:5
+    Visibility: public -/
+def amount.AssetAmount.Insts.CoreConvertFromPairAQuantity.from
+  {A : Type _} {N : Type _} (p : (A × (quantity.Quantity N))) :
+  Result (amount.AssetAmount A N)
+  := do
+  let (asset, quantity) := p
+  amount.AssetAmount.new asset quantity
+
+/-- [account_extraction::amount::{impl core::convert::From<account_extraction::amount::AssetAmount<A, N>> for (A, account_extraction::quantity::Quantity<N>)}::from]:
+    Source: 'verification/../src/amount.rs', lines 53:4-55:5
+    Visibility: public -/
+def PairAQuantity.Insts.CoreConvertFromAssetAmount.from
+  {A : Type _} {N : Type _} (value : amount.AssetAmount A N) :
+  Result (A × (quantity.Quantity N))
+  := do
+  amount.AssetAmount.into_parts value
+
+/-- Trait implementation: [account_extraction::amount::{impl core::convert::From<account_extraction::amount::AssetAmount<A, N>> for (A, account_extraction::quantity::Quantity<N>)}]
+    Source: 'verification/../src/amount.rs', lines 52:0-56:1 -/
+@[reducible]
+def PairAQuantity.Insts.CoreConvertFromAssetAmount (A : Type _) (N : Type _) :
+  core.convert.From (A × (quantity.Quantity N)) (amount.AssetAmount A N) := {
+  «from» := PairAQuantity.Insts.CoreConvertFromAssetAmount.from
+}
+
+/-- [account_extraction::basket::{account_extraction::basket::Basket<A, N>}::insert_amount]:
+    Source: 'verification/../src/basket.rs', lines 117:4-120:5
+    Visibility: public -/
+def basket.Basket.insert_amount
+  {A : Type _} {N : Type _} {Clause2_SignedMeasure : Type _} (corecmpEqInst :
+  core.cmp.Eq A) (corehashHashInst : core.hash.Hash A)
+  (quantityQuantityScalarInst : quantity.QuantityScalar N
+  Clause2_SignedMeasure) (self : basket.Basket A N)
+  (value : amount.AssetAmount A N) :
+  Result ((Option (quantity.Quantity N)) × (basket.Basket A N))
+  := do
+  let (asset, quantity) ← amount.AssetAmount.into_parts value
+  basket.Basket.insert corecmpEqInst corehashHashInst
+    quantityQuantityScalarInst self asset quantity
 
 /-- [account_extraction::basket::{account_extraction::basket::Basket<A, N>}::checked_add]: loop body 0:
     Source: 'verification/../src/basket.rs', lines 131:8-140:5
@@ -1369,72 +1569,6 @@ def basket.Basket.Insts.CoreDefaultDefault (A : Type _) (N : Type _) :
   core.default.Default (basket.Basket A N) := {
   default := basket.Basket.Insts.CoreDefaultDefault.default A N
 }
-
-/-- [account_extraction::basket::{impl core::cmp::PartialEq<account_extraction::basket::Basket<A, N>> for account_extraction::basket::Basket<A, N>}::eq]: loop body 0:
-    Source: 'verification/../src/basket.rs', lines 191:13-198:5
-    Visibility: public -/
-@[rust_loop_body]
-def basket.Basket.Insts.CoreCmpPartialEqBasket.eq_loop.body
-  {A : Type _} {N : Type _} (corecmpEqInst : core.cmp.Eq A) (corehashHashInst :
-  core.hash.Hash A) (corecmpPartialEqInst : core.cmp.PartialEq N N)
-  (other : basket.Basket A N)
-  (iter : indexmap.map.iter.Iter A (quantity.Quantity N)) :
-  Result (ControlFlow (indexmap.map.iter.Iter A (quantity.Quantity N)) Bool)
-  := do
-  let (o, iter1) ←
-    indexmap.map.iter.Iter.Insts.CoreIterTraitsIteratorIteratorPairSharedAKSharedAV.next
-      iter
-  match o with
-  | none => ok (done true)
-  | some p =>
-    let (asset, amount) := p
-    let o1 ←
-      indexmap.map.IndexMap.get
-        std.hash.random.RandomState.Insts.CoreHashBuildHasherDefaultHasher
-        corehashHashInst (equivalent.Equivalent.Blanket corecmpEqInst
-        (core.borrow.Borrow.Blanket A)) other.quantities asset
-    let b ←
-      core.option.Option.Insts.CoreCmpPartialEqOption.eq
-        (core.cmp.PartialEqShared
-        (quantity.Quantity.Insts.CoreCmpPartialEqQuantity
-        corecmpPartialEqInst)) o1 (some amount)
-    if b
-    then ok (cont iter1)
-    else ok (done false)
-
-/-- [account_extraction::basket::{impl core::cmp::PartialEq<account_extraction::basket::Basket<A, N>> for account_extraction::basket::Basket<A, N>}::eq]: loop 0:
-    Source: 'verification/../src/basket.rs', lines 191:13-198:5
-    Visibility: public -/
-@[rust_loop]
-def basket.Basket.Insts.CoreCmpPartialEqBasket.eq_loop
-  {A : Type _} {N : Type _} (corecmpEqInst : core.cmp.Eq A) (corehashHashInst :
-  core.hash.Hash A) (corecmpPartialEqInst : core.cmp.PartialEq N N)
-  (iter : indexmap.map.iter.Iter A (quantity.Quantity N))
-  (other : basket.Basket A N) :
-  Result Bool
-  := do
-  loop
-    (fun iter1 => basket.Basket.Insts.CoreCmpPartialEqBasket.eq_loop.body
-      corecmpEqInst corehashHashInst corecmpPartialEqInst other iter1)
-    iter
-
-/-- [account_extraction::basket::{impl core::cmp::PartialEq<account_extraction::basket::Basket<A, N>> for account_extraction::basket::Basket<A, N>}::eq]:
-    Source: 'verification/../src/basket.rs', lines 187:4-198:5
-    Visibility: public -/
-def basket.Basket.Insts.CoreCmpPartialEqBasket.eq
-  {A : Type _} {N : Type _} (corecmpEqInst : core.cmp.Eq A) (corehashHashInst :
-  core.hash.Hash A) (corecmpPartialEqInst : core.cmp.PartialEq N N)
-  (self : basket.Basket A N) (other : basket.Basket A N) :
-  Result Bool
-  := do
-  let i ← basket.Basket.len self
-  let i1 ← basket.Basket.len other
-  if i != i1
-  then ok false
-  else
-    let iter ← basket.Basket.iter self
-    basket.Basket.Insts.CoreCmpPartialEqBasket.eq_loop corecmpEqInst
-      corehashHashInst corecmpPartialEqInst iter other
 
 /-- Trait implementation: [account_extraction::basket::{impl core::cmp::PartialEq<account_extraction::basket::Basket<A, N>> for account_extraction::basket::Basket<A, N>}]
     Source: 'verification/../src/basket.rs', lines 182:0-199:1 -/
@@ -1634,6 +1768,66 @@ def economy.StateFingerprint.get
   (self : economy.StateFingerprint) : Result Std.U64 := do
   ok self
 
+/-- [account_extraction::economy::{account_extraction::economy::AccountAssessment<AccountId, A, N>}::account]:
+    Source: 'verification/../src/economy.rs', lines 143:4-145:5
+    Visibility: public -/
+def economy.AccountAssessment.impl.account
+  {AccountId : Type _} {A : Type _} {N : Type _}
+  (self : economy.AccountAssessment AccountId A N) :
+  Result AccountId
+  := do
+  ok self.account
+
+/-- [account_extraction::economy::{account_extraction::economy::AccountAssessment<AccountId, A, N>}::available]:
+    Source: 'verification/../src/economy.rs', lines 148:4-150:5
+    Visibility: public -/
+def economy.AccountAssessment.impl.available
+  {AccountId : Type _} {A : Type _} {N : Type _}
+  (self : economy.AccountAssessment AccountId A N) :
+  Result (basket.Basket A N)
+  := do
+  ok self.available
+
+/-- [account_extraction::economy::{account_extraction::economy::AccountAssessment<AccountId, A, N>}::required]:
+    Source: 'verification/../src/economy.rs', lines 152:4-154:5
+    Visibility: public -/
+def economy.AccountAssessment.impl.required
+  {AccountId : Type _} {A : Type _} {N : Type _}
+  (self : economy.AccountAssessment AccountId A N) :
+  Result (basket.Basket A N)
+  := do
+  ok self.required
+
+/-- [account_extraction::economy::{account_extraction::economy::AccountAssessment<AccountId, A, N>}::consumed]:
+    Source: 'verification/../src/economy.rs', lines 156:4-158:5
+    Visibility: public -/
+def economy.AccountAssessment.impl.consumed
+  {AccountId : Type _} {A : Type _} {N : Type _}
+  (self : economy.AccountAssessment AccountId A N) :
+  Result (basket.Basket A N)
+  := do
+  ok self.consumed
+
+/-- [account_extraction::economy::{account_extraction::economy::AccountAssessment<AccountId, A, N>}::produced]:
+    Source: 'verification/../src/economy.rs', lines 160:4-162:5
+    Visibility: public -/
+def economy.AccountAssessment.impl.produced
+  {AccountId : Type _} {A : Type _} {N : Type _}
+  (self : economy.AccountAssessment AccountId A N) :
+  Result (basket.Basket A N)
+  := do
+  ok self.produced
+
+/-- [account_extraction::economy::{account_extraction::economy::AccountAssessment<AccountId, A, N>}::preserved]:
+    Source: 'verification/../src/economy.rs', lines 164:4-166:5
+    Visibility: public -/
+def economy.AccountAssessment.impl.preserved
+  {AccountId : Type _} {A : Type _} {N : Type _}
+  (self : economy.AccountAssessment AccountId A N) :
+  Result (basket.Basket A N)
+  := do
+  ok self.preserved
+
 /-- [account_extraction::economy::{account_extraction::economy::AccountAssessment<AccountId, A, N>}::new]:
     Source: 'verification/../src/economy.rs', lines 168:4-184:5 -/
 def economy.AccountAssessment.new
@@ -1645,6 +1839,26 @@ def economy.AccountAssessment.new
   := do
   ok { account, available, required, consumed, produced, preserved }
 
+/-- [account_extraction::economy::{account_extraction::economy::AccountShortfall<AccountId, A, N>}::account]:
+    Source: 'verification/../src/economy.rs', lines 199:4-201:5
+    Visibility: public -/
+def economy.AccountShortfall.impl.account
+  {AccountId : Type _} {A : Type _} {N : Type _}
+  (self : economy.AccountShortfall AccountId A N) :
+  Result AccountId
+  := do
+  ok self.account
+
+/-- [account_extraction::economy::{account_extraction::economy::AccountShortfall<AccountId, A, N>}::missing]:
+    Source: 'verification/../src/economy.rs', lines 203:4-205:5
+    Visibility: public -/
+def economy.AccountShortfall.impl.missing
+  {AccountId : Type _} {A : Type _} {N : Type _}
+  (self : economy.AccountShortfall AccountId A N) :
+  Result (basket.Basket A N)
+  := do
+  ok self.missing
+
 /-- [account_extraction::economy::{account_extraction::economy::AccountShortfall<AccountId, A, N>}::new]:
     Source: 'verification/../src/economy.rs', lines 207:4-209:5 -/
 def economy.AccountShortfall.new
@@ -1653,6 +1867,24 @@ def economy.AccountShortfall.new
   Result (economy.AccountShortfall AccountId A N)
   := do
   ok { account, missing }
+
+/-- [account_extraction::economy::{account_extraction::economy::ExchangeAssessment<AccountId, A, RateId, Role, N, Clause0_SignedMeasure>}::status]:
+    Source: 'verification/../src/economy.rs', lines 246:4-252:5
+    Visibility: public -/
+def economy.ExchangeAssessment.status
+  {AccountId : Type _} {A : Type _} {RateId : Type _} {Role : Type _} {N :
+  Type _} {Clause0_SignedMeasure : Type _} (quantityQuantityScalarInst :
+  quantity.QuantityScalar N Clause0_SignedMeasure)
+  (self : economy.ExchangeAssessment AccountId A RateId Role N
+  Clause0_SignedMeasure) :
+  Result economy.AssessmentStatus
+  := do
+  match self with
+  | economy.ExchangeAssessment.Applicable _ _ =>
+    ok economy.AssessmentStatus.Applicable
+  | economy.ExchangeAssessment.Infeasible _ _ =>
+    ok economy.AssessmentStatus.Infeasible
+  | economy.ExchangeAssessment.Invalid _ => ok economy.AssessmentStatus.Invalid
 
 /-- [account_extraction::economy::{account_extraction::economy::ExchangeAssessment<AccountId, A, RateId, Role, N, Clause0_SignedMeasure>}::is_applicable]:
     Source: 'verification/../src/economy.rs', lines 254:4-256:5
@@ -1669,6 +1901,101 @@ def economy.ExchangeAssessment.is_applicable
   | economy.ExchangeAssessment.Applicable _ _ => ok true
   | economy.ExchangeAssessment.Infeasible _ _ => ok false
   | economy.ExchangeAssessment.Invalid _ => ok false
+
+/-- [account_extraction::economy::{account_extraction::economy::ExchangeAssessment<AccountId, A, RateId, Role, N, Clause0_SignedMeasure>}::accounts]:
+    Source: 'verification/../src/economy.rs', lines 258:4-263:5
+    Visibility: public -/
+def economy.ExchangeAssessment.accounts
+  {AccountId : Type _} {A : Type _} {RateId : Type _} {Role : Type _} {N :
+  Type _} {Clause0_SignedMeasure : Type _} (quantityQuantityScalarInst :
+  quantity.QuantityScalar N Clause0_SignedMeasure)
+  (self : economy.ExchangeAssessment AccountId A RateId Role N
+  Clause0_SignedMeasure) :
+  Result (Slice (economy.AccountAssessment AccountId A N))
+  := do
+  match self with
+  | economy.ExchangeAssessment.Applicable accounts _ =>
+    ok (alloc.vec.Vec.deref accounts)
+  | economy.ExchangeAssessment.Infeasible accounts _ =>
+    ok (alloc.vec.Vec.deref accounts)
+  | economy.ExchangeAssessment.Invalid _ =>
+    ok (Array.to_slice
+      (Std.Array.empty (economy.AccountAssessment AccountId A N)))
+
+/-- [account_extraction::economy::{account_extraction::economy::ExchangeAssessment<AccountId, A, RateId, Role, N, Clause0_SignedMeasure>}::shortfalls]:
+    Source: 'verification/../src/economy.rs', lines 274:4-279:5
+    Visibility: public -/
+def economy.ExchangeAssessment.shortfalls
+  {AccountId : Type _} {A : Type _} {RateId : Type _} {Role : Type _} {N :
+  Type _} {Clause0_SignedMeasure : Type _} (quantityQuantityScalarInst :
+  quantity.QuantityScalar N Clause0_SignedMeasure)
+  (self : economy.ExchangeAssessment AccountId A RateId Role N
+  Clause0_SignedMeasure) :
+  Result (Slice (economy.AccountShortfall AccountId A N))
+  := do
+  match self with
+  | economy.ExchangeAssessment.Applicable _ _ =>
+    ok (Array.to_slice
+      (Std.Array.empty (economy.AccountShortfall AccountId A N)))
+  | economy.ExchangeAssessment.Infeasible _ shortfalls =>
+    ok (alloc.vec.Vec.deref shortfalls)
+  | economy.ExchangeAssessment.Invalid _ =>
+    ok (Array.to_slice
+      (Std.Array.empty (economy.AccountShortfall AccountId A N)))
+
+/-- [account_extraction::economy::{account_extraction::economy::ExchangeAssessment<AccountId, A, RateId, Role, N, Clause0_SignedMeasure>}::projected_deltas]:
+    Source: 'verification/../src/economy.rs', lines 291:4-298:5
+    Visibility: public -/
+def economy.ExchangeAssessment.projected_deltas
+  {AccountId : Type _} {A : Type _} {RateId : Type _} {Role : Type _} {N :
+  Type _} {Clause0_SignedMeasure : Type _} (quantityQuantityScalarInst :
+  quantity.QuantityScalar N Clause0_SignedMeasure)
+  (self : economy.ExchangeAssessment AccountId A RateId Role N
+  Clause0_SignedMeasure) :
+  Result (Option (Slice (exchange.AccountDelta AccountId A N)))
+  := do
+  match self with
+  | economy.ExchangeAssessment.Applicable _ projected_deltas =>
+    let s := alloc.vec.Vec.deref projected_deltas
+    ok (some s)
+  | economy.ExchangeAssessment.Infeasible _ _ => ok none
+  | economy.ExchangeAssessment.Invalid _ => ok none
+
+/-- [account_extraction::economy::{account_extraction::economy::ExchangeAssessment<AccountId, A, RateId, Role, N, Clause0_SignedMeasure>}::issues]:
+    Source: 'verification/../src/economy.rs', lines 300:4-305:5
+    Visibility: public -/
+def economy.ExchangeAssessment.issues
+  {AccountId : Type _} {A : Type _} {RateId : Type _} {Role : Type _} {N :
+  Type _} {Clause0_SignedMeasure : Type _} (quantityQuantityScalarInst :
+  quantity.QuantityScalar N Clause0_SignedMeasure)
+  (self : economy.ExchangeAssessment AccountId A RateId Role N
+  Clause0_SignedMeasure) :
+  Result (Slice (economy.ApplyError RateId Role AccountId A N
+    Clause0_SignedMeasure))
+  := do
+  match self with
+  | economy.ExchangeAssessment.Applicable _ _ =>
+    ok (Array.to_slice
+      (Std.Array.empty
+        (economy.ApplyError
+        RateId
+        Role
+        AccountId
+        A
+        N
+        Clause0_SignedMeasure)))
+  | economy.ExchangeAssessment.Infeasible _ _ =>
+    ok (Array.to_slice
+      (Std.Array.empty
+        (economy.ApplyError
+        RateId
+        Role
+        AccountId
+        A
+        N
+        Clause0_SignedMeasure)))
+  | economy.ExchangeAssessment.Invalid issues =>
+    ok (alloc.vec.Vec.deref issues)
 
 /-- [account_extraction::economy::{account_extraction::economy::EconomyBuilder<AccountId, A, RateId, Role, N>}::new]:
     Source: 'verification/../src/economy.rs', lines 321:4-328:5
@@ -1854,6 +2181,16 @@ def economy.EconomyBuilder.Insts.CoreDefaultDefault.default
   := do
   economy.EconomyBuilder.new A Role N corecmpEqInst corehashHashInst
     corecmpEqInst1 corehashHashInst1
+
+/-- [account_extraction::economy::{account_extraction::economy::ModelBuildError<AccountId, RateId>}::issues]:
+    Source: 'verification/../src/economy.rs', lines 395:4-397:5
+    Visibility: public -/
+def economy.ModelBuildError.impl.issues
+  {AccountId : Type _} {RateId : Type _}
+  (self : economy.ModelBuildError AccountId RateId) :
+  Result (Slice (economy.ModelIssue AccountId RateId))
+  := do
+  ok (alloc.vec.Vec.deref self.issues)
 
 /-- [account_extraction::economy::{account_extraction::economy::Economy<AccountId, A, RateId, Role, N>}::account]:
     Source: 'verification/../src/economy.rs', lines 513:4-518:5
@@ -6367,6 +6704,95 @@ def economy.EconomicView.observation_key
     corehashHashInst2 corecmpOrdInst2 corecloneCloneInst3 corecmpOrdInst3
     quantityQuantityScalarInst self.economy self.visible
 
+/-- [account_extraction::exchange::{account_extraction::exchange::Exchange<RateId, Role, AccountId, N>}::new]:
+    Source: 'verification/../src/exchange.rs', lines 34:4-41:5
+    Visibility: public -/
+def exchange.Exchange.new
+  {RateId : Type _} {Role : Type _} (AccountId : Type _) {N : Type _}
+  (corecmpOrdInst : core.cmp.Ord Role) (rate : RateId)
+  (units : quantity.Quantity N) :
+  Result (exchange.Exchange RateId Role AccountId N)
+  := do
+  let bm ← alloc.collections.btree.map.BTreeMapKVGlobal.new Role AccountId
+  let bm1 ←
+    alloc.collections.btree.map.BTreeMapKVGlobal.new String (quantity.Quantity
+      N)
+  ok { rate, bindings := bm, units, parameters := bm1 }
+
+/-- [account_extraction::exchange::{account_extraction::exchange::Exchange<RateId, Role, AccountId, N>}::bind]:
+    Source: 'verification/../src/exchange.rs', lines 43:4-46:5
+    Visibility: public -/
+def exchange.Exchange.bind
+  {RateId : Type _} {Role : Type _} {AccountId : Type _} {N : Type _}
+  (corecmpOrdInst : core.cmp.Ord Role)
+  (self : exchange.Exchange RateId Role AccountId N) (role : Role)
+  (account : AccountId) :
+  Result (exchange.Exchange RateId Role AccountId N)
+  := do
+  let (_, bm) ←
+    alloc.collections.btree.map.BTreeMap.insert
+      alloc.alloc.Global.Insts.CoreAllocAllocatorClone corecmpOrdInst
+      self.bindings role account
+  ok { self with bindings := bm }
+
+/-- [account_extraction::exchange::{account_extraction::exchange::Exchange<RateId, Role, AccountId, N>}::parameter]:
+    Source: 'verification/../src/exchange.rs', lines 53:4-56:5
+    Visibility: public -/
+def exchange.Exchange.parameter
+  {RateId : Type _} {Role : Type _} {AccountId : Type _} {N : Type _} {T4 :
+  Type _} (corecmpOrdInst : core.cmp.Ord Role) (coreconvertIntoT4StringInst :
+  core.convert.Into T4 String)
+  (self : exchange.Exchange RateId Role AccountId N) («name» : T4)
+  (value : quantity.Quantity N) :
+  Result (exchange.Exchange RateId Role AccountId N)
+  := do
+  let s ← coreconvertIntoT4StringInst.into «name»
+  let (_, bm) ←
+    alloc.collections.btree.map.BTreeMap.insert
+      alloc.alloc.Global.Insts.CoreAllocAllocatorClone
+      alloc.string.String.Insts.CoreCmpOrd self.parameters s value
+  ok { self with parameters := bm }
+
+/-- [account_extraction::exchange::{account_extraction::exchange::AccountDelta<AccountId, A, N>}::account]:
+    Source: 'verification/../src/exchange.rs', lines 88:4-90:5
+    Visibility: public -/
+def exchange.AccountDelta.impl.account
+  {AccountId : Type _} {A : Type _} {N : Type _}
+  (self : exchange.AccountDelta AccountId A N) :
+  Result AccountId
+  := do
+  ok self.account
+
+/-- [account_extraction::exchange::{account_extraction::exchange::AccountDelta<AccountId, A, N>}::preserved]:
+    Source: 'verification/../src/exchange.rs', lines 100:4-102:5
+    Visibility: public -/
+def exchange.AccountDelta.impl.preserved
+  {AccountId : Type _} {A : Type _} {N : Type _}
+  (self : exchange.AccountDelta AccountId A N) :
+  Result (basket.Basket A N)
+  := do
+  ok self.preserved
+
+/-- [account_extraction::exchange::{account_extraction::exchange::Receipt<RateId, Role, AccountId, A, N>}::exchange]:
+    Source: 'verification/../src/exchange.rs', lines 148:4-150:5
+    Visibility: public -/
+def exchange.Receipt.exchange
+  {RateId : Type _} {Role : Type _} {AccountId : Type _} {A : Type _} {N :
+  Type _} (self : exchange.Receipt RateId Role AccountId A N) :
+  Result (exchange.Exchange RateId Role AccountId N)
+  := do
+  ok self.proposal
+
+/-- [account_extraction::exchange::{account_extraction::exchange::Receipt<RateId, Role, AccountId, A, N>}::deltas]:
+    Source: 'verification/../src/exchange.rs', lines 152:4-154:5
+    Visibility: public -/
+def exchange.Receipt.impl.deltas
+  {RateId : Type _} {Role : Type _} {AccountId : Type _} {A : Type _} {N :
+  Type _} (self : exchange.Receipt RateId Role AccountId A N) :
+  Result (Slice (exchange.AccountDelta AccountId A N))
+  := do
+  ok (alloc.vec.Vec.deref self.deltas)
+
 /-- [account_extraction::exchange::{account_extraction::exchange::Trace<RateId, Role, AccountId, N>}::new]:
     Source: 'verification/../src/exchange.rs', lines 174:4-178:5
     Visibility: public -/
@@ -6481,6 +6907,163 @@ def U64.Insts.Account_extractionQuantityQuantityScalarI128 :
   checked_weighted :=
     U64.Insts.Account_extractionQuantityQuantityScalarI128.checked_weighted
 }
+
+/-- [account_extraction::quantity::{account_extraction::quantity::Quantity<u64>}::new]:
+    Source: 'verification/../src/quantity.rs', lines 96:4-98:5
+    Visibility: public -/
+def quantity.QuantityU64.new
+  (value : Std.U64) : Result (quantity.Quantity Std.U64) := do
+  ok value
+
+/-- [account_extraction::quantity::{account_extraction::quantity::Quantity<u64>}::get]:
+    Source: 'verification/../src/quantity.rs', lines 100:4-102:5
+    Visibility: public -/
+def quantity.QuantityU64.get
+  (self : quantity.Quantity Std.U64) : Result Std.U64 := do
+  ok self
+
+/-- [account_extraction::quantity::{account_extraction::quantity::Quantity<N>}::into_scalar]:
+    Source: 'verification/../src/quantity.rs', lines 122:4-124:5
+    Visibility: public -/
+def quantity.Quantity.into_scalar
+  {N : Type _} {Clause0_SignedMeasure : Type _} (QuantityScalarInst :
+  quantity.QuantityScalar N Clause0_SignedMeasure) (self : quantity.Quantity N)
+  :
+  Result N
+  := do
+  ok self
+
+/-- [account_extraction::quantity::{impl core::convert::From<u64> for account_extraction::quantity::Quantity<u64>}::from]:
+    Source: 'verification/../src/quantity.rs', lines 170:4-172:5
+    Visibility: public -/
+def quantity.QuantityU64.Insts.CoreConvertFromU64.from
+  (value : Std.U64) : Result (quantity.Quantity Std.U64) := do
+  quantity.QuantityU64.new value
+
+/-- [account_extraction::quantity::{impl core::convert::From<u32> for account_extraction::quantity::Quantity<u64>}::from]:
+    Source: 'verification/../src/quantity.rs', lines 176:4-178:5
+    Visibility: public -/
+def quantity.QuantityU64.Insts.CoreConvertFromU32.from
+  (value : Std.U32) : Result (quantity.Quantity Std.U64) := do
+  let i ← lift (core.convert.num.FromU64U32.from value)
+  quantity.QuantityU64.new i
+
+/-- [account_extraction::rate::{account_extraction::rate::QuantityExpression<Role, A, u64>}::constant]:
+    Source: 'verification/../src/rate.rs', lines 66:4-70:5
+    Visibility: public -/
+def rate.QuantityExpressionRoleAU64.constant
+  (Role : Type _) (A : Type _) (value : Std.U64) :
+  Result (rate.QuantityExpression Role A Std.U64)
+  := do
+  let q ← quantity.QuantityU64.new value
+  ok (rate.QuantityExpression.Constant q)
+
+/-- [account_extraction::rate::{impl core::ops::arith::Add<account_extraction::rate::QuantityExpression<Role, A, N>, account_extraction::rate::QuantityExpression<Role, A, N>> for account_extraction::rate::QuantityExpression<Role, A, N>}::add]:
+    Source: 'verification/../src/rate.rs', lines 76:4-81:5
+    Visibility: public -/
+def
+  rate.QuantityExpression.Insts.CoreOpsArithAddQuantityExpressionQuantityExpression.add
+  {Role : Type _} {A : Type _} {N : Type _}
+  (self : rate.QuantityExpression Role A N)
+  (right : rate.QuantityExpression Role A N) :
+  Result (rate.QuantityExpression Role A N)
+  := do
+  ok (rate.QuantityExpression.Add self right)
+
+/-- [account_extraction::rate::{account_extraction::rate::QuantityExpression<Role, A, N>}::units]:
+    Source: 'verification/../src/rate.rs', lines 85:4-87:5
+    Visibility: public -/
+def rate.QuantityExpression.units
+  (Role : Type _) (A : Type _) (N : Type _) :
+  Result (rate.QuantityExpression Role A N)
+  := do
+  ok rate.QuantityExpression.Units
+
+/-- [account_extraction::rate::{account_extraction::rate::QuantityExpression<Role, A, N>}::parameter]:
+    Source: 'verification/../src/rate.rs', lines 89:4-91:5
+    Visibility: public -/
+def rate.QuantityExpression.parameter
+  (Role : Type _) (A : Type _) (N : Type _) {T3 : Type _}
+  (coreconvertIntoT3StringInst : core.convert.Into T3 String) («name» : T3) :
+  Result (rate.QuantityExpression Role A N)
+  := do
+  let s ← coreconvertIntoT3StringInst.into «name»
+  ok (rate.QuantityExpression.Parameter s)
+
+/-- [account_extraction::rate::{account_extraction::rate::QuantityExpression<Role, A, N>}::balance]:
+    Source: 'verification/../src/rate.rs', lines 93:4-95:5
+    Visibility: public -/
+def rate.QuantityExpression.balance
+  {Role : Type _} {A : Type _} (N : Type _) (role : Role) (asset : A) :
+  Result (rate.QuantityExpression Role A N)
+  := do
+  ok (rate.QuantityExpression.Balance role asset)
+
+/-- [account_extraction::rate::{account_extraction::rate::QuantityExpression<Role, A, N>}::plus]:
+    Source: 'verification/../src/rate.rs', lines 97:4-102:5
+    Visibility: public -/
+def rate.QuantityExpression.plus
+  {Role : Type _} {A : Type _} {N : Type _}
+  (left : rate.QuantityExpression Role A N)
+  (right : rate.QuantityExpression Role A N) :
+  Result (rate.QuantityExpression Role A N)
+  := do
+  ok (rate.QuantityExpression.Add left right)
+
+/-- [account_extraction::rate::{account_extraction::rate::QuantityExpression<Role, A, N>}::subtract]:
+    Source: 'verification/../src/rate.rs', lines 104:4-109:5
+    Visibility: public -/
+def rate.QuantityExpression.subtract
+  {Role : Type _} {A : Type _} {N : Type _}
+  (left : rate.QuantityExpression Role A N)
+  (right : rate.QuantityExpression Role A N) :
+  Result (rate.QuantityExpression Role A N)
+  := do
+  ok (rate.QuantityExpression.Subtract left right)
+
+/-- [account_extraction::rate::{account_extraction::rate::QuantityExpression<Role, A, N>}::multiply]:
+    Source: 'verification/../src/rate.rs', lines 111:4-116:5
+    Visibility: public -/
+def rate.QuantityExpression.multiply
+  {Role : Type _} {A : Type _} {N : Type _}
+  (left : rate.QuantityExpression Role A N)
+  (right : rate.QuantityExpression Role A N) :
+  Result (rate.QuantityExpression Role A N)
+  := do
+  ok (rate.QuantityExpression.Multiply left right)
+
+/-- [account_extraction::rate::{account_extraction::rate::QuantityExpression<Role, A, N>}::divide_floor]:
+    Source: 'verification/../src/rate.rs', lines 118:4-123:5
+    Visibility: public -/
+def rate.QuantityExpression.divide_floor
+  {Role : Type _} {A : Type _} {N : Type _}
+  (numerator : rate.QuantityExpression Role A N)
+  (denominator : rate.QuantityExpression Role A N) :
+  Result (rate.QuantityExpression Role A N)
+  := do
+  ok (rate.QuantityExpression.DivideFloor numerator denominator)
+
+/-- [account_extraction::rate::{account_extraction::rate::QuantityExpression<Role, A, N>}::minimum]:
+    Source: 'verification/../src/rate.rs', lines 125:4-130:5
+    Visibility: public -/
+def rate.QuantityExpression.minimum
+  {Role : Type _} {A : Type _} {N : Type _}
+  (left : rate.QuantityExpression Role A N)
+  (right : rate.QuantityExpression Role A N) :
+  Result (rate.QuantityExpression Role A N)
+  := do
+  ok (rate.QuantityExpression.Minimum left right)
+
+/-- [account_extraction::rate::{account_extraction::rate::QuantityExpression<Role, A, N>}::maximum]:
+    Source: 'verification/../src/rate.rs', lines 132:4-137:5
+    Visibility: public -/
+def rate.QuantityExpression.maximum
+  {Role : Type _} {A : Type _} {N : Type _}
+  (left : rate.QuantityExpression Role A N)
+  (right : rate.QuantityExpression Role A N) :
+  Result (rate.QuantityExpression Role A N)
+  := do
+  ok (rate.QuantityExpression.Maximum left right)
 
 /-- [account_extraction::rate::{account_extraction::rate::QuantityExpression<Role, A, N>}::collect_roles]:
     Source: 'verification/../src/rate.rs', lines 139:4-164:5 -/
@@ -8191,5 +8774,668 @@ def key_balances
     Visibility: public -/
 def fingerprint_get (value : economy.StateFingerprint) : Result Std.U64 := do
   economy.StateFingerprint.get value
+
+/-- [account_extraction::amount_new]:
+    Source: 'verification/extract_account.rs', lines 568:0-570:1
+    Visibility: public -/
+def amount_new
+  {A : Type _} {N : Type _} (asset : A) (value : quantity.Quantity N) :
+  Result (amount.AssetAmount A N)
+  := do
+  amount.AssetAmount.new asset value
+
+/-- [account_extraction::amount_asset]:
+    Source: 'verification/extract_account.rs', lines 572:0-574:1
+    Visibility: public -/
+def amount_asset
+  {A : Type _} {N : Type _} (value : amount.AssetAmount A N) : Result A := do
+  amount.AssetAmount.impl.asset value
+
+/-- [account_extraction::amount_quantity]:
+    Source: 'verification/extract_account.rs', lines 576:0-578:1
+    Visibility: public -/
+def amount_quantity
+  {A : Type _} {N : Type _} (value : amount.AssetAmount A N) :
+  Result (quantity.Quantity N)
+  := do
+  amount.AssetAmount.impl.quantity value
+
+/-- [account_extraction::amount_parts]:
+    Source: 'verification/extract_account.rs', lines 580:0-582:1
+    Visibility: public -/
+def amount_parts
+  {A : Type _} {N : Type _} (value : amount.AssetAmount A N) :
+  Result (A × (quantity.Quantity N))
+  := do
+  amount.AssetAmount.into_parts value
+
+/-- [account_extraction::amount_from_pair]:
+    Source: 'verification/extract_account.rs', lines 584:0-586:1
+    Visibility: public -/
+def amount_from_pair
+  {A : Type _} {N : Type _} (parts : (A × (quantity.Quantity N))) :
+  Result (amount.AssetAmount A N)
+  := do
+  amount.AssetAmount.Insts.CoreConvertFromPairAQuantity.from parts
+
+/-- [account_extraction::amount_to_pair]:
+    Source: 'verification/extract_account.rs', lines 588:0-590:1
+    Visibility: public -/
+def amount_to_pair
+  {A : Type _} {N : Type _} (value : amount.AssetAmount A N) :
+  Result (A × (quantity.Quantity N))
+  := do
+  core.convert.IntoFrom.into (PairAQuantity.Insts.CoreConvertFromAssetAmount A
+    N) value
+
+/-- [account_extraction::quantity_new]:
+    Source: 'verification/extract_account.rs', lines 592:0-594:1
+    Visibility: public -/
+def quantity_new (value : Std.U64) : Result (quantity.Quantity Std.U64) := do
+  quantity.QuantityU64.new value
+
+/-- [account_extraction::quantity_get]:
+    Source: 'verification/extract_account.rs', lines 596:0-598:1
+    Visibility: public -/
+def quantity_get (value : quantity.Quantity Std.U64) : Result Std.U64 := do
+  quantity.QuantityU64.get value
+
+/-- [account_extraction::quantity_from_u64]:
+    Source: 'verification/extract_account.rs', lines 600:0-602:1
+    Visibility: public -/
+def quantity_from_u64
+  (value : Std.U64) : Result (quantity.Quantity Std.U64) := do
+  quantity.QuantityU64.Insts.CoreConvertFromU64.from value
+
+/-- [account_extraction::quantity_from_u32]:
+    Source: 'verification/extract_account.rs', lines 604:0-606:1
+    Visibility: public -/
+def quantity_from_u32
+  (value : Std.U32) : Result (quantity.Quantity Std.U64) := do
+  quantity.QuantityU64.Insts.CoreConvertFromU32.from value
+
+/-- [account_extraction::quantity_validate]:
+    Source: 'verification/extract_account.rs', lines 608:0-612:1
+    Visibility: public -/
+def quantity_validate
+  {N : Type _} {Clause0_SignedMeasure : Type _} (quantityQuantityScalarInst :
+  quantity.QuantityScalar N Clause0_SignedMeasure) (value : N) :
+  Result (core.result.Result (quantity.Quantity N) quantity.QuantityError)
+  := do
+  quantity.Quantity.try_from_scalar quantityQuantityScalarInst value
+
+/-- [account_extraction::quantity_borrow]:
+    Source: 'verification/extract_account.rs', lines 614:0-616:1
+    Visibility: public -/
+def quantity_borrow
+  {N : Type _} {Clause0_SignedMeasure : Type _} (quantityQuantityScalarInst :
+  quantity.QuantityScalar N Clause0_SignedMeasure)
+  (value : quantity.Quantity N) :
+  Result N
+  := do
+  quantity.Quantity.as_scalar quantityQuantityScalarInst value
+
+/-- [account_extraction::quantity_consume]:
+    Source: 'verification/extract_account.rs', lines 618:0-620:1
+    Visibility: public -/
+def quantity_consume
+  {N : Type _} {Clause0_SignedMeasure : Type _} (quantityQuantityScalarInst :
+  quantity.QuantityScalar N Clause0_SignedMeasure)
+  (value : quantity.Quantity N) :
+  Result N
+  := do
+  quantity.Quantity.into_scalar quantityQuantityScalarInst value
+
+/-- [account_extraction::account_new]:
+    Source: 'verification/extract_account.rs', lines 622:0-624:1
+    Visibility: public -/
+def account_new
+  {A : Type _} {N : Type _} (assets : basket.Basket A N) :
+  Result (account.Account A N)
+  := do
+  account.Account.new assets
+
+/-- [account_extraction::account_default]:
+    Source: 'verification/extract_account.rs', lines 626:0-628:1
+    Visibility: public -/
+def account_default
+  (A : Type _) (N : Type _) : Result (account.Account A N) := do
+  account.Account.Insts.CoreDefaultDefault.default A N
+
+/-- [account_extraction::account_from_basket]:
+    Source: 'verification/extract_account.rs', lines 630:0-632:1
+    Visibility: public -/
+def account_from_basket
+  {A : Type _} {N : Type _} (assets : basket.Basket A N) :
+  Result (account.Account A N)
+  := do
+  account.Account.Insts.CoreConvertFromBasket.from assets
+
+/-- [account_extraction::account_into_basket]:
+    Source: 'verification/extract_account.rs', lines 634:0-636:1
+    Visibility: public -/
+def account_into_basket
+  {A : Type _} {N : Type _} (holder : account.Account A N) :
+  Result (basket.Basket A N)
+  := do
+  account.Account.into_balances holder
+
+/-- [account_extraction::account_borrow_basket]:
+    Source: 'verification/extract_account.rs', lines 638:0-640:1
+    Visibility: public -/
+def account_borrow_basket
+  {A : Type _} {N : Type _} (holder : account.Account A N) :
+  Result (basket.Basket A N)
+  := do
+  account.Account.impl.balances holder
+
+/-- [account_extraction::account_equal]:
+    Source: 'verification/extract_account.rs', lines 642:0-644:1
+    Visibility: public -/
+def account_equal
+  {A : Type _} (corecmpEqInst : core.cmp.Eq A) (corehashHashInst :
+  core.hash.Hash A) (left : account.Account A Std.U64)
+  (right : account.Account A Std.U64) :
+  Result Bool
+  := do
+  account.Account.Insts.CoreCmpPartialEqAccount.eq corecmpEqInst
+    corehashHashInst core.cmp.PartialEqU64 left right
+
+/-- [account_extraction::proposal_new]:
+    Source: 'verification/extract_account.rs', lines 646:0-651:1
+    Visibility: public -/
+def proposal_new
+  {RateId : Type _} {Role : Type _} (AccountId : Type _) {N : Type _}
+  (corecmpOrdInst : core.cmp.Ord Role) (rate_id : RateId)
+  (units : quantity.Quantity N) :
+  Result (exchange.Exchange RateId Role AccountId N)
+  := do
+  exchange.Exchange.new AccountId corecmpOrdInst rate_id units
+
+/-- [account_extraction::proposal_bind]:
+    Source: 'verification/extract_account.rs', lines 653:0-659:1
+    Visibility: public -/
+def proposal_bind
+  {RateId : Type _} {Role : Type _} {AccountId : Type _} {N : Type _}
+  (corecmpOrdInst : core.cmp.Ord Role)
+  (proposal : exchange.Exchange RateId Role AccountId N) (role : Role)
+  (holder : AccountId) :
+  Result (exchange.Exchange RateId Role AccountId N)
+  := do
+  exchange.Exchange.bind corecmpOrdInst proposal role holder
+
+/-- [account_extraction::proposal_parameter]:
+    Source: 'verification/extract_account.rs', lines 661:0-667:1
+    Visibility: public -/
+def proposal_parameter
+  {RateId : Type _} {Role : Type _} {AccountId : Type _} {N : Type _}
+  (corecmpOrdInst : core.cmp.Ord Role)
+  (proposal : exchange.Exchange RateId Role AccountId N) («name» : String)
+  (value : quantity.Quantity N) :
+  Result (exchange.Exchange RateId Role AccountId N)
+  := do
+  exchange.Exchange.parameter corecmpOrdInst (core.convert.IntoFrom
+    (core.convert.FromSame String)) proposal «name» value
+
+/-- [account_extraction::proposal_rate]:
+    Source: 'verification/extract_account.rs', lines 669:0-673:1
+    Visibility: public -/
+def proposal_rate
+  {RateId : Type _} {Role : Type _} {AccountId : Type _} {N : Type _}
+  (corecmpOrdInst : core.cmp.Ord Role)
+  (proposal : exchange.Exchange RateId Role AccountId N) :
+  Result RateId
+  := do
+  exchange.Exchange.impl.rate corecmpOrdInst proposal
+
+/-- [account_extraction::proposal_bindings]:
+    Source: 'verification/extract_account.rs', lines 675:0-679:1
+    Visibility: public -/
+def proposal_bindings
+  {RateId : Type _} {Role : Type _} {AccountId : Type _} {N : Type _}
+  (corecmpOrdInst : core.cmp.Ord Role)
+  (proposal : exchange.Exchange RateId Role AccountId N) :
+  Result (alloc.collections.btree.map.BTreeMap Role AccountId
+    alloc.alloc.Global)
+  := do
+  exchange.Exchange.impl.bindings corecmpOrdInst proposal
+
+/-- [account_extraction::proposal_units]:
+    Source: 'verification/extract_account.rs', lines 681:0-685:1
+    Visibility: public -/
+def proposal_units
+  {RateId : Type _} {Role : Type _} {AccountId : Type _} {N : Type _}
+  (corecmpOrdInst : core.cmp.Ord Role)
+  (proposal : exchange.Exchange RateId Role AccountId N) :
+  Result (quantity.Quantity N)
+  := do
+  exchange.Exchange.impl.units corecmpOrdInst proposal
+
+/-- [account_extraction::proposal_parameters]:
+    Source: 'verification/extract_account.rs', lines 687:0-691:1
+    Visibility: public -/
+def proposal_parameters
+  {RateId : Type _} {Role : Type _} {AccountId : Type _} {N : Type _}
+  (corecmpOrdInst : core.cmp.Ord Role)
+  (proposal : exchange.Exchange RateId Role AccountId N) :
+  Result (alloc.collections.btree.map.BTreeMap String (quantity.Quantity N)
+    alloc.alloc.Global)
+  := do
+  exchange.Exchange.impl.parameters corecmpOrdInst proposal
+
+/-- [account_extraction::delta_account]:
+    Source: 'verification/extract_account.rs', lines 693:0-695:1
+    Visibility: public -/
+def delta_account
+  {AccountId : Type _} {A : Type _} {N : Type _}
+  (value : exchange.AccountDelta AccountId A N) :
+  Result AccountId
+  := do
+  exchange.AccountDelta.impl.account value
+
+/-- [account_extraction::delta_consumed]:
+    Source: 'verification/extract_account.rs', lines 697:0-699:1
+    Visibility: public -/
+def delta_consumed
+  {AccountId : Type _} {A : Type _} {N : Type _}
+  (value : exchange.AccountDelta AccountId A N) :
+  Result (basket.Basket A N)
+  := do
+  exchange.AccountDelta.impl.consumed value
+
+/-- [account_extraction::delta_produced]:
+    Source: 'verification/extract_account.rs', lines 701:0-703:1
+    Visibility: public -/
+def delta_produced
+  {AccountId : Type _} {A : Type _} {N : Type _}
+  (value : exchange.AccountDelta AccountId A N) :
+  Result (basket.Basket A N)
+  := do
+  exchange.AccountDelta.impl.produced value
+
+/-- [account_extraction::delta_preserved]:
+    Source: 'verification/extract_account.rs', lines 705:0-707:1
+    Visibility: public -/
+def delta_preserved
+  {AccountId : Type _} {A : Type _} {N : Type _}
+  (value : exchange.AccountDelta AccountId A N) :
+  Result (basket.Basket A N)
+  := do
+  exchange.AccountDelta.impl.preserved value
+
+/-- [account_extraction::receipt_exchange]:
+    Source: 'verification/extract_account.rs', lines 709:0-713:1
+    Visibility: public -/
+def receipt_exchange
+  {RateId : Type _} {Role : Type _} {AccountId : Type _} {A : Type _} {N :
+  Type _} (value : exchange.Receipt RateId Role AccountId A N) :
+  Result (exchange.Exchange RateId Role AccountId N)
+  := do
+  exchange.Receipt.exchange value
+
+/-- [account_extraction::receipt_deltas]:
+    Source: 'verification/extract_account.rs', lines 715:0-719:1
+    Visibility: public -/
+def receipt_deltas
+  {RateId : Type _} {Role : Type _} {AccountId : Type _} {A : Type _} {N :
+  Type _} (value : exchange.Receipt RateId Role AccountId A N) :
+  Result (Slice (exchange.AccountDelta AccountId A N))
+  := do
+  exchange.Receipt.impl.deltas value
+
+/-- [account_extraction::account_assessment_account]:
+    Source: 'verification/extract_account.rs', lines 721:0-725:1
+    Visibility: public -/
+def account_assessment_account
+  {AccountId : Type _} {A : Type _} {N : Type _}
+  (value : economy.AccountAssessment AccountId A N) :
+  Result AccountId
+  := do
+  economy.AccountAssessment.impl.account value
+
+/-- [account_extraction::account_assessment_available]:
+    Source: 'verification/extract_account.rs', lines 727:0-731:1
+    Visibility: public -/
+def account_assessment_available
+  {AccountId : Type _} {A : Type _} {N : Type _}
+  (value : economy.AccountAssessment AccountId A N) :
+  Result (basket.Basket A N)
+  := do
+  economy.AccountAssessment.impl.available value
+
+/-- [account_extraction::account_assessment_required]:
+    Source: 'verification/extract_account.rs', lines 733:0-737:1
+    Visibility: public -/
+def account_assessment_required
+  {AccountId : Type _} {A : Type _} {N : Type _}
+  (value : economy.AccountAssessment AccountId A N) :
+  Result (basket.Basket A N)
+  := do
+  economy.AccountAssessment.impl.required value
+
+/-- [account_extraction::account_assessment_consumed]:
+    Source: 'verification/extract_account.rs', lines 739:0-743:1
+    Visibility: public -/
+def account_assessment_consumed
+  {AccountId : Type _} {A : Type _} {N : Type _}
+  (value : economy.AccountAssessment AccountId A N) :
+  Result (basket.Basket A N)
+  := do
+  economy.AccountAssessment.impl.consumed value
+
+/-- [account_extraction::account_assessment_produced]:
+    Source: 'verification/extract_account.rs', lines 745:0-749:1
+    Visibility: public -/
+def account_assessment_produced
+  {AccountId : Type _} {A : Type _} {N : Type _}
+  (value : economy.AccountAssessment AccountId A N) :
+  Result (basket.Basket A N)
+  := do
+  economy.AccountAssessment.impl.produced value
+
+/-- [account_extraction::account_assessment_preserved]:
+    Source: 'verification/extract_account.rs', lines 751:0-755:1
+    Visibility: public -/
+def account_assessment_preserved
+  {AccountId : Type _} {A : Type _} {N : Type _}
+  (value : economy.AccountAssessment AccountId A N) :
+  Result (basket.Basket A N)
+  := do
+  economy.AccountAssessment.impl.preserved value
+
+/-- [account_extraction::account_shortfall_account]:
+    Source: 'verification/extract_account.rs', lines 757:0-761:1
+    Visibility: public -/
+def account_shortfall_account
+  {AccountId : Type _} {A : Type _} {N : Type _}
+  (value : economy.AccountShortfall AccountId A N) :
+  Result AccountId
+  := do
+  economy.AccountShortfall.impl.account value
+
+/-- [account_extraction::account_shortfall_missing]:
+    Source: 'verification/extract_account.rs', lines 763:0-767:1
+    Visibility: public -/
+def account_shortfall_missing
+  {AccountId : Type _} {A : Type _} {N : Type _}
+  (value : economy.AccountShortfall AccountId A N) :
+  Result (basket.Basket A N)
+  := do
+  economy.AccountShortfall.impl.missing value
+
+/-- [account_extraction::assessment_status]:
+    Source: 'verification/extract_account.rs', lines 769:0-773:1
+    Visibility: public -/
+def assessment_status
+  {AccountId : Type _} {A : Type _} {RateId : Type _} {Role : Type _} {N :
+  Type _} {Clause0_SignedMeasure : Type _} (quantityQuantityScalarInst :
+  quantity.QuantityScalar N Clause0_SignedMeasure)
+  (value : economy.ExchangeAssessment AccountId A RateId Role N
+  Clause0_SignedMeasure) :
+  Result economy.AssessmentStatus
+  := do
+  economy.ExchangeAssessment.status quantityQuantityScalarInst value
+
+/-- [account_extraction::assessment_accounts]:
+    Source: 'verification/extract_account.rs', lines 775:0-779:1
+    Visibility: public -/
+def assessment_accounts
+  {AccountId : Type _} {A : Type _} {RateId : Type _} {Role : Type _} {N :
+  Type _} {Clause0_SignedMeasure : Type _} (quantityQuantityScalarInst :
+  quantity.QuantityScalar N Clause0_SignedMeasure)
+  (value : economy.ExchangeAssessment AccountId A RateId Role N
+  Clause0_SignedMeasure) :
+  Result (Slice (economy.AccountAssessment AccountId A N))
+  := do
+  economy.ExchangeAssessment.accounts quantityQuantityScalarInst value
+
+/-- [account_extraction::assessment_shortfalls]:
+    Source: 'verification/extract_account.rs', lines 781:0-785:1
+    Visibility: public -/
+def assessment_shortfalls
+  {AccountId : Type _} {A : Type _} {RateId : Type _} {Role : Type _} {N :
+  Type _} {Clause0_SignedMeasure : Type _} (quantityQuantityScalarInst :
+  quantity.QuantityScalar N Clause0_SignedMeasure)
+  (value : economy.ExchangeAssessment AccountId A RateId Role N
+  Clause0_SignedMeasure) :
+  Result (Slice (economy.AccountShortfall AccountId A N))
+  := do
+  economy.ExchangeAssessment.shortfalls quantityQuantityScalarInst value
+
+/-- [account_extraction::assessment_projected_deltas]:
+    Source: 'verification/extract_account.rs', lines 787:0-791:1
+    Visibility: public -/
+def assessment_projected_deltas
+  {AccountId : Type _} {A : Type _} {RateId : Type _} {Role : Type _} {N :
+  Type _} {Clause0_SignedMeasure : Type _} (quantityQuantityScalarInst :
+  quantity.QuantityScalar N Clause0_SignedMeasure)
+  (value : economy.ExchangeAssessment AccountId A RateId Role N
+  Clause0_SignedMeasure) :
+  Result (Option (Slice (exchange.AccountDelta AccountId A N)))
+  := do
+  economy.ExchangeAssessment.projected_deltas quantityQuantityScalarInst value
+
+/-- [account_extraction::assessment_issues]:
+    Source: 'verification/extract_account.rs', lines 793:0-797:1
+    Visibility: public -/
+def assessment_issues
+  {AccountId : Type _} {A : Type _} {RateId : Type _} {Role : Type _} {N :
+  Type _} {Clause0_SignedMeasure : Type _} (quantityQuantityScalarInst :
+  quantity.QuantityScalar N Clause0_SignedMeasure)
+  (value : economy.ExchangeAssessment AccountId A RateId Role N
+  Clause0_SignedMeasure) :
+  Result (Slice (economy.ApplyError RateId Role AccountId A N
+    Clause0_SignedMeasure))
+  := do
+  economy.ExchangeAssessment.issues quantityQuantityScalarInst value
+
+/-- [account_extraction::computed_role]:
+    Source: 'verification/extract_account.rs', lines 799:0-801:1
+    Visibility: public -/
+def computed_role
+  {Role : Type _} {A : Type _} {N : Type _}
+  (value : rate.ComputedAmount Role A N) :
+  Result Role
+  := do
+  rate.ComputedAmount.impl.role value
+
+/-- [account_extraction::computed_asset]:
+    Source: 'verification/extract_account.rs', lines 803:0-805:1
+    Visibility: public -/
+def computed_asset
+  {Role : Type _} {A : Type _} {N : Type _}
+  (value : rate.ComputedAmount Role A N) :
+  Result A
+  := do
+  rate.ComputedAmount.impl.asset value
+
+/-- [account_extraction::computed_quantity]:
+    Source: 'verification/extract_account.rs', lines 807:0-811:1
+    Visibility: public -/
+def computed_quantity
+  {Role : Type _} {A : Type _} {N : Type _}
+  (value : rate.ComputedAmount Role A N) :
+  Result (rate.QuantityExpression Role A N)
+  := do
+  rate.ComputedAmount.impl.quantity value
+
+/-- [account_extraction::condition_name]:
+    Source: 'verification/extract_account.rs', lines 813:0-815:1
+    Visibility: public -/
+def condition_name
+  {Role : Type _} {A : Type _} {N : Type _}
+  (value : rate.RateCondition Role A N) :
+  Result Str
+  := do
+  rate.RateCondition.impl.name value
+
+/-- [account_extraction::condition_left]:
+    Source: 'verification/extract_account.rs', lines 817:0-821:1
+    Visibility: public -/
+def condition_left
+  {Role : Type _} {A : Type _} {N : Type _}
+  (value : rate.RateCondition Role A N) :
+  Result (rate.QuantityExpression Role A N)
+  := do
+  rate.RateCondition.impl.left value
+
+/-- [account_extraction::condition_comparison]:
+    Source: 'verification/extract_account.rs', lines 823:0-825:1
+    Visibility: public -/
+def condition_comparison
+  {Role : Type _} {A : Type _} {N : Type _}
+  (value : rate.RateCondition Role A N) :
+  Result rate.QuantityComparison
+  := do
+  rate.RateCondition.impl.comparison value
+
+/-- [account_extraction::condition_right]:
+    Source: 'verification/extract_account.rs', lines 827:0-831:1
+    Visibility: public -/
+def condition_right
+  {Role : Type _} {A : Type _} {N : Type _}
+  (value : rate.RateCondition Role A N) :
+  Result (rate.QuantityExpression Role A N)
+  := do
+  rate.RateCondition.impl.right value
+
+/-- [account_extraction::model_build_error_issues]:
+    Source: 'verification/extract_account.rs', lines 833:0-837:1
+    Visibility: public -/
+def model_build_error_issues
+  {AccountId : Type _} {RateId : Type _}
+  (value : economy.ModelBuildError AccountId RateId) :
+  Result (Slice (economy.ModelIssue AccountId RateId))
+  := do
+  economy.ModelBuildError.impl.issues value
+
+/-- [account_extraction::expression_constant]:
+    Source: 'verification/extract_account.rs', lines 839:0-841:1
+    Visibility: public -/
+def expression_constant
+  (Role : Type _) (A : Type _) (value : Std.U64) :
+  Result (rate.QuantityExpression Role A Std.U64)
+  := do
+  rate.QuantityExpressionRoleAU64.constant Role A value
+
+/-- [account_extraction::expression_units]:
+    Source: 'verification/extract_account.rs', lines 843:0-845:1
+    Visibility: public -/
+def expression_units
+  (Role : Type _) (A : Type _) (N : Type _) :
+  Result (rate.QuantityExpression Role A N)
+  := do
+  rate.QuantityExpression.units Role A N
+
+/-- [account_extraction::expression_balance]:
+    Source: 'verification/extract_account.rs', lines 847:0-849:1
+    Visibility: public -/
+def expression_balance
+  {Role : Type _} {A : Type _} (N : Type _) (role : Role) (asset : A) :
+  Result (rate.QuantityExpression Role A N)
+  := do
+  rate.QuantityExpression.balance N role asset
+
+/-- [account_extraction::expression_parameter]:
+    Source: 'verification/extract_account.rs', lines 851:0-853:1
+    Visibility: public -/
+def expression_parameter
+  (Role : Type _) (A : Type _) (N : Type _) («name» : String) :
+  Result (rate.QuantityExpression Role A N)
+  := do
+  rate.QuantityExpression.parameter Role A N (core.convert.IntoFrom
+    (core.convert.FromSame String)) «name»
+
+/-- [account_extraction::expression_plus]:
+    Source: 'verification/extract_account.rs', lines 855:0-860:1
+    Visibility: public -/
+def expression_plus
+  {Role : Type _} {A : Type _} {N : Type _}
+  (left : rate.QuantityExpression Role A N)
+  (right : rate.QuantityExpression Role A N) :
+  Result (rate.QuantityExpression Role A N)
+  := do
+  rate.QuantityExpression.plus left right
+
+/-- [account_extraction::expression_subtract]:
+    Source: 'verification/extract_account.rs', lines 862:0-867:1
+    Visibility: public -/
+def expression_subtract
+  {Role : Type _} {A : Type _} {N : Type _}
+  (left : rate.QuantityExpression Role A N)
+  (right : rate.QuantityExpression Role A N) :
+  Result (rate.QuantityExpression Role A N)
+  := do
+  rate.QuantityExpression.subtract left right
+
+/-- [account_extraction::expression_multiply]:
+    Source: 'verification/extract_account.rs', lines 869:0-874:1
+    Visibility: public -/
+def expression_multiply
+  {Role : Type _} {A : Type _} {N : Type _}
+  (left : rate.QuantityExpression Role A N)
+  (right : rate.QuantityExpression Role A N) :
+  Result (rate.QuantityExpression Role A N)
+  := do
+  rate.QuantityExpression.multiply left right
+
+/-- [account_extraction::expression_divide_floor]:
+    Source: 'verification/extract_account.rs', lines 876:0-881:1
+    Visibility: public -/
+def expression_divide_floor
+  {Role : Type _} {A : Type _} {N : Type _}
+  (left : rate.QuantityExpression Role A N)
+  (right : rate.QuantityExpression Role A N) :
+  Result (rate.QuantityExpression Role A N)
+  := do
+  rate.QuantityExpression.divide_floor left right
+
+/-- [account_extraction::expression_minimum]:
+    Source: 'verification/extract_account.rs', lines 883:0-888:1
+    Visibility: public -/
+def expression_minimum
+  {Role : Type _} {A : Type _} {N : Type _}
+  (left : rate.QuantityExpression Role A N)
+  (right : rate.QuantityExpression Role A N) :
+  Result (rate.QuantityExpression Role A N)
+  := do
+  rate.QuantityExpression.minimum left right
+
+/-- [account_extraction::expression_maximum]:
+    Source: 'verification/extract_account.rs', lines 890:0-895:1
+    Visibility: public -/
+def expression_maximum
+  {Role : Type _} {A : Type _} {N : Type _}
+  (left : rate.QuantityExpression Role A N)
+  (right : rate.QuantityExpression Role A N) :
+  Result (rate.QuantityExpression Role A N)
+  := do
+  rate.QuantityExpression.maximum left right
+
+/-- [account_extraction::expression_add]:
+    Source: 'verification/extract_account.rs', lines 897:0-902:1
+    Visibility: public -/
+def expression_add
+  {Role : Type _} {A : Type _} {N : Type _}
+  (left : rate.QuantityExpression Role A N)
+  (right : rate.QuantityExpression Role A N) :
+  Result (rate.QuantityExpression Role A N)
+  := do
+  rate.QuantityExpression.Insts.CoreOpsArithAddQuantityExpressionQuantityExpression.add
+    left right
+
+/-- [account_extraction::basket_insert_amount]:
+    Source: 'verification/extract_account.rs', lines 904:0-909:1
+    Visibility: public -/
+def basket_insert_amount
+  {A : Type _} {N : Type _} {Clause2_SignedMeasure : Type _} (corecmpEqInst :
+  core.cmp.Eq A) (corehashHashInst : core.hash.Hash A)
+  (quantityQuantityScalarInst : quantity.QuantityScalar N
+  Clause2_SignedMeasure) (state : basket.Basket A N)
+  (value : amount.AssetAmount A N) :
+  Result ((Option (quantity.Quantity N)) × (basket.Basket A N))
+  := do
+  basket.Basket.insert_amount corecmpEqInst corehashHashInst
+    quantityQuantityScalarInst state value
 
 end Axionomy.AccountExtracted

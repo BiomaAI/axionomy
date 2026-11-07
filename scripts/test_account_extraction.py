@@ -143,6 +143,18 @@ class AccountExtractionTests(unittest.TestCase):
                     validate_generated(self.directory)
         path.write_text(original)
 
+    def test_missing_public_data_definitions_are_rejected(self):
+        path = self.directory / "Funs.lean"
+        original = path.read_text()
+        for definition in ("amount.AssetAmount.new", "exchange.Exchange.bind",
+                           "economy.ExchangeAssessment.status", "rate.QuantityExpression.divide_floor"):
+            with self.subTest(definition=definition):
+                needle = "def " + definition + "\n"
+                self.assertEqual(original.count(needle), 1)
+                path.write_text(original.replace(needle, "def bypass\n"))
+                with self.assertRaisesRegex(ValueError, "missing account production definition"):
+                    validate_generated(self.directory)
+
     def test_new_external_interface_is_rejected(self):
         (self.directory / "FunsExternal_Template.lean").write_text("new dependency")
         with self.assertRaisesRegex(ValueError, "external model boundary changed"):

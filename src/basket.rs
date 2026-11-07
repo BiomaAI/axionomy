@@ -114,8 +114,8 @@ where
         }
     }
 
-    pub fn insert_amount(&mut self, amount: AssetAmount<A, N>) -> Option<Quantity<N>> {
-        let (asset, quantity) = amount.into_parts();
+    pub fn insert_amount(&mut self, value: AssetAmount<A, N>) -> Option<Quantity<N>> {
+        let (asset, quantity) = value.into_parts();
         self.insert(asset, quantity)
     }
 }

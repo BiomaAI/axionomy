@@ -1,21 +1,21 @@
 {
   "version": 1,
-  "assurance": "Partial implementation verification: Aeneas-extracted production u64 arithmetic, basket/account operations, model/rate construction and discovery, complete transaction assessment/application, finite-vector filtering, fork/simulation/ordered replay, goals, finite-vector views, canonical state/observation keys and scoped deterministic fingerprints refine Lean specifications. Explicit collection/Arc/UTF-8/sorting/hashing models, lawful identifier operations, resource bounds, compiler/translation and primitive models remain trusted. Remaining public data APIs, serialization/schema contracts and other numeric backends remain open.",
+  "assurance": "Partial implementation verification: Aeneas-extracted production u64 arithmetic, basket/account operations, model/rate construction and discovery, complete transaction assessment/application, finite-vector filtering, fork/simulation/ordered replay, goals, finite-vector views, canonical state/observation keys and scoped deterministic fingerprints, foundational typed data APIs and expression construction refine Lean specifications. Explicit collection/Arc/UTF-8/sorting/hashing models, lawful identifier operations, resource bounds, compiler/translation and primitive models remain trusted. Remaining public data APIs, serialization/schema contracts and other numeric backends remain open.",
   "sources": {
     "Cargo.toml": "414a2b181e13225e4b76aa58e70d998064174dde2d8cee603ea3af648d61a7f3",
     "Cargo.lock": "00ef263c160aeebaa49187874a4b11ec94fee9bc8fbea5a2f0cacc190607919c",
     "src/account.rs": "0eaf66937c63de2993353828e42fcfea2b80f172f5cb74fc76a28cef79fd9ff6",
-    "src/amount.rs": "4aa0f1432494aac0454890604e3addbd002fa6b9ded1f75f91fce7675540f9ee",
-    "src/basket.rs": "10e7d7792f3b1de207bdae124fd76a8fa5fe93295b1a4eb49455b588941ee5f1",
+    "src/amount.rs": "4c6a0599d4e7697fadb6981b88cc01e832fa6c01a0b33d1b997ba5c5bb1c705d",
+    "src/basket.rs": "e1856f9473b09b6cf361db4058f92e23e93b118fbd0d5be9eeb1125b5622f849",
     "src/economy.rs": "31d3c582bb73a17c2c6b2cd8efbac8bf5f2f0d1bec3a7e9c8a168757e05f54be",
     "src/exchange.rs": "90a0755a4b3f780220ced362dc421364a6c3691d9ce900050cd57b3bbcc4ccc4",
     "src/lib.rs": "46d6f713693714650653128e2ceabf8a895b8ad98a38a7bdbeab4ea378a5cc06",
-    "src/quantity.rs": "af66b8cf86b6ac58cccd4e9fcfb740e06928f86b4bf6117660fb7f37319b97dd",
+    "src/quantity.rs": "246c805344babccb3c1c00371686e098111044a2ce46f456f211de6eb9928364",
     "src/rate.rs": "af545aa57d7668c346cfb9b0aefe3207af23b6443f9f7064ab5b1eaff9210812",
     "verification/extract.rs": "415b34f5f4f8aa2679af860bd2a4092c96e113145919160fe7c81e33836de3e0",
     "verification/aeneas-toolchain.json": "8676d7d11be51a6f41984d874b35910e8a1a3d0a18414998feb9402ef80932fb",
     "verification/extract_basket.rs": "dc2b3a2159704c24a5261d0069a2aac7b575f30a94ae35c4c1e96933638592dd",
-    "verification/extract_account.rs": "c8a1eb64d779d10ec3c98e2248d696eed4b0026e402572d2ab415b947c981255",
+    "verification/extract_account.rs": "b445c53bd3b6a1bbbd5619b7d7502f2212dd67f331fedb8bf57302f1602c6a61",
     "verification/patches/aeneas-namespaced-discriminant.patch": "fabac7482deb3da6ecaca60c4060dfe9d2114efdd010699e736c4a91267f3bc9"
   },
   "features": [
@@ -160,7 +160,7 @@
         "tests/account.rs"
       ],
       "limitations": [
-        "Asset domains remain separate Lean and Rust type parameters. The round-trip theorem is about the Lean structure; Rust conversions are covered by tests and compiler checks."
+        "This original theorem concerns the Lean structure. The separate typed_data_operations contract now proves the actual extracted AssetAmount constructor, accessors and both tuple conversions/round trips. Derived traits and serialization remain separate item 16\u201317 obligations."
       ]
     },
     {
@@ -844,6 +844,107 @@
         "Canonical aggregation, sorted unique affected accounts, existing-account lookup and effect-count bounds are derived from validation and builder invariants; they discharge preflight, preparation and commit obligations. The sorted logical BTreeMap/BTreeSet and ordered IndexMap abstractions, allocator, stable hashing, identity-preserving clones, Rust compiler/MIR, Charon/Aeneas and primitive models remain trusted. New mutable-index adapters panic on absent keys and preserve all other entries; Arc clone exposes the same immutable logical pointee without verifying physical reference counting or copy-on-write.",
         "Filtering refines the public implementation for finite Vec candidates: exact stable filtering including duplicates against one original snapshot, with a successful boolean assessment for every candidate. Arbitrary user-provided iterator behavior, resource allocation, destructor effects, generic numeric laws, BigUint/BigInt, serialization/schema, formatting, other convenience APIs, fork/simulation, replay, observations and canonical keys remain separate contracts. No fingerprint collision-freedom claim is made.",
         "The 596 Lean-generated full-transaction cases check exact assessments, errors, receipts, final account order/state, rejection atomicity, unchanged rates/invariants, and filtering through the public Rust API. Conformance is finite evidence supplementing the general refinement proofs. Mutation controls regenerate compilable production Rust changes and require the semantic proofs to reject them. See verification/ACCOUNTS.md for source refactors and the precise trust boundary."
+      ]
+    },
+    {
+      "id": "typed_data_operations",
+      "status": "aeneas_refinement_proved",
+      "sources": [
+        "src/amount.rs",
+        "src/quantity.rs",
+        "src/account.rs",
+        "src/basket.rs",
+        "src/exchange.rs",
+        "src/economy.rs",
+        "src/rate.rs",
+        "verification/extract_account.rs"
+      ],
+      "extracted_module": "AccountExtraction.Funs",
+      "theorems": [
+        "Axionomy.TypedDataRefinement.quantity_validation",
+        "Axionomy.TypedDataRefinement.quantity_validation_iff",
+        "Axionomy.TypedDataRefinement.checked_validation",
+        "Axionomy.TypedDataRefinement.quantity_new",
+        "Axionomy.TypedDataRefinement.quantity_get",
+        "Axionomy.TypedDataRefinement.quantity_u64_roundtrip",
+        "Axionomy.TypedDataRefinement.quantity_from_u64",
+        "Axionomy.TypedDataRefinement.quantity_from_u32",
+        "Axionomy.TypedDataRefinement.quantity_borrow",
+        "Axionomy.TypedDataRefinement.quantity_consume",
+        "Axionomy.TypedDataRefinement.quantity_default",
+        "Axionomy.TypedDataRefinement.amount_new",
+        "Axionomy.TypedDataRefinement.amount_from_pair",
+        "Axionomy.TypedDataRefinement.amount_to_pair",
+        "Axionomy.TypedDataRefinement.amount_pair_roundtrip",
+        "Axionomy.TypedDataRefinement.amount_value_roundtrip",
+        "Axionomy.TypedDataRefinement.account_new",
+        "Axionomy.TypedDataRefinement.account_default",
+        "Axionomy.TypedDataRefinement.account_roundtrip",
+        "Axionomy.TypedDataRefinement.account_equality",
+        "Axionomy.TypedDataRefinement.insert_amount",
+        "Axionomy.TypedDataRefinement.proposal_new",
+        "Axionomy.TypedDataRefinement.proposal_bind",
+        "Axionomy.TypedDataRefinement.proposal_parameter",
+        "Axionomy.TypedDataRefinement.assessment_accessors",
+        "Axionomy.TypedDataRefinement.condition_name",
+        "Axionomy.TypedDataRefinement.amount_accessors",
+        "Axionomy.TypedDataRefinement.account_accessors",
+        "Axionomy.TypedDataRefinement.delta_accessors",
+        "Axionomy.TypedDataRefinement.receipt_accessors",
+        "Axionomy.TypedDataRefinement.account_assessment_accessors",
+        "Axionomy.TypedDataRefinement.account_shortfall_accessors",
+        "Axionomy.TypedDataRefinement.model_error_accessors",
+        "Axionomy.TypedDataRefinement.computed_accessors",
+        "Axionomy.TypedDataRefinement.condition_accessors",
+        "Axionomy.TypedDataRefinement.proposal_accessors"
+      ],
+      "rust_tests": [
+        "tests/public_data_conformance.rs",
+        "tests/transaction_conformance.rs",
+        "src/quantity.rs"
+      ],
+      "limitations": [
+        "Generic value transport, borrowed/consuming accessors, amount/account round trips, exact u32/u64 conversion and proposal field preservation are proved for the extracted production methods without replacing their distinct identifier or numeric types.",
+        "Quantity validation and checked-result rejection use an explicit independent law for the backend nonnegative predicate. Default uses the backend zero result; this does not establish algebraic validity for an arbitrary QuantityScalar. Account equality and basket insert_amount are specialized to u64 and lawful identifier equality, with map-size bounds for equality.",
+        "Proposal map updates use the reviewed logical sorted-map adapter and comparison/identity laws. Into<String> calls require a separate successful encoding law; arbitrary callback failure/divergence remains an open boundary. Condition names use the explicit UTF-8 adapter and a representable byte-length bound.",
+        "Physical references, allocation, collection storage, compiler/translation and primitive models remain trusted. This is a batch within item 16, not full public API coverage: remaining iterators, rate/invariant/model APIs, convenience-constructor panic behavior and derived equality/hash/formatting contracts remain open. Serialization/schema is item 17; other numeric arithmetic is item 18."
+      ]
+    },
+    {
+      "id": "expression_construction",
+      "status": "aeneas_refinement_proved",
+      "sources": [
+        "src/rate.rs",
+        "src/quantity.rs",
+        "src/economy.rs",
+        "verification/extract_account.rs"
+      ],
+      "extracted_module": "AccountExtraction.Funs",
+      "theorems": [
+        "Axionomy.ExpressionConstructionRefinement.constant",
+        "Axionomy.ExpressionConstructionRefinement.units",
+        "Axionomy.ExpressionConstructionRefinement.balance",
+        "Axionomy.ExpressionConstructionRefinement.parameter",
+        "Axionomy.ExpressionConstructionRefinement.add_operator",
+        "Axionomy.ExpressionConstructionRefinement.construct_refines",
+        "Axionomy.ExpressionConstructionRefinement.decode_encode",
+        "Axionomy.ExpressionConstructionRefinement.evaluate_constructed",
+        "Axionomy.ExpressionConstructionRefinement.plus",
+        "Axionomy.ExpressionConstructionRefinement.subtract",
+        "Axionomy.ExpressionConstructionRefinement.multiply",
+        "Axionomy.ExpressionConstructionRefinement.divide_floor",
+        "Axionomy.ExpressionConstructionRefinement.minimum",
+        "Axionomy.ExpressionConstructionRefinement.maximum"
+      ],
+      "rust_tests": [
+        "tests/public_data_conformance.rs",
+        "tests/transaction_conformance.rs",
+        "tests/lean_conformance.rs"
+      ],
+      "limitations": [
+        "All public expression constructors and the Add operator preserve exact variants, operand order and typed identifiers. The u64 construct_refines and evaluate_constructed theorems compose recursive construction with the actual extracted evaluator and its exact error behavior.",
+        "Nonconstant construction is generic in N. Recursive evaluation remains the u64 implementation contract. Into<String> parameter conversion requires an independent successful encoding law; the composed constructor uses the concrete String identity conversion.",
+        "Box allocation, stack/resource behavior, collections, compiler/translation and primitive models remain dependencies. Tests reconstruct the existing Lean evaluation trees via public Rust constructors; those finite cases supplement the general implementation proofs."
       ]
     }
   ]

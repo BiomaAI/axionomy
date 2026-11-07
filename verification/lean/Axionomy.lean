@@ -72,3 +72,6 @@ import Axionomy.KeyOrdering
 import Axionomy.KeyRefinement
 import Axionomy.FingerprintRefinement
 import Axionomy.ObservationConformance
+import Axionomy.TypedDataRefinement
+import Axionomy.ExpressionConstructionRefinement
+import Axionomy.PublicDataConformance

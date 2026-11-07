@@ -595,3 +595,63 @@ proof gate (281 registered contracts and 3,083 audited Axionomy theorems), all 2
 workspace tests, 80 boundary/gate controls, formatting, Clippy and documentation
 checks. Items 14–15 are validated within the scopes above; items 16–18 remain open
 or partial.
+
+## Typed public data and expression construction
+
+`TypedDataRefinement` proves the extracted `AssetAmount` constructor, accessors
+and both tuple conversions, including round trips in both directions. Quantity
+new/get, u64 conversion, lossless u32 widening, scalar borrow/consume and default
+are explicit contracts. `quantity_validation` and `checked_validation` preserve
+the independent nonnegative predicate supplied by a numeric backend, including
+rejection of invalid checked results. The predicate law is a premise about the
+primitive backend method, not an assumption about the constructor's result.
+It does not establish the full algebraic requirements still tracked in item 18.
+
+The account constructor/default/borrow/consume/conversion contracts preserve the
+entire basket. u64 account equality composes the basket equality proof; it ignores
+entry order for unique entries and requires representable map lengths. Typed
+amount insertion composes the proved store operation, including the old-value
+result, zero removal and the unchanged remaining entries.
+
+Proposal construction preserves the supplied rate identity and units. Binding
+and parameter updates replace only their selected map entry and preserve other
+proposal fields. The sorted-map dependency model retains the stored key on
+overwrite; identifier order must agree with identity. Parameter conversion has an
+independent `Into<String>` encoding law. The composed expression constructor uses
+the concrete String identity conversion. Arbitrary callback failure or divergence
+still needs a separate contract.
+
+Direct contracts cover proposal, receipt, delta, account assessment, shortfall,
+computed amount, rate condition and model-build-error accessors. Assessment
+variants return the exact account/shortfall/issue lists and distinguish absent
+projected deltas from an empty successful list. Borrowed condition names use the
+reviewed UTF-8 model with a representable byte-length bound. Rust's borrowed
+lifetimes and distinct identifier domains remain intact.
+
+`ExpressionConstructionRefinement` covers all public expression constructors and
+the Add operator. `construct_refines` recursively composes the actual extracted
+constructors; `evaluate_constructed` then composes their result with the existing
+evaluator refinement. This proves exact operators, operand order, typed names,
+values and evaluation failures for u64 expression trees. Nonconstant constructors
+and ordinary value accessors remain generic in the numeric representation.
+Allocation, physical references/storage, stack/resource behavior, compilation,
+translation and the existing primitive models remain dependencies.
+
+The extraction adds 65 checked forwarding roots without a new external model.
+Two Rust parameter names change from `amount` to `value` to avoid an Aeneas module
+name collision; types and executable behavior are unchanged. The Lean generator
+adds 18 typed-value/update cases, 120 proposal cases and five signed validation
+cases. Rust also rebuilds both trees in each of the existing 2,210 evaluation
+scenarios through public constructors. The existing transaction conformance bridge
+checks the diagnostic and receipt accessors. Three production mutation controls
+target discarded bindings, a wrong delta accessor and reversed division operands.
+The batch passed the full proof gate with 331 registered contracts (50 new) and
+3,244 audited Axionomy theorems, fresh extraction, all 304 workspace tests,
+83 boundary/gate controls and all three new production mutation controls.
+Formatting, Clippy with warnings denied, documentation and compile-fail doctests
+also passed. The prior 40 production mutation controls remain in CI.
+
+This closes a batch within item 16. It does not close the remaining collection,
+iterator, lookup, rate/invariant/model inspection, derived-trait, formatting or
+convenience-constructor contracts, nor serialization/schema or other numeric
+backend arithmetic.

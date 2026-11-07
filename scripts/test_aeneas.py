@@ -55,6 +55,25 @@ class ExtractionBoundaryTests(unittest.TestCase):
 
 
 class ProductionMutationTests(unittest.TestCase):
+    def test_discarding_proposal_bindings_breaks_public_data(self):
+        self.check_mutation(
+            "src/exchange.rs", "self.bindings.insert(role, account);",
+            "self.bindings.insert(role, account); self.bindings = BTreeMap::new();",
+            "extract_account.py", "stale account model", "TypedDataRefinement", "AccountExtraction")
+
+    def test_wrong_delta_accessor_breaks_public_data(self):
+        self.check_mutation(
+            "src/exchange.rs", "pub fn preserved(&self) -> &Basket<A, N> {\n        &self.preserved",
+            "pub fn preserved(&self) -> &Basket<A, N> {\n        &self.produced",
+            "extract_account.py", "stale account model", "TypedDataRefinement", "AccountExtraction",
+            proof_failure="Application type mismatch")
+
+    def test_swapped_division_operands_break_expression_construction(self):
+        self.check_mutation(
+            "src/rate.rs", "numerator: Box::new(numerator),\n            denominator: Box::new(denominator)",
+            "numerator: Box::new(denominator),\n            denominator: Box::new(numerator)",
+            "extract_account.py", "stale account model", "ExpressionConstructionRefinement", "AccountExtraction")
+
     def test_missing_goal_account_acceptance_breaks_matching(self):
         self.check_mutation(
             "src/economy.rs", "let Some(holder) = self.accounts.get(account_id) else {\n                return false;",

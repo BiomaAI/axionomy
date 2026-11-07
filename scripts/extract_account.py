@@ -42,6 +42,72 @@ VALIDATION_CALL = """let rule = match self.validate_structure(proposal) {
         };"""
 
 ENTRY_CALLS = {
+    "amount_new": "AssetAmount::new(asset,value)",
+    "amount_asset": "value.asset()",
+    "amount_quantity": "value.quantity()",
+    "amount_parts": "value.into_parts()",
+    "amount_from_pair": "AssetAmount::from(parts)",
+    "amount_to_pair": "value.into()",
+    "quantity_new": "Quantity::new(value)",
+    "quantity_get": "value.get()",
+    "quantity_from_u64": "Quantity::from(value)",
+    "quantity_from_u32": "Quantity::from(value)",
+    "quantity_validate": "Quantity::try_from_scalar(value)",
+    "quantity_borrow": "value.as_scalar()",
+    "quantity_consume": "value.into_scalar()",
+    "account_new": "Account::new(assets)",
+    "account_default": "Account::default()",
+    "account_from_basket": "Account::from(assets)",
+    "account_into_basket": "holder.into_balances()",
+    "account_borrow_basket": "holder.balances()",
+    "account_equal": "left==right",
+    "proposal_new": "Exchange::new(rate_id,units)",
+    "proposal_bind": "proposal.bind(role,holder)",
+    "proposal_parameter": "proposal.parameter(name,value)",
+    "proposal_rate": "proposal.rate()",
+    "proposal_bindings": "proposal.bindings()",
+    "proposal_units": "proposal.units()",
+    "proposal_parameters": "proposal.parameters()",
+    "delta_account": "value.account()",
+    "delta_consumed": "value.consumed()",
+    "delta_produced": "value.produced()",
+    "delta_preserved": "value.preserved()",
+    "receipt_exchange": "value.exchange()",
+    "receipt_deltas": "value.deltas()",
+    "account_assessment_account": "value.account()",
+    "account_assessment_available": "value.available()",
+    "account_assessment_required": "value.required()",
+    "account_assessment_consumed": "value.consumed()",
+    "account_assessment_produced": "value.produced()",
+    "account_assessment_preserved": "value.preserved()",
+    "account_shortfall_account": "value.account()",
+    "account_shortfall_missing": "value.missing()",
+    "assessment_status": "value.status()",
+    "assessment_accounts": "value.accounts()",
+    "assessment_shortfalls": "value.shortfalls()",
+    "assessment_projected_deltas": "value.projected_deltas()",
+    "assessment_issues": "value.issues()",
+    "computed_role": "value.role()",
+    "computed_asset": "value.asset()",
+    "computed_quantity": "value.quantity()",
+    "condition_name": "value.name()",
+    "condition_left": "value.left()",
+    "condition_comparison": "value.comparison()",
+    "condition_right": "value.right()",
+    "model_build_error_issues": "value.issues()",
+    "expression_constant": "QuantityExpression::constant(value)",
+    "expression_units": "QuantityExpression::units()",
+    "expression_balance": "QuantityExpression::balance(role,asset)",
+    "expression_parameter": "QuantityExpression::parameter(name)",
+    "expression_plus": "QuantityExpression::plus(left,right)",
+    "expression_subtract": "QuantityExpression::subtract(left,right)",
+    "expression_multiply": "QuantityExpression::multiply(left,right)",
+    "expression_divide_floor": "QuantityExpression::divide_floor(left,right)",
+    "expression_minimum": "QuantityExpression::minimum(left,right)",
+    "expression_maximum": "QuantityExpression::maximum(left,right)",
+    "expression_add": "left+right",
+    "basket_insert_amount": "state.insert_amount(value)",
+
     "goal_new": "economy::Goal::new()",
     "goal_default": "economy::Goal::default()",
     "goal_require": "goal.require(id,assets)",
@@ -110,6 +176,31 @@ ENTRY_CALLS = {
 }
 
 
+PUBLIC_DEFINITIONS = (
+    "amount.AssetAmount.new", "amount.AssetAmount.impl.asset", "amount.AssetAmount.impl.quantity",
+    "amount.AssetAmount.into_parts", "amount.AssetAmount.Insts.CoreConvertFromPairAQuantity.from",
+    "PairAQuantity.Insts.CoreConvertFromAssetAmount.from", "basket.Basket.insert_amount",
+    "quantity.QuantityU64.new", "quantity.QuantityU64.get", "quantity.Quantity.into_scalar",
+    "quantity.QuantityU64.Insts.CoreConvertFromU32.from", "quantity.QuantityU64.Insts.CoreConvertFromU64.from",
+    "account.Account.new", "account.Account.into_balances", "account.Account.Insts.CoreDefaultDefault.default",
+    "account.Account.Insts.CoreConvertFromBasket.from", "account.Account.Insts.CoreCmpPartialEqAccount.eq",
+    "exchange.Exchange.new", "exchange.Exchange.bind", "exchange.Exchange.parameter",
+    "exchange.Receipt.exchange", "exchange.Receipt.impl.deltas", "exchange.AccountDelta.impl.account",
+    "exchange.AccountDelta.impl.preserved", "economy.ModelBuildError.impl.issues",
+    *[f"economy.AccountAssessment.impl.{field}" for field in
+      ("account", "available", "required", "consumed", "produced", "preserved")],
+    "economy.AccountShortfall.impl.account", "economy.AccountShortfall.impl.missing",
+    *[f"economy.ExchangeAssessment.{method}" for method in
+      ("status", "accounts", "shortfalls", "projected_deltas", "issues")],
+    "rate.QuantityExpressionRoleAU64.constant",
+    *[f"rate.QuantityExpression.{method}" for method in
+      ("units", "balance", "parameter", "plus", "subtract", "multiply", "divide_floor", "minimum", "maximum")],
+    "rate.QuantityExpression.Insts.CoreOpsArithAddQuantityExpressionQuantityExpression.add",
+    *[f"rate.ComputedAmount.impl.{field}" for field in ("role", "asset", "quantity")],
+    *[f"rate.RateCondition.impl.{field}" for field in ("name", "left", "comparison", "right")],
+)
+
+
 def validate_bridge(root=ROOT):
     """Require the harness to forward to the unchanged production methods."""
     harness = (root / "verification/extract_account.rs").read_text()
@@ -144,7 +235,7 @@ def validate_generated(directory):
         if re.search(r"\b(sorry|admit|axiom)\b", (directory / name).read_text()):
             raise ValueError(f"unfinished or axiomatic account extraction: {name}")
     functions = (directory / "Funs.lean").read_text()
-    for entry in (*ENTRY_CALLS, "account.Account.prepare_exchange",
+    for entry in (*ENTRY_CALLS, *PUBLIC_DEFINITIONS, "account.Account.prepare_exchange",
                   "account.Account.Insts.CoreCloneClone.clone",
                   "account.Account.deposit", "account.Account.withdraw",
                   "account.Account.deposit_loop.body", "account.Account.withdraw_loop.body",
@@ -198,7 +289,7 @@ def validate_generated(directory):
                   "economy.evaluate_expression", "economy.evaluate_binary", "economy.evaluate_condition",
                   "economy.merge_scaled", "economy.merge_quantity", "economy.ExpressionError.into_message",
                   "U64.Insts.Account_extractionQuantityQuantityScalarI128.checked_weighted"):
-        if not re.search(r"^def " + re.escape(entry) + r"\s", functions, re.MULTILINE):
+        if not re.search(r"^def\s+" + re.escape(entry) + r"\s", functions, re.MULTILINE):
             raise ValueError(f"missing account production definition: {entry}")
 
 
@@ -241,7 +332,7 @@ def check_extraction(write=False):
                      ("--start-from-if-exists", "account_extraction::" + entry)],
                    "--mir", "promoted", "--sysroot", "default",
                    "--include", "account_extraction::account", "--include", "account_extraction::basket",
-                   "--include", "account_extraction::quantity",
+                   "--include", "account_extraction::quantity", "--include", "account_extraction::amount",
                    "--include", "account_extraction::rate", "--include", "account_extraction::exchange",
                    "--include", "account_extraction::economy",
                    "--include", "num_traits", "--opaque", "indexmap",

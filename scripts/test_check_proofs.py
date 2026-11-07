@@ -86,6 +86,20 @@ class CoverageGateTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "no supported extraction pipeline"):
             validate_coverage(self.root, self.coverage)
 
+    def test_incomplete_typed_data_refinement_is_rejected(self):
+        feature = self.coverage["features"][0]
+        feature.update(id="typed_data_operations", status="aeneas_refinement_proved",
+                       extracted_module="AccountExtraction.Funs")
+        with self.assertRaisesRegex(ValueError, "incomplete implementation refinement contract"):
+            validate_coverage(self.root, self.coverage)
+
+    def test_incomplete_expression_construction_is_rejected(self):
+        feature = self.coverage["features"][0]
+        feature.update(id="expression_construction", status="aeneas_refinement_proved",
+                       extracted_module="AccountExtraction.Funs")
+        with self.assertRaisesRegex(ValueError, "incomplete implementation refinement contract"):
+            validate_coverage(self.root, self.coverage)
+
     def test_incomplete_observation_refinement_is_rejected(self):
         feature = self.coverage["features"][0]
         feature.update(id="observations_and_goals", status="aeneas_refinement_proved",

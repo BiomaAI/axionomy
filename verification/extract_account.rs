@@ -562,3 +562,348 @@ pub fn key_balances<AccountId, A>(
 pub fn fingerprint_get(value: economy::StateFingerprint) -> u64 {
     value.get()
 }
+
+// Typed public data boundaries: each root forwards to the production API.
+
+pub fn amount_new<A, N>(asset: A, value: Quantity<N>) -> AssetAmount<A, N> {
+    AssetAmount::new(asset, value)
+}
+
+pub fn amount_asset<A, N>(value: &AssetAmount<A, N>) -> &A {
+    value.asset()
+}
+
+pub fn amount_quantity<A, N>(value: &AssetAmount<A, N>) -> &Quantity<N> {
+    value.quantity()
+}
+
+pub fn amount_parts<A, N>(value: AssetAmount<A, N>) -> (A, Quantity<N>) {
+    value.into_parts()
+}
+
+pub fn amount_from_pair<A, N>(parts: (A, Quantity<N>)) -> AssetAmount<A, N> {
+    AssetAmount::from(parts)
+}
+
+pub fn amount_to_pair<A, N>(value: AssetAmount<A, N>) -> (A, Quantity<N>) {
+    value.into()
+}
+
+pub fn quantity_new(value: u64) -> Quantity {
+    Quantity::new(value)
+}
+
+pub fn quantity_get(value: Quantity) -> u64 {
+    value.get()
+}
+
+pub fn quantity_from_u64(value: u64) -> Quantity {
+    Quantity::from(value)
+}
+
+pub fn quantity_from_u32(value: u32) -> Quantity {
+    Quantity::from(value)
+}
+
+pub fn quantity_validate<N: QuantityScalar>(
+    value: N,
+) -> Result<Quantity<N>, quantity::QuantityError> {
+    Quantity::try_from_scalar(value)
+}
+
+pub fn quantity_borrow<N: QuantityScalar>(value: &Quantity<N>) -> &N {
+    value.as_scalar()
+}
+
+pub fn quantity_consume<N: QuantityScalar>(value: Quantity<N>) -> N {
+    value.into_scalar()
+}
+
+pub fn account_new<A, N>(assets: Basket<A, N>) -> Account<A, N> {
+    Account::new(assets)
+}
+
+pub fn account_default<A, N>() -> Account<A, N> {
+    Account::default()
+}
+
+pub fn account_from_basket<A, N>(assets: Basket<A, N>) -> Account<A, N> {
+    Account::from(assets)
+}
+
+pub fn account_into_basket<A, N>(holder: Account<A, N>) -> Basket<A, N> {
+    holder.into_balances()
+}
+
+pub fn account_borrow_basket<A, N>(holder: &Account<A, N>) -> &Basket<A, N> {
+    holder.balances()
+}
+
+pub fn account_equal<A: Eq + std::hash::Hash>(left: &Account<A>, right: &Account<A>) -> bool {
+    left == right
+}
+
+pub fn proposal_new<RateId, Role: Ord, AccountId, N>(
+    rate_id: RateId,
+    units: Quantity<N>,
+) -> Exchange<RateId, Role, AccountId, N> {
+    Exchange::new(rate_id, units)
+}
+
+pub fn proposal_bind<RateId, Role: Ord, AccountId, N>(
+    proposal: Exchange<RateId, Role, AccountId, N>,
+    role: Role,
+    holder: AccountId,
+) -> Exchange<RateId, Role, AccountId, N> {
+    proposal.bind(role, holder)
+}
+
+pub fn proposal_parameter<RateId, Role: Ord, AccountId, N>(
+    proposal: Exchange<RateId, Role, AccountId, N>,
+    name: String,
+    value: Quantity<N>,
+) -> Exchange<RateId, Role, AccountId, N> {
+    proposal.parameter(name, value)
+}
+
+pub fn proposal_rate<RateId, Role: Ord, AccountId, N>(
+    proposal: &Exchange<RateId, Role, AccountId, N>,
+) -> &RateId {
+    proposal.rate()
+}
+
+pub fn proposal_bindings<RateId, Role: Ord, AccountId, N>(
+    proposal: &Exchange<RateId, Role, AccountId, N>,
+) -> &std::collections::BTreeMap<Role, AccountId> {
+    proposal.bindings()
+}
+
+pub fn proposal_units<RateId, Role: Ord, AccountId, N>(
+    proposal: &Exchange<RateId, Role, AccountId, N>,
+) -> &Quantity<N> {
+    proposal.units()
+}
+
+pub fn proposal_parameters<RateId, Role: Ord, AccountId, N>(
+    proposal: &Exchange<RateId, Role, AccountId, N>,
+) -> &std::collections::BTreeMap<String, Quantity<N>> {
+    proposal.parameters()
+}
+
+pub fn delta_account<AccountId, A, N>(value: &AccountDelta<AccountId, A, N>) -> &AccountId {
+    value.account()
+}
+
+pub fn delta_consumed<AccountId, A, N>(value: &AccountDelta<AccountId, A, N>) -> &Basket<A, N> {
+    value.consumed()
+}
+
+pub fn delta_produced<AccountId, A, N>(value: &AccountDelta<AccountId, A, N>) -> &Basket<A, N> {
+    value.produced()
+}
+
+pub fn delta_preserved<AccountId, A, N>(value: &AccountDelta<AccountId, A, N>) -> &Basket<A, N> {
+    value.preserved()
+}
+
+pub fn receipt_exchange<RateId, Role, AccountId, A, N>(
+    value: &Receipt<RateId, Role, AccountId, A, N>,
+) -> &Exchange<RateId, Role, AccountId, N> {
+    value.exchange()
+}
+
+pub fn receipt_deltas<RateId, Role, AccountId, A, N>(
+    value: &Receipt<RateId, Role, AccountId, A, N>,
+) -> &[AccountDelta<AccountId, A, N>] {
+    value.deltas()
+}
+
+pub fn account_assessment_account<AccountId, A, N>(
+    value: &economy::AccountAssessment<AccountId, A, N>,
+) -> &AccountId {
+    value.account()
+}
+
+pub fn account_assessment_available<AccountId, A, N>(
+    value: &economy::AccountAssessment<AccountId, A, N>,
+) -> &Basket<A, N> {
+    value.available()
+}
+
+pub fn account_assessment_required<AccountId, A, N>(
+    value: &economy::AccountAssessment<AccountId, A, N>,
+) -> &Basket<A, N> {
+    value.required()
+}
+
+pub fn account_assessment_consumed<AccountId, A, N>(
+    value: &economy::AccountAssessment<AccountId, A, N>,
+) -> &Basket<A, N> {
+    value.consumed()
+}
+
+pub fn account_assessment_produced<AccountId, A, N>(
+    value: &economy::AccountAssessment<AccountId, A, N>,
+) -> &Basket<A, N> {
+    value.produced()
+}
+
+pub fn account_assessment_preserved<AccountId, A, N>(
+    value: &economy::AccountAssessment<AccountId, A, N>,
+) -> &Basket<A, N> {
+    value.preserved()
+}
+
+pub fn account_shortfall_account<AccountId, A, N>(
+    value: &economy::AccountShortfall<AccountId, A, N>,
+) -> &AccountId {
+    value.account()
+}
+
+pub fn account_shortfall_missing<AccountId, A, N>(
+    value: &economy::AccountShortfall<AccountId, A, N>,
+) -> &Basket<A, N> {
+    value.missing()
+}
+
+pub fn assessment_status<AccountId, A, RateId, Role, N: QuantityScalar>(
+    value: &economy::ExchangeAssessment<AccountId, A, RateId, Role, N>,
+) -> economy::AssessmentStatus {
+    value.status()
+}
+
+pub fn assessment_accounts<AccountId, A, RateId, Role, N: QuantityScalar>(
+    value: &economy::ExchangeAssessment<AccountId, A, RateId, Role, N>,
+) -> &[economy::AccountAssessment<AccountId, A, N>] {
+    value.accounts()
+}
+
+pub fn assessment_shortfalls<AccountId, A, RateId, Role, N: QuantityScalar>(
+    value: &economy::ExchangeAssessment<AccountId, A, RateId, Role, N>,
+) -> &[economy::AccountShortfall<AccountId, A, N>] {
+    value.shortfalls()
+}
+
+pub fn assessment_projected_deltas<AccountId, A, RateId, Role, N: QuantityScalar>(
+    value: &economy::ExchangeAssessment<AccountId, A, RateId, Role, N>,
+) -> Option<&[AccountDelta<AccountId, A, N>]> {
+    value.projected_deltas()
+}
+
+pub fn assessment_issues<AccountId, A, RateId, Role, N: QuantityScalar>(
+    value: &economy::ExchangeAssessment<AccountId, A, RateId, Role, N>,
+) -> &[economy::ApplyError<RateId, Role, AccountId, A, N>] {
+    value.issues()
+}
+
+pub fn computed_role<Role, A, N>(value: &ComputedAmount<Role, A, N>) -> &Role {
+    value.role()
+}
+
+pub fn computed_asset<Role, A, N>(value: &ComputedAmount<Role, A, N>) -> &A {
+    value.asset()
+}
+
+pub fn computed_quantity<Role, A, N>(
+    value: &ComputedAmount<Role, A, N>,
+) -> &QuantityExpression<Role, A, N> {
+    value.quantity()
+}
+
+pub fn condition_name<Role, A, N>(value: &RateCondition<Role, A, N>) -> &str {
+    value.name()
+}
+
+pub fn condition_left<Role, A, N>(
+    value: &RateCondition<Role, A, N>,
+) -> &QuantityExpression<Role, A, N> {
+    value.left()
+}
+
+pub fn condition_comparison<Role, A, N>(value: &RateCondition<Role, A, N>) -> QuantityComparison {
+    value.comparison()
+}
+
+pub fn condition_right<Role, A, N>(
+    value: &RateCondition<Role, A, N>,
+) -> &QuantityExpression<Role, A, N> {
+    value.right()
+}
+
+pub fn model_build_error_issues<AccountId, RateId>(
+    value: &economy::ModelBuildError<AccountId, RateId>,
+) -> &[economy::ModelIssue<AccountId, RateId>] {
+    value.issues()
+}
+
+pub fn expression_constant<Role, A>(value: u64) -> QuantityExpression<Role, A> {
+    QuantityExpression::constant(value)
+}
+
+pub fn expression_units<Role, A, N>() -> QuantityExpression<Role, A, N> {
+    QuantityExpression::units()
+}
+
+pub fn expression_balance<Role, A, N>(role: Role, asset: A) -> QuantityExpression<Role, A, N> {
+    QuantityExpression::balance(role, asset)
+}
+
+pub fn expression_parameter<Role, A, N>(name: String) -> QuantityExpression<Role, A, N> {
+    QuantityExpression::parameter(name)
+}
+
+pub fn expression_plus<Role, A, N>(
+    left: QuantityExpression<Role, A, N>,
+    right: QuantityExpression<Role, A, N>,
+) -> QuantityExpression<Role, A, N> {
+    QuantityExpression::plus(left, right)
+}
+
+pub fn expression_subtract<Role, A, N>(
+    left: QuantityExpression<Role, A, N>,
+    right: QuantityExpression<Role, A, N>,
+) -> QuantityExpression<Role, A, N> {
+    QuantityExpression::subtract(left, right)
+}
+
+pub fn expression_multiply<Role, A, N>(
+    left: QuantityExpression<Role, A, N>,
+    right: QuantityExpression<Role, A, N>,
+) -> QuantityExpression<Role, A, N> {
+    QuantityExpression::multiply(left, right)
+}
+
+pub fn expression_divide_floor<Role, A, N>(
+    left: QuantityExpression<Role, A, N>,
+    right: QuantityExpression<Role, A, N>,
+) -> QuantityExpression<Role, A, N> {
+    QuantityExpression::divide_floor(left, right)
+}
+
+pub fn expression_minimum<Role, A, N>(
+    left: QuantityExpression<Role, A, N>,
+    right: QuantityExpression<Role, A, N>,
+) -> QuantityExpression<Role, A, N> {
+    QuantityExpression::minimum(left, right)
+}
+
+pub fn expression_maximum<Role, A, N>(
+    left: QuantityExpression<Role, A, N>,
+    right: QuantityExpression<Role, A, N>,
+) -> QuantityExpression<Role, A, N> {
+    QuantityExpression::maximum(left, right)
+}
+
+pub fn expression_add<Role, A, N>(
+    left: QuantityExpression<Role, A, N>,
+    right: QuantityExpression<Role, A, N>,
+) -> QuantityExpression<Role, A, N> {
+    left + right
+}
+
+pub fn basket_insert_amount<A: Eq + std::hash::Hash, N: QuantityScalar>(
+    state: &mut Basket<A, N>,
+    value: AssetAmount<A, N>,
+) -> Option<Quantity<N>> {
+    state.insert_amount(value)
+}

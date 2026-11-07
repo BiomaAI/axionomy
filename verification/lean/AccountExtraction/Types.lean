@@ -217,6 +217,13 @@ inductive account.AccountError (A : Type _) (N : Type _) (Clause2_SignedMeasure
   account.AccountError A N Clause2_SignedMeasure
 | Overflow : A → account.AccountError A N Clause2_SignedMeasure
 
+/-- [account_extraction::amount::AssetAmount]
+    Source: 'verification/../src/amount.rs', lines 23:0-26:1
+    Visibility: public -/
+structure amount.AssetAmount (A : Type _) (N : Type _) where
+  asset : A
+  quantity : quantity.Quantity N
+
 /-- [account_extraction::economy::Goal]
     Source: 'verification/../src/economy.rs', lines 21:0-23:1
     Visibility: public -/
@@ -326,6 +333,15 @@ structure economy.Economy (AccountId : Type _) (A : Type _) (RateId : Type _)
     Visibility: public -/
 @[reducible]
 def economy.StateFingerprint := Std.U64
+
+/-- [account_extraction::economy::AssessmentStatus]
+    Source: 'verification/../src/economy.rs', lines 121:0-125:1
+    Visibility: public -/
+@[discriminant isize]
+inductive economy.AssessmentStatus where
+| Applicable : economy.AssessmentStatus
+| Infeasible : economy.AssessmentStatus
+| Invalid : economy.AssessmentStatus
 
 /-- [account_extraction::economy::AccountAssessment]
     Source: 'verification/../src/economy.rs', lines 133:0-140:1
