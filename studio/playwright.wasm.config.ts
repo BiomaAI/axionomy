@@ -8,7 +8,8 @@ export default defineConfig({
     baseURL: "http://127.0.0.1:5174",
   },
   webServer: {
-    command: "VITE_AXIONOMY_ENGINE=browser pnpm dev --host 127.0.0.1 --port 5174",
+    // Reuse the Wasm artifacts from `pnpm build`; optimization is not server startup.
+    command: "VITE_AXIONOMY_ENGINE=browser pnpm exec vite --host 127.0.0.1 --port 5174",
     url: "http://127.0.0.1:5174",
     reuseExistingServer: false,
     timeout: 180_000,

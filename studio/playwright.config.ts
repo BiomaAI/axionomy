@@ -16,7 +16,8 @@ export default defineConfig({
       timeout: 120_000,
     },
     {
-      command: "VITE_AXIONOMY_DEV_SERVER=http://127.0.0.1:3001 pnpm dev --host 127.0.0.1",
+      // Reuse the Wasm artifacts from `pnpm build`; optimization is not server startup.
+      command: "VITE_AXIONOMY_DEV_SERVER=http://127.0.0.1:3001 pnpm exec vite --host 127.0.0.1",
       url: "http://127.0.0.1:5173",
       reuseExistingServer: false,
       timeout: 120_000,

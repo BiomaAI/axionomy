@@ -211,6 +211,10 @@ pnpm test:e2e
 pnpm test:e2e:wasm
 ```
 
+Run `pnpm build` before either browser suite. Playwright starts Vite directly
+and reuses that build's Wasm artifacts, keeping Wasm optimization outside the
+server startup timeout. CI uses the same sequence.
+
 The Playwright tests launch both servers, start a real run, follow its SSE
 stream, observe tactical search progress and pause/resume behavior,
 fetch and scrub its replay-verified artifact, verify structured rejection
