@@ -71,7 +71,7 @@ structure basket.Basket (A : Type _) (N : Type _) where
     std.hash.random.RandomState
 
 /-- [basket_extraction::basket::BasketError]
-    Source: 'verification/../src/basket.rs', lines 275:0-278:1
+    Source: 'verification/../src/basket.rs', lines 280:0-283:1
     Visibility: public -/
 @[discriminant isize]
 inductive basket.BasketError (A : Type _) where

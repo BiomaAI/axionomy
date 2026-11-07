@@ -849,6 +849,263 @@ def account.Account.prepare_exchange
       (account.Account A N) (core.convert.FromSame (account.AccountError A N
       Clause3_SignedMeasure)) residual
 
+/-- [account_extraction::basket::{account_extraction::basket::Basket<A, N>}::len]:
+    Source: 'verification/../src/basket.rs', lines 55:4-57:5
+    Visibility: public -/
+def basket.Basket.len
+  {A : Type _} {N : Type _} (self : basket.Basket A N) : Result Std.Usize := do
+  indexmap.map.IndexMap.len self.quantities
+
+/-- [account_extraction::basket::{account_extraction::basket::Basket<A, N>}::checked_add]: loop body 0:
+    Source: 'verification/../src/basket.rs', lines 131:8-140:5
+    Visibility: public -/
+@[rust_loop_body]
+def basket.Basket.checked_add_loop.body
+  {A : Type _} {N : Type _} {Clause3_SignedMeasure : Type _}
+  (corecloneCloneInst : core.clone.Clone A) (corecmpEqInst : core.cmp.Eq A)
+  (corehashHashInst : core.hash.Hash A) (quantityQuantityScalarInst :
+  quantity.QuantityScalar N Clause3_SignedMeasure) (self : basket.Basket A N)
+  (iter : indexmap.map.iter.Iter A (quantity.Quantity N))
+  (updated : basket.Basket A N) :
+  Result (ControlFlow ((indexmap.map.iter.Iter A (quantity.Quantity N)) ×
+    (basket.Basket A N)) ((core.result.Result Unit A) × (basket.Basket A N)))
+  := do
+  let (o, iter1) ←
+    indexmap.map.iter.Iter.Insts.CoreIterTraitsIteratorIteratorPairSharedAKSharedAV.next
+      iter
+  match o with
+  | none => ok (done (core.result.Result.Ok (), updated))
+  | some p =>
+    let (asset, amount) := p
+    let q ←
+      basket.Basket.quantity corecmpEqInst corehashHashInst
+        quantityQuantityScalarInst updated asset
+    let o1 ←
+      quantity.Quantity.checked_add quantityQuantityScalarInst q amount
+    match o1 with
+    | none =>
+      let t ← corecloneCloneInst.clone asset
+      ok (done (core.result.Result.Err t, self))
+    | some amount1 =>
+      let t ← corecloneCloneInst.clone asset
+      let (_, updated1) ←
+        basket.Basket.insert corecmpEqInst corehashHashInst
+          quantityQuantityScalarInst updated t amount1
+      ok (cont (iter1, updated1))
+
+/-- [account_extraction::basket::{account_extraction::basket::Basket<A, N>}::checked_add]: loop 0:
+    Source: 'verification/../src/basket.rs', lines 131:8-140:5
+    Visibility: public -/
+@[rust_loop]
+def basket.Basket.checked_add_loop
+  {A : Type _} {N : Type _} {Clause3_SignedMeasure : Type _}
+  (corecloneCloneInst : core.clone.Clone A) (corecmpEqInst : core.cmp.Eq A)
+  (corehashHashInst : core.hash.Hash A) (quantityQuantityScalarInst :
+  quantity.QuantityScalar N Clause3_SignedMeasure)
+  (iter : indexmap.map.iter.Iter A (quantity.Quantity N))
+  (self : basket.Basket A N) (updated : basket.Basket A N) :
+  Result ((core.result.Result Unit A) × (basket.Basket A N))
+  := do
+  loop
+    (fun (iter1, updated1) => basket.Basket.checked_add_loop.body
+      corecloneCloneInst corecmpEqInst corehashHashInst
+      quantityQuantityScalarInst self iter1 updated1)
+    (iter, updated)
+
+/-- [account_extraction::basket::{account_extraction::basket::Basket<A, N>}::checked_add]:
+    Source: 'verification/../src/basket.rs', lines 128:4-140:5
+    Visibility: public -/
+def basket.Basket.checked_add
+  {A : Type _} {N : Type _} {Clause3_SignedMeasure : Type _}
+  (corecloneCloneInst : core.clone.Clone A) (corecmpEqInst : core.cmp.Eq A)
+  (corehashHashInst : core.hash.Hash A) (quantityQuantityScalarInst :
+  quantity.QuantityScalar N Clause3_SignedMeasure) (self : basket.Basket A N)
+  (other : basket.Basket A N) :
+  Result ((core.result.Result Unit A) × (basket.Basket A N))
+  := do
+  let updated ←
+    basket.Basket.Insts.CoreCloneClone.clone corecloneCloneInst
+      quantityQuantityScalarInst.corecloneCloneInst self
+  let iter ← basket.Basket.iter other
+  basket.Basket.checked_add_loop corecloneCloneInst corecmpEqInst
+    corehashHashInst quantityQuantityScalarInst iter self updated
+
+/-- [account_extraction::quantity::{account_extraction::quantity::Quantity<N>}::checked_mul]:
+    Source: 'verification/../src/quantity.rs', lines 138:4-140:5
+    Visibility: public -/
+def quantity.Quantity.checked_mul
+  {N : Type _} {Clause0_SignedMeasure : Type _} (QuantityScalarInst :
+  quantity.QuantityScalar N Clause0_SignedMeasure) (self : quantity.Quantity N)
+  (rhs : quantity.Quantity N) :
+  Result (Option (quantity.Quantity N))
+  := do
+  let o ←
+    QuantityScalarInst.num_traitsopscheckedCheckedMulInst.checked_mul self rhs
+  quantity.Quantity.from_checked QuantityScalarInst o
+
+/-- [account_extraction::basket::{account_extraction::basket::Basket<A, N>}::checked_scale]: loop body 0:
+    Source: 'verification/../src/basket.rs', lines 145:8-153:5
+    Visibility: public -/
+@[rust_loop_body]
+def basket.Basket.checked_scale_loop.body
+  {A : Type _} {N : Type _} {Clause3_SignedMeasure : Type _}
+  (corecloneCloneInst : core.clone.Clone A) (corecmpEqInst : core.cmp.Eq A)
+  (corehashHashInst : core.hash.Hash A) (quantityQuantityScalarInst :
+  quantity.QuantityScalar N Clause3_SignedMeasure)
+  (units : quantity.Quantity N)
+  (iter : indexmap.map.iter.Iter A (quantity.Quantity N))
+  (scaled : basket.Basket A N) :
+  Result (ControlFlow ((indexmap.map.iter.Iter A (quantity.Quantity N)) ×
+    (basket.Basket A N)) (core.result.Result (basket.Basket A N) A))
+  := do
+  let (o, iter1) ←
+    indexmap.map.iter.Iter.Insts.CoreIterTraitsIteratorIteratorPairSharedAKSharedAV.next
+      iter
+  match o with
+  | none => ok (done (core.result.Result.Ok scaled))
+  | some p =>
+    let (asset, amount) := p
+    let o1 ←
+      quantity.Quantity.checked_mul quantityQuantityScalarInst amount units
+    match o1 with
+    | none =>
+      let t ← corecloneCloneInst.clone asset
+      ok (done (core.result.Result.Err t))
+    | some amount1 =>
+      let t ← corecloneCloneInst.clone asset
+      let (_, scaled1) ←
+        basket.Basket.insert corecmpEqInst corehashHashInst
+          quantityQuantityScalarInst scaled t amount1
+      ok (cont (iter1, scaled1))
+
+/-- [account_extraction::basket::{account_extraction::basket::Basket<A, N>}::checked_scale]: loop 0:
+    Source: 'verification/../src/basket.rs', lines 145:8-153:5
+    Visibility: public -/
+@[rust_loop]
+def basket.Basket.checked_scale_loop
+  {A : Type _} {N : Type _} {Clause3_SignedMeasure : Type _}
+  (corecloneCloneInst : core.clone.Clone A) (corecmpEqInst : core.cmp.Eq A)
+  (corehashHashInst : core.hash.Hash A) (quantityQuantityScalarInst :
+  quantity.QuantityScalar N Clause3_SignedMeasure)
+  (iter : indexmap.map.iter.Iter A (quantity.Quantity N))
+  (units : quantity.Quantity N) (scaled : basket.Basket A N) :
+  Result (core.result.Result (basket.Basket A N) A)
+  := do
+  loop
+    (fun (iter1, scaled1) => basket.Basket.checked_scale_loop.body
+      corecloneCloneInst corecmpEqInst corehashHashInst
+      quantityQuantityScalarInst units iter1 scaled1)
+    (iter, scaled)
+
+/-- [account_extraction::basket::{account_extraction::basket::Basket<A, N>}::checked_scale]:
+    Source: 'verification/../src/basket.rs', lines 142:4-153:5
+    Visibility: public -/
+def basket.Basket.checked_scale
+  {A : Type _} {N : Type _} {Clause3_SignedMeasure : Type _}
+  (corecloneCloneInst : core.clone.Clone A) (corecmpEqInst : core.cmp.Eq A)
+  (corehashHashInst : core.hash.Hash A) (quantityQuantityScalarInst :
+  quantity.QuantityScalar N Clause3_SignedMeasure) (self : basket.Basket A N)
+  (units : quantity.Quantity N) :
+  Result (core.result.Result (basket.Basket A N) A)
+  := do
+  let scaled ← basket.Basket.new A N
+  let iter ← basket.Basket.iter self
+  basket.Basket.checked_scale_loop corecloneCloneInst corecmpEqInst
+    corehashHashInst quantityQuantityScalarInst iter units scaled
+
+/-- [account_extraction::basket::{account_extraction::basket::Basket<A, N>}::contains]:
+    Source: 'verification/../src/basket.rs', lines 171:4-173:5
+    Visibility: public -/
+def basket.Basket.contains
+  {A : Type _} {N : Type _} {Clause3_SignedMeasure : Type _}
+  (corecloneCloneInst : core.clone.Clone A) (corecmpEqInst : core.cmp.Eq A)
+  (corehashHashInst : core.hash.Hash A) (quantityQuantityScalarInst :
+  quantity.QuantityScalar N Clause3_SignedMeasure) (self : basket.Basket A N)
+  (required : basket.Basket A N) :
+  Result Bool
+  := do
+  let b ←
+    basket.Basket.shortfall corecloneCloneInst corecmpEqInst corehashHashInst
+      quantityQuantityScalarInst self required
+  basket.Basket.is_empty b
+
+/-- [account_extraction::basket::{impl core::cmp::PartialEq<account_extraction::basket::Basket<A, N>> for account_extraction::basket::Basket<A, N>}::eq]: loop body 0:
+    Source: 'verification/../src/basket.rs', lines 191:13-198:5
+    Visibility: public -/
+@[rust_loop_body]
+def basket.Basket.Insts.CoreCmpPartialEqBasket.eq_loop.body
+  {A : Type _} {N : Type _} (corecmpEqInst : core.cmp.Eq A) (corehashHashInst :
+  core.hash.Hash A) (corecmpPartialEqInst : core.cmp.PartialEq N N)
+  (other : basket.Basket A N)
+  (iter : indexmap.map.iter.Iter A (quantity.Quantity N)) :
+  Result (ControlFlow (indexmap.map.iter.Iter A (quantity.Quantity N)) Bool)
+  := do
+  let (o, iter1) ←
+    indexmap.map.iter.Iter.Insts.CoreIterTraitsIteratorIteratorPairSharedAKSharedAV.next
+      iter
+  match o with
+  | none => ok (done true)
+  | some p =>
+    let (asset, amount) := p
+    let o1 ←
+      indexmap.map.IndexMap.get
+        std.hash.random.RandomState.Insts.CoreHashBuildHasherDefaultHasher
+        corehashHashInst (equivalent.Equivalent.Blanket corecmpEqInst
+        (core.borrow.Borrow.Blanket A)) other.quantities asset
+    let b ←
+      core.option.Option.Insts.CoreCmpPartialEqOption.eq
+        (core.cmp.PartialEqShared
+        (quantity.Quantity.Insts.CoreCmpPartialEqQuantity
+        corecmpPartialEqInst)) o1 (some amount)
+    if b
+    then ok (cont iter1)
+    else ok (done false)
+
+/-- [account_extraction::basket::{impl core::cmp::PartialEq<account_extraction::basket::Basket<A, N>> for account_extraction::basket::Basket<A, N>}::eq]: loop 0:
+    Source: 'verification/../src/basket.rs', lines 191:13-198:5
+    Visibility: public -/
+@[rust_loop]
+def basket.Basket.Insts.CoreCmpPartialEqBasket.eq_loop
+  {A : Type _} {N : Type _} (corecmpEqInst : core.cmp.Eq A) (corehashHashInst :
+  core.hash.Hash A) (corecmpPartialEqInst : core.cmp.PartialEq N N)
+  (iter : indexmap.map.iter.Iter A (quantity.Quantity N))
+  (other : basket.Basket A N) :
+  Result Bool
+  := do
+  loop
+    (fun iter1 => basket.Basket.Insts.CoreCmpPartialEqBasket.eq_loop.body
+      corecmpEqInst corehashHashInst corecmpPartialEqInst other iter1)
+    iter
+
+/-- [account_extraction::basket::{impl core::cmp::PartialEq<account_extraction::basket::Basket<A, N>> for account_extraction::basket::Basket<A, N>}::eq]:
+    Source: 'verification/../src/basket.rs', lines 187:4-198:5
+    Visibility: public -/
+def basket.Basket.Insts.CoreCmpPartialEqBasket.eq
+  {A : Type _} {N : Type _} (corecmpEqInst : core.cmp.Eq A) (corehashHashInst :
+  core.hash.Hash A) (corecmpPartialEqInst : core.cmp.PartialEq N N)
+  (self : basket.Basket A N) (other : basket.Basket A N) :
+  Result Bool
+  := do
+  let i ← basket.Basket.len self
+  let i1 ← basket.Basket.len other
+  if i != i1
+  then ok false
+  else
+    let iter ← basket.Basket.iter self
+    basket.Basket.Insts.CoreCmpPartialEqBasket.eq_loop corecmpEqInst
+      corehashHashInst corecmpPartialEqInst iter other
+
+/-- Trait implementation: [account_extraction::basket::{impl core::cmp::PartialEq<account_extraction::basket::Basket<A, N>> for account_extraction::basket::Basket<A, N>}]
+    Source: 'verification/../src/basket.rs', lines 182:0-199:1 -/
+@[reducible]
+def basket.Basket.Insts.CoreCmpPartialEqBasket {A : Type _} {N : Type _}
+  (corecmpEqInst : core.cmp.Eq A) (corehashHashInst : core.hash.Hash A)
+  (corecmpPartialEqInst : core.cmp.PartialEq N N) : core.cmp.PartialEq
+  (basket.Basket A N) (basket.Basket A N) := {
+  eq := basket.Basket.Insts.CoreCmpPartialEqBasket.eq corecmpEqInst
+    corehashHashInst corecmpPartialEqInst
+}
+
 /-- Trait implementation: [account_extraction::quantity::{impl account_extraction::quantity::QuantityMeasure for T}]
     Source: 'verification/../src/quantity.rs', lines 14:0-14:100 -/
 @[reducible]
@@ -946,8 +1203,56 @@ def withdraw
   account.Account.withdraw corecloneCloneInst corecmpEqInst corehashHashInst
     U64.Insts.Account_extractionQuantityQuantityScalarI128 state assets
 
+/-- [account_extraction::basket_add]:
+    Source: 'verification/extract_account.rs', lines 31:0-36:1
+    Visibility: public -/
+def basket_add
+  {A : Type _} (corecloneCloneInst : core.clone.Clone A) (corecmpEqInst :
+  core.cmp.Eq A) (corehashHashInst : core.hash.Hash A)
+  (state : basket.Basket A Std.U64) (assets : basket.Basket A Std.U64) :
+  Result ((core.result.Result Unit A) × (basket.Basket A Std.U64))
+  := do
+  basket.Basket.checked_add corecloneCloneInst corecmpEqInst corehashHashInst
+    U64.Insts.Account_extractionQuantityQuantityScalarI128 state assets
+
+/-- [account_extraction::basket_scale]:
+    Source: 'verification/extract_account.rs', lines 38:0-43:1
+    Visibility: public -/
+def basket_scale
+  {A : Type _} (corecloneCloneInst : core.clone.Clone A) (corecmpEqInst :
+  core.cmp.Eq A) (corehashHashInst : core.hash.Hash A)
+  (state : basket.Basket A Std.U64) (units : quantity.Quantity Std.U64) :
+  Result (core.result.Result (basket.Basket A Std.U64) A)
+  := do
+  basket.Basket.checked_scale corecloneCloneInst corecmpEqInst corehashHashInst
+    U64.Insts.Account_extractionQuantityQuantityScalarI128 state units
+
+/-- [account_extraction::basket_contains]:
+    Source: 'verification/extract_account.rs', lines 45:0-50:1
+    Visibility: public -/
+def basket_contains
+  {A : Type _} (corecloneCloneInst : core.clone.Clone A) (corecmpEqInst :
+  core.cmp.Eq A) (corehashHashInst : core.hash.Hash A)
+  (state : basket.Basket A Std.U64) (required : basket.Basket A Std.U64) :
+  Result Bool
+  := do
+  basket.Basket.contains corecloneCloneInst corecmpEqInst corehashHashInst
+    U64.Insts.Account_extractionQuantityQuantityScalarI128 state required
+
+/-- [account_extraction::basket_equal]:
+    Source: 'verification/extract_account.rs', lines 52:0-54:1
+    Visibility: public -/
+def basket_equal
+  {A : Type _} (corecmpEqInst : core.cmp.Eq A) (corehashHashInst :
+  core.hash.Hash A) (left : basket.Basket A Std.U64)
+  (right : basket.Basket A Std.U64) :
+  Result Bool
+  := do
+  basket.Basket.Insts.CoreCmpPartialEqBasket.eq corecmpEqInst corehashHashInst
+    core.cmp.PartialEqU64 left right
+
 /-- [account_extraction::prepare_exchange]:
-    Source: 'verification/extract_account.rs', lines 31:0-37:1
+    Source: 'verification/extract_account.rs', lines 56:0-62:1
     Visibility: public -/
 def prepare_exchange
   {A : Type _} (corecloneCloneInst : core.clone.Clone A) (corecmpEqInst :

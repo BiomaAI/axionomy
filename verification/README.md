@@ -21,6 +21,12 @@ model. It proves duplicate rejection (including zeros), exact nonzero contents,
 and preserved insertion order. See [the basket proof](BASKETS.md) for the
 shared-source extraction and the trusted storage boundary.
 
+Basket addition, scaling, containment, and equality also have implementation
+proofs, including atomic addition failure, exact overflow order, and equality
+independent of insertion order. Representation proofs preserve distinct assets
+and the omission of zero quantities through updates and staging. Equality also
+requires collection lengths representable by `usize`.
+
 Account deposits and withdrawals also have implementation proofs for u64
 quantities and lawful asset equality/cloning under that storage abstraction.
 They match a natural-number specification for final balances, ordered errors,
@@ -55,6 +61,7 @@ The current library covers:
 | --- | --- |
 | `QuantityRefinement` | Actual Aeneas-extracted u64 addition, subtraction, multiplication, and division refine `Quantity`, including all checked failures |
 | `BasketRefinement` | Extracted production construction refines `Basket` for u64 vector inputs, under lawful equality and the explicit collection model |
+| `BasketOperations` / `BasketOperationsRefinement` | Extracted addition/scaling/containment/equality, exact natural-number results/errors, unordered equality, and canonical representation preservation |
 | `Basket` | Success iff asset identifiers are unique; zeros cannot hide duplicates; canonical output preserves nonzero entries, uniqueness, and order |
 | `AccountRefinement` | Extracted deposit, withdrawal, and shortfall terminate and match exact natural-number outcomes under lawful equality/cloning and the collection model |
 | `AccountRefinement.prepare_refines_naturals` | Extracted production exchange account staging returns exact consumption-before-production results, including shortfall and late-overflow errors |
@@ -73,6 +80,50 @@ covers individual entries. `Replay`'s step premise must be discharged when linki
 it to the Rust exchange implementation; it does not prove arbitrary transitions safe.
 
 ## Required feature workflow
+
+### Active completion goal
+
+Complete the current root crate's production-to-Lean contracts in the four
+milestones below. Keep Rust's typed domains, numeric backends, and ownership
+guarantees. A milestone is complete only when its composed implementation
+theorems, caller preconditions, failure behavior, fresh extraction, conformance,
+mutation controls, and workspace checks pass. Commit and push validated work
+to `origin/main`; theorem counts do not measure percentage completion.
+
+| Milestone | Item | Remaining contract | Status |
+| --- | --- | --- | --- |
+| 1. u64 transaction kernel | 1 | Basket addition/scaling, containment/equality, canonical representation preservation | Implementation proved under documented models |
+| 1 | 2 | Model/rate construction, duplicate IDs, role/parameter/asset discovery, distinct roles | Open |
+| 1 | 3 | Exchange units, rate/account existence, binding/parameter validation | Open |
+| 1 | 4 | Full expression/condition evaluation against the original snapshot | Design proofs |
+| 1 | 5 | Account effect aggregation, bounded scaling/merging, computed-effect semantics | Design proofs |
+| 1 | 6 | Consumption plus preservation availability and complete shortfalls | Design proofs |
+| 1 | 7 | Complete preparation, unique affected accounts, established staging preconditions | Per-account staging proved |
+| 1 | 8 | Runtime signed conservation, intermediate i128 overflow, error classification | Design proofs |
+| 1 | 9 | Multi-account atomic commit, unchanged frame, safe prepared-account lookups | Design proofs |
+| 1 | 10 | Assessment/application agreement, filtering, immutability, exact diagnostics/order | Design proofs |
+| 1 | 11 | Receipts/deltas agree with the actual proposal and committed changes | Partial design proofs |
+| 2. Execution and observations | 12 | Fork/simulation isolation and equivalence | Open |
+| 2 | 13 | Ordered traces, replay prefix-on-error, isolated replay, invariant composition | Design proofs |
+| 2 | 14 | Goals, visibility, hidden-state noninterference, missing/zero distinctions | Design proofs |
+| 2 | 15 | Canonical state/observation keys and deterministic fingerprints | Open |
+| 3. Public data boundary | 16 | Remaining typed constructors/accessors/conversions/iterators/equality | Partial implementation proofs |
+| 3 | 17 | Serialization round trips, validation/canonicalization, accurate schema contracts | Open |
+| 4. Numeric backends | 18 | BigUint/BigInt and explicit algebraic requirements for custom backends | Open |
+
+Every internal `expect` needs a discharged precondition. Intentionally panicking
+convenience constructors need explicit contracts; do not claim unconditional
+panic freedom for them. Generic numeric proofs require algebraic laws beyond
+Rust's trait bounds. Prove canonical-key properties for their declared
+equivalence, never collision freedom of finite fingerprints.
+
+The existing compiler/translation/primitive and collection/allocation/clone
+trust boundaries remain explicit. Verifying those dependencies themselves is
+outside this goal. Game rules, equilibrium, search, transport, and Studio are
+also outside it. The detailed legacy gaps below remain until their production
+contracts are discharged; updating this table does not certify code.
+
+### Per-feature checks
 
 1. State the feature's contract and failure behavior in Lean. Preserve separate
    account, asset, role, parameter, and numeric meanings.
@@ -138,6 +189,10 @@ checking assessment, exact errors and receipts, an earlier staged account on lat
 failure, unaffected accounts, and fork isolation. These whole-economy checks are
 finite regression evidence, not a refinement theorem for `Economy::apply`.
 Separate existing Rust tests cover additional behavior.
+
+The basket operation specification adds 654 cases for addition, scaling,
+containment, and equality. It checks ordered results and errors, zero
+canonicalization, and unchanged inputs.
 
 ## Explicit legacy refinement gaps
 

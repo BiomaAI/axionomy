@@ -47,6 +47,11 @@ class AccountBridgeTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "economy preparation handoff changed"):
             validate_bridge(self.root)
 
+    def test_changed_basket_entry_is_rejected(self):
+        self.target.write_text(self.target.read_text().replace("state.checked_scale(units)", "state.clone()"))
+        with self.assertRaisesRegex(ValueError, "not a forwarding call: basket_scale"):
+            validate_bridge(self.root)
+
 
 class AccountExtractionTests(unittest.TestCase):
     def setUp(self):
@@ -86,6 +91,12 @@ class AccountExtractionTests(unittest.TestCase):
     def test_missing_extracted_preparation_is_rejected(self):
         path = self.directory / "Funs.lean"
         path.write_text(path.read_text().replace("def account.Account.prepare_exchange\n", "def bypass\n"))
+        with self.assertRaisesRegex(ValueError, "missing account production definition"):
+            validate_generated(self.directory)
+
+    def test_missing_extracted_basket_addition_is_rejected(self):
+        path = self.directory / "Funs.lean"
+        path.write_text(path.read_text().replace("def basket.Basket.checked_add\n", "def bypass\n"))
         with self.assertRaisesRegex(ValueError, "missing account production definition"):
             validate_generated(self.directory)
 

@@ -2,6 +2,8 @@ import Axionomy.Quantity
 import Axionomy.QuantityRefinement
 import Axionomy.Basket
 import Axionomy.BasketRefinement
+import Axionomy.BasketOperations
+import Axionomy.BasketOperationsRefinement
 import Axionomy.Account
 import Axionomy.AccountMap
 import Axionomy.AccountRefinement

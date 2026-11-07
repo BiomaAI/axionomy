@@ -55,6 +55,18 @@ class ExtractionBoundaryTests(unittest.TestCase):
 
 
 class ProductionMutationTests(unittest.TestCase):
+    def test_partial_basket_addition_breaks_the_basket_operations_proof(self):
+        original = """let Some(amount) = updated.quantity(asset).checked_add(amount) else {
+                return Err(asset.clone());"""
+        self.check_mutation(
+            "src/basket.rs", original, original.replace("return Err", "*self = updated;\n                return Err"),
+            "extract_account.py", "stale account model", "BasketOperationsRefinement", "AccountExtraction")
+
+    def test_ignoring_scale_units_breaks_the_basket_operations_proof(self):
+        self.check_mutation(
+            "src/basket.rs", "amount.checked_mul(units)", "amount.checked_mul(amount)",
+            "extract_account.py", "stale account model", "BasketOperationsRefinement", "AccountExtraction")
+
     def test_producing_before_consuming_breaks_the_preparation_proof(self):
         self.check_mutation(
             "src/account.rs", "updated.withdraw(consumed)?;\n        updated.deposit(produced)?;",
@@ -93,7 +105,7 @@ class ProductionMutationTests(unittest.TestCase):
             "src/basket.rs", original, replacement,
             "extract_basket.py", "stale basket model", "BasketRefinement")
 
-    def check_mutation(self, source_path, original, replacement, script, stale_message, module):
+    def check_mutation(self, source_path, original, replacement, script, stale_message, module, extraction=None):
         # Copy only reviewed/unignored project files into an isolated checkout.
         # Never edit the user's working tree. Tools and dependency caches are
         # shared; proof artifacts and the mutated Rust source remain isolated.
@@ -133,7 +145,7 @@ class ProductionMutationTests(unittest.TestCase):
             self.assertIn(stale_message, stale.stdout)
             regenerate = run(sys.executable, "scripts/" + script, "--write")
             self.assertEqual(regenerate.returncode, 0, regenerate.stdout)
-            generated = run("lake", "build", module.replace("Refinement", "Extraction"),
+            generated = run("lake", "build", extraction or module.replace("Refinement", "Extraction"),
                             cwd=root / "verification/lean")
             self.assertEqual(generated.returncode, 0, generated.stdout)
             proof = run("lake", "build", "Axionomy." + module, cwd=root / "verification/lean")

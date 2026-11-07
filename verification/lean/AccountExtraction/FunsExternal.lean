@@ -31,6 +31,13 @@ def core.option.OptionShared0T.cloned {T : Type} (inst : core.clone.Clone T) :
     let copied ← inst.clone value
     .ok (some copied)
 
+-- Option equality invokes the supplied value comparison, preserving failures.
+def core.option.Option.Insts.CoreCmpPartialEqOption.eq {T : Type}
+    (inst : core.cmp.PartialEq T T) : Option T → Option T → Result Bool
+  | none, none => .ok true
+  | some left, some right => inst.eq left right
+  | _, _ => .ok false
+
 def std.hash.random.RandomState.Insts.CoreCloneClone.clone
     (state : std.hash.random.RandomState) : Result std.hash.random.RandomState := .ok state
 
@@ -71,6 +78,12 @@ def indexmap.map.IndexMapKVRandomState.new (K V : Type) :
     Result (indexmap.map.IndexMap K V std.hash.random.RandomState) := .ok []
 def indexmap.map.IndexMap.is_empty {K V S : Type}
     (entries : indexmap.map.IndexMap K V S) : Result Bool := .ok entries.isEmpty
+
+-- Length is defined only for lists representable by a Rust collection.
+def indexmap.map.IndexMap.len {K V S : Type}
+    (entries : indexmap.map.IndexMap K V S) : Result Std.Usize :=
+  if bound : entries.length < 2^UScalarTy.Usize.numBits then .ok (Std.Usize.ofNatCore entries.length bound)
+  else .fail .panic
 
 def indexmap.map.IndexMap.iter {K V S : Type}
     (entries : indexmap.map.IndexMap K V S) : Result (indexmap.map.iter.Iter K V) := .ok entries

@@ -1,12 +1,12 @@
 {
   "version": 1,
-  "assurance": "Partial implementation verification: Aeneas-extracted production u64 arithmetic, basket construction, account deposit/withdrawal, and per-account exchange staging refine Lean specifications. Collections use explicit trusted models; compiler/translation and primitive models remain trusted. Other core contracts have design proofs and finite Rust conformance.",
+  "assurance": "Partial implementation verification: Aeneas-extracted production u64 arithmetic, basket construction and operations, account deposit/withdrawal, and per-account exchange staging refine Lean specifications. Collections use explicit trusted models; compiler/translation and primitive models remain trusted. Other core contracts have design proofs and finite Rust conformance.",
   "sources": {
     "Cargo.toml": "414a2b181e13225e4b76aa58e70d998064174dde2d8cee603ea3af648d61a7f3",
     "Cargo.lock": "00ef263c160aeebaa49187874a4b11ec94fee9bc8fbea5a2f0cacc190607919c",
     "src/account.rs": "0eaf66937c63de2993353828e42fcfea2b80f172f5cb74fc76a28cef79fd9ff6",
     "src/amount.rs": "4aa0f1432494aac0454890604e3addbd002fa6b9ded1f75f91fce7675540f9ee",
-    "src/basket.rs": "4d85b432b3a35354bd2044e58ab61c4767109ac8f5dfb050e5c8caa98f8afc42",
+    "src/basket.rs": "10e7d7792f3b1de207bdae124fd76a8fa5fe93295b1a4eb49455b588941ee5f1",
     "src/economy.rs": "be50c1051c25c2e656f9a8d01bc2838f0ada89560d5564de2cb6a8ad1743e29b",
     "src/exchange.rs": "aabae395148c0dd8703b2fc99aa177700eaffd0d8aac602f8a5ffbf7fb09a47b",
     "src/lib.rs": "46d6f713693714650653128e2ceabf8a895b8ad98a38a7bdbeab4ea378a5cc06",
@@ -15,7 +15,7 @@
     "verification/extract.rs": "415b34f5f4f8aa2679af860bd2a4092c96e113145919160fe7c81e33836de3e0",
     "verification/aeneas-toolchain.json": "8676d7d11be51a6f41984d874b35910e8a1a3d0a18414998feb9402ef80932fb",
     "verification/extract_basket.rs": "dc2b3a2159704c24a5261d0069a2aac7b575f30a94ae35c4c1e96933638592dd",
-    "verification/extract_account.rs": "38f7f70e5bdd72435eb8aaeddd6eeb2d0dbda489124898e929af56ee30918da3",
+    "verification/extract_account.rs": "aeec1933b1c9adc0cfdca4b0b1b2c75167517d303e9f44d28b853156c98f043c",
     "verification/patches/aeneas-namespaced-discriminant.patch": "fabac7482deb3da6ecaca60c4060dfe9d2114efdd010699e736c4a91267f3bc9"
   },
   "features": [
@@ -107,6 +107,46 @@
       ]
     },
     {
+      "id": "basket_operations",
+      "status": "aeneas_refinement_proved",
+      "sources": [
+        "src/basket.rs",
+        "src/quantity.rs",
+        "verification/extract_account.rs",
+        "verification/aeneas-toolchain.json"
+      ],
+      "extracted_module": "AccountExtraction.Funs",
+      "theorems": [
+        "Axionomy.BasketOperations.add_rejection_atomic",
+        "Axionomy.BasketOperations.add_success_exact",
+        "Axionomy.BasketOperations.store_valid",
+        "Axionomy.BasketOperations.add_valid",
+        "Axionomy.BasketOperations.scale_valid",
+        "Axionomy.BasketOperations.debit_valid",
+        "Axionomy.BasketOperations.prepare_valid",
+        "Axionomy.BasketOperations.shortfall_valid",
+        "Axionomy.BasketOperations.equal_iff_permutation",
+        "Axionomy.BasketOperationsRefinement.mul_exact",
+        "Axionomy.BasketOperationsRefinement.add_refines_naturals",
+        "Axionomy.BasketOperationsRefinement.scale_refines_naturals",
+        "Axionomy.BasketOperationsRefinement.contains_refines",
+        "Axionomy.BasketOperationsRefinement.contains_refines_naturals",
+        "Axionomy.BasketOperationsRefinement.equal_refines",
+        "Axionomy.BasketOperationsRefinement.equal_iff_permutation"
+      ],
+      "rust_tests": [
+        "tests/lean_conformance.rs",
+        "tests/account.rs",
+        "tests/generic_quantity.rs"
+      ],
+      "limitations": [
+        "Production checked_add, checked_scale, contains and PartialEq::eq are shared-source extracted for u64. Theorems prove total execution and exact ordered natural-number updates/errors, containment and order-independent equality. Equality is equivalent to permutation for unique keys and requires lengths representable by usize. Containment requires unique requested keys. Asset equality/cloning must satisfy the existing explicit laws.",
+        "Canonical representation proofs establish unique keys and no zero entries through store, credit/debit, addition, scaling, shortfall and successful account staging. They compose with the extracted operations; they do not prove physical memory layout or allocation bounds.",
+        "The ordered-map model and compiler/MIR/Charon/Aeneas/primitive trust remain. Option equality and bounded map length have explicit executable adapters; no new axioms are added. Out-of-range logical map lengths fail closed. Physical hashing/allocation/destructor/clone isolation are outside the proof. See verification/BASKETS.md.",
+        "Only local loop bindings were renamed for extraction, and equality uses a short-circuiting loop instead of unsupported Iterator::all while preserving PartialEq::eq dispatch and existing public bounds. Arbitrary iterators, sorted views, serialization, numeric backend laws and full exchange behavior remain separate contracts."
+      ]
+    },
+    {
       "id": "asset_qualified_amounts",
       "status": "design_proved_rust_tested",
       "sources": [
@@ -139,7 +179,7 @@
         "tests/serde.rs"
       ],
       "limitations": [
-        "Entry-level canonicalization and scalar shortfall are proved. Basket construction has its separate refinement contract. Account updates now extract lookup, insertion/removal and complete shortfall under an ordered-map model; other basket operations, physical IndexMap semantics, arbitrary iterators and serialization remain unrefined."
+        "Entry canonicalization and shortfall have design proofs. Separate basket/account implementation contracts now cover construction, lookup, insertion/removal, shortfall, addition/scaling, containment/equality and logical canonical representation preservation. Sorted iteration, remaining typed adapters, physical IndexMap semantics and serialization remain unrefined."
       ]
     },
     {

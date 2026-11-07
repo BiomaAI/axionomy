@@ -19,7 +19,7 @@ GENERATED = {
 }
 TEMPLATES = {
     "TypesExternal_Template.lean": "86560f493b0b74e2a8e17c56566a8a967907b37a9f1ea962fe6cfc297dc22817",
-    "FunsExternal_Template.lean": "64de724fe2167c6bcf3609dd731c9817877b5e1514e42e91385bb32dce7ad65a",
+    "FunsExternal_Template.lean": "f2fba8f92acf16f9f8b14cfa0d9f4b3b464b6a396686748b3998d341bd526c42",
 }
 
 # The caller remains outside the extraction. Keep its exact staging handoff
@@ -36,6 +36,16 @@ PREPARATION_CALL = """let account = match self
                 }
             };"""
 
+ENTRY_CALLS = {
+    "deposit": "state.deposit(assets)",
+    "withdraw": "state.withdraw(assets)",
+    "prepare_exchange": "state.prepare_exchange(consumed,produced)",
+    "basket_add": "state.checked_add(assets)",
+    "basket_scale": "state.checked_scale(units)",
+    "basket_contains": "state.contains(required)",
+    "basket_equal": "left==right",
+}
+
 
 def validate_bridge(root=ROOT):
     """Require the harness to forward to the unchanged production methods."""
@@ -43,10 +53,9 @@ def validate_bridge(root=ROOT):
     paths = re.findall(r'#\[path\s*=\s*"([^"]+)"\]', harness)
     if sorted(paths) != ["../src/account.rs", "../src/amount.rs", "../src/basket.rs", "../src/quantity.rs"]:
         raise ValueError("account extraction must include the exact production source files")
-    for operation in ("deposit", "withdraw", "prepare_exchange"):
+    for operation, call in ENTRY_CALLS.items():
         matches = re.findall(r"\bfn " + operation + r"\b[^{}]*\{([^{}]*)\}", harness)
-        arguments = "consumed,produced" if operation == "prepare_exchange" else "assets"
-        if len(matches) != 1 or re.sub(r"\s+", "", matches[0]) != f"state.{operation}({arguments})":
+        if len(matches) != 1 or re.sub(r"\s+", "", matches[0]) != call:
             raise ValueError(f"account extraction entry point is not a forwarding call: {operation}")
     economy = (root / "src/economy.rs").read_text()
     if re.sub(r"\s+", "", economy).count(re.sub(r"\s+", "", PREPARATION_CALL)) != 1:
@@ -64,12 +73,15 @@ def validate_generated(directory):
         if re.search(r"\b(sorry|admit|axiom)\b", (directory / name).read_text()):
             raise ValueError(f"unfinished or axiomatic account extraction: {name}")
     functions = (directory / "Funs.lean").read_text()
-    for entry in ("deposit", "withdraw", "prepare_exchange", "account.Account.prepare_exchange",
+    for entry in (*ENTRY_CALLS, "account.Account.prepare_exchange",
                   "account.Account.Insts.CoreCloneClone.clone",
                   "account.Account.deposit", "account.Account.withdraw",
                   "account.Account.deposit_loop.body", "account.Account.withdraw_loop.body",
                   "basket.Basket.shortfall", "basket.Basket.shortfall_loop.body",
-                  "basket.Basket.insert", "quantity.Quantity.checked_add", "quantity.Quantity.checked_sub"):
+                  "basket.Basket.insert", "basket.Basket.checked_add", "basket.Basket.checked_add_loop.body",
+                  "basket.Basket.checked_scale", "basket.Basket.checked_scale_loop.body", "basket.Basket.contains",
+                  "basket.Basket.Insts.CoreCmpPartialEqBasket.eq", "basket.Basket.Insts.CoreCmpPartialEqBasket.eq_loop.body",
+                  "quantity.Quantity.checked_add", "quantity.Quantity.checked_sub", "quantity.Quantity.checked_mul"):
         if not re.search(r"^def " + re.escape(entry) + r"\s", functions, re.MULTILINE):
             raise ValueError(f"missing account production definition: {entry}")
 
@@ -104,9 +116,8 @@ def check_extraction(write=False):
         generated.mkdir()
         command = [str(charon), "cargo", "--preset", "aeneas", "--monomorphize-mut",
                    "--resugar-drops", "--rustc-arg=-Zinline-mir=no",
-                   "--start-from-if-exists", "account_extraction::deposit",
-                   "--start-from-if-exists", "account_extraction::withdraw",
-                   "--start-from-if-exists", "account_extraction::prepare_exchange",
+                   *[arg for entry in ENTRY_CALLS for arg in
+                     ("--start-from-if-exists", "account_extraction::" + entry)],
                    "--mir", "promoted", "--sysroot", "default",
                    "--include", "account_extraction::account", "--include", "account_extraction::basket",
                    "--include", "account_extraction::quantity",

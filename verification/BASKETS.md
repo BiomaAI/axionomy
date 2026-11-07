@@ -1,5 +1,55 @@
 # Implementation proof: basket construction
 
+The constructor contract below is complemented by the production operation
+proofs in `Axionomy/BasketOperationsRefinement.lean`. These use the shared-source
+account extraction so account and exchange proofs can reuse the same basket
+types and methods.
+
+## Addition, scaling, containment, and equality
+
+For u64 quantities, `add_refines_naturals` and `scale_refines_naturals` prove
+termination and exact natural-number results of `Basket::checked_add` and
+`checked_scale`, including first-overflow asset order. Addition preserves its
+original ordered state on failure. Scaling returns no partial basket and removes
+zero products. Neither theorem assumes success. They use lawful asset equality
+and cloning, and the existing ordered-map abstraction.
+
+`contains_refines` proves total execution and the exact shortfall-based Boolean;
+`contains_refines_naturals` identifies success with sufficient balance for every
+requested asset. Required asset identifiers must be distinct, as for the earlier
+shortfall proof. The equality theorem proves total execution for baskets whose
+lengths fit `usize`; with unique identifiers, equality holds exactly when their
+entry lists are permutations. It therefore ignores insertion order while still
+checking asset identities, quantities, and additional entries.
+
+`BasketOperations.Valid` means unique asset identifiers and no zero entries.
+The store, credit, debit, addition, scaling, shortfall, and exchange-staging
+theorems preserve this representation invariant under their stated premises.
+They complement the constructor invariant and establish facts needed by later
+calls; they do not assume the result of the operation being verified.
+
+The production addition/scaling loops only rename local `quantity` bindings to
+`amount`, avoiding generated namespace shadowing. Basket equality replaces
+`Iterator::all` with an equivalent short-circuiting loop because the pinned
+Aeneas iterator trait lacks `all`. It still uses the original `PartialEq::eq`
+comparison (not a possibly user-overridden `ne`) and retains all public bounds.
+No generated Lean or intermediate LLBC is patched.
+
+The account extraction's reviewed external boundary adds two explicit definitions:
+Option equality invokes the supplied comparison and propagates its failures;
+map length returns the logical entry count when it fits `usize`, otherwise fails
+closed. Physical collection correctness/allocation remains trusted. Equality's
+length premise excludes impossible Rust collections; uniqueness excludes invalid
+duplicate-key map representations. The external-template checksum pins these
+interfaces. No axioms are added.
+
+The Lean specification generates 654 cases for the public Rust operations,
+covering both entry orders, empty/different-key baskets, zero scaling, u64
+boundaries, and late overflow. Isolated mutations that partially commit addition
+or ignore the scaling factor must compile after extraction and then fail the
+operation refinement proof. Arbitrary iterators, sorted views, serialization,
+custom backends, and the complete exchange evaluator remain separate contracts.
+
 `Basket::try_from_entries` used to discard a zero entry before checking the next
 asset. As a result, `[(A, 0), (A, 1)]` and `[(A, 0), (A, 0)]` incorrectly succeeded
 despite the constructor's duplicate-rejection contract. Construction now records

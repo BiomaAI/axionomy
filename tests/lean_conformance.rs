@@ -15,6 +15,68 @@ struct Fixtures {
     baskets: Vec<BasketCase>,
     accounts: Vec<AccountCase>,
     preparations: Vec<PreparationCase>,
+    #[serde(rename = "basketOps")]
+    basket_ops: Vec<BasketOpsCase>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct BasketOpsCase {
+    before: Vec<(u64, String)>,
+    other: Vec<(u64, String)>,
+    units: String,
+    added: Vec<(u64, String)>,
+    add_overflow: Option<u64>,
+    scaled: Option<Vec<(u64, String)>>,
+    scale_overflow: Option<u64>,
+    contains: bool,
+    equal: bool,
+}
+
+#[test]
+fn basket_operations_match_lean() {
+    fn build(entries: &[(u64, String)]) -> Basket<u64> {
+        Basket::try_from_entries(
+            entries
+                .iter()
+                .map(|(asset, value)| (*asset, Quantity::new(number(value)))),
+        )
+        .unwrap()
+    }
+    fn entries(basket: &Basket<u64>) -> Vec<(u64, String)> {
+        basket
+            .iter()
+            .map(|(asset, value)| (*asset, value.to_string()))
+            .collect()
+    }
+    let cases = fixtures().basket_ops;
+    assert_eq!(cases.len(), 654);
+    for case in cases {
+        let original = build(&case.before);
+        let other = build(&case.other);
+        assert_eq!(original.contains(&other), case.contains, "{case:?}");
+        assert_eq!(original == other, case.equal, "{case:?}");
+        let mut updated = original.clone();
+        assert_eq!(
+            updated.checked_add(&other).err(),
+            case.add_overflow,
+            "{case:?}"
+        );
+        assert_eq!(entries(&updated), case.added, "{case:?}");
+        match (
+            original.checked_scale(&Quantity::new(number(&case.units))),
+            &case.scaled,
+            case.scale_overflow,
+        ) {
+            (Ok(scaled), Some(expected), None) => {
+                assert_eq!(&entries(&scaled), expected, "{case:?}")
+            }
+            (Err(asset), None, Some(expected)) => assert_eq!(asset, expected, "{case:?}"),
+            (actual, _, _) => panic!("scale disagrees with Lean: {case:?}: {actual:?}"),
+        }
+        assert_eq!(entries(&original), case.before, "{case:?}");
+        assert_eq!(entries(&other), case.other, "{case:?}");
+    }
 }
 
 #[derive(Debug, Deserialize)]

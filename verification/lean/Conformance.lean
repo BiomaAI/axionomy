@@ -3,6 +3,7 @@ import Axionomy.Exchange
 import Axionomy.Rates
 import Axionomy.Basket
 import Axionomy.Account
+import Axionomy.BasketOperations
 
 /-! Deterministic executable examples from the SAME definitions used in the
 proofs. Rust runs these examples through the public API. Agreement on these
@@ -99,6 +100,32 @@ def preparationCase (before consumed produced : List (Nat × Nat)) : Preparation
     | .error (.insufficient missing) => (none, some (strings missing))
   ⟨strings before, strings consumed, strings produced, strings result.2, error.1, error.2⟩
 
+structure BasketOpsCase where
+  before : List (Nat × String)
+  other : List (Nat × String)
+  units : String
+  added : List (Nat × String)
+  addOverflow : Option Nat
+  scaled : Option (List (Nat × String))
+  scaleOverflow : Option Nat
+  contains : Bool
+  equal : Bool
+  deriving ToJson
+
+def basketOpsCase (before other : List (Nat × Nat)) (units : Nat) : BasketOpsCase :=
+  let before := Basket.canonical before
+  let other := Basket.canonical other
+  let ops := Account.naturals Quantity.u64Max
+  let added := BasketOperations.add ops before other
+  let scaled := BasketOperations.scale ops (Quantity.mul Quantity.u64Max) before units
+  let strings := fun entries : List (Nat × Nat) => entries.map (fun (asset, value) => (asset, toString value))
+  let addError := match added.1 with | .ok () => none | .error asset => some asset
+  let scaleResult := match scaled with
+    | .ok entries => (some (strings entries), none)
+    | .error asset => (none, some asset)
+  ⟨strings before, strings other, toString units, strings added.2, addError, scaleResult.1,
+    scaleResult.2, (Account.shortfall ops before other).isEmpty, BasketOperations.equal before other⟩
+
 def main : IO Unit := do
   let limit := Quantity.u64Max
   let boundaries := [0, 1, 2, 3, limit - 1, limit]
@@ -180,7 +207,21 @@ def main : IO Unit := do
        ([(0, 5), (2, 7)], [(0, 5)], [(3, 2), (0, 1)]),
        ([(0, limit), (1, limit)], [], [(1, 1), (0, 1)])] do
     preparations := preparations.push (preparationCase before consumed produced)
+  let mut basketOps : Array BasketOpsCase := #[]
+  for first in [0, 1, limit] do
+    for second in [0, 1, limit] do
+      for otherFirst in [0, 1, limit] do
+        for otherSecond in [0, 1, limit] do
+          for units in [0, 1, 2, limit] do
+            for reverse in [false, true] do
+              let other := [(0, otherFirst), (1, otherSecond), (2, 7)]
+              basketOps := basketOps.push (basketOpsCase [(0, first), (1, second), (2, 7)]
+                (if reverse then other.reverse else other) units)
+  for (before, other, units) in [([], [], 0), ([(0, 1)], [], 1), ([], [(0, 1)], 1),
+      ([(0, 1)], [(1, 1)], 1), ([(0, 0)], [], limit),
+      ([(0, 2), (1, limit)], [(0, 1), (1, 1)], 2)] do
+    basketOps := basketOps.push (basketOpsCase before other units)
   let document := Json.mkObj [("version", toJson (1 : Nat)), ("scalars", toJson scalars),
     ("exchanges", toJson exchanges), ("expressions", toJson expressions), ("baskets", toJson baskets),
-    ("accounts", toJson accounts), ("preparations", toJson preparations)]
+    ("accounts", toJson accounts), ("preparations", toJson preparations), ("basketOps", toJson basketOps)]
   IO.println document.compress

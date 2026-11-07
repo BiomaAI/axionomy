@@ -128,11 +128,11 @@ where
     pub fn checked_add(&mut self, other: &Self) -> Result<(), A> {
         let mut updated = self.clone();
 
-        for (asset, quantity) in other.iter() {
-            let Some(quantity) = updated.quantity(asset).checked_add(quantity) else {
+        for (asset, amount) in other.iter() {
+            let Some(amount) = updated.quantity(asset).checked_add(amount) else {
                 return Err(asset.clone());
             };
-            updated.insert(asset.clone(), quantity);
+            updated.insert(asset.clone(), amount);
         }
 
         *self = updated;
@@ -142,11 +142,11 @@ where
     pub fn checked_scale(&self, units: &Quantity<N>) -> Result<Self, A> {
         let mut scaled = Self::new();
 
-        for (asset, quantity) in self.iter() {
-            let Some(quantity) = quantity.checked_mul(units) else {
+        for (asset, amount) in self.iter() {
+            let Some(amount) = amount.checked_mul(units) else {
                 return Err(asset.clone());
             };
-            scaled.insert(asset.clone(), quantity);
+            scaled.insert(asset.clone(), amount);
         }
 
         Ok(scaled)
@@ -185,11 +185,16 @@ where
     N: PartialEq,
 {
     fn eq(&self, other: &Self) -> bool {
-        self.len() == other.len()
-            && self
-                .quantities
-                .iter()
-                .all(|(asset, quantity)| other.quantities.get(asset) == Some(quantity))
+        if self.len() != other.len() {
+            return false;
+        }
+        for (asset, amount) in self.iter() {
+            if other.quantities.get(asset) == Some(amount) {
+                continue;
+            }
+            return false;
+        }
+        true
     }
 }
 
