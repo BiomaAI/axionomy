@@ -528,6 +528,13 @@ def validate_coverage(root, coverage):
                     "Axionomy.ConservationRefinement.conserves_refines_integers",
                     "Axionomy.ConservationRefinement.accepted_conserves",
                     "Axionomy.ConservationRefinement.measure_refines_integers"}),
+                "full_width_mul_div": ("AccountExtraction.Funs", {
+                    "Axionomy.MulDivRefinement.impl_exact",
+                    "Axionomy.MulDivRefinement.quantity_refines",
+                    "Axionomy.EvaluationRefinement.evaluate_refines_naturals",
+                    "Axionomy.ExpressionConstructionRefinement.public_mul_div",
+                    "Axionomy.DiscoveryRefinement.parameters_refines",
+                    "Axionomy.DerivedRecordRefinement.rounding_eq"}),
                 "u64_checked_arithmetic": ("QuantityExtraction.Funs", {
                     f"Axionomy.QuantityRefinement.checked_{op}_refines"
                     for op in ("add", "sub", "mul", "div")}),
@@ -613,12 +620,12 @@ def main():
     if generated != committed:
         raise ValueError("Lean conformance cases are stale; regenerate them from Conformance.lean and review the diff")
     run("cargo", "test", "-p", "axionomy", "--all-features", "--test", "lean_conformance",
-        "--test", "transaction_conformance", "--test", "observation_conformance", "--test", "public_data_conformance", "--test", "iterator_conformance", "--test", "basket_collection_conformance", "--test", "basket_sorted_conformance", "--test", "inspection_conformance", "--test", "convenience_conformance", "--test", "derived_conformance", "--test", "inherited_conformance", "--test", "invariant_input_conformance")
+        "--test", "transaction_conformance", "--test", "observation_conformance", "--test", "public_data_conformance", "--test", "iterator_conformance", "--test", "basket_collection_conformance", "--test", "basket_sorted_conformance", "--test", "inspection_conformance", "--test", "convenience_conformance", "--test", "derived_conformance", "--test", "inherited_conformance", "--test", "invariant_input_conformance", "--test", "mul_div")
     run("cargo", "test", "-p", "axionomy", "--all-features", "--lib",
         "runtime_")
     run("cargo", "test", "-p", "axionomy", "--all-features", "--doc")
     print(f"Verified {len(theorems)} registered theorems and their axiom dependencies, "
-          "fresh Aeneas extraction of u64 arithmetic, basket construction/operations, account updates/staging, model/rate construction and metadata discovery, complete transaction assessment/application and finite-input iterator filtering, fork/simulation/ordered replay, goals/views/canonical keys and scoped fingerprints, typed data APIs, expression construction, generic trace extension and basket collection boundaries including sorted borrowed iteration, generic core inspection and complete asset collection, convenience constructor panics and string-conversion callbacks, generic derived equality/clone/order, inherited clone replacement/inequality/order helpers and scoped hash traversal contracts, snapshot evaluation/conditions, signed conservation and measurement, "
+          "fresh Aeneas extraction of u64 arithmetic and full-width rounded mul-div, basket construction/operations, account updates/staging, model/rate construction and metadata discovery, complete transaction assessment/application and finite-input iterator filtering, fork/simulation/ordered replay, goals/views/canonical keys and scoped fingerprints, typed data APIs, expression construction, generic trace extension and basket collection boundaries including sorted borrowed iteration, generic core inspection and complete asset collection, convenience constructor panics and string-conversion callbacks, generic derived equality/clone/order, inherited clone replacement/inequality/order helpers and scoped hash traversal contracts, snapshot evaluation/conditions, signed conservation and measurement, "
           "and Rust conformance/type checks. Collection storage uses an explicit trusted model. "
           "Other core implementation refinement remains unproved; see verification/README.md.")
 

@@ -117,3 +117,5 @@ import Axionomy.InheritedConformance
 import Axionomy.InvariantInput
 import Axionomy.InvariantInputRefinement
 import Axionomy.InvariantInputConformance
+import Axionomy.MulDiv
+import Axionomy.MulDivRefinement

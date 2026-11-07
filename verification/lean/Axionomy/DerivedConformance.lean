@@ -15,7 +15,11 @@ def expressions : List Expr := atoms ++
   [.Add (.Multiply .Units (.Constant 3)) (.Parameter "β"),
    .Add (.Multiply .Units (.Constant 4)) (.Parameter "β"),
    .Add (.Multiply .Units (.Constant 3)) (.Parameter "γ"),
-   .Maximum (.Minimum (.Balance 0 1) .Units) (.DivideFloor (.Constant 7) (.Constant 2))]
+   .Maximum (.Minimum (.Balance 0 1) .Units) (.DivideFloor (.Constant 7) (.Constant 2))] ++
+  ([quantity.Rounding.Floor, quantity.Rounding.Ceil].flatMap fun rounding =>
+    [.MulDiv (.Constant 7) .Units (.Constant 2) rounding, .MulDiv .Units (.Constant 7) (.Constant 2) rounding,
+     .MulDiv (.Constant 7) .Units (.Balance 0 1) rounding,
+     .MulDiv (.Balance 0 1) (.Parameter "β") .Units rounding])
 
 def binaryJson (kind : String) (left right : Json) : Json :=
   Json.mkObj [("kind", toJson kind), ("left", left), ("right", right)]
@@ -31,6 +35,10 @@ def expressionJson : Expr → Json
   | .DivideFloor left right => binaryJson "divide_floor" (expressionJson left) (expressionJson right)
   | .Minimum left right => binaryJson "minimum" (expressionJson left) (expressionJson right)
   | .Maximum left right => binaryJson "maximum" (expressionJson left) (expressionJson right)
+  | .MulDiv left right denominator rounding => Json.mkObj [("kind", toJson "mul_div"),
+      ("left", expressionJson left), ("right", expressionJson right),
+      ("denominator", expressionJson denominator),
+      ("rounding", toJson (match rounding with | .Floor => "floor" | .Ceil => "ceil"))]
 
 def equalPairs {T : Type} [DecidableEq T] (values : List T) : List (Nat × Nat × Bool) :=
   values.zipIdx.flatMap fun (left, i) => values.zipIdx.map fun (right, j) => (i, j, decide (left = right))

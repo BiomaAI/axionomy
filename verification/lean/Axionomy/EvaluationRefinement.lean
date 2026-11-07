@@ -1,5 +1,6 @@
 import Axionomy.Evaluation
 import Axionomy.RateConstructionRefinement
+import Axionomy.MulDivRefinement
 
 namespace Axionomy.EvaluationRefinement
 open Aeneas Aeneas.Std AccountExtracted AccountRefinement
@@ -7,7 +8,8 @@ open Aeneas Aeneas.Std AccountExtracted AccountRefinement
 def arithmetic : Evaluation.Arithmetic Std.U64 :=
   ⟨U64.checked_add, U64.checked_sub, U64.checked_mul, U64.checked_div,
     fun l r => if l.val ≤ r.val then l else r,
-    fun l r => if l.val ≤ r.val then r else l⟩
+    fun l r => if l.val ≤ r.val then r else l,
+    fun value => decide (value = 0#u64), MulDivRefinement.mulDiv⟩
 
 theorem sub_exact (left right : Std.U64) :
     (U64.checked_sub left right).map UScalar.val = Quantity.sub left.val right.val := by
@@ -34,6 +36,8 @@ theorem natural_hom : Evaluation.Hom arithmetic (Evaluation.naturals Quantity.u6
   div := div_exact
   min := by intro l r; by_cases h : l.val ≤ r.val <;> simp [arithmetic, Evaluation.naturals, h, Nat.min_def]
   max := by intro l r; by_cases h : l.val ≤ r.val <;> simp [arithmetic, Evaluation.naturals, h, Nat.max_def]
+  isZero := by intro q; simp [arithmetic, Evaluation.naturals, UScalar.eq_equiv]
+  mulDiv := MulDivRefinement.mulDiv_val
 
 @[simp] theorem sub_call (left right : Std.U64) :
     quantity.Quantity.checked_sub scalar left right = .ok (U64.checked_sub left right) := by
@@ -75,6 +79,9 @@ def decodeExpression {Role A : Type} : rate.QuantityExpression Role A Std.U64 �
   | .DivideFloor left right => .binary .div (decodeExpression left) (decodeExpression right)
   | .Minimum left right => .binary .min (decodeExpression left) (decodeExpression right)
   | .Maximum left right => .binary .max (decodeExpression left) (decodeExpression right)
+  | .MulDiv left right denominator rounding =>
+    .mulDiv (MulDivRefinement.decodeRounding rounding) (decodeExpression left)
+      (decodeExpression right) (decodeExpression denominator)
 
 open Evaluation (orderedFind)
 
@@ -144,6 +151,41 @@ theorem binary_call {F : Type} (operationInst : core.ops.function.FnOnce F (Std.
       core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual,
       core.convert.FromSame.from]
   split <;> simp_all [Evaluation.checked]
+
+def mulDivResult (rounding : MulDiv.Rounding)
+    (left right denominator : Except Evaluation.Error Std.U64) : Except Evaluation.Error Std.U64 :=
+  match left with
+  | .error error => .error error
+  | .ok l => match right with
+    | .error error => .error error
+    | .ok r => match denominator with
+      | .error error => .error error
+      | .ok d => Evaluation.operateMulDiv arithmetic rounding l r d
+
+omit [DecidableEq AccountId] [DecidableEq A] in
+theorem mulDiv_call (rounding : quantity.Rounding)
+    (proposal : exchange.Exchange RateId Role AccountId Std.U64)
+    (accounts : List (AccountId × account.Account A Std.U64))
+    (left right denominator : rate.QuantityExpression Role A Std.U64)
+    (leftResult rightResult denominatorResult : Except Evaluation.Error Std.U64)
+    (hl : economy.evaluate_expression accountEq accountHash assetEq assetHash roleOrd scalar left proposal accounts = .ok (encodeResult leftResult))
+    (hr : economy.evaluate_expression accountEq accountHash assetEq assetHash roleOrd scalar right proposal accounts = .ok (encodeResult rightResult))
+    (hd : economy.evaluate_expression accountEq accountHash assetEq assetHash roleOrd scalar denominator proposal accounts = .ok (encodeResult denominatorResult)) :
+    economy.evaluate_mul_div accountEq accountHash assetEq assetHash roleOrd scalar
+      left right denominator rounding proposal accounts =
+      .ok (encodeResult (mulDivResult (MulDivRefinement.decodeRounding rounding)
+        leftResult rightResult denominatorResult)) := by
+  rw [economy.evaluate_mul_div.eq_def]
+  cases leftResult <;> cases rightResult <;> cases denominatorResult <;>
+    simp [mulDivResult, hl, hr, hd, encodeResult, core.result.Result.Insts.CoreOpsTry.branch,
+      core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual,
+      core.convert.FromSame.from]
+  rename_i l r d
+  by_cases zero : d = 0#u64
+  · simp [zero, Evaluation.operateMulDiv, arithmetic, AccountRefinement.arithmetic, encodeError]
+  · simp [zero, Evaluation.operateMulDiv, arithmetic, AccountRefinement.arithmetic,
+      core.option.Option.ok_or]
+    split <;> simp_all [Evaluation.checked, encodeResult, encodeError]
 
 include hAccount hAsset hRole in
 theorem eval_impl (proposal : exchange.Exchange RateId Role AccountId Std.U64)
@@ -264,6 +306,14 @@ theorem eval_impl (proposal : exchange.Exchange RateId Role AccountId Std.U64)
     by_cases h : l.val ≤ r.val
     · simp [core.cmp.Ord.max.default, core.cmp.Ord.max_body, arithmetic, h, Nat.not_lt.mpr h]
     · simp [core.cmp.Ord.max.default, core.cmp.Ord.max_body, arithmetic, h, Nat.lt_of_not_ge h]
+  | MulDiv left right denominator rounding ihl ihr ihd =>
+    rw [economy.evaluate_expression.eq_def]
+    have step := mulDiv_call accountEq accountHash assetEq assetHash roleOrd rounding
+      proposal accounts left right denominator _ _ _ ihl ihr ihd
+    cases hl : Evaluation.eval arithmetic (context roleCompare proposal accounts) (decodeExpression left) <;>
+      cases hr : Evaluation.eval arithmetic (context roleCompare proposal accounts) (decodeExpression right) <;>
+      cases hd : Evaluation.eval arithmetic (context roleCompare proposal accounts) (decodeExpression denominator) <;>
+      simpa [decodeExpression, Evaluation.eval, mulDivResult, hl, hr, hd] using step
 
 include hAccount hAsset hRole in
 theorem evaluate_refines (proposal : exchange.Exchange RateId Role AccountId Std.U64)

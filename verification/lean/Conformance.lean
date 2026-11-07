@@ -200,6 +200,10 @@ def expressionJson : Evaluation.Expr Nat Nat Nat → Json
     let fields := match op with
       | .div => ("numerator", "denominator") | _ => ("left", "right")
     Json.mkObj [("kind", toJson kind), (fields.1, expressionJson left), (fields.2, expressionJson right)]
+  | .mulDiv rounding left right denominator =>
+    Json.mkObj [("kind", toJson "mul_div"), ("left", expressionJson left), ("right", expressionJson right),
+      ("denominator", expressionJson denominator),
+      ("rounding", toJson (match rounding with | .floor => "floor" | .ceil => "ceil"))]
 
 structure EvaluationCase where
   units : String
@@ -543,6 +547,19 @@ def main : IO Unit := do
         evaluation := evaluation.push (evaluationCase units
           (.binary op (.binary .sub (.balance 0 0) left) (.binary .div (.parameter "éλ") .units))
           (.balance 3 0))
+      -- Full-width products, exact/inexact quotients, zero denominators,
+      -- quotient overflow and an error in each operand position.
+      let mulDivOperands : List (Evaluation.Expr Nat Nat Nat × Evaluation.Expr Nat Nat Nat) :=
+        [(.constant limit, .constant limit), (.parameter "a", .constant 2), (.balance 0 0, .units),
+         (.constant 1, .parameter "z"), (.constant 2, .constant 1), (.parameter "", .constant 1),
+         (.constant 1, .balance 3 0), (.units, .balance 1 0)]
+      for rounding in [MulDiv.Rounding.floor, .ceil] do
+        for (right, denominator) in mulDivOperands do
+          evaluation := evaluation.push (evaluationCase units (.mulDiv rounding left right denominator)
+            (.parameter "a"))
+        evaluation := evaluation.push (evaluationCase units
+          (.binary .add (.mulDiv rounding (.balance 0 0) left (.parameter "éλ")) .units)
+          (.mulDiv rounding left (.constant 3) (.constant 2)))
   let mut measurements : Array MeasureCase := #[]
   for firstWeight in coefficients do
     for secondWeight in coefficients do
@@ -582,6 +599,9 @@ def main : IO Unit := do
     discoveryExpressions := discoveryExpressions ++
       [.binary op (.binary .add (.balance 2 3) (.parameter "éλ"))
         (.binary .max (.balance 0 99) (.binary .sub (.parameter "a") (.balance 2 3)))]
+  for rounding in [MulDiv.Rounding.floor, .ceil] do
+    discoveryExpressions := discoveryExpressions ++
+      [.mulDiv rounding (.balance 2 3) (.parameter "éλ") (.binary .sub (.parameter "a") (.balance 0 99))]
   for expression in discoveryExpressions do
     for kind in [0, 1, 2, 3] do
       metadata := metadata.push (metadataCase [

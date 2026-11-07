@@ -52,6 +52,11 @@ theorem comparison_clone_from
     inherited_comparison_clone_from target source =
       derived_comparison_clone source := rfl
 
+theorem rounding_clone_from
+  (target : quantity.Rounding) (source : quantity.Rounding) :
+    inherited_rounding_clone_from target source =
+      derived_rounding_clone source := rfl
+
 theorem fingerprint_clone_from
   (target : economy.StateFingerprint) (source : economy.StateFingerprint) :
     inherited_fingerprint_clone_from target source =

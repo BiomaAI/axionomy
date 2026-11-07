@@ -56,6 +56,12 @@ theorem comparison_ne
       let equal ← derived_comparison_eq left right
       .ok (!equal)) := rfl
 
+theorem rounding_ne
+  (left : quantity.Rounding) (right : quantity.Rounding) :
+    inherited_rounding_ne left right = (do
+      let equal ← derived_rounding_eq left right
+      .ok (!equal)) := rfl
+
 theorem fingerprint_ne
   (left : economy.StateFingerprint) (right : economy.StateFingerprint) :
     inherited_fingerprint_ne left right = (do

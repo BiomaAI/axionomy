@@ -74,6 +74,10 @@ def expressionJson : Expression → Json
   | .DivideFloor left right => binaryJson "divide" (expressionJson left) (expressionJson right)
   | .Minimum left right => binaryJson "minimum" (expressionJson left) (expressionJson right)
   | .Maximum left right => binaryJson "maximum" (expressionJson left) (expressionJson right)
+  | .MulDiv left right denominator rounding => Json.mkObj [("kind", toJson "mul_div"),
+      ("left", expressionJson left), ("right", expressionJson right),
+      ("denominator", expressionJson denominator),
+      ("rounding", toJson (match rounding with | .Floor => "floor" | .Ceil => "ceil"))]
 
 def entriesJson (entries : List (Nat × Nat)) : Json :=
   toJson (entries.map fun (asset, value) => (asset, toString value))
@@ -133,7 +137,8 @@ def models : Array Json := Id.run do
     let right : Expression := .Maximum (.Balance 8 77) (.Balance 4 88)
     let expressions : List Expression := [.Constant value, .Units, .Parameter "", .Balance 4 88,
       .Add left right, .Subtract left right, .Multiply left right, .DivideFloor left right,
-      .Minimum left right, .Maximum left right]
+      .Minimum left right, .Maximum left right, .MulDiv left right (.Balance 8 66) .Floor,
+      .MulDiv (.Balance 8 66) right left .Ceil]
     for expression in expressions do
       for mode in List.range 8 do
         cases := cases.push (modelCase mode value expression)

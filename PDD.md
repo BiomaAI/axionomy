@@ -230,6 +230,13 @@ while a two-unit batch requires two tokens upfront. State-evaluated expressions
 also observe the pre-exchange snapshot once; their effects are not automatically
 scaled by units. Any stronger batching theorem must state its conditions.
 
+Fractional rates are integer ratios. `MulDiv` multiplies at full width and
+divides once, with an explicit `Rounding`; nothing in the kernel rounds
+implicitly. Models round amounts a participant pays up and amounts a
+participant receives down, so rounding dust accrues to the counterparty and
+round trips cannot create value. Banker's rounding is deliberately absent: the
+safety property for an economy is the rounding direction, not the nearest value.
+
 When multiple roles bind to one account, their effects are merged before any
 balance is checked. This prevents role aliasing from creating order-dependent
 behavior. Rates can prohibit aliases with `distinct`.

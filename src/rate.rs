@@ -1,4 +1,4 @@
-use crate::{Account, AccountDelta, Basket, Quantity, QuantityScalar};
+use crate::{Account, AccountDelta, Basket, Quantity, QuantityScalar, Rounding};
 use indexmap::IndexMap;
 use num_traits::{CheckedAdd, Zero};
 use schemars::{JsonSchema, Schema, SchemaGenerator};
@@ -14,7 +14,11 @@ use thiserror::Error;
 ///
 /// This keeps state-dependent exchange laws inside Axionomy authority without
 /// embedding domain callbacks in the kernel. Expressions intentionally expose
-/// only exact integer arithmetic; division is floor division.
+/// only exact integer arithmetic. `DivideFloor` rounds down; `MulDiv` computes
+/// `left × right ÷ denominator` from a full-width product with an explicit
+/// [`Rounding`] direction, so scaled ratios cannot overflow in the
+/// intermediate product. Round amounts a participant pays up and amounts a
+/// participant receives down, so rounding dust stays with the counterparty.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(
     tag = "kind",
@@ -60,6 +64,14 @@ pub enum QuantityExpression<Role, A, N = u64> {
         left: Box<Self>,
         right: Box<Self>,
     },
+    /// `left × right ÷ denominator` from a full-width intermediate product,
+    /// with an inexact quotient rounded in the stated direction.
+    MulDiv {
+        left: Box<Self>,
+        right: Box<Self>,
+        denominator: Box<Self>,
+        rounding: Rounding,
+    },
 }
 
 impl<Role, A> QuantityExpression<Role, A> {
@@ -67,6 +79,11 @@ impl<Role, A> QuantityExpression<Role, A> {
         Self::Constant {
             value: Quantity::new(value),
         }
+    }
+
+    /// `⌈numerator ÷ denominator⌉`, expressed as a rounded-up mul-div by one.
+    pub fn divide_ceil(numerator: Self, denominator: Self) -> Self {
+        Self::mul_div(numerator, Self::constant(1), denominator, Rounding::Ceil)
     }
 }
 
@@ -136,6 +153,18 @@ impl<Role, A, N> QuantityExpression<Role, A, N> {
         }
     }
 
+    /// `left × right ÷ denominator` with a full-width product. Use
+    /// [`Rounding::Ceil`] for amounts a participant pays and
+    /// [`Rounding::Floor`] for amounts a participant receives.
+    pub fn mul_div(left: Self, right: Self, denominator: Self, rounding: Rounding) -> Self {
+        Self::MulDiv {
+            left: Box::new(left),
+            right: Box::new(right),
+            denominator: Box::new(denominator),
+            rounding,
+        }
+    }
+
     fn collect_roles<'a>(&'a self, roles: &mut BTreeSet<&'a Role>)
     where
         Role: Ord,
@@ -157,6 +186,16 @@ impl<Role, A, N> QuantityExpression<Role, A, N> {
                 denominator,
             } => {
                 numerator.collect_roles(roles);
+                denominator.collect_roles(roles);
+            }
+            Self::MulDiv {
+                left,
+                right,
+                denominator,
+                ..
+            } => {
+                left.collect_roles(roles);
+                right.collect_roles(roles);
                 denominator.collect_roles(roles);
             }
             Self::Constant { .. } | Self::Units | Self::Parameter { .. } => {}
@@ -181,6 +220,16 @@ impl<Role, A, N> QuantityExpression<Role, A, N> {
                 numerator.collect_assets(assets);
                 denominator.collect_assets(assets);
             }
+            Self::MulDiv {
+                left,
+                right,
+                denominator,
+                ..
+            } => {
+                left.collect_assets(assets);
+                right.collect_assets(assets);
+                denominator.collect_assets(assets);
+            }
             Self::Constant { .. } | Self::Units | Self::Parameter { .. } => {}
         }
     }
@@ -203,6 +252,16 @@ impl<Role, A, N> QuantityExpression<Role, A, N> {
                 denominator,
             } => {
                 numerator.collect_parameters(parameters);
+                denominator.collect_parameters(parameters);
+            }
+            Self::MulDiv {
+                left,
+                right,
+                denominator,
+                ..
+            } => {
+                left.collect_parameters(parameters);
+                right.collect_parameters(parameters);
                 denominator.collect_parameters(parameters);
             }
             Self::Constant { .. } | Self::Units | Self::Balance { .. } => {}
@@ -1125,7 +1184,7 @@ mod metadata_conformance {
     fn runtime_rate_metadata_matches_lean() {
         let fixtures: Fixtures =
             serde_json::from_str(include_str!("../verification/conformance.json")).unwrap();
-        assert_eq!(fixtures.metadata.len(), 77);
+        assert_eq!(fixtures.metadata.len(), 85);
         for case in fixtures.metadata {
             assert_eq!(case.snapshots.len(), case.steps.len() + 1);
             for default in [false, true] {

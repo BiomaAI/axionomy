@@ -23,6 +23,10 @@ theorem add_operator (left right : rate.QuantityExpression Role A N) :
     rate.QuantityExpression.Insts.CoreOpsArithAddQuantityExpressionQuantityExpression.add left right =
       .ok (.Add left right) := rfl
 
+def encodeRounding : MulDiv.Rounding → quantity.Rounding
+  | .floor => .Floor
+  | .ceil => .Ceil
+
 def encode : Evaluation.Expr Role A N → rate.QuantityExpression Role A N
   | .constant value => .Constant value
   | .units => .Units
@@ -35,6 +39,8 @@ def encode : Evaluation.Expr Role A N → rate.QuantityExpression Role A N
     | .div => .DivideFloor (encode left) (encode right)
     | .min => .Minimum (encode left) (encode right)
     | .max => .Maximum (encode left) (encode right)
+  | .mulDiv rounding left right denominator =>
+    .MulDiv (encode left) (encode right) (encode denominator) (encodeRounding rounding)
 
 /-- Build each node with the actual extracted public Rust constructor. -/
 def construct : Evaluation.Expr Role A Std.U64 → Result (rate.QuantityExpression Role A Std.U64)
@@ -53,6 +59,11 @@ def construct : Evaluation.Expr Role A Std.U64 → Result (rate.QuantityExpressi
     | .div => rate.QuantityExpression.divide_floor l r
     | .min => rate.QuantityExpression.minimum l r
     | .max => rate.QuantityExpression.maximum l r
+  | .mulDiv rounding left right denominator => do
+    let l ← construct left
+    let r ← construct right
+    let d ← construct denominator
+    rate.QuantityExpression.mul_div l r d (encodeRounding rounding)
 
 theorem construct_refines (expression : Evaluation.Expr Role A Std.U64) :
     construct expression = .ok (encode expression) := by
@@ -65,6 +76,8 @@ theorem construct_refines (expression : Evaluation.Expr Role A Std.U64) :
     cases op <;> simp [construct, ihLeft, ihRight, encode, rate.QuantityExpression.plus,
       rate.QuantityExpression.subtract, rate.QuantityExpression.multiply, rate.QuantityExpression.divide_floor,
       rate.QuantityExpression.minimum, rate.QuantityExpression.maximum]
+  | mulDiv rounding left right denominator ihLeft ihRight ihDenominator =>
+    simp [construct, ihLeft, ihRight, ihDenominator, encode, rate.QuantityExpression.mul_div]
 
 theorem decode_encode (expression : Evaluation.Expr Role A Std.U64) :
     EvaluationRefinement.decodeExpression (encode expression) = expression := by
@@ -75,6 +88,9 @@ theorem decode_encode (expression : Evaluation.Expr Role A Std.U64) :
   | balance role asset => rfl
   | binary op left right ihLeft ihRight =>
     cases op <;> simp [encode, EvaluationRefinement.decodeExpression, ihLeft, ihRight]
+  | mulDiv rounding left right denominator ihLeft ihRight ihDenominator =>
+    cases rounding <;> simp [encode, encodeRounding, MulDivRefinement.decodeRounding,
+      EvaluationRefinement.decodeExpression, ihLeft, ihRight, ihDenominator]
 
 /-- Composing constructors with the already-proved evaluator preserves every
 operator, operand position, identifier and checked-arithmetic failure. -/
@@ -109,5 +125,33 @@ theorem minimum (left right : rate.QuantityExpression Role A N) :
 
 theorem maximum (left right : rate.QuantityExpression Role A N) :
     rate.QuantityExpression.maximum left right = .ok (.Maximum left right) := rfl
+
+theorem mul_div (left right denominator : rate.QuantityExpression Role A N)
+    (rounding : quantity.Rounding) :
+    rate.QuantityExpression.mul_div left right denominator rounding =
+      .ok (.MulDiv left right denominator rounding) := rfl
+
+/-- Ceiling division is the rounded-up mul-div by the constant one. -/
+theorem divide_ceil (numerator denominator : rate.QuantityExpression Role A Std.U64) :
+    rate.QuantityExpressionRoleAU64.divide_ceil numerator denominator =
+      .ok (.MulDiv numerator (.Constant 1#u64) denominator .Ceil) := by
+  simp [rate.QuantityExpressionRoleAU64.divide_ceil, constant, rate.QuantityExpression.mul_div]
+
+/-- The public forwarding roots return exactly these trees. -/
+theorem public_mul_div (left right denominator : rate.QuantityExpression Role A N)
+    (rounding : quantity.Rounding) :
+    expression_mul_div left right denominator rounding =
+      .ok (.MulDiv left right denominator rounding) := rfl
+
+theorem public_divide_ceil (numerator denominator : rate.QuantityExpression Role A Std.U64) :
+    expression_divide_ceil numerator denominator =
+      .ok (.MulDiv numerator (.Constant 1#u64) denominator .Ceil) := by
+  simp [expression_divide_ceil, divide_ceil]
+
+/-- Evaluating a constructed ceiling division gives the exact rounded-up quotient
+of the operands, with the same zero-divisor and operand-error behavior. -/
+theorem divide_ceil_quotient (numerator denominator : Nat) (nonzero : denominator ≠ 0) :
+    MulDiv.quotient .ceil numerator 1 denominator = (numerator + denominator - 1) / denominator := by
+  simpa using MulDiv.ceil_closed_form numerator 1 denominator nonzero
 
 end Axionomy.ExpressionConstructionRefinement

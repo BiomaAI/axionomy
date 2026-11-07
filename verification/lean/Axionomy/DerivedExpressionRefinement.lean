@@ -4,7 +4,17 @@ namespace Axionomy.DerivedExpressionRefinement
 open Aeneas Aeneas.Std AccountExtracted AccountRefinement DerivedValueRefinement
 variable {Role A N : Type}
 
+deriving instance DecidableEq for quantity.Rounding
 deriving instance DecidableEq for rate.QuantityExpression
+
+/-- The derived `Rounding` clone and equality used inside expressions. -/
+@[simp] theorem rounding_clone (value : quantity.Rounding) :
+    quantity.Rounding.Insts.CoreCloneClone.clone value = .ok value := rfl
+
+@[simp] theorem rounding_eq (left right : quantity.Rounding) :
+    quantity.Rounding.Insts.CoreCmpPartialEqRounding.eq left right = .ok (decide (left = right)) := by
+  cases left <;> cases right <;>
+    simp [quantity.Rounding.Insts.CoreCmpPartialEqRounding.eq, quantity.Rounding.read_discriminant]
 
 /-- A finite recursive expression retains its entire structure and values under
 independently lawful primitive clones. The induction proves termination too. -/

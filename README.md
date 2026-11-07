@@ -149,6 +149,8 @@ adapters.
 - Atomic multi-account exchanges with consume, produce, and preserve baskets.
 - Serializable state-evaluated rate laws with exact integer expressions,
   named exchange parameters, and authoritative conditions for nonlinear rules.
+- Full-width `MulDiv` with an explicit `Rounding` direction for fees, prices,
+  and shares: intermediate products never overflow, and rounding is never implicit.
 - Explanatory assessments, complete shortfalls, projected deltas, and receipts.
 - Declared invariants, asset-configured goals, isolated forks, and deterministic replay.
 - Stable Serde models plus optional `BigUint`, dimension-safe `uom`, and Jiff authoring.
@@ -468,6 +470,31 @@ key itself, so two-decimal and six-decimal amounts of one ID cannot mix, and
 decimal text or rationals that are not exact multiples of an atom are rejected. Jiff uses this
 same representation, so calendar and physical-time authoring cannot create
 competing clocks outside the economy.
+
+Fractional rates stay exact integer arithmetic. `QuantityExpression::mul_div`
+computes `left × right ÷ denominator` from a full-width product (`u128` for the
+`u64` backend), so only the final quotient must fit. Every such division names
+its `Rounding`: round amounts a participant pays up and amounts a participant
+receives down, so rounding dust stays with the counterparty and declared
+conservation invariants still hold.
+
+```rust
+use axionomy::{QuantityExpression as Q, Rounding};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum Role { Trader }
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+enum Asset { Credit }
+
+// fee = ⌈units × bps ÷ 10_000⌉, charged to the trader.
+let fee: Q<Role, Asset> =
+    Q::mul_div(Q::units(), Q::parameter("bps"), Q::constant(10_000), Rounding::Ceil);
+# let _ = fee;
+```
+
+A zero denominator reports division by zero before the quotient is attempted;
+an unrepresentable quotient reports overflow. Lean proves the extracted `u64`
+implementation and evaluator exact for every input.
 
 The typed `uom` and Jiff adapters currently require the resulting atom count to
 fit `u64` before converting it into the economy's selected `Quantity<N>`

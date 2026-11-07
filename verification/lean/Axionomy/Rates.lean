@@ -1,4 +1,5 @@
 import Axionomy.Quantity
+import Axionomy.MulDiv
 
 /-! Pure pre-snapshot expression evaluation and aggregated effects. Rust role
 lookup, map iteration, and checked aggregation still need refinement proofs. -/
@@ -23,6 +24,7 @@ inductive Expr (Role Asset Parameter : Type) where
   | parameter (name : Parameter)
   | balance (role : Role) (asset : Asset)
   | binary (op : Op) (left right : Expr Role Asset Parameter)
+  | mulDiv (rounding : MulDiv.Rounding) (left right denominator : Expr Role Asset Parameter)
 
 structure Context (Role Asset Parameter : Type) where
   units : Nat
@@ -40,6 +42,15 @@ def eval {Role Asset Parameter : Type} (limit : Nat) (ctx : Context Role Asset P
       let r ← eval limit ctx right
       let value ← operate op l r
       Quantity.checked limit value
+  | .mulDiv rounding left right denominator => do
+      let l ← eval limit ctx left
+      let r ← eval limit ctx right
+      let d ← eval limit ctx denominator
+      MulDiv.mulDiv limit rounding l r d
+
+-- The mathematical meaning of a rounded mul-div has no intermediate bound.
+def mulDivExact (rounding : MulDiv.Rounding) (l r d : Nat) : Option Nat :=
+  if d = 0 then none else some (MulDiv.quotient rounding l r d)
 
 def mathematical {Role Asset Parameter : Type} (ctx : Context Role Asset Parameter) :
     Expr Role Asset Parameter → Option Nat
@@ -51,6 +62,11 @@ def mathematical {Role Asset Parameter : Type} (ctx : Context Role Asset Paramet
       let l ← mathematical ctx left
       let r ← mathematical ctx right
       operate op l r
+  | .mulDiv rounding left right denominator => do
+      let l ← mathematical ctx left
+      let r ← mathematical ctx right
+      let d ← mathematical ctx denominator
+      mulDivExact rounding l r d
 
 theorem bind_checked {limit result : Nat} {source : Option Nat}
     (h : source.bind (Quantity.checked limit) = some result) :
@@ -90,6 +106,22 @@ theorem eval_refines_mathematical {Role Asset Parameter : Type}
         constructor
         · simp [mathematical, (ihl l hl).1, (ihr r hr).1, hs.1]
         · exact hs.2
+  | mulDiv rounding left right denominator ihl ihr ihd =>
+    cases hl : eval limit ctx left with
+    | none => simp [eval, hl] at h
+    | some l =>
+      cases hr : eval limit ctx right with
+      | none => simp [eval, hl, hr] at h
+      | some r =>
+        cases hd : eval limit ctx denominator with
+        | none => simp [eval, hl, hr, hd] at h
+        | some d =>
+          have hm : MulDiv.mulDiv limit rounding l r d = some result := by
+            simpa [eval, hl, hr, hd] using h
+          have hs := (MulDiv.success_iff limit rounding l r d result).mp hm
+          constructor
+          · simp [mathematical, (ihl l hl).1, (ihr r hr).1, (ihd d hd).1, mulDivExact, hs.1, hs.2.2]
+          · exact hs.2.2 ▸ hs.2.1
 
 structure Effect where
   consume : Nat

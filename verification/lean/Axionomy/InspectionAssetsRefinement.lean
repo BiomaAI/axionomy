@@ -12,6 +12,8 @@ def expressionAssets : rate.QuantityExpression Role A N → List A
   | .Add left right | .Subtract left right | .Multiply left right
   | .DivideFloor left right | .Minimum left right | .Maximum left right =>
     expressionAssets left ++ expressionAssets right
+  | .MulDiv left right denominator _ =>
+    expressionAssets left ++ expressionAssets right ++ expressionAssets denominator
 
 def amountAssets (amount : rate.ComputedAmount Role A N) : List A :=
   amount.asset :: expressionAssets amount.quantity
@@ -55,6 +57,17 @@ theorem expression_assets (expression : rate.QuantityExpression Role A N)
     · rw [rate.QuantityExpression.collect_assets.eq_def]
       simp [leftCall, rightCall]
     · simp [resultEntries, middleEntries, expressionAssets, List.append_assoc]
+  | MulDiv left right denominator rounding ihl ihr ihd =>
+    simp only [expressionAssets, List.length_append] at capacity
+    obtain ⟨first, leftCall, firstEntries⟩ := ihl accumulated (by omega)
+    obtain ⟨second, rightCall, secondEntries⟩ := ihr first
+      (by rw [firstEntries]; simp only [List.length_append]; omega)
+    obtain ⟨result, denominatorCall, resultEntries⟩ := ihd second
+      (by rw [secondEntries, firstEntries]; simp only [List.length_append]; omega)
+    refine ⟨result, ?_, ?_⟩
+    · rw [rate.QuantityExpression.collect_assets.eq_def]
+      simp [leftCall, rightCall, denominatorCall]
+    · simp [resultEntries, secondEntries, firstEntries, expressionAssets, List.append_assoc]
 
 theorem amount_assets_body (iter : core.slice.iter.Iter (rate.ComputedAmount Role A N))
     (amount : rate.ComputedAmount Role A N) (rest : List (rate.ComputedAmount Role A N))

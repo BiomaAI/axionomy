@@ -8,16 +8,19 @@ variable {Role A Q : Type}
 def roles : Evaluation.Expr Role A Q → List Role
   | .balance role _ => [role]
   | .binary _ left right => roles left ++ roles right
+  | .mulDiv _ left right denominator => roles left ++ roles right ++ roles denominator
   | _ => []
 
 def assets : Evaluation.Expr Role A Q → List A
   | .balance _ asset => [asset]
   | .binary _ left right => assets left ++ assets right
+  | .mulDiv _ left right denominator => assets left ++ assets right ++ assets denominator
   | _ => []
 
 def parameters : Evaluation.Expr Role A Q → List String
   | .parameter parameter => [parameter]
   | .binary _ left right => parameters left ++ parameters right
+  | .mulDiv _ left right denominator => parameters left ++ parameters right ++ parameters denominator
   | _ => []
 
 def registerAll {K : Type} (cmp : K → K → Ordering) (entries accumulated : List K) : List K :=

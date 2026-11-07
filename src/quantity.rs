@@ -6,6 +6,19 @@ use std::fmt;
 use std::hash::Hash;
 use thiserror::Error;
 
+/// Direction in which an inexact quotient is rounded.
+///
+/// Round amounts a participant pays up and amounts a participant receives
+/// down, so rounding dust always stays with the counterparty.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum Rounding {
+    /// Round an inexact quotient down (`⌊x⌋`).
+    Floor,
+    /// Round an inexact quotient up (`⌈x⌉`).
+    Ceil,
+}
+
 /// Scalar operations required by a quantity backend's invariant measure.
 ///
 /// The blanket implementation preserves the existing backend requirements.
@@ -43,6 +56,28 @@ pub trait QuantityScalar:
 
     /// Multiplies this non-negative value by a signed invariant coefficient.
     fn checked_weighted(&self, coefficient: i64) -> Option<Self::SignedMeasure>;
+
+    /// Computes `self × rhs ÷ denominator` from an exact, full-width product,
+    /// rounding an inexact quotient in the given direction.
+    ///
+    /// Only the quotient must be representable: an intermediate product that
+    /// exceeds this backend must not cause a failure. Returns `None` for a zero
+    /// denominator or an unrepresentable quotient.
+    fn checked_mul_div(&self, rhs: &Self, denominator: &Self, rounding: Rounding) -> Option<Self>;
+}
+
+// A u64 × u64 product always fits u128, so widened arithmetic cannot overflow;
+// only the final quotient is narrowed back to u64.
+const fn widen(value: u64) -> u128 {
+    value as u128
+}
+
+const fn narrow(value: u128) -> Option<u64> {
+    if value > u64::MAX as u128 {
+        None
+    } else {
+        Some(value as u64)
+    }
 }
 
 impl QuantityScalar for u64 {
@@ -58,6 +93,30 @@ impl QuantityScalar for u64 {
 
     fn checked_weighted(&self, coefficient: i64) -> Option<Self::SignedMeasure> {
         i128::from(*self).checked_mul(i128::from(coefficient))
+    }
+
+    // Aeneas models the primitive remainder operator, not `is_multiple_of`.
+    #[allow(
+        clippy::manual_is_multiple_of,
+        reason = "keep the extracted primitive remainder"
+    )]
+    fn checked_mul_div(&self, rhs: &Self, denominator: &Self, rounding: Rounding) -> Option<Self> {
+        if *denominator == 0 {
+            return None;
+        }
+        let product = widen(*self) * widen(*rhs);
+        let divisor = widen(*denominator);
+        let quotient = product / divisor;
+        match rounding {
+            Rounding::Floor => narrow(quotient),
+            Rounding::Ceil => {
+                if product % divisor == 0 {
+                    narrow(quotient)
+                } else {
+                    narrow(quotient + 1)
+                }
+            }
+        }
     }
 }
 
@@ -75,6 +134,18 @@ impl QuantityScalar for num_bigint::BigUint {
 
     fn checked_weighted(&self, coefficient: i64) -> Option<Self::SignedMeasure> {
         Some(num_bigint::BigInt::from(self.clone()) * num_bigint::BigInt::from(coefficient))
+    }
+
+    fn checked_mul_div(&self, rhs: &Self, denominator: &Self, rounding: Rounding) -> Option<Self> {
+        if denominator.is_zero() {
+            return None;
+        }
+        let product = self * rhs;
+        let quotient = &product / denominator;
+        match rounding {
+            Rounding::Ceil if !(&product % denominator).is_zero() => Some(quotient + 1_u32),
+            Rounding::Floor | Rounding::Ceil => Some(quotient),
+        }
     }
 }
 
@@ -141,6 +212,30 @@ where
 
     pub fn checked_div(&self, rhs: &Self) -> Option<Self> {
         Self::from_checked(self.0.checked_div(&rhs.0))
+    }
+
+    /// Returns `self × rhs ÷ denominator`, rounded as requested, without
+    /// intermediate overflow.
+    ///
+    /// The product is computed at full width; `None` means the denominator is
+    /// zero or the rounded quotient is not a representable quantity.
+    ///
+    /// ```
+    /// use axionomy::{Quantity, Rounding};
+    /// let max = Quantity::new(u64::MAX);
+    /// assert_eq!(max.checked_mul_div(&max, &max, Rounding::Floor), Some(max));
+    /// let (seven, one, two) = (Quantity::new(7), Quantity::new(1), Quantity::new(2));
+    /// assert_eq!(seven.checked_mul_div(&one, &two, Rounding::Floor), Some(Quantity::new(3)));
+    /// assert_eq!(seven.checked_mul_div(&one, &two, Rounding::Ceil), Some(Quantity::new(4)));
+    /// assert_eq!(seven.checked_mul_div(&one, &Quantity::ZERO, Rounding::Ceil), None);
+    /// ```
+    pub fn checked_mul_div(
+        &self,
+        rhs: &Self,
+        denominator: &Self,
+        rounding: Rounding,
+    ) -> Option<Self> {
+        Self::from_checked(self.0.checked_mul_div(&rhs.0, &denominator.0, rounding))
     }
 
     // Explicit matching lets Aeneas extract the complete conversion without
@@ -233,7 +328,7 @@ pub enum QuantityError {
 
 #[cfg(test)]
 mod signed_scalar_tests {
-    use super::{Quantity, QuantityScalar};
+    use super::{Quantity, QuantityScalar, Rounding};
 
     // A backend can represent negative intermediate results even though a
     // Quantity cannot. Keep this generic boundary intact when proving u64.
@@ -250,6 +345,22 @@ mod signed_scalar_tests {
 
         fn checked_weighted(&self, coefficient: i64) -> Option<Self::SignedMeasure> {
             i128::from(*self).checked_mul(i128::from(coefficient))
+        }
+
+        fn checked_mul_div(
+            &self,
+            rhs: &Self,
+            denominator: &Self,
+            rounding: Rounding,
+        ) -> Option<Self> {
+            let product = i128::from(*self) * i128::from(*rhs);
+            let divisor = i128::from(*denominator);
+            let quotient = product.checked_div_euclid(divisor)?;
+            let quotient = match rounding {
+                Rounding::Ceil if product.rem_euclid(divisor) != 0 => quotient + 1,
+                Rounding::Floor | Rounding::Ceil => quotient,
+            };
+            Self::try_from(quotient).ok()
         }
     }
 
@@ -280,7 +391,7 @@ mod signed_scalar_tests {
 
 #[cfg(all(test, not(feature = "bigint")))]
 mod tests {
-    use super::{Quantity, QuantityScalar};
+    use super::{Quantity, QuantityScalar, Rounding};
     use num_bigint::{BigInt, BigUint};
 
     impl QuantityScalar for BigUint {
@@ -296,6 +407,24 @@ mod tests {
 
         fn checked_weighted(&self, coefficient: i64) -> Option<Self::SignedMeasure> {
             Some(BigInt::from(self.clone()) * BigInt::from(coefficient))
+        }
+
+        fn checked_mul_div(
+            &self,
+            rhs: &Self,
+            denominator: &Self,
+            rounding: Rounding,
+        ) -> Option<Self> {
+            let zero = BigUint::from(0_u8);
+            if denominator == &zero {
+                return None;
+            }
+            let product = self * rhs;
+            let quotient = &product / denominator;
+            Some(match rounding {
+                Rounding::Ceil if &product % denominator != zero => quotient + 1_u32,
+                Rounding::Floor | Rounding::Ceil => quotient,
+            })
         }
     }
 

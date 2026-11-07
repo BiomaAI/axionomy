@@ -70,6 +70,12 @@ fn expression(value: &Value) -> Expression {
         "balance" => {
             Expression::balance(Role(number(&value["role"])), Asset(number(&value["asset"])))
         }
+        "mul_div" => Expression::mul_div(
+            expression(&value["left"]),
+            expression(&value["right"]),
+            expression(&value["denominator"]),
+            serde_json::from_value(value["rounding"].clone()).unwrap(),
+        ),
         kind => {
             let left = expression(&value["left"]);
             let right = expression(&value["right"]);
@@ -155,8 +161,8 @@ fn recursive_expression_equality_and_clone_match_lean() {
         .iter()
         .map(expression)
         .collect::<Vec<_>>();
-    assert_eq!(values.len(), 30);
-    assert_eq!(items(&data["expressionPairs"]).len(), 900);
+    assert_eq!(values.len(), 38);
+    assert_eq!(items(&data["expressionPairs"]).len(), 1444);
     check_pairs(&values, &data["expressionPairs"]);
     let computed = values
         .iter()

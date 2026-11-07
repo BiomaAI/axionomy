@@ -20,6 +20,14 @@ theorem comparison_eq (left right : rate.QuantityComparison) :
 
 theorem comparison_clone (value : rate.QuantityComparison) : derived_comparison_clone value = .ok value := rfl
 
+/-- Derived `Rounding` equality decides equality of the direction. -/
+theorem rounding_eq (left right : quantity.Rounding) :
+    derived_rounding_eq left right = .ok (decide (left = right)) := by
+  cases left <;> cases right <;>
+    simp [derived_rounding_eq, quantity.Rounding.Insts.CoreCmpPartialEqRounding.eq, quantity.Rounding.read_discriminant]
+
+theorem rounding_clone (value : quantity.Rounding) : derived_rounding_clone value = .ok value := rfl
+
 theorem assessment_status_eq (left right : economy.AssessmentStatus) :
     derived_assessment_status_eq left right = .ok (decide (left = right)) := by
   cases left <;> cases right <;>

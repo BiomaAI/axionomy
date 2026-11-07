@@ -162,6 +162,17 @@ fn construct(expression: Expression) -> Expression {
         Expression::Maximum { left, right } => {
             Expression::maximum(construct(*left), construct(*right))
         }
+        Expression::MulDiv {
+            left,
+            right,
+            denominator,
+            rounding,
+        } => Expression::mul_div(
+            construct(*left),
+            construct(*right),
+            construct(*denominator),
+            rounding,
+        ),
     }
 }
 

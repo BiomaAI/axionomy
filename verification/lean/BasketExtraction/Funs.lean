@@ -110,7 +110,7 @@ impl_def U64.Insts.Num_traitsIdentitiesZero : num_traits.identities.Zero
 }
 
 /-- [basket_extraction::quantity::{basket_extraction::quantity::Quantity<N>}::scalar_is_zero]:
-    Source: 'verification/../src/quantity.rs', lines 88:4-90:5 -/
+    Source: 'verification/../src/quantity.rs', lines 159:4-161:5 -/
 def quantity.Quantity.scalar_is_zero
   {N : Type _} (num_traitsidentitiesZeroInst : num_traits.identities.Zero N)
   (self : quantity.Quantity N) :

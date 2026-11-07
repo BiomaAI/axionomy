@@ -236,6 +236,12 @@ fn expression<N: QuantityScalar>(
         "units" => E::units(),
         "parameter" => E::parameter(text(&input["name"])),
         "balance" => E::balance(Role(number(&input["role"])), Asset(number(&input["asset"]))),
+        "mul_div" => E::mul_div(
+            expression(&input["left"], parse),
+            expression(&input["right"], parse),
+            expression(&input["denominator"], parse),
+            serde_json::from_value(input["rounding"].clone()).unwrap(),
+        ),
         kind => {
             let left = expression(&input["left"], parse);
             let right = expression(&input["right"], parse);
@@ -270,6 +276,20 @@ fn expression_json<N: QuantityScalar>(value: &QuantityExpression<Role, Asset, N>
         } => ("divide", numerator, denominator),
         E::Minimum { left, right } => ("minimum", left, right),
         E::Maximum { left, right } => ("maximum", left, right),
+        E::MulDiv {
+            left,
+            right,
+            denominator,
+            rounding,
+        } => {
+            return json!({
+                "kind": "mul_div",
+                "left": expression_json(left),
+                "right": expression_json(right),
+                "denominator": expression_json(denominator),
+                "rounding": rounding,
+            });
+        }
     };
     json!({"kind": kind, "left": expression_json(left), "right": expression_json(right)})
 }
@@ -509,7 +529,7 @@ fn check_model<N: QuantityScalar>(case: &Value, parse: impl Fn(&str) -> N) {
 #[test]
 fn model_inspection_and_asset_union_match_lean() {
     let data = fixtures();
-    assert_eq!(items(&data["models"]).len(), 240);
+    assert_eq!(items(&data["models"]).len(), 288);
     let mut checked = 0;
     for case in items(&data["models"]) {
         if text(&case["value"]).parse::<u64>().is_ok() {
@@ -517,7 +537,7 @@ fn model_inspection_and_asset_union_match_lean() {
             checked += 1;
         }
     }
-    assert_eq!(checked, 160);
+    assert_eq!(checked, 192);
 }
 
 #[cfg(feature = "bigint")]

@@ -6,7 +6,8 @@
 
 use axionomy::{
     AccountAssessment, AccountDelta, ApplyError, Basket, Economy, Exchange, ExchangeAssessment,
-    Goal, Quantity, QuantityComparison, QuantityExpression, QuantityScalar, Receipt, Trace,
+    Goal, Quantity, QuantityComparison, QuantityExpression, QuantityScalar, Receipt, Rounding,
+    Trace,
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -1864,6 +1865,21 @@ where
             "max({}, {})",
             expression_view(left, ontology),
             expression_view(right, ontology)
+        ),
+        QuantityExpression::MulDiv {
+            left,
+            right,
+            denominator,
+            rounding,
+        } => format!(
+            "{}({} × {} ÷ {})",
+            match rounding {
+                Rounding::Floor => "floor",
+                Rounding::Ceil => "ceil",
+            },
+            expression_view(left, ontology),
+            expression_view(right, ontology),
+            expression_view(denominator, ontology)
         ),
     }
 }

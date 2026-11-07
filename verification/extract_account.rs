@@ -4,7 +4,7 @@ mod amount;
 #[path = "../src/quantity.rs"]
 mod quantity;
 use amount::AssetAmount;
-use quantity::{Quantity, QuantityScalar};
+use quantity::{Quantity, QuantityScalar, Rounding};
 #[path = "../src/basket.rs"]
 mod basket;
 use basket::Basket;
@@ -953,6 +953,31 @@ pub fn expression_divide_floor<Role, A, N>(
     QuantityExpression::divide_floor(left, right)
 }
 
+pub fn expression_mul_div<Role, A, N>(
+    left: QuantityExpression<Role, A, N>,
+    right: QuantityExpression<Role, A, N>,
+    denominator: QuantityExpression<Role, A, N>,
+    rounding: Rounding,
+) -> QuantityExpression<Role, A, N> {
+    QuantityExpression::mul_div(left, right, denominator, rounding)
+}
+
+pub fn expression_divide_ceil<Role, A>(
+    numerator: QuantityExpression<Role, A>,
+    denominator: QuantityExpression<Role, A>,
+) -> QuantityExpression<Role, A> {
+    QuantityExpression::divide_ceil(numerator, denominator)
+}
+
+pub fn quantity_mul_div(
+    left: &Quantity,
+    right: &Quantity,
+    denominator: &Quantity,
+    rounding: Rounding,
+) -> Option<Quantity> {
+    left.checked_mul_div(right, denominator, rounding)
+}
+
 pub fn expression_minimum<Role, A, N>(
     left: QuantityExpression<Role, A, N>,
     right: QuantityExpression<Role, A, N>,
@@ -1380,6 +1405,16 @@ pub fn derived_comparison_clone(value: &QuantityComparison) -> QuantityCompariso
     value.clone()
 }
 
+pub fn derived_rounding_eq(left: &Rounding, right: &Rounding) -> bool {
+    left == right
+}
+
+// Extract Clone explicitly even for Copy types.
+#[allow(clippy::clone_on_copy)]
+pub fn derived_rounding_clone(value: &Rounding) -> Rounding {
+    value.clone()
+}
+
 pub fn derived_fingerprint_eq(
     left: &economy::StateFingerprint,
     right: &economy::StateFingerprint,
@@ -1753,6 +1788,10 @@ pub fn inherited_comparison_clone_from(
     target.clone_from(source)
 }
 
+pub fn inherited_rounding_clone_from(target: &mut Rounding, source: &Rounding) {
+    target.clone_from(source)
+}
+
 pub fn inherited_fingerprint_clone_from(
     target: &mut economy::StateFingerprint,
     source: &economy::StateFingerprint,
@@ -1971,6 +2010,10 @@ pub fn inherited_condition_ne<Role: PartialEq, A: PartialEq, N: PartialEq>(
 }
 
 pub fn inherited_comparison_ne(left: &QuantityComparison, right: &QuantityComparison) -> bool {
+    left != right
+}
+
+pub fn inherited_rounding_ne(left: &Rounding, right: &Rounding) -> bool {
     left != right
 }
 

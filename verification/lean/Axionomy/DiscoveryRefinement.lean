@@ -30,6 +30,9 @@ theorem roles_refines (expression : rate.QuantityExpression Role A Std.U64) (acc
   | DivideFloor left right ihl ihr | Minimum left right ihl ihr | Maximum left right ihl ihr =>
     rw [rate.QuantityExpression.collect_roles.eq_def]
     simp [ihl, ihr, decodeExpression, Discovery.roles, Discovery.registerAll_append]
+  | MulDiv left right denominator rounding ihl ihr ihd =>
+    rw [rate.QuantityExpression.collect_roles.eq_def]
+    simp [ihl, ihr, ihd, decodeExpression, Discovery.roles, Discovery.registerAll_append]
 
 include lawful in
 theorem roles_complete (identity : ∀ x y, cmp x y = .eq → x = y)
@@ -71,6 +74,18 @@ theorem assets_refines {Role A : Type} (expression : rate.QuantityExpression Rol
     · rw [rate.QuantityExpression.collect_assets.eq_def]
       simp [leftCall, rightCall]
     · simp [resultEntries, middleEntries, decodeExpression, Discovery.assets, List.append_assoc]
+  | MulDiv left right denominator rounding ihl ihr ihd =>
+    simp only [decodeExpression, Discovery.assets, List.length_append] at capacity
+    obtain ⟨first, leftCall, firstEntries⟩ := ihl accumulated (by omega)
+    obtain ⟨second, rightCall, secondEntries⟩ := ihr first
+      (by rw [firstEntries]; simp only [List.length_append]; omega)
+    obtain ⟨result, denominatorCall, resultEntries⟩ := ihd second
+      (by rw [secondEntries, firstEntries]; simp only [List.length_append]; omega)
+    refine ⟨result, ?_, ?_⟩
+    · rw [rate.QuantityExpression.collect_assets.eq_def]
+      simp [leftCall, rightCall, denominatorCall]
+    · simp [resultEntries, secondEntries, firstEntries, decodeExpression, Discovery.assets,
+        List.append_assoc]
 
 def Strings (logical : List String) (physical : List Str) : Prop :=
   List.Forall₂ (fun text bytes => decodeString bytes = .ok text) logical physical
@@ -143,6 +158,29 @@ theorem parameters_refines {Role A : Type} (expression : rate.QuantityExpression
     refine ⟨result, ?_, ?_⟩
     · rw [rate.QuantityExpression.collect_parameters.eq_def]
       simp [leftCall, rightCall]
+    · simpa only [decodeExpression, Discovery.parameters, Discovery.registerAll_append] using resultRelated
+  | MulDiv left right denominator rounding ihl ihr ihd =>
+    have fitsLeft : NamesFit left := by
+      intro parameter member
+      apply fits parameter
+      simp only [decodeExpression, Discovery.parameters, List.mem_append]
+      exact Or.inl (Or.inl member)
+    have fitsRight : NamesFit right := by
+      intro parameter member
+      apply fits parameter
+      simp only [decodeExpression, Discovery.parameters, List.mem_append]
+      exact Or.inl (Or.inr member)
+    have fitsDenominator : NamesFit denominator := by
+      intro parameter member
+      apply fits parameter
+      simp only [decodeExpression, Discovery.parameters, List.mem_append]
+      exact Or.inr member
+    obtain ⟨first, leftCall, firstRelated⟩ := ihl logical physical related fitsLeft
+    obtain ⟨second, rightCall, secondRelated⟩ := ihr _ first firstRelated fitsRight
+    obtain ⟨result, denominatorCall, resultRelated⟩ := ihd _ second secondRelated fitsDenominator
+    refine ⟨result, ?_, ?_⟩
+    · rw [rate.QuantityExpression.collect_parameters.eq_def]
+      simp [leftCall, rightCall, denominatorCall]
     · simpa only [decodeExpression, Discovery.parameters, Discovery.registerAll_append] using resultRelated
 
 end Axionomy.DiscoveryRefinement

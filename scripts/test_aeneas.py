@@ -55,6 +55,12 @@ class ExtractionBoundaryTests(unittest.TestCase):
 
 
 class ProductionMutationTests(unittest.TestCase):
+    def test_ceiling_without_increment_breaks_mul_div(self):
+        self.check_mutation(
+            "src/quantity.rs", "                    narrow(quotient + 1)",
+            "                    narrow(quotient)",
+            "extract_account.py", "stale account model", "MulDivRefinement", "AccountExtraction")
+
     def test_zero_weight_cannot_hide_duplicate_invariant_asset(self):
         self.check_mutation(
             "src/rate.rs", "            weights.insert(asset, weight);",

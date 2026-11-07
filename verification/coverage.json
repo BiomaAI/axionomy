@@ -1,21 +1,21 @@
 {
   "version": 1,
-  "assurance": "Partial implementation verification: Aeneas-extracted production u64 arithmetic, basket/account operations, model/rate construction and discovery, complete transaction assessment/application, finite-input iterator filtering, fork/simulation/ordered replay, goals, finite-input iterator views, canonical state/observation keys and scoped deterministic fingerprints, generic trace extension, basket collection boundaries including sorted borrowed iteration, foundational typed data APIs, expression construction and generic core inspection/asset discovery, u64 convenience constructor panic contracts and generic string-conversion callbacks, generic derived equality/clone/order, inherited clone replacement/inequality/order helpers and scoped hashing refine Lean specifications. Explicit collection/Arc/UTF-8/sorting/hashing models, lawful identifier operations, resource bounds, compiler/translation and primitive models remain trusted. Remaining public data APIs, serialization/schema contracts and other numeric backends remain open.",
+  "assurance": "Partial implementation verification: Aeneas-extracted production u64 arithmetic, basket/account operations, model/rate construction and discovery, complete transaction assessment/application, finite-input iterator filtering, fork/simulation/ordered replay, goals, finite-input iterator views, canonical state/observation keys and scoped deterministic fingerprints, generic trace extension, basket collection boundaries including sorted borrowed iteration, foundational typed data APIs, expression construction and generic core inspection/asset discovery, u64 convenience constructor panic contracts and generic string-conversion callbacks, full-width rounded mul-div with explicit rounding, generic derived equality/clone/order, inherited clone replacement/inequality/order helpers and scoped hashing refine Lean specifications. Explicit collection/Arc/UTF-8/sorting/hashing models, lawful identifier operations, resource bounds, compiler/translation and primitive models remain trusted. Remaining public data APIs, serialization/schema contracts and other numeric backends remain open.",
   "sources": {
     "Cargo.toml": "414a2b181e13225e4b76aa58e70d998064174dde2d8cee603ea3af648d61a7f3",
     "Cargo.lock": "00ef263c160aeebaa49187874a4b11ec94fee9bc8fbea5a2f0cacc190607919c",
     "src/account.rs": "0eaf66937c63de2993353828e42fcfea2b80f172f5cb74fc76a28cef79fd9ff6",
     "src/amount.rs": "4c6a0599d4e7697fadb6981b88cc01e832fa6c01a0b33d1b997ba5c5bb1c705d",
     "src/basket.rs": "f9797280daeb1e9c4dedc795e39763f2ee1eb2b14ed6835a20a416f72a1ba419",
-    "src/economy.rs": "31b589d33fa4cc8c02d4340b39015bba545a9ca1e47465a4295d4cdd827b30f1",
+    "src/economy.rs": "fa79ec26a470ce47cbe71e62812df2ef7e7e25665e28d623c39f4f8a4d71437d",
     "src/exchange.rs": "234f6e6459d2fb97a1fbb802e14afed6e5ed50a023c8c2de745e6f6eac39b455",
-    "src/lib.rs": "46d6f713693714650653128e2ceabf8a895b8ad98a38a7bdbeab4ea378a5cc06",
-    "src/quantity.rs": "246c805344babccb3c1c00371686e098111044a2ce46f456f211de6eb9928364",
-    "src/rate.rs": "468a703c0b9271e9dc2851c555c67331572a067ddbf15d6bca93747f43b82f7a",
+    "src/lib.rs": "a30aa22ec74d2aed2436494deb39148b407d5f68dae74a57a8bc24c193998414",
+    "src/quantity.rs": "ec4578a9c60b76d0a8fc0bfbe217e173bf098dbd5920e0ada83e51ec32ed65cc",
+    "src/rate.rs": "f113a91630aac2c2b01f120370aa9f5dac1701aec6f7f198f682042bc59c0e72",
     "verification/extract.rs": "415b34f5f4f8aa2679af860bd2a4092c96e113145919160fe7c81e33836de3e0",
     "verification/aeneas-toolchain.json": "8676d7d11be51a6f41984d874b35910e8a1a3d0a18414998feb9402ef80932fb",
     "verification/extract_basket.rs": "dc2b3a2159704c24a5261d0069a2aac7b575f30a94ae35c4c1e96933638592dd",
-    "verification/extract_account.rs": "be60ff0865d41f96b3aaed3cc1dd68647c42fb55cc9f486e6d687e77245cd5e3",
+    "verification/extract_account.rs": "f60ad7d1b14414d8e51cd42f14961f619e738cd4398c3ee1aadcaa01ca61b7d6",
     "verification/patches/aeneas-namespaced-discriminant.patch": "fabac7482deb3da6ecaca60c4060dfe9d2114efdd010699e736c4a91267f3bc9"
   },
   "features": [
@@ -610,7 +610,8 @@
         "The shared-source recursive production evaluator is proved for all finite expressions and u64 inputs against checked Nat arithmetic. It reads one immutable proposal/account context, evaluates left before right, distinguishes missing parameters/unbound roles/missing accounts, treats absent asset balances as zero, and refines all six binary operations. Both condition operands use that context; all three comparisons and exact error precedence are proved. No successful-execution premise is assumed.",
         "AccountId, Role, Asset and RateId remain distinct generic types. Equality on account IDs/assets and ordering on roles obey the existing total/lawful dictionaries. Sorted BTreeMap lookup and IndexMap lookup preserve logical entries; read-only Arc deref/AsRef exposes its logical pointee. Physical storage, total ordering/hash coherence, allocation, UTF-8 string comparison/cloning, compiler/MIR, Charon/Aeneas and backend semantics remain trusted.",
         "Private evaluator failures are now a typed ExpressionError; the public string API is unchanged. Exact message rendering is proved, including arbitrary valid Unicode parameter names, provided the full message byte length fits usize. Explicit UTF-8 decode/encode and checked push_str models reject malformed slices or oversized strings. Allocation, stack/resource exhaustion, reference counts, COW and machine code are outside the theorem. Formatting internals still fail closed; the proof does not model erased format arguments as arbitrary correct text.",
-        "A production condition helper factors the existing evaluations/comparison with unchanged typed signatures and diagnostic order. complete_transactions now composes the full condition iteration, wrapping, aggregation and commit. Serialization and custom numeric backends remain separate obligations."
+        "A production condition helper factors the existing evaluations/comparison with unchanged typed signatures and diagnostic order. complete_transactions now composes the full condition iteration, wrapping, aggregation and commit. Serialization and custom numeric backends remain separate obligations.",
+        "The evaluator also covers QuantityExpression::MulDiv; see the full_width_mul_div contract for its exact operand order, zero-denominator and overflow behavior."
       ]
     },
     {
@@ -944,7 +945,8 @@
       "limitations": [
         "All public expression constructors and the Add operator preserve exact variants, operand order and typed identifiers. The u64 construct_refines and evaluate_constructed theorems compose recursive construction with the actual extracted evaluator and its exact error behavior.",
         "Nonconstant construction is generic in N. Recursive evaluation remains the u64 implementation contract. Into<String> parameter conversion requires an independent successful encoding law; the composed constructor uses the concrete String identity conversion.",
-        "Box allocation, stack/resource behavior, collections, compiler/translation and primitive models remain dependencies. Tests reconstruct the existing Lean evaluation trees via public Rust constructors; those finite cases supplement the general implementation proofs."
+        "Box allocation, stack/resource behavior, collections, compiler/translation and primitive models remain dependencies. Tests reconstruct the existing Lean evaluation trees via public Rust constructors; those finite cases supplement the general implementation proofs.",
+        "The mul_div constructor and the u64 divide_ceil convenience (mul_div by one with Rounding::Ceil) are covered by the full_width_mul_div contract."
       ]
     },
     {
@@ -1488,6 +1490,89 @@
         "The real serde loader delegates to this shared helper through a source-guarded handoff. Serde parsing, error conversion, serialization round trips and schema contracts are not implementation-proved here. Diagnostic Debug/Display rendering is outside the required proof scope. This is one validation contract within item 17, not complete serialization coverage.",
         "The existing logical IndexMap and Vec models, identity-consistent Eq/Hash behavior, successful allocation, destruction, compiler/MIR/Charon/Aeneas translation and primitive operations remain explicit dependencies. The new validation pass keeps zero entries in a temporary map; physical allocation costs and performance equivalence are not proved. No new external dependency model or compiler patch is added.",
         "262 Lean-generated cases exercise the public deserializer, including all short sequences over two assets and signed/zero weights, ordering and i64 extremes. Rust also checks duplicate rejection through Economy deserialization and a non-Clone/non-Ord asset type. These finite checks supplement the general helper proof. A re-extracted production mutation that removes zero entries before checking all duplicates must compile and then fail the refinement."
+      ]
+    },
+    {
+      "id": "full_width_mul_div",
+      "status": "aeneas_refinement_proved",
+      "sources": [
+        "src/quantity.rs",
+        "src/rate.rs",
+        "src/economy.rs",
+        "src/lib.rs",
+        "verification/extract_account.rs",
+        "verification/aeneas-toolchain.json"
+      ],
+      "extracted_module": "AccountExtraction.Funs",
+      "theorems": [
+        "Axionomy.MulDiv.success_iff",
+        "Axionomy.MulDiv.zero_denominator_rejected",
+        "Axionomy.MulDiv.overflow_iff",
+        "Axionomy.MulDiv.full_width_example",
+        "Axionomy.MulDiv.floor_bounds",
+        "Axionomy.MulDiv.ceil_bounds",
+        "Axionomy.MulDiv.floor_le_ceil",
+        "Axionomy.MulDiv.ceil_le_floor_succ",
+        "Axionomy.MulDiv.ceil_eq_floor_iff",
+        "Axionomy.MulDiv.floor_mono_left",
+        "Axionomy.MulDiv.floor_mono_right",
+        "Axionomy.MulDiv.floor_anti_denominator",
+        "Axionomy.MulDiv.ceil_closed_form",
+        "Axionomy.MulDiv.ceil_mono_left",
+        "Axionomy.MulDiv.ceil_mono_right",
+        "Axionomy.MulDiv.ceil_anti_denominator",
+        "Axionomy.MulDiv.floor_unit",
+        "Axionomy.MulDiv.mulDiv_floor_unit",
+        "Axionomy.MulDivRefinement.mulDiv_val",
+        "Axionomy.MulDivRefinement.narrow_spec",
+        "Axionomy.MulDivRefinement.decodeRounding_injective",
+        "Axionomy.MulDivRefinement.impl_spec",
+        "Axionomy.MulDivRefinement.impl_exact",
+        "Axionomy.MulDivRefinement.mul_div_call",
+        "Axionomy.MulDivRefinement.quantity_refines",
+        "Axionomy.Rates.eval_refines_mathematical",
+        "Axionomy.Evaluation.mulDiv_operand_error_first",
+        "Axionomy.Evaluation.mulDiv_zero_denominator",
+        "Axionomy.Evaluation.map_operateMulDiv",
+        "Axionomy.Evaluation.map_eval",
+        "Axionomy.EvaluationRefinement.natural_hom",
+        "Axionomy.EvaluationRefinement.mulDiv_call",
+        "Axionomy.EvaluationRefinement.evaluate_refines_naturals",
+        "Axionomy.ExpressionConstructionRefinement.construct_refines",
+        "Axionomy.ExpressionConstructionRefinement.decode_encode",
+        "Axionomy.ExpressionConstructionRefinement.mul_div",
+        "Axionomy.ExpressionConstructionRefinement.divide_ceil",
+        "Axionomy.ExpressionConstructionRefinement.public_mul_div",
+        "Axionomy.ExpressionConstructionRefinement.public_divide_ceil",
+        "Axionomy.ExpressionConstructionRefinement.divide_ceil_quotient",
+        "Axionomy.DiscoveryRefinement.roles_refines",
+        "Axionomy.DiscoveryRefinement.assets_refines",
+        "Axionomy.DiscoveryRefinement.parameters_refines",
+        "Axionomy.InspectionAssetsRefinement.expression_assets",
+        "Axionomy.TransactionDiagnostics.mulDiv_missing_impossible",
+        "Axionomy.TransactionDiagnostics.eval_parameter_source",
+        "Axionomy.DerivedRecordRefinement.rounding_eq",
+        "Axionomy.DerivedRecordRefinement.rounding_clone",
+        "Axionomy.DerivedExpressionRefinement.rounding_eq",
+        "Axionomy.DerivedExpressionRefinement.rounding_clone",
+        "Axionomy.DerivedExpressionRefinement.clone_public",
+        "Axionomy.DerivedExpressionRefinement.equal_public",
+        "Axionomy.InheritedCloneRefinement.rounding_clone_from",
+        "Axionomy.InheritedEqualityRefinement.rounding_ne"
+      ],
+      "rust_tests": [
+        "tests/mul_div.rs",
+        "tests/lean_conformance.rs",
+        "tests/public_data_conformance.rs",
+        "tests/derived_conformance.rs",
+        "tests/inspection_conformance.rs",
+        "tests/inherited_conformance.rs"
+      ],
+      "limitations": [
+        "QuantityExpression::MulDiv computes left × right ÷ denominator with an explicit Rounding (Floor or Ceil). For every u64 triple and both directions, the extracted production QuantityScalar::checked_mul_div widens to u128, multiplies, divides and (for Ceil with a nonzero remainder) adds one without any primitive failure, and returns exactly MulDiv.mulDiv u64Max: None iff the denominator is zero or the rounded quotient exceeds u64. The intermediate product is never range-checked. Public Quantity<u64>::checked_mul_div and the evaluator refine this specification.",
+        "The evaluator evaluates left, right and denominator in order against one snapshot; the first operand error wins, then a zero denominator reports DivisionByZero before the quotient is attempted, and an out-of-range quotient reports MultiplicationOverflow. Discovery, inspection asset collection and parameter diagnostics recurse into all three operands in order. Rounding is a typed public enum whose derived equality/clone and inherited clone_from/ne are proved like QuantityComparison.",
+        "The u128 operations are Aeneas's native checked primitives and casts; no new intrinsic, external declaration or compiler patch is added. The BigUint QuantityScalar implementation, arbitrary custom backends and serde/JsonSchema encoding of MulDiv and Rounding are tested but not implementation-proved. Lean-generated conformance adds 468 evaluation cases (independently recomputed in tests via a wide-integer reference), discovery, inspection and derived-trait cases; tests/mul_div.rs adds property tests against a u128 reference and BigUint agreement.",
+        "MulDiv specification theorems (bounds, floor ≤ ceil ≤ floor + 1, exactness, monotonicity, floor-by-one equals DivideFloor) are design-level facts over naturals; the existing DivideFloor variant is unchanged for compatibility."
       ]
     }
   ]

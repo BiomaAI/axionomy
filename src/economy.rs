@@ -1,7 +1,7 @@
 use crate::{
     Account, AccountDelta, AccountError, Basket, ComputedAmount, Exchange, LinearInvariant,
     Quantity, QuantityComparison, QuantityExpression, QuantityScalar, Rate, RateCondition, Receipt,
-    Trace,
+    Rounding, Trace,
 };
 use indexmap::IndexMap;
 use schemars::{JsonSchema, Schema, SchemaGenerator};
@@ -1467,6 +1467,12 @@ where
             ExpressionError::DivisionByZero,
             |left, right| left.checked_div(right),
         ),
+        QuantityExpression::MulDiv {
+            left,
+            right,
+            denominator,
+            rounding,
+        } => evaluate_mul_div(left, right, denominator, *rounding, proposal, accounts),
         QuantityExpression::Minimum { left, right } => {
             let left = evaluate_expression(left, proposal, accounts)?;
             let right = evaluate_expression(right, proposal, accounts)?;
@@ -1517,6 +1523,33 @@ where
     let left = evaluate_expression(left, proposal, accounts)?;
     let right = evaluate_expression(right, proposal, accounts)?;
     operation(&left, &right).ok_or(error)
+}
+
+// Operands are evaluated left to right against the same snapshot. A zero
+// denominator is reported before the full-width quotient is attempted; a
+// quotient outside the backend reports multiplication overflow.
+fn evaluate_mul_div<AccountId, A, RateId, Role, N>(
+    left: &QuantityExpression<Role, A, N>,
+    right: &QuantityExpression<Role, A, N>,
+    denominator: &QuantityExpression<Role, A, N>,
+    rounding: Rounding,
+    proposal: &Exchange<RateId, Role, AccountId, N>,
+    accounts: &IndexMap<AccountId, Arc<Account<A, N>>>,
+) -> Result<Quantity<N>, ExpressionError>
+where
+    AccountId: Eq + Hash,
+    A: Eq + Hash,
+    Role: Ord,
+    N: QuantityScalar,
+{
+    let left = evaluate_expression(left, proposal, accounts)?;
+    let right = evaluate_expression(right, proposal, accounts)?;
+    let denominator = evaluate_expression(denominator, proposal, accounts)?;
+    if denominator.is_zero() {
+        return Err(ExpressionError::DivisionByZero);
+    }
+    left.checked_mul_div(&right, &denominator, rounding)
+        .ok_or(ExpressionError::MultiplicationOverflow)
 }
 
 fn invalid_analysis<AccountId, A, RateId, Role, N>(
@@ -1631,7 +1664,7 @@ mod evaluation_conformance {
     fn runtime_evaluation_and_effects_match_lean() {
         let fixtures: Fixtures =
             serde_json::from_str(include_str!("../verification/conformance.json")).unwrap();
-        assert_eq!(fixtures.evaluation.len(), 2210);
+        assert_eq!(fixtures.evaluation.len(), 2678);
         let mut condition_outcomes = [0; 3];
         for case in fixtures.evaluation {
             let mut proposal = Exchange::new(Rule, Quantity::new(case.units.parse().unwrap()));

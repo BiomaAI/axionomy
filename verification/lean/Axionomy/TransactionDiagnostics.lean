@@ -15,6 +15,14 @@ theorem operation_missing_impossible {Q : Type} (ops : Evaluation.Arithmetic Q) 
   all_goals try (unfold Evaluation.checked; split)
   all_goals simp
 
+theorem mulDiv_missing_impossible {Q : Type} (ops : Evaluation.Arithmetic Q)
+    (rounding : MulDiv.Rounding) (left right denominator : Q) (key : String) :
+    Evaluation.operateMulDiv ops rounding left right denominator ≠ .error (.missingParameter key) := by
+  unfold Evaluation.operateMulDiv
+  split
+  · simp
+  · unfold Evaluation.checked; split <;> simp
+
 theorem eval_parameter_source {Role A Q : Type} (ops : Evaluation.Arithmetic Q)
     (context : Evaluation.Context Role A Q)
     (balanceErrors : ∀ role asset key, context.balance role asset ≠ .error (.missingParameter key))
@@ -42,6 +50,27 @@ theorem eval_parameter_source {Role A Q : Type} (ops : Evaluation.Arithmetic Q)
       | ok r =>
         exact False.elim (operation_missing_impossible ops op l r key
           (by simpa [Evaluation.eval, leftResult, rightResult] using failed))
+  | mulDiv rounding left right denominator ihl ihr ihd =>
+    simp only [Discovery.parameters, List.mem_append]
+    cases leftResult : Evaluation.eval ops context left with
+    | error error =>
+      have same : error = .missingParameter key := by simpa [Evaluation.eval, leftResult] using failed
+      exact Or.inl (Or.inl (ihl (same ▸ leftResult)))
+    | ok l =>
+      cases rightResult : Evaluation.eval ops context right with
+      | error error =>
+        have same : error = .missingParameter key := by
+          simpa [Evaluation.eval, leftResult, rightResult] using failed
+        exact Or.inl (Or.inr (ihr (same ▸ rightResult)))
+      | ok r =>
+        cases denominatorResult : Evaluation.eval ops context denominator with
+        | error error =>
+          have same : error = .missingParameter key := by
+            simpa [Evaluation.eval, leftResult, rightResult, denominatorResult] using failed
+          exact Or.inr (ihd (same ▸ denominatorResult))
+        | ok d =>
+          exact False.elim (mulDiv_missing_impossible ops rounding l r d key
+            (by simpa [Evaluation.eval, leftResult, rightResult, denominatorResult] using failed))
 
 theorem condition_parameter_source {Role A Q : Type} (ops : Evaluation.Arithmetic Q) (value : Q → Nat)
     (context : Evaluation.Context Role A Q)

@@ -100,7 +100,7 @@ class AccountBridgeTests(unittest.TestCase):
     def test_changed_inherited_forwarders_are_rejected(self):
         original = self.target.read_text()
         entries = [name for name in ENTRY_CALLS if name.startswith("inherited_")]
-        self.assertEqual(len(entries), 58)
+        self.assertEqual(len(entries), 60)
         for name in entries:
             with self.subTest(entry=name):
                 pattern = r"(pub fn " + re.escape(name) + r"\b.*?\{)(.*?)(\n\})"
@@ -114,7 +114,7 @@ class AccountBridgeTests(unittest.TestCase):
         original = self.target.read_text()
         entries = {name: call for name, call in ENTRY_CALLS.items()
                    if name.startswith("derived_") or name == "clone_value"}
-        self.assertEqual(len(entries), 63)
+        self.assertEqual(len(entries), 65)
         for name, call in entries.items():
             with self.subTest(entry=name):
                 pattern = r"(pub fn " + re.escape(name) + r"\b.*?\{)(.*?)(\n\})"
@@ -232,7 +232,7 @@ class AccountExtractionTests(unittest.TestCase):
         path = self.directory / "Funs.lean"
         original = path.read_text()
         entries = [name for name in ENTRY_CALLS if name.startswith("inherited_")]
-        self.assertEqual(len(entries), 58)
+        self.assertEqual(len(entries), 60)
         for name in entries:
             with self.subTest(name=name):
                 changed, count = re.subn(r"(^def\s+)" + re.escape(name) + r"(?=\s)",
@@ -245,7 +245,7 @@ class AccountExtractionTests(unittest.TestCase):
     def test_missing_derived_methods_are_rejected(self):
         path = self.directory / "Funs.lean"
         original = path.read_text()
-        self.assertEqual(len(DERIVED_DEFINITIONS), 54)
+        self.assertEqual(len(DERIVED_DEFINITIONS), 56)
         for name in DERIVED_DEFINITIONS:
             with self.subTest(name=name):
                 changed, count = re.subn(r"(^def\s+)" + re.escape(name) + r"(?=\s)",

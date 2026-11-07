@@ -17,7 +17,7 @@ pub use economy::{
     ModelIssue, ObservationKey, ReplayResult, SimulationResult, StateFingerprint,
 };
 pub use exchange::{AccountDelta, Exchange, Receipt, Trace};
-pub use quantity::{Quantity, QuantityError, QuantityMeasure, QuantityScalar};
+pub use quantity::{Quantity, QuantityError, QuantityMeasure, QuantityScalar, Rounding};
 pub use rate::{
     ComputedAmount, LinearInvariant, QuantityComparison, QuantityExpression, Rate, RateCondition,
     RateError, basket,

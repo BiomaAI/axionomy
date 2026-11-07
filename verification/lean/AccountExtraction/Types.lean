@@ -149,7 +149,7 @@ structure num_traits.ops.checked.CheckedDiv (Self : Type _) where
   checked_div : Self → Self → Result (Option Self)
 
 /-- [account_extraction::quantity::Quantity]
-    Source: 'verification/../src/quantity.rs', lines 83:0-83:32
+    Source: 'verification/../src/quantity.rs', lines 154:0-154:32
     Visibility: public -/
 @[reducible]
 def quantity.Quantity (N : Type _) := N
@@ -168,7 +168,7 @@ structure account.Account (A : Type _) (N : Type _) where
   balances : basket.Basket A N
 
 /-- Trait declaration: [account_extraction::quantity::QuantityMeasure]
-    Source: 'verification/../src/quantity.rs', lines 12:0-12:88
+    Source: 'verification/../src/quantity.rs', lines 25:0-25:88
     Visibility: public -/
 structure quantity.QuantityMeasure (Self : Type _) where
   corecloneCloneInst : core.clone.Clone Self
@@ -178,8 +178,16 @@ structure quantity.QuantityMeasure (Self : Type _) where
   num_traitsidentitiesZeroInst : num_traits.identities.Zero Self
   num_traitsopscheckedCheckedAddInst : num_traits.ops.checked.CheckedAdd Self
 
+/-- [account_extraction::quantity::Rounding]
+    Source: 'verification/../src/quantity.rs', lines 15:0-20:1
+    Visibility: public -/
+@[discriminant isize]
+inductive quantity.Rounding where
+| Floor : quantity.Rounding
+| Ceil : quantity.Rounding
+
 /-- Trait declaration: [account_extraction::quantity::QuantityScalar]
-    Source: 'verification/../src/quantity.rs', lines 22:0-46:1
+    Source: 'verification/../src/quantity.rs', lines 35:0-67:1
     Visibility: public -/
 structure quantity.QuantityScalar (Self : Type _) (Self_SignedMeasure : Type _)
   where
@@ -198,9 +206,11 @@ structure quantity.QuantityScalar (Self : Type _) (Self_SignedMeasure : Type _)
   is_nonnegative : Self → Result Bool
   from_u64 : Std.U64 → Result (Option Self)
   checked_weighted : Self → Std.I64 → Result (Option Self_SignedMeasure)
+  checked_mul_div : Self → Self → Self → quantity.Rounding → Result
+    (Option Self)
 
 /-- [account_extraction::quantity::QuantityError]
-    Source: 'verification/../src/quantity.rs', lines 229:0-232:1
+    Source: 'verification/../src/quantity.rs', lines 324:0-327:1
     Visibility: public -/
 @[discriminant isize]
 inductive quantity.QuantityError where
@@ -255,12 +265,12 @@ def economy.AccountEntries (AccountId : Type _) (A : Type _) (N : Type _) :=
   indexmap.map.iter.Iter AccountId (alloc.sync.Arc (account.Account A N))
 
 /-- [account_extraction::rate::WeightEntries]
-    Source: 'verification/../src/rate.rs', lines 730:0-730:61 -/
+    Source: 'verification/../src/rate.rs', lines 789:0-789:61 -/
 @[reducible]
 def rate.WeightEntries (A : Type _) := indexmap.map.iter.Iter A Std.I64
 
 /-- [account_extraction::rate::LinearInvariant]
-    Source: 'verification/../src/rate.rs', lines 724:0-727:1
+    Source: 'verification/../src/rate.rs', lines 783:0-786:1
     Visibility: public -/
 structure rate.LinearInvariant (A : Type _) where
   «name» : String
@@ -274,7 +284,7 @@ structure economy.Goal (AccountId : Type _) (A : Type _) (N : Type _) where
     alloc.alloc.Global
 
 /-- [account_extraction::rate::QuantityComparison]
-    Source: 'verification/../src/rate.rs', lines 253:0-257:1
+    Source: 'verification/../src/rate.rs', lines 312:0-316:1
     Visibility: public -/
 @[discriminant isize]
 inductive rate.QuantityComparison where
@@ -283,7 +293,7 @@ inductive rate.QuantityComparison where
 | LessThanOrEqual : rate.QuantityComparison
 
 /-- [account_extraction::rate::QuantityExpression]
-    Source: 'verification/../src/rate.rs', lines 27:0-63:1
+    Source: 'verification/../src/rate.rs', lines 31:0-75:1
     Visibility: public -/
 @[discriminant isize]
 inductive rate.QuantityExpression (Role : Type _) (A : Type _) (N : Type _)
@@ -316,9 +326,15 @@ inductive rate.QuantityExpression (Role : Type _) (A : Type _) (N : Type _)
   rate.QuantityExpression Role A N →
   rate.QuantityExpression Role A N →
   rate.QuantityExpression Role A N
+| MulDiv :
+  rate.QuantityExpression Role A N →
+  rate.QuantityExpression Role A N →
+  rate.QuantityExpression Role A N →
+  quantity.Rounding →
+  rate.QuantityExpression Role A N
 
 /-- [account_extraction::rate::RateCondition]
-    Source: 'verification/../src/rate.rs', lines 264:0-269:1
+    Source: 'verification/../src/rate.rs', lines 323:0-328:1
     Visibility: public -/
 structure rate.RateCondition (Role : Type _) (A : Type _) (N : Type _) where
   «name» : String
@@ -327,7 +343,7 @@ structure rate.RateCondition (Role : Type _) (A : Type _) (N : Type _) where
   right : rate.QuantityExpression Role A N
 
 /-- [account_extraction::rate::ComputedAmount]
-    Source: 'verification/../src/rate.rs', lines 218:0-222:1
+    Source: 'verification/../src/rate.rs', lines 277:0-281:1
     Visibility: public -/
 structure rate.ComputedAmount (Role : Type _) (A : Type _) (N : Type _) where
   role : Role
@@ -335,7 +351,7 @@ structure rate.ComputedAmount (Role : Type _) (A : Type _) (N : Type _) where
   quantity : rate.QuantityExpression Role A N
 
 /-- [account_extraction::rate::Rate]
-    Source: 'verification/../src/rate.rs', lines 290:0-300:1
+    Source: 'verification/../src/rate.rs', lines 349:0-359:1
     Visibility: public -/
 structure rate.Rate (Role : Type _) (A : Type _) (N : Type _) where
   consume : alloc.collections.btree.map.BTreeMap Role (basket.Basket A N)
@@ -652,35 +668,35 @@ structure exchange.Trace (RateId : Type _) (Role : Type _) (AccountId : Type _)
   exchanges : alloc.vec.Vec (exchange.Exchange RateId Role AccountId N)
 
 /-- [account_extraction::rate::RateError]
-    Source: 'verification/../src/rate.rs', lines 718:0-721:1
+    Source: 'verification/../src/rate.rs', lines 777:0-780:1
     Visibility: public -/
 @[discriminant isize]
 inductive rate.RateError (Role : Type _) (A : Type _) where
 | BasketOverflow : Role → A → rate.RateError Role A
 
 /-- [account_extraction::rate::{account_extraction::rate::Rate<Role, A, N>}::try_consume::{closure}]
-    Source: 'verification/../src/rate.rs', lines 329:21-329:70 -/
+    Source: 'verification/../src/rate.rs', lines 388:21-388:70 -/
 @[reducible]
 def rate.Rate.try_consume.closure (Role : Type _) (A : Type _) (N : Type _)
   (Clause5_SignedMeasure : Type _) :=
   Role
 
 /-- [account_extraction::rate::{account_extraction::rate::Rate<Role, A, N>}::try_produce::{closure}]
-    Source: 'verification/../src/rate.rs', lines 347:21-347:70 -/
+    Source: 'verification/../src/rate.rs', lines 406:21-406:70 -/
 @[reducible]
 def rate.Rate.try_produce.closure (Role : Type _) (A : Type _) (N : Type _)
   (Clause5_SignedMeasure : Type _) :=
   Role
 
 /-- [account_extraction::rate::{account_extraction::rate::Rate<Role, A, N>}::try_preserve::{closure}]
-    Source: 'verification/../src/rate.rs', lines 365:21-365:70 -/
+    Source: 'verification/../src/rate.rs', lines 424:21-424:70 -/
 @[reducible]
 def rate.Rate.try_preserve.closure (Role : Type _) (A : Type _) (N : Type _)
   (Clause5_SignedMeasure : Type _) :=
   Role
 
 /-- [account_extraction::rate::basket::{closure}]
-    Source: 'verification/../src/rate.rs', lines 914:13-914:59 -/
+    Source: 'verification/../src/rate.rs', lines 973:13-973:59 -/
 @[reducible]
 def rate.basket.closure (A : Type _) (LEN : Std.Usize) := Unit
 

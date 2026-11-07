@@ -1,5 +1,6 @@
 import Axionomy.Rates
 import Axionomy.Account
+import Axionomy.MulDiv
 
 namespace Axionomy.Evaluation
 
@@ -29,9 +30,12 @@ structure Arithmetic (Q : Type) where
   div : Q → Q → Option Q
   min : Q → Q → Q
   max : Q → Q → Q
+  isZero : Q → Bool
+  mulDiv : MulDiv.Rounding → Q → Q → Q → Option Q
 
 def naturals (limit : Nat) : Arithmetic Nat :=
-  ⟨Quantity.add limit, Quantity.sub, Quantity.mul limit, Quantity.div, min, max⟩
+  ⟨Quantity.add limit, Quantity.sub, Quantity.mul limit, Quantity.div, min, max,
+    fun value => decide (value = 0), MulDiv.mulDiv limit⟩
 
 def checked {Q : Type} (error : Error) : Option Q → Except Error Q
   | none => .error error
@@ -53,12 +57,20 @@ def operate {Q : Type} (ops : Arithmetic Q) : Rates.Op → Q → Q → Except Er
   | .min, l, r => .ok (ops.min l r)
   | .max, l, r => .ok (ops.max l r)
 
+-- A zero denominator is reported before the full-width quotient is attempted;
+-- a quotient outside the backend reports the multiplication overflow.
+def operateMulDiv {Q : Type} (ops : Arithmetic Q) (rounding : MulDiv.Rounding)
+    (l r d : Q) : Except Error Q :=
+  if ops.isZero d then .error .divisionByZero
+  else checked .multiplicationOverflow (ops.mulDiv rounding l r d)
+
 inductive Expr (Role Asset Q : Type) where
   | constant (value : Q)
   | units
   | parameter (name : String)
   | balance (role : Role) (asset : Asset)
   | binary (op : Rates.Op) (left right : Expr Role Asset Q)
+  | mulDiv (rounding : MulDiv.Rounding) (left right denominator : Expr Role Asset Q)
 
 structure Context (Role Asset Q : Type) where
   units : Q
@@ -99,6 +111,14 @@ def eval {Role Asset Q : Type} (ops : Arithmetic Q) (context : Context Role Asse
     | .ok l => match eval ops context right with
       | .error error => .error error
       | .ok r => operate ops op l r
+  | .mulDiv rounding left right denominator =>
+    match eval ops context left with
+    | .error error => .error error
+    | .ok l => match eval ops context right with
+      | .error error => .error error
+      | .ok r => match eval ops context denominator with
+        | .error error => .error error
+        | .ok d => operateMulDiv ops rounding l r d
 
 inductive Comparison where
   | equal | greaterOrEqual | lessOrEqual
@@ -131,6 +151,24 @@ theorem right_error_after_left {Role Asset Q : Type} (ops : Arithmetic Q)
     eval ops context (.binary op left right) = .error error := by
   simp [eval, succeeded, failed]
 
+theorem mulDiv_operand_error_first {Role Asset Q : Type} (ops : Arithmetic Q)
+    (context : Context Role Asset Q) (rounding : MulDiv.Rounding)
+    (left right denominator : Expr Role Asset Q) (error : Error)
+    (failed : eval ops context left = .error error ∨
+      (∃ l, eval ops context left = .ok l ∧ eval ops context right = .error error) ∨
+      (∃ l r, eval ops context left = .ok l ∧ eval ops context right = .ok r ∧
+        eval ops context denominator = .error error)) :
+    eval ops context (.mulDiv rounding left right denominator) = .error error := by
+  rcases failed with failed | ⟨l, hl, failed⟩ | ⟨l, r, hl, hr, failed⟩ <;> simp [eval, *]
+
+theorem mulDiv_zero_denominator {Role Asset Q : Type} (ops : Arithmetic Q)
+    (context : Context Role Asset Q) (rounding : MulDiv.Rounding)
+    (left right denominator : Expr Role Asset Q) (l r d : Q)
+    (hl : eval ops context left = .ok l) (hr : eval ops context right = .ok r)
+    (hd : eval ops context denominator = .ok d) (zero : ops.isZero d = true) :
+    eval ops context (.mulDiv rounding left right denominator) = .error .divisionByZero := by
+  simp [eval, hl, hr, hd, operateMulDiv, zero]
+
 def mapResult {Q R : Type} (value : Q → R) : Except Error Q → Except Error R
   | .error error => .error error
   | .ok result => .ok (value result)
@@ -141,6 +179,8 @@ def Expr.map {Role Asset Q R : Type} (value : Q → R) : Expr Role Asset Q → E
   | .parameter name => .parameter name
   | .balance role asset => .balance role asset
   | .binary op left right => .binary op (left.map value) (right.map value)
+  | .mulDiv rounding left right denominator =>
+    .mulDiv rounding (left.map value) (right.map value) (denominator.map value)
 
 def Context.map {Role Asset Q R : Type} (value : Q → R) (context : Context Role Asset Q) :
     Context Role Asset R :=
@@ -154,6 +194,9 @@ structure Hom {Q R : Type} (left : Arithmetic Q) (right : Arithmetic R) (value :
   div : ∀ l r, (left.div l r).map value = right.div (value l) (value r)
   min : ∀ l r, value (left.min l r) = right.min (value l) (value r)
   max : ∀ l r, value (left.max l r) = right.max (value l) (value r)
+  isZero : ∀ q, left.isZero q = right.isZero (value q)
+  mulDiv : ∀ rounding l r d,
+    (left.mulDiv rounding l r d).map value = right.mulDiv rounding (value l) (value r) (value d)
 
 theorem map_checked {Q R : Type} (value : Q → R) (error : Error) (result : Option Q) :
     mapResult value (checked error result) = checked error (result.map value) := by
@@ -170,6 +213,15 @@ theorem map_operate {Q R : Type} (left : Arithmetic Q) (right : Arithmetic R)
   | min => simp [operate, mapResult, hom.min]
   | max => simp [operate, mapResult, hom.max]
 
+theorem map_operateMulDiv {Q R : Type} (left : Arithmetic Q) (right : Arithmetic R)
+    (value : Q → R) (hom : Hom left right value) (rounding : MulDiv.Rounding) (l r d : Q) :
+    mapResult value (operateMulDiv left rounding l r d) =
+      operateMulDiv right rounding (value l) (value r) (value d) := by
+  simp only [operateMulDiv, ← hom.isZero]
+  split
+  · rfl
+  · simp only [map_checked, hom.mulDiv]
+
 theorem map_eval {Role Asset Q R : Type} (left : Arithmetic Q) (right : Arithmetic R)
     (value : Q → R) (hom : Hom left right value)
     (context : Context Role Asset Q) (expression : Expr Role Asset Q) :
@@ -184,6 +236,11 @@ theorem map_eval {Role Asset Q R : Type} (left : Arithmetic Q) (right : Arithmet
     simp only [eval, Expr.map, ← ihl, ← ihr]
     cases hl : eval left context l <;> cases hr : eval left context r <;>
       first | rfl | exact map_operate left right value hom op _ _
+  | mulDiv rounding l r d ihl ihr ihd =>
+    simp only [eval, Expr.map, ← ihl, ← ihr, ← ihd]
+    cases hl : eval left context l <;> cases hr : eval left context r <;>
+      cases hd : eval left context d <;>
+      first | rfl | exact map_operateMulDiv left right value hom rounding _ _ _
 
 theorem map_condition {Role Asset Q : Type} (ops : Arithmetic Q) (other : Arithmetic Nat)
     (value : Q → Nat) (hom : Hom ops other value) (context : Context Role Asset Q)

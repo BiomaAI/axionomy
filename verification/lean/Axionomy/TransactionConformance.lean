@@ -104,12 +104,12 @@ def fixtures (expression : Evaluation.Expr Nat Nat Nat → Json) : Array Json :=
   for source in [0, 1, 5, limit] do
     for target in [0, 1, limit] do
       for units in [0, 1, 2, limit] do
-        for alias in [false, true] do
+        for aliased in [false, true] do
           for reserve in [0, 1, 3] do
             for output in [0, 2] do
               cases := cases.push (scenario expression "static-grid" [(9, [(7, 11)]), (1, [(0, source)]), (0, [(0, target)])]
                 { transfer with produce := [(1, Basket.canonical [(0, output)])], preserve := [(0, Basket.canonical [(0, reserve)])] }
-                { proposal with units := units, bindings := [(0, 1), (1, if alias then 1 else 0)] })
+                { proposal with units := units, bindings := [(0, 1), (1, if aliased then 1 else 0)] })
   let add := fun label accounts rule action invariants => scenario expression label accounts rule action invariants
   cases := cases.push (add "empty-rate" before blank { proposal with bindings := [] } [])
   cases := cases.push (add "snapshot-computed" before { transfer with computedProduce := [⟨1, 1, .balance 0 0⟩] } proposal [])
@@ -169,8 +169,8 @@ def executionFixtures (expression : Evaluation.Expr Nat Nat Nat → Json) : Arra
   for source in [0, 1, 3, 5, limit] do
     for target in [0, limit - 1] do
       for units in [1, 2] do
-        for alias in [false, true] do
-          let proposal : Proposal := ⟨7, [(0, 1), (1, if alias then 1 else 0)], units, []⟩
+        for aliased in [false, true] do
+          let proposal : Proposal := ⟨7, [(0, 1), (1, if aliased then 1 else 0)], units, []⟩
           let bad := { proposal with units := 0 }
           for actions in [[], [proposal], [proposal, proposal], [proposal, bad, proposal], [bad, proposal], [proposal, proposal, proposal]] do
             cases := cases.push (replayScenario expression "replay-grid"

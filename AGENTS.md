@@ -31,7 +31,7 @@ into it), read `verification/README.md` and `verification/coverage.json` first.
 - Run `python3 scripts/check_proofs.py` and the appropriate Rust checks before
   completing core work. Preserve the workspace's existing checks.
 - Report verification precisely. The current baseline proves Aeneas-extracted
-  u64 checked arithmetic, basket construction/operations, account deposit/withdrawal,
+  u64 checked arithmetic, full-width rounded mul-div, basket construction/operations, account deposit/withdrawal,
   model/rate construction and metadata discovery, complete transaction assessment/application
   and finite-input iterator candidate filtering, fork/simulation/ordered replay, snapshot expressions/conditions,
   bounded effect aggregation, availability/preservation, preparation, atomic commit,

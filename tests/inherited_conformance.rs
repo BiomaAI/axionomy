@@ -251,6 +251,16 @@ impl QuantityScalar for Tagged {
     fn checked_weighted(&self, coefficient: i64) -> Option<i128> {
         i128::from(self.value).checked_mul(i128::from(coefficient))
     }
+    fn checked_mul_div(
+        &self,
+        rhs: &Self,
+        denominator: &Self,
+        rounding: axionomy::Rounding,
+    ) -> Option<Self> {
+        self.value
+            .checked_mul_div(&rhs.value, &denominator.value, rounding)
+            .map(|value| Self { value, tag: 0 })
+    }
 }
 
 #[test]

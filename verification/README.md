@@ -100,6 +100,24 @@ including the original target on failure. Full condition/effect orchestration
 in `Economy::analyze` is now composed with these proofs. See [ACCOUNTS.md](ACCOUNTS.md) for the read-only
 Arc, ordered lookup, UTF-8 and allocation boundaries.
 
+Full-width rounded mul-div also has an implementation proof. For every triple
+of u64 inputs and both `Rounding` directions, the extracted
+`QuantityScalar::checked_mul_div` widens to `u128`, multiplies, divides and,
+for `Ceil` with a remainder, adds one without any primitive failure, returning
+exactly `MulDiv.mulDiv u64Max`: `None` iff the denominator is zero or the
+rounded quotient exceeds u64. The product itself is never range-checked. The
+evaluator's `MulDiv` node evaluates its operands in order, reports a zero
+denominator before attempting the quotient, and is covered by the same
+evaluator refinement. Discovery, asset inspection, construction and the derived
+`Rounding` traits are proved alongside; `BigUint` and custom backends are tested
+only. See the `full_width_mul_div` contract in `coverage.json`.
+This milestone passed the full proof gate (708 registered contracts, 4,525
+audited Axionomy theorems), fresh extraction, 468 new Lean-generated evaluation
+cases (all 2,678 independently recomputed with a wide-integer reference), all
+372 workspace tests, 110 boundary/gate/extraction controls and production
+mutations, including a new control that drops the ceiling increment. Formatting
+and Clippy with warnings denied also passed.
+
 The complete production u64 `analyze`, `assess`, and `apply` paths now refine an
 ordered transaction specification. Rejection preserves the entire raw model.
 Success returns the submitted proposal and specified deltas, commits exactly
@@ -148,6 +166,7 @@ The current library covers:
 | `Discovery` / `DiscoveryRefinement` / `RateMetadataRefinement` / `RateDiscoveryRefinement` | Extracted computed/condition/distinct construction, exact recursive roles, sorted parameter union, complete ordered asset references and unchanged fields |
 | `Validation` / `ValidationCompleteRefinement` | Extracted full structural validation, exact selected rate or ordered diagnostics, nonempty rejection, accepted binding/account/parameter existence and distinctness |
 | `Conservation` / `ConservationRefinement` | Extracted runtime invariant check and whole-state measurement, exact signed widening/weighting, intermediate overflow and mathematical conservation on acceptance |
+| `MulDiv` / `MulDivRefinement` | Exact rounded quotients with full-width products, floor/ceil bounds and monotonicity; extracted u64 widening, rounding and narrowing return exactly the specification for every input |
 | `Evaluation` / `EvaluationRefinement` / `DiagnosticRefinement` | Extracted recursive expressions and conditions against one snapshot, all checked outcomes, first-error order, exact public error text |
 | `Effects` / `EffectsRefinement` | Extracted bounded static scaling/merging and computed single-quantity addition, exact errors and atomic failure |
 | `Transaction` / `AnalysisRefinement` / `ApplyRefinement` | Complete extracted transaction analysis, assessment and application; ordered stages/errors, atomic rejection, exact receipts/state and unchanged frame |
