@@ -177,8 +177,8 @@ impl<RateId, Role, AccountId, N> Trace<RateId, Role, AccountId, N> {
         }
     }
 
-    pub fn push(&mut self, exchange: Exchange<RateId, Role, AccountId, N>) {
-        self.exchanges.push(exchange);
+    pub fn push(&mut self, proposal: Exchange<RateId, Role, AccountId, N>) {
+        self.exchanges.push(proposal);
     }
 
     pub fn extend(

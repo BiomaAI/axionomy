@@ -465,5 +465,56 @@ transaction scenarios with Rust. Cases cover aliasing, original-snapshot
 evaluation, scaling, preservation, ordered shortfalls, late-account overflow,
 invariant overflow/violation diagnostics, receipt agreement and atomic rejection.
 Mutation controls require regenerated changed Rust to compile and then fail the
-corresponding semantic proof. Remaining execution/replay, observations, public
-data-boundary and numeric-backend contracts remain listed in the main backlog.
+corresponding semantic proof. Remaining observations, public data-boundary and numeric-backend contracts remain listed in the main backlog.
+
+
+## Execution: fork, simulation and replay
+
+`ExecutionRefinement` composes the actual extracted `Economy::apply` with the
+production fork, simulation and replay wrappers. `Economy::replay` now uses an
+explicit loop with the same first-error behavior as the former iterator/collect
+chain. Its public generic signature is unchanged. Local proposal names avoid
+shadowing generated Lean namespaces. The extraction harness forwards directly
+to these methods and to Trace new/default/push/exchanges/into_exchanges.
+
+`Execution.run` specifies an ordered trace, accumulated receipts and the state
+on either outcome. A failed action ends the trace immediately. The specification
+and `TransactionExecution.replay_error_prefix` derive that atomic transaction
+rejection leaves exactly the state reached by the successful prefix. Success
+returns receipts in proposal order. `success_history` records every intermediate
+state; `accepted_changes` applies the existing per-transaction receipt theorem
+at every step, including repeated visits to the same account. `apply_conserves`
+derives acceptance by every registered runtime invariant from the actual
+analysis control flow. `replay_conserves` composes those facts and proves exact
+mathematical equality of weighted consumed and produced totals for each receipt
+throughout the successful trace. The first-error prefix theorem supplies the same
+result for the accepted portion of a failed trace.
+
+The implementation theorem proves termination and exact results for all traces
+whose proposals satisfy the transaction name/metadata bounds and whose starting
+account count fits usize. Trace Vec bounds supply receipt capacity. The proof
+does not assume intermediate apply success, replay success, or per-step caller
+readiness. The actual apply frame preserves rates, invariants and account-key
+order; induction uses those facts to derive all next-step obligations. General
+invariant composition still requires the relevant per-step property, rather
+than asserting that arbitrary user predicates are preserved.
+
+Derived Economy cloning preserves the logical account map and shared rate and
+invariant values. Derived Exchange cloning preserves its typed rate, ordered
+bindings, units and parameters. The only newly introduced external interface is
+BTreeMap clone, modeled by calling each supplied key/value clone and retaining
+entry order. The generated external template diff was reviewed: no other
+interface changed. Lawful identifier clones, ordered finite-map models, logical
+Arc values, allocation/resources, physical collection storage, reference counts,
+clone/COW isolation, the compiler and translation remain explicit trust
+boundaries. Rust enforces source borrowing and ownership; Lean is not proving
+physical reference-count implementation or machine code.
+
+246 Lean-generated replay fixtures cover empty traces, repeated actions,
+changing balances, aliases, zero-unit/missing-rate stops, overflow, conservation,
+changing parameters and original-snapshot computed effects. Rust compares exact
+ordered receipts, errors, final prefix state and source isolation. All 596
+transaction fixtures also check simulate. Production mutation controls require
+proof failure when replay ignores errors, discards receipts, or simulation
+applies twice. Generic trace extension and serialization remain separate public
+boundary obligations.

@@ -91,6 +91,15 @@ def indexmap.map.IndexMap.Insts.CoreCloneClone.clone {K V S : Type}
     (entries : indexmap.map.IndexMap K V S) : Result (indexmap.map.IndexMap K V S) :=
   cloneEntries keyInst valueInst entries
 
+-- Logical BTreeMap cloning visits every key/value and retains ordered entries.
+-- Physical tree storage, allocation and clone isolation remain dependency models.
+def alloc.collections.btree.map.BTreeMap.Insts.CoreCloneClone.clone {K V A : Type}
+    (keyInst : core.clone.Clone K) (valueInst : core.clone.Clone V)
+    (_ : core.alloc.AllocatorClone A)
+    (entries : alloc.collections.btree.map.BTreeMap K V A) :
+    Result (alloc.collections.btree.map.BTreeMap K V A) :=
+  cloneEntries keyInst valueInst entries
+
 def indexmap.map.IndexMapKVRandomState.new (K V : Type) :
     Result (indexmap.map.IndexMap K V std.hash.random.RandomState) := .ok []
 def indexmap.map.IndexMap.is_empty {K V S : Type}

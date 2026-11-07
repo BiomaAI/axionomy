@@ -50,6 +50,21 @@ def validate_coverage(root, coverage):
             # These are the implemented extraction pipelines. Future
             # claims need their own regeneration and trust-boundary checks.
             pipelines = {
+                "receipts_and_replay": ("AccountExtraction.Funs", {
+                    "Axionomy.ExecutionRefinement.fork_refines",
+                    "Axionomy.ExecutionRefinement.simulate_refines",
+                    "Axionomy.ExecutionRefinement.replay_refines",
+                    "Axionomy.ExecutionRefinement.replayed_refines",
+                    "Axionomy.ExecutionRefinement.accepted_replay_contract",
+                    "Axionomy.ExecutionRefinement.rejected_replay_prefix",
+                    "Axionomy.ExecutionRefinement.replay_loop_refines",
+                    "Axionomy.ExecutionRefinement.economy_clone",
+                    "Axionomy.ExecutionRefinement.proposal_clone",
+                    "Axionomy.TransactionExecution.replay_error_prefix",
+                    "Axionomy.TransactionExecution.replay_receipt_order",
+                    "Axionomy.TransactionExecution.accepted_changes",
+                    "Axionomy.TransactionExecution.apply_conserves",
+                    "Axionomy.TransactionExecution.replay_conserves"}),
                 "complete_transactions": ("AccountExtraction.Funs", {
                     "Axionomy.AnalysisRefinement.analyze_refines",
                     "Axionomy.AnalysisRefinement.assess_refines",
@@ -208,7 +223,7 @@ def main():
         "runtime_")
     run("cargo", "test", "-p", "axionomy", "--all-features", "--doc")
     print(f"Verified {len(theorems)} registered theorems and their axiom dependencies, "
-          "fresh Aeneas extraction of u64 arithmetic, basket construction/operations, account updates/staging, model/rate construction and metadata discovery, complete transaction assessment/application and vector filtering, snapshot evaluation/conditions, signed conservation and measurement, "
+          "fresh Aeneas extraction of u64 arithmetic, basket construction/operations, account updates/staging, model/rate construction and metadata discovery, complete transaction assessment/application and vector filtering, fork/simulation/ordered replay, snapshot evaluation/conditions, signed conservation and measurement, "
           "and Rust conformance/type checks. Collection storage uses an explicit trusted model. "
           "Other core implementation refinement remains unproved; see verification/README.md.")
 

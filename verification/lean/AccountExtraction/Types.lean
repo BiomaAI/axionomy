@@ -345,7 +345,7 @@ structure exchange.AccountDelta (AccountId : Type _) (A : Type _) (N : Type _)
   preserved : basket.Basket A N
 
 /-- [account_extraction::economy::ApplyError]
-    Source: 'verification/../src/economy.rs', lines 1158:0-1198:1
+    Source: 'verification/../src/economy.rs', lines 1160:0-1200:1
     Visibility: public -/
 @[discriminant isize]
 inductive economy.ApplyError (RateId : Type _) (Role : Type _) (AccountId :
@@ -459,8 +459,16 @@ structure exchange.Exchange (RateId : Type _) (Role : Type _) (AccountId :
   parameters : alloc.collections.btree.map.BTreeMap String (quantity.Quantity
     N) alloc.alloc.Global
 
+/-- [account_extraction::exchange::Receipt]
+    Source: 'verification/../src/exchange.rs', lines 124:0-128:1
+    Visibility: public -/
+structure exchange.Receipt (RateId : Type _) (Role : Type _) (AccountId :
+  Type _) (A : Type _) (N : Type _) where
+  proposal : exchange.Exchange RateId Role AccountId N
+  deltas : alloc.vec.Vec (exchange.AccountDelta AccountId A N)
+
 /-- [account_extraction::economy::Analysis]
-    Source: 'verification/../src/economy.rs', lines 1260:0-1266:1 -/
+    Source: 'verification/../src/economy.rs', lines 1262:0-1268:1 -/
 structure economy.Analysis (AccountId : Type _) (A : Type _) (RateId : Type _)
   (Role : Type _) (N : Type _) (Clause0_SignedMeasure : Type _) where
   assessment : economy.ExchangeAssessment AccountId A RateId Role N
@@ -469,7 +477,7 @@ structure economy.Analysis (AccountId : Type _) (A : Type _) (RateId : Type _)
     (account.Account A N))))
 
 /-- [account_extraction::economy::Preparation]
-    Source: 'verification/../src/economy.rs', lines 1240:0-1243:1 -/
+    Source: 'verification/../src/economy.rs', lines 1242:0-1245:1 -/
 structure economy.Preparation (AccountId : Type _) (A : Type _) (N : Type _)
   where
   accounts : alloc.vec.Vec (AccountId × (alloc.sync.Arc (account.Account A
@@ -477,21 +485,21 @@ structure economy.Preparation (AccountId : Type _) (A : Type _) (N : Type _)
   deltas : alloc.vec.Vec (exchange.AccountDelta AccountId A N)
 
 /-- [account_extraction::economy::Availability]
-    Source: 'verification/../src/economy.rs', lines 1235:0-1238:1 -/
+    Source: 'verification/../src/economy.rs', lines 1237:0-1240:1 -/
 structure economy.Availability (AccountId : Type _) (A : Type _) (N : Type _)
   where
   accounts : alloc.vec.Vec (economy.AccountAssessment AccountId A N)
   shortfalls : alloc.vec.Vec (economy.AccountShortfall AccountId A N)
 
 /-- [account_extraction::economy::Effect]
-    Source: 'verification/../src/economy.rs', lines 1201:0-1205:1 -/
+    Source: 'verification/../src/economy.rs', lines 1203:0-1207:1 -/
 structure economy.Effect (A : Type _) (N : Type _) where
   consume : basket.Basket A N
   produce : basket.Basket A N
   preserve : basket.Basket A N
 
 /-- [account_extraction::economy::ComputedDirection]
-    Source: 'verification/../src/economy.rs', lines 1208:0-1212:1 -/
+    Source: 'verification/../src/economy.rs', lines 1210:0-1214:1 -/
 @[discriminant isize]
 inductive economy.ComputedDirection where
 | Consume : economy.ComputedDirection
@@ -499,7 +507,7 @@ inductive economy.ComputedDirection where
 | Preserve : economy.ComputedDirection
 
 /-- [account_extraction::economy::evaluate_expression::{closure#4}]
-    Source: 'verification/../src/economy.rs', lines 1392:12-1392:49 -/
+    Source: 'verification/../src/economy.rs', lines 1394:12-1394:49 -/
 @[reducible]
 def economy.evaluate_expression.closure_4 (AccountId : Type _) (A : Type _)
   (RateId : Type _) (Role : Type _) (N : Type _) (Clause5_SignedMeasure :
@@ -507,7 +515,7 @@ def economy.evaluate_expression.closure_4 (AccountId : Type _) (A : Type _)
 Unit
 
 /-- [account_extraction::economy::evaluate_expression::{closure#3}]
-    Source: 'verification/../src/economy.rs', lines 1381:12-1381:49 -/
+    Source: 'verification/../src/economy.rs', lines 1383:12-1383:49 -/
 @[reducible]
 def economy.evaluate_expression.closure_3 (AccountId : Type _) (A : Type _)
   (RateId : Type _) (Role : Type _) (N : Type _) (Clause5_SignedMeasure :
@@ -515,7 +523,7 @@ def economy.evaluate_expression.closure_3 (AccountId : Type _) (A : Type _)
 Unit
 
 /-- [account_extraction::economy::evaluate_expression::{closure#2}]
-    Source: 'verification/../src/economy.rs', lines 1373:12-1373:49 -/
+    Source: 'verification/../src/economy.rs', lines 1375:12-1375:49 -/
 @[reducible]
 def economy.evaluate_expression.closure_2 (AccountId : Type _) (A : Type _)
   (RateId : Type _) (Role : Type _) (N : Type _) (Clause5_SignedMeasure :
@@ -523,7 +531,7 @@ def economy.evaluate_expression.closure_2 (AccountId : Type _) (A : Type _)
 Unit
 
 /-- [account_extraction::economy::evaluate_expression::{closure#1}]
-    Source: 'verification/../src/economy.rs', lines 1365:12-1365:49 -/
+    Source: 'verification/../src/economy.rs', lines 1367:12-1367:49 -/
 @[reducible]
 def economy.evaluate_expression.closure_1 (AccountId : Type _) (A : Type _)
   (RateId : Type _) (Role : Type _) (N : Type _) (Clause5_SignedMeasure :
@@ -531,7 +539,7 @@ def economy.evaluate_expression.closure_1 (AccountId : Type _) (A : Type _)
 Unit
 
 /-- [account_extraction::economy::evaluate_expression::{closure}]
-    Source: 'verification/../src/economy.rs', lines 1348:24-1348:74 -/
+    Source: 'verification/../src/economy.rs', lines 1350:24-1350:74 -/
 @[reducible]
 def economy.evaluate_expression.closure (AccountId : Type _) (A : Type _)
   (RateId : Type _) (Role : Type _) (N : Type _) (Clause5_SignedMeasure :
@@ -539,7 +547,7 @@ def economy.evaluate_expression.closure (AccountId : Type _) (A : Type _)
   String
 
 /-- [account_extraction::economy::ExpressionError]
-    Source: 'verification/../src/economy.rs', lines 1299:0-1307:1 -/
+    Source: 'verification/../src/economy.rs', lines 1301:0-1309:1 -/
 @[discriminant isize]
 inductive economy.ExpressionError where
 | MissingParameter : String → economy.ExpressionError
@@ -550,13 +558,12 @@ inductive economy.ExpressionError where
 | MultiplicationOverflow : economy.ExpressionError
 | DivisionByZero : economy.ExpressionError
 
-/-- [account_extraction::exchange::Receipt]
-    Source: 'verification/../src/exchange.rs', lines 124:0-128:1
+/-- [account_extraction::exchange::Trace]
+    Source: 'verification/../src/exchange.rs', lines 169:0-171:1
     Visibility: public -/
-structure exchange.Receipt (RateId : Type _) (Role : Type _) (AccountId :
-  Type _) (A : Type _) (N : Type _) where
-  proposal : exchange.Exchange RateId Role AccountId N
-  deltas : alloc.vec.Vec (exchange.AccountDelta AccountId A N)
+structure exchange.Trace (RateId : Type _) (Role : Type _) (AccountId : Type _)
+  (N : Type _) where
+  exchanges : alloc.vec.Vec (exchange.Exchange RateId Role AccountId N)
 
 /-- [account_extraction::rate::RateError]
     Source: 'verification/../src/rate.rs', lines 690:0-693:1

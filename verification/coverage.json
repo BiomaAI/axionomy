@@ -7,15 +7,15 @@
     "src/account.rs": "0eaf66937c63de2993353828e42fcfea2b80f172f5cb74fc76a28cef79fd9ff6",
     "src/amount.rs": "4aa0f1432494aac0454890604e3addbd002fa6b9ded1f75f91fce7675540f9ee",
     "src/basket.rs": "10e7d7792f3b1de207bdae124fd76a8fa5fe93295b1a4eb49455b588941ee5f1",
-    "src/economy.rs": "c4ea1b6b47f24a98a37afba8707e83f0d99f83df6ba6c91db17a82b695d7f0e6",
-    "src/exchange.rs": "19d4c5e8c17afef0cd030a27809ea0b8cfe710990544c350515b48cd742367a2",
+    "src/economy.rs": "00da2b4d0a520528250b270e5622600c8b215242be00370ce8d6dd1fa62b888c",
+    "src/exchange.rs": "90a0755a4b3f780220ced362dc421364a6c3691d9ce900050cd57b3bbcc4ccc4",
     "src/lib.rs": "46d6f713693714650653128e2ceabf8a895b8ad98a38a7bdbeab4ea378a5cc06",
     "src/quantity.rs": "af66b8cf86b6ac58cccd4e9fcfb740e06928f86b4bf6117660fb7f37319b97dd",
     "src/rate.rs": "af545aa57d7668c346cfb9b0aefe3207af23b6443f9f7064ab5b1eaff9210812",
     "verification/extract.rs": "415b34f5f4f8aa2679af860bd2a4092c96e113145919160fe7c81e33836de3e0",
     "verification/aeneas-toolchain.json": "8676d7d11be51a6f41984d874b35910e8a1a3d0a18414998feb9402ef80932fb",
     "verification/extract_basket.rs": "dc2b3a2159704c24a5261d0069a2aac7b575f30a94ae35c4c1e96933638592dd",
-    "verification/extract_account.rs": "3bce45e694cf60f85f8681d2a244df0441361cac73ea6b936acc2848b13eb772",
+    "verification/extract_account.rs": "0fa96b07ba84099abb59825b394313dd97f99126d28b1baf68bb7ca0bf257a59",
     "verification/patches/aeneas-namespaced-discriminant.patch": "fabac7482deb3da6ecaca60c4060dfe9d2114efdd010699e736c4a91267f3bc9"
   },
   "features": [
@@ -329,26 +329,62 @@
     },
     {
       "id": "receipts_and_replay",
-      "status": "design_proved_rust_tested",
+      "status": "aeneas_refinement_proved",
       "sources": [
         "src/exchange.rs",
-        "src/economy.rs"
+        "src/economy.rs",
+        "verification/extract_account.rs",
+        "verification/aeneas-toolchain.json"
       ],
       "theorems": [
         "Axionomy.Exchange.acceptance_applies_every_delta",
         "Axionomy.Replay.append",
         "Axionomy.Replay.invariant_preserved",
-        "Axionomy.Replay.deterministic"
+        "Axionomy.Replay.deterministic",
+        "Axionomy.Execution.append",
+        "Axionomy.Execution.error_prefix",
+        "Axionomy.Execution.atomic_error_prefix",
+        "Axionomy.Execution.success_history",
+        "Axionomy.Execution.Accepted.receipt_order",
+        "Axionomy.Execution.Accepted.invariant",
+        "Axionomy.ExecutionRefinement.economy_clone",
+        "Axionomy.ExecutionRefinement.proposal_clone",
+        "Axionomy.ExecutionRefinement.trace_new",
+        "Axionomy.ExecutionRefinement.trace_default",
+        "Axionomy.ExecutionRefinement.trace_push",
+        "Axionomy.ExecutionRefinement.trace_borrow",
+        "Axionomy.ExecutionRefinement.trace_consume",
+        "Axionomy.ExecutionRefinement.fork_refines",
+        "Axionomy.ExecutionRefinement.simulate_refines",
+        "Axionomy.ExecutionRefinement.replay_loop_refines",
+        "Axionomy.ExecutionRefinement.replay_refines",
+        "Axionomy.ExecutionRefinement.replayed_refines",
+        "Axionomy.TransactionExecution.rejection_atomic",
+        "Axionomy.TransactionExecution.replay_error_prefix",
+        "Axionomy.TransactionExecution.replay_receipt_order",
+        "Axionomy.TransactionExecution.accepted_changes",
+        "Axionomy.TransactionExecution.checks_conserve",
+        "Axionomy.TransactionExecution.stages_conserve",
+        "Axionomy.TransactionExecution.analysis_conserves",
+        "Axionomy.TransactionExecution.apply_conserves",
+        "Axionomy.TransactionExecution.accepted_conserves",
+        "Axionomy.TransactionExecution.replay_conserves",
+        "Axionomy.ExecutionRefinement.accepted_replay_contract",
+        "Axionomy.ExecutionRefinement.rejected_replay_prefix"
       ],
       "rust_tests": [
         "tests/lean_conformance.rs",
         "tests/economy.rs",
-        "tests/serde.rs"
+        "tests/serde.rs",
+        "tests/transaction_conformance.rs"
       ],
       "limitations": [
-        "These replay design theorems assume an invariant-preserving deterministic step. The separate complete_transactions contract refines actual u64 apply and receipts; composition with Rust replay and its error behavior remains open.",
-        "Rust mutating replay prefix-on-error, Arc fork isolation and serialized trace refinement remain unproved. These are tracked separately from the complete transaction implementation contract."
-      ]
+        "The production u64 fork, simulate, replay, replayed and Trace new/default/push/exchanges/into_exchanges paths are shared-source extracted. Derived Economy and Exchange clones are proved exact under lawful identifier cloning. Replay terminates without panic for every bounded trace satisfying the transaction metadata/name/capacity preconditions; no successful step or intermediate-state readiness is assumed. The transaction frame derives unchanged rules, invariants and account-key cardinality through every step.",
+        "The typed ordered replay specification retains the final state on both success and failure. Rejection atomicity derives exactly the accepted prefix state and first error; success retains receipt order and each receipt describes its own intermediate committed state. Simulation and replayed publish isolated branch results with the source immutably borrowed. The reusable invariant-composition lemma requires a step law; concrete replay refinement discharges the transaction caller invariants through the extracted apply frame, rather than assuming them for intermediate states. The actual analyze/apply accepted control flow also establishes every registered weighted-transfer conservation check; replay_conserves derives exact mathematical consumed/produced equality per receipt throughout a successful trace, and the first-error theorem supplies its successful prefix.",
+        "Logical IndexMap, ordered BTreeMap, Vec/slice and Arc models, lawful equality/ordering/hash coherence, UTF-8 lengths, allocation/resources, compiler/MIR/Charon/Aeneas/backend semantics remain explicit trust boundaries. BTreeMap clone calls every key/value clone and preserves entry order; physical tree/Arc storage, reference counts, allocator behavior and clone/COW isolation are not verified. Strong Rust domains and ownership remain enforced. This is not machine-code verification.",
+        "Trace generic extend, remaining derived/convenience APIs, serialization/schema contracts and BigUint/BigInt/custom numeric laws remain separate items 16–18. 246 Lean-generated replay scenarios and 596 transaction simulation scenarios supplement the general proofs; they do not replace them."
+      ],
+      "extracted_module": "AccountExtraction.Funs"
     },
     {
       "id": "observations_and_goals",

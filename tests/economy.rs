@@ -358,6 +358,31 @@ fn forks_and_replay_validate_a_trace_without_touching_the_source() {
 }
 
 #[test]
+fn replay_stops_at_first_error_and_keeps_only_the_successful_prefix() {
+    let original = world();
+    let mut expected = original.fork();
+    let accepted = transform(2);
+    let rejected = transform(1);
+    expected.apply(accepted.clone()).unwrap();
+    let expected_error = expected.assess(&rejected);
+    assert!(!expected_error.is_applicable());
+    // This last action is valid after the accepted prefix. It must not execute.
+    assert!(expected.is_applicable(&finish()));
+    let mut trace = Trace::new();
+    trace.extend([accepted, rejected, finish()]);
+    let before = original.state_key();
+    let mut actual = original.fork();
+    assert!(matches!(
+        actual.replay(&trace),
+        Err(ApplyError::Infeasible { .. })
+    ));
+    assert_eq!(actual.state_key(), expected.state_key());
+    assert_eq!(original.state_key(), before);
+    assert!(original.replayed(&trace).is_err());
+    assert_eq!(original.state_key(), before);
+}
+
+#[test]
 fn economic_views_have_canonical_observation_identities() {
     let world = world();
     let source_and_sink = world.view([AccountId::Source, AccountId::Sink]);

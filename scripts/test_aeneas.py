@@ -55,6 +55,25 @@ class ExtractionBoundaryTests(unittest.TestCase):
 
 
 class ProductionMutationTests(unittest.TestCase):
+    def test_replay_ignoring_error_breaks_execution(self):
+        self.check_mutation(
+            "src/economy.rs", "receipts.push(self.apply(proposal.clone())?);",
+            "if let Ok(receipt) = self.apply(proposal.clone()) { receipts.push(receipt); }",
+            "extract_account.py", "stale account model", "ExecutionRefinement", "AccountExtraction")
+
+    def test_replay_discarding_receipts_breaks_execution(self):
+        self.check_mutation(
+            "src/economy.rs", "receipts.push(self.apply(proposal.clone())?);",
+            "receipts.push(self.apply(proposal.clone())?); receipts = Vec::new();",
+            "extract_account.py", "stale account model", "ExecutionRefinement", "AccountExtraction",
+            proof_failure="Type mismatch")
+
+    def test_simulation_applying_twice_breaks_execution(self):
+        self.check_mutation(
+            "src/economy.rs", "let receipt = fork.apply(proposal)?;",
+            "fork.apply(proposal.clone())?; let receipt = fork.apply(proposal)?;",
+            "extract_account.py", "stale account model", "ExecutionRefinement", "AccountExtraction")
+
     def test_reversed_filter_breaks_transaction_filtering(self):
         self.check_mutation(
             "src/economy.rs", "if self.is_applicable(&proposal)", "if !self.is_applicable(&proposal)",

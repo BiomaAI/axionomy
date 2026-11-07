@@ -611,10 +611,10 @@ where
     /// Applies one exchange to an isolated branch, leaving this economy intact.
     pub fn simulate(
         &self,
-        exchange: Exchange<RateId, Role, AccountId, N>,
+        proposal: Exchange<RateId, Role, AccountId, N>,
     ) -> SimulationResult<AccountId, A, RateId, Role, N> {
         let mut fork = self.fork();
-        let receipt = fork.apply(exchange)?;
+        let receipt = fork.apply(proposal)?;
         Ok((fork, receipt))
     }
 
@@ -677,16 +677,18 @@ where
         }
     }
 
+    /// Applies proposals in order and stops at the first error, retaining the
+    /// changes from earlier successful proposals. Returns ordered receipts only
+    /// when every proposal succeeds.
     pub fn replay(
         &mut self,
         trace: &Trace<RateId, Role, AccountId, N>,
     ) -> ReplayResult<AccountId, A, RateId, Role, N> {
-        trace
-            .exchanges()
-            .iter()
-            .cloned()
-            .map(|proposal| self.apply(proposal))
-            .collect()
+        let mut receipts = Vec::new();
+        for proposal in trace.exchanges() {
+            receipts.push(self.apply(proposal.clone())?);
+        }
+        Ok(receipts)
     }
 
     /// Validates a complete trace on an isolated branch and returns its final state.

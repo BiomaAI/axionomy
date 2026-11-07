@@ -1,5 +1,6 @@
 import Lean
 import Axionomy.Transaction
+import Axionomy.Execution
 import Axionomy.Basket
 
 namespace TransactionConformance
@@ -144,6 +145,48 @@ def fixtures (expression : Evaluation.Expr Nat Nat Nat → Json) : Array Json :=
     { proposal with units := 0, bindings := [(0, 77), (1, 77), (2, 88)], parameters := [("unknown", 1)] } [])
   cases := cases.push (add "parameter-and-comparison" before { transfer with computedPreserve := [⟨0, 0, .parameter "éλ"⟩], conditions := [⟨"lower", .balance 0 0, .greaterOrEqual, .parameter "éλ"⟩, ⟨"upper", .parameter "éλ", .lessOrEqual, .units⟩] }
     { proposal with parameters := [("éλ", 1)] } [])
+  return cases
+
+def receiptJson (value : Transaction.Receipt Nat Nat Nat Nat) : Json := Json.mkObj [
+  ("proposal", proposalJson value.proposal), ("deltas", toJson (value.deltas.map delta))]
+
+def replayScenario (expression : Evaluation.Expr Nat Nat Nat → Json) (label : String)
+    (before : List (Nat × List (Nat × Nat))) (rule : Rule) (actions : List Proposal)
+    (invariants : List (Transaction.Invariant Nat) := []) : Json :=
+  let model : Model := ⟨before.map (fun (id, entries) => (id, Basket.canonical entries)), [(7, normalize rule)], invariants⟩
+  let expected := match Execution.run (Transaction.apply compare compare) model actions [] with
+    | none => tagged "panic"
+    | some (result, after) => Json.mkObj [("after", accounts after.accounts),
+        ("error", match result with | .error error => failure error | .ok _ => Json.null),
+        ("receipts", match result with | .error _ => Json.null | .ok receipts => toJson (receipts.map receiptJson))]
+  Json.mkObj [("base", scenario expression label before rule ⟨7, [], 1, []⟩ invariants),
+    ("trace", toJson (actions.map proposalJson)), ("expected", expected)]
+
+def executionFixtures (expression : Evaluation.Expr Nat Nat Nat → Json) : Array Json := Id.run do
+  let limit := Quantity.u64Max
+  let transfer : Rule := { blank with consume := [(0, [(0, 1)])], produce := [(1, [(0, 1)])] }
+  let mut cases := #[]
+  for source in [0, 1, 3, 5, limit] do
+    for target in [0, limit - 1] do
+      for units in [1, 2] do
+        for alias in [false, true] do
+          let proposal : Proposal := ⟨7, [(0, 1), (1, if alias then 1 else 0)], units, []⟩
+          let bad := { proposal with units := 0 }
+          for actions in [[], [proposal], [proposal, proposal], [proposal, bad, proposal], [bad, proposal], [proposal, proposal, proposal]] do
+            cases := cases.push (replayScenario expression "replay-grid"
+              [(9, [(7, 11)]), (1, [(0, source)]), (0, [(0, target)])] transfer actions [⟨"mass", [(0, 1)]⟩])
+  let proposal : Proposal := ⟨7, [(0, 1), (1, 0)], 1, []⟩
+  let before := [(9, [(7, 11)]), (1, [(0, 5)]), (0, [])]
+  let computed : Rule := { blank with computedConsume := [⟨0, 0, .parameter "n"⟩], computedProduce := [⟨1, 0, .parameter "n"⟩], conditions := [⟨"available", .balance 0 0, .greaterOrEqual, .parameter "n"⟩] }
+  let parameter := fun n => { proposal with parameters := [("n", n)] }
+  for actions in [[parameter 1, parameter 2], [parameter 2, parameter 4, parameter 1],
+      [parameter 5, parameter 1], [parameter 1, { proposal with rate := 99 }, parameter 1]] do
+    cases := cases.push (replayScenario expression "changing-snapshot-and-parameters" before computed actions [⟨"mass", [(0, 1)]⟩])
+  cases := cases.push (replayScenario expression "empty-rate-repeated" before blank
+    (List.replicate 8 { proposal with bindings := [] }))
+  cases := cases.push (replayScenario expression "computed-snapshot-revisited" before
+    { blank with computedConsume := [⟨0, 0, .binary .div (.balance 0 0) (.constant 2)⟩], computedProduce := [⟨1, 0, .binary .div (.balance 0 0) (.constant 2)⟩] }
+    [proposal, proposal, proposal, proposal] [⟨"mass", [(0, 1)]⟩])
   return cases
 
 end TransactionConformance

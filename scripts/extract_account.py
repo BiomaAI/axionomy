@@ -19,7 +19,7 @@ GENERATED = {
 }
 TEMPLATES = {
     "TypesExternal_Template.lean": "1e23b03807db8349ee43313ba025edadafe9ce91362da38a9cfc28942e8df36a",
-    "FunsExternal_Template.lean": "4945946b34dff4062402df20fedf395f43edfb760dfa1b525220674b62e9abf9",
+    "FunsExternal_Template.lean": "7cf028a0973a730bf6f62d8834b95c3a1a6c386953731c1fadaa44500cd1cb6b",
 }
 
 # Keep critical handoffs explicit alongside the complete caller extraction.
@@ -42,6 +42,15 @@ VALIDATION_CALL = """let rule = match self.validate_structure(proposal) {
         };"""
 
 ENTRY_CALLS = {
+    "model_fork": "model.fork()",
+    "model_simulate": "model.simulate(proposal)",
+    "model_replay": "model.replay(trace)",
+    "model_replayed": "model.replayed(trace)",
+    "trace_new": "Trace::new()",
+    "trace_default": "Trace::default()",
+    "trace_push": "trace.push(proposal)",
+    "trace_exchanges": "trace.exchanges()",
+    "trace_into_exchanges": "trace.into_exchanges()",
     "model_is_applicable": "model.is_applicable(proposal)",
     "model_applicable": "model.applicable(candidates)",
     "assess_model_proposal": "model.assess(proposal)",
@@ -126,6 +135,10 @@ def validate_generated(directory):
                   "economy.Economy.validate_structure",
                   *[f"economy.Economy.validate_structure_loop{i}.body" for i in range(7)],
                   "economy.Economy.analyze", "economy.Economy.assess", "economy.Economy.apply",
+                  "economy.Economy.fork", "economy.Economy.simulate", "economy.Economy.replay",
+                  "economy.Economy.replay_loop.body", "economy.Economy.replayed",
+                  "economy.Economy.Insts.CoreCloneClone.clone", "exchange.Exchange.Insts.CoreCloneClone.clone",
+                  "exchange.Trace.new", "exchange.Trace.push", "exchange.Trace.impl.exchanges", "exchange.Trace.into_exchanges",
                   "economy.Economy.is_applicable", "economy.Economy.applicable", "economy.ExchangeAssessment.is_applicable",
                   "exchange.Receipt.new", "economy.Effect.merge_computed", "economy.relevant_balances",
                   *[f"economy.Economy.{stage}{suffix}" for stage in (

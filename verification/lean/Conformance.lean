@@ -601,5 +601,6 @@ def main : IO Unit := do
     ("conservation", toJson conservation), ("rateMerges", toJson rateMerges),
     ("evaluation", toJson evaluation), ("measurements", toJson measurements), ("effects", toJson effects),
     ("models", toJson models), ("metadata", toJson metadata), ("validation", toJson validation),
-    ("transactions", toJson (TransactionConformance.fixtures expressionJson))]
+    ("transactions", toJson (TransactionConformance.fixtures expressionJson)),
+    ("executions", toJson (TransactionConformance.executionFixtures expressionJson))]
   IO.println document.compress

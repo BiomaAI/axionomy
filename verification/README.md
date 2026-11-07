@@ -100,6 +100,13 @@ on these paths is derived. Public applicability checks and finite vector candida
 filtering also refine the same original-snapshot analysis, retaining order and
 duplicates. See the complete transaction contract in [ACCOUNTS.md](ACCOUNTS.md).
 
+Production fork, simulation, ordered replay and isolated replay now refine a
+state-retaining execution specification. Replay rejection leaves the accepted
+prefix committed; successful receipts retain proposal order and satisfy every
+registered weighted-transfer conservation check. Structural caller preconditions
+are derived through the transaction frame. Physical Arc/clone isolation remains
+an explicit dependency model. See the [execution contract](ACCOUNTS.md#execution-fork-simulation-and-replay).
+
 The other core contracts still have handwritten design proofs and finite Rust
 conformance tests. Neither an entire source module nor every existing core
 behavior is declared proved just because it has a coverage entry.
@@ -172,8 +179,8 @@ to `origin/main`; theorem counts do not measure percentage completion.
 | 1 | 9 | Multi-account atomic commit, unchanged frame, safe prepared-account lookups | Implementation proved: safe lookups, atomic rejection, exact committed state and unchanged frame |
 | 1 | 10 | Assessment/application agreement, filtering, immutability, exact diagnostics/order | Implementation proved: analyze/assess/apply agreement, boolean applicability and stable finite-vector filtering; arbitrary iterators remain in item 16 |
 | 1 | 11 | Receipts/deltas agree with the actual proposal and committed changes | Implementation proved: submitted proposal, unique receipt accounts and exact observable committed balance for every delta |
-| 2. Execution and observations | 12 | Fork/simulation isolation and equivalence | Open |
-| 2 | 13 | Ordered traces, replay prefix-on-error, isolated replay, invariant composition | Design proofs |
+| 2. Execution and observations | 12 | Fork/simulation isolation and equivalence | Implementation proved under documented logical storage/clone models |
+| 2 | 13 | Ordered traces, replay prefix-on-error, isolated replay, invariant composition | Implementation proved: first error, accepted prefix state, ordered receipts and derived caller invariants; generic trace extension remains in item 16 |
 | 2 | 14 | Goals, visibility, hidden-state noninterference, missing/zero distinctions | Design proofs |
 | 2 | 15 | Canonical state/observation keys and deterministic fingerprints | Open |
 | 3. Public data boundary | 16 | Remaining typed constructors/accessors/conversions/iterators/equality | Partial implementation proofs |
@@ -211,7 +218,26 @@ The transaction contracts are registered in `coverage.json` and the mandatory
 proof gate. This milestone passed fresh extraction, the Lean kernel/axiom audit,
 generated conformance, all verification controls (including production mutations),
 and Rust 1.89 workspace formatting, Clippy, tests and documentation checks.
-Milestones 2–4 remain open; this is not full core coverage.
+Milestone 2 is partially complete (items 12–13); items 14–18 remain open or partial. This is not full core coverage.
+
+The execution paths now compose the transaction proof. `ExecutionRefinement`
+proves production `fork`, `simulate`, `replay` and `replayed`, including exact
+ordered receipts and error results. The replay loop derives each next step's
+metadata/resource conditions from the previous step's preserved rates, invariants
+and account keys. `Execution` retains the state on failure; `TransactionExecution`
+proves that this is exactly the successful prefix state, and that each successful
+receipt describes the balance change at its own intermediate state. Trace
+construction, append-by-push and borrowed/consuming access preserve proposal order.
+See [the execution contract](ACCOUNTS.md#execution-fork-simulation-and-replay).
+The fixture bridge adds 246 replay scenarios and checks simulation against all
+596 existing transaction cases. Generic `Trace::extend` and serialized traces
+remain in items 16–17. Physical clone/Arc isolation remains a dependency boundary;
+Rust's immutable source borrows and typed APIs remain intact.
+This execution slice passed the full proof gate (238 registered contracts), fresh
+extraction and kernel/axiom audit, 246 replay plus 596 simulation conformance
+scenarios, 294 workspace tests, 75 boundary/gate controls and three new production
+mutation controls. Formatting, Clippy with warnings denied, documentation and
+compile-fail doctests also passed. The prior 32 production controls remain in CI.
 
 Items 14–15 include a reproduced observation-key gap across different account
 domains: a visible empty account and an absent account currently produce the same
@@ -334,7 +360,7 @@ the initial theorems. They are a backfill plan, not an exemption for new behavio
 - Charon/Aeneas extraction and refinement beyond the four `Quantity<u64>` checked
   arithmetic operations, basket construction/operations, account updates/staging,
   model/rate construction and metadata discovery, complete u64 transaction
-  assessment/application and finite-vector filtering, snapshot expression/condition
+  assessment/application, finite-vector filtering, fork/simulation/replay and ordered trace access, snapshot expression/condition
   evaluation, bounded effect helpers, runtime conservation and whole-state measurement.
 - Correctness of `IndexMap`, `BTreeMap`, `Arc`, iterator order, allocation, cloning,
   and copy-on-write isolation; Rust compilation still enforces its ownership rules.

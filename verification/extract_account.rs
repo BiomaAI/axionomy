@@ -329,3 +329,81 @@ pub fn apply_model_proposal<
 ) -> economy::ApplyResult<AccountId, A, RateId, Role> {
     model.apply(proposal)
 }
+
+pub fn model_fork<
+    AccountId: Clone + Eq + std::hash::Hash + Ord,
+    A: Clone + Eq + std::hash::Hash + Ord,
+    RateId: Clone + Eq + std::hash::Hash + Ord,
+    Role: Clone + Ord,
+>(
+    model: &economy::Economy<AccountId, A, RateId, Role>,
+) -> economy::Economy<AccountId, A, RateId, Role> {
+    model.fork()
+}
+
+pub fn model_simulate<
+    AccountId: Clone + Eq + std::hash::Hash + Ord,
+    A: Clone + Eq + std::hash::Hash + Ord,
+    RateId: Clone + Eq + std::hash::Hash + Ord,
+    Role: Clone + Ord,
+>(
+    model: &economy::Economy<AccountId, A, RateId, Role>,
+    proposal: Exchange<RateId, Role, AccountId>,
+) -> economy::SimulationResult<AccountId, A, RateId, Role> {
+    model.simulate(proposal)
+}
+
+pub fn model_replay<
+    AccountId: Clone + Eq + std::hash::Hash + Ord,
+    A: Clone + Eq + std::hash::Hash + Ord,
+    RateId: Clone + Eq + std::hash::Hash + Ord,
+    Role: Clone + Ord,
+>(
+    model: &mut economy::Economy<AccountId, A, RateId, Role>,
+    trace: &Trace<RateId, Role, AccountId>,
+) -> economy::ReplayResult<AccountId, A, RateId, Role> {
+    model.replay(trace)
+}
+
+#[allow(clippy::type_complexity)] // Keep the forwarding signature identical to production.
+pub fn model_replayed<
+    AccountId: Clone + Eq + std::hash::Hash + Ord,
+    A: Clone + Eq + std::hash::Hash + Ord,
+    RateId: Clone + Eq + std::hash::Hash + Ord,
+    Role: Clone + Ord,
+>(
+    model: &economy::Economy<AccountId, A, RateId, Role>,
+    trace: &Trace<RateId, Role, AccountId>,
+) -> Result<
+    economy::Economy<AccountId, A, RateId, Role>,
+    economy::ApplyError<RateId, Role, AccountId, A>,
+> {
+    model.replayed(trace)
+}
+
+pub fn trace_new<RateId, Role, AccountId>() -> Trace<RateId, Role, AccountId> {
+    Trace::new()
+}
+
+pub fn trace_default<RateId, Role, AccountId>() -> Trace<RateId, Role, AccountId> {
+    Trace::default()
+}
+
+pub fn trace_push<RateId, Role, AccountId>(
+    trace: &mut Trace<RateId, Role, AccountId>,
+    proposal: Exchange<RateId, Role, AccountId>,
+) {
+    trace.push(proposal)
+}
+
+pub fn trace_exchanges<RateId, Role, AccountId>(
+    trace: &Trace<RateId, Role, AccountId>,
+) -> &[Exchange<RateId, Role, AccountId>] {
+    trace.exchanges()
+}
+
+pub fn trace_into_exchanges<RateId, Role, AccountId>(
+    trace: Trace<RateId, Role, AccountId>,
+) -> Vec<Exchange<RateId, Role, AccountId>> {
+    trace.into_exchanges()
+}

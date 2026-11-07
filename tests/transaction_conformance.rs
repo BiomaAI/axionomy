@@ -3,7 +3,7 @@
 use axionomy::{
     Account, AccountAssessment, AccountDelta, AccountShortfall, ApplyError, Basket, Economy,
     EconomyBuilder, Exchange, ExchangeAssessment, LinearInvariant, Quantity, QuantityComparison,
-    QuantityExpression, Rate,
+    QuantityExpression, Rate, Receipt, Trace,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -83,6 +83,14 @@ struct Case {
 #[derive(Deserialize)]
 struct Fixtures {
     transactions: Vec<Case>,
+    executions: Vec<ExecutionCase>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ExecutionCase {
+    base: Case,
+    trace: Vec<ProposalCase>,
+    expected: Value,
 }
 
 fn basket(entries: &Amounts) -> Basket<Asset> {
@@ -264,17 +272,22 @@ fn build(case: &Case) -> (World, Proposal) {
         }
         builder = builder.invariant(value);
     }
-    let mut action = Exchange::new(
-        case.proposal.rate,
-        Quantity::new(case.proposal.units.parse::<u64>().unwrap()),
-    );
-    for (role, account) in &case.proposal.bindings {
+    (builder.build().unwrap(), build_proposal(&case.proposal))
+}
+
+fn build_proposal(case: &ProposalCase) -> Proposal {
+    let mut action = Exchange::new(case.rate, Quantity::new(case.units.parse::<u64>().unwrap()));
+    for (role, account) in &case.bindings {
         action = action.bind(*role, *account);
     }
-    for (key, value) in &case.proposal.parameters {
+    for (key, value) in &case.parameters {
         action = action.parameter(key, Quantity::new(value.parse::<u64>().unwrap()));
     }
-    (builder.build().unwrap(), action)
+    action
+}
+
+fn receipt(value: &Receipt<RuleId, Role, Holder, Asset>) -> Value {
+    json!({"proposal": proposal(value.exchange()), "deltas": deltas(value.deltas())})
 }
 
 #[test]
@@ -290,6 +303,31 @@ fn complete_transactions_match_lean() {
         );
         let (mut world, action) = build(case);
         let before = serde_json::to_value(&world).unwrap();
+        match world.simulate(action.clone()) {
+            Ok((branch, actual)) => {
+                assert!(case.expected["error"].is_null(), "simulation: {case:?}");
+                assert_eq!(
+                    snapshot(&branch),
+                    case.expected["after"],
+                    "simulation: {case:?}"
+                );
+                assert_eq!(
+                    receipt(&actual),
+                    case.expected["receipt"],
+                    "simulation: {case:?}"
+                );
+            }
+            Err(error) => assert_eq!(
+                failure(&error),
+                case.expected["error"],
+                "simulation: {case:?}"
+            ),
+        }
+        assert_eq!(
+            serde_json::to_value(&world).unwrap(),
+            before,
+            "simulation mutated source: {case:?}"
+        );
         let assessed = world.assess(&action);
         assert_eq!(
             assessment(&assessed),
@@ -359,5 +397,80 @@ fn complete_transactions_match_lean() {
         let after = serde_json::to_value(&world).unwrap();
         assert_eq!(after["rates"], before["rates"]);
         assert_eq!(after["invariants"], before["invariants"]);
+    }
+}
+
+#[test]
+fn complete_replays_match_lean() {
+    let fixtures: Fixtures =
+        serde_json::from_str(include_str!("../verification/conformance.json")).unwrap();
+    assert_eq!(fixtures.executions.len(), 246);
+    for (index, case) in fixtures.executions.iter().enumerate() {
+        assert_ne!(
+            case.expected.get("kind"),
+            Some(&json!("panic")),
+            "Lean replay panicked: {case:?}"
+        );
+        let (source, _) = build(&case.base);
+        let before = serde_json::to_value(&source).unwrap();
+        let mut trace = Trace::default();
+        let actions = case.trace.iter().map(build_proposal).collect::<Vec<_>>();
+        for action in &actions {
+            trace.push(action.clone());
+        }
+        assert_eq!(trace.exchanges(), actions.as_slice());
+        assert_eq!(trace.clone().into_exchanges(), actions);
+        let mut branch = source.fork();
+        assert_eq!(serde_json::to_value(&branch).unwrap(), before);
+        match branch.replay(&trace) {
+            Ok(receipts) => {
+                assert!(case.expected["error"].is_null(), "case {index}: {case:?}");
+                assert_eq!(
+                    json!(receipts.iter().map(receipt).collect::<Vec<_>>()),
+                    case.expected["receipts"],
+                    "case {index}: {case:?}"
+                );
+            }
+            Err(error) => {
+                assert!(
+                    case.expected["receipts"].is_null(),
+                    "case {index}: {case:?}"
+                );
+                assert_eq!(
+                    failure(&error),
+                    case.expected["error"],
+                    "case {index}: {case:?}"
+                );
+            }
+        }
+        assert_eq!(
+            snapshot(&branch),
+            case.expected["after"],
+            "case {index}: {case:?}"
+        );
+        let after = serde_json::to_value(&branch).unwrap();
+        assert_eq!(after["rates"], before["rates"]);
+        assert_eq!(after["invariants"], before["invariants"]);
+        assert_eq!(serde_json::to_value(&source).unwrap(), before);
+        match source.replayed(&trace) {
+            Ok(after) => {
+                assert!(case.expected["error"].is_null(), "case {index}: {case:?}");
+                assert_eq!(
+                    snapshot(&after),
+                    case.expected["after"],
+                    "case {index}: {case:?}"
+                );
+            }
+            Err(error) => assert_eq!(
+                failure(&error),
+                case.expected["error"],
+                "case {index}: {case:?}"
+            ),
+        }
+        assert_eq!(
+            serde_json::to_value(&source).unwrap(),
+            before,
+            "isolated replay mutated source: {case:?}"
+        );
     }
 }

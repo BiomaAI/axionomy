@@ -325,6 +325,14 @@ def alloc.string.String.Insts.CoreCmpOrd : core.cmp.Ord String := {
   cmp := alloc.string.String.Insts.CoreCmpOrd.cmp
 }
 
+/-- Trait implementation: [alloc::string::{impl core::clone::Clone for alloc::string::String}]
+    Source: '/rustc/library/alloc/src/string.rs', lines 2424:0-2424:21
+    Name pattern: [core::clone::Clone<alloc::string::String>] -/
+@[reducible, rust_trait_impl "core::clone::Clone<alloc::string::String>"]
+def alloc.string.String.Insts.CoreCloneClone : core.clone.Clone String := {
+  clone := alloc.string.String.Insts.CoreCloneClone.clone
+}
+
 /-- Trait implementation: [alloc::sync::{impl core::clone::Clone for alloc::sync::Arc<T>}]
     Source: '/rustc/library/alloc/src/sync.rs', lines 2505:0-2505:54
     Name pattern: [core::clone::Clone<alloc::sync::Arc<@T>>] -/
@@ -1365,6 +1373,31 @@ def basket.Basket.Insts.CoreCmpPartialEqBasket {A : Type _} {N : Type _}
     corehashHashInst corecmpPartialEqInst
 }
 
+/-- [account_extraction::economy::{impl core::clone::Clone for account_extraction::economy::Economy<AccountId, A, RateId, Role, N>}::clone]:
+    Source: 'verification/../src/economy.rs', lines 68:16-68:21
+    Visibility: public -/
+def economy.Economy.Insts.CoreCloneClone.clone
+  {AccountId : Type _} {A : Type _} {RateId : Type _} {Role : Type _} {N :
+  Type _} (corecloneCloneInst : core.clone.Clone AccountId)
+  (corecloneCloneInst1 : core.clone.Clone A) (corecloneCloneInst2 :
+  core.clone.Clone RateId) (corecloneCloneInst3 : core.clone.Clone Role)
+  (corecloneCloneInst4 : core.clone.Clone N)
+  (self : economy.Economy AccountId A RateId Role N) :
+  Result (economy.Economy AccountId A RateId Role N)
+  := do
+  let im ←
+    indexmap.map.IndexMap.Insts.CoreCloneClone.clone corecloneCloneInst
+      (alloc.sync.Arc.Insts.CoreCloneClone (account.Account A N)
+      alloc.alloc.Global.Insts.CoreAllocAllocatorClone)
+      std.hash.random.RandomState.Insts.CoreCloneClone self.accounts
+  let a ←
+    alloc.sync.Arc.Insts.CoreCloneClone.clone
+      alloc.alloc.Global.Insts.CoreAllocAllocatorClone self.rates
+  let a1 ←
+    alloc.sync.Arc.Insts.CoreCloneClone.clone
+      alloc.alloc.Global.Insts.CoreAllocAllocatorClone self.invariants
+  ok { accounts := im, rates := a, invariants := a1 }
+
 /-- [account_extraction::economy::{account_extraction::economy::AccountAssessment<AccountId, A, N>}::new]:
     Source: 'verification/../src/economy.rs', lines 159:4-175:5 -/
 def economy.AccountAssessment.new
@@ -1586,8 +1619,40 @@ def economy.EconomyBuilder.Insts.CoreDefaultDefault.default
   economy.EconomyBuilder.new A Role N corecmpEqInst corehashHashInst
     corecmpEqInst1 corehashHashInst1
 
+/-- [account_extraction::economy::{account_extraction::economy::Economy<AccountId, A, RateId, Role, N>}::fork]:
+    Source: 'verification/../src/economy.rs', lines 607:4-609:5
+    Visibility: public -/
+def economy.Economy.fork
+  {AccountId : Type _} {A : Type _} {RateId : Type _} {Role : Type _} {N :
+  Type _} {Clause14_SignedMeasure : Type _} (corecloneCloneInst :
+  core.clone.Clone AccountId) (corecmpEqInst : core.cmp.Eq AccountId)
+  (corehashHashInst : core.hash.Hash AccountId) (corecmpOrdInst : core.cmp.Ord
+  AccountId) (corecloneCloneInst1 : core.clone.Clone A) (corecmpEqInst1 :
+  core.cmp.Eq A) (corehashHashInst1 : core.hash.Hash A) (corecmpOrdInst1 :
+  core.cmp.Ord A) (corecloneCloneInst2 : core.clone.Clone RateId)
+  (corecmpEqInst2 : core.cmp.Eq RateId) (corehashHashInst2 : core.hash.Hash
+  RateId) (corecmpOrdInst2 : core.cmp.Ord RateId) (corecloneCloneInst3 :
+  core.clone.Clone Role) (corecmpOrdInst3 : core.cmp.Ord Role)
+  (quantityQuantityScalarInst : quantity.QuantityScalar N
+  Clause14_SignedMeasure) (self : economy.Economy AccountId A RateId Role N) :
+  Result (economy.Economy AccountId A RateId Role N)
+  := do
+  economy.Economy.Insts.CoreCloneClone.clone corecloneCloneInst
+    corecloneCloneInst1 corecloneCloneInst2 corecloneCloneInst3
+    quantityQuantityScalarInst.corecloneCloneInst self
+
+/-- [account_extraction::exchange::{account_extraction::exchange::Receipt<RateId, Role, AccountId, A, N>}::new]:
+    Source: 'verification/../src/exchange.rs', lines 156:4-161:5 -/
+def exchange.Receipt.new
+  {RateId : Type _} {Role : Type _} {AccountId : Type _} {A : Type _} {N :
+  Type _} (proposal : exchange.Exchange RateId Role AccountId N)
+  (deltas : alloc.vec.Vec (exchange.AccountDelta AccountId A N)) :
+  Result (exchange.Receipt RateId Role AccountId A N)
+  := do
+  ok { proposal, deltas }
+
 /-- [account_extraction::economy::invalid_analysis]:
-    Source: 'verification/../src/economy.rs', lines 1446:0-1457:1 -/
+    Source: 'verification/../src/economy.rs', lines 1448:0-1459:1 -/
 def economy.invalid_analysis
   {AccountId : Type _} {A : Type _} {RateId : Type _} {Role : Type _} {N :
   Type _} {Clause0_SignedMeasure : Type _} (quantityQuantityScalarInst :
@@ -1888,7 +1953,7 @@ def rate.LinearInvariant.impl.name
   alloc.string.String.Insts.CoreOpsDerefDerefStr.deref self.name
 
 /-- [account_extraction::economy::{account_extraction::economy::Economy<AccountId, A, RateId, Role, N>}::accounts_with_prepared]: loop body 0:
-    Source: 'verification/../src/economy.rs', lines 813:8-815:9 -/
+    Source: 'verification/../src/economy.rs', lines 815:8-817:9 -/
 @[rust_loop_body]
 def economy.Economy.accounts_with_prepared_loop.body
   {AccountId : Type _} {A : Type _} {N : Type _} (corecmpEqInst : core.cmp.Eq
@@ -1921,7 +1986,7 @@ def economy.Economy.accounts_with_prepared_loop.body
     ok (cont (iter1, after_accounts1))
 
 /-- [account_extraction::economy::{account_extraction::economy::Economy<AccountId, A, RateId, Role, N>}::accounts_with_prepared]: loop 0:
-    Source: 'verification/../src/economy.rs', lines 813:8-815:9 -/
+    Source: 'verification/../src/economy.rs', lines 815:8-817:9 -/
 @[rust_loop]
 def economy.Economy.accounts_with_prepared_loop
   {AccountId : Type _} {A : Type _} {N : Type _} (corecmpEqInst : core.cmp.Eq
@@ -1940,7 +2005,7 @@ def economy.Economy.accounts_with_prepared_loop
     (iter, after_accounts)
 
 /-- [account_extraction::economy::{account_extraction::economy::Economy<AccountId, A, RateId, Role, N>}::accounts_with_prepared]:
-    Source: 'verification/../src/economy.rs', lines 808:4-817:5 -/
+    Source: 'verification/../src/economy.rs', lines 810:4-819:5 -/
 def economy.Economy.accounts_with_prepared
   {AccountId : Type _} {A : Type _} {RateId : Type _} {Role : Type _} {N :
   Type _} {Clause14_SignedMeasure : Type _} (corecloneCloneInst :
@@ -1971,7 +2036,7 @@ def economy.Economy.accounts_with_prepared
     iter after_accounts
 
 /-- [account_extraction::economy::{account_extraction::economy::Economy<AccountId, A, RateId, Role, N>}::check_invariants]: loop body 0:
-    Source: 'verification/../src/economy.rs', lines 984:8-1011:5 -/
+    Source: 'verification/../src/economy.rs', lines 986:8-1013:5 -/
 @[rust_loop_body]
 def economy.Economy.check_invariants_loop.body
   {AccountId : Type _} {A : Type _} {RateId : Type _} {Role : Type _} {N :
@@ -2063,7 +2128,7 @@ def economy.Economy.check_invariants_loop.body
               (economy.ApplyError.InvariantViolation s1 before after)))
 
 /-- [account_extraction::economy::{account_extraction::economy::Economy<AccountId, A, RateId, Role, N>}::check_invariants]: loop 0:
-    Source: 'verification/../src/economy.rs', lines 984:8-1011:5 -/
+    Source: 'verification/../src/economy.rs', lines 986:8-1013:5 -/
 @[rust_loop]
 def economy.Economy.check_invariants_loop
   {AccountId : Type _} {A : Type _} {RateId : Type _} {Role : Type _} {N :
@@ -2100,7 +2165,7 @@ def economy.Economy.check_invariants_loop
     iter
 
 /-- [account_extraction::economy::{account_extraction::economy::Economy<AccountId, A, RateId, Role, N>}::check_invariants]:
-    Source: 'verification/../src/economy.rs', lines 979:4-1011:5 -/
+    Source: 'verification/../src/economy.rs', lines 981:4-1013:5 -/
 def economy.Economy.check_invariants
   {AccountId : Type _} {A : Type _} {RateId : Type _} {Role : Type _} {N :
   Type _} {Clause14_SignedMeasure : Type _} (corecloneCloneInst :
@@ -2143,7 +2208,7 @@ def exchange.AccountDelta.new
   ok { account, consumed, produced, preserved }
 
 /-- [account_extraction::economy::map_account_error]:
-    Source: 'verification/../src/economy.rs', lines 1471:0-1488:1 -/
+    Source: 'verification/../src/economy.rs', lines 1473:0-1490:1 -/
 def economy.map_account_error
   (RateId : Type _) (Role : Type _) {AccountId : Type _} {A : Type _} {N :
   Type _} {Clause2_SignedMeasure : Type _} (corecmpEqInst : core.cmp.Eq A)
@@ -2164,7 +2229,7 @@ def economy.map_account_error
     ok (economy.ApplyError.BalanceOverflow holder asset)
 
 /-- [account_extraction::economy::{account_extraction::economy::Economy<AccountId, A, RateId, Role, N>}::prepare_effects]: loop body 0:
-    Source: 'verification/../src/economy.rs', lines 952:8-977:5 -/
+    Source: 'verification/../src/economy.rs', lines 954:8-979:5 -/
 @[rust_loop_body]
 def economy.Economy.prepare_effects_loop.body
   {AccountId : Type _} {A : Type _} {RateId : Type _} {Role : Type _} {N :
@@ -2226,7 +2291,7 @@ def economy.Economy.prepare_effects_loop.body
       ok (done (core.result.Result.Err ae))
 
 /-- [account_extraction::economy::{account_extraction::economy::Economy<AccountId, A, RateId, Role, N>}::prepare_effects]: loop 0:
-    Source: 'verification/../src/economy.rs', lines 952:8-977:5 -/
+    Source: 'verification/../src/economy.rs', lines 954:8-979:5 -/
 @[rust_loop]
 def economy.Economy.prepare_effects_loop
   {AccountId : Type _} {A : Type _} {RateId : Type _} {Role : Type _} {N :
@@ -2253,7 +2318,7 @@ def economy.Economy.prepare_effects_loop
     (iter, prepared_accounts, deltas)
 
 /-- [account_extraction::economy::{account_extraction::economy::Economy<AccountId, A, RateId, Role, N>}::prepare_effects]:
-    Source: 'verification/../src/economy.rs', lines 946:4-977:5 -/
+    Source: 'verification/../src/economy.rs', lines 948:4-979:5 -/
 def economy.Economy.prepare_effects
   {AccountId : Type _} {A : Type _} {RateId : Type _} {Role : Type _} {N :
   Type _} {Clause14_SignedMeasure : Type _} (corecloneCloneInst :
@@ -2299,7 +2364,7 @@ def exchange.Exchange.impl.rate
   ok self.rate
 
 /-- [account_extraction::economy::relevant_balances]: loop body 0:
-    Source: 'verification/../src/economy.rs', lines 1465:4-1467:5 -/
+    Source: 'verification/../src/economy.rs', lines 1467:4-1469:5 -/
 @[rust_loop_body]
 def economy.relevant_balances_loop.body
   {A : Type _} {N : Type _} {Clause3_SignedMeasure : Type _}
@@ -2329,7 +2394,7 @@ def economy.relevant_balances_loop.body
     ok (cont (iter1, relevant1))
 
 /-- [account_extraction::economy::relevant_balances]: loop 0:
-    Source: 'verification/../src/economy.rs', lines 1465:4-1467:5 -/
+    Source: 'verification/../src/economy.rs', lines 1467:4-1469:5 -/
 @[rust_loop]
 def economy.relevant_balances_loop
   {A : Type _} {N : Type _} {Clause3_SignedMeasure : Type _}
@@ -2347,7 +2412,7 @@ def economy.relevant_balances_loop
     (iter, relevant)
 
 /-- [account_extraction::economy::relevant_balances]:
-    Source: 'verification/../src/economy.rs', lines 1459:0-1469:1 -/
+    Source: 'verification/../src/economy.rs', lines 1461:0-1471:1 -/
 def economy.relevant_balances
   {A : Type _} {N : Type _} {Clause3_SignedMeasure : Type _}
   (corecloneCloneInst : core.clone.Clone A) (corecmpEqInst : core.cmp.Eq A)
@@ -2362,7 +2427,7 @@ def economy.relevant_balances
     corehashHashInst quantityQuantityScalarInst iter holder relevant
 
 /-- [account_extraction::economy::{account_extraction::economy::Economy<AccountId, A, RateId, Role, N>}::preflight_effects]: loop body 0:
-    Source: 'verification/../src/economy.rs', lines 913:8-944:5 -/
+    Source: 'verification/../src/economy.rs', lines 915:8-946:5 -/
 @[rust_loop_body]
 def economy.Economy.preflight_effects_loop.body
   {AccountId : Type _} {A : Type _} {RateId : Type _} {Role : Type _} {N :
@@ -2441,7 +2506,7 @@ def economy.Economy.preflight_effects_loop.body
         asset)))
 
 /-- [account_extraction::economy::{account_extraction::economy::Economy<AccountId, A, RateId, Role, N>}::preflight_effects]: loop 0:
-    Source: 'verification/../src/economy.rs', lines 913:8-944:5 -/
+    Source: 'verification/../src/economy.rs', lines 915:8-946:5 -/
 @[rust_loop]
 def economy.Economy.preflight_effects_loop
   {AccountId : Type _} {A : Type _} {RateId : Type _} {Role : Type _} {N :
@@ -2470,7 +2535,7 @@ def economy.Economy.preflight_effects_loop
     (iter, account_assessments, shortfalls)
 
 /-- [account_extraction::economy::{account_extraction::economy::Economy<AccountId, A, RateId, Role, N>}::preflight_effects]:
-    Source: 'verification/../src/economy.rs', lines 906:4-944:5 -/
+    Source: 'verification/../src/economy.rs', lines 908:4-946:5 -/
 def economy.Economy.preflight_effects
   {AccountId : Type _} {A : Type _} {RateId : Type _} {Role : Type _} {N :
   Type _} {Clause14_SignedMeasure : Type _} (corecloneCloneInst :
@@ -2636,7 +2701,7 @@ def exchange.Exchange.impl.bindings
   ok self.bindings
 
 /-- [account_extraction::economy::merge_scaled]:
-    Source: 'verification/../src/economy.rs', lines 1268:0-1279:1 -/
+    Source: 'verification/../src/economy.rs', lines 1270:0-1281:1 -/
 def economy.merge_scaled
   {A : Type _} {N : Type _} {Clause3_SignedMeasure : Type _}
   (corecloneCloneInst : core.clone.Clone A) (corecmpEqInst : core.cmp.Eq A)
@@ -2660,7 +2725,7 @@ def economy.merge_scaled
     ok (r1, target)
 
 /-- [account_extraction::economy::{impl core::default::Default for account_extraction::economy::Effect<A, N>}::default]:
-    Source: 'verification/../src/economy.rs', lines 1215:4-1221:5
+    Source: 'verification/../src/economy.rs', lines 1217:4-1223:5
     Visibility: public -/
 def economy.Effect.Insts.CoreDefaultDefault.default
   (A : Type _) (N : Type _) : Result (economy.Effect A N) := do
@@ -2668,7 +2733,7 @@ def economy.Effect.Insts.CoreDefaultDefault.default
   ok { consume := b, produce := b, preserve := b }
 
 /-- Trait implementation: [account_extraction::economy::{impl core::default::Default for account_extraction::economy::Effect<A, N>}]
-    Source: 'verification/../src/economy.rs', lines 1214:0-1222:1 -/
+    Source: 'verification/../src/economy.rs', lines 1216:0-1224:1 -/
 @[reducible]
 def economy.Effect.Insts.CoreDefaultDefault (A : Type _) (N : Type _) :
   core.default.Default (economy.Effect A N) := {
@@ -2772,7 +2837,7 @@ def quantity.Quantity.checked_div
   quantity.Quantity.from_checked QuantityScalarInst o
 
 /-- [account_extraction::economy::evaluate_expression::{impl core::ops::function::FnOnce<(&'_0 account_extraction::quantity::Quantity<N>, &'_1 account_extraction::quantity::Quantity<N>), core::option::Option<account_extraction::quantity::Quantity<N>>> for account_extraction::economy::evaluate_expression::{closure#4}<AccountId, A, RateId, Role, N, Clause5_SignedMeasure>}::call_once]:
-    Source: 'verification/../src/economy.rs', lines 1392:12-1392:49 -/
+    Source: 'verification/../src/economy.rs', lines 1394:12-1394:49 -/
 def
   economy.evaluate_expression.closure_4.Insts.CoreOpsFunctionFnOncePairShared0QuantityShared1QuantityOptionQuantity.call_once
   {AccountId : Type _} {A : Type _} {RateId : Type _} {Role : Type _} {N :
@@ -2790,7 +2855,7 @@ def
   quantity.Quantity.checked_div quantityQuantityScalarInst left right
 
 /-- Trait implementation: [account_extraction::economy::evaluate_expression::{impl core::ops::function::FnOnce<(&'_0 account_extraction::quantity::Quantity<N>, &'_1 account_extraction::quantity::Quantity<N>), core::option::Option<account_extraction::quantity::Quantity<N>>> for account_extraction::economy::evaluate_expression::{closure#4}<AccountId, A, RateId, Role, N, Clause5_SignedMeasure>}]
-    Source: 'verification/../src/economy.rs', lines 1392:12-1392:49 -/
+    Source: 'verification/../src/economy.rs', lines 1394:12-1394:49 -/
 @[reducible]
 def
   economy.evaluate_expression.closure_4.Insts.CoreOpsFunctionFnOncePairShared0QuantityShared1QuantityOptionQuantity
@@ -2810,7 +2875,7 @@ def
 }
 
 /-- [account_extraction::economy::evaluate_expression::{impl core::ops::function::FnOnce<(&'_0 account_extraction::quantity::Quantity<N>, &'_1 account_extraction::quantity::Quantity<N>), core::option::Option<account_extraction::quantity::Quantity<N>>> for account_extraction::economy::evaluate_expression::{closure#3}<AccountId, A, RateId, Role, N, Clause5_SignedMeasure>}::call_once]:
-    Source: 'verification/../src/economy.rs', lines 1381:12-1381:49 -/
+    Source: 'verification/../src/economy.rs', lines 1383:12-1383:49 -/
 def
   economy.evaluate_expression.closure_3.Insts.CoreOpsFunctionFnOncePairShared0QuantityShared1QuantityOptionQuantity.call_once
   {AccountId : Type _} {A : Type _} {RateId : Type _} {Role : Type _} {N :
@@ -2828,7 +2893,7 @@ def
   quantity.Quantity.checked_mul quantityQuantityScalarInst left right
 
 /-- Trait implementation: [account_extraction::economy::evaluate_expression::{impl core::ops::function::FnOnce<(&'_0 account_extraction::quantity::Quantity<N>, &'_1 account_extraction::quantity::Quantity<N>), core::option::Option<account_extraction::quantity::Quantity<N>>> for account_extraction::economy::evaluate_expression::{closure#3}<AccountId, A, RateId, Role, N, Clause5_SignedMeasure>}]
-    Source: 'verification/../src/economy.rs', lines 1381:12-1381:49 -/
+    Source: 'verification/../src/economy.rs', lines 1383:12-1383:49 -/
 @[reducible]
 def
   economy.evaluate_expression.closure_3.Insts.CoreOpsFunctionFnOncePairShared0QuantityShared1QuantityOptionQuantity
@@ -2848,7 +2913,7 @@ def
 }
 
 /-- [account_extraction::economy::evaluate_expression::{impl core::ops::function::FnOnce<(&'_0 account_extraction::quantity::Quantity<N>, &'_1 account_extraction::quantity::Quantity<N>), core::option::Option<account_extraction::quantity::Quantity<N>>> for account_extraction::economy::evaluate_expression::{closure#2}<AccountId, A, RateId, Role, N, Clause5_SignedMeasure>}::call_once]:
-    Source: 'verification/../src/economy.rs', lines 1373:12-1373:49 -/
+    Source: 'verification/../src/economy.rs', lines 1375:12-1375:49 -/
 def
   economy.evaluate_expression.closure_2.Insts.CoreOpsFunctionFnOncePairShared0QuantityShared1QuantityOptionQuantity.call_once
   {AccountId : Type _} {A : Type _} {RateId : Type _} {Role : Type _} {N :
@@ -2866,7 +2931,7 @@ def
   quantity.Quantity.checked_sub quantityQuantityScalarInst left right
 
 /-- Trait implementation: [account_extraction::economy::evaluate_expression::{impl core::ops::function::FnOnce<(&'_0 account_extraction::quantity::Quantity<N>, &'_1 account_extraction::quantity::Quantity<N>), core::option::Option<account_extraction::quantity::Quantity<N>>> for account_extraction::economy::evaluate_expression::{closure#2}<AccountId, A, RateId, Role, N, Clause5_SignedMeasure>}]
-    Source: 'verification/../src/economy.rs', lines 1373:12-1373:49 -/
+    Source: 'verification/../src/economy.rs', lines 1375:12-1375:49 -/
 @[reducible]
 def
   economy.evaluate_expression.closure_2.Insts.CoreOpsFunctionFnOncePairShared0QuantityShared1QuantityOptionQuantity
@@ -2886,7 +2951,7 @@ def
 }
 
 /-- [account_extraction::economy::evaluate_expression::{impl core::ops::function::FnOnce<(&'_0 account_extraction::quantity::Quantity<N>, &'_1 account_extraction::quantity::Quantity<N>), core::option::Option<account_extraction::quantity::Quantity<N>>> for account_extraction::economy::evaluate_expression::{closure#1}<AccountId, A, RateId, Role, N, Clause5_SignedMeasure>}::call_once]:
-    Source: 'verification/../src/economy.rs', lines 1365:12-1365:49 -/
+    Source: 'verification/../src/economy.rs', lines 1367:12-1367:49 -/
 def
   economy.evaluate_expression.closure_1.Insts.CoreOpsFunctionFnOncePairShared0QuantityShared1QuantityOptionQuantity.call_once
   {AccountId : Type _} {A : Type _} {RateId : Type _} {Role : Type _} {N :
@@ -2904,7 +2969,7 @@ def
   quantity.Quantity.checked_add quantityQuantityScalarInst left right
 
 /-- Trait implementation: [account_extraction::economy::evaluate_expression::{impl core::ops::function::FnOnce<(&'_0 account_extraction::quantity::Quantity<N>, &'_1 account_extraction::quantity::Quantity<N>), core::option::Option<account_extraction::quantity::Quantity<N>>> for account_extraction::economy::evaluate_expression::{closure#1}<AccountId, A, RateId, Role, N, Clause5_SignedMeasure>}]
-    Source: 'verification/../src/economy.rs', lines 1365:12-1365:49 -/
+    Source: 'verification/../src/economy.rs', lines 1367:12-1367:49 -/
 @[reducible]
 def
   economy.evaluate_expression.closure_1.Insts.CoreOpsFunctionFnOncePairShared0QuantityShared1QuantityOptionQuantity
@@ -2924,7 +2989,7 @@ def
 }
 
 /-- [account_extraction::economy::evaluate_expression::{impl core::ops::function::FnOnce<(), account_extraction::economy::ExpressionError> for account_extraction::economy::evaluate_expression::{closure}<'_0, AccountId, A, RateId, Role, N, Clause5_SignedMeasure>}::call_once]:
-    Source: 'verification/../src/economy.rs', lines 1348:24-1348:74 -/
+    Source: 'verification/../src/economy.rs', lines 1350:24-1350:74 -/
 def
   economy.evaluate_expression.closure.Insts.CoreOpsFunctionFnOnceTupleExpressionError.call_once
   {AccountId : Type _} {A : Type _} {RateId : Type _} {Role : Type _} {N :
@@ -2941,7 +3006,7 @@ def
   ok (economy.ExpressionError.MissingParameter s)
 
 /-- Trait implementation: [account_extraction::economy::evaluate_expression::{impl core::ops::function::FnOnce<(), account_extraction::economy::ExpressionError> for account_extraction::economy::evaluate_expression::{closure}<'_0, AccountId, A, RateId, Role, N, Clause5_SignedMeasure>}]
-    Source: 'verification/../src/economy.rs', lines 1348:24-1348:74 -/
+    Source: 'verification/../src/economy.rs', lines 1350:24-1350:74 -/
 @[reducible]
 def
   economy.evaluate_expression.closure.Insts.CoreOpsFunctionFnOnceTupleExpressionError
@@ -2962,7 +3027,7 @@ def
 mutual
 
 /-- [account_extraction::economy::evaluate_expression]:
-    Source: 'verification/../src/economy.rs', lines 1330:0-1405:1 -/
+    Source: 'verification/../src/economy.rs', lines 1332:0-1407:1 -/
 def economy.evaluate_expression
   {AccountId : Type _} {A : Type _} {RateId : Type _} {Role : Type _} {N :
   Type _} {Clause5_SignedMeasure : Type _} (corecmpEqInst : core.cmp.Eq
@@ -3121,7 +3186,7 @@ def economy.evaluate_expression
 partial_fixpoint
 
 /-- [account_extraction::economy::evaluate_binary]:
-    Source: 'verification/../src/economy.rs', lines 1427:0-1444:1 -/
+    Source: 'verification/../src/economy.rs', lines 1429:0-1446:1 -/
 def economy.evaluate_binary
   {AccountId : Type _} {A : Type _} {RateId : Type _} {Role : Type _} {N :
   Type _} {T5 : Type _} {Clause5_SignedMeasure : Type _} (corecmpEqInst :
@@ -3170,7 +3235,7 @@ partial_fixpoint
 end
 
 /-- [account_extraction::economy::{account_extraction::economy::ExpressionError}::into_message]:
-    Source: 'verification/../src/economy.rs', lines 1310:4-1327:5 -/
+    Source: 'verification/../src/economy.rs', lines 1312:4-1329:5 -/
 def economy.ExpressionError.into_message
   (self : economy.ExpressionError) : Result String := do
   match self with
@@ -3198,7 +3263,7 @@ def economy.ExpressionError.into_message
     Str.Insts.AllocBorrowToOwnedString.to_owned (toStr "division by zero")
 
 /-- [account_extraction::economy::merge_quantity]:
-    Source: 'verification/../src/economy.rs', lines 1281:0-1295:1 -/
+    Source: 'verification/../src/economy.rs', lines 1283:0-1297:1 -/
 def economy.merge_quantity
   {A : Type _} {N : Type _} {Clause3_SignedMeasure : Type _}
   (corecloneCloneInst : core.clone.Clone A) (corecmpEqInst : core.cmp.Eq A)
@@ -3220,7 +3285,7 @@ def economy.merge_quantity
     ok (core.result.Result.Ok (), target1)
 
 /-- [account_extraction::economy::{account_extraction::economy::Effect<A, N>}::merge_computed]:
-    Source: 'verification/../src/economy.rs', lines 1246:4-1257:5 -/
+    Source: 'verification/../src/economy.rs', lines 1248:4-1259:5 -/
 def economy.Effect.merge_computed
   {A : Type _} {N : Type _} {Clause3_SignedMeasure : Type _}
   (corecloneCloneInst : core.clone.Clone A) (corecmpEqInst : core.cmp.Eq A)
@@ -3248,7 +3313,7 @@ def economy.Effect.merge_computed
     ok (r, { self with preserve := b })
 
 /-- [account_extraction::economy::{account_extraction::economy::Economy<AccountId, A, RateId, Role, N>}::merge_computed_effects]: loop body 0:
-    Source: 'verification/../src/economy.rs', lines 781:8-806:5 -/
+    Source: 'verification/../src/economy.rs', lines 783:8-808:5 -/
 @[rust_loop_body]
 def economy.Economy.merge_computed_effects_loop.body
   {AccountId : Type _} {A : Type _} {RateId : Type _} {Role : Type _} {N :
@@ -3329,7 +3394,7 @@ def economy.Economy.merge_computed_effects_loop.body
         s), effects))
 
 /-- [account_extraction::economy::{account_extraction::economy::Economy<AccountId, A, RateId, Role, N>}::merge_computed_effects]: loop 0:
-    Source: 'verification/../src/economy.rs', lines 781:8-806:5 -/
+    Source: 'verification/../src/economy.rs', lines 783:8-808:5 -/
 @[rust_loop]
 def economy.Economy.merge_computed_effects_loop
   {AccountId : Type _} {A : Type _} {RateId : Type _} {Role : Type _} {N :
@@ -3360,7 +3425,7 @@ def economy.Economy.merge_computed_effects_loop
     (iter, effects)
 
 /-- [account_extraction::economy::{account_extraction::economy::Economy<AccountId, A, RateId, Role, N>}::merge_computed_effects]:
-    Source: 'verification/../src/economy.rs', lines 774:4-806:5 -/
+    Source: 'verification/../src/economy.rs', lines 776:4-808:5 -/
 def economy.Economy.merge_computed_effects
   {AccountId : Type _} {A : Type _} {RateId : Type _} {Role : Type _} {N :
   Type _} {Clause14_SignedMeasure : Type _} (corecloneCloneInst :
@@ -3392,7 +3457,7 @@ def economy.Economy.merge_computed_effects
     quantityQuantityScalarInst iter self direction proposal effects
 
 /-- [account_extraction::economy::{account_extraction::economy::Economy<AccountId, A, RateId, Role, N>}::aggregate_effects]: loop body 0:
-    Source: 'verification/../src/economy.rs', lines 851:8-904:5 -/
+    Source: 'verification/../src/economy.rs', lines 853:8-906:5 -/
 @[rust_loop_body]
 def economy.Economy.aggregate_effects_loop.body
   {AccountId : Type _} {A : Type _} {RateId : Type _} {Role : Type _} {N :
@@ -3665,7 +3730,7 @@ def economy.Economy.aggregate_effects_loop.body
           asset)))
 
 /-- [account_extraction::economy::{account_extraction::economy::Economy<AccountId, A, RateId, Role, N>}::aggregate_effects]: loop 0:
-    Source: 'verification/../src/economy.rs', lines 851:8-904:5 -/
+    Source: 'verification/../src/economy.rs', lines 853:8-906:5 -/
 @[rust_loop]
 def economy.Economy.aggregate_effects_loop
   {AccountId : Type _} {A : Type _} {RateId : Type _} {Role : Type _} {N :
@@ -3699,7 +3764,7 @@ def economy.Economy.aggregate_effects_loop
     (iter, effects)
 
 /-- [account_extraction::economy::{account_extraction::economy::Economy<AccountId, A, RateId, Role, N>}::aggregate_effects]:
-    Source: 'verification/../src/economy.rs', lines 845:4-904:5 -/
+    Source: 'verification/../src/economy.rs', lines 847:4-906:5 -/
 def economy.Economy.aggregate_effects
   {AccountId : Type _} {A : Type _} {RateId : Type _} {Role : Type _} {N :
   Type _} {Clause14_SignedMeasure : Type _} (corecloneCloneInst :
@@ -3787,7 +3852,7 @@ def rate.RateCondition.impl.left
   ok self.left
 
 /-- [account_extraction::economy::evaluate_condition]:
-    Source: 'verification/../src/economy.rs', lines 1407:0-1425:1 -/
+    Source: 'verification/../src/economy.rs', lines 1409:0-1427:1 -/
 def economy.evaluate_condition
   {AccountId : Type _} {A : Type _} {RateId : Type _} {Role : Type _} {N :
   Type _} {Clause5_SignedMeasure : Type _} (corecmpEqInst : core.cmp.Eq
@@ -3843,7 +3908,7 @@ def economy.evaluate_condition
       Bool (core.convert.FromSame economy.ExpressionError) residual
 
 /-- [account_extraction::economy::{account_extraction::economy::Economy<AccountId, A, RateId, Role, N>}::check_conditions]: loop body 0:
-    Source: 'verification/../src/economy.rs', lines 824:8-843:5 -/
+    Source: 'verification/../src/economy.rs', lines 826:8-845:5 -/
 @[rust_loop_body]
 def economy.Economy.check_conditions_loop.body
   {AccountId : Type _} {A : Type _} {RateId : Type _} {Role : Type _} {N :
@@ -3886,7 +3951,7 @@ def economy.Economy.check_conditions_loop.body
         s)))
 
 /-- [account_extraction::economy::{account_extraction::economy::Economy<AccountId, A, RateId, Role, N>}::check_conditions]: loop 0:
-    Source: 'verification/../src/economy.rs', lines 824:8-843:5 -/
+    Source: 'verification/../src/economy.rs', lines 826:8-845:5 -/
 @[rust_loop]
 def economy.Economy.check_conditions_loop
   {AccountId : Type _} {A : Type _} {RateId : Type _} {Role : Type _} {N :
@@ -3909,7 +3974,7 @@ def economy.Economy.check_conditions_loop
     iter
 
 /-- [account_extraction::economy::{account_extraction::economy::Economy<AccountId, A, RateId, Role, N>}::check_conditions]:
-    Source: 'verification/../src/economy.rs', lines 819:4-843:5 -/
+    Source: 'verification/../src/economy.rs', lines 821:4-845:5 -/
 def economy.Economy.check_conditions
   {AccountId : Type _} {A : Type _} {RateId : Type _} {Role : Type _} {N :
   Type _} {Clause14_SignedMeasure : Type _} (corecloneCloneInst :
@@ -4158,7 +4223,7 @@ def rate.Rate.has_role
   rate.Rate.has_role_loop corecloneCloneInst corecmpOrdInst iter role
 
 /-- [account_extraction::economy::{account_extraction::economy::Economy<AccountId, A, RateId, Role, N>}::validate_structure]: loop body 0:
-    Source: 'verification/../src/economy.rs', lines 718:8-722:9 -/
+    Source: 'verification/../src/economy.rs', lines 720:8-724:9 -/
 @[rust_loop_body]
 def economy.Economy.validate_structure_loop0.body
   {AccountId : Type _} {A : Type _} {RateId : Type _} {Role : Type _} {N :
@@ -4193,7 +4258,7 @@ def economy.Economy.validate_structure_loop0.body
       ok (cont (iter1, issues1))
 
 /-- [account_extraction::economy::{account_extraction::economy::Economy<AccountId, A, RateId, Role, N>}::validate_structure]: loop 0:
-    Source: 'verification/../src/economy.rs', lines 718:8-722:9 -/
+    Source: 'verification/../src/economy.rs', lines 720:8-724:9 -/
 @[rust_loop]
 def economy.Economy.validate_structure_loop0
   {AccountId : Type _} {A : Type _} {RateId : Type _} {Role : Type _} {N :
@@ -4212,7 +4277,7 @@ def economy.Economy.validate_structure_loop0
     (iter, issues)
 
 /-- [account_extraction::economy::{account_extraction::economy::Economy<AccountId, A, RateId, Role, N>}::validate_structure]: loop body 1:
-    Source: 'verification/../src/economy.rs', lines 723:8-727:9 -/
+    Source: 'verification/../src/economy.rs', lines 725:8-729:9 -/
 @[rust_loop_body]
 def economy.Economy.validate_structure_loop1.body
   {AccountId : Type _} {A : Type _} {RateId : Type _} {Role : Type _} {N :
@@ -4247,7 +4312,7 @@ def economy.Economy.validate_structure_loop1.body
       ok (cont (iter1, issues1))
 
 /-- [account_extraction::economy::{account_extraction::economy::Economy<AccountId, A, RateId, Role, N>}::validate_structure]: loop 1:
-    Source: 'verification/../src/economy.rs', lines 723:8-727:9 -/
+    Source: 'verification/../src/economy.rs', lines 725:8-729:9 -/
 @[rust_loop]
 def economy.Economy.validate_structure_loop1
   {AccountId : Type _} {A : Type _} {RateId : Type _} {Role : Type _} {N :
@@ -4269,7 +4334,7 @@ def economy.Economy.validate_structure_loop1
     (iter, issues)
 
 /-- [account_extraction::economy::{account_extraction::economy::Economy<AccountId, A, RateId, Role, N>}::validate_structure]: loop body 2:
-    Source: 'verification/../src/economy.rs', lines 730:8-736:9 -/
+    Source: 'verification/../src/economy.rs', lines 732:8-738:9 -/
 @[rust_loop_body]
 def economy.Economy.validate_structure_loop2.body
   {AccountId : Type _} {A : Type _} {RateId : Type _} {Role : Type _} {N :
@@ -4304,7 +4369,7 @@ def economy.Economy.validate_structure_loop2.body
       ok (cont (iter1, issues1))
 
 /-- [account_extraction::economy::{account_extraction::economy::Economy<AccountId, A, RateId, Role, N>}::validate_structure]: loop 2:
-    Source: 'verification/../src/economy.rs', lines 730:8-736:9 -/
+    Source: 'verification/../src/economy.rs', lines 732:8-738:9 -/
 @[rust_loop]
 def economy.Economy.validate_structure_loop2
   {AccountId : Type _} {A : Type _} {RateId : Type _} {Role : Type _} {N :
@@ -4322,7 +4387,7 @@ def economy.Economy.validate_structure_loop2
     (iter, issues)
 
 /-- [account_extraction::economy::{account_extraction::economy::Economy<AccountId, A, RateId, Role, N>}::validate_structure]: loop body 3:
-    Source: 'verification/../src/economy.rs', lines 737:8-741:9 -/
+    Source: 'verification/../src/economy.rs', lines 739:8-743:9 -/
 @[rust_loop_body]
 def economy.Economy.validate_structure_loop3.body
   {AccountId : Type _} {A : Type _} {RateId : Type _} {Role : Type _} {N :
@@ -4358,7 +4423,7 @@ def economy.Economy.validate_structure_loop3.body
       ok (cont (iter1, issues1))
 
 /-- [account_extraction::economy::{account_extraction::economy::Economy<AccountId, A, RateId, Role, N>}::validate_structure]: loop 3:
-    Source: 'verification/../src/economy.rs', lines 737:8-741:9 -/
+    Source: 'verification/../src/economy.rs', lines 739:8-743:9 -/
 @[rust_loop]
 def economy.Economy.validate_structure_loop3
   {AccountId : Type _} {A : Type _} {RateId : Type _} {Role : Type _} {N :
@@ -4377,7 +4442,7 @@ def economy.Economy.validate_structure_loop3
     (iter, issues)
 
 /-- [account_extraction::economy::{account_extraction::economy::Economy<AccountId, A, RateId, Role, N>}::validate_structure]: loop body 4:
-    Source: 'verification/../src/economy.rs', lines 742:8-753:9 -/
+    Source: 'verification/../src/economy.rs', lines 744:8-755:9 -/
 @[rust_loop_body]
 def economy.Economy.validate_structure_loop4.body
   {AccountId : Type _} {A : Type _} {RateId : Type _} {Role : Type _} {N :
@@ -4429,7 +4494,7 @@ def economy.Economy.validate_structure_loop4.body
         else ok (cont (iter1, issues))
 
 /-- [account_extraction::economy::{account_extraction::economy::Economy<AccountId, A, RateId, Role, N>}::validate_structure]: loop 4:
-    Source: 'verification/../src/economy.rs', lines 742:8-753:9 -/
+    Source: 'verification/../src/economy.rs', lines 744:8-755:9 -/
 @[rust_loop]
 def economy.Economy.validate_structure_loop4
   {AccountId : Type _} {A : Type _} {RateId : Type _} {Role : Type _} {N :
@@ -4450,7 +4515,7 @@ def economy.Economy.validate_structure_loop4
     (iter, issues)
 
 /-- [account_extraction::economy::{account_extraction::economy::Economy<AccountId, A, RateId, Role, N>}::validate_structure]: loop body 5:
-    Source: 'verification/../src/economy.rs', lines 756:8-762:9 -/
+    Source: 'verification/../src/economy.rs', lines 758:8-764:9 -/
 @[rust_loop_body]
 def economy.Economy.validate_structure_loop5.body
   {AccountId : Type _} {A : Type _} {RateId : Type _} {Role : Type _} {N :
@@ -4499,7 +4564,7 @@ def economy.Economy.validate_structure_loop5.body
         ok (cont (iter1, missing_accounts1))
 
 /-- [account_extraction::economy::{account_extraction::economy::Economy<AccountId, A, RateId, Role, N>}::validate_structure]: loop 5:
-    Source: 'verification/../src/economy.rs', lines 756:8-762:9 -/
+    Source: 'verification/../src/economy.rs', lines 758:8-764:9 -/
 @[rust_loop]
 def economy.Economy.validate_structure_loop5
   {AccountId : Type _} {A : Type _} {RateId : Type _} {Role : Type _} {N :
@@ -4522,7 +4587,7 @@ def economy.Economy.validate_structure_loop5
     (iter, missing_accounts)
 
 /-- [account_extraction::economy::{account_extraction::economy::Economy<AccountId, A, RateId, Role, N>}::validate_structure]: loop body 6:
-    Source: 'verification/../src/economy.rs', lines 763:8-765:9 -/
+    Source: 'verification/../src/economy.rs', lines 765:8-767:9 -/
 @[rust_loop_body]
 def economy.Economy.validate_structure_loop6.body
   {AccountId : Type _} {A : Type _} {RateId : Type _} {Role : Type _} {N :
@@ -4546,7 +4611,7 @@ def economy.Economy.validate_structure_loop6.body
     ok (cont (iter1, issues1))
 
 /-- [account_extraction::economy::{account_extraction::economy::Economy<AccountId, A, RateId, Role, N>}::validate_structure]: loop 6:
-    Source: 'verification/../src/economy.rs', lines 763:8-765:9 -/
+    Source: 'verification/../src/economy.rs', lines 765:8-767:9 -/
 @[rust_loop]
 def economy.Economy.validate_structure_loop6
   {AccountId : Type _} {A : Type _} {RateId : Type _} {Role : Type _} {N :
@@ -4563,7 +4628,7 @@ def economy.Economy.validate_structure_loop6
     (iter, issues)
 
 /-- [account_extraction::economy::{account_extraction::economy::Economy<AccountId, A, RateId, Role, N>}::validate_structure]:
-    Source: 'verification/../src/economy.rs', lines 702:4-772:5 -/
+    Source: 'verification/../src/economy.rs', lines 704:4-774:5 -/
 def economy.Economy.validate_structure
   {AccountId : Type _} {A : Type _} {RateId : Type _} {Role : Type _} {N :
   Type _} {Clause14_SignedMeasure : Type _} (corecloneCloneInst :
@@ -4668,7 +4733,7 @@ def economy.Economy.validate_structure
     else ok (core.result.Result.Err issues6)
 
 /-- [account_extraction::economy::{account_extraction::economy::Economy<AccountId, A, RateId, Role, N>}::analyze]:
-    Source: 'verification/../src/economy.rs', lines 1013:4-1055:5 -/
+    Source: 'verification/../src/economy.rs', lines 1015:4-1057:5 -/
 def economy.Economy.analyze
   {AccountId : Type _} {A : Type _} {RateId : Type _} {Role : Type _} {N :
   Type _} {Clause14_SignedMeasure : Type _} (corecloneCloneInst :
@@ -4795,6 +4860,142 @@ def economy.Economy.analyze
       economy.invalid_analysis quantityQuantityScalarInst ret
   | core.result.Result.Err issues =>
     economy.invalid_analysis quantityQuantityScalarInst issues
+
+/-- [account_extraction::economy::{account_extraction::economy::Economy<AccountId, A, RateId, Role, N>}::apply]: loop body 0:
+    Source: 'verification/../src/economy.rs', lines 663:16-667:17
+    Visibility: public -/
+@[rust_loop_body]
+def economy.Economy.apply_loop.body
+  {AccountId : Type _} {A : Type _} {RateId : Type _} {Role : Type _} {N :
+  Type _} (corecmpEqInst : core.cmp.Eq AccountId) (corehashHashInst :
+  core.hash.Hash AccountId)
+  (iter : alloc.vec.into_iter.IntoIter (AccountId × (alloc.sync.Arc
+  (account.Account A N)))) (self : economy.Economy AccountId A RateId Role N) :
+  Result (ControlFlow ((alloc.vec.into_iter.IntoIter (AccountId ×
+    (alloc.sync.Arc (account.Account A N)))) × (economy.Economy AccountId A
+    RateId Role N)) (economy.Economy AccountId A RateId Role N))
+  := do
+  let (o, iter1) ← alloc.vec.into_iter.IteratorIntoIter.next iter
+  match o with
+  | none => ok (done self)
+  | some p =>
+    let (account_id, holder) := p
+    let (_, index_mut_back) ←
+      indexmap.map.IndexMap.Insts.CoreOpsIndexIndexMutShared0QV.index_mut
+        corehashHashInst (equivalent.Equivalent.Blanket corecmpEqInst
+        (core.borrow.Borrow.Blanket AccountId))
+        std.hash.random.RandomState.Insts.CoreHashBuildHasherDefaultHasher
+        self.accounts account_id
+    let im := index_mut_back holder
+    ok (cont (iter1, { self with accounts := im }))
+
+/-- [account_extraction::economy::{account_extraction::economy::Economy<AccountId, A, RateId, Role, N>}::apply]: loop 0:
+    Source: 'verification/../src/economy.rs', lines 663:16-667:17
+    Visibility: public -/
+@[rust_loop]
+def economy.Economy.apply_loop
+  {AccountId : Type _} {A : Type _} {RateId : Type _} {Role : Type _} {N :
+  Type _} (corecmpEqInst : core.cmp.Eq AccountId) (corehashHashInst :
+  core.hash.Hash AccountId)
+  (iter : alloc.vec.into_iter.IntoIter (AccountId × (alloc.sync.Arc
+  (account.Account A N)))) (self : economy.Economy AccountId A RateId Role N) :
+  Result (economy.Economy AccountId A RateId Role N)
+  := do
+  loop
+    (fun (iter1, self1) => economy.Economy.apply_loop.body corecmpEqInst
+      corehashHashInst iter1 self1)
+    (iter, self)
+
+/-- [account_extraction::economy::{account_extraction::economy::Economy<AccountId, A, RateId, Role, N>}::apply]:
+    Source: 'verification/../src/economy.rs', lines 650:4-678:5
+    Visibility: public -/
+def economy.Economy.apply
+  {AccountId : Type _} {A : Type _} {RateId : Type _} {Role : Type _} {N :
+  Type _} {Clause14_SignedMeasure : Type _} (corecloneCloneInst :
+  core.clone.Clone AccountId) (corecmpEqInst : core.cmp.Eq AccountId)
+  (corehashHashInst : core.hash.Hash AccountId) (corecmpOrdInst : core.cmp.Ord
+  AccountId) (corecloneCloneInst1 : core.clone.Clone A) (corecmpEqInst1 :
+  core.cmp.Eq A) (corehashHashInst1 : core.hash.Hash A) (corecmpOrdInst1 :
+  core.cmp.Ord A) (corecloneCloneInst2 : core.clone.Clone RateId)
+  (corecmpEqInst2 : core.cmp.Eq RateId) (corehashHashInst2 : core.hash.Hash
+  RateId) (corecmpOrdInst2 : core.cmp.Ord RateId) (corecloneCloneInst3 :
+  core.clone.Clone Role) (corecmpOrdInst3 : core.cmp.Ord Role)
+  (quantityQuantityScalarInst : quantity.QuantityScalar N
+  Clause14_SignedMeasure) (self : economy.Economy AccountId A RateId Role N)
+  (proposal : exchange.Exchange RateId Role AccountId N) :
+  Result ((core.result.Result (exchange.Receipt RateId Role AccountId A N)
+    (economy.ApplyError RateId Role AccountId A N Clause14_SignedMeasure)) ×
+    (economy.Economy AccountId A RateId Role N))
+  := do
+  let a ←
+    economy.Economy.analyze corecloneCloneInst corecmpEqInst corehashHashInst
+      corecmpOrdInst corecloneCloneInst1 corecmpEqInst1 corehashHashInst1
+      corecmpOrdInst1 corecloneCloneInst2 corecmpEqInst2 corehashHashInst2
+      corecmpOrdInst2 corecloneCloneInst3 corecmpOrdInst3
+      quantityQuantityScalarInst self proposal
+  match a.assessment with
+  | economy.ExchangeAssessment.Applicable _ projected_deltas =>
+    let v ←
+      core.option.Option.expect a.prepared_accounts (toStr
+        "applicable assessments have prepared accounts")
+    let iter ← alloc.vec.IntoIteratorVec.into_iter v
+    let self1 ←
+      economy.Economy.apply_loop corecmpEqInst corehashHashInst iter self
+    let r ← exchange.Receipt.new proposal projected_deltas
+    ok (core.result.Result.Ok r, self1)
+  | economy.ExchangeAssessment.Infeasible _ shortfalls =>
+    ok (core.result.Result.Err (economy.ApplyError.Infeasible shortfalls),
+      self)
+  | economy.ExchangeAssessment.Invalid issues =>
+    let ii ← alloc.vec.IntoIteratorVec.into_iter issues
+    let (o, _) ← alloc.vec.into_iter.IteratorIntoIter.next ii
+    let ae ←
+      core.option.Option.expect o (toStr
+        "invalid assessments contain at least one issue")
+    ok (core.result.Result.Err ae, self)
+
+/-- [account_extraction::economy::{account_extraction::economy::Economy<AccountId, A, RateId, Role, N>}::simulate]:
+    Source: 'verification/../src/economy.rs', lines 612:4-619:5
+    Visibility: public -/
+def economy.Economy.simulate
+  {AccountId : Type _} {A : Type _} {RateId : Type _} {Role : Type _} {N :
+  Type _} {Clause14_SignedMeasure : Type _} (corecloneCloneInst :
+  core.clone.Clone AccountId) (corecmpEqInst : core.cmp.Eq AccountId)
+  (corehashHashInst : core.hash.Hash AccountId) (corecmpOrdInst : core.cmp.Ord
+  AccountId) (corecloneCloneInst1 : core.clone.Clone A) (corecmpEqInst1 :
+  core.cmp.Eq A) (corehashHashInst1 : core.hash.Hash A) (corecmpOrdInst1 :
+  core.cmp.Ord A) (corecloneCloneInst2 : core.clone.Clone RateId)
+  (corecmpEqInst2 : core.cmp.Eq RateId) (corehashHashInst2 : core.hash.Hash
+  RateId) (corecmpOrdInst2 : core.cmp.Ord RateId) (corecloneCloneInst3 :
+  core.clone.Clone Role) (corecmpOrdInst3 : core.cmp.Ord Role)
+  (quantityQuantityScalarInst : quantity.QuantityScalar N
+  Clause14_SignedMeasure) (self : economy.Economy AccountId A RateId Role N)
+  (proposal : exchange.Exchange RateId Role AccountId N) :
+  Result (core.result.Result ((economy.Economy AccountId A RateId Role N) ×
+    (exchange.Receipt RateId Role AccountId A N)) (economy.ApplyError RateId
+    Role AccountId A N Clause14_SignedMeasure))
+  := do
+  let fork ←
+    economy.Economy.fork corecloneCloneInst corecmpEqInst corehashHashInst
+      corecmpOrdInst corecloneCloneInst1 corecmpEqInst1 corehashHashInst1
+      corecmpOrdInst1 corecloneCloneInst2 corecmpEqInst2 corehashHashInst2
+      corecmpOrdInst2 corecloneCloneInst3 corecmpOrdInst3
+      quantityQuantityScalarInst self
+  let (r, fork1) ←
+    economy.Economy.apply corecloneCloneInst corecmpEqInst corehashHashInst
+      corecmpOrdInst corecloneCloneInst1 corecmpEqInst1 corehashHashInst1
+      corecmpOrdInst1 corecloneCloneInst2 corecmpEqInst2 corehashHashInst2
+      corecmpOrdInst2 corecloneCloneInst3 corecmpOrdInst3
+      quantityQuantityScalarInst fork proposal
+  let cf ← core.result.Result.Insts.CoreOpsTry.branch r
+  match cf with
+  | core.ops.control_flow.ControlFlow.Continue val =>
+    ok (core.result.Result.Ok (fork1, val))
+  | core.ops.control_flow.ControlFlow.Break residual =>
+    core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
+      ((economy.Economy AccountId A RateId Role N) × (exchange.Receipt RateId
+      Role AccountId A N)) (core.convert.FromSame (economy.ApplyError RateId
+      Role AccountId A N Clause14_SignedMeasure)) residual
 
 /-- [account_extraction::economy::{account_extraction::economy::Economy<AccountId, A, RateId, Role, N>}::assess]:
     Source: 'verification/../src/economy.rs', lines 622:4-627:5
@@ -4962,65 +5163,132 @@ def economy.Economy.applicable
     coreitertraitscollectIntoIteratorT5ExchangeClause15_IntoIterInst iter self
     (alloc.vec.Vec.new (exchange.Exchange RateId Role AccountId N))
 
-/-- [account_extraction::exchange::{account_extraction::exchange::Receipt<RateId, Role, AccountId, A, N>}::new]:
-    Source: 'verification/../src/exchange.rs', lines 156:4-161:5 -/
-def exchange.Receipt.new
-  {RateId : Type _} {Role : Type _} {AccountId : Type _} {A : Type _} {N :
-  Type _} (proposal : exchange.Exchange RateId Role AccountId N)
-  (deltas : alloc.vec.Vec (exchange.AccountDelta AccountId A N)) :
-  Result (exchange.Receipt RateId Role AccountId A N)
+/-- [account_extraction::exchange::{account_extraction::exchange::Trace<RateId, Role, AccountId, N>}::exchanges]:
+    Source: 'verification/../src/exchange.rs', lines 191:4-193:5
+    Visibility: public -/
+def exchange.Trace.impl.exchanges
+  {RateId : Type _} {Role : Type _} {AccountId : Type _} {N : Type _}
+  (self : exchange.Trace RateId Role AccountId N) :
+  Result (Slice (exchange.Exchange RateId Role AccountId N))
   := do
-  ok { proposal, deltas }
+  ok (alloc.vec.Vec.deref self.exchanges)
 
-/-- [account_extraction::economy::{account_extraction::economy::Economy<AccountId, A, RateId, Role, N>}::apply]: loop body 0:
-    Source: 'verification/../src/economy.rs', lines 663:16-667:17
+/-- [account_extraction::exchange::{impl core::clone::Clone for account_extraction::exchange::Exchange<RateId, Role, AccountId, N>}::clone]:
+    Source: 'verification/../src/exchange.rs', lines 17:16-17:21
+    Visibility: public -/
+def exchange.Exchange.Insts.CoreCloneClone.clone
+  {RateId : Type _} {Role : Type _} {AccountId : Type _} {N : Type _}
+  (corecloneCloneInst : core.clone.Clone RateId) (corecloneCloneInst1 :
+  core.clone.Clone Role) (corecloneCloneInst2 : core.clone.Clone AccountId)
+  (corecloneCloneInst3 : core.clone.Clone N)
+  (self : exchange.Exchange RateId Role AccountId N) :
+  Result (exchange.Exchange RateId Role AccountId N)
+  := do
+  let t ← corecloneCloneInst.clone self.rate
+  let bm ←
+    alloc.collections.btree.map.BTreeMap.Insts.CoreCloneClone.clone
+      corecloneCloneInst1 corecloneCloneInst2
+      alloc.alloc.Global.Insts.CoreAllocAllocatorClone self.bindings
+  let q ←
+    quantity.Quantity.Insts.CoreCloneClone.clone corecloneCloneInst3 self.units
+  let bm1 ←
+    alloc.collections.btree.map.BTreeMap.Insts.CoreCloneClone.clone
+      alloc.string.String.Insts.CoreCloneClone
+      (quantity.Quantity.Insts.CoreCloneClone corecloneCloneInst3)
+      alloc.alloc.Global.Insts.CoreAllocAllocatorClone self.parameters
+  ok { rate := t, bindings := bm, units := q, parameters := bm1 }
+
+/-- [account_extraction::economy::{account_extraction::economy::Economy<AccountId, A, RateId, Role, N>}::replay]: loop body 0:
+    Source: 'verification/../src/economy.rs', lines 688:8-692:5
     Visibility: public -/
 @[rust_loop_body]
-def economy.Economy.apply_loop.body
+def economy.Economy.replay_loop.body
   {AccountId : Type _} {A : Type _} {RateId : Type _} {Role : Type _} {N :
-  Type _} (corecmpEqInst : core.cmp.Eq AccountId) (corehashHashInst :
-  core.hash.Hash AccountId)
-  (iter : alloc.vec.into_iter.IntoIter (AccountId × (alloc.sync.Arc
-  (account.Account A N)))) (self : economy.Economy AccountId A RateId Role N) :
-  Result (ControlFlow ((alloc.vec.into_iter.IntoIter (AccountId ×
-    (alloc.sync.Arc (account.Account A N)))) × (economy.Economy AccountId A
-    RateId Role N)) (economy.Economy AccountId A RateId Role N))
+  Type _} {Clause14_SignedMeasure : Type _} (corecloneCloneInst :
+  core.clone.Clone AccountId) (corecmpEqInst : core.cmp.Eq AccountId)
+  (corehashHashInst : core.hash.Hash AccountId) (corecmpOrdInst : core.cmp.Ord
+  AccountId) (corecloneCloneInst1 : core.clone.Clone A) (corecmpEqInst1 :
+  core.cmp.Eq A) (corehashHashInst1 : core.hash.Hash A) (corecmpOrdInst1 :
+  core.cmp.Ord A) (corecloneCloneInst2 : core.clone.Clone RateId)
+  (corecmpEqInst2 : core.cmp.Eq RateId) (corehashHashInst2 : core.hash.Hash
+  RateId) (corecmpOrdInst2 : core.cmp.Ord RateId) (corecloneCloneInst3 :
+  core.clone.Clone Role) (corecmpOrdInst3 : core.cmp.Ord Role)
+  (quantityQuantityScalarInst : quantity.QuantityScalar N
+  Clause14_SignedMeasure)
+  (iter : core.slice.iter.Iter (exchange.Exchange RateId Role AccountId N))
+  (self : economy.Economy AccountId A RateId Role N)
+  (receipts : alloc.vec.Vec (exchange.Receipt RateId Role AccountId A N)) :
+  Result (ControlFlow ((core.slice.iter.Iter (exchange.Exchange RateId Role
+    AccountId N)) × (economy.Economy AccountId A RateId Role N) ×
+    (alloc.vec.Vec (exchange.Receipt RateId Role AccountId A N)))
+    ((core.result.Result (alloc.vec.Vec (exchange.Receipt RateId Role AccountId
+    A N)) (economy.ApplyError RateId Role AccountId A N
+    Clause14_SignedMeasure)) × (economy.Economy AccountId A RateId Role N)))
   := do
-  let (o, iter1) ← alloc.vec.into_iter.IteratorIntoIter.next iter
+  let (o, iter1) ← core.slice.iter.IteratorSliceIter.next iter
   match o with
-  | none => ok (done self)
-  | some p =>
-    let (account_id, holder) := p
-    let (_, index_mut_back) ←
-      indexmap.map.IndexMap.Insts.CoreOpsIndexIndexMutShared0QV.index_mut
-        corehashHashInst (equivalent.Equivalent.Blanket corecmpEqInst
-        (core.borrow.Borrow.Blanket AccountId))
-        std.hash.random.RandomState.Insts.CoreHashBuildHasherDefaultHasher
-        self.accounts account_id
-    let im := index_mut_back holder
-    ok (cont (iter1, { self with accounts := im }))
+  | none => ok (done (core.result.Result.Ok receipts, self))
+  | some proposal =>
+    let e ←
+      exchange.Exchange.Insts.CoreCloneClone.clone corecloneCloneInst2
+        corecloneCloneInst3 corecloneCloneInst
+        quantityQuantityScalarInst.corecloneCloneInst proposal
+    let (r, self1) ←
+      economy.Economy.apply corecloneCloneInst corecmpEqInst corehashHashInst
+        corecmpOrdInst corecloneCloneInst1 corecmpEqInst1 corehashHashInst1
+        corecmpOrdInst1 corecloneCloneInst2 corecmpEqInst2 corehashHashInst2
+        corecmpOrdInst2 corecloneCloneInst3 corecmpOrdInst3
+        quantityQuantityScalarInst self e
+    let cf ← core.result.Result.Insts.CoreOpsTry.branch r
+    match cf with
+    | core.ops.control_flow.ControlFlow.Continue val =>
+      let receipts1 ← alloc.vec.Vec.push receipts val
+      ok (cont (iter1, self1, receipts1))
+    | core.ops.control_flow.ControlFlow.Break residual =>
+      let r1 ←
+        core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
+          (alloc.vec.Vec (exchange.Receipt RateId Role AccountId A N))
+          (core.convert.FromSame (economy.ApplyError RateId Role AccountId A N
+          Clause14_SignedMeasure)) residual
+      ok (done (r1, self1))
 
-/-- [account_extraction::economy::{account_extraction::economy::Economy<AccountId, A, RateId, Role, N>}::apply]: loop 0:
-    Source: 'verification/../src/economy.rs', lines 663:16-667:17
+/-- [account_extraction::economy::{account_extraction::economy::Economy<AccountId, A, RateId, Role, N>}::replay]: loop 0:
+    Source: 'verification/../src/economy.rs', lines 688:8-692:5
     Visibility: public -/
 @[rust_loop]
-def economy.Economy.apply_loop
+def economy.Economy.replay_loop
   {AccountId : Type _} {A : Type _} {RateId : Type _} {Role : Type _} {N :
-  Type _} (corecmpEqInst : core.cmp.Eq AccountId) (corehashHashInst :
-  core.hash.Hash AccountId)
-  (iter : alloc.vec.into_iter.IntoIter (AccountId × (alloc.sync.Arc
-  (account.Account A N)))) (self : economy.Economy AccountId A RateId Role N) :
-  Result (economy.Economy AccountId A RateId Role N)
+  Type _} {Clause14_SignedMeasure : Type _} (corecloneCloneInst :
+  core.clone.Clone AccountId) (corecmpEqInst : core.cmp.Eq AccountId)
+  (corehashHashInst : core.hash.Hash AccountId) (corecmpOrdInst : core.cmp.Ord
+  AccountId) (corecloneCloneInst1 : core.clone.Clone A) (corecmpEqInst1 :
+  core.cmp.Eq A) (corehashHashInst1 : core.hash.Hash A) (corecmpOrdInst1 :
+  core.cmp.Ord A) (corecloneCloneInst2 : core.clone.Clone RateId)
+  (corecmpEqInst2 : core.cmp.Eq RateId) (corehashHashInst2 : core.hash.Hash
+  RateId) (corecmpOrdInst2 : core.cmp.Ord RateId) (corecloneCloneInst3 :
+  core.clone.Clone Role) (corecmpOrdInst3 : core.cmp.Ord Role)
+  (quantityQuantityScalarInst : quantity.QuantityScalar N
+  Clause14_SignedMeasure)
+  (iter : core.slice.iter.Iter (exchange.Exchange RateId Role AccountId N))
+  (self : economy.Economy AccountId A RateId Role N)
+  (receipts : alloc.vec.Vec (exchange.Receipt RateId Role AccountId A N)) :
+  Result ((core.result.Result (alloc.vec.Vec (exchange.Receipt RateId Role
+    AccountId A N)) (economy.ApplyError RateId Role AccountId A N
+    Clause14_SignedMeasure)) × (economy.Economy AccountId A RateId Role N))
   := do
   loop
-    (fun (iter1, self1) => economy.Economy.apply_loop.body corecmpEqInst
-      corehashHashInst iter1 self1)
-    (iter, self)
+    (fun (iter1, self1, receipts1) => economy.Economy.replay_loop.body
+      corecloneCloneInst corecmpEqInst corehashHashInst corecmpOrdInst
+      corecloneCloneInst1 corecmpEqInst1 corehashHashInst1 corecmpOrdInst1
+      corecloneCloneInst2 corecmpEqInst2 corehashHashInst2 corecmpOrdInst2
+      corecloneCloneInst3 corecmpOrdInst3 quantityQuantityScalarInst iter1
+      self1 receipts1)
+    (iter, self, receipts)
 
-/-- [account_extraction::economy::{account_extraction::economy::Economy<AccountId, A, RateId, Role, N>}::apply]:
-    Source: 'verification/../src/economy.rs', lines 650:4-678:5
+/-- [account_extraction::economy::{account_extraction::economy::Economy<AccountId, A, RateId, Role, N>}::replay]:
+    Source: 'verification/../src/economy.rs', lines 683:4-692:5
     Visibility: public -/
-def economy.Economy.apply
+def economy.Economy.replay
   {AccountId : Type _} {A : Type _} {RateId : Type _} {Role : Type _} {N :
   Type _} {Clause14_SignedMeasure : Type _} (corecloneCloneInst :
   core.clone.Clone AccountId) (corecmpEqInst : core.cmp.Eq AccountId)
@@ -5033,37 +5301,106 @@ def economy.Economy.apply
   core.clone.Clone Role) (corecmpOrdInst3 : core.cmp.Ord Role)
   (quantityQuantityScalarInst : quantity.QuantityScalar N
   Clause14_SignedMeasure) (self : economy.Economy AccountId A RateId Role N)
-  (proposal : exchange.Exchange RateId Role AccountId N) :
-  Result ((core.result.Result (exchange.Receipt RateId Role AccountId A N)
-    (economy.ApplyError RateId Role AccountId A N Clause14_SignedMeasure)) ×
-    (economy.Economy AccountId A RateId Role N))
+  (trace : exchange.Trace RateId Role AccountId N) :
+  Result ((core.result.Result (alloc.vec.Vec (exchange.Receipt RateId Role
+    AccountId A N)) (economy.ApplyError RateId Role AccountId A N
+    Clause14_SignedMeasure)) × (economy.Economy AccountId A RateId Role N))
   := do
-  let a ←
-    economy.Economy.analyze corecloneCloneInst corecmpEqInst corehashHashInst
+  let s ← exchange.Trace.impl.exchanges trace
+  let iter ←
+    SharedSlice.Insts.CoreIterTraitsCollectIntoIteratorSharedIter.into_iter s
+  economy.Economy.replay_loop corecloneCloneInst corecmpEqInst corehashHashInst
+    corecmpOrdInst corecloneCloneInst1 corecmpEqInst1 corehashHashInst1
+    corecmpOrdInst1 corecloneCloneInst2 corecmpEqInst2 corehashHashInst2
+    corecmpOrdInst2 corecloneCloneInst3 corecmpOrdInst3
+    quantityQuantityScalarInst iter self (alloc.vec.Vec.new (exchange.Receipt
+    RateId Role AccountId A N))
+
+/-- [account_extraction::economy::{account_extraction::economy::Economy<AccountId, A, RateId, Role, N>}::replayed]:
+    Source: 'verification/../src/economy.rs', lines 695:4-702:5
+    Visibility: public -/
+def economy.Economy.replayed
+  {AccountId : Type _} {A : Type _} {RateId : Type _} {Role : Type _} {N :
+  Type _} {Clause14_SignedMeasure : Type _} (corecloneCloneInst :
+  core.clone.Clone AccountId) (corecmpEqInst : core.cmp.Eq AccountId)
+  (corehashHashInst : core.hash.Hash AccountId) (corecmpOrdInst : core.cmp.Ord
+  AccountId) (corecloneCloneInst1 : core.clone.Clone A) (corecmpEqInst1 :
+  core.cmp.Eq A) (corehashHashInst1 : core.hash.Hash A) (corecmpOrdInst1 :
+  core.cmp.Ord A) (corecloneCloneInst2 : core.clone.Clone RateId)
+  (corecmpEqInst2 : core.cmp.Eq RateId) (corehashHashInst2 : core.hash.Hash
+  RateId) (corecmpOrdInst2 : core.cmp.Ord RateId) (corecloneCloneInst3 :
+  core.clone.Clone Role) (corecmpOrdInst3 : core.cmp.Ord Role)
+  (quantityQuantityScalarInst : quantity.QuantityScalar N
+  Clause14_SignedMeasure) (self : economy.Economy AccountId A RateId Role N)
+  (trace : exchange.Trace RateId Role AccountId N) :
+  Result (core.result.Result (economy.Economy AccountId A RateId Role N)
+    (economy.ApplyError RateId Role AccountId A N Clause14_SignedMeasure))
+  := do
+  let fork ←
+    economy.Economy.fork corecloneCloneInst corecmpEqInst corehashHashInst
       corecmpOrdInst corecloneCloneInst1 corecmpEqInst1 corehashHashInst1
       corecmpOrdInst1 corecloneCloneInst2 corecmpEqInst2 corehashHashInst2
       corecmpOrdInst2 corecloneCloneInst3 corecmpOrdInst3
-      quantityQuantityScalarInst self proposal
-  match a.assessment with
-  | economy.ExchangeAssessment.Applicable _ projected_deltas =>
-    let v ←
-      core.option.Option.expect a.prepared_accounts (toStr
-        "applicable assessments have prepared accounts")
-    let iter ← alloc.vec.IntoIteratorVec.into_iter v
-    let self1 ←
-      economy.Economy.apply_loop corecmpEqInst corehashHashInst iter self
-    let r ← exchange.Receipt.new proposal projected_deltas
-    ok (core.result.Result.Ok r, self1)
-  | economy.ExchangeAssessment.Infeasible _ shortfalls =>
-    ok (core.result.Result.Err (economy.ApplyError.Infeasible shortfalls),
-      self)
-  | economy.ExchangeAssessment.Invalid issues =>
-    let ii ← alloc.vec.IntoIteratorVec.into_iter issues
-    let (o, _) ← alloc.vec.into_iter.IteratorIntoIter.next ii
-    let ae ←
-      core.option.Option.expect o (toStr
-        "invalid assessments contain at least one issue")
-    ok (core.result.Result.Err ae, self)
+      quantityQuantityScalarInst self
+  let (r, fork1) ←
+    economy.Economy.replay corecloneCloneInst corecmpEqInst corehashHashInst
+      corecmpOrdInst corecloneCloneInst1 corecmpEqInst1 corehashHashInst1
+      corecmpOrdInst1 corecloneCloneInst2 corecmpEqInst2 corehashHashInst2
+      corecmpOrdInst2 corecloneCloneInst3 corecmpOrdInst3
+      quantityQuantityScalarInst fork trace
+  let cf ← core.result.Result.Insts.CoreOpsTry.branch r
+  match cf with
+  | core.ops.control_flow.ControlFlow.Continue _ =>
+    ok (core.result.Result.Ok fork1)
+  | core.ops.control_flow.ControlFlow.Break residual =>
+    core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
+      (economy.Economy AccountId A RateId Role N) (core.convert.FromSame
+      (economy.ApplyError RateId Role AccountId A N Clause14_SignedMeasure))
+      residual
+
+/-- [account_extraction::exchange::{account_extraction::exchange::Trace<RateId, Role, AccountId, N>}::new]:
+    Source: 'verification/../src/exchange.rs', lines 174:4-178:5
+    Visibility: public -/
+def exchange.Trace.new
+  (RateId : Type _) (Role : Type _) (AccountId : Type _) (N : Type _) :
+  Result (exchange.Trace RateId Role AccountId N)
+  := do
+  ok
+    {
+      exchanges :=
+        (alloc.vec.Vec.new (exchange.Exchange RateId Role AccountId N))
+    }
+
+/-- [account_extraction::exchange::{account_extraction::exchange::Trace<RateId, Role, AccountId, N>}::push]:
+    Source: 'verification/../src/exchange.rs', lines 180:4-182:5
+    Visibility: public -/
+def exchange.Trace.push
+  {RateId : Type _} {Role : Type _} {AccountId : Type _} {N : Type _}
+  (self : exchange.Trace RateId Role AccountId N)
+  (proposal : exchange.Exchange RateId Role AccountId N) :
+  Result (exchange.Trace RateId Role AccountId N)
+  := do
+  let v ← alloc.vec.Vec.push self.exchanges proposal
+  ok { exchanges := v }
+
+/-- [account_extraction::exchange::{account_extraction::exchange::Trace<RateId, Role, AccountId, N>}::into_exchanges]:
+    Source: 'verification/../src/exchange.rs', lines 195:4-197:5
+    Visibility: public -/
+def exchange.Trace.into_exchanges
+  {RateId : Type _} {Role : Type _} {AccountId : Type _} {N : Type _}
+  (self : exchange.Trace RateId Role AccountId N) :
+  Result (alloc.vec.Vec (exchange.Exchange RateId Role AccountId N))
+  := do
+  ok self.exchanges
+
+/-- [account_extraction::exchange::{impl core::default::Default for account_extraction::exchange::Trace<RateId, Role, AccountId, N>}::default]:
+    Source: 'verification/../src/exchange.rs', lines 201:4-203:5
+    Visibility: public -/
+def exchange.Trace.Insts.CoreDefaultDefault.default
+  (RateId : Type _) (Role : Type _) (AccountId : Type _) (N : Type _) :
+  Result (exchange.Trace RateId Role AccountId N)
+  := do
+  exchange.Trace.new RateId Role AccountId N
 
 /-- Trait implementation: [account_extraction::quantity::{impl account_extraction::quantity::QuantityMeasure for T}]
     Source: 'verification/../src/quantity.rs', lines 14:0-14:100 -/
@@ -6402,5 +6739,151 @@ def apply_model_proposal
     corecmpOrdInst1 corecloneCloneInst2 corecmpEqInst2 corehashHashInst2
     corecmpOrdInst2 corecloneCloneInst3 corecmpOrdInst3
     U64.Insts.Account_extractionQuantityQuantityScalarI128 model proposal
+
+/-- [account_extraction::model_fork]:
+    Source: 'verification/extract_account.rs', lines 333:0-342:1
+    Visibility: public -/
+def model_fork
+  {AccountId : Type _} {A : Type _} {RateId : Type _} {Role : Type _}
+  (corecloneCloneInst : core.clone.Clone AccountId) (corecmpEqInst :
+  core.cmp.Eq AccountId) (corehashHashInst : core.hash.Hash AccountId)
+  (corecmpOrdInst : core.cmp.Ord AccountId) (corecloneCloneInst1 :
+  core.clone.Clone A) (corecmpEqInst1 : core.cmp.Eq A) (corehashHashInst1 :
+  core.hash.Hash A) (corecmpOrdInst1 : core.cmp.Ord A) (corecloneCloneInst2 :
+  core.clone.Clone RateId) (corecmpEqInst2 : core.cmp.Eq RateId)
+  (corehashHashInst2 : core.hash.Hash RateId) (corecmpOrdInst2 : core.cmp.Ord
+  RateId) (corecloneCloneInst3 : core.clone.Clone Role) (corecmpOrdInst3 :
+  core.cmp.Ord Role) (model : economy.Economy AccountId A RateId Role Std.U64)
+  :
+  Result (economy.Economy AccountId A RateId Role Std.U64)
+  := do
+  economy.Economy.fork corecloneCloneInst corecmpEqInst corehashHashInst
+    corecmpOrdInst corecloneCloneInst1 corecmpEqInst1 corehashHashInst1
+    corecmpOrdInst1 corecloneCloneInst2 corecmpEqInst2 corehashHashInst2
+    corecmpOrdInst2 corecloneCloneInst3 corecmpOrdInst3
+    U64.Insts.Account_extractionQuantityQuantityScalarI128 model
+
+/-- [account_extraction::model_simulate]:
+    Source: 'verification/extract_account.rs', lines 344:0-354:1
+    Visibility: public -/
+def model_simulate
+  {AccountId : Type _} {A : Type _} {RateId : Type _} {Role : Type _}
+  (corecloneCloneInst : core.clone.Clone AccountId) (corecmpEqInst :
+  core.cmp.Eq AccountId) (corehashHashInst : core.hash.Hash AccountId)
+  (corecmpOrdInst : core.cmp.Ord AccountId) (corecloneCloneInst1 :
+  core.clone.Clone A) (corecmpEqInst1 : core.cmp.Eq A) (corehashHashInst1 :
+  core.hash.Hash A) (corecmpOrdInst1 : core.cmp.Ord A) (corecloneCloneInst2 :
+  core.clone.Clone RateId) (corecmpEqInst2 : core.cmp.Eq RateId)
+  (corehashHashInst2 : core.hash.Hash RateId) (corecmpOrdInst2 : core.cmp.Ord
+  RateId) (corecloneCloneInst3 : core.clone.Clone Role) (corecmpOrdInst3 :
+  core.cmp.Ord Role) (model : economy.Economy AccountId A RateId Role Std.U64)
+  (proposal : exchange.Exchange RateId Role AccountId Std.U64) :
+  Result (core.result.Result ((economy.Economy AccountId A RateId Role Std.U64)
+    × (exchange.Receipt RateId Role AccountId A Std.U64)) (economy.ApplyError
+    RateId Role AccountId A Std.U64 Std.I128))
+  := do
+  economy.Economy.simulate corecloneCloneInst corecmpEqInst corehashHashInst
+    corecmpOrdInst corecloneCloneInst1 corecmpEqInst1 corehashHashInst1
+    corecmpOrdInst1 corecloneCloneInst2 corecmpEqInst2 corehashHashInst2
+    corecmpOrdInst2 corecloneCloneInst3 corecmpOrdInst3
+    U64.Insts.Account_extractionQuantityQuantityScalarI128 model proposal
+
+/-- [account_extraction::model_replay]:
+    Source: 'verification/extract_account.rs', lines 356:0-366:1
+    Visibility: public -/
+def model_replay
+  {AccountId : Type _} {A : Type _} {RateId : Type _} {Role : Type _}
+  (corecloneCloneInst : core.clone.Clone AccountId) (corecmpEqInst :
+  core.cmp.Eq AccountId) (corehashHashInst : core.hash.Hash AccountId)
+  (corecmpOrdInst : core.cmp.Ord AccountId) (corecloneCloneInst1 :
+  core.clone.Clone A) (corecmpEqInst1 : core.cmp.Eq A) (corehashHashInst1 :
+  core.hash.Hash A) (corecmpOrdInst1 : core.cmp.Ord A) (corecloneCloneInst2 :
+  core.clone.Clone RateId) (corecmpEqInst2 : core.cmp.Eq RateId)
+  (corehashHashInst2 : core.hash.Hash RateId) (corecmpOrdInst2 : core.cmp.Ord
+  RateId) (corecloneCloneInst3 : core.clone.Clone Role) (corecmpOrdInst3 :
+  core.cmp.Ord Role) (model : economy.Economy AccountId A RateId Role Std.U64)
+  (trace : exchange.Trace RateId Role AccountId Std.U64) :
+  Result ((core.result.Result (alloc.vec.Vec (exchange.Receipt RateId Role
+    AccountId A Std.U64)) (economy.ApplyError RateId Role AccountId A Std.U64
+    Std.I128)) × (economy.Economy AccountId A RateId Role Std.U64))
+  := do
+  economy.Economy.replay corecloneCloneInst corecmpEqInst corehashHashInst
+    corecmpOrdInst corecloneCloneInst1 corecmpEqInst1 corehashHashInst1
+    corecmpOrdInst1 corecloneCloneInst2 corecmpEqInst2 corehashHashInst2
+    corecmpOrdInst2 corecloneCloneInst3 corecmpOrdInst3
+    U64.Insts.Account_extractionQuantityQuantityScalarI128 model trace
+
+/-- [account_extraction::model_replayed]:
+    Source: 'verification/extract_account.rs', lines 369:0-382:1
+    Visibility: public -/
+def model_replayed
+  {AccountId : Type _} {A : Type _} {RateId : Type _} {Role : Type _}
+  (corecloneCloneInst : core.clone.Clone AccountId) (corecmpEqInst :
+  core.cmp.Eq AccountId) (corehashHashInst : core.hash.Hash AccountId)
+  (corecmpOrdInst : core.cmp.Ord AccountId) (corecloneCloneInst1 :
+  core.clone.Clone A) (corecmpEqInst1 : core.cmp.Eq A) (corehashHashInst1 :
+  core.hash.Hash A) (corecmpOrdInst1 : core.cmp.Ord A) (corecloneCloneInst2 :
+  core.clone.Clone RateId) (corecmpEqInst2 : core.cmp.Eq RateId)
+  (corehashHashInst2 : core.hash.Hash RateId) (corecmpOrdInst2 : core.cmp.Ord
+  RateId) (corecloneCloneInst3 : core.clone.Clone Role) (corecmpOrdInst3 :
+  core.cmp.Ord Role) (model : economy.Economy AccountId A RateId Role Std.U64)
+  (trace : exchange.Trace RateId Role AccountId Std.U64) :
+  Result (core.result.Result (economy.Economy AccountId A RateId Role Std.U64)
+    (economy.ApplyError RateId Role AccountId A Std.U64 Std.I128))
+  := do
+  economy.Economy.replayed corecloneCloneInst corecmpEqInst corehashHashInst
+    corecmpOrdInst corecloneCloneInst1 corecmpEqInst1 corehashHashInst1
+    corecmpOrdInst1 corecloneCloneInst2 corecmpEqInst2 corehashHashInst2
+    corecmpOrdInst2 corecloneCloneInst3 corecmpOrdInst3
+    U64.Insts.Account_extractionQuantityQuantityScalarI128 model trace
+
+/-- [account_extraction::trace_new]:
+    Source: 'verification/extract_account.rs', lines 384:0-386:1
+    Visibility: public -/
+def trace_new
+  (RateId : Type _) (Role : Type _) (AccountId : Type _) :
+  Result (exchange.Trace RateId Role AccountId Std.U64)
+  := do
+  exchange.Trace.new RateId Role AccountId Std.U64
+
+/-- [account_extraction::trace_default]:
+    Source: 'verification/extract_account.rs', lines 388:0-390:1
+    Visibility: public -/
+def trace_default
+  (RateId : Type _) (Role : Type _) (AccountId : Type _) :
+  Result (exchange.Trace RateId Role AccountId Std.U64)
+  := do
+  exchange.Trace.Insts.CoreDefaultDefault.default RateId Role AccountId Std.U64
+
+/-- [account_extraction::trace_push]:
+    Source: 'verification/extract_account.rs', lines 392:0-397:1
+    Visibility: public -/
+def trace_push
+  {RateId : Type _} {Role : Type _} {AccountId : Type _}
+  (trace : exchange.Trace RateId Role AccountId Std.U64)
+  (proposal : exchange.Exchange RateId Role AccountId Std.U64) :
+  Result (exchange.Trace RateId Role AccountId Std.U64)
+  := do
+  exchange.Trace.push trace proposal
+
+/-- [account_extraction::trace_exchanges]:
+    Source: 'verification/extract_account.rs', lines 399:0-403:1
+    Visibility: public -/
+def trace_exchanges
+  {RateId : Type _} {Role : Type _} {AccountId : Type _}
+  (trace : exchange.Trace RateId Role AccountId Std.U64) :
+  Result (Slice (exchange.Exchange RateId Role AccountId Std.U64))
+  := do
+  exchange.Trace.impl.exchanges trace
+
+/-- [account_extraction::trace_into_exchanges]:
+    Source: 'verification/extract_account.rs', lines 405:0-409:1
+    Visibility: public -/
+def trace_into_exchanges
+  {RateId : Type _} {Role : Type _} {AccountId : Type _}
+  (trace : exchange.Trace RateId Role AccountId Std.U64) :
+  Result (alloc.vec.Vec (exchange.Exchange RateId Role AccountId Std.U64))
+  := do
+  exchange.Trace.into_exchanges trace
 
 end Axionomy.AccountExtracted
