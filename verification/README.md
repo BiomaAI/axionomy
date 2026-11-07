@@ -57,6 +57,16 @@ Vec growth and UTF-8 lengths have explicit `usize` bounds; condition labels use
 the `String` specialization. Static convenience panics, invariant constructors
 and arbitrary `Into<String>` callbacks remain in item 16.
 
+Complete structural proposal validation now has an implementation proof as well.
+It returns the selected stored rate or the exact ordered list of structural issues:
+zero units, missing rate, missing/unknown bindings and parameters, distinct-role
+violations, and sorted deduplicated missing accounts. A missing rate ends validation
+after the units check. Acceptance implies nonzero units, existing bound accounts
+for every registered role, all required parameters, and the declared distinctness
+constraints. Rejection always contains an issue. This covers the private production
+helper called by `analyze`; condition/effect orchestration remains open. Error-vector
+growth and UTF-8 names require explicit `usize` bounds under the collection model.
+
 The runtime `LinearInvariant::conserves` path is also extracted and proved:
 every `u64 × i64` contribution fits in `i128`, every intermediate addition is
 checked, and the result is exactly the ordered integer specification. `None`
@@ -108,6 +118,7 @@ The current library covers:
 | `RateConstruction` / `RateConstructionRefinement` | Extracted static builders, exact per-role merges/errors, role registration and unchanged rate fields under the sorted collection model |
 | `ModelConstruction` / `ModelConstructionRefinement` | Extracted model builders, exact ordered duplicate errors, first-entry retention, unique-key preservation and complete build result |
 | `Discovery` / `DiscoveryRefinement` / `RateMetadataRefinement` / `RateDiscoveryRefinement` | Extracted computed/condition/distinct construction, exact recursive roles, sorted parameter union, complete ordered asset references and unchanged fields |
+| `Validation` / `ValidationCompleteRefinement` | Extracted full structural validation, exact selected rate or ordered diagnostics, nonempty rejection, accepted binding/account/parameter existence and distinctness |
 | `Conservation` / `ConservationRefinement` | Extracted runtime invariant check and whole-state measurement, exact signed widening/weighting, intermediate overflow and mathematical conservation on acceptance |
 | `Evaluation` / `EvaluationRefinement` / `DiagnosticRefinement` | Extracted recursive expressions and conditions against one snapshot, all checked outcomes, first-error order, exact public error text |
 | `Effects` / `EffectsRefinement` | Extracted bounded static scaling/merging and computed single-quantity addition, exact errors and atomic failure |
@@ -137,7 +148,7 @@ to `origin/main`; theorem counts do not measure percentage completion.
 | --- | --- | --- | --- |
 | 1. u64 transaction kernel | 1 | Basket addition/scaling, containment/equality, canonical representation preservation | Implementation proved under documented models |
 | 1 | 2 | Model/rate construction, duplicate IDs, role/parameter/asset discovery, distinct roles | Implementation proved under documented models; remaining convenience APIs tracked in item 16 |
-| 1 | 3 | Exchange units, rate/account existence, binding/parameter validation | Open |
+| 1 | 3 | Exchange units, rate/account existence, binding/parameter validation | Implementation proved under documented models; downstream caller composition remains open |
 | 1 | 4 | Full expression/condition evaluation against the original snapshot | Interpreter/helpers proved; caller orchestration open |
 | 1 | 5 | Account effect aggregation, bounded scaling/merging, computed-effect semantics | Bounded helpers proved; aggregation loop open |
 | 1 | 6 | Consumption plus preservation availability and complete shortfalls | Design proofs |
@@ -252,6 +263,12 @@ prefix against Lean-generated snapshots, using both `new` and `default`. They
 cover interleaved duplicate IDs, retained values, exact issue order, all expression
 constructors, repeated/reversed/self distinct pairs, Unicode names, all computed
 kinds, all condition comparisons and repeated asset references.
+Another 765 structural-validation cases cover all eight issue categories, exact
+ordering, zero-plus-missing-rate early return, accepted rate selection, aliased
+missing accounts, distinct pairs, unknown/missing parameters, Unicode names and
+u64 boundaries. Each runs both directly and through `assess`/`apply`, with and
+without a failing condition, checking structural-error precedence and unchanged
+state. These caller checks are finite integration evidence, not caller proofs.
 
 ## Explicit legacy refinement gaps
 
@@ -260,13 +277,14 @@ the initial theorems. They are a backfill plan, not an exemption for new behavio
 
 - Charon/Aeneas extraction and refinement beyond the four `Quantity<u64>` checked
   arithmetic operations, basket construction/operations, account updates/staging,
-  model/rate construction and metadata discovery, snapshot expression/condition evaluation, bounded effect helpers,
+  model/rate construction and metadata discovery, structural validation, snapshot expression/condition evaluation, bounded effect helpers,
   runtime conservation and whole-state measurement, including the remaining exchange `expect` and
   termination obligations.
 - Correctness of `IndexMap`, `BTreeMap`, `Arc`, iterator order, allocation, cloning,
   and copy-on-write isolation; Rust compilation still enforces its ownership rules.
-- Full structural validation: required/unknown roles and parameters, account/rate
-  existence, distinct bindings, and aggregate overflow. Duplicate model IDs are now covered.
+- Composition of structural validation with condition/effect orchestration,
+  aggregate overflow and preparation. Structural validation and duplicate model
+  IDs now have implementation proofs; downstream caller obligations remain open.
 - Remaining finite-map adapters, serialization/schema round trips,
   canonical state/observation ordering, and fingerprints. Fingerprints are not
   collision-free identities and must not be given such a theorem.
@@ -279,7 +297,7 @@ the initial theorems. They are a backfill plan, not an exemption for new behavio
   Rust `replay` retains an accepted prefix on failure; `replayed` protects its source.
 
 For further implementation proofs, extend the pinned Aeneas pipeline from u64
-arithmetic, baskets, accounts, model/rate construction, discovery, evaluation, effects and conservation
+arithmetic, baskets, accounts, model/rate construction, discovery, validation, evaluation, effects and conservation
 to complete exchange preparation and commit, connecting
 extracted definitions to the existing specifications. Model unavoidable external dependencies explicitly and
 report their trust status. Do not maintain a second Rust algorithm only for proofs

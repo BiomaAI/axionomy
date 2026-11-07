@@ -30,4 +30,6 @@ abbrev alloc.sync.Arc (T : Type) := T
 abbrev indexmap.map.iter.Values (_K V : Type) := List V
 abbrev indexmap.map.iter.IntoIter (K V : Type) := List (K × V)
 abbrev alloc.collections.btree.set.IntoIter (T _A : Type) := List T
+abbrev alloc.collections.btree.map.Keys (K _V : Type) := List K
+abbrev alloc.collections.btree.set.Iter (T : Type) := List T
 end Axionomy.AccountExtracted

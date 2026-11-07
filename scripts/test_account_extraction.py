@@ -68,6 +68,17 @@ class AccountBridgeTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "not a forwarding call: model_build"):
             validate_bridge(self.root)
 
+    def test_changed_validation_entry_is_rejected(self):
+        self.target.write_text(self.target.read_text().replace("model.validate_structure(proposal)", "Ok(rule)"))
+        with self.assertRaisesRegex(ValueError, "not a forwarding call: validate_model_proposal"):
+            validate_bridge(self.root)
+
+    def test_bypassed_validation_handoff_is_rejected(self):
+        path = self.root / "src/economy.rs"
+        path.write_text(path.read_text().replace("self.validate_structure(exchange)", "Ok(rule)"))
+        with self.assertRaisesRegex(ValueError, "economy validation handoff changed"):
+            validate_bridge(self.root)
+
     def test_changed_discovery_entry_is_rejected(self):
         self.target.write_text(self.target.read_text().replace("rule.parameter_names()", "Default::default()"))
         with self.assertRaisesRegex(ValueError, "not a forwarding call: rate_parameters"):
@@ -111,6 +122,18 @@ class AccountExtractionTests(unittest.TestCase):
     def test_missing_extracted_model_build_is_rejected(self):
         path = self.directory / "Funs.lean"
         path.write_text(path.read_text().replace("def economy.EconomyBuilder.build\n", "def bypass\n"))
+        with self.assertRaisesRegex(ValueError, "missing account production definition"):
+            validate_generated(self.directory)
+
+    def test_missing_extracted_validation_is_rejected(self):
+        path = self.directory / "Funs.lean"
+        path.write_text(path.read_text().replace("def economy.Economy.validate_structure\n", "def bypass\n"))
+        with self.assertRaisesRegex(ValueError, "missing account production definition"):
+            validate_generated(self.directory)
+
+    def test_missing_validation_loop_is_rejected(self):
+        path = self.directory / "Funs.lean"
+        path.write_text(path.read_text().replace("def economy.Economy.validate_structure_loop5.body\n", "def bypass\n"))
         with self.assertRaisesRegex(ValueError, "missing account production definition"):
             validate_generated(self.directory)
 

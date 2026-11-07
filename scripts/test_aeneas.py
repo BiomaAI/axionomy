@@ -55,6 +55,31 @@ class ExtractionBoundaryTests(unittest.TestCase):
 
 
 class ProductionMutationTests(unittest.TestCase):
+    def test_reversed_zero_units_breaks_structural_validation(self):
+        self.check_mutation(
+            "src/economy.rs", "if proposal.units().is_zero()", "if !proposal.units().is_zero()",
+            "extract_account.py", "stale account model", "ValidationCompleteRefinement", "AccountExtraction")
+
+    def test_reversed_missing_binding_breaks_structural_validation(self):
+        self.check_mutation(
+            "src/economy.rs", "if !proposal.bindings().contains_key(role)", "if proposal.bindings().contains_key(role)",
+            "extract_account.py", "stale account model", "ValidationRefinement", "AccountExtraction")
+
+    def test_reversed_missing_parameter_breaks_structural_validation(self):
+        self.check_mutation(
+            "src/economy.rs", "if !proposal.parameters().contains_key(name)", "if proposal.parameters().contains_key(name)",
+            "extract_account.py", "stale account model", "ValidationParametersRefinement", "AccountExtraction")
+
+    def test_aliased_distinct_roles_break_structural_validation(self):
+        self.check_mutation(
+            "src/economy.rs", "&& left_account == right_account", "&& !(left_account == right_account)",
+            "extract_account.py", "stale account model", "ValidationRefinement", "AccountExtraction")
+
+    def test_reversed_missing_account_breaks_structural_validation(self):
+        self.check_mutation(
+            "src/economy.rs", "&& !self.accounts.contains_key(holder)", "&& self.accounts.contains_key(holder)",
+            "extract_account.py", "stale account model", "ValidationAccountsRefinement", "AccountExtraction")
+
     def test_reversed_duplicate_check_breaks_model_construction(self):
         self.check_mutation(
             "src/economy.rs", "if self.accounts.contains_key(&id)", "if !self.accounts.contains_key(&id)",

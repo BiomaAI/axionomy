@@ -18,8 +18,8 @@ GENERATED = {
     "AccountExtraction.lean": "AccountExtraction.lean",
 }
 TEMPLATES = {
-    "TypesExternal_Template.lean": "839a81b8481892d6f1a7653d75dde2b5ca2c3458a426f3d3a64fc0574de4a3fb",
-    "FunsExternal_Template.lean": "33f62969d1a4f067f9a43ed223acba9b5520f5ca189753a4ed5a9194fd991ae1",
+    "TypesExternal_Template.lean": "6c1bb6c6058d25191551c6400ddf411958e9dd7963a89e708c520fc427c0f6dc",
+    "FunsExternal_Template.lean": "db33da6731c63ac3fd32590429be62ceeb06dead894b270a574cac2a2a95482f",
 }
 
 # The caller remains outside the extraction. Keep its exact staging handoff
@@ -36,7 +36,13 @@ PREPARATION_CALL = """let account = match self
                 }
             };"""
 
+VALIDATION_CALL = """let rate = match self.validate_structure(exchange) {
+            Ok(rate) => rate,
+            Err(issues) => return invalid_analysis(issues),
+        };"""
+
 ENTRY_CALLS = {
+    "validate_model_proposal": "model.validate_structure(proposal)",
     "model_new": "economy::EconomyBuilder::new()",
     "model_default": "economy::EconomyBuilder::default()",
     "model_account": "builder.account(id,state)",
@@ -87,6 +93,8 @@ def validate_bridge(root=ROOT):
     economy = (root / "src/economy.rs").read_text()
     if re.sub(r"\s+", "", economy).count(re.sub(r"\s+", "", PREPARATION_CALL)) != 1:
         raise ValueError("economy preparation handoff changed; review the production connection")
+    if re.sub(r"\s+", "", economy).count(re.sub(r"\s+", "", VALIDATION_CALL)) != 1:
+        raise ValueError("economy validation handoff changed; review the production connection")
 
 
 def validate_generated(directory):
@@ -111,6 +119,9 @@ def validate_generated(directory):
                   "quantity.Quantity.checked_add", "quantity.Quantity.checked_sub", "quantity.Quantity.checked_mul",
                   "economy.EconomyBuilder.new", "economy.EconomyBuilder.account", "economy.EconomyBuilder.rate",
                   "economy.EconomyBuilder.invariant", "economy.EconomyBuilder.build", "economy.EconomyBuilder.build_loop.body",
+                  "economy.Economy.validate_structure",
+                  *[f"economy.Economy.validate_structure_loop{i}.body" for i in range(7)],
+                  "rate.Rate.has_role", "rate.Rate.has_role_loop.body",
                   "rate.Rate.new", "rate.Rate.impl.distinct", "rate.Rate.register_expression_roles_loop.body",
                   "rate.Rate.consume_computed", "rate.Rate.produce_computed", "rate.Rate.preserve_computed",
                   "rate.Rate.condition", "rate.Rate.condition_loop.body",

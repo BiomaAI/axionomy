@@ -267,3 +267,17 @@ pub fn model_default<AccountId: Eq + std::hash::Hash, A, RateId: Eq + std::hash:
 pub fn rate_default<Role: Clone + Ord, A: Clone + Eq + std::hash::Hash>() -> Rate<Role, A> {
     Rate::default()
 }
+
+#[allow(dead_code, clippy::type_complexity)]
+pub(crate) fn validate_model_proposal<
+    'a,
+    AccountId: Clone + Eq + std::hash::Hash + Ord,
+    A: Clone + Eq + std::hash::Hash + Ord,
+    RateId: Clone + Eq + std::hash::Hash + Ord,
+    Role: Clone + Ord,
+>(
+    model: &'a economy::Economy<AccountId, A, RateId, Role>,
+    proposal: &Exchange<RateId, Role, AccountId>,
+) -> Result<&'a Rate<Role, A>, Vec<economy::ApplyError<RateId, Role, AccountId, A>>> {
+    model.validate_structure(proposal)
+}

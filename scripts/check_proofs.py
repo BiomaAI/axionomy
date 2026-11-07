@@ -50,6 +50,11 @@ def validate_coverage(root, coverage):
             # These are the implemented extraction pipelines. Future
             # claims need their own regeneration and trust-boundary checks.
             pipelines = {
+                'structural_validation': ("AccountExtraction.Funs", {
+                    'Axionomy.ValidationCompleteRefinement.validate_refines',
+                    'Axionomy.ValidationCompleteRefinement.accepted_has_accounts',
+                    'Axionomy.ValidationCompleteRefinement.accepted_parameters_and_distinct',
+                    'Axionomy.ValidationCompleteRefinement.rejected_has_issue'}),
                 'model_construction': ("AccountExtraction.Funs", {
                     'Axionomy.ModelConstructionRefinement.new_refines',
                     'Axionomy.ModelConstructionRefinement.default_refines',
@@ -180,7 +185,7 @@ def main():
         "runtime_")
     run("cargo", "test", "-p", "axionomy", "--all-features", "--doc")
     print(f"Verified {len(theorems)} registered theorems and their axiom dependencies, "
-          "fresh Aeneas extraction of u64 arithmetic, basket construction/operations, account updates/staging, model/rate construction and metadata discovery, snapshot evaluation/conditions, effect helpers, signed conservation and measurement, "
+          "fresh Aeneas extraction of u64 arithmetic, basket construction/operations, account updates/staging, model/rate construction and metadata discovery, structural validation, snapshot evaluation/conditions, effect helpers, signed conservation and measurement, "
           "and Rust conformance/type checks. Collection storage uses an explicit trusted model. "
           "Other core implementation refinement remains unproved; see verification/README.md.")
 

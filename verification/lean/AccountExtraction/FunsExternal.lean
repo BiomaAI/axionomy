@@ -356,4 +356,61 @@ def indexmap.map.IndexMap.contains_key {K V S Q H : Type}
   let value ← indexmap.map.IndexMap.get hasher hashInst equiv entries query
   .ok value.isSome
 
+-- Read-only tree iteration preserves sorted logical key order.
+def alloc.collections.btree.map.BTreeMap.keys {K V A : Type}
+    (_ : core.alloc.AllocatorClone A) (entries : alloc.collections.btree.map.BTreeMap K V A) :
+    Result (alloc.collections.btree.map.Keys K V) := .ok (entries.map Prod.fst)
+
+def alloc.collections.btree.map.Keys.Insts.CoreIterTraitsIteratorIteratorSharedAK.next {K V : Type} :
+    alloc.collections.btree.map.Keys K V → Result (Option K × alloc.collections.btree.map.Keys K V)
+  | [] => .ok (none, [])
+  | key :: rest => .ok (some key, rest)
+
+def alloc.collections.btree.set.BTreeSet.iter {T A : Type}
+    (_ : core.alloc.AllocatorClone A) (entries : alloc.collections.btree.set.BTreeSet T A) :
+    Result (alloc.collections.btree.set.Iter T) := .ok entries
+
+def SharedABTreeSet.Insts.CoreIterTraitsCollectIntoIteratorSharedATIter.into_iter {T A : Type}
+    (_ : core.alloc.AllocatorClone A) (entries : alloc.collections.btree.set.BTreeSet T A) :
+    Result (alloc.collections.btree.set.Iter T) := .ok entries
+
+def alloc.collections.btree.set.Iter.Insts.CoreIterTraitsIteratorIteratorSharedAT.next {T : Type} :
+    alloc.collections.btree.set.Iter T → Result (Option T × alloc.collections.btree.set.Iter T)
+  | [] => .ok (none, [])
+  | value :: rest => .ok (some value, rest)
+
+def cloneValues {T : Type} (cloneInst : core.clone.Clone T) : List T → Result (List T)
+  | [] => .ok []
+  | value :: rest => do
+    let copied ← cloneInst.clone value
+    let remaining ← cloneValues cloneInst rest
+    .ok (copied :: remaining)
+
+def alloc.collections.btree.set.BTreeSet.Insts.CoreCloneClone.clone {T A : Type}
+    (cloneInst : core.clone.Clone T) (_ : core.alloc.AllocatorClone A)
+    (entries : alloc.collections.btree.set.BTreeSet T A) : Result (alloc.collections.btree.set.BTreeSet T A) :=
+  cloneValues cloneInst entries
+
+def Shared0T.Insts.CoreBorrowBorrow.borrow {T : Type} (value : T) : Result T := .ok value
+
+def alloc.string.String.as_str (value : String) : Result Str :=
+  alloc.string.String.Insts.CoreOpsDerefDerefStr.deref value
+
+def alloc.string.String.Insts.CoreBorrowBorrowStr.borrow (value : String) : Result Str :=
+  alloc.string.String.Insts.CoreOpsDerefDerefStr.deref value
+
+def alloc.collections.btree.map.BTreeMap.contains_key {K V A Q : Type}
+    (allocator : core.alloc.AllocatorClone A) (borrowInst : core.borrow.Borrow K Q)
+    (keyOrd : core.cmp.Ord K) (queryOrd : core.cmp.Ord Q)
+    (entries : alloc.collections.btree.map.BTreeMap K V A) (query : Q) : Result Bool := do
+  let result ← alloc.collections.btree.map.BTreeMap.get allocator borrowInst keyOrd queryOrd entries query
+  .ok result.isSome
+
+def alloc.collections.btree.set.BTreeSet.contains {T A Q : Type}
+    (allocator : core.alloc.AllocatorClone A) (borrowInst : core.borrow.Borrow T Q)
+    (keyOrd : core.cmp.Ord T) (queryOrd : core.cmp.Ord Q)
+    (entries : alloc.collections.btree.set.BTreeSet T A) (query : Q) : Result Bool :=
+  alloc.collections.btree.map.BTreeMap.contains_key allocator borrowInst keyOrd queryOrd
+    (entries.map fun key => (key, ())) query
+
 end Axionomy.AccountExtracted

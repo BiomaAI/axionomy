@@ -469,6 +469,15 @@ where
         self.roles.iter()
     }
 
+    pub(crate) fn has_role(&self, role: &Role) -> bool {
+        for known in &self.roles {
+            if known == role {
+                return true;
+            }
+        }
+        false
+    }
+
     pub fn consumed(&self, role: &Role) -> Option<&Basket<A, N>> {
         self.consume.get(role)
     }

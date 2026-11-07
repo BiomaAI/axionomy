@@ -135,7 +135,7 @@ theorems establish that:
 The extraction uses the same account harness, models, and external template
 checksums. It adds no trusted model. A syntactic guard checks the exact production
 handoff in `Economy::analyze`; the caller is not extracted by this theorem.
-Role/account validation, effect aggregation, preserved-resource preflight,
+Role/account validation is covered separately below. Effect aggregation, preserved-resource preflight,
 invariant checking, prepared-account completeness, multi-account commit, and
 the caller's remaining `expect` sites remain separate proof obligations.
 
@@ -273,7 +273,7 @@ The extension adds the following explicit dependency models:
 
 The proofs have no premise asserting that evaluation or measurement succeeded.
 Lawful identity/equality/ordering dictionaries have existing concrete witnesses.
-Theorems over helpers do not certify full structural validation, iteration over
+Theorems over these helpers do not certify iteration over
 conditions, aggregate account effects, preservation preflight, diagnostics,
 preparation completeness, receipts, multi-account commit or other numeric backends.
 
@@ -332,5 +332,52 @@ at every prefix. Rust checks both `new` and `default` with separate holder, asse
 role and rate types. Six controls mutate duplicate detection, build rejection,
 computed-role discovery, distinct-pair orientation, preserve parameter inclusion,
 and condition asset order. Each must compile after fresh extraction and then fail
-its semantic proof. This closes the model/discovery backlog item, while exchange
-validation/orchestration and remaining convenience APIs retain their own contracts.
+its semantic proof. This closes the model/discovery backlog item. Structural
+validation is covered below; orchestration and convenience APIs remain separate.
+
+## Complete structural validation
+
+`ValidationCompleteRefinement.validate_refines` proves successful termination of
+the extracted production `Economy::validate_structure` and exact agreement with
+the typed `Validation.validate` specification. It covers every branch and all
+seven loops, with no assumed success of the helper or any loop. The result is
+the same stored borrowed rate, or the complete diagnostic list in its existing
+order: zero units; missing rate (early return); missing bindings; unknown bindings;
+missing parameters; unknown parameters; distinct-role violations; sorted,
+deduplicated missing bound accounts. All role/parameter issues are accumulated
+before the final accept/reject decision.
+
+Corollaries prove that accepted units are nonzero, every declared role has a
+binding to an existing account, every required parameter is supplied, distinct
+pairs bind different accounts, and every rejection has at least one issue.
+The account-existence result requires comparator equality to imply identity,
+so deduplication cannot hide a missing account. These facts are available for
+future caller proofs; they do not yet discharge every downstream `expect` or
+establish that all computed references are registered in a deserialized rate.
+
+`analyze` now delegates its existing structural checks to this crate-private
+borrowed-result helper. The bridge guard checks that exact handoff. Explicit
+loops replace unsupported `Iterator::any` and chained missing-account iterators.
+Required-name traversal clones the set of borrowed names, because the pinned
+translator cannot handle nested shared borrows or `iter().copied()` here. This
+adds a temporary set allocation, retains borrowed names and all public types,
+and preserves diagnostic contents/order. Physical allocation cost and failure
+remain outside the proof.
+
+New external contracts model tree key iteration, borrowed set iteration, logical
+set cloning with per-element clone effects, borrowed string views and tree/set
+membership using the existing ordered lookup. They preserve the previously
+documented sorted-collection, lawful key/hash/order, clone, UTF-8, allocation,
+compiler and translation trust boundaries. Parameter UTF-8 byte lengths must fit
+`usize`; a conservative sum bounds the maximum diagnostic-vector length. These
+are input/resource conditions, not premises that validation succeeds. No axioms
+or assumed loop results were added.
+
+Lean generates 765 cases. Rust exercises the actual private helper with distinct
+holder/asset/role/rate types, checks selected-rate pointer identity, and compares
+all ordered diagnostics. Each case also runs through `assess` and `apply`, both
+with and without a failing post-validation condition, checking first-error
+behavior and unchanged state. These are caller regression tests. Five mutation
+controls reverse units, binding, parameter, distinctness and account checks;
+the generated mutant must compile before its semantic proof is rejected.
+Full condition/effect orchestration, preparation, commit and receipts remain open.

@@ -84,4 +84,21 @@ def pairCompare (cmp : Role → Role → Ordering) (left right : Role × Role) :
 def orderedPair (cmp : Role → Role → Ordering) (left right : Role) : Role × Role :=
   if cmp left right = .gt then (right, left) else (left, right)
 
+theorem register_length_le {K : Type} (cmp : K → K → Ordering) (key : K) (entries : List K) :
+    (RateConstruction.register cmp key entries).length ≤ entries.length + 1 := by
+  induction entries with
+  | nil => simp [RateConstruction.register]
+  | cons first rest ih =>
+    cases order : cmp key first <;> simp [RateConstruction.register, order] <;> omega
+
+theorem registerAll_length_le {K : Type} (cmp : K → K → Ordering) (entries accumulated : List K) :
+    (registerAll cmp entries accumulated).length ≤ accumulated.length + entries.length := by
+  induction entries generalizing accumulated with
+  | nil => simp [registerAll]
+  | cons key rest ih =>
+    have bound := ih (RateConstruction.register cmp key accumulated)
+    have step := register_length_le cmp key accumulated
+    simp only [registerAll, List.foldl_cons, List.length_cons] at *
+    omega
+
 end Axionomy.Discovery

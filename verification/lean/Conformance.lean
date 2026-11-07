@@ -10,6 +10,7 @@ import Axionomy.Evaluation
 import Axionomy.Effects
 import Axionomy.ModelConstruction
 import Axionomy.Discovery
+import Axionomy.Validation
 
 /-! Deterministic executable examples from the SAME definitions used in the
 proofs. Rust runs these examples through the public API. Agreement on these
@@ -346,6 +347,54 @@ def metadataCase (inputs : List (Nat × Nat × Nat × Evaluation.Expr Nat Nat Na
       Discovery.registerAll compare parameterRefs [], assetRefs⟩]
   return ⟨steps, snapshots⟩
 
+structure ValidationIssueCase where
+  kind : String
+  ids : List Nat := []
+  parameter : String := ""
+  deriving ToJson
+
+def validationIssue (issue : Validation.Issue Nat Nat Nat) : ValidationIssueCase :=
+  match issue with
+  | .zeroUnits => ⟨"zeroUnits", [], ""⟩
+  | .missingRate id => ⟨"missingRate", [id], ""⟩
+  | .missingBinding role => ⟨"missingBinding", [role], ""⟩
+  | .unknownBinding role => ⟨"unknownBinding", [role], ""⟩
+  | .missingParameter parameter => ⟨"missingParameter", [], parameter⟩
+  | .unknownParameter parameter => ⟨"unknownParameter", [], parameter⟩
+  | .rolesMustDiffer left right => ⟨"rolesMustDiffer", [left, right], ""⟩
+  | .missingAccount id => ⟨"missingAccount", [id], ""⟩
+
+structure ValidationCase where
+  roles : List Nat
+  requiredParameters : List String
+  distinct : List (Nat × Nat)
+  units : String
+  rate : Nat
+  bindings : List (Nat × Nat)
+  parameters : List (String × String)
+  accounts : List Nat
+  accepted : Bool
+  issues : List ValidationIssueCase
+  deriving ToJson
+
+def validationCase (roles : List Nat) (requiredParameters : List String) (distinct : List (Nat × Nat))
+    (units rate : Nat) (bindings : List (Nat × Nat)) (parameters : List (String × Nat))
+    (accounts : List Nat) : ValidationCase :=
+  let roles := Discovery.registerAll compare (roles ++ distinct.flatMap (fun (l, r) => [l, r])) []
+  let names := Discovery.registerAll compare requiredParameters []
+  let pairs := Discovery.registerAll (Discovery.pairCompare compare)
+    (distinct.map fun (l, r) => Discovery.orderedPair compare l r) []
+  let bindings := bindings.mergeSort (fun l r => l.1 ≤ r.1)
+  let parameters := parameters.mergeSort (fun l r => l.1 ≤ r.1)
+  let metadata : Validation.Metadata Nat := ⟨roles, names, pairs⟩
+  let result := Validation.validate compare compare id units rate [(0, metadata), (2, ⟨[], [], []⟩)]
+    bindings parameters (fun id => decide (id ∈ accounts))
+  let (accepted, issues) := match result with
+    | .ok _ => (true, [])
+    | .error issues => (false, issues.map validationIssue)
+  ⟨roles, names, pairs, toString units, rate, bindings,
+    parameters.map (fun (key, value) => (key, toString value)), accounts, accepted, issues⟩
+
 def main : IO Unit := do
   let limit := Quantity.u64Max
   let boundaries := [0, 1, 2, 3, limit - 1, limit]
@@ -529,10 +578,26 @@ def main : IO Unit := do
         (0, 2, 7, .parameter "éλ", .units), (1, 1, 6, .balance 0 99, .units),
         (2, 2, 7, expression, .units), (3, 0, 0, expression, .binary .add (.parameter "") (.parameter "éλ")),
         (4, 1, 4, .units, .units), (4, 2, 2, .units, .units)])
+  let mut validation : Array ValidationCase := #[]
+  -- Structural errors accumulate in category order, except a missing rate
+  -- stops validation after the units check. Aliased missing accounts deduplicate.
+  for units in [0, 1, limit] do
+    for rule in [0, 1, 2] do
+      for bindings in [[], [(0, 0)], [(1, 1), (0, 0)], [(0, 0), (1, 0)],
+          [(0, 9), (1, 9)], [(1, 8), (0, 9)], [(2, 7), (0, 0), (1, 1)]] do
+        for parameters in [[], [("éλ", 1)], [("éλ", limit), ("", 0)],
+            [("z", 3), ("未知`", 4), ("", 0)]] do
+          for availableAccounts in [[], [0], [1, 0]] do
+            validation := validation.push (validationCase [1, 0] ["éλ", "", "éλ"] [(1, 0)]
+              units rule bindings parameters availableAccounts)
+  for roles in [[], [0], [2, 0, 1]] do
+    for pairs in [[], [(0, 0)], [(1, 0), (0, 1), (2, 0)]] do
+      validation := validation.push (validationCase roles [] pairs 1 0
+        (roles.map fun role => (role, role)) [] roles)
   let document := Json.mkObj [("version", toJson (1 : Nat)), ("scalars", toJson scalars),
     ("exchanges", toJson exchanges), ("expressions", toJson expressions), ("baskets", toJson baskets),
     ("accounts", toJson accounts), ("preparations", toJson preparations), ("basketOps", toJson basketOps),
     ("conservation", toJson conservation), ("rateMerges", toJson rateMerges),
     ("evaluation", toJson evaluation), ("measurements", toJson measurements), ("effects", toJson effects),
-    ("models", toJson models), ("metadata", toJson metadata)]
+    ("models", toJson models), ("metadata", toJson metadata), ("validation", toJson validation)]
   IO.println document.compress

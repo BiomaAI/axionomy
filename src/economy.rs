@@ -86,6 +86,9 @@ impl StateFingerprint {
     }
 }
 
+type StructuralValidationResult<'a, AccountId, A, RateId, Role, N> =
+    Result<&'a Rate<Role, A, N>, Vec<ApplyError<RateId, Role, AccountId, A, N>>>;
+
 pub type ApplyResult<AccountId, A, RateId, Role, N = u64> =
     Result<Receipt<RateId, Role, AccountId, A, N>, ApplyError<RateId, Role, AccountId, A, N>>;
 
@@ -695,50 +698,50 @@ where
         Ok(fork)
     }
 
-    fn analyze(
+    pub(crate) fn validate_structure(
         &self,
-        exchange: &Exchange<RateId, Role, AccountId, N>,
-    ) -> Analysis<AccountId, A, RateId, Role, N> {
+        proposal: &Exchange<RateId, Role, AccountId, N>,
+    ) -> StructuralValidationResult<'_, AccountId, A, RateId, Role, N> {
         let mut issues = Vec::new();
-        if exchange.units().is_zero() {
+        if proposal.units().is_zero() {
             issues.push(ApplyError::ZeroUnits);
         }
 
-        let Some(rate) = self.rates.get(exchange.rate()) else {
+        let Some(rule) = self.rates.get(proposal.rate()) else {
             issues.push(ApplyError::MissingRate {
-                rate: exchange.rate().clone(),
+                rate: proposal.rate().clone(),
             });
-            return invalid_analysis(issues);
+            return Err(issues);
         };
 
-        for role in rate.roles() {
-            if !exchange.bindings().contains_key(role) {
+        for role in rule.roles() {
+            if !proposal.bindings().contains_key(role) {
                 issues.push(ApplyError::MissingBinding { role: role.clone() });
             }
         }
-        for role in exchange.bindings().keys() {
-            if !rate.roles().any(|known| known == role) {
+        for role in proposal.bindings().keys() {
+            if !rule.has_role(role) {
                 issues.push(ApplyError::UnknownBinding { role: role.clone() });
             }
         }
 
-        let parameter_names = rate.parameter_names();
-        for name in &parameter_names {
-            if !exchange.parameters().contains_key(*name) {
+        let parameter_names = rule.parameter_names();
+        for name in parameter_names.clone() {
+            if !proposal.parameters().contains_key(name) {
                 issues.push(ApplyError::MissingParameter {
-                    name: (*name).to_owned(),
+                    name: name.to_owned(),
                 });
             }
         }
-        for name in exchange.parameters().keys() {
+        for name in proposal.parameters().keys() {
             if !parameter_names.contains(name.as_str()) {
                 issues.push(ApplyError::UnknownParameter { name: name.clone() });
             }
         }
-        for (left, right) in rate.distinct_roles() {
+        for (left, right) in rule.distinct_roles() {
             if let (Some(left_account), Some(right_account)) = (
-                exchange.bindings().get(left),
-                exchange.bindings().get(right),
+                proposal.bindings().get(left),
+                proposal.bindings().get(right),
             ) && left_account == right_account
             {
                 issues.push(ApplyError::RolesMustDiffer {
@@ -748,19 +751,33 @@ where
             }
         }
 
-        let missing_accounts = rate
-            .roles()
-            .filter_map(|role| exchange.bindings().get(role))
-            .filter(|account| !self.accounts.contains_key(*account))
-            .cloned()
-            .collect::<BTreeSet<_>>();
+        let mut missing_accounts = BTreeSet::new();
+        for role in rule.roles() {
+            if let Some(holder) = proposal.bindings().get(role)
+                && !self.accounts.contains_key(holder)
+            {
+                missing_accounts.insert(holder.clone());
+            }
+        }
         for account in missing_accounts {
             issues.push(ApplyError::MissingAccount { account });
         }
 
-        if !issues.is_empty() {
-            return invalid_analysis(issues);
+        if issues.is_empty() {
+            Ok(rule)
+        } else {
+            Err(issues)
         }
+    }
+
+    fn analyze(
+        &self,
+        exchange: &Exchange<RateId, Role, AccountId, N>,
+    ) -> Analysis<AccountId, A, RateId, Role, N> {
+        let rate = match self.validate_structure(exchange) {
+            Ok(rate) => rate,
+            Err(issues) => return invalid_analysis(issues),
+        };
 
         for condition in rate.conditions() {
             let satisfied = match evaluate_condition(condition, exchange, &self.accounts) {
@@ -1669,5 +1686,188 @@ mod construction_conformance {
             }
         }
         assert!(outcomes.into_iter().all(|count| count > 0));
+    }
+}
+
+#[cfg(test)]
+mod validation_conformance {
+    use super::*;
+
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Deserialize, Serialize)]
+    struct Holder(u64);
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
+    struct Asset(u64);
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Deserialize, Serialize)]
+    struct Role(u64);
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Deserialize, Serialize)]
+    struct Rule(u64);
+    type Error = ApplyError<Rule, Role, Holder, Asset>;
+
+    #[derive(Debug, Deserialize)]
+    struct Issue {
+        kind: String,
+        ids: Vec<u64>,
+        parameter: String,
+    }
+
+    impl Issue {
+        fn error(&self) -> Error {
+            match self.kind.as_str() {
+                "zeroUnits" => Error::ZeroUnits,
+                "missingRate" => Error::MissingRate {
+                    rate: Rule(self.ids[0]),
+                },
+                "missingBinding" => Error::MissingBinding {
+                    role: Role(self.ids[0]),
+                },
+                "unknownBinding" => Error::UnknownBinding {
+                    role: Role(self.ids[0]),
+                },
+                "missingParameter" => Error::MissingParameter {
+                    name: self.parameter.clone(),
+                },
+                "unknownParameter" => Error::UnknownParameter {
+                    name: self.parameter.clone(),
+                },
+                "rolesMustDiffer" => Error::RolesMustDiffer {
+                    left: Role(self.ids[0]),
+                    right: Role(self.ids[1]),
+                },
+                "missingAccount" => Error::MissingAccount {
+                    account: Holder(self.ids[0]),
+                },
+                _ => panic!("unknown structural issue"),
+            }
+        }
+    }
+
+    #[derive(Debug, Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct Case {
+        roles: Vec<Role>,
+        required_parameters: Vec<String>,
+        distinct: Vec<(Role, Role)>,
+        units: String,
+        rate: Rule,
+        bindings: Vec<(Role, Holder)>,
+        parameters: Vec<(String, String)>,
+        accounts: Vec<Holder>,
+        accepted: bool,
+        issues: Vec<Issue>,
+    }
+
+    #[derive(Deserialize)]
+    struct Fixtures {
+        validation: Vec<Case>,
+    }
+
+    #[test]
+    fn runtime_structural_validation_matches_lean() {
+        let fixtures: Fixtures =
+            serde_json::from_str(include_str!("../verification/conformance.json")).unwrap();
+        assert_eq!(fixtures.validation.len(), 765);
+        let mut outcomes = [0; 2];
+        let mut kinds = BTreeSet::new();
+        for case in fixtures.validation {
+            for trap in [false, true] {
+                let mut rule = Rate::new();
+                for role in &case.roles {
+                    rule = rule.consume(*role, Basket::<Asset>::new());
+                }
+                for parameter in &case.required_parameters {
+                    rule = rule.condition(
+                        parameter.clone(),
+                        QuantityExpression::parameter(parameter),
+                        QuantityComparison::Equal,
+                        QuantityExpression::parameter(parameter),
+                    );
+                }
+                for (left, right) in &case.distinct {
+                    rule = rule.distinct(*left, *right);
+                }
+                let fail_condition = |rule: Rate<Role, Asset>| {
+                    if trap {
+                        rule.condition(
+                            "after validation",
+                            QuantityExpression::constant(0),
+                            QuantityComparison::Equal,
+                            QuantityExpression::constant(1),
+                        )
+                    } else {
+                        rule
+                    }
+                };
+                let mut builder = EconomyBuilder::new()
+                    .rate(Rule(0), fail_condition(rule))
+                    .rate(Rule(2), fail_condition(Rate::new()));
+                for id in &case.accounts {
+                    builder = builder.account(
+                        *id,
+                        Account::new(
+                            Basket::try_from_entries([(Asset(0), Quantity::new(5))]).unwrap(),
+                        ),
+                    );
+                }
+                let mut model = builder.build().unwrap();
+                let mut proposal =
+                    Exchange::new(case.rate, Quantity::new(case.units.parse().unwrap()));
+                for (role, id) in &case.bindings {
+                    proposal = proposal.bind(*role, *id);
+                }
+                for (parameter, value) in &case.parameters {
+                    proposal = proposal.parameter(parameter, Quantity::new(value.parse().unwrap()));
+                }
+                let expected: Vec<Error> = case.issues.iter().map(Issue::error).collect();
+                for issue in &case.issues {
+                    kinds.insert(issue.kind.clone());
+                }
+                let before = serde_json::to_value(&model).unwrap();
+                match model.validate_structure(&proposal) {
+                    Ok(selected) => {
+                        assert!(case.accepted, "{case:?}");
+                        assert!(expected.is_empty());
+                        assert!(std::ptr::eq(selected, model.rates.get(&case.rate).unwrap()));
+                        outcomes[0] += 1;
+                    }
+                    Err(errors) => {
+                        assert!(!case.accepted, "{case:?}");
+                        assert!(!errors.is_empty());
+                        assert_eq!(
+                            serde_json::to_value(errors).unwrap(),
+                            serde_json::to_value(&expected).unwrap(),
+                            "{case:?}"
+                        );
+                        outcomes[1] += 1;
+                    }
+                }
+                let assessment = model.assess(&proposal);
+                let expected = if case.accepted && trap {
+                    vec![Error::RateConditionFailed {
+                        rate: case.rate,
+                        condition: "after validation".into(),
+                    }]
+                } else {
+                    expected
+                };
+                assert_eq!(
+                    serde_json::to_value(assessment.issues()).unwrap(),
+                    serde_json::to_value(&expected).unwrap(),
+                    "{case:?}"
+                );
+                assert_eq!(serde_json::to_value(&model).unwrap(), before);
+                let applied = model.apply(proposal);
+                match expected.first() {
+                    None => assert!(applied.is_ok(), "{case:?}"),
+                    Some(first) => assert_eq!(
+                        serde_json::to_value(applied.unwrap_err()).unwrap(),
+                        serde_json::to_value(first).unwrap(),
+                        "{case:?}"
+                    ),
+                }
+                assert_eq!(serde_json::to_value(&model).unwrap(), before);
+            }
+        }
+        assert!(outcomes.into_iter().all(|count| count > 0));
+        assert_eq!(kinds.len(), 8);
     }
 }

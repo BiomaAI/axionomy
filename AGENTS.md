@@ -28,7 +28,7 @@ into it), read `verification/README.md` and `verification/coverage.json` first.
   completing core work. Preserve the workspace's existing checks.
 - Report verification precisely. The current baseline proves Aeneas-extracted
   u64 checked arithmetic, basket construction/operations, account deposit/withdrawal, and
-  per-account exchange staging, model/rate construction and metadata discovery, snapshot expressions/conditions,
+  per-account exchange staging, model/rate construction and metadata discovery, structural validation, snapshot expressions/conditions,
   bounded effect helpers, runtime signed conservation and whole-state measurement
   against Lean specifications. Collections use
   explicit trusted models; other contracts have design proofs and finite Rust

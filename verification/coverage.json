@@ -1,21 +1,21 @@
 {
   "version": 1,
-  "assurance": "Partial implementation verification: Aeneas-extracted production u64 arithmetic, basket construction/operations, account updates/staging, model/rate construction and metadata discovery, snapshot expression/condition evaluation, bounded effect helpers, signed conservation and whole-state measurement refine Lean specifications. Explicit collection, logical Arc creation/read and UTF-8 models, compiler/translation and primitive models remain trusted. Complete exchange orchestration and other core contracts remain open.",
+  "assurance": "Partial implementation verification: Aeneas-extracted production u64 arithmetic, basket construction/operations, account updates/staging, model/rate construction and metadata discovery, structural validation, snapshot expression/condition evaluation, bounded effect helpers, signed conservation and whole-state measurement refine Lean specifications. Explicit collection, logical Arc creation/read and UTF-8 models, compiler/translation and primitive models remain trusted. Complete exchange orchestration and other core contracts remain open.",
   "sources": {
     "Cargo.toml": "414a2b181e13225e4b76aa58e70d998064174dde2d8cee603ea3af648d61a7f3",
     "Cargo.lock": "00ef263c160aeebaa49187874a4b11ec94fee9bc8fbea5a2f0cacc190607919c",
     "src/account.rs": "0eaf66937c63de2993353828e42fcfea2b80f172f5cb74fc76a28cef79fd9ff6",
     "src/amount.rs": "4aa0f1432494aac0454890604e3addbd002fa6b9ded1f75f91fce7675540f9ee",
     "src/basket.rs": "10e7d7792f3b1de207bdae124fd76a8fa5fe93295b1a4eb49455b588941ee5f1",
-    "src/economy.rs": "5eebd30fc460f6798c26cf2180ab5ab3881f24a67dd951ae9b7c21b75d921be1",
+    "src/economy.rs": "377dac9708dff82e9988d2ec3a202c3b874e3b4cef9e9173b0d9b865fe8c076b",
     "src/exchange.rs": "aabae395148c0dd8703b2fc99aa177700eaffd0d8aac602f8a5ffbf7fb09a47b",
     "src/lib.rs": "46d6f713693714650653128e2ceabf8a895b8ad98a38a7bdbeab4ea378a5cc06",
     "src/quantity.rs": "af66b8cf86b6ac58cccd4e9fcfb740e06928f86b4bf6117660fb7f37319b97dd",
-    "src/rate.rs": "60fea4217acf9590650fbdc2ab25ea8eb4e913950b7fb569b8184fff51bb5488",
+    "src/rate.rs": "af545aa57d7668c346cfb9b0aefe3207af23b6443f9f7064ab5b1eaff9210812",
     "verification/extract.rs": "415b34f5f4f8aa2679af860bd2a4092c96e113145919160fe7c81e33836de3e0",
     "verification/aeneas-toolchain.json": "8676d7d11be51a6f41984d874b35910e8a1a3d0a18414998feb9402ef80932fb",
     "verification/extract_basket.rs": "dc2b3a2159704c24a5261d0069a2aac7b575f30a94ae35c4c1e96933638592dd",
-    "verification/extract_account.rs": "96354e6dffd04c93b2ca753d7bd9832cf9888c97cbc393ced8ada65304b96ff7",
+    "verification/extract_account.rs": "13aee1c8e3b186adb993df75a3aae2e2d0f885bb8c050c1721051306f8569d57",
     "verification/patches/aeneas-namespaced-discriminant.patch": "fabac7482deb3da6ecaca60c4060dfe9d2114efdd010699e736c4a91267f3bc9"
   },
   "features": [
@@ -254,7 +254,7 @@
       "limitations": [
         "The production crate-private Account::prepare_exchange helper is shared-source extracted for u64 quantities. Lean proves termination and exact ordered natural-number results/errors of cloning, withdrawal then deposit, including shortfall rejection and overflow after successful withdrawal. Unique consumed assets and lawful equality/cloning are required; successful preparation is not assumed.",
         "The helper borrows its source immutably in Rust and returns a new account only on success. preparedOutcome models publication or original-state retention for conformance; its atomicity theorem does not prove the multi-account commit loop. Existing collection/clone isolation, allocation, stable hashing, compiler/MIR, Charon/Aeneas and primitive-model assumptions remain; no new external model is introduced. See verification/ACCOUNTS.md.",
-        "Economy::analyze now delegates the same clone-withdraw-deposit sequence to this helper. Its exact handoff is syntactically guarded and whole-economy conformance tests cover 492 cases, but the caller is not extracted. Account lookup/completeness, role and parameter validation, aggregation, preserved-resource preflight, invariant checks, error mapping, receipts and multi-account commit remain separate refinement obligations.",
+        "Economy::analyze now delegates the same clone-withdraw-deposit sequence to this helper. Its exact handoff is syntactically guarded and whole-economy conformance tests cover 492 cases, but the caller is not extracted. Structural role/parameter/account validation is now proved separately; preparation completeness, aggregation, preserved-resource preflight, invariant checks, error mapping, receipts and multi-account commit remain separate refinement obligations.",
         "The generic Rust API and ownership/type guarantees are preserved. The theorem does not establish arbitrary QuantityScalar laws, BigUint/BigInt correctness, physical collection correctness, serialization or replay."
       ]
     },
@@ -277,7 +277,7 @@
         "tests/economy.rs"
       ],
       "limitations": [
-        "These original design theorems assume a typed lookup context. The separate snapshot_evaluation implementation contract now covers recursive expression/condition evaluation, actual role/parameter/account lookup and exact typed errors. Structural validation of proposals and complete condition/effect orchestration in Economy::analyze remain open.",
+        "These original design theorems assume a typed lookup context. The separate snapshot_evaluation implementation contract now covers recursive expression/condition evaluation, actual role/parameter/account lookup and exact typed errors. Structural validation is covered by the separate structural_validation contract; complete condition/effect orchestration in Economy::analyze remains open.",
         "Effect merge algebra is over exact Nat; no claim is made that diagnostic order or bounded overflow is independent of insertion order. The separate bounded_effect_helpers contract covers production checked scaling-plus-addition and single-quantity merging, including atomic failure; it does not cover the complete per-account aggregation loop."
       ]
     },
@@ -501,7 +501,7 @@
         "The shared-source recursive production evaluator is proved for all finite expressions and u64 inputs against checked Nat arithmetic. It reads one immutable proposal/account context, evaluates left before right, distinguishes missing parameters/unbound roles/missing accounts, treats absent asset balances as zero, and refines all six binary operations. Both condition operands use that context; all three comparisons and exact error precedence are proved. No successful-execution premise is assumed.",
         "AccountId, Role, Asset and RateId remain distinct generic types. Equality on account IDs/assets and ordering on roles obey the existing total/lawful dictionaries. Sorted BTreeMap lookup and IndexMap lookup preserve logical entries; read-only Arc deref/AsRef exposes its logical pointee. Physical storage, total ordering/hash coherence, allocation, UTF-8 string comparison/cloning, compiler/MIR, Charon/Aeneas and backend semantics remain trusted.",
         "Private evaluator failures are now a typed ExpressionError; the public string API is unchanged. Exact message rendering is proved, including arbitrary valid Unicode parameter names, provided the full message byte length fits usize. Explicit UTF-8 decode/encode and checked push_str models reject malformed slices or oversized strings. Allocation, stack/resource exhaustion, reference counts, COW and machine code are outside the theorem. Formatting internals still fail closed; the proof does not model erased format arguments as arbitrary correct text.",
-        "A production condition helper factors the existing two evaluations and comparison without changing public signatures, bounds or diagnostic order. Full Economy::analyze structural validation, iteration over conditions, diagnostic wrapping, effect evaluation/aggregation and commit are not yet refined. The helper proof does not certify those callers or serialization/custom numeric backends."
+        "A production condition helper factors the existing two evaluations and comparison without changing public signatures, bounds or diagnostic order. Structural validation is covered separately. Full Economy::analyze iteration over conditions, diagnostic wrapping, effect evaluation/aggregation and commit are not yet refined. The helper proof does not certify those callers or serialization/custom numeric backends."
       ]
     },
     {
@@ -620,7 +620,45 @@
       "limitations": [
         "All ten recursive expression constructors and complete Rate parameter_names/computed_asset_keys paths are extracted. Parameters are the sorted logical union of every computed expression and both sides of every condition. Asset output preserves every occurrence and exact consume/produce/preserve/condition order, with each computed target asset before expression references. Public outputs remain borrowed &str/&Asset in Rust.",
         "Each parameter UTF-8 byte length must fit usize, and the full asset-reference vector length must fit usize. Exact UTF-8 decoding and string ordering, Vec/slice iteration and sorted sets are explicit dependency models. Allocation, recursion/stack limits, physical string/collection storage and the compiler/MIR/translation/backend boundary remain trusted; malformed modeled UTF-8 fails closed.",
-        "Metadata discovery does not by itself prove exchange binding/parameter validation or complete preparation; those callers remain open. Static basket assets belong to their separate maps and are intentionally excluded from computed_asset_keys."
+        "Metadata discovery composes with the separate structural_validation contract for binding/parameter validation. Complete preparation and constructor-to-caller metadata invariants remain open. Static basket assets belong to their separate maps and are intentionally excluded from computed_asset_keys."
+      ]
+    },
+    {
+      "id": "structural_validation",
+      "status": "aeneas_refinement_proved",
+      "sources": [
+        "src/economy.rs",
+        "src/rate.rs",
+        "src/exchange.rs",
+        "verification/extract_account.rs",
+        "verification/aeneas-toolchain.json"
+      ],
+      "extracted_module": "AccountExtraction.Funs",
+      "theorems": [
+        "Axionomy.ValidationCompleteRefinement.validate_refines",
+        "Axionomy.ValidationCompleteRefinement.accepted_has_accounts",
+        "Axionomy.ValidationCompleteRefinement.accepted_parameters_and_distinct",
+        "Axionomy.ValidationCompleteRefinement.rejected_has_issue",
+        "Axionomy.ValidationRefinement.has_role_refines",
+        "Axionomy.Validation.accepted_rule",
+        "Axionomy.Validation.valid_units",
+        "Axionomy.Validation.required_binding",
+        "Axionomy.Validation.required_account",
+        "Axionomy.Validation.required_parameter",
+        "Axionomy.Validation.bound_accounts_differ",
+        "Axionomy.Validation.rejected_nonempty",
+        "Axionomy.ValidationCompleteRefinement.empty_inputs_fit"
+      ],
+      "rust_tests": [
+        "src/economy.rs",
+        "tests/economy.rs",
+        "tests/state_evaluated_rates.rs"
+      ],
+      "limitations": [
+        "Complete extracted u64 structural helper and all seven loops terminate and return the exact stored rate or ordered issues under the logical collection model. Covers zero units, missing-rate early return, missing/unknown roles and parameters, distinct-role violations and sorted deduplicated missing accounts. Actual acceptance yields nonzero units, required bindings to existing accounts, required parameters and distinctness; actual rejection is nonempty.",
+        "Account/rate/role identity cloning and selected equality/ordering operations must obey explicit laws. Account comparator equality must imply identity for the existence corollary. Valid sorted BTreeMap/BTreeSet representations, lawful ordering/equality/hash coherence, borrowed UTF-8 representation, allocation, physical collection/Arc/string semantics, compiler/MIR/Charon/Aeneas/backend correctness remain trusted.",
+        "Parameter names must fit usize in UTF-8, and a conservative maximum issue count must fit usize. These are resource premises, not assumed validation success. Required-name iteration clones a set of borrowed names to avoid unsupported nested shared borrows; this adds a temporary allocation while preserving public types and diagnostic order.",
+        "Economy::analyze calls the private borrowed-result helper through a syntactically guarded handoff. Lean-generated cases exercise both the helper and public assess/apply, including condition-error precedence and unchanged state. The caller orchestration, metadata validity after arbitrary deserialization, downstream expect safety, aggregation, availability, preparation, commit and receipts are still separate obligations. This contract covers u64, not other numeric backends."
       ]
     }
   ]

@@ -13,7 +13,7 @@ proof's intrinsic boundary described here remains unchanged.
 The [account update proof](ACCOUNTS.md) extracts deposit, withdrawal, shortfall,
 and the production per-account exchange staging helper using the production
 generic trait dictionary and the collection abstraction. That shared pipeline
-also proves model/rate construction and complete metadata discovery,
+also proves model/rate construction, complete metadata discovery and structural validation,
 recursive snapshot evaluation and conditions,
 bounded effect helpers, exact evaluator messages, signed conservation and
 whole-state measurement;
