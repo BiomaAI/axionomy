@@ -19,6 +19,15 @@ set_option maxRecDepth 2048
 
 namespace Axionomy.AccountExtracted
 
+/-- Trait declaration: [core::alloc::AllocatorClone]
+    Source: '/rustc/library/core/src/alloc/mod.rs', lines 541:0-541:50
+    Name pattern: [core::alloc::AllocatorClone]
+    Visibility: public -/
+@[rust_trait "core::alloc::AllocatorClone"
+  (parentClauses := ["cloneCloneInst"])]
+structure core.alloc.AllocatorClone (Self : Type _) where
+  cloneCloneInst : core.clone.Clone Self
+
 /-- Trait declaration: [core::hash::BuildHasher]
     Source: '/rustc/library/core/src/hash/mod.rs', lines 637:0-637:21
     Name pattern: [core::hash::BuildHasher]
@@ -63,6 +72,21 @@ structure core.ops.arith.Mul (Self : Type _) (Rhs : Type _) (Self_Output :
 structure core.ops.arith.Div (Self : Type _) (Rhs : Type _) (Self_Output :
   Type _) where
   div : Self → Rhs → Result Self_Output
+
+/-- [alloc::collections::btree::map::entry::Entry]
+    Source: '/rustc/library/alloc/src/collections/btree/map/entry.rs', lines 19:0-24:1
+    Name pattern: [alloc::collections::btree::map::entry::Entry]
+    Visibility: public -/
+@[discriminant isize, rust_type "alloc::collections::btree::map::entry::Entry"
+  (mutRegions := #[0])]
+inductive alloc.collections.btree.map.entry.Entry (K : Type _) (V : Type _) (A
+  : Type _) where
+| Vacant :
+  alloc.collections.btree.map.entry.VacantEntry K V A →
+  alloc.collections.btree.map.entry.Entry K V A
+| Occupied :
+  alloc.collections.btree.map.entry.OccupiedEntry K V A →
+  alloc.collections.btree.map.entry.Entry K V A
 
 /-- Trait declaration: [equivalent::Equivalent]
     Source: '/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/equivalent-1.0.2/src/lib.rs', lines 77:0-77:31
@@ -192,5 +216,129 @@ inductive account.AccountError (A : Type _) (N : Type _) (Clause2_SignedMeasure
   basket.Basket A N →
   account.AccountError A N Clause2_SignedMeasure
 | Overflow : A → account.AccountError A N Clause2_SignedMeasure
+
+/-- [account_extraction::exchange::AccountDelta]
+    Source: 'verification/../src/exchange.rs', lines 80:0-85:1
+    Visibility: public -/
+structure exchange.AccountDelta (AccountId : Type _) (A : Type _) (N : Type _)
+  where
+  account : AccountId
+  consumed : basket.Basket A N
+  produced : basket.Basket A N
+  preserved : basket.Basket A N
+
+/-- [account_extraction::rate::QuantityExpression]
+    Source: 'verification/../src/rate.rs', lines 27:0-63:1
+    Visibility: public -/
+@[discriminant isize]
+inductive rate.QuantityExpression (Role : Type _) (A : Type _) (N : Type _)
+  where
+| Constant : quantity.Quantity N → rate.QuantityExpression Role A N
+| Units : rate.QuantityExpression Role A N
+| Parameter : String → rate.QuantityExpression Role A N
+| Balance : Role → A → rate.QuantityExpression Role A N
+| Add :
+  rate.QuantityExpression Role A N →
+  rate.QuantityExpression Role A N →
+  rate.QuantityExpression Role A N
+| Subtract :
+  rate.QuantityExpression Role A N →
+  rate.QuantityExpression Role A N →
+  rate.QuantityExpression Role A N
+| Multiply :
+  rate.QuantityExpression Role A N →
+  rate.QuantityExpression Role A N →
+  rate.QuantityExpression Role A N
+| DivideFloor :
+  rate.QuantityExpression Role A N →
+  rate.QuantityExpression Role A N →
+  rate.QuantityExpression Role A N
+| Minimum :
+  rate.QuantityExpression Role A N →
+  rate.QuantityExpression Role A N →
+  rate.QuantityExpression Role A N
+| Maximum :
+  rate.QuantityExpression Role A N →
+  rate.QuantityExpression Role A N →
+  rate.QuantityExpression Role A N
+
+/-- [account_extraction::rate::ComputedAmount]
+    Source: 'verification/../src/rate.rs', lines 218:0-222:1
+    Visibility: public -/
+structure rate.ComputedAmount (Role : Type _) (A : Type _) (N : Type _) where
+  role : Role
+  asset : A
+  quantity : rate.QuantityExpression Role A N
+
+/-- [account_extraction::rate::QuantityComparison]
+    Source: 'verification/../src/rate.rs', lines 240:0-244:1
+    Visibility: public -/
+@[discriminant isize]
+inductive rate.QuantityComparison where
+| Equal : rate.QuantityComparison
+| GreaterThanOrEqual : rate.QuantityComparison
+| LessThanOrEqual : rate.QuantityComparison
+
+/-- [account_extraction::rate::RateCondition]
+    Source: 'verification/../src/rate.rs', lines 251:0-256:1
+    Visibility: public -/
+structure rate.RateCondition (Role : Type _) (A : Type _) (N : Type _) where
+  «name» : String
+  left : rate.QuantityExpression Role A N
+  comparison : rate.QuantityComparison
+  right : rate.QuantityExpression Role A N
+
+/-- [account_extraction::rate::Rate]
+    Source: 'verification/../src/rate.rs', lines 277:0-287:1
+    Visibility: public -/
+structure rate.Rate (Role : Type _) (A : Type _) (N : Type _) where
+  consume : alloc.collections.btree.map.BTreeMap Role (basket.Basket A N)
+    alloc.alloc.Global
+  produce : alloc.collections.btree.map.BTreeMap Role (basket.Basket A N)
+    alloc.alloc.Global
+  preserve : alloc.collections.btree.map.BTreeMap Role (basket.Basket A N)
+    alloc.alloc.Global
+  roles : alloc.collections.btree.set.BTreeSet Role alloc.alloc.Global
+  distinct : alloc.collections.btree.set.BTreeSet (Role × Role)
+    alloc.alloc.Global
+  computed_consume : alloc.vec.Vec (rate.ComputedAmount Role A N)
+  computed_produce : alloc.vec.Vec (rate.ComputedAmount Role A N)
+  computed_preserve : alloc.vec.Vec (rate.ComputedAmount Role A N)
+  conditions : alloc.vec.Vec (rate.RateCondition Role A N)
+
+/-- [account_extraction::rate::RateError]
+    Source: 'verification/../src/rate.rs', lines 675:0-678:1
+    Visibility: public -/
+@[discriminant isize]
+inductive rate.RateError (Role : Type _) (A : Type _) where
+| BasketOverflow : Role → A → rate.RateError Role A
+
+/-- [account_extraction::rate::{account_extraction::rate::Rate<Role, A, N>}::try_consume::{closure}]
+    Source: 'verification/../src/rate.rs', lines 316:21-316:70 -/
+@[reducible]
+def rate.Rate.try_consume.closure (Role : Type _) (A : Type _) (N : Type _)
+  (Clause5_SignedMeasure : Type _) :=
+  Role
+
+/-- [account_extraction::rate::{account_extraction::rate::Rate<Role, A, N>}::try_produce::{closure}]
+    Source: 'verification/../src/rate.rs', lines 334:21-334:70 -/
+@[reducible]
+def rate.Rate.try_produce.closure (Role : Type _) (A : Type _) (N : Type _)
+  (Clause5_SignedMeasure : Type _) :=
+  Role
+
+/-- [account_extraction::rate::{account_extraction::rate::Rate<Role, A, N>}::try_preserve::{closure}]
+    Source: 'verification/../src/rate.rs', lines 352:21-352:70 -/
+@[reducible]
+def rate.Rate.try_preserve.closure (Role : Type _) (A : Type _) (N : Type _)
+  (Clause5_SignedMeasure : Type _) :=
+  Role
+
+/-- [account_extraction::rate::LinearInvariant]
+    Source: 'verification/../src/rate.rs', lines 681:0-684:1
+    Visibility: public -/
+structure rate.LinearInvariant (A : Type _) where
+  «name» : String
+  weights : indexmap.map.IndexMap A Std.I64 std.hash.random.RandomState
 
 end Axionomy.AccountExtracted

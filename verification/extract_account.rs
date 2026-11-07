@@ -11,6 +11,14 @@ use basket::Basket;
 #[path = "../src/account.rs"]
 mod account;
 use account::{Account, AccountError};
+// Receipt/delta constructors are unused by this extraction entrypoint subset.
+#[allow(dead_code)]
+#[path = "../src/exchange.rs"]
+pub mod exchange;
+use exchange::AccountDelta;
+#[path = "../src/rate.rs"]
+pub mod rate;
+use rate::{LinearInvariant, Rate, RateError};
 
 pub fn deposit<A: Clone + Eq + std::hash::Hash>(
     state: &mut Account<A>,
@@ -59,4 +67,39 @@ pub fn prepare_exchange<A: Clone + Eq + std::hash::Hash>(
     produced: &Basket<A>,
 ) -> Result<Account<A>, AccountError<A>> {
     state.prepare_exchange(consumed, produced)
+}
+
+pub fn weighted(value: &u64, coefficient: i64) -> Option<i128> {
+    value.checked_weighted(coefficient)
+}
+
+pub fn invariant_conserves<AccountId, A: Eq + std::hash::Hash>(
+    invariant: &LinearInvariant<A>,
+    deltas: &[AccountDelta<AccountId, A>],
+) -> Option<bool> {
+    invariant.conserves(deltas)
+}
+
+pub fn rate_consume<Role: Clone + Ord, A: Clone + Eq + std::hash::Hash>(
+    rule: Rate<Role, A>,
+    role: Role,
+    assets: Basket<A>,
+) -> Result<Rate<Role, A>, RateError<Role, A>> {
+    rule.try_consume(role, assets)
+}
+
+pub fn rate_produce<Role: Clone + Ord, A: Clone + Eq + std::hash::Hash>(
+    rule: Rate<Role, A>,
+    role: Role,
+    assets: Basket<A>,
+) -> Result<Rate<Role, A>, RateError<Role, A>> {
+    rule.try_produce(role, assets)
+}
+
+pub fn rate_preserve<Role: Clone + Ord, A: Clone + Eq + std::hash::Hash>(
+    rule: Rate<Role, A>,
+    role: Role,
+    assets: Basket<A>,
+) -> Result<Rate<Role, A>, RateError<Role, A>> {
+    rule.try_preserve(role, assets)
 }

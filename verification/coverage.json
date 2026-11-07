@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "assurance": "Partial implementation verification: Aeneas-extracted production u64 arithmetic, basket construction and operations, account deposit/withdrawal, and per-account exchange staging refine Lean specifications. Collections use explicit trusted models; compiler/translation and primitive models remain trusted. Other core contracts have design proofs and finite Rust conformance.",
+  "assurance": "Partial implementation verification: Aeneas-extracted production u64 arithmetic, basket construction and operations, account deposit/withdrawal, per-account exchange staging, static rate builders, and runtime signed conservation refine Lean specifications. Collections use explicit trusted models; compiler/translation and primitive models remain trusted. Other core contracts have design proofs and finite Rust conformance.",
   "sources": {
     "Cargo.toml": "414a2b181e13225e4b76aa58e70d998064174dde2d8cee603ea3af648d61a7f3",
     "Cargo.lock": "00ef263c160aeebaa49187874a4b11ec94fee9bc8fbea5a2f0cacc190607919c",
@@ -11,11 +11,11 @@
     "src/exchange.rs": "aabae395148c0dd8703b2fc99aa177700eaffd0d8aac602f8a5ffbf7fb09a47b",
     "src/lib.rs": "46d6f713693714650653128e2ceabf8a895b8ad98a38a7bdbeab4ea378a5cc06",
     "src/quantity.rs": "af66b8cf86b6ac58cccd4e9fcfb740e06928f86b4bf6117660fb7f37319b97dd",
-    "src/rate.rs": "516f11fe309ff825f26a6f23b55a01afc6b6fd8cffb65017444a37a3d3bccf93",
+    "src/rate.rs": "94281d1f16794d8c73da68a11fb2e9c503664d19e098a729f35fb522cfd21d27",
     "verification/extract.rs": "415b34f5f4f8aa2679af860bd2a4092c96e113145919160fe7c81e33836de3e0",
     "verification/aeneas-toolchain.json": "8676d7d11be51a6f41984d874b35910e8a1a3d0a18414998feb9402ef80932fb",
     "verification/extract_basket.rs": "dc2b3a2159704c24a5261d0069a2aac7b575f30a94ae35c4c1e96933638592dd",
-    "verification/extract_account.rs": "aeec1933b1c9adc0cfdca4b0b1b2c75167517d303e9f44d28b853156c98f043c",
+    "verification/extract_account.rs": "ee58126eec86bc278699aa2304623d6daee4275eec1c6d22dc348d6a805e4c1c",
     "verification/patches/aeneas-namespaced-discriminant.patch": "fabac7482deb3da6ecaca60c4060dfe9d2114efdd010699e736c4a91267f3bc9"
   },
   "features": [
@@ -42,7 +42,7 @@
       ],
       "limitations": [
         "The generic Nat specifications are proved. The separate u64_checked_arithmetic contract refines the extracted u64 implementation; arbitrary QuantityScalar laws are not proved.",
-        "BigUint/BigInt, signed weighted conversion, serialization, and user-defined trait laws remain legacy refinement gaps."
+        "BigUint/BigInt, serialization, and user-defined trait laws remain legacy refinement gaps. Signed u64 weighting is covered by the separate runtime_linear_conservation implementation contract."
       ]
     },
     {
@@ -220,7 +220,7 @@
         "The actual production deposit, withdrawal, shortfall, basket lookup/insertion, and checked arithmetic call paths are extracted from shared source. For u64 quantities and finite baskets, Lean proves execution without panic/divergence and exact natural-number outcomes, including ordered state and errors. Withdrawal and shortfall require distinct requested asset identifiers, as enforced by the public Basket representation.",
         "Generic assets require total equality agreeing with identity and total identity-preserving Clone. Rust Eq/Clone/Hash trait bounds alone do not establish those laws. Concrete equality and clone dictionaries witness satisfiability; the premises do not assume update correctness.",
         "IndexMap storage, iteration, lookup, insertion, removal, cloning, allocation, and hashing use the explicit ordered-list model. Models invoke supplied equality and asset/value cloning, but physical allocator/hash/hasher-clone/destructor behavior remains trusted. Compiler, MIR, Charon/Aeneas translation and backend primitives are also trusted. See verification/ACCOUNTS.md.",
-        "QuantityMeasure groups exactly the pre-existing SignedMeasure trait bounds and has a blanket implementation; all public Rust scalar requirements remain. The generated account proof retains the QuantityScalar dictionary. Unused formatting, hashing, and signed conversion paths fail closed in the model and are not claimed verified.",
+        "QuantityMeasure groups exactly the pre-existing SignedMeasure trait bounds and has a blanket implementation; all public Rust scalar requirements remain. The generated account proof retains the QuantityScalar dictionary. Unused formatting and hashing paths fail closed in the model. Exact signed conversion is now covered by the separate runtime_linear_conservation contract.",
         "Does not refine arbitrary QuantityScalar backends, BigUint/BigInt, serialization, account cloning as a separate API, account identifiers in Economy, full exchange preparation/commit (per-account staging has a separate refinement contract), or replay. These remain separate contracts.",
         "The pinned Lean backend has a checksum-guarded patch that gives generated discriminant instances fully qualified names. It fixes cross-module name collisions without changing enum values, program translation, or proof semantics; the kernel checks the resulting declarations."
       ],
@@ -324,7 +324,7 @@
         "tests/generic_quantity.rs"
       ],
       "limitations": [
-        "Arbitrary signed mathematical weights are proved. Checked i128 accumulation, intermediate overflow and runtime invariant diagnostic computation remain unproved."
+        "Arbitrary signed mathematical weights are proved algebraically. The separate runtime_linear_conservation implementation contract now covers checked i128 delta accumulation, intermediate overflow and the conservation predicate. Whole-state measurement, caller diagnostic computation and composition with the complete exchange remain unproved."
       ]
     },
     {
@@ -390,6 +390,81 @@
       "limitations": [
         "Lean keeps semantic domains typed; Rust compile-fail examples independently enforce asset/role identity and immutable inspection. This is not a theorem about rustc, dependency code, package resolution or generic backend laws.",
         "Core dependency and lockfile edits invalidate this review, including transitive updates; their implementation correctness is outside the initial proof boundary."
+      ]
+    },
+    {
+      "id": "static_rate_construction",
+      "status": "aeneas_refinement_proved",
+      "sources": [
+        "src/rate.rs",
+        "src/basket.rs",
+        "src/quantity.rs",
+        "verification/extract_account.rs",
+        "verification/aeneas-toolchain.json"
+      ],
+      "extracted_module": "AccountExtraction.Funs",
+      "theorems": [
+        "Axionomy.RateConstruction.locate_restore",
+        "Axionomy.RateConstruction.locate_key",
+        "Axionomy.RateConstruction.registered",
+        "Axionomy.RateConstruction.merge_success",
+        "Axionomy.RateConstructionRefinement.u64Ordering_lawful",
+        "Axionomy.RateConstructionRefinement.u64Ordering_identity",
+        "Axionomy.RateConstructionRefinement.merge_refines",
+        "Axionomy.RateConstructionRefinement.consume_refines",
+        "Axionomy.RateConstructionRefinement.produce_refines",
+        "Axionomy.RateConstructionRefinement.preserve_refines",
+        "Axionomy.RateConstructionRefinement.consume_registers_and_frames",
+        "Axionomy.RateConstructionRefinement.produce_registers_and_frames",
+        "Axionomy.RateConstructionRefinement.preserve_registers_and_frames"
+      ],
+      "rust_tests": [
+        "tests/lean_conformance.rs",
+        "tests/economy.rs"
+      ],
+      "limitations": [
+        "Shared-source extraction covers try_consume, try_produce and try_preserve for u64 quantities. Theorems prove total execution, exact ordered basket merge/error results, role registration including empty baskets, and unchanged other effect maps, distinctness declarations, computed effects and conditions. Private merge entry/backward-function behavior is proved explicitly.",
+        "Roles and assets remain separate generic types. Asset equality and asset/role cloning must satisfy the existing identity/totality laws. Role comparison must terminate and agree with the pure comparator; registered-role identity additionally requires comparison equality to imply identity. Concrete u64 ordering witnesses show these premises are satisfiable. Existing arithmetic refinement relates bounded u64 additions to natural numbers.",
+        "BTreeMap/BTreeSet use a new explicit sorted-list model with occupied/vacant entry positions, stored-key retention and default insertion. Applying the model assumes valid ordered collections, lawful total ordering, allocator/tree correctness, clone isolation and the compiler/MIR/Charon/Aeneas/backend boundary. Physical tree code is not verified. See verification/ACCOUNTS.md.",
+        "Only private local bindings were renamed in production for extraction. Full Rate::new/Default, infallible convenience-constructor panic contracts, computed role/parameter/asset discovery, distinct-role construction, EconomyBuilder validation and serialization remain separate open contracts."
+      ]
+    },
+    {
+      "id": "runtime_linear_conservation",
+      "status": "aeneas_refinement_proved",
+      "sources": [
+        "src/rate.rs",
+        "src/quantity.rs",
+        "src/exchange.rs",
+        "verification/extract_account.rs",
+        "verification/aeneas-toolchain.json"
+      ],
+      "extracted_module": "AccountExtraction.Funs",
+      "theorems": [
+        "Axionomy.Conservation.checkedAdd_exact",
+        "Axionomy.Conservation.accumulate_exact",
+        "Axionomy.Conservation.totals_exact",
+        "Axionomy.Conservation.conservation_sound",
+        "Axionomy.Conservation.map_accumulate",
+        "Axionomy.Conservation.map_totals",
+        "Axionomy.ConservationRefinement.widen_value",
+        "Axionomy.ConservationRefinement.weighted_bounds",
+        "Axionomy.ConservationRefinement.weighted_exact",
+        "Axionomy.ConservationRefinement.signed_add_exact",
+        "Axionomy.ConservationRefinement.accumulate_call",
+        "Axionomy.ConservationRefinement.conserves_refines_integers",
+        "Axionomy.ConservationRefinement.accepted_conserves"
+      ],
+      "rust_tests": [
+        "src/rate.rs",
+        "tests/economy.rs",
+        "tests/generic_quantity.rs"
+      ],
+      "limitations": [
+        "The production LinearInvariant::conserves path and both nested loops are extracted for u64/i128. For all u64 quantities and i64 weights, Lean proves exact widening/weighting, checked intermediate addition, total execution and exact Option Bool agreement with an ordered mathematical Int specification. Some(true) implies equal mathematical weighted consumed/produced totals. None represents intermediate overflow, including cancellation-sensitive order.",
+        "Asset equality is total and agrees with identity. Account IDs and assets remain separate types; preserved quantities are retained in the typed delta but not counted as transfers. Missing weights contribute zero. IndexMap and slice iteration use the documented logical collection/backend models; compiler/MIR, Charon/Aeneas, primitive conversion semantics, allocation and physical storage remain trusted. No new axioms or success premises are introduced.",
+        "The u64-to-i128 adapter now implements exact widening instead of failing closed, and Option try adapters propagate Some/None. Formatting and hash internals still fail closed. The proof does not claim physical collection correctness.",
+        "Whole-state LinearInvariant::measure, invariant weight construction, economy caller classification/diagnostic totals, aggregation/staging prerequisites and complete exchange conservation composition remain open. BigUint/BigInt and custom QuantityScalar/QuantityMeasure laws are separate obligations."
       ]
     }
   ]

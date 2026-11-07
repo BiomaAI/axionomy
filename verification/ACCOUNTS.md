@@ -91,9 +91,9 @@ The account proof extends the [basket collection abstraction](BASKETS.md):
 - Option cloning/default combinators have explicit models. Actual account
   control flow, shortfall computation, checked arithmetic, `expect` calls, and
   assignment of the committed account are extracted, not external models.
-- Unused hash internals, formatting, and signed conversion return execution
-  failure in the model. The successful account proofs do not execute them and
-  do not certify these unrelated operations.
+- Unused hash internals and formatting return execution failure in the model.
+  The shared pipeline now models exact u64-to-i128 widening for the separate
+  conservation proof; account updates do not execute that conversion.
 
 All generated and handwritten Axionomy declarations undergo the transitive
 axiom audit. Models are definitions; no new axioms, unfinished proofs, or premises
@@ -170,3 +170,43 @@ fork isolation. Full depletion followed by reproduction must succeed even at
 integration checks, not universal whole-economy proofs. An isolated mutation
 reverses deposit and withdrawal; regeneration must compile and its refinement
 proof must fail.
+
+## Shared pipeline: rates and conservation
+
+The harness also includes the exact production `rate.rs` and `exchange.rs`
+modules. Its new entrypoints only forward to the three fallible static rate
+builders, u64 weighting, and `LinearInvariant::conserves`. Local `basket` and
+`quantity` bindings in private rate helpers were renamed to `assets` and `amount`
+to avoid shadowing generated namespaces; no Rust bounds or algorithms changed.
+
+`RateConstructionRefinement` composes the existing basket addition proof with
+entry borrowing and its backward functions. Its exact outcomes include ordered
+asset overflow and unchanged unrelated rate fields. Even an empty basket registers
+a role. The private merge model inserts the default empty basket before merging,
+matching Rust's entry API even on error; the public consuming builder returns no
+partially built rate on failure.
+
+BTree maps/sets use sorted lists and invoke the supplied role comparison.
+Occupied entries retain their stored key. Vacant entries remember insertion
+position, and backward functions restore the preceding/following entries.
+`locate_restore` and `locate_key` prove the position/frame contracts; the builder
+proofs require total identity-preserving cloning and comparison agreeing with a
+pure comparator. The registered-role theorem additionally requires comparison
+equality to imply key identity. Applying these models to Rust assumes valid
+sorted storage and lawful total ordering, as well as allocation/tree correctness.
+The translation does not verify the standard library's tree internals.
+
+`ConservationRefinement` proves exact widening and multiplication for all u64
+quantities and i64 coefficients, exact checked i128 addition, and total execution
+of both conservation loops. It relates the result to a mathematical integer
+specification with intermediate bounds, not just a final unbounded sum.
+`accepted_conserves` states equality of weighted mathematical totals on success.
+The Option try adapters propagate failure explicitly. None of these adapters or
+proofs adds an axiom. Whole-state measurements and economy diagnostics remain
+separate obligations, as do BigUint/BigInt and custom backend laws.
+
+Fresh extraction, external-interface checksums, the Lean kernel/axiom audit,
+464 conservation fixtures and 56 merge fixtures (each run through three builders)
+cover the new paths. Negative controls reverse the conservation result and discard
+a rate overflow: the regenerated Rust programs compile, but their implementation
+proofs must fail.

@@ -39,7 +39,23 @@ helper clones an account, withdraws consumed assets, and deposits produced asset
 Its Aeneas extraction returns exactly the specified new account or error; a later
 deposit overflow returns no partially prepared account. Rust's immutable source
 borrow complements the proof. This does not yet verify the multi-account commit,
-effect aggregation, preservation preflight, or invariant validation.
+effect aggregation, preservation preflight, or the caller’s invariant diagnostics.
+
+Static rate builders (`try_consume`, `try_produce`, `try_preserve`) now have
+implementation proofs for exact basket merging, ordered overflow errors, role
+registration, and unchanged other fields. Roles remain a separate type from
+assets. These paths use an explicit sorted logical `BTreeMap`/`BTreeSet` model;
+physical trees, lawful ordering, allocation and cloning remain trust boundaries.
+This does not yet cover computed-role discovery or full model construction.
+
+The runtime `LinearInvariant::conserves` path is also extracted and proved:
+every `u64 × i64` contribution fits in `i128`, every intermediate addition is
+checked, and the result is exactly the ordered integer specification. `None`
+means an intermediate overflow; `Some(false)` means unequal totals;
+`Some(true)` implies equal mathematical weighted consumed/produced totals.
+The proof covers both nested loops, missing weights (zero), negative weights,
+empty deltas and preserved baskets being excluded from transferred quantities.
+Whole-state `measure`, diagnostic construction and the economy caller remain open.
 
 The other core contracts still have handwritten design proofs and finite Rust
 conformance tests. Neither an entire source module nor every existing core
@@ -68,6 +84,8 @@ The current library covers:
 | `Account` / `AccountMap` | Atomic rejection, exact positive shortfalls, selected-asset update frame property, and arithmetic representation conversion |
 | `Quantity` | Exact checked addition/multiplication, subtraction without underflow, floor division, asset-qualified amount round trip |
 | `State` | Typed account/asset updates and frame property, zero canonicalization, complete scalar shortfall, hidden-account projection, observation noninterference, monotone goals |
+| `RateConstruction` / `RateConstructionRefinement` | Extracted static builders, exact per-role merges/errors, role registration and unchanged rate fields under the sorted collection model |
+| `Conservation` / `ConservationRefinement` | Extracted runtime invariant check, exact signed widening/weighting, intermediate overflow and mathematical conservation on acceptance |
 | `Rates` | Checked expression evaluation refines mathematical evaluation and bounds its result; effect merging is associative/commutative in exact arithmetic; preservation does not scale |
 | `Exchange` | Exact prepared deltas, preserved resources, assessment/application agreement, atomic rejection, output bounds, signed weighted conservation |
 | `Replay` | Trace concatenation, deterministic outcomes, invariant induction given an invariant-preserving step |
@@ -93,13 +111,13 @@ to `origin/main`; theorem counts do not measure percentage completion.
 | Milestone | Item | Remaining contract | Status |
 | --- | --- | --- | --- |
 | 1. u64 transaction kernel | 1 | Basket addition/scaling, containment/equality, canonical representation preservation | Implementation proved under documented models |
-| 1 | 2 | Model/rate construction, duplicate IDs, role/parameter/asset discovery, distinct roles | Open |
+| 1 | 2 | Model/rate construction, duplicate IDs, role/parameter/asset discovery, distinct roles | Static builders proved; model/discovery open |
 | 1 | 3 | Exchange units, rate/account existence, binding/parameter validation | Open |
 | 1 | 4 | Full expression/condition evaluation against the original snapshot | Design proofs |
 | 1 | 5 | Account effect aggregation, bounded scaling/merging, computed-effect semantics | Design proofs |
 | 1 | 6 | Consumption plus preservation availability and complete shortfalls | Design proofs |
 | 1 | 7 | Complete preparation, unique affected accounts, established staging preconditions | Per-account staging proved |
-| 1 | 8 | Runtime signed conservation, intermediate i128 overflow, error classification | Design proofs |
+| 1 | 8 | Runtime signed conservation, intermediate i128 overflow, error classification | Predicate proved; caller diagnostics/measure open |
 | 1 | 9 | Multi-account atomic commit, unchanged frame, safe prepared-account lookups | Design proofs |
 | 1 | 10 | Assessment/application agreement, filtering, immutability, exact diagnostics/order | Design proofs |
 | 1 | 11 | Receipts/deltas agree with the actual proposal and committed changes | Partial design proofs |
@@ -192,7 +210,12 @@ Separate existing Rust tests cover additional behavior.
 
 The basket operation specification adds 654 cases for addition, scaling,
 containment, and equality. It checks ordered results and errors, zero
-canonicalization, and unchanged inputs.
+canonicalization, and unchanged inputs. Another 56 rate-merge cases run through
+all three builders, checking registered roles and unaffected effect maps. The
+464 signed-conservation cases include both i64 extremes, missing/zero weights,
+positive and negative overflow, cancellation reordered within/across accounts,
+and all three outcomes. The private conservation method is exercised directly
+by a crate unit test included in the proof gate.
 
 ## Explicit legacy refinement gaps
 
@@ -200,25 +223,26 @@ The following existed before this proof requirement and are not discharged by
 the initial theorems. They are a backfill plan, not an exemption for new behavior:
 
 - Charon/Aeneas extraction and refinement beyond the four `Quantity<u64>` checked
-  arithmetic operations, basket construction, account deposit/withdrawal, and
-  per-account exchange staging, including the remaining exchange `expect` and
+  arithmetic operations, basket construction/operations, account updates/staging,
+  static rate builders and the runtime conservation predicate, including the remaining exchange `expect` and
   termination obligations.
 - Correctness of `IndexMap`, `BTreeMap`, `Arc`, iterator order, allocation, cloning,
   and copy-on-write isolation; Rust compilation still enforces its ownership rules.
 - Full structural validation: required/unknown roles and parameters, account/rate
   existence, distinct bindings, duplicate model IDs, and aggregate overflow.
-- Sparse finite-map operations beyond the proved constructor, serialization/schema round trips,
+- Remaining finite-map adapters, serialization/schema round trips,
   canonical state/observation ordering, and fingerprints. Fingerprints are not
   collision-free identities and must not be given such a theorem.
-- Refinement of checked signed invariant accumulation to mathematical `Int`,
-  including intermediate `i128` overflow and error classification.
+- Whole-state invariant measurement, caller error classification and before/after
+  diagnostic totals. The delta-based conservation predicate and its intermediate
+  `i128` overflow now have implementation proofs.
 - Laws for custom `QuantityScalar` backends and BigUint/BigInt implementations.
   Rust trait bounds specify operations, not their algebraic correctness.
 - Complete diagnostic/error ordering, receipts, and Rust replay/fork refinement.
   Rust `replay` retains an accepted prefix on failure; `replayed` protects its source.
 
 For further implementation proofs, extend the pinned Aeneas pipeline from u64
-arithmetic, baskets, accounts, and account staging to complete exchange preparation and commit, connecting
+arithmetic, baskets, accounts, static rates and conservation to complete exchange preparation and commit, connecting
 extracted definitions to the existing specifications. Model unavoidable external dependencies explicitly and
 report their trust status. Do not maintain a second Rust algorithm only for proofs
 or change the public API to an untyped representation to satisfy extraction.

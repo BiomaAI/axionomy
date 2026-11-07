@@ -5,9 +5,15 @@ namespace Axionomy.AccountExtracted
 open Aeneas Aeneas.Std
 set_option linter.dupNamespace false
 
--- Unobserved formatting, hashing and signed conversion fail closed. Account
--- updates never call these paths under the logical collection model.
-def I128.Insts.CoreConvertFromU64.from (_ : Std.U64) : Result Std.I128 := .fail .panic
+-- Widening a u64 to i128 is exact. Formatting and hash internals still fail
+-- closed; logical collection operations do not execute those paths.
+def widenU64 (value : Std.U64) : Std.I128 :=
+  IScalar.ofIntCore (Int.ofNat value.val) (by
+    have h := value.hBounds
+    simp only [UScalarTy.numBits] at h
+    norm_num [IScalarTy.numBits]
+    omega)
+def I128.Insts.CoreConvertFromU64.from (value : Std.U64) : Result Std.I128 := .ok (widenU64 value)
 def I128.Insts.CoreFmtDisplay.fmt (_ : Std.I128) (_ : core.fmt.Formatter) :
     Result (core.result.Result Unit core.fmt.Error × core.fmt.Formatter) := .fail .panic
 def U64.Insts.CoreHashHash.hash {H : Type} (_ : core.hash.Hasher H)
@@ -37,6 +43,16 @@ def core.option.Option.Insts.CoreCmpPartialEqOption.eq {T : Type}
   | none, none => .ok true
   | some left, some right => inst.eq left right
   | _, _ => .ok false
+
+def core.option.Option.Insts.CoreOpsTry_traitTry.branch {T : Type} :
+    Option T → Result (core.ops.control_flow.ControlFlow (Option Never) T)
+  | some value => .ok (.Continue value)
+  | none => .ok (.Break none)
+
+def core.option.Option.Insts.CoreOpsTry_traitFromResidualOptionNever.from_residual
+    (T : Type) : Option Never → Result (Option T)
+  | none => .ok none
+  | some impossible => nomatch impossible
 
 def std.hash.random.RandomState.Insts.CoreCloneClone.clone
     (state : std.hash.random.RandomState) : Result std.hash.random.RandomState := .ok state
@@ -119,5 +135,62 @@ def indexmap.map.IndexMap.shift_remove {K V S Q H : Type}
     (_ : core.hash.BuildHasher S H) (_ : core.hash.Hash Q) (eq : equivalent.Equivalent Q K)
     (entries : indexmap.map.IndexMap K V S) (query : Q) : Result (Option V × indexmap.map.IndexMap K V S) :=
   mapRemove eq.equivalent query entries
+
+def treePrepend {K V Alloc : Type} (entry : K × V) :
+    alloc.collections.btree.map.entry.Entry K V Alloc → alloc.collections.btree.map.entry.Entry K V Alloc
+  | .Vacant position => .Vacant { position with before := entry :: position.before }
+  | .Occupied position => .Occupied { position with before := entry :: position.before }
+
+def treeLocate {K V Alloc : Type} (cmp : K → K → Result Ordering) (query : K) :
+    List (K × V) → Result (alloc.collections.btree.map.entry.Entry K V Alloc)
+  | [] => .ok (.Vacant ⟨[], query, []⟩)
+  | (key, value) :: rest => do
+    let order ← cmp query key
+    match order with
+    | .lt => .ok (.Vacant ⟨[], query, (key, value) :: rest⟩)
+    | .eq => .ok (.Occupied ⟨[], key, value, rest⟩)
+    | .gt =>
+      let position ← treeLocate cmp query rest
+      .ok (treePrepend (key, value) position)
+
+def treeRestore {K V Alloc : Type} : alloc.collections.btree.map.entry.Entry K V Alloc → List (K × V)
+  | .Vacant position => position.before ++ position.after
+  | .Occupied position => position.before ++ (position.key, position.value) :: position.after
+
+def alloc.collections.btree.map.BTreeMap.entry {K V Alloc : Type}
+    (_ : core.alloc.AllocatorClone Alloc) (ordInst : core.cmp.Ord K)
+    (entries : alloc.collections.btree.map.BTreeMap K V Alloc) (key : K) :
+    Result (alloc.collections.btree.map.entry.Entry K V Alloc ×
+      (alloc.collections.btree.map.entry.Entry K V Alloc → alloc.collections.btree.map.BTreeMap K V Alloc)) := do
+  let position ← treeLocate ordInst.cmp key entries
+  .ok (position, treeRestore)
+
+def alloc.collections.btree.map.entry.Entry.or_default {K V Alloc : Type}
+    (_ : core.cmp.Ord K) (defaultInst : core.default.Default V) (_ : core.alloc.AllocatorClone Alloc)
+    (position : alloc.collections.btree.map.entry.Entry K V Alloc) :
+    Result (V × (V → alloc.collections.btree.map.entry.Entry K V Alloc)) := do
+  match position with
+  | .Occupied entry => .ok (entry.value, fun value => .Occupied { entry with value })
+  | .Vacant entry =>
+    let value ← defaultInst.default
+    .ok (value, fun updated => .Occupied ⟨entry.before, entry.key, updated, entry.after⟩)
+
+def sortedInsert {K : Type} (cmp : K → K → Result Ordering) (value : K) :
+    List K → Result (Bool × List K)
+  | [] => .ok (true, [value])
+  | key :: rest => do
+    let order ← cmp value key
+    match order with
+    | .lt => .ok (true, value :: key :: rest)
+    | .eq => .ok (false, key :: rest)
+    | .gt =>
+      let (inserted, updated) ← sortedInsert cmp value rest
+      .ok (inserted, key :: updated)
+
+def alloc.collections.btree.set.BTreeSet.insert {K Alloc : Type}
+    (_ : core.alloc.AllocatorClone Alloc) (ordInst : core.cmp.Ord K)
+    (entries : alloc.collections.btree.set.BTreeSet K Alloc) (value : K) :
+    Result (Bool × alloc.collections.btree.set.BTreeSet K Alloc) :=
+  sortedInsert ordInst.cmp value entries
 
 end Axionomy.AccountExtracted

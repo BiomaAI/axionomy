@@ -55,6 +55,17 @@ class ExtractionBoundaryTests(unittest.TestCase):
 
 
 class ProductionMutationTests(unittest.TestCase):
+    def test_reversed_conservation_breaks_the_runtime_proof(self):
+        self.check_mutation(
+            "src/rate.rs", "Some(consumed == produced)", "Some(consumed != produced)",
+            "extract_account.py", "stale account model", "ConservationRefinement", "AccountExtraction")
+
+    def test_ignored_rate_overflow_breaks_the_builder_proof(self):
+        original = "target.entry(role).or_default().checked_add(&assets)"
+        self.check_mutation(
+            "src/rate.rs", original, "let _ = " + original + ";\n    Ok(())",
+            "extract_account.py", "stale account model", "RateConstructionRefinement", "AccountExtraction")
+
     def test_partial_basket_addition_breaks_the_basket_operations_proof(self):
         original = """let Some(amount) = updated.quantity(asset).checked_add(amount) else {
                 return Err(asset.clone());"""

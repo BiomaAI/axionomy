@@ -4,6 +4,8 @@ import Axionomy.Rates
 import Axionomy.Basket
 import Axionomy.Account
 import Axionomy.BasketOperations
+import Axionomy.Conservation
+import Axionomy.RateConstruction
 
 /-! Deterministic executable examples from the SAME definitions used in the
 proofs. Rust runs these examples through the public API. Agreement on these
@@ -126,6 +128,49 @@ def basketOpsCase (before other : List (Nat × Nat)) (units : Nat) : BasketOpsCa
   ⟨strings before, strings other, toString units, strings added.2, addError, scaleResult.1,
     scaleResult.2, (Account.shortfall ops before other).isEmpty, BasketOperations.equal before other⟩
 
+structure ConservationDeltaCase where
+  account : Nat
+  consumed : List (Nat × String)
+  produced : List (Nat × String)
+  preserved : List (Nat × String)
+  deriving ToJson
+
+structure ConservationCase where
+  weights : List (Nat × String)
+  deltas : List ConservationDeltaCase
+  conserved : Option Bool
+  deriving ToJson
+
+def conservationCase (weights : List (Nat × Int))
+    (deltas : List (Conservation.Delta Nat Nat Nat)) : ConservationCase :=
+  let strings := fun entries : List (Nat × Nat) =>
+    entries.map (fun (asset, amount) => (asset, toString amount))
+  ⟨weights.map (fun (asset, weight) => (asset, toString weight)),
+    deltas.map (fun d => ⟨d.account, strings d.consumed, strings d.produced, strings d.preserved⟩),
+    Conservation.conserves (fun a q => some (Conservation.contribution weights a q))
+      Conservation.checkedAdd 0 deltas⟩
+
+structure RateMergeCase where
+  target : List (Nat × List (Nat × String))
+  role : Nat
+  assets : List (Nat × String)
+  merged : Option (List (Nat × List (Nat × String)))
+  overflow : Option Nat
+  roles : List Nat
+  deriving ToJson
+
+def rateMergeCase (target : List (Nat × List (Nat × Nat))) (role : Nat)
+    (assets : List (Nat × Nat)) : RateMergeCase :=
+  let assets := Basket.canonical assets
+  let strings := fun entries : List (Nat × Nat) => entries.map fun (asset, amount) => (asset, toString amount)
+  let maps := fun entries : List (Nat × List (Nat × Nat)) => entries.map fun (r, b) => (r, strings b)
+  let result := RateConstruction.merge (Account.naturals Quantity.u64Max) compare target role assets
+  let outcome := match result with
+    | .error asset => (none, some asset)
+    | .ok merged => (some (maps merged), none)
+  ⟨maps target, role, strings assets, outcome.1, outcome.2,
+    RateConstruction.register compare role (target.map Prod.fst)⟩
+
 def main : IO Unit := do
   let limit := Quantity.u64Max
   let boundaries := [0, 1, 2, 3, limit - 1, limit]
@@ -221,7 +266,35 @@ def main : IO Unit := do
       ([(0, 1)], [(1, 1)], 1), ([(0, 0)], [], limit),
       ([(0, 2), (1, limit)], [(0, 1), (1, 1)], 2)] do
     basketOps := basketOps.push (basketOpsCase before other units)
+  let mut conservation : Array ConservationCase := #[]
+  let coefficients : List Int := [-(2^63), -1, 0, 1, 2^63 - 1]
+  for firstWeight in coefficients do
+    for secondWeight in coefficients do
+      for first in [0, 1, limit] do
+        for second in [0, 1, limit] do
+          for same in [false, true] do
+            let consumed := Basket.canonical [(0, first), (1, second), (2, limit)]
+            let produced := if same then consumed else Basket.canonical [(0, second), (1, first)]
+            conservation := conservation.push (conservationCase [(0, firstWeight), (1, secondWeight)]
+              [⟨0, consumed, produced, [(3, limit)]⟩])
+  conservation := conservation.push (conservationCase [] [])
+  for sign in [(1 : Int), -1] do
+    let weights := [(0, sign * (2^63 - 1)), (1, sign * (2^63 - 1)), (2, -sign * (2^63 - 1))]
+    for order in [[0, 1, 2], [0, 2, 1], [2, 0, 1]] do
+      let entries := order.map (fun asset => (asset, limit))
+      conservation := conservation.push (conservationCase weights [⟨0, entries, entries, []⟩])
+      conservation := conservation.push (conservationCase weights
+        (entries.map fun (asset, amount) => ⟨asset, [(asset, amount)], [(asset, amount)], []⟩))
+  -- Negative products have a slightly larger magnitude at i64::MIN.
+  conservation := conservation.push (conservationCase [(0, -(2^63)), (1, -(2^63))]
+    [⟨0, [(0, limit)], [], []⟩, ⟨1, [(1, limit)], [], []⟩])
+  let mut rateMerges : Array RateMergeCase := #[]
+  for target in [[], [(0, [(0, 1)]), (2, [(1, limit)])]] do
+    for role in [0, 1, 2, 3] do
+      for assets in [[], [(0, 0)], [(0, 1)], [(1, 1)], [(0, limit)], [(1, limit)], [(0, 1), (1, 1)]] do
+        rateMerges := rateMerges.push (rateMergeCase target role assets)
   let document := Json.mkObj [("version", toJson (1 : Nat)), ("scalars", toJson scalars),
     ("exchanges", toJson exchanges), ("expressions", toJson expressions), ("baskets", toJson baskets),
-    ("accounts", toJson accounts), ("preparations", toJson preparations), ("basketOps", toJson basketOps)]
+    ("accounts", toJson accounts), ("preparations", toJson preparations), ("basketOps", toJson basketOps),
+    ("conservation", toJson conservation), ("rateMerges", toJson rateMerges)]
   IO.println document.compress

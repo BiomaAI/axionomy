@@ -50,6 +50,15 @@ def validate_coverage(root, coverage):
             # These are the implemented extraction pipelines. Future
             # claims need their own regeneration and trust-boundary checks.
             pipelines = {
+                "static_rate_construction": ("AccountExtraction.Funs", {
+                    f"Axionomy.RateConstructionRefinement.{kind}_{contract}"
+                    for kind in ("consume", "produce", "preserve")
+                    for contract in ("refines", "registers_and_frames")}),
+                "runtime_linear_conservation": ("AccountExtraction.Funs", {
+                    "Axionomy.ConservationRefinement.weighted_exact",
+                    "Axionomy.ConservationRefinement.signed_add_exact",
+                    "Axionomy.ConservationRefinement.conserves_refines_integers",
+                    "Axionomy.ConservationRefinement.accepted_conserves"}),
                 "u64_checked_arithmetic": ("QuantityExtraction.Funs", {
                     f"Axionomy.QuantityRefinement.checked_{op}_refines"
                     for op in ("add", "sub", "mul", "div")}),
@@ -135,9 +144,11 @@ def main():
     if generated != committed:
         raise ValueError("Lean conformance cases are stale; regenerate them from Conformance.lean and review the diff")
     run("cargo", "test", "-p", "axionomy", "--all-features", "--test", "lean_conformance")
+    run("cargo", "test", "-p", "axionomy", "--all-features", "--lib",
+        "runtime_signed_conservation_matches_lean")
     run("cargo", "test", "-p", "axionomy", "--all-features", "--doc")
     print(f"Verified {len(theorems)} registered theorems and their axiom dependencies, "
-          "fresh Aeneas extraction of u64 arithmetic, basket construction/operations, account updates and exchange account staging, "
+          "fresh Aeneas extraction of u64 arithmetic, basket construction/operations, account updates/staging, static rate builders and signed conservation, "
           "and Rust conformance/type checks. Collection storage uses an explicit trusted model. "
           "Other core implementation refinement remains unproved; see verification/README.md.")
 

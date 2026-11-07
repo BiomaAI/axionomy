@@ -17,6 +17,86 @@ struct Fixtures {
     preparations: Vec<PreparationCase>,
     #[serde(rename = "basketOps")]
     basket_ops: Vec<BasketOpsCase>,
+    #[serde(rename = "rateMerges")]
+    rate_merges: Vec<RateMergeCase>,
+}
+
+type RateEffectEntries = Vec<(u64, Vec<(u64, String)>)>;
+
+#[derive(Debug, Deserialize)]
+struct RateMergeCase {
+    target: RateEffectEntries,
+    role: u64,
+    assets: Vec<(u64, String)>,
+    merged: Option<RateEffectEntries>,
+    overflow: Option<u64>,
+    roles: Vec<u64>,
+}
+
+#[test]
+fn rate_builders_match_lean() {
+    fn build(entries: &[(u64, String)]) -> Basket<u64> {
+        Basket::try_from_entries(entries.iter().map(|(a, q)| (*a, Quantity::new(number(q)))))
+            .unwrap()
+    }
+    fn entries(assets: &Basket<u64>) -> Vec<(u64, String)> {
+        assets.iter().map(|(a, q)| (*a, q.to_string())).collect()
+    }
+    let cases = fixtures().rate_merges;
+    assert_eq!(cases.len(), 56);
+    for case in cases {
+        let mut original = Rate::new();
+        for (role, assets) in &case.target {
+            original = original
+                .consume(*role, build(assets))
+                .produce(*role, build(assets))
+                .preserve(*role, build(assets));
+        }
+        for kind in 0..3 {
+            let updated = match kind {
+                0 => original.clone().try_consume(case.role, build(&case.assets)),
+                1 => original.clone().try_produce(case.role, build(&case.assets)),
+                _ => original
+                    .clone()
+                    .try_preserve(case.role, build(&case.assets)),
+            };
+            match (updated, &case.merged, case.overflow) {
+                (
+                    Err(axionomy::RateError::BasketOverflow { role, asset }),
+                    None,
+                    Some(expected),
+                ) => {
+                    assert_eq!((role, asset), (case.role, expected), "{case:?}");
+                }
+                (Ok(updated), Some(expected), None) => {
+                    assert_eq!(updated.roles().copied().collect::<Vec<_>>(), case.roles);
+                    for field in 0..3 {
+                        let actual: Vec<_> = updated
+                            .roles()
+                            .filter_map(|role| {
+                                let assets = match field {
+                                    0 => updated.consumed(role),
+                                    1 => updated.produced(role),
+                                    _ => updated.preserved(role),
+                                }?;
+                                Some((*role, entries(assets)))
+                            })
+                            .collect();
+                        assert_eq!(
+                            &actual,
+                            if field == kind {
+                                expected
+                            } else {
+                                &case.target
+                            },
+                            "field={field}, kind={kind}, {case:?}"
+                        );
+                    }
+                }
+                (actual, _, _) => panic!("rate disagrees with Lean: {case:?}: {actual:?}"),
+            }
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]

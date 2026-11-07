@@ -18,8 +18,8 @@ GENERATED = {
     "AccountExtraction.lean": "AccountExtraction.lean",
 }
 TEMPLATES = {
-    "TypesExternal_Template.lean": "86560f493b0b74e2a8e17c56566a8a967907b37a9f1ea962fe6cfc297dc22817",
-    "FunsExternal_Template.lean": "f2fba8f92acf16f9f8b14cfa0d9f4b3b464b6a396686748b3998d341bd526c42",
+    "TypesExternal_Template.lean": "95167ba681fa007ed7699a737b041426bdbd589211eb5fdeff65c91606ac92f3",
+    "FunsExternal_Template.lean": "781deb8e5a3821f6efa7b02788424b0a930eea6826f3e467a27522e66614689e",
 }
 
 # The caller remains outside the extraction. Keep its exact staging handoff
@@ -44,6 +44,11 @@ ENTRY_CALLS = {
     "basket_scale": "state.checked_scale(units)",
     "basket_contains": "state.contains(required)",
     "basket_equal": "left==right",
+    "weighted": "value.checked_weighted(coefficient)",
+    "invariant_conserves": "invariant.conserves(deltas)",
+    "rate_consume": "rule.try_consume(role,assets)",
+    "rate_produce": "rule.try_produce(role,assets)",
+    "rate_preserve": "rule.try_preserve(role,assets)",
 }
 
 
@@ -51,7 +56,8 @@ def validate_bridge(root=ROOT):
     """Require the harness to forward to the unchanged production methods."""
     harness = (root / "verification/extract_account.rs").read_text()
     paths = re.findall(r'#\[path\s*=\s*"([^"]+)"\]', harness)
-    if sorted(paths) != ["../src/account.rs", "../src/amount.rs", "../src/basket.rs", "../src/quantity.rs"]:
+    if sorted(paths) != ["../src/account.rs", "../src/amount.rs", "../src/basket.rs", "../src/exchange.rs",
+                         "../src/quantity.rs", "../src/rate.rs"]:
         raise ValueError("account extraction must include the exact production source files")
     for operation, call in ENTRY_CALLS.items():
         matches = re.findall(r"\bfn " + operation + r"\b[^{}]*\{([^{}]*)\}", harness)
@@ -81,7 +87,11 @@ def validate_generated(directory):
                   "basket.Basket.insert", "basket.Basket.checked_add", "basket.Basket.checked_add_loop.body",
                   "basket.Basket.checked_scale", "basket.Basket.checked_scale_loop.body", "basket.Basket.contains",
                   "basket.Basket.Insts.CoreCmpPartialEqBasket.eq", "basket.Basket.Insts.CoreCmpPartialEqBasket.eq_loop.body",
-                  "quantity.Quantity.checked_add", "quantity.Quantity.checked_sub", "quantity.Quantity.checked_mul"):
+                  "quantity.Quantity.checked_add", "quantity.Quantity.checked_sub", "quantity.Quantity.checked_mul",
+                  "rate.merge", "rate.Rate.try_consume", "rate.Rate.try_produce", "rate.Rate.try_preserve",
+                  "rate.LinearInvariant.checked_add_basket_measure_loop.body",
+                  "rate.LinearInvariant.conserves_loop.body", "rate.LinearInvariant.conserves",
+                  "U64.Insts.Account_extractionQuantityQuantityScalarI128.checked_weighted"):
         if not re.search(r"^def " + re.escape(entry) + r"\s", functions, re.MULTILINE):
             raise ValueError(f"missing account production definition: {entry}")
 
@@ -121,6 +131,7 @@ def check_extraction(write=False):
                    "--mir", "promoted", "--sysroot", "default",
                    "--include", "account_extraction::account", "--include", "account_extraction::basket",
                    "--include", "account_extraction::quantity",
+                   "--include", "account_extraction::rate", "--include", "account_extraction::exchange",
                    "--include", "num_traits", "--opaque", "indexmap",
                    "--dest-file", str(llbc), "--", "--locked", "-p", "axionomy",
                    "--example", "account_extraction", "--no-default-features"]

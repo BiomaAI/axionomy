@@ -534,14 +534,14 @@ where
 fn merge<Role, A, N>(
     target: &mut BTreeMap<Role, Basket<A, N>>,
     role: Role,
-    basket: Basket<A, N>,
+    assets: Basket<A, N>,
 ) -> Result<(), A>
 where
     Role: Ord,
     A: Clone + Eq + Hash,
     N: QuantityScalar,
 {
-    target.entry(role).or_default().checked_add(&basket)
+    target.entry(role).or_default().checked_add(&assets)
 }
 
 impl<Role, A, N> Serialize for Rate<Role, A, N>
@@ -722,9 +722,9 @@ where
     {
         let mut total = N::SignedMeasure::zero();
         for account in accounts.values() {
-            for (asset, quantity) in account.as_ref().balances().iter() {
+            for (asset, amount) in account.as_ref().balances().iter() {
                 let coefficient = *self.weights.get(asset).unwrap_or(&0);
-                let weighted = quantity.as_scalar().checked_weighted(coefficient)?;
+                let weighted = amount.as_scalar().checked_weighted(coefficient)?;
                 total = CheckedAdd::checked_add(&total, &weighted)?;
             }
         }
@@ -756,14 +756,14 @@ where
     fn checked_add_basket_measure<N>(
         &self,
         mut total: N::SignedMeasure,
-        basket: &Basket<A, N>,
+        assets: &Basket<A, N>,
     ) -> Option<N::SignedMeasure>
     where
         N: QuantityScalar,
     {
-        for (asset, quantity) in basket.iter() {
+        for (asset, amount) in assets.iter() {
             let coefficient = *self.weights.get(asset).unwrap_or(&0);
-            let weighted = quantity.as_scalar().checked_weighted(coefficient)?;
+            let weighted = amount.as_scalar().checked_weighted(coefficient)?;
             total = CheckedAdd::checked_add(&total, &weighted)?;
         }
         Some(total)
@@ -840,4 +840,71 @@ where
     entries
         .map(|(asset, quantity)| (asset, Quantity::new(quantity)))
         .into()
+}
+
+#[cfg(test)]
+mod conservation_conformance {
+    use super::*;
+
+    #[derive(Debug, Deserialize)]
+    struct DeltaCase {
+        account: u64,
+        consumed: Vec<(u64, String)>,
+        produced: Vec<(u64, String)>,
+        preserved: Vec<(u64, String)>,
+    }
+
+    #[derive(Debug, Deserialize)]
+    struct Case {
+        weights: Vec<(u64, String)>,
+        deltas: Vec<DeltaCase>,
+        conserved: Option<bool>,
+    }
+
+    #[derive(Deserialize)]
+    struct Fixtures {
+        conservation: Vec<Case>,
+    }
+
+    #[test]
+    fn runtime_signed_conservation_matches_lean() {
+        fn amounts(entries: &[(u64, String)]) -> Basket<u64> {
+            Basket::try_from_entries(
+                entries
+                    .iter()
+                    .map(|(asset, amount)| (*asset, Quantity::new(amount.parse().unwrap()))),
+            )
+            .unwrap()
+        }
+        let fixtures: Fixtures =
+            serde_json::from_str(include_str!("../verification/conformance.json")).unwrap();
+        assert_eq!(fixtures.conservation.len(), 464);
+        let mut outcomes = [0; 3];
+        for case in fixtures.conservation {
+            let mut invariant = LinearInvariant::new("fixture");
+            for (asset, coefficient) in &case.weights {
+                invariant = invariant.weight(*asset, coefficient.parse().unwrap());
+            }
+            let deltas: Vec<_> = case
+                .deltas
+                .iter()
+                .map(|d| {
+                    AccountDelta::new(
+                        d.account,
+                        amounts(&d.consumed),
+                        amounts(&d.produced),
+                        amounts(&d.preserved),
+                    )
+                })
+                .collect();
+            let actual = invariant.conserves(&deltas);
+            assert_eq!(actual, case.conserved, "{case:?}");
+            outcomes[match actual {
+                None => 0,
+                Some(false) => 1,
+                Some(true) => 2,
+            }] += 1;
+        }
+        assert!(outcomes.into_iter().all(|count| count > 0));
+    }
 }
