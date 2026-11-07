@@ -906,18 +906,17 @@ where
         let mut prepared_accounts = Vec::with_capacity(effects.len());
         let mut deltas = Vec::with_capacity(effects.len());
         for (account_id, effect) in effects {
-            let mut account = self
+            let account = match self
                 .accounts
                 .get(&account_id)
                 .expect("bound accounts were checked")
-                .as_ref()
-                .clone();
-            if let Err(error) = account.withdraw(&effect.consume) {
-                return invalid_analysis(vec![map_account_error(account_id.clone(), error)]);
-            }
-            if let Err(error) = account.deposit(&effect.produce) {
-                return invalid_analysis(vec![map_account_error(account_id.clone(), error)]);
-            }
+                .prepare_exchange(&effect.consume, &effect.produce)
+            {
+                Ok(account) => account,
+                Err(error) => {
+                    return invalid_analysis(vec![map_account_error(account_id.clone(), error)]);
+                }
+            };
             deltas.push(AccountDelta::new(
                 account_id.clone(),
                 effect.consume,

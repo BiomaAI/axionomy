@@ -10,8 +10,9 @@ There are no input bounds beyond the u64 type itself.
 The separate [basket construction proof](BASKETS.md) extends this pipeline with
 shared-source extraction and an explicit collection abstraction. The arithmetic
 proof's intrinsic boundary described here remains unchanged.
-The [account update proof](ACCOUNTS.md) extracts deposit, withdrawal, and shortfall
-using the production generic trait dictionary and the collection abstraction.
+The [account update proof](ACCOUNTS.md) extracts deposit, withdrawal, shortfall,
+and the production per-account exchange staging helper using the production
+generic trait dictionary and the collection abstraction.
 
 `Axionomy/QuantityRefinement.lean` contains the four refinement theorems. Its
 `Refines` predicate requires an actual `Result.ok` witness as well as equality

@@ -99,7 +99,45 @@ All generated and handwritten Axionomy declarations undergo the transitive
 axiom audit. Models are definitions; no new axioms, unfinished proofs, or premises
 asserting update correctness are admitted. Other basket operations, serialization,
 BigUint/custom backends, Economy account selection, exchanges, and replay retain
-separate coverage boundaries.
+separate coverage boundaries, except for the per-account staging contract below.
+
+## Exchange account staging
+
+`Account::prepare_exchange` now owns the production clone-withdraw-deposit
+sequence previously in `Economy::analyze`. It is crate-private, borrows the source
+account immutably, and returns either a new typed account or the original typed
+account error. The public API and all numeric/asset bounds are unchanged.
+The economy calls this helper in the same account order and maps errors as before.
+There is no separate Rust algorithm maintained for proofs.
+
+`AccountRefinement.prepare_refines_naturals` proves termination and exact returned
+balances/errors for the extracted helper, including the derived account clone
+and both `?` branches. It composes the previously proved withdrawal and deposit
+paths. Its premises are the same lawful equality/cloning and unique consumed
+asset identifiers; it does not assume sufficient funds or a successful deposit.
+`Account.map_prepare` connects the u64 instance to natural-number arithmetic.
+
+The executable specification `Account.prepare` checks consumption first. Its
+theorems establish that:
+
+- Missing consumed resources return the complete withdrawal shortfall, regardless
+  of what would be produced. Future production cannot fund current consumption.
+- Success holds exactly when the consumption preflight succeeds and checked
+  credit of the debited account succeeds, returning that exact state and order.
+- Overflow during production returns the first overflowing asset in production
+  order. No intermediate account is returned. For example, consuming an asset
+  and then overflowing a different asset cannot publish the withdrawal.
+- `preparedOutcome` retains the original state on rejection. This is the
+  specification's publication rule used by conformance cases; it is not itself
+  a proof of the economy's commit loop. Rust enforces the helper's immutable
+  source borrow, under the existing collection/clone assumptions above.
+
+The extraction uses the same account harness, models, and external template
+checksums. It adds no trusted model. A syntactic guard checks the exact production
+handoff in `Economy::analyze`; the caller is not extracted by this theorem.
+Role/account validation, effect aggregation, preserved-resource preflight,
+invariant checking, prepared-account completeness, multi-account commit, and
+the caller's remaining `expect` sites remain separate proof obligations.
 
 ## Reproduce and maintain
 
@@ -122,3 +160,13 @@ preservation after a later failure. They run through the public Rust methods.
 Isolated production-source mutations commit partial deposits and reverse the
 withdrawal preflight condition. Each must reject stale extraction, successfully
 compile its freshly generated model, and then fail its refinement proof.
+
+Another 492 Lean-generated cases run via the public `Economy::assess` and `apply`
+APIs. They vary consumption/production order and u64 boundaries, with an earlier
+account that stages successfully and a separate unaffected account. They check
+exact results, errors, receipts, assessment immutability, failure atomicity, and
+fork isolation. Full depletion followed by reproduction must succeed even at
+`u64::MAX`; producing a missing consumed asset must still fail. These are finite
+integration checks, not universal whole-economy proofs. An isolated mutation
+reverses deposit and withdrawal; regeneration must compile and its refinement
+proof must fail.

@@ -312,6 +312,52 @@ def U64.Insts.Num_traitsOpsCheckedCheckedDiv :
   checked_div := U64.Insts.Num_traitsOpsCheckedCheckedDiv.checked_div
 }
 
+/-- [account_extraction::quantity::{impl core::clone::Clone for account_extraction::quantity::Quantity<N>}::clone]:
+    Source: 'verification/../src/quantity.rs', lines 82:16-82:21
+    Visibility: public -/
+def quantity.Quantity.Insts.CoreCloneClone.clone
+  {N : Type _} (corecloneCloneInst : core.clone.Clone N)
+  (self : quantity.Quantity N) :
+  Result (quantity.Quantity N)
+  := do
+  let t ← corecloneCloneInst.clone self
+  ok t
+
+/-- Trait implementation: [account_extraction::quantity::{impl core::clone::Clone for account_extraction::quantity::Quantity<N>}]
+    Source: 'verification/../src/quantity.rs', lines 82:16-82:21 -/
+@[reducible]
+def quantity.Quantity.Insts.CoreCloneClone {N : Type _} (corecloneCloneInst :
+  core.clone.Clone N) : core.clone.Clone (quantity.Quantity N) := {
+  clone := quantity.Quantity.Insts.CoreCloneClone.clone corecloneCloneInst
+}
+
+/-- [account_extraction::basket::{impl core::clone::Clone for account_extraction::basket::Basket<A, N>}::clone]:
+    Source: 'verification/../src/basket.rs', lines 13:16-13:21
+    Visibility: public -/
+def basket.Basket.Insts.CoreCloneClone.clone
+  {A : Type _} {N : Type _} (corecloneCloneInst : core.clone.Clone A)
+  (corecloneCloneInst1 : core.clone.Clone N) (self : basket.Basket A N) :
+  Result (basket.Basket A N)
+  := do
+  let im ←
+    indexmap.map.IndexMap.Insts.CoreCloneClone.clone corecloneCloneInst
+      (quantity.Quantity.Insts.CoreCloneClone corecloneCloneInst1)
+      std.hash.random.RandomState.Insts.CoreCloneClone self.quantities
+  ok { quantities := im }
+
+/-- [account_extraction::account::{impl core::clone::Clone for account_extraction::account::Account<A, N>}::clone]:
+    Source: 'verification/../src/account.rs', lines 7:16-7:21
+    Visibility: public -/
+def account.Account.Insts.CoreCloneClone.clone
+  {A : Type _} {N : Type _} (corecloneCloneInst : core.clone.Clone A)
+  (corecloneCloneInst1 : core.clone.Clone N) (self : account.Account A N) :
+  Result (account.Account A N)
+  := do
+  let b ←
+    basket.Basket.Insts.CoreCloneClone.clone corecloneCloneInst
+      corecloneCloneInst1 self.balances
+  ok { balances := b }
+
 /-- [account_extraction::quantity::{account_extraction::quantity::Quantity<N>}::try_from_scalar]:
     Source: 'verification/../src/quantity.rs', lines 110:4-116:5
     Visibility: public -/
@@ -423,25 +469,6 @@ def quantity.Quantity.Insts.CoreDefaultDefault {N : Type _}
     QuantityScalarInst
 }
 
-/-- [account_extraction::quantity::{impl core::clone::Clone for account_extraction::quantity::Quantity<N>}::clone]:
-    Source: 'verification/../src/quantity.rs', lines 82:16-82:21
-    Visibility: public -/
-def quantity.Quantity.Insts.CoreCloneClone.clone
-  {N : Type _} (corecloneCloneInst : core.clone.Clone N)
-  (self : quantity.Quantity N) :
-  Result (quantity.Quantity N)
-  := do
-  let t ← corecloneCloneInst.clone self
-  ok t
-
-/-- Trait implementation: [account_extraction::quantity::{impl core::clone::Clone for account_extraction::quantity::Quantity<N>}]
-    Source: 'verification/../src/quantity.rs', lines 82:16-82:21 -/
-@[reducible]
-def quantity.Quantity.Insts.CoreCloneClone {N : Type _} (corecloneCloneInst :
-  core.clone.Clone N) : core.clone.Clone (quantity.Quantity N) := {
-  clone := quantity.Quantity.Insts.CoreCloneClone.clone corecloneCloneInst
-}
-
 /-- [account_extraction::basket::{account_extraction::basket::Basket<A, N>}::quantity]:
     Source: 'verification/../src/basket.rs', lines 105:4-107:5
     Visibility: public -/
@@ -471,20 +498,6 @@ def basket.Basket.iter
   Result (indexmap.map.iter.Iter A (quantity.Quantity N))
   := do
   indexmap.map.IndexMap.iter self.quantities
-
-/-- [account_extraction::basket::{impl core::clone::Clone for account_extraction::basket::Basket<A, N>}::clone]:
-    Source: 'verification/../src/basket.rs', lines 13:16-13:21
-    Visibility: public -/
-def basket.Basket.Insts.CoreCloneClone.clone
-  {A : Type _} {N : Type _} (corecloneCloneInst : core.clone.Clone A)
-  (corecloneCloneInst1 : core.clone.Clone N) (self : basket.Basket A N) :
-  Result (basket.Basket A N)
-  := do
-  let im ←
-    indexmap.map.IndexMap.Insts.CoreCloneClone.clone corecloneCloneInst
-      (quantity.Quantity.Insts.CoreCloneClone corecloneCloneInst1)
-      std.hash.random.RandomState.Insts.CoreCloneClone self.quantities
-  ok { quantities := im }
 
 /-- [account_extraction::account::{account_extraction::account::Account<A, N>}::deposit]: loop body 0:
     Source: 'verification/../src/account.rs', lines 48:8-60:5
@@ -800,6 +813,42 @@ def account.Account.withdraw
     ok (core.result.Result.Err (account.AccountError.InsufficientBalance
       shortfall), self)
 
+/-- [account_extraction::account::{account_extraction::account::Account<A, N>}::prepare_exchange]:
+    Source: 'verification/../src/account.rs', lines 83:4-92:5 -/
+def account.Account.prepare_exchange
+  {A : Type _} {N : Type _} {Clause3_SignedMeasure : Type _}
+  (corecloneCloneInst : core.clone.Clone A) (corecmpEqInst : core.cmp.Eq A)
+  (corehashHashInst : core.hash.Hash A) (quantityQuantityScalarInst :
+  quantity.QuantityScalar N Clause3_SignedMeasure) (self : account.Account A N)
+  (consumed : basket.Basket A N) (produced : basket.Basket A N) :
+  Result (core.result.Result (account.Account A N) (account.AccountError A N
+    Clause3_SignedMeasure))
+  := do
+  let updated ←
+    account.Account.Insts.CoreCloneClone.clone corecloneCloneInst
+      quantityQuantityScalarInst.corecloneCloneInst self
+  let (r, updated1) ←
+    account.Account.withdraw corecloneCloneInst corecmpEqInst corehashHashInst
+      quantityQuantityScalarInst updated consumed
+  let cf ← core.result.Result.Insts.CoreOpsTry.branch r
+  match cf with
+  | core.ops.control_flow.ControlFlow.Continue _ =>
+    let (r1, updated2) ←
+      account.Account.deposit corecloneCloneInst corecmpEqInst corehashHashInst
+        quantityQuantityScalarInst updated1 produced
+    let cf1 ← core.result.Result.Insts.CoreOpsTry.branch r1
+    match cf1 with
+    | core.ops.control_flow.ControlFlow.Continue _ =>
+      ok (core.result.Result.Ok updated2)
+    | core.ops.control_flow.ControlFlow.Break residual =>
+      core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
+        (account.Account A N) (core.convert.FromSame (account.AccountError A N
+        Clause3_SignedMeasure)) residual
+  | core.ops.control_flow.ControlFlow.Break residual =>
+    core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
+      (account.Account A N) (core.convert.FromSame (account.AccountError A N
+      Clause3_SignedMeasure)) residual
+
 /-- Trait implementation: [account_extraction::quantity::{impl account_extraction::quantity::QuantityMeasure for T}]
     Source: 'verification/../src/quantity.rs', lines 14:0-14:100 -/
 @[reducible]
@@ -896,5 +945,20 @@ def withdraw
   := do
   account.Account.withdraw corecloneCloneInst corecmpEqInst corehashHashInst
     U64.Insts.Account_extractionQuantityQuantityScalarI128 state assets
+
+/-- [account_extraction::prepare_exchange]:
+    Source: 'verification/extract_account.rs', lines 31:0-37:1
+    Visibility: public -/
+def prepare_exchange
+  {A : Type _} (corecloneCloneInst : core.clone.Clone A) (corecmpEqInst :
+  core.cmp.Eq A) (corehashHashInst : core.hash.Hash A)
+  (state : account.Account A Std.U64) (consumed : basket.Basket A Std.U64)
+  (produced : basket.Basket A Std.U64) :
+  Result (core.result.Result (account.Account A Std.U64) (account.AccountError
+    A Std.U64 Std.I128))
+  := do
+  account.Account.prepare_exchange corecloneCloneInst corecmpEqInst
+    corehashHashInst U64.Insts.Account_extractionQuantityQuantityScalarI128
+    state consumed produced
 
 end Axionomy.AccountExtracted

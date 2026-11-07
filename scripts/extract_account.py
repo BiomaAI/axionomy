@@ -22,6 +22,20 @@ TEMPLATES = {
     "FunsExternal_Template.lean": "64de724fe2167c6bcf3609dd731c9817877b5e1514e42e91385bb32dce7ad65a",
 }
 
+# The caller remains outside the extraction. Keep its exact staging handoff
+# reviewable and reject bypasses; this is not a proof of Economy::analyze.
+PREPARATION_CALL = """let account = match self
+                .accounts
+                .get(&account_id)
+                .expect("bound accounts were checked")
+                .prepare_exchange(&effect.consume, &effect.produce)
+            {
+                Ok(account) => account,
+                Err(error) => {
+                    return invalid_analysis(vec![map_account_error(account_id.clone(), error)]);
+                }
+            };"""
+
 
 def validate_bridge(root=ROOT):
     """Require the harness to forward to the unchanged production methods."""
@@ -29,10 +43,14 @@ def validate_bridge(root=ROOT):
     paths = re.findall(r'#\[path\s*=\s*"([^"]+)"\]', harness)
     if sorted(paths) != ["../src/account.rs", "../src/amount.rs", "../src/basket.rs", "../src/quantity.rs"]:
         raise ValueError("account extraction must include the exact production source files")
-    for operation in ("deposit", "withdraw"):
+    for operation in ("deposit", "withdraw", "prepare_exchange"):
         matches = re.findall(r"\bfn " + operation + r"\b[^{}]*\{([^{}]*)\}", harness)
-        if len(matches) != 1 or re.sub(r"\s+", "", matches[0]) != f"state.{operation}(assets)":
+        arguments = "consumed,produced" if operation == "prepare_exchange" else "assets"
+        if len(matches) != 1 or re.sub(r"\s+", "", matches[0]) != f"state.{operation}({arguments})":
             raise ValueError(f"account extraction entry point is not a forwarding call: {operation}")
+    economy = (root / "src/economy.rs").read_text()
+    if re.sub(r"\s+", "", economy).count(re.sub(r"\s+", "", PREPARATION_CALL)) != 1:
+        raise ValueError("economy preparation handoff changed; review the production connection")
 
 
 def validate_generated(directory):
@@ -46,7 +64,9 @@ def validate_generated(directory):
         if re.search(r"\b(sorry|admit|axiom)\b", (directory / name).read_text()):
             raise ValueError(f"unfinished or axiomatic account extraction: {name}")
     functions = (directory / "Funs.lean").read_text()
-    for entry in ("deposit", "withdraw", "account.Account.deposit", "account.Account.withdraw",
+    for entry in ("deposit", "withdraw", "prepare_exchange", "account.Account.prepare_exchange",
+                  "account.Account.Insts.CoreCloneClone.clone",
+                  "account.Account.deposit", "account.Account.withdraw",
                   "account.Account.deposit_loop.body", "account.Account.withdraw_loop.body",
                   "basket.Basket.shortfall", "basket.Basket.shortfall_loop.body",
                   "basket.Basket.insert", "quantity.Quantity.checked_add", "quantity.Quantity.checked_sub"):
@@ -86,6 +106,7 @@ def check_extraction(write=False):
                    "--resugar-drops", "--rustc-arg=-Zinline-mir=no",
                    "--start-from-if-exists", "account_extraction::deposit",
                    "--start-from-if-exists", "account_extraction::withdraw",
+                   "--start-from-if-exists", "account_extraction::prepare_exchange",
                    "--mir", "promoted", "--sysroot", "default",
                    "--include", "account_extraction::account", "--include", "account_extraction::basket",
                    "--include", "account_extraction::quantity",

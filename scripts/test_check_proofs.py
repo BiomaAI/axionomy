@@ -93,6 +93,13 @@ class CoverageGateTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "incomplete implementation refinement contract"):
             validate_coverage(self.root, self.coverage)
 
+    def test_incomplete_preparation_refinement_is_rejected(self):
+        feature = self.coverage["features"][0]
+        feature.update(id="account_exchange_preparation", status="aeneas_refinement_proved",
+                       extracted_module="AccountExtraction.Funs")
+        with self.assertRaisesRegex(ValueError, "incomplete implementation refinement contract"):
+            validate_coverage(self.root, self.coverage)
+
 
 class KernelAuditTests(unittest.TestCase):
     @classmethod

@@ -77,6 +77,19 @@ where
         self.balances = updated;
         Ok(())
     }
+
+    /// Stages an exchange on a private copy, withdrawing before depositing.
+    /// The source account remains unchanged even if the deposit overflows.
+    pub(crate) fn prepare_exchange(
+        &self,
+        consumed: &Basket<A, N>,
+        produced: &Basket<A, N>,
+    ) -> Result<Self, AccountError<A, N>> {
+        let mut updated = self.clone();
+        updated.withdraw(consumed)?;
+        updated.deposit(produced)?;
+        Ok(updated)
+    }
 }
 
 impl<A, N> Default for Account<A, N> {

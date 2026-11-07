@@ -27,3 +27,11 @@ pub fn withdraw<A: Clone + Eq + std::hash::Hash>(
 }
 
 fn main() {}
+
+pub fn prepare_exchange<A: Clone + Eq + std::hash::Hash>(
+    state: &Account<A>,
+    consumed: &Basket<A>,
+    produced: &Basket<A>,
+) -> Result<Account<A>, AccountError<A>> {
+    state.prepare_exchange(consumed, produced)
+}

@@ -137,5 +137,26 @@ theorem map_withdraw (state amounts : List (A × Q)) :
   rw [empty]
   split <;> simp [mapOutcome, Except.mapError, mapError, map_debit ops other f laws]
 
+def mapPrepared (result : Except (UpdateError A Q) (List (A × Q))) :
+    Except (UpdateError A R) (List (A × R)) :=
+  (result.map (mapEntries f)).mapError (mapError f)
+
+include laws in
+theorem map_prepare (state consumed produced : List (A × Q)) :
+    mapPrepared f (prepare ops state consumed produced) =
+      prepare other (mapEntries f state) (mapEntries f consumed) (mapEntries f produced) := by
+  unfold prepare
+  rw [← map_withdraw ops other f laws]
+  cases withdrawal : withdraw ops state consumed with
+  | mk status debited =>
+    cases status with
+    | error error => rfl
+    | ok value =>
+      cases value
+      simp only [mapOutcome, Except.mapError]
+      rw [← map_deposit ops other f laws]
+      cases deposit ops debited produced with
+      | mk status updated => cases status <;> rfl
+
 end Mapping
 end Axionomy.Account

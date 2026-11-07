@@ -18,6 +18,8 @@ class AccountBridgeTests(unittest.TestCase):
         self.target = self.root / "verification/extract_account.rs"
         self.target.parent.mkdir(parents=True)
         shutil.copyfile(ROOT / "verification/extract_account.rs", self.target)
+        (self.root / "src").mkdir()
+        shutil.copyfile(ROOT / "src/economy.rs", self.root / "src/economy.rs")
 
     def test_production_sources_pass(self):
         validate_bridge(self.root)
@@ -30,6 +32,19 @@ class AccountBridgeTests(unittest.TestCase):
     def test_changed_entry_point_is_rejected(self):
         self.target.write_text(self.target.read_text().replace("state.deposit(assets)", "state.withdraw(assets)"))
         with self.assertRaisesRegex(ValueError, "not a forwarding call: deposit"):
+            validate_bridge(self.root)
+
+    def test_changed_preparation_entry_is_rejected(self):
+        self.target.write_text(self.target.read_text().replace(
+            "state.prepare_exchange(consumed, produced)", "state.prepare_exchange(produced, consumed)"))
+        with self.assertRaisesRegex(ValueError, "not a forwarding call: prepare_exchange"):
+            validate_bridge(self.root)
+
+    def test_bypassed_economy_handoff_is_rejected(self):
+        path = self.root / "src/economy.rs"
+        path.write_text(path.read_text().replace(
+            ".prepare_exchange(&effect.consume, &effect.produce)", ".clone()"))
+        with self.assertRaisesRegex(ValueError, "economy preparation handoff changed"):
             validate_bridge(self.root)
 
 
@@ -65,6 +80,12 @@ class AccountExtractionTests(unittest.TestCase):
     def test_missing_extracted_withdrawal_is_rejected(self):
         path = self.directory / "Funs.lean"
         path.write_text(path.read_text().replace("def account.Account.withdraw\n", "def bypass\n"))
+        with self.assertRaisesRegex(ValueError, "missing account production definition"):
+            validate_generated(self.directory)
+
+    def test_missing_extracted_preparation_is_rejected(self):
+        path = self.directory / "Funs.lean"
+        path.write_text(path.read_text().replace("def account.Account.prepare_exchange\n", "def bypass\n"))
         with self.assertRaisesRegex(ValueError, "missing account production definition"):
             validate_generated(self.directory)
 

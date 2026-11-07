@@ -55,6 +55,12 @@ class ExtractionBoundaryTests(unittest.TestCase):
 
 
 class ProductionMutationTests(unittest.TestCase):
+    def test_producing_before_consuming_breaks_the_preparation_proof(self):
+        self.check_mutation(
+            "src/account.rs", "updated.withdraw(consumed)?;\n        updated.deposit(produced)?;",
+            "updated.deposit(produced)?;\n        updated.withdraw(consumed)?;",
+            "extract_account.py", "stale account model", "AccountRefinement")
+
     def test_partial_deposit_commit_breaks_the_account_proof(self):
         original = "return Err(AccountError::Overflow {"
         self.check_mutation(

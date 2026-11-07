@@ -28,6 +28,13 @@ complete shortfalls, and atomic rejection. Both subtraction `expect` calls are
 proved safe on these paths; withdrawal requires distinct requested assets.
 See [the account proof](ACCOUNTS.md) for the exact scope and source refactors.
 
+Per-account exchange staging also has an implementation proof. The production
+helper clones an account, withdraws consumed assets, and deposits produced assets.
+Its Aeneas extraction returns exactly the specified new account or error; a later
+deposit overflow returns no partially prepared account. Rust's immutable source
+borrow complements the proof. This does not yet verify the multi-account commit,
+effect aggregation, preservation preflight, or invariant validation.
+
 The other core contracts still have handwritten design proofs and finite Rust
 conformance tests. Neither an entire source module nor every existing core
 behavior is declared proved just because it has a coverage entry.
@@ -50,6 +57,7 @@ The current library covers:
 | `BasketRefinement` | Extracted production construction refines `Basket` for u64 vector inputs, under lawful equality and the explicit collection model |
 | `Basket` | Success iff asset identifiers are unique; zeros cannot hide duplicates; canonical output preserves nonzero entries, uniqueness, and order |
 | `AccountRefinement` | Extracted deposit, withdrawal, and shortfall terminate and match exact natural-number outcomes under lawful equality/cloning and the collection model |
+| `AccountRefinement.prepare_refines_naturals` | Extracted production exchange account staging returns exact consumption-before-production results, including shortfall and late-overflow errors |
 | `Account` / `AccountMap` | Atomic rejection, exact positive shortfalls, selected-asset update frame property, and arithmetic representation conversion |
 | `Quantity` | Exact checked addition/multiplication, subtraction without underflow, floor division, asset-qualified amount round trip |
 | `State` | Typed account/asset updates and frame property, zero canonicalization, complete scalar shortfall, hidden-account projection, observation noninterference, monotone goals |
@@ -125,7 +133,11 @@ include u64 boundaries, overflow, underflow, zero units/divisors, preserved
 thresholds, conservation, computed effects, parameter lookup, conditions and
 pre-exchange snapshots. They also include 260 basket cases and 328 account update
 cases covering duplicates, zero quantities, order, exact errors, atomic rejection,
-and u64 boundaries. Separate existing Rust tests cover additional behavior.
+and u64 boundaries. Another 492 staging cases run through two-account exchanges,
+checking assessment, exact errors and receipts, an earlier staged account on late
+failure, unaffected accounts, and fork isolation. These whole-economy checks are
+finite regression evidence, not a refinement theorem for `Economy::apply`.
+Separate existing Rust tests cover additional behavior.
 
 ## Explicit legacy refinement gaps
 
@@ -133,8 +145,9 @@ The following existed before this proof requirement and are not discharged by
 the initial theorems. They are a backfill plan, not an exemption for new behavior:
 
 - Charon/Aeneas extraction and refinement beyond the four `Quantity<u64>` checked
-  arithmetic operations, basket construction, and account deposit/withdrawal,
-  including exchange `expect` and termination obligations.
+  arithmetic operations, basket construction, account deposit/withdrawal, and
+  per-account exchange staging, including the remaining exchange `expect` and
+  termination obligations.
 - Correctness of `IndexMap`, `BTreeMap`, `Arc`, iterator order, allocation, cloning,
   and copy-on-write isolation; Rust compilation still enforces its ownership rules.
 - Full structural validation: required/unknown roles and parameters, account/rate
@@ -150,7 +163,7 @@ the initial theorems. They are a backfill plan, not an exemption for new behavio
   Rust `replay` retains an accepted prefix on failure; `replayed` protects its source.
 
 For further implementation proofs, extend the pinned Aeneas pipeline from u64
-arithmetic, baskets, and accounts to exchange preparation and commit, connecting
+arithmetic, baskets, accounts, and account staging to complete exchange preparation and commit, connecting
 extracted definitions to the existing specifications. Model unavoidable external dependencies explicitly and
 report their trust status. Do not maintain a second Rust algorithm only for proofs
 or change the public API to an untyped representation to satisfy extraction.

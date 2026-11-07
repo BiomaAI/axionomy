@@ -428,6 +428,65 @@ theorem withdraw_refines_naturals (state amounts : List (A × Std.U64))
     withdraw_refines cloneInst eqInst hashInst hClone hEq state amounts unique, ?_⟩
   rw [decode_encode, Account.map_withdraw arithmetic _ _ natural_hom]
 
+def encodePrepared (result : Except (Account.UpdateError A Std.U64) (List (A × Std.U64))) :
+    core.result.Result (account.Account A Std.U64) (account.AccountError A Std.U64 Std.I128) :=
+  match result with
+  | .ok updated => .Ok ⟨⟨updated⟩⟩
+  | .error error => .Err (encodeError error)
+
+include hClone hEq in
+theorem prepare_refines (state consumed produced : List (A × Std.U64))
+    (unique : (consumed.map Prod.fst).Nodup) :
+    AccountExtracted.prepare_exchange cloneInst eqInst hashInst ⟨⟨state⟩⟩ ⟨consumed⟩ ⟨produced⟩ =
+      .ok (encodePrepared (Account.prepare arithmetic state consumed produced)) := by
+  have withdrawal := withdraw_refines cloneInst eqInst hashInst hClone hEq state consumed unique
+  change account.Account.withdraw cloneInst eqInst hashInst scalar ⟨⟨state⟩⟩ ⟨consumed⟩ = _ at withdrawal
+  simp only [AccountExtracted.prepare_exchange, account.Account.prepare_exchange,
+    account.Account.Insts.CoreCloneClone.clone, clone_call cloneInst hClone, bind_ok, withdrawal]
+  cases w : Account.withdraw arithmetic state consumed with
+  | mk status debited =>
+    cases status with
+    | error error =>
+      simp [encodeOutcome, core.result.Result.Insts.CoreOpsTry.branch,
+        core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual,
+        Account.prepare, w, encodePrepared]
+    | ok value =>
+      cases value
+      have deposit := deposit_refines cloneInst eqInst hashInst hClone hEq debited produced
+      change account.Account.deposit cloneInst eqInst hashInst scalar ⟨⟨debited⟩⟩ ⟨produced⟩ = _ at deposit
+      simp only [encodeOutcome, core.result.Result.Insts.CoreOpsTry.branch]
+      cases d : Account.deposit arithmetic debited produced with
+      | mk status updated =>
+        cases status <;> simp [deposit, encodeOutcome,
+          core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual,
+          Account.prepare, w, d, encodePrepared]
+
+def decodePrepared (result : core.result.Result (account.Account A Std.U64)
+    (account.AccountError A Std.U64 Std.I128)) : Except (Account.UpdateError A Nat) (List (A × Nat)) :=
+  match result with
+  | .Ok updated => .ok (Account.mapEntries UScalar.val updated.balances.quantities)
+  | .Err (.Overflow asset) => .error (.overflow asset)
+  | .Err (.InsufficientBalance missing) => .error (.insufficient (Account.mapEntries UScalar.val missing.quantities))
+
+omit [DecidableEq A] in
+theorem decode_encode_prepared (result : Except (Account.UpdateError A Std.U64) (List (A × Std.U64))) :
+    decodePrepared (encodePrepared result) = Account.mapPrepared UScalar.val result := by
+  cases result with
+  | ok updated => rfl
+  | error error => cases error <;> rfl
+
+include hClone hEq in
+theorem prepare_refines_naturals (state consumed produced : List (A × Std.U64))
+    (unique : (consumed.map Prod.fst).Nodup) :
+    ∃ result, AccountExtracted.prepare_exchange cloneInst eqInst hashInst
+        ⟨⟨state⟩⟩ ⟨consumed⟩ ⟨produced⟩ = .ok result ∧
+      decodePrepared result = Account.prepare (Account.naturals Quantity.u64Max)
+        (Account.mapEntries UScalar.val state) (Account.mapEntries UScalar.val consumed)
+        (Account.mapEntries UScalar.val produced) := by
+  refine ⟨encodePrepared (Account.prepare arithmetic state consumed produced),
+    prepare_refines cloneInst eqInst hashInst hClone hEq state consumed produced unique, ?_⟩
+  rw [decode_encode_prepared, Account.map_prepare arithmetic _ _ natural_hom]
+
 -- Both premises have concrete witnesses, independent of the requested outcome.
 def exactClone (A : Type) : core.clone.Clone A :=
   { clone := fun value => .ok value, clone_from := fun _ source => .ok source }

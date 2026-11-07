@@ -72,6 +72,52 @@ def withdraw {A Q : Type} [DecidableEq A] (ops : Arithmetic Q)
   if missing.isEmpty then (.ok (), debit ops state amounts)
   else (.error (.insufficient missing), state)
 
+-- Preparing returns a new account or an error; it never publishes an
+-- intermediate withdrawal. Consumption is checked before production.
+def prepare {A Q : Type} [DecidableEq A] (ops : Arithmetic Q)
+    (state consumed produced : List (A × Q)) : Except (UpdateError A Q) (List (A × Q)) :=
+  match withdraw ops state consumed with
+  | (.error error, _) => .error error
+  | (.ok (), debited) =>
+    match deposit ops debited produced with
+    | (.error error, _) => .error error
+    | (.ok (), updated) => .ok updated
+
+def preparedOutcome {A Q : Type} (state : List (A × Q))
+    (result : Except (UpdateError A Q) (List (A × Q))) :
+    Except (UpdateError A Q) Unit × List (A × Q) :=
+  match result with
+  | .error error => (.error error, state)
+  | .ok updated => (.ok (), updated)
+
+theorem prepare_insufficient {A Q : Type} [DecidableEq A] (ops : Arithmetic Q)
+    (state consumed produced : List (A × Q))
+    (missing : shortfall ops state consumed ≠ []) :
+    prepare ops state consumed produced = .error (.insufficient (shortfall ops state consumed)) := by
+  simp [prepare, withdraw, List.isEmpty_iff, missing]
+
+theorem prepare_success_iff {A Q : Type} [DecidableEq A] (ops : Arithmetic Q)
+    (state consumed produced updated : List (A × Q)) :
+    prepare ops state consumed produced = .ok updated ↔
+      shortfall ops state consumed = [] ∧ credit ops (debit ops state consumed) produced = .ok updated := by
+  by_cases empty : shortfall ops state consumed = []
+  · simp only [prepare, withdraw, empty, List.isEmpty_nil, ↓reduceIte, deposit]
+    cases credit ops (debit ops state consumed) produced <;> simp
+  · simp [prepare_insufficient ops state consumed produced empty, empty]
+
+theorem prepare_late_overflow {A Q : Type} [DecidableEq A] (ops : Arithmetic Q)
+    (state consumed produced : List (A × Q)) (asset : A)
+    (enough : shortfall ops state consumed = [])
+    (overflow : credit ops (debit ops state consumed) produced = .error asset) :
+    prepare ops state consumed produced = .error (.overflow asset) := by
+  simp [prepare, withdraw, enough, deposit, overflow]
+
+theorem prepared_rejection_atomic {A Q : Type} (state : List (A × Q))
+    (result : Except (UpdateError A Q) (List (A × Q))) (error : UpdateError A Q)
+    (rejected : (preparedOutcome state result).1 = .error error) :
+    (preparedOutcome state result).2 = state := by
+  cases result <;> simp_all [preparedOutcome]
+
 theorem deposit_rejection_atomic {A Q : Type} [DecidableEq A] (ops : Arithmetic Q)
     (state amounts : List (A × Q)) (error : UpdateError A Q)
     (rejected : (deposit ops state amounts).1 = .error error) :

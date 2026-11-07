@@ -183,7 +183,7 @@ structure quantity.QuantityScalar (Self : Type _) (Self_SignedMeasure : Type _)
   checked_weighted : Self → Std.I64 → Result (Option Self_SignedMeasure)
 
 /-- [account_extraction::account::AccountError]
-    Source: 'verification/../src/account.rs', lines 116:0-125:1
+    Source: 'verification/../src/account.rs', lines 129:0-138:1
     Visibility: public -/
 @[discriminant isize]
 inductive account.AccountError (A : Type _) (N : Type _) (Clause2_SignedMeasure

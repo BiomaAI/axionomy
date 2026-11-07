@@ -1,13 +1,13 @@
 {
   "version": 1,
-  "assurance": "Partial implementation verification: Aeneas-extracted production u64 arithmetic, basket construction, and account deposit/withdrawal refine Lean specifications. Collections use explicit trusted models; compiler/translation and primitive models remain trusted. Other core contracts have design proofs and finite Rust conformance.",
+  "assurance": "Partial implementation verification: Aeneas-extracted production u64 arithmetic, basket construction, account deposit/withdrawal, and per-account exchange staging refine Lean specifications. Collections use explicit trusted models; compiler/translation and primitive models remain trusted. Other core contracts have design proofs and finite Rust conformance.",
   "sources": {
     "Cargo.toml": "414a2b181e13225e4b76aa58e70d998064174dde2d8cee603ea3af648d61a7f3",
     "Cargo.lock": "00ef263c160aeebaa49187874a4b11ec94fee9bc8fbea5a2f0cacc190607919c",
-    "src/account.rs": "f9ad6bbffdc893791a246cb480395607e80e2942867c3a116e2aeb8ee2b185e2",
+    "src/account.rs": "0eaf66937c63de2993353828e42fcfea2b80f172f5cb74fc76a28cef79fd9ff6",
     "src/amount.rs": "4aa0f1432494aac0454890604e3addbd002fa6b9ded1f75f91fce7675540f9ee",
     "src/basket.rs": "4d85b432b3a35354bd2044e58ab61c4767109ac8f5dfb050e5c8caa98f8afc42",
-    "src/economy.rs": "e2f67048df59aae0ce3b92b146c81d29130ced1abd89faf14bab2458b3bef45a",
+    "src/economy.rs": "be50c1051c25c2e656f9a8d01bc2838f0ada89560d5564de2cb6a8ad1743e29b",
     "src/exchange.rs": "aabae395148c0dd8703b2fc99aa177700eaffd0d8aac602f8a5ffbf7fb09a47b",
     "src/lib.rs": "46d6f713693714650653128e2ceabf8a895b8ad98a38a7bdbeab4ea378a5cc06",
     "src/quantity.rs": "af66b8cf86b6ac58cccd4e9fcfb740e06928f86b4bf6117660fb7f37319b97dd",
@@ -15,7 +15,7 @@
     "verification/extract.rs": "415b34f5f4f8aa2679af860bd2a4092c96e113145919160fe7c81e33836de3e0",
     "verification/aeneas-toolchain.json": "8676d7d11be51a6f41984d874b35910e8a1a3d0a18414998feb9402ef80932fb",
     "verification/extract_basket.rs": "dc2b3a2159704c24a5261d0069a2aac7b575f30a94ae35c4c1e96933638592dd",
-    "verification/extract_account.rs": "fa97026e7683f6769120c0782f8bb6b804e991e00c14a9f555ee6d41e82d9bee",
+    "verification/extract_account.rs": "38f7f70e5bdd72435eb8aaeddd6eeb2d0dbda489124898e929af56ee30918da3",
     "verification/patches/aeneas-namespaced-discriminant.patch": "fabac7482deb3da6ecaca60c4060dfe9d2114efdd010699e736c4a91267f3bc9"
   },
   "features": [
@@ -181,10 +181,42 @@
         "Generic assets require total equality agreeing with identity and total identity-preserving Clone. Rust Eq/Clone/Hash trait bounds alone do not establish those laws. Concrete equality and clone dictionaries witness satisfiability; the premises do not assume update correctness.",
         "IndexMap storage, iteration, lookup, insertion, removal, cloning, allocation, and hashing use the explicit ordered-list model. Models invoke supplied equality and asset/value cloning, but physical allocator/hash/hasher-clone/destructor behavior remains trusted. Compiler, MIR, Charon/Aeneas translation and backend primitives are also trusted. See verification/ACCOUNTS.md.",
         "QuantityMeasure groups exactly the pre-existing SignedMeasure trait bounds and has a blanket implementation; all public Rust scalar requirements remain. The generated account proof retains the QuantityScalar dictionary. Unused formatting, hashing, and signed conversion paths fail closed in the model and are not claimed verified.",
-        "Does not refine arbitrary QuantityScalar backends, BigUint/BigInt, serialization, account cloning as a separate API, account identifiers in Economy, exchange preparation/commit, or replay. These remain separate contracts.",
+        "Does not refine arbitrary QuantityScalar backends, BigUint/BigInt, serialization, account cloning as a separate API, account identifiers in Economy, full exchange preparation/commit (per-account staging has a separate refinement contract), or replay. These remain separate contracts.",
         "The pinned Lean backend has a checksum-guarded patch that gives generated discriminant instances fully qualified names. It fixes cross-module name collisions without changing enum values, program translation, or proof semantics; the kernel checks the resulting declarations."
       ],
       "extracted_module": "AccountExtraction.Funs"
+    },
+    {
+      "id": "account_exchange_preparation",
+      "status": "aeneas_refinement_proved",
+      "sources": [
+        "src/account.rs",
+        "src/economy.rs",
+        "src/basket.rs",
+        "src/quantity.rs",
+        "verification/extract_account.rs",
+        "verification/aeneas-toolchain.json"
+      ],
+      "extracted_module": "AccountExtraction.Funs",
+      "theorems": [
+        "Axionomy.Account.prepare_insufficient",
+        "Axionomy.Account.prepare_success_iff",
+        "Axionomy.Account.prepare_late_overflow",
+        "Axionomy.Account.prepared_rejection_atomic",
+        "Axionomy.Account.map_prepare",
+        "Axionomy.AccountRefinement.prepare_refines_naturals"
+      ],
+      "rust_tests": [
+        "tests/lean_conformance.rs",
+        "tests/economy.rs",
+        "tests/generic_quantity.rs"
+      ],
+      "limitations": [
+        "The production crate-private Account::prepare_exchange helper is shared-source extracted for u64 quantities. Lean proves termination and exact ordered natural-number results/errors of cloning, withdrawal then deposit, including shortfall rejection and overflow after successful withdrawal. Unique consumed assets and lawful equality/cloning are required; successful preparation is not assumed.",
+        "The helper borrows its source immutably in Rust and returns a new account only on success. preparedOutcome models publication or original-state retention for conformance; its atomicity theorem does not prove the multi-account commit loop. Existing collection/clone isolation, allocation, stable hashing, compiler/MIR, Charon/Aeneas and primitive-model assumptions remain; no new external model is introduced. See verification/ACCOUNTS.md.",
+        "Economy::analyze now delegates the same clone-withdraw-deposit sequence to this helper. Its exact handoff is syntactically guarded and whole-economy conformance tests cover 492 cases, but the caller is not extracted. Account lookup/completeness, role and parameter validation, aggregation, preserved-resource preflight, invariant checks, error mapping, receipts and multi-account commit remain separate refinement obligations.",
+        "The generic Rust API and ownership/type guarantees are preserved. The theorem does not establish arbitrary QuantityScalar laws, BigUint/BigInt correctness, physical collection correctness, serialization or replay."
+      ]
     },
     {
       "id": "rate_expressions_and_effects",
@@ -231,7 +263,7 @@
         "tests/properties.rs"
       ],
       "limitations": [
-        "The proof begins with distinct account/asset entries whose effects have already been aggregated; Rust preflight, prepared-account completeness, error ordering and all internal expects are not refined.",
+        "The proof begins with distinct account/asset entries whose effects have already been aggregated. The separate account_exchange_preparation contract now refines per-account staging, but Rust preflight, prepared-account completeness, error ordering, multi-account commit and its internal expects are not refined.",
         "The scalar static fixture adapter exercises u64 scaling and requirement overflow but is not a proof of the complete Rust rate evaluator."
       ]
     },

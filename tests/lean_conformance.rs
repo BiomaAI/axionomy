@@ -1,7 +1,7 @@
 //! Finite cross-language regression checks against executable Lean definitions.
 //! This is not a proof that the Rust implementation refines those definitions.
 use axionomy::{
-    Account, AccountError, AssetAmount, Basket, BasketError, EconomyBuilder, Exchange,
+    Account, AccountError, ApplyError, AssetAmount, Basket, BasketError, EconomyBuilder, Exchange,
     LinearInvariant, Quantity, QuantityComparison, QuantityExpression as Q, Rate, basket,
 };
 use serde::Deserialize;
@@ -14,6 +14,114 @@ struct Fixtures {
     expressions: Vec<ExpressionCase>,
     baskets: Vec<BasketCase>,
     accounts: Vec<AccountCase>,
+    preparations: Vec<PreparationCase>,
+}
+
+#[derive(Debug, Deserialize)]
+struct PreparationCase {
+    before: Vec<(u64, String)>,
+    consumed: Vec<(u64, String)>,
+    produced: Vec<(u64, String)>,
+    after: Vec<(u64, String)>,
+    overflow: Option<u64>,
+    shortfall: Option<Vec<(u64, String)>>,
+}
+
+#[test]
+fn exchange_preparation_matches_lean() {
+    fn fixture_basket(entries: &[(u64, String)]) -> Basket<u64> {
+        Basket::try_from_entries(
+            entries
+                .iter()
+                .map(|(asset, value)| (*asset, Quantity::new(number(value)))),
+        )
+        .unwrap()
+    }
+    fn entries(basket: &Basket<u64>) -> Vec<(u64, String)> {
+        basket
+            .iter()
+            .map(|(asset, value)| (*asset, value.to_string()))
+            .collect()
+    }
+    let cases = fixtures().preparations;
+    assert_eq!(cases.len(), 492);
+    for case in cases {
+        let consumed = fixture_basket(&case.consumed);
+        let produced = fixture_basket(&case.produced);
+        let rate = Rate::new()
+            .consume(0_u16, basket([(9, 1)]))
+            .produce(0_u16, basket([(9, 2)]))
+            .consume(1_u16, consumed.clone())
+            .produce(1_u16, produced.clone());
+        // Account 0 stages successfully before account 1. A later error must
+        // leave both accounts untouched, including insertion order.
+        let mut world = EconomyBuilder::<u8, u64, u8, u16>::new()
+            .account(0, Account::from(basket([(9, 1)])))
+            .account(1, Account::from(fixture_basket(&case.before)))
+            .account(2, Account::from(basket([(8, 3)])))
+            .rate(0, rate)
+            .build()
+            .unwrap();
+        let original = world.fork();
+        let action = Exchange::new(0, Quantity::new(1)).bind(0, 0).bind(1, 1);
+        let accepted = case.overflow.is_none() && case.shortfall.is_none();
+        let assessment = world.assess(&action);
+        assert_eq!(assessment.is_applicable(), accepted, "{case:?}");
+        for id in 0..3 {
+            assert_eq!(
+                entries(world.account(&id).unwrap().balances()),
+                entries(original.account(&id).unwrap().balances()),
+                "assessment changed account {id}: {case:?}"
+            );
+        }
+        match (case.overflow, &case.shortfall, world.apply(action)) {
+            (None, None, Ok(receipt)) => {
+                let delta = receipt
+                    .deltas()
+                    .iter()
+                    .find(|delta| *delta.account() == 1)
+                    .unwrap();
+                assert_eq!(entries(delta.consumed()), entries(&consumed), "{case:?}");
+                assert_eq!(entries(delta.produced()), entries(&produced), "{case:?}");
+            }
+            (Some(expected), None, Err(ApplyError::BalanceOverflow { account, asset })) => {
+                assert_eq!((account, asset), (1, expected), "{case:?}");
+            }
+            (None, Some(expected), Err(ApplyError::Infeasible { shortfalls })) => {
+                assert_eq!(shortfalls.len(), 1, "{case:?}");
+                assert_eq!(*shortfalls[0].account(), 1, "{case:?}");
+                assert_eq!(&entries(shortfalls[0].missing()), expected, "{case:?}");
+            }
+            (_, _, actual) => panic!("preparation disagrees with Lean: {case:?}: {actual:?}"),
+        }
+        assert_eq!(
+            entries(world.account(&1).unwrap().balances()),
+            case.after,
+            "{case:?}"
+        );
+        assert_eq!(
+            world.balance(&0, &9).get(),
+            if accepted { 2 } else { 1 },
+            "{case:?}"
+        );
+        assert_eq!(
+            entries(world.account(&2).unwrap().balances()),
+            vec![(8, "3".to_owned())]
+        );
+        for id in 0..3 {
+            assert_eq!(
+                entries(original.account(&id).unwrap().balances()),
+                if id == 0 {
+                    vec![(9, "1".to_owned())]
+                } else if id == 1 {
+                    case.before.clone()
+                } else {
+                    vec![(8, "3".to_owned())]
+                },
+                "fork changed account {id}: {case:?}"
+            );
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]

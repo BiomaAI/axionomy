@@ -77,6 +77,28 @@ def accountCase (depositing : Bool) (before amounts : List (Nat × Nat)) : Accou
   ⟨if depositing then "deposit" else "withdraw", strings before, strings amounts,
     strings result.2, error.1, error.2⟩
 
+structure PreparationCase where
+  before : List (Nat × String)
+  consumed : List (Nat × String)
+  produced : List (Nat × String)
+  after : List (Nat × String)
+  overflow : Option Nat
+  shortfall : Option (List (Nat × String))
+  deriving ToJson
+
+def preparationCase (before consumed produced : List (Nat × Nat)) : PreparationCase :=
+  let before := Basket.canonical before
+  let consumed := Basket.canonical consumed
+  let produced := Basket.canonical produced
+  let result := Account.preparedOutcome before
+    (Account.prepare (Account.naturals Quantity.u64Max) before consumed produced)
+  let strings := fun entries : List (Nat × Nat) => entries.map (fun (asset, value) => (asset, toString value))
+  let error := match result.1 with
+    | .ok () => (none, none)
+    | .error (.overflow asset) => (some asset, none)
+    | .error (.insufficient missing) => (none, some (strings missing))
+  ⟨strings before, strings consumed, strings produced, strings result.2, error.1, error.2⟩
+
 def main : IO Unit := do
   let limit := Quantity.u64Max
   let boundaries := [0, 1, 2, 3, limit - 1, limit]
@@ -140,7 +162,25 @@ def main : IO Unit := do
       ([(0, 5), (1, 2), (2, 7)], [(0, 5), (1, 3), (3, 1)])] do
     for depositing in [false, true] do
       accounts := accounts.push (accountCase depositing before amounts)
+  let mut preparations : Array PreparationCase := #[]
+  for first in [0, 1, limit] do
+    for second in [0, 1, limit] do
+      for consumed in [0, 1, limit] do
+        for producedFirst in [0, 1, limit] do
+          for producedSecond in [0, 1, limit] do
+            for reverse in [false, true] do
+              let take := [(0, consumed), (1, 1)]
+              let give := [(0, producedFirst), (1, producedSecond)]
+              preparations := preparations.push (preparationCase [(0, first), (1, second), (2, 7)]
+                (if reverse then take.reverse else take) (if reverse then give.reverse else give))
+  for (before, consumed, produced) in
+      [([], [], []), ([(0, limit)], [(0, limit)], [(0, limit)]),
+       ([(0, 5), (1, limit)], [(0, 5)], [(0, 1), (1, 1)]),
+       ([(0, 5)], [(0, 6), (3, 2)], [(0, 10), (3, 2)]),
+       ([(0, 5), (2, 7)], [(0, 5)], [(3, 2), (0, 1)]),
+       ([(0, limit), (1, limit)], [], [(1, 1), (0, 1)])] do
+    preparations := preparations.push (preparationCase before consumed produced)
   let document := Json.mkObj [("version", toJson (1 : Nat)), ("scalars", toJson scalars),
     ("exchanges", toJson exchanges), ("expressions", toJson expressions), ("baskets", toJson baskets),
-    ("accounts", toJson accounts)]
+    ("accounts", toJson accounts), ("preparations", toJson preparations)]
   IO.println document.compress

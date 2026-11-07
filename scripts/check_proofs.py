@@ -62,6 +62,11 @@ def validate_coverage(root, coverage):
                     "Axionomy.AccountRefinement.withdraw_refines_naturals",
                     "Axionomy.AccountRefinement.shortfall_refines",
                     "Axionomy.AccountRefinement.exactClone_lawful"}),
+                "account_exchange_preparation": ("AccountExtraction.Funs", {
+                    "Axionomy.AccountRefinement.prepare_refines_naturals",
+                    "Axionomy.Account.prepare_success_iff",
+                    "Axionomy.Account.prepare_insufficient",
+                    "Axionomy.Account.prepare_late_overflow"}),
             }
             pipeline = pipelines.get(feature["id"])
             if pipeline is None or feature.get("extracted_module") != pipeline[0]:
@@ -126,7 +131,7 @@ def main():
     run("cargo", "test", "-p", "axionomy", "--all-features", "--test", "lean_conformance")
     run("cargo", "test", "-p", "axionomy", "--all-features", "--doc")
     print(f"Verified {len(theorems)} registered theorems and their axiom dependencies, "
-          "fresh Aeneas extraction of u64 arithmetic, basket construction, and account updates, "
+          "fresh Aeneas extraction of u64 arithmetic, basket construction, account updates and exchange account staging, "
           "and Rust conformance/type checks. Collection storage uses an explicit trusted model. "
           "Other core implementation refinement remains unproved; see verification/README.md.")
 
