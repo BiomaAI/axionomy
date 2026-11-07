@@ -55,6 +55,30 @@ class ExtractionBoundaryTests(unittest.TestCase):
 
 
 class ProductionMutationTests(unittest.TestCase):
+    def test_ignored_clone_source_breaks_inherited_replacement(self):
+        original = '''#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Quantity<N = u64>(N);'''
+        replacement = original.replace("Debug, Clone, Copy", "Debug, Copy") + '''
+impl<N: Clone> Clone for Quantity<N> {
+    fn clone(&self) -> Self { Self(self.0.clone()) }
+    fn clone_from(&mut self, _source: &Self) {}
+}'''
+        self.check_mutation("src/quantity.rs", original, replacement,
+                            "extract_account.py", "stale account model", "InheritedCloneRefinement", "AccountExtraction",
+                            proof_failure="Not a definitional equality: the left-hand side\n  inherited_quantity_clone_from")
+
+    def test_omitted_slice_hash_breaks_inherited_traversal(self):
+        original = '''#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Quantity<N = u64>(N);'''
+        replacement = original.replace("Ord, Hash)", "Ord)") + '''
+impl<N: std::hash::Hash> std::hash::Hash for Quantity<N> {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) { std::hash::Hash::hash(&self.0, state); }
+    fn hash_slice<H: std::hash::Hasher>(_values: &[Self], _state: &mut H) {}
+}'''
+        self.check_mutation("src/quantity.rs", original, replacement,
+                            "extract_account.py", "stale account model", "InheritedHashRefinement", "AccountExtraction",
+                            proof_failure="Type mismatch\n  hash_values")
+
     def test_reversed_amount_hash_breaks_field_order(self):
         original = '''#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
 #[serde(bound(

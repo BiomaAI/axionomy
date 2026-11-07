@@ -414,7 +414,7 @@ def alloc.collections.btree.set.IntoIter.Insts.CoreIterTraitsIteratorIterator.ne
 def SharedAVec.Insts.CoreIterTraitsCollectIntoIteratorSharedATIter.into_iter {T : Type} (_ : Type)
     (values : alloc.vec.Vec T) : Result (core.slice.iter.Iter T) := core.slice.Slice.iter values.slice
 
-def Shared0A.Insts.CoreCmpOrd.cmp {A : Type} (ordInst : core.cmp.Ord A) :
+def Shared0A.Insts.CoreCmpOrd.cmp {A : Type _} (ordInst : core.cmp.Ord A) :
     A → A → Result Ordering := ordInst.cmp
 
 def Str.Insts.CoreCmpOrd.cmp (left right : Str) : Result Ordering := do
@@ -565,7 +565,7 @@ def alloc.collections.btree.map.BTreeMap.len {K V A : Type}
 
 -- An Arc clone shares the same logical immutable pointee. Reference-counting,
 -- physical allocation, aliasing and copy-on-write remain dependency boundaries.
-def alloc.sync.Arc.Insts.CoreCloneClone.clone {T A : Type}
+def alloc.sync.Arc.Insts.CoreCloneClone.clone {T : Type} {A : Type _}
     (_ : core.alloc.AllocatorClone A) (value : alloc.sync.Arc T) : Result (alloc.sync.Arc T) := .ok value
 
 -- A mutable map index preserves the stored key and every other entry. Missing
@@ -601,7 +601,7 @@ def alloc.collections.btree.map.BTreeMap.insert {K V A : Type}
   | .Vacant entry => .ok (none, entry.before ++ (key, value) :: entry.after)
   | .Occupied entry => .ok (some entry.value, entry.before ++ (entry.key, value) :: entry.after)
 
-def TupleVUT.Insts.CoreCmpOrd.cmp {V U T : Type}
+def TupleVUT.Insts.CoreCmpOrd.cmp {V : Type _} {U : Type _} {T : Type _}
     (first : core.cmp.Ord V) (second : core.cmp.Ord U) (third : core.cmp.Ord T)
     (left right : V × U × T) : Result Ordering := do
   let compared ← first.cmp left.1 right.1
@@ -616,20 +616,20 @@ def TupleVUT.Insts.CoreCmpOrd.cmp {V U T : Type}
     | .eq => third.cmp left.2.2 right.2.2
 
 -- These unused dictionary fields remain fail-closed. Sorting uses Ord::cmp.
-def TupleVUT.Insts.CoreCmpPartialOrdTupleVUT.partial_cmp {V U T : Type}
+def TupleVUT.Insts.CoreCmpPartialOrdTupleVUT.partial_cmp {V : Type _} {U : Type _} {T : Type _}
     (_ : core.cmp.PartialOrd V V) (_ : core.cmp.PartialOrd U U) (_ : core.cmp.PartialOrd T T)
     (_ _ : V × U × T) : Result (Option Ordering) := .fail .panic
-def TupleVUT.Insts.CoreCmpPartialOrdTupleVUT.lt {V U T : Type}
+def TupleVUT.Insts.CoreCmpPartialOrdTupleVUT.lt {V : Type _} {U : Type _} {T : Type _}
     (_ : core.cmp.PartialOrd V V) (_ : core.cmp.PartialOrd U U) (_ : core.cmp.PartialOrd T T)
     (_ _ : V × U × T) : Result Bool := .fail .panic
-def TupleVUT.Insts.CoreCmpPartialOrdTupleVUT.le {V U T : Type}
+def TupleVUT.Insts.CoreCmpPartialOrdTupleVUT.le {V : Type _} {U : Type _} {T : Type _}
     (_ : core.cmp.PartialOrd V V) (_ : core.cmp.PartialOrd U U) (_ : core.cmp.PartialOrd T T)
     (_ _ : V × U × T) : Result Bool := .fail .panic
-def TupleVUT.Insts.CoreCmpPartialOrdTupleVUT.gt {V U T : Type}
+def TupleVUT.Insts.CoreCmpPartialOrdTupleVUT.gt {V : Type _} {U : Type _} {T : Type _}
     (_ : core.cmp.PartialOrd V V) (_ : core.cmp.PartialOrd U U) (_ : core.cmp.PartialOrd T T)
     (_ _ : V × U × T) : Result Bool := .fail .panic
 
-def TupleVUT.Insts.CoreCmpPartialOrdTupleVUT.ge {V U T : Type}
+def TupleVUT.Insts.CoreCmpPartialOrdTupleVUT.ge {V : Type _} {U : Type _} {T : Type _}
     (_ : core.cmp.PartialOrd V V) (_ : core.cmp.PartialOrd U U) (_ : core.cmp.PartialOrd T T)
     (_ _ : V × U × T) : Result Bool := .fail .panic
 -- Pinned core/src/tuple.rs expands equality as field comparisons joined by &&:
@@ -692,14 +692,14 @@ def alloc.slice.Slice.sort_by {T F : Type}
   if fits : sorted.length ≤ Usize.max then .ok (Slice.from sorted fits)
   else .fail .panic
 
-def TupleTBC.Insts.CoreHashHash.hash {T B C S : Type}
+def TupleTBC.Insts.CoreHashHash.hash {T : Type _} {B : Type _} {C : Type _} {S : Type _}
     (first : core.hash.Hash T) (second : core.hash.Hash B) (third : core.hash.Hash C)
     (hasher : core.hash.Hasher S) (value : T × B × C) (state : S) : Result S := do
   let state ← first.hash hasher value.1 state
   let state ← second.hash hasher value.2.1 state
   third.hash hasher value.2.2 state
 
-def hashValues {T H : Type} (hashInst : core.hash.Hash T) (hasher : core.hash.Hasher H) : List T → H → Result H
+def hashValues {T : Type _} {H : Type _} (hashInst : core.hash.Hash T) (hasher : core.hash.Hasher H) : List T → H → Result H
   | [], state => .ok state
   | value :: rest, state => do
     let next ← hashInst.hash hasher value state
@@ -710,7 +710,7 @@ def hashValues {T H : Type} (hashInst : core.hash.Hash T) (hasher : core.hash.Ha
 -- compatibility condition. Prefix and integer bytes match
 -- the default Hasher methods on the verified 64-bit little-endian targets.
 -- Custom hash_slice/Hasher convenience overrides are not represented here.
-def alloc.vec.Vec.Insts.CoreHashHash.hash {T : Type} (_ : Type) {H : Type}
+def alloc.vec.Vec.Insts.CoreHashHash.hash {T : Type _} (_ : Type _) {H : Type _}
     (hashInst : core.hash.Hash T) (hasher : core.hash.Hasher H) (values : alloc.vec.Vec T) (state : H) : Result H := do
   if fits : values.val.length ≤ U64.max then
     let count : Std.U64 := UScalar.ofNatCore values.val.length (by
@@ -720,5 +720,46 @@ def alloc.vec.Vec.Insts.CoreHashHash.hash {T : Type} (_ : Type) {H : Type}
     let next ← hasher.write state (core.num.U64.to_le_bytes count).to_slice
     hashValues hashInst hasher values.val next
   else .fail .panic
+
+-- Reviewed std defaults and overrides exposed by inherited public methods.
+-- Hash::hash_slice's default loops over elements with no length prefix. The
+-- four core Hash implementations inherit it; arbitrary erased overrides do not.
+-- Extracting the std body itself currently fails on slice iterator PtrMetadata.
+def core.hash.Hash.hash_slice.default {T : Type _} {H : Type _}
+    (inst : core.hash.Hash T) (hasher : core.hash.Hasher H)
+    (values : Slice T) (state : H) : Result H :=
+  hashValues inst hasher values.val state
+
+-- The primitive override makes one native-byte write, even for an empty slice.
+-- This differs observably from a sequence of per-element writes. It is not
+-- called by the four core wrappers. The extraction target is checked as LE64.
+def U64.Insts.CoreHashHash.hash_slice {H : Type _}
+    (hasher : core.hash.Hasher H) (values : Slice Std.U64) (state : H) : Result H :=
+  let bytes := values.val.flatMap fun value => (core.num.U64.to_le_bytes value).val
+  if fits : bytes.length ≤ Usize.max then hasher.write state (Slice.from bytes fits)
+  else .fail .panic
+
+-- Tuple overrides use payload ne directly, short-circuiting left to right;
+-- they are not the negation of tuple eq when a payload overrides ne.
+def Pair.Insts.CoreCmpPartialEqPair.ne {U : Type _} {T : Type _}
+    (first : core.cmp.PartialEq U U) (second : core.cmp.PartialEq T T)
+    (left right : U × T) : Result Bool := do
+  let differs ← first.ne left.1 right.1
+  if differs then .ok true else second.ne left.2 right.2
+
+def TupleVUT.Insts.CoreCmpPartialEqTupleVUT.ne {V : Type _} {U : Type _} {T : Type _}
+    (first : core.cmp.PartialEq V V) (second : core.cmp.PartialEq U U)
+    (third : core.cmp.PartialEq T T) (left right : V × U × T) : Result Bool := do
+  let firstDiffers ← first.ne left.1 right.1
+  if firstDiffers then .ok true else
+    let secondDiffers ← second.ne left.2.1 right.2.1
+    if secondDiffers then .ok true else third.ne left.2.2 right.2.2
+
+def Box.Insts.CoreCmpPartialEqBox.ne {T : Type _} (_ : Type)
+    (inst : core.cmp.PartialEq T T) (left right : T) : Result Bool := inst.ne left right
+
+-- Logical string contents; buffer reuse, allocation and drops remain external.
+def alloc.string.String.Insts.CoreCloneClone.clone_from (_ source : String) : Result String :=
+  .ok source
 
 end Axionomy.AccountExtracted

@@ -40,6 +40,8 @@ into it), read `verification/README.md` and `verification/coverage.json` first.
   string-conversion results for names and parameters,
   generic derived equality and cloning, quantity/fingerprint ordering and
   explicitly scoped hash composition (including all observation-key fields),
+  inherited clone replacement and inequality, quantity/fingerprint order helpers,
+  and slice hashing under the reviewed standard-library default model,
   runtime signed conservation and whole-state diagnostic measurement
   against Lean specifications. Collections use
   explicit trusted models; other contracts have design proofs and finite Rust

@@ -19,13 +19,16 @@ GENERATED = {
 }
 TEMPLATES = {
     "TypesExternal_Template.lean": "b8ad76496c678a024c5cde4fdabe7d3063f8c30f237d5aa3d12f527cad18b85a",
-    "FunsExternal_Template.lean": "9205518614a6dd01a4ad4e56d139f2c7c32797fa00ce64c244e7761d19e980e9",
+    "FunsExternal_Template.lean": "eae38cce63cb72a0578aff62076886cb1c8ecec8b4aae17f6608e088eb93f343",
 }
 
 # The pinned backend's Iterator dictionary omits size_hint. Its supported
 # filtering mode removes that dictionary field, while preserving concrete
 # methods and their callers for extraction and proof. Generic calls through the
-# absent field cannot typecheck in Lean. Accept only this exact diagnostic;
+# absent field cannot typecheck in Lean. Hash also omits hash_slice, but the
+# four core wrappers call its separately modeled std default directly, with
+# concrete extracted Hash implementations. They do not dispatch through an
+# erased payload hash_slice override. Accept only the two exact diagnostics;
 # every other warning/error remains fatal. Concrete iterator definitions are
 # mandatory below, so filtering cannot silently replace their implementation.
 FILTERED_TRAIT_WARNING = (
@@ -33,6 +36,11 @@ FILTERED_TRAIT_WARNING = (
     "'core::iter::traits::iterator::Iterator', could not find the information "
     "for item 'size_hint'. The model defined in the Lean library seems to be "
     "missing the corresponding field."
+)
+FILTERED_HASH_WARNING = (
+    "When retrieving the builtin information for trait decl "
+    "'core::hash::Hash', could not find the information for item 'hash_slice'. "
+    "The model defined in the Lean library seems to be missing the corresponding field."
 )
 
 INSPECTION_DEFINITIONS = (
@@ -89,8 +97,8 @@ DERIVED_DEFINITIONS = (
 def validate_extraction_diagnostics(output):
     plain = re.sub(r"\x1b\[[0-9;]*m", "", output)
     diagnostics = re.findall(r"\[(Warn|Error)\s*\]\s*([^\n]*)", plain)
-    if diagnostics != [("Warn", FILTERED_TRAIT_WARNING)]:
-        raise ValueError("unexpected account extraction diagnostics; only the reviewed Iterator.size_hint warning is permitted")
+    if sorted(diagnostics) != sorted([("Warn", FILTERED_TRAIT_WARNING), ("Warn", FILTERED_HASH_WARNING)]):
+        raise ValueError("unexpected account extraction diagnostics; only the reviewed Iterator.size_hint and Hash.hash_slice warnings are permitted")
 
 # Keep critical handoffs explicit alongside the complete caller extraction.
 # These syntactic guards supplement, rather than replace, the Lean refinements.
@@ -112,6 +120,64 @@ VALIDATION_CALL = """let rule = match self.validate_structure(proposal) {
         };"""
 
 ENTRY_CALLS = {
+    "inherited_quantity_clone_from": "target.clone_from(source)",
+    "inherited_amount_clone_from": "target.clone_from(source)",
+    "inherited_expression_clone_from": "target.clone_from(source)",
+    "inherited_computed_amount_clone_from": "target.clone_from(source)",
+    "inherited_condition_clone_from": "target.clone_from(source)",
+    "inherited_comparison_clone_from": "target.clone_from(source)",
+    "inherited_fingerprint_clone_from": "target.clone_from(source)",
+    "inherited_assessment_status_clone_from": "target.clone_from(source)",
+    "inherited_model_issue_clone_from": "target.clone_from(source)",
+    "inherited_model_error_clone_from": "target.clone_from(source)",
+    "inherited_basket_error_clone_from": "target.clone_from(source)",
+    "inherited_rate_error_clone_from": "target.clone_from(source)",
+    "inherited_quantity_error_clone_from": "target.clone_from(source)",
+    "inherited_proposal_clone_from": "target.clone_from(source)",
+    "inherited_trace_clone_from": "target.clone_from(source)",
+    "inherited_observation_key_clone_from": "target.clone_from(source)",
+    "inherited_basket_clone_from": "target.clone_from(source)",
+    "inherited_account_clone_from": "target.clone_from(source)",
+    "inherited_account_error_clone_from": "target.clone_from(source)",
+    "inherited_delta_clone_from": "target.clone_from(source)",
+    "inherited_receipt_clone_from": "target.clone_from(source)",
+    "inherited_goal_clone_from": "target.clone_from(source)",
+    "inherited_rate_clone_from": "target.clone_from(source)",
+    "inherited_invariant_clone_from": "target.clone_from(source)",
+    "inherited_economy_clone_from": "target.clone_from(source)",
+    "inherited_account_assessment_clone_from": "target.clone_from(source)",
+    "inherited_shortfall_clone_from": "target.clone_from(source)",
+    "inherited_assessment_clone_from": "target.clone_from(source)",
+    "inherited_apply_error_clone_from": "target.clone_from(source)",
+    "inherited_quantity_ne": "left!=right",
+    "inherited_amount_ne": "left!=right",
+    "inherited_expression_ne": "left!=right",
+    "inherited_computed_amount_ne": "left!=right",
+    "inherited_condition_ne": "left!=right",
+    "inherited_comparison_ne": "left!=right",
+    "inherited_fingerprint_ne": "left!=right",
+    "inherited_assessment_status_ne": "left!=right",
+    "inherited_model_issue_ne": "left!=right",
+    "inherited_model_error_ne": "left!=right",
+    "inherited_basket_error_ne": "left!=right",
+    "inherited_rate_error_ne": "left!=right",
+    "inherited_quantity_error_ne": "left!=right",
+    "inherited_proposal_ne": "left!=right",
+    "inherited_trace_ne": "left!=right",
+    "inherited_observation_key_ne": "left!=right",
+    "inherited_account_error_ne": "left!=right",
+    "inherited_basket_ne": "left!=right",
+    "inherited_account_ne": "left!=right",
+    "inherited_quantity_min": "left.min(right)",
+    "inherited_quantity_max": "left.max(right)",
+    "inherited_quantity_clamp": "value.clamp(lower,upper)",
+    "inherited_fingerprint_min": "left.min(right)",
+    "inherited_fingerprint_max": "left.max(right)",
+    "inherited_fingerprint_clamp": "value.clamp(lower,upper)",
+    "inherited_quantity_hash_slice": "std::hash::Hash::hash_slice(values,state)",
+    "inherited_amount_hash_slice": "std::hash::Hash::hash_slice(values,state)",
+    "inherited_fingerprint_hash_slice": "std::hash::Hash::hash_slice(values,state)",
+    "inherited_observation_key_hash_slice": "std::hash::Hash::hash_slice(values,state)",
     "derived_basket_clone": "value.clone()",
     "derived_account_clone": "value.clone()",
     "derived_account_error_clone": "value.clone()",

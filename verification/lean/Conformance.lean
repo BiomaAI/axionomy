@@ -20,6 +20,7 @@ import Axionomy.BasketSortedConformance
 import Axionomy.InspectionConformance
 import Axionomy.ConvenienceConformance
 import Axionomy.DerivedConformance
+import Axionomy.InheritedConformance
 
 /-! Deterministic executable examples from the SAME definitions used in the
 proofs. Rust runs these examples through the public API. Agreement on these
@@ -618,5 +619,6 @@ def main : IO Unit := do
     ("basketSorted", toJson BasketSortedConformance.fixtures),
     ("inspection", InspectionConformance.fixtures),
     ("convenience", ConvenienceConformance.fixtures),
-    ("derived", DerivedConformance.fixtures)]
+    ("derived", DerivedConformance.fixtures),
+    ("inherited", InheritedConformance.fixtures)]
   IO.println document.compress

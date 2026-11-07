@@ -185,7 +185,7 @@ to `origin/main`; theorem counts do not measure percentage completion.
 | 2 | 13 | Ordered traces, replay prefix-on-error, isolated replay, invariant composition | Implementation proved: first error, accepted prefix state, ordered receipts and derived caller invariants; generic trace extension also proved under explicit iterator laws |
 | 2 | 14 | Goals, visibility, hidden-state noninterference, missing/zero distinctions | Implementation proved and validated; finite-input iterator construction and documented collection models |
 | 2 | 15 | Canonical state/observation keys and deterministic fingerprints | Implementation proved and validated under documented sorting/hash models and native 64-bit little-endian scope |
-| 3. Public data boundary | 16 | Remaining typed constructors/accessors/conversions/iterators/equality | Partial: foundational typed data, expression construction, iterator consumers, basket collection boundaries, core inspection, u64 convenience constructors and derived traits proved under documented models; remaining APIs listed below |
+| 3. Public data boundary | 16 | Remaining typed constructors/accessors/conversions/iterators/equality | Partial: foundational typed data, expression construction, iterator consumers, basket collection boundaries, core inspection, u64 convenience constructors, derived traits and inherited helpers proved under documented models; remaining APIs listed below |
 | 3 | 17 | Serialization round trips, validation/canonicalization, accurate schema contracts | Open |
 | 4. Numeric backends | 18 | BigUint/BigInt and explicit algebraic requirements for custom backends | Open |
 
@@ -273,6 +273,23 @@ doctests also passed. The prior 35 production mutation controls remain in CI.
 
 The remaining completion work is:
 
+**Completed item 16 inherited-trait batch:** extracted 58 public forwarding roots for
+29 `clone_from` methods, 19 `ne` methods (including basket/account equality),
+quantity/fingerprint `min`/`max`/`clamp`, and four `hash_slice` methods. The
+pinned std defaults and backend representations have been reviewed. Four proof
+modules compile with 78 contracts for result composition, tie selection, clamp
+rejection and hash traversal under explicit callback laws. Lean-generated order,
+clamp and hash-chunk fixtures pass the Rust bridge, including 36 generated tagged
+cases that distinguish equal-key values. The full gate passed with 655 registered
+contracts and 4,289 audited Axionomy theorems. All 333 Rust workspace tests in 59
+groups, workspace doctests, formatting, Clippy with warnings denied and strict
+documentation builds passed. All 105 boundary/gate controls passed. Both new
+production mutations compiled after re-extraction and then broke the intended
+semantic proofs: ignored clone replacement and omitted slice hashing. The prior
+54 production mutation controls remain in CI; all 56 source targets were checked.
+Item 16 remains partial, and items 17–18 remain open.
+See [the exact dependency boundary](ACCOUNTS.md#inherited-public-traits).
+
 **Completed item 16 derived-trait batch:** implementation contracts cover equality/clone on typed
 values, recursive expressions, conditions, proposals/traces, errors and observation
 keys, plus quantity/fingerprint ordering and typed hashing. All remaining public
@@ -295,11 +312,10 @@ workspace doctests. All 102 boundary/gate controls passed. Both new re-extracted
 production mutants compiled and then broke their semantic proofs: reversed amount
 hash order and observation-key equality omitting existing accounts. The prior 52
 production mutation controls remain in CI; all 54 source targets were checked.
-Formatting and
-remaining iterator/callback adapters and inherited trait convenience methods
-(`clone_from`, `ne`, `min`/`max`/`clamp`, `hash_slice`) remain visible obligations
-alongside items 17–18. This batch covers the named derived methods, not every
-inherited method made available by their trait implementations.
+Formatting and remaining iterator/callback adapters remain visible obligations
+alongside items 17–18. The inherited convenience methods are covered by the
+separate batch above; this derived-method batch does not establish those contracts
+by itself.
 
 **Completed item 16 convenience-constructor batch:** implementation proofs cover
 `Rate::consume`/`produce`/`preserve` overflow panics, duplicate rejection by the
@@ -345,10 +361,9 @@ See the
   filtering are also proved under independent iterator laws. Basket construction
   from entries and typed amounts, FromIterator/array conversions, and basic borrowed
   iteration/queries including sorted views are now covered as well. Remaining work
-  includes remaining collection iterator and arbitrary callback contracts;
-  inherited trait conveniences
-  (`clone_from`, `ne`, `min`/`max`/`clamp`, `hash_slice`); arbitrary erased hash
-  overrides/portability beyond the scoped models; and formatting. The u64 static-rate and basket
+  includes remaining collection iterator and arbitrary callback contracts,
+  arbitrary erased hash overrides/portability beyond the scoped models, and
+  formatting. The u64 static-rate and basket
   convenience panic contracts are covered by the batch above. See the [public data contracts](ACCOUNTS.md#typed-public-data-and-expression-construction)
   for the exact scope of this batch.
 - **17 — Serialization and schema:** connect production serialization and
@@ -517,39 +532,33 @@ u64 boundaries. Each runs both directly and through `assess`/`apply`, with and
 without a failing condition, checking structural-error precedence and unchanged
 state. These caller checks are finite integration evidence, not caller proofs.
 
-## Explicit legacy refinement gaps
+## Remaining contracts and dependency boundaries
 
-The following existed before this proof requirement and are not discharged by
-the initial theorems. They are a backfill plan, not an exemption for new behavior:
+The unfinished core work remains items 16–18 of the completion goal:
 
-- Charon/Aeneas extraction and refinement beyond the four `Quantity<u64>` checked
-  arithmetic operations, basket construction/operations, account updates/staging,
-  model/rate construction and metadata discovery, complete u64 transaction
-  assessment/application, finite-input iterator filtering, fork/simulation/replay, ordered trace access/extension, goals, finite-input iterator views, canonical keys and scoped fingerprints, snapshot expression/condition
-  evaluation, bounded effect helpers, runtime conservation and whole-state measurement.
-- Correctness of `IndexMap`, `BTreeMap`, `Arc`, iterator order, allocation, cloning,
-  and copy-on-write isolation; Rust compilation still enforces its ownership rules.
-- Constructor and deserialization composition for the remaining public APIs.
-  Transaction caller preconditions are now discharged through structural
-  validation, aggregation, preparation and commit; arbitrary deserialized metadata
-  still needs its separate representation contract.
-- Remaining finite-map adapters, serialization/schema round trips,
-  remaining inherited trait methods, arbitrary erased hash overrides, and portability of fingerprint encodings
-  beyond the documented targets. Fingerprints are not collision-free identities.
-- Other remaining public APIs and arbitrary callback contracts. Static u64 rate
-  and basket convenience panics, string conversions, invariant construction and
-  inspection are covered by the batches above. Runtime
-  invariant checks, intermediate `i128` overflow, and caller diagnostic totals
-  are covered by the complete transaction contract.
-- Laws for custom `QuantityScalar` backends and BigUint/BigInt implementations.
-  Rust trait bounds specify operations, not their algebraic correctness.
+- Remaining public API, finite-map/iterator adapter, formatting and arbitrary
+  callback contracts; arbitrary erased hash overrides and fingerprint portability
+  beyond the documented targets. The named inherited helpers in the batch above
+  have their own contracts. Fingerprints are not collision-free identities.
+- Serialization/deserialization composition, representation validation and schema
+  contracts, including arbitrary deserialized metadata and keys. Transaction
+  caller preconditions are discharged for the documented well-formed domain;
+  input boundaries must establish that domain separately.
+- BigUint arithmetic, BigInt measures and laws for custom `QuantityScalar` and
+  `QuantityMeasure` implementations. Rust trait bounds specify operations, not
+  their algebraic correctness.
 
-For further implementation proofs, extend the pinned Aeneas pipeline from u64
-arithmetic, baskets, accounts, model/rate construction, discovery, validation, evaluation, effects and conservation
-to execution/observation and remaining public data contracts, connecting
-extracted definitions to the existing specifications. Model unavoidable external dependencies explicitly and
-report their trust status. Do not maintain a second Rust algorithm only for proofs
-or change the public API to an untyped representation to satisfy extraction.
+The correctness of compiler/translation infrastructure, physical `IndexMap`,
+`BTreeMap`, `Arc`, allocation, cloning and copy-on-write implementations remains
+an explicit dependency boundary. Their logical adapters must match the concrete
+operations used by each contract; proving the dependencies themselves is outside
+this goal. Rust compilation continues to enforce ownership and strong typing.
+
+Extend the pinned Aeneas pipeline for the remaining contracts, connecting fresh
+extracted definitions to typed specifications. Model unavoidable external
+dependencies explicitly and report their trust status. Do not maintain a second
+Rust algorithm only for proofs or change the public API to an untyped
+representation to satisfy extraction.
 
 The specification also deliberately avoids universal batch/sequential equivalence:
 consume-one/produce-one can fire twice from one token, while a two-unit batch

@@ -108,3 +108,8 @@ import Axionomy.DerivedKeyRefinement
 import Axionomy.DerivedRecordRefinement
 import Axionomy.DerivedValueRefinement
 import Axionomy.DerivedConformance
+import Axionomy.InheritedCloneRefinement
+import Axionomy.InheritedEqualityRefinement
+import Axionomy.InheritedOrderRefinement
+import Axionomy.InheritedHashRefinement
+import Axionomy.InheritedConformance

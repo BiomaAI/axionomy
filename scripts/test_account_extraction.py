@@ -9,20 +9,27 @@ from unittest.mock import patch
 
 from extract_account import (GENERATED, LEAN, ROOT, TEMPLATES, compare_generated,
                             validate_bridge, validate_generated, validate_fingerprint_target,
-                            FILTERED_TRAIT_WARNING, INSPECTION_DEFINITIONS, CONVENIENCE_DEFINITIONS,
+                            FILTERED_TRAIT_WARNING, FILTERED_HASH_WARNING,
+                            INSPECTION_DEFINITIONS, CONVENIENCE_DEFINITIONS,
                             DERIVED_DEFINITIONS, ENTRY_CALLS,
                             validate_extraction_diagnostics)
 
 
 class ExtractionDiagnosticsTests(unittest.TestCase):
-    def test_only_reviewed_filtered_dictionary_warning_passes(self):
-        validate_extraction_diagnostics("[\x1b[93mWarn\x1b[39m ] " + FILTERED_TRAIT_WARNING + "\n")
+    def test_only_reviewed_filtered_dictionary_warnings_pass(self):
+        for warnings in ((FILTERED_TRAIT_WARNING, FILTERED_HASH_WARNING),
+                         (FILTERED_HASH_WARNING, FILTERED_TRAIT_WARNING)):
+            validate_extraction_diagnostics("".join("[\x1b[93mWarn\x1b[39m ] " + warning + "\n" for warning in warnings))
 
     def test_other_diagnostics_and_missing_expected_warning_fail(self):
-        allowed = "[Warn ] " + FILTERED_TRAIT_WARNING + "\n"
+        iterator = "[Warn ] " + FILTERED_TRAIT_WARNING + "\n"
+        hashing = "[Warn ] " + FILTERED_HASH_WARNING + "\n"
+        allowed = iterator + hashing
         for output in ("", allowed + "[Error] translation failed\n",
                        allowed + "[Warn ] a different unsupported operation\n",
-                       allowed.replace("size_hint", "next"), allowed + allowed):
+                       allowed.replace("size_hint", "next"), allowed + allowed,
+                       iterator, hashing, allowed + hashing,
+                       allowed.replace("hash_slice", "hash")):
             with self.subTest(output=output), self.assertRaisesRegex(ValueError, "unexpected account extraction diagnostics"):
                 validate_extraction_diagnostics(output)
 
@@ -74,6 +81,19 @@ class AccountBridgeTests(unittest.TestCase):
 
     def test_production_sources_pass(self):
         validate_bridge(self.root)
+
+    def test_changed_inherited_forwarders_are_rejected(self):
+        original = self.target.read_text()
+        entries = [name for name in ENTRY_CALLS if name.startswith("inherited_")]
+        self.assertEqual(len(entries), 58)
+        for name in entries:
+            with self.subTest(entry=name):
+                pattern = r"(pub fn " + re.escape(name) + r"\b.*?\{)(.*?)(\n\})"
+                changed, count = re.subn(pattern, r"\1 bypassed()\3", original, flags=re.DOTALL)
+                self.assertEqual(count, 1)
+                self.target.write_text(changed)
+                with self.assertRaisesRegex(ValueError, "not a forwarding call: " + name):
+                    validate_bridge(self.root)
 
     def test_changed_derived_forwarders_are_rejected(self):
         original = self.target.read_text()
@@ -192,6 +212,20 @@ class AccountExtractionTests(unittest.TestCase):
 
     def test_current_generated_code_passes(self):
         validate_generated(self.directory)
+
+    def test_missing_inherited_roots_are_rejected(self):
+        path = self.directory / "Funs.lean"
+        original = path.read_text()
+        entries = [name for name in ENTRY_CALLS if name.startswith("inherited_")]
+        self.assertEqual(len(entries), 58)
+        for name in entries:
+            with self.subTest(name=name):
+                changed, count = re.subn(r"(^def\s+)" + re.escape(name) + r"(?=\s)",
+                                        r"\1bypassed_inherited", original, flags=re.MULTILINE)
+                self.assertEqual(count, 1)
+                path.write_text(changed)
+                with self.assertRaisesRegex(ValueError, "missing account production definition"):
+                    validate_generated(self.directory)
 
     def test_missing_derived_methods_are_rejected(self):
         path = self.directory / "Funs.lean"

@@ -49,6 +49,19 @@ fn check_serialized_clone<T: Clone + Serialize>(value: &T) {
         serde_json::to_string(value).unwrap()
     );
 }
+fn check_equal_clone_from<T: Clone + PartialEq + std::fmt::Debug>(target: &T, source: &T) {
+    let mut result = target.clone();
+    result.clone_from(source);
+    assert_eq!(&result, source);
+}
+fn check_clone_from<T: Clone + Serialize>(target: &T, source: &T) {
+    let mut result = target.clone();
+    result.clone_from(source);
+    assert_eq!(
+        serde_json::to_string(&result).unwrap(),
+        serde_json::to_string(source).unwrap()
+    );
+}
 fn expression(value: &Value) -> Expression {
     match value["kind"].as_str().unwrap() {
         "constant" => Expression::constant(scalar(&value["value"])),
@@ -96,7 +109,7 @@ fn amounts(value: &Value) -> Basket<Asset> {
     )
     .unwrap()
 }
-fn check_pairs<T: PartialEq>(values: &[T], pairs: &Value) {
+fn check_pairs<T: PartialEq + Clone + std::fmt::Debug>(values: &[T], pairs: &Value) {
     for pair in items(pairs) {
         let left = usize::try_from(number(&pair[0])).unwrap();
         let right = usize::try_from(number(&pair[1][0])).unwrap();
@@ -105,6 +118,13 @@ fn check_pairs<T: PartialEq>(values: &[T], pairs: &Value) {
             pair[1][1].as_bool().unwrap(),
             "pair {left}, {right}"
         );
+        assert_eq!(
+            values[left] != values[right],
+            !pair[1][1].as_bool().unwrap()
+        );
+        let mut target = values[left].clone();
+        target.clone_from(&values[right]);
+        assert_eq!(target, values[right]);
     }
 }
 
@@ -230,6 +250,8 @@ fn quantities_amounts_and_fingerprints_match_lean() {
         let right = Quantity::new(scalar(&case["right"]));
         let expected = case["eq"].as_bool().unwrap();
         assert_eq!(left == right, expected);
+        assert_eq!(left != right, !expected);
+        check_clone_from(&left, &right);
         assert_eq!(cloned(&left), left);
         let ordering = case["cmp"].as_i64().unwrap().cmp(&0);
         assert_eq!(left.cmp(&right), ordering);
@@ -247,6 +269,8 @@ fn quantities_amounts_and_fingerprints_match_lean() {
         let fingerprint: StateFingerprint = serde_json::from_value(json!(left.get())).unwrap();
         let other: StateFingerprint = serde_json::from_value(json!(right.get())).unwrap();
         assert_eq!(fingerprint == other, expected);
+        assert_eq!(fingerprint != other, !expected);
+        check_clone_from(&fingerprint, &other);
         assert_eq!(cloned(&fingerprint), fingerprint);
         assert_eq!(fingerprint.cmp(&other), ordering);
         assert_eq!(fingerprint.partial_cmp(&other), Some(ordering));
@@ -264,6 +288,8 @@ fn quantities_amounts_and_fingerprints_match_lean() {
         let same_asset = AssetAmount::new(Asset(7), right);
         let other_asset = AssetAmount::new(Asset(8), right);
         assert_eq!(amount == same_asset, expected);
+        assert_eq!(amount != same_asset, !expected);
+        check_clone_from(&amount, &other_asset);
         assert_ne!(amount, other_asset);
         assert_eq!(cloned(&amount), amount);
         let mut expected_bytes = hashed(&Asset(7)).0;
@@ -315,6 +341,11 @@ fn record_error_and_model_clone_paths_preserve_all_fields() {
         let equal = case["eq"].as_bool().unwrap();
         let basket_error = BasketError::DuplicateAsset { asset: Asset(left) };
         assert_eq!(cloned(&basket_error), basket_error);
+        let other_basket_error = BasketError::DuplicateAsset {
+            asset: Asset(right),
+        };
+        assert_eq!(basket_error != other_basket_error, !equal);
+        check_equal_clone_from(&basket_error, &other_basket_error);
         assert_eq!(
             basket_error
                 == BasketError::DuplicateAsset {
@@ -327,6 +358,12 @@ fn record_error_and_model_clone_paths_preserve_all_fields() {
             asset: Asset(right),
         };
         assert_eq!(cloned(&rate_error), rate_error);
+        let other_rate_error = RateError::BasketOverflow {
+            role: Role(right),
+            asset: Asset(left),
+        };
+        assert_eq!(rate_error != other_rate_error, !equal);
+        check_equal_clone_from(&rate_error, &other_rate_error);
         assert_eq!(
             rate_error
                 == RateError::BasketOverflow {
@@ -355,6 +392,12 @@ fn record_error_and_model_clone_paths_preserve_all_fields() {
             equal
         );
         assert_ne!(issue, ModelIssue::DuplicateRate { rate: RuleId(left) });
+        check_clone_from(
+            &issue,
+            &ModelIssue::DuplicateRate {
+                rate: RuleId(right),
+            },
+        );
         let issue: ModelIssue<Holder, RuleId> = ModelIssue::DuplicateRate { rate: RuleId(left) };
         assert_eq!(cloned(&issue), issue);
         assert_eq!(
@@ -379,15 +422,21 @@ fn record_error_and_model_clone_paths_preserve_all_fields() {
         assert_eq!(cloned(left), *left);
         for (j, right) in comparisons.iter().enumerate() {
             assert_eq!(left == right, i == j);
+            assert_eq!(left != right, i != j);
+            check_clone_from(left, right);
         }
     }
     for (i, left) in statuses.iter().enumerate() {
         assert_eq!(cloned(left), *left);
         for (j, right) in statuses.iter().enumerate() {
             assert_eq!(left == right, i == j);
+            assert_eq!(left != right, i != j);
+            check_clone_from(left, right);
         }
     }
     assert_eq!(cloned(&QuantityError::Negative), QuantityError::Negative);
+    assert!(!QuantityError::Negative.ne(&QuantityError::Negative));
+    check_equal_clone_from(&QuantityError::Negative, &QuantityError::Negative);
     let full = amounts(&data["baskets"][4]);
     let requirement = amounts(&data["baskets"][1]);
     let rule = Rate::new()
@@ -405,6 +454,7 @@ fn record_error_and_model_clone_paths_preserve_all_fields() {
             Expression::units(),
         );
     check_serialized_clone(&rule);
+    check_clone_from(&Rate::new(), &rule);
     for amount in rule
         .computed_consumed()
         .iter()
@@ -420,6 +470,7 @@ fn record_error_and_model_clone_paths_preserve_all_fields() {
         .weight(Asset(0), -3)
         .weight(Asset(1), 7);
     let copy = cloned(&invariant);
+    check_clone_from(&LinearInvariant::new("old"), &invariant);
     assert_eq!(copy.name(), invariant.name());
     assert_eq!(
         copy.weights().collect::<Vec<_>>(),
@@ -429,6 +480,7 @@ fn record_error_and_model_clone_paths_preserve_all_fields() {
         .require(Holder(0), full.clone())
         .require(Holder(1), Basket::new());
     assert_eq!(cloned(&goal).requirements(), goal.requirements());
+    check_clone_from(&Goal::new(), &goal);
     let mut world: World = EconomyBuilder::new()
         .account(Holder(0), Account::new(full))
         .account(Holder(1), Account::default())
@@ -436,6 +488,7 @@ fn record_error_and_model_clone_paths_preserve_all_fields() {
         .build()
         .unwrap();
     check_serialized_clone(&world);
+    check_clone_from(&EconomyBuilder::new().build().unwrap(), &world);
     let submitted = Proposal::new(RuleId(0), Quantity::new(1))
         .bind(Role(0), Holder(0))
         .bind(Role(1), Holder(1));
@@ -444,12 +497,22 @@ fn record_error_and_model_clone_paths_preserve_all_fields() {
     check_serialized_clone(&assessment);
     for account in assessment.accounts() {
         check_serialized_clone(account);
+        check_clone_from(&assessment.accounts()[0], account);
     }
     for delta in assessment.projected_deltas().unwrap() {
         check_serialized_clone(delta);
+        check_clone_from(&assessment.projected_deltas().unwrap()[0], delta);
     }
     let receipt = world.apply(submitted).unwrap();
     check_serialized_clone(&receipt);
+    let mut empty_world: World = EconomyBuilder::new()
+        .rate(RuleId(7), Rate::new())
+        .build()
+        .unwrap();
+    let empty_receipt = empty_world
+        .apply(Proposal::new(RuleId(7), Quantity::new(2)))
+        .unwrap();
+    check_clone_from(&empty_receipt, &receipt);
     for delta in receipt.deltas() {
         check_serialized_clone(delta);
     }
@@ -462,8 +525,12 @@ fn record_error_and_model_clone_paths_preserve_all_fields() {
         poor.assess(&Proposal::new(RuleId(0), Quantity::new(1)).bind(Role(0), Holder(0)));
     assert_eq!(infeasible.status(), AssessmentStatus::Infeasible);
     check_serialized_clone(&infeasible);
+    check_clone_from(&assessment, &infeasible);
     for shortfall in infeasible.shortfalls() {
         check_serialized_clone(shortfall);
+        let larger =
+            poor.assess(&Proposal::new(RuleId(0), Quantity::new(2)).bind(Role(0), Holder(0)));
+        check_clone_from(&larger.shortfalls()[0], shortfall);
     }
     let failures: Vec<Failure> = vec![
         Failure::MissingRate { rate: RuleId(7) },
@@ -507,6 +574,7 @@ fn record_error_and_model_clone_paths_preserve_all_fields() {
     ];
     for failure in &failures {
         check_serialized_clone(failure);
+        check_clone_from(&Failure::ZeroUnits, failure);
     }
     let invalid: ExchangeAssessment<Holder, Asset, RuleId, Role> =
         ExchangeAssessment::Invalid { issues: failures };
@@ -519,6 +587,14 @@ fn record_error_and_model_clone_paths_preserve_all_fields() {
         .build();
     let error = bad.unwrap_err();
     assert_eq!(cloned(&error), error);
+    assert!(!error.ne(&error));
+    let other_error = EconomyBuilder::<Holder, Asset, RuleId, Role>::new()
+        .account(Holder(9), Account::default())
+        .account(Holder(9), Account::default())
+        .build()
+        .unwrap_err();
+    assert!(error.ne(&other_error));
+    check_clone_from(&other_error, &error);
     assert_eq!(error.issues().len(), 2);
 }
 

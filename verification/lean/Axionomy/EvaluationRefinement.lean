@@ -97,7 +97,7 @@ theorem tree_get_exact {K V : Type} (ordInst : core.cmp.Ord K) (cmp : K → K �
 @[simp] theorem min_call (left right : Std.U64) :
     core.cmp.min (quantity.Quantity.Insts.CoreCmpOrd core.cmp.OrdU64) left right =
       .ok (arithmetic.min left right) := by
-  simp only [core.cmp.min, core.cmp.Ord.min_body, quantity_less, bind_ok]
+  simp only [core.cmp.min, core.cmp.Ord.min.default, core.cmp.Ord.min_body, quantity_less, bind_ok]
   by_cases h : left.val ≤ right.val
   · simp [arithmetic, h, Nat.not_lt.mpr h]
   · simp [arithmetic, h, Nat.lt_of_not_ge h]
@@ -105,7 +105,7 @@ theorem tree_get_exact {K V : Type} (ordInst : core.cmp.Ord K) (cmp : K → K �
 @[simp] theorem max_call (left right : Std.U64) :
     core.cmp.max (quantity.Quantity.Insts.CoreCmpOrd core.cmp.OrdU64) left right =
       .ok (arithmetic.max left right) := by
-  simp only [core.cmp.max, core.cmp.Ord.max_body, quantity_less, bind_ok]
+  simp only [core.cmp.max, core.cmp.Ord.max.default, core.cmp.Ord.max_body, quantity_less, bind_ok]
   by_cases h : left.val ≤ right.val
   · simp [arithmetic, h, Nat.not_lt.mpr h]
   · simp [arithmetic, h, Nat.lt_of_not_ge h]
@@ -250,8 +250,8 @@ theorem eval_impl (proposal : exchange.Exchange RateId Role AccountId Std.U64)
         core.convert.FromSame.from, Evaluation.eval, decodeExpression, Evaluation.operate]
     rename_i l r
     by_cases h : l.val ≤ r.val
-    · simp [core.cmp.Ord.min_body, arithmetic, h, Nat.not_lt.mpr h]
-    · simp [core.cmp.Ord.min_body, arithmetic, h, Nat.lt_of_not_ge h]
+    · simp [core.cmp.Ord.min.default, core.cmp.Ord.min_body, arithmetic, h, Nat.not_lt.mpr h]
+    · simp [core.cmp.Ord.min.default, core.cmp.Ord.min_body, arithmetic, h, Nat.lt_of_not_ge h]
   | Maximum left right ihl ihr =>
     rw [economy.evaluate_expression.eq_def]
     simp only [ihl, ihr]
@@ -262,8 +262,8 @@ theorem eval_impl (proposal : exchange.Exchange RateId Role AccountId Std.U64)
         core.convert.FromSame.from, Evaluation.eval, decodeExpression, Evaluation.operate]
     rename_i l r
     by_cases h : l.val ≤ r.val
-    · simp [core.cmp.Ord.max_body, arithmetic, h, Nat.not_lt.mpr h]
-    · simp [core.cmp.Ord.max_body, arithmetic, h, Nat.lt_of_not_ge h]
+    · simp [core.cmp.Ord.max.default, core.cmp.Ord.max_body, arithmetic, h, Nat.not_lt.mpr h]
+    · simp [core.cmp.Ord.max.default, core.cmp.Ord.max_body, arithmetic, h, Nat.lt_of_not_ge h]
 
 include hAccount hAsset hRole in
 theorem evaluate_refines (proposal : exchange.Exchange RateId Role AccountId Std.U64)

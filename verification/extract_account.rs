@@ -1706,3 +1706,435 @@ pub fn derived_account_error_eq<A: Eq + std::hash::Hash, N: QuantityScalar>(
 ) -> bool {
     left == right
 }
+
+pub fn inherited_quantity_clone_from<N: Clone>(target: &mut Quantity<N>, source: &Quantity<N>) {
+    target.clone_from(source)
+}
+
+pub fn inherited_amount_clone_from<A: Clone, N: Clone>(
+    target: &mut AssetAmount<A, N>,
+    source: &AssetAmount<A, N>,
+) {
+    target.clone_from(source)
+}
+
+pub fn inherited_expression_clone_from<Role: Clone, A: Clone, N: Clone>(
+    target: &mut QuantityExpression<Role, A, N>,
+    source: &QuantityExpression<Role, A, N>,
+) {
+    target.clone_from(source)
+}
+
+pub fn inherited_computed_amount_clone_from<Role: Clone, A: Clone, N: Clone>(
+    target: &mut ComputedAmount<Role, A, N>,
+    source: &ComputedAmount<Role, A, N>,
+) {
+    target.clone_from(source)
+}
+
+pub fn inherited_condition_clone_from<Role: Clone, A: Clone, N: Clone>(
+    target: &mut RateCondition<Role, A, N>,
+    source: &RateCondition<Role, A, N>,
+) {
+    target.clone_from(source)
+}
+
+pub fn inherited_comparison_clone_from(
+    target: &mut QuantityComparison,
+    source: &QuantityComparison,
+) {
+    target.clone_from(source)
+}
+
+pub fn inherited_fingerprint_clone_from(
+    target: &mut economy::StateFingerprint,
+    source: &economy::StateFingerprint,
+) {
+    target.clone_from(source)
+}
+
+pub fn inherited_assessment_status_clone_from(
+    target: &mut economy::AssessmentStatus,
+    source: &economy::AssessmentStatus,
+) {
+    target.clone_from(source)
+}
+
+pub fn inherited_model_issue_clone_from<AccountId: Clone, RateId: Clone>(
+    target: &mut economy::ModelIssue<AccountId, RateId>,
+    source: &economy::ModelIssue<AccountId, RateId>,
+) {
+    target.clone_from(source)
+}
+
+pub fn inherited_model_error_clone_from<AccountId: Clone, RateId: Clone>(
+    target: &mut economy::ModelBuildError<AccountId, RateId>,
+    source: &economy::ModelBuildError<AccountId, RateId>,
+) {
+    target.clone_from(source)
+}
+
+pub fn inherited_basket_error_clone_from<A: Clone>(
+    target: &mut basket::BasketError<A>,
+    source: &basket::BasketError<A>,
+) {
+    target.clone_from(source)
+}
+
+pub fn inherited_rate_error_clone_from<Role: Clone, A: Clone>(
+    target: &mut RateError<Role, A>,
+    source: &RateError<Role, A>,
+) {
+    target.clone_from(source)
+}
+
+pub fn inherited_quantity_error_clone_from(
+    target: &mut quantity::QuantityError,
+    source: &quantity::QuantityError,
+) {
+    target.clone_from(source)
+}
+
+pub fn inherited_proposal_clone_from<RateId: Clone, Role: Clone, AccountId: Clone, N: Clone>(
+    target: &mut Exchange<RateId, Role, AccountId, N>,
+    source: &Exchange<RateId, Role, AccountId, N>,
+) {
+    target.clone_from(source)
+}
+
+pub fn inherited_trace_clone_from<RateId: Clone, Role: Clone, AccountId: Clone, N: Clone>(
+    target: &mut Trace<RateId, Role, AccountId, N>,
+    source: &Trace<RateId, Role, AccountId, N>,
+) {
+    target.clone_from(source)
+}
+
+pub fn inherited_observation_key_clone_from<AccountId: Clone, A: Clone, N: Clone>(
+    target: &mut economy::ObservationKey<AccountId, A, N>,
+    source: &economy::ObservationKey<AccountId, A, N>,
+) {
+    target.clone_from(source)
+}
+
+pub fn inherited_basket_clone_from<A: Clone, N: Clone>(
+    target: &mut Basket<A, N>,
+    source: &Basket<A, N>,
+) {
+    target.clone_from(source)
+}
+
+pub fn inherited_account_clone_from<A: Clone, N: Clone>(
+    target: &mut Account<A, N>,
+    source: &Account<A, N>,
+) {
+    target.clone_from(source)
+}
+
+pub fn inherited_account_error_clone_from<A: Clone + Eq + std::hash::Hash, N: QuantityScalar>(
+    target: &mut AccountError<A, N>,
+    source: &AccountError<A, N>,
+) {
+    target.clone_from(source)
+}
+
+pub fn inherited_delta_clone_from<AccountId: Clone, A: Clone, N: Clone>(
+    target: &mut AccountDelta<AccountId, A, N>,
+    source: &AccountDelta<AccountId, A, N>,
+) {
+    target.clone_from(source)
+}
+
+pub fn inherited_receipt_clone_from<
+    RateId: Clone,
+    Role: Clone,
+    AccountId: Clone,
+    A: Clone,
+    N: Clone,
+>(
+    target: &mut Receipt<RateId, Role, AccountId, A, N>,
+    source: &Receipt<RateId, Role, AccountId, A, N>,
+) {
+    target.clone_from(source)
+}
+
+pub fn inherited_goal_clone_from<AccountId: Clone, A: Clone, N: Clone>(
+    target: &mut economy::Goal<AccountId, A, N>,
+    source: &economy::Goal<AccountId, A, N>,
+) {
+    target.clone_from(source)
+}
+
+pub fn inherited_rate_clone_from<Role: Clone, A: Clone, N: Clone>(
+    target: &mut Rate<Role, A, N>,
+    source: &Rate<Role, A, N>,
+) {
+    target.clone_from(source)
+}
+
+pub fn inherited_invariant_clone_from<A: Clone>(
+    target: &mut LinearInvariant<A>,
+    source: &LinearInvariant<A>,
+) {
+    target.clone_from(source)
+}
+
+pub fn inherited_economy_clone_from<
+    AccountId: Clone,
+    A: Clone,
+    RateId: Clone,
+    Role: Clone,
+    N: Clone,
+>(
+    target: &mut economy::Economy<AccountId, A, RateId, Role, N>,
+    source: &economy::Economy<AccountId, A, RateId, Role, N>,
+) {
+    target.clone_from(source)
+}
+
+pub fn inherited_account_assessment_clone_from<AccountId: Clone, A: Clone, N: Clone>(
+    target: &mut economy::AccountAssessment<AccountId, A, N>,
+    source: &economy::AccountAssessment<AccountId, A, N>,
+) {
+    target.clone_from(source)
+}
+
+pub fn inherited_shortfall_clone_from<AccountId: Clone, A: Clone, N: Clone>(
+    target: &mut economy::AccountShortfall<AccountId, A, N>,
+    source: &economy::AccountShortfall<AccountId, A, N>,
+) {
+    target.clone_from(source)
+}
+
+pub fn inherited_assessment_clone_from<
+    AccountId: Clone,
+    A: Clone,
+    RateId: Clone,
+    Role: Clone,
+    N: QuantityScalar,
+>(
+    target: &mut economy::ExchangeAssessment<AccountId, A, RateId, Role, N>,
+    source: &economy::ExchangeAssessment<AccountId, A, RateId, Role, N>,
+) {
+    target.clone_from(source)
+}
+
+pub fn inherited_apply_error_clone_from<
+    RateId: Clone,
+    Role: Clone,
+    AccountId: Clone,
+    A: Clone,
+    N: QuantityScalar,
+>(
+    target: &mut economy::ApplyError<RateId, Role, AccountId, A, N>,
+    source: &economy::ApplyError<RateId, Role, AccountId, A, N>,
+) {
+    target.clone_from(source)
+}
+
+pub fn inherited_quantity_ne<N: PartialEq>(left: &Quantity<N>, right: &Quantity<N>) -> bool {
+    left != right
+}
+
+pub fn inherited_amount_ne<A: PartialEq, N: PartialEq>(
+    left: &AssetAmount<A, N>,
+    right: &AssetAmount<A, N>,
+) -> bool {
+    left != right
+}
+
+pub fn inherited_expression_ne<Role: PartialEq, A: PartialEq, N: PartialEq>(
+    left: &QuantityExpression<Role, A, N>,
+    right: &QuantityExpression<Role, A, N>,
+) -> bool {
+    left != right
+}
+
+pub fn inherited_computed_amount_ne<Role: PartialEq, A: PartialEq, N: PartialEq>(
+    left: &ComputedAmount<Role, A, N>,
+    right: &ComputedAmount<Role, A, N>,
+) -> bool {
+    left != right
+}
+
+pub fn inherited_condition_ne<Role: PartialEq, A: PartialEq, N: PartialEq>(
+    left: &RateCondition<Role, A, N>,
+    right: &RateCondition<Role, A, N>,
+) -> bool {
+    left != right
+}
+
+pub fn inherited_comparison_ne(left: &QuantityComparison, right: &QuantityComparison) -> bool {
+    left != right
+}
+
+pub fn inherited_fingerprint_ne(
+    left: &economy::StateFingerprint,
+    right: &economy::StateFingerprint,
+) -> bool {
+    left != right
+}
+
+pub fn inherited_assessment_status_ne(
+    left: &economy::AssessmentStatus,
+    right: &economy::AssessmentStatus,
+) -> bool {
+    left != right
+}
+
+pub fn inherited_model_issue_ne<AccountId: PartialEq, RateId: PartialEq>(
+    left: &economy::ModelIssue<AccountId, RateId>,
+    right: &economy::ModelIssue<AccountId, RateId>,
+) -> bool {
+    left != right
+}
+
+pub fn inherited_model_error_ne<AccountId: PartialEq, RateId: PartialEq>(
+    left: &economy::ModelBuildError<AccountId, RateId>,
+    right: &economy::ModelBuildError<AccountId, RateId>,
+) -> bool {
+    left != right
+}
+
+pub fn inherited_basket_error_ne<A: PartialEq>(
+    left: &basket::BasketError<A>,
+    right: &basket::BasketError<A>,
+) -> bool {
+    left != right
+}
+
+pub fn inherited_rate_error_ne<Role: PartialEq, A: PartialEq>(
+    left: &RateError<Role, A>,
+    right: &RateError<Role, A>,
+) -> bool {
+    left != right
+}
+
+pub fn inherited_quantity_error_ne(
+    left: &quantity::QuantityError,
+    right: &quantity::QuantityError,
+) -> bool {
+    left != right
+}
+
+pub fn inherited_proposal_ne<
+    RateId: PartialEq,
+    Role: PartialEq,
+    AccountId: PartialEq,
+    N: PartialEq,
+>(
+    left: &Exchange<RateId, Role, AccountId, N>,
+    right: &Exchange<RateId, Role, AccountId, N>,
+) -> bool {
+    left != right
+}
+
+pub fn inherited_trace_ne<
+    RateId: PartialEq,
+    Role: PartialEq,
+    AccountId: PartialEq,
+    N: PartialEq,
+>(
+    left: &Trace<RateId, Role, AccountId, N>,
+    right: &Trace<RateId, Role, AccountId, N>,
+) -> bool {
+    left != right
+}
+
+pub fn inherited_observation_key_ne<AccountId: PartialEq, A: PartialEq, N: PartialEq>(
+    left: &economy::ObservationKey<AccountId, A, N>,
+    right: &economy::ObservationKey<AccountId, A, N>,
+) -> bool {
+    left != right
+}
+
+pub fn inherited_account_error_ne<A: Eq + std::hash::Hash, N: QuantityScalar>(
+    left: &AccountError<A, N>,
+    right: &AccountError<A, N>,
+) -> bool {
+    left != right
+}
+
+pub fn inherited_basket_ne<A: Eq + std::hash::Hash, N: PartialEq>(
+    left: &Basket<A, N>,
+    right: &Basket<A, N>,
+) -> bool {
+    left != right
+}
+
+pub fn inherited_account_ne<A: Eq + std::hash::Hash, N: PartialEq>(
+    left: &Account<A, N>,
+    right: &Account<A, N>,
+) -> bool {
+    left != right
+}
+
+pub fn inherited_quantity_min<N: Ord>(left: Quantity<N>, right: Quantity<N>) -> Quantity<N> {
+    left.min(right)
+}
+
+pub fn inherited_quantity_max<N: Ord>(left: Quantity<N>, right: Quantity<N>) -> Quantity<N> {
+    left.max(right)
+}
+
+pub fn inherited_quantity_clamp<N: Ord>(
+    value: Quantity<N>,
+    lower: Quantity<N>,
+    upper: Quantity<N>,
+) -> Quantity<N> {
+    value.clamp(lower, upper)
+}
+
+pub fn inherited_fingerprint_min(
+    left: economy::StateFingerprint,
+    right: economy::StateFingerprint,
+) -> economy::StateFingerprint {
+    left.min(right)
+}
+
+pub fn inherited_fingerprint_max(
+    left: economy::StateFingerprint,
+    right: economy::StateFingerprint,
+) -> economy::StateFingerprint {
+    left.max(right)
+}
+
+pub fn inherited_fingerprint_clamp(
+    value: economy::StateFingerprint,
+    lower: economy::StateFingerprint,
+    upper: economy::StateFingerprint,
+) -> economy::StateFingerprint {
+    value.clamp(lower, upper)
+}
+
+pub fn inherited_quantity_hash_slice<N: std::hash::Hash, H: std::hash::Hasher>(
+    values: &[Quantity<N>],
+    state: &mut H,
+) {
+    std::hash::Hash::hash_slice(values, state)
+}
+
+pub fn inherited_amount_hash_slice<A: std::hash::Hash, N: std::hash::Hash, H: std::hash::Hasher>(
+    values: &[AssetAmount<A, N>],
+    state: &mut H,
+) {
+    std::hash::Hash::hash_slice(values, state)
+}
+
+pub fn inherited_fingerprint_hash_slice<H: std::hash::Hasher>(
+    values: &[economy::StateFingerprint],
+    state: &mut H,
+) {
+    std::hash::Hash::hash_slice(values, state)
+}
+
+pub fn inherited_observation_key_hash_slice<
+    AccountId: std::hash::Hash,
+    A: std::hash::Hash,
+    N: std::hash::Hash,
+    H: std::hash::Hasher,
+>(
+    values: &[economy::ObservationKey<AccountId, A, N>],
+    state: &mut H,
+) {
+    std::hash::Hash::hash_slice(values, state)
+}

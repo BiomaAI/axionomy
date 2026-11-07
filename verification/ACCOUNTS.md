@@ -932,7 +932,68 @@ distinct identifier types and the public API, also checking computed amounts and
 conditions, all clone families, every error variant and large non-Copy BigUint
 payload transport. Serialization is used only to supply some public test inputs
 or observe records without PartialEq; this is not a serialization proof. That
-milestone, numeric arithmetic laws, formatting, remaining iterator adapters,
-inherited trait convenience methods (`clone_from`, `ne`, `min`/`max`/`clamp`,
-`hash_slice`) and arbitrary callback/destructor behavior remain separate
-completion obligations.
+milestone, numeric arithmetic laws, formatting, remaining iterator adapters
+and arbitrary callback/destructor behavior remain separate completion obligations.
+The inherited trait conveniences are covered by the next contract.
+
+## Inherited public traits
+
+The 58 forwarding roots call the public Rust methods without changing production
+source, generic bounds, visibility, ownership or borrowing. Four proof modules
+register 78 contracts and compose the previously covered derived implementations:
+
+- `InheritedCloneRefinement`: 29 `clone_from` methods return exactly the result
+  of cloning the source, independent of the previous target. This includes modeled
+  callback failure/divergence. Successful field preservation follows from the
+  derived clone contracts and their primitive laws. Physical drops, allocation
+  reuse, Arc counts and mutable state after Rust unwinding remain dependencies.
+- `InheritedEqualityRefinement`: 19 `ne` methods negate the core type's `eq`
+  result. They propagate its failures, and do not call a payload's `ne` override.
+  Basket/account equality keeps its existing key-lookup, length and storage laws.
+- `InheritedOrderRefinement`: quantity/fingerprint `min`, `max` and `clamp`
+  preserve the exact comparison protocol. Min selects the first input on a tie;
+  max selects the second. Clamp checks the bounds first, returns the lower bound
+  without checking the upper bound when below it, and retains the input at equal
+  bounds. Invalid or incomparable bounds produce Aeneas `assertionFailure`, the
+  model of Rust's assertion panic. Independent Nat-key comparison laws justify
+  exact total selectors without erasing distinguishable values with equal keys.
+- `InheritedHashRefinement`: four slice-hash entry points perform ordered element
+  hashing with no outer length prefix. The contracts prove empty identity, append
+  composition, state threading, first-callback failure and finite success under
+  primitive callback laws. They compose the existing element-hash contracts.
+
+The pinned Rust default `core::hash::Hash::hash_slice` loops over the slice and
+calls each element's `hash`. Aeneas cannot currently translate this std body:
+the slice iterator reaches unsupported `PtrMetadata` in its interpreter. We model
+this std default explicitly using the existing ordered `hashValues` fold. This
+is a reviewed dependency boundary, not a proof of the standard library itself.
+All four core Hash implementations inherit the default, so these outer calls do
+not dispatch to a payload `hash_slice` override. Internal observation-key vector
+hashing still has the native LE64/default-method restrictions documented above.
+Arbitrary erased overrides and portability outside that scope remain open.
+
+Six new external interfaces were reviewed against the pinned Rust sources:
+the default hash-slice loop; the separate primitive u64 bulk-byte hash-slice
+override; pair/triple `ne` overrides; Box `ne`; and String `clone_from`. Tuple
+inequality calls payload `ne` left-to-right with short-circuiting, and Box delegates
+to its payload. String replacement models contents, with allocation and drops
+outside scope. The unused u64 slice override preserves its distinct single-write
+behavior, even for an empty slice, under a representable byte-length bound.
+Generic adapter universes were widened to match newly retained dictionaries;
+their storage and callback semantics are unchanged.
+
+The backend omits the Hash `hash_slice` and Iterator `size_hint` dictionary fields.
+The diagnostic guard permits exactly one of each reviewed warning; missing,
+duplicated or other diagnostics fail. All 58 new roots and the existing concrete
+core methods are mandatory. Each slice root resolves to the named default adapter
+with its concrete extracted core dictionary, rather than an erased override.
+
+Lean generates 36 numeric pairs, 216 clamp cases and eight slice sequences with
+exact hasher write chunks, plus nine tagged order pairs and 27 tagged clamp cases.
+Rust reuses structural fixtures for replacement and
+inequality, checks all clone families, uses distinct typed identifiers and tests
+tags that distinguish equal-key scalar values. Deliberately panicking payload
+convenience overrides check that core defaults use the specified dispatch.
+Serialization only supplies some inputs and observations; item 17 remains open.
+Production mutation controls omit clone replacement or slice traversal and require
+successful extraction/compilation before the semantic proofs reject the change.
