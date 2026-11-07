@@ -55,6 +55,12 @@ class ExtractionBoundaryTests(unittest.TestCase):
 
 
 class ProductionMutationTests(unittest.TestCase):
+    def test_zero_weight_cannot_hide_duplicate_invariant_asset(self):
+        self.check_mutation(
+            "src/rate.rs", "            weights.insert(asset, weight);",
+            "            if weight != 0 { weights.insert(asset, weight); }",
+            "extract_account.py", "stale account model", "InvariantInputRefinement", "AccountExtraction")
+
     def test_ignored_clone_source_breaks_inherited_replacement(self):
         original = '''#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Quantity<N = u64>(N);'''

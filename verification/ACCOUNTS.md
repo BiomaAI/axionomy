@@ -936,6 +936,36 @@ milestone, numeric arithmetic laws, remaining iterator adapters
 and arbitrary callback/destructor behavior remain separate completion obligations.
 The inherited trait conveniences are covered by the next contract.
 
+## Invariant input validation
+
+`LinearInvariant` deserialization previously checked duplicates against weights
+that had already been normalized. A zero first weight disappeared before the
+next check, so `[(asset, 0), (asset, 2)]` was accepted while nonzero duplicates
+were rejected. Repeated assets now fail before zero normalization.
+
+The production `from_serialized_weights` helper retains all input entries during
+validation, then builds the sparse weight map. Aeneas extracts both loops.
+`InvariantInputRefinement.construct_refines` connects their complete result to
+`InvariantInput.construct` over mathematical signed integers. It proves
+termination and first-duplicate rejection for all finite represented vectors
+under lawful asset equality and the existing logical map model. Success retains
+the name and exactly the nonzero input coefficients in order, with unique keys.
+The proof covers the full i64 range, including negative weights. No asset Clone
+or Ord bound is added; public weight-update semantics remain unchanged.
+
+The Lean generator supplies 262 input cases covering duplicate placement, zero,
+negative weights, ordering and both i64 extremes. Rust exercises the actual
+serde loader with a non-Clone/non-Ord asset type and checks that economy loading
+propagates duplicate rejection. A production mutation that drops zero entries
+before validation must compile after re-extraction and fail the refinement.
+
+The serde-to-helper handoff is source-guarded and tested. Serde parsing,
+serialization round trips, error conversion and text rendering are not proved
+by this contract. The existing IndexMap/Vec models, lawful Eq/Hash behavior,
+allocation, resource exhaustion, destruction, compilation and translation remain
+explicit dependencies. The implementation uses a temporary map during validation;
+no allocation or performance equivalence to the old loader is claimed.
+
 ## Inherited public traits
 
 The 58 forwarding roots call the public Rust methods without changing production

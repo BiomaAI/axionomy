@@ -193,7 +193,7 @@ to `origin/main`; theorem counts do not measure percentage completion.
 | 2 | 14 | Goals, visibility, hidden-state noninterference, missing/zero distinctions | Implementation proved and validated; finite-input iterator construction and documented collection models |
 | 2 | 15 | Canonical state/observation keys and deterministic fingerprints | Implementation proved and validated under documented sorting/hash models and native 64-bit little-endian scope |
 | 3. Public data boundary | 16 | Remaining typed constructors/accessors/conversions/iterators/equality | Partial: foundational typed data, expression construction, iterator consumers, basket collection boundaries, core inspection, u64 convenience constructors, derived traits and inherited helpers proved under documented models; remaining APIs listed below |
-| 3 | 17 | Serialization round trips, validation/canonicalization, accurate schema contracts | Open |
+| 3 | 17 | Serialization round trips, validation/canonicalization, accurate schema contracts | Partial: invariant weight validation/normalization proved; serializer/codec composition and other inputs remain open |
 | 4. Numeric backends | 18 | BigUint/BigInt and explicit algebraic requirements for custom backends | Open |
 
 The completed u64 transaction milestone extracts the complete production `assess`/`apply`
@@ -279,6 +279,21 @@ proofs. Formatting, Clippy with warnings denied, documentation and compile-fail
 doctests also passed. The prior 35 production mutation controls remain in CI.
 
 The remaining completion work is:
+
+**Item 17 invariant input validation:** the production loader now rejects every
+repeated asset weight, including duplicates preceded by zero. Its extracted
+`from_serialized_weights` helper proves first-duplicate rejection, termination,
+name preservation, exact signed coefficients and ordered zero normalization.
+Accepted weights are unique and nonzero. Rust's existing asset bounds are
+unchanged. The serde handoff is source-guarded and tested; the codec itself is
+not proved. See [the input contract](ACCOUNTS.md#invariant-input-validation).
+
+This is a **paused work-in-progress checkpoint**, not a validated milestone.
+Fresh helper extraction and `InvariantInputRefinement` compilation passed.
+Still pending: finish the full Lean build, regenerate `conformance.json`, run the
+new Rust cases and production mutation, and complete the proof/workspace gates.
+The boundary-test invocation also needs rerunning with `AccountExtractionTests`
+(the attempted `AccountBoundaryTests` class does not exist).
 
 **Completed item 16 inherited-trait batch:** extracted 58 public forwarding roots for
 29 `clone_from` methods, 19 `ne` methods (including basket/account equality),
@@ -378,6 +393,7 @@ See the
   quantity validation, duplicate basket entries, rate normalization, economy
   metadata, traces, receipts, goals and keys. Check schemas against accepted values,
   including custom signed scalar schemas and inconsistent serialized key fields.
+  Invariant weight validation is covered; composition with the codec remains open.
 - **18 — Numeric backends:** extend the implementation contracts from u64 to the
   supported BigUint quantities and BigInt signed measures. State and discharge the
   algebraic requirements for custom `QuantityScalar`/`QuantityMeasure` backends,

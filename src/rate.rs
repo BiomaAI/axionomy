@@ -765,6 +765,28 @@ where
         self
     }
 
+    // Keep zero weights until all input identifiers have been checked. Removing
+    // them earlier would let a repeated asset evade duplicate rejection.
+    pub(crate) fn from_serialized_weights(name: String, entries: Vec<(A, i64)>) -> Result<Self, A> {
+        let mut weights = IndexMap::new();
+        for (asset, weight) in entries {
+            if weights.contains_key(&asset) {
+                return Err(asset);
+            }
+            weights.insert(asset, weight);
+        }
+        let mut invariant = Self {
+            name,
+            weights: IndexMap::new(),
+        };
+        for (asset, weight) in weights {
+            if weight != 0 {
+                invariant.weights.insert(asset, weight);
+            }
+        }
+        Ok(invariant)
+    }
+
     pub fn name(&self) -> &str {
         &self.name
     }
@@ -858,16 +880,9 @@ where
         D: Deserializer<'de>,
     {
         let data = InvariantData::<A>::deserialize(deserializer)?;
-        let mut invariant = Self::new(data.name);
-        for (asset, weight) in data.weights {
-            if invariant.weights.contains_key(&asset) {
-                return Err(serde::de::Error::custom(
-                    "linear invariant contains a duplicate asset weight",
-                ));
-            }
-            invariant = invariant.weight(asset, weight);
-        }
-        Ok(invariant)
+        Self::from_serialized_weights(data.name, data.weights).map_err(|_| {
+            serde::de::Error::custom("linear invariant contains a duplicate asset weight")
+        })
     }
 }
 

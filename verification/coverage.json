@@ -11,11 +11,11 @@
     "src/exchange.rs": "234f6e6459d2fb97a1fbb802e14afed6e5ed50a023c8c2de745e6f6eac39b455",
     "src/lib.rs": "46d6f713693714650653128e2ceabf8a895b8ad98a38a7bdbeab4ea378a5cc06",
     "src/quantity.rs": "246c805344babccb3c1c00371686e098111044a2ce46f456f211de6eb9928364",
-    "src/rate.rs": "5af32fe1a4b7495c2ab397fc47193824bc9c65418d66b6fa3f54188fe8844abc",
+    "src/rate.rs": "468a703c0b9271e9dc2851c555c67331572a067ddbf15d6bca93747f43b82f7a",
     "verification/extract.rs": "415b34f5f4f8aa2679af860bd2a4092c96e113145919160fe7c81e33836de3e0",
     "verification/aeneas-toolchain.json": "8676d7d11be51a6f41984d874b35910e8a1a3d0a18414998feb9402ef80932fb",
     "verification/extract_basket.rs": "dc2b3a2159704c24a5261d0069a2aac7b575f30a94ae35c4c1e96933638592dd",
-    "verification/extract_account.rs": "43eae0aef4e64860d1b82c3568891167396ea5a93ddb60be42d3e9cd106f947a",
+    "verification/extract_account.rs": "be60ff0865d41f96b3aaed3cc1dd68647c42fb55cc9f486e6d687e77245cd5e3",
     "verification/patches/aeneas-namespaced-discriminant.patch": "fabac7482deb3da6ecaca60c4060dfe9d2114efdd010699e736c4a91267f3bc9"
   },
   "features": [
@@ -1455,6 +1455,39 @@
         "Hash traversal proves empty identity, concatenation with state threading, first-callback failure and finite success under independent primitive callback laws. It does not prove arbitrary callbacks terminate, panic freedom without those laws, state after unwinding or fingerprint collision freedom. The separately modeled u64 hash_slice override performs a single native-byte write including an empty write; it is not called by core wrappers, and requires representable byte length.",
         "The pinned backend omits Iterator.size_hint and Hash.hash_slice dictionary fields. The diagnostic guard accepts exactly one of each reviewed warning and rejects missing, duplicate or unrelated diagnostics; wrapper and concrete production-definition guards prevent silent removal. Hash slice roots call the named default adapter with concrete core dictionaries. Six new external interfaces are reviewed against pinned std, including logical String.clone_from. Generic Lean interface universes were widened where needed without changing storage or callback behavior.",
         "Lean generates 36 order pairs, 216 clamp cases and eight slice sequences with exact write chunks, nine tagged order pairs and 27 tagged clamp cases. Rust also reuses the structural fixture pairs for inequality/replacement, exercises all clone families, checks distinguishable tie values with a fully typed scalar, and installs deliberately panicking payload convenience overrides to verify default dispatch. Tests supplement the general proofs; serialization is only test observation/input transport, not a verified boundary. Re-extracted mutations omit clone replacement or slice hashing and must compile before their semantic proofs fail."
+      ]
+    },
+    {
+      "id": "invariant_input_validation",
+      "status": "aeneas_refinement_proved",
+      "sources": [
+        "src/rate.rs",
+        "verification/extract_account.rs",
+        "verification/aeneas-toolchain.json"
+      ],
+      "extracted_module": "AccountExtraction.Funs",
+      "theorems": [
+        "Axionomy.InvariantInput.construction_succeeds_iff",
+        "Axionomy.InvariantInput.zero_cannot_hide_duplicate",
+        "Axionomy.InvariantInput.canonical_has_no_zero",
+        "Axionomy.InvariantInput.canonical_preserves_entries",
+        "Axionomy.InvariantInput.canonical_preserves_order",
+        "Axionomy.InvariantInput.successful_weights_valid",
+        "Axionomy.InvariantInputRefinement.construct_exact",
+        "Axionomy.InvariantInputRefinement.construct_refines",
+        "Axionomy.InvariantInputRefinement.duplicate_rejected",
+        "Axionomy.InvariantInputRefinement.accepted_fields",
+        "Axionomy.InvariantInputRefinement.accepted_valid"
+      ],
+      "rust_tests": [
+        "tests/invariant_input_conformance.rs",
+        "tests/serde.rs"
+      ],
+      "limitations": [
+        "Fresh extraction covers the production LinearInvariant::from_serialized_weights helper and both loops. For every finite represented vector and lawful asset equality, it terminates, rejects the first duplicate asset including zero-weight occurrences, and otherwise preserves the name and exact signed i64 coefficients in input order after omitting zeros. Accepted weights are unique and nonzero; no new Clone or Ord bounds are imposed.",
+        "The real serde loader delegates to this shared helper through a source-guarded handoff. Serde parsing, error conversion, serialization round trips and schema contracts are not implementation-proved here. Diagnostic Debug/Display rendering is outside the required proof scope. This is one validation contract within item 17, not complete serialization coverage.",
+        "The existing logical IndexMap and Vec models, identity-consistent Eq/Hash behavior, successful allocation, destruction, compiler/MIR/Charon/Aeneas translation and primitive operations remain explicit dependencies. The new validation pass keeps zero entries in a temporary map; physical allocation costs and performance equivalence are not proved. No new external dependency model or compiler patch is added.",
+        "262 Lean-generated cases exercise the public deserializer, including all short sequences over two assets and signed/zero weights, ordering and i64 extremes. Rust also checks duplicate rejection through Economy deserialization and a non-Clone/non-Ord asset type. These finite checks supplement the general helper proof. A re-extracted production mutation that removes zero entries before checking all duplicates must compile and then fail the refinement."
       ]
     }
   ]

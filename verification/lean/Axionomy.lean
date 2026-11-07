@@ -113,3 +113,7 @@ import Axionomy.InheritedEqualityRefinement
 import Axionomy.InheritedOrderRefinement
 import Axionomy.InheritedHashRefinement
 import Axionomy.InheritedConformance
+
+import Axionomy.InvariantInput
+import Axionomy.InvariantInputRefinement
+import Axionomy.InvariantInputConformance

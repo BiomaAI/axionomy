@@ -21,6 +21,7 @@ import Axionomy.InspectionConformance
 import Axionomy.ConvenienceConformance
 import Axionomy.DerivedConformance
 import Axionomy.InheritedConformance
+import Axionomy.InvariantInputConformance
 
 /-! Deterministic executable examples from the SAME definitions used in the
 proofs. Rust runs these examples through the public API. Agreement on these
@@ -620,5 +621,6 @@ def main : IO Unit := do
     ("inspection", InspectionConformance.fixtures),
     ("convenience", ConvenienceConformance.fixtures),
     ("derived", DerivedConformance.fixtures),
-    ("inherited", InheritedConformance.fixtures)]
+    ("inherited", InheritedConformance.fixtures),
+    ("invariantInputs", toJson InvariantInputConformance.fixtures)]
   IO.println document.compress

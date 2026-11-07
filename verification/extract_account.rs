@@ -1093,6 +1093,13 @@ pub fn invariant_new<A: Eq + std::hash::Hash, S: Into<String>>(name: S) -> Linea
     LinearInvariant::new(name)
 }
 
+pub fn invariant_from_serialized_weights<A: Eq + std::hash::Hash>(
+    name: String,
+    entries: Vec<(A, i64)>,
+) -> Result<LinearInvariant<A>, A> {
+    LinearInvariant::from_serialized_weights(name, entries)
+}
+
 pub fn invariant_weight<A: Eq + std::hash::Hash>(
     value: LinearInvariant<A>,
     asset: A,

@@ -11,7 +11,7 @@ from extract_account import (GENERATED, LEAN, ROOT, TEMPLATES, compare_generated
                             validate_bridge, validate_generated, validate_fingerprint_target,
                             FILTERED_TRAIT_WARNING, FILTERED_HASH_WARNING,
                             INSPECTION_DEFINITIONS, CONVENIENCE_DEFINITIONS,
-                            DERIVED_DEFINITIONS, ENTRY_CALLS,
+                            DERIVED_DEFINITIONS, INVARIANT_INPUT_DEFINITIONS, ENTRY_CALLS,
                             validate_extraction_diagnostics)
 
 
@@ -56,6 +56,21 @@ class AccountBridgeTests(unittest.TestCase):
         (self.root / "src").mkdir()
         shutil.copyfile(ROOT / "src/economy.rs", self.root / "src/economy.rs")
         shutil.copyfile(ROOT / "src/basket.rs", self.root / "src/basket.rs")
+        shutil.copyfile(ROOT / "src/rate.rs", self.root / "src/rate.rs")
+
+    def test_invariant_input_handoff_cannot_be_bypassed(self):
+        path = self.root / "src/rate.rs"
+        path.write_text(path.read_text().replace(
+            "Self::from_serialized_weights(data.name, data.weights)", "Ok(Self::new(data.name))"))
+        with self.assertRaisesRegex(ValueError, "invariant deserialization handoff changed"):
+            validate_bridge(self.root)
+
+    def test_invariant_input_forwarder_cannot_discard_entries(self):
+        self.target.write_text(self.target.read_text().replace(
+            "LinearInvariant::from_serialized_weights(name, entries)",
+            "LinearInvariant::from_serialized_weights(name, Vec::new())"))
+        with self.assertRaisesRegex(ValueError, "not a forwarding call: invariant_from_serialized_weights"):
+            validate_bridge(self.root)
 
     def test_changed_retention_adapter_is_rejected(self):
         source = self.root / "src/basket.rs"
@@ -262,6 +277,19 @@ class AccountExtractionTests(unittest.TestCase):
             with self.subTest(name=name):
                 changed, count = re.subn(r"(^def\s+)" + re.escape(name) + r"(?=\s)",
                                         r"\1bypassed_convenience", original, flags=re.MULTILINE)
+                self.assertEqual(count, 1)
+                path.write_text(changed)
+                with self.assertRaisesRegex(ValueError, "missing account production definition"):
+                    validate_generated(self.directory)
+        path.write_text(original)
+
+    def test_missing_invariant_validation_or_normalization_loop_is_rejected(self):
+        path = self.directory / "Funs.lean"
+        original = path.read_text()
+        for name in INVARIANT_INPUT_DEFINITIONS:
+            with self.subTest(name=name):
+                changed, count = re.subn(r"(^def\s+)" + re.escape(name) + r"(?=\s)",
+                                        r"\1bypassed_invariant_input", original, flags=re.MULTILINE)
                 self.assertEqual(count, 1)
                 path.write_text(changed)
                 with self.assertRaisesRegex(ValueError, "missing account production definition"):

@@ -67,6 +67,17 @@ CONVENIENCE_DEFINITIONS = (
     "exchange.Exchange.parameter", "rate.QuantityExpression.parameter", "rate.Rate.condition",
 )
 
+INVARIANT_INPUT_DEFINITIONS = (
+    "rate.LinearInvariant.from_serialized_weights",
+    *[f"rate.LinearInvariant.from_serialized_weights_{loop}{suffix}"
+      for loop in ("loop0", "loop0_loop0") for suffix in ("", ".body")],
+)
+
+INVARIANT_INPUT_CALL = '''let data = InvariantData::<A>::deserialize(deserializer)?;
+        Self::from_serialized_weights(data.name, data.weights).map_err(|_| {
+            serde::de::Error::custom("linear invariant contains a duplicate asset weight")
+        })'''
+
 # Derived methods must be production definitions, not merely forwarding roots
 # that could resolve to an external stub or a copied specification.
 DERIVED_DEFINITIONS = (
@@ -120,6 +131,7 @@ VALIDATION_CALL = """let rule = match self.validate_structure(proposal) {
         };"""
 
 ENTRY_CALLS = {
+    "invariant_from_serialized_weights": "LinearInvariant::from_serialized_weights(name,entries)",
     "inherited_quantity_clone_from": "target.clone_from(source)",
     "inherited_amount_clone_from": "target.clone_from(source)",
     "inherited_expression_clone_from": "target.clone_from(source)",
@@ -462,6 +474,9 @@ def validate_bridge(root=ROOT):
         if len(matches) != 1 or re.sub(r"\s+", "", matches[0]) != call:
             raise ValueError(f"account extraction entry point is not a forwarding call: {operation}")
     economy = (root / "src/economy.rs").read_text()
+    rate = (root / "src/rate.rs").read_text()
+    if re.sub(r"\s+", "", rate).count(re.sub(r"\s+", "", INVARIANT_INPUT_CALL)) != 1:
+        raise ValueError("invariant deserialization handoff changed; review the production connection")
     if re.sub(r"\s+", "", economy).count(re.sub(r"\s+", "", PREPARATION_CALL)) != 1:
         raise ValueError("economy preparation handoff changed; review the production connection")
     if re.sub(r"\s+", "", economy).count(re.sub(r"\s+", "", VALIDATION_CALL)) != 1:
@@ -485,7 +500,7 @@ def validate_generated(directory):
             raise ValueError(f"unfinished or axiomatic account extraction: {name}")
     functions = (directory / "Funs.lean").read_text()
     for entry in (*ENTRY_CALLS, *PUBLIC_DEFINITIONS, *INSPECTION_DEFINITIONS, *CONVENIENCE_DEFINITIONS,
-                  *DERIVED_DEFINITIONS, "account.Account.prepare_exchange",
+                  *DERIVED_DEFINITIONS, *INVARIANT_INPUT_DEFINITIONS, "account.Account.prepare_exchange",
                   "account.Account.Insts.CoreCloneClone.clone",
                   "basket.construct_entries", "basket.construct_entries_loop.body",
                   "basket.Basket.try_from_entries", "basket.Basket.try_from_amounts",

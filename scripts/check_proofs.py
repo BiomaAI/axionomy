@@ -50,6 +50,16 @@ def validate_coverage(root, coverage):
             # These are the implemented extraction pipelines. Future
             # claims need their own regeneration and trust-boundary checks.
             pipelines = {
+                "invariant_input_validation": ("AccountExtraction.Funs", {
+                    "Axionomy.InvariantInput.construction_succeeds_iff",
+                    "Axionomy.InvariantInput.zero_cannot_hide_duplicate",
+                    "Axionomy.InvariantInput.successful_weights_valid",
+                    "Axionomy.InvariantInputRefinement.construct_exact",
+                    "Axionomy.InvariantInputRefinement.construct_refines",
+                    "Axionomy.InvariantInputRefinement.duplicate_rejected",
+                    "Axionomy.InvariantInputRefinement.accepted_fields",
+                    "Axionomy.InvariantInputRefinement.accepted_valid",
+                }),
                 "inherited_traits_boundary": ("AccountExtraction.Funs", {
                     "Axionomy.InheritedCloneRefinement.quantity_clone_from",
                     "Axionomy.InheritedCloneRefinement.amount_clone_from",
@@ -603,7 +613,7 @@ def main():
     if generated != committed:
         raise ValueError("Lean conformance cases are stale; regenerate them from Conformance.lean and review the diff")
     run("cargo", "test", "-p", "axionomy", "--all-features", "--test", "lean_conformance",
-        "--test", "transaction_conformance", "--test", "observation_conformance", "--test", "public_data_conformance", "--test", "iterator_conformance", "--test", "basket_collection_conformance", "--test", "basket_sorted_conformance", "--test", "inspection_conformance", "--test", "convenience_conformance", "--test", "derived_conformance", "--test", "inherited_conformance")
+        "--test", "transaction_conformance", "--test", "observation_conformance", "--test", "public_data_conformance", "--test", "iterator_conformance", "--test", "basket_collection_conformance", "--test", "basket_sorted_conformance", "--test", "inspection_conformance", "--test", "convenience_conformance", "--test", "derived_conformance", "--test", "inherited_conformance", "--test", "invariant_input_conformance")
     run("cargo", "test", "-p", "axionomy", "--all-features", "--lib",
         "runtime_")
     run("cargo", "test", "-p", "axionomy", "--all-features", "--doc")
