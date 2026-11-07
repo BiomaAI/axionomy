@@ -57,7 +57,8 @@ asset discovery, preserving borrowed Rust return types and all other rate fields
 Vec growth and UTF-8 lengths have explicit `usize` bounds; condition labels use
 the `String` specialization. The inspection batch below proves invariant
 construction, including its `Into<String>` success/failure boundary. Static
-convenience panics and other arbitrary callback contracts remain in item 16.
+u64 convenience panics and string-conversion results have separate contracts below;
+other arbitrary callback contracts remain in item 16.
 
 Complete structural proposal validation now has an implementation proof as well.
 It returns the selected stored rate or the exact ordered list of structural issues:
@@ -184,7 +185,7 @@ to `origin/main`; theorem counts do not measure percentage completion.
 | 2 | 13 | Ordered traces, replay prefix-on-error, isolated replay, invariant composition | Implementation proved: first error, accepted prefix state, ordered receipts and derived caller invariants; generic trace extension also proved under explicit iterator laws |
 | 2 | 14 | Goals, visibility, hidden-state noninterference, missing/zero distinctions | Implementation proved and validated; finite-input iterator construction and documented collection models |
 | 2 | 15 | Canonical state/observation keys and deterministic fingerprints | Implementation proved and validated under documented sorting/hash models and native 64-bit little-endian scope |
-| 3. Public data boundary | 16 | Remaining typed constructors/accessors/conversions/iterators/equality | Partial: foundational typed data, expression construction, iterator consumers, basket collection boundaries and core inspection proved; remaining APIs listed below |
+| 3. Public data boundary | 16 | Remaining typed constructors/accessors/conversions/iterators/equality | Partial: foundational typed data, expression construction, iterator consumers, basket collection boundaries, core inspection and u64 convenience constructors proved; remaining APIs listed below |
 | 3 | 17 | Serialization round trips, validation/canonicalization, accurate schema contracts | Open |
 | 4. Numeric backends | 18 | BigUint/BigInt and explicit algebraic requirements for custom backends | Open |
 
@@ -272,6 +273,22 @@ doctests also passed. The prior 35 production mutation controls remain in CI.
 
 The remaining completion work is:
 
+**Completed item 16 convenience-constructor batch:** implementation proofs cover
+`Rate::consume`/`produce`/`preserve` overflow panics, duplicate rejection by the
+`basket` literal helper, and `Into<String>` results in expression/proposal
+parameters, invariant names and condition labels. Seven forwarding roots connect
+the production APIs to Aeneas. The sole new external interface is std array-map,
+with a reviewed model that threads callback state in input order and propagates
+failure. The 26 contracts are registered in the mandatory gate; 781 Lean-generated
+literal arrays, 72 callback cases and the 56 existing merge cases connect them to
+Rust. This batch passed the full proof gate (487 registered contracts; 3,706
+audited Axionomy theorems), fresh extraction, all 322 workspace tests in 57 groups,
+99 boundary/gate controls and both new production mutation controls. Rust 1.89
+formatting, Clippy with warnings denied, documentation and workspace doctests
+passed. The prior 50 production mutation controls remain in CI; all 52 source
+targets were checked. Item 16 remains partial.
+See [the exact contract and dependency boundary](ACCOUNTS.md#convenience-constructors-and-string-conversion-callbacks).
+
 **Completed item 16 inspection batch:** assessment lookup and
 rate/invariant/model inspection now have fresh extraction for 20 public APIs plus
 seven iterator-consumption probes. The development `Inspection*Refinement` modules
@@ -301,8 +318,8 @@ See the
   from entries and typed amounts, FromIterator/array conversions, and basic borrowed
   iteration/queries including sorted views are now covered as well. Remaining work
   includes remaining collection iterator and arbitrary callback contracts;
-  derived equality/hash behavior and formatting; and the explicit panic contracts
-  of convenience constructors. See the [public data contracts](ACCOUNTS.md#typed-public-data-and-expression-construction)
+  derived equality/hash behavior and formatting. The u64 static-rate and basket
+  convenience panic contracts are covered by the batch above. See the [public data contracts](ACCOUNTS.md#typed-public-data-and-expression-construction)
   for the exact scope of this batch.
 - **17 — Serialization and schema:** connect production serialization and
   deserialization to round-trip, rejection and canonicalization contracts. Cover
@@ -489,8 +506,9 @@ the initial theorems. They are a backfill plan, not an exemption for new behavio
 - Remaining finite-map adapters, serialization/schema round trips,
   remaining derived key equality/hash APIs, and portability of fingerprint encodings
   beyond the documented targets. Fingerprints are not collision-free identities.
-- Other remaining convenience APIs and their explicit panic contracts. Invariant
-  construction and inspection are covered by the completed batch above. Runtime
+- Other remaining public APIs and arbitrary callback contracts. Static u64 rate
+  and basket convenience panics, string conversions, invariant construction and
+  inspection are covered by the batches above. Runtime
   invariant checks, intermediate `i128` overflow, and caller diagnostic totals
   are covered by the complete transaction contract.
 - Laws for custom `QuantityScalar` backends and BigUint/BigInt implementations.

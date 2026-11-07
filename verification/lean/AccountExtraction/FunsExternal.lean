@@ -17,6 +17,22 @@ def Array.Insts.CoreIterTraitsCollectIntoIteratorTIntoIter.into_iter
     {T : Type} {N : Std.Usize} (values : Array T N) : Result (core.array.iter.IntoIter T N) :=
   .ok values.val
 
+-- Logical std array::map model: thread the FnMut state from left to right,
+-- propagate its first failure, and preserve the array length. Rust's physical
+-- MaybeUninit buffer, allocation and unwind drops remain dependency boundaries.
+def mapArrayEntries {T U F : Type} (call : F → T → Result (U × F))
+    (state : F) : (entries : List T) → Result ({ values : List U // values.length = entries.length } × F)
+  | [] => .ok (⟨[], rfl⟩, state)
+  | entry :: rest => do
+    let (value, next) ← call state entry
+    let (values, finalState) ← mapArrayEntries call next rest
+    .ok (⟨value :: values.val, by simp [values.property]⟩, finalState)
+
+def core.array.Array.map {T F U : Type} {N : Std.Usize}
+    (callback : core.ops.function.FnMut F T U) (entries : Array T N) (state : F) : Result (Array U N) := do
+  let (values, _) ← mapArrayEntries callback.call_mut state entries.val
+  .ok (Array.from values.val (by simp [values.property]))
+
 -- The same source-guarded shared-reference adapter used by BasketExtraction.
 -- It invokes the extracted zero predicate and propagates callback failure.
 def basket.retain_quantities {A N F : Type}

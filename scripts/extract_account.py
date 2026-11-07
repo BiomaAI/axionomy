@@ -19,7 +19,7 @@ GENERATED = {
 }
 TEMPLATES = {
     "TypesExternal_Template.lean": "b8ad76496c678a024c5cde4fdabe7d3063f8c30f237d5aa3d12f527cad18b85a",
-    "FunsExternal_Template.lean": "931662c681025b297193b09d6885a2dabb6b8e4345db3e29a24b1ed923951190",
+    "FunsExternal_Template.lean": "0f192758fb6b2589dff3beef16359ff41c7bc72c86a8af2e63481acb3e9ec64f",
 }
 
 # The pinned backend's Iterator dictionary omits size_hint. Its supported
@@ -53,6 +53,12 @@ INSPECTION_DEFINITIONS = (
       ("economy.Economy.asset_keys", 3)) for index in range(count) for suffix in ("", ".body")],
 )
 
+CONVENIENCE_DEFINITIONS = (
+    "rate.Rate.impl.consume", "rate.Rate.impl.produce", "rate.Rate.impl.preserve",
+    "rate.basket", "rate.basket.closure.Insts.CoreOpsFunctionFnMutTuplePairAU64PairAQuantityU64.call_mut",
+    "exchange.Exchange.parameter", "rate.QuantityExpression.parameter", "rate.Rate.condition",
+)
+
 
 def validate_extraction_diagnostics(output):
     plain = re.sub(r"\x1b\[[0-9;]*m", "", output)
@@ -80,6 +86,13 @@ VALIDATION_CALL = """let rule = match self.validate_structure(proposal) {
         };"""
 
 ENTRY_CALLS = {
+    "rate_consume_or_panic": "rule.consume(role,assets)",
+    "rate_produce_or_panic": "rule.produce(role,assets)",
+    "rate_preserve_or_panic": "rule.preserve(role,assets)",
+    "basket_literal": "rate::basket(entries)",
+    "proposal_parameter_with": "proposal.parameter(name,value)",
+    "expression_parameter_with": "QuantityExpression::parameter(name)",
+    "rate_condition_with": "rule.condition(label,left,comparison,right)",
     "inspect_model_accounts_next": "model.accounts().next()",
     "inspect_model_accounts_hint": "model.accounts().size_hint()",
     "inspect_model_rate_ids_next": "model.rate_ids().next()",
@@ -316,7 +329,7 @@ def validate_generated(directory):
         if re.search(r"\b(sorry|admit|axiom)\b", (directory / name).read_text()):
             raise ValueError(f"unfinished or axiomatic account extraction: {name}")
     functions = (directory / "Funs.lean").read_text()
-    for entry in (*ENTRY_CALLS, *PUBLIC_DEFINITIONS, *INSPECTION_DEFINITIONS, "account.Account.prepare_exchange",
+    for entry in (*ENTRY_CALLS, *PUBLIC_DEFINITIONS, *INSPECTION_DEFINITIONS, *CONVENIENCE_DEFINITIONS, "account.Account.prepare_exchange",
                   "account.Account.Insts.CoreCloneClone.clone",
                   "basket.construct_entries", "basket.construct_entries_loop.body",
                   "basket.Basket.try_from_entries", "basket.Basket.try_from_amounts",

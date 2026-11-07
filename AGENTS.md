@@ -36,6 +36,8 @@ into it), read `verification/README.md` and `verification/coverage.json` first.
   generic basket collection construction/conversions and borrowed iteration/queries including stable asset sorting,
   generic assessment/rate/invariant/model inspection, concrete borrowed iterator
   contents and size hints, and complete model asset collection,
+  u64 rate/basket convenience-constructor panic contracts and generic
+  string-conversion results for names and parameters,
   runtime signed conservation and whole-state diagnostic measurement
   against Lean specifications. Collections use
   explicit trusted models; other contracts have design proofs and finite Rust

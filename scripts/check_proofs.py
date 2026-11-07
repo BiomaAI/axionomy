@@ -50,6 +50,34 @@ def validate_coverage(root, coverage):
             # These are the implemented extraction pipelines. Future
             # claims need their own regeneration and trust-boundary checks.
             pipelines = {
+                "convenience_constructor_boundary": ("AccountExtraction.Funs", {
+                    "Axionomy.ConvenienceRefinement.unwrap_panics_iff",
+                    "Axionomy.ConvenienceRefinement.merge_overflow_naturals",
+                    "Axionomy.ConvenienceRefinement.consume_refines",
+                    "Axionomy.ConvenienceRefinement.produce_refines",
+                    "Axionomy.ConvenienceRefinement.preserve_refines",
+                    "Axionomy.ConvenienceRefinement.consume_panics_iff",
+                    "Axionomy.ConvenienceRefinement.produce_panics_iff",
+                    "Axionomy.ConvenienceRefinement.preserve_panics_iff",
+                    "Axionomy.ConvenienceRefinement.consume_panics_naturals",
+                    "Axionomy.ConvenienceRefinement.produce_panics_naturals",
+                    "Axionomy.ConvenienceRefinement.preserve_panics_naturals",
+                    "Axionomy.ConvenienceRefinement.map_identity",
+                    "Axionomy.ConvenienceRefinement.array_identity",
+                    "Axionomy.ConvenienceRefinement.literal_conversion",
+                    "Axionomy.ConvenienceRefinement.literal_refines",
+                    "Axionomy.ConvenienceRefinement.literal_panics_iff",
+                    "Axionomy.CallbackRefinement.expression_effect",
+                    "Axionomy.CallbackRefinement.expression_success",
+                    "Axionomy.CallbackRefinement.expression_failure",
+                    "Axionomy.CallbackRefinement.proposal_effect",
+                    "Axionomy.CallbackRefinement.proposal_success",
+                    "Axionomy.CallbackRefinement.proposal_failure",
+                    "Axionomy.CallbackRefinement.invariant_effect",
+                    "Axionomy.CallbackRefinement.condition_effect",
+                    "Axionomy.CallbackRefinement.condition_success",
+                    "Axionomy.CallbackRefinement.condition_failure",
+                }),
                 "core_inspection_boundary": ("AccountExtraction.Funs", {
                     "Axionomy.Inspection.first_none",
                     "Axionomy.Inspection.first_prefix",
@@ -403,12 +431,12 @@ def main():
     if generated != committed:
         raise ValueError("Lean conformance cases are stale; regenerate them from Conformance.lean and review the diff")
     run("cargo", "test", "-p", "axionomy", "--all-features", "--test", "lean_conformance",
-        "--test", "transaction_conformance", "--test", "observation_conformance", "--test", "public_data_conformance", "--test", "iterator_conformance", "--test", "basket_collection_conformance", "--test", "basket_sorted_conformance", "--test", "inspection_conformance")
+        "--test", "transaction_conformance", "--test", "observation_conformance", "--test", "public_data_conformance", "--test", "iterator_conformance", "--test", "basket_collection_conformance", "--test", "basket_sorted_conformance", "--test", "inspection_conformance", "--test", "convenience_conformance")
     run("cargo", "test", "-p", "axionomy", "--all-features", "--lib",
         "runtime_")
     run("cargo", "test", "-p", "axionomy", "--all-features", "--doc")
     print(f"Verified {len(theorems)} registered theorems and their axiom dependencies, "
-          "fresh Aeneas extraction of u64 arithmetic, basket construction/operations, account updates/staging, model/rate construction and metadata discovery, complete transaction assessment/application and finite-input iterator filtering, fork/simulation/ordered replay, goals/views/canonical keys and scoped fingerprints, typed data APIs, expression construction, generic trace extension and basket collection boundaries including sorted borrowed iteration, generic core inspection and complete asset collection, snapshot evaluation/conditions, signed conservation and measurement, "
+          "fresh Aeneas extraction of u64 arithmetic, basket construction/operations, account updates/staging, model/rate construction and metadata discovery, complete transaction assessment/application and finite-input iterator filtering, fork/simulation/ordered replay, goals/views/canonical keys and scoped fingerprints, typed data APIs, expression construction, generic trace extension and basket collection boundaries including sorted borrowed iteration, generic core inspection and complete asset collection, convenience constructor panics and string-conversion callbacks, snapshot evaluation/conditions, signed conservation and measurement, "
           "and Rust conformance/type checks. Collection storage uses an explicit trusted model. "
           "Other core implementation refinement remains unproved; see verification/README.md.")
 

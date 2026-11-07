@@ -896,7 +896,7 @@ where
     A: Eq + Hash,
 {
     entries
-        .map(|(asset, quantity)| (asset, Quantity::new(quantity)))
+        .map(|(asset, value)| (asset, Quantity::new(value)))
         .into()
 }
 

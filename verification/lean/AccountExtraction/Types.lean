@@ -679,4 +679,9 @@ def rate.Rate.try_preserve.closure (Role : Type _) (A : Type _) (N : Type _)
   (Clause5_SignedMeasure : Type _) :=
   Role
 
+/-- [account_extraction::rate::basket::{closure}]
+    Source: 'verification/../src/rate.rs', lines 899:13-899:59 -/
+@[reducible]
+def rate.basket.closure (A : Type _) (LEN : Std.Usize) := Unit
+
 end Axionomy.AccountExtracted

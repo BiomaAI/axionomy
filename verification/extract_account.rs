@@ -1250,3 +1250,57 @@ pub fn invariant_weights_hint<A: Eq + std::hash::Hash>(
 ) -> (usize, Option<usize>) {
     value.weights().size_hint()
 }
+
+pub fn rate_consume_or_panic<Role: Clone + Ord, A: Clone + Eq + std::hash::Hash>(
+    rule: Rate<Role, A>,
+    role: Role,
+    assets: Basket<A>,
+) -> Rate<Role, A> {
+    rule.consume(role, assets)
+}
+
+pub fn rate_produce_or_panic<Role: Clone + Ord, A: Clone + Eq + std::hash::Hash>(
+    rule: Rate<Role, A>,
+    role: Role,
+    assets: Basket<A>,
+) -> Rate<Role, A> {
+    rule.produce(role, assets)
+}
+
+pub fn rate_preserve_or_panic<Role: Clone + Ord, A: Clone + Eq + std::hash::Hash>(
+    rule: Rate<Role, A>,
+    role: Role,
+    assets: Basket<A>,
+) -> Rate<Role, A> {
+    rule.preserve(role, assets)
+}
+
+pub fn basket_literal<A: Eq + std::hash::Hash, const LEN: usize>(
+    entries: [(A, u64); LEN],
+) -> Basket<A> {
+    rate::basket(entries)
+}
+
+pub fn proposal_parameter_with<RateId, Role: Ord, AccountId, N, S: Into<String>>(
+    proposal: Exchange<RateId, Role, AccountId, N>,
+    name: S,
+    value: Quantity<N>,
+) -> Exchange<RateId, Role, AccountId, N> {
+    proposal.parameter(name, value)
+}
+
+pub fn expression_parameter_with<Role, A, N, S: Into<String>>(
+    name: S,
+) -> QuantityExpression<Role, A, N> {
+    QuantityExpression::parameter(name)
+}
+
+pub fn rate_condition_with<Role: Clone + Ord, A: Clone + Eq + std::hash::Hash, S: Into<String>>(
+    rule: Rate<Role, A>,
+    label: S,
+    left: QuantityExpression<Role, A>,
+    comparison: QuantityComparison,
+    right: QuantityExpression<Role, A>,
+) -> Rate<Role, A> {
+    rule.condition(label, left, comparison, right)
+}

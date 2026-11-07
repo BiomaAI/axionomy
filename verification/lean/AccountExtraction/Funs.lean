@@ -2000,6 +2000,19 @@ def basket.Basket.Insts.CoreConvertFromArrayPairAQuantityLEN.from
     (Array.Insts.CoreIterTraitsCollectIntoIteratorTIntoIter (A ×
     (quantity.Quantity N)) LEN) entries
 
+/-- Trait implementation: [account_extraction::basket::{impl core::convert::From<[(A, account_extraction::quantity::Quantity<N>); LEN]> for account_extraction::basket::Basket<A, N>}]
+    Source: 'verification/../src/basket.rs', lines 252:0-260:1 -/
+@[reducible]
+def basket.Basket.Insts.CoreConvertFromArrayPairAQuantityLEN {A : Type _} {N :
+  Type _} {Clause2_SignedMeasure : Type _} (LEN : Std.Usize) (corecmpEqInst :
+  core.cmp.Eq A) (corehashHashInst : core.hash.Hash A)
+  (quantityQuantityScalarInst : quantity.QuantityScalar N
+  Clause2_SignedMeasure) : core.convert.From (basket.Basket A N) (Array (A ×
+  (quantity.Quantity N)) LEN) := {
+  «from» := basket.Basket.Insts.CoreConvertFromArrayPairAQuantityLEN.from
+    corecmpEqInst corehashHashInst quantityQuantityScalarInst
+}
+
 /-- [account_extraction::economy::{impl core::iter::traits::iterator::Iterator<(&'a AccountId, &'a account_extraction::account::Account<A, N>)> for account_extraction::economy::AccountEntries<'a, AccountId, A, N>}::next]:
     Source: 'verification/../src/economy.rs', lines 22:4-27:5
     Visibility: public -/
@@ -8599,6 +8612,26 @@ def rate.Rate.try_consume
       (rate.Rate Role A N) (core.convert.FromSame (rate.RateError Role A))
       residual
 
+/-- [account_extraction::rate::{account_extraction::rate::Rate<Role, A, N>}::consume]:
+    Source: 'verification/../src/rate.rs', lines 333:4-338:5
+    Visibility: public -/
+def rate.Rate.impl.consume
+  {Role : Type _} {A : Type _} {N : Type _} {Clause5_SignedMeasure : Type _}
+  (corecloneCloneInst : core.clone.Clone Role) (corecmpOrdInst : core.cmp.Ord
+  Role) (corecloneCloneInst1 : core.clone.Clone A) (corecmpEqInst : core.cmp.Eq
+  A) (corehashHashInst : core.hash.Hash A) (quantityQuantityScalarInst :
+  quantity.QuantityScalar N Clause5_SignedMeasure) (self : rate.Rate Role A N)
+  (role : Role) (basket : basket.Basket A N) :
+  Result (rate.Rate Role A N)
+  := do
+  let r ←
+    rate.Rate.try_consume corecloneCloneInst corecmpOrdInst corecloneCloneInst1
+      corecmpEqInst corehashHashInst quantityQuantityScalarInst self role
+      basket
+  match r with
+  | core.result.Result.Ok rate => ok rate
+  | core.result.Result.Err _ => fail panic
+
 /-- [account_extraction::rate::{account_extraction::rate::Rate<Role, A, N>}::try_produce::{impl core::ops::function::FnOnce<(A,), account_extraction::rate::RateError<Role, A>> for account_extraction::rate::{account_extraction::rate::Rate<Role, A, N>}::try_produce::{closure}<Role, A, N, Clause5_SignedMeasure>}::call_once]:
     Source: 'verification/../src/rate.rs', lines 347:21-347:70 -/
 def
@@ -8665,6 +8698,26 @@ def rate.Rate.try_produce
       (rate.Rate Role A N) (core.convert.FromSame (rate.RateError Role A))
       residual
 
+/-- [account_extraction::rate::{account_extraction::rate::Rate<Role, A, N>}::produce]:
+    Source: 'verification/../src/rate.rs', lines 351:4-356:5
+    Visibility: public -/
+def rate.Rate.impl.produce
+  {Role : Type _} {A : Type _} {N : Type _} {Clause5_SignedMeasure : Type _}
+  (corecloneCloneInst : core.clone.Clone Role) (corecmpOrdInst : core.cmp.Ord
+  Role) (corecloneCloneInst1 : core.clone.Clone A) (corecmpEqInst : core.cmp.Eq
+  A) (corehashHashInst : core.hash.Hash A) (quantityQuantityScalarInst :
+  quantity.QuantityScalar N Clause5_SignedMeasure) (self : rate.Rate Role A N)
+  (role : Role) (basket : basket.Basket A N) :
+  Result (rate.Rate Role A N)
+  := do
+  let r ←
+    rate.Rate.try_produce corecloneCloneInst corecmpOrdInst corecloneCloneInst1
+      corecmpEqInst corehashHashInst quantityQuantityScalarInst self role
+      basket
+  match r with
+  | core.result.Result.Ok rate => ok rate
+  | core.result.Result.Err _ => fail panic
+
 /-- [account_extraction::rate::{account_extraction::rate::Rate<Role, A, N>}::try_preserve::{impl core::ops::function::FnOnce<(A,), account_extraction::rate::RateError<Role, A>> for account_extraction::rate::{account_extraction::rate::Rate<Role, A, N>}::try_preserve::{closure}<Role, A, N, Clause5_SignedMeasure>}::call_once]:
     Source: 'verification/../src/rate.rs', lines 365:21-365:70 -/
 def
@@ -8730,6 +8783,26 @@ def rate.Rate.try_preserve
     core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
       (rate.Rate Role A N) (core.convert.FromSame (rate.RateError Role A))
       residual
+
+/-- [account_extraction::rate::{account_extraction::rate::Rate<Role, A, N>}::preserve]:
+    Source: 'verification/../src/rate.rs', lines 369:4-374:5
+    Visibility: public -/
+def rate.Rate.impl.preserve
+  {Role : Type _} {A : Type _} {N : Type _} {Clause5_SignedMeasure : Type _}
+  (corecloneCloneInst : core.clone.Clone Role) (corecmpOrdInst : core.cmp.Ord
+  Role) (corecloneCloneInst1 : core.clone.Clone A) (corecmpEqInst : core.cmp.Eq
+  A) (corehashHashInst : core.hash.Hash A) (quantityQuantityScalarInst :
+  quantity.QuantityScalar N Clause5_SignedMeasure) (self : rate.Rate Role A N)
+  (role : Role) (basket : basket.Basket A N) :
+  Result (rate.Rate Role A N)
+  := do
+  let r ←
+    rate.Rate.try_preserve corecloneCloneInst corecmpOrdInst
+      corecloneCloneInst1 corecmpEqInst corehashHashInst
+      quantityQuantityScalarInst self role basket
+  match r with
+  | core.result.Result.Ok rate => ok rate
+  | core.result.Result.Err _ => fail panic
 
 /-- [account_extraction::rate::{account_extraction::rate::Rate<Role, A, N>}::distinct]:
     Source: 'verification/../src/rate.rs', lines 376:4-386:5
@@ -9018,6 +9091,79 @@ def rate.LinearInvariant.weight
         std.hash.random.RandomState.Insts.CoreHashBuildHasherDefaultHasher
         self.weights asset weight
     ok { self with weights := im }
+
+/-- [account_extraction::rate::basket::{impl core::ops::function::FnMut<((A, u64),), (A, account_extraction::quantity::Quantity<u64>)> for account_extraction::rate::basket::{closure}<A, LEN>}::call_mut]:
+    Source: 'verification/../src/rate.rs', lines 899:13-899:59 -/
+def
+  rate.basket.closure.Insts.CoreOpsFunctionFnMutTuplePairAU64PairAQuantityU64.call_mut
+  {A : Type _} {LEN : Std.Usize} (corecmpEqInst : core.cmp.Eq A)
+  (corehashHashInst : core.hash.Hash A) (c : rate.basket.closure A LEN)
+  (tupled_args : (A × Std.U64)) :
+  Result ((A × (quantity.Quantity Std.U64)) × (rate.basket.closure A LEN))
+  := do
+  let (asset, value) := tupled_args
+  let q ← quantity.QuantityU64.new value
+  ok ((asset, q), c)
+
+/-- [account_extraction::rate::basket::{impl core::ops::function::FnOnce<((A, u64),), (A, account_extraction::quantity::Quantity<u64>)> for account_extraction::rate::basket::{closure}<A, LEN>}::call_once]:
+    Source: 'verification/../src/rate.rs', lines 899:13-899:59 -/
+def
+  rate.basket.closure.Insts.CoreOpsFunctionFnOnceTuplePairAU64PairAQuantityU64.call_once
+  {A : Type _} {LEN : Std.Usize} (corecmpEqInst : core.cmp.Eq A)
+  (corehashHashInst : core.hash.Hash A) (c : rate.basket.closure A LEN)
+  (p : (A × Std.U64)) :
+  Result (A × (quantity.Quantity Std.U64))
+  := do
+  let (p1, _) ←
+    rate.basket.closure.Insts.CoreOpsFunctionFnMutTuplePairAU64PairAQuantityU64.call_mut
+      corecmpEqInst corehashHashInst c p
+  ok p1
+
+/-- Trait implementation: [account_extraction::rate::basket::{impl core::ops::function::FnOnce<((A, u64),), (A, account_extraction::quantity::Quantity<u64>)> for account_extraction::rate::basket::{closure}<A, LEN>}]
+    Source: 'verification/../src/rate.rs', lines 899:13-899:59 -/
+@[reducible]
+def
+  rate.basket.closure.Insts.CoreOpsFunctionFnOnceTuplePairAU64PairAQuantityU64
+  {A : Type _} (LEN : Std.Usize) (corecmpEqInst : core.cmp.Eq A)
+  (corehashHashInst : core.hash.Hash A) : core.ops.function.FnOnce
+  (rate.basket.closure A LEN) (A × Std.U64) (A × (quantity.Quantity Std.U64))
+  := {
+  call_once :=
+    rate.basket.closure.Insts.CoreOpsFunctionFnOnceTuplePairAU64PairAQuantityU64.call_once
+    corecmpEqInst corehashHashInst
+}
+
+/-- Trait implementation: [account_extraction::rate::basket::{impl core::ops::function::FnMut<((A, u64),), (A, account_extraction::quantity::Quantity<u64>)> for account_extraction::rate::basket::{closure}<A, LEN>}]
+    Source: 'verification/../src/rate.rs', lines 899:13-899:59 -/
+@[reducible]
+def rate.basket.closure.Insts.CoreOpsFunctionFnMutTuplePairAU64PairAQuantityU64
+  {A : Type _} (LEN : Std.Usize) (corecmpEqInst : core.cmp.Eq A)
+  (corehashHashInst : core.hash.Hash A) : core.ops.function.FnMut
+  (rate.basket.closure A LEN) (A × Std.U64) (A × (quantity.Quantity Std.U64))
+  := {
+  FnOnceInst :=
+    rate.basket.closure.Insts.CoreOpsFunctionFnOnceTuplePairAU64PairAQuantityU64
+    LEN corecmpEqInst corehashHashInst
+  call_mut :=
+    rate.basket.closure.Insts.CoreOpsFunctionFnMutTuplePairAU64PairAQuantityU64.call_mut
+    corecmpEqInst corehashHashInst
+}
+
+/-- [account_extraction::rate::basket]:
+    Source: 'verification/../src/rate.rs', lines 894:0-901:1
+    Visibility: public -/
+def rate.basket
+  {A : Type _} {LEN : Std.Usize} (corecmpEqInst : core.cmp.Eq A)
+  (corehashHashInst : core.hash.Hash A) (entries : Array (A × Std.U64) LEN) :
+  Result (basket.Basket A Std.U64)
+  := do
+  let a ←
+    core.array.Array.map
+      (rate.basket.closure.Insts.CoreOpsFunctionFnMutTuplePairAU64PairAQuantityU64
+      LEN corecmpEqInst corehashHashInst) entries ()
+  core.convert.IntoFrom.into
+    (basket.Basket.Insts.CoreConvertFromArrayPairAQuantityLEN LEN corecmpEqInst
+    corehashHashInst U64.Insts.Account_extractionQuantityQuantityScalarI128) a
 
 /-- [account_extraction::deposit]:
     Source: 'verification/extract_account.rs', lines 27:0-32:1
@@ -11361,5 +11507,104 @@ def invariant_weights_hint
     rate.LinearInvariant.impl.weights corecmpEqInst corehashHashInst value
   rate.WeightEntries.Insts.CoreIterTraitsIteratorIteratorPairSharedAAI64.size_hint
     we
+
+/-- [account_extraction::rate_consume_or_panic]:
+    Source: 'verification/extract_account.rs', lines 1254:0-1260:1
+    Visibility: public -/
+def rate_consume_or_panic
+  {Role : Type _} {A : Type _} (corecloneCloneInst : core.clone.Clone Role)
+  (corecmpOrdInst : core.cmp.Ord Role) (corecloneCloneInst1 : core.clone.Clone
+  A) (corecmpEqInst : core.cmp.Eq A) (corehashHashInst : core.hash.Hash A)
+  (rule : rate.Rate Role A Std.U64) (role : Role)
+  (assets : basket.Basket A Std.U64) :
+  Result (rate.Rate Role A Std.U64)
+  := do
+  rate.Rate.impl.consume corecloneCloneInst corecmpOrdInst corecloneCloneInst1
+    corecmpEqInst corehashHashInst
+    U64.Insts.Account_extractionQuantityQuantityScalarI128 rule role assets
+
+/-- [account_extraction::rate_produce_or_panic]:
+    Source: 'verification/extract_account.rs', lines 1262:0-1268:1
+    Visibility: public -/
+def rate_produce_or_panic
+  {Role : Type _} {A : Type _} (corecloneCloneInst : core.clone.Clone Role)
+  (corecmpOrdInst : core.cmp.Ord Role) (corecloneCloneInst1 : core.clone.Clone
+  A) (corecmpEqInst : core.cmp.Eq A) (corehashHashInst : core.hash.Hash A)
+  (rule : rate.Rate Role A Std.U64) (role : Role)
+  (assets : basket.Basket A Std.U64) :
+  Result (rate.Rate Role A Std.U64)
+  := do
+  rate.Rate.impl.produce corecloneCloneInst corecmpOrdInst corecloneCloneInst1
+    corecmpEqInst corehashHashInst
+    U64.Insts.Account_extractionQuantityQuantityScalarI128 rule role assets
+
+/-- [account_extraction::rate_preserve_or_panic]:
+    Source: 'verification/extract_account.rs', lines 1270:0-1276:1
+    Visibility: public -/
+def rate_preserve_or_panic
+  {Role : Type _} {A : Type _} (corecloneCloneInst : core.clone.Clone Role)
+  (corecmpOrdInst : core.cmp.Ord Role) (corecloneCloneInst1 : core.clone.Clone
+  A) (corecmpEqInst : core.cmp.Eq A) (corehashHashInst : core.hash.Hash A)
+  (rule : rate.Rate Role A Std.U64) (role : Role)
+  (assets : basket.Basket A Std.U64) :
+  Result (rate.Rate Role A Std.U64)
+  := do
+  rate.Rate.impl.preserve corecloneCloneInst corecmpOrdInst corecloneCloneInst1
+    corecmpEqInst corehashHashInst
+    U64.Insts.Account_extractionQuantityQuantityScalarI128 rule role assets
+
+/-- [account_extraction::basket_literal]:
+    Source: 'verification/extract_account.rs', lines 1278:0-1282:1
+    Visibility: public -/
+def basket_literal
+  {A : Type _} {LEN : Std.Usize} (corecmpEqInst : core.cmp.Eq A)
+  (corehashHashInst : core.hash.Hash A) (entries : Array (A × Std.U64) LEN) :
+  Result (basket.Basket A Std.U64)
+  := do
+  rate.basket corecmpEqInst corehashHashInst entries
+
+/-- [account_extraction::proposal_parameter_with]:
+    Source: 'verification/extract_account.rs', lines 1284:0-1290:1
+    Visibility: public -/
+def proposal_parameter_with
+  {RateId : Type _} {Role : Type _} {AccountId : Type _} {N : Type _} {S :
+  Type _} (corecmpOrdInst : core.cmp.Ord Role) (coreconvertIntoSStringInst :
+  core.convert.Into S String)
+  (proposal : exchange.Exchange RateId Role AccountId N) («name» : S)
+  (value : quantity.Quantity N) :
+  Result (exchange.Exchange RateId Role AccountId N)
+  := do
+  exchange.Exchange.parameter corecmpOrdInst coreconvertIntoSStringInst
+    proposal «name» value
+
+/-- [account_extraction::expression_parameter_with]:
+    Source: 'verification/extract_account.rs', lines 1292:0-1296:1
+    Visibility: public -/
+def expression_parameter_with
+  (Role : Type _) (A : Type _) (N : Type _) {S : Type _}
+  (coreconvertIntoSStringInst : core.convert.Into S String) («name» : S) :
+  Result (rate.QuantityExpression Role A N)
+  := do
+  rate.QuantityExpression.parameter Role A N coreconvertIntoSStringInst
+    «name»
+
+/-- [account_extraction::rate_condition_with]:
+    Source: 'verification/extract_account.rs', lines 1298:0-1306:1
+    Visibility: public -/
+def rate_condition_with
+  {Role : Type _} {A : Type _} {S : Type _} (corecloneCloneInst :
+  core.clone.Clone Role) (corecmpOrdInst : core.cmp.Ord Role)
+  (corecloneCloneInst1 : core.clone.Clone A) (corecmpEqInst : core.cmp.Eq A)
+  (corehashHashInst : core.hash.Hash A) (coreconvertIntoSStringInst :
+  core.convert.Into S String) (rule : rate.Rate Role A Std.U64) (label : S)
+  (left : rate.QuantityExpression Role A Std.U64)
+  (comparison : rate.QuantityComparison)
+  (right : rate.QuantityExpression Role A Std.U64) :
+  Result (rate.Rate Role A Std.U64)
+  := do
+  rate.Rate.condition corecloneCloneInst corecmpOrdInst corecloneCloneInst1
+    corecmpEqInst corehashHashInst
+    U64.Insts.Account_extractionQuantityQuantityScalarI128
+    coreconvertIntoSStringInst rule label left comparison right
 
 end Axionomy.AccountExtracted

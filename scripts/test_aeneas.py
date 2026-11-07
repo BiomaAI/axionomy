@@ -55,6 +55,19 @@ class ExtractionBoundaryTests(unittest.TestCase):
 
 
 class ProductionMutationTests(unittest.TestCase):
+    def test_silenced_rate_overflow_breaks_convenience_contract(self):
+        self.check_mutation(
+            "src/rate.rs", 'Ok(rate) => rate,\n            Err(_) => panic!("rate consume basket quantity overflow"),',
+            "Ok(value) => value,\n            Err(_) => Self::new(),",
+            "extract_account.py", "stale account model", "ConvenienceRefinement", "AccountExtraction",
+            proof_failure="Tactic `rfl` failed")
+
+    def test_zeroed_literal_quantity_breaks_conversion_contract(self):
+        self.check_mutation(
+            "src/rate.rs", ".map(|(asset, value)| (asset, Quantity::new(value)))",
+            ".map(|(asset, _value)| (asset, Quantity::new(0)))",
+            "extract_account.py", "stale account model", "ConvenienceRefinement", "AccountExtraction")
+
     def test_reversed_assessment_match_breaks_lookup(self):
         self.check_mutation(
             "src/economy.rs", "if assessment.account() == account {", "if !(assessment.account() == account) {",

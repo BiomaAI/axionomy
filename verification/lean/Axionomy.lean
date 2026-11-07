@@ -95,3 +95,6 @@ import Axionomy.InspectionAssetsRefinement
 import Axionomy.InspectionCollectionRefinement
 import Axionomy.InspectionModelAssetsRefinement
 import Axionomy.InspectionConformance
+import Axionomy.ConvenienceRefinement
+import Axionomy.CallbackRefinement
+import Axionomy.ConvenienceConformance

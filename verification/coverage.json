@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "assurance": "Partial implementation verification: Aeneas-extracted production u64 arithmetic, basket/account operations, model/rate construction and discovery, complete transaction assessment/application, finite-input iterator filtering, fork/simulation/ordered replay, goals, finite-input iterator views, canonical state/observation keys and scoped deterministic fingerprints, generic trace extension, basket collection boundaries including sorted borrowed iteration, foundational typed data APIs, expression construction and generic core inspection/asset discovery refine Lean specifications. Explicit collection/Arc/UTF-8/sorting/hashing models, lawful identifier operations, resource bounds, compiler/translation and primitive models remain trusted. Remaining public data APIs, serialization/schema contracts and other numeric backends remain open.",
+  "assurance": "Partial implementation verification: Aeneas-extracted production u64 arithmetic, basket/account operations, model/rate construction and discovery, complete transaction assessment/application, finite-input iterator filtering, fork/simulation/ordered replay, goals, finite-input iterator views, canonical state/observation keys and scoped deterministic fingerprints, generic trace extension, basket collection boundaries including sorted borrowed iteration, foundational typed data APIs, expression construction and generic core inspection/asset discovery, u64 convenience constructor panic contracts and generic string-conversion callbacks refine Lean specifications. Explicit collection/Arc/UTF-8/sorting/hashing models, lawful identifier operations, resource bounds, compiler/translation and primitive models remain trusted. Remaining public data APIs, serialization/schema contracts and other numeric backends remain open.",
   "sources": {
     "Cargo.toml": "414a2b181e13225e4b76aa58e70d998064174dde2d8cee603ea3af648d61a7f3",
     "Cargo.lock": "00ef263c160aeebaa49187874a4b11ec94fee9bc8fbea5a2f0cacc190607919c",
@@ -11,11 +11,11 @@
     "src/exchange.rs": "234f6e6459d2fb97a1fbb802e14afed6e5ed50a023c8c2de745e6f6eac39b455",
     "src/lib.rs": "46d6f713693714650653128e2ceabf8a895b8ad98a38a7bdbeab4ea378a5cc06",
     "src/quantity.rs": "246c805344babccb3c1c00371686e098111044a2ce46f456f211de6eb9928364",
-    "src/rate.rs": "d329eec767c2142b9e93ac095e770b01b8c2e1a62322cb082d99c3c8834d29e8",
+    "src/rate.rs": "5af32fe1a4b7495c2ab397fc47193824bc9c65418d66b6fa3f54188fe8844abc",
     "verification/extract.rs": "415b34f5f4f8aa2679af860bd2a4092c96e113145919160fe7c81e33836de3e0",
     "verification/aeneas-toolchain.json": "8676d7d11be51a6f41984d874b35910e8a1a3d0a18414998feb9402ef80932fb",
     "verification/extract_basket.rs": "dc2b3a2159704c24a5261d0069a2aac7b575f30a94ae35c4c1e96933638592dd",
-    "verification/extract_account.rs": "5b6baf1606c1eb1e1409cde05787e6c778a4ea2cf9c83fa9667195b9db5bbda7",
+    "verification/extract_account.rs": "ecf0c1e9cc2ae5b6710d3e5f0ec8033a31204cfbf37409777cde4181dd7b891b",
     "verification/patches/aeneas-namespaced-discriminant.patch": "fabac7482deb3da6ecaca60c4060dfe9d2114efdd010699e736c4a91267f3bc9"
   },
   "features": [
@@ -179,7 +179,7 @@
         "tests/serde.rs"
       ],
       "limitations": [
-        "Entry canonicalization and shortfall have design proofs. Separate basket/account implementation contracts now cover construction, lookup, insertion/removal, shortfall, addition/scaling, containment/equality and logical canonical representation preservation. Sorted iteration, remaining typed adapters, physical IndexMap semantics and serialization remain unrefined."
+        "Entry canonicalization and shortfall have design proofs. Separate basket/account implementation contracts now cover construction, lookup, insertion/removal, shortfall, addition/scaling, containment/equality and logical canonical representation preservation. Sorted iteration and foundational typed adapters have separate implementation contracts; physical IndexMap semantics and serialization remain unrefined."
       ]
     },
     {
@@ -535,7 +535,7 @@
         "Shared-source extraction covers try_consume, try_produce and try_preserve for u64 quantities. Theorems prove total execution, exact ordered basket merge/error results, role registration including empty baskets, and unchanged other effect maps, distinctness declarations, computed effects and conditions. Private merge entry/backward-function behavior is proved explicitly.",
         "Roles and assets remain separate generic types. Asset equality and asset/role cloning must satisfy the existing identity/totality laws. Role comparison must terminate and agree with the pure comparator; registered-role identity additionally requires comparison equality to imply identity. Concrete u64 ordering witnesses show these premises are satisfiable. Existing arithmetic refinement relates bounded u64 additions to natural numbers.",
         "BTreeMap/BTreeSet use a new explicit sorted-list model with occupied/vacant entry positions, stored-key retention and default insertion. Applying the model assumes valid ordered collections, lawful total ordering, allocator/tree correctness, clone isolation and the compiler/MIR/Charon/Aeneas/backend boundary. Physical tree code is not verified. See verification/ACCOUNTS.md.",
-        "The infallible static convenience-constructor panic contracts and serialization remain separate contracts. Model/rate constructors and computed role/parameter/asset discovery are covered by the model_construction, computed_rate_construction and rate_discovery contracts."
+        "The infallible static convenience-constructor panic contracts are covered separately by convenience_constructor_boundary; serialization remains open. Model/rate constructors and computed role/parameter/asset discovery are covered by the model_construction, computed_rate_construction and rate_discovery contracts."
       ]
     },
     {
@@ -702,7 +702,7 @@
       "limitations": [
         "Extracted u64 Rate new/default, all three computed-effect constructors, condition construction for String labels, distinct-pair canonicalization and recursive referenced-role registration. Exact effect/condition append order, duplicate role/pair handling and unchanged other fields. Arbitrary Into<String> callbacks are not covered by the String forwarding specialization.",
         "Role cloning/ordering must terminate and agree with their logical values/comparator; membership additionally needs comparator equality to imply identity. Distinct construction requires the selected PartialOrd::le to agree with the same comparator; u64 witnesses discharge these laws. Valid ordered collections and lawful total ordering remain assumptions when applying the sorted-list external model to Rust.",
-        "Vec append requires a spare usize element. Borrowed-reference ordering and tuple lexicographic cmp/partial_cmp/eq have explicit logical models. Unused tuple lt/le/ge remain fail-closed because pinned Rust chaining hooks are absent from the backend dictionary. Physical trees/storage, allocation/stack limits, cloning, compiler/MIR/translation/backend semantics remain trusted. Static convenience panics, LinearInvariant constructors, serialization and non-u64 numeric backends remain separate contracts."
+        "Vec append requires a spare usize element. Borrowed-reference ordering and tuple lexicographic cmp/partial_cmp/eq have explicit logical models. Unused tuple lt/le/ge remain fail-closed because pinned Rust chaining hooks are absent from the backend dictionary. Physical trees/storage, allocation/stack limits, cloning, compiler/MIR/translation/backend semantics remain trusted. Static convenience panics and LinearInvariant constructors have separate implementation contracts; serialization and non-u64 numeric backends remain open."
       ]
     },
     {
@@ -906,8 +906,8 @@
       "limitations": [
         "Generic value transport, borrowed/consuming accessors, amount/account round trips, exact u32/u64 conversion and proposal field preservation are proved for the extracted production methods without replacing their distinct identifier or numeric types.",
         "Quantity validation and checked-result rejection use an explicit independent law for the backend nonnegative predicate. Default uses the backend zero result; this does not establish algebraic validity for an arbitrary QuantityScalar. Account equality and basket insert_amount are specialized to u64 and lawful identifier equality, with map-size bounds for equality.",
-        "Proposal map updates use the reviewed logical sorted-map adapter and comparison/identity laws. Into<String> calls require a separate successful encoding law; arbitrary callback failure/divergence remains an open boundary. Condition names use the explicit UTF-8 adapter and a representable byte-length bound.",
-        "Physical references, allocation, collection storage, compiler/translation and primitive models remain trusted. This is a batch within item 16, not full public API coverage: remaining iterators, rate/invariant/model APIs, convenience-constructor panic behavior and derived equality/hash/formatting contracts remain open. Serialization/schema is item 17; other numeric arithmetic is item 18."
+        "Proposal map updates use the reviewed logical sorted-map adapter and comparison/identity laws. These Into<String> success contracts require an independent encoding law; convenience_constructor_boundary separately covers modeled failure/divergence. Condition names use the explicit UTF-8 adapter and a representable byte-length bound.",
+        "Physical references, allocation, collection storage, compiler/translation and primitive models remain trusted. This is a batch within item 16, not full public API coverage: inspection, collection and convenience-constructor contracts have separate coverage; remaining iterators and derived equality/hash/formatting contracts remain open. Serialization/schema is item 17; other numeric arithmetic is item 18."
       ]
     },
     {
@@ -1052,7 +1052,7 @@
         "FromIterator and owned fixed-array conversions return the exact canonical basket or panic on duplicate assets. Under successful iterator/equality/zero laws, duplicate keys are exactly the panic condition. Aeneas models the panic class rather than its text; Rust conformance checks the current panic message. Public constructors retain their typed identifiers and QuantityScalar bounds.",
         "Basic new/default/len/is_empty/get/borrowed insertion-order iteration are refined. Length and the composed successful-construction contract have explicit usize bounds. IndexMap storage, hashing, allocation and the source-guarded shared-reference retain adapter remain trusted; the extracted zero callback itself is proved.",
         "Owned array iteration uses a reviewed executable list model of the pinned Rust alive range and forward next operation; physical MaybeUninit storage, moves, drops and iterator internals remain dependency assumptions. Array conversion forwards directly to FromIterator. A private extracted AmountEntries iterator calls next and into_parts explicitly, avoiding erased custom map overrides and preserving early rejection without precollecting inputs.",
-        "Sorted borrowed iteration is covered by the separate basket_sorted_iteration contract. Serialization/schema, remaining inspection/convenience/derived APIs and numeric backend arithmetic remain open. Compiler/MIR/Charon/Aeneas and primitive semantics retain their documented trust boundaries."
+        "Sorted borrowed iteration is covered by the separate basket_sorted_iteration contract. Inspection and u64 convenience constructors have separate implementation contracts; serialization/schema, remaining derived APIs and numeric backend arithmetic remain open. Compiler/MIR/Charon/Aeneas and primitive semantics retain their documented trust boundaries."
       ]
     },
     {
@@ -1173,6 +1173,58 @@
         "Complete model asset collection returns the sorted duplicate-free union of balances, static baskets reached through registered rate roles, computed targets and recursive expression/condition balance references, and invariant weight keys. Membership, ordering, uniqueness and size follow from independent lawful asset ordering, lawful role comparisons and a usize bound on each rate's computed-reference vector. This contract describes raw stored metadata as inspected; it does not assume deserialization validates role registration. Resource allocation, collection internals and arbitrary comparator failure/side effects remain dependency boundaries.",
         "The pinned Aeneas Iterator dictionary lacks size_hint. Account extraction uses its trait-method filtering mode, retains the concrete public caller probes and adapter next/size_hint definitions, and allows exactly the reviewed missing-size_hint warning. Missing/duplicate/different warnings and errors fail the diagnostic guard; missing definitions or changed external interfaces also fail. Generic dictionary-based size_hint calls remain unsupported and cannot silently compile. Reviewed models cover indexmap 2.14.0 Keys/Iter and concrete std Slice/Vec/array size hints; no translator patch or new axiom is introduced.",
         "537 Lean-generated scenarios comprise 144 first-match/comparison-panic lookups, 153 signed weight-update sequences with every-prefix expectations and 240 model inspection/asset-union scenarios. Distinct Rust identifier types, PartialEq-only lookup IDs, Unicode names, i64 extrema, duplicates, empty inputs, all recursive expression forms/comparison variants and BigUint payloads beyond u64 are exercised. These finite cases supplement the universal implementation contracts; serde is only test setup for private assessment records. Three production mutants must compile after re-extraction and then fail their intended semantic proofs."
+      ]
+    },
+    {
+      "id": "convenience_constructor_boundary",
+      "status": "aeneas_refinement_proved",
+      "sources": [
+        "src/rate.rs",
+        "src/exchange.rs",
+        "src/basket.rs",
+        "src/quantity.rs",
+        "verification/extract_account.rs",
+        "verification/aeneas-toolchain.json"
+      ],
+      "extracted_module": "AccountExtraction.Funs",
+      "theorems": [
+        "Axionomy.ConvenienceRefinement.unwrap_panics_iff",
+        "Axionomy.ConvenienceRefinement.merge_overflow_naturals",
+        "Axionomy.ConvenienceRefinement.consume_refines",
+        "Axionomy.ConvenienceRefinement.produce_refines",
+        "Axionomy.ConvenienceRefinement.preserve_refines",
+        "Axionomy.ConvenienceRefinement.consume_panics_iff",
+        "Axionomy.ConvenienceRefinement.produce_panics_iff",
+        "Axionomy.ConvenienceRefinement.preserve_panics_iff",
+        "Axionomy.ConvenienceRefinement.consume_panics_naturals",
+        "Axionomy.ConvenienceRefinement.produce_panics_naturals",
+        "Axionomy.ConvenienceRefinement.preserve_panics_naturals",
+        "Axionomy.ConvenienceRefinement.map_identity",
+        "Axionomy.ConvenienceRefinement.array_identity",
+        "Axionomy.ConvenienceRefinement.literal_conversion",
+        "Axionomy.ConvenienceRefinement.literal_refines",
+        "Axionomy.ConvenienceRefinement.literal_panics_iff",
+        "Axionomy.CallbackRefinement.expression_effect",
+        "Axionomy.CallbackRefinement.expression_success",
+        "Axionomy.CallbackRefinement.expression_failure",
+        "Axionomy.CallbackRefinement.proposal_effect",
+        "Axionomy.CallbackRefinement.proposal_success",
+        "Axionomy.CallbackRefinement.proposal_failure",
+        "Axionomy.CallbackRefinement.invariant_effect",
+        "Axionomy.CallbackRefinement.condition_effect",
+        "Axionomy.CallbackRefinement.condition_success",
+        "Axionomy.CallbackRefinement.condition_failure"
+      ],
+      "rust_tests": [
+        "tests/convenience_conformance.rs"
+      ],
+      "limitations": [
+        "Fresh extraction covers Rate::consume/produce/preserve for u64 quantities, the fixed-array basket literal helper, and generic Into<String> callbacks for expression/proposal parameters and condition labels. Strongly typed Role, Asset, RateId, AccountId and numeric payload domains retain their public bounds. A production local variable is renamed solely to avoid an extracted Lean namespace collision; behavior is unchanged.",
+        "The three rate shortcuts return exactly the checked-builder success result, including unchanged other fields, or panic exactly when the independent bounded-natural credit specification overflows. This requires independent successful lawful role cloning/ordering and asset cloning/equality. It is not a totality claim for arbitrary user callbacks or numeric backends. The basket helper preserves literal values and order, removes zero entries and panics exactly on duplicate asset keys, including duplicates with zero quantity, under lawful equality.",
+        "Expression/proposal callback contracts are generic in the numeric payload. Whole-function monadic equalities retain the supplied Into<String> result, including modeled failure or divergence. Independent point conversion laws yield success and failure corollaries. Proposal updates retain all other fields and overwrite only the converted parameter name. Invariant construction composes the existing generic success/failure contracts.",
+        "Condition construction uses the u64 rate instantiation and independent successful role comparison/clone laws. It registers exactly the referenced roles, appends the converted-label condition and preserves all other fields. Success requires space for one more Vec element; conversion failure propagates without that capacity premise because it precedes vector growth. Arbitrary role callback failure, foreign side effects, destructors and physical unwind state are not proved.",
+        "The only new external interface is std array::map. Its reviewed executable model traverses input in order, threads FnMut state, preserves length and propagates the first failure. The extracted basket closure is independently proved to preserve each typed asset and u64 value. Pinned Rust core/src/array/mod.rs map/try_map/try_from_fn_erased support this model; physical MaybeUninit/drain storage, moves and drops remain trusted. Existing collection/string/primitive semantics and compiler/MIR/Charon/Aeneas boundaries remain.",
+        "781 Lean-generated literal arrays and 72 conversion cases supplement the general proofs; all 56 existing merge scenarios exercise each of the three shortcuts. Rust checks exact panic messages, exactly-once string conversion, Unicode names, overwrite/insertion, preserved metadata and typed non-Clone/non-Ord literal assets. Two re-extracted production mutants must compile and then fail their semantic proof. Serialization/schema, remaining public data APIs and BigUint/BigInt/custom numeric arithmetic remain open."
       ]
     }
   ]

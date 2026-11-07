@@ -9,7 +9,8 @@ from unittest.mock import patch
 
 from extract_account import (GENERATED, LEAN, ROOT, TEMPLATES, compare_generated,
                             validate_bridge, validate_generated, validate_fingerprint_target,
-                            FILTERED_TRAIT_WARNING, INSPECTION_DEFINITIONS, validate_extraction_diagnostics)
+                            FILTERED_TRAIT_WARNING, INSPECTION_DEFINITIONS, CONVENIENCE_DEFINITIONS,
+                            validate_extraction_diagnostics)
 
 
 class ExtractionDiagnosticsTests(unittest.TestCase):
@@ -182,6 +183,19 @@ class AccountExtractionTests(unittest.TestCase):
                 # Names may follow a newline after `def` in generated Lean.
                 changed, count = re.subn(r"(^def\s+)" + re.escape(name) + r"(?=\s)",
                                         r"\1bypassed_inspection", original, flags=re.MULTILINE)
+                self.assertEqual(count, 1)
+                path.write_text(changed)
+                with self.assertRaisesRegex(ValueError, "missing account production definition"):
+                    validate_generated(self.directory)
+        path.write_text(original)
+
+    def test_missing_convenience_methods_or_conversion_closure_are_rejected(self):
+        path = self.directory / "Funs.lean"
+        original = path.read_text()
+        for name in CONVENIENCE_DEFINITIONS:
+            with self.subTest(name=name):
+                changed, count = re.subn(r"(^def\s+)" + re.escape(name) + r"(?=\s)",
+                                        r"\1bypassed_convenience", original, flags=re.MULTILINE)
                 self.assertEqual(count, 1)
                 path.write_text(changed)
                 with self.assertRaisesRegex(ValueError, "missing account production definition"):

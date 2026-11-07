@@ -290,3 +290,11 @@ Axionomy theorems), fresh extraction, all 314 workspace tests, 93 boundary/gate
 controls and the reversed-comparator production mutation. Formatting, Clippy
 with warnings denied, documentation and compile-fail doctests also passed.
 The prior 46 production mutation controls remain in CI.
+
+The public u64 `basket([(asset, value), ...])` helper now has a composed
+`ConvenienceRefinement` contract. The extracted closure preserves each literal
+value; array mapping followed by collection returns exactly the canonical basket
+or panics exactly on duplicate keys under lawful equality. Zero entries still
+participate in duplicate detection. The reviewed std array-map boundary and the
+781 generated literal cases are documented in
+[the convenience-constructor contract](ACCOUNTS.md#convenience-constructors-and-string-conversion-callbacks).

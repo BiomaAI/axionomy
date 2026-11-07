@@ -298,7 +298,8 @@ premise. Appending issues/invariants requires room for one more vector element.
 condition construction with a `String` label, referenced-role registration, and
 canonical distinct pairs. Complete record-update equalities prove frame behavior.
 The selected role `PartialOrd::le` must agree with its comparator; u64 has a proved
-witness. Arbitrary `Into<String>` callback behavior is outside this specialization.
+witness. Generic `Into<String>` effects are covered separately by
+`CallbackRefinement`, as described in the convenience-constructor contract below.
 
 `DiscoveryRefinement` covers all ten expression constructors.
 `RateDiscoveryRefinement` composes the recursive proofs through every computed
@@ -620,8 +621,9 @@ and parameter updates replace only their selected map entry and preserve other
 proposal fields. The sorted-map dependency model retains the stored key on
 overwrite; identifier order must agree with identity. Parameter conversion has an
 independent `Into<String>` encoding law. The composed expression constructor uses
-the concrete String identity conversion. Arbitrary callback failure or divergence
-still needs a separate contract.
+the concrete String identity conversion. `CallbackRefinement` supplies the separate
+whole-function contracts for arbitrary modeled conversion results, including
+failure or divergence, described below.
 
 Direct contracts cover proposal, receipt, delta, account assessment, shortfall,
 computed amount, rate condition and model-build-error accessors. Assessment
@@ -807,3 +809,59 @@ documentation and workspace doctests. The previous 47 production controls remain
 in CI. These counts describe verification evidence, not a percentage of core
 coverage; remaining typed APIs, serialization/schema and numeric backend work
 are tracked in the completion backlog.
+
+## Convenience constructors and string-conversion callbacks
+
+`ConvenienceRefinement` connects the public u64 `Rate::consume`, `produce` and
+`preserve` shortcuts to the existing checked-builder specifications. Each returns
+exactly the successful builder result, with all other fields preserved, or panics
+exactly when bounded natural-number credit overflows. The failure criterion is an
+independent specification over the selected role basket and input entries, not a
+premise that the extracted builder fails. Role clone/order and asset clone/equality
+laws remain explicit, successful primitive-operation assumptions. These are u64
+contracts; generic numeric arithmetic still belongs to item 18.
+
+The fixed-array `basket` helper composes the extracted mapping closure with the
+proved array-to-basket constructor. Literal asset/value pairs remain unchanged by
+the closure. The result has insertion order and zero filtering, and duplicate
+asset keys are exactly the panic condition under lawful equality, including zero
+entries. Its public `Eq + Hash` asset bound stays intact, without adding `Clone`
+or `Ord`. A source-local variable changes from `quantity` to `value` to avoid a
+Lean namespace collision; this does not change the Rust behavior or signature.
+
+The only added external interface is `core.array.Array.map`. The reviewed model
+calls the supplied `FnMut` from left to right, threads its state, retains length
+and propagates the first failure. The pinned Rust source at
+`library/core/src/array/mod.rs` implements `map` through `try_map`, a draining
+iterator and `try_from_fn_erased`, whose loop invokes the generator at increasing
+indices. Physical `MaybeUninit` storage, moves, drops, unwinding and resource
+limits remain trusted. The extracted basket closure is proved against this
+model; proving helpers about the model does not verify the standard library.
+The external template hash and required concrete definitions are guarded, with
+no translator patch or new axiom.
+
+`CallbackRefinement` covers generic `Into<String>` inputs to expression parameters,
+proposal parameters, invariant names and condition labels. Whole-function monadic
+equalities preserve any modeled conversion result, including failure or
+divergence; point laws for conversion success/failure yield the corresponding
+constructor contracts. They do not assume that the constructor already succeeds.
+Expression/proposal numeric payloads stay generic. Proposal updates overwrite
+only the converted parameter key and retain rate, units and bindings. Invariant
+construction composes its existing name and empty-weight contracts.
+
+Condition construction is extracted for u64 rates. Under independent successful
+role comparison/clone laws, it registers exactly the expression roles and appends
+the condition with its converted label, preserving all remaining fields. Success
+requires vector capacity for one element. A conversion failure precedes the
+append and therefore propagates without that capacity assumption. Foreign side
+effects, arbitrary role callback failures, destructors and state observable after
+physical unwinding are outside this contract.
+
+Lean generates 781 literal arrays and 72 callback scenarios. Rust additionally
+runs all 56 existing bounded-merge scenarios through each of the three rate
+shortcuts. It checks exact results and metadata frames, duplicate/overflow panic
+messages, exactly-once conversion, Unicode names, overwriting and non-Clone,
+non-Ord literal assets. Two controls change overflow rejection to success and
+replace literal values with zero; each must re-extract and compile, then fail its
+semantic proof. Panic messages and callback side-effect counts are finite Rust
+evidence; the Lean contracts establish the logical results and panic class.
