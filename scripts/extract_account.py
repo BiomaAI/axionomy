@@ -18,8 +18,8 @@ GENERATED = {
     "AccountExtraction.lean": "AccountExtraction.lean",
 }
 TEMPLATES = {
-    "TypesExternal_Template.lean": "1e23b03807db8349ee43313ba025edadafe9ce91362da38a9cfc28942e8df36a",
-    "FunsExternal_Template.lean": "7cf028a0973a730bf6f62d8834b95c3a1a6c386953731c1fadaa44500cd1cb6b",
+    "TypesExternal_Template.lean": "5d799b1ee543006cebe6325df3382239259a305cd75139d39e816fb0122ccd6b",
+    "FunsExternal_Template.lean": "171a72da913bb2fdf3c2d1249a607c22b8bcb7883e4cd9cc93c431cc67fd2877",
 }
 
 # Keep critical handoffs explicit alongside the complete caller extraction.
@@ -42,6 +42,24 @@ VALIDATION_CALL = """let rule = match self.validate_structure(proposal) {
         };"""
 
 ENTRY_CALLS = {
+    "goal_new": "economy::Goal::new()",
+    "goal_default": "economy::Goal::default()",
+    "goal_require": "goal.require(id,assets)",
+    "goal_requirements": "goal.requirements()",
+    "goal_assets": "goal.asset_keys()",
+    "inspect_model_account": "model.account(id)",
+    "model_balance": "model.balance(id,asset)",
+    "model_matches": "model.matches(goal)",
+    "model_view": "model.view(visible)",
+    "model_state_key": "model.state_key()",
+    "model_fingerprint": "model.state_fingerprint()",
+    "view_account": "view.account(id)",
+    "view_balance": "view.balance(id,asset)",
+    "view_key": "view.observation_key()",
+    "key_visible": "key.visible_accounts()",
+    "key_existing": "key.existing_accounts()",
+    "key_balances": "key.balances()",
+    "fingerprint_get": "value.get()",
     "model_fork": "model.fork()",
     "model_simulate": "model.simulate(proposal)",
     "model_replay": "model.replay(trace)",
@@ -110,6 +128,11 @@ def validate_bridge(root=ROOT):
         raise ValueError("economy validation handoff changed; review the production connection")
 
 
+def validate_fingerprint_target(cfg):
+    if not {'target_pointer_width="64"', 'target_endian="little"'} <= set(cfg.splitlines()):
+        raise ValueError("fingerprint proof adapter requires a 64-bit little-endian extraction target")
+
+
 def validate_generated(directory):
     names = {p.name for p in directory.iterdir()}
     if names != set(GENERATED) | set(TEMPLATES):
@@ -139,6 +162,18 @@ def validate_generated(directory):
                   "economy.Economy.replay_loop.body", "economy.Economy.replayed",
                   "economy.Economy.Insts.CoreCloneClone.clone", "exchange.Exchange.Insts.CoreCloneClone.clone",
                   "exchange.Trace.new", "exchange.Trace.push", "exchange.Trace.impl.exchanges", "exchange.Trace.into_exchanges",
+                  "economy.Goal.new", "economy.Goal.require", "economy.Goal.requirements",
+                  "economy.Goal.collect_assets_loop.body", "economy.Goal.asset_keys_loop.body", "economy.Goal.asset_keys",
+                  "economy.Economy.account", "economy.Economy.balance", "economy.Economy.matches", "economy.Economy.matches_loop.body",
+                  "economy.Economy.view", "economy.Economy.view_loop.body", "economy.Economy.state_key",
+                  "economy.Economy.state_key_loop0.body", "economy.Economy.state_key_loop0_loop0.body",
+                  "economy.Economy.observation_key_for", "economy.Economy.observation_key_for_loop0.body",
+                  "economy.Economy.observation_key_for_loop0_loop0.body", "economy.EconomicView.account",
+                  "economy.EconomicView.balance", "economy.EconomicView.observation_key",
+                  "economy.ObservationKey.impl.visible_accounts", "economy.ObservationKey.impl.existing_accounts",
+                  "economy.ObservationKey.impl.balances", "economy.Economy.state_fingerprint", "economy.StateFingerprint.get",
+                  "economy.FingerprintHasher.new", "economy.FingerprintHasher.Insts.CoreHashHasher.write",
+                  "economy.FingerprintHasher.Insts.CoreHashHasher.write_loop.body", "economy.FingerprintHasher.Insts.CoreHashHasher.finish",
                   "economy.Economy.is_applicable", "economy.Economy.applicable", "economy.ExchangeAssessment.is_applicable",
                   "exchange.Receipt.new", "economy.Effect.merge_computed", "economy.relevant_balances",
                   *[f"economy.Economy.{stage}{suffix}" for stage in (
@@ -188,6 +223,11 @@ def check_extraction(write=False):
     toolchain = "+" + PIN["charon"]["rust_toolchain"]
     rustc = subprocess.check_output(["rustc", toolchain, "-vV"], text=True)
     host = next(line.removeprefix("host: ") for line in rustc.splitlines() if line.startswith("host: "))
+    # The reviewed integer/length-prefix Hash adapters model native 64-bit
+    # little-endian writes. Make the extraction target explicit and fail closed.
+    environment["CARGO_BUILD_TARGET"] = host
+    cfg = subprocess.check_output(["rustc", toolchain, "--print", "cfg", "--target", host], text=True)
+    validate_fingerprint_target(cfg)
     subprocess.run(["cargo", toolchain, "clean", "--target", host, "-p", "axionomy"],
                    cwd=ROOT, env=environment, check=True)
     with tempfile.TemporaryDirectory(prefix="account-extraction-", dir=WORK) as scratch:

@@ -7,7 +7,18 @@ import unittest
 from unittest.mock import patch
 
 from extract_account import (GENERATED, LEAN, ROOT, TEMPLATES, compare_generated,
-                            validate_bridge, validate_generated)
+                            validate_bridge, validate_generated, validate_fingerprint_target)
+
+
+class FingerprintTargetTests(unittest.TestCase):
+    def test_reviewed_target_passes(self):
+        validate_fingerprint_target('target_pointer_width="64"\ntarget_endian="little"\n')
+
+    def test_other_integer_hash_formats_are_rejected(self):
+        for cfg in ['target_pointer_width="32"\ntarget_endian="little"',
+                    'target_pointer_width="64"\ntarget_endian="big"', '']:
+            with self.subTest(cfg=cfg), self.assertRaisesRegex(ValueError, "64-bit little-endian"):
+                validate_fingerprint_target(cfg)
 
 
 class AccountBridgeTests(unittest.TestCase):
@@ -119,6 +130,18 @@ class AccountExtractionTests(unittest.TestCase):
 
     def test_current_generated_code_passes(self):
         validate_generated(self.directory)
+
+    def test_missing_key_and_goal_definitions_are_rejected(self):
+        path = self.directory / "Funs.lean"
+        original = path.read_text()
+        for name in ["economy.Goal.asset_keys", "economy.Economy.matches_loop.body",
+                     "economy.Economy.observation_key_for", "economy.Economy.state_key",
+                     "economy.FingerprintHasher.Insts.CoreHashHasher.write_loop.body"]:
+            with self.subTest(name=name):
+                path.write_text(original.replace("def " + name + "\n", "def bypass\n"))
+                with self.assertRaisesRegex(ValueError, "missing account production definition"):
+                    validate_generated(self.directory)
+        path.write_text(original)
 
     def test_new_external_interface_is_rejected(self):
         (self.directory / "FunsExternal_Template.lean").write_text("new dependency")

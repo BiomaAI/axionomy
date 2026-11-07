@@ -4,10 +4,10 @@ import BasketExtraction.FunsExternal
 namespace Axionomy.AccountExtracted
 open Aeneas Aeneas.Std
 set_option linter.dupNamespace false
-universe u v
+universe u v w
 
--- Widening a u64 to i128 is exact. Formatting and hash internals still fail
--- closed; logical collection operations do not execute those paths.
+-- Widening a u64 to i128 is exact. Formatting and DefaultHasher internals
+-- fail closed; fingerprint hashing uses the explicitly scoped adapters below.
 def widenU64 (value : Std.U64) : Std.I128 :=
   IScalar.ofIntCore (Int.ofNat value.val) (by
     have h := value.hBounds
@@ -17,8 +17,12 @@ def widenU64 (value : Std.U64) : Std.I128 :=
 def I128.Insts.CoreConvertFromU64.from (value : Std.U64) : Result Std.I128 := .ok (widenU64 value)
 def I128.Insts.CoreFmtDisplay.fmt (_ : Std.I128) (_ : core.fmt.Formatter) :
     Result (core.result.Result Unit core.fmt.Error × core.fmt.Formatter) := .fail .panic
-def U64.Insts.CoreHashHash.hash {H : Type} (_ : core.hash.Hasher H)
-    (_ : Std.U64) (_ : H) : Result H := .fail .panic
+-- Native integer hashing on the verified 64-bit little-endian targets, with
+-- the Hasher default write_u64 implementation. FingerprintHasher uses it.
+-- Overrides of erased Hasher convenience methods are outside this adapter.
+def U64.Insts.CoreHashHash.hash {H : Type} (hasher : core.hash.Hasher H)
+    (value : Std.U64) (state : H) : Result H :=
+  hasher.write state (core.num.U64.to_le_bytes value).to_slice
 
 def U64.Insts.CoreOpsArithAddU64U64.add := @UScalar.add .U64
 def U64.Insts.CoreOpsArithSubU64U64.sub := @UScalar.sub .U64
@@ -471,5 +475,102 @@ def indexmap.map.IndexMap.Insts.CoreOpsIndexIndexMutShared0QV.index_mut {K V Q S
     (_ : core.hash.Hash Q) (eqInst : equivalent.Equivalent Q K) (_ : core.hash.BuildHasher S H)
     (entries : indexmap.map.IndexMap K V S) (query : Q) : Result (V × (V → indexmap.map.IndexMap K V S)) :=
   mapIndexMut eqInst.equivalent query entries
+
+
+
+-- Borrowed map iteration preserves the logical insertion order.
+def SharedAIndexMap.Insts.CoreIterTraitsCollectIntoIteratorPairSharedAKSharedAVIter.into_iter {K V S : Type}
+    (entries : indexmap.map.IndexMap K V S) : Result (indexmap.map.iter.Iter K V) := .ok entries
+
+-- Like BTreeMap::insert, retain the existing key when ordering says equal.
+def alloc.collections.btree.map.BTreeMap.insert {K V A : Type}
+    (_ : core.alloc.AllocatorClone A) (ordInst : core.cmp.Ord K)
+    (entries : alloc.collections.btree.map.BTreeMap K V A) (key : K) (value : V) :
+    Result (Option V × alloc.collections.btree.map.BTreeMap K V A) := do
+  let position ← treeLocate (Alloc := A) ordInst.cmp key entries
+  match position with
+  | .Vacant entry => .ok (none, entry.before ++ (key, value) :: entry.after)
+  | .Occupied entry => .ok (some entry.value, entry.before ++ (entry.key, value) :: entry.after)
+
+def TupleVUT.Insts.CoreCmpOrd.cmp {V U T : Type}
+    (first : core.cmp.Ord V) (second : core.cmp.Ord U) (third : core.cmp.Ord T)
+    (left right : V × U × T) : Result Ordering := do
+  let compared ← first.cmp left.1 right.1
+  match compared with
+  | .lt => .ok .lt
+  | .gt => .ok .gt
+  | .eq =>
+    let compared ← second.cmp left.2.1 right.2.1
+    match compared with
+    | .lt => .ok .lt
+    | .gt => .ok .gt
+    | .eq => third.cmp left.2.2 right.2.2
+
+-- These unused dictionary fields remain fail-closed. Sorting uses Ord::cmp.
+def TupleVUT.Insts.CoreCmpPartialOrdTupleVUT.partial_cmp {V U T : Type}
+    (_ : core.cmp.PartialOrd V V) (_ : core.cmp.PartialOrd U U) (_ : core.cmp.PartialOrd T T)
+    (_ _ : V × U × T) : Result (Option Ordering) := .fail .panic
+def TupleVUT.Insts.CoreCmpPartialOrdTupleVUT.lt {V U T : Type}
+    (_ : core.cmp.PartialOrd V V) (_ : core.cmp.PartialOrd U U) (_ : core.cmp.PartialOrd T T)
+    (_ _ : V × U × T) : Result Bool := .fail .panic
+def TupleVUT.Insts.CoreCmpPartialOrdTupleVUT.le {V U T : Type}
+    (_ : core.cmp.PartialOrd V V) (_ : core.cmp.PartialOrd U U) (_ : core.cmp.PartialOrd T T)
+    (_ _ : V × U × T) : Result Bool := .fail .panic
+def TupleVUT.Insts.CoreCmpPartialOrdTupleVUT.ge {V U T : Type}
+    (_ : core.cmp.PartialOrd V V) (_ : core.cmp.PartialOrd U U) (_ : core.cmp.PartialOrd T T)
+    (_ _ : V × U × T) : Result Bool := .fail .panic
+def TupleVUT.Insts.CoreCmpPartialEqTupleVUT.eq {V : Type u} {U : Type v} {T : Type w}
+    (_ : core.cmp.PartialEq V V) (_ : core.cmp.PartialEq U U) (_ : core.cmp.PartialEq T T)
+    (_ _ : V × U × T) : Result Bool := .fail .panic
+
+-- Stable logical sorting, using the supplied comparator and propagating its
+-- failures. Physical slice sorting and allocation are a dependency boundary.
+def orderedInsertM {T : Type} (cmp : T → T → Result Ordering) (value : T) : List T → Result (List T)
+  | [] => .ok [value]
+  | head :: rest => do
+    let order ← cmp value head
+    if order = .gt then
+      let tail ← orderedInsertM cmp value rest
+      .ok (head :: tail)
+    else .ok (value :: head :: rest)
+
+def stableSortM {T : Type} (cmp : T → T → Result Ordering) : List T → Result (List T)
+  | [] => .ok []
+  | head :: rest => do
+    let sorted ← stableSortM cmp rest
+    orderedInsertM cmp head sorted
+
+def alloc.slice.Slice.sort {T : Type} (ordInst : core.cmp.Ord T) (values : Slice T) : Result (Slice T) := do
+  let sorted ← stableSortM ordInst.cmp values.val
+  if fits : sorted.length ≤ Usize.max then .ok (Slice.from sorted fits)
+  else .fail .panic
+
+def TupleTBC.Insts.CoreHashHash.hash {T B C S : Type}
+    (first : core.hash.Hash T) (second : core.hash.Hash B) (third : core.hash.Hash C)
+    (hasher : core.hash.Hasher S) (value : T × B × C) (state : S) : Result S := do
+  let state ← first.hash hasher value.1 state
+  let state ← second.hash hasher value.2.1 state
+  third.hash hasher value.2.2 state
+
+def hashValues {T H : Type} (hashInst : core.hash.Hash T) (hasher : core.hash.Hasher H) : List T → H → Result H
+  | [], state => .ok state
+  | value :: rest, state => do
+    let next ← hashInst.hash hasher value state
+    hashValues hashInst hasher rest next
+
+-- Vec hashing is used only for three-tuples, whose Hash::hash_slice uses the
+-- default ordered per-element implementation. Prefix and integer bytes match
+-- the default Hasher methods on the verified 64-bit little-endian targets.
+-- Custom hash_slice/Hasher convenience overrides are not represented here.
+def alloc.vec.Vec.Insts.CoreHashHash.hash {T : Type} (_ : Type) {H : Type}
+    (hashInst : core.hash.Hash T) (hasher : core.hash.Hasher H) (values : alloc.vec.Vec T) (state : H) : Result H := do
+  if fits : values.val.length ≤ U64.max then
+    let count : Std.U64 := UScalar.ofNatCore values.val.length (by
+      simp only [U64.max_eq] at fits
+      simp only [UScalarTy.numBits]
+      omega)
+    let next ← hasher.write state (core.num.U64.to_le_bytes count).to_slice
+    hashValues hashInst hasher values.val next
+  else .fail .panic
 
 end Axionomy.AccountExtracted

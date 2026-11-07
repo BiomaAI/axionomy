@@ -50,6 +50,24 @@ def validate_coverage(root, coverage):
             # These are the implemented extraction pipelines. Future
             # claims need their own regeneration and trust-boundary checks.
             pipelines = {
+                "observations_and_goals": ("AccountExtraction.Funs", {
+                    "Axionomy.GoalRefinement.new_goal", "Axionomy.GoalRefinement.default_goal",
+                    "Axionomy.GoalRefinement.require_goal", "Axionomy.GoalRefinement.requirements",
+                    "Axionomy.GoalRefinement.asset_keys", "Axionomy.GoalRefinement.matches_goal",
+                    "Axionomy.ViewConstructionRefinement.model_view", "Axionomy.ObservationRefinement.view_account",
+                    "Axionomy.ObservationRefinement.view_balance", "Axionomy.Observations.satisfies_iff",
+                    "Axionomy.Observations.goal_monotone", "Axionomy.Observations.noninterference"}),
+                "canonical_keys_and_fingerprints": ("AccountExtraction.Funs", {
+                    "Axionomy.KeyRefinement.state_key", "Axionomy.KeyRefinement.state_key_contract",
+                    "Axionomy.KeyRefinement.observation_key", "Axionomy.KeyRefinement.view_key",
+                    "Axionomy.KeyRefinement.view_key_sound", "Axionomy.KeyRefinement.key_visible",
+                    "Axionomy.KeyRefinement.key_existing", "Axionomy.KeyRefinement.key_balances",
+                    "Axionomy.CanonicalKeys.noninterference", "Axionomy.CanonicalKeys.missing_distinguished",
+                    "Axionomy.CanonicalKeys.queries_equal", "Axionomy.CanonicalKeys.reordered",
+                    "Axionomy.CanonicalSort.sort_canonical", "Axionomy.CanonicalSort.slice_sort",
+                    "Axionomy.KeyOrdering.triples_laws", "Axionomy.FingerprintRefinement.fingerprint_refines",
+                    "Axionomy.FingerprintRefinement.run_value", "Axionomy.FingerprintRefinement.number_hash",
+                    "Axionomy.FingerprintRefinement.fingerprint_get"}),
                 "receipts_and_replay": ("AccountExtraction.Funs", {
                     "Axionomy.ExecutionRefinement.fork_refines",
                     "Axionomy.ExecutionRefinement.simulate_refines",
@@ -218,12 +236,12 @@ def main():
     if generated != committed:
         raise ValueError("Lean conformance cases are stale; regenerate them from Conformance.lean and review the diff")
     run("cargo", "test", "-p", "axionomy", "--all-features", "--test", "lean_conformance",
-        "--test", "transaction_conformance")
+        "--test", "transaction_conformance", "--test", "observation_conformance")
     run("cargo", "test", "-p", "axionomy", "--all-features", "--lib",
         "runtime_")
     run("cargo", "test", "-p", "axionomy", "--all-features", "--doc")
     print(f"Verified {len(theorems)} registered theorems and their axiom dependencies, "
-          "fresh Aeneas extraction of u64 arithmetic, basket construction/operations, account updates/staging, model/rate construction and metadata discovery, complete transaction assessment/application and vector filtering, fork/simulation/ordered replay, snapshot evaluation/conditions, signed conservation and measurement, "
+          "fresh Aeneas extraction of u64 arithmetic, basket construction/operations, account updates/staging, model/rate construction and metadata discovery, complete transaction assessment/application and vector filtering, fork/simulation/ordered replay, goals/views/canonical keys and scoped fingerprints, snapshot evaluation/conditions, signed conservation and measurement, "
           "and Rust conformance/type checks. Collection storage uses an explicit trusted model. "
           "Other core implementation refinement remains unproved; see verification/README.md.")
 

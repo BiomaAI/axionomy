@@ -465,7 +465,7 @@ transaction scenarios with Rust. Cases cover aliasing, original-snapshot
 evaluation, scaling, preservation, ordered shortfalls, late-account overflow,
 invariant overflow/violation diagnostics, receipt agreement and atomic rejection.
 Mutation controls require regenerated changed Rust to compile and then fail the
-corresponding semantic proof. Remaining observations, public data-boundary and numeric-backend contracts remain listed in the main backlog.
+corresponding semantic proof. Remaining public data-boundary and numeric-backend contracts remain listed in the main backlog.
 
 
 ## Execution: fork, simulation and replay
@@ -518,3 +518,80 @@ transaction fixtures also check simulate. Production mutation controls require
 proof failure when replay ignores errors, discards receipts, or simulation
 applies twice. Generic trace extension and serialization remain separate public
 boundary obligations.
+
+## Goals, views and canonical keys
+
+`GoalRefinement` proves new/default/require/requirements, borrowed asset discovery,
+and complete goal matching. Matching is an account-existence and natural-number
+sufficiency predicate, including empty required baskets. `Observations.goal_monotone`
+requires both preserved account existence and nondecreasing balances. Sorted map
+insertion retains the stored key and replaces the required basket. Logical map
+storage and allocation remain trusted; supplied identifier operations must obey
+their independent equality, clone and order laws.
+
+`ViewConstructionRefinement` proves finite-vector view construction as sorted,
+deduplicated registration. `ObservationRefinement` proves the actual model/view
+lookups, including zero balances and hidden/missing accounts. The sorted visibility
+precondition follows from construction. Rust's generic `IntoIterator` API is
+preserved; arbitrary user iterator callbacks remain a separate item 16 obligation.
+Explicit loops and the borrowed goal-asset helper avoid Aeneas nested-borrow
+limitations while preserving borrowed return values and every identifier type.
+
+`KeyRefinement` proves both nested key builders, their capacity obligations,
+sorting calls, and public accessors. `CanonicalSort` connects the dependency sort
+adapter to a stable insertion-sort specification and proves permutation, length,
+sortedness and canonical order under independent order laws. `KeyOrdering` derives
+lexicographic triple laws from account/asset comparisons and exact u64 ordering.
+Physical std slice sorting remains trusted; the generic adapter's behavior for
+unlawful comparators is not a claim about Rust's implementation.
+
+Produced observation keys contain requested visibility, existing visible accounts
+(including empty accounts), and visible balance triples. `view_key_sound` composes
+the key and lookup refinements: equal generated keys imply equal actual public
+balance-query calls, including Some(0) versus None, across different account domains.
+It requires valid sorted visibility sets, unique asset entries, lawful operations
+and output capacity bounds. Key generation and the query proof do not assume that
+missing accounts exist. Noninterference excludes hidden accounts. Reordering
+balances preserves keys. State keys omit empty-account existence and model metadata;
+use a fixed account domain when account-existence behavior matters.
+
+The new required serialized `existing_accounts` field intentionally rejects old
+keys. It cannot be reconstructed from a balance list. This is covered by Rust
+regressions and schema checks; a general validation contract for arbitrary
+serialized key fields remains item 17. Derived key PartialEq/Hash methods are also
+separate item 16 work: the proved equality is equality of produced typed fields.
+Unused tuple PartialEq/PartialOrd dictionary fields remain fail-closed in the
+external model; sorting uses Ord::cmp.
+
+`FingerprintRefinement` proves the concrete new/write/finish implementation and
+complete state_fingerprint caller against mathematical FNV-1a. Every byte performs
+xor then multiplication modulo 2^64. The stream contains the vector length followed
+by each sorted triple's account, asset and u64 quantity encodings. Identifier Hash
+implementations have explicit deterministic byte-encoding laws; the numeric law is
+proved for the reviewed adapter. This establishes a deterministic fingerprint for
+the declared encoding, with no collision-freedom claim.
+
+The hashing boundary is native 64-bit little-endian Rust with the default Hasher
+convenience methods and tuple Hash::hash_slice. The pinned Rust sources show Vec
+hash delegates to slice hashing, which prefixes its usize length and invokes the
+item hash_slice; tuples inherit the default per-element hash_slice. Hasher's default
+write_usize/write_u64 use native-endian bytes. Aeneas's trait dictionary retains
+only Hasher::write/finish and Hash::hash, erasing those convenience overrides. The
+adapter therefore does not claim arbitrary override support. The extraction script
+forces its native target and rejects other word widths or byte orders. Current
+pinned binaries support macOS arm64 and Linux x86_64/aarch64. Reviewed source paths:
+`library/core/src/hash/mod.rs` and `library/alloc/src/vec/mod.rs` in the pinned
+nightly-2026-09-17 rust-src component. Physical hashing/storage, allocation, standard
+primitives, compiler/MIR/Charon/Aeneas and backend semantics remain dependencies.
+
+504 executable Lean fixtures exercise empty/absent accounts, hidden data, duplicate
+visibility requests, account/asset insertion order, overwritten goals, zeros,
+u64 maximum identifiers/quantities, query results, both key forms and fingerprints.
+The Rust bridge uses separate Holder/Asset/RuleId/Role types. Production mutation
+controls target missing-goal acceptance, reversed visibility, omitted empty-account
+presence, skipped state sorting and an incorrect FNV prime. These tests supplement
+the general proofs. All five controls passed, alongside fresh extraction, the full
+proof gate (281 registered contracts and 3,083 audited Axionomy theorems), all 298
+workspace tests, 80 boundary/gate controls, formatting, Clippy and documentation
+checks. Items 14–15 are validated within the scopes above; items 16–18 remain open
+or partial.

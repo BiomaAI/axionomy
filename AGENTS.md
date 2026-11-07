@@ -31,7 +31,8 @@ into it), read `verification/README.md` and `verification/coverage.json` first.
   model/rate construction and metadata discovery, complete transaction assessment/application
   and finite-vector candidate filtering, fork/simulation/ordered replay, snapshot expressions/conditions,
   bounded effect aggregation, availability/preservation, preparation, atomic commit,
-  receipts, runtime signed conservation and whole-state diagnostic measurement
+  receipts, goals and finite-vector views, canonical keys and explicitly scoped fingerprints,
+  runtime signed conservation and whole-state diagnostic measurement
   against Lean specifications. Collections use
   explicit trusted models; other contracts have design proofs and finite Rust
   conformance tests. This is not a proof of the

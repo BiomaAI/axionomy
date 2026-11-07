@@ -145,3 +145,26 @@ fn semantic_state_identity_is_independent_of_construction_order() {
     assert_eq!(first.state_key(), second.state_key());
     assert_eq!(first.state_fingerprint(), second.state_fingerprint());
 }
+
+#[test]
+fn observation_keys_require_and_round_trip_visible_account_existence() {
+    use axionomy::ObservationKey;
+    let world: Economy<u8, u8, u8, u8> = EconomyBuilder::new()
+        .account(0, Account::default())
+        .build()
+        .unwrap();
+    let key = world.view([0, 1]).observation_key();
+    let mut encoded = serde_json::to_value(&key).unwrap();
+    assert_eq!(encoded["existing_accounts"], serde_json::json!([0]));
+    let decoded: ObservationKey<u8, u8> = serde_json::from_value(encoded.clone()).unwrap();
+    assert_eq!(decoded, key);
+    encoded.as_object_mut().unwrap().remove("existing_accounts");
+    assert!(serde_json::from_value::<ObservationKey<u8, u8>>(encoded).is_err());
+    let schema = serde_json::to_value(schemars::schema_for!(ObservationKey<u8, u8>)).unwrap();
+    assert!(
+        schema["required"]
+            .as_array()
+            .unwrap()
+            .contains(&serde_json::json!("existing_accounts"))
+    );
+}

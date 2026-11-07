@@ -57,11 +57,20 @@ where
     A: Ord,
 {
     /// Returns every asset identity referenced by this goal.
+    // Shared map iteration uses the same reviewed Aeneas adapter as goal matching.
+    #[allow(clippy::for_kv_map)]
     pub fn asset_keys(&self) -> BTreeSet<&A> {
-        self.required
-            .values()
-            .flat_map(|basket| basket.iter().map(|(asset, _)| asset))
-            .collect()
+        let mut assets = BTreeSet::new();
+        for (_, required) in &self.required {
+            Self::collect_assets(required, &mut assets);
+        }
+        assets
+    }
+
+    fn collect_assets<'a>(required: &'a Basket<A, N>, assets: &mut BTreeSet<&'a A>) {
+        for (asset, _) in required.iter() {
+            assets.insert(asset);
+        }
     }
 }
 
@@ -502,13 +511,17 @@ where
     /// }
     /// ```
     pub fn account(&self, id: &AccountId) -> Option<&Account<A, N>> {
-        self.accounts.get(id).map(Arc::as_ref)
+        match self.accounts.get(id) {
+            Some(holder) => Some(holder.as_ref()),
+            None => None,
+        }
     }
 
-    pub fn balance(&self, account: &AccountId, asset: &A) -> Quantity<N> {
-        self.accounts
-            .get(account)
-            .map_or_else(Quantity::default, |account| account.balance(asset))
+    pub fn balance(&self, account_id: &AccountId, asset: &A) -> Quantity<N> {
+        match self.accounts.get(account_id) {
+            Some(holder) => holder.balance(asset),
+            None => Quantity::default(),
+        }
     }
 
     pub fn accounts(&self) -> impl Iterator<Item = (&AccountId, &Account<A, N>)> {
@@ -568,32 +581,68 @@ where
     }
 
     pub fn matches(&self, goal: &Goal<AccountId, A, N>) -> bool {
-        goal.requirements().iter().all(|(account_id, required)| {
-            self.accounts
-                .get(account_id)
-                .is_some_and(|account| account.balances().contains(required))
-        })
+        for (account_id, required) in goal.requirements() {
+            let Some(holder) = self.accounts.get(account_id) else {
+                return false;
+            };
+            if !holder.balances().contains(required) {
+                return false;
+            }
+        }
+        true
     }
 
     pub fn view(
         &self,
         visible_accounts: impl IntoIterator<Item = AccountId>,
     ) -> EconomicView<'_, AccountId, A, RateId, Role, N> {
+        let mut visible = BTreeSet::new();
+        for account_id in visible_accounts {
+            visible.insert(account_id);
+        }
         EconomicView {
             economy: self,
-            visible: visible_accounts.into_iter().collect(),
+            visible,
         }
     }
 
+    /// Canonical nonzero balances, ignoring account and asset insertion order.
+    /// Empty and absent accounts have the same key; compare keys within the
+    /// same account domain when account existence matters.
     pub fn state_key(&self) -> Vec<(AccountId, A, Quantity<N>)> {
         let mut key = Vec::new();
-        for (account_id, account) in &self.accounts {
-            for (asset, quantity) in account.balances().iter() {
-                key.push((account_id.clone(), asset.clone(), quantity.clone()));
+        for (account_id, holder) in &self.accounts {
+            for (asset, value) in holder.balances().iter() {
+                key.push((account_id.clone(), asset.clone(), value.clone()));
             }
         }
         key.sort();
         key
+    }
+
+    fn observation_key_for(
+        &self,
+        visible: &BTreeSet<AccountId>,
+    ) -> ObservationKey<AccountId, A, N> {
+        let mut balances = Vec::new();
+        let mut visible_accounts = Vec::new();
+        let mut existing_accounts = Vec::new();
+        for account_id in visible {
+            visible_accounts.push(account_id.clone());
+            let Some(holder) = self.account(account_id) else {
+                continue;
+            };
+            existing_accounts.push(account_id.clone());
+            for (asset, value) in holder.balances().iter() {
+                balances.push((account_id.clone(), asset.clone(), value.clone()));
+            }
+        }
+        balances.sort();
+        ObservationKey {
+            visible_accounts,
+            existing_accounts,
+            balances,
+        }
     }
 
     /// Returns a compact fingerprint for caches scoped to this economy model.
@@ -1087,7 +1136,9 @@ pub struct EconomicView<'a, AccountId, A, RateId, Role, N = u64> {
     visible: BTreeSet<AccountId>,
 }
 
-/// Canonical actor-visible state, including the view's account boundary.
+/// Canonical actor-visible balances, account existence, and visibility boundary.
+/// Produced keys ignore storage insertion order. Serialized keys must include
+/// `existing_accounts`; older keys cannot recover this information from balances.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
 #[serde(bound(
     serialize = "AccountId: Serialize, A: Serialize, N: Serialize",
@@ -1095,12 +1146,18 @@ pub struct EconomicView<'a, AccountId, A, RateId, Role, N = u64> {
 ))]
 pub struct ObservationKey<AccountId, A, N = u64> {
     visible_accounts: Vec<AccountId>,
+    existing_accounts: Vec<AccountId>,
     balances: Vec<(AccountId, A, Quantity<N>)>,
 }
 
 impl<AccountId, A, N> ObservationKey<AccountId, A, N> {
     pub fn visible_accounts(&self) -> &[AccountId] {
         &self.visible_accounts
+    }
+
+    /// Visible accounts present in the economy, including empty accounts.
+    pub fn existing_accounts(&self) -> &[AccountId] {
+        &self.existing_accounts
     }
 
     pub fn balances(&self) -> &[(AccountId, A, Quantity<N>)] {
@@ -1117,36 +1174,27 @@ where
     N: QuantityScalar,
 {
     pub fn account(&self, id: &AccountId) -> Option<&Account<A, N>> {
-        self.visible
-            .contains(id)
-            .then(|| self.economy.account(id))
-            .flatten()
+        if self.visible.contains(id) {
+            self.economy.account(id)
+        } else {
+            None
+        }
     }
 
-    pub fn balance(&self, account: &AccountId, asset: &A) -> Option<Quantity<N>> {
-        self.account(account).map(|visible| visible.balance(asset))
+    pub fn balance(&self, account_id: &AccountId, asset: &A) -> Option<Quantity<N>> {
+        match self.account(account_id) {
+            Some(holder) => Some(holder.balance(asset)),
+            None => None,
+        }
     }
 
     /// Returns a canonical identity containing only visible economic state.
     ///
-    /// Equal observation keys mean that this view cannot distinguish the two
-    /// snapshots. Search code can therefore key information sets without
-    /// copying hidden accounts into a parallel state representation.
+    /// Equal produced keys have the same visibility boundary, visible account
+    /// existence, and balance-query results, including missing versus zero.
+    /// They ignore storage insertion order and all hidden accounts.
     pub fn observation_key(&self) -> ObservationKey<AccountId, A, N> {
-        let mut balances = Vec::new();
-        for account_id in &self.visible {
-            let Some(account) = self.economy.account(account_id) else {
-                continue;
-            };
-            for (asset, quantity) in account.balances().iter() {
-                balances.push((account_id.clone(), asset.clone(), quantity.clone()));
-            }
-        }
-        balances.sort();
-        ObservationKey {
-            visible_accounts: self.visible.iter().cloned().collect(),
-            balances,
-        }
+        self.economy.observation_key_for(&self.visible)
     }
 }
 

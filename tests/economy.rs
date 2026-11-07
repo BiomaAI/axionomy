@@ -1,5 +1,5 @@
 use axionomy::{
-    Account, AccountDelta, ApplyError, AssessmentStatus, Economy, EconomyBuilder, Exchange,
+    Account, AccountDelta, ApplyError, AssessmentStatus, Basket, Economy, EconomyBuilder, Exchange,
     ExchangeAssessment, Goal, LinearInvariant, Quantity, Rate, Trace, basket,
 };
 
@@ -490,4 +490,35 @@ fn checked_arithmetic_failures_are_atomic() {
         })
     ));
     assert_eq!(balance_overflow.state_key(), before);
+}
+
+#[test]
+fn observation_keys_distinguish_missing_from_empty_visible_accounts() {
+    let empty: Economy<u8, u8, u8, u8> = EconomyBuilder::new()
+        .account(0, Account::default())
+        .build()
+        .unwrap();
+    let missing: Economy<u8, u8, u8, u8> = EconomyBuilder::new().build().unwrap();
+    let present_view = empty.view([1, 0, 0]);
+    let absent_view = missing.view([0, 1]);
+    assert_eq!(present_view.balance(&0, &2), Some(Quantity::new(0)));
+    assert_eq!(absent_view.balance(&0, &2), None);
+    assert_eq!(present_view.balance(&1, &2), None);
+    assert_eq!(present_view.balance(&2, &2), None);
+    let present_key = present_view.observation_key();
+    let absent_key = absent_view.observation_key();
+    assert_eq!(present_key.visible_accounts(), &[0, 1]);
+    assert_eq!(present_key.existing_accounts(), &[0]);
+    assert!(present_key.balances().is_empty());
+    assert!(absent_key.existing_accounts().is_empty());
+    assert_ne!(present_key, absent_key);
+    // Hidden account existence must not leak into the observation.
+    assert_eq!(
+        empty.view([1]).observation_key(),
+        missing.view([1]).observation_key()
+    );
+    // A goal mentioning an empty account still requires that account to exist.
+    let goal = Goal::new().require(0, Basket::new());
+    assert!(empty.matches(&goal));
+    assert!(!missing.matches(&goal));
 }

@@ -1,13 +1,13 @@
 {
   "version": 1,
-  "assurance": "Partial implementation verification: Aeneas-extracted production u64 arithmetic, basket/account operations, model/rate construction and discovery, complete transaction assessment/application and vector candidate filtering refine Lean specifications. This includes validation, original-snapshot evaluation, aggregation, availability/preservation, preparation, runtime conservation diagnostics, atomic multi-account commit and receipts. Explicit collection/Arc/UTF-8 models, lawful identifier operations, resource bounds, compiler/translation and primitive models remain trusted. Execution/replay, observations, remaining public data APIs and other numeric backends remain open.",
+  "assurance": "Partial implementation verification: Aeneas-extracted production u64 arithmetic, basket/account operations, model/rate construction and discovery, complete transaction assessment/application, finite-vector filtering, fork/simulation/ordered replay, goals, finite-vector views, canonical state/observation keys and scoped deterministic fingerprints refine Lean specifications. Explicit collection/Arc/UTF-8/sorting/hashing models, lawful identifier operations, resource bounds, compiler/translation and primitive models remain trusted. Remaining public data APIs, serialization/schema contracts and other numeric backends remain open.",
   "sources": {
     "Cargo.toml": "414a2b181e13225e4b76aa58e70d998064174dde2d8cee603ea3af648d61a7f3",
     "Cargo.lock": "00ef263c160aeebaa49187874a4b11ec94fee9bc8fbea5a2f0cacc190607919c",
     "src/account.rs": "0eaf66937c63de2993353828e42fcfea2b80f172f5cb74fc76a28cef79fd9ff6",
     "src/amount.rs": "4aa0f1432494aac0454890604e3addbd002fa6b9ded1f75f91fce7675540f9ee",
     "src/basket.rs": "10e7d7792f3b1de207bdae124fd76a8fa5fe93295b1a4eb49455b588941ee5f1",
-    "src/economy.rs": "00da2b4d0a520528250b270e5622600c8b215242be00370ce8d6dd1fa62b888c",
+    "src/economy.rs": "31d3c582bb73a17c2c6b2cd8efbac8bf5f2f0d1bec3a7e9c8a168757e05f54be",
     "src/exchange.rs": "90a0755a4b3f780220ced362dc421364a6c3691d9ce900050cd57b3bbcc4ccc4",
     "src/lib.rs": "46d6f713693714650653128e2ceabf8a895b8ad98a38a7bdbeab4ea378a5cc06",
     "src/quantity.rs": "af66b8cf86b6ac58cccd4e9fcfb740e06928f86b4bf6117660fb7f37319b97dd",
@@ -15,7 +15,7 @@
     "verification/extract.rs": "415b34f5f4f8aa2679af860bd2a4092c96e113145919160fe7c81e33836de3e0",
     "verification/aeneas-toolchain.json": "8676d7d11be51a6f41984d874b35910e8a1a3d0a18414998feb9402ef80932fb",
     "verification/extract_basket.rs": "dc2b3a2159704c24a5261d0069a2aac7b575f30a94ae35c4c1e96933638592dd",
-    "verification/extract_account.rs": "0fa96b07ba84099abb59825b394313dd97f99126d28b1baf68bb7ca0bf257a59",
+    "verification/extract_account.rs": "c8a1eb64d779d10ec3c98e2248d696eed4b0026e402572d2ab415b947c981255",
     "verification/patches/aeneas-namespaced-discriminant.patch": "fabac7482deb3da6ecaca60c4060dfe9d2114efdd010699e736c4a91267f3bc9"
   },
   "features": [
@@ -382,27 +382,100 @@
         "The production u64 fork, simulate, replay, replayed and Trace new/default/push/exchanges/into_exchanges paths are shared-source extracted. Derived Economy and Exchange clones are proved exact under lawful identifier cloning. Replay terminates without panic for every bounded trace satisfying the transaction metadata/name/capacity preconditions; no successful step or intermediate-state readiness is assumed. The transaction frame derives unchanged rules, invariants and account-key cardinality through every step.",
         "The typed ordered replay specification retains the final state on both success and failure. Rejection atomicity derives exactly the accepted prefix state and first error; success retains receipt order and each receipt describes its own intermediate committed state. Simulation and replayed publish isolated branch results with the source immutably borrowed. The reusable invariant-composition lemma requires a step law; concrete replay refinement discharges the transaction caller invariants through the extracted apply frame, rather than assuming them for intermediate states. The actual analyze/apply accepted control flow also establishes every registered weighted-transfer conservation check; replay_conserves derives exact mathematical consumed/produced equality per receipt throughout a successful trace, and the first-error theorem supplies its successful prefix.",
         "Logical IndexMap, ordered BTreeMap, Vec/slice and Arc models, lawful equality/ordering/hash coherence, UTF-8 lengths, allocation/resources, compiler/MIR/Charon/Aeneas/backend semantics remain explicit trust boundaries. BTreeMap clone calls every key/value clone and preserves entry order; physical tree/Arc storage, reference counts, allocator behavior and clone/COW isolation are not verified. Strong Rust domains and ownership remain enforced. This is not machine-code verification.",
-        "Trace generic extend, remaining derived/convenience APIs, serialization/schema contracts and BigUint/BigInt/custom numeric laws remain separate items 16–18. 246 Lean-generated replay scenarios and 596 transaction simulation scenarios supplement the general proofs; they do not replace them."
+        "Trace generic extend, remaining derived/convenience APIs, serialization/schema contracts and BigUint/BigInt/custom numeric laws remain separate items 16\u201318. 246 Lean-generated replay scenarios and 596 transaction simulation scenarios supplement the general proofs; they do not replace them."
       ],
       "extracted_module": "AccountExtraction.Funs"
     },
     {
       "id": "observations_and_goals",
-      "status": "design_proved_rust_tested",
+      "status": "aeneas_refinement_proved",
       "sources": [
-        "src/economy.rs"
+        "src/economy.rs",
+        "verification/extract_account.rs",
+        "verification/aeneas-toolchain.json"
       ],
       "theorems": [
-        "Axionomy.State.hidden_account",
-        "Axionomy.State.observation_noninterference",
-        "Axionomy.State.goal_monotone"
+        "Axionomy.Observations.hidden_account",
+        "Axionomy.Observations.missing_account",
+        "Axionomy.Observations.empty_account_zero",
+        "Axionomy.Observations.noninterference",
+        "Axionomy.Observations.satisfies_iff",
+        "Axionomy.Observations.goal_monotone",
+        "Axionomy.Observations.registerAll_sorted",
+        "Axionomy.Observations.registerAll_unique",
+        "Axionomy.GoalRefinement.new_goal",
+        "Axionomy.GoalRefinement.default_goal",
+        "Axionomy.GoalRefinement.require_goal",
+        "Axionomy.GoalRefinement.requirements",
+        "Axionomy.GoalRefinement.asset_keys",
+        "Axionomy.GoalRefinement.matches_goal",
+        "Axionomy.ObservationRefinement.model_account",
+        "Axionomy.ObservationRefinement.model_balance",
+        "Axionomy.ObservationRefinement.view_account",
+        "Axionomy.ObservationRefinement.view_balance",
+        "Axionomy.ViewConstructionRefinement.model_view"
       ],
       "rust_tests": [
+        "tests/observation_conformance.rs",
         "tests/economy.rs",
         "tests/serde.rs"
       ],
       "limitations": [
-        "The model treats account presence as a domain precondition and proves extensional projections. Missing-account distinctions, sorted observation keys, state fingerprints and Rust view refinement are not proved."
+        "The shared-source u64 paths prove goal construction/replacement/access/asset discovery, exact matching against mathematical natural-number requirements, model/view account and balance lookup, and finite-vector visibility construction. Missing required accounts fail even for empty baskets; visible empty accounts return Some(0), hidden or absent accounts return None. Goal matching requires unique asset entries in each required basket; the existing basket constructor/update proofs establish that representation for constructed baskets.",
+        "Visibility construction computes a sorted deduplicated set under independent ordering laws, preserving the borrowed model. Visible lookup requires that sorted-set invariant; its construction proof discharges it for finite Vec inputs. Hidden-state noninterference and goal monotonicity account explicitly for account existence. Arbitrary custom IntoIterator behavior remains item 16; no unconditional termination of arbitrary user callbacks is claimed.",
+        "Identifier equality/cloning and ordering laws, logical IndexMap/BTreeMap/BTreeSet/Arc models and allocation remain explicit assumptions. Goal::require replaces the previous basket at the sorted map position, retaining the stored key. Borrowed asset discovery remains borrowed and identifier domains remain distinct. 504 Lean-generated observation/goal/key scenarios are finite regression evidence, additional to the general implementation proofs."
+      ],
+      "extracted_module": "AccountExtraction.Funs"
+    },
+    {
+      "id": "canonical_keys_and_fingerprints",
+      "status": "aeneas_refinement_proved",
+      "extracted_module": "AccountExtraction.Funs",
+      "sources": [
+        "src/economy.rs",
+        "verification/extract_account.rs",
+        "verification/aeneas-toolchain.json"
+      ],
+      "theorems": [
+        "Axionomy.CanonicalSort.sort_perm",
+        "Axionomy.CanonicalSort.sort_sorted",
+        "Axionomy.CanonicalSort.sort_canonical",
+        "Axionomy.CanonicalSort.slice_sort",
+        "Axionomy.KeyOrdering.triples_laws",
+        "Axionomy.KeyOrdering.triples_ordering",
+        "Axionomy.CanonicalKeys.existing_iff",
+        "Axionomy.CanonicalKeys.observe_member",
+        "Axionomy.CanonicalKeys.noninterference",
+        "Axionomy.CanonicalKeys.missing_distinguished",
+        "Axionomy.CanonicalKeys.queries_equal",
+        "Axionomy.CanonicalKeys.reordered",
+        "Axionomy.CanonicalKeys.state_reordered",
+        "Axionomy.KeyRefinement.state_key",
+        "Axionomy.KeyRefinement.state_key_contract",
+        "Axionomy.KeyRefinement.observation_key",
+        "Axionomy.KeyRefinement.view_key",
+        "Axionomy.KeyRefinement.view_key_sound",
+        "Axionomy.KeyRefinement.key_visible",
+        "Axionomy.KeyRefinement.key_existing",
+        "Axionomy.KeyRefinement.key_balances",
+        "Axionomy.FingerprintRefinement.run_value",
+        "Axionomy.FingerprintRefinement.write_bytes",
+        "Axionomy.FingerprintRefinement.number_hash",
+        "Axionomy.FingerprintRefinement.vector_hash",
+        "Axionomy.FingerprintRefinement.fingerprint_refines",
+        "Axionomy.FingerprintRefinement.fingerprint_get"
+      ],
+      "rust_tests": [
+        "tests/observation_conformance.rs",
+        "tests/economy.rs",
+        "tests/serde.rs"
+      ],
+      "limitations": [
+        "Production state_key, observation_key, accessors and state_fingerprint are extracted directly. Nested key loops preserve every typed account/asset/u64 entry and prove termination under explicit output-entry and visibility usize bounds. Tuple ordering is derived from independent identifier order laws and u64 ordering. The logical slice-sort adapter is proved a length-preserving canonical sorted permutation for lawful total comparators; physical standard-library sorting remains trusted.",
+        "Observation keys include visibility, visible account existence (including empty accounts), and canonical visible balances. Equal produced keys imply equality of actual EconomicView::balance calls, including Some(0) versus None, with sorted visible sets and unique per-account assets. Hidden accounts do not affect keys. Balance permutations preserve canonical keys. State keys intentionally omit empty account existence and model metadata; identical account domains are needed when comparing goal/existence behavior. No claim covers arbitrary raw iteration order or arbitrary deserialized keys.",
+        "FingerprintHasher new/write/finish and the complete state_fingerprint path refine mathematical FNV-1a, including every xor and modular u64 multiplication. The stream includes an exact u64 length prefix and ordered typed triples. Identifier Hash implementations require explicit deterministic byte-encoding laws; the u64 law is proved for the reviewed adapter. Finite fingerprints are not collision-free identities.",
+        "Hash models are scoped to native 64-bit little-endian extraction targets, enforced by the extraction script. Rust Vec<Hash> delegates to tuple Hash::hash_slice, which uses the default per-element path; FingerprintHasher uses default Hasher convenience methods. Aeneas erases hash_slice and convenience overrides, so those arbitrary overrides are not modeled. The reviewed std sources and 504 Rust fingerprint cases supplement this dependency boundary. Tuple PartialEq/PartialOrd dictionary methods unused by sorting remain fail-closed; remaining derived equality/hash APIs are item 16.",
+        "Serialized ObservationKey now requires existing_accounts; legacy keys are rejected because balances cannot recover empty-account existence. The regression test checks that field and schema requirement, but general serialization validity, canonicalization and round trips remain item 17. BigUint/BigInt and custom numeric backends remain item 18."
       ]
     },
     {

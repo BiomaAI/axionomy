@@ -181,8 +181,8 @@ to `origin/main`; theorem counts do not measure percentage completion.
 | 1 | 11 | Receipts/deltas agree with the actual proposal and committed changes | Implementation proved: submitted proposal, unique receipt accounts and exact observable committed balance for every delta |
 | 2. Execution and observations | 12 | Fork/simulation isolation and equivalence | Implementation proved under documented logical storage/clone models |
 | 2 | 13 | Ordered traces, replay prefix-on-error, isolated replay, invariant composition | Implementation proved: first error, accepted prefix state, ordered receipts and derived caller invariants; generic trace extension remains in item 16 |
-| 2 | 14 | Goals, visibility, hidden-state noninterference, missing/zero distinctions | Design proofs |
-| 2 | 15 | Canonical state/observation keys and deterministic fingerprints | Open |
+| 2 | 14 | Goals, visibility, hidden-state noninterference, missing/zero distinctions | Implementation proved and validated; finite-vector construction and documented collection models |
+| 2 | 15 | Canonical state/observation keys and deterministic fingerprints | Implementation proved and validated under documented sorting/hash models and native 64-bit little-endian scope |
 | 3. Public data boundary | 16 | Remaining typed constructors/accessors/conversions/iterators/equality | Partial implementation proofs |
 | 3 | 17 | Serialization round trips, validation/canonicalization, accurate schema contracts | Open |
 | 4. Numeric backends | 18 | BigUint/BigInt and explicit algebraic requirements for custom backends | Open |
@@ -218,7 +218,9 @@ The transaction contracts are registered in `coverage.json` and the mandatory
 proof gate. This milestone passed fresh extraction, the Lean kernel/axiom audit,
 generated conformance, all verification controls (including production mutations),
 and Rust 1.89 workspace formatting, Clippy, tests and documentation checks.
-Milestone 2 is partially complete (items 12–13); items 14–18 remain open or partial. This is not full core coverage.
+Items 1–15 are validated within their documented domains and dependency models.
+Items 16–18 remain open or partial. This is not full core coverage, and the item
+count is not a percentage of implementation effort.
 
 The execution paths now compose the transaction proof. `ExecutionRefinement`
 proves production `fork`, `simulate`, `replay` and `replayed`, including exact
@@ -239,12 +241,51 @@ scenarios, 294 workspace tests, 75 boundary/gate controls and three new producti
 mutation controls. Formatting, Clippy with warnings denied, documentation and
 compile-fail doctests also passed. The prior 32 production controls remain in CI.
 
-Items 14–15 include a reproduced observation-key gap across different account
-domains: a visible empty account and an absent account currently produce the same
-key, although `balance` returns `Some(0)` for the former and `None` for the latter.
-The observation contract must preserve that distinction in its declared
-equivalence; identical account domains cannot be silently assumed for arbitrary
-models. This remains open in the execution/observation milestone.
+Items 14–15 fix the observation-key gap across account domains: keys now include
+`existing_accounts`, so a visible empty account and an absent account differ,
+matching `Some(0)` versus `None` balance results. The new field is required in
+serialized keys; old keys are rejected because their balances cannot recover
+empty-account presence. Arbitrarily deserialized keys still need item 17's
+validation contract. See [the observation and key contracts](ACCOUNTS.md#goals-views-and-canonical-keys).
+
+The new refinements cover goal new/default/require/requirements/asset discovery,
+matching, account/balance queries, finite-vector view construction, both key
+builders and accessors, and the fingerprint byte loop and caller. Equal produced
+observation keys imply equal actual public balance queries for canonical baskets;
+hidden accounts do not contribute. Sorting derives a canonical permutation under
+independent identifier order laws. State keys deliberately omit empty-account
+presence and metadata, so they are not identities of complete economy models.
+Fingerprint proofs describe FNV-1a, never collision freedom. Hashing is scoped to
+native 64-bit little-endian targets and default-method byte streams with explicit
+identifier encoding laws. The extraction guard enforces the platform scope.
+504 Lean-generated observation/goal/key/fingerprint scenarios supplement the proofs.
+
+This observation milestone passed the full proof gate (281 registered contracts,
+3,083 audited Axionomy theorems), fresh extraction, all 298 workspace tests,
+80 boundary/gate controls and five new production mutation controls. The mutations
+confirm that missing-goal acceptance, reversed visibility, omitted empty-account
+presence, skipped state sorting and an incorrect FNV prime break their implementation
+proofs. Formatting, Clippy with warnings denied, documentation and compile-fail
+doctests also passed. The prior 35 production mutation controls remain in CI.
+
+The remaining completion work is:
+
+- **16 — Typed public APIs:** finish constructor, accessor and conversion contracts
+  for amounts, quantities, accounts, baskets, exchanges, receipts, assessments,
+  rate expressions/conditions/invariants and model inspection. Cover sorted
+  iteration, generic trace extension and arbitrary iterator callbacks with explicit
+  iterator laws; cover derived equality/hash behavior and formatting. State the
+  panic conditions of intentionally panicking convenience constructors.
+- **17 — Serialization and schema:** connect production serialization and
+  deserialization to round-trip, rejection and canonicalization contracts. Cover
+  quantity validation, duplicate basket entries, rate normalization, economy
+  metadata, traces, receipts, goals and keys. Check schemas against accepted values,
+  including custom signed scalar schemas and inconsistent serialized key fields.
+- **18 — Numeric backends:** extend the implementation contracts from u64 to the
+  supported BigUint quantities and BigInt signed measures. State and discharge the
+  algebraic requirements for custom `QuantityScalar`/`QuantityMeasure` backends,
+  with explicit dependency and resource assumptions. Rust trait bounds alone do
+  not establish these laws; BigInt itself is not currently a quantity backend.
 
 Every internal `expect` needs a discharged precondition. Intentionally panicking
 convenience constructors need explicit contracts; do not claim unconditional
@@ -360,7 +401,7 @@ the initial theorems. They are a backfill plan, not an exemption for new behavio
 - Charon/Aeneas extraction and refinement beyond the four `Quantity<u64>` checked
   arithmetic operations, basket construction/operations, account updates/staging,
   model/rate construction and metadata discovery, complete u64 transaction
-  assessment/application, finite-vector filtering, fork/simulation/replay and ordered trace access, snapshot expression/condition
+  assessment/application, finite-vector filtering, fork/simulation/replay and ordered trace access, goals, finite-vector views, canonical keys and scoped fingerprints, snapshot expression/condition
   evaluation, bounded effect helpers, runtime conservation and whole-state measurement.
 - Correctness of `IndexMap`, `BTreeMap`, `Arc`, iterator order, allocation, cloning,
   and copy-on-write isolation; Rust compilation still enforces its ownership rules.
@@ -369,15 +410,13 @@ the initial theorems. They are a backfill plan, not an exemption for new behavio
   validation, aggregation, preparation and commit; arbitrary deserialized metadata
   still needs its separate representation contract.
 - Remaining finite-map adapters, serialization/schema round trips,
-  canonical state/observation ordering, and fingerprints. Fingerprints are not
-  collision-free identities and must not be given such a theorem.
+  remaining derived key equality/hash APIs, and portability of fingerprint encodings
+  beyond the documented targets. Fingerprints are not collision-free identities.
 - Invariant constructors and other remaining convenience APIs. Runtime invariant
   checks, intermediate `i128` overflow, and caller diagnostic totals are now
   covered by the complete transaction contract.
 - Laws for custom `QuantityScalar` backends and BigUint/BigInt implementations.
   Rust trait bounds specify operations, not their algebraic correctness.
-- Rust replay/fork refinement and its composition with the transaction contract.
-  Rust `replay` retains an accepted prefix on failure; `replayed` protects its source.
 
 For further implementation proofs, extend the pinned Aeneas pipeline from u64
 arithmetic, baskets, accounts, model/rate construction, discovery, validation, evaluation, effects and conservation

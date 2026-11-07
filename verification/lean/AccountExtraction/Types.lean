@@ -217,6 +217,13 @@ inductive account.AccountError (A : Type _) (N : Type _) (Clause2_SignedMeasure
   account.AccountError A N Clause2_SignedMeasure
 | Overflow : A → account.AccountError A N Clause2_SignedMeasure
 
+/-- [account_extraction::economy::Goal]
+    Source: 'verification/../src/economy.rs', lines 21:0-23:1
+    Visibility: public -/
+structure economy.Goal (AccountId : Type _) (A : Type _) (N : Type _) where
+  required : alloc.collections.btree.map.BTreeMap AccountId (basket.Basket A N)
+    alloc.alloc.Global
+
 /-- [account_extraction::rate::LinearInvariant]
     Source: 'verification/../src/rate.rs', lines 696:0-699:1
     Visibility: public -/
@@ -304,7 +311,7 @@ structure rate.Rate (Role : Type _) (A : Type _) (N : Type _) where
   conditions : alloc.vec.Vec (rate.RateCondition Role A N)
 
 /-- [account_extraction::economy::Economy]
-    Source: 'verification/../src/economy.rs', lines 69:0-73:1
+    Source: 'verification/../src/economy.rs', lines 78:0-82:1
     Visibility: public -/
 structure economy.Economy (AccountId : Type _) (A : Type _) (RateId : Type _)
   (Role : Type _) (N : Type _) where
@@ -314,8 +321,14 @@ structure economy.Economy (AccountId : Type _) (A : Type _) (RateId : Type _)
     std.hash.random.RandomState)
   invariants : alloc.sync.Arc (alloc.vec.Vec (rate.LinearInvariant A))
 
+/-- [account_extraction::economy::StateFingerprint]
+    Source: 'verification/../src/economy.rs', lines 91:0-91:33
+    Visibility: public -/
+@[reducible]
+def economy.StateFingerprint := Std.U64
+
 /-- [account_extraction::economy::AccountAssessment]
-    Source: 'verification/../src/economy.rs', lines 124:0-131:1
+    Source: 'verification/../src/economy.rs', lines 133:0-140:1
     Visibility: public -/
 structure economy.AccountAssessment (AccountId : Type _) (A : Type _) (N :
   Type _) where
@@ -327,7 +340,7 @@ structure economy.AccountAssessment (AccountId : Type _) (A : Type _) (N :
   preserved : basket.Basket A N
 
 /-- [account_extraction::economy::AccountShortfall]
-    Source: 'verification/../src/economy.rs', lines 184:0-187:1
+    Source: 'verification/../src/economy.rs', lines 193:0-196:1
     Visibility: public -/
 structure economy.AccountShortfall (AccountId : Type _) (A : Type _) (N :
   Type _) where
@@ -345,7 +358,7 @@ structure exchange.AccountDelta (AccountId : Type _) (A : Type _) (N : Type _)
   preserved : basket.Basket A N
 
 /-- [account_extraction::economy::ApplyError]
-    Source: 'verification/../src/economy.rs', lines 1160:0-1200:1
+    Source: 'verification/../src/economy.rs', lines 1208:0-1248:1
     Visibility: public -/
 @[discriminant isize]
 inductive economy.ApplyError (RateId : Type _) (Role : Type _) (AccountId :
@@ -403,7 +416,7 @@ inductive economy.ApplyError (RateId : Type _) (Role : Type _) (AccountId :
   economy.ApplyError RateId Role AccountId A N Clause0_SignedMeasure
 
 /-- [account_extraction::economy::ExchangeAssessment]
-    Source: 'verification/../src/economy.rs', lines 212:0-231:1
+    Source: 'verification/../src/economy.rs', lines 221:0-240:1
     Visibility: public -/
 @[discriminant isize]
 inductive economy.ExchangeAssessment (AccountId : Type _) (A : Type _) (RateId
@@ -422,7 +435,7 @@ inductive economy.ExchangeAssessment (AccountId : Type _) (A : Type _) (RateId
   economy.ExchangeAssessment AccountId A RateId Role N Clause0_SignedMeasure
 
 /-- [account_extraction::economy::ModelIssue]
-    Source: 'verification/../src/economy.rs', lines 374:0-377:1
+    Source: 'verification/../src/economy.rs', lines 383:0-386:1
     Visibility: public -/
 @[discriminant isize]
 inductive economy.ModelIssue (AccountId : Type _) (RateId : Type _) where
@@ -430,7 +443,7 @@ inductive economy.ModelIssue (AccountId : Type _) (RateId : Type _) where
 | DuplicateRate : RateId → economy.ModelIssue AccountId RateId
 
 /-- [account_extraction::economy::EconomyBuilder]
-    Source: 'verification/../src/economy.rs', lines 300:0-305:1
+    Source: 'verification/../src/economy.rs', lines 309:0-314:1
     Visibility: public -/
 structure economy.EconomyBuilder (AccountId : Type _) (A : Type _) (RateId :
   Type _) (Role : Type _) (N : Type _) where
@@ -442,10 +455,32 @@ structure economy.EconomyBuilder (AccountId : Type _) (A : Type _) (RateId :
   issues : alloc.vec.Vec (economy.ModelIssue AccountId RateId)
 
 /-- [account_extraction::economy::ModelBuildError]
-    Source: 'verification/../src/economy.rs', lines 381:0-383:1
+    Source: 'verification/../src/economy.rs', lines 390:0-392:1
     Visibility: public -/
 structure economy.ModelBuildError (AccountId : Type _) (RateId : Type _) where
   issues : alloc.vec.Vec (economy.ModelIssue AccountId RateId)
+
+/-- [account_extraction::economy::EconomicView]
+    Source: 'verification/../src/economy.rs', lines 1134:0-1137:1
+    Visibility: public -/
+structure economy.EconomicView (AccountId : Type _) (A : Type _) (RateId :
+  Type _) (Role : Type _) (N : Type _) where
+  economy : economy.Economy AccountId A RateId Role N
+  visible : alloc.collections.btree.set.BTreeSet AccountId alloc.alloc.Global
+
+/-- [account_extraction::economy::ObservationKey]
+    Source: 'verification/../src/economy.rs', lines 1147:0-1151:1
+    Visibility: public -/
+structure economy.ObservationKey (AccountId : Type _) (A : Type _) (N : Type _)
+  where
+  visible_accounts : alloc.vec.Vec AccountId
+  existing_accounts : alloc.vec.Vec AccountId
+  balances : alloc.vec.Vec (AccountId × A × (quantity.Quantity N))
+
+/-- [account_extraction::economy::FingerprintHasher]
+    Source: 'verification/../src/economy.rs', lines 1109:0-1111:1 -/
+structure economy.FingerprintHasher where
+  state : Std.U64
 
 /-- [account_extraction::exchange::Exchange]
     Source: 'verification/../src/exchange.rs', lines 22:0-28:1
@@ -468,7 +503,7 @@ structure exchange.Receipt (RateId : Type _) (Role : Type _) (AccountId :
   deltas : alloc.vec.Vec (exchange.AccountDelta AccountId A N)
 
 /-- [account_extraction::economy::Analysis]
-    Source: 'verification/../src/economy.rs', lines 1262:0-1268:1 -/
+    Source: 'verification/../src/economy.rs', lines 1310:0-1316:1 -/
 structure economy.Analysis (AccountId : Type _) (A : Type _) (RateId : Type _)
   (Role : Type _) (N : Type _) (Clause0_SignedMeasure : Type _) where
   assessment : economy.ExchangeAssessment AccountId A RateId Role N
@@ -477,7 +512,7 @@ structure economy.Analysis (AccountId : Type _) (A : Type _) (RateId : Type _)
     (account.Account A N))))
 
 /-- [account_extraction::economy::Preparation]
-    Source: 'verification/../src/economy.rs', lines 1242:0-1245:1 -/
+    Source: 'verification/../src/economy.rs', lines 1290:0-1293:1 -/
 structure economy.Preparation (AccountId : Type _) (A : Type _) (N : Type _)
   where
   accounts : alloc.vec.Vec (AccountId × (alloc.sync.Arc (account.Account A
@@ -485,21 +520,21 @@ structure economy.Preparation (AccountId : Type _) (A : Type _) (N : Type _)
   deltas : alloc.vec.Vec (exchange.AccountDelta AccountId A N)
 
 /-- [account_extraction::economy::Availability]
-    Source: 'verification/../src/economy.rs', lines 1237:0-1240:1 -/
+    Source: 'verification/../src/economy.rs', lines 1285:0-1288:1 -/
 structure economy.Availability (AccountId : Type _) (A : Type _) (N : Type _)
   where
   accounts : alloc.vec.Vec (economy.AccountAssessment AccountId A N)
   shortfalls : alloc.vec.Vec (economy.AccountShortfall AccountId A N)
 
 /-- [account_extraction::economy::Effect]
-    Source: 'verification/../src/economy.rs', lines 1203:0-1207:1 -/
+    Source: 'verification/../src/economy.rs', lines 1251:0-1255:1 -/
 structure economy.Effect (A : Type _) (N : Type _) where
   consume : basket.Basket A N
   produce : basket.Basket A N
   preserve : basket.Basket A N
 
 /-- [account_extraction::economy::ComputedDirection]
-    Source: 'verification/../src/economy.rs', lines 1210:0-1214:1 -/
+    Source: 'verification/../src/economy.rs', lines 1258:0-1262:1 -/
 @[discriminant isize]
 inductive economy.ComputedDirection where
 | Consume : economy.ComputedDirection
@@ -507,7 +542,7 @@ inductive economy.ComputedDirection where
 | Preserve : economy.ComputedDirection
 
 /-- [account_extraction::economy::evaluate_expression::{closure#4}]
-    Source: 'verification/../src/economy.rs', lines 1394:12-1394:49 -/
+    Source: 'verification/../src/economy.rs', lines 1442:12-1442:49 -/
 @[reducible]
 def economy.evaluate_expression.closure_4 (AccountId : Type _) (A : Type _)
   (RateId : Type _) (Role : Type _) (N : Type _) (Clause5_SignedMeasure :
@@ -515,7 +550,7 @@ def economy.evaluate_expression.closure_4 (AccountId : Type _) (A : Type _)
 Unit
 
 /-- [account_extraction::economy::evaluate_expression::{closure#3}]
-    Source: 'verification/../src/economy.rs', lines 1383:12-1383:49 -/
+    Source: 'verification/../src/economy.rs', lines 1431:12-1431:49 -/
 @[reducible]
 def economy.evaluate_expression.closure_3 (AccountId : Type _) (A : Type _)
   (RateId : Type _) (Role : Type _) (N : Type _) (Clause5_SignedMeasure :
@@ -523,7 +558,7 @@ def economy.evaluate_expression.closure_3 (AccountId : Type _) (A : Type _)
 Unit
 
 /-- [account_extraction::economy::evaluate_expression::{closure#2}]
-    Source: 'verification/../src/economy.rs', lines 1375:12-1375:49 -/
+    Source: 'verification/../src/economy.rs', lines 1423:12-1423:49 -/
 @[reducible]
 def economy.evaluate_expression.closure_2 (AccountId : Type _) (A : Type _)
   (RateId : Type _) (Role : Type _) (N : Type _) (Clause5_SignedMeasure :
@@ -531,7 +566,7 @@ def economy.evaluate_expression.closure_2 (AccountId : Type _) (A : Type _)
 Unit
 
 /-- [account_extraction::economy::evaluate_expression::{closure#1}]
-    Source: 'verification/../src/economy.rs', lines 1367:12-1367:49 -/
+    Source: 'verification/../src/economy.rs', lines 1415:12-1415:49 -/
 @[reducible]
 def economy.evaluate_expression.closure_1 (AccountId : Type _) (A : Type _)
   (RateId : Type _) (Role : Type _) (N : Type _) (Clause5_SignedMeasure :
@@ -539,7 +574,7 @@ def economy.evaluate_expression.closure_1 (AccountId : Type _) (A : Type _)
 Unit
 
 /-- [account_extraction::economy::evaluate_expression::{closure}]
-    Source: 'verification/../src/economy.rs', lines 1350:24-1350:74 -/
+    Source: 'verification/../src/economy.rs', lines 1398:24-1398:74 -/
 @[reducible]
 def economy.evaluate_expression.closure (AccountId : Type _) (A : Type _)
   (RateId : Type _) (Role : Type _) (N : Type _) (Clause5_SignedMeasure :
@@ -547,7 +582,7 @@ def economy.evaluate_expression.closure (AccountId : Type _) (A : Type _)
   String
 
 /-- [account_extraction::economy::ExpressionError]
-    Source: 'verification/../src/economy.rs', lines 1301:0-1309:1 -/
+    Source: 'verification/../src/economy.rs', lines 1349:0-1357:1 -/
 @[discriminant isize]
 inductive economy.ExpressionError where
 | MissingParameter : String → economy.ExpressionError

@@ -55,6 +55,33 @@ class ExtractionBoundaryTests(unittest.TestCase):
 
 
 class ProductionMutationTests(unittest.TestCase):
+    def test_missing_goal_account_acceptance_breaks_matching(self):
+        self.check_mutation(
+            "src/economy.rs", "let Some(holder) = self.accounts.get(account_id) else {\n                return false;",
+            "let Some(holder) = self.accounts.get(account_id) else {\n                return true;",
+            "extract_account.py", "stale account model", "GoalRefinement", "AccountExtraction")
+
+    def test_reversed_visibility_breaks_observations(self):
+        self.check_mutation(
+            "src/economy.rs", "if self.visible.contains(id) {", "if !self.visible.contains(id) {",
+            "extract_account.py", "stale account model", "ObservationRefinement", "AccountExtraction")
+
+    def test_omitting_empty_accounts_breaks_observation_keys(self):
+        self.check_mutation(
+            "src/economy.rs", "existing_accounts.push(account_id.clone());",
+            "if !holder.balances().is_empty() { existing_accounts.push(account_id.clone()); }",
+            "extract_account.py", "stale account model", "KeyRefinement", "AccountExtraction")
+
+    def test_skipping_state_sort_breaks_canonical_keys(self):
+        self.check_mutation(
+            "src/economy.rs", "key.sort();", "if key.is_empty() { key.sort(); }",
+            "extract_account.py", "stale account model", "KeyRefinement", "AccountExtraction")
+
+    def test_wrong_fnv_prime_breaks_fingerprints(self):
+        self.check_mutation(
+            "src/economy.rs", "wrapping_mul(0x0000_0100_0000_01b3)", "wrapping_mul(0x0000_0100_0000_01b5)",
+            "extract_account.py", "stale account model", "FingerprintRefinement", "AccountExtraction")
+
     def test_replay_ignoring_error_breaks_execution(self):
         self.check_mutation(
             "src/economy.rs", "receipts.push(self.apply(proposal.clone())?);",

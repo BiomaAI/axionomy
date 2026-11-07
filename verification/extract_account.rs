@@ -407,3 +407,158 @@ pub fn trace_into_exchanges<RateId, Role, AccountId>(
 ) -> Vec<Exchange<RateId, Role, AccountId>> {
     trace.into_exchanges()
 }
+
+pub fn inspect_model_account<
+    'a,
+    AccountId: Clone + Eq + std::hash::Hash + Ord,
+    A: Clone + Eq + std::hash::Hash + Ord,
+    RateId: Clone + Eq + std::hash::Hash + Ord,
+    Role: Clone + Ord,
+>(
+    model: &'a economy::Economy<AccountId, A, RateId, Role>,
+    id: &AccountId,
+) -> Option<&'a Account<A>> {
+    model.account(id)
+}
+
+pub fn model_balance<
+    AccountId: Clone + Eq + std::hash::Hash + Ord,
+    A: Clone + Eq + std::hash::Hash + Ord,
+    RateId: Clone + Eq + std::hash::Hash + Ord,
+    Role: Clone + Ord,
+>(
+    model: &economy::Economy<AccountId, A, RateId, Role>,
+    id: &AccountId,
+    asset: &A,
+) -> Quantity<u64> {
+    model.balance(id, asset)
+}
+
+pub fn model_matches<
+    AccountId: Clone + Eq + std::hash::Hash + Ord,
+    A: Clone + Eq + std::hash::Hash + Ord,
+    RateId: Clone + Eq + std::hash::Hash + Ord,
+    Role: Clone + Ord,
+>(
+    model: &economy::Economy<AccountId, A, RateId, Role>,
+    goal: &economy::Goal<AccountId, A>,
+) -> bool {
+    model.matches(goal)
+}
+
+pub fn model_view<
+    AccountId: Clone + Eq + std::hash::Hash + Ord,
+    A: Clone + Eq + std::hash::Hash + Ord,
+    RateId: Clone + Eq + std::hash::Hash + Ord,
+    Role: Clone + Ord,
+>(
+    model: &economy::Economy<AccountId, A, RateId, Role>,
+    visible: Vec<AccountId>,
+) -> economy::EconomicView<'_, AccountId, A, RateId, Role> {
+    model.view(visible)
+}
+
+pub fn model_state_key<
+    AccountId: Clone + Eq + std::hash::Hash + Ord,
+    A: Clone + Eq + std::hash::Hash + Ord,
+    RateId: Clone + Eq + std::hash::Hash + Ord,
+    Role: Clone + Ord,
+>(
+    model: &economy::Economy<AccountId, A, RateId, Role>,
+) -> Vec<(AccountId, A, Quantity<u64>)> {
+    model.state_key()
+}
+
+pub fn model_fingerprint<
+    AccountId: Clone + Eq + std::hash::Hash + Ord,
+    A: Clone + Eq + std::hash::Hash + Ord,
+    RateId: Clone + Eq + std::hash::Hash + Ord,
+    Role: Clone + Ord,
+>(
+    model: &economy::Economy<AccountId, A, RateId, Role>,
+) -> economy::StateFingerprint {
+    model.state_fingerprint()
+}
+
+pub fn view_account<
+    'a,
+    AccountId: Clone + Eq + std::hash::Hash + Ord,
+    A: Clone + Eq + std::hash::Hash + Ord,
+    RateId: Clone + Eq + std::hash::Hash + Ord,
+    Role: Clone + Ord,
+>(
+    view: &'a economy::EconomicView<'_, AccountId, A, RateId, Role>,
+    id: &AccountId,
+) -> Option<&'a Account<A>> {
+    view.account(id)
+}
+
+pub fn view_balance<
+    AccountId: Clone + Eq + std::hash::Hash + Ord,
+    A: Clone + Eq + std::hash::Hash + Ord,
+    RateId: Clone + Eq + std::hash::Hash + Ord,
+    Role: Clone + Ord,
+>(
+    view: &economy::EconomicView<'_, AccountId, A, RateId, Role>,
+    id: &AccountId,
+    asset: &A,
+) -> Option<Quantity<u64>> {
+    view.balance(id, asset)
+}
+
+pub fn view_key<
+    AccountId: Clone + Eq + std::hash::Hash + Ord,
+    A: Clone + Eq + std::hash::Hash + Ord,
+    RateId: Clone + Eq + std::hash::Hash + Ord,
+    Role: Clone + Ord,
+>(
+    view: &economy::EconomicView<'_, AccountId, A, RateId, Role>,
+) -> economy::ObservationKey<AccountId, A> {
+    view.observation_key()
+}
+
+pub fn goal_new<AccountId: Ord, A>() -> economy::Goal<AccountId, A> {
+    economy::Goal::new()
+}
+
+pub fn goal_default<AccountId: Ord, A>() -> economy::Goal<AccountId, A> {
+    economy::Goal::default()
+}
+
+pub fn goal_require<AccountId: Ord, A>(
+    goal: economy::Goal<AccountId, A>,
+    id: AccountId,
+    assets: Basket<A>,
+) -> economy::Goal<AccountId, A> {
+    goal.require(id, assets)
+}
+
+pub fn goal_requirements<AccountId: Ord, A>(
+    goal: &economy::Goal<AccountId, A>,
+) -> &std::collections::BTreeMap<AccountId, Basket<A>> {
+    goal.requirements()
+}
+
+pub fn goal_assets<AccountId: Ord, A: Ord>(
+    goal: &economy::Goal<AccountId, A>,
+) -> std::collections::BTreeSet<&A> {
+    goal.asset_keys()
+}
+
+pub fn key_visible<AccountId, A>(key: &economy::ObservationKey<AccountId, A>) -> &[AccountId] {
+    key.visible_accounts()
+}
+
+pub fn key_existing<AccountId, A>(key: &economy::ObservationKey<AccountId, A>) -> &[AccountId] {
+    key.existing_accounts()
+}
+
+pub fn key_balances<AccountId, A>(
+    key: &economy::ObservationKey<AccountId, A>,
+) -> &[(AccountId, A, Quantity<u64>)] {
+    key.balances()
+}
+
+pub fn fingerprint_get(value: economy::StateFingerprint) -> u64 {
+    value.get()
+}
