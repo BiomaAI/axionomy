@@ -1574,6 +1574,32 @@
         "The u128 operations are Aeneas's native checked primitives and casts; no new intrinsic, external declaration or compiler patch is added. The BigUint QuantityScalar implementation, arbitrary custom backends and serde/JsonSchema encoding of MulDiv and Rounding are tested but not implementation-proved. Lean-generated conformance adds 468 evaluation cases (independently recomputed in tests via a wide-integer reference), discovery, inspection and derived-trait cases; tests/mul_div.rs adds property tests against a u128 reference and BigUint agreement.",
         "MulDiv specification theorems (bounds, floor ≤ ceil ≤ floor + 1, exactness, monotonicity, floor-by-one equals DivideFloor) are design-level facts over naturals; the existing DivideFloor variant is unchanged for compatibility."
       ]
+    },
+    {
+      "id": "rounding_discipline",
+      "status": "design_proved_rust_tested",
+      "sources": [
+        "src/quantity.rs",
+        "src/rate.rs"
+      ],
+      "theorems": [
+        "Axionomy.RoundingDiscipline.payout_never_exceeds_exact",
+        "Axionomy.RoundingDiscipline.charge_never_below_exact",
+        "Axionomy.RoundingDiscipline.counterparty_keeps_dust",
+        "Axionomy.RoundingDiscipline.deposit_redeem_never_profits",
+        "Axionomy.RoundingDiscipline.mint_redeem_never_profits",
+        "Axionomy.RoundingDiscipline.withdraw_burns_enough",
+        "Axionomy.RoundingDiscipline.split_conserves"
+      ],
+      "rust_tests": [
+        "tests/rounding_discipline.rs",
+        "tests/mul_div.rs",
+        "crates/axionomy-problems/src/lending.rs"
+      ],
+      "limitations": [
+        "These are model-level laws over exact naturals built on MulDiv.quotient: a floor payout never exceeds and a ceiling charge never falls below the exact value; charging the ceiling and paying the floor of one ratio leaves the counterparty zero or one atom of dust; share-vault deposit-then-redeem and mint-then-redeem never return more than was paid, for every vault state including empty ones; withdrawals burn at least the exact share value; a floored two-way split with an explicit remainder conserves the total.",
+        "The kernel does not choose rounding directions; models do. The laws are exercised through real exchanges whose amounts are MulDiv expressions under declared conservation invariants (tests/rounding_discipline.rs property tests) and by the lending reference model, whose round-trip, interest-accounting and inflation-attack tests run through the kernel. Those Rust models are tested, not implementation-proved; the MulDiv evaluation they rely on is covered by the full_width_mul_div refinement."
+      ]
     }
   ]
 }

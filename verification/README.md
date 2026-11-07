@@ -166,6 +166,7 @@ The current library covers:
 | `Discovery` / `DiscoveryRefinement` / `RateMetadataRefinement` / `RateDiscoveryRefinement` | Extracted computed/condition/distinct construction, exact recursive roles, sorted parameter union, complete ordered asset references and unchanged fields |
 | `Validation` / `ValidationCompleteRefinement` | Extracted full structural validation, exact selected rate or ordered diagnostics, nonempty rejection, accepted binding/account/parameter existence and distinctness |
 | `Conservation` / `ConservationRefinement` | Extracted runtime invariant check and whole-state measurement, exact signed widening/weighting, intermediate overflow and mathematical conservation on acceptance |
+| `RoundingDiscipline` | Model-level laws: floor payouts never exceed and ceiling charges never fall below exact values; vault deposit/mint round trips never profit; withdrawals burn enough shares; explicit-remainder splits conserve |
 | `MulDiv` / `MulDivRefinement` | Exact rounded quotients with full-width products, floor/ceil bounds and monotonicity; extracted u64 widening, rounding and narrowing return exactly the specification for every input |
 | `Evaluation` / `EvaluationRefinement` / `DiagnosticRefinement` | Extracted recursive expressions and conditions against one snapshot, all checked outcomes, first-error order, exact public error text |
 | `Effects` / `EffectsRefinement` | Extracted bounded static scaling/merging and computed single-quantity addition, exact errors and atomic failure |
