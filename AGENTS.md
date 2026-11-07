@@ -3,6 +3,9 @@
 Axionomy core features must carry Lean proofs. This is a product requirement,
 alongside Rust's ownership and strong typing guarantees.
 
+Commit and push each completed, validated milestone to `origin/main` unless the
+user directs otherwise. Keep commits focused on the milestone's changes.
+
 For changes to the root crate (`src/**`, its dependencies, or semantics promoted
 into it), read `verification/README.md` and `verification/coverage.json` first.
 
@@ -23,8 +26,11 @@ into it), read `verification/README.md` and `verification/coverage.json` first.
   theorem premises for satisfiability and avoid vacuous or circular contracts.
 - Run `python3 scripts/check_proofs.py` and the appropriate Rust checks before
   completing core work. Preserve the workspace's existing checks.
-- Report verification precisely. The current baseline has checked design proofs
-  and finite Rust conformance tests, not a proof of the entire Rust implementation.
+- Report verification precisely. The current baseline proves Aeneas-extracted
+  u64 checked arithmetic against Lean specifications; other core contracts have
+  design proofs and finite Rust conformance tests. This is not a proof of the
+  entire Rust implementation. Preserve fresh extraction and its explicit trust
+  boundary when extending implementation proofs.
   Existing refinement gaps are recorded in `verification/README.md`; new features
   must not silently expand those gaps or claim a stronger verification level.
 

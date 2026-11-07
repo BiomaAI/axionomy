@@ -1,5 +1,6 @@
 import Lean
-import Axionomy
+import Axionomy.Exchange
+import Axionomy.Rates
 
 /-! Deterministic executable examples from the SAME definitions used in the
 proofs. Rust runs these examples through the public API. Agreement on these

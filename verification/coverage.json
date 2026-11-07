@@ -1,8 +1,8 @@
 {
   "version": 1,
-  "assurance": "Checked design specifications with finite Rust conformance; implementation refinement is not proved.",
+  "assurance": "Aeneas-extracted u64 checked arithmetic is proved against Lean specifications, subject to the documented translation and primitive-model trust boundary. Other core contracts have design proofs and finite Rust conformance.",
   "sources": {
-    "Cargo.toml": "f0065be3bd2e66fca2728a0e039b6a9ec9bc4812ede39ac9d810db35d906062c",
+    "Cargo.toml": "4bc9d7a0305bfd13a1ba0bea109ccf732dc11f2c88bccdef03050f313b7ab3da",
     "Cargo.lock": "00ef263c160aeebaa49187874a4b11ec94fee9bc8fbea5a2f0cacc190607919c",
     "src/account.rs": "f9ad6bbffdc893791a246cb480395607e80e2942867c3a116e2aeb8ee2b185e2",
     "src/amount.rs": "4aa0f1432494aac0454890604e3addbd002fa6b9ded1f75f91fce7675540f9ee",
@@ -10,8 +10,10 @@
     "src/economy.rs": "e2f67048df59aae0ce3b92b146c81d29130ced1abd89faf14bab2458b3bef45a",
     "src/exchange.rs": "aabae395148c0dd8703b2fc99aa177700eaffd0d8aac602f8a5ffbf7fb09a47b",
     "src/lib.rs": "a4ec7c34fa7f3020ab494dfffd824e8655e63a5434f45fa190df28441f7e89e5",
-    "src/quantity.rs": "48eeb070d1eb0eeb32b82a46e1f238af6d097bdd86c2eed99ae54fc24b719515",
-    "src/rate.rs": "516f11fe309ff825f26a6f23b55a01afc6b6fd8cffb65017444a37a3d3bccf93"
+    "src/quantity.rs": "ce7f716473fa7cef2f5520de90ba0219bed94bfdb7aabe330b04ed622ab2ec97",
+    "src/rate.rs": "516f11fe309ff825f26a6f23b55a01afc6b6fd8cffb65017444a37a3d3bccf93",
+    "verification/extract.rs": "415b34f5f4f8aa2679af860bd2a4092c96e113145919160fe7c81e33836de3e0",
+    "verification/aeneas-toolchain.json": "943b4c78adf0388582b8c3bc17abb2ffbafde15cb9f4529a8d8434f816102bef"
   },
   "features": [
     {
@@ -32,11 +34,37 @@
       "rust_tests": [
         "tests/lean_conformance.rs",
         "tests/properties.rs",
-        "tests/generic_quantity.rs"
+        "tests/generic_quantity.rs",
+        "src/quantity.rs"
       ],
       "limitations": [
-        "Proofs concern Nat operations with an explicit bound. Rust u64 conformance is tested; num_traits and custom QuantityScalar implementations are not formally refined.",
+        "The generic Nat specifications are proved. The separate u64_checked_arithmetic contract refines the extracted u64 implementation; arbitrary QuantityScalar laws are not proved.",
         "BigUint/BigInt, signed weighted conversion, serialization, and user-defined trait laws remain legacy refinement gaps."
+      ]
+    },
+    {
+      "id": "u64_checked_arithmetic",
+      "status": "aeneas_refinement_proved",
+      "sources": [
+        "src/quantity.rs",
+        "verification/extract.rs",
+        "verification/aeneas-toolchain.json"
+      ],
+      "extracted_module": "QuantityExtraction.Funs",
+      "theorems": [
+        "Axionomy.QuantityRefinement.checked_add_refines",
+        "Axionomy.QuantityRefinement.checked_sub_refines",
+        "Axionomy.QuantityRefinement.checked_mul_refines",
+        "Axionomy.QuantityRefinement.checked_div_refines"
+      ],
+      "rust_tests": [
+        "tests/lean_conformance.rs",
+        "src/quantity.rs"
+      ],
+      "limitations": [
+        "Proves total correctness of the Aeneas-generated production call paths for all u64 operand pairs in the default-feature configuration. Rust MIR inlining, Charon/Aeneas translation, and compiler/codegen correctness are trusted rather than proved here.",
+        "Primitive semantics come from Aeneas and explicit adapters for u64 add_with_overflow, mul_with_overflow, and the cold_path hint. The checker rejects other intrinsic instantiations and changes to the external template. See verification/AENEAS.md.",
+        "Does not cover BigUint, arbitrary QuantityScalar backends, signed weighted conversion, serialization, accounts, or exchanges. Rust retains its generic trait bounds and strong types."
       ]
     },
     {

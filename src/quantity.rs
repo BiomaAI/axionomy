@@ -113,27 +113,32 @@ where
     }
 
     pub fn checked_add(&self, rhs: &Self) -> Option<Self> {
-        self.0
-            .checked_add(&rhs.0)
-            .and_then(|value| Self::try_from_scalar(value).ok())
+        Self::from_checked(self.0.checked_add(&rhs.0))
     }
 
     pub fn checked_sub(&self, rhs: &Self) -> Option<Self> {
-        self.0
-            .checked_sub(&rhs.0)
-            .and_then(|value| Self::try_from_scalar(value).ok())
+        Self::from_checked(self.0.checked_sub(&rhs.0))
     }
 
     pub fn checked_mul(&self, rhs: &Self) -> Option<Self> {
-        self.0
-            .checked_mul(&rhs.0)
-            .and_then(|value| Self::try_from_scalar(value).ok())
+        Self::from_checked(self.0.checked_mul(&rhs.0))
     }
 
     pub fn checked_div(&self, rhs: &Self) -> Option<Self> {
-        self.0
-            .checked_div(&rhs.0)
-            .and_then(|value| Self::try_from_scalar(value).ok())
+        Self::from_checked(self.0.checked_div(&rhs.0))
+    }
+
+    // Explicit matching lets Aeneas extract the complete conversion without
+    // a model of the standard library's generic Result::ok drop handling.
+    #[allow(clippy::manual_ok_err, reason = "Aeneas needs the explicit conversion")]
+    fn from_checked(value: Option<N>) -> Option<Self> {
+        match value {
+            Some(value) => match Self::try_from_scalar(value) {
+                Ok(quantity) => Some(quantity),
+                Err(_) => None,
+            },
+            None => None,
+        }
     }
 }
 
@@ -209,6 +214,38 @@ where
 pub enum QuantityError {
     #[error("quantity cannot be negative")]
     Negative,
+}
+
+#[cfg(test)]
+mod signed_scalar_tests {
+    use super::{Quantity, QuantityScalar};
+
+    // A backend can represent negative intermediate results even though a
+    // Quantity cannot. Keep this generic boundary intact when proving u64.
+    impl QuantityScalar for i64 {
+        type SignedMeasure = i128;
+
+        fn is_nonnegative(&self) -> bool {
+            *self >= 0
+        }
+
+        fn from_u64(value: u64) -> Option<Self> {
+            Self::try_from(value).ok()
+        }
+
+        fn checked_weighted(&self, coefficient: i64) -> Option<Self::SignedMeasure> {
+            i128::from(*self).checked_mul(i128::from(coefficient))
+        }
+    }
+
+    #[test]
+    fn checked_results_still_enforce_nonnegativity_for_other_backends() {
+        let one = Quantity::try_from_scalar(1_i64).unwrap();
+        let two = Quantity::try_from_scalar(2_i64).unwrap();
+        assert_eq!(one.checked_sub(&two), None);
+        assert_eq!(two.checked_sub(&one), Some(one));
+        assert!(Quantity::try_from_scalar(-1_i64).is_err());
+    }
 }
 
 #[cfg(all(test, not(feature = "bigint")))]

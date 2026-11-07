@@ -8,4 +8,6 @@ studio/playwright-report/
 studio/test-results/
 studio/src/generated/wasm/
 verification/lean/.lake/
+verification/.tools/
+verification/.work/
 scripts/__pycache__/

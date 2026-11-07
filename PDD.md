@@ -1881,10 +1881,13 @@ native HTTP, browser Wasm, and static Pages without auto-running a task.
 Specifications, checked proofs, Rust conformance evidence, and explicit source
 coverage are required parts of core development. Lean supplements Rust's type
 system; verification must not erase ontology types or weaken ownership and
-mutation boundaries. The initial design proofs and finite conformance cases are
-labeled separately from future Aeneas implementation refinement proofs. CI rejects
-unproved declarations, missing/stale coverage, and conformance drift. Source
-hashes establish review freshness, not semantic correspondence: reviewers must
+mutation boundaries. Design proofs and finite conformance cases are labeled
+separately from Aeneas implementation refinement proofs. The first implementation
+proof covers the four u64 checked arithmetic operations; the rest of the core
+retains explicit refinement gaps. CI regenerates the implementation model from
+production Rust and rejects stale extraction, unproved declarations, missing/stale
+coverage, and conformance drift. Source hashes establish review freshness, not
+semantic correspondence: reviewers must
 check that each theorem states the intended contract with adequate premises.
 
 ## 16. Success criteria

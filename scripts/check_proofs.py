@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check proof coverage, kernel dependencies, generated cases and Rust conformance.
+"""Check coverage, fresh Rust extraction, kernel proofs and Rust conformance.
 
 Source hashes record review freshness. They do NOT establish Rust refinement.
 """
@@ -11,13 +11,17 @@ import subprocess
 import sys
 import tempfile
 
+from extract_quantity import check_extraction
+
 ROOT = Path(__file__).resolve().parents[1]
 
 
 def validate_coverage(root, coverage):
     if coverage.get("version") != 1:
         raise ValueError("unsupported proof coverage version")
-    sources = {"Cargo.toml", "Cargo.lock"} | {str(p.relative_to(root)) for p in (root / "src").rglob("*.rs")}
+    sources = {"Cargo.toml", "Cargo.lock", "verification/extract.rs",
+               "verification/aeneas-toolchain.json"} | {
+                   str(p.relative_to(root)) for p in (root / "src").rglob("*.rs")}
     recorded = coverage["sources"]
     if sources != set(recorded):
         raise ValueError(f"core source coverage differs: {sorted(sources ^ set(recorded))}")
@@ -36,10 +40,17 @@ def validate_coverage(root, coverage):
         if feature["id"] in ids:
             raise ValueError(f"duplicate feature: {feature['id']}")
         ids.add(feature["id"])
-        # The initial proof layer is explicitly design-level. Introducing a
-        # stronger status requires changing this checker and its trust contract.
-        if feature["status"] != "design_proved_rust_tested":
+        if feature["status"] not in {"design_proved_rust_tested", "aeneas_refinement_proved"}:
             raise ValueError(f"unsupported verification status: {feature['status']}")
+        if feature["status"] == "aeneas_refinement_proved":
+            # This gate currently implements one extraction pipeline. Future
+            # claims need their own regeneration and trust-boundary checks.
+            if feature["id"] != "u64_checked_arithmetic" or feature.get("extracted_module") != "QuantityExtraction.Funs":
+                raise ValueError("refinement claim has no supported extraction pipeline")
+            required = {f"Axionomy.QuantityRefinement.checked_{op}_refines"
+                        for op in ("add", "sub", "mul", "div")}
+            if not required <= set(feature["theorems"]):
+                raise ValueError("incomplete u64 implementation refinement contract")
         if not feature["sources"] or not set(feature["sources"]) <= sources:
             raise ValueError(f"invalid source mapping: {feature['id']}")
         covered.update(feature["sources"])
@@ -80,6 +91,7 @@ def audit_source(theorems):
 def main():
     coverage = json.loads((ROOT / "verification/coverage.json").read_text())
     theorems = validate_coverage(ROOT, coverage)
+    check_extraction()
     lean_root = ROOT / "verification/lean"
     run("lake", "build", cwd=lean_root)
     run("lake", "env", "leanchecker", "Axionomy", cwd=lean_root)
@@ -93,8 +105,9 @@ def main():
         raise ValueError("Lean conformance cases are stale; regenerate them from Conformance.lean and review the diff")
     run("cargo", "test", "-p", "axionomy", "--all-features", "--test", "lean_conformance")
     run("cargo", "test", "-p", "axionomy", "--all-features", "--doc")
-    print(f"Verified {len(theorems)} registered design theorems, their axiom dependencies, "
-          "and the Rust conformance/type checks. Rust implementation refinement remains unproved.")
+    print(f"Verified {len(theorems)} registered theorems and their axiom dependencies, "
+          "fresh Aeneas extraction of u64 checked arithmetic, and Rust conformance/type checks. "
+          "Other core implementation refinement remains unproved; see verification/README.md.")
 
 
 if __name__ == "__main__":

@@ -8,25 +8,32 @@ for static typing or runtime validation.
 
 ## Current assurance level
 
-**Design proved, Rust tested.** The Lean library is handwritten; it is not an
-Aeneas extraction. Its theorems establish the stated mathematical properties.
-The generated cases exercise the real Rust API against the executable Lean
-definitions, but agreement on finite cases is not a universal refinement proof.
-Neither an entire source module nor every existing core behavior is declared
-proved just because it has a coverage entry.
+**Partial implementation verification.** The four production `Quantity<u64>`
+checked arithmetic operations are extracted through Charon/Aeneas. Lean proves
+that their generated implementations terminate without panic and return exactly
+the specified result for every pair of u64 inputs, including checked rejection.
+This is conditional on the documented compiler, translation, and primitive-model
+trust boundary; it is not a machine-code verification claim.
+
+The other core contracts still have handwritten design proofs and finite Rust
+conformance tests. Neither an entire source module nor every existing core
+behavior is declared proved just because it has a coverage entry.
+See [the Aeneas integration](AENEAS.md) for the exact scope and reproduction steps.
 
 `coverage.json` maps core feature contracts to checked theorem names, Rust test
-files, and explicit limitations. All root `src/**/*.rs` files, `Cargo.toml`, and `Cargo.lock`
+files, and explicit limitations. All root `src/**/*.rs` files, `Cargo.toml`,
+`Cargo.lock`, the extraction entry points, and the pinned extraction toolchain
 must be accounted for. SHA-256 entries record the exact reviewed source version;
 changing source invalidates the review until the proof relationship is reviewed
 and the entry is deliberately updated. Hashes do not mechanically establish that
 a theorem describes Rust. Reviewers must check that relationship and the adequacy
 and satisfiability of theorem premises. Adding an unrelated theorem is not coverage.
 
-The initial library covers:
+The current library covers:
 
-| Module | Checked design properties |
+| Module | Checked properties |
 | --- | --- |
+| `QuantityRefinement` | Actual Aeneas-extracted u64 addition, subtraction, multiplication, and division refine `Quantity`, including all checked failures |
 | `Quantity` | Exact checked addition/multiplication, subtraction without underflow, floor division, asset-qualified amount round trip |
 | `State` | Typed account/asset updates and frame property, zero canonicalization, complete scalar shortfall, hidden-account projection, observation noninterference, monotone goals |
 | `Rates` | Checked expression evaluation refines mathematical evaluation and bounds its result; effect merging is associative/commutative in exact arithmetic; preservation does not scale |
@@ -63,16 +70,21 @@ GitHub branch-protection settings.
 
 ## Run locally
 
-Install [elan](https://github.com/leanprover/elan), then run from the repository root:
+Install Python 3.12+, Git, rustup, and [elan](https://github.com/leanprover/elan), then run from the repository root:
 
 ```sh
+python3 scripts/setup_aeneas.py
+(cd verification/lean && lake update)
 python3 scripts/check_proofs.py
 python3 -m unittest discover -s scripts -p 'test_*.py'
 ```
 
-The project pins Lean in `lean/lean-toolchain` and uses only Lean's bundled
-libraries. Rust builds do not require Lean. The proof command builds the Lean
-library, rechecks compiled proof terms with `leanchecker`, audits every Axionomy declaration and registered theorem, checks that
+The project pins Lean in `lean/lean-toolchain`, and pins Aeneas/Charon in
+`aeneas-toolchain.json`. The Aeneas backend brings pinned Mathlib dependencies.
+Rust builds do not require Lean. The proof command regenerates the implementation
+model from Rust, checks it against the committed extraction, builds the Lean
+library, rechecks compiled proof terms with `leanchecker`, audits every Axionomy
+declaration and registered theorem, checks that
 the generated conformance cases match the committed file, runs those cases
 against Rust, and runs Rust doctests including compile-fail type contracts.
 
@@ -99,8 +111,8 @@ pre-exchange snapshots. Separate existing Rust tests cover additional behavior.
 The following existed before this proof requirement and are not discharged by
 the initial theorems. They are a backfill plan, not an exemption for new behavior:
 
-- Charon/Aeneas extraction and refinement of the actual Rust functions into the
-  mathematical model, including every internal `expect` and termination obligation.
+- Charon/Aeneas extraction and refinement beyond the four `Quantity<u64>` checked
+  arithmetic operations, including account/exchange `expect` and termination obligations.
 - Correctness of `IndexMap`, `BTreeMap`, `Arc`, iterator order, allocation, cloning,
   and copy-on-write isolation; Rust compilation still enforces its ownership rules.
 - Full structural validation: required/unknown roles and parameters, account/rate
@@ -115,9 +127,9 @@ the initial theorems. They are a backfill plan, not an exemption for new behavio
 - Complete diagnostic/error ordering, receipts, and Rust replay/fork refinement.
   Rust `replay` retains an accepted prefix on failure; `replayed` protects its source.
 
-For implementation proofs, pin compatible Rust/Charon/Aeneas/Lean versions,
-start with the u64 arithmetic/account boundary, and connect extracted definitions
-to these specifications. Model unavoidable external dependencies explicitly and
+For further implementation proofs, extend the pinned Aeneas pipeline from u64
+arithmetic to the account boundary and connect extracted definitions to these
+specifications. Model unavoidable external dependencies explicitly and
 report their trust status. Do not maintain a second Rust algorithm only for proofs
 or change the public API to an untyped representation to satisfy extraction.
 

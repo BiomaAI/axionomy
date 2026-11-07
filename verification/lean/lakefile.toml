@@ -2,11 +2,18 @@ name = "axionomy-proofs"
 version = "0.1.0"
 defaultTargets = ["Axionomy", "Audit", "conformance"]
 
+[[require]]
+name = "aeneas"
+path = "../.tools/aeneas/backends/lean"
+
 [[lean_lib]]
 name = "Axionomy"
 
 [[lean_lib]]
 name = "Audit"
+
+[[lean_lib]]
+name = "QuantityExtraction"
 
 [[lean_exe]]
 name = "conformance"

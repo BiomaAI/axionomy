@@ -59,3 +59,7 @@ harness = false
 [[example]]
 name = "bigint"
 required-features = ["bigint"]
+
+[[example]]
+name = "quantity_extraction"
+path = "verification/extract.rs"
