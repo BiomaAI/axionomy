@@ -280,7 +280,7 @@ doctests also passed. The prior 35 production mutation controls remain in CI.
 
 The remaining completion work is:
 
-**Item 17 invariant input validation:** the production loader now rejects every
+**Completed item 17 invariant input validation:** the production loader now rejects every
 repeated asset weight, including duplicates preceded by zero. Its extracted
 `from_serialized_weights` helper proves first-duplicate rejection, termination,
 name preservation, exact signed coefficients and ordered zero normalization.
@@ -288,12 +288,11 @@ Accepted weights are unique and nonzero. Rust's existing asset bounds are
 unchanged. The serde handoff is source-guarded and tested; the codec itself is
 not proved. See [the input contract](ACCOUNTS.md#invariant-input-validation).
 
-This is a **paused work-in-progress checkpoint**, not a validated milestone.
-Fresh helper extraction and `InvariantInputRefinement` compilation passed.
-Still pending: finish the full Lean build, regenerate `conformance.json`, run the
-new Rust cases and production mutation, and complete the proof/workspace gates.
-The boundary-test invocation also needs rerunning with `AccountExtractionTests`
-(the attempted `AccountBoundaryTests` class does not exist).
+This milestone passed the full proof gate (666 registered contracts, 4,338
+audited Axionomy theorems), fresh extraction, 262 regenerated Lean conformance
+cases, all 348 workspace tests and 91 boundary/gate/extraction controls,
+including the new production mutation that drops zero weights before duplicate
+validation. Formatting and Clippy with warnings denied also passed.
 
 **Completed item 16 inherited-trait batch:** extracted 58 public forwarding roots for
 29 `clone_from` methods, 19 `ne` methods (including basket/account equality),
