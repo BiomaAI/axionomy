@@ -50,6 +50,27 @@ def validate_coverage(root, coverage):
             # These are the implemented extraction pipelines. Future
             # claims need their own regeneration and trust-boundary checks.
             pipelines = {
+                "iterator_consumers": ("AccountExtraction.Funs", {
+                    "Axionomy.IteratorContract.yields_unique",
+                    "Axionomy.IteratorContract.vector_yields",
+                    "Axionomy.IteratorContract.scripted_yields",
+                    "Axionomy.TraceExtensionRefinement.extend_loop",
+                    "Axionomy.TraceExtensionRefinement.extend_refines",
+                    "Axionomy.TraceExtensionRefinement.extend_loop_failure",
+                    "Axionomy.TraceExtensionRefinement.extend_failure",
+                    "Axionomy.TraceExtensionRefinement.extend_start_failure",
+                    "Axionomy.IteratorViewRefinement.view_loop",
+                    "Axionomy.IteratorViewRefinement.view_loop_failure",
+                    "Axionomy.IteratorViewRefinement.model_view",
+                    "Axionomy.IteratorViewRefinement.model_view_contract",
+                    "Axionomy.IteratorViewRefinement.model_view_failure",
+                    "Axionomy.IteratorViewRefinement.model_view_start_failure",
+                    "Axionomy.IteratorFilteringRefinement.filter_loop",
+                    "Axionomy.IteratorFilteringRefinement.filter_loop_failure",
+                    "Axionomy.IteratorFilteringRefinement.applicable_refines",
+                    "Axionomy.IteratorFilteringRefinement.applicable_failure",
+                    "Axionomy.IteratorFilteringRefinement.applicable_start_failure",
+                }),
                 "typed_data_operations": ("AccountExtraction.Funs", {
                     "Axionomy.TypedDataRefinement.quantity_validation", "Axionomy.TypedDataRefinement.quantity_validation_iff",
                     "Axionomy.TypedDataRefinement.checked_validation", "Axionomy.TypedDataRefinement.quantity_new",
@@ -265,12 +286,12 @@ def main():
     if generated != committed:
         raise ValueError("Lean conformance cases are stale; regenerate them from Conformance.lean and review the diff")
     run("cargo", "test", "-p", "axionomy", "--all-features", "--test", "lean_conformance",
-        "--test", "transaction_conformance", "--test", "observation_conformance", "--test", "public_data_conformance")
+        "--test", "transaction_conformance", "--test", "observation_conformance", "--test", "public_data_conformance", "--test", "iterator_conformance")
     run("cargo", "test", "-p", "axionomy", "--all-features", "--lib",
         "runtime_")
     run("cargo", "test", "-p", "axionomy", "--all-features", "--doc")
     print(f"Verified {len(theorems)} registered theorems and their axiom dependencies, "
-          "fresh Aeneas extraction of u64 arithmetic, basket construction/operations, account updates/staging, model/rate construction and metadata discovery, complete transaction assessment/application and vector filtering, fork/simulation/ordered replay, goals/views/canonical keys and scoped fingerprints, typed data APIs and expression construction, snapshot evaluation/conditions, signed conservation and measurement, "
+          "fresh Aeneas extraction of u64 arithmetic, basket construction/operations, account updates/staging, model/rate construction and metadata discovery, complete transaction assessment/application and finite-input iterator filtering, fork/simulation/ordered replay, goals/views/canonical keys and scoped fingerprints, typed data APIs, expression construction and generic trace extension, snapshot evaluation/conditions, signed conservation and measurement, "
           "and Rust conformance/type checks. Collection storage uses an explicit trusted model. "
           "Other core implementation refinement remains unproved; see verification/README.md.")
 

@@ -177,13 +177,13 @@ to `origin/main`; theorem counts do not measure percentage completion.
 | 1 | 7 | Complete preparation, unique affected accounts, established staging preconditions | Implementation proved: complete staging, unique existing accounts and exact ordered deltas |
 | 1 | 8 | Runtime signed conservation, intermediate i128 overflow, error classification | Implementation proved: complete runtime invariant checks, checked intermediate measures and exact diagnostics |
 | 1 | 9 | Multi-account atomic commit, unchanged frame, safe prepared-account lookups | Implementation proved: safe lookups, atomic rejection, exact committed state and unchanged frame |
-| 1 | 10 | Assessment/application agreement, filtering, immutability, exact diagnostics/order | Implementation proved: analyze/assess/apply agreement, boolean applicability and stable finite-vector filtering; arbitrary iterators remain in item 16 |
+| 1 | 10 | Assessment/application agreement, filtering, immutability, exact diagnostics/order | Implementation proved: analyze/assess/apply agreement, boolean applicability and stable finite-input iterator filtering under explicit iterator laws |
 | 1 | 11 | Receipts/deltas agree with the actual proposal and committed changes | Implementation proved: submitted proposal, unique receipt accounts and exact observable committed balance for every delta |
 | 2. Execution and observations | 12 | Fork/simulation isolation and equivalence | Implementation proved under documented logical storage/clone models |
-| 2 | 13 | Ordered traces, replay prefix-on-error, isolated replay, invariant composition | Implementation proved: first error, accepted prefix state, ordered receipts and derived caller invariants; generic trace extension remains in item 16 |
-| 2 | 14 | Goals, visibility, hidden-state noninterference, missing/zero distinctions | Implementation proved and validated; finite-vector construction and documented collection models |
+| 2 | 13 | Ordered traces, replay prefix-on-error, isolated replay, invariant composition | Implementation proved: first error, accepted prefix state, ordered receipts and derived caller invariants; generic trace extension also proved under explicit iterator laws |
+| 2 | 14 | Goals, visibility, hidden-state noninterference, missing/zero distinctions | Implementation proved and validated; finite-input iterator construction and documented collection models |
 | 2 | 15 | Canonical state/observation keys and deterministic fingerprints | Implementation proved and validated under documented sorting/hash models and native 64-bit little-endian scope |
-| 3. Public data boundary | 16 | Remaining typed constructors/accessors/conversions/iterators/equality | Partial: foundational typed data and expression construction proved and validated; remaining APIs listed below |
+| 3. Public data boundary | 16 | Remaining typed constructors/accessors/conversions/iterators/equality | Partial: foundational typed data, expression construction and finite-input iterator consumers proved; remaining APIs listed below |
 | 3 | 17 | Serialization round trips, validation/canonicalization, accurate schema contracts | Open |
 | 4. Numeric backends | 18 | BigUint/BigInt and explicit algebraic requirements for custom backends | Open |
 
@@ -211,8 +211,9 @@ the public Rust API matches their exact assessments, diagnostics, receipts,
 post-state, and rejection behavior. The scenarios include aliasing, original
 snapshot evaluation, preservation, overflow, and conservation diagnostics.
 These finite checks supplement the general proofs. Filtering now has an
-implementation proof for finite vector candidates. Arbitrary user-provided
-iterator behavior remains a separate public-boundary obligation in item 16.
+implementation proof for finite vector candidates. The iterator-consumer batch below extends this to finite user-provided
+streams under independent IntoIterator/next laws; arbitrary callback implementations
+still require their own evidence.
 
 The transaction contracts are registered in `coverage.json` and the mandatory
 proof gate. This milestone passed fresh extraction, the Lean kernel/axiom audit,
@@ -232,8 +233,8 @@ receipt describes the balance change at its own intermediate state. Trace
 construction, append-by-push and borrowed/consuming access preserve proposal order.
 See [the execution contract](ACCOUNTS.md#execution-fork-simulation-and-replay).
 The fixture bridge adds 246 replay scenarios and checks simulation against all
-596 existing transaction cases. Generic `Trace::extend` and serialized traces
-remain in items 16–17. Physical clone/Arc isolation remains a dependency boundary;
+596 existing transaction cases. Generic `Trace::extend` is covered by the iterator-consumer batch below;
+serialized traces remain in item 17. Physical clone/Arc isolation remains a dependency boundary;
 Rust's immutable source borrows and typed APIs remain intact.
 This execution slice passed the full proof gate (238 registered contracts), fresh
 extraction and kernel/axiom audit, 246 replay plus 596 simulation conformance
@@ -273,10 +274,11 @@ The remaining completion work is:
 - **16 — Typed public APIs:** the foundational batch now has composed proofs for
   amounts, quantity validation/conversion, account wrappers/equality, typed basket
   insertion, proposal builders, receipt/delta/assessment accessors and expression
-  constructors. This batch is validated. Remaining work includes
+  constructors. Generic trace extension, finite-input iterator views and candidate
+  filtering are also proved under independent iterator laws. Remaining work includes
   basket construction from typed amounts, collection conversions and sorted
   iteration; assessment lookup by account; remaining rate/invariant/model
-  inspection APIs; generic trace extension and arbitrary iterator/callback laws;
+  inspection APIs; remaining collection iterator and arbitrary callback contracts;
   derived equality/hash behavior and formatting; and the explicit panic contracts
   of convenience constructors. See the [public data contracts](ACCOUNTS.md#typed-public-data-and-expression-construction)
   for the exact scope of this batch.
@@ -290,6 +292,21 @@ The remaining completion work is:
   algebraic requirements for custom `QuantityScalar`/`QuantityMeasure` backends,
   with explicit dependency and resource assumptions. Rust trait bounds alone do
   not establish these laws; BigInt itself is not currently a quantity backend.
+
+The iterator-consumer batch adds 19 registered contracts for generic trace
+extension, finite-input view construction and stable candidate filtering. The
+protocol records primitive `into_iter`/`next` results up to the first `None`,
+with concrete vector and non-fused scripted witnesses. Separate contracts propagate
+iterator panics after a finite prefix and failures during conversion to an iterator.
+Views derive sorted uniqueness and an output-size bound; filtering composes the
+existing complete transaction analysis. Trace extension preserves the original
+prefix and every yielded proposal, including duplicates. See the
+[iterator contracts](ACCOUNTS.md#generic-iterator-consumers) for dependency and
+failure scope. These contracts do not prove arbitrary callbacks terminate or
+establish state after Rust unwinding. This batch passed the full proof gate
+(350 registered contracts; 3,292 audited theorems), all 307 workspace tests,
+86 boundary/gate controls, the new production mutation control, formatting,
+Clippy, documentation and compile-fail doctests.
 
 Every internal `expect` needs a discharged precondition. Intentionally panicking
 convenience constructors need explicit contracts; do not claim unconditional
@@ -405,7 +422,7 @@ the initial theorems. They are a backfill plan, not an exemption for new behavio
 - Charon/Aeneas extraction and refinement beyond the four `Quantity<u64>` checked
   arithmetic operations, basket construction/operations, account updates/staging,
   model/rate construction and metadata discovery, complete u64 transaction
-  assessment/application, finite-vector filtering, fork/simulation/replay and ordered trace access, goals, finite-vector views, canonical keys and scoped fingerprints, snapshot expression/condition
+  assessment/application, finite-input iterator filtering, fork/simulation/replay, ordered trace access/extension, goals, finite-input iterator views, canonical keys and scoped fingerprints, snapshot expression/condition
   evaluation, bounded effect helpers, runtime conservation and whole-state measurement.
 - Correctness of `IndexMap`, `BTreeMap`, `Arc`, iterator order, allocation, cloning,
   and copy-on-write isolation; Rust compilation still enforces its ownership rules.

@@ -402,6 +402,15 @@ pub fn trace_exchanges<RateId, Role, AccountId>(
     trace.exchanges()
 }
 
+pub fn trace_extend<RateId, Role, AccountId, N, I>(
+    trace: &mut Trace<RateId, Role, AccountId, N>,
+    exchanges: I,
+) where
+    I: IntoIterator<Item = Exchange<RateId, Role, AccountId, N>>,
+{
+    trace.extend(exchanges)
+}
+
 pub fn trace_into_exchanges<RateId, Role, AccountId>(
     trace: Trace<RateId, Role, AccountId>,
 ) -> Vec<Exchange<RateId, Role, AccountId>> {

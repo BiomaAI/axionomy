@@ -185,7 +185,9 @@ impl<RateId, Role, AccountId, N> Trace<RateId, Role, AccountId, N> {
         &mut self,
         exchanges: impl IntoIterator<Item = Exchange<RateId, Role, AccountId, N>>,
     ) {
-        self.exchanges.extend(exchanges);
+        for proposal in exchanges {
+            self.exchanges.push(proposal);
+        }
     }
 
     pub fn exchanges(&self) -> &[Exchange<RateId, Role, AccountId, N>] {

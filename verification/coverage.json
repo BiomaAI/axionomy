@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "assurance": "Partial implementation verification: Aeneas-extracted production u64 arithmetic, basket/account operations, model/rate construction and discovery, complete transaction assessment/application, finite-vector filtering, fork/simulation/ordered replay, goals, finite-vector views, canonical state/observation keys and scoped deterministic fingerprints, foundational typed data APIs and expression construction refine Lean specifications. Explicit collection/Arc/UTF-8/sorting/hashing models, lawful identifier operations, resource bounds, compiler/translation and primitive models remain trusted. Remaining public data APIs, serialization/schema contracts and other numeric backends remain open.",
+  "assurance": "Partial implementation verification: Aeneas-extracted production u64 arithmetic, basket/account operations, model/rate construction and discovery, complete transaction assessment/application, finite-input iterator filtering, fork/simulation/ordered replay, goals, finite-input iterator views, canonical state/observation keys and scoped deterministic fingerprints, generic trace extension, foundational typed data APIs and expression construction refine Lean specifications. Explicit collection/Arc/UTF-8/sorting/hashing models, lawful identifier operations, resource bounds, compiler/translation and primitive models remain trusted. Remaining public data APIs, serialization/schema contracts and other numeric backends remain open.",
   "sources": {
     "Cargo.toml": "414a2b181e13225e4b76aa58e70d998064174dde2d8cee603ea3af648d61a7f3",
     "Cargo.lock": "00ef263c160aeebaa49187874a4b11ec94fee9bc8fbea5a2f0cacc190607919c",
@@ -8,14 +8,14 @@
     "src/amount.rs": "4c6a0599d4e7697fadb6981b88cc01e832fa6c01a0b33d1b997ba5c5bb1c705d",
     "src/basket.rs": "e1856f9473b09b6cf361db4058f92e23e93b118fbd0d5be9eeb1125b5622f849",
     "src/economy.rs": "31d3c582bb73a17c2c6b2cd8efbac8bf5f2f0d1bec3a7e9c8a168757e05f54be",
-    "src/exchange.rs": "90a0755a4b3f780220ced362dc421364a6c3691d9ce900050cd57b3bbcc4ccc4",
+    "src/exchange.rs": "234f6e6459d2fb97a1fbb802e14afed6e5ed50a023c8c2de745e6f6eac39b455",
     "src/lib.rs": "46d6f713693714650653128e2ceabf8a895b8ad98a38a7bdbeab4ea378a5cc06",
     "src/quantity.rs": "246c805344babccb3c1c00371686e098111044a2ce46f456f211de6eb9928364",
     "src/rate.rs": "af545aa57d7668c346cfb9b0aefe3207af23b6443f9f7064ab5b1eaff9210812",
     "verification/extract.rs": "415b34f5f4f8aa2679af860bd2a4092c96e113145919160fe7c81e33836de3e0",
     "verification/aeneas-toolchain.json": "8676d7d11be51a6f41984d874b35910e8a1a3d0a18414998feb9402ef80932fb",
     "verification/extract_basket.rs": "dc2b3a2159704c24a5261d0069a2aac7b575f30a94ae35c4c1e96933638592dd",
-    "verification/extract_account.rs": "b445c53bd3b6a1bbbd5619b7d7502f2212dd67f331fedb8bf57302f1602c6a61",
+    "verification/extract_account.rs": "7168e357179adee890b6185b4692c84796bc3e6cabf4dde78f927bfa899752aa",
     "verification/patches/aeneas-namespaced-discriminant.patch": "fabac7482deb3da6ecaca60c4060dfe9d2114efdd010699e736c4a91267f3bc9"
   },
   "features": [
@@ -382,7 +382,7 @@
         "The production u64 fork, simulate, replay, replayed and Trace new/default/push/exchanges/into_exchanges paths are shared-source extracted. Derived Economy and Exchange clones are proved exact under lawful identifier cloning. Replay terminates without panic for every bounded trace satisfying the transaction metadata/name/capacity preconditions; no successful step or intermediate-state readiness is assumed. The transaction frame derives unchanged rules, invariants and account-key cardinality through every step.",
         "The typed ordered replay specification retains the final state on both success and failure. Rejection atomicity derives exactly the accepted prefix state and first error; success retains receipt order and each receipt describes its own intermediate committed state. Simulation and replayed publish isolated branch results with the source immutably borrowed. The reusable invariant-composition lemma requires a step law; concrete replay refinement discharges the transaction caller invariants through the extracted apply frame, rather than assuming them for intermediate states. The actual analyze/apply accepted control flow also establishes every registered weighted-transfer conservation check; replay_conserves derives exact mathematical consumed/produced equality per receipt throughout a successful trace, and the first-error theorem supplies its successful prefix.",
         "Logical IndexMap, ordered BTreeMap, Vec/slice and Arc models, lawful equality/ordering/hash coherence, UTF-8 lengths, allocation/resources, compiler/MIR/Charon/Aeneas/backend semantics remain explicit trust boundaries. BTreeMap clone calls every key/value clone and preserves entry order; physical tree/Arc storage, reference counts, allocator behavior and clone/COW isolation are not verified. Strong Rust domains and ownership remain enforced. This is not machine-code verification.",
-        "Trace generic extend, remaining derived/convenience APIs, serialization/schema contracts and BigUint/BigInt/custom numeric laws remain separate items 16\u201318. 246 Lean-generated replay scenarios and 596 transaction simulation scenarios supplement the general proofs; they do not replace them."
+        "Trace generic extend is covered separately by iterator_consumers. Remaining derived/convenience APIs, serialization/schema contracts and BigUint/BigInt/custom numeric laws remain separate items 16\u201318. 246 Lean-generated replay scenarios and 596 transaction simulation scenarios supplement the general proofs; they do not replace them."
       ],
       "extracted_module": "AccountExtraction.Funs"
     },
@@ -422,7 +422,7 @@
       ],
       "limitations": [
         "The shared-source u64 paths prove goal construction/replacement/access/asset discovery, exact matching against mathematical natural-number requirements, model/view account and balance lookup, and finite-vector visibility construction. Missing required accounts fail even for empty baskets; visible empty accounts return Some(0), hidden or absent accounts return None. Goal matching requires unique asset entries in each required basket; the existing basket constructor/update proofs establish that representation for constructed baskets.",
-        "Visibility construction computes a sorted deduplicated set under independent ordering laws, preserving the borrowed model. Visible lookup requires that sorted-set invariant; its construction proof discharges it for finite Vec inputs. Hidden-state noninterference and goal monotonicity account explicitly for account existence. Arbitrary custom IntoIterator behavior remains item 16; no unconditional termination of arbitrary user callbacks is claimed.",
+        "Visibility construction computes a sorted deduplicated set under independent ordering laws, preserving the borrowed model. Visible lookup requires that sorted-set invariant; its construction proof discharges it for finite Vec inputs. Hidden-state noninterference and goal monotonicity account explicitly for account existence. The iterator_consumers contract extends this to finite streams under independent primitive call laws; no unconditional termination of arbitrary user callbacks is claimed.",
         "Identifier equality/cloning and ordering laws, logical IndexMap/BTreeMap/BTreeSet/Arc models and allocation remain explicit assumptions. Goal::require replaces the previous basket at the sorted map position, retaining the stored key. Borrowed asset discovery remains borrowed and identifier domains remain distinct. 504 Lean-generated observation/goal/key scenarios are finite regression evidence, additional to the general implementation proofs."
       ],
       "extracted_module": "AccountExtraction.Funs"
@@ -945,6 +945,50 @@
         "All public expression constructors and the Add operator preserve exact variants, operand order and typed identifiers. The u64 construct_refines and evaluate_constructed theorems compose recursive construction with the actual extracted evaluator and its exact error behavior.",
         "Nonconstant construction is generic in N. Recursive evaluation remains the u64 implementation contract. Into<String> parameter conversion requires an independent successful encoding law; the composed constructor uses the concrete String identity conversion.",
         "Box allocation, stack/resource behavior, collections, compiler/translation and primitive models remain dependencies. Tests reconstruct the existing Lean evaluation trees via public Rust constructors; those finite cases supplement the general implementation proofs."
+      ]
+    },
+    {
+      "id": "iterator_consumers",
+      "status": "aeneas_refinement_proved",
+      "sources": [
+        "src/exchange.rs",
+        "src/economy.rs",
+        "verification/extract_account.rs",
+        "verification/aeneas-toolchain.json"
+      ],
+      "extracted_module": "AccountExtraction.Funs",
+      "theorems": [
+        "Axionomy.IteratorContract.yields_unique",
+        "Axionomy.IteratorContract.vector_yields",
+        "Axionomy.IteratorContract.scripted_yields",
+        "Axionomy.TraceExtensionRefinement.extend_loop",
+        "Axionomy.TraceExtensionRefinement.extend_refines",
+        "Axionomy.TraceExtensionRefinement.extend_loop_failure",
+        "Axionomy.TraceExtensionRefinement.extend_failure",
+        "Axionomy.TraceExtensionRefinement.extend_start_failure",
+        "Axionomy.IteratorViewRefinement.view_loop",
+        "Axionomy.IteratorViewRefinement.view_loop_failure",
+        "Axionomy.IteratorViewRefinement.model_view",
+        "Axionomy.IteratorViewRefinement.model_view_contract",
+        "Axionomy.IteratorViewRefinement.model_view_failure",
+        "Axionomy.IteratorViewRefinement.model_view_start_failure",
+        "Axionomy.IteratorFilteringRefinement.filter_loop",
+        "Axionomy.IteratorFilteringRefinement.filter_loop_failure",
+        "Axionomy.IteratorFilteringRefinement.applicable_refines",
+        "Axionomy.IteratorFilteringRefinement.applicable_failure",
+        "Axionomy.IteratorFilteringRefinement.applicable_start_failure"
+      ],
+      "rust_tests": [
+        "tests/iterator_conformance.rs",
+        "tests/support/scripted_iterator.rs",
+        "tests/transaction_conformance.rs"
+      ],
+      "limitations": [
+        "Refines production Trace::extend for arbitrary typed proposals and numeric payloads, and Economy::view for generic numeric dictionaries. Candidate filtering composes the complete u64 transaction contract. Independent IntoIterator/next call laws describe finite streams up to the first None; later iterator states need not be fused. Concrete Vec and scripted non-fused witnesses establish satisfiable protocols.",
+        "Successful trace extension preserves the original prefix and appends every yielded proposal in order, including duplicates. Views preserve the original model and register exactly the yielded IDs; independent order laws derive sorted uniqueness. Filtering retains exactly the applicable proposals, their order and duplicates against the same snapshot.",
+        "IntoIterator failures and next failures after a finite successful prefix propagate under the documented lawful primitive callbacks and size bounds. No claim is made about arbitrary nonterminating callbacks, destructor effects, foreign side effects, allocator failure, or state observable after physical Rust unwinding.",
+        "Trace::extend now explicitly loops over next and pushes, avoiding reliance on unmodelled Vec::extend specializations, custom size_hint or fold overrides. This retains logical output for lawful iterators; allocation strategy and callback invocation differ from the old standard-library delegation. The public generic signature and strong typing are preserved.",
+        "Collection storage, ordering adapters, the primitive Vec/iterator model, and compiler/Charon/Aeneas remain explicit trusted dependencies. Output capacities and analysis readiness are explicit; proofs do not establish arbitrary iterator implementations or QuantityScalar algebraic laws."
       ]
     }
   ]

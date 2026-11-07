@@ -1,5 +1,8 @@
 //! Whole-transaction regression bridge to the executable Lean specification.
 //! The universal implementation guarantee comes from the Aeneas refinements.
+#[path = "support/scripted_iterator.rs"]
+mod scripted_iterator;
+
 use axionomy::{
     Account, AccountAssessment, AccountDelta, AccountShortfall, ApplyError, Basket, Economy,
     EconomyBuilder, Exchange, ExchangeAssessment, LinearInvariant, Quantity, QuantityComparison,
@@ -342,6 +345,23 @@ fn complete_transactions_match_lean() {
         );
         assert_eq!(world.is_applicable(&action), assessed.is_applicable());
         let invalid = Exchange::new(RuleId(7), Quantity::new(0));
+        let (candidates, starts, calls) = scripted_iterator::source([
+            Some(action.clone()),
+            Some(invalid.clone()),
+            Some(action.clone()),
+            None,
+            Some(action.clone()),
+        ]);
+        assert_eq!(
+            world.applicable(candidates),
+            if assessed.is_applicable() {
+                vec![action.clone(), action.clone()]
+            } else {
+                vec![]
+            }
+        );
+        assert_eq!(starts.get(), 1);
+        assert_eq!(calls.get(), 4);
         assert_eq!(
             world.applicable([action.clone(), invalid, action.clone()]),
             if assessed.is_applicable() {

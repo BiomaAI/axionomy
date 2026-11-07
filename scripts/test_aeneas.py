@@ -55,6 +55,13 @@ class ExtractionBoundaryTests(unittest.TestCase):
 
 
 class ProductionMutationTests(unittest.TestCase):
+    def test_discarding_later_trace_entries_breaks_iterator_contract(self):
+        self.check_mutation(
+            "src/exchange.rs", "for proposal in exchanges {\n            self.exchanges.push(proposal);",
+            "for proposal in exchanges {\n            if self.exchanges.is_empty() { self.exchanges.push(proposal); }",
+            "extract_account.py", "stale account model", "TraceExtensionRefinement", "AccountExtraction",
+            proof_failure="Type mismatch")
+
     def test_discarding_proposal_bindings_breaks_public_data(self):
         self.check_mutation(
             "src/exchange.rs", "self.bindings.insert(role, account);",

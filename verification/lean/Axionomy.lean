@@ -75,3 +75,8 @@ import Axionomy.ObservationConformance
 import Axionomy.TypedDataRefinement
 import Axionomy.ExpressionConstructionRefinement
 import Axionomy.PublicDataConformance
+import Axionomy.IteratorContract
+import Axionomy.TraceExtensionRefinement
+import Axionomy.IteratorFilteringRefinement
+import Axionomy.IteratorViewRefinement
+import Axionomy.IteratorConformance

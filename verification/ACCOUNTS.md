@@ -429,8 +429,8 @@ followed by production from that original balance. The proof composes actual
 filter for finite Vec candidates. It preserves order and duplicates, evaluates
 each candidate against the same original model, and establishes successful
 boolean evaluation for every candidate; the default on a missing specification
-result is therefore unreachable. Arbitrary custom iterator behavior is still a
-separate public-boundary contract.
+result is therefore unreachable. `IteratorFilteringRefinement` extends this to
+finite streams under independent callback laws, as described below.
 
 Premises include total identity-preserving cloning, identity-consistent equality,
 comparison agreeing with the logical comparator, and lawful account ordering
@@ -516,8 +516,8 @@ changing parameters and original-snapshot computed effects. Rust compares exact
 ordered receipts, errors, final prefix state and source isolation. All 596
 transaction fixtures also check simulate. Production mutation controls require
 proof failure when replay ignores errors, discards receipts, or simulation
-applies twice. Generic trace extension and serialization remain separate public
-boundary obligations.
+applies twice. Generic trace extension is covered by the iterator-consumer
+contract below; serialization remains a separate public-boundary obligation.
 
 ## Goals, views and canonical keys
 
@@ -533,7 +533,9 @@ their independent equality, clone and order laws.
 deduplicated registration. `ObservationRefinement` proves the actual model/view
 lookups, including zero balances and hidden/missing accounts. The sorted visibility
 precondition follows from construction. Rust's generic `IntoIterator` API is
-preserved; arbitrary user iterator callbacks remain a separate item 16 obligation.
+preserved. The iterator-consumer contract below extends construction to finite
+streams under primitive callback laws; arbitrary callback implementations still
+need their own evidence.
 Explicit loops and the borrowed goal-asset helper avoid Aeneas nested-borrow
 limitations while preserving borrowed return values and every identifier type.
 
@@ -655,3 +657,65 @@ This closes a batch within item 16. It does not close the remaining collection,
 iterator, lookup, rate/invariant/model inspection, derived-trait, formatting or
 convenience-constructor contracts, nor serialization/schema or other numeric
 backend arithmetic.
+
+## Generic iterator consumers
+
+`IteratorContract.Yields` describes only primitive `next` calls, up to the first
+`None`. It neither assumes a consumer result nor requires fused behavior after
+that `None`. `yields_unique` proves determinism of the observed sequence, and
+`vector_yields` and `scripted_yields` supply concrete, satisfiable witnesses. A
+separate `FailsAfter` protocol describes a finite successful prefix followed by
+an iterator panic. Each public consumer also has an explicit `into_iter` failure
+contract. Nonterminating iterators are outside these termination claims.
+
+`TraceExtensionRefinement` connects the actual extracted `Trace::extend` to list
+concatenation for generic typed proposals and numeric payloads. It preserves the
+entire original trace, proposal order and duplicates. The capacity premise covers
+the old length plus the yielded length. The implementation now uses an explicit
+`for`/`push` loop instead of delegating to `Vec::extend`; this avoids adding a
+trusted model for standard-library specializations or erased iterator overrides.
+The generic public signature is unchanged. Logical results are preserved for
+lawful iterators; allocation strategy and calls to custom `size_hint`/`fold`
+overrides can differ from the previous delegation. No performance equivalence is
+claimed.
+
+`IteratorViewRefinement` proves the generic production view loop and public view
+constructor. The model stays unchanged and visibility equals ordered registration
+of exactly the yielded identifiers. Independent order laws establish sorted,
+unique IDs; an input-length bound establishes the output bound. This operation is
+generic in the numeric dictionary and does not establish its arithmetic laws.
+
+`IteratorFilteringRefinement` extends candidate filtering beyond vectors. Its
+public theorem composes complete u64 transaction analysis for every yielded
+proposal, deriving the predicate result from the existing analysis proof. It
+preserves order and duplicates and uses the same original snapshot throughout.
+Capacity, metadata readiness and lawful identifier operations remain explicit.
+The successful and failure-prefix loop theorems support the public contracts;
+consumer correctness is not a premise about itself.
+
+All three consumers propagate iterator failures, subject to successful lawful
+operations on the preceding values. These are Aeneas failure results, not proofs
+of recoverable state after physical Rust unwinding. Destructor effects, foreign
+side effects, allocator behavior, primitive collection models, compilation and
+translation retain their documented dependency boundaries. No new external model
+or axiom is introduced by this batch.
+
+Lean generates 24 scripted trace/view cases, including empty streams, duplicates,
+nonempty starting traces and `Some` values after an initial or intermediate
+`None`. Rust checks these cases with a separately implemented iterator whose
+`fold` and `size_hint` overrides panic and which rejects polling after `None`.
+All 596 transaction scenarios also exercise the generic candidate source,
+including repeated proposals and an unused tail. Additional Rust checks exercise
+panic propagation during `into_iter` and after prefixes of lengths zero to three.
+A production mutation that drops trace entries must compile through extraction
+and then fail the implementation proof. Remaining item 16 work includes basket
+collection conversions/iteration, inspection/lookup APIs, other callback laws,
+derived traits, formatting and convenience-constructor panic contracts.
+
+This batch passed fresh extraction and the full proof gate: 350 registered
+contracts, 3,292 audited Axionomy theorems, kernel checking, fixture equality and
+compile-fail doctests. All 307 workspace tests, 86 boundary/gate controls and the
+new production mutation control passed, as did formatting, Clippy and documentation
+with warnings denied. The mutation keeps the extracted loop interface intact:
+appending only when the trace is empty compiles through extraction and then fails
+the refinement proof. The prior 43 production mutation controls remain in CI.

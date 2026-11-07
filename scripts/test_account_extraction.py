@@ -45,6 +45,11 @@ class AccountBridgeTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "not a forwarding call: deposit"):
             validate_bridge(self.root)
 
+    def test_changed_trace_extension_entry_is_rejected(self):
+        self.target.write_text(self.target.read_text().replace("trace.extend(exchanges)", "trace.push(exchanges)"))
+        with self.assertRaisesRegex(ValueError, "not a forwarding call: trace_extend"):
+            validate_bridge(self.root)
+
     def test_changed_preparation_entry_is_rejected(self):
         self.target.write_text(self.target.read_text().replace(
             "state.prepare_exchange(consumed, produced)", "state.prepare_exchange(produced, consumed)"))
@@ -148,6 +153,18 @@ class AccountExtractionTests(unittest.TestCase):
         original = path.read_text()
         for definition in ("amount.AssetAmount.new", "exchange.Exchange.bind",
                            "economy.ExchangeAssessment.status", "rate.QuantityExpression.divide_floor"):
+            with self.subTest(definition=definition):
+                needle = "def " + definition + "\n"
+                self.assertEqual(original.count(needle), 1)
+                path.write_text(original.replace(needle, "def bypass\n"))
+                with self.assertRaisesRegex(ValueError, "missing account production definition"):
+                    validate_generated(self.directory)
+
+    def test_missing_iterator_consumers_are_rejected(self):
+        path = self.directory / "Funs.lean"
+        original = path.read_text()
+        for definition in ("exchange.Trace.extend", "exchange.Trace.extend_loop.body",
+                           "economy.Economy.view_loop.body", "economy.Economy.applicable_loop.body"):
             with self.subTest(definition=definition):
                 needle = "def " + definition + "\n"
                 self.assertEqual(original.count(needle), 1)

@@ -689117,5 +689117,407 @@
         "value": "18446744073709551615"
       }
     ]
-  }
+  },
+  "iterators": [
+    {
+      "calls": 1,
+      "expectedTrace": [],
+      "expectedVisible": [],
+      "initial": [],
+      "script": []
+    },
+    {
+      "calls": 1,
+      "expectedTrace": [],
+      "expectedVisible": [],
+      "initial": [],
+      "script": [
+        null
+      ]
+    },
+    {
+      "calls": 2,
+      "expectedTrace": [
+        1
+      ],
+      "expectedVisible": [
+        1
+      ],
+      "initial": [],
+      "script": [
+        1
+      ]
+    },
+    {
+      "calls": 4,
+      "expectedTrace": [
+        2,
+        1,
+        2
+      ],
+      "expectedVisible": [
+        1,
+        2
+      ],
+      "initial": [],
+      "script": [
+        2,
+        1,
+        2
+      ]
+    },
+    {
+      "calls": 1,
+      "expectedTrace": [],
+      "expectedVisible": [],
+      "initial": [],
+      "script": [
+        null,
+        7
+      ]
+    },
+    {
+      "calls": 2,
+      "expectedTrace": [
+        2
+      ],
+      "expectedVisible": [
+        2
+      ],
+      "initial": [],
+      "script": [
+        2,
+        null,
+        1
+      ]
+    },
+    {
+      "calls": 3,
+      "expectedTrace": [
+        0,
+        0
+      ],
+      "expectedVisible": [
+        0
+      ],
+      "initial": [],
+      "script": [
+        0,
+        0,
+        null,
+        9
+      ]
+    },
+    {
+      "calls": 5,
+      "expectedTrace": [
+        9,
+        1,
+        0,
+        1
+      ],
+      "expectedVisible": [
+        0,
+        1,
+        9
+      ],
+      "initial": [],
+      "script": [
+        9,
+        1,
+        0,
+        1
+      ]
+    },
+    {
+      "calls": 1,
+      "expectedTrace": [
+        7
+      ],
+      "expectedVisible": [],
+      "initial": [
+        7
+      ],
+      "script": []
+    },
+    {
+      "calls": 1,
+      "expectedTrace": [
+        7
+      ],
+      "expectedVisible": [],
+      "initial": [
+        7
+      ],
+      "script": [
+        null
+      ]
+    },
+    {
+      "calls": 2,
+      "expectedTrace": [
+        7,
+        1
+      ],
+      "expectedVisible": [
+        1
+      ],
+      "initial": [
+        7
+      ],
+      "script": [
+        1
+      ]
+    },
+    {
+      "calls": 4,
+      "expectedTrace": [
+        7,
+        2,
+        1,
+        2
+      ],
+      "expectedVisible": [
+        1,
+        2
+      ],
+      "initial": [
+        7
+      ],
+      "script": [
+        2,
+        1,
+        2
+      ]
+    },
+    {
+      "calls": 1,
+      "expectedTrace": [
+        7
+      ],
+      "expectedVisible": [],
+      "initial": [
+        7
+      ],
+      "script": [
+        null,
+        7
+      ]
+    },
+    {
+      "calls": 2,
+      "expectedTrace": [
+        7,
+        2
+      ],
+      "expectedVisible": [
+        2
+      ],
+      "initial": [
+        7
+      ],
+      "script": [
+        2,
+        null,
+        1
+      ]
+    },
+    {
+      "calls": 3,
+      "expectedTrace": [
+        7,
+        0,
+        0
+      ],
+      "expectedVisible": [
+        0
+      ],
+      "initial": [
+        7
+      ],
+      "script": [
+        0,
+        0,
+        null,
+        9
+      ]
+    },
+    {
+      "calls": 5,
+      "expectedTrace": [
+        7,
+        9,
+        1,
+        0,
+        1
+      ],
+      "expectedVisible": [
+        0,
+        1,
+        9
+      ],
+      "initial": [
+        7
+      ],
+      "script": [
+        9,
+        1,
+        0,
+        1
+      ]
+    },
+    {
+      "calls": 1,
+      "expectedTrace": [
+        1,
+        2
+      ],
+      "expectedVisible": [],
+      "initial": [
+        1,
+        2
+      ],
+      "script": []
+    },
+    {
+      "calls": 1,
+      "expectedTrace": [
+        1,
+        2
+      ],
+      "expectedVisible": [],
+      "initial": [
+        1,
+        2
+      ],
+      "script": [
+        null
+      ]
+    },
+    {
+      "calls": 2,
+      "expectedTrace": [
+        1,
+        2,
+        1
+      ],
+      "expectedVisible": [
+        1
+      ],
+      "initial": [
+        1,
+        2
+      ],
+      "script": [
+        1
+      ]
+    },
+    {
+      "calls": 4,
+      "expectedTrace": [
+        1,
+        2,
+        2,
+        1,
+        2
+      ],
+      "expectedVisible": [
+        1,
+        2
+      ],
+      "initial": [
+        1,
+        2
+      ],
+      "script": [
+        2,
+        1,
+        2
+      ]
+    },
+    {
+      "calls": 1,
+      "expectedTrace": [
+        1,
+        2
+      ],
+      "expectedVisible": [],
+      "initial": [
+        1,
+        2
+      ],
+      "script": [
+        null,
+        7
+      ]
+    },
+    {
+      "calls": 2,
+      "expectedTrace": [
+        1,
+        2,
+        2
+      ],
+      "expectedVisible": [
+        2
+      ],
+      "initial": [
+        1,
+        2
+      ],
+      "script": [
+        2,
+        null,
+        1
+      ]
+    },
+    {
+      "calls": 3,
+      "expectedTrace": [
+        1,
+        2,
+        0,
+        0
+      ],
+      "expectedVisible": [
+        0
+      ],
+      "initial": [
+        1,
+        2
+      ],
+      "script": [
+        0,
+        0,
+        null,
+        9
+      ]
+    },
+    {
+      "calls": 5,
+      "expectedTrace": [
+        1,
+        2,
+        9,
+        1,
+        0,
+        1
+      ],
+      "expectedVisible": [
+        0,
+        1,
+        9
+      ],
+      "initial": [
+        1,
+        2
+      ],
+      "script": [
+        9,
+        1,
+        0,
+        1
+      ]
+    }
+  ]
 }
