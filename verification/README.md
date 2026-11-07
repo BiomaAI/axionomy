@@ -6,6 +6,13 @@ and retains ownership, borrowing, generic ontology types, private state, and
 exact numeric backends. Proofs are an additional requirement, not a replacement
 for static typing or runtime validation.
 
+Diagnostic `Debug`/`Display` rendering (text, field layout, indentation and writer
+behavior) is outside the required Lean proof scope. Public APIs and supporting
+operations remain in scope when they establish engine guarantees. In particular,
+typed input validation, state equality, cloning for isolated execution, ordering,
+and canonical state/observation keys retain their proof requirements. Diagnostic
+formatting is not a prerequisite for completing any milestone below.
+
 ## Current assurance level
 
 **Partial implementation verification.** The four production `Quantity<u64>`
@@ -312,8 +319,8 @@ workspace doctests. All 102 boundary/gate controls passed. Both new re-extracted
 production mutants compiled and then broke their semantic proofs: reversed amount
 hash order and observation-key equality omitting existing accounts. The prior 52
 production mutation controls remain in CI; all 54 source targets were checked.
-Formatting and remaining iterator/callback adapters remain visible obligations
-alongside items 17–18. The inherited convenience methods are covered by the
+Remaining iterator/callback adapters remain visible obligations alongside
+items 17–18. The inherited convenience methods are covered by the
 separate batch above; this derived-method batch does not establish those contracts
 by itself.
 
@@ -362,8 +369,8 @@ See the
   from entries and typed amounts, FromIterator/array conversions, and basic borrowed
   iteration/queries including sorted views are now covered as well. Remaining work
   includes remaining collection iterator and arbitrary callback contracts,
-  arbitrary erased hash overrides/portability beyond the scoped models, and
-  formatting. The u64 static-rate and basket
+  arbitrary erased hash overrides/portability beyond the scoped models.
+  The u64 static-rate and basket
   convenience panic contracts are covered by the batch above. See the [public data contracts](ACCOUNTS.md#typed-public-data-and-expression-construction)
   for the exact scope of this batch.
 - **17 — Serialization and schema:** connect production serialization and
@@ -536,7 +543,7 @@ state. These caller checks are finite integration evidence, not caller proofs.
 
 The unfinished core work remains items 16–18 of the completion goal:
 
-- Remaining public API, finite-map/iterator adapter, formatting and arbitrary
+- Remaining public API, finite-map/iterator adapter and arbitrary
   callback contracts; arbitrary erased hash overrides and fingerprint portability
   beyond the documented targets. The named inherited helpers in the batch above
   have their own contracts. Fingerprints are not collision-free identities.

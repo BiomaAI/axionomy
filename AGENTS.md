@@ -3,6 +3,10 @@
 Axionomy core features must carry Lean proofs. This is a product requirement,
 alongside Rust's ownership and strong typing guarantees.
 
+Diagnostic `Debug`/`Display` formatting is outside the required Lean proof scope.
+This exclusion does not remove proof requirements for public APIs or supporting
+operations that establish core engine guarantees.
+
 Commit and push each completed, validated milestone to `origin/main` unless the
 user directs otherwise. Keep commits focused on the milestone's changes.
 

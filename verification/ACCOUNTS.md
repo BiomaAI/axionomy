@@ -658,7 +658,7 @@ Formatting, Clippy with warnings denied, documentation and compile-fail doctests
 also passed. The prior 40 production mutation controls remain in CI.
 
 This closes a batch within item 16. It does not close the remaining collection,
-iterator, lookup, rate/invariant/model inspection, derived-trait, formatting or
+iterator, lookup, rate/invariant/model inspection, derived-trait or
 convenience-constructor contracts, nor serialization/schema or other numeric
 backend arithmetic.
 
@@ -714,7 +714,7 @@ panic propagation during `into_iter` and after prefixes of lengths zero to three
 A production mutation that drops trace entries must compile through extraction
 and then fail the implementation proof. Remaining item 16 work includes basket
 collection conversions/iteration and inspection/lookup APIs (covered by subsequent
-batches), other callback laws, derived traits, formatting and convenience-constructor
+batches), other callback laws, derived traits and convenience-constructor
 panic contracts.
 
 This batch passed fresh extraction and the full proof gate: 350 registered
@@ -932,7 +932,7 @@ distinct identifier types and the public API, also checking computed amounts and
 conditions, all clone families, every error variant and large non-Copy BigUint
 payload transport. Serialization is used only to supply some public test inputs
 or observe records without PartialEq; this is not a serialization proof. That
-milestone, numeric arithmetic laws, formatting, remaining iterator adapters
+milestone, numeric arithmetic laws, remaining iterator adapters
 and arbitrary callback/destructor behavior remain separate completion obligations.
 The inherited trait conveniences are covered by the next contract.
 
