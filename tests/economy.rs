@@ -253,15 +253,23 @@ fn applicable_assessment_projects_exact_receipt_deltas() {
 #[test]
 fn applicability_conveniences_derive_from_assessment() {
     let world = world();
+    let before = world.state_key();
+    let smaller = transform(1);
     let feasible = transform(2);
     let infeasible = transform(3);
 
     assert!(world.is_applicable(&feasible));
     assert!(!world.is_applicable(&infeasible));
     assert_eq!(
-        world.applicable([feasible.clone(), infeasible]),
-        vec![feasible]
+        world.applicable([
+            smaller.clone(),
+            infeasible,
+            feasible.clone(),
+            smaller.clone(),
+        ]),
+        vec![smaller.clone(), feasible, smaller]
     );
+    assert_eq!(world.state_key(), before);
 }
 
 #[test]

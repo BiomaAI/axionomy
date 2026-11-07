@@ -413,4 +413,54 @@ def alloc.collections.btree.set.BTreeSet.contains {T A Q : Type}
   alloc.collections.btree.map.BTreeMap.contains_key allocator borrowInst keyOrd queryOrd
     (entries.map fun key => (key, ())) query
 
+def core.result.Result.is_err {T E : Type} : core.result.Result T E → Result Bool
+  | .Ok _ => .ok false
+  | .Err _ => .ok true
+
+def SharedABTreeMap.Insts.CoreIterTraitsCollectIntoIteratorPairSharedAKSharedAVIter.into_iter {K V A : Type}
+    (_ : core.alloc.AllocatorClone A) (entries : alloc.collections.btree.map.BTreeMap K V A) :
+    Result (alloc.collections.btree.map.Iter K V) := .ok entries
+
+def alloc.collections.btree.map.Iter.Insts.CoreIterTraitsIteratorIteratorPairSharedAKSharedAV.next {K V : Type} :
+    alloc.collections.btree.map.Iter K V → Result (Option (K × V) × alloc.collections.btree.map.Iter K V)
+  | [] => .ok (none, [])
+  | entry :: rest => .ok (some entry, rest)
+
+def alloc.collections.btree.map.BTreeMap.Insts.CoreIterTraitsCollectIntoIteratorPairIntoIter.into_iter {K V A : Type}
+    (_ : core.alloc.AllocatorClone A) (entries : alloc.collections.btree.map.BTreeMap K V A) :
+    Result (alloc.collections.btree.map.IntoIter K V A) := .ok entries
+
+def alloc.collections.btree.map.IntoIter.Insts.CoreIterTraitsIteratorIteratorPair.next {K V A : Type}
+    (_ : core.alloc.AllocatorClone A) : alloc.collections.btree.map.IntoIter K V A →
+    Result (Option (K × V) × alloc.collections.btree.map.IntoIter K V A)
+  | [] => .ok (none, [])
+  | entry :: rest => .ok (some entry, rest)
+
+def alloc.collections.btree.map.BTreeMap.len {K V A : Type}
+    (_ : core.alloc.AllocatorClone A) (entries : alloc.collections.btree.map.BTreeMap K V A) : Result Std.Usize :=
+  if bound : entries.length < 2^UScalarTy.Usize.numBits then .ok (Std.Usize.ofNatCore entries.length bound)
+  else .fail .panic
+
+-- An Arc clone shares the same logical immutable pointee. Reference-counting,
+-- physical allocation, aliasing and copy-on-write remain dependency boundaries.
+def alloc.sync.Arc.Insts.CoreCloneClone.clone {T A : Type}
+    (_ : core.alloc.AllocatorClone A) (value : alloc.sync.Arc T) : Result (alloc.sync.Arc T) := .ok value
+
+-- A mutable map index preserves the stored key and every other entry. Missing
+-- keys panic; callers must prove existence rather than assume the borrow succeeds.
+def mapIndexMut {K V Q : Type} (eq : Q → K → Result Bool) (query : Q) :
+    List (K × V) → Result (V × (V → List (K × V)))
+  | [] => .fail .panic
+  | (key, stored) :: rest => do
+    let equal ← eq query key
+    if equal then .ok (stored, fun value => (key, value) :: rest)
+    else
+      let (selected, restore) ← mapIndexMut eq query rest
+      .ok (selected, fun value => (key, stored) :: restore value)
+
+def indexmap.map.IndexMap.Insts.CoreOpsIndexIndexMutShared0QV.index_mut {K V Q S H : Type}
+    (_ : core.hash.Hash Q) (eqInst : equivalent.Equivalent Q K) (_ : core.hash.BuildHasher S H)
+    (entries : indexmap.map.IndexMap K V S) (query : Q) : Result (V × (V → indexmap.map.IndexMap K V S)) :=
+  mapIndexMut eqInst.equivalent query entries
+
 end Axionomy.AccountExtracted

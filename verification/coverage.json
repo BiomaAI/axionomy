@@ -1,21 +1,21 @@
 {
   "version": 1,
-  "assurance": "Partial implementation verification: Aeneas-extracted production u64 arithmetic, basket construction/operations, account updates/staging, model/rate construction and metadata discovery, structural validation, snapshot expression/condition evaluation, bounded effect helpers, signed conservation and whole-state measurement refine Lean specifications. Explicit collection, logical Arc creation/read and UTF-8 models, compiler/translation and primitive models remain trusted. Complete exchange orchestration and other core contracts remain open.",
+  "assurance": "Partial implementation verification: Aeneas-extracted production u64 arithmetic, basket/account operations, model/rate construction and discovery, complete transaction assessment/application and vector candidate filtering refine Lean specifications. This includes validation, original-snapshot evaluation, aggregation, availability/preservation, preparation, runtime conservation diagnostics, atomic multi-account commit and receipts. Explicit collection/Arc/UTF-8 models, lawful identifier operations, resource bounds, compiler/translation and primitive models remain trusted. Execution/replay, observations, remaining public data APIs and other numeric backends remain open.",
   "sources": {
     "Cargo.toml": "414a2b181e13225e4b76aa58e70d998064174dde2d8cee603ea3af648d61a7f3",
     "Cargo.lock": "00ef263c160aeebaa49187874a4b11ec94fee9bc8fbea5a2f0cacc190607919c",
     "src/account.rs": "0eaf66937c63de2993353828e42fcfea2b80f172f5cb74fc76a28cef79fd9ff6",
     "src/amount.rs": "4aa0f1432494aac0454890604e3addbd002fa6b9ded1f75f91fce7675540f9ee",
     "src/basket.rs": "10e7d7792f3b1de207bdae124fd76a8fa5fe93295b1a4eb49455b588941ee5f1",
-    "src/economy.rs": "377dac9708dff82e9988d2ec3a202c3b874e3b4cef9e9173b0d9b865fe8c076b",
-    "src/exchange.rs": "aabae395148c0dd8703b2fc99aa177700eaffd0d8aac602f8a5ffbf7fb09a47b",
+    "src/economy.rs": "c4ea1b6b47f24a98a37afba8707e83f0d99f83df6ba6c91db17a82b695d7f0e6",
+    "src/exchange.rs": "19d4c5e8c17afef0cd030a27809ea0b8cfe710990544c350515b48cd742367a2",
     "src/lib.rs": "46d6f713693714650653128e2ceabf8a895b8ad98a38a7bdbeab4ea378a5cc06",
     "src/quantity.rs": "af66b8cf86b6ac58cccd4e9fcfb740e06928f86b4bf6117660fb7f37319b97dd",
     "src/rate.rs": "af545aa57d7668c346cfb9b0aefe3207af23b6443f9f7064ab5b1eaff9210812",
     "verification/extract.rs": "415b34f5f4f8aa2679af860bd2a4092c96e113145919160fe7c81e33836de3e0",
     "verification/aeneas-toolchain.json": "8676d7d11be51a6f41984d874b35910e8a1a3d0a18414998feb9402ef80932fb",
     "verification/extract_basket.rs": "dc2b3a2159704c24a5261d0069a2aac7b575f30a94ae35c4c1e96933638592dd",
-    "verification/extract_account.rs": "13aee1c8e3b186adb993df75a3aae2e2d0f885bb8c050c1721051306f8569d57",
+    "verification/extract_account.rs": "3bce45e694cf60f85f8681d2a244df0441361cac73ea6b936acc2848b13eb772",
     "verification/patches/aeneas-namespaced-discriminant.patch": "fabac7482deb3da6ecaca60c4060dfe9d2114efdd010699e736c4a91267f3bc9"
   },
   "features": [
@@ -254,7 +254,7 @@
       "limitations": [
         "The production crate-private Account::prepare_exchange helper is shared-source extracted for u64 quantities. Lean proves termination and exact ordered natural-number results/errors of cloning, withdrawal then deposit, including shortfall rejection and overflow after successful withdrawal. Unique consumed assets and lawful equality/cloning are required; successful preparation is not assumed.",
         "The helper borrows its source immutably in Rust and returns a new account only on success. preparedOutcome models publication or original-state retention for conformance; its atomicity theorem does not prove the multi-account commit loop. Existing collection/clone isolation, allocation, stable hashing, compiler/MIR, Charon/Aeneas and primitive-model assumptions remain; no new external model is introduced. See verification/ACCOUNTS.md.",
-        "Economy::analyze now delegates the same clone-withdraw-deposit sequence to this helper. Its exact handoff is syntactically guarded and whole-economy conformance tests cover 492 cases, but the caller is not extracted. Structural role/parameter/account validation is now proved separately; preparation completeness, aggregation, preserved-resource preflight, invariant checks, error mapping, receipts and multi-account commit remain separate refinement obligations.",
+        "The production prepare_effects caller delegates the clone-withdraw-deposit sequence to this helper. Its handoff is syntactically guarded. The separate complete_transactions contract now extracts and proves the caller through full analyze/assess/apply; 492 earlier staging fixtures and 596 complete transaction fixtures supplement those proofs.",
         "The generic Rust API and ownership/type guarantees are preserved. The theorem does not establish arbitrary QuantityScalar laws, BigUint/BigInt correctness, physical collection correctness, serialization or replay."
       ]
     },
@@ -277,7 +277,7 @@
         "tests/economy.rs"
       ],
       "limitations": [
-        "These original design theorems assume a typed lookup context. The separate snapshot_evaluation implementation contract now covers recursive expression/condition evaluation, actual role/parameter/account lookup and exact typed errors. Structural validation is covered by the separate structural_validation contract; complete condition/effect orchestration in Economy::analyze remains open.",
+        "These original design theorems assume a typed lookup context. The separate snapshot_evaluation implementation contract covers recursive expression/condition evaluation, actual lookup and exact typed errors; complete_transactions now composes the full validation, condition and effect orchestration in Economy::analyze.",
         "Effect merge algebra is over exact Nat; no claim is made that diagnostic order or bounded overflow is independent of insertion order. The separate bounded_effect_helpers contract covers production checked scaling-plus-addition and single-quantity merging, including atomic failure; it does not cover the complete per-account aggregation loop."
       ]
     },
@@ -303,7 +303,7 @@
         "tests/properties.rs"
       ],
       "limitations": [
-        "The proof begins with distinct account/asset entries whose effects have already been aggregated. The separate account_exchange_preparation contract now refines per-account staging, but Rust preflight, prepared-account completeness, error ordering, multi-account commit and its internal expects are not refined.",
+        "These original design theorems begin with distinct already-aggregated account/asset effects. The separate complete_transactions implementation contract now derives aggregation/caller invariants and covers the full u64 preflight, preparation, error ordering, commit, receipt and internal expect paths.",
         "The scalar static fixture adapter exercises u64 scaling and requirement overflow but is not a proof of the complete Rust rate evaluator."
       ]
     },
@@ -324,7 +324,7 @@
         "tests/generic_quantity.rs"
       ],
       "limitations": [
-        "Arbitrary signed mathematical weights are proved algebraically. The separate runtime_linear_conservation implementation contract now covers checked i128 delta accumulation, intermediate overflow and the conservation predicate. Caller diagnostic computation and composition with the complete exchange remain unproved."
+        "Arbitrary signed mathematical weights are proved algebraically. The separate runtime_linear_conservation implementation contract covers checked i128 delta accumulation, intermediate overflow and conservation. complete_transactions composes that runtime predicate and whole-state measurements with exact caller diagnostics and transaction behavior."
       ]
     },
     {
@@ -346,8 +346,8 @@
         "tests/serde.rs"
       ],
       "limitations": [
-        "Replay induction explicitly assumes an invariant-preserving deterministic step. This premise is not a refinement theorem for Rust apply.",
-        "Receipt conformance is finite; Rust mutating replay prefix-on-error, Arc fork isolation and serialized trace refinement remain unproved."
+        "These replay design theorems assume an invariant-preserving deterministic step. The separate complete_transactions contract refines actual u64 apply and receipts; composition with Rust replay and its error behavior remains open.",
+        "Rust mutating replay prefix-on-error, Arc fork isolation and serialized trace refinement remain unproved. These are tracked separately from the complete transaction implementation contract."
       ]
     },
     {
@@ -466,7 +466,7 @@
         "The production LinearInvariant::conserves path and both nested loops are extracted for u64/i128. For all u64 quantities and i64 weights, Lean proves exact widening/weighting, checked intermediate addition, total execution and exact Option Bool agreement with an ordered mathematical Int specification. Some(true) implies equal mathematical weighted consumed/produced totals. None represents intermediate overflow, including cancellation-sensitive order. Whole-state LinearInvariant::measure also refines the ordered checked integer fold across all accounts and assets, including empty accounts, missing weights and intermediate overflow.",
         "Asset equality is total and agrees with identity. Account IDs and assets remain separate types; preserved quantities are retained in the typed delta but not counted as transfers. Missing weights contribute zero. IndexMap and slice iteration use the documented logical collection/backend models; compiler/MIR, Charon/Aeneas, primitive conversion semantics, allocation and physical storage remain trusted. No new axioms or success premises are introduced. Read-only Arc access returns the logical account value; IndexMap values iteration preserves insertion order. Reference counts, mutation/COW and allocator correctness are not proved.",
         "The u64-to-i128 adapter now implements exact widening instead of failing closed, and Option try adapters propagate Some/None. Formatting and hash internals still fail closed. The proof does not claim physical collection correctness.",
-        "Invariant weight construction, economy caller classification/diagnostic totals, aggregation/staging prerequisites and complete exchange conservation composition remain open. BigUint/BigInt and custom QuantityScalar/QuantityMeasure laws are separate obligations. Whole-state measurement now reuses the same checked basket fold instead of a nested loop with outer continue, preserving iteration and arithmetic order."
+        "Invariant constructors remain a separate public-boundary obligation. complete_transactions now proves economy caller classification, diagnostic totals and composition with aggregation/staging/commit. BigUint/BigInt and custom QuantityScalar/QuantityMeasure laws remain open. Whole-state measurement preserves ordered checked arithmetic."
       ]
     },
     {
@@ -501,7 +501,7 @@
         "The shared-source recursive production evaluator is proved for all finite expressions and u64 inputs against checked Nat arithmetic. It reads one immutable proposal/account context, evaluates left before right, distinguishes missing parameters/unbound roles/missing accounts, treats absent asset balances as zero, and refines all six binary operations. Both condition operands use that context; all three comparisons and exact error precedence are proved. No successful-execution premise is assumed.",
         "AccountId, Role, Asset and RateId remain distinct generic types. Equality on account IDs/assets and ordering on roles obey the existing total/lawful dictionaries. Sorted BTreeMap lookup and IndexMap lookup preserve logical entries; read-only Arc deref/AsRef exposes its logical pointee. Physical storage, total ordering/hash coherence, allocation, UTF-8 string comparison/cloning, compiler/MIR, Charon/Aeneas and backend semantics remain trusted.",
         "Private evaluator failures are now a typed ExpressionError; the public string API is unchanged. Exact message rendering is proved, including arbitrary valid Unicode parameter names, provided the full message byte length fits usize. Explicit UTF-8 decode/encode and checked push_str models reject malformed slices or oversized strings. Allocation, stack/resource exhaustion, reference counts, COW and machine code are outside the theorem. Formatting internals still fail closed; the proof does not model erased format arguments as arbitrary correct text.",
-        "A production condition helper factors the existing two evaluations and comparison without changing public signatures, bounds or diagnostic order. Structural validation is covered separately. Full Economy::analyze iteration over conditions, diagnostic wrapping, effect evaluation/aggregation and commit are not yet refined. The helper proof does not certify those callers or serialization/custom numeric backends."
+        "A production condition helper factors the existing evaluations/comparison with unchanged typed signatures and diagnostic order. complete_transactions now composes the full condition iteration, wrapping, aggregation and commit. Serialization and custom numeric backends remain separate obligations."
       ]
     },
     {
@@ -527,7 +527,7 @@
       ],
       "limitations": [
         "Production merge_scaled scales source assets with checked multiplication in source order, then atomically adds the resulting basket. Scaling or addition errors return the exact first overflowing asset and the original target. Production merge_quantity performs one checked addition and canonical insertion; computed quantities are not multiplied by units. Theorems relate results and ordered state directly to Nat specifications for all u64 values.",
-        "The existing lawful asset equality/cloning and explicit collection/primitive models apply. Immutable source borrows and distinct Rust domains remain intact. These helper proofs do not establish full role-to-account aggregation, computed-effect evaluation order, consumption/preservation availability, unique affected accounts or complete preparation/commit. Those caller obligations remain open."
+        "The existing lawful asset equality/cloning and collection/primitive models apply. Immutable source borrows and distinct Rust domains remain intact. complete_transactions now derives and proves role-to-account aggregation, computed evaluation order, availability/preservation, unique affected accounts and complete preparation/commit."
       ]
     },
     {
@@ -620,7 +620,7 @@
       "limitations": [
         "All ten recursive expression constructors and complete Rate parameter_names/computed_asset_keys paths are extracted. Parameters are the sorted logical union of every computed expression and both sides of every condition. Asset output preserves every occurrence and exact consume/produce/preserve/condition order, with each computed target asset before expression references. Public outputs remain borrowed &str/&Asset in Rust.",
         "Each parameter UTF-8 byte length must fit usize, and the full asset-reference vector length must fit usize. Exact UTF-8 decoding and string ordering, Vec/slice iteration and sorted sets are explicit dependency models. Allocation, recursion/stack limits, physical string/collection storage and the compiler/MIR/translation/backend boundary remain trusted; malformed modeled UTF-8 fails closed.",
-        "Metadata discovery composes with the separate structural_validation contract for binding/parameter validation. Complete preparation and constructor-to-caller metadata invariants remain open. Static basket assets belong to their separate maps and are intentionally excluded from computed_asset_keys."
+        "Metadata discovery composes with structural_validation and complete_transactions. Builder proofs establish computed-target registration; arbitrary deserialization representation contracts remain open. Static basket assets intentionally remain excluded from computed_asset_keys."
       ]
     },
     {
@@ -658,7 +658,83 @@
         "Complete extracted u64 structural helper and all seven loops terminate and return the exact stored rate or ordered issues under the logical collection model. Covers zero units, missing-rate early return, missing/unknown roles and parameters, distinct-role violations and sorted deduplicated missing accounts. Actual acceptance yields nonzero units, required bindings to existing accounts, required parameters and distinctness; actual rejection is nonempty.",
         "Account/rate/role identity cloning and selected equality/ordering operations must obey explicit laws. Account comparator equality must imply identity for the existence corollary. Valid sorted BTreeMap/BTreeSet representations, lawful ordering/equality/hash coherence, borrowed UTF-8 representation, allocation, physical collection/Arc/string semantics, compiler/MIR/Charon/Aeneas/backend correctness remain trusted.",
         "Parameter names must fit usize in UTF-8, and a conservative maximum issue count must fit usize. These are resource premises, not assumed validation success. Required-name iteration clones a set of borrowed names to avoid unsupported nested shared borrows; this adds a temporary allocation while preserving public types and diagnostic order.",
-        "Economy::analyze calls the private borrowed-result helper through a syntactically guarded handoff. Lean-generated cases exercise both the helper and public assess/apply, including condition-error precedence and unchanged state. The caller orchestration, metadata validity after arbitrary deserialization, downstream expect safety, aggregation, availability, preparation, commit and receipts are still separate obligations. This contract covers u64, not other numeric backends."
+        "Economy::analyze calls the borrowed-result helper through a guarded handoff. complete_transactions now proves the caller orchestration, derived lookup/expect safety, aggregation, availability, preparation, commit and receipts. Arbitrary deserialized metadata and other numeric backends remain separate obligations."
+      ]
+    },
+    {
+      "id": "complete_transactions",
+      "status": "aeneas_refinement_proved",
+      "sources": [
+        "src/economy.rs",
+        "src/exchange.rs",
+        "src/rate.rs",
+        "src/account.rs",
+        "src/basket.rs",
+        "src/quantity.rs",
+        "verification/extract_account.rs",
+        "verification/aeneas-toolchain.json",
+        "verification/patches/aeneas-namespaced-discriminant.patch"
+      ],
+      "extracted_module": "AccountExtraction.Funs",
+      "theorems": [
+        "Axionomy.ConditionRefinement.conditions_refines",
+        "Axionomy.AvailabilityRefinement.preflight_refines",
+        "Axionomy.PreparationRefinement.prepare_refines",
+        "Axionomy.PreparationRefinement.successful_preparation",
+        "Axionomy.PreparationRefinement.prepared_commit",
+        "Axionomy.CommitRefinement.apply_loop_frames",
+        "Axionomy.Transaction.preparation_contract",
+        "Axionomy.Transaction.preparation_unique",
+        "Axionomy.TransactionDiagnostics.condition_error_fits",
+        "Axionomy.TransactionDiagnostics.expression_error_fits",
+        "Axionomy.CommitRefinement.snapshot_refines",
+        "Axionomy.TransactionDecode.install_map",
+        "Axionomy.InvariantRefinement.invariants_refines",
+        "Axionomy.ComputedEffectRefinement.computed_refines",
+        "Axionomy.StaticEffectRefinement.static_body_refines",
+        "Axionomy.StaticEffectRefinement.raw_merge_decode",
+        "Axionomy.AggregationRefinement.aggregate_refines",
+        "Axionomy.TransactionAggregation.aggregate_valid",
+        "Axionomy.OrderedEffects.aggregate_contract",
+        "Axionomy.AggregationContract.validated_aggregate",
+        "Axionomy.AggregationContract.ready_preflight",
+        "Axionomy.AggregationContract.ready_prepare",
+        "Axionomy.RateWellFormed.new_registered",
+        "Axionomy.RateWellFormed.consume_registered",
+        "Axionomy.RateWellFormed.produce_registered",
+        "Axionomy.RateWellFormed.preserve_registered",
+        "Axionomy.RateWellFormed.static_consume_registered",
+        "Axionomy.RateWellFormed.static_produce_registered",
+        "Axionomy.RateWellFormed.static_preserve_registered",
+        "Axionomy.RateWellFormed.condition_registered",
+        "Axionomy.RateWellFormed.distinct_registered",
+        "Axionomy.ValidationDecode.validation_decode",
+        "Axionomy.AnalysisRefinement.analyze_refines",
+        "Axionomy.AnalysisRefinement.assess_refines",
+        "Axionomy.Transaction.analyze_ready",
+        "Axionomy.ApplyRefinement.apply_refines",
+        "Axionomy.FilteringRefinement.is_applicable_refines",
+        "Axionomy.FilteringRefinement.applicable_refines",
+        "Axionomy.Transaction.applyAnalysis_rejection_atomic",
+        "Axionomy.ApplyRefinement.accepted_receipt_refines",
+        "Axionomy.Transaction.apply_receipt_changes",
+        "Axionomy.Transaction.install_find_staged"
+      ],
+      "rust_tests": [
+        "tests/transaction_conformance.rs",
+        "tests/lean_conformance.rs",
+        "tests/economy.rs",
+        "tests/state_evaluated_rates.rs",
+        "tests/generic_quantity.rs",
+        "tests/serde.rs"
+      ],
+      "limitations": [
+        "The complete production u64 analyze, assess and apply paths are freshly extracted. Refinement proves termination without panic and exact natural-number/signed-integer results, ordered diagnostics and state, including structural rejection, original-snapshot conditions/computed expressions, static scaling, unscaled preservation and computed quantities, alias aggregation, complete shortfalls, preparation and invariant diagnostics. The contracts do not assume successful validation, feasibility, conservation or a successful commit.",
+        "Apply returns the exact specified proposal and deltas. Successful preparation relates every staged account to its original balance and aggregated effects, with unique existing account IDs. Apply discharges both expect preconditions and every mutable index lookup, preserves the entire raw model on rejection, and preserves account order/keys, rates, invariants and accounts outside the receipt deltas on success. Typed semantic domains remain separate Rust/Lean parameters. The accepted_receipt_refines corollary explicitly proves unique receipt accounts and, for each delta, that the committed observable account equals successful consumption-then-production of its original balance.",
+        "Model identifier/asset/role equality and cloning must be lawful and terminating; comparison must agree with the logical comparator. Account ordering additionally requires reflexivity, identity-consistent equality, strict-order transitivity and reversal. Computed targets must be registered; the included actual new/static/computed/condition/distinct builder proofs establish and preserve that representation invariant. UTF-8 diagnostic/parameter/discovery lengths, validation issue growth and account count have explicit usize bounds. These are input/representation/resource laws, not assumptions of transaction correctness.",
+        "Canonical aggregation, sorted unique affected accounts, existing-account lookup and effect-count bounds are derived from validation and builder invariants; they discharge preflight, preparation and commit obligations. The sorted logical BTreeMap/BTreeSet and ordered IndexMap abstractions, allocator, stable hashing, identity-preserving clones, Rust compiler/MIR, Charon/Aeneas and primitive models remain trusted. New mutable-index adapters panic on absent keys and preserve all other entries; Arc clone exposes the same immutable logical pointee without verifying physical reference counting or copy-on-write.",
+        "Filtering refines the public implementation for finite Vec candidates: exact stable filtering including duplicates against one original snapshot, with a successful boolean assessment for every candidate. Arbitrary user-provided iterator behavior, resource allocation, destructor effects, generic numeric laws, BigUint/BigInt, serialization/schema, formatting, other convenience APIs, fork/simulation, replay, observations and canonical keys remain separate contracts. No fingerprint collision-freedom claim is made.",
+        "The 596 Lean-generated full-transaction cases check exact assessments, errors, receipts, final account order/state, rejection atomicity, unchanged rates/invariants, and filtering through the public Rust API. Conformance is finite evidence supplementing the general refinement proofs. Mutation controls regenerate compilable production Rust changes and require the semantic proofs to reject them. See verification/ACCOUNTS.md for source refactors and the precise trust boundary."
       ]
     }
   ]

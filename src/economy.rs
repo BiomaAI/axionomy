@@ -1,6 +1,7 @@
 use crate::{
-    Account, AccountDelta, AccountError, Basket, Exchange, LinearInvariant, Quantity,
-    QuantityComparison, QuantityExpression, QuantityScalar, Rate, RateCondition, Receipt, Trace,
+    Account, AccountDelta, AccountError, Basket, ComputedAmount, Exchange, LinearInvariant,
+    Quantity, QuantityComparison, QuantityExpression, QuantityScalar, Rate, RateCondition, Receipt,
+    Trace,
 };
 use indexmap::IndexMap;
 use schemars::{JsonSchema, Schema, SchemaGenerator};
@@ -620,15 +621,15 @@ where
     /// Explains one exchange without mutating the economy.
     pub fn assess(
         &self,
-        exchange: &Exchange<RateId, Role, AccountId, N>,
+        proposal: &Exchange<RateId, Role, AccountId, N>,
     ) -> ExchangeAssessment<AccountId, A, RateId, Role, N> {
-        self.analyze(exchange).assessment
+        self.analyze(proposal).assessment
     }
 
     /// Returns whether one exchange is applicable to the current snapshot.
     #[must_use]
-    pub fn is_applicable(&self, exchange: &Exchange<RateId, Role, AccountId, N>) -> bool {
-        self.assess(exchange).is_applicable()
+    pub fn is_applicable(&self, proposal: &Exchange<RateId, Role, AccountId, N>) -> bool {
+        self.assess(proposal).is_applicable()
     }
 
     /// Retains only candidates applicable to the current snapshot.
@@ -637,34 +638,34 @@ where
         &self,
         candidates: impl IntoIterator<Item = Exchange<RateId, Role, AccountId, N>>,
     ) -> Vec<Exchange<RateId, Role, AccountId, N>> {
-        candidates
-            .into_iter()
-            .filter(|exchange| self.is_applicable(exchange))
-            .collect()
+        let mut applicable = Vec::new();
+        for proposal in candidates {
+            if self.is_applicable(&proposal) {
+                applicable.push(proposal);
+            }
+        }
+        applicable
     }
 
     pub fn apply(
         &mut self,
-        exchange: Exchange<RateId, Role, AccountId, N>,
+        proposal: Exchange<RateId, Role, AccountId, N>,
     ) -> ApplyResult<AccountId, A, RateId, Role, N> {
         let Analysis {
             assessment,
             prepared_accounts,
-        } = self.analyze(&exchange);
+        } = self.analyze(&proposal);
 
         match assessment {
             ExchangeAssessment::Applicable {
                 projected_deltas, ..
             } => {
-                for (account_id, account) in
+                for (account_id, holder) in
                     prepared_accounts.expect("applicable assessments have prepared accounts")
                 {
-                    *self
-                        .accounts
-                        .get_mut(&account_id)
-                        .expect("prepared accounts already exist in the economy") = account;
+                    self.accounts[&account_id] = holder;
                 }
-                Ok(Receipt::new(exchange, projected_deltas))
+                Ok(Receipt::new(proposal, projected_deltas))
             }
             ExchangeAssessment::Infeasible { shortfalls, .. } => {
                 Err(ApplyError::Infeasible { shortfalls })
@@ -684,7 +685,7 @@ where
             .exchanges()
             .iter()
             .cloned()
-            .map(|exchange| self.apply(exchange))
+            .map(|proposal| self.apply(proposal))
             .collect()
     }
 
@@ -759,8 +760,8 @@ where
                 missing_accounts.insert(holder.clone());
             }
         }
-        for account in missing_accounts {
-            issues.push(ApplyError::MissingAccount { account });
+        for holder in missing_accounts {
+            issues.push(ApplyError::MissingAccount { account: holder });
         }
 
         if issues.is_empty() {
@@ -770,119 +771,159 @@ where
         }
     }
 
-    fn analyze(
+    fn merge_computed_effects(
         &self,
-        exchange: &Exchange<RateId, Role, AccountId, N>,
-    ) -> Analysis<AccountId, A, RateId, Role, N> {
-        let rate = match self.validate_structure(exchange) {
-            Ok(rate) => rate,
-            Err(issues) => return invalid_analysis(issues),
-        };
+        amounts: &[ComputedAmount<Role, A, N>],
+        direction: ComputedDirection,
+        proposal: &Exchange<RateId, Role, AccountId, N>,
+        effects: &mut BTreeMap<AccountId, Effect<A, N>>,
+    ) -> Result<(), ApplyError<RateId, Role, AccountId, A, N>> {
+        for amount in amounts {
+            let value = match evaluate_expression(amount.quantity(), proposal, &self.accounts) {
+                Ok(value) => value,
+                Err(error) => {
+                    return Err(ApplyError::RateLawEvaluation {
+                        rate: proposal.rate().clone(),
+                        message: error.into_message(),
+                    });
+                }
+            };
+            let account_id = proposal
+                .bindings()
+                .get(amount.role())
+                .expect("computed rate roles were checked")
+                .clone();
+            let effect = effects.entry(account_id).or_default();
+            let merged = effect.merge_computed(direction, amount.asset().clone(), value);
+            if merged.is_err() {
+                return Err(ApplyError::RateOverflow {
+                    rate: proposal.rate().clone(),
+                    asset: amount.asset().clone(),
+                });
+            }
+        }
+        Ok(())
+    }
 
-        for condition in rate.conditions() {
-            let satisfied = match evaluate_condition(condition, exchange, &self.accounts) {
+    fn accounts_with_prepared(
+        &self,
+        prepared_accounts: &PreparedAccounts<AccountId, A, N>,
+    ) -> IndexMap<AccountId, Arc<Account<A, N>>> {
+        let mut after_accounts = self.accounts.clone();
+        for (account_id, holder) in prepared_accounts {
+            after_accounts[account_id] = holder.clone();
+        }
+        after_accounts
+    }
+
+    fn check_conditions(
+        &self,
+        rule: &Rate<Role, A, N>,
+        proposal: &Exchange<RateId, Role, AccountId, N>,
+    ) -> Result<(), ApplyError<RateId, Role, AccountId, A, N>> {
+        for condition in rule.conditions() {
+            let satisfied = match evaluate_condition(condition, proposal, &self.accounts) {
                 Ok(satisfied) => satisfied,
                 Err(error) => {
-                    return invalid_analysis(vec![ApplyError::RateLawEvaluation {
-                        rate: exchange.rate().clone(),
+                    return Err(ApplyError::RateLawEvaluation {
+                        rate: proposal.rate().clone(),
                         message: error.into_message(),
-                    }]);
+                    });
                 }
             };
             if !satisfied {
-                return invalid_analysis(vec![ApplyError::RateConditionFailed {
-                    rate: exchange.rate().clone(),
+                return Err(ApplyError::RateConditionFailed {
+                    rate: proposal.rate().clone(),
                     condition: condition.name().to_owned(),
-                }]);
+                });
             }
         }
 
+        Ok(())
+    }
+
+    fn aggregate_effects(
+        &self,
+        rule: &Rate<Role, A, N>,
+        proposal: &Exchange<RateId, Role, AccountId, N>,
+    ) -> AggregationResult<AccountId, A, RateId, Role, N> {
         let mut effects: BTreeMap<AccountId, Effect<A, N>> = BTreeMap::new();
-        for role in rate.roles() {
-            let account_id = exchange
+        for role in rule.roles() {
+            let account_id = proposal
                 .bindings()
                 .get(role)
                 .expect("all role bindings were checked")
                 .clone();
             let effect = effects.entry(account_id).or_default();
-            if let Some(consume) = rate.consumed(role)
-                && let Err(asset) = merge_scaled(&mut effect.consume, consume, exchange.units())
+            if let Some(consume) = rule.consumed(role)
+                && let Err(asset) = merge_scaled(&mut effect.consume, consume, proposal.units())
             {
-                return invalid_analysis(vec![ApplyError::RateOverflow {
-                    rate: exchange.rate().clone(),
+                return Err(ApplyError::RateOverflow {
+                    rate: proposal.rate().clone(),
                     asset,
-                }]);
+                });
             }
-            if let Some(produce) = rate.produced(role)
-                && let Err(asset) = merge_scaled(&mut effect.produce, produce, exchange.units())
+            if let Some(produce) = rule.produced(role)
+                && let Err(asset) = merge_scaled(&mut effect.produce, produce, proposal.units())
             {
-                return invalid_analysis(vec![ApplyError::RateOverflow {
-                    rate: exchange.rate().clone(),
+                return Err(ApplyError::RateOverflow {
+                    rate: proposal.rate().clone(),
                     asset,
-                }]);
+                });
             }
-            if let Some(preserve) = rate.preserved(role)
+            if let Some(preserve) = rule.preserved(role)
                 && let Err(asset) = effect.preserve.checked_add(preserve)
             {
-                return invalid_analysis(vec![ApplyError::RateOverflow {
-                    rate: exchange.rate().clone(),
+                return Err(ApplyError::RateOverflow {
+                    rate: proposal.rate().clone(),
                     asset,
-                }]);
+                });
             }
         }
 
-        for (amounts, direction) in [
-            (rate.computed_consumed(), ComputedDirection::Consume),
-            (rate.computed_produced(), ComputedDirection::Produce),
-            (rate.computed_preserved(), ComputedDirection::Preserve),
-        ] {
-            for amount in amounts {
-                let quantity =
-                    match evaluate_expression(amount.quantity(), exchange, &self.accounts) {
-                        Ok(value) => value,
-                        Err(error) => {
-                            return invalid_analysis(vec![ApplyError::RateLawEvaluation {
-                                rate: exchange.rate().clone(),
-                                message: error.into_message(),
-                            }]);
-                        }
-                    };
-                let account_id = exchange
-                    .bindings()
-                    .get(amount.role())
-                    .expect("computed rate roles were checked")
-                    .clone();
-                let effect = effects.entry(account_id).or_default();
-                let target = match direction {
-                    ComputedDirection::Consume => &mut effect.consume,
-                    ComputedDirection::Produce => &mut effect.produce,
-                    ComputedDirection::Preserve => &mut effect.preserve,
-                };
-                if merge_quantity(target, amount.asset().clone(), quantity).is_err() {
-                    return invalid_analysis(vec![ApplyError::RateOverflow {
-                        rate: exchange.rate().clone(),
-                        asset: amount.asset().clone(),
-                    }]);
-                }
-            }
-        }
+        self.merge_computed_effects(
+            rule.computed_consumed(),
+            ComputedDirection::Consume,
+            proposal,
+            &mut effects,
+        )?;
+        self.merge_computed_effects(
+            rule.computed_produced(),
+            ComputedDirection::Produce,
+            proposal,
+            &mut effects,
+        )?;
+        self.merge_computed_effects(
+            rule.computed_preserved(),
+            ComputedDirection::Preserve,
+            proposal,
+            &mut effects,
+        )?;
 
+        Ok(effects)
+    }
+
+    fn preflight_effects(
+        &self,
+        proposal: &Exchange<RateId, Role, AccountId, N>,
+        effects: &BTreeMap<AccountId, Effect<A, N>>,
+    ) -> AvailabilityResult<AccountId, A, RateId, Role, N> {
         let mut account_assessments = Vec::with_capacity(effects.len());
         let mut shortfalls = Vec::new();
-        for (account_id, effect) in &effects {
-            let account = self
+        for (account_id, effect) in effects {
+            let holder = self
                 .accounts
                 .get(account_id)
                 .expect("bound accounts were checked");
             let mut required = effect.consume.clone();
             if let Err(asset) = required.checked_add(&effect.preserve) {
-                return invalid_analysis(vec![ApplyError::RateOverflow {
-                    rate: exchange.rate().clone(),
+                return Err(ApplyError::RateOverflow {
+                    rate: proposal.rate().clone(),
                     asset,
-                }]);
+                });
             }
-            let available = relevant_balances(account, &required);
-            let missing = account.balances().shortfall(&required);
+            let available = relevant_balances(holder, &required);
+            let missing = holder.balances().shortfall(&required);
             account_assessments.push(AccountAssessment::new(
                 account_id.clone(),
                 available,
@@ -896,28 +937,28 @@ where
             }
         }
 
-        if !shortfalls.is_empty() {
-            return Analysis {
-                assessment: ExchangeAssessment::Infeasible {
-                    accounts: account_assessments,
-                    shortfalls,
-                },
-                prepared_accounts: None,
-            };
-        }
+        Ok(Availability {
+            accounts: account_assessments,
+            shortfalls,
+        })
+    }
 
+    fn prepare_effects(
+        &self,
+        effects: BTreeMap<AccountId, Effect<A, N>>,
+    ) -> PreparationResult<AccountId, A, RateId, Role, N> {
         let mut prepared_accounts = Vec::with_capacity(effects.len());
         let mut deltas = Vec::with_capacity(effects.len());
         for (account_id, effect) in effects {
-            let account = match self
+            let holder = match self
                 .accounts
                 .get(&account_id)
                 .expect("bound accounts were checked")
                 .prepare_exchange(&effect.consume, &effect.produce)
             {
-                Ok(account) => account,
+                Ok(holder) => holder,
                 Err(error) => {
-                    return invalid_analysis(vec![map_account_error(account_id.clone(), error)]);
+                    return Err(map_account_error(account_id.clone(), error));
                 }
             };
             deltas.push(AccountDelta::new(
@@ -926,46 +967,90 @@ where
                 effect.produce,
                 effect.preserve,
             ));
-            prepared_accounts.push((account_id, Arc::new(account)));
+            prepared_accounts.push((account_id, Arc::new(holder)));
         }
 
+        Ok(Preparation {
+            accounts: prepared_accounts,
+            deltas,
+        })
+    }
+
+    fn check_invariants(
+        &self,
+        deltas: &[AccountDelta<AccountId, A, N>],
+        prepared_accounts: &PreparedAccounts<AccountId, A, N>,
+    ) -> Result<(), ApplyError<RateId, Role, AccountId, A, N>> {
         for invariant in self.invariants.iter() {
-            let Some(conserved) = invariant.conserves(&deltas) else {
-                return invalid_analysis(vec![ApplyError::InvariantOverflow {
+            let Some(conserved) = invariant.conserves(deltas) else {
+                return Err(ApplyError::InvariantOverflow {
                     invariant: invariant.name().to_owned(),
-                }]);
+                });
             };
             if !conserved {
                 let Some(before) = invariant.measure(&self.accounts) else {
-                    return invalid_analysis(vec![ApplyError::InvariantOverflow {
+                    return Err(ApplyError::InvariantOverflow {
                         invariant: invariant.name().to_owned(),
-                    }]);
+                    });
                 };
-                let mut after_accounts = self.accounts.clone();
-                for (account_id, account) in &prepared_accounts {
-                    *after_accounts
-                        .get_mut(account_id)
-                        .expect("prepared accounts already exist in the economy") = account.clone();
-                }
+                let after_accounts = self.accounts_with_prepared(prepared_accounts);
                 let Some(after) = invariant.measure(&after_accounts) else {
-                    return invalid_analysis(vec![ApplyError::InvariantOverflow {
+                    return Err(ApplyError::InvariantOverflow {
                         invariant: invariant.name().to_owned(),
-                    }]);
+                    });
                 };
-                return invalid_analysis(vec![ApplyError::InvariantViolation {
+                return Err(ApplyError::InvariantViolation {
                     invariant: invariant.name().to_owned(),
                     before,
                     after,
-                }]);
+                });
             }
         }
 
+        Ok(())
+    }
+
+    fn analyze(
+        &self,
+        proposal: &Exchange<RateId, Role, AccountId, N>,
+    ) -> Analysis<AccountId, A, RateId, Role, N> {
+        let rule = match self.validate_structure(proposal) {
+            Ok(rule) => rule,
+            Err(issues) => return invalid_analysis(issues),
+        };
+        if let Err(error) = self.check_conditions(rule, proposal) {
+            return invalid_analysis(vec![error]);
+        }
+        let effects = match self.aggregate_effects(rule, proposal) {
+            Ok(effects) => effects,
+            Err(error) => return invalid_analysis(vec![error]),
+        };
+        let availability = match self.preflight_effects(proposal, &effects) {
+            Ok(availability) => availability,
+            Err(error) => return invalid_analysis(vec![error]),
+        };
+        if !availability.shortfalls.is_empty() {
+            return Analysis {
+                assessment: ExchangeAssessment::Infeasible {
+                    accounts: availability.accounts,
+                    shortfalls: availability.shortfalls,
+                },
+                prepared_accounts: None,
+            };
+        }
+        let prepared = match self.prepare_effects(effects) {
+            Ok(prepared) => prepared,
+            Err(error) => return invalid_analysis(vec![error]),
+        };
+        if let Err(error) = self.check_invariants(&prepared.deltas, &prepared.accounts) {
+            return invalid_analysis(vec![error]);
+        }
         Analysis {
             assessment: ExchangeAssessment::Applicable {
-                accounts: account_assessments,
-                projected_deltas: deltas,
+                accounts: availability.accounts,
+                projected_deltas: prepared.deltas,
             },
-            prepared_accounts: Some(prepared_accounts),
+            prepared_accounts: Some(prepared.accounts),
         }
     }
 }
@@ -1137,6 +1222,40 @@ impl<A, N> Default for Effect<A, N> {
 }
 
 type PreparedAccounts<AccountId, A, N> = Vec<(AccountId, Arc<Account<A, N>>)>;
+
+type AggregationResult<AccountId, A, RateId, Role, N> =
+    Result<BTreeMap<AccountId, Effect<A, N>>, ApplyError<RateId, Role, AccountId, A, N>>;
+
+type AvailabilityResult<AccountId, A, RateId, Role, N> =
+    Result<Availability<AccountId, A, N>, ApplyError<RateId, Role, AccountId, A, N>>;
+
+type PreparationResult<AccountId, A, RateId, Role, N> =
+    Result<Preparation<AccountId, A, N>, ApplyError<RateId, Role, AccountId, A, N>>;
+
+struct Availability<AccountId, A, N> {
+    accounts: Vec<AccountAssessment<AccountId, A, N>>,
+    shortfalls: Vec<AccountShortfall<AccountId, A, N>>,
+}
+
+struct Preparation<AccountId, A, N> {
+    accounts: PreparedAccounts<AccountId, A, N>,
+    deltas: Vec<AccountDelta<AccountId, A, N>>,
+}
+
+impl<A: Clone + Eq + Hash, N: QuantityScalar> Effect<A, N> {
+    fn merge_computed(
+        &mut self,
+        direction: ComputedDirection,
+        asset: A,
+        value: Quantity<N>,
+    ) -> Result<(), A> {
+        match direction {
+            ComputedDirection::Consume => merge_quantity(&mut self.consume, asset, value),
+            ComputedDirection::Produce => merge_quantity(&mut self.produce, asset, value),
+            ComputedDirection::Preserve => merge_quantity(&mut self.preserve, asset, value),
+        }
+    }
+}
 
 struct Analysis<AccountId, A, RateId, Role, N>
 where
@@ -1337,19 +1456,20 @@ where
     }
 }
 
-fn relevant_balances<A, N>(account: &Account<A, N>, required: &Basket<A, N>) -> Basket<A, N>
+fn relevant_balances<A, N>(holder: &Account<A, N>, required: &Basket<A, N>) -> Basket<A, N>
 where
     A: Clone + Eq + Hash,
     N: QuantityScalar,
 {
-    required
-        .iter()
-        .map(|(asset, _)| (asset.clone(), account.balance(asset)))
-        .collect()
+    let mut relevant = Basket::new();
+    for (asset, _) in required.iter() {
+        relevant.insert(asset.clone(), holder.balance(asset));
+    }
+    relevant
 }
 
 fn map_account_error<RateId, Role, AccountId, A, N>(
-    account: AccountId,
+    holder: AccountId,
     error: AccountError<A, N>,
 ) -> ApplyError<RateId, Role, AccountId, A, N>
 where
@@ -1358,9 +1478,12 @@ where
 {
     match error {
         AccountError::InsufficientBalance { shortfall } => ApplyError::Infeasible {
-            shortfalls: vec![AccountShortfall::new(account, shortfall)],
+            shortfalls: vec![AccountShortfall::new(holder, shortfall)],
         },
-        AccountError::Overflow { asset } => ApplyError::BalanceOverflow { account, asset },
+        AccountError::Overflow { asset } => ApplyError::BalanceOverflow {
+            account: holder,
+            asset,
+        },
     }
 }
 

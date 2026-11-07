@@ -18,30 +18,34 @@ GENERATED = {
     "AccountExtraction.lean": "AccountExtraction.lean",
 }
 TEMPLATES = {
-    "TypesExternal_Template.lean": "6c1bb6c6058d25191551c6400ddf411958e9dd7963a89e708c520fc427c0f6dc",
-    "FunsExternal_Template.lean": "db33da6731c63ac3fd32590429be62ceeb06dead894b270a574cac2a2a95482f",
+    "TypesExternal_Template.lean": "1e23b03807db8349ee43313ba025edadafe9ce91362da38a9cfc28942e8df36a",
+    "FunsExternal_Template.lean": "4945946b34dff4062402df20fedf395f43edfb760dfa1b525220674b62e9abf9",
 }
 
-# The caller remains outside the extraction. Keep its exact staging handoff
-# reviewable and reject bypasses; this is not a proof of Economy::analyze.
-PREPARATION_CALL = """let account = match self
+# Keep critical handoffs explicit alongside the complete caller extraction.
+# These syntactic guards supplement, rather than replace, the Lean refinements.
+PREPARATION_CALL = """let holder = match self
                 .accounts
                 .get(&account_id)
                 .expect("bound accounts were checked")
                 .prepare_exchange(&effect.consume, &effect.produce)
             {
-                Ok(account) => account,
+                Ok(holder) => holder,
                 Err(error) => {
-                    return invalid_analysis(vec![map_account_error(account_id.clone(), error)]);
+                    return Err(map_account_error(account_id.clone(), error));
                 }
             };"""
 
-VALIDATION_CALL = """let rate = match self.validate_structure(exchange) {
-            Ok(rate) => rate,
+VALIDATION_CALL = """let rule = match self.validate_structure(proposal) {
+            Ok(rule) => rule,
             Err(issues) => return invalid_analysis(issues),
         };"""
 
 ENTRY_CALLS = {
+    "model_is_applicable": "model.is_applicable(proposal)",
+    "model_applicable": "model.applicable(candidates)",
+    "assess_model_proposal": "model.assess(proposal)",
+    "apply_model_proposal": "model.apply(proposal)",
     "validate_model_proposal": "model.validate_structure(proposal)",
     "model_new": "economy::EconomyBuilder::new()",
     "model_default": "economy::EconomyBuilder::default()",
@@ -121,6 +125,16 @@ def validate_generated(directory):
                   "economy.EconomyBuilder.invariant", "economy.EconomyBuilder.build", "economy.EconomyBuilder.build_loop.body",
                   "economy.Economy.validate_structure",
                   *[f"economy.Economy.validate_structure_loop{i}.body" for i in range(7)],
+                  "economy.Economy.analyze", "economy.Economy.assess", "economy.Economy.apply",
+                  "economy.Economy.is_applicable", "economy.Economy.applicable", "economy.ExchangeAssessment.is_applicable",
+                  "exchange.Receipt.new", "economy.Effect.merge_computed", "economy.relevant_balances",
+                  *[f"economy.Economy.{stage}{suffix}" for stage in (
+                      "merge_computed_effects", "aggregate_effects", "check_conditions", "preflight_effects",
+                      "prepare_effects", "accounts_with_prepared", "check_invariants", "apply", "applicable")
+                    for suffix in ("_loop", "_loop.body")],
+                  *[f"economy.Economy.{stage}" for stage in (
+                      "merge_computed_effects", "aggregate_effects", "check_conditions", "preflight_effects",
+                      "prepare_effects", "accounts_with_prepared", "check_invariants")],
                   "rate.Rate.has_role", "rate.Rate.has_role_loop.body",
                   "rate.Rate.new", "rate.Rate.impl.distinct", "rate.Rate.register_expression_roles_loop.body",
                   "rate.Rate.consume_computed", "rate.Rate.produce_computed", "rate.Rate.preserve_computed",

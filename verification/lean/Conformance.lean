@@ -11,6 +11,7 @@ import Axionomy.Effects
 import Axionomy.ModelConstruction
 import Axionomy.Discovery
 import Axionomy.Validation
+import Axionomy.TransactionConformance
 
 /-! Deterministic executable examples from the SAME definitions used in the
 proofs. Rust runs these examples through the public API. Agreement on these
@@ -599,5 +600,6 @@ def main : IO Unit := do
     ("accounts", toJson accounts), ("preparations", toJson preparations), ("basketOps", toJson basketOps),
     ("conservation", toJson conservation), ("rateMerges", toJson rateMerges),
     ("evaluation", toJson evaluation), ("measurements", toJson measurements), ("effects", toJson effects),
-    ("models", toJson models), ("metadata", toJson metadata), ("validation", toJson validation)]
+    ("models", toJson models), ("metadata", toJson metadata), ("validation", toJson validation),
+    ("transactions", toJson (TransactionConformance.fixtures expressionJson))]
   IO.println document.compress

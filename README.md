@@ -85,11 +85,12 @@ learning, deployment, and assurance.
 Core development is proof-bearing: every new or changed kernel feature must
 include a typed Lean specification, checked proofs, and Rust conformance evidence.
 Rust's ownership and ontology types remain part of the contract. The current
-baseline proves Aeneas-extracted u64 checked arithmetic, basket construction and operations,
-account deposit/withdrawal, per-account exchange staging, model/rate construction and metadata discovery,
-snapshot expressions/conditions, bounded effect helpers, signed conservation and
-whole-state measurement against Lean specifications. Collections, logical Arc creation/read
-access and UTF-8 strings use explicit trusted models;
+baseline proves Aeneas-extracted u64 checked arithmetic, basket/account operations,
+model/rate construction and discovery, complete transaction assessment/application
+and stable finite-vector candidate filtering. This includes original-snapshot
+evaluation, effect aggregation, preservation, staging, atomic commit, receipts,
+and signed conservation diagnostics. Collections, logical Arc operations and
+UTF-8 strings use explicit trusted models;
 other core contracts have design proofs and finite Rust conformance tests. See
 [the proof contract and coverage](verification/README.md) for exact boundaries.
 

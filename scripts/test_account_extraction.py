@@ -73,9 +73,20 @@ class AccountBridgeTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "not a forwarding call: validate_model_proposal"):
             validate_bridge(self.root)
 
+    def test_changed_transaction_entries_are_rejected(self):
+        original = self.target.read_text()
+        for name, call in (("assess_model_proposal", "model.assess(proposal)"),
+                           ("apply_model_proposal", "model.apply(proposal)"),
+                           ("model_is_applicable", "model.is_applicable(proposal)"),
+                           ("model_applicable", "model.applicable(candidates)")):
+            with self.subTest(entry=name):
+                self.target.write_text(original.replace(call, "bypassed()"))
+                with self.assertRaisesRegex(ValueError, "not a forwarding call: " + name):
+                    validate_bridge(self.root)
+
     def test_bypassed_validation_handoff_is_rejected(self):
         path = self.root / "src/economy.rs"
-        path.write_text(path.read_text().replace("self.validate_structure(exchange)", "Ok(rule)"))
+        path.write_text(path.read_text().replace("self.validate_structure(proposal)", "Ok(rule)"))
         with self.assertRaisesRegex(ValueError, "economy validation handoff changed"):
             validate_bridge(self.root)
 
@@ -130,6 +141,21 @@ class AccountExtractionTests(unittest.TestCase):
         path.write_text(path.read_text().replace("def economy.Economy.validate_structure\n", "def bypass\n"))
         with self.assertRaisesRegex(ValueError, "missing account production definition"):
             validate_generated(self.directory)
+
+    def test_missing_transaction_stages_are_rejected(self):
+        path = self.directory / "Funs.lean"
+        original = path.read_text()
+        for definition in ("analyze", "assess", "apply", "applicable", "is_applicable",
+                           "aggregate_effects_loop.body", "merge_computed_effects_loop.body",
+                           "check_conditions_loop.body", "preflight_effects_loop.body",
+                           "prepare_effects_loop.body", "check_invariants_loop.body",
+                           "accounts_with_prepared_loop.body", "apply_loop.body", "applicable_loop.body"):
+            with self.subTest(definition=definition):
+                needle = "def economy.Economy." + definition + "\n"
+                self.assertEqual(original.count(needle), 1)
+                path.write_text(original.replace(needle, "def bypass\n"))
+                with self.assertRaisesRegex(ValueError, "missing account production definition"):
+                    validate_generated(self.directory)
 
     def test_missing_validation_loop_is_rejected(self):
         path = self.directory / "Funs.lean"

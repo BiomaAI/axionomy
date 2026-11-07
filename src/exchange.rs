@@ -116,19 +116,37 @@ impl<AccountId, A, N> AccountDelta<AccountId, A, N> {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[derive(Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(bound(
     serialize = "RateId: Serialize, Role: Serialize + Ord, AccountId: Serialize, A: Serialize, N: Serialize",
     deserialize = "RateId: Deserialize<'de>, Role: Deserialize<'de> + Ord, AccountId: Deserialize<'de>, A: Deserialize<'de> + Eq + Hash, N: Deserialize<'de> + QuantityScalar"
 ))]
 pub struct Receipt<RateId, Role, AccountId, A, N = u64> {
-    exchange: Exchange<RateId, Role, AccountId, N>,
+    #[serde(rename = "exchange")]
+    proposal: Exchange<RateId, Role, AccountId, N>,
     deltas: Vec<AccountDelta<AccountId, A, N>>,
+}
+
+impl<RateId, Role, AccountId, A, N> std::fmt::Debug for Receipt<RateId, Role, AccountId, A, N>
+where
+    RateId: std::fmt::Debug,
+    Role: std::fmt::Debug,
+    AccountId: std::fmt::Debug,
+    A: std::fmt::Debug,
+    N: std::fmt::Debug,
+{
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("Receipt")
+            .field("exchange", &self.proposal)
+            .field("deltas", &self.deltas)
+            .finish()
+    }
 }
 
 impl<RateId, Role, AccountId, A, N> Receipt<RateId, Role, AccountId, A, N> {
     pub fn exchange(&self) -> &Exchange<RateId, Role, AccountId, N> {
-        &self.exchange
+        &self.proposal
     }
 
     pub fn deltas(&self) -> &[AccountDelta<AccountId, A, N>] {
@@ -136,10 +154,10 @@ impl<RateId, Role, AccountId, A, N> Receipt<RateId, Role, AccountId, A, N> {
     }
 
     pub(crate) fn new(
-        exchange: Exchange<RateId, Role, AccountId, N>,
+        proposal: Exchange<RateId, Role, AccountId, N>,
         deltas: Vec<AccountDelta<AccountId, A, N>>,
     ) -> Self {
-        Self { exchange, deltas }
+        Self { proposal, deltas }
     }
 }
 

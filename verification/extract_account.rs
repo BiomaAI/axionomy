@@ -11,7 +11,6 @@ use basket::Basket;
 #[path = "../src/account.rs"]
 mod account;
 use account::{Account, AccountError};
-// Receipt/delta constructors are unused by this extraction entrypoint subset.
 #[allow(dead_code)]
 #[path = "../src/exchange.rs"]
 pub mod exchange;
@@ -19,7 +18,8 @@ use exchange::{AccountDelta, Exchange, Receipt, Trace};
 #[path = "../src/rate.rs"]
 pub mod rate;
 use rate::{
-    LinearInvariant, QuantityComparison, QuantityExpression, Rate, RateCondition, RateError,
+    ComputedAmount, LinearInvariant, QuantityComparison, QuantityExpression, Rate, RateCondition,
+    RateError,
 };
 #[path = "../src/economy.rs"]
 pub mod economy;
@@ -280,4 +280,52 @@ pub(crate) fn validate_model_proposal<
     proposal: &Exchange<RateId, Role, AccountId>,
 ) -> Result<&'a Rate<Role, A>, Vec<economy::ApplyError<RateId, Role, AccountId, A>>> {
     model.validate_structure(proposal)
+}
+
+pub fn assess_model_proposal<
+    AccountId: Clone + Eq + std::hash::Hash + Ord,
+    A: Clone + Eq + std::hash::Hash + Ord,
+    RateId: Clone + Eq + std::hash::Hash + Ord,
+    Role: Clone + Ord,
+>(
+    model: &economy::Economy<AccountId, A, RateId, Role>,
+    proposal: &Exchange<RateId, Role, AccountId>,
+) -> economy::ExchangeAssessment<AccountId, A, RateId, Role> {
+    model.assess(proposal)
+}
+
+pub fn model_is_applicable<
+    AccountId: Clone + Eq + std::hash::Hash + Ord,
+    A: Clone + Eq + std::hash::Hash + Ord,
+    RateId: Clone + Eq + std::hash::Hash + Ord,
+    Role: Clone + Ord,
+>(
+    model: &economy::Economy<AccountId, A, RateId, Role>,
+    proposal: &Exchange<RateId, Role, AccountId>,
+) -> bool {
+    model.is_applicable(proposal)
+}
+
+pub fn model_applicable<
+    AccountId: Clone + Eq + std::hash::Hash + Ord,
+    A: Clone + Eq + std::hash::Hash + Ord,
+    RateId: Clone + Eq + std::hash::Hash + Ord,
+    Role: Clone + Ord,
+>(
+    model: &economy::Economy<AccountId, A, RateId, Role>,
+    candidates: Vec<Exchange<RateId, Role, AccountId>>,
+) -> Vec<Exchange<RateId, Role, AccountId>> {
+    model.applicable(candidates)
+}
+
+pub fn apply_model_proposal<
+    AccountId: Clone + Eq + std::hash::Hash + Ord,
+    A: Clone + Eq + std::hash::Hash + Ord,
+    RateId: Clone + Eq + std::hash::Hash + Ord,
+    Role: Clone + Ord,
+>(
+    model: &mut economy::Economy<AccountId, A, RateId, Role>,
+    proposal: Exchange<RateId, Role, AccountId>,
+) -> economy::ApplyResult<AccountId, A, RateId, Role> {
+    model.apply(proposal)
 }

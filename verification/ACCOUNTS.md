@@ -134,10 +134,9 @@ theorems establish that:
 
 The extraction uses the same account harness, models, and external template
 checksums. It adds no trusted model. A syntactic guard checks the exact production
-handoff in `Economy::analyze`; the caller is not extracted by this theorem.
-Role/account validation is covered separately below. Effect aggregation, preserved-resource preflight,
-invariant checking, prepared-account completeness, multi-account commit, and
-the caller's remaining `expect` sites remain separate proof obligations.
+handoff in `Economy::prepare_effects`. This helper theorem is composed with the
+complete caller extraction and transaction proofs described below, including
+aggregation, preservation preflight, invariants, preparation and commit.
 
 ## Reproduce and maintain
 
@@ -202,8 +201,8 @@ of both conservation loops. It relates the result to a mathematical integer
 specification with intermediate bounds, not just a final unbounded sum.
 `accepted_conserves` states equality of weighted mathematical totals on success.
 The Option try adapters propagate failure explicitly. None of these adapters or
-proofs adds an axiom. Economy diagnostics remain
-separate obligations, as do BigUint/BigInt and custom backend laws.
+proofs adds an axiom. The transaction contract below now covers economy
+diagnostics; BigUint/BigInt and custom backend laws remain separate obligations.
 
 Fresh extraction, external-interface checksums, the Lean kernel/axiom audit,
 464 conservation fixtures and 56 merge fixtures (each run through three builders)
@@ -243,15 +242,15 @@ Literal decoding is checked by Lean's kernel, not an extra native-evaluation axi
 source amount, then atomically adds the resulting basket. Either stage returns
 its first overflowing asset and the original target. Computed quantities receive
 one checked addition with zero canonicalization, without an implicit units
-multiplier. These are helper contracts; the account aggregation loop and its
-caller preconditions remain open.
+multiplier. The transaction contract below composes these helpers with the
+complete account aggregation loop and derives its caller preconditions.
 
 `ConservationRefinement.measure_refines_integers` proves the complete ordered
 fold over account values and each account's asset entries. It covers intermediate
 signed overflow, negative weights, empty accounts and absent weights. The Rust
 method now reuses `checked_add_basket_measure`, preserving arithmetic and iterator
 order while avoiding an outer-loop `continue` unsupported by the translator.
-This does not yet prove invariant construction or the economy's before/after
+This helper theorem does not prove invariant construction or the economy's before/after
 error diagnostics.
 
 The extension adds the following explicit dependency models:
@@ -333,7 +332,8 @@ role and rate types. Six controls mutate duplicate detection, build rejection,
 computed-role discovery, distinct-pair orientation, preserve parameter inclusion,
 and condition asset order. Each must compile after fresh extraction and then fail
 its semantic proof. This closes the model/discovery backlog item. Structural
-validation is covered below; orchestration and convenience APIs remain separate.
+validation and complete transaction orchestration are covered below;
+remaining convenience APIs are tracked separately.
 
 ## Complete structural validation
 
@@ -351,9 +351,10 @@ Corollaries prove that accepted units are nonzero, every declared role has a
 binding to an existing account, every required parameter is supplied, distinct
 pairs bind different accounts, and every rejection has at least one issue.
 The account-existence result requires comparator equality to imply identity,
-so deduplication cannot hide a missing account. These facts are available for
-future caller proofs; they do not yet discharge every downstream `expect` or
-establish that all computed references are registered in a deserialized rate.
+so deduplication cannot hide a missing account. The transaction proofs below use
+these facts to discharge downstream lookups. Computed-target registration is
+established by the actual builders; arbitrary deserialized metadata still needs
+its separate representation contract.
 
 `analyze` now delegates its existing structural checks to this crate-private
 borrowed-result helper. The bridge guard checks that exact handoff. Explicit
@@ -380,4 +381,89 @@ with and without a failing post-validation condition, checking first-error
 behavior and unchanged state. These are caller regression tests. Five mutation
 controls reverse units, binding, parameter, distinctness and account checks;
 the generated mutant must compile before its semantic proof is rejected.
-Full condition/effect orchestration, preparation, commit and receipts remain open.
+
+## Complete transaction assessment, application and filtering
+
+`Transaction.lean` specifies the actual ordered pipeline using natural-number
+quantities bounded by u64 and signed integer measures bounded by i128. Handled
+transaction errors are distinct from modeled panic. `TransactionDecode` maps
+the extracted typed Rust values to this specification without collapsing account,
+asset, role or rate domains. The generated implementation remains the production
+Rust call path, not a second Rust algorithm written for verification.
+
+`AnalysisRefinement.analyze_refines` and `assess_refines` compose structural
+validation, all conditions, static effects, computed consume/produce/preserve,
+availability, account preparation and invariant checks. They prove termination
+and exact ordered results, including the first applicable error, every positive
+shortfall, relevant balances, projected deltas and diagnostic totals. Conditions
+and computed expressions use the original snapshot. Static consumption/production
+scale by units; preservation and computed quantities do not gain an implicit
+units multiplier. Aliased roles accumulate into one account effect.
+
+The composition derives rather than assumes safe downstream lookups:
+
+- `RateWellFormed` proves that actual constructors/builders register every
+  computed target and preserve that invariant through subsequent builder calls.
+- Structural acceptance establishes the bindings and existing accounts.
+- `AggregationContract` derives canonical baskets, sorted unique affected
+  accounts and a size bound from the model. These facts discharge preflight and
+  preparation premises, including checked vector growth.
+- `Transaction.analyze_ready` in `TransactionSafety.lean` establishes nonempty rejection or uniquely staged
+  accounts corresponding to exactly the aggregated effects and receipt deltas.
+
+`ApplyRefinement.apply_refines` connects those facts to the full public `apply`.
+It proves both internal `expect` preconditions and the existence of every mutable
+account index. Rejection returns the exact error and the entire unchanged raw
+model. Acceptance returns the submitted proposal and specified deltas, installs
+exactly the prepared balances, and preserves account keys/order, rates, invariants
+and account lookups outside the receipt deltas. Successful staging is not an input
+assumption of the full theorem.
+
+`ApplyRefinement.accepted_receipt_refines` states the receipt consequence directly:
+receipt account IDs are unique, and each delta names an original and committed
+account whose observable final balance equals successful checked consumption
+followed by production from that original balance. The proof composes actual
+`apply` refinement, preparation correspondence and exact staged-account lookup.
+
+`FilteringRefinement` proves public boolean applicability and the production
+filter for finite Vec candidates. It preserves order and duplicates, evaluates
+each candidate against the same original model, and establishes successful
+boolean evaluation for every candidate; the default on a missing specification
+result is therefore unreachable. Arbitrary custom iterator behavior is still a
+separate public-boundary contract.
+
+Premises include total identity-preserving cloning, identity-consistent equality,
+comparison agreeing with the logical comparator, and lawful account ordering
+(reflexivity, equality consistency, strict-order transitivity and reversal).
+Computed targets must be registered. Explicit `usize` bounds cover account count,
+validation issue growth and relevant UTF-8 names/rendered diagnostics. These are
+representation, identifier and resource requirements, not assumptions that an
+exchange succeeds. Natural-number ordering and the existing lawful dictionary
+witnesses demonstrate satisfiability. Builder proofs derive target registration.
+
+Production refactors separate the existing stages without changing their order
+or public types. Explicit loops replace iterator combinators for relevant-balance
+construction and candidate filtering. Existing-key mutable indexing replaces
+`get_mut(...).expect(...)`; its absence panic is discharged by the caller proof.
+The private receipt field is named `proposal` to avoid translation name shadowing;
+the public getter, serialized/schema field `exchange`, and debug field name are
+preserved. Rust still enforces ownership, private state and generic domain bounds.
+
+The additional external models cover ordered borrowed/consuming BTreeMap
+iteration, bounded map length, `Result::is_err`, logical Arc clone and mutable
+IndexMap indexing with a backward update function. Absent mutable keys panic;
+successful replacement retains the stored key and all other entries. Arc clone
+shares its immutable logical pointee. Physical collection storage, hashing,
+allocation, reference counting, destructor effects and clone/copy-on-write
+isolation remain trusted, alongside compiler/MIR, Charon/Aeneas and primitive
+models. The unused `MaybeUninit` type alias models no uninitialized-memory
+operation. The kernel audit accepts no new axioms.
+
+The mandatory proof gate registers these composed contracts, checks fresh
+extraction and all axiom dependencies, and compares 596 Lean-generated complete
+transaction scenarios with Rust. Cases cover aliasing, original-snapshot
+evaluation, scaling, preservation, ordered shortfalls, late-account overflow,
+invariant overflow/violation diagnostics, receipt agreement and atomic rejection.
+Mutation controls require regenerated changed Rust to compile and then fail the
+corresponding semantic proof. Remaining execution/replay, observations, public
+data-boundary and numeric-backend contracts remain listed in the main backlog.

@@ -32,4 +32,9 @@ abbrev indexmap.map.iter.IntoIter (K V : Type) := List (K × V)
 abbrev alloc.collections.btree.set.IntoIter (T _A : Type) := List T
 abbrev alloc.collections.btree.map.Keys (K _V : Type) := List K
 abbrev alloc.collections.btree.set.Iter (T : Type) := List T
+abbrev alloc.collections.btree.map.Iter (K V : Type) := List (K × V)
+abbrev alloc.collections.btree.map.IntoIter (K V _A : Type) := List (K × V)
+-- Present in the dependency template but unused by the translated call paths.
+-- No operation reading or writing uninitialized storage is modeled here.
+abbrev core.mem.maybe_uninit.MaybeUninit (T : Type) := Option T
 end Axionomy.AccountExtracted

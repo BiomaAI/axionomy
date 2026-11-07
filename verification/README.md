@@ -38,8 +38,9 @@ Per-account exchange staging also has an implementation proof. The production
 helper clones an account, withdraws consumed assets, and deposits produced assets.
 Its Aeneas extraction returns exactly the specified new account or error; a later
 deposit overflow returns no partially prepared account. Rust's immutable source
-borrow complements the proof. This does not yet verify the multi-account commit,
-effect aggregation, preservation preflight, or the caller’s invariant diagnostics.
+borrow complements the proof. The complete transaction contract below composes
+this staging proof with aggregation, preservation preflight, invariant diagnostics,
+and multi-account commit.
 
 Static rate builders (`try_consume`, `try_produce`, `try_preserve`) now have
 implementation proofs for exact basket merging, ordered overflow errors, role
@@ -64,7 +65,8 @@ violations, and sorted deduplicated missing accounts. A missing rate ends valida
 after the units check. Acceptance implies nonzero units, existing bound accounts
 for every registered role, all required parameters, and the declared distinctness
 constraints. Rejection always contains an issue. This covers the private production
-helper called by `analyze`; condition/effect orchestration remains open. Error-vector
+helper called by `analyze`; the transaction proof composes its accepted and rejected
+branches with condition/effect orchestration. Error-vector
 growth and UTF-8 names require explicit `usize` bounds under the collection model.
 
 The runtime `LinearInvariant::conserves` path is also extracted and proved:
@@ -75,7 +77,8 @@ means an intermediate overflow; `Some(false)` means unequal totals;
 The proof covers both nested loops, missing weights (zero), negative weights,
 empty deltas and preserved baskets being excluded from transferred quantities.
 Whole-state `measure` now also refines the ordered checked integer fold over
-all accounts. Diagnostic construction and the economy caller remain open.
+all accounts. The complete transaction contract also proves the caller's error
+classification and exact before/after diagnostic totals.
 
 The recursive expression evaluator and condition helper now have implementation
 proofs for every finite expression and u64 input. They preserve the original
@@ -85,8 +88,17 @@ errors retain the existing public text; message rendering is proved for valid
 UTF-8 names when the resulting message fits `usize`. Static effect scaling/merging
 and computed single-quantity merging also have exact implementation proofs,
 including the original target on failure. Full condition/effect orchestration
-in `Economy::analyze` remains open. See [ACCOUNTS.md](ACCOUNTS.md) for the read-only
+in `Economy::analyze` is now composed with these proofs. See [ACCOUNTS.md](ACCOUNTS.md) for the read-only
 Arc, ordered lookup, UTF-8 and allocation boundaries.
+
+The complete production u64 `analyze`, `assess`, and `apply` paths now refine an
+ordered transaction specification. Rejection preserves the entire raw model.
+Success returns the submitted proposal and specified deltas, commits exactly
+the prepared accounts, and preserves account keys/order, rates, invariants, and
+accounts outside the receipt deltas. Every internal lookup/`expect` precondition
+on these paths is derived. Public applicability checks and finite vector candidate
+filtering also refine the same original-snapshot analysis, retaining order and
+duplicates. See the complete transaction contract in [ACCOUNTS.md](ACCOUNTS.md).
 
 The other core contracts still have handwritten design proofs and finite Rust
 conformance tests. Neither an entire source module nor every existing core
@@ -122,6 +134,9 @@ The current library covers:
 | `Conservation` / `ConservationRefinement` | Extracted runtime invariant check and whole-state measurement, exact signed widening/weighting, intermediate overflow and mathematical conservation on acceptance |
 | `Evaluation` / `EvaluationRefinement` / `DiagnosticRefinement` | Extracted recursive expressions and conditions against one snapshot, all checked outcomes, first-error order, exact public error text |
 | `Effects` / `EffectsRefinement` | Extracted bounded static scaling/merging and computed single-quantity addition, exact errors and atomic failure |
+| `Transaction` / `AnalysisRefinement` / `ApplyRefinement` | Complete extracted transaction analysis, assessment and application; ordered stages/errors, atomic rejection, exact receipts/state and unchanged frame |
+| `AggregationContract` / `TransactionSafety` / `RateWellFormed` | Builder-established target registration; canonical, sorted unique existing affected accounts; derived staging/commit preconditions |
+| `FilteringRefinement` | Extracted boolean applicability and stable finite-vector filtering, preserving duplicates against the same snapshot |
 | `Rates` | Checked expression evaluation refines mathematical evaluation and bounds its result; effect merging is associative/commutative in exact arithmetic; preservation does not scale |
 | `Exchange` | Exact prepared deltas, preserved resources, assessment/application agreement, atomic rejection, output bounds, signed weighted conservation |
 | `Replay` | Trace concatenation, deterministic outcomes, invariant induction given an invariant-preserving step |
@@ -144,19 +159,19 @@ theorems, caller preconditions, failure behavior, fresh extraction, conformance,
 mutation controls, and workspace checks pass. Commit and push validated work
 to `origin/main`; theorem counts do not measure percentage completion.
 
-| Milestone | Item | Remaining contract | Status |
+| Milestone | Item | Contract | Status |
 | --- | --- | --- | --- |
 | 1. u64 transaction kernel | 1 | Basket addition/scaling, containment/equality, canonical representation preservation | Implementation proved under documented models |
 | 1 | 2 | Model/rate construction, duplicate IDs, role/parameter/asset discovery, distinct roles | Implementation proved under documented models; remaining convenience APIs tracked in item 16 |
-| 1 | 3 | Exchange units, rate/account existence, binding/parameter validation | Implementation proved under documented models; downstream caller composition remains open |
-| 1 | 4 | Full expression/condition evaluation against the original snapshot | Interpreter/helpers proved; caller orchestration open |
-| 1 | 5 | Account effect aggregation, bounded scaling/merging, computed-effect semantics | Bounded helpers proved; aggregation loop open |
-| 1 | 6 | Consumption plus preservation availability and complete shortfalls | Design proofs |
-| 1 | 7 | Complete preparation, unique affected accounts, established staging preconditions | Per-account staging proved |
-| 1 | 8 | Runtime signed conservation, intermediate i128 overflow, error classification | Predicate and measure proved; caller diagnostics open |
-| 1 | 9 | Multi-account atomic commit, unchanged frame, safe prepared-account lookups | Design proofs |
-| 1 | 10 | Assessment/application agreement, filtering, immutability, exact diagnostics/order | Design proofs |
-| 1 | 11 | Receipts/deltas agree with the actual proposal and committed changes | Partial design proofs |
+| 1 | 3 | Exchange units, rate/account existence, binding/parameter validation | Implementation proved under documented models; composed through complete transaction execution |
+| 1 | 4 | Full expression/condition evaluation against the original snapshot | Implementation proved: complete ordered condition loop and original-snapshot evaluation |
+| 1 | 5 | Account effect aggregation, bounded scaling/merging, computed-effect semantics | Implementation proved: complete static/computed aggregation, aliasing and canonical/sorted/unique existing-account invariants |
+| 1 | 6 | Consumption plus preservation availability and complete shortfalls | Implementation proved: consume plus preserve, exact ordered assessments and complete shortfalls |
+| 1 | 7 | Complete preparation, unique affected accounts, established staging preconditions | Implementation proved: complete staging, unique existing accounts and exact ordered deltas |
+| 1 | 8 | Runtime signed conservation, intermediate i128 overflow, error classification | Implementation proved: complete runtime invariant checks, checked intermediate measures and exact diagnostics |
+| 1 | 9 | Multi-account atomic commit, unchanged frame, safe prepared-account lookups | Implementation proved: safe lookups, atomic rejection, exact committed state and unchanged frame |
+| 1 | 10 | Assessment/application agreement, filtering, immutability, exact diagnostics/order | Implementation proved: analyze/assess/apply agreement, boolean applicability and stable finite-vector filtering; arbitrary iterators remain in item 16 |
+| 1 | 11 | Receipts/deltas agree with the actual proposal and committed changes | Implementation proved: submitted proposal, unique receipt accounts and exact observable committed balance for every delta |
 | 2. Execution and observations | 12 | Fork/simulation isolation and equivalence | Open |
 | 2 | 13 | Ordered traces, replay prefix-on-error, isolated replay, invariant composition | Design proofs |
 | 2 | 14 | Goals, visibility, hidden-state noninterference, missing/zero distinctions | Design proofs |
@@ -164,6 +179,46 @@ to `origin/main`; theorem counts do not measure percentage completion.
 | 3. Public data boundary | 16 | Remaining typed constructors/accessors/conversions/iterators/equality | Partial implementation proofs |
 | 3 | 17 | Serialization round trips, validation/canonicalization, accurate schema contracts | Open |
 | 4. Numeric backends | 18 | BigUint/BigInt and explicit algebraic requirements for custom backends | Open |
+
+The completed u64 transaction milestone extracts the complete production `assess`/`apply`
+path. `Transaction` and `TransactionDecode` specify its ordered stages and typed
+errors. The refinements compose structural validation, conditions, complete
+static/computed aggregation, preflight, preparation, and invariant diagnostics
+into the production `analyze` and public `assess`/`apply` paths. These establish exact
+ordered results and termination without panic under the explicit dependency
+models, lawful identifier operations, registered computed targets, and resource
+bounds. Aggregation derives canonical baskets, sorted unique existing accounts,
+and a size bound from the model; those properties discharge the preflight and
+preparation preconditions. Rate-builder proofs establish and preserve computed
+target registration. Preparation establishes ordered account/delta correspondence
+and the existence needed by the commit loop. The complete `apply` refinement
+discharges its internal `expect` preconditions, preserves the entire original
+model on rejection, and returns the specified receipt and committed model on
+success. Its frame property preserves account keys, rates, invariants, and
+accounts outside the receipt deltas. Account ordering requires
+reflexivity, equality consistency, transitivity, and reversal of greater-than;
+matching Rust comparisons to a logical function alone is insufficient.
+
+The Lean fixture generator now produces 596 complete transaction scenarios;
+the public Rust API matches their exact assessments, diagnostics, receipts,
+post-state, and rejection behavior. The scenarios include aliasing, original
+snapshot evaluation, preservation, overflow, and conservation diagnostics.
+These finite checks supplement the general proofs. Filtering now has an
+implementation proof for finite vector candidates. Arbitrary user-provided
+iterator behavior remains a separate public-boundary obligation in item 16.
+
+The transaction contracts are registered in `coverage.json` and the mandatory
+proof gate. This milestone passed fresh extraction, the Lean kernel/axiom audit,
+generated conformance, all verification controls (including production mutations),
+and Rust 1.89 workspace formatting, Clippy, tests and documentation checks.
+Milestones 2–4 remain open; this is not full core coverage.
+
+Items 14–15 include a reproduced observation-key gap across different account
+domains: a visible empty account and an absent account currently produce the same
+key, although `balance` returns `Some(0)` for the former and `None` for the latter.
+The observation contract must preserve that distinction in its declared
+equivalence; identical account domains cannot be silently assumed for arbitrary
+models. This remains open in the execution/observation milestone.
 
 Every internal `expect` needs a discharged precondition. Intentionally panicking
 convenience constructors need explicit contracts; do not claim unconditional
@@ -241,7 +296,8 @@ cases covering duplicates, zero quantities, order, exact errors, atomic rejectio
 and u64 boundaries. Another 492 staging cases run through two-account exchanges,
 checking assessment, exact errors and receipts, an earlier staged account on late
 failure, unaffected accounts, and fork isolation. These whole-economy checks are
-finite regression evidence, not a refinement theorem for `Economy::apply`.
+finite regression evidence. The separate `ApplyRefinement.apply_refines` theorem
+now connects the complete production `Economy::apply` path to its specification.
 Separate existing Rust tests cover additional behavior.
 
 The basket operation specification adds 654 cases for addition, scaling,
@@ -277,28 +333,29 @@ the initial theorems. They are a backfill plan, not an exemption for new behavio
 
 - Charon/Aeneas extraction and refinement beyond the four `Quantity<u64>` checked
   arithmetic operations, basket construction/operations, account updates/staging,
-  model/rate construction and metadata discovery, structural validation, snapshot expression/condition evaluation, bounded effect helpers,
-  runtime conservation and whole-state measurement, including the remaining exchange `expect` and
-  termination obligations.
+  model/rate construction and metadata discovery, complete u64 transaction
+  assessment/application and finite-vector filtering, snapshot expression/condition
+  evaluation, bounded effect helpers, runtime conservation and whole-state measurement.
 - Correctness of `IndexMap`, `BTreeMap`, `Arc`, iterator order, allocation, cloning,
   and copy-on-write isolation; Rust compilation still enforces its ownership rules.
-- Composition of structural validation with condition/effect orchestration,
-  aggregate overflow and preparation. Structural validation and duplicate model
-  IDs now have implementation proofs; downstream caller obligations remain open.
+- Constructor and deserialization composition for the remaining public APIs.
+  Transaction caller preconditions are now discharged through structural
+  validation, aggregation, preparation and commit; arbitrary deserialized metadata
+  still needs its separate representation contract.
 - Remaining finite-map adapters, serialization/schema round trips,
   canonical state/observation ordering, and fingerprints. Fingerprints are not
   collision-free identities and must not be given such a theorem.
-- Invariant caller error classification and before/after diagnostic totals. The
-  delta-based conservation predicate, whole-state measurement and intermediate
-  `i128` overflow now have implementation proofs.
+- Invariant constructors and other remaining convenience APIs. Runtime invariant
+  checks, intermediate `i128` overflow, and caller diagnostic totals are now
+  covered by the complete transaction contract.
 - Laws for custom `QuantityScalar` backends and BigUint/BigInt implementations.
   Rust trait bounds specify operations, not their algebraic correctness.
-- Complete diagnostic/error ordering, receipts, and Rust replay/fork refinement.
+- Rust replay/fork refinement and its composition with the transaction contract.
   Rust `replay` retains an accepted prefix on failure; `replayed` protects its source.
 
 For further implementation proofs, extend the pinned Aeneas pipeline from u64
 arithmetic, baskets, accounts, model/rate construction, discovery, validation, evaluation, effects and conservation
-to complete exchange preparation and commit, connecting
+to execution/observation and remaining public data contracts, connecting
 extracted definitions to the existing specifications. Model unavoidable external dependencies explicitly and
 report their trust status. Do not maintain a second Rust algorithm only for proofs
 or change the public API to an untyped representation to satisfy extraction.

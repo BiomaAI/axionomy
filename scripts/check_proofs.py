@@ -50,6 +50,28 @@ def validate_coverage(root, coverage):
             # These are the implemented extraction pipelines. Future
             # claims need their own regeneration and trust-boundary checks.
             pipelines = {
+                "complete_transactions": ("AccountExtraction.Funs", {
+                    "Axionomy.AnalysisRefinement.analyze_refines",
+                    "Axionomy.AnalysisRefinement.assess_refines",
+                    "Axionomy.ApplyRefinement.apply_refines",
+                    "Axionomy.ApplyRefinement.accepted_receipt_refines",
+                    "Axionomy.Transaction.apply_receipt_changes",
+                    "Axionomy.FilteringRefinement.is_applicable_refines",
+                    "Axionomy.FilteringRefinement.applicable_refines",
+                    "Axionomy.AggregationContract.validated_aggregate",
+                    "Axionomy.AggregationContract.ready_preflight",
+                    "Axionomy.AggregationContract.ready_prepare",
+                    "Axionomy.Transaction.analyze_ready",
+                    "Axionomy.OrderedEffects.aggregate_contract",
+                    "Axionomy.RateWellFormed.new_registered",
+                    "Axionomy.RateWellFormed.consume_registered",
+                    "Axionomy.RateWellFormed.produce_registered",
+                    "Axionomy.RateWellFormed.preserve_registered",
+                    "Axionomy.RateWellFormed.static_consume_registered",
+                    "Axionomy.RateWellFormed.static_produce_registered",
+                    "Axionomy.RateWellFormed.static_preserve_registered",
+                    "Axionomy.RateWellFormed.condition_registered",
+                    "Axionomy.RateWellFormed.distinct_registered"}),
                 'structural_validation': ("AccountExtraction.Funs", {
                     'Axionomy.ValidationCompleteRefinement.validate_refines',
                     'Axionomy.ValidationCompleteRefinement.accepted_has_accounts',
@@ -180,12 +202,13 @@ def main():
     committed = json.loads((ROOT / "verification/conformance.json").read_text())
     if generated != committed:
         raise ValueError("Lean conformance cases are stale; regenerate them from Conformance.lean and review the diff")
-    run("cargo", "test", "-p", "axionomy", "--all-features", "--test", "lean_conformance")
+    run("cargo", "test", "-p", "axionomy", "--all-features", "--test", "lean_conformance",
+        "--test", "transaction_conformance")
     run("cargo", "test", "-p", "axionomy", "--all-features", "--lib",
         "runtime_")
     run("cargo", "test", "-p", "axionomy", "--all-features", "--doc")
     print(f"Verified {len(theorems)} registered theorems and their axiom dependencies, "
-          "fresh Aeneas extraction of u64 arithmetic, basket construction/operations, account updates/staging, model/rate construction and metadata discovery, structural validation, snapshot evaluation/conditions, effect helpers, signed conservation and measurement, "
+          "fresh Aeneas extraction of u64 arithmetic, basket construction/operations, account updates/staging, model/rate construction and metadata discovery, complete transaction assessment/application and vector filtering, snapshot evaluation/conditions, signed conservation and measurement, "
           "and Rust conformance/type checks. Collection storage uses an explicit trusted model. "
           "Other core implementation refinement remains unproved; see verification/README.md.")
 

@@ -15,8 +15,9 @@ and the production per-account exchange staging helper using the production
 generic trait dictionary and the collection abstraction. That shared pipeline
 also proves model/rate construction, complete metadata discovery and structural validation,
 recursive snapshot evaluation and conditions,
-bounded effect helpers, exact evaluator messages, signed conservation and
-whole-state measurement;
+bounded effect helpers, exact evaluator messages, signed conservation,
+whole-state measurement, complete transaction assessment/application and stable
+finite-vector candidate filtering;
 see its extended trust boundary in [ACCOUNTS.md](ACCOUNTS.md).
 
 `Axionomy/QuantityRefinement.lean` contains the four refinement theorems. Its

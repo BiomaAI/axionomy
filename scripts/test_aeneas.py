@@ -55,6 +55,48 @@ class ExtractionBoundaryTests(unittest.TestCase):
 
 
 class ProductionMutationTests(unittest.TestCase):
+    def test_reversed_filter_breaks_transaction_filtering(self):
+        self.check_mutation(
+            "src/economy.rs", "if self.is_applicable(&proposal)", "if !self.is_applicable(&proposal)",
+            "extract_account.py", "stale account model", "FilteringRefinement", "AccountExtraction",
+            proof_failure="Type mismatch")
+
+    def test_wrong_computed_channel_breaks_aggregation(self):
+        self.check_mutation(
+            "src/economy.rs", "ComputedDirection::Produce => merge_quantity(&mut self.produce, asset, value)",
+            "ComputedDirection::Produce => merge_quantity(&mut self.consume, asset, value)",
+            "extract_account.py", "stale account model", "ComputedEffectRefinement", "AccountExtraction")
+
+    def test_wrong_preservation_requirement_breaks_preflight(self):
+        self.check_mutation(
+            "src/economy.rs", "required.checked_add(&effect.preserve)", "required.checked_add(&effect.produce)",
+            "extract_account.py", "stale account model", "AvailabilityRefinement", "AccountExtraction")
+
+    def test_reversed_condition_breaks_transaction_conditions(self):
+        self.check_mutation(
+            "src/economy.rs", "if !satisfied {", "if satisfied {",
+            "extract_account.py", "stale account model", "ConditionRefinement", "AccountExtraction")
+
+    def test_reversed_invariant_diagnostic_breaks_invariant_caller(self):
+        self.check_mutation(
+            "src/economy.rs", "                    before,\n                    after,",
+            "                    before: after,\n                    after: before,",
+            "extract_account.py", "stale account model", "InvariantRefinement", "AccountExtraction")
+
+    def test_empty_receipt_breaks_complete_application(self):
+        self.check_mutation(
+            "src/economy.rs", "Receipt::new(proposal, projected_deltas)", "Receipt::new(proposal, Vec::new())",
+            "extract_account.py", "stale account model", "ApplyRefinement", "AccountExtraction")
+
+    def test_wrong_committed_balance_breaks_atomic_commit(self):
+        # Replacing the prepared account with an empty one breaks the exact
+        # backward update at the proof's typed state-equivalence step.
+        self.check_mutation(
+            "src/economy.rs", "self.accounts[&account_id] = holder;",
+            "self.accounts[&account_id] = Arc::new(Account::new(Basket::new()));",
+            "extract_account.py", "stale account model", "CommitRefinement", "AccountExtraction",
+            proof_failure="'change' tactic failed")
+
     def test_reversed_zero_units_breaks_structural_validation(self):
         self.check_mutation(
             "src/economy.rs", "if proposal.units().is_zero()", "if !proposal.units().is_zero()",
