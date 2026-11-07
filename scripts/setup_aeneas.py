@@ -20,6 +20,26 @@ TOOLS = ROOT / "verification/.tools"
 PIN = json.loads((ROOT / "verification/aeneas-toolchain.json").read_text())
 
 
+def check_backend_patch(destination, root=ROOT, pin=PIN, write=False):
+    """Pin the instance-name fix as well as the unmodified release binary."""
+    patch = pin["lean_backend_patch"]
+    artifact = root / patch["path"]
+    if hashlib.sha256(artifact.read_bytes()).hexdigest() != patch["sha256"]:
+        raise ValueError("Lean backend patch checksum mismatch")
+    source = destination / patch["source"]
+    digest = hashlib.sha256(source.read_bytes()).hexdigest()
+    if digest == patch["after_sha256"]:
+        return
+    if digest != patch["before_sha256"]:
+        raise ValueError("Lean backend source differs from both reviewed versions")
+    if not write:
+        raise ValueError("Lean backend patch missing; run python3 scripts/setup_aeneas.py")
+    run("git", "apply", "--check", str(artifact), cwd=destination)
+    run("git", "apply", str(artifact), cwd=destination)
+    if hashlib.sha256(source.read_bytes()).hexdigest() != patch["after_sha256"]:
+        raise ValueError("Lean backend patch produced an unexpected source hash")
+
+
 def run(*args, cwd=ROOT, capture=False):
     print("+ " + " ".join(map(str, args)), flush=True)
     return subprocess.run(args, cwd=cwd, check=True, text=True,
@@ -40,6 +60,7 @@ def verify_tools():
     backend_lean = TOOLS / "aeneas/backends/lean/lean-toolchain"
     if lean.read_text().strip() != PIN["lean"] or backend_lean.read_text().strip() != PIN["lean"]:
         raise ValueError("Lean versions do not match the extraction toolchain")
+    check_backend_patch(TOOLS / "aeneas")
     return aeneas, charon
 
 
@@ -67,6 +88,7 @@ def main():
                 bundle.extractall(destination, filter="data")
         marker.write_text(archive["sha256"] + "\n")
 
+    check_backend_patch(destination, write=True)
     toolchain = PIN["charon"]["rust_toolchain"]
     run("rustup", "toolchain", "install", toolchain, "--profile", "minimal",
         "--component", "rustc-dev", "--component", "llvm-tools", "--component", "rust-src")

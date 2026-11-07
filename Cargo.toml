@@ -67,3 +67,7 @@ path = "verification/extract.rs"
 [[example]]
 name = "basket_extraction"
 path = "verification/extract_basket.rs"
+
+[[example]]
+name = "account_extraction"
+path = "verification/extract_account.rs"

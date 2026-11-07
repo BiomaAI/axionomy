@@ -1,0 +1,124 @@
+# Implementation proof: account updates
+
+The production `Account::deposit` and `Account::withdraw` paths now have Aeneas
+refinement proofs for u64 quantities. `src/account.rs` is extracted without
+rewriting its algorithms. The proof includes basket lookup, zero-removing
+insertion, shortfall calculation, and the checked quantity operations used by
+those paths.
+
+## Checked contract
+
+`Axionomy/Account.lean` defines an ordered, typed account specification. Deposits
+perform checked addition and reject the first overflowing asset in request order.
+Withdrawals return every positive shortfall in request order, or subtract the
+requested quantities. Successful updates keep unaffected entries and remove
+zero balances. Both failure results preserve the original ordered state.
+
+`AccountRefinement.deposit_refines_naturals` and
+`AccountRefinement.withdraw_refines_naturals` prove that the generated production
+program terminates with exactly the specification's result and resulting state.
+Their execution `Result.ok` witness excludes panic and divergence in the model;
+a rejected deposit or withdrawal is a Rust error, not an execution failure.
+
+The withdrawal proof requires unique requested asset identifiers. That is the
+invariant of the public `Basket` representation; the preceding constructor proof
+establishes it. The proof shows that updates of an earlier asset leave the later
+requested assets unchanged. Thus a successful shortfall preflight guarantees each
+subtraction's `expect` is safe. The separate shortfall proof also discharges its
+`expect`: a positive deficiency always admits checked subtraction.
+
+The proof quantifies over every u64 quantity and arbitrary finite baskets,
+including empty baskets, missing assets, full depletion, and late overflow. It
+keeps asset identities as an arbitrary type. Equality and cloning have explicit
+laws: equality terminates and agrees with identity, and cloning terminates and
+returns an equal asset. Concrete dictionaries satisfy these premises without
+assuming the desired outcome.
+
+`AccountMap.lean` proves that value conversion commutes with the specification.
+`natural_hom` establishes that the u64 arithmetic instance maps to checked
+natural-number addition bounded by `2^64 - 1` and exact natural subtraction.
+Consequently the main theorem compares final quantities and errors to ordinary
+natural numbers, not just another machine-integer calculation.
+
+## Production connection and type guarantees
+
+`extract_account.rs` includes the exact production account, basket, amount, and
+quantity source files through `#[path]`, then forwards to the public methods.
+The checker verifies these paths and forwarding bodies. Charon uses promoted
+MIR before drop elaboration, as in the basket constructor pipeline. Generated
+Lean and intermediate LLBC are not patched.
+
+Two source refactors let the pinned translator compile the complete paths:
+
+- `QuantityMeasure` names exactly the existing `SignedMeasure` requirements:
+  `Clone + Eq + Debug + Display + Zero + CheckedAdd`. A blanket implementation
+  supplies it to every type already satisfying those bounds. `QuantityScalar`
+  retains every operation and bound, including those of its associated measure.
+  Grouping the measure bounds prevents the generator from assigning the same
+  field names to scalar and measure trait dictionaries.
+- The local `quantity` parameter of `Basket::insert` is named `amount`, avoiding
+  shadowing of the generated `quantity` module. Its type and behavior are identical.
+
+Account methods, asset types, numeric backends, private state, ownership, and
+borrowing boundaries retain their original Rust guarantees. The theorem covers
+the default u64 extraction configuration; it makes no algebraic claim for an
+arbitrary user-defined numeric backend.
+
+## Explicit trust boundary
+
+The compiler/MIR, Charon, Aeneas, and backend primitive models remain trusted,
+as described in [AENEAS.md](AENEAS.md). This is not machine-code verification.
+The pinned Lean backend includes a small, reviewed instance-naming patch. Its
+discriminant attribute otherwise gives two independently extracted `QuantityError`
+types the same global instance name, preventing their combined import. The patch
+names each instance under its fully qualified enum type. It changes no enum
+values, translated program, or proof semantics. Setup checks the patch checksum
+and both source versions; extraction requires the patched source hash. The Lean
+kernel checks the resulting declarations along with all other proof terms.
+
+The account proof extends the [basket collection abstraction](BASKETS.md):
+
+- `IndexMap` is an ordered list of typed pairs. Lookup, insertion, removal, and
+  iteration have explicit executable models. Insertion reuses the basket proof's
+  map model. Removal preserves the remaining insertion order.
+- The cloning model invokes the supplied key/value `Clone` operations and
+  propagates failures. The proof uses explicit clone laws and the extracted
+  quantity clone implementation. Physical allocations, hashing, resizing,
+  hasher cloning, destructor effects, and copy isolation are not extracted or
+  verified. Applying the theorem to Rust assumes those collection operations
+  implement their logical contracts with lawful, stable hashing and successful
+  allocation.
+- Option cloning/default combinators have explicit models. Actual account
+  control flow, shortfall computation, checked arithmetic, `expect` calls, and
+  assignment of the committed account are extracted, not external models.
+- Unused hash internals, formatting, and signed conversion return execution
+  failure in the model. The successful account proofs do not execute them and
+  do not certify these unrelated operations.
+
+All generated and handwritten Axionomy declarations undergo the transitive
+axiom audit. Models are definitions; no new axioms, unfinished proofs, or premises
+asserting update correctness are admitted. Other basket operations, serialization,
+BigUint/custom backends, Economy account selection, exchanges, and replay retain
+separate coverage boundaries.
+
+## Reproduce and maintain
+
+After the tool setup described in [README.md](README.md):
+
+```sh
+python3 scripts/extract_account.py --write
+# Review the generated diff, proofs, external interfaces, and source coverage.
+python3 scripts/check_proofs.py
+python3 -m unittest discover -s scripts -p 'test_*.py'
+```
+
+The gate regenerates account code alongside arithmetic and basket construction,
+rejects stale generated files and changed external interfaces, checks the Lean
+kernel and axiom dependencies, and runs Rust conformance and type checks.
+
+The executable natural-number specification generates 328 account cases covering
+both asset orders, u64 boundaries, exact shortfalls, untouched assets, and state
+preservation after a later failure. They run through the public Rust methods.
+Isolated production-source mutations commit partial deposits and reverse the
+withdrawal preflight condition. Each must reject stale extraction, successfully
+compile its freshly generated model, and then fail its refinement proof.

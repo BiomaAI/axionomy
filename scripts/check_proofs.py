@@ -13,6 +13,7 @@ import tempfile
 
 from extract_quantity import check_extraction
 from extract_basket import check_extraction as check_basket_extraction
+from extract_account import check_extraction as check_account_extraction
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -21,6 +22,8 @@ def validate_coverage(root, coverage):
     if coverage.get("version") != 1:
         raise ValueError("unsupported proof coverage version")
     sources = {"Cargo.toml", "Cargo.lock", "verification/extract.rs", "verification/extract_basket.rs",
+               "verification/extract_account.rs",
+               "verification/patches/aeneas-namespaced-discriminant.patch",
                "verification/aeneas-toolchain.json"} | {
                    str(p.relative_to(root)) for p in (root / "src").rglob("*.rs")}
     recorded = coverage["sources"]
@@ -54,6 +57,11 @@ def validate_coverage(root, coverage):
                     "Axionomy.BasketRefinement.construct_refines",
                     "Axionomy.BasketRefinement.duplicate_rejected",
                     "Axionomy.BasketRefinement.exactEquality_lawful"}),
+                "account_updates": ("AccountExtraction.Funs", {
+                    "Axionomy.AccountRefinement.deposit_refines_naturals",
+                    "Axionomy.AccountRefinement.withdraw_refines_naturals",
+                    "Axionomy.AccountRefinement.shortfall_refines",
+                    "Axionomy.AccountRefinement.exactClone_lawful"}),
             }
             pipeline = pipelines.get(feature["id"])
             if pipeline is None or feature.get("extracted_module") != pipeline[0]:
@@ -103,6 +111,7 @@ def main():
     theorems = validate_coverage(ROOT, coverage)
     check_extraction()
     check_basket_extraction()
+    check_account_extraction()
     lean_root = ROOT / "verification/lean"
     run("lake", "build", cwd=lean_root)
     run("lake", "env", "leanchecker", "Axionomy", cwd=lean_root)
@@ -117,8 +126,8 @@ def main():
     run("cargo", "test", "-p", "axionomy", "--all-features", "--test", "lean_conformance")
     run("cargo", "test", "-p", "axionomy", "--all-features", "--doc")
     print(f"Verified {len(theorems)} registered theorems and their axiom dependencies, "
-          "fresh Aeneas extraction of u64 checked arithmetic and basket construction, "
-          "and Rust conformance/type checks. Basket storage uses an explicit trusted model. "
+          "fresh Aeneas extraction of u64 arithmetic, basket construction, and account updates, "
+          "and Rust conformance/type checks. Collection storage uses an explicit trusted model. "
           "Other core implementation refinement remains unproved; see verification/README.md.")
 
 

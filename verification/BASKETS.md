@@ -84,6 +84,8 @@ construction and JSON deserialization also use that implementation, but their
 adapters have finite conformance evidence, not separate implementation proofs.
 The existing mutation, arithmetic, account, rate, exchange, serialization, and
 arbitrary numeric-backend gaps remain explicit in `coverage.json`.
+The subsequent [account proof](ACCOUNTS.md) covers deposit/withdrawal and their
+basket lookup, insertion, and shortfall paths under the same storage abstraction.
 
 ## Regenerate and check
 

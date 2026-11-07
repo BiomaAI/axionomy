@@ -27,8 +27,8 @@ into it), read `verification/README.md` and `verification/coverage.json` first.
 - Run `python3 scripts/check_proofs.py` and the appropriate Rust checks before
   completing core work. Preserve the workspace's existing checks.
 - Report verification precisely. The current baseline proves Aeneas-extracted
-  u64 checked arithmetic and basket construction against Lean specifications.
-  Basket construction uses an explicit trusted collection model; other contracts have
+  u64 checked arithmetic, basket construction, and account deposit/withdrawal
+  against Lean specifications. Collections use explicit trusted models; other contracts have
   design proofs and finite Rust conformance tests. This is not a proof of the
   entire Rust implementation. Preserve fresh extraction and its explicit trust
   boundary when extending implementation proofs.

@@ -55,6 +55,17 @@ class ExtractionBoundaryTests(unittest.TestCase):
 
 
 class ProductionMutationTests(unittest.TestCase):
+    def test_partial_deposit_commit_breaks_the_account_proof(self):
+        original = "return Err(AccountError::Overflow {"
+        self.check_mutation(
+            "src/account.rs", original, "self.balances = updated;\n                " + original,
+            "extract_account.py", "stale account model", "AccountRefinement")
+
+    def test_reversed_withdrawal_check_breaks_the_account_proof(self):
+        self.check_mutation(
+            "src/account.rs", "if !shortfall.is_empty() {", "if shortfall.is_empty() {",
+            "extract_account.py", "stale account model", "AccountRefinement")
+
     def test_reversing_rust_subtraction_breaks_the_refinement_proof(self):
         self.check_mutation(
             "src/quantity.rs", "Self::from_checked(self.0.checked_sub(&rhs.0))",
@@ -116,6 +127,9 @@ class ProductionMutationTests(unittest.TestCase):
             self.assertIn(stale_message, stale.stdout)
             regenerate = run(sys.executable, "scripts/" + script, "--write")
             self.assertEqual(regenerate.returncode, 0, regenerate.stdout)
+            generated = run("lake", "build", module.replace("Refinement", "Extraction"),
+                            cwd=root / "verification/lean")
+            self.assertEqual(generated.returncode, 0, generated.stdout)
             proof = run("lake", "build", "Axionomy." + module, cwd=root / "verification/lean")
             self.assertNotEqual(proof.returncode, 0, proof.stdout)
             self.assertIn(module + ".lean", proof.stdout)

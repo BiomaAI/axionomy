@@ -1,0 +1,117 @@
+#!/usr/bin/env python3
+"""Extract the production account updates and check its storage boundary."""
+import argparse
+import hashlib
+import os
+from pathlib import Path
+import re
+import subprocess
+import sys
+import tempfile
+
+from setup_aeneas import PIN, ROOT, verify_tools
+from extract_quantity import LEAN, WORK
+
+GENERATED = {
+    "Types.lean": "AccountExtraction/Types.lean",
+    "Funs.lean": "AccountExtraction/Funs.lean",
+    "AccountExtraction.lean": "AccountExtraction.lean",
+}
+TEMPLATES = {
+    "TypesExternal_Template.lean": "86560f493b0b74e2a8e17c56566a8a967907b37a9f1ea962fe6cfc297dc22817",
+    "FunsExternal_Template.lean": "64de724fe2167c6bcf3609dd731c9817877b5e1514e42e91385bb32dce7ad65a",
+}
+
+
+def validate_bridge(root=ROOT):
+    """Require the harness to forward to the unchanged production methods."""
+    harness = (root / "verification/extract_account.rs").read_text()
+    paths = re.findall(r'#\[path\s*=\s*"([^"]+)"\]', harness)
+    if sorted(paths) != ["../src/account.rs", "../src/amount.rs", "../src/basket.rs", "../src/quantity.rs"]:
+        raise ValueError("account extraction must include the exact production source files")
+    for operation in ("deposit", "withdraw"):
+        matches = re.findall(r"\bfn " + operation + r"\b[^{}]*\{([^{}]*)\}", harness)
+        if len(matches) != 1 or re.sub(r"\s+", "", matches[0]) != f"state.{operation}(assets)":
+            raise ValueError(f"account extraction entry point is not a forwarding call: {operation}")
+
+
+def validate_generated(directory):
+    names = {p.name for p in directory.iterdir()}
+    if names != set(GENERATED) | set(TEMPLATES):
+        raise ValueError(f"unexpected account extraction files: {sorted(names)}")
+    for name, expected in TEMPLATES.items():
+        if hashlib.sha256((directory / name).read_bytes()).hexdigest() != expected:
+            raise ValueError(f"account external model boundary changed: {name}; review its semantics")
+    for name in GENERATED:
+        if re.search(r"\b(sorry|admit|axiom)\b", (directory / name).read_text()):
+            raise ValueError(f"unfinished or axiomatic account extraction: {name}")
+    functions = (directory / "Funs.lean").read_text()
+    for entry in ("deposit", "withdraw", "account.Account.deposit", "account.Account.withdraw",
+                  "account.Account.deposit_loop.body", "account.Account.withdraw_loop.body",
+                  "basket.Basket.shortfall", "basket.Basket.shortfall_loop.body",
+                  "basket.Basket.insert", "quantity.Quantity.checked_add", "quantity.Quantity.checked_sub"):
+        if not re.search(r"^def " + re.escape(entry) + r"\s", functions, re.MULTILINE):
+            raise ValueError(f"missing account production definition: {entry}")
+
+
+def compare_generated(directory, lean=LEAN, write=False):
+    for name, relative in GENERATED.items():
+        actual = (directory / name).read_bytes()
+        target = lean / relative
+        if write:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(actual)
+        elif not target.is_file() or actual != target.read_bytes():
+            raise ValueError(f"stale account model: {relative}; run python3 scripts/extract_account.py --write and review/reprove")
+
+
+def check_extraction(write=False):
+    validate_bridge()
+    aeneas, charon = verify_tools()
+    WORK.mkdir(parents=True, exist_ok=True)
+    environment = os.environ.copy()
+    environment["CARGO_TARGET_DIR"] = str(WORK / "cargo-target")
+    environment["CARGO_INCREMENTAL"] = "0"
+    toolchain = "+" + PIN["charon"]["rust_toolchain"]
+    rustc = subprocess.check_output(["rustc", toolchain, "-vV"], text=True)
+    host = next(line.removeprefix("host: ") for line in rustc.splitlines() if line.startswith("host: "))
+    subprocess.run(["cargo", toolchain, "clean", "--target", host, "-p", "axionomy"],
+                   cwd=ROOT, env=environment, check=True)
+    with tempfile.TemporaryDirectory(prefix="account-extraction-", dir=WORK) as scratch:
+        scratch = Path(scratch)
+        llbc = scratch / "account_extraction.llbc"
+        generated = scratch / "generated"
+        generated.mkdir()
+        command = [str(charon), "cargo", "--preset", "aeneas", "--monomorphize-mut",
+                   "--resugar-drops", "--rustc-arg=-Zinline-mir=no",
+                   "--start-from-if-exists", "account_extraction::deposit",
+                   "--start-from-if-exists", "account_extraction::withdraw",
+                   "--mir", "promoted", "--sysroot", "default",
+                   "--include", "account_extraction::account", "--include", "account_extraction::basket",
+                   "--include", "account_extraction::quantity",
+                   "--include", "num_traits", "--opaque", "indexmap",
+                   "--dest-file", str(llbc), "--", "--locked", "-p", "axionomy",
+                   "--example", "account_extraction", "--no-default-features"]
+        print("Extracting the production account updates...", flush=True)
+        subprocess.run(command, cwd=ROOT, env=environment, check=True)
+        if not llbc.is_file():
+            raise ValueError("Charon did not emit fresh account LLBC")
+        subprocess.run([str(aeneas), "-backend", "lean", "-namespace", "Axionomy.AccountExtracted",
+                        "-dest", str(generated), "-use-lean-modules", "false", "-split-files",
+                        "-gen-lib-entry", "-warnings-as-errors", "-no-progress-bar", str(llbc)],
+                       cwd=ROOT, check=True)
+        validate_generated(generated)
+        compare_generated(generated, write=write)
+    print("Account extraction updated; review and recheck proofs." if write else
+          "Production account extraction matches the committed model.", flush=True)
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--write", action="store_true")
+    args = parser.parse_args()
+    try:
+        check_extraction(write=args.write)
+    except (ValueError, OSError, subprocess.CalledProcessError) as error:
+        print(f"Account extraction failed: {error}", file=sys.stderr)
+        sys.exit(1)

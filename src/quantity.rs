@@ -6,6 +6,13 @@ use std::fmt;
 use std::hash::Hash;
 use thiserror::Error;
 
+/// Scalar operations required by a quantity backend's invariant measure.
+///
+/// The blanket implementation preserves the existing backend requirements.
+pub trait QuantityMeasure: Clone + Eq + fmt::Debug + fmt::Display + Zero + CheckedAdd {}
+
+impl<T> QuantityMeasure for T where T: Clone + Eq + fmt::Debug + fmt::Display + Zero + CheckedAdd {}
+
 /// Exact scalar behavior required by authoritative economic quantities.
 ///
 /// Implementations may have a wider representable domain than Axionomy
@@ -26,7 +33,7 @@ pub trait QuantityScalar:
     + CheckedDiv
 {
     /// Signed exact type used while evaluating linear invariants.
-    type SignedMeasure: Clone + Eq + fmt::Debug + fmt::Display + Zero + CheckedAdd;
+    type SignedMeasure: QuantityMeasure;
 
     /// Returns whether this value is valid as a non-negative quantity.
     fn is_nonnegative(&self) -> bool;

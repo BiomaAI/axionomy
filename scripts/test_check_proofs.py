@@ -19,6 +19,8 @@ class CoverageGateTests(unittest.TestCase):
             "Cargo.lock": "version = 4\n",
             "verification/extract.rs": "// extraction entry points\n",
             "verification/extract_basket.rs": "// shared basket extraction entry point\n",
+            "verification/extract_account.rs": "// shared account extraction entry points\n",
+            "verification/patches/aeneas-namespaced-discriminant.patch": "// pinned backend name fix\n",
             "verification/aeneas-toolchain.json": "{}\n",
             "src/lib.rs": "pub struct TypedCore;\n",
             "tests/contract.rs": "// regression evidence\n",
@@ -29,7 +31,8 @@ class CoverageGateTests(unittest.TestCase):
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_text(content)
         sources = ["Cargo.toml", "Cargo.lock", "src/lib.rs", "verification/extract.rs",
-                   "verification/extract_basket.rs", "verification/aeneas-toolchain.json"]
+                   "verification/extract_basket.rs", "verification/extract_account.rs",
+                   "verification/patches/aeneas-namespaced-discriminant.patch", "verification/aeneas-toolchain.json"]
         self.coverage = {
             "version": 1,
             "sources": {name: hashlib.sha256((self.root / name).read_bytes()).hexdigest() for name in sources},

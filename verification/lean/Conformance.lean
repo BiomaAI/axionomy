@@ -2,6 +2,7 @@ import Lean
 import Axionomy.Exchange
 import Axionomy.Rates
 import Axionomy.Basket
+import Axionomy.Account
 
 /-! Deterministic executable examples from the SAME definitions used in the
 proofs. Rust runs these examples through the public API. Agreement on these
@@ -54,6 +55,28 @@ def basketCase (entries : List (Nat × Nat)) : BasketCase :=
 def expression : Rates.Expr Unit Unit Unit :=
   .binary .div (.binary .mul (.balance () ()) .units) (.parameter ())
 
+structure AccountCase where
+  operation : String
+  before : List (Nat × String)
+  amounts : List (Nat × String)
+  after : List (Nat × String)
+  overflow : Option Nat
+  shortfall : Option (List (Nat × String))
+  deriving ToJson
+
+def accountCase (depositing : Bool) (before amounts : List (Nat × Nat)) : AccountCase :=
+  let before := Basket.canonical before
+  let amounts := Basket.canonical amounts
+  let ops := Account.naturals Quantity.u64Max
+  let result := if depositing then Account.deposit ops before amounts else Account.withdraw ops before amounts
+  let strings := fun entries : List (Nat × Nat) => entries.map (fun (asset, value) => (asset, toString value))
+  let error := match result.1 with
+    | .ok () => (none, none)
+    | .error (.overflow asset) => (some asset, none)
+    | .error (.insufficient missing) => (none, some (strings missing))
+  ⟨if depositing then "deposit" else "withdraw", strings before, strings amounts,
+    strings result.2, error.1, error.2⟩
+
 def main : IO Unit := do
   let limit := Quantity.u64Max
   let boundaries := [0, 1, 2, 3, limit - 1, limit]
@@ -103,6 +126,21 @@ def main : IO Unit := do
       baskets := baskets.push (basketCase entries)
     level := level.flatMap (fun prior => alphabet.map (fun entry => prior ++ [entry]))
   baskets := baskets.push (basketCase [(0, 0), (1, 2), (1, 0), (0, 1)])
+  let mut accounts : Array AccountCase := #[]
+  for first in [0, 1, limit] do
+    for second in [0, 1, limit] do
+      for addFirst in [0, 1, limit] do
+        for addSecond in [0, 1, limit] do
+          for reverse in [false, true] do
+            let amounts := [(0, addFirst), (1, addSecond)]
+            let amounts := if reverse then amounts.reverse else amounts
+            for depositing in [false, true] do
+              accounts := accounts.push (accountCase depositing [(0, first), (1, second), (2, 7)] amounts)
+  for (before, amounts) in [([(0, 10), (1, limit), (2, 7)], [(0, 5), (1, 1)]),
+      ([(0, 5), (1, 2), (2, 7)], [(0, 5), (1, 3), (3, 1)])] do
+    for depositing in [false, true] do
+      accounts := accounts.push (accountCase depositing before amounts)
   let document := Json.mkObj [("version", toJson (1 : Nat)), ("scalars", toJson scalars),
-    ("exchanges", toJson exchanges), ("expressions", toJson expressions), ("baskets", toJson baskets)]
+    ("exchanges", toJson exchanges), ("expressions", toJson expressions), ("baskets", toJson baskets),
+    ("accounts", toJson accounts)]
   IO.println document.compress

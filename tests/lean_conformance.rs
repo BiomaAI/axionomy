@@ -1,8 +1,8 @@
 //! Finite cross-language regression checks against executable Lean definitions.
 //! This is not a proof that the Rust implementation refines those definitions.
 use axionomy::{
-    Account, AssetAmount, Basket, BasketError, EconomyBuilder, Exchange, LinearInvariant, Quantity,
-    QuantityComparison, QuantityExpression as Q, Rate, basket,
+    Account, AccountError, AssetAmount, Basket, BasketError, EconomyBuilder, Exchange,
+    LinearInvariant, Quantity, QuantityComparison, QuantityExpression as Q, Rate, basket,
 };
 use serde::Deserialize;
 
@@ -13,6 +13,68 @@ struct Fixtures {
     exchanges: Vec<ExchangeCase>,
     expressions: Vec<ExpressionCase>,
     baskets: Vec<BasketCase>,
+    accounts: Vec<AccountCase>,
+}
+
+#[derive(Debug, Deserialize)]
+struct AccountCase {
+    operation: String,
+    before: Vec<(u64, String)>,
+    amounts: Vec<(u64, String)>,
+    after: Vec<(u64, String)>,
+    overflow: Option<u64>,
+    shortfall: Option<Vec<(u64, String)>>,
+}
+
+#[test]
+fn account_updates_match_lean() {
+    fn basket(entries: &[(u64, String)]) -> Basket<u64> {
+        Basket::try_from_entries(
+            entries
+                .iter()
+                .map(|(asset, value)| (*asset, Quantity::new(number(value)))),
+        )
+        .unwrap()
+    }
+    fn entries(basket: &Basket<u64>) -> Vec<(u64, String)> {
+        basket
+            .iter()
+            .map(|(asset, value)| (*asset, value.to_string()))
+            .collect()
+    }
+    let cases = fixtures().accounts;
+    assert_eq!(cases.len(), 328);
+    for case in cases {
+        let mut account = Account::new(basket(&case.before));
+        let amounts = basket(&case.amounts);
+        let original = account.clone();
+        let result = match case.operation.as_str() {
+            "deposit" => account.deposit(&amounts),
+            "withdraw" => account.withdraw(&amounts),
+            other => panic!("unknown Lean account operation: {other}"),
+        };
+        match (&case.overflow, &case.shortfall, result) {
+            (None, None, Ok(())) => {}
+            (Some(expected), None, Err(AccountError::Overflow { asset })) => {
+                assert_eq!(asset, *expected, "{case:?}");
+                assert_eq!(
+                    entries(account.balances()),
+                    entries(original.balances()),
+                    "{case:?}"
+                );
+            }
+            (None, Some(expected), Err(AccountError::InsufficientBalance { shortfall })) => {
+                assert_eq!(&entries(&shortfall), expected, "{case:?}");
+                assert_eq!(
+                    entries(account.balances()),
+                    entries(original.balances()),
+                    "{case:?}"
+                );
+            }
+            (_, _, actual) => panic!("account result disagrees with Lean: {case:?}: {actual:?}"),
+        }
+        assert_eq!(entries(account.balances()), case.after, "{case:?}");
+    }
 }
 
 #[derive(Debug, Deserialize)]

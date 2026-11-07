@@ -10,6 +10,8 @@ There are no input bounds beyond the u64 type itself.
 The separate [basket construction proof](BASKETS.md) extends this pipeline with
 shared-source extraction and an explicit collection abstraction. The arithmetic
 proof's intrinsic boundary described here remains unchanged.
+The [account update proof](ACCOUNTS.md) extracts deposit, withdrawal, and shortfall
+using the production generic trait dictionary and the collection abstraction.
 
 `Axionomy/QuantityRefinement.lean` contains the four refinement theorems. Its
 `Refines` predicate requires an actual `Result.ok` witness as well as equality
@@ -86,6 +88,13 @@ Setup verifies the Aeneas release archive checksum and builds Charon from
 Aeneas's exact pinned commit. It installs the extraction Rust nightly without
 changing the default Rust toolchain. The release's Lean backend and the project
 use the same Lean version. `lean/lake-manifest.json` pins transitive Lean packages.
+
+Setup also applies `patches/aeneas-namespaced-discriminant.patch` to the Lean
+support code. It gives generated enum discriminant instances fully qualified
+names, allowing multiple extractions of the same Rust enum to coexist in the
+combined audit. `aeneas-toolchain.json` pins the patch and the before/after source
+hashes; unknown source changes are rejected. The translation binary is unchanged,
+and the patch changes names only. All resulting terms still undergo kernel checks.
 
 After intentionally changing production arithmetic:
 

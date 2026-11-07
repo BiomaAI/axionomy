@@ -1,20 +1,22 @@
 {
   "version": 1,
-  "assurance": "Partial implementation verification: Aeneas-extracted production u64 checked arithmetic and basket construction refine Lean specifications. Basket construction uses an explicit trusted ordered-map model; compiler/translation and primitive models remain trusted. Other core contracts have design proofs and finite Rust conformance.",
+  "assurance": "Partial implementation verification: Aeneas-extracted production u64 arithmetic, basket construction, and account deposit/withdrawal refine Lean specifications. Collections use explicit trusted models; compiler/translation and primitive models remain trusted. Other core contracts have design proofs and finite Rust conformance.",
   "sources": {
-    "Cargo.toml": "8d1026ddadc355457ba0da93ae5e2da7d0c621ee675de597314604f675c634c2",
+    "Cargo.toml": "414a2b181e13225e4b76aa58e70d998064174dde2d8cee603ea3af648d61a7f3",
     "Cargo.lock": "00ef263c160aeebaa49187874a4b11ec94fee9bc8fbea5a2f0cacc190607919c",
     "src/account.rs": "f9ad6bbffdc893791a246cb480395607e80e2942867c3a116e2aeb8ee2b185e2",
     "src/amount.rs": "4aa0f1432494aac0454890604e3addbd002fa6b9ded1f75f91fce7675540f9ee",
-    "src/basket.rs": "c291028c6c2903367c16aa5125ef180358add0fc97d54e72681adde896a95fb7",
+    "src/basket.rs": "4d85b432b3a35354bd2044e58ab61c4767109ac8f5dfb050e5c8caa98f8afc42",
     "src/economy.rs": "e2f67048df59aae0ce3b92b146c81d29130ced1abd89faf14bab2458b3bef45a",
     "src/exchange.rs": "aabae395148c0dd8703b2fc99aa177700eaffd0d8aac602f8a5ffbf7fb09a47b",
-    "src/lib.rs": "a4ec7c34fa7f3020ab494dfffd824e8655e63a5434f45fa190df28441f7e89e5",
-    "src/quantity.rs": "5ccffa3e3b879691bd11bd41c7236ba597eeccbcc349596210c6a3d82a9bcca6",
+    "src/lib.rs": "46d6f713693714650653128e2ceabf8a895b8ad98a38a7bdbeab4ea378a5cc06",
+    "src/quantity.rs": "af66b8cf86b6ac58cccd4e9fcfb740e06928f86b4bf6117660fb7f37319b97dd",
     "src/rate.rs": "516f11fe309ff825f26a6f23b55a01afc6b6fd8cffb65017444a37a3d3bccf93",
     "verification/extract.rs": "415b34f5f4f8aa2679af860bd2a4092c96e113145919160fe7c81e33836de3e0",
-    "verification/aeneas-toolchain.json": "943b4c78adf0388582b8c3bc17abb2ffbafde15cb9f4529a8d8434f816102bef",
-    "verification/extract_basket.rs": "dc2b3a2159704c24a5261d0069a2aac7b575f30a94ae35c4c1e96933638592dd"
+    "verification/aeneas-toolchain.json": "8676d7d11be51a6f41984d874b35910e8a1a3d0a18414998feb9402ef80932fb",
+    "verification/extract_basket.rs": "dc2b3a2159704c24a5261d0069a2aac7b575f30a94ae35c4c1e96933638592dd",
+    "verification/extract_account.rs": "fa97026e7683f6769120c0782f8bb6b804e991e00c14a9f555ee6d41e82d9bee",
+    "verification/patches/aeneas-namespaced-discriminant.patch": "fabac7482deb3da6ecaca60c4060dfe9d2114efdd010699e736c4a91267f3bc9"
   },
   "features": [
     {
@@ -137,28 +139,52 @@
         "tests/serde.rs"
       ],
       "limitations": [
-        "Entry-level canonicalization and scalar shortfall are proved. The separate basket_construction contract refines construction under a collection model. Other basket mutations, physical IndexMap semantics, arbitrary iterators, and serialization are not refined."
+        "Entry-level canonicalization and scalar shortfall are proved. Basket construction has its separate refinement contract. Account updates now extract lookup, insertion/removal and complete shortfall under an ordered-map model; other basket operations, physical IndexMap semantics, arbitrary iterators and serialization remain unrefined."
       ]
     },
     {
       "id": "account_updates",
-      "status": "design_proved_rust_tested",
+      "status": "aeneas_refinement_proved",
       "sources": [
-        "src/account.rs"
+        "src/account.rs",
+        "src/basket.rs",
+        "src/quantity.rs",
+        "src/amount.rs",
+        "verification/extract_account.rs",
+        "verification/aeneas-toolchain.json",
+        "verification/patches/aeneas-namespaced-discriminant.patch"
       ],
       "theorems": [
         "Axionomy.State.set_selected",
         "Axionomy.State.set_frame",
         "Axionomy.Exchange.exact_balance_delta",
-        "Axionomy.Exchange.rejection_is_atomic"
+        "Axionomy.Exchange.rejection_is_atomic",
+        "Axionomy.Account.deposit_rejection_atomic",
+        "Axionomy.Account.withdrawal_rejection_atomic",
+        "Axionomy.Account.shortfall_empty_iff",
+        "Axionomy.Account.shortfall_exact",
+        "Axionomy.Account.store_frame",
+        "Axionomy.AccountRefinement.add_exact",
+        "Axionomy.AccountRefinement.difference_value",
+        "Axionomy.AccountRefinement.natural_hom",
+        "Axionomy.AccountRefinement.deposit_refines_naturals",
+        "Axionomy.AccountRefinement.withdraw_refines_naturals",
+        "Axionomy.AccountRefinement.shortfall_refines",
+        "Axionomy.AccountRefinement.exactClone_lawful"
       ],
       "rust_tests": [
         "tests/account.rs",
         "tests/lean_conformance.rs"
       ],
       "limitations": [
-        "Prepared mathematical updates and the extensional frame property are proved. Mutable Rust account operations, collection cloning, and internal expects require refinement."
-      ]
+        "The actual production deposit, withdrawal, shortfall, basket lookup/insertion, and checked arithmetic call paths are extracted from shared source. For u64 quantities and finite baskets, Lean proves execution without panic/divergence and exact natural-number outcomes, including ordered state and errors. Withdrawal and shortfall require distinct requested asset identifiers, as enforced by the public Basket representation.",
+        "Generic assets require total equality agreeing with identity and total identity-preserving Clone. Rust Eq/Clone/Hash trait bounds alone do not establish those laws. Concrete equality and clone dictionaries witness satisfiability; the premises do not assume update correctness.",
+        "IndexMap storage, iteration, lookup, insertion, removal, cloning, allocation, and hashing use the explicit ordered-list model. Models invoke supplied equality and asset/value cloning, but physical allocator/hash/hasher-clone/destructor behavior remains trusted. Compiler, MIR, Charon/Aeneas translation and backend primitives are also trusted. See verification/ACCOUNTS.md.",
+        "QuantityMeasure groups exactly the pre-existing SignedMeasure trait bounds and has a blanket implementation; all public Rust scalar requirements remain. The generated account proof retains the QuantityScalar dictionary. Unused formatting, hashing, and signed conversion paths fail closed in the model and are not claimed verified.",
+        "Does not refine arbitrary QuantityScalar backends, BigUint/BigInt, serialization, account cloning as a separate API, account identifiers in Economy, exchange preparation/commit, or replay. These remain separate contracts.",
+        "The pinned Lean backend has a checksum-guarded patch that gives generated discriminant instances fully qualified names. It fixes cross-module name collisions without changing enum values, program translation, or proof semantics; the kernel checks the resulting declarations."
+      ],
+      "extracted_module": "AccountExtraction.Funs"
     },
     {
       "id": "rate_expressions_and_effects",

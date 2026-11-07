@@ -3,9 +3,18 @@
     "revision": "4acbb6d73abe9082e45cf49ba6d6229a2c7d5836",
     "release": "nightly-2026.11.06-4acbb6d",
     "archives": {
-      "Darwin-arm64": {"name": "aeneas-macos-aarch64.tar.gz", "sha256": "4e8ed96cf4f02478d1645c04d7f74ed1124913da588029a5743e85de8500e75c"},
-      "Linux-aarch64": {"name": "aeneas-linux-aarch64.tar.gz", "sha256": "870cbcdf836cdb8734ff19ddc6343fec4a1a01801d2c33b1511c6e97ca0c1ac4"},
-      "Linux-x86_64": {"name": "aeneas-linux-x86_64.tar.gz", "sha256": "257b8503464e74f17dc2dc9506b8a7440f257b4d307ad240ff3e28ec587c36b6"}
+      "Darwin-arm64": {
+        "name": "aeneas-macos-aarch64.tar.gz",
+        "sha256": "4e8ed96cf4f02478d1645c04d7f74ed1124913da588029a5743e85de8500e75c"
+      },
+      "Linux-aarch64": {
+        "name": "aeneas-linux-aarch64.tar.gz",
+        "sha256": "870cbcdf836cdb8734ff19ddc6343fec4a1a01801d2c33b1511c6e97ca0c1ac4"
+      },
+      "Linux-x86_64": {
+        "name": "aeneas-linux-x86_64.tar.gz",
+        "sha256": "257b8503464e74f17dc2dc9506b8a7440f257b4d307ad240ff3e28ec587c36b6"
+      }
     }
   },
   "charon": {
@@ -13,5 +22,12 @@
     "version": "0.1.312",
     "rust_toolchain": "nightly-2026-09-17"
   },
-  "lean": "leanprover/lean4:v4.35.0"
+  "lean": "leanprover/lean4:v4.35.0",
+  "lean_backend_patch": {
+    "path": "verification/patches/aeneas-namespaced-discriminant.patch",
+    "sha256": "fabac7482deb3da6ecaca60c4060dfe9d2114efdd010699e736c4a91267f3bc9",
+    "source": "backends/lean/Aeneas/Data/Discriminant.lean",
+    "before_sha256": "8143d882076f297f21ac20049ae9b37cd512e6260e71ff3d22ec85cc198a15cb",
+    "after_sha256": "c6f37372e831a0e7f5699515516d63964c89669cce4b2c854f9cca4c37645d47"
+  }
 }

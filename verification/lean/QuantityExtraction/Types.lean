@@ -19,14 +19,14 @@ set_option maxRecDepth 2048
 namespace Axionomy.Extracted
 
 /-- [axionomy::quantity::Quantity]
-    Source: 'src/quantity.rs', lines 76:0-76:28
+    Source: 'src/quantity.rs', lines 83:0-83:28
     Name pattern: [axionomy::quantity::Quantity]
     Visibility: public -/
 @[reducible, rust_type "axionomy::quantity::Quantity"]
 def axionomy.quantity.Quantity (N : Type _) := N
 
 /-- [axionomy::quantity::QuantityError]
-    Source: 'src/quantity.rs', lines 222:0-222:22
+    Source: 'src/quantity.rs', lines 229:0-229:22
     Name pattern: [axionomy::quantity::QuantityError]
     Visibility: public -/
 @[discriminant isize, rust_type "axionomy::quantity::QuantityError"]

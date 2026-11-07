@@ -106,11 +106,11 @@ where
         self.quantities.get(asset).cloned().unwrap_or_default()
     }
 
-    pub fn insert(&mut self, asset: A, quantity: Quantity<N>) -> Option<Quantity<N>> {
-        if quantity.is_zero() {
+    pub fn insert(&mut self, asset: A, amount: Quantity<N>) -> Option<Quantity<N>> {
+        if amount.is_zero() {
             self.quantities.shift_remove(&asset)
         } else {
-            self.quantities.insert(asset, quantity)
+            self.quantities.insert(asset, amount)
         }
     }
 

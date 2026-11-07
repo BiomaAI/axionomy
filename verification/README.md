@@ -21,6 +21,13 @@ model. It proves duplicate rejection (including zeros), exact nonzero contents,
 and preserved insertion order. See [the basket proof](BASKETS.md) for the
 shared-source extraction and the trusted storage boundary.
 
+Account deposits and withdrawals also have implementation proofs for u64
+quantities and lawful asset equality/cloning under that storage abstraction.
+They match a natural-number specification for final balances, ordered errors,
+complete shortfalls, and atomic rejection. Both subtraction `expect` calls are
+proved safe on these paths; withdrawal requires distinct requested assets.
+See [the account proof](ACCOUNTS.md) for the exact scope and source refactors.
+
 The other core contracts still have handwritten design proofs and finite Rust
 conformance tests. Neither an entire source module nor every existing core
 behavior is declared proved just because it has a coverage entry.
@@ -29,7 +36,7 @@ See [the Aeneas integration](AENEAS.md) for the exact scope and reproduction ste
 `coverage.json` maps core feature contracts to checked theorem names, Rust test
 files, and explicit limitations. All root `src/**/*.rs` files, `Cargo.toml`,
 `Cargo.lock`, the extraction entry points, and the pinned extraction toolchain
-must be accounted for. SHA-256 entries record the exact reviewed source version;
+and its reviewed backend patch must be accounted for. SHA-256 entries record the exact reviewed source version;
 changing source invalidates the review until the proof relationship is reviewed
 and the entry is deliberately updated. Hashes do not mechanically establish that
 a theorem describes Rust. Reviewers must check that relationship and the adequacy
@@ -42,6 +49,8 @@ The current library covers:
 | `QuantityRefinement` | Actual Aeneas-extracted u64 addition, subtraction, multiplication, and division refine `Quantity`, including all checked failures |
 | `BasketRefinement` | Extracted production construction refines `Basket` for u64 vector inputs, under lawful equality and the explicit collection model |
 | `Basket` | Success iff asset identifiers are unique; zeros cannot hide duplicates; canonical output preserves nonzero entries, uniqueness, and order |
+| `AccountRefinement` | Extracted deposit, withdrawal, and shortfall terminate and match exact natural-number outcomes under lawful equality/cloning and the collection model |
+| `Account` / `AccountMap` | Atomic rejection, exact positive shortfalls, selected-asset update frame property, and arithmetic representation conversion |
 | `Quantity` | Exact checked addition/multiplication, subtraction without underflow, floor division, asset-qualified amount round trip |
 | `State` | Typed account/asset updates and frame property, zero canonicalization, complete scalar shortfall, hidden-account projection, observation noninterference, monotone goals |
 | `Rates` | Checked expression evaluation refines mathematical evaluation and bounds its result; effect merging is associative/commutative in exact arithmetic; preservation does not scale |
@@ -89,6 +98,8 @@ python3 -m unittest discover -s scripts -p 'test_*.py'
 
 The project pins Lean in `lean/lean-toolchain`, and pins Aeneas/Charon in
 `aeneas-toolchain.json`. The Aeneas backend brings pinned Mathlib dependencies.
+The toolchain pin also records a checksum-guarded Lean support patch that prevents
+generated enum instance-name collisions; it changes no translated operations.
 Rust builds do not require Lean. The proof command regenerates the implementation
 model from Rust, checks it against the committed extraction, builds the Lean
 library, rechecks compiled proof terms with `leanchecker`, audits every Axionomy
@@ -112,9 +123,9 @@ lake build
 Formatting of JSON is immaterial. Review the actual changed values. The cases
 include u64 boundaries, overflow, underflow, zero units/divisors, preserved
 thresholds, conservation, computed effects, parameter lookup, conditions and
-pre-exchange snapshots. They also include 260 basket cases covering duplicates,
-zero quantities, order, and u64 boundaries. Separate existing Rust tests cover
-additional behavior.
+pre-exchange snapshots. They also include 260 basket cases and 328 account update
+cases covering duplicates, zero quantities, order, exact errors, atomic rejection,
+and u64 boundaries. Separate existing Rust tests cover additional behavior.
 
 ## Explicit legacy refinement gaps
 
@@ -122,8 +133,8 @@ The following existed before this proof requirement and are not discharged by
 the initial theorems. They are a backfill plan, not an exemption for new behavior:
 
 - Charon/Aeneas extraction and refinement beyond the four `Quantity<u64>` checked
-  arithmetic operations and modeled-storage basket construction, including
-  account/exchange `expect` and termination obligations.
+  arithmetic operations, basket construction, and account deposit/withdrawal,
+  including exchange `expect` and termination obligations.
 - Correctness of `IndexMap`, `BTreeMap`, `Arc`, iterator order, allocation, cloning,
   and copy-on-write isolation; Rust compilation still enforces its ownership rules.
 - Full structural validation: required/unknown roles and parameters, account/rate
@@ -139,8 +150,8 @@ the initial theorems. They are a backfill plan, not an exemption for new behavio
   Rust `replay` retains an accepted prefix on failure; `replayed` protects its source.
 
 For further implementation proofs, extend the pinned Aeneas pipeline from u64
-arithmetic and basket construction to the account boundary and connect extracted definitions to these
-specifications. Model unavoidable external dependencies explicitly and
+arithmetic, baskets, and accounts to exchange preparation and commit, connecting
+extracted definitions to the existing specifications. Model unavoidable external dependencies explicitly and
 report their trust status. Do not maintain a second Rust algorithm only for proofs
 or change the public API to an untyped representation to satisfy extraction.
 
