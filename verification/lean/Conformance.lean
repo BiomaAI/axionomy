@@ -8,6 +8,8 @@ import Axionomy.Conservation
 import Axionomy.RateConstruction
 import Axionomy.Evaluation
 import Axionomy.Effects
+import Axionomy.ModelConstruction
+import Axionomy.Discovery
 
 /-! Deterministic executable examples from the SAME definitions used in the
 proofs. Rust runs these examples through the public API. Agreement on these
@@ -252,6 +254,98 @@ def effectsCase (target source : List (Nat × Nat)) (units asset amount : Nat) :
   ⟨strings target, strings source, toString units, scaled.1, scaled.2, asset, toString amount,
     computed.1, computed.2⟩
 
+
+structure ModelSnapshot where
+  accounts : List (Nat × Nat)
+  rates : List (Nat × Nat)
+  invariants : List Nat
+  issues : List (Nat × Nat)
+  accepted : Bool
+  deriving ToJson
+
+def modelSnapshot (builder : ModelConstruction.Builder Nat Nat Nat Nat Nat) : ModelSnapshot :=
+  ⟨builder.accounts, builder.rates, builder.invariants,
+    builder.issues.map (fun issue => match issue with
+      | .duplicateAccount id => (0, id) | .duplicateRate id => (1, id)),
+    match builder.build with | .ok _ => true | .error _ => false⟩
+
+structure ModelCase where
+  steps : List (Nat × Nat × Nat)
+  snapshots : List ModelSnapshot
+  deriving ToJson
+
+def modelCase (steps : List (Nat × Nat × Nat)) : ModelCase := Id.run do
+  let mut builder : ModelConstruction.Builder Nat Nat Nat Nat Nat := .empty
+  let mut snapshots := [modelSnapshot builder]
+  for (kind, key, value) in steps do
+    builder := match kind with
+      | 0 => builder.addAccount key value
+      | 1 => builder.addRate key value
+      | _ => builder.addInvariant value
+    snapshots := snapshots ++ [modelSnapshot builder]
+  return ⟨steps, snapshots⟩
+
+structure MetadataStep where
+  kind : Nat
+  role : Nat
+  asset : Nat
+  expression : Json
+  right : Json
+  label : String
+  comparison : Nat
+  deriving ToJson
+
+structure MetadataSnapshot where
+  roles : List Nat
+  distinct : List (Nat × Nat)
+  consumed : List (Nat × Nat × Json)
+  produced : List (Nat × Nat × Json)
+  preserved : List (Nat × Nat × Json)
+  conditions : List (String × Json × Nat × Json)
+  parameters : List String
+  assets : List Nat
+  deriving ToJson
+
+structure MetadataCase where
+  steps : List MetadataStep
+  snapshots : List MetadataSnapshot
+  deriving ToJson
+
+def metadataCase (inputs : List (Nat × Nat × Nat × Evaluation.Expr Nat Nat Nat × Evaluation.Expr Nat Nat Nat)) : MetadataCase := Id.run do
+  let mut roles := []
+  let mut distinct := []
+  let mut consumed := []
+  let mut produced := []
+  let mut preserved := []
+  let mut conditions := []
+  let mut steps := []
+  let mut snapshots := [MetadataSnapshot.mk [] [] [] [] [] [] [] []]
+  for (kind, role, asset, expression, right) in inputs do
+    let label := "condition " ++ toString steps.length
+    let comparison := steps.length % 3
+    steps := steps ++ [⟨kind, role, asset, expressionJson expression, expressionJson right, label, comparison⟩]
+    if kind < 3 then
+      roles := Discovery.expressionRoles compare role expression roles
+      if kind = 0 then consumed := consumed ++ [(role, asset, expression)]
+      else if kind = 1 then produced := produced ++ [(role, asset, expression)]
+      else preserved := preserved ++ [(role, asset, expression)]
+    else if kind = 3 then
+      roles := Discovery.conditionRoles compare expression right roles
+      conditions := conditions ++ [(label, expression, comparison, right)]
+    else
+      roles := RateConstruction.register compare asset (RateConstruction.register compare role roles)
+      distinct := RateConstruction.register (Discovery.pairCompare compare) (Discovery.orderedPair compare role asset) distinct
+    let amounts := consumed ++ produced ++ preserved
+    let parameterRefs := amounts.flatMap (fun (_, _, expression) => Discovery.parameters expression) ++
+      conditions.flatMap (fun (_, left, _, right) => Discovery.parameters left ++ Discovery.parameters right)
+    let assetRefs := amounts.flatMap (fun (_, asset, expression) => asset :: Discovery.assets expression) ++
+      conditions.flatMap (fun (_, left, _, right) => Discovery.assets left ++ Discovery.assets right)
+    let serialize := fun entries => entries.map fun (role, asset, expression) => (role, asset, expressionJson expression)
+    snapshots := snapshots ++ [⟨roles, distinct, serialize consumed, serialize produced, serialize preserved,
+      conditions.map (fun (label, left, comparison, right) => (label, expressionJson left, comparison, expressionJson right)),
+      Discovery.registerAll compare parameterRefs [], assetRefs⟩]
+  return ⟨steps, snapshots⟩
+
 def main : IO Unit := do
   let limit := Quantity.u64Max
   let boundaries := [0, 1, 2, 3, limit - 1, limit]
@@ -414,9 +508,31 @@ def main : IO Unit := do
           effects := effects.push (effectsCase [(0, before), (1, limit), (3, 7)]
             [(0, added), (1, 1)] units asset added)
   effects := effects.push (effectsCase [] [] 0 0 0)
+  let mut models : Array ModelCase := #[modelCase []]
+  let options : List (Nat × Nat × Nat) := [(0, 0, 1), (0, 0, 9), (0, 1, 3),
+    (1, 0, 2), (1, 0, 8), (1, 2, 0), (2, 0, 5)]
+  for first in options do
+    for second in options do
+      for third in options do
+        models := models.push (modelCase [first, second, third])
+  models := models.push (modelCase [(0, 0, 1), (1, 0, 2), (1, 0, 7), (0, 0, 8), (1, 0, 9), (2, 0, 4), (0, 1, 3)])
+  let mut metadata : Array MetadataCase := #[metadataCase []]
+  let mut discoveryExpressions := atoms
+  for op in [Rates.Op.add, .sub, .mul, .div, .min, .max] do
+    discoveryExpressions := discoveryExpressions ++
+      [.binary op (.binary .add (.balance 2 3) (.parameter "éλ"))
+        (.binary .max (.balance 0 99) (.binary .sub (.parameter "a") (.balance 2 3)))]
+  for expression in discoveryExpressions do
+    for kind in [0, 1, 2, 3] do
+      metadata := metadata.push (metadataCase [
+        (4, 4, 1, .units, .units), (kind, 3, 5, expression, .parameter "未知`"),
+        (0, 2, 7, .parameter "éλ", .units), (1, 1, 6, .balance 0 99, .units),
+        (2, 2, 7, expression, .units), (3, 0, 0, expression, .binary .add (.parameter "") (.parameter "éλ")),
+        (4, 1, 4, .units, .units), (4, 2, 2, .units, .units)])
   let document := Json.mkObj [("version", toJson (1 : Nat)), ("scalars", toJson scalars),
     ("exchanges", toJson exchanges), ("expressions", toJson expressions), ("baskets", toJson baskets),
     ("accounts", toJson accounts), ("preparations", toJson preparations), ("basketOps", toJson basketOps),
     ("conservation", toJson conservation), ("rateMerges", toJson rateMerges),
-    ("evaluation", toJson evaluation), ("measurements", toJson measurements), ("effects", toJson effects)]
+    ("evaluation", toJson evaluation), ("measurements", toJson measurements), ("effects", toJson effects),
+    ("models", toJson models), ("metadata", toJson metadata)]
   IO.println document.compress

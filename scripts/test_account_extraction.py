@@ -63,6 +63,16 @@ class AccountBridgeTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "not a forwarding call: evaluate"):
             validate_bridge(self.root)
 
+    def test_changed_model_entry_is_rejected(self):
+        self.target.write_text(self.target.read_text().replace("builder.build()", "Ok(builder)"))
+        with self.assertRaisesRegex(ValueError, "not a forwarding call: model_build"):
+            validate_bridge(self.root)
+
+    def test_changed_discovery_entry_is_rejected(self):
+        self.target.write_text(self.target.read_text().replace("rule.parameter_names()", "Default::default()"))
+        with self.assertRaisesRegex(ValueError, "not a forwarding call: rate_parameters"):
+            validate_bridge(self.root)
+
     def test_changed_rate_entry_is_rejected(self):
         self.target.write_text(self.target.read_text().replace("rule.try_consume(role, assets)", "rule.try_produce(role, assets)"))
         with self.assertRaisesRegex(ValueError, "not a forwarding call: rate_consume"):
@@ -96,6 +106,18 @@ class AccountExtractionTests(unittest.TestCase):
     def test_unexpected_generated_file_is_rejected(self):
         (self.directory / "Unexpected.lean").write_text("")
         with self.assertRaisesRegex(ValueError, "unexpected account extraction files"):
+            validate_generated(self.directory)
+
+    def test_missing_extracted_model_build_is_rejected(self):
+        path = self.directory / "Funs.lean"
+        path.write_text(path.read_text().replace("def economy.EconomyBuilder.build\n", "def bypass\n"))
+        with self.assertRaisesRegex(ValueError, "missing account production definition"):
+            validate_generated(self.directory)
+
+    def test_missing_extracted_discovery_is_rejected(self):
+        path = self.directory / "Funs.lean"
+        path.write_text(path.read_text().replace("def rate.Rate.parameter_names\n", "def bypass\n"))
+        with self.assertRaisesRegex(ValueError, "missing account production definition"):
             validate_generated(self.directory)
 
     def test_missing_extracted_withdrawal_is_rejected(self):

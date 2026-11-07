@@ -55,6 +55,44 @@ class ExtractionBoundaryTests(unittest.TestCase):
 
 
 class ProductionMutationTests(unittest.TestCase):
+    def test_reversed_duplicate_check_breaks_model_construction(self):
+        self.check_mutation(
+            "src/economy.rs", "if self.accounts.contains_key(&id)", "if !self.accounts.contains_key(&id)",
+            "extract_account.py", "stale account model", "ModelConstructionRefinement", "AccountExtraction")
+
+    def test_accepting_duplicate_models_breaks_model_build(self):
+        self.check_mutation(
+            "src/economy.rs", "if !self.issues.is_empty()", "if self.issues.is_empty()",
+            "extract_account.py", "stale account model", "ModelConstructionRefinement", "AccountExtraction")
+
+    def test_missing_computed_roles_breaks_metadata_construction(self):
+        original = "self.register_expression_roles(&role, &quantity);\n        self.computed_consume.push"
+        replacement = "self.roles.insert(role.clone());\n        self.computed_consume.push"
+        self.check_mutation(
+            "src/rate.rs", original, replacement,
+            "extract_account.py", "stale account model", "RateMetadataRefinement", "AccountExtraction")
+
+    def test_reversed_distinct_pair_breaks_metadata_construction(self):
+        self.check_mutation(
+            "src/rate.rs", "if left <= right", "if left >= right",
+            "extract_account.py", "stale account model", "RateMetadataRefinement", "AccountExtraction",
+            # The selected ge method cannot use the proved le law; simplification
+            # stops at the semantic branch comparison after generated code compiles.
+            proof_failure="`simp` made no progress")
+
+    def test_missing_preserve_parameters_breaks_rate_discovery(self):
+        self.check_mutation(
+            "src/rate.rs", "ComputedAmount::collect_parameters(&self.computed_preserve, &mut parameters);",
+            "ComputedAmount::collect_parameters(&self.computed_consume, &mut parameters);",
+            "extract_account.py", "stale account model", "RateDiscoveryRefinement", "AccountExtraction")
+
+    def test_reversed_condition_asset_order_breaks_rate_discovery(self):
+        original = "condition.left.collect_assets(&mut assets);\n            condition.right.collect_assets(&mut assets);"
+        replacement = "condition.right.collect_assets(&mut assets);\n            condition.left.collect_assets(&mut assets);"
+        self.check_mutation(
+            "src/rate.rs", original, replacement,
+            "extract_account.py", "stale account model", "RateDiscoveryRefinement", "AccountExtraction")
+
     def test_reversed_expression_error_order_breaks_the_evaluator_proof(self):
         original = """let left = evaluate_expression(left, proposal, accounts)?;
     let right = evaluate_expression(right, proposal, accounts)?;

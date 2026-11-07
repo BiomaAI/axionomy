@@ -1,21 +1,21 @@
 {
   "version": 1,
-  "assurance": "Partial implementation verification: Aeneas-extracted production u64 arithmetic, basket construction/operations, account updates/staging, static rate builders, snapshot expression/condition evaluation, bounded effect helpers, signed conservation and whole-state measurement refine Lean specifications. Explicit collection, read-only Arc and UTF-8 models, compiler/translation and primitive models remain trusted. Complete exchange orchestration and other core contracts remain open.",
+  "assurance": "Partial implementation verification: Aeneas-extracted production u64 arithmetic, basket construction/operations, account updates/staging, model/rate construction and metadata discovery, snapshot expression/condition evaluation, bounded effect helpers, signed conservation and whole-state measurement refine Lean specifications. Explicit collection, logical Arc creation/read and UTF-8 models, compiler/translation and primitive models remain trusted. Complete exchange orchestration and other core contracts remain open.",
   "sources": {
     "Cargo.toml": "414a2b181e13225e4b76aa58e70d998064174dde2d8cee603ea3af648d61a7f3",
     "Cargo.lock": "00ef263c160aeebaa49187874a4b11ec94fee9bc8fbea5a2f0cacc190607919c",
     "src/account.rs": "0eaf66937c63de2993353828e42fcfea2b80f172f5cb74fc76a28cef79fd9ff6",
     "src/amount.rs": "4aa0f1432494aac0454890604e3addbd002fa6b9ded1f75f91fce7675540f9ee",
     "src/basket.rs": "10e7d7792f3b1de207bdae124fd76a8fa5fe93295b1a4eb49455b588941ee5f1",
-    "src/economy.rs": "04fa7243253e7357b428d824a6352ae3af77e80bbdd1671d36d84318824e0523",
+    "src/economy.rs": "5eebd30fc460f6798c26cf2180ab5ab3881f24a67dd951ae9b7c21b75d921be1",
     "src/exchange.rs": "aabae395148c0dd8703b2fc99aa177700eaffd0d8aac602f8a5ffbf7fb09a47b",
     "src/lib.rs": "46d6f713693714650653128e2ceabf8a895b8ad98a38a7bdbeab4ea378a5cc06",
     "src/quantity.rs": "af66b8cf86b6ac58cccd4e9fcfb740e06928f86b4bf6117660fb7f37319b97dd",
-    "src/rate.rs": "67969e837be29899cb8b6ce59567c4000144ef891d6e1371c1eb41b340285730",
+    "src/rate.rs": "60fea4217acf9590650fbdc2ab25ea8eb4e913950b7fb569b8184fff51bb5488",
     "verification/extract.rs": "415b34f5f4f8aa2679af860bd2a4092c96e113145919160fe7c81e33836de3e0",
     "verification/aeneas-toolchain.json": "8676d7d11be51a6f41984d874b35910e8a1a3d0a18414998feb9402ef80932fb",
     "verification/extract_basket.rs": "dc2b3a2159704c24a5261d0069a2aac7b575f30a94ae35c4c1e96933638592dd",
-    "verification/extract_account.rs": "40cbeb1d4783eacfe68babad166c54cd1b03fac112f871fdf7b3e4ee54846a79",
+    "verification/extract_account.rs": "96354e6dffd04c93b2ca753d7bd9832cf9888c97cbc393ced8ada65304b96ff7",
     "verification/patches/aeneas-namespaced-discriminant.patch": "fabac7482deb3da6ecaca60c4060dfe9d2114efdd010699e736c4a91267f3bc9"
   },
   "features": [
@@ -426,7 +426,7 @@
         "Shared-source extraction covers try_consume, try_produce and try_preserve for u64 quantities. Theorems prove total execution, exact ordered basket merge/error results, role registration including empty baskets, and unchanged other effect maps, distinctness declarations, computed effects and conditions. Private merge entry/backward-function behavior is proved explicitly.",
         "Roles and assets remain separate generic types. Asset equality and asset/role cloning must satisfy the existing identity/totality laws. Role comparison must terminate and agree with the pure comparator; registered-role identity additionally requires comparison equality to imply identity. Concrete u64 ordering witnesses show these premises are satisfiable. Existing arithmetic refinement relates bounded u64 additions to natural numbers.",
         "BTreeMap/BTreeSet use a new explicit sorted-list model with occupied/vacant entry positions, stored-key retention and default insertion. Applying the model assumes valid ordered collections, lawful total ordering, allocator/tree correctness, clone isolation and the compiler/MIR/Charon/Aeneas/backend boundary. Physical tree code is not verified. See verification/ACCOUNTS.md.",
-        "Only private local bindings were renamed in production for extraction. Full Rate::new/Default, infallible convenience-constructor panic contracts, computed role/parameter/asset discovery, distinct-role construction, EconomyBuilder validation and serialization remain separate open contracts."
+        "The infallible static convenience-constructor panic contracts and serialization remain separate contracts. Model/rate constructors and computed role/parameter/asset discovery are covered by the model_construction, computed_rate_construction and rate_discovery contracts."
       ]
     },
     {
@@ -528,6 +528,99 @@
       "limitations": [
         "Production merge_scaled scales source assets with checked multiplication in source order, then atomically adds the resulting basket. Scaling or addition errors return the exact first overflowing asset and the original target. Production merge_quantity performs one checked addition and canonical insertion; computed quantities are not multiplied by units. Theorems relate results and ordered state directly to Nat specifications for all u64 values.",
         "The existing lawful asset equality/cloning and explicit collection/primitive models apply. Immutable source borrows and distinct Rust domains remain intact. These helper proofs do not establish full role-to-account aggregation, computed-effect evaluation order, consumption/preservation availability, unique affected accounts or complete preparation/commit. Those caller obligations remain open."
+      ]
+    },
+    {
+      "id": "model_construction",
+      "status": "aeneas_refinement_proved",
+      "sources": [
+        "src/economy.rs",
+        "src/rate.rs",
+        "verification/extract_account.rs",
+        "verification/aeneas-toolchain.json"
+      ],
+      "extracted_module": "AccountExtraction.Funs",
+      "theorems": [
+        "Axionomy.ModelConstruction.Builder.build_success_iff",
+        "Axionomy.ModelConstruction.Builder.duplicate_account_retained",
+        "Axionomy.ModelConstruction.Builder.duplicate_rate_retained",
+        "Axionomy.ModelConstructionRefinement.new_refines",
+        "Axionomy.ModelConstructionRefinement.default_refines",
+        "Axionomy.ModelConstructionRefinement.account_refines",
+        "Axionomy.ModelConstructionRefinement.rate_refines",
+        "Axionomy.ModelConstructionRefinement.invariant_refines",
+        "Axionomy.ModelConstructionRefinement.new_establishes_valid",
+        "Axionomy.ModelConstructionRefinement.account_preserves_valid",
+        "Axionomy.ModelConstructionRefinement.rate_preserves_valid",
+        "Axionomy.ModelConstructionRefinement.invariant_preserves_valid",
+        "Axionomy.ModelConstructionRefinement.build_refines"
+      ],
+      "rust_tests": [
+        "src/economy.rs",
+        "tests/lean_conformance.rs"
+      ],
+      "limitations": [
+        "Extracted EconomyBuilder new/default/account/rate/invariant/build for u64, with separate account, asset, role and rate types. Exact ordered duplicate issues, first-entry retention, unaffected fields and complete accepted contents. Build requires distinct account/rate keys; the constructor and insertion/invariant preservation theorems establish this reachable-state invariant.",
+        "Appending an issue or invariant requires its current Vec length below usize::MAX; the stronger insertion contract imposes the issue bound even for a fresh ID. Logical map insertion/owning iteration and Arc::new are trusted executable dependency models; physical storage, hashing, allocation, reference counts, COW, clone isolation, destructors and the compiler/MIR/translation/backend boundary remain outside the proof.",
+        "Registration preserves the supplied typed account, rate and invariant values; their separate constructors/contracts are not inferred from this theorem. Model serialization and arbitrary numeric backends remain separate contracts."
+      ]
+    },
+    {
+      "id": "computed_rate_construction",
+      "status": "aeneas_refinement_proved",
+      "sources": [
+        "src/rate.rs",
+        "verification/extract_account.rs",
+        "verification/aeneas-toolchain.json"
+      ],
+      "extracted_module": "AccountExtraction.Funs",
+      "theorems": [
+        "Axionomy.RateMetadataRefinement.new_refines",
+        "Axionomy.RateMetadataRefinement.default_refines",
+        "Axionomy.RateMetadataRefinement.consume_refines",
+        "Axionomy.RateMetadataRefinement.produce_refines",
+        "Axionomy.RateMetadataRefinement.preserve_refines",
+        "Axionomy.RateMetadataRefinement.condition_refines",
+        "Axionomy.RateMetadataRefinement.distinct_refines",
+        "Axionomy.RateMetadataRefinement.u64_less_equal_lawful",
+        "Axionomy.Discovery.expressionRoles_complete",
+        "Axionomy.Discovery.conditionRoles_complete"
+      ],
+      "rust_tests": [
+        "src/rate.rs",
+        "tests/lean_conformance.rs"
+      ],
+      "limitations": [
+        "Extracted u64 Rate new/default, all three computed-effect constructors, condition construction for String labels, distinct-pair canonicalization and recursive referenced-role registration. Exact effect/condition append order, duplicate role/pair handling and unchanged other fields. Arbitrary Into<String> callbacks are not covered by the String forwarding specialization.",
+        "Role cloning/ordering must terminate and agree with their logical values/comparator; membership additionally needs comparator equality to imply identity. Distinct construction requires the selected PartialOrd::le to agree with the same comparator; u64 witnesses discharge these laws. Valid ordered collections and lawful total ordering remain assumptions when applying the sorted-list external model to Rust.",
+        "Vec append requires a spare usize element. Borrowed-reference ordering and tuple lexicographic cmp/partial_cmp/eq have explicit logical models. Unused tuple lt/le/ge remain fail-closed because pinned Rust chaining hooks are absent from the backend dictionary. Physical trees/storage, allocation/stack limits, cloning, compiler/MIR/translation/backend semantics remain trusted. Static convenience panics, LinearInvariant constructors, serialization and non-u64 numeric backends remain separate contracts."
+      ]
+    },
+    {
+      "id": "rate_discovery",
+      "status": "aeneas_refinement_proved",
+      "sources": [
+        "src/rate.rs",
+        "verification/extract_account.rs",
+        "verification/aeneas-toolchain.json"
+      ],
+      "extracted_module": "AccountExtraction.Funs",
+      "theorems": [
+        "Axionomy.DiscoveryRefinement.roles_refines",
+        "Axionomy.DiscoveryRefinement.roles_complete",
+        "Axionomy.DiscoveryRefinement.assets_refines",
+        "Axionomy.DiscoveryRefinement.parameters_refines",
+        "Axionomy.RateDiscoveryRefinement.parameters_refines",
+        "Axionomy.RateDiscoveryRefinement.parameters_complete",
+        "Axionomy.RateDiscoveryRefinement.assets_refines"
+      ],
+      "rust_tests": [
+        "src/rate.rs"
+      ],
+      "limitations": [
+        "All ten recursive expression constructors and complete Rate parameter_names/computed_asset_keys paths are extracted. Parameters are the sorted logical union of every computed expression and both sides of every condition. Asset output preserves every occurrence and exact consume/produce/preserve/condition order, with each computed target asset before expression references. Public outputs remain borrowed &str/&Asset in Rust.",
+        "Each parameter UTF-8 byte length must fit usize, and the full asset-reference vector length must fit usize. Exact UTF-8 decoding and string ordering, Vec/slice iteration and sorted sets are explicit dependency models. Allocation, recursion/stack limits, physical string/collection storage and the compiler/MIR/translation/backend boundary remain trusted; malformed modeled UTF-8 fails closed.",
+        "Metadata discovery does not by itself prove exchange binding/parameter validation or complete preparation; those callers remain open. Static basket assets belong to their separate maps and are intentionally excluded from computed_asset_keys."
       ]
     }
   ]

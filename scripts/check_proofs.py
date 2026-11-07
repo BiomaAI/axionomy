@@ -50,6 +50,30 @@ def validate_coverage(root, coverage):
             # These are the implemented extraction pipelines. Future
             # claims need their own regeneration and trust-boundary checks.
             pipelines = {
+                'model_construction': ("AccountExtraction.Funs", {
+                    'Axionomy.ModelConstructionRefinement.new_refines',
+                    'Axionomy.ModelConstructionRefinement.default_refines',
+                    'Axionomy.ModelConstructionRefinement.account_refines',
+                    'Axionomy.ModelConstructionRefinement.rate_refines',
+                    'Axionomy.ModelConstructionRefinement.invariant_refines',
+                    'Axionomy.ModelConstructionRefinement.new_establishes_valid',
+                    'Axionomy.ModelConstructionRefinement.account_preserves_valid',
+                    'Axionomy.ModelConstructionRefinement.rate_preserves_valid',
+                    'Axionomy.ModelConstructionRefinement.invariant_preserves_valid',
+                    'Axionomy.ModelConstructionRefinement.build_refines'}),
+                'computed_rate_construction': ("AccountExtraction.Funs", {
+                    'Axionomy.RateMetadataRefinement.new_refines',
+                    'Axionomy.RateMetadataRefinement.default_refines',
+                    'Axionomy.RateMetadataRefinement.consume_refines',
+                    'Axionomy.RateMetadataRefinement.produce_refines',
+                    'Axionomy.RateMetadataRefinement.preserve_refines',
+                    'Axionomy.RateMetadataRefinement.condition_refines',
+                    'Axionomy.RateMetadataRefinement.distinct_refines',
+                    'Axionomy.RateMetadataRefinement.u64_less_equal_lawful'}),
+                'rate_discovery': ("AccountExtraction.Funs", {
+                    'Axionomy.RateDiscoveryRefinement.parameters_refines',
+                    'Axionomy.RateDiscoveryRefinement.parameters_complete',
+                    'Axionomy.RateDiscoveryRefinement.assets_refines'}),
                 "snapshot_evaluation": ("AccountExtraction.Funs", {
                     "Axionomy.EvaluationRefinement.evaluate_refines_naturals",
                     "Axionomy.EvaluationRefinement.condition_refines_naturals",
@@ -156,7 +180,7 @@ def main():
         "runtime_")
     run("cargo", "test", "-p", "axionomy", "--all-features", "--doc")
     print(f"Verified {len(theorems)} registered theorems and their axiom dependencies, "
-          "fresh Aeneas extraction of u64 arithmetic, basket construction/operations, account updates/staging, static rate builders, snapshot evaluation/conditions, effect helpers, signed conservation and measurement, "
+          "fresh Aeneas extraction of u64 arithmetic, basket construction/operations, account updates/staging, model/rate construction and metadata discovery, snapshot evaluation/conditions, effect helpers, signed conservation and measurement, "
           "and Rust conformance/type checks. Collection storage uses an explicit trusted model. "
           "Other core implementation refinement remains unproved; see verification/README.md.")
 

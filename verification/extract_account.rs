@@ -163,3 +163,107 @@ pub(crate) fn evaluate_condition<
 ) -> Result<bool, economy::ExpressionError> {
     economy::evaluate_condition(condition, exchange, accounts)
 }
+
+pub fn model_new<AccountId: Eq + std::hash::Hash, A, RateId: Eq + std::hash::Hash, Role>()
+-> economy::EconomyBuilder<AccountId, A, RateId, Role> {
+    economy::EconomyBuilder::new()
+}
+
+pub fn model_account<AccountId: Eq + std::hash::Hash, A, RateId: Eq + std::hash::Hash, Role>(
+    builder: economy::EconomyBuilder<AccountId, A, RateId, Role>,
+    id: AccountId,
+    state: Account<A>,
+) -> economy::EconomyBuilder<AccountId, A, RateId, Role> {
+    builder.account(id, state)
+}
+
+pub fn model_rate<AccountId: Eq + std::hash::Hash, A, RateId: Eq + std::hash::Hash, Role>(
+    builder: economy::EconomyBuilder<AccountId, A, RateId, Role>,
+    id: RateId,
+    rule: Rate<Role, A>,
+) -> economy::EconomyBuilder<AccountId, A, RateId, Role> {
+    builder.rate(id, rule)
+}
+
+pub fn model_invariant<AccountId: Eq + std::hash::Hash, A, RateId: Eq + std::hash::Hash, Role>(
+    builder: economy::EconomyBuilder<AccountId, A, RateId, Role>,
+    invariant: LinearInvariant<A>,
+) -> economy::EconomyBuilder<AccountId, A, RateId, Role> {
+    builder.invariant(invariant)
+}
+
+pub fn model_build<AccountId: Eq + std::hash::Hash, A, RateId: Eq + std::hash::Hash, Role>(
+    builder: economy::EconomyBuilder<AccountId, A, RateId, Role>,
+) -> economy::ModelBuildResult<AccountId, A, RateId, Role> {
+    builder.build()
+}
+
+pub fn rate_new<Role: Clone + Ord, A: Clone + Eq + std::hash::Hash>() -> Rate<Role, A> {
+    Rate::new()
+}
+
+pub fn rate_distinct<Role: Clone + Ord, A: Clone + Eq + std::hash::Hash>(
+    rule: Rate<Role, A>,
+    left: Role,
+    right: Role,
+) -> Rate<Role, A> {
+    rule.distinct(left, right)
+}
+
+pub fn rate_computed_consume<Role: Clone + Ord, A: Clone + Eq + std::hash::Hash>(
+    rule: Rate<Role, A>,
+    role: Role,
+    asset: A,
+    expression: QuantityExpression<Role, A>,
+) -> Rate<Role, A> {
+    rule.consume_computed(role, asset, expression)
+}
+
+pub fn rate_computed_produce<Role: Clone + Ord, A: Clone + Eq + std::hash::Hash>(
+    rule: Rate<Role, A>,
+    role: Role,
+    asset: A,
+    expression: QuantityExpression<Role, A>,
+) -> Rate<Role, A> {
+    rule.produce_computed(role, asset, expression)
+}
+
+pub fn rate_computed_preserve<Role: Clone + Ord, A: Clone + Eq + std::hash::Hash>(
+    rule: Rate<Role, A>,
+    role: Role,
+    asset: A,
+    expression: QuantityExpression<Role, A>,
+) -> Rate<Role, A> {
+    rule.preserve_computed(role, asset, expression)
+}
+
+pub fn rate_condition<Role: Clone + Ord, A: Clone + Eq + std::hash::Hash>(
+    rule: Rate<Role, A>,
+    label: String,
+    left: QuantityExpression<Role, A>,
+    comparison: QuantityComparison,
+    right: QuantityExpression<Role, A>,
+) -> Rate<Role, A> {
+    rule.condition(label, left, comparison, right)
+}
+
+pub fn rate_parameters<Role: Clone + Ord, A: Clone + Eq + std::hash::Hash>(
+    rule: &Rate<Role, A>,
+) -> std::collections::BTreeSet<&str> {
+    rule.parameter_names()
+}
+
+pub fn rate_assets<Role: Clone + Ord, A: Clone + Eq + std::hash::Hash>(
+    rule: &Rate<Role, A>,
+) -> Vec<&A> {
+    rule.computed_asset_keys()
+}
+
+pub fn model_default<AccountId: Eq + std::hash::Hash, A, RateId: Eq + std::hash::Hash, Role>()
+-> economy::EconomyBuilder<AccountId, A, RateId, Role> {
+    economy::EconomyBuilder::default()
+}
+
+pub fn rate_default<Role: Clone + Ord, A: Clone + Eq + std::hash::Hash>() -> Rate<Role, A> {
+    Rate::default()
+}

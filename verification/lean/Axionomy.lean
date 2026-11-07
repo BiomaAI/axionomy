@@ -20,3 +20,10 @@ import Axionomy.EvaluationRefinement
 import Axionomy.DiagnosticRefinement
 import Axionomy.Effects
 import Axionomy.EffectsRefinement
+
+import Axionomy.ModelConstruction
+import Axionomy.ModelConstructionRefinement
+import Axionomy.Discovery
+import Axionomy.DiscoveryRefinement
+import Axionomy.RateMetadataRefinement
+import Axionomy.RateDiscoveryRefinement

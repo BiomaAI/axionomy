@@ -23,6 +23,28 @@ noncomputable section
 
 namespace Axionomy.AccountExtracted
 
+/-- Trait implementation: [core::cmp::impls::{impl core::cmp::Eq for &'_0 A}]
+    Source: '/rustc/library/core/src/cmp.rs', lines 2525:4-2525:61
+    Name pattern: [core::cmp::Eq<&'0 @A>] -/
+@[reducible, rust_trait_impl "core::cmp::Eq<&'0 @A>"]
+impl_def Shared0A.Insts.CoreCmpEq {A : Type _} (EqInst : core.cmp.Eq A) :
+  core.cmp.Eq A := {
+  partialEqInst := core.cmp.PartialEqShared EqInst.partialEqInst
+  assert_fields_are_eq := core.cmp.Eq.assert_fields_are_eq.default
+    (Shared0A.Insts.CoreCmpEq EqInst)
+}
+
+/-- Trait implementation: [core::cmp::impls::{impl core::cmp::Ord for &'_0 A}]
+    Source: '/rustc/library/core/src/cmp.rs', lines 2514:4-2516:23
+    Name pattern: [core::cmp::Ord<&'0 @A>] -/
+@[reducible, rust_trait_impl "core::cmp::Ord<&'0 @A>"]
+def Shared0A.Insts.CoreCmpOrd {A : Type _} (OrdInst : core.cmp.Ord A) :
+  core.cmp.Ord A := {
+  eqInst := Shared0A.Insts.CoreCmpEq OrdInst.eqInst
+  partialOrdInst := core.cmp.PartialOrdShared OrdInst.partialOrdInst
+  cmp := Shared0A.Insts.CoreCmpOrd.cmp OrdInst
+}
+
 /-- Trait implementation: [core::fmt::num::imp::{impl core::fmt::Display for u64}]
     Source: '/rustc/library/core/src/fmt/num.rs', lines 134:8-134:39; this code is generated from a macro invocation at: '/rustc/library/core/src/fmt/num.rs', lines 606:4-606:94
     Name pattern: [core::fmt::Display<u64>] -/
@@ -91,6 +113,99 @@ def U64.Insts.CoreOpsArithMulU64U64 : core.ops.arith.Mul Std.U64 Std.U64
 def U64.Insts.CoreOpsArithDivU64U64 : core.ops.arith.Div Std.U64 Std.U64
   Std.U64 := {
   div := U64.Insts.CoreOpsArithDivU64U64.div
+}
+
+/-- Trait implementation: [core::str::traits::{impl core::cmp::PartialEq<str> for str}]
+    Source: '/rustc/library/core/src/str/traits.rs', lines 27:0-27:28
+    Name pattern: [core::cmp::PartialEq<str, str>] -/
+@[reducible, rust_trait_impl "core::cmp::PartialEq<str, str>"]
+def Str.Insts.CoreCmpPartialEqStr : core.cmp.PartialEq Str Str := {
+  eq := Str.Insts.CoreCmpPartialEqStr.eq
+}
+
+/-- Trait implementation: [core::str::traits::{impl core::cmp::PartialOrd<str> for str}]
+    Source: '/rustc/library/core/src/str/traits.rs', lines 46:0-46:23
+    Name pattern: [core::cmp::PartialOrd<str, str>] -/
+@[reducible, rust_trait_impl "core::cmp::PartialOrd<str, str>"]
+impl_def Str.Insts.CoreCmpPartialOrdStr : core.cmp.PartialOrd Str Str := {
+  partialEqInst := Str.Insts.CoreCmpPartialEqStr
+  partial_cmp := Str.Insts.CoreCmpPartialOrdStr.partial_cmp
+  lt := core.cmp.PartialOrd.lt.trait_default Str.Insts.CoreCmpPartialOrdStr
+  le := core.cmp.PartialOrd.le.trait_default Str.Insts.CoreCmpPartialOrdStr
+  ge := core.cmp.PartialOrd.ge.trait_default Str.Insts.CoreCmpPartialOrdStr
+}
+
+/-- Trait implementation: [core::str::traits::{impl core::cmp::Eq for str}]
+    Source: '/rustc/library/core/src/str/traits.rs', lines 36:0-36:21
+    Name pattern: [core::cmp::Eq<str>] -/
+@[reducible, rust_trait_impl "core::cmp::Eq<str>"]
+impl_def Str.Insts.CoreCmpEq : core.cmp.Eq Str := {
+  partialEqInst := Str.Insts.CoreCmpPartialEqStr
+  assert_fields_are_eq := core.cmp.Eq.assert_fields_are_eq.default
+    Str.Insts.CoreCmpEq
+}
+
+/-- Trait implementation: [core::str::traits::{impl core::cmp::Ord for str}]
+    Source: '/rustc/library/core/src/str/traits.rs', lines 18:0-18:16
+    Name pattern: [core::cmp::Ord<str>] -/
+@[reducible, rust_trait_impl "core::cmp::Ord<str>"]
+def Str.Insts.CoreCmpOrd : core.cmp.Ord Str := {
+  eqInst := Str.Insts.CoreCmpEq
+  partialOrdInst := Str.Insts.CoreCmpPartialOrdStr
+  cmp := Str.Insts.CoreCmpOrd.cmp
+}
+
+/-- Trait implementation: [core::tuple::{impl core::cmp::PartialEq<(U, T)> for (U, T)}]
+    Source: '/rustc/library/core/src/tuple.rs', lines 28:12-28:74; this code is generated from a macro invocation at: '/rustc/library/core/src/tuple.rs', lines 238:0-238:37
+    Name pattern: [core::cmp::PartialEq<(@U, @T), (@U, @T)>] -/
+@[reducible, rust_trait_impl "core::cmp::PartialEq<(@U, @T), (@U, @T)>"]
+def Pair.Insts.CoreCmpPartialEqPair {U : Type _} {T : Type _} (cmpPartialEqInst
+  : core.cmp.PartialEq U U) (cmpPartialEqInst1 : core.cmp.PartialEq T T) :
+  core.cmp.PartialEq (U × T) (U × T) := {
+  eq := Pair.Insts.CoreCmpPartialEqPair.eq cmpPartialEqInst cmpPartialEqInst1
+}
+
+/-- Trait implementation: [core::tuple::{impl core::cmp::PartialOrd<(U, T)> for (U, T)}]
+    Source: '/rustc/library/core/src/tuple.rs', lines 66:12-66:76; this code is generated from a macro invocation at: '/rustc/library/core/src/tuple.rs', lines 238:0-238:37
+    Name pattern: [core::cmp::PartialOrd<(@U, @T), (@U, @T)>] -/
+@[reducible, rust_trait_impl "core::cmp::PartialOrd<(@U, @T), (@U, @T)>"]
+def Pair.Insts.CoreCmpPartialOrdPair {U : Type _} {T : Type _}
+  (cmpPartialOrdInst : core.cmp.PartialOrd U U) (cmpPartialOrdInst1 :
+  core.cmp.PartialOrd T T) : core.cmp.PartialOrd (U × T) (U × T) := {
+  partialEqInst := Pair.Insts.CoreCmpPartialEqPair
+    cmpPartialOrdInst.partialEqInst cmpPartialOrdInst1.partialEqInst
+  partial_cmp := Pair.Insts.CoreCmpPartialOrdPair.partial_cmp cmpPartialOrdInst
+    cmpPartialOrdInst1
+  lt := Pair.Insts.CoreCmpPartialOrdPair.lt cmpPartialOrdInst
+    cmpPartialOrdInst1
+  le := Pair.Insts.CoreCmpPartialOrdPair.le cmpPartialOrdInst
+    cmpPartialOrdInst1
+  ge := Pair.Insts.CoreCmpPartialOrdPair.ge cmpPartialOrdInst
+    cmpPartialOrdInst1
+}
+
+/-- Trait implementation: [core::tuple::{impl core::cmp::Eq for (U, T)}]
+    Source: '/rustc/library/core/src/tuple.rs', lines 44:12-44:60; this code is generated from a macro invocation at: '/rustc/library/core/src/tuple.rs', lines 238:0-238:37
+    Name pattern: [core::cmp::Eq<(@U, @T)>] -/
+@[reducible, rust_trait_impl "core::cmp::Eq<(@U, @T)>"]
+impl_def Pair.Insts.CoreCmpEq {U : Type _} {T : Type _} (cmpEqInst :
+  core.cmp.Eq U) (cmpEqInst1 : core.cmp.Eq T) : core.cmp.Eq (U × T) := {
+  partialEqInst := Pair.Insts.CoreCmpPartialEqPair cmpEqInst.partialEqInst
+    cmpEqInst1.partialEqInst
+  assert_fields_are_eq := core.cmp.Eq.assert_fields_are_eq.default
+    (Pair.Insts.CoreCmpEq cmpEqInst cmpEqInst1)
+}
+
+/-- Trait implementation: [core::tuple::{impl core::cmp::Ord for (U, T)}]
+    Source: '/rustc/library/core/src/tuple.rs', lines 111:12-111:62; this code is generated from a macro invocation at: '/rustc/library/core/src/tuple.rs', lines 238:0-238:37
+    Name pattern: [core::cmp::Ord<(@U, @T)>] -/
+@[reducible, rust_trait_impl "core::cmp::Ord<(@U, @T)>"]
+def Pair.Insts.CoreCmpOrd {U : Type _} {T : Type _} (cmpOrdInst : core.cmp.Ord
+  U) (cmpOrdInst1 : core.cmp.Ord T) : core.cmp.Ord (U × T) := {
+  eqInst := Pair.Insts.CoreCmpEq cmpOrdInst.eqInst cmpOrdInst1.eqInst
+  partialOrdInst := Pair.Insts.CoreCmpPartialOrdPair cmpOrdInst.partialOrdInst
+    cmpOrdInst1.partialOrdInst
+  cmp := Pair.Insts.CoreCmpOrd.cmp cmpOrdInst cmpOrdInst1
 }
 
 /-- Trait implementation: [std::hash::random::{impl core::clone::Clone for std::hash::random::RandomState}]
@@ -1213,6 +1328,191 @@ def basket.Basket.Insts.CoreCmpPartialEqBasket {A : Type _} {N : Type _}
     corehashHashInst corecmpPartialEqInst
 }
 
+/-- [account_extraction::economy::{account_extraction::economy::EconomyBuilder<AccountId, A, RateId, Role, N>}::new]:
+    Source: 'verification/../src/economy.rs', lines 308:4-315:5
+    Visibility: public -/
+def economy.EconomyBuilder.new
+  {AccountId : Type _} (A : Type _) {RateId : Type _} (Role : Type _) (N :
+  Type _) (corecmpEqInst : core.cmp.Eq AccountId) (corehashHashInst :
+  core.hash.Hash AccountId) (corecmpEqInst1 : core.cmp.Eq RateId)
+  (corehashHashInst1 : core.hash.Hash RateId) :
+  Result (economy.EconomyBuilder AccountId A RateId Role N)
+  := do
+  let im ←
+    indexmap.map.IndexMapKVRandomState.new AccountId (account.Account A N)
+  let im1 ←
+    indexmap.map.IndexMapKVRandomState.new RateId (rate.Rate Role A N)
+  ok
+    {
+      accounts := im,
+      rates := im1,
+      invariants := (alloc.vec.Vec.new (rate.LinearInvariant A)),
+      issues := (alloc.vec.Vec.new (economy.ModelIssue AccountId RateId))
+    }
+
+/-- [account_extraction::economy::{account_extraction::economy::EconomyBuilder<AccountId, A, RateId, Role, N>}::account]:
+    Source: 'verification/../src/economy.rs', lines 317:4-325:5
+    Visibility: public -/
+def economy.EconomyBuilder.account
+  {AccountId : Type _} {A : Type _} {RateId : Type _} {Role : Type _} {N :
+  Type _} (corecmpEqInst : core.cmp.Eq AccountId) (corehashHashInst :
+  core.hash.Hash AccountId) (corecmpEqInst1 : core.cmp.Eq RateId)
+  (corehashHashInst1 : core.hash.Hash RateId)
+  (self : economy.EconomyBuilder AccountId A RateId Role N) (id : AccountId)
+  (account : account.Account A N) :
+  Result (economy.EconomyBuilder AccountId A RateId Role N)
+  := do
+  let b ←
+    indexmap.map.IndexMap.contains_key
+      std.hash.random.RandomState.Insts.CoreHashBuildHasherDefaultHasher
+      corehashHashInst (equivalent.Equivalent.Blanket corecmpEqInst
+      (core.borrow.Borrow.Blanket AccountId)) self.accounts id
+  if b
+  then
+    let v ←
+      alloc.vec.Vec.push self.issues (economy.ModelIssue.DuplicateAccount id)
+    ok { self with issues := v }
+  else
+    let (_, im) ←
+      indexmap.map.IndexMap.insert corehashHashInst corecmpEqInst
+        std.hash.random.RandomState.Insts.CoreHashBuildHasherDefaultHasher
+        self.accounts id account
+    ok { self with accounts := im }
+
+/-- [account_extraction::economy::{account_extraction::economy::EconomyBuilder<AccountId, A, RateId, Role, N>}::rate]:
+    Source: 'verification/../src/economy.rs', lines 327:4-334:5
+    Visibility: public -/
+def economy.EconomyBuilder.rate
+  {AccountId : Type _} {A : Type _} {RateId : Type _} {Role : Type _} {N :
+  Type _} (corecmpEqInst : core.cmp.Eq AccountId) (corehashHashInst :
+  core.hash.Hash AccountId) (corecmpEqInst1 : core.cmp.Eq RateId)
+  (corehashHashInst1 : core.hash.Hash RateId)
+  (self : economy.EconomyBuilder AccountId A RateId Role N) (id : RateId)
+  (rate : rate.Rate Role A N) :
+  Result (economy.EconomyBuilder AccountId A RateId Role N)
+  := do
+  let b ←
+    indexmap.map.IndexMap.contains_key
+      std.hash.random.RandomState.Insts.CoreHashBuildHasherDefaultHasher
+      corehashHashInst1 (equivalent.Equivalent.Blanket corecmpEqInst1
+      (core.borrow.Borrow.Blanket RateId)) self.rates id
+  if b
+  then
+    let v ←
+      alloc.vec.Vec.push self.issues (economy.ModelIssue.DuplicateRate id)
+    ok { self with issues := v }
+  else
+    let (_, im) ←
+      indexmap.map.IndexMap.insert corehashHashInst1 corecmpEqInst1
+        std.hash.random.RandomState.Insts.CoreHashBuildHasherDefaultHasher
+        self.rates id rate
+    ok { self with rates := im }
+
+/-- [account_extraction::economy::{account_extraction::economy::EconomyBuilder<AccountId, A, RateId, Role, N>}::invariant]:
+    Source: 'verification/../src/economy.rs', lines 336:4-339:5
+    Visibility: public -/
+def economy.EconomyBuilder.invariant
+  {AccountId : Type _} {A : Type _} {RateId : Type _} {Role : Type _} {N :
+  Type _} (corecmpEqInst : core.cmp.Eq AccountId) (corehashHashInst :
+  core.hash.Hash AccountId) (corecmpEqInst1 : core.cmp.Eq RateId)
+  (corehashHashInst1 : core.hash.Hash RateId)
+  (self : economy.EconomyBuilder AccountId A RateId Role N)
+  (invariant : rate.LinearInvariant A) :
+  Result (economy.EconomyBuilder AccountId A RateId Role N)
+  := do
+  let v ← alloc.vec.Vec.push self.invariants invariant
+  ok { self with invariants := v }
+
+/-- [account_extraction::economy::{account_extraction::economy::EconomyBuilder<AccountId, A, RateId, Role, N>}::build]: loop body 0:
+    Source: 'verification/../src/economy.rs', lines 348:8-350:9
+    Visibility: public -/
+@[rust_loop_body]
+def economy.EconomyBuilder.build_loop.body
+  {AccountId : Type _} {A : Type _} {N : Type _} (corecmpEqInst : core.cmp.Eq
+  AccountId) (corehashHashInst : core.hash.Hash AccountId)
+  (iter : indexmap.map.iter.IntoIter AccountId (account.Account A N))
+  (accounts : indexmap.map.IndexMap AccountId (alloc.sync.Arc (account.Account
+  A N)) std.hash.random.RandomState) :
+  Result (ControlFlow ((indexmap.map.iter.IntoIter AccountId (account.Account A
+    N)) × (indexmap.map.IndexMap AccountId (alloc.sync.Arc (account.Account A
+    N)) std.hash.random.RandomState)) (indexmap.map.IndexMap AccountId
+    (alloc.sync.Arc (account.Account A N)) std.hash.random.RandomState))
+  := do
+  let (o, iter1) ←
+    indexmap.map.iter.IntoIter.Insts.CoreIterTraitsIteratorIteratorPair.next
+      iter
+  match o with
+  | none => ok (done accounts)
+  | some p =>
+    let (id, holder) := p
+    let a ← alloc.sync.Arc.new holder
+    let (_, accounts1) ←
+      indexmap.map.IndexMap.insert corehashHashInst corecmpEqInst
+        std.hash.random.RandomState.Insts.CoreHashBuildHasherDefaultHasher
+        accounts id a
+    ok (cont (iter1, accounts1))
+
+/-- [account_extraction::economy::{account_extraction::economy::EconomyBuilder<AccountId, A, RateId, Role, N>}::build]: loop 0:
+    Source: 'verification/../src/economy.rs', lines 348:8-350:9
+    Visibility: public -/
+@[rust_loop]
+def economy.EconomyBuilder.build_loop
+  {AccountId : Type _} {A : Type _} {N : Type _} (corecmpEqInst : core.cmp.Eq
+  AccountId) (corehashHashInst : core.hash.Hash AccountId)
+  (iter : indexmap.map.iter.IntoIter AccountId (account.Account A N))
+  (accounts : indexmap.map.IndexMap AccountId (alloc.sync.Arc (account.Account
+  A N)) std.hash.random.RandomState) :
+  Result (indexmap.map.IndexMap AccountId (alloc.sync.Arc (account.Account A
+    N)) std.hash.random.RandomState)
+  := do
+  loop
+    (fun (iter1, accounts1) => economy.EconomyBuilder.build_loop.body
+      corecmpEqInst corehashHashInst iter1 accounts1)
+    (iter, accounts)
+
+/-- [account_extraction::economy::{account_extraction::economy::EconomyBuilder<AccountId, A, RateId, Role, N>}::build]:
+    Source: 'verification/../src/economy.rs', lines 341:4-356:5
+    Visibility: public -/
+def economy.EconomyBuilder.build
+  {AccountId : Type _} {A : Type _} {RateId : Type _} {Role : Type _} {N :
+  Type _} (corecmpEqInst : core.cmp.Eq AccountId) (corehashHashInst :
+  core.hash.Hash AccountId) (corecmpEqInst1 : core.cmp.Eq RateId)
+  (corehashHashInst1 : core.hash.Hash RateId)
+  (self : economy.EconomyBuilder AccountId A RateId Role N) :
+  Result (core.result.Result (economy.Economy AccountId A RateId Role N)
+    (economy.ModelBuildError AccountId RateId))
+  := do
+  let b ← alloc.vec.Vec.is_empty self.issues
+  if b
+  then
+    let accounts ←
+      indexmap.map.IndexMapKVRandomState.new AccountId (alloc.sync.Arc
+        (account.Account A N))
+    let iter ←
+      indexmap.map.IndexMap.Insts.CoreIterTraitsCollectIntoIteratorPairIntoIter.into_iter
+        self.accounts
+    let accounts1 ←
+      economy.EconomyBuilder.build_loop corecmpEqInst corehashHashInst iter
+        accounts
+    let a ← alloc.sync.Arc.new self.rates
+    let a1 ← alloc.sync.Arc.new self.invariants
+    ok (core.result.Result.Ok
+      { accounts := accounts1, rates := a, invariants := a1 })
+  else ok (core.result.Result.Err { issues := self.issues })
+
+/-- [account_extraction::economy::{impl core::default::Default for account_extraction::economy::EconomyBuilder<AccountId, A, RateId, Role, N>}::default]:
+    Source: 'verification/../src/economy.rs', lines 364:4-366:5
+    Visibility: public -/
+def economy.EconomyBuilder.Insts.CoreDefaultDefault.default
+  {AccountId : Type _} (A : Type _) {RateId : Type _} (Role : Type _) (N :
+  Type _) (corecmpEqInst : core.cmp.Eq AccountId) (corehashHashInst :
+  core.hash.Hash AccountId) (corecmpEqInst1 : core.cmp.Eq RateId)
+  (corehashHashInst1 : core.hash.Hash RateId) :
+  Result (economy.EconomyBuilder AccountId A RateId Role N)
+  := do
+  economy.EconomyBuilder.new A Role N corecmpEqInst corehashHashInst
+    corecmpEqInst1 corehashHashInst1
+
 /-- [account_extraction::economy::merge_scaled]:
     Source: 'verification/../src/economy.rs', lines 1132:0-1143:1 -/
 def economy.merge_scaled
@@ -1775,7 +2075,7 @@ partial_fixpoint
 end
 
 /-- [account_extraction::rate::{account_extraction::rate::RateCondition<Role, A, N>}::right]:
-    Source: 'verification/../src/rate.rs', lines 271:4-273:5
+    Source: 'verification/../src/rate.rs', lines 284:4-286:5
     Visibility: public -/
 def rate.RateCondition.impl.right
   {Role : Type _} {A : Type _} {N : Type _}
@@ -1785,7 +2085,7 @@ def rate.RateCondition.impl.right
   ok self.right
 
 /-- [account_extraction::rate::{account_extraction::rate::RateCondition<Role, A, N>}::comparison]:
-    Source: 'verification/../src/rate.rs', lines 267:4-269:5
+    Source: 'verification/../src/rate.rs', lines 280:4-282:5
     Visibility: public -/
 def rate.RateCondition.impl.comparison
   {Role : Type _} {A : Type _} {N : Type _}
@@ -1795,7 +2095,7 @@ def rate.RateCondition.impl.comparison
   ok self.comparison
 
 /-- [account_extraction::rate::{account_extraction::rate::RateCondition<Role, A, N>}::left]:
-    Source: 'verification/../src/rate.rs', lines 263:4-265:5
+    Source: 'verification/../src/rate.rs', lines 276:4-278:5
     Visibility: public -/
 def rate.RateCondition.impl.left
   {Role : Type _} {A : Type _} {N : Type _}
@@ -1962,8 +2262,248 @@ def quantity.Quantity.as_scalar
   := do
   ok self
 
+/-- [account_extraction::rate::{account_extraction::rate::QuantityExpression<Role, A, N>}::collect_roles]:
+    Source: 'verification/../src/rate.rs', lines 139:4-164:5 -/
+def rate.QuantityExpression.collect_roles
+  {Role : Type _} {A : Type _} {N : Type _} (corecmpOrdInst : core.cmp.Ord
+  Role) (self : rate.QuantityExpression Role A N)
+  (roles : alloc.collections.btree.set.BTreeSet Role alloc.alloc.Global) :
+  Result (alloc.collections.btree.set.BTreeSet Role alloc.alloc.Global)
+  := do
+  match self with
+  | rate.QuantityExpression.Constant _ => ok roles
+  | rate.QuantityExpression.Units => ok roles
+  | rate.QuantityExpression.Parameter _ => ok roles
+  | rate.QuantityExpression.Balance role _ =>
+    let (_, roles1) ←
+      alloc.collections.btree.set.BTreeSet.insert
+        alloc.alloc.Global.Insts.CoreAllocAllocatorClone
+        (Shared0A.Insts.CoreCmpOrd corecmpOrdInst) roles role
+    ok roles1
+  | rate.QuantityExpression.Add left right =>
+    let roles1 ←
+      rate.QuantityExpression.collect_roles corecmpOrdInst left roles
+    rate.QuantityExpression.collect_roles corecmpOrdInst right roles1
+  | rate.QuantityExpression.Subtract left right =>
+    let roles1 ←
+      rate.QuantityExpression.collect_roles corecmpOrdInst left roles
+    rate.QuantityExpression.collect_roles corecmpOrdInst right roles1
+  | rate.QuantityExpression.Multiply left right =>
+    let roles1 ←
+      rate.QuantityExpression.collect_roles corecmpOrdInst left roles
+    rate.QuantityExpression.collect_roles corecmpOrdInst right roles1
+  | rate.QuantityExpression.DivideFloor numerator denominator =>
+    let roles1 ←
+      rate.QuantityExpression.collect_roles corecmpOrdInst numerator roles
+    rate.QuantityExpression.collect_roles corecmpOrdInst denominator roles1
+  | rate.QuantityExpression.Minimum left right =>
+    let roles1 ←
+      rate.QuantityExpression.collect_roles corecmpOrdInst left roles
+    rate.QuantityExpression.collect_roles corecmpOrdInst right roles1
+  | rate.QuantityExpression.Maximum left right =>
+    let roles1 ←
+      rate.QuantityExpression.collect_roles corecmpOrdInst left roles
+    rate.QuantityExpression.collect_roles corecmpOrdInst right roles1
+partial_fixpoint
+
+/-- [account_extraction::rate::{account_extraction::rate::QuantityExpression<Role, A, N>}::collect_assets]:
+    Source: 'verification/../src/rate.rs', lines 166:4-186:5 -/
+def rate.QuantityExpression.collect_assets
+  {Role : Type _} {A : Type _} {N : Type _}
+  (self : rate.QuantityExpression Role A N) (assets : alloc.vec.Vec A) :
+  Result (alloc.vec.Vec A)
+  := do
+  match self with
+  | rate.QuantityExpression.Constant _ => ok assets
+  | rate.QuantityExpression.Units => ok assets
+  | rate.QuantityExpression.Parameter _ => ok assets
+  | rate.QuantityExpression.Balance _ asset => alloc.vec.Vec.push assets asset
+  | rate.QuantityExpression.Add left right =>
+    let assets1 ← rate.QuantityExpression.collect_assets left assets
+    rate.QuantityExpression.collect_assets right assets1
+  | rate.QuantityExpression.Subtract left right =>
+    let assets1 ← rate.QuantityExpression.collect_assets left assets
+    rate.QuantityExpression.collect_assets right assets1
+  | rate.QuantityExpression.Multiply left right =>
+    let assets1 ← rate.QuantityExpression.collect_assets left assets
+    rate.QuantityExpression.collect_assets right assets1
+  | rate.QuantityExpression.DivideFloor numerator denominator =>
+    let assets1 ← rate.QuantityExpression.collect_assets numerator assets
+    rate.QuantityExpression.collect_assets denominator assets1
+  | rate.QuantityExpression.Minimum left right =>
+    let assets1 ← rate.QuantityExpression.collect_assets left assets
+    rate.QuantityExpression.collect_assets right assets1
+  | rate.QuantityExpression.Maximum left right =>
+    let assets1 ← rate.QuantityExpression.collect_assets left assets
+    rate.QuantityExpression.collect_assets right assets1
+partial_fixpoint
+
+/-- [account_extraction::rate::{account_extraction::rate::QuantityExpression<Role, A, N>}::collect_parameters]:
+    Source: 'verification/../src/rate.rs', lines 188:4-210:5 -/
+def rate.QuantityExpression.collect_parameters
+  {Role : Type _} {A : Type _} {N : Type _}
+  (self : rate.QuantityExpression Role A N)
+  (parameters : alloc.collections.btree.set.BTreeSet Str alloc.alloc.Global) :
+  Result (alloc.collections.btree.set.BTreeSet Str alloc.alloc.Global)
+  := do
+  match self with
+  | rate.QuantityExpression.Constant _ => ok parameters
+  | rate.QuantityExpression.Units => ok parameters
+  | rate.QuantityExpression.Parameter «name» =>
+    let s ← alloc.string.String.Insts.CoreOpsDerefDerefStr.deref «name»
+    let (_, parameters1) ←
+      alloc.collections.btree.set.BTreeSet.insert
+        alloc.alloc.Global.Insts.CoreAllocAllocatorClone
+        (Shared0A.Insts.CoreCmpOrd Str.Insts.CoreCmpOrd) parameters s
+    ok parameters1
+  | rate.QuantityExpression.Balance _ _ => ok parameters
+  | rate.QuantityExpression.Add left right =>
+    let parameters1 ←
+      rate.QuantityExpression.collect_parameters left parameters
+    rate.QuantityExpression.collect_parameters right parameters1
+  | rate.QuantityExpression.Subtract left right =>
+    let parameters1 ←
+      rate.QuantityExpression.collect_parameters left parameters
+    rate.QuantityExpression.collect_parameters right parameters1
+  | rate.QuantityExpression.Multiply left right =>
+    let parameters1 ←
+      rate.QuantityExpression.collect_parameters left parameters
+    rate.QuantityExpression.collect_parameters right parameters1
+  | rate.QuantityExpression.DivideFloor numerator denominator =>
+    let parameters1 ←
+      rate.QuantityExpression.collect_parameters numerator parameters
+    rate.QuantityExpression.collect_parameters denominator parameters1
+  | rate.QuantityExpression.Minimum left right =>
+    let parameters1 ←
+      rate.QuantityExpression.collect_parameters left parameters
+    rate.QuantityExpression.collect_parameters right parameters1
+  | rate.QuantityExpression.Maximum left right =>
+    let parameters1 ←
+      rate.QuantityExpression.collect_parameters left parameters
+    rate.QuantityExpression.collect_parameters right parameters1
+partial_fixpoint
+
+/-- [account_extraction::rate::{account_extraction::rate::ComputedAmount<Role, A, N>}::collect_parameters]: loop body 0:
+    Source: 'verification/../src/rate.rs', lines 238:8-240:9 -/
+@[rust_loop_body]
+def rate.ComputedAmount.collect_parameters_loop.body
+  {Role : Type _} {A : Type _} {N : Type _}
+  (iter : core.slice.iter.Iter (rate.ComputedAmount Role A N))
+  (parameters : alloc.collections.btree.set.BTreeSet Str alloc.alloc.Global) :
+  Result (ControlFlow ((core.slice.iter.Iter (rate.ComputedAmount Role A N)) ×
+    (alloc.collections.btree.set.BTreeSet Str alloc.alloc.Global))
+    (alloc.collections.btree.set.BTreeSet Str alloc.alloc.Global))
+  := do
+  let (o, iter1) ← core.slice.iter.IteratorSliceIter.next iter
+  match o with
+  | none => ok (done parameters)
+  | some amount =>
+    let parameters1 ←
+      rate.QuantityExpression.collect_parameters amount.quantity parameters
+    ok (cont (iter1, parameters1))
+
+/-- [account_extraction::rate::{account_extraction::rate::ComputedAmount<Role, A, N>}::collect_parameters]: loop 0:
+    Source: 'verification/../src/rate.rs', lines 238:8-240:9 -/
+@[rust_loop]
+def rate.ComputedAmount.collect_parameters_loop
+  {Role : Type _} {A : Type _} {N : Type _}
+  (iter : core.slice.iter.Iter (rate.ComputedAmount Role A N))
+  (parameters : alloc.collections.btree.set.BTreeSet Str alloc.alloc.Global) :
+  Result (alloc.collections.btree.set.BTreeSet Str alloc.alloc.Global)
+  := do
+  loop
+    (fun (iter1, parameters1) =>
+      rate.ComputedAmount.collect_parameters_loop.body iter1 parameters1)
+    (iter, parameters)
+
+/-- [account_extraction::rate::{account_extraction::rate::ComputedAmount<Role, A, N>}::collect_parameters]:
+    Source: 'verification/../src/rate.rs', lines 237:4-241:5 -/
+def rate.ComputedAmount.collect_parameters
+  {Role : Type _} {A : Type _} {N : Type _}
+  (amounts : Slice (rate.ComputedAmount Role A N))
+  (parameters : alloc.collections.btree.set.BTreeSet Str alloc.alloc.Global) :
+  Result (alloc.collections.btree.set.BTreeSet Str alloc.alloc.Global)
+  := do
+  let iter ←
+    SharedSlice.Insts.CoreIterTraitsCollectIntoIteratorSharedIter.into_iter
+      amounts
+  rate.ComputedAmount.collect_parameters_loop iter parameters
+
+/-- [account_extraction::rate::{account_extraction::rate::ComputedAmount<Role, A, N>}::collect_assets]: loop body 0:
+    Source: 'verification/../src/rate.rs', lines 244:8-247:9 -/
+@[rust_loop_body]
+def rate.ComputedAmount.collect_assets_loop.body
+  {Role : Type _} {A : Type _} {N : Type _}
+  (iter : core.slice.iter.Iter (rate.ComputedAmount Role A N))
+  (assets : alloc.vec.Vec A) :
+  Result (ControlFlow ((core.slice.iter.Iter (rate.ComputedAmount Role A N)) ×
+    (alloc.vec.Vec A)) (alloc.vec.Vec A))
+  := do
+  let (o, iter1) ← core.slice.iter.IteratorSliceIter.next iter
+  match o with
+  | none => ok (done assets)
+  | some amount =>
+    let assets1 ← alloc.vec.Vec.push assets amount.asset
+    let assets2 ←
+      rate.QuantityExpression.collect_assets amount.quantity assets1
+    ok (cont (iter1, assets2))
+
+/-- [account_extraction::rate::{account_extraction::rate::ComputedAmount<Role, A, N>}::collect_assets]: loop 0:
+    Source: 'verification/../src/rate.rs', lines 244:8-247:9 -/
+@[rust_loop]
+def rate.ComputedAmount.collect_assets_loop
+  {Role : Type _} {A : Type _} {N : Type _}
+  (iter : core.slice.iter.Iter (rate.ComputedAmount Role A N))
+  (assets : alloc.vec.Vec A) :
+  Result (alloc.vec.Vec A)
+  := do
+  loop
+    (fun (iter1, assets1) => rate.ComputedAmount.collect_assets_loop.body iter1
+      assets1)
+    (iter, assets)
+
+/-- [account_extraction::rate::{account_extraction::rate::ComputedAmount<Role, A, N>}::collect_assets]:
+    Source: 'verification/../src/rate.rs', lines 243:4-248:5 -/
+def rate.ComputedAmount.collect_assets
+  {Role : Type _} {A : Type _} {N : Type _}
+  (amounts : Slice (rate.ComputedAmount Role A N)) (assets : alloc.vec.Vec A) :
+  Result (alloc.vec.Vec A)
+  := do
+  let iter ←
+    SharedSlice.Insts.CoreIterTraitsCollectIntoIteratorSharedIter.into_iter
+      amounts
+  rate.ComputedAmount.collect_assets_loop iter assets
+
+/-- [account_extraction::rate::{account_extraction::rate::Rate<Role, A, N>}::new]:
+    Source: 'verification/../src/rate.rs', lines 308:4-320:5
+    Visibility: public -/
+def rate.Rate.new
+  {Role : Type _} {A : Type _} {N : Type _} {Clause5_SignedMeasure : Type _}
+  (corecloneCloneInst : core.clone.Clone Role) (corecmpOrdInst : core.cmp.Ord
+  Role) (corecloneCloneInst1 : core.clone.Clone A) (corecmpEqInst : core.cmp.Eq
+  A) (corehashHashInst : core.hash.Hash A) (quantityQuantityScalarInst :
+  quantity.QuantityScalar N Clause5_SignedMeasure) :
+  Result (rate.Rate Role A N)
+  := do
+  let bm ←
+    alloc.collections.btree.map.BTreeMapKVGlobal.new Role (basket.Basket A N)
+  let bs ← alloc.collections.btree.set.BTreeSetTGlobal.new Role
+  let bs1 ← alloc.collections.btree.set.BTreeSetTGlobal.new (Role × Role)
+  ok
+    {
+      consume := bm,
+      produce := bm,
+      preserve := bm,
+      roles := bs,
+      distinct := bs1,
+      computed_consume := (alloc.vec.Vec.new (rate.ComputedAmount Role A N)),
+      computed_produce := (alloc.vec.Vec.new (rate.ComputedAmount Role A N)),
+      computed_preserve := (alloc.vec.Vec.new (rate.ComputedAmount Role A N)),
+      conditions := (alloc.vec.Vec.new (rate.RateCondition Role A N))
+    }
+
 /-- [account_extraction::rate::merge]:
-    Source: 'verification/../src/rate.rs', lines 534:0-545:1 -/
+    Source: 'verification/../src/rate.rs', lines 540:0-551:1 -/
 def rate.merge
   {Role : Type _} {A : Type _} {N : Type _} {Clause4_SignedMeasure : Type _}
   (corecmpOrdInst : core.cmp.Ord Role) (corecloneCloneInst : core.clone.Clone
@@ -1991,7 +2531,7 @@ def rate.merge
   ok (r, target1)
 
 /-- [account_extraction::rate::{account_extraction::rate::Rate<Role, A, N>}::try_consume::{impl core::ops::function::FnOnce<(A,), account_extraction::rate::RateError<Role, A>> for account_extraction::rate::{account_extraction::rate::Rate<Role, A, N>}::try_consume::{closure}<Role, A, N, Clause5_SignedMeasure>}::call_once]:
-    Source: 'verification/../src/rate.rs', lines 316:21-316:70 -/
+    Source: 'verification/../src/rate.rs', lines 329:21-329:70 -/
 def
   rate.Rate.try_consume.closure.Insts.CoreOpsFunctionFnOnceTupleARateError.call_once
   {Role : Type _} {A : Type _} {N : Type _} {Clause5_SignedMeasure : Type _}
@@ -2006,7 +2546,7 @@ def
   ok (rate.RateError.BasketOverflow c tupled_args)
 
 /-- Trait implementation: [account_extraction::rate::{account_extraction::rate::Rate<Role, A, N>}::try_consume::{impl core::ops::function::FnOnce<(A,), account_extraction::rate::RateError<Role, A>> for account_extraction::rate::{account_extraction::rate::Rate<Role, A, N>}::try_consume::{closure}<Role, A, N, Clause5_SignedMeasure>}]
-    Source: 'verification/../src/rate.rs', lines 316:21-316:70 -/
+    Source: 'verification/../src/rate.rs', lines 329:21-329:70 -/
 @[reducible]
 def rate.Rate.try_consume.closure.Insts.CoreOpsFunctionFnOnceTupleARateError
   {Role : Type _} {A : Type _} {N : Type _} {Clause5_SignedMeasure : Type _}
@@ -2023,7 +2563,7 @@ def rate.Rate.try_consume.closure.Insts.CoreOpsFunctionFnOnceTupleARateError
 }
 
 /-- [account_extraction::rate::{account_extraction::rate::Rate<Role, A, N>}::try_consume]:
-    Source: 'verification/../src/rate.rs', lines 309:4-318:5
+    Source: 'verification/../src/rate.rs', lines 322:4-331:5
     Visibility: public -/
 def rate.Rate.try_consume
   {Role : Type _} {A : Type _} {N : Type _} {Clause5_SignedMeasure : Type _}
@@ -2057,7 +2597,7 @@ def rate.Rate.try_consume
       residual
 
 /-- [account_extraction::rate::{account_extraction::rate::Rate<Role, A, N>}::try_produce::{impl core::ops::function::FnOnce<(A,), account_extraction::rate::RateError<Role, A>> for account_extraction::rate::{account_extraction::rate::Rate<Role, A, N>}::try_produce::{closure}<Role, A, N, Clause5_SignedMeasure>}::call_once]:
-    Source: 'verification/../src/rate.rs', lines 334:21-334:70 -/
+    Source: 'verification/../src/rate.rs', lines 347:21-347:70 -/
 def
   rate.Rate.try_produce.closure.Insts.CoreOpsFunctionFnOnceTupleARateError.call_once
   {Role : Type _} {A : Type _} {N : Type _} {Clause5_SignedMeasure : Type _}
@@ -2072,7 +2612,7 @@ def
   ok (rate.RateError.BasketOverflow c tupled_args)
 
 /-- Trait implementation: [account_extraction::rate::{account_extraction::rate::Rate<Role, A, N>}::try_produce::{impl core::ops::function::FnOnce<(A,), account_extraction::rate::RateError<Role, A>> for account_extraction::rate::{account_extraction::rate::Rate<Role, A, N>}::try_produce::{closure}<Role, A, N, Clause5_SignedMeasure>}]
-    Source: 'verification/../src/rate.rs', lines 334:21-334:70 -/
+    Source: 'verification/../src/rate.rs', lines 347:21-347:70 -/
 @[reducible]
 def rate.Rate.try_produce.closure.Insts.CoreOpsFunctionFnOnceTupleARateError
   {Role : Type _} {A : Type _} {N : Type _} {Clause5_SignedMeasure : Type _}
@@ -2089,7 +2629,7 @@ def rate.Rate.try_produce.closure.Insts.CoreOpsFunctionFnOnceTupleARateError
 }
 
 /-- [account_extraction::rate::{account_extraction::rate::Rate<Role, A, N>}::try_produce]:
-    Source: 'verification/../src/rate.rs', lines 327:4-336:5
+    Source: 'verification/../src/rate.rs', lines 340:4-349:5
     Visibility: public -/
 def rate.Rate.try_produce
   {Role : Type _} {A : Type _} {N : Type _} {Clause5_SignedMeasure : Type _}
@@ -2123,7 +2663,7 @@ def rate.Rate.try_produce
       residual
 
 /-- [account_extraction::rate::{account_extraction::rate::Rate<Role, A, N>}::try_preserve::{impl core::ops::function::FnOnce<(A,), account_extraction::rate::RateError<Role, A>> for account_extraction::rate::{account_extraction::rate::Rate<Role, A, N>}::try_preserve::{closure}<Role, A, N, Clause5_SignedMeasure>}::call_once]:
-    Source: 'verification/../src/rate.rs', lines 352:21-352:70 -/
+    Source: 'verification/../src/rate.rs', lines 365:21-365:70 -/
 def
   rate.Rate.try_preserve.closure.Insts.CoreOpsFunctionFnOnceTupleARateError.call_once
   {Role : Type _} {A : Type _} {N : Type _} {Clause5_SignedMeasure : Type _}
@@ -2138,7 +2678,7 @@ def
   ok (rate.RateError.BasketOverflow c tupled_args)
 
 /-- Trait implementation: [account_extraction::rate::{account_extraction::rate::Rate<Role, A, N>}::try_preserve::{impl core::ops::function::FnOnce<(A,), account_extraction::rate::RateError<Role, A>> for account_extraction::rate::{account_extraction::rate::Rate<Role, A, N>}::try_preserve::{closure}<Role, A, N, Clause5_SignedMeasure>}]
-    Source: 'verification/../src/rate.rs', lines 352:21-352:70 -/
+    Source: 'verification/../src/rate.rs', lines 365:21-365:70 -/
 @[reducible]
 def rate.Rate.try_preserve.closure.Insts.CoreOpsFunctionFnOnceTupleARateError
   {Role : Type _} {A : Type _} {N : Type _} {Clause5_SignedMeasure : Type _}
@@ -2155,7 +2695,7 @@ def rate.Rate.try_preserve.closure.Insts.CoreOpsFunctionFnOnceTupleARateError
 }
 
 /-- [account_extraction::rate::{account_extraction::rate::Rate<Role, A, N>}::try_preserve]:
-    Source: 'verification/../src/rate.rs', lines 345:4-354:5
+    Source: 'verification/../src/rate.rs', lines 358:4-367:5
     Visibility: public -/
 def rate.Rate.try_preserve
   {Role : Type _} {A : Type _} {N : Type _} {Clause5_SignedMeasure : Type _}
@@ -2188,8 +2728,379 @@ def rate.Rate.try_preserve
       (rate.Rate Role A N) (core.convert.FromSame (rate.RateError Role A))
       residual
 
+/-- [account_extraction::rate::{account_extraction::rate::Rate<Role, A, N>}::distinct]:
+    Source: 'verification/../src/rate.rs', lines 376:4-386:5
+    Visibility: public -/
+def rate.Rate.impl.distinct
+  {Role : Type _} {A : Type _} {N : Type _} {Clause5_SignedMeasure : Type _}
+  (corecloneCloneInst : core.clone.Clone Role) (corecmpOrdInst : core.cmp.Ord
+  Role) (corecloneCloneInst1 : core.clone.Clone A) (corecmpEqInst : core.cmp.Eq
+  A) (corehashHashInst : core.hash.Hash A) (quantityQuantityScalarInst :
+  quantity.QuantityScalar N Clause5_SignedMeasure) (self : rate.Rate Role A N)
+  (left : Role) (right : Role) :
+  Result (rate.Rate Role A N)
+  := do
+  let t ← corecloneCloneInst.clone left
+  let (_, bs) ←
+    alloc.collections.btree.set.BTreeSet.insert
+      alloc.alloc.Global.Insts.CoreAllocAllocatorClone corecmpOrdInst
+      self.roles t
+  let t1 ← corecloneCloneInst.clone right
+  let (_, bs1) ←
+    alloc.collections.btree.set.BTreeSet.insert
+      alloc.alloc.Global.Insts.CoreAllocAllocatorClone corecmpOrdInst bs t1
+  let b ← corecmpOrdInst.partialOrdInst.le left right
+  let (t2, t3) ← if b
+                   then ok (left, right)
+                   else ok (right, left)
+  let (_, bs2) ←
+    alloc.collections.btree.set.BTreeSet.insert
+      alloc.alloc.Global.Insts.CoreAllocAllocatorClone (Pair.Insts.CoreCmpOrd
+      corecmpOrdInst corecmpOrdInst) self.distinct (t2, t3)
+  ok { self with roles := bs1, distinct := bs2 }
+
+/-- [account_extraction::rate::{account_extraction::rate::Rate<Role, A, N>}::register_expression_roles]: loop body 0:
+    Source: 'verification/../src/rate.rs', lines 463:8-465:9 -/
+@[rust_loop_body]
+def rate.Rate.register_expression_roles_loop.body
+  {Role : Type _} (corecloneCloneInst : core.clone.Clone Role) (corecmpOrdInst
+  : core.cmp.Ord Role)
+  (iter : alloc.collections.btree.set.IntoIter Role alloc.alloc.Global)
+  (bs : alloc.collections.btree.set.BTreeSet Role alloc.alloc.Global) :
+  Result (ControlFlow ((alloc.collections.btree.set.IntoIter Role
+    alloc.alloc.Global) × (alloc.collections.btree.set.BTreeSet Role
+    alloc.alloc.Global)) (alloc.collections.btree.set.BTreeSet Role
+    alloc.alloc.Global))
+  := do
+  let (o, iter1) ←
+    alloc.collections.btree.set.IntoIter.Insts.CoreIterTraitsIteratorIterator.next
+      alloc.alloc.Global.Insts.CoreAllocAllocatorClone iter
+  match o with
+  | none => ok (done bs)
+  | some role =>
+    let t ← corecloneCloneInst.clone role
+    let (_, bs1) ←
+      alloc.collections.btree.set.BTreeSet.insert
+        alloc.alloc.Global.Insts.CoreAllocAllocatorClone corecmpOrdInst bs t
+    ok (cont (iter1, bs1))
+
+/-- [account_extraction::rate::{account_extraction::rate::Rate<Role, A, N>}::register_expression_roles]: loop 0:
+    Source: 'verification/../src/rate.rs', lines 463:8-465:9 -/
+@[rust_loop]
+def rate.Rate.register_expression_roles_loop
+  {Role : Type _} (corecloneCloneInst : core.clone.Clone Role) (corecmpOrdInst
+  : core.cmp.Ord Role)
+  (iter : alloc.collections.btree.set.IntoIter Role alloc.alloc.Global)
+  (bs : alloc.collections.btree.set.BTreeSet Role alloc.alloc.Global) :
+  Result (alloc.collections.btree.set.BTreeSet Role alloc.alloc.Global)
+  := do
+  loop
+    (fun (iter1, bs1) => rate.Rate.register_expression_roles_loop.body
+      corecloneCloneInst corecmpOrdInst iter1 bs1)
+    (iter, bs)
+
+/-- [account_extraction::rate::{account_extraction::rate::Rate<Role, A, N>}::register_expression_roles]:
+    Source: 'verification/../src/rate.rs', lines 455:4-466:5 -/
+def rate.Rate.register_expression_roles
+  {Role : Type _} {A : Type _} {N : Type _} {Clause5_SignedMeasure : Type _}
+  (corecloneCloneInst : core.clone.Clone Role) (corecmpOrdInst : core.cmp.Ord
+  Role) (corecloneCloneInst1 : core.clone.Clone A) (corecmpEqInst : core.cmp.Eq
+  A) (corehashHashInst : core.hash.Hash A) (quantityQuantityScalarInst :
+  quantity.QuantityScalar N Clause5_SignedMeasure) (self : rate.Rate Role A N)
+  (target : Role) (expression : rate.QuantityExpression Role A N) :
+  Result (rate.Rate Role A N)
+  := do
+  let t ← corecloneCloneInst.clone target
+  let (_, bs) ←
+    alloc.collections.btree.set.BTreeSet.insert
+      alloc.alloc.Global.Insts.CoreAllocAllocatorClone corecmpOrdInst
+      self.roles t
+  let expression_roles ← alloc.collections.btree.set.BTreeSetTGlobal.new Role
+  let expression_roles1 ←
+    rate.QuantityExpression.collect_roles corecmpOrdInst expression
+      expression_roles
+  let iter ←
+    alloc.collections.btree.set.BTreeSet.Insts.CoreIterTraitsCollectIntoIteratorTIntoIter.into_iter
+      alloc.alloc.Global.Insts.CoreAllocAllocatorClone expression_roles1
+  let bs1 ←
+    rate.Rate.register_expression_roles_loop corecloneCloneInst corecmpOrdInst
+      iter bs
+  ok { self with roles := bs1 }
+
+/-- [account_extraction::rate::{account_extraction::rate::Rate<Role, A, N>}::consume_computed]:
+    Source: 'verification/../src/rate.rs', lines 388:4-401:5
+    Visibility: public -/
+def rate.Rate.consume_computed
+  {Role : Type _} {A : Type _} {N : Type _} {Clause5_SignedMeasure : Type _}
+  (corecloneCloneInst : core.clone.Clone Role) (corecmpOrdInst : core.cmp.Ord
+  Role) (corecloneCloneInst1 : core.clone.Clone A) (corecmpEqInst : core.cmp.Eq
+  A) (corehashHashInst : core.hash.Hash A) (quantityQuantityScalarInst :
+  quantity.QuantityScalar N Clause5_SignedMeasure) (self : rate.Rate Role A N)
+  (role : Role) (asset : A) (quantity : rate.QuantityExpression Role A N) :
+  Result (rate.Rate Role A N)
+  := do
+  let self1 ←
+    rate.Rate.register_expression_roles corecloneCloneInst corecmpOrdInst
+      corecloneCloneInst1 corecmpEqInst corehashHashInst
+      quantityQuantityScalarInst self role quantity
+  let v ←
+    alloc.vec.Vec.push self1.computed_consume ({ role, asset, quantity } :
+      rate.ComputedAmount Role A N)
+  ok { self1 with computed_consume := v }
+
+/-- [account_extraction::rate::{account_extraction::rate::Rate<Role, A, N>}::produce_computed]:
+    Source: 'verification/../src/rate.rs', lines 403:4-416:5
+    Visibility: public -/
+def rate.Rate.produce_computed
+  {Role : Type _} {A : Type _} {N : Type _} {Clause5_SignedMeasure : Type _}
+  (corecloneCloneInst : core.clone.Clone Role) (corecmpOrdInst : core.cmp.Ord
+  Role) (corecloneCloneInst1 : core.clone.Clone A) (corecmpEqInst : core.cmp.Eq
+  A) (corehashHashInst : core.hash.Hash A) (quantityQuantityScalarInst :
+  quantity.QuantityScalar N Clause5_SignedMeasure) (self : rate.Rate Role A N)
+  (role : Role) (asset : A) (quantity : rate.QuantityExpression Role A N) :
+  Result (rate.Rate Role A N)
+  := do
+  let self1 ←
+    rate.Rate.register_expression_roles corecloneCloneInst corecmpOrdInst
+      corecloneCloneInst1 corecmpEqInst corehashHashInst
+      quantityQuantityScalarInst self role quantity
+  let v ←
+    alloc.vec.Vec.push self1.computed_produce ({ role, asset, quantity } :
+      rate.ComputedAmount Role A N)
+  ok { self1 with computed_produce := v }
+
+/-- [account_extraction::rate::{account_extraction::rate::Rate<Role, A, N>}::preserve_computed]:
+    Source: 'verification/../src/rate.rs', lines 418:4-431:5
+    Visibility: public -/
+def rate.Rate.preserve_computed
+  {Role : Type _} {A : Type _} {N : Type _} {Clause5_SignedMeasure : Type _}
+  (corecloneCloneInst : core.clone.Clone Role) (corecmpOrdInst : core.cmp.Ord
+  Role) (corecloneCloneInst1 : core.clone.Clone A) (corecmpEqInst : core.cmp.Eq
+  A) (corehashHashInst : core.hash.Hash A) (quantityQuantityScalarInst :
+  quantity.QuantityScalar N Clause5_SignedMeasure) (self : rate.Rate Role A N)
+  (role : Role) (asset : A) (quantity : rate.QuantityExpression Role A N) :
+  Result (rate.Rate Role A N)
+  := do
+  let self1 ←
+    rate.Rate.register_expression_roles corecloneCloneInst corecmpOrdInst
+      corecloneCloneInst1 corecmpEqInst corehashHashInst
+      quantityQuantityScalarInst self role quantity
+  let v ←
+    alloc.vec.Vec.push self1.computed_preserve ({ role, asset, quantity } :
+      rate.ComputedAmount Role A N)
+  ok { self1 with computed_preserve := v }
+
+/-- [account_extraction::rate::{account_extraction::rate::Rate<Role, A, N>}::condition]: loop body 0:
+    Source: 'verification/../src/rate.rs', lines 443:8-445:9
+    Visibility: public -/
+@[rust_loop_body]
+def rate.Rate.condition_loop.body
+  {Role : Type _} {A : Type _} {N : Type _} (corecloneCloneInst :
+  core.clone.Clone Role) (corecmpOrdInst : core.cmp.Ord Role)
+  (iter : alloc.collections.btree.set.IntoIter Role alloc.alloc.Global)
+  (self : rate.Rate Role A N) :
+  Result (ControlFlow ((alloc.collections.btree.set.IntoIter Role
+    alloc.alloc.Global) × (rate.Rate Role A N)) (rate.Rate Role A N))
+  := do
+  let (o, iter1) ←
+    alloc.collections.btree.set.IntoIter.Insts.CoreIterTraitsIteratorIterator.next
+      alloc.alloc.Global.Insts.CoreAllocAllocatorClone iter
+  match o with
+  | none => ok (done self)
+  | some role =>
+    let t ← corecloneCloneInst.clone role
+    let (_, bs) ←
+      alloc.collections.btree.set.BTreeSet.insert
+        alloc.alloc.Global.Insts.CoreAllocAllocatorClone corecmpOrdInst
+        self.roles t
+    ok (cont (iter1, { self with roles := bs }))
+
+/-- [account_extraction::rate::{account_extraction::rate::Rate<Role, A, N>}::condition]: loop 0:
+    Source: 'verification/../src/rate.rs', lines 443:8-445:9
+    Visibility: public -/
+@[rust_loop]
+def rate.Rate.condition_loop
+  {Role : Type _} {A : Type _} {N : Type _} (corecloneCloneInst :
+  core.clone.Clone Role) (corecmpOrdInst : core.cmp.Ord Role)
+  (iter : alloc.collections.btree.set.IntoIter Role alloc.alloc.Global)
+  (self : rate.Rate Role A N) :
+  Result (rate.Rate Role A N)
+  := do
+  loop
+    (fun (iter1, self1) => rate.Rate.condition_loop.body corecloneCloneInst
+      corecmpOrdInst iter1 self1)
+    (iter, self)
+
+/-- [account_extraction::rate::{account_extraction::rate::Rate<Role, A, N>}::condition]:
+    Source: 'verification/../src/rate.rs', lines 433:4-453:5
+    Visibility: public -/
+def rate.Rate.condition
+  {Role : Type _} {A : Type _} {N : Type _} {T3 : Type _}
+  {Clause5_SignedMeasure : Type _} (corecloneCloneInst : core.clone.Clone Role)
+  (corecmpOrdInst : core.cmp.Ord Role) (corecloneCloneInst1 : core.clone.Clone
+  A) (corecmpEqInst : core.cmp.Eq A) (corehashHashInst : core.hash.Hash A)
+  (quantityQuantityScalarInst : quantity.QuantityScalar N
+  Clause5_SignedMeasure) (coreconvertIntoT3StringInst : core.convert.Into T3
+  String) (self : rate.Rate Role A N) («name» : T3)
+  (left : rate.QuantityExpression Role A N)
+  (comparison : rate.QuantityComparison)
+  (right : rate.QuantityExpression Role A N) :
+  Result (rate.Rate Role A N)
+  := do
+  let expression_roles ← alloc.collections.btree.set.BTreeSetTGlobal.new Role
+  let expression_roles1 ←
+    rate.QuantityExpression.collect_roles corecmpOrdInst left expression_roles
+  let expression_roles2 ←
+    rate.QuantityExpression.collect_roles corecmpOrdInst right
+      expression_roles1
+  let iter ←
+    alloc.collections.btree.set.BTreeSet.Insts.CoreIterTraitsCollectIntoIteratorTIntoIter.into_iter
+      alloc.alloc.Global.Insts.CoreAllocAllocatorClone expression_roles2
+  let self1 ←
+    rate.Rate.condition_loop corecloneCloneInst corecmpOrdInst iter self
+  let s ← coreconvertIntoT3StringInst.into «name»
+  let v ←
+    alloc.vec.Vec.push self1.conditions
+      ({ «name» := s, left, comparison, right } : rate.RateCondition Role A
+      N)
+  ok { self1 with conditions := v }
+
+/-- [account_extraction::rate::{account_extraction::rate::Rate<Role, A, N>}::parameter_names]: loop body 0:
+    Source: 'verification/../src/rate.rs', lines 509:8-512:9
+    Visibility: public -/
+@[rust_loop_body]
+def rate.Rate.parameter_names_loop.body
+  {Role : Type _} {A : Type _} {N : Type _}
+  (iter : core.slice.iter.Iter (rate.RateCondition Role A N))
+  (parameters : alloc.collections.btree.set.BTreeSet Str alloc.alloc.Global) :
+  Result (ControlFlow ((core.slice.iter.Iter (rate.RateCondition Role A N)) ×
+    (alloc.collections.btree.set.BTreeSet Str alloc.alloc.Global))
+    (alloc.collections.btree.set.BTreeSet Str alloc.alloc.Global))
+  := do
+  let (o, iter1) ← core.slice.iter.IteratorSliceIter.next iter
+  match o with
+  | none => ok (done parameters)
+  | some condition =>
+    let parameters1 ←
+      rate.QuantityExpression.collect_parameters condition.left parameters
+    let parameters2 ←
+      rate.QuantityExpression.collect_parameters condition.right parameters1
+    ok (cont (iter1, parameters2))
+
+/-- [account_extraction::rate::{account_extraction::rate::Rate<Role, A, N>}::parameter_names]: loop 0:
+    Source: 'verification/../src/rate.rs', lines 509:8-512:9
+    Visibility: public -/
+@[rust_loop]
+def rate.Rate.parameter_names_loop
+  {Role : Type _} {A : Type _} {N : Type _}
+  (iter : core.slice.iter.Iter (rate.RateCondition Role A N))
+  (parameters : alloc.collections.btree.set.BTreeSet Str alloc.alloc.Global) :
+  Result (alloc.collections.btree.set.BTreeSet Str alloc.alloc.Global)
+  := do
+  loop
+    (fun (iter1, parameters1) => rate.Rate.parameter_names_loop.body iter1
+      parameters1)
+    (iter, parameters)
+
+/-- [account_extraction::rate::{account_extraction::rate::Rate<Role, A, N>}::parameter_names]:
+    Source: 'verification/../src/rate.rs', lines 504:4-514:5
+    Visibility: public -/
+def rate.Rate.parameter_names
+  {Role : Type _} {A : Type _} {N : Type _} {Clause5_SignedMeasure : Type _}
+  (corecloneCloneInst : core.clone.Clone Role) (corecmpOrdInst : core.cmp.Ord
+  Role) (corecloneCloneInst1 : core.clone.Clone A) (corecmpEqInst : core.cmp.Eq
+  A) (corehashHashInst : core.hash.Hash A) (quantityQuantityScalarInst :
+  quantity.QuantityScalar N Clause5_SignedMeasure) (self : rate.Rate Role A N)
+  :
+  Result (alloc.collections.btree.set.BTreeSet Str alloc.alloc.Global)
+  := do
+  let parameters ← alloc.collections.btree.set.BTreeSetTGlobal.new Str
+  let s := alloc.vec.Vec.deref self.computed_consume
+  let parameters1 ← rate.ComputedAmount.collect_parameters s parameters
+  let s1 := alloc.vec.Vec.deref self.computed_produce
+  let parameters2 ← rate.ComputedAmount.collect_parameters s1 parameters1
+  let s2 := alloc.vec.Vec.deref self.computed_preserve
+  let parameters3 ← rate.ComputedAmount.collect_parameters s2 parameters2
+  let iter ←
+    SharedAVec.Insts.CoreIterTraitsCollectIntoIteratorSharedATIter.into_iter
+      alloc.alloc.Global self.conditions
+  rate.Rate.parameter_names_loop iter parameters3
+
+/-- [account_extraction::rate::{account_extraction::rate::Rate<Role, A, N>}::computed_asset_keys]: loop body 0:
+    Source: 'verification/../src/rate.rs', lines 521:8-524:9
+    Visibility: public -/
+@[rust_loop_body]
+def rate.Rate.computed_asset_keys_loop.body
+  {Role : Type _} {A : Type _} {N : Type _}
+  (iter : core.slice.iter.Iter (rate.RateCondition Role A N))
+  (assets : alloc.vec.Vec A) :
+  Result (ControlFlow ((core.slice.iter.Iter (rate.RateCondition Role A N)) ×
+    (alloc.vec.Vec A)) (alloc.vec.Vec A))
+  := do
+  let (o, iter1) ← core.slice.iter.IteratorSliceIter.next iter
+  match o with
+  | none => ok (done assets)
+  | some condition =>
+    let assets1 ←
+      rate.QuantityExpression.collect_assets condition.left assets
+    let assets2 ←
+      rate.QuantityExpression.collect_assets condition.right assets1
+    ok (cont (iter1, assets2))
+
+/-- [account_extraction::rate::{account_extraction::rate::Rate<Role, A, N>}::computed_asset_keys]: loop 0:
+    Source: 'verification/../src/rate.rs', lines 521:8-524:9
+    Visibility: public -/
+@[rust_loop]
+def rate.Rate.computed_asset_keys_loop
+  {Role : Type _} {A : Type _} {N : Type _}
+  (iter : core.slice.iter.Iter (rate.RateCondition Role A N))
+  (assets : alloc.vec.Vec A) :
+  Result (alloc.vec.Vec A)
+  := do
+  loop
+    (fun (iter1, assets1) => rate.Rate.computed_asset_keys_loop.body iter1
+      assets1)
+    (iter, assets)
+
+/-- [account_extraction::rate::{account_extraction::rate::Rate<Role, A, N>}::computed_asset_keys]:
+    Source: 'verification/../src/rate.rs', lines 516:4-526:5
+    Visibility: public -/
+def rate.Rate.computed_asset_keys
+  {Role : Type _} {A : Type _} {N : Type _} {Clause5_SignedMeasure : Type _}
+  (corecloneCloneInst : core.clone.Clone Role) (corecmpOrdInst : core.cmp.Ord
+  Role) (corecloneCloneInst1 : core.clone.Clone A) (corecmpEqInst : core.cmp.Eq
+  A) (corehashHashInst : core.hash.Hash A) (quantityQuantityScalarInst :
+  quantity.QuantityScalar N Clause5_SignedMeasure) (self : rate.Rate Role A N)
+  :
+  Result (alloc.vec.Vec A)
+  := do
+  let s := alloc.vec.Vec.deref self.computed_consume
+  let assets ← rate.ComputedAmount.collect_assets s (alloc.vec.Vec.new A)
+  let s1 := alloc.vec.Vec.deref self.computed_produce
+  let assets1 ← rate.ComputedAmount.collect_assets s1 assets
+  let s2 := alloc.vec.Vec.deref self.computed_preserve
+  let assets2 ← rate.ComputedAmount.collect_assets s2 assets1
+  let iter ←
+    SharedAVec.Insts.CoreIterTraitsCollectIntoIteratorSharedATIter.into_iter
+      alloc.alloc.Global self.conditions
+  rate.Rate.computed_asset_keys_loop iter assets2
+
+/-- [account_extraction::rate::{impl core::default::Default for account_extraction::rate::Rate<Role, A, N>}::default]:
+    Source: 'verification/../src/rate.rs', lines 535:4-537:5
+    Visibility: public -/
+def rate.Rate.Insts.CoreDefaultDefault.default
+  {Role : Type _} {A : Type _} {N : Type _} {Clause5_SignedMeasure : Type _}
+  (corecloneCloneInst : core.clone.Clone Role) (corecmpOrdInst : core.cmp.Ord
+  Role) (corecloneCloneInst1 : core.clone.Clone A) (corecmpEqInst : core.cmp.Eq
+  A) (corehashHashInst : core.hash.Hash A) (quantityQuantityScalarInst :
+  quantity.QuantityScalar N Clause5_SignedMeasure) :
+  Result (rate.Rate Role A N)
+  := do
+  rate.Rate.new corecloneCloneInst corecmpOrdInst corecloneCloneInst1
+    corecmpEqInst corehashHashInst quantityQuantityScalarInst
+
 /-- [account_extraction::rate::{account_extraction::rate::LinearInvariant<A>}::checked_add_basket_measure]: loop body 0:
-    Source: 'verification/../src/rate.rs', lines 760:8-766:5 -/
+    Source: 'verification/../src/rate.rs', lines 766:8-772:5 -/
 @[rust_loop_body]
 def rate.LinearInvariant.checked_add_basket_measure_loop.body
   {A : Type _} {N : Type _} {Clause2_SignedMeasure : Type _} (corecmpEqInst :
@@ -2238,7 +3149,7 @@ def rate.LinearInvariant.checked_add_basket_measure_loop.body
       ok (done o3)
 
 /-- [account_extraction::rate::{account_extraction::rate::LinearInvariant<A>}::checked_add_basket_measure]: loop 0:
-    Source: 'verification/../src/rate.rs', lines 760:8-766:5 -/
+    Source: 'verification/../src/rate.rs', lines 766:8-772:5 -/
 @[rust_loop]
 def rate.LinearInvariant.checked_add_basket_measure_loop
   {A : Type _} {N : Type _} {Clause2_SignedMeasure : Type _} (corecmpEqInst :
@@ -2256,7 +3167,7 @@ def rate.LinearInvariant.checked_add_basket_measure_loop
     (iter, total)
 
 /-- [account_extraction::rate::{account_extraction::rate::LinearInvariant<A>}::checked_add_basket_measure]:
-    Source: 'verification/../src/rate.rs', lines 752:4-766:5 -/
+    Source: 'verification/../src/rate.rs', lines 758:4-772:5 -/
 def rate.LinearInvariant.checked_add_basket_measure
   {A : Type _} {N : Type _} {Clause2_SignedMeasure : Type _} (corecmpEqInst :
   core.cmp.Eq A) (corehashHashInst : core.hash.Hash A)
@@ -2270,7 +3181,7 @@ def rate.LinearInvariant.checked_add_basket_measure
     corehashHashInst quantityQuantityScalarInst iter self total
 
 /-- [account_extraction::rate::{account_extraction::rate::LinearInvariant<A>}::measure]: loop body 0:
-    Source: 'verification/../src/rate.rs', lines 724:8-728:5
+    Source: 'verification/../src/rate.rs', lines 730:8-734:5
     Visibility: public -/
 @[rust_loop_body]
 def rate.LinearInvariant.measure_loop.body
@@ -2306,7 +3217,7 @@ def rate.LinearInvariant.measure_loop.body
       ok (done o2)
 
 /-- [account_extraction::rate::{account_extraction::rate::LinearInvariant<A>}::measure]: loop 0:
-    Source: 'verification/../src/rate.rs', lines 724:8-728:5
+    Source: 'verification/../src/rate.rs', lines 730:8-734:5
     Visibility: public -/
 @[rust_loop]
 def rate.LinearInvariant.measure_loop
@@ -2326,7 +3237,7 @@ def rate.LinearInvariant.measure_loop
     (iter, total)
 
 /-- [account_extraction::rate::{account_extraction::rate::LinearInvariant<A>}::measure]:
-    Source: 'verification/../src/rate.rs', lines 714:4-728:5
+    Source: 'verification/../src/rate.rs', lines 720:4-734:5
     Visibility: public -/
 def rate.LinearInvariant.measure
   {A : Type _} {AccountId : Type _} {Holder : Type _} {N : Type _}
@@ -2347,7 +3258,7 @@ def rate.LinearInvariant.measure
     total
 
 /-- [account_extraction::rate::{account_extraction::rate::LinearInvariant<A>}::conserves]: loop body 0:
-    Source: 'verification/../src/rate.rs', lines 745:8-750:5 -/
+    Source: 'verification/../src/rate.rs', lines 751:8-756:5 -/
 @[rust_loop_body]
 def rate.LinearInvariant.conserves_loop.body
   {A : Type _} {AccountId : Type _} {N : Type _} {Clause2_SignedMeasure :
@@ -2394,7 +3305,7 @@ def rate.LinearInvariant.conserves_loop.body
       ok (done o2)
 
 /-- [account_extraction::rate::{account_extraction::rate::LinearInvariant<A>}::conserves]: loop 0:
-    Source: 'verification/../src/rate.rs', lines 745:8-750:5 -/
+    Source: 'verification/../src/rate.rs', lines 751:8-756:5 -/
 @[rust_loop]
 def rate.LinearInvariant.conserves_loop
   {A : Type _} {AccountId : Type _} {N : Type _} {Clause2_SignedMeasure :
@@ -2413,7 +3324,7 @@ def rate.LinearInvariant.conserves_loop
     (iter, consumed, produced)
 
 /-- [account_extraction::rate::{account_extraction::rate::LinearInvariant<A>}::conserves]:
-    Source: 'verification/../src/rate.rs', lines 736:4-750:5 -/
+    Source: 'verification/../src/rate.rs', lines 742:4-756:5 -/
 def rate.LinearInvariant.conserves
   {A : Type _} {AccountId : Type _} {N : Type _} {Clause2_SignedMeasure :
   Type _} (corecmpEqInst : core.cmp.Eq A) (corehashHashInst : core.hash.Hash A)
@@ -2670,5 +3581,226 @@ def evaluate_condition
     corehashHashInst1 corecmpOrdInst
     U64.Insts.Account_extractionQuantityQuantityScalarI128 condition exchange
     accounts
+
+/-- [account_extraction::model_new]:
+    Source: 'verification/extract_account.rs', lines 167:0-170:1
+    Visibility: public -/
+def model_new
+  {AccountId : Type _} (A : Type _) {RateId : Type _} (Role : Type _)
+  (corecmpEqInst : core.cmp.Eq AccountId) (corehashHashInst : core.hash.Hash
+  AccountId) (corecmpEqInst1 : core.cmp.Eq RateId) (corehashHashInst1 :
+  core.hash.Hash RateId) :
+  Result (economy.EconomyBuilder AccountId A RateId Role Std.U64)
+  := do
+  economy.EconomyBuilder.new A Role Std.U64 corecmpEqInst corehashHashInst
+    corecmpEqInst1 corehashHashInst1
+
+/-- [account_extraction::model_account]:
+    Source: 'verification/extract_account.rs', lines 172:0-178:1
+    Visibility: public -/
+def model_account
+  {AccountId : Type _} {A : Type _} {RateId : Type _} {Role : Type _}
+  (corecmpEqInst : core.cmp.Eq AccountId) (corehashHashInst : core.hash.Hash
+  AccountId) (corecmpEqInst1 : core.cmp.Eq RateId) (corehashHashInst1 :
+  core.hash.Hash RateId)
+  (builder : economy.EconomyBuilder AccountId A RateId Role Std.U64)
+  (id : AccountId) (state : account.Account A Std.U64) :
+  Result (economy.EconomyBuilder AccountId A RateId Role Std.U64)
+  := do
+  economy.EconomyBuilder.account corecmpEqInst corehashHashInst corecmpEqInst1
+    corehashHashInst1 builder id state
+
+/-- [account_extraction::model_rate]:
+    Source: 'verification/extract_account.rs', lines 180:0-186:1
+    Visibility: public -/
+def model_rate
+  {AccountId : Type _} {A : Type _} {RateId : Type _} {Role : Type _}
+  (corecmpEqInst : core.cmp.Eq AccountId) (corehashHashInst : core.hash.Hash
+  AccountId) (corecmpEqInst1 : core.cmp.Eq RateId) (corehashHashInst1 :
+  core.hash.Hash RateId)
+  (builder : economy.EconomyBuilder AccountId A RateId Role Std.U64)
+  (id : RateId) (rule : rate.Rate Role A Std.U64) :
+  Result (economy.EconomyBuilder AccountId A RateId Role Std.U64)
+  := do
+  economy.EconomyBuilder.rate corecmpEqInst corehashHashInst corecmpEqInst1
+    corehashHashInst1 builder id rule
+
+/-- [account_extraction::model_invariant]:
+    Source: 'verification/extract_account.rs', lines 188:0-193:1
+    Visibility: public -/
+def model_invariant
+  {AccountId : Type _} {A : Type _} {RateId : Type _} {Role : Type _}
+  (corecmpEqInst : core.cmp.Eq AccountId) (corehashHashInst : core.hash.Hash
+  AccountId) (corecmpEqInst1 : core.cmp.Eq RateId) (corehashHashInst1 :
+  core.hash.Hash RateId)
+  (builder : economy.EconomyBuilder AccountId A RateId Role Std.U64)
+  (invariant : rate.LinearInvariant A) :
+  Result (economy.EconomyBuilder AccountId A RateId Role Std.U64)
+  := do
+  economy.EconomyBuilder.invariant corecmpEqInst corehashHashInst
+    corecmpEqInst1 corehashHashInst1 builder invariant
+
+/-- [account_extraction::model_build]:
+    Source: 'verification/extract_account.rs', lines 195:0-199:1
+    Visibility: public -/
+def model_build
+  {AccountId : Type _} {A : Type _} {RateId : Type _} {Role : Type _}
+  (corecmpEqInst : core.cmp.Eq AccountId) (corehashHashInst : core.hash.Hash
+  AccountId) (corecmpEqInst1 : core.cmp.Eq RateId) (corehashHashInst1 :
+  core.hash.Hash RateId)
+  (builder : economy.EconomyBuilder AccountId A RateId Role Std.U64) :
+  Result (core.result.Result (economy.Economy AccountId A RateId Role Std.U64)
+    (economy.ModelBuildError AccountId RateId))
+  := do
+  economy.EconomyBuilder.build corecmpEqInst corehashHashInst corecmpEqInst1
+    corehashHashInst1 builder
+
+/-- [account_extraction::rate_new]:
+    Source: 'verification/extract_account.rs', lines 201:0-203:1
+    Visibility: public -/
+def rate_new
+  {Role : Type _} {A : Type _} (corecloneCloneInst : core.clone.Clone Role)
+  (corecmpOrdInst : core.cmp.Ord Role) (corecloneCloneInst1 : core.clone.Clone
+  A) (corecmpEqInst : core.cmp.Eq A) (corehashHashInst : core.hash.Hash A) :
+  Result (rate.Rate Role A Std.U64)
+  := do
+  rate.Rate.new corecloneCloneInst corecmpOrdInst corecloneCloneInst1
+    corecmpEqInst corehashHashInst
+    U64.Insts.Account_extractionQuantityQuantityScalarI128
+
+/-- [account_extraction::rate_distinct]:
+    Source: 'verification/extract_account.rs', lines 205:0-211:1
+    Visibility: public -/
+def rate_distinct
+  {Role : Type _} {A : Type _} (corecloneCloneInst : core.clone.Clone Role)
+  (corecmpOrdInst : core.cmp.Ord Role) (corecloneCloneInst1 : core.clone.Clone
+  A) (corecmpEqInst : core.cmp.Eq A) (corehashHashInst : core.hash.Hash A)
+  (rule : rate.Rate Role A Std.U64) (left : Role) (right : Role) :
+  Result (rate.Rate Role A Std.U64)
+  := do
+  rate.Rate.impl.distinct corecloneCloneInst corecmpOrdInst corecloneCloneInst1
+    corecmpEqInst corehashHashInst
+    U64.Insts.Account_extractionQuantityQuantityScalarI128 rule left right
+
+/-- [account_extraction::rate_computed_consume]:
+    Source: 'verification/extract_account.rs', lines 213:0-220:1
+    Visibility: public -/
+def rate_computed_consume
+  {Role : Type _} {A : Type _} (corecloneCloneInst : core.clone.Clone Role)
+  (corecmpOrdInst : core.cmp.Ord Role) (corecloneCloneInst1 : core.clone.Clone
+  A) (corecmpEqInst : core.cmp.Eq A) (corehashHashInst : core.hash.Hash A)
+  (rule : rate.Rate Role A Std.U64) (role : Role) (asset : A)
+  (expression : rate.QuantityExpression Role A Std.U64) :
+  Result (rate.Rate Role A Std.U64)
+  := do
+  rate.Rate.consume_computed corecloneCloneInst corecmpOrdInst
+    corecloneCloneInst1 corecmpEqInst corehashHashInst
+    U64.Insts.Account_extractionQuantityQuantityScalarI128 rule role asset
+    expression
+
+/-- [account_extraction::rate_computed_produce]:
+    Source: 'verification/extract_account.rs', lines 222:0-229:1
+    Visibility: public -/
+def rate_computed_produce
+  {Role : Type _} {A : Type _} (corecloneCloneInst : core.clone.Clone Role)
+  (corecmpOrdInst : core.cmp.Ord Role) (corecloneCloneInst1 : core.clone.Clone
+  A) (corecmpEqInst : core.cmp.Eq A) (corehashHashInst : core.hash.Hash A)
+  (rule : rate.Rate Role A Std.U64) (role : Role) (asset : A)
+  (expression : rate.QuantityExpression Role A Std.U64) :
+  Result (rate.Rate Role A Std.U64)
+  := do
+  rate.Rate.produce_computed corecloneCloneInst corecmpOrdInst
+    corecloneCloneInst1 corecmpEqInst corehashHashInst
+    U64.Insts.Account_extractionQuantityQuantityScalarI128 rule role asset
+    expression
+
+/-- [account_extraction::rate_computed_preserve]:
+    Source: 'verification/extract_account.rs', lines 231:0-238:1
+    Visibility: public -/
+def rate_computed_preserve
+  {Role : Type _} {A : Type _} (corecloneCloneInst : core.clone.Clone Role)
+  (corecmpOrdInst : core.cmp.Ord Role) (corecloneCloneInst1 : core.clone.Clone
+  A) (corecmpEqInst : core.cmp.Eq A) (corehashHashInst : core.hash.Hash A)
+  (rule : rate.Rate Role A Std.U64) (role : Role) (asset : A)
+  (expression : rate.QuantityExpression Role A Std.U64) :
+  Result (rate.Rate Role A Std.U64)
+  := do
+  rate.Rate.preserve_computed corecloneCloneInst corecmpOrdInst
+    corecloneCloneInst1 corecmpEqInst corehashHashInst
+    U64.Insts.Account_extractionQuantityQuantityScalarI128 rule role asset
+    expression
+
+/-- [account_extraction::rate_condition]:
+    Source: 'verification/extract_account.rs', lines 240:0-248:1
+    Visibility: public -/
+def rate_condition
+  {Role : Type _} {A : Type _} (corecloneCloneInst : core.clone.Clone Role)
+  (corecmpOrdInst : core.cmp.Ord Role) (corecloneCloneInst1 : core.clone.Clone
+  A) (corecmpEqInst : core.cmp.Eq A) (corehashHashInst : core.hash.Hash A)
+  (rule : rate.Rate Role A Std.U64) (label : String)
+  (left : rate.QuantityExpression Role A Std.U64)
+  (comparison : rate.QuantityComparison)
+  (right : rate.QuantityExpression Role A Std.U64) :
+  Result (rate.Rate Role A Std.U64)
+  := do
+  rate.Rate.condition corecloneCloneInst corecmpOrdInst corecloneCloneInst1
+    corecmpEqInst corehashHashInst
+    U64.Insts.Account_extractionQuantityQuantityScalarI128
+    (core.convert.IntoFrom (core.convert.FromSame String)) rule label left
+    comparison right
+
+/-- [account_extraction::rate_parameters]:
+    Source: 'verification/extract_account.rs', lines 250:0-254:1
+    Visibility: public -/
+def rate_parameters
+  {Role : Type _} {A : Type _} (corecloneCloneInst : core.clone.Clone Role)
+  (corecmpOrdInst : core.cmp.Ord Role) (corecloneCloneInst1 : core.clone.Clone
+  A) (corecmpEqInst : core.cmp.Eq A) (corehashHashInst : core.hash.Hash A)
+  (rule : rate.Rate Role A Std.U64) :
+  Result (alloc.collections.btree.set.BTreeSet Str alloc.alloc.Global)
+  := do
+  rate.Rate.parameter_names corecloneCloneInst corecmpOrdInst
+    corecloneCloneInst1 corecmpEqInst corehashHashInst
+    U64.Insts.Account_extractionQuantityQuantityScalarI128 rule
+
+/-- [account_extraction::rate_assets]:
+    Source: 'verification/extract_account.rs', lines 256:0-260:1
+    Visibility: public -/
+def rate_assets
+  {Role : Type _} {A : Type _} (corecloneCloneInst : core.clone.Clone Role)
+  (corecmpOrdInst : core.cmp.Ord Role) (corecloneCloneInst1 : core.clone.Clone
+  A) (corecmpEqInst : core.cmp.Eq A) (corehashHashInst : core.hash.Hash A)
+  (rule : rate.Rate Role A Std.U64) :
+  Result (alloc.vec.Vec A)
+  := do
+  rate.Rate.computed_asset_keys corecloneCloneInst corecmpOrdInst
+    corecloneCloneInst1 corecmpEqInst corehashHashInst
+    U64.Insts.Account_extractionQuantityQuantityScalarI128 rule
+
+/-- [account_extraction::model_default]:
+    Source: 'verification/extract_account.rs', lines 262:0-265:1
+    Visibility: public -/
+def model_default
+  {AccountId : Type _} (A : Type _) {RateId : Type _} (Role : Type _)
+  (corecmpEqInst : core.cmp.Eq AccountId) (corehashHashInst : core.hash.Hash
+  AccountId) (corecmpEqInst1 : core.cmp.Eq RateId) (corehashHashInst1 :
+  core.hash.Hash RateId) :
+  Result (economy.EconomyBuilder AccountId A RateId Role Std.U64)
+  := do
+  economy.EconomyBuilder.Insts.CoreDefaultDefault.default A Role Std.U64
+    corecmpEqInst corehashHashInst corecmpEqInst1 corehashHashInst1
+
+/-- [account_extraction::rate_default]:
+    Source: 'verification/extract_account.rs', lines 267:0-269:1
+    Visibility: public -/
+def rate_default
+  {Role : Type _} {A : Type _} (corecloneCloneInst : core.clone.Clone Role)
+  (corecmpOrdInst : core.cmp.Ord Role) (corecloneCloneInst1 : core.clone.Clone
+  A) (corecmpEqInst : core.cmp.Eq A) (corehashHashInst : core.hash.Hash A) :
+  Result (rate.Rate Role A Std.U64)
+  := do
+  rate.Rate.Insts.CoreDefaultDefault.default corecloneCloneInst corecmpOrdInst
+    corecloneCloneInst1 corecmpEqInst corehashHashInst
+    U64.Insts.Account_extractionQuantityQuantityScalarI128
 
 end Axionomy.AccountExtracted

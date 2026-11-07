@@ -4,6 +4,7 @@ import BasketExtraction.FunsExternal
 namespace Axionomy.AccountExtracted
 open Aeneas Aeneas.Std
 set_option linter.dupNamespace false
+universe u v
 
 -- Widening a u64 to i128 is exact. Formatting and hash internals still fail
 -- closed; logical collection operations do not execute those paths.
@@ -263,5 +264,96 @@ def alloc.string.String.push_str (original : String) (suffix : Str) : Result Str
   let suffix ← decodeString suffix
   let result := original ++ suffix
   if result.toByteArray.size ≤ Usize.max then .ok result else .fail .panic
+
+-- Constructor/owned-iterator models preserve logical values and traversal order.
+-- Physical allocation, reference counts and collection destruction stay trusted.
+def alloc.sync.Arc.new {T : Type} (value : T) : Result (alloc.sync.Arc T) := .ok value
+
+def indexmap.map.IndexMap.Insts.CoreIterTraitsCollectIntoIteratorPairIntoIter.into_iter {K V S : Type}
+    (entries : indexmap.map.IndexMap K V S) : Result (indexmap.map.iter.IntoIter K V) := .ok entries
+
+def indexmap.map.iter.IntoIter.Insts.CoreIterTraitsIteratorIteratorPair.next {K V : Type} :
+    indexmap.map.iter.IntoIter K V → Result (Option (K × V) × indexmap.map.iter.IntoIter K V)
+  | [] => .ok (none, [])
+  | entry :: rest => .ok (some entry, rest)
+
+def alloc.collections.btree.map.BTreeMapKVGlobal.new (K V : Type) :
+    Result (alloc.collections.btree.map.BTreeMap K V alloc.alloc.Global) := .ok []
+
+def alloc.collections.btree.set.BTreeSetTGlobal.new (T : Type) :
+    Result (alloc.collections.btree.set.BTreeSet T alloc.alloc.Global) := .ok []
+
+def alloc.collections.btree.set.BTreeSet.Insts.CoreIterTraitsCollectIntoIteratorTIntoIter.into_iter {T A : Type}
+    (_ : core.alloc.AllocatorClone A) (entries : alloc.collections.btree.set.BTreeSet T A) :
+    Result (alloc.collections.btree.set.IntoIter T A) := .ok entries
+
+def alloc.collections.btree.set.IntoIter.Insts.CoreIterTraitsIteratorIterator.next {T A : Type}
+    (_ : core.alloc.AllocatorClone A) : alloc.collections.btree.set.IntoIter T A →
+      Result (Option T × alloc.collections.btree.set.IntoIter T A)
+  | [] => .ok (none, [])
+  | value :: rest => .ok (some value, rest)
+
+def SharedAVec.Insts.CoreIterTraitsCollectIntoIteratorSharedATIter.into_iter {T : Type} (_ : Type)
+    (values : alloc.vec.Vec T) : Result (core.slice.iter.Iter T) := core.slice.Slice.iter values.slice
+
+def Shared0A.Insts.CoreCmpOrd.cmp {A : Type} (ordInst : core.cmp.Ord A) :
+    A → A → Result Ordering := ordInst.cmp
+
+def Str.Insts.CoreCmpOrd.cmp (left right : Str) : Result Ordering := do
+  let left ← decodeString left
+  let right ← decodeString right
+  .ok (compare left right)
+
+def Str.Insts.CoreCmpPartialOrdStr.partial_cmp (left right : Str) : Result (Option Ordering) := do
+  let result ← Str.Insts.CoreCmpOrd.cmp left right
+  .ok (some result)
+
+def Str.Insts.CoreCmpPartialEqStr.eq (left right : Str) : Result Bool := do
+  let left ← decodeString left
+  let right ← decodeString right
+  .ok (decide (left = right))
+
+-- Tuple comparison follows the pinned core/tuple.rs lexical_cmp and
+-- lexical_partial_cmp macros; equality short-circuits in component order.
+def Pair.Insts.CoreCmpOrd.cmp {U : Type u} {T : Type v} (first : core.cmp.Ord U) (second : core.cmp.Ord T)
+    (left right : U × T) : Result Ordering := do
+  let order ← first.cmp left.1 right.1
+  match order with
+  | .eq => second.cmp left.2 right.2
+  | result => .ok result
+
+def Pair.Insts.CoreCmpPartialOrdPair.partial_cmp {U : Type u} {T : Type v}
+    (first : core.cmp.PartialOrd U U) (second : core.cmp.PartialOrd T T)
+    (left right : U × T) : Result (Option Ordering) := do
+  let order ← first.partial_cmp left.1 right.1
+  match order with
+  | some .eq => second.partial_cmp left.2 right.2
+  | result => .ok result
+
+def Pair.Insts.CoreCmpPartialEqPair.eq {U : Type u} {T : Type v}
+    (first : core.cmp.PartialEq U U) (second : core.cmp.PartialEq T T)
+    (left right : U × T) : Result Bool := do
+  let equal ← first.eq left.1 right.1
+  if equal then second.eq left.2 right.2 else .ok false
+
+-- These unused methods dispatch new __chaining_* trait hooks in pinned Rust,
+-- which this backend dictionary does not expose. Keep them explicitly unsupported.
+def Pair.Insts.CoreCmpPartialOrdPair.lt {U : Type u} {T : Type v}
+    (_ : core.cmp.PartialOrd U U) (_ : core.cmp.PartialOrd T T)
+    (_ _ : U × T) : Result Bool := .fail .panic
+
+def Pair.Insts.CoreCmpPartialOrdPair.le {U : Type u} {T : Type v}
+    (_ : core.cmp.PartialOrd U U) (_ : core.cmp.PartialOrd T T)
+    (_ _ : U × T) : Result Bool := .fail .panic
+
+def Pair.Insts.CoreCmpPartialOrdPair.ge {U : Type u} {T : Type v}
+    (_ : core.cmp.PartialOrd U U) (_ : core.cmp.PartialOrd T T)
+    (_ _ : U × T) : Result Bool := .fail .panic
+
+def indexmap.map.IndexMap.contains_key {K V S Q H : Type}
+    (hasher : core.hash.BuildHasher S H) (hashInst : core.hash.Hash Q)
+    (equiv : equivalent.Equivalent Q K) (entries : indexmap.map.IndexMap K V S) (query : Q) : Result Bool := do
+  let value ← indexmap.map.IndexMap.get hasher hashInst equiv entries query
+  .ok value.isSome
 
 end Axionomy.AccountExtracted

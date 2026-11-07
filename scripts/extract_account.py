@@ -18,8 +18,8 @@ GENERATED = {
     "AccountExtraction.lean": "AccountExtraction.lean",
 }
 TEMPLATES = {
-    "TypesExternal_Template.lean": "a24af3114c5def7076f3d614501bcb6d9966083941a1f73162d7020fd0a38ef8",
-    "FunsExternal_Template.lean": "54b7a8c9ac3ed58e98a4301b7988f4552869f638b16df204c37dab639198d7ec",
+    "TypesExternal_Template.lean": "839a81b8481892d6f1a7653d75dde2b5ca2c3458a426f3d3a64fc0574de4a3fb",
+    "FunsExternal_Template.lean": "33f62969d1a4f067f9a43ed223acba9b5520f5ca189753a4ed5a9194fd991ae1",
 }
 
 # The caller remains outside the extraction. Keep its exact staging handoff
@@ -37,6 +37,21 @@ PREPARATION_CALL = """let account = match self
             };"""
 
 ENTRY_CALLS = {
+    "model_new": "economy::EconomyBuilder::new()",
+    "model_default": "economy::EconomyBuilder::default()",
+    "model_account": "builder.account(id,state)",
+    "model_rate": "builder.rate(id,rule)",
+    "model_invariant": "builder.invariant(invariant)",
+    "model_build": "builder.build()",
+    "rate_new": "Rate::new()",
+    "rate_default": "Rate::default()",
+    "rate_distinct": "rule.distinct(left,right)",
+    "rate_computed_consume": "rule.consume_computed(role,asset,expression)",
+    "rate_computed_produce": "rule.produce_computed(role,asset,expression)",
+    "rate_computed_preserve": "rule.preserve_computed(role,asset,expression)",
+    "rate_condition": "rule.condition(label,left,comparison,right)",
+    "rate_parameters": "rule.parameter_names()",
+    "rate_assets": "rule.computed_asset_keys()",
     "deposit": "state.deposit(assets)",
     "withdraw": "state.withdraw(assets)",
     "prepare_exchange": "state.prepare_exchange(consumed,produced)",
@@ -94,6 +109,15 @@ def validate_generated(directory):
                   "basket.Basket.checked_scale", "basket.Basket.checked_scale_loop.body", "basket.Basket.contains",
                   "basket.Basket.Insts.CoreCmpPartialEqBasket.eq", "basket.Basket.Insts.CoreCmpPartialEqBasket.eq_loop.body",
                   "quantity.Quantity.checked_add", "quantity.Quantity.checked_sub", "quantity.Quantity.checked_mul",
+                  "economy.EconomyBuilder.new", "economy.EconomyBuilder.account", "economy.EconomyBuilder.rate",
+                  "economy.EconomyBuilder.invariant", "economy.EconomyBuilder.build", "economy.EconomyBuilder.build_loop.body",
+                  "rate.Rate.new", "rate.Rate.impl.distinct", "rate.Rate.register_expression_roles_loop.body",
+                  "rate.Rate.consume_computed", "rate.Rate.produce_computed", "rate.Rate.preserve_computed",
+                  "rate.Rate.condition", "rate.Rate.condition_loop.body",
+                  "rate.QuantityExpression.collect_roles", "rate.QuantityExpression.collect_parameters", "rate.QuantityExpression.collect_assets",
+                  "rate.ComputedAmount.collect_parameters_loop.body", "rate.ComputedAmount.collect_assets_loop.body",
+                  "rate.Rate.parameter_names", "rate.Rate.parameter_names_loop.body",
+                  "rate.Rate.computed_asset_keys", "rate.Rate.computed_asset_keys_loop.body",
                   "rate.merge", "rate.Rate.try_consume", "rate.Rate.try_produce", "rate.Rate.try_preserve",
                   "rate.LinearInvariant.checked_add_basket_measure_loop.body",
                   "rate.LinearInvariant.conserves_loop.body", "rate.LinearInvariant.conserves",

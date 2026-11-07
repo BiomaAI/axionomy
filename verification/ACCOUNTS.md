@@ -174,7 +174,7 @@ proof must fail.
 ## Shared pipeline: rates and conservation
 
 The harness also includes the exact production `rate.rs` and `exchange.rs`
-modules. Its new entrypoints only forward to the three fallible static rate
+modules. Its original rate entrypoints forward to the three fallible static rate
 builders, u64 weighting, and `LinearInvariant::conserves`. Local `basket` and
 `quantity` bindings in private rate helpers were renamed to `assets` and `amount`
 to avoid shadowing generated namespaces; no Rust bounds or algorithms changed.
@@ -256,8 +256,8 @@ error diagnostics.
 
 The extension adds the following explicit dependency models:
 
-- `Arc<T>` denotes its logical immutable pointee. Only `Deref` and `AsRef` are
-  modeled here. Reference counts, clone/COW mutation, isolation and allocation
+- `Arc<T>` denotes its logical immutable pointee. `Deref`, `AsRef`, and logical creation through `Arc::new` are
+  modeled; the model-construction extension below uses creation. Reference counts, clone/COW mutation, isolation and allocation
   are not established by this abstraction; Rust still checks borrowing.
 - `IndexMap::values` traverses the existing logical list in insertion order.
   `BTreeMap::get` borrows each stored key and performs ordered early-stop lookup.
@@ -283,3 +283,54 @@ prefix and discard scaled amounts. Each control first requires fresh extraction
 and successful compilation of the generated implementation, then requires the
 reviewed semantic proof failure. A stale model or an unresolved external symbol
 cannot satisfy these checks.
+
+
+## Model construction and complete rate metadata
+
+`ModelConstructionRefinement` extracts `EconomyBuilder::new/default`, account/rate
+registration, invariant registration and `build`. Its typed specification records
+first-entry retention, insertion order, the ordered sequence of duplicate errors
+and unchanged unrelated data. `build` accepts exactly an issue-free builder and
+returns all registered data. Its distinct-key premise is established by `new`
+and preserved by all registration operations; it is not an assumed build-success
+premise. Appending issues/invariants requires room for one more vector element.
+
+`RateMetadataRefinement` covers `Rate::new/default`, the three computed builders,
+condition construction with a `String` label, referenced-role registration, and
+canonical distinct pairs. Complete record-update equalities prove frame behavior.
+The selected role `PartialOrd::le` must agree with its comparator; u64 has a proved
+witness. Arbitrary `Into<String>` callback behavior is outside this specialization.
+
+`DiscoveryRefinement` covers all ten expression constructors.
+`RateDiscoveryRefinement` composes the recursive proofs through every computed
+amount and condition loop. Parameter discovery returns exactly the logical sorted
+union of names, including references on both condition sides. Asset discovery
+retains duplicates and traverses consume, produce, preserve, then conditions;
+each computed target precedes its expression's references. The capacity premise
+bounds the total number of output references, and each parameter must have a
+UTF-8 byte length representable by `usize`. Static basket assets are intentionally
+outside `computed_asset_keys`, matching the public contract.
+
+The production refactors replace `map/collect`, `extend/cloned` and chained
+iterators with explicit loops and two private slice helpers. The pinned translator
+cannot handle those iterator trait/lifetime combinations. The replacements retain
+public signatures, ordering, borrowing, ownership and generic bounds. Their actual
+production paths are extracted; no alternate Rust algorithm is maintained.
+
+New dependency models cover empty trees/sets, owning ordered-map/set iteration,
+borrowed vector iteration, `contains_key`, logical `Arc::new`, reference ordering,
+UTF-8 string comparison and lexicographic pair comparison/equality. These are
+explicit trusted standard-library contracts, not proofs of physical storage,
+allocation, reference counting, COW or destructors. Unused tuple `lt/le/ge` fail
+closed: the pinned Rust tuple implementations use chaining hooks absent from the
+backend dictionary. No proof calls those placeholders. Existing lawful key/hash/
+ordering, successful allocation, compiler/MIR/translation and backend assumptions
+remain, and no axioms were added.
+
+Lean generates 345 model sequences and 77 rate sequences with expected snapshots
+at every prefix. Rust checks both `new` and `default` with separate holder, asset,
+role and rate types. Six controls mutate duplicate detection, build rejection,
+computed-role discovery, distinct-pair orientation, preserve parameter inclusion,
+and condition asset order. Each must compile after fresh extraction and then fail
+its semantic proof. This closes the model/discovery backlog item, while exchange
+validation/orchestration and remaining convenience APIs retain their own contracts.

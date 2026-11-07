@@ -46,7 +46,16 @@ implementation proofs for exact basket merging, ordered overflow errors, role
 registration, and unchanged other fields. Roles remain a separate type from
 assets. These paths use an explicit sorted logical `BTreeMap`/`BTreeSet` model;
 physical trees, lawful ordering, allocation and cloning remain trust boundaries.
-This does not yet cover computed-role discovery or full model construction.
+Model construction and computed rate construction/discovery are now extracted
+and proved as well. Builders retain the first account/rate under duplicate IDs,
+report every duplicate in encounter order, and publish exactly the registered
+model only when there are no issues. Constructors establish and preserve the
+unique-key precondition used by `build`. Rate proofs cover computed effects,
+conditions, canonical distinct-role pairs, and complete recursive role/parameter/
+asset discovery, preserving borrowed Rust return types and all other rate fields.
+Vec growth and UTF-8 lengths have explicit `usize` bounds; condition labels use
+the `String` specialization. Static convenience panics, invariant constructors
+and arbitrary `Into<String>` callbacks remain in item 16.
 
 The runtime `LinearInvariant::conserves` path is also extracted and proved:
 every `u64 × i64` contribution fits in `i128`, every intermediate addition is
@@ -97,6 +106,8 @@ The current library covers:
 | `Quantity` | Exact checked addition/multiplication, subtraction without underflow, floor division, asset-qualified amount round trip |
 | `State` | Typed account/asset updates and frame property, zero canonicalization, complete scalar shortfall, hidden-account projection, observation noninterference, monotone goals |
 | `RateConstruction` / `RateConstructionRefinement` | Extracted static builders, exact per-role merges/errors, role registration and unchanged rate fields under the sorted collection model |
+| `ModelConstruction` / `ModelConstructionRefinement` | Extracted model builders, exact ordered duplicate errors, first-entry retention, unique-key preservation and complete build result |
+| `Discovery` / `DiscoveryRefinement` / `RateMetadataRefinement` / `RateDiscoveryRefinement` | Extracted computed/condition/distinct construction, exact recursive roles, sorted parameter union, complete ordered asset references and unchanged fields |
 | `Conservation` / `ConservationRefinement` | Extracted runtime invariant check and whole-state measurement, exact signed widening/weighting, intermediate overflow and mathematical conservation on acceptance |
 | `Evaluation` / `EvaluationRefinement` / `DiagnosticRefinement` | Extracted recursive expressions and conditions against one snapshot, all checked outcomes, first-error order, exact public error text |
 | `Effects` / `EffectsRefinement` | Extracted bounded static scaling/merging and computed single-quantity addition, exact errors and atomic failure |
@@ -125,7 +136,7 @@ to `origin/main`; theorem counts do not measure percentage completion.
 | Milestone | Item | Remaining contract | Status |
 | --- | --- | --- | --- |
 | 1. u64 transaction kernel | 1 | Basket addition/scaling, containment/equality, canonical representation preservation | Implementation proved under documented models |
-| 1 | 2 | Model/rate construction, duplicate IDs, role/parameter/asset discovery, distinct roles | Static builders proved; model/discovery open |
+| 1 | 2 | Model/rate construction, duplicate IDs, role/parameter/asset discovery, distinct roles | Implementation proved under documented models; remaining convenience APIs tracked in item 16 |
 | 1 | 3 | Exchange units, rate/account existence, binding/parameter validation | Open |
 | 1 | 4 | Full expression/condition evaluation against the original snapshot | Interpreter/helpers proved; caller orchestration open |
 | 1 | 5 | Account effect aggregation, bounded scaling/merging, computed-effect semantics | Bounded helpers proved; aggregation loop open |
@@ -236,6 +247,11 @@ missing bindings/accounts/assets, zero units and u64 boundaries. Another 73 case
 exercise atomic static merging and unscaled computed quantities. These run
 directly through the production private helpers, alongside existing public
 whole-economy tests; they do not substitute for the implementation theorems.
+An additional 345 model sequences and 77 rate sequences check every construction
+prefix against Lean-generated snapshots, using both `new` and `default`. They
+cover interleaved duplicate IDs, retained values, exact issue order, all expression
+constructors, repeated/reversed/self distinct pairs, Unicode names, all computed
+kinds, all condition comparisons and repeated asset references.
 
 ## Explicit legacy refinement gaps
 
@@ -244,13 +260,13 @@ the initial theorems. They are a backfill plan, not an exemption for new behavio
 
 - Charon/Aeneas extraction and refinement beyond the four `Quantity<u64>` checked
   arithmetic operations, basket construction/operations, account updates/staging,
-  static rate builders, snapshot expression/condition evaluation, bounded effect helpers,
+  model/rate construction and metadata discovery, snapshot expression/condition evaluation, bounded effect helpers,
   runtime conservation and whole-state measurement, including the remaining exchange `expect` and
   termination obligations.
 - Correctness of `IndexMap`, `BTreeMap`, `Arc`, iterator order, allocation, cloning,
   and copy-on-write isolation; Rust compilation still enforces its ownership rules.
 - Full structural validation: required/unknown roles and parameters, account/rate
-  existence, distinct bindings, duplicate model IDs, and aggregate overflow.
+  existence, distinct bindings, and aggregate overflow. Duplicate model IDs are now covered.
 - Remaining finite-map adapters, serialization/schema round trips,
   canonical state/observation ordering, and fingerprints. Fingerprints are not
   collision-free identities and must not be given such a theorem.
@@ -263,7 +279,7 @@ the initial theorems. They are a backfill plan, not an exemption for new behavio
   Rust `replay` retains an accepted prefix on failure; `replayed` protects its source.
 
 For further implementation proofs, extend the pinned Aeneas pipeline from u64
-arithmetic, baskets, accounts, static rates, evaluation, effects and conservation
+arithmetic, baskets, accounts, model/rate construction, discovery, evaluation, effects and conservation
 to complete exchange preparation and commit, connecting
 extracted definitions to the existing specifications. Model unavoidable external dependencies explicitly and
 report their trust status. Do not maintain a second Rust algorithm only for proofs

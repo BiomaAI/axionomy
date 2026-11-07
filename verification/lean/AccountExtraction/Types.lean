@@ -217,17 +217,21 @@ inductive account.AccountError (A : Type _) (N : Type _) (Clause2_SignedMeasure
   account.AccountError A N Clause2_SignedMeasure
 | Overflow : A → account.AccountError A N Clause2_SignedMeasure
 
-/-- [account_extraction::economy::ExpressionError]
-    Source: 'verification/../src/economy.rs', lines 1163:0-1171:1 -/
+/-- [account_extraction::rate::LinearInvariant]
+    Source: 'verification/../src/rate.rs', lines 687:0-690:1
+    Visibility: public -/
+structure rate.LinearInvariant (A : Type _) where
+  «name» : String
+  weights : indexmap.map.IndexMap A Std.I64 std.hash.random.RandomState
+
+/-- [account_extraction::rate::QuantityComparison]
+    Source: 'verification/../src/rate.rs', lines 253:0-257:1
+    Visibility: public -/
 @[discriminant isize]
-inductive economy.ExpressionError where
-| MissingParameter : String → economy.ExpressionError
-| UnboundRole : economy.ExpressionError
-| MissingAccount : economy.ExpressionError
-| AdditionOverflow : economy.ExpressionError
-| SubtractionUnderflow : economy.ExpressionError
-| MultiplicationOverflow : economy.ExpressionError
-| DivisionByZero : economy.ExpressionError
+inductive rate.QuantityComparison where
+| Equal : rate.QuantityComparison
+| GreaterThanOrEqual : rate.QuantityComparison
+| LessThanOrEqual : rate.QuantityComparison
 
 /-- [account_extraction::rate::QuantityExpression]
     Source: 'verification/../src/rate.rs', lines 27:0-63:1
@@ -263,6 +267,90 @@ inductive rate.QuantityExpression (Role : Type _) (A : Type _) (N : Type _)
   rate.QuantityExpression Role A N →
   rate.QuantityExpression Role A N →
   rate.QuantityExpression Role A N
+
+/-- [account_extraction::rate::RateCondition]
+    Source: 'verification/../src/rate.rs', lines 264:0-269:1
+    Visibility: public -/
+structure rate.RateCondition (Role : Type _) (A : Type _) (N : Type _) where
+  «name» : String
+  left : rate.QuantityExpression Role A N
+  comparison : rate.QuantityComparison
+  right : rate.QuantityExpression Role A N
+
+/-- [account_extraction::rate::ComputedAmount]
+    Source: 'verification/../src/rate.rs', lines 218:0-222:1
+    Visibility: public -/
+structure rate.ComputedAmount (Role : Type _) (A : Type _) (N : Type _) where
+  role : Role
+  asset : A
+  quantity : rate.QuantityExpression Role A N
+
+/-- [account_extraction::rate::Rate]
+    Source: 'verification/../src/rate.rs', lines 290:0-300:1
+    Visibility: public -/
+structure rate.Rate (Role : Type _) (A : Type _) (N : Type _) where
+  consume : alloc.collections.btree.map.BTreeMap Role (basket.Basket A N)
+    alloc.alloc.Global
+  produce : alloc.collections.btree.map.BTreeMap Role (basket.Basket A N)
+    alloc.alloc.Global
+  preserve : alloc.collections.btree.map.BTreeMap Role (basket.Basket A N)
+    alloc.alloc.Global
+  roles : alloc.collections.btree.set.BTreeSet Role alloc.alloc.Global
+  distinct : alloc.collections.btree.set.BTreeSet (Role × Role)
+    alloc.alloc.Global
+  computed_consume : alloc.vec.Vec (rate.ComputedAmount Role A N)
+  computed_produce : alloc.vec.Vec (rate.ComputedAmount Role A N)
+  computed_preserve : alloc.vec.Vec (rate.ComputedAmount Role A N)
+  conditions : alloc.vec.Vec (rate.RateCondition Role A N)
+
+/-- [account_extraction::economy::Economy]
+    Source: 'verification/../src/economy.rs', lines 68:0-72:1
+    Visibility: public -/
+structure economy.Economy (AccountId : Type _) (A : Type _) (RateId : Type _)
+  (Role : Type _) (N : Type _) where
+  accounts : indexmap.map.IndexMap AccountId (alloc.sync.Arc (account.Account A
+    N)) std.hash.random.RandomState
+  rates : alloc.sync.Arc (indexmap.map.IndexMap RateId (rate.Rate Role A N)
+    std.hash.random.RandomState)
+  invariants : alloc.sync.Arc (alloc.vec.Vec (rate.LinearInvariant A))
+
+/-- [account_extraction::economy::ModelIssue]
+    Source: 'verification/../src/economy.rs', lines 370:0-373:1
+    Visibility: public -/
+@[discriminant isize]
+inductive economy.ModelIssue (AccountId : Type _) (RateId : Type _) where
+| DuplicateAccount : AccountId → economy.ModelIssue AccountId RateId
+| DuplicateRate : RateId → economy.ModelIssue AccountId RateId
+
+/-- [account_extraction::economy::EconomyBuilder]
+    Source: 'verification/../src/economy.rs', lines 296:0-301:1
+    Visibility: public -/
+structure economy.EconomyBuilder (AccountId : Type _) (A : Type _) (RateId :
+  Type _) (Role : Type _) (N : Type _) where
+  accounts : indexmap.map.IndexMap AccountId (account.Account A N)
+    std.hash.random.RandomState
+  rates : indexmap.map.IndexMap RateId (rate.Rate Role A N)
+    std.hash.random.RandomState
+  invariants : alloc.vec.Vec (rate.LinearInvariant A)
+  issues : alloc.vec.Vec (economy.ModelIssue AccountId RateId)
+
+/-- [account_extraction::economy::ModelBuildError]
+    Source: 'verification/../src/economy.rs', lines 377:0-379:1
+    Visibility: public -/
+structure economy.ModelBuildError (AccountId : Type _) (RateId : Type _) where
+  issues : alloc.vec.Vec (economy.ModelIssue AccountId RateId)
+
+/-- [account_extraction::economy::ExpressionError]
+    Source: 'verification/../src/economy.rs', lines 1163:0-1171:1 -/
+@[discriminant isize]
+inductive economy.ExpressionError where
+| MissingParameter : String → economy.ExpressionError
+| UnboundRole : economy.ExpressionError
+| MissingAccount : economy.ExpressionError
+| AdditionOverflow : economy.ExpressionError
+| SubtractionUnderflow : economy.ExpressionError
+| MultiplicationOverflow : economy.ExpressionError
+| DivisionByZero : economy.ExpressionError
 
 /-- [account_extraction::exchange::Exchange]
     Source: 'verification/../src/exchange.rs', lines 22:0-28:1
@@ -316,24 +404,6 @@ def economy.evaluate_expression.closure (AccountId : Type _) (A : Type _)
   Type _) :=
   String
 
-/-- [account_extraction::rate::QuantityComparison]
-    Source: 'verification/../src/rate.rs', lines 240:0-244:1
-    Visibility: public -/
-@[discriminant isize]
-inductive rate.QuantityComparison where
-| Equal : rate.QuantityComparison
-| GreaterThanOrEqual : rate.QuantityComparison
-| LessThanOrEqual : rate.QuantityComparison
-
-/-- [account_extraction::rate::RateCondition]
-    Source: 'verification/../src/rate.rs', lines 251:0-256:1
-    Visibility: public -/
-structure rate.RateCondition (Role : Type _) (A : Type _) (N : Type _) where
-  «name» : String
-  left : rate.QuantityExpression Role A N
-  comparison : rate.QuantityComparison
-  right : rate.QuantityExpression Role A N
-
 /-- [account_extraction::exchange::AccountDelta]
     Source: 'verification/../src/exchange.rs', lines 80:0-85:1
     Visibility: public -/
@@ -344,65 +414,32 @@ structure exchange.AccountDelta (AccountId : Type _) (A : Type _) (N : Type _)
   produced : basket.Basket A N
   preserved : basket.Basket A N
 
-/-- [account_extraction::rate::ComputedAmount]
-    Source: 'verification/../src/rate.rs', lines 218:0-222:1
-    Visibility: public -/
-structure rate.ComputedAmount (Role : Type _) (A : Type _) (N : Type _) where
-  role : Role
-  asset : A
-  quantity : rate.QuantityExpression Role A N
-
-/-- [account_extraction::rate::Rate]
-    Source: 'verification/../src/rate.rs', lines 277:0-287:1
-    Visibility: public -/
-structure rate.Rate (Role : Type _) (A : Type _) (N : Type _) where
-  consume : alloc.collections.btree.map.BTreeMap Role (basket.Basket A N)
-    alloc.alloc.Global
-  produce : alloc.collections.btree.map.BTreeMap Role (basket.Basket A N)
-    alloc.alloc.Global
-  preserve : alloc.collections.btree.map.BTreeMap Role (basket.Basket A N)
-    alloc.alloc.Global
-  roles : alloc.collections.btree.set.BTreeSet Role alloc.alloc.Global
-  distinct : alloc.collections.btree.set.BTreeSet (Role × Role)
-    alloc.alloc.Global
-  computed_consume : alloc.vec.Vec (rate.ComputedAmount Role A N)
-  computed_produce : alloc.vec.Vec (rate.ComputedAmount Role A N)
-  computed_preserve : alloc.vec.Vec (rate.ComputedAmount Role A N)
-  conditions : alloc.vec.Vec (rate.RateCondition Role A N)
-
 /-- [account_extraction::rate::RateError]
-    Source: 'verification/../src/rate.rs', lines 675:0-678:1
+    Source: 'verification/../src/rate.rs', lines 681:0-684:1
     Visibility: public -/
 @[discriminant isize]
 inductive rate.RateError (Role : Type _) (A : Type _) where
 | BasketOverflow : Role → A → rate.RateError Role A
 
 /-- [account_extraction::rate::{account_extraction::rate::Rate<Role, A, N>}::try_consume::{closure}]
-    Source: 'verification/../src/rate.rs', lines 316:21-316:70 -/
+    Source: 'verification/../src/rate.rs', lines 329:21-329:70 -/
 @[reducible]
 def rate.Rate.try_consume.closure (Role : Type _) (A : Type _) (N : Type _)
   (Clause5_SignedMeasure : Type _) :=
   Role
 
 /-- [account_extraction::rate::{account_extraction::rate::Rate<Role, A, N>}::try_produce::{closure}]
-    Source: 'verification/../src/rate.rs', lines 334:21-334:70 -/
+    Source: 'verification/../src/rate.rs', lines 347:21-347:70 -/
 @[reducible]
 def rate.Rate.try_produce.closure (Role : Type _) (A : Type _) (N : Type _)
   (Clause5_SignedMeasure : Type _) :=
   Role
 
 /-- [account_extraction::rate::{account_extraction::rate::Rate<Role, A, N>}::try_preserve::{closure}]
-    Source: 'verification/../src/rate.rs', lines 352:21-352:70 -/
+    Source: 'verification/../src/rate.rs', lines 365:21-365:70 -/
 @[reducible]
 def rate.Rate.try_preserve.closure (Role : Type _) (A : Type _) (N : Type _)
   (Clause5_SignedMeasure : Type _) :=
   Role
-
-/-- [account_extraction::rate::LinearInvariant]
-    Source: 'verification/../src/rate.rs', lines 681:0-684:1
-    Visibility: public -/
-structure rate.LinearInvariant (A : Type _) where
-  «name» : String
-  weights : indexmap.map.IndexMap A Std.I64 std.hash.random.RandomState
 
 end Axionomy.AccountExtracted

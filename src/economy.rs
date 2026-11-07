@@ -344,12 +344,12 @@ where
                 issues: self.issues,
             });
         }
+        let mut accounts = IndexMap::new();
+        for (id, holder) in self.accounts {
+            accounts.insert(id, Arc::new(holder));
+        }
         Ok(Economy {
-            accounts: self
-                .accounts
-                .into_iter()
-                .map(|(id, account)| (id, Arc::new(account)))
-                .collect(),
+            accounts,
             rates: Arc::new(self.rates),
             invariants: Arc::new(self.invariants),
         })
@@ -1496,5 +1496,178 @@ mod evaluation_conformance {
             assert_eq!(actual.err(), case.computed_error, "{case:?}");
             assert_eq!(entries(&target), case.computed, "{case:?}");
         }
+    }
+}
+
+#[cfg(test)]
+mod construction_conformance {
+    use super::*;
+
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+    struct Holder(u64);
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+    struct Asset(u64);
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+    struct Rule(u64);
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+    struct Role(u64);
+    type Builder = EconomyBuilder<Holder, Asset, Rule, Role>;
+
+    #[derive(Debug, Deserialize)]
+    struct Snapshot {
+        accounts: Vec<(u64, u64)>,
+        rates: Vec<(u64, u64)>,
+        invariants: Vec<u64>,
+        issues: Vec<(u64, u64)>,
+        accepted: bool,
+    }
+
+    #[derive(Debug, Deserialize)]
+    struct Case {
+        steps: Vec<(u64, (u64, u64))>,
+        snapshots: Vec<Snapshot>,
+    }
+
+    #[derive(Deserialize)]
+    struct Fixtures {
+        models: Vec<Case>,
+    }
+
+    fn balances(value: u64) -> Basket<Asset> {
+        Basket::try_from_entries([(Asset(0), Quantity::new(value))]).unwrap()
+    }
+
+    fn expected_issues(snapshot: &Snapshot) -> Vec<ModelIssue<Holder, Rule>> {
+        snapshot
+            .issues
+            .iter()
+            .map(|&(kind, id)| match kind {
+                0 => ModelIssue::DuplicateAccount {
+                    account: Holder(id),
+                },
+                1 => ModelIssue::DuplicateRate { rate: Rule(id) },
+                _ => panic!("unknown model issue"),
+            })
+            .collect()
+    }
+
+    #[test]
+    fn runtime_model_construction_matches_lean() {
+        let fixtures: Fixtures =
+            serde_json::from_str(include_str!("../verification/conformance.json")).unwrap();
+        assert_eq!(fixtures.models.len(), 345);
+        let mut outcomes = [0; 2];
+        for case in fixtures.models {
+            assert_eq!(case.snapshots.len(), case.steps.len() + 1);
+            for default in [false, true] {
+                // Build consumes its builder. Recreate each prefix to check every intermediate
+                // accepted/rejected model as well as retained data after duplicate inputs.
+                for (count, snapshot) in case.snapshots.iter().enumerate() {
+                    let mut builder = if default {
+                        Builder::default()
+                    } else {
+                        Builder::new()
+                    };
+                    for &(kind, (key, value)) in &case.steps[..count] {
+                        builder = match kind {
+                            0 => builder.account(Holder(key), Account::new(balances(value))),
+                            1 => builder
+                                .rate(Rule(key), Rate::new().produce(Role(0), balances(value))),
+                            2 => builder.invariant(
+                                LinearInvariant::new(value.to_string())
+                                    .weight(Asset(0), -(value as i64)),
+                            ),
+                            _ => panic!("unknown model construction step"),
+                        };
+                    }
+                    assert_eq!(
+                        builder
+                            .accounts
+                            .iter()
+                            .map(|(id, holder)| (
+                                id.0,
+                                *holder.balances().quantity(&Asset(0)).as_scalar()
+                            ))
+                            .collect::<Vec<_>>(),
+                        snapshot.accounts
+                    );
+                    assert_eq!(
+                        builder
+                            .rates
+                            .iter()
+                            .map(|(id, rule)| (
+                                id.0,
+                                *rule
+                                    .produced(&Role(0))
+                                    .unwrap()
+                                    .quantity(&Asset(0))
+                                    .as_scalar()
+                            ))
+                            .collect::<Vec<_>>(),
+                        snapshot.rates
+                    );
+                    assert_eq!(
+                        builder
+                            .invariants
+                            .iter()
+                            .map(|i| i.name().parse::<u64>().unwrap())
+                            .collect::<Vec<_>>(),
+                        snapshot.invariants
+                    );
+                    for (invariant, value) in builder.invariants.iter().zip(&snapshot.invariants) {
+                        let expected = if *value == 0 {
+                            vec![]
+                        } else {
+                            vec![(&Asset(0), -(*value as i64))]
+                        };
+                        assert_eq!(invariant.weights().collect::<Vec<_>>(), expected);
+                    }
+                    assert_eq!(builder.issues, expected_issues(snapshot));
+                    let actual = builder.build();
+                    assert_eq!(actual.is_ok(), snapshot.accepted);
+                    outcomes[usize::from(actual.is_ok())] += 1;
+                    match actual {
+                        Ok(model) => {
+                            assert_eq!(
+                                model
+                                    .accounts
+                                    .iter()
+                                    .map(|(id, holder)| (
+                                        id.0,
+                                        *holder.balances().quantity(&Asset(0)).as_scalar()
+                                    ))
+                                    .collect::<Vec<_>>(),
+                                snapshot.accounts
+                            );
+                            assert_eq!(
+                                model
+                                    .rates
+                                    .iter()
+                                    .map(|(id, rule)| (
+                                        id.0,
+                                        *rule
+                                            .produced(&Role(0))
+                                            .unwrap()
+                                            .quantity(&Asset(0))
+                                            .as_scalar()
+                                    ))
+                                    .collect::<Vec<_>>(),
+                                snapshot.rates
+                            );
+                            assert_eq!(
+                                model
+                                    .invariants
+                                    .iter()
+                                    .map(|i| i.name().parse::<u64>().unwrap())
+                                    .collect::<Vec<_>>(),
+                                snapshot.invariants
+                            );
+                        }
+                        Err(error) => assert_eq!(error.issues(), expected_issues(snapshot)),
+                    }
+                }
+            }
+        }
+        assert!(outcomes.into_iter().all(|count| count > 0));
     }
 }

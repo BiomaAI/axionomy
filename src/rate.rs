@@ -233,6 +233,19 @@ impl<Role, A, N> ComputedAmount<Role, A, N> {
     pub const fn quantity(&self) -> &QuantityExpression<Role, A, N> {
         &self.quantity
     }
+
+    fn collect_parameters<'a>(amounts: &'a [Self], parameters: &mut BTreeSet<&'a str>) {
+        for amount in amounts {
+            amount.quantity.collect_parameters(parameters);
+        }
+    }
+
+    fn collect_assets<'a>(amounts: &'a [Self], assets: &mut Vec<&'a A>) {
+        for amount in amounts {
+            assets.push(&amount.asset);
+            amount.quantity.collect_assets(assets);
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -427,7 +440,9 @@ where
         let mut expression_roles = BTreeSet::new();
         left.collect_roles(&mut expression_roles);
         right.collect_roles(&mut expression_roles);
-        self.roles.extend(expression_roles.into_iter().cloned());
+        for role in expression_roles {
+            self.roles.insert(role.clone());
+        }
         self.conditions.push(RateCondition {
             name: name.into(),
             left,
@@ -445,7 +460,9 @@ where
         self.roles.insert(target.clone());
         let mut expression_roles = BTreeSet::new();
         expression.collect_roles(&mut expression_roles);
-        self.roles.extend(expression_roles.into_iter().cloned());
+        for role in expression_roles {
+            self.roles.insert(role.clone());
+        }
     }
 
     pub fn roles(&self) -> impl Iterator<Item = &Role> {
@@ -486,14 +503,9 @@ where
 
     pub fn parameter_names(&self) -> BTreeSet<&str> {
         let mut parameters = BTreeSet::new();
-        for amount in self
-            .computed_consume
-            .iter()
-            .chain(&self.computed_produce)
-            .chain(&self.computed_preserve)
-        {
-            amount.quantity.collect_parameters(&mut parameters);
-        }
+        ComputedAmount::collect_parameters(&self.computed_consume, &mut parameters);
+        ComputedAmount::collect_parameters(&self.computed_produce, &mut parameters);
+        ComputedAmount::collect_parameters(&self.computed_preserve, &mut parameters);
         for condition in &self.conditions {
             condition.left.collect_parameters(&mut parameters);
             condition.right.collect_parameters(&mut parameters);
@@ -503,15 +515,9 @@ where
 
     pub fn computed_asset_keys(&self) -> Vec<&A> {
         let mut assets = Vec::new();
-        for amount in self
-            .computed_consume
-            .iter()
-            .chain(&self.computed_produce)
-            .chain(&self.computed_preserve)
-        {
-            assets.push(&amount.asset);
-            amount.quantity.collect_assets(&mut assets);
-        }
+        ComputedAmount::collect_assets(&self.computed_consume, &mut assets);
+        ComputedAmount::collect_assets(&self.computed_produce, &mut assets);
+        ComputedAmount::collect_assets(&self.computed_preserve, &mut assets);
         for condition in &self.conditions {
             condition.left.collect_assets(&mut assets);
             condition.right.collect_assets(&mut assets);
@@ -944,5 +950,137 @@ mod conservation_conformance {
             outcomes[usize::from(actual.is_some())] += 1;
         }
         assert!(outcomes.into_iter().all(|count| count > 0));
+    }
+}
+
+#[cfg(test)]
+mod metadata_conformance {
+    use super::*;
+
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Deserialize)]
+    struct Role(u64);
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Deserialize)]
+    struct Asset(u64);
+    type Expression = QuantityExpression<Role, Asset>;
+    type AmountData = (Role, (Asset, Expression));
+    type ConditionData = (String, (Expression, (u8, Expression)));
+
+    #[derive(Debug, Deserialize)]
+    struct Step {
+        kind: u8,
+        role: Role,
+        asset: Asset,
+        expression: Expression,
+        right: Expression,
+        label: String,
+        comparison: u8,
+    }
+
+    #[derive(Debug, Deserialize)]
+    struct Snapshot {
+        roles: Vec<Role>,
+        distinct: Vec<(Role, Role)>,
+        consumed: Vec<AmountData>,
+        produced: Vec<AmountData>,
+        preserved: Vec<AmountData>,
+        conditions: Vec<ConditionData>,
+        parameters: Vec<String>,
+        assets: Vec<Asset>,
+    }
+
+    #[derive(Debug, Deserialize)]
+    struct Case {
+        steps: Vec<Step>,
+        snapshots: Vec<Snapshot>,
+    }
+
+    #[derive(Deserialize)]
+    struct Fixtures {
+        metadata: Vec<Case>,
+    }
+
+    fn comparison(code: u8) -> QuantityComparison {
+        match code {
+            0 => QuantityComparison::Equal,
+            1 => QuantityComparison::GreaterThanOrEqual,
+            2 => QuantityComparison::LessThanOrEqual,
+            _ => panic!("unknown comparison"),
+        }
+    }
+
+    fn check(rule: &Rate<Role, Asset>, expected: &Snapshot) {
+        assert_eq!(rule.roles().copied().collect::<Vec<_>>(), expected.roles);
+        assert_eq!(
+            rule.distinct_roles().copied().collect::<Vec<_>>(),
+            expected.distinct
+        );
+        for (actual, expected) in [
+            (rule.computed_consumed(), &expected.consumed),
+            (rule.computed_produced(), &expected.produced),
+            (rule.computed_preserved(), &expected.preserved),
+        ] {
+            assert_eq!(
+                actual
+                    .iter()
+                    .map(|a| (a.role, (a.asset, a.quantity.clone())))
+                    .collect::<Vec<_>>(),
+                *expected
+            );
+        }
+        assert_eq!(rule.conditions.len(), expected.conditions.len());
+        for (actual, (label, (left, (code, right)))) in
+            rule.conditions.iter().zip(&expected.conditions)
+        {
+            assert_eq!(&actual.name, label);
+            assert_eq!(&actual.left, left);
+            assert_eq!(actual.comparison, comparison(*code));
+            assert_eq!(&actual.right, right);
+        }
+        assert_eq!(
+            rule.parameter_names().into_iter().collect::<Vec<_>>(),
+            expected.parameters
+        );
+        assert_eq!(
+            rule.computed_asset_keys()
+                .into_iter()
+                .copied()
+                .collect::<Vec<_>>(),
+            expected.assets
+        );
+        assert!(rule.consume.is_empty() && rule.produce.is_empty() && rule.preserve.is_empty());
+    }
+
+    #[test]
+    fn runtime_rate_metadata_matches_lean() {
+        let fixtures: Fixtures =
+            serde_json::from_str(include_str!("../verification/conformance.json")).unwrap();
+        assert_eq!(fixtures.metadata.len(), 77);
+        for case in fixtures.metadata {
+            assert_eq!(case.snapshots.len(), case.steps.len() + 1);
+            for default in [false, true] {
+                let mut rule = if default {
+                    Rate::default()
+                } else {
+                    Rate::new()
+                };
+                check(&rule, &case.snapshots[0]);
+                for (step, expected) in case.steps.iter().zip(&case.snapshots[1..]) {
+                    rule = match step.kind {
+                        0 => rule.consume_computed(step.role, step.asset, step.expression.clone()),
+                        1 => rule.produce_computed(step.role, step.asset, step.expression.clone()),
+                        2 => rule.preserve_computed(step.role, step.asset, step.expression.clone()),
+                        3 => rule.condition(
+                            &step.label,
+                            step.expression.clone(),
+                            comparison(step.comparison),
+                            step.right.clone(),
+                        ),
+                        4 => rule.distinct(step.role, Role(step.asset.0)),
+                        _ => panic!("unknown rate construction step"),
+                    };
+                    check(&rule, expected);
+                }
+            }
+        }
     }
 }
