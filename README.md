@@ -86,8 +86,10 @@ Core development is proof-bearing: every new or changed kernel feature must
 include a typed Lean specification, checked proofs, and Rust conformance evidence.
 Rust's ownership and ontology types remain part of the contract. The current
 baseline proves Aeneas-extracted u64 checked arithmetic, basket construction and operations,
-account deposit/withdrawal, and per-account exchange staging against Lean
-specifications, with explicit trusted collection models;
+account deposit/withdrawal, per-account exchange staging, static rate builders,
+snapshot expressions/conditions, bounded effect helpers, signed conservation and
+whole-state measurement against Lean specifications. Collections, read-only Arc
+access and UTF-8 strings use explicit trusted models;
 other core contracts have design proofs and finite Rust conformance tests. See
 [the proof contract and coverage](verification/README.md) for exact boundaries.
 
@@ -597,8 +599,9 @@ INFO non-dominated route energy=6 time=6 exchanges=6 replay_verified=true
 
 For exchange units `n`, consume and produce baskets scale by `n`. A preserved
 basket is an unscaled read threshold: it must exist, but it is not consumed.
-This makes a batched exchange observationally consistent with sequential
-firings that reuse the same catalyst or fact.
+A batch must have its full scaled consumption available at the start; sequential
+firings can reuse earlier outputs. The preserved threshold can be reused across
+firings.
 
 For every affected account:
 

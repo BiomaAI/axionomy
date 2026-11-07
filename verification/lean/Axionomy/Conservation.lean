@@ -161,4 +161,17 @@ theorem map_totals {AccountId A Q M R : Type} (weighted : A → Q → Option M)
         simp only [k, Option.map_some] at hp
         simpa [totals, h, k, ← hc, ← hp] using ih nextC nextP
 
+theorem accumulate_append {A Q M : Type} (weighted : A → Q → Option M)
+    (add : M → M → Option M) (left right : List (A × Q)) (initial : M) :
+    accumulate weighted add initial (left ++ right) =
+      (accumulate weighted add initial left).bind (fun next => accumulate weighted add next right) := by
+  induction left generalizing initial with
+  | nil => simp [accumulate]
+  | cons entry rest ih =>
+    rcases entry with ⟨asset, amount⟩
+    cases hw : weighted asset amount with
+    | none => simp [accumulate, hw]
+    | some term =>
+      cases ha : add initial term <;> simp [accumulate, hw, ha, ih]
+
 end Axionomy.Conservation

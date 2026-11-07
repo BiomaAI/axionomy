@@ -1,21 +1,21 @@
 {
   "version": 1,
-  "assurance": "Partial implementation verification: Aeneas-extracted production u64 arithmetic, basket construction and operations, account deposit/withdrawal, per-account exchange staging, static rate builders, and runtime signed conservation refine Lean specifications. Collections use explicit trusted models; compiler/translation and primitive models remain trusted. Other core contracts have design proofs and finite Rust conformance.",
+  "assurance": "Partial implementation verification: Aeneas-extracted production u64 arithmetic, basket construction/operations, account updates/staging, static rate builders, snapshot expression/condition evaluation, bounded effect helpers, signed conservation and whole-state measurement refine Lean specifications. Explicit collection, read-only Arc and UTF-8 models, compiler/translation and primitive models remain trusted. Complete exchange orchestration and other core contracts remain open.",
   "sources": {
     "Cargo.toml": "414a2b181e13225e4b76aa58e70d998064174dde2d8cee603ea3af648d61a7f3",
     "Cargo.lock": "00ef263c160aeebaa49187874a4b11ec94fee9bc8fbea5a2f0cacc190607919c",
     "src/account.rs": "0eaf66937c63de2993353828e42fcfea2b80f172f5cb74fc76a28cef79fd9ff6",
     "src/amount.rs": "4aa0f1432494aac0454890604e3addbd002fa6b9ded1f75f91fce7675540f9ee",
     "src/basket.rs": "10e7d7792f3b1de207bdae124fd76a8fa5fe93295b1a4eb49455b588941ee5f1",
-    "src/economy.rs": "be50c1051c25c2e656f9a8d01bc2838f0ada89560d5564de2cb6a8ad1743e29b",
+    "src/economy.rs": "04fa7243253e7357b428d824a6352ae3af77e80bbdd1671d36d84318824e0523",
     "src/exchange.rs": "aabae395148c0dd8703b2fc99aa177700eaffd0d8aac602f8a5ffbf7fb09a47b",
     "src/lib.rs": "46d6f713693714650653128e2ceabf8a895b8ad98a38a7bdbeab4ea378a5cc06",
     "src/quantity.rs": "af66b8cf86b6ac58cccd4e9fcfb740e06928f86b4bf6117660fb7f37319b97dd",
-    "src/rate.rs": "94281d1f16794d8c73da68a11fb2e9c503664d19e098a729f35fb522cfd21d27",
+    "src/rate.rs": "67969e837be29899cb8b6ce59567c4000144ef891d6e1371c1eb41b340285730",
     "verification/extract.rs": "415b34f5f4f8aa2679af860bd2a4092c96e113145919160fe7c81e33836de3e0",
     "verification/aeneas-toolchain.json": "8676d7d11be51a6f41984d874b35910e8a1a3d0a18414998feb9402ef80932fb",
     "verification/extract_basket.rs": "dc2b3a2159704c24a5261d0069a2aac7b575f30a94ae35c4c1e96933638592dd",
-    "verification/extract_account.rs": "ee58126eec86bc278699aa2304623d6daee4275eec1c6d22dc348d6a805e4c1c",
+    "verification/extract_account.rs": "40cbeb1d4783eacfe68babad166c54cd1b03fac112f871fdf7b3e4ee54846a79",
     "verification/patches/aeneas-namespaced-discriminant.patch": "fabac7482deb3da6ecaca60c4060dfe9d2114efdd010699e736c4a91267f3bc9"
   },
   "features": [
@@ -277,8 +277,8 @@
         "tests/economy.rs"
       ],
       "limitations": [
-        "Expression evaluation assumes a typed lookup context. Structural role/parameter validation, binding existence/distinctness and checked aggregate merging are not yet proved.",
-        "Effect merge algebra is over exact Nat; no claim is made that diagnostic order or bounded overflow is independent of insertion order."
+        "These original design theorems assume a typed lookup context. The separate snapshot_evaluation implementation contract now covers recursive expression/condition evaluation, actual role/parameter/account lookup and exact typed errors. Structural validation of proposals and complete condition/effect orchestration in Economy::analyze remain open.",
+        "Effect merge algebra is over exact Nat; no claim is made that diagnostic order or bounded overflow is independent of insertion order. The separate bounded_effect_helpers contract covers production checked scaling-plus-addition and single-quantity merging, including atomic failure; it does not cover the complete per-account aggregation loop."
       ]
     },
     {
@@ -324,7 +324,7 @@
         "tests/generic_quantity.rs"
       ],
       "limitations": [
-        "Arbitrary signed mathematical weights are proved algebraically. The separate runtime_linear_conservation implementation contract now covers checked i128 delta accumulation, intermediate overflow and the conservation predicate. Whole-state measurement, caller diagnostic computation and composition with the complete exchange remain unproved."
+        "Arbitrary signed mathematical weights are proved algebraically. The separate runtime_linear_conservation implementation contract now covers checked i128 delta accumulation, intermediate overflow and the conservation predicate. Caller diagnostic computation and composition with the complete exchange remain unproved."
       ]
     },
     {
@@ -453,7 +453,9 @@
         "Axionomy.ConservationRefinement.signed_add_exact",
         "Axionomy.ConservationRefinement.accumulate_call",
         "Axionomy.ConservationRefinement.conserves_refines_integers",
-        "Axionomy.ConservationRefinement.accepted_conserves"
+        "Axionomy.ConservationRefinement.accepted_conserves",
+        "Axionomy.Conservation.accumulate_append",
+        "Axionomy.ConservationRefinement.measure_refines_integers"
       ],
       "rust_tests": [
         "src/rate.rs",
@@ -461,10 +463,71 @@
         "tests/generic_quantity.rs"
       ],
       "limitations": [
-        "The production LinearInvariant::conserves path and both nested loops are extracted for u64/i128. For all u64 quantities and i64 weights, Lean proves exact widening/weighting, checked intermediate addition, total execution and exact Option Bool agreement with an ordered mathematical Int specification. Some(true) implies equal mathematical weighted consumed/produced totals. None represents intermediate overflow, including cancellation-sensitive order.",
-        "Asset equality is total and agrees with identity. Account IDs and assets remain separate types; preserved quantities are retained in the typed delta but not counted as transfers. Missing weights contribute zero. IndexMap and slice iteration use the documented logical collection/backend models; compiler/MIR, Charon/Aeneas, primitive conversion semantics, allocation and physical storage remain trusted. No new axioms or success premises are introduced.",
+        "The production LinearInvariant::conserves path and both nested loops are extracted for u64/i128. For all u64 quantities and i64 weights, Lean proves exact widening/weighting, checked intermediate addition, total execution and exact Option Bool agreement with an ordered mathematical Int specification. Some(true) implies equal mathematical weighted consumed/produced totals. None represents intermediate overflow, including cancellation-sensitive order. Whole-state LinearInvariant::measure also refines the ordered checked integer fold across all accounts and assets, including empty accounts, missing weights and intermediate overflow.",
+        "Asset equality is total and agrees with identity. Account IDs and assets remain separate types; preserved quantities are retained in the typed delta but not counted as transfers. Missing weights contribute zero. IndexMap and slice iteration use the documented logical collection/backend models; compiler/MIR, Charon/Aeneas, primitive conversion semantics, allocation and physical storage remain trusted. No new axioms or success premises are introduced. Read-only Arc access returns the logical account value; IndexMap values iteration preserves insertion order. Reference counts, mutation/COW and allocator correctness are not proved.",
         "The u64-to-i128 adapter now implements exact widening instead of failing closed, and Option try adapters propagate Some/None. Formatting and hash internals still fail closed. The proof does not claim physical collection correctness.",
-        "Whole-state LinearInvariant::measure, invariant weight construction, economy caller classification/diagnostic totals, aggregation/staging prerequisites and complete exchange conservation composition remain open. BigUint/BigInt and custom QuantityScalar/QuantityMeasure laws are separate obligations."
+        "Invariant weight construction, economy caller classification/diagnostic totals, aggregation/staging prerequisites and complete exchange conservation composition remain open. BigUint/BigInt and custom QuantityScalar/QuantityMeasure laws are separate obligations. Whole-state measurement now reuses the same checked basket fold instead of a nested loop with outer continue, preserving iteration and arithmetic order."
+      ]
+    },
+    {
+      "id": "snapshot_evaluation",
+      "status": "aeneas_refinement_proved",
+      "sources": [
+        "src/economy.rs",
+        "src/rate.rs",
+        "src/exchange.rs",
+        "src/quantity.rs",
+        "verification/extract_account.rs",
+        "verification/aeneas-toolchain.json"
+      ],
+      "extracted_module": "AccountExtraction.Funs",
+      "theorems": [
+        "Axionomy.Evaluation.left_error_first",
+        "Axionomy.Evaluation.right_error_after_left",
+        "Axionomy.Evaluation.map_eval",
+        "Axionomy.Evaluation.map_condition",
+        "Axionomy.EvaluationRefinement.natural_hom",
+        "Axionomy.EvaluationRefinement.evaluate_refines_naturals",
+        "Axionomy.EvaluationRefinement.condition_refines_naturals",
+        "Axionomy.DiagnosticRefinement.decode_encode",
+        "Axionomy.DiagnosticRefinement.message_refines"
+      ],
+      "rust_tests": [
+        "src/economy.rs",
+        "tests/state_evaluated_rates.rs",
+        "tests/lean_conformance.rs"
+      ],
+      "limitations": [
+        "The shared-source recursive production evaluator is proved for all finite expressions and u64 inputs against checked Nat arithmetic. It reads one immutable proposal/account context, evaluates left before right, distinguishes missing parameters/unbound roles/missing accounts, treats absent asset balances as zero, and refines all six binary operations. Both condition operands use that context; all three comparisons and exact error precedence are proved. No successful-execution premise is assumed.",
+        "AccountId, Role, Asset and RateId remain distinct generic types. Equality on account IDs/assets and ordering on roles obey the existing total/lawful dictionaries. Sorted BTreeMap lookup and IndexMap lookup preserve logical entries; read-only Arc deref/AsRef exposes its logical pointee. Physical storage, total ordering/hash coherence, allocation, UTF-8 string comparison/cloning, compiler/MIR, Charon/Aeneas and backend semantics remain trusted.",
+        "Private evaluator failures are now a typed ExpressionError; the public string API is unchanged. Exact message rendering is proved, including arbitrary valid Unicode parameter names, provided the full message byte length fits usize. Explicit UTF-8 decode/encode and checked push_str models reject malformed slices or oversized strings. Allocation, stack/resource exhaustion, reference counts, COW and machine code are outside the theorem. Formatting internals still fail closed; the proof does not model erased format arguments as arbitrary correct text.",
+        "A production condition helper factors the existing two evaluations and comparison without changing public signatures, bounds or diagnostic order. Full Economy::analyze structural validation, iteration over conditions, diagnostic wrapping, effect evaluation/aggregation and commit are not yet refined. The helper proof does not certify those callers or serialization/custom numeric backends."
+      ]
+    },
+    {
+      "id": "bounded_effect_helpers",
+      "status": "aeneas_refinement_proved",
+      "sources": [
+        "src/economy.rs",
+        "src/basket.rs",
+        "src/quantity.rs",
+        "verification/extract_account.rs",
+        "verification/aeneas-toolchain.json"
+      ],
+      "extracted_module": "AccountExtraction.Funs",
+      "theorems": [
+        "Axionomy.Effects.scaled_map",
+        "Axionomy.EffectsRefinement.scaled_refines_naturals",
+        "Axionomy.EffectsRefinement.amount_refines_naturals"
+      ],
+      "rust_tests": [
+        "src/economy.rs",
+        "tests/economy.rs",
+        "tests/state_evaluated_rates.rs"
+      ],
+      "limitations": [
+        "Production merge_scaled scales source assets with checked multiplication in source order, then atomically adds the resulting basket. Scaling or addition errors return the exact first overflowing asset and the original target. Production merge_quantity performs one checked addition and canonical insertion; computed quantities are not multiplied by units. Theorems relate results and ordered state directly to Nat specifications for all u64 values.",
+        "The existing lawful asset equality/cloning and explicit collection/primitive models apply. Immutable source borrows and distinct Rust domains remain intact. These helper proofs do not establish full role-to-account aggregation, computed-effect evaluation order, consumption/preservation availability, unique affected accounts or complete preparation/commit. Those caller obligations remain open."
       ]
     }
   ]

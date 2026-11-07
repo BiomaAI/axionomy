@@ -15,10 +15,14 @@ use account::{Account, AccountError};
 #[allow(dead_code)]
 #[path = "../src/exchange.rs"]
 pub mod exchange;
-use exchange::AccountDelta;
+use exchange::{AccountDelta, Exchange, Receipt, Trace};
 #[path = "../src/rate.rs"]
 pub mod rate;
-use rate::{LinearInvariant, Rate, RateError};
+use rate::{
+    LinearInvariant, QuantityComparison, QuantityExpression, Rate, RateCondition, RateError,
+};
+#[path = "../src/economy.rs"]
+pub mod economy;
 
 pub fn deposit<A: Clone + Eq + std::hash::Hash>(
     state: &mut Account<A>,
@@ -102,4 +106,60 @@ pub fn rate_preserve<Role: Clone + Ord, A: Clone + Eq + std::hash::Hash>(
     assets: Basket<A>,
 ) -> Result<Rate<Role, A>, RateError<Role, A>> {
     rule.try_preserve(role, assets)
+}
+
+#[allow(dead_code)]
+pub(crate) fn evaluate<
+    AccountId: Eq + std::hash::Hash,
+    A: Eq + std::hash::Hash,
+    RateId,
+    Role: Ord,
+>(
+    expression: &QuantityExpression<Role, A>,
+    exchange: &Exchange<RateId, Role, AccountId>,
+    accounts: &indexmap::IndexMap<AccountId, std::sync::Arc<Account<A>>>,
+) -> Result<Quantity, economy::ExpressionError> {
+    economy::evaluate_expression(expression, exchange, accounts)
+}
+
+pub fn merge_effects<A: Clone + Eq + std::hash::Hash>(
+    target: &mut Basket<A>,
+    source: &Basket<A>,
+    units: &Quantity,
+) -> Result<(), A> {
+    economy::merge_scaled(target, source, units)
+}
+
+pub fn merge_amount<A: Clone + Eq + std::hash::Hash>(
+    target: &mut Basket<A>,
+    asset: A,
+    amount: Quantity,
+) -> Result<(), A> {
+    economy::merge_quantity(target, asset, amount)
+}
+
+pub fn invariant_measure<AccountId, A: Clone + Eq + std::hash::Hash>(
+    invariant: &LinearInvariant<A>,
+    accounts: &indexmap::IndexMap<AccountId, std::sync::Arc<Account<A>>>,
+) -> Option<i128> {
+    invariant.measure(accounts)
+}
+
+#[allow(dead_code)]
+pub(crate) fn expression_message(error: economy::ExpressionError) -> String {
+    error.into_message()
+}
+
+#[allow(dead_code)]
+pub(crate) fn evaluate_condition<
+    AccountId: Eq + std::hash::Hash,
+    A: Eq + std::hash::Hash,
+    RateId,
+    Role: Ord,
+>(
+    condition: &RateCondition<Role, A>,
+    exchange: &Exchange<RateId, Role, AccountId>,
+    accounts: &indexmap::IndexMap<AccountId, std::sync::Arc<Account<A>>>,
+) -> Result<bool, economy::ExpressionError> {
+    economy::evaluate_condition(condition, exchange, accounts)
 }

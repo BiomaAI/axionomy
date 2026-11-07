@@ -57,6 +57,12 @@ class AccountBridgeTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "not a forwarding call: invariant_conserves"):
             validate_bridge(self.root)
 
+    def test_changed_evaluator_entry_is_rejected(self):
+        self.target.write_text(self.target.read_text().replace(
+            "economy::evaluate_expression(expression, exchange, accounts)", "Ok(Quantity::new(0))"))
+        with self.assertRaisesRegex(ValueError, "not a forwarding call: evaluate"):
+            validate_bridge(self.root)
+
     def test_changed_rate_entry_is_rejected(self):
         self.target.write_text(self.target.read_text().replace("rule.try_consume(role, assets)", "rule.try_produce(role, assets)"))
         with self.assertRaisesRegex(ValueError, "not a forwarding call: rate_consume"):
@@ -113,6 +119,18 @@ class AccountExtractionTests(unittest.TestCase):
     def test_missing_extracted_conservation_is_rejected(self):
         path = self.directory / "Funs.lean"
         path.write_text(path.read_text().replace("def rate.LinearInvariant.conserves\n", "def bypass\n"))
+        with self.assertRaisesRegex(ValueError, "missing account production definition"):
+            validate_generated(self.directory)
+
+    def test_missing_extracted_evaluation_is_rejected(self):
+        path = self.directory / "Funs.lean"
+        path.write_text(path.read_text().replace("def economy.evaluate_expression\n", "def bypass\n"))
+        with self.assertRaisesRegex(ValueError, "missing account production definition"):
+            validate_generated(self.directory)
+
+    def test_missing_extracted_measurement_is_rejected(self):
+        path = self.directory / "Funs.lean"
+        path.write_text(path.read_text().replace("def rate.LinearInvariant.measure_loop.body\n", "def bypass\n"))
         with self.assertRaisesRegex(ValueError, "missing account production definition"):
             validate_generated(self.directory)
 

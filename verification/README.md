@@ -55,7 +55,19 @@ means an intermediate overflow; `Some(false)` means unequal totals;
 `Some(true)` implies equal mathematical weighted consumed/produced totals.
 The proof covers both nested loops, missing weights (zero), negative weights,
 empty deltas and preserved baskets being excluded from transferred quantities.
-Whole-state `measure`, diagnostic construction and the economy caller remain open.
+Whole-state `measure` now also refines the ordered checked integer fold over
+all accounts. Diagnostic construction and the economy caller remain open.
+
+The recursive expression evaluator and condition helper now have implementation
+proofs for every finite expression and u64 input. They preserve the original
+snapshot, left-to-right error precedence, missing-input distinctions and exact
+checked Nat arithmetic, including floor division and min/max. Typed internal
+errors retain the existing public text; message rendering is proved for valid
+UTF-8 names when the resulting message fits `usize`. Static effect scaling/merging
+and computed single-quantity merging also have exact implementation proofs,
+including the original target on failure. Full condition/effect orchestration
+in `Economy::analyze` remains open. See [ACCOUNTS.md](ACCOUNTS.md) for the read-only
+Arc, ordered lookup, UTF-8 and allocation boundaries.
 
 The other core contracts still have handwritten design proofs and finite Rust
 conformance tests. Neither an entire source module nor every existing core
@@ -85,7 +97,9 @@ The current library covers:
 | `Quantity` | Exact checked addition/multiplication, subtraction without underflow, floor division, asset-qualified amount round trip |
 | `State` | Typed account/asset updates and frame property, zero canonicalization, complete scalar shortfall, hidden-account projection, observation noninterference, monotone goals |
 | `RateConstruction` / `RateConstructionRefinement` | Extracted static builders, exact per-role merges/errors, role registration and unchanged rate fields under the sorted collection model |
-| `Conservation` / `ConservationRefinement` | Extracted runtime invariant check, exact signed widening/weighting, intermediate overflow and mathematical conservation on acceptance |
+| `Conservation` / `ConservationRefinement` | Extracted runtime invariant check and whole-state measurement, exact signed widening/weighting, intermediate overflow and mathematical conservation on acceptance |
+| `Evaluation` / `EvaluationRefinement` / `DiagnosticRefinement` | Extracted recursive expressions and conditions against one snapshot, all checked outcomes, first-error order, exact public error text |
+| `Effects` / `EffectsRefinement` | Extracted bounded static scaling/merging and computed single-quantity addition, exact errors and atomic failure |
 | `Rates` | Checked expression evaluation refines mathematical evaluation and bounds its result; effect merging is associative/commutative in exact arithmetic; preservation does not scale |
 | `Exchange` | Exact prepared deltas, preserved resources, assessment/application agreement, atomic rejection, output bounds, signed weighted conservation |
 | `Replay` | Trace concatenation, deterministic outcomes, invariant induction given an invariant-preserving step |
@@ -113,11 +127,11 @@ to `origin/main`; theorem counts do not measure percentage completion.
 | 1. u64 transaction kernel | 1 | Basket addition/scaling, containment/equality, canonical representation preservation | Implementation proved under documented models |
 | 1 | 2 | Model/rate construction, duplicate IDs, role/parameter/asset discovery, distinct roles | Static builders proved; model/discovery open |
 | 1 | 3 | Exchange units, rate/account existence, binding/parameter validation | Open |
-| 1 | 4 | Full expression/condition evaluation against the original snapshot | Design proofs |
-| 1 | 5 | Account effect aggregation, bounded scaling/merging, computed-effect semantics | Design proofs |
+| 1 | 4 | Full expression/condition evaluation against the original snapshot | Interpreter/helpers proved; caller orchestration open |
+| 1 | 5 | Account effect aggregation, bounded scaling/merging, computed-effect semantics | Bounded helpers proved; aggregation loop open |
 | 1 | 6 | Consumption plus preservation availability and complete shortfalls | Design proofs |
 | 1 | 7 | Complete preparation, unique affected accounts, established staging preconditions | Per-account staging proved |
-| 1 | 8 | Runtime signed conservation, intermediate i128 overflow, error classification | Predicate proved; caller diagnostics/measure open |
+| 1 | 8 | Runtime signed conservation, intermediate i128 overflow, error classification | Predicate and measure proved; caller diagnostics open |
 | 1 | 9 | Multi-account atomic commit, unchanged frame, safe prepared-account lookups | Design proofs |
 | 1 | 10 | Assessment/application agreement, filtering, immutability, exact diagnostics/order | Design proofs |
 | 1 | 11 | Receipts/deltas agree with the actual proposal and committed changes | Partial design proofs |
@@ -215,7 +229,13 @@ all three builders, checking registered roles and unaffected effect maps. The
 464 signed-conservation cases include both i64 extremes, missing/zero weights,
 positive and negative overflow, cancellation reordered within/across accounts,
 and all three outcomes. The private conservation method is exercised directly
-by a crate unit test included in the proof gate.
+by a crate unit test included in the proof gate. Another 463 cases cover
+whole-state measurement. The new evaluator corpus has 2,210 expressions and
+6,630 condition checks, including nested errors, all comparisons, Unicode names,
+missing bindings/accounts/assets, zero units and u64 boundaries. Another 73 cases
+exercise atomic static merging and unscaled computed quantities. These run
+directly through the production private helpers, alongside existing public
+whole-economy tests; they do not substitute for the implementation theorems.
 
 ## Explicit legacy refinement gaps
 
@@ -224,7 +244,8 @@ the initial theorems. They are a backfill plan, not an exemption for new behavio
 
 - Charon/Aeneas extraction and refinement beyond the four `Quantity<u64>` checked
   arithmetic operations, basket construction/operations, account updates/staging,
-  static rate builders and the runtime conservation predicate, including the remaining exchange `expect` and
+  static rate builders, snapshot expression/condition evaluation, bounded effect helpers,
+  runtime conservation and whole-state measurement, including the remaining exchange `expect` and
   termination obligations.
 - Correctness of `IndexMap`, `BTreeMap`, `Arc`, iterator order, allocation, cloning,
   and copy-on-write isolation; Rust compilation still enforces its ownership rules.
@@ -233,8 +254,8 @@ the initial theorems. They are a backfill plan, not an exemption for new behavio
 - Remaining finite-map adapters, serialization/schema round trips,
   canonical state/observation ordering, and fingerprints. Fingerprints are not
   collision-free identities and must not be given such a theorem.
-- Whole-state invariant measurement, caller error classification and before/after
-  diagnostic totals. The delta-based conservation predicate and its intermediate
+- Invariant caller error classification and before/after diagnostic totals. The
+  delta-based conservation predicate, whole-state measurement and intermediate
   `i128` overflow now have implementation proofs.
 - Laws for custom `QuantityScalar` backends and BigUint/BigInt implementations.
   Rust trait bounds specify operations, not their algebraic correctness.
@@ -242,7 +263,8 @@ the initial theorems. They are a backfill plan, not an exemption for new behavio
   Rust `replay` retains an accepted prefix on failure; `replayed` protects its source.
 
 For further implementation proofs, extend the pinned Aeneas pipeline from u64
-arithmetic, baskets, accounts, static rates and conservation to complete exchange preparation and commit, connecting
+arithmetic, baskets, accounts, static rates, evaluation, effects and conservation
+to complete exchange preparation and commit, connecting
 extracted definitions to the existing specifications. Model unavoidable external dependencies explicitly and
 report their trust status. Do not maintain a second Rust algorithm only for proofs
 or change the public API to an untyped representation to satisfy extraction.

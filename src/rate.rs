@@ -721,12 +721,8 @@ where
         N: QuantityScalar,
     {
         let mut total = N::SignedMeasure::zero();
-        for account in accounts.values() {
-            for (asset, amount) in account.as_ref().balances().iter() {
-                let coefficient = *self.weights.get(asset).unwrap_or(&0);
-                let weighted = amount.as_scalar().checked_weighted(coefficient)?;
-                total = CheckedAdd::checked_add(&total, &weighted)?;
-            }
+        for holder in accounts.values() {
+            total = self.checked_add_basket_measure(total, holder.as_ref().balances())?;
         }
         Some(total)
     }
@@ -864,6 +860,14 @@ mod conservation_conformance {
     #[derive(Deserialize)]
     struct Fixtures {
         conservation: Vec<Case>,
+        measurements: Vec<Measurement>,
+    }
+
+    #[derive(Debug, Deserialize)]
+    struct Measurement {
+        weights: Vec<(u64, String)>,
+        accounts: Vec<(u64, Vec<(u64, String)>)>,
+        measured: Option<String>,
     }
 
     #[test]
@@ -904,6 +908,40 @@ mod conservation_conformance {
                 Some(false) => 1,
                 Some(true) => 2,
             }] += 1;
+        }
+        assert!(outcomes.into_iter().all(|count| count > 0));
+    }
+
+    #[test]
+    fn runtime_state_measurement_matches_lean() {
+        let fixtures: Fixtures =
+            serde_json::from_str(include_str!("../verification/conformance.json")).unwrap();
+        assert_eq!(fixtures.measurements.len(), 463);
+        let mut outcomes = [0; 2];
+        for case in fixtures.measurements {
+            let mut invariant = LinearInvariant::new("fixture");
+            for (asset, coefficient) in &case.weights {
+                invariant = invariant.weight(*asset, coefficient.parse().unwrap());
+            }
+            let accounts: IndexMap<_, _> = case
+                .accounts
+                .iter()
+                .map(|(id, entries)| {
+                    let balances: Basket<u64> =
+                        Basket::try_from_entries(entries.iter().map(|(asset, amount)| {
+                            (*asset, Quantity::new(amount.parse().unwrap()))
+                        }))
+                        .unwrap();
+                    (*id, std::sync::Arc::new(Account::new(balances)))
+                })
+                .collect();
+            let before = accounts.clone();
+            let actual = invariant
+                .measure::<_, _, u64>(&accounts)
+                .map(|value| value.to_string());
+            assert_eq!(actual, case.measured, "{case:?}");
+            assert_eq!(accounts, before);
+            outcomes[usize::from(actual.is_some())] += 1;
         }
         assert!(outcomes.into_iter().all(|count| count > 0));
     }

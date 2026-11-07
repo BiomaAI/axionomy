@@ -23,4 +23,8 @@ structure alloc.collections.btree.map.entry.VacantEntry (K V _A : Type) where
   before : List (K × V)
   key : K
   after : List (K × V)
+-- Read-only Arc borrows expose the logical pointee; physical reference counting
+-- and allocation are trusted. No mutation or copy-on-write behavior is modeled here.
+abbrev alloc.sync.Arc (T : Type) := T
+abbrev indexmap.map.iter.Values (_K V : Type) := List V
 end Axionomy.AccountExtracted

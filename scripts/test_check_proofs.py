@@ -107,6 +107,20 @@ class CoverageGateTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "incomplete implementation refinement contract"):
             validate_coverage(self.root, self.coverage)
 
+    def test_incomplete_evaluation_refinement_is_rejected(self):
+        feature = self.coverage["features"][0]
+        feature.update(id="snapshot_evaluation", status="aeneas_refinement_proved",
+                       extracted_module="AccountExtraction.Funs")
+        with self.assertRaisesRegex(ValueError, "incomplete implementation refinement contract"):
+            validate_coverage(self.root, self.coverage)
+
+    def test_incomplete_effect_refinement_is_rejected(self):
+        feature = self.coverage["features"][0]
+        feature.update(id="bounded_effect_helpers", status="aeneas_refinement_proved",
+                       extracted_module="AccountExtraction.Funs")
+        with self.assertRaisesRegex(ValueError, "incomplete implementation refinement contract"):
+            validate_coverage(self.root, self.coverage)
+
     def test_incomplete_conservation_refinement_is_rejected(self):
         feature = self.coverage["features"][0]
         feature.update(id="runtime_linear_conservation", status="aeneas_refinement_proved",

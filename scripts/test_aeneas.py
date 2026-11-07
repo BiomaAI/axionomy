@@ -55,6 +55,41 @@ class ExtractionBoundaryTests(unittest.TestCase):
 
 
 class ProductionMutationTests(unittest.TestCase):
+    def test_reversed_expression_error_order_breaks_the_evaluator_proof(self):
+        original = """let left = evaluate_expression(left, proposal, accounts)?;
+    let right = evaluate_expression(right, proposal, accounts)?;
+    operation(&left, &right).ok_or(error)"""
+        replacement = """let right = evaluate_expression(right, proposal, accounts)?;
+    let left = evaluate_expression(left, proposal, accounts)?;
+    operation(&left, &right).ok_or(error)"""
+        self.check_mutation(
+            "src/economy.rs", original, replacement,
+            "extract_account.py", "stale account model", "EvaluationRefinement", "AccountExtraction",
+            proof_failure="⊢ encodeError")
+
+    def test_strict_condition_breaks_the_condition_proof(self):
+        self.check_mutation(
+            "src/economy.rs", "QuantityComparison::LessThanOrEqual => left <= right",
+            "QuantityComparison::LessThanOrEqual => left < right",
+            "extract_account.py", "stale account model", "EvaluationRefinement", "AccountExtraction",
+            proof_failure="omega could not prove the goal")
+
+    def test_reset_measurement_total_breaks_the_measurement_proof(self):
+        self.check_mutation(
+            "src/rate.rs", "self.checked_add_basket_measure(total, holder.as_ref().balances())?",
+            "self.checked_add_basket_measure(N::SignedMeasure::zero(), holder.as_ref().balances())?",
+            "extract_account.py", "stale account model", "ConservationRefinement", "AccountExtraction")
+
+    def test_changed_error_text_breaks_the_diagnostic_proof(self):
+        self.check_mutation(
+            "src/economy.rs", 'String::from("missing parameter `")', 'String::from("unknown parameter `")',
+            "extract_account.py", "stale account model", "DiagnosticRefinement", "AccountExtraction")
+
+    def test_unscaled_effect_merge_breaks_the_effects_proof(self):
+        self.check_mutation(
+            "src/economy.rs", "target.checked_add(&scaled)", "target.checked_add(source)",
+            "extract_account.py", "stale account model", "EffectsRefinement", "AccountExtraction")
+
     def test_reversed_conservation_breaks_the_runtime_proof(self):
         self.check_mutation(
             "src/rate.rs", "Some(consumed == produced)", "Some(consumed != produced)",
@@ -116,7 +151,8 @@ class ProductionMutationTests(unittest.TestCase):
             "src/basket.rs", original, replacement,
             "extract_basket.py", "stale basket model", "BasketRefinement")
 
-    def check_mutation(self, source_path, original, replacement, script, stale_message, module, extraction=None):
+    def check_mutation(self, source_path, original, replacement, script, stale_message, module, extraction=None,
+                       proof_failure="unsolved goals"):
         # Copy only reviewed/unignored project files into an isolated checkout.
         # Never edit the user's working tree. Tools and dependency caches are
         # shared; proof artifacts and the mutated Rust source remain isolated.
@@ -162,7 +198,10 @@ class ProductionMutationTests(unittest.TestCase):
             proof = run("lake", "build", "Axionomy." + module, cwd=root / "verification/lean")
             self.assertNotEqual(proof.returncode, 0, proof.stdout)
             self.assertIn(module + ".lean", proof.stdout)
-            self.assertIn("unsolved goals", proof.stdout)
+            # Require the reviewed semantic proof failure, after the regenerated
+            # implementation itself has compiled. Unknown declarations or model
+            # compilation failures do not satisfy this control.
+            self.assertIn(proof_failure, proof.stdout)
 
 
 if __name__ == "__main__":

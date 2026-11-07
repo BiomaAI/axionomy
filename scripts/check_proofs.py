@@ -50,6 +50,13 @@ def validate_coverage(root, coverage):
             # These are the implemented extraction pipelines. Future
             # claims need their own regeneration and trust-boundary checks.
             pipelines = {
+                "snapshot_evaluation": ("AccountExtraction.Funs", {
+                    "Axionomy.EvaluationRefinement.evaluate_refines_naturals",
+                    "Axionomy.EvaluationRefinement.condition_refines_naturals",
+                    "Axionomy.DiagnosticRefinement.message_refines"}),
+                "bounded_effect_helpers": ("AccountExtraction.Funs", {
+                    "Axionomy.EffectsRefinement.scaled_refines_naturals",
+                    "Axionomy.EffectsRefinement.amount_refines_naturals"}),
                 "static_rate_construction": ("AccountExtraction.Funs", {
                     f"Axionomy.RateConstructionRefinement.{kind}_{contract}"
                     for kind in ("consume", "produce", "preserve")
@@ -58,7 +65,8 @@ def validate_coverage(root, coverage):
                     "Axionomy.ConservationRefinement.weighted_exact",
                     "Axionomy.ConservationRefinement.signed_add_exact",
                     "Axionomy.ConservationRefinement.conserves_refines_integers",
-                    "Axionomy.ConservationRefinement.accepted_conserves"}),
+                    "Axionomy.ConservationRefinement.accepted_conserves",
+                    "Axionomy.ConservationRefinement.measure_refines_integers"}),
                 "u64_checked_arithmetic": ("QuantityExtraction.Funs", {
                     f"Axionomy.QuantityRefinement.checked_{op}_refines"
                     for op in ("add", "sub", "mul", "div")}),
@@ -145,10 +153,10 @@ def main():
         raise ValueError("Lean conformance cases are stale; regenerate them from Conformance.lean and review the diff")
     run("cargo", "test", "-p", "axionomy", "--all-features", "--test", "lean_conformance")
     run("cargo", "test", "-p", "axionomy", "--all-features", "--lib",
-        "runtime_signed_conservation_matches_lean")
+        "runtime_")
     run("cargo", "test", "-p", "axionomy", "--all-features", "--doc")
     print(f"Verified {len(theorems)} registered theorems and their axiom dependencies, "
-          "fresh Aeneas extraction of u64 arithmetic, basket construction/operations, account updates/staging, static rate builders and signed conservation, "
+          "fresh Aeneas extraction of u64 arithmetic, basket construction/operations, account updates/staging, static rate builders, snapshot evaluation/conditions, effect helpers, signed conservation and measurement, "
           "and Rust conformance/type checks. Collection storage uses an explicit trusted model. "
           "Other core implementation refinement remains unproved; see verification/README.md.")
 

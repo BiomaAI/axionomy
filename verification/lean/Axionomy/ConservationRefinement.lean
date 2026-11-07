@@ -290,5 +290,76 @@ theorem accepted_conserves {AccountId : Type} (invariant : rate.LinearInvariant 
     0 (deltas.val.map decodeDelta) accepted
   simpa [List.map_map, Function.comp_def, decodeDelta] using sound
 
+abbrev accountRef {A : Type} :=
+  alloc.sync.Arc.Insts.CoreConvertAsRef (account.Account A Std.U64) alloc.alloc.Global
+
+include hEq in
+theorem measure_body (AccountId : Type) (invariant : rate.LinearInvariant A)
+    (remaining : List (account.Account A Std.U64)) (total : Std.I128) :
+    rate.LinearInvariant.measure_loop.body (AccountId := AccountId) eqInst hashInst accountRef scalar
+      invariant remaining total = .ok (match remaining with
+        | [] => .done (some total)
+        | state :: rest => match Conservation.accumulate (contribution invariant.weights)
+            I128.checked_add total state.balances.quantities with
+          | none => .done none
+          | some next => .cont (rest, next)) := by
+  cases remaining with
+  | nil => simp [rate.LinearInvariant.measure_loop.body,
+      indexmap.map.iter.Values.Insts.CoreIterTraitsIteratorIteratorSharedAV.next]
+  | cons state rest =>
+    simp only [rate.LinearInvariant.measure_loop.body,
+      indexmap.map.iter.Values.Insts.CoreIterTraitsIteratorIteratorSharedAV.next, bind_ok,
+      alloc.sync.Arc.Insts.CoreConvertAsRef.as_ref, account.Account.impl.balances,
+      accumulate_call eqInst hashInst hEq]
+    cases h : Conservation.accumulate (contribution invariant.weights) I128.checked_add total state.balances.quantities <;>
+      simp [h, core.option.Option.Insts.CoreOpsTry_traitTry.branch,
+        core.option.Option.Insts.CoreOpsTry_traitFromResidualOptionNever.from_residual]
+
+include hEq in
+theorem measure_loop (AccountId : Type) (invariant : rate.LinearInvariant A)
+    (remaining : List (account.Account A Std.U64)) (total : Std.I128) :
+    rate.LinearInvariant.measure_loop (AccountId := AccountId) eqInst hashInst accountRef scalar
+      remaining invariant total = .ok (Conservation.accumulate (contribution invariant.weights)
+        I128.checked_add total (remaining.flatMap fun state => state.balances.quantities)) := by
+  induction remaining generalizing total with
+  | nil =>
+    unfold rate.LinearInvariant.measure_loop
+    rw [loop.eq_1]
+    simp [measure_body eqInst hashInst hEq, Conservation.accumulate]
+  | cons state rest ih =>
+    unfold rate.LinearInvariant.measure_loop
+    rw [loop.eq_1]
+    simp only [measure_body eqInst hashInst hEq AccountId invariant (state :: rest) total]
+    cases h : Conservation.accumulate (contribution invariant.weights) I128.checked_add total state.balances.quantities with
+    | none => simp [Conservation.accumulate_append, h]
+    | some next =>
+      simp only [bind_ok]
+      change rate.LinearInvariant.measure_loop (AccountId := AccountId) eqInst hashInst accountRef scalar
+        rest invariant next = _
+      rw [ih]
+      simp [Conservation.accumulate_append, h]
+
+include hEq in
+theorem measure_refines {AccountId : Type} (cloneInst : core.clone.Clone A)
+    (invariant : rate.LinearInvariant A) (accounts : List (AccountId × account.Account A Std.U64)) :
+    invariant_measure cloneInst eqInst hashInst invariant accounts =
+      .ok (Conservation.accumulate (contribution invariant.weights) I128.checked_add 0#i128
+        (accounts.flatMap fun (_, state) => state.balances.quantities)) := by
+  simp [invariant_measure, rate.LinearInvariant.measure, I128.Insts.Num_traitsIdentitiesZero.zero,
+    indexmap.map.IndexMap.values, measure_loop eqInst hashInst hEq,
+    List.flatMap_map]
+
+include hEq in
+theorem measure_refines_integers {AccountId : Type} (cloneInst : core.clone.Clone A)
+    (invariant : rate.LinearInvariant A) (accounts : List (AccountId × account.Account A Std.U64)) :
+    ∃ result, invariant_measure cloneInst eqInst hashInst invariant accounts = .ok result ∧
+      result.map IScalar.val = Conservation.accumulate
+        (fun a q => some (mathematical invariant.weights a q)) Conservation.checkedAdd 0
+        (accounts.flatMap fun (_, state) => state.balances.quantities) := by
+  refine ⟨_, measure_refines eqInst hashInst hEq cloneInst invariant accounts, ?_⟩
+  exact Conservation.map_accumulate (contribution invariant.weights) I128.checked_add
+    (fun a q => some (mathematical invariant.weights a q)) Conservation.checkedAdd
+    IScalar.val (contribution_exact invariant.weights) signed_add_exact _ 0#i128
+
 end Accumulation
 end Axionomy.ConservationRefinement

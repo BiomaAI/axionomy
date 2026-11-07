@@ -167,13 +167,6 @@ structure basket.Basket (A : Type _) (N : Type _) where
 structure account.Account (A : Type _) (N : Type _) where
   balances : basket.Basket A N
 
-/-- [account_extraction::quantity::QuantityError]
-    Source: 'verification/../src/quantity.rs', lines 229:0-232:1
-    Visibility: public -/
-@[discriminant isize]
-inductive quantity.QuantityError where
-| Negative : quantity.QuantityError
-
 /-- Trait declaration: [account_extraction::quantity::QuantityMeasure]
     Source: 'verification/../src/quantity.rs', lines 12:0-12:88
     Visibility: public -/
@@ -206,6 +199,13 @@ structure quantity.QuantityScalar (Self : Type _) (Self_SignedMeasure : Type _)
   from_u64 : Std.U64 → Result (Option Self)
   checked_weighted : Self → Std.I64 → Result (Option Self_SignedMeasure)
 
+/-- [account_extraction::quantity::QuantityError]
+    Source: 'verification/../src/quantity.rs', lines 229:0-232:1
+    Visibility: public -/
+@[discriminant isize]
+inductive quantity.QuantityError where
+| Negative : quantity.QuantityError
+
 /-- [account_extraction::account::AccountError]
     Source: 'verification/../src/account.rs', lines 129:0-138:1
     Visibility: public -/
@@ -217,15 +217,17 @@ inductive account.AccountError (A : Type _) (N : Type _) (Clause2_SignedMeasure
   account.AccountError A N Clause2_SignedMeasure
 | Overflow : A → account.AccountError A N Clause2_SignedMeasure
 
-/-- [account_extraction::exchange::AccountDelta]
-    Source: 'verification/../src/exchange.rs', lines 80:0-85:1
-    Visibility: public -/
-structure exchange.AccountDelta (AccountId : Type _) (A : Type _) (N : Type _)
-  where
-  account : AccountId
-  consumed : basket.Basket A N
-  produced : basket.Basket A N
-  preserved : basket.Basket A N
+/-- [account_extraction::economy::ExpressionError]
+    Source: 'verification/../src/economy.rs', lines 1163:0-1171:1 -/
+@[discriminant isize]
+inductive economy.ExpressionError where
+| MissingParameter : String → economy.ExpressionError
+| UnboundRole : economy.ExpressionError
+| MissingAccount : economy.ExpressionError
+| AdditionOverflow : economy.ExpressionError
+| SubtractionUnderflow : economy.ExpressionError
+| MultiplicationOverflow : economy.ExpressionError
+| DivisionByZero : economy.ExpressionError
 
 /-- [account_extraction::rate::QuantityExpression]
     Source: 'verification/../src/rate.rs', lines 27:0-63:1
@@ -262,13 +264,57 @@ inductive rate.QuantityExpression (Role : Type _) (A : Type _) (N : Type _)
   rate.QuantityExpression Role A N →
   rate.QuantityExpression Role A N
 
-/-- [account_extraction::rate::ComputedAmount]
-    Source: 'verification/../src/rate.rs', lines 218:0-222:1
+/-- [account_extraction::exchange::Exchange]
+    Source: 'verification/../src/exchange.rs', lines 22:0-28:1
     Visibility: public -/
-structure rate.ComputedAmount (Role : Type _) (A : Type _) (N : Type _) where
-  role : Role
-  asset : A
-  quantity : rate.QuantityExpression Role A N
+structure exchange.Exchange (RateId : Type _) (Role : Type _) (AccountId :
+  Type _) (N : Type _) where
+  rate : RateId
+  bindings : alloc.collections.btree.map.BTreeMap Role AccountId
+    alloc.alloc.Global
+  units : quantity.Quantity N
+  parameters : alloc.collections.btree.map.BTreeMap String (quantity.Quantity
+    N) alloc.alloc.Global
+
+/-- [account_extraction::economy::evaluate_expression::{closure#4}]
+    Source: 'verification/../src/economy.rs', lines 1256:12-1256:49 -/
+@[reducible]
+def economy.evaluate_expression.closure_4 (AccountId : Type _) (A : Type _)
+  (RateId : Type _) (Role : Type _) (N : Type _) (Clause5_SignedMeasure :
+  Type _) :=
+Unit
+
+/-- [account_extraction::economy::evaluate_expression::{closure#3}]
+    Source: 'verification/../src/economy.rs', lines 1245:12-1245:49 -/
+@[reducible]
+def economy.evaluate_expression.closure_3 (AccountId : Type _) (A : Type _)
+  (RateId : Type _) (Role : Type _) (N : Type _) (Clause5_SignedMeasure :
+  Type _) :=
+Unit
+
+/-- [account_extraction::economy::evaluate_expression::{closure#2}]
+    Source: 'verification/../src/economy.rs', lines 1237:12-1237:49 -/
+@[reducible]
+def economy.evaluate_expression.closure_2 (AccountId : Type _) (A : Type _)
+  (RateId : Type _) (Role : Type _) (N : Type _) (Clause5_SignedMeasure :
+  Type _) :=
+Unit
+
+/-- [account_extraction::economy::evaluate_expression::{closure#1}]
+    Source: 'verification/../src/economy.rs', lines 1229:12-1229:49 -/
+@[reducible]
+def economy.evaluate_expression.closure_1 (AccountId : Type _) (A : Type _)
+  (RateId : Type _) (Role : Type _) (N : Type _) (Clause5_SignedMeasure :
+  Type _) :=
+Unit
+
+/-- [account_extraction::economy::evaluate_expression::{closure}]
+    Source: 'verification/../src/economy.rs', lines 1212:24-1212:74 -/
+@[reducible]
+def economy.evaluate_expression.closure (AccountId : Type _) (A : Type _)
+  (RateId : Type _) (Role : Type _) (N : Type _) (Clause5_SignedMeasure :
+  Type _) :=
+  String
 
 /-- [account_extraction::rate::QuantityComparison]
     Source: 'verification/../src/rate.rs', lines 240:0-244:1
@@ -287,6 +333,24 @@ structure rate.RateCondition (Role : Type _) (A : Type _) (N : Type _) where
   left : rate.QuantityExpression Role A N
   comparison : rate.QuantityComparison
   right : rate.QuantityExpression Role A N
+
+/-- [account_extraction::exchange::AccountDelta]
+    Source: 'verification/../src/exchange.rs', lines 80:0-85:1
+    Visibility: public -/
+structure exchange.AccountDelta (AccountId : Type _) (A : Type _) (N : Type _)
+  where
+  account : AccountId
+  consumed : basket.Basket A N
+  produced : basket.Basket A N
+  preserved : basket.Basket A N
+
+/-- [account_extraction::rate::ComputedAmount]
+    Source: 'verification/../src/rate.rs', lines 218:0-222:1
+    Visibility: public -/
+structure rate.ComputedAmount (Role : Type _) (A : Type _) (N : Type _) where
+  role : Role
+  asset : A
+  quantity : rate.QuantityExpression Role A N
 
 /-- [account_extraction::rate::Rate]
     Source: 'verification/../src/rate.rs', lines 277:0-287:1

@@ -193,4 +193,75 @@ def alloc.collections.btree.set.BTreeSet.insert {K Alloc : Type}
     Result (Bool × alloc.collections.btree.set.BTreeSet K Alloc) :=
   sortedInsert ordInst.cmp value entries
 
+-- Lookup borrows keys and compares the borrowed domain, as BTreeMap::get does.
+def treeGet {K V Q : Type} (borrowKey : K → Result Q) (cmp : Q → Q → Result Ordering)
+    (query : Q) : List (K × V) → Result (Option V)
+  | [] => .ok none
+  | (key, value) :: rest => do
+    let key ← borrowKey key
+    let ordering ← cmp query key
+    match ordering with
+    | .lt => .ok none
+    | .eq => .ok (some value)
+    | .gt => treeGet borrowKey cmp query rest
+
+def alloc.collections.btree.map.BTreeMap.get {K V Alloc Q : Type}
+    (_ : core.alloc.AllocatorClone Alloc) (borrowInst : core.borrow.Borrow K Q)
+    (_ : core.cmp.Ord K) (ordInst : core.cmp.Ord Q)
+    (entries : alloc.collections.btree.map.BTreeMap K V Alloc) (query : Q) : Result (Option V) :=
+  treeGet borrowInst.borrow ordInst.cmp query entries
+
+def core.option.Option.ok_or_else {T E F : Type} (inst : core.ops.function.FnOnce F Unit E)
+    (choice : Option T) (error : F) : Result (core.result.Result T E) :=
+  match choice with
+  | some value => .ok (.Ok value)
+  | none => do
+    let error ← inst.call_once error ()
+    .ok (.Err error)
+
+def alloc.sync.Arc.Insts.CoreOpsDerefDeref.deref {T : Type} (_ : Type)
+    (value : alloc.sync.Arc T) : Result T := .ok value
+def alloc.sync.Arc.Insts.CoreConvertAsRef.as_ref {T : Type} (_ : Type)
+    (value : alloc.sync.Arc T) : Result T := .ok value
+
+def indexmap.map.IndexMap.values {K V S : Type} (entries : indexmap.map.IndexMap K V S) :
+    Result (indexmap.map.iter.Values K V) := .ok (entries.map Prod.snd)
+def indexmap.map.iter.Values.Insts.CoreIterTraitsIteratorIteratorSharedAV.next {K V : Type} :
+    indexmap.map.iter.Values K V → Result (Option V × indexmap.map.iter.Values K V)
+  | [] => .ok (none, [])
+  | value :: rest => .ok (some value, rest)
+
+-- Strings are mathematical UTF-8 strings. Malformed logical str values and
+-- unrepresentable lengths fail closed; allocation and physical byte storage remain trusted.
+def encodeString (value : String) (bound : value.toByteArray.size ≤ Usize.max) : Str :=
+  Slice.from (value.toByteArray.data.toList.map fun byte => (⟨byte.toBitVec⟩ : Std.U8))
+    (by simpa using bound)
+
+def decodeString (value : Str) : Result String :=
+  let bytes : ByteArray := ⟨(value.val.map fun byte => UInt8.ofBitVec byte.bv).toArray⟩
+  match String.fromUTF8? bytes with
+  | some text => .ok text
+  | none => .fail .panic
+
+def Str.Insts.AllocBorrowToOwnedString.to_owned := decodeString
+
+def alloc.string.String.Insts.CoreCmpPartialEqString.eq (left right : String) : Result Bool :=
+  .ok (decide (left = right))
+def alloc.string.String.Insts.CoreCmpPartialOrdString.partial_cmp (left right : String) :
+    Result (Option Ordering) := .ok (some (compare left right))
+def alloc.string.String.Insts.CoreCmpEq.assert_fields_are_eq (_ : String) : Result Unit := .ok ()
+def alloc.string.String.Insts.CoreCmpOrd.cmp (left right : String) : Result Ordering := .ok (compare left right)
+def alloc.string.String.Insts.CoreCloneClone.clone (value : String) : Result String := .ok value
+
+def alloc.string.String.Insts.CoreOpsDerefDerefStr.deref (value : String) : Result Str :=
+  if bound : value.toByteArray.size ≤ Usize.max then .ok (encodeString value bound)
+  else .fail .panic
+
+def alloc.string.String.Insts.CoreConvertFromShared0Str.from := decodeString
+
+def alloc.string.String.push_str (original : String) (suffix : Str) : Result String := do
+  let suffix ← decodeString suffix
+  let result := original ++ suffix
+  if result.toByteArray.size ≤ Usize.max then .ok result else .fail .panic
+
 end Axionomy.AccountExtracted

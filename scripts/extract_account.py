@@ -18,8 +18,8 @@ GENERATED = {
     "AccountExtraction.lean": "AccountExtraction.lean",
 }
 TEMPLATES = {
-    "TypesExternal_Template.lean": "95167ba681fa007ed7699a737b041426bdbd589211eb5fdeff65c91606ac92f3",
-    "FunsExternal_Template.lean": "781deb8e5a3821f6efa7b02788424b0a930eea6826f3e467a27522e66614689e",
+    "TypesExternal_Template.lean": "a24af3114c5def7076f3d614501bcb6d9966083941a1f73162d7020fd0a38ef8",
+    "FunsExternal_Template.lean": "54b7a8c9ac3ed58e98a4301b7988f4552869f638b16df204c37dab639198d7ec",
 }
 
 # The caller remains outside the extraction. Keep its exact staging handoff
@@ -45,6 +45,12 @@ ENTRY_CALLS = {
     "basket_contains": "state.contains(required)",
     "basket_equal": "left==right",
     "weighted": "value.checked_weighted(coefficient)",
+    "expression_message": "error.into_message()",
+    "evaluate": "economy::evaluate_expression(expression,exchange,accounts)",
+    "evaluate_condition": "economy::evaluate_condition(condition,exchange,accounts)",
+    "merge_effects": "economy::merge_scaled(target,source,units)",
+    "merge_amount": "economy::merge_quantity(target,asset,amount)",
+    "invariant_measure": "invariant.measure(accounts)",
     "invariant_conserves": "invariant.conserves(deltas)",
     "rate_consume": "rule.try_consume(role,assets)",
     "rate_produce": "rule.try_produce(role,assets)",
@@ -56,7 +62,7 @@ def validate_bridge(root=ROOT):
     """Require the harness to forward to the unchanged production methods."""
     harness = (root / "verification/extract_account.rs").read_text()
     paths = re.findall(r'#\[path\s*=\s*"([^"]+)"\]', harness)
-    if sorted(paths) != ["../src/account.rs", "../src/amount.rs", "../src/basket.rs", "../src/exchange.rs",
+    if sorted(paths) != ["../src/account.rs", "../src/amount.rs", "../src/basket.rs", "../src/economy.rs", "../src/exchange.rs",
                          "../src/quantity.rs", "../src/rate.rs"]:
         raise ValueError("account extraction must include the exact production source files")
     for operation, call in ENTRY_CALLS.items():
@@ -91,6 +97,9 @@ def validate_generated(directory):
                   "rate.merge", "rate.Rate.try_consume", "rate.Rate.try_produce", "rate.Rate.try_preserve",
                   "rate.LinearInvariant.checked_add_basket_measure_loop.body",
                   "rate.LinearInvariant.conserves_loop.body", "rate.LinearInvariant.conserves",
+                  "rate.LinearInvariant.measure_loop.body", "rate.LinearInvariant.measure",
+                  "economy.evaluate_expression", "economy.evaluate_binary", "economy.evaluate_condition",
+                  "economy.merge_scaled", "economy.merge_quantity", "economy.ExpressionError.into_message",
                   "U64.Insts.Account_extractionQuantityQuantityScalarI128.checked_weighted"):
         if not re.search(r"^def " + re.escape(entry) + r"\s", functions, re.MULTILINE):
             raise ValueError(f"missing account production definition: {entry}")
@@ -132,6 +141,7 @@ def check_extraction(write=False):
                    "--include", "account_extraction::account", "--include", "account_extraction::basket",
                    "--include", "account_extraction::quantity",
                    "--include", "account_extraction::rate", "--include", "account_extraction::exchange",
+                   "--include", "account_extraction::economy",
                    "--include", "num_traits", "--opaque", "indexmap",
                    "--dest-file", str(llbc), "--", "--locked", "-p", "axionomy",
                    "--example", "account_extraction", "--no-default-features"]

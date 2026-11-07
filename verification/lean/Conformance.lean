@@ -6,6 +6,8 @@ import Axionomy.Account
 import Axionomy.BasketOperations
 import Axionomy.Conservation
 import Axionomy.RateConstruction
+import Axionomy.Evaluation
+import Axionomy.Effects
 
 /-! Deterministic executable examples from the SAME definitions used in the
 proofs. Rust runs these examples through the public API. Agreement on these
@@ -171,6 +173,85 @@ def rateMergeCase (target : List (Nat × List (Nat × Nat))) (role : Nat)
   ⟨maps target, role, strings assets, outcome.1, outcome.2,
     RateConstruction.register compare role (target.map Prod.fst)⟩
 
+
+def expressionJson : Evaluation.Expr Nat Nat Nat → Json
+  | .constant value => Json.mkObj [("kind", toJson "constant"), ("value", toJson value)]
+  | .units => Json.mkObj [("kind", toJson "units")]
+  | .parameter parameter => Json.mkObj [("kind", toJson "parameter"), ("name", toJson parameter)]
+  | .balance role asset => Json.mkObj [("kind", toJson "balance"), ("role", toJson role), ("asset", toJson asset)]
+  | .binary op left right =>
+    let kind := match op with
+      | .add => "add" | .sub => "subtract" | .mul => "multiply"
+      | .div => "divide_floor" | .min => "minimum" | .max => "maximum"
+    let fields := match op with
+      | .div => ("numerator", "denominator") | _ => ("left", "right")
+    Json.mkObj [("kind", toJson kind), (fields.1, expressionJson left), (fields.2, expressionJson right)]
+
+structure EvaluationCase where
+  units : String
+  parameters : List (String × String)
+  bindings : List (Nat × Nat)
+  accounts : List (Nat × List (Nat × String))
+  expression : Json
+  result : Option String
+  error : Option String
+  conditionRight : Json
+  conditions : List (Option Bool × Option String)
+  deriving ToJson
+
+def evaluationCase (units : Nat) (expression right : Evaluation.Expr Nat Nat Nat) : EvaluationCase :=
+  let parameters := [("a", 3), ("z", 0), ("éλ", Quantity.u64Max)]
+  let bindings := [(0, 0), (1, 1), (2, 999)]
+  let accounts := [(0, [(0, Quantity.u64Max), (1, 3)]), (1, [(0, 1)])]
+  let context := Evaluation.fromState compare 0 units parameters bindings accounts
+  let ops := Evaluation.naturals Quantity.u64Max
+  let outcome := match Evaluation.eval ops context expression with
+    | .ok value => (some (toString value), none)
+    | .error error => (none, some error.message)
+  let conditions := [Evaluation.Comparison.equal, .greaterOrEqual, .lessOrEqual].map fun comparison =>
+    match Evaluation.condition ops id context comparison expression right with
+    | .ok value => (some value, none)
+    | .error error => (none, some error.message)
+  ⟨toString units, parameters.map (fun (key, value) => (key, toString value)), bindings,
+    accounts.map (fun (key, entries) => (key, entries.map fun (asset, value) => (asset, toString value))),
+    expressionJson expression, outcome.1, outcome.2, expressionJson right, conditions⟩
+
+structure MeasureCase where
+  weights : List (Nat × String)
+  accounts : List (Nat × List (Nat × String))
+  measured : Option String
+  deriving ToJson
+
+def measureCase (weights : List (Nat × Int)) (accounts : List (Nat × List (Nat × Nat))) : MeasureCase :=
+  ⟨weights.map (fun (asset, weight) => (asset, toString weight)),
+    accounts.map (fun (key, entries) => (key, entries.map fun (asset, value) => (asset, toString value))),
+    (Conservation.accumulate (fun a q => some (Conservation.contribution weights a q))
+      Conservation.checkedAdd 0 (accounts.flatMap Prod.snd)).map toString⟩
+
+structure EffectsCase where
+  target : List (Nat × String)
+  source : List (Nat × String)
+  units : String
+  scaled : List (Nat × String)
+  scaleError : Option Nat
+  asset : Nat
+  amount : String
+  computed : List (Nat × String)
+  computedError : Option Nat
+  deriving ToJson
+
+def effectsCase (target source : List (Nat × Nat)) (units asset amount : Nat) : EffectsCase :=
+  let target := Basket.canonical target
+  let source := Basket.canonical source
+  let strings := fun entries : List (Nat × Nat) => entries.map fun (key, value) => (key, toString value)
+  let ops := Account.naturals Quantity.u64Max
+  let scaled := match Effects.scaled ops (Quantity.mul Quantity.u64Max) target source units with
+    | .ok entries => (strings entries, none) | .error asset => (strings target, some asset)
+  let computed := match Account.credit ops target [(asset, amount)] with
+    | .ok entries => (strings entries, none) | .error asset => (strings target, some asset)
+  ⟨strings target, strings source, toString units, scaled.1, scaled.2, asset, toString amount,
+    computed.1, computed.2⟩
+
 def main : IO Unit := do
   let limit := Quantity.u64Max
   let boundaries := [0, 1, 2, 3, limit - 1, limit]
@@ -293,8 +374,49 @@ def main : IO Unit := do
     for role in [0, 1, 2, 3] do
       for assets in [[], [(0, 0)], [(0, 1)], [(1, 1)], [(0, limit)], [(1, limit)], [(0, 1), (1, 1)]] do
         rateMerges := rateMerges.push (rateMergeCase target role assets)
+  let atoms : List (Evaluation.Expr Nat Nat Nat) :=
+    [.constant 0, .constant 1, .constant limit, .units, .parameter "a", .parameter "éλ",
+     .parameter "", .parameter "未知`", .balance 0 0, .balance 0 99,
+     .balance 1 0, .balance 2 0, .balance 3 0]
+  let mut evaluation : Array EvaluationCase := #[]
+  for units in [0, 2] do
+    for left in atoms do
+      evaluation := evaluation.push (evaluationCase units left (.parameter "missing condition"))
+      for right in atoms do
+        for op in [Rates.Op.add, .sub, .mul, .div, .min, .max] do
+          evaluation := evaluation.push (evaluationCase units (.binary op left right) .units)
+      for op in [Rates.Op.add, .sub, .mul, .div, .min, .max] do
+        evaluation := evaluation.push (evaluationCase units
+          (.binary op (.binary .sub (.balance 0 0) left) (.binary .div (.parameter "éλ") .units))
+          (.balance 3 0))
+  let mut measurements : Array MeasureCase := #[]
+  for firstWeight in coefficients do
+    for secondWeight in coefficients do
+      for first in [0, 1, limit] do
+        for second in [0, 1, limit] do
+          let weights := [(0, firstWeight), (1, secondWeight)]
+          for split in [false, true] do
+            measurements := measurements.push (measureCase weights
+              (if split then [(0, Basket.canonical [(0, first)]), (1, Basket.canonical [(1, second)]), (2, [])]
+               else [(0, Basket.canonical [(0, first), (1, second), (2, limit)]), (1, [])]))
+  measurements := measurements.push (measureCase [] [])
+  for sign in [(1 : Int), -1] do
+    let weights := [(0, sign * (2^63 - 1)), (1, sign * (2^63 - 1)), (2, -sign * (2^63 - 1))]
+    for order in [[0, 1, 2], [0, 2, 1], [2, 0, 1]] do
+      let entries := order.map (fun asset => (asset, limit))
+      measurements := measurements.push (measureCase weights [(0, entries)])
+      measurements := measurements.push (measureCase weights (entries.map fun (asset, amount) => (asset, [(asset, amount)])))
+  let mut effects : Array EffectsCase := #[]
+  for before in [0, 1, limit] do
+    for added in [0, 1, limit] do
+      for units in [0, 1, 2, limit] do
+        for asset in [0, 2] do
+          effects := effects.push (effectsCase [(0, before), (1, limit), (3, 7)]
+            [(0, added), (1, 1)] units asset added)
+  effects := effects.push (effectsCase [] [] 0 0 0)
   let document := Json.mkObj [("version", toJson (1 : Nat)), ("scalars", toJson scalars),
     ("exchanges", toJson exchanges), ("expressions", toJson expressions), ("baskets", toJson baskets),
     ("accounts", toJson accounts), ("preparations", toJson preparations), ("basketOps", toJson basketOps),
-    ("conservation", toJson conservation), ("rateMerges", toJson rateMerges)]
+    ("conservation", toJson conservation), ("rateMerges", toJson rateMerges),
+    ("evaluation", toJson evaluation), ("measurements", toJson measurements), ("effects", toJson effects)]
   IO.println document.compress

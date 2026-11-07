@@ -13,7 +13,9 @@ proof's intrinsic boundary described here remains unchanged.
 The [account update proof](ACCOUNTS.md) extracts deposit, withdrawal, shortfall,
 and the production per-account exchange staging helper using the production
 generic trait dictionary and the collection abstraction. That shared pipeline
-also proves static rate builders and the runtime signed conservation predicate;
+also proves static rate builders, recursive snapshot evaluation and conditions,
+bounded effect helpers, exact evaluator messages, signed conservation and
+whole-state measurement;
 see its extended trust boundary in [ACCOUNTS.md](ACCOUNTS.md).
 
 `Axionomy/QuantityRefinement.lean` contains the four refinement theorems. Its

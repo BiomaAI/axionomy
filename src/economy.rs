@@ -1,6 +1,6 @@
 use crate::{
     Account, AccountDelta, AccountError, Basket, Exchange, LinearInvariant, Quantity,
-    QuantityComparison, QuantityExpression, QuantityScalar, Rate, Receipt, Trace,
+    QuantityComparison, QuantityExpression, QuantityScalar, Rate, RateCondition, Receipt, Trace,
 };
 use indexmap::IndexMap;
 use schemars::{JsonSchema, Schema, SchemaGenerator};
@@ -763,28 +763,14 @@ where
         }
 
         for condition in rate.conditions() {
-            let left = match evaluate_expression(condition.left(), exchange, &self.accounts) {
-                Ok(value) => value,
-                Err(message) => {
+            let satisfied = match evaluate_condition(condition, exchange, &self.accounts) {
+                Ok(satisfied) => satisfied,
+                Err(error) => {
                     return invalid_analysis(vec![ApplyError::RateLawEvaluation {
                         rate: exchange.rate().clone(),
-                        message,
+                        message: error.into_message(),
                     }]);
                 }
-            };
-            let right = match evaluate_expression(condition.right(), exchange, &self.accounts) {
-                Ok(value) => value,
-                Err(message) => {
-                    return invalid_analysis(vec![ApplyError::RateLawEvaluation {
-                        rate: exchange.rate().clone(),
-                        message,
-                    }]);
-                }
-            };
-            let satisfied = match condition.comparison() {
-                QuantityComparison::Equal => left == right,
-                QuantityComparison::GreaterThanOrEqual => left >= right,
-                QuantityComparison::LessThanOrEqual => left <= right,
             };
             if !satisfied {
                 return invalid_analysis(vec![ApplyError::RateConditionFailed {
@@ -837,10 +823,10 @@ where
                 let quantity =
                     match evaluate_expression(amount.quantity(), exchange, &self.accounts) {
                         Ok(value) => value,
-                        Err(message) => {
+                        Err(error) => {
                             return invalid_analysis(vec![ApplyError::RateLawEvaluation {
                                 rate: exchange.rate().clone(),
-                                message,
+                                message: error.into_message(),
                             }]);
                         }
                     };
@@ -1143,7 +1129,7 @@ where
     prepared_accounts: Option<PreparedAccounts<AccountId, A, N>>,
 }
 
-fn merge_scaled<A, N>(
+pub(crate) fn merge_scaled<A, N>(
     target: &mut Basket<A, N>,
     source: &Basket<A, N>,
     units: &Quantity<N>,
@@ -1156,23 +1142,60 @@ where
     target.checked_add(&scaled)
 }
 
-fn merge_quantity<A, N>(target: &mut Basket<A, N>, asset: A, quantity: Quantity<N>) -> Result<(), A>
+pub(crate) fn merge_quantity<A, N>(
+    target: &mut Basket<A, N>,
+    asset: A,
+    amount: Quantity<N>,
+) -> Result<(), A>
 where
     A: Clone + Eq + Hash,
     N: QuantityScalar,
 {
-    let Some(total) = target.quantity(&asset).checked_add(&quantity) else {
+    let Some(total) = target.quantity(&asset).checked_add(&amount) else {
         return Err(asset);
     };
     target.insert(asset, total);
     Ok(())
 }
 
-fn evaluate_expression<AccountId, A, RateId, Role, N>(
+/// Typed failures inside the evaluator; text is produced only for public diagnostics.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum ExpressionError {
+    MissingParameter(String),
+    UnboundRole,
+    MissingAccount,
+    AdditionOverflow,
+    SubtractionUnderflow,
+    MultiplicationOverflow,
+    DivisionByZero,
+}
+
+impl ExpressionError {
+    pub(crate) fn into_message(self) -> String {
+        match self {
+            Self::MissingParameter(name) => {
+                let mut message = String::from("missing parameter `");
+                message.push_str(&name);
+                // Both pieces use the same proved UTF-8 append operation.
+                #[allow(clippy::single_char_add_str)]
+                message.push_str("`");
+                message
+            }
+            Self::UnboundRole => "expression references an unbound role".to_owned(),
+            Self::MissingAccount => "expression references a missing account".to_owned(),
+            Self::AdditionOverflow => "addition overflow".to_owned(),
+            Self::SubtractionUnderflow => "subtraction underflow".to_owned(),
+            Self::MultiplicationOverflow => "multiplication overflow".to_owned(),
+            Self::DivisionByZero => "division by zero".to_owned(),
+        }
+    }
+}
+
+pub(crate) fn evaluate_expression<AccountId, A, RateId, Role, N>(
     expression: &QuantityExpression<Role, A, N>,
-    exchange: &Exchange<RateId, Role, AccountId, N>,
+    proposal: &Exchange<RateId, Role, AccountId, N>,
     accounts: &IndexMap<AccountId, Arc<Account<A, N>>>,
-) -> Result<Quantity<N>, String>
+) -> Result<Quantity<N>, ExpressionError>
 where
     AccountId: Eq + Hash,
     A: Eq + Hash,
@@ -1181,44 +1204,44 @@ where
 {
     match expression {
         QuantityExpression::Constant { value } => Ok(value.clone()),
-        QuantityExpression::Units => Ok(exchange.units().clone()),
-        QuantityExpression::Parameter { name } => exchange
+        QuantityExpression::Units => Ok(proposal.units().clone()),
+        QuantityExpression::Parameter { name } => proposal
             .parameters()
             .get(name)
             .cloned()
-            .ok_or_else(|| format!("missing parameter `{name}`")),
+            .ok_or_else(|| ExpressionError::MissingParameter(name.clone())),
         QuantityExpression::Balance { role, asset } => {
-            let account_id = exchange
+            let account_id = proposal
                 .bindings()
                 .get(role)
-                .ok_or_else(|| "expression references an unbound role".to_owned())?;
+                .ok_or(ExpressionError::UnboundRole)?;
             let account = accounts
                 .get(account_id)
-                .ok_or_else(|| "expression references a missing account".to_owned())?;
+                .ok_or(ExpressionError::MissingAccount)?;
             Ok(account.balance(asset))
         }
         QuantityExpression::Add { left, right } => evaluate_binary(
             left,
             right,
-            exchange,
+            proposal,
             accounts,
-            "addition overflow",
+            ExpressionError::AdditionOverflow,
             |left, right| left.checked_add(right),
         ),
         QuantityExpression::Subtract { left, right } => evaluate_binary(
             left,
             right,
-            exchange,
+            proposal,
             accounts,
-            "subtraction underflow",
+            ExpressionError::SubtractionUnderflow,
             |left, right| left.checked_sub(right),
         ),
         QuantityExpression::Multiply { left, right } => evaluate_binary(
             left,
             right,
-            exchange,
+            proposal,
             accounts,
-            "multiplication overflow",
+            ExpressionError::MultiplicationOverflow,
             |left, right| left.checked_mul(right),
         ),
         QuantityExpression::DivideFloor {
@@ -1227,41 +1250,61 @@ where
         } => evaluate_binary(
             numerator,
             denominator,
-            exchange,
+            proposal,
             accounts,
-            "division by zero",
+            ExpressionError::DivisionByZero,
             |left, right| left.checked_div(right),
         ),
         QuantityExpression::Minimum { left, right } => {
-            let left = evaluate_expression(left, exchange, accounts)?;
-            let right = evaluate_expression(right, exchange, accounts)?;
+            let left = evaluate_expression(left, proposal, accounts)?;
+            let right = evaluate_expression(right, proposal, accounts)?;
             Ok(std::cmp::min(left, right))
         }
         QuantityExpression::Maximum { left, right } => {
-            let left = evaluate_expression(left, exchange, accounts)?;
-            let right = evaluate_expression(right, exchange, accounts)?;
+            let left = evaluate_expression(left, proposal, accounts)?;
+            let right = evaluate_expression(right, proposal, accounts)?;
             Ok(std::cmp::max(left, right))
         }
     }
 }
 
-fn evaluate_binary<AccountId, A, RateId, Role, N>(
-    left: &QuantityExpression<Role, A, N>,
-    right: &QuantityExpression<Role, A, N>,
-    exchange: &Exchange<RateId, Role, AccountId, N>,
+pub(crate) fn evaluate_condition<AccountId, A, RateId, Role, N>(
+    condition: &RateCondition<Role, A, N>,
+    proposal: &Exchange<RateId, Role, AccountId, N>,
     accounts: &IndexMap<AccountId, Arc<Account<A, N>>>,
-    error: &str,
-    operation: impl FnOnce(&Quantity<N>, &Quantity<N>) -> Option<Quantity<N>>,
-) -> Result<Quantity<N>, String>
+) -> Result<bool, ExpressionError>
 where
     AccountId: Eq + Hash,
     A: Eq + Hash,
     Role: Ord,
     N: QuantityScalar,
 {
-    let left = evaluate_expression(left, exchange, accounts)?;
-    let right = evaluate_expression(right, exchange, accounts)?;
-    operation(&left, &right).ok_or_else(|| error.to_owned())
+    let left = evaluate_expression(condition.left(), proposal, accounts)?;
+    let right = evaluate_expression(condition.right(), proposal, accounts)?;
+    Ok(match condition.comparison() {
+        QuantityComparison::Equal => left == right,
+        QuantityComparison::GreaterThanOrEqual => left >= right,
+        QuantityComparison::LessThanOrEqual => left <= right,
+    })
+}
+
+fn evaluate_binary<AccountId, A, RateId, Role, N>(
+    left: &QuantityExpression<Role, A, N>,
+    right: &QuantityExpression<Role, A, N>,
+    proposal: &Exchange<RateId, Role, AccountId, N>,
+    accounts: &IndexMap<AccountId, Arc<Account<A, N>>>,
+    error: ExpressionError,
+    operation: impl FnOnce(&Quantity<N>, &Quantity<N>) -> Option<Quantity<N>>,
+) -> Result<Quantity<N>, ExpressionError>
+where
+    AccountId: Eq + Hash,
+    A: Eq + Hash,
+    Role: Ord,
+    N: QuantityScalar,
+{
+    let left = evaluate_expression(left, proposal, accounts)?;
+    let right = evaluate_expression(right, proposal, accounts)?;
+    operation(&left, &right).ok_or(error)
 }
 
 fn invalid_analysis<AccountId, A, RateId, Role, N>(
@@ -1301,5 +1344,157 @@ where
             shortfalls: vec![AccountShortfall::new(account, shortfall)],
         },
         AccountError::Overflow { asset } => ApplyError::BalanceOverflow { account, asset },
+    }
+}
+
+#[cfg(test)]
+mod evaluation_conformance {
+    use super::*;
+
+    // Exercise distinct semantic domains even in the fixture adapter.
+    #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Deserialize)]
+    struct Holder(u64);
+    #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Deserialize)]
+    struct Asset(u64);
+    #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Deserialize)]
+    struct Role(u64);
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    struct Rule;
+
+    #[derive(Debug, Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct EvaluationCase {
+        units: String,
+        parameters: Vec<(String, String)>,
+        bindings: Vec<(Role, Holder)>,
+        accounts: Vec<(Holder, Vec<(Asset, String)>)>,
+        expression: QuantityExpression<Role, Asset>,
+        result: Option<String>,
+        error: Option<String>,
+        condition_right: QuantityExpression<Role, Asset>,
+        conditions: Vec<(Option<bool>, Option<String>)>,
+    }
+
+    #[derive(Debug, Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct EffectsCase {
+        target: Vec<(Asset, String)>,
+        source: Vec<(Asset, String)>,
+        units: String,
+        scaled: Vec<(Asset, String)>,
+        scale_error: Option<Asset>,
+        asset: Asset,
+        amount: String,
+        computed: Vec<(Asset, String)>,
+        computed_error: Option<Asset>,
+    }
+
+    #[derive(Deserialize)]
+    struct Fixtures {
+        evaluation: Vec<EvaluationCase>,
+        effects: Vec<EffectsCase>,
+    }
+
+    fn amounts(entries: &[(Asset, String)]) -> Basket<Asset> {
+        Basket::try_from_entries(
+            entries
+                .iter()
+                .map(|(asset, amount)| (asset.clone(), Quantity::new(amount.parse().unwrap()))),
+        )
+        .unwrap()
+    }
+
+    fn entries(basket: &Basket<Asset>) -> Vec<(Asset, String)> {
+        basket
+            .iter()
+            .map(|(asset, amount)| (asset.clone(), amount.as_scalar().to_string()))
+            .collect()
+    }
+
+    #[test]
+    fn runtime_evaluation_and_effects_match_lean() {
+        let fixtures: Fixtures =
+            serde_json::from_str(include_str!("../verification/conformance.json")).unwrap();
+        assert_eq!(fixtures.evaluation.len(), 2210);
+        let mut condition_outcomes = [0; 3];
+        for case in fixtures.evaluation {
+            let mut proposal = Exchange::new(Rule, Quantity::new(case.units.parse().unwrap()));
+            for (role, holder) in &case.bindings {
+                proposal = proposal.bind(role.clone(), holder.clone());
+            }
+            for (parameter, amount) in &case.parameters {
+                proposal = proposal.parameter(parameter, Quantity::new(amount.parse().unwrap()));
+            }
+            let accounts: IndexMap<_, _> = case
+                .accounts
+                .iter()
+                .map(|(id, balances)| (id.clone(), Arc::new(Account::new(amounts(balances)))))
+                .collect();
+            let before = accounts.clone();
+            let proposal_before = proposal.clone();
+            let actual = evaluate_expression(&case.expression, &proposal, &accounts)
+                .map(|value| value.into_scalar().to_string())
+                .map_err(ExpressionError::into_message);
+            let expected = match (&case.result, &case.error) {
+                (Some(value), None) => Ok(value.clone()),
+                (None, Some(error)) => Err(error.clone()),
+                _ => panic!("invalid evaluation fixture: {case:?}"),
+            };
+            assert_eq!(actual, expected, "{case:?}");
+            for (comparison, expected) in [
+                QuantityComparison::Equal,
+                QuantityComparison::GreaterThanOrEqual,
+                QuantityComparison::LessThanOrEqual,
+            ]
+            .into_iter()
+            .zip(&case.conditions)
+            {
+                let rule = Rate::new().condition(
+                    "fixture",
+                    case.expression.clone(),
+                    comparison,
+                    case.condition_right.clone(),
+                );
+                let actual = evaluate_condition(&rule.conditions()[0], &proposal, &accounts)
+                    .map_err(ExpressionError::into_message);
+                let expected = match expected {
+                    (Some(value), None) => Ok(*value),
+                    (None, Some(error)) => Err(error.clone()),
+                    _ => panic!("invalid condition fixture: {case:?}"),
+                };
+                assert_eq!(actual, expected, "{case:?}, {comparison:?}");
+                condition_outcomes[match actual {
+                    Ok(false) => 0,
+                    Ok(true) => 1,
+                    Err(_) => 2,
+                }] += 1;
+            }
+            assert_eq!(accounts, before);
+            assert_eq!(proposal, proposal_before);
+        }
+        assert!(condition_outcomes.into_iter().all(|count| count > 0));
+
+        assert_eq!(fixtures.effects.len(), 73);
+        for case in fixtures.effects {
+            let source = amounts(&case.source);
+            let source_before = source.clone();
+            let mut target = amounts(&case.target);
+            let actual = merge_scaled(
+                &mut target,
+                &source,
+                &Quantity::new(case.units.parse().unwrap()),
+            );
+            assert_eq!(actual.err(), case.scale_error, "{case:?}");
+            assert_eq!(entries(&target), case.scaled, "{case:?}");
+            assert_eq!(source, source_before);
+            let mut target = amounts(&case.target);
+            let actual = merge_quantity(
+                &mut target,
+                case.asset.clone(),
+                Quantity::new(case.amount.parse().unwrap()),
+            );
+            assert_eq!(actual.err(), case.computed_error, "{case:?}");
+            assert_eq!(entries(&target), case.computed, "{case:?}");
+        }
     }
 }

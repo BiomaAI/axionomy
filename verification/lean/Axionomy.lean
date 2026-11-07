@@ -15,3 +15,8 @@ import Axionomy.Conservation
 import Axionomy.ConservationRefinement
 import Axionomy.RateConstruction
 import Axionomy.RateConstructionRefinement
+import Axionomy.Evaluation
+import Axionomy.EvaluationRefinement
+import Axionomy.DiagnosticRefinement
+import Axionomy.Effects
+import Axionomy.EffectsRefinement

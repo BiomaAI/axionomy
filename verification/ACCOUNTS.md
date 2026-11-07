@@ -202,7 +202,7 @@ of both conservation loops. It relates the result to a mathematical integer
 specification with intermediate bounds, not just a final unbounded sum.
 `accepted_conserves` states equality of weighted mathematical totals on success.
 The Option try adapters propagate failure explicitly. None of these adapters or
-proofs adds an axiom. Whole-state measurements and economy diagnostics remain
+proofs adds an axiom. Economy diagnostics remain
 separate obligations, as do BigUint/BigInt and custom backend laws.
 
 Fresh extraction, external-interface checksums, the Lean kernel/axiom audit,
@@ -210,3 +210,76 @@ Fresh extraction, external-interface checksums, the Lean kernel/axiom audit,
 cover the new paths. Negative controls reverse the conservation result and discard
 a rate overflow: the regenerated Rust programs compile, but their implementation
 proofs must fail.
+
+
+## Snapshot evaluation, effects and whole-state measurement
+
+The shared pipeline now also includes the exact production `economy.rs` source.
+The forwarding entry points select the recursive expression interpreter, a
+condition helper, the static/computed effect merge helpers, typed-error rendering,
+and `LinearInvariant::measure`. Generated Rust types retain separate account,
+asset, role and rate identifiers; no public API or generic bound was removed.
+
+`EvaluationRefinement.evaluate_refines_naturals` proves termination and exact
+checked natural-number results for every finite expression and u64 input. Both
+children read the same immutable context. A failing left child wins over a
+failing right child; operation-specific errors occur only after both succeed.
+Parameters use sorted string lookup. Balance lookup distinguishes an unbound
+role, a bound missing account and an absent asset (zero). Addition, subtraction,
+multiplication, floor division, minimum and maximum are covered. The condition
+refinement proves the two evaluations and all three comparisons, including
+ordered propagation of evaluation failures.
+
+The existing condition code was factored into a crate-private helper called by
+`Economy::analyze`. Internal failures now use `ExpressionError`; public errors
+still contain exactly the existing message text. This avoids depending on erased
+formatting arguments in the translation backend. `DiagnosticRefinement` proves
+UTF-8 encode/decode round trips and exact production messages, including arbitrary
+valid Unicode parameter names, when the complete message byte length fits `usize`.
+Literal decoding is checked by Lean's kernel, not an extra native-evaluation axiom.
+
+`EffectsRefinement` proves the exact natural-number result and state for
+`merge_scaled` and `merge_quantity`. Static merging first checks every scaled
+source amount, then atomically adds the resulting basket. Either stage returns
+its first overflowing asset and the original target. Computed quantities receive
+one checked addition with zero canonicalization, without an implicit units
+multiplier. These are helper contracts; the account aggregation loop and its
+caller preconditions remain open.
+
+`ConservationRefinement.measure_refines_integers` proves the complete ordered
+fold over account values and each account's asset entries. It covers intermediate
+signed overflow, negative weights, empty accounts and absent weights. The Rust
+method now reuses `checked_add_basket_measure`, preserving arithmetic and iterator
+order while avoiding an outer-loop `continue` unsupported by the translator.
+This does not yet prove invariant construction or the economy's before/after
+error diagnostics.
+
+The extension adds the following explicit dependency models:
+
+- `Arc<T>` denotes its logical immutable pointee. Only `Deref` and `AsRef` are
+  modeled here. Reference counts, clone/COW mutation, isolation and allocation
+  are not established by this abstraction; Rust still checks borrowing.
+- `IndexMap::values` traverses the existing logical list in insertion order.
+  `BTreeMap::get` borrows each stored key and performs ordered early-stop lookup.
+  Valid sorted maps, lawful ordering/equality, hash coherence and physical storage
+  remain assumptions of applying the logical collection model.
+- Strings are Lean's valid UTF-8 strings, with explicit byte-slice conversion and
+  checked append length. Invalid logical UTF-8 and unrepresentable lengths fail
+  closed. Correct physical UTF-8 storage, Rust/Lean string-order agreement,
+  allocation and copying remain trusted. Formatting and hashing internals are
+  still unsupported, not silently interpreted as correct output.
+- Resource exhaustion (allocation/stack), translation correctness, primitive
+  semantics and machine code retain the existing trust boundaries.
+
+The proofs have no premise asserting that evaluation or measurement succeeded.
+Lawful identity/equality/ordering dictionaries have existing concrete witnesses.
+Theorems over helpers do not certify full structural validation, iteration over
+conditions, aggregate account effects, preservation preflight, diagnostics,
+preparation completeness, receipts, multi-account commit or other numeric backends.
+
+The evaluator/effect/measurement controls deliberately reverse operand error
+order, replace `<=` with `<`, reset the running measure, alter the parameter-error
+prefix and discard scaled amounts. Each control first requires fresh extraction
+and successful compilation of the generated implementation, then requires the
+reviewed semantic proof failure. A stale model or an unresolved external symbol
+cannot satisfy these checks.
