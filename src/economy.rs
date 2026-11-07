@@ -13,6 +13,40 @@ use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 use thiserror::Error;
 
+// Keep the lazy borrowed account projection explicit for extraction.
+struct AccountEntries<'a, AccountId, A, N>(indexmap::map::Iter<'a, AccountId, Arc<Account<A, N>>>);
+
+impl<'a, AccountId, A, N> Iterator for AccountEntries<'a, AccountId, A, N> {
+    type Item = (&'a AccountId, &'a Account<A, N>);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.0.next() {
+            Some((id, account)) => Some((id, account.as_ref())),
+            None => None,
+        }
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let remaining = self.0.len();
+        (remaining, Some(remaining))
+    }
+}
+
+fn collect_basket_assets<'a, A: Ord, N>(contents: &'a Basket<A, N>, assets: &mut BTreeSet<&'a A>) {
+    for (asset, _) in contents.iter() {
+        assets.insert(asset);
+    }
+}
+
+fn collect_invariant_assets<'a, A: Eq + Hash + Ord>(
+    invariant: &'a LinearInvariant<A>,
+    assets: &mut BTreeSet<&'a A>,
+) {
+    for (asset, _) in invariant.weights() {
+        assets.insert(asset);
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(bound(
     serialize = "AccountId: Serialize + Ord, A: Serialize, N: Serialize",
@@ -262,13 +296,17 @@ where
         }
     }
 
+    #[allow(clippy::manual_find)] // Extract the primitive first-match loop; slice::find has unsupported lifetimes.
     pub fn account(&self, account: &AccountId) -> Option<&AccountAssessment<AccountId, A, N>>
     where
         AccountId: PartialEq,
     {
-        self.accounts()
-            .iter()
-            .find(|assessment| assessment.account() == account)
+        for assessment in self.accounts() {
+            if assessment.account() == account {
+                return Some(assessment);
+            }
+        }
+        None
     }
 
     pub fn shortfalls(&self) -> &[AccountShortfall<AccountId, A, N>] {
@@ -282,10 +320,12 @@ where
     where
         AccountId: PartialEq,
     {
-        self.shortfalls()
-            .iter()
-            .find(|shortfall| shortfall.account() == account)
-            .map(AccountShortfall::missing)
+        for shortfall in self.shortfalls() {
+            if shortfall.account() == account {
+                return Some(shortfall.missing());
+            }
+        }
+        None
     }
 
     pub fn projected_deltas(&self) -> Option<&[AccountDelta<AccountId, A, N>]> {
@@ -525,9 +565,7 @@ where
     }
 
     pub fn accounts(&self) -> impl Iterator<Item = (&AccountId, &Account<A, N>)> {
-        self.accounts
-            .iter()
-            .map(|(id, account)| (id, account.as_ref()))
+        AccountEntries(self.accounts.iter())
     }
 
     pub fn rate(&self, id: &RateId) -> Option<&Rate<Role, A, N>> {
@@ -555,26 +593,14 @@ where
     pub fn asset_keys(&self) -> BTreeSet<&A> {
         let mut assets = BTreeSet::new();
 
-        for account in self.accounts.values() {
-            assets.extend(account.balances().iter().map(|(asset, _)| asset));
+        for holder in self.accounts.values() {
+            collect_basket_assets(holder.balances(), &mut assets);
         }
-        for rate in self.rates.values() {
-            for role in rate.roles() {
-                for basket in [
-                    rate.consumed(role),
-                    rate.produced(role),
-                    rate.preserved(role),
-                ]
-                .into_iter()
-                .flatten()
-                {
-                    assets.extend(basket.iter().map(|(asset, _)| asset));
-                }
-            }
-            assets.extend(rate.computed_asset_keys());
+        for rule in self.rates.values() {
+            rule.collect_assets(&mut assets);
         }
         for invariant in self.invariants.iter() {
-            assets.extend(invariant.weights().map(|(asset, _)| asset));
+            collect_invariant_assets(invariant, &mut assets);
         }
 
         assets

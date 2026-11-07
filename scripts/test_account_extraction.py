@@ -1,5 +1,6 @@
 """Negative controls for the account's shared-source and storage boundaries."""
 import hashlib
+import re
 from pathlib import Path
 import shutil
 import tempfile
@@ -7,7 +8,21 @@ import unittest
 from unittest.mock import patch
 
 from extract_account import (GENERATED, LEAN, ROOT, TEMPLATES, compare_generated,
-                            validate_bridge, validate_generated, validate_fingerprint_target)
+                            validate_bridge, validate_generated, validate_fingerprint_target,
+                            FILTERED_TRAIT_WARNING, INSPECTION_DEFINITIONS, validate_extraction_diagnostics)
+
+
+class ExtractionDiagnosticsTests(unittest.TestCase):
+    def test_only_reviewed_filtered_dictionary_warning_passes(self):
+        validate_extraction_diagnostics("[\x1b[93mWarn\x1b[39m ] " + FILTERED_TRAIT_WARNING + "\n")
+
+    def test_other_diagnostics_and_missing_expected_warning_fail(self):
+        allowed = "[Warn ] " + FILTERED_TRAIT_WARNING + "\n"
+        for output in ("", allowed + "[Error] translation failed\n",
+                       allowed + "[Warn ] a different unsupported operation\n",
+                       allowed.replace("size_hint", "next"), allowed + allowed):
+            with self.subTest(output=output), self.assertRaisesRegex(ValueError, "unexpected account extraction diagnostics"):
+                validate_extraction_diagnostics(output)
 
 
 class FingerprintTargetTests(unittest.TestCase):
@@ -158,6 +173,20 @@ class AccountExtractionTests(unittest.TestCase):
 
     def test_current_generated_code_passes(self):
         validate_generated(self.directory)
+
+    def test_missing_inspection_methods_or_loops_are_rejected(self):
+        path = self.directory / "Funs.lean"
+        original = path.read_text()
+        for name in INSPECTION_DEFINITIONS:
+            with self.subTest(name=name):
+                # Names may follow a newline after `def` in generated Lean.
+                changed, count = re.subn(r"(^def\s+)" + re.escape(name) + r"(?=\s)",
+                                        r"\1bypassed_inspection", original, flags=re.MULTILINE)
+                self.assertEqual(count, 1)
+                path.write_text(changed)
+                with self.assertRaisesRegex(ValueError, "missing account production definition"):
+                    validate_generated(self.directory)
+        path.write_text(original)
 
     def test_missing_key_and_goal_definitions_are_rejected(self):
         path = self.directory / "Funs.lean"

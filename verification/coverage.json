@@ -1,21 +1,21 @@
 {
   "version": 1,
-  "assurance": "Partial implementation verification: Aeneas-extracted production u64 arithmetic, basket/account operations, model/rate construction and discovery, complete transaction assessment/application, finite-input iterator filtering, fork/simulation/ordered replay, goals, finite-input iterator views, canonical state/observation keys and scoped deterministic fingerprints, generic trace extension, basket collection boundaries including sorted borrowed iteration, foundational typed data APIs and expression construction refine Lean specifications. Explicit collection/Arc/UTF-8/sorting/hashing models, lawful identifier operations, resource bounds, compiler/translation and primitive models remain trusted. Remaining public data APIs, serialization/schema contracts and other numeric backends remain open.",
+  "assurance": "Partial implementation verification: Aeneas-extracted production u64 arithmetic, basket/account operations, model/rate construction and discovery, complete transaction assessment/application, finite-input iterator filtering, fork/simulation/ordered replay, goals, finite-input iterator views, canonical state/observation keys and scoped deterministic fingerprints, generic trace extension, basket collection boundaries including sorted borrowed iteration, foundational typed data APIs, expression construction and generic core inspection/asset discovery refine Lean specifications. Explicit collection/Arc/UTF-8/sorting/hashing models, lawful identifier operations, resource bounds, compiler/translation and primitive models remain trusted. Remaining public data APIs, serialization/schema contracts and other numeric backends remain open.",
   "sources": {
     "Cargo.toml": "414a2b181e13225e4b76aa58e70d998064174dde2d8cee603ea3af648d61a7f3",
     "Cargo.lock": "00ef263c160aeebaa49187874a4b11ec94fee9bc8fbea5a2f0cacc190607919c",
     "src/account.rs": "0eaf66937c63de2993353828e42fcfea2b80f172f5cb74fc76a28cef79fd9ff6",
     "src/amount.rs": "4c6a0599d4e7697fadb6981b88cc01e832fa6c01a0b33d1b997ba5c5bb1c705d",
     "src/basket.rs": "f9797280daeb1e9c4dedc795e39763f2ee1eb2b14ed6835a20a416f72a1ba419",
-    "src/economy.rs": "31d3c582bb73a17c2c6b2cd8efbac8bf5f2f0d1bec3a7e9c8a168757e05f54be",
+    "src/economy.rs": "31b589d33fa4cc8c02d4340b39015bba545a9ca1e47465a4295d4cdd827b30f1",
     "src/exchange.rs": "234f6e6459d2fb97a1fbb802e14afed6e5ed50a023c8c2de745e6f6eac39b455",
     "src/lib.rs": "46d6f713693714650653128e2ceabf8a895b8ad98a38a7bdbeab4ea378a5cc06",
     "src/quantity.rs": "246c805344babccb3c1c00371686e098111044a2ce46f456f211de6eb9928364",
-    "src/rate.rs": "af545aa57d7668c346cfb9b0aefe3207af23b6443f9f7064ab5b1eaff9210812",
+    "src/rate.rs": "d329eec767c2142b9e93ac095e770b01b8c2e1a62322cb082d99c3c8834d29e8",
     "verification/extract.rs": "415b34f5f4f8aa2679af860bd2a4092c96e113145919160fe7c81e33836de3e0",
     "verification/aeneas-toolchain.json": "8676d7d11be51a6f41984d874b35910e8a1a3d0a18414998feb9402ef80932fb",
     "verification/extract_basket.rs": "dc2b3a2159704c24a5261d0069a2aac7b575f30a94ae35c4c1e96933638592dd",
-    "verification/extract_account.rs": "b32c6def22ef8fb793bc55de1cbead4cae81c07556bf59d7966db0c9fb8ebd72",
+    "verification/extract_account.rs": "5b6baf1606c1eb1e1409cde05787e6c778a4ea2cf9c83fa9667195b9db5bbda7",
     "verification/patches/aeneas-namespaced-discriminant.patch": "fabac7482deb3da6ecaca60c4060dfe9d2114efdd010699e736c4a91267f3bc9"
   },
   "features": [
@@ -160,7 +160,7 @@
         "tests/account.rs"
       ],
       "limitations": [
-        "This original theorem concerns the Lean structure. The separate typed_data_operations contract now proves the actual extracted AssetAmount constructor, accessors and both tuple conversions/round trips. Derived traits and serialization remain separate item 16\u201317 obligations."
+        "This original theorem concerns the Lean structure. The separate typed_data_operations contract now proves the actual extracted AssetAmount constructor, accessors and both tuple conversions/round trips. Derived traits and serialization remain separate item 16–17 obligations."
       ]
     },
     {
@@ -382,7 +382,7 @@
         "The production u64 fork, simulate, replay, replayed and Trace new/default/push/exchanges/into_exchanges paths are shared-source extracted. Derived Economy and Exchange clones are proved exact under lawful identifier cloning. Replay terminates without panic for every bounded trace satisfying the transaction metadata/name/capacity preconditions; no successful step or intermediate-state readiness is assumed. The transaction frame derives unchanged rules, invariants and account-key cardinality through every step.",
         "The typed ordered replay specification retains the final state on both success and failure. Rejection atomicity derives exactly the accepted prefix state and first error; success retains receipt order and each receipt describes its own intermediate committed state. Simulation and replayed publish isolated branch results with the source immutably borrowed. The reusable invariant-composition lemma requires a step law; concrete replay refinement discharges the transaction caller invariants through the extracted apply frame, rather than assuming them for intermediate states. The actual analyze/apply accepted control flow also establishes every registered weighted-transfer conservation check; replay_conserves derives exact mathematical consumed/produced equality per receipt throughout a successful trace, and the first-error theorem supplies its successful prefix.",
         "Logical IndexMap, ordered BTreeMap, Vec/slice and Arc models, lawful equality/ordering/hash coherence, UTF-8 lengths, allocation/resources, compiler/MIR/Charon/Aeneas/backend semantics remain explicit trust boundaries. BTreeMap clone calls every key/value clone and preserves entry order; physical tree/Arc storage, reference counts, allocator behavior and clone/COW isolation are not verified. Strong Rust domains and ownership remain enforced. This is not machine-code verification.",
-        "Trace generic extend is covered separately by iterator_consumers. Remaining derived/convenience APIs, serialization/schema contracts and BigUint/BigInt/custom numeric laws remain separate items 16\u201318. 246 Lean-generated replay scenarios and 596 transaction simulation scenarios supplement the general proofs; they do not replace them."
+        "Trace generic extend is covered separately by iterator_consumers. Remaining derived/convenience APIs, serialization/schema contracts and BigUint/BigInt/custom numeric laws remain separate items 16–18. 246 Lean-generated replay scenarios and 596 transaction simulation scenarios supplement the general proofs; they do not replace them."
       ],
       "extracted_module": "AccountExtraction.Funs"
     },
@@ -1088,6 +1088,91 @@
         "The existing trusted std stable-sort boundary is extended to sort_by with executable state-threaded comparator plumbing. Review of pinned Rust alloc/src/slice.rs confirms stable ascending ordering and comparison through the supplied callback. The insertion-sort model specifies lawful results, not std driftsort implementation, comparison counts/order, performance, allocation, destructor effects, interior mutability or unwind state. Helper calculations over this model are not contracts for arbitrary unlawful/stateful comparators.",
         "IndexMap storage/iteration, std Vec collection and ownership iteration, compiler/MIR/Charon/Aeneas and primitive semantics remain explicit dependencies. Rust ownership preserves borrowing; finite integration checks also confirm pointer identity and unchanged source insertion order. The source refactor scopes the temporary mutable slice inside a generic owned-vector helper and uses Vec::from_iter; no clone, type erasure or new public trait bound is introduced.",
         "326 Lean-generated finite cases cover every ordered subset of five asset/value entries, zero omission, u64 maximum, ascending and reverse ontology order, and non-Copy BigUint payloads. Non-cloneable assets and an empty basket with an unordered non-cloneable scalar check the public bounds. These checks supplement the universal contracts and do not prove BigUint arithmetic."
+      ]
+    },
+    {
+      "id": "core_inspection_boundary",
+      "status": "aeneas_refinement_proved",
+      "sources": [
+        "src/economy.rs",
+        "src/rate.rs",
+        "verification/extract_account.rs",
+        "verification/aeneas-toolchain.json"
+      ],
+      "extracted_module": "AccountExtraction.Funs",
+      "theorems": [
+        "Axionomy.Inspection.first_none",
+        "Axionomy.Inspection.first_prefix",
+        "Axionomy.Inspection.first_member",
+        "Axionomy.Inspection.zero_removes",
+        "Axionomy.Inspection.other_weight_unchanged",
+        "Axionomy.Inspection.weights_valid",
+        "Axionomy.InspectionLookupRefinement.assessment_account",
+        "Axionomy.InspectionLookupRefinement.assessment_shortfall",
+        "Axionomy.InspectionLookupRefinement.account_first_match",
+        "Axionomy.InspectionLookupRefinement.shortfall_first_match",
+        "Axionomy.InspectionLookupRefinement.account_prefix",
+        "Axionomy.InspectionLookupRefinement.account_comparison_failure",
+        "Axionomy.InspectionLookupRefinement.shortfall_prefix",
+        "Axionomy.InspectionLookupRefinement.shortfall_comparison_failure",
+        "Axionomy.InspectionRefinement.iterator_length",
+        "Axionomy.InspectionRefinement.exact_hint",
+        "Axionomy.InspectionRefinement.account_next",
+        "Axionomy.InspectionRefinement.accounts_yield",
+        "Axionomy.InspectionRefinement.accounts_hint",
+        "Axionomy.InspectionRefinement.weight_next",
+        "Axionomy.InspectionRefinement.weights_yield",
+        "Axionomy.InspectionRefinement.weights_hint",
+        "Axionomy.InspectionRefinement.keys_yield",
+        "Axionomy.InspectionRefinement.invariant_new",
+        "Axionomy.InspectionRefinement.invariant_new_failure",
+        "Axionomy.InspectionRefinement.invariant_name",
+        "Axionomy.InspectionRefinement.invariant_weights",
+        "Axionomy.InspectionRefinement.invariant_weight",
+        "Axionomy.InspectionRefinement.invariant_weight_contract",
+        "Axionomy.InspectionRefinement.rate_roles",
+        "Axionomy.InspectionRefinement.rate_distinct",
+        "Axionomy.InspectionRefinement.rate_computed_consumed",
+        "Axionomy.InspectionRefinement.rate_computed_produced",
+        "Axionomy.InspectionRefinement.rate_computed_preserved",
+        "Axionomy.InspectionRefinement.rate_conditions",
+        "Axionomy.InspectionRefinement.rate_consumed",
+        "Axionomy.InspectionRefinement.rate_produced",
+        "Axionomy.InspectionRefinement.rate_preserved",
+        "Axionomy.InspectionRefinement.model_accounts",
+        "Axionomy.InspectionRefinement.model_rate_ids",
+        "Axionomy.InspectionRefinement.model_invariants",
+        "Axionomy.InspectionRefinement.model_rate",
+        "Axionomy.InspectionIteratorRefinement.slice_yields",
+        "Axionomy.InspectionIteratorRefinement.slice_hint",
+        "Axionomy.InspectionIteratorRefinement.weights_iterator",
+        "Axionomy.InspectionIteratorRefinement.weights_public_hint",
+        "Axionomy.InspectionIteratorRefinement.accounts_iterator",
+        "Axionomy.InspectionIteratorRefinement.accounts_public_next",
+        "Axionomy.InspectionIteratorRefinement.accounts_public_hint",
+        "Axionomy.InspectionIteratorRefinement.rate_ids_iterator",
+        "Axionomy.InspectionIteratorRefinement.rate_ids_public_next",
+        "Axionomy.InspectionIteratorRefinement.rate_ids_public_hint",
+        "Axionomy.InspectionIteratorRefinement.invariants_iterator",
+        "Axionomy.InspectionIteratorRefinement.invariants_public_next",
+        "Axionomy.InspectionIteratorRefinement.invariants_public_hint",
+        "Axionomy.InspectionAssetsRefinement.expression_assets",
+        "Axionomy.InspectionAssetsRefinement.computed_assets",
+        "Axionomy.InspectionCollectionRefinement.rate_assets",
+        "Axionomy.InspectionModelAssetsRefinement.model_assets",
+        "Axionomy.InspectionModelAssetsRefinement.model_assets_contract"
+      ],
+      "rust_tests": [
+        "tests/inspection_conformance.rs"
+      ],
+      "limitations": [
+        "Fresh extraction connects 20 public assessment/rate/invariant/model inspection APIs and seven concrete iterator-consumption probes to production Rust. Numeric payloads remain generic and no arithmetic law is required for metadata inspection. These contracts do not prove BigUint arithmetic, BigInt signed measures, serialization or arbitrary numeric implementations.",
+        "Assessment lookup returns the first matching borrowed record, or its missing basket, for all three assessment variants including caller-constructed duplicate account IDs. Whole-function monadic refinements cover primitive comparison results; composed contracts prove finite-prefix success and comparison-failure propagation without assumptions on unused tails. Pure successful comparison laws yield the total first-match specification. No Eq, Hash or Ord bound is added to the PartialEq-only Rust lookup. Foreign side effects, physical reference identity and state after unwinding are not logical proof claims.",
+        "Invariant new propagates arbitrary Into<String> success/failure. Weight insertion/replacement/removal exactly refines signed integer updates, preserves the name and unique nonzero representation, and preserves other keys under lawful asset equality. The name borrows the original UTF-8 string within usize bounds. IndexMap hashing, allocations and iteration are trusted dependency semantics. Physical borrowing and exact iterator hints at every prefix are additionally checked in Rust.",
+        "Rate accessors expose stored roles, distinct pairs, all three static/computed effect categories and conditions. Static lookup uses independent total role-comparison laws. Model account/rate/invariant iteration preserves insertion order; model rate lookup uses independent total equality laws. Concrete iterator factories compose with next/finite-yield and exact-size contracts. Logical IndexMap lengths require explicit usize bounds; Vec/Slice bounds are intrinsic to their models.",
+        "Complete model asset collection returns the sorted duplicate-free union of balances, static baskets reached through registered rate roles, computed targets and recursive expression/condition balance references, and invariant weight keys. Membership, ordering, uniqueness and size follow from independent lawful asset ordering, lawful role comparisons and a usize bound on each rate's computed-reference vector. This contract describes raw stored metadata as inspected; it does not assume deserialization validates role registration. Resource allocation, collection internals and arbitrary comparator failure/side effects remain dependency boundaries.",
+        "The pinned Aeneas Iterator dictionary lacks size_hint. Account extraction uses its trait-method filtering mode, retains the concrete public caller probes and adapter next/size_hint definitions, and allows exactly the reviewed missing-size_hint warning. Missing/duplicate/different warnings and errors fail the diagnostic guard; missing definitions or changed external interfaces also fail. Generic dictionary-based size_hint calls remain unsupported and cannot silently compile. Reviewed models cover indexmap 2.14.0 Keys/Iter and concrete std Slice/Vec/array size hints; no translator patch or new axiom is introduced.",
+        "537 Lean-generated scenarios comprise 144 first-match/comparison-panic lookups, 153 signed weight-update sequences with every-prefix expectations and 240 model inspection/asset-union scenarios. Distinct Rust identifier types, PartialEq-only lookup IDs, Unicode names, i64 extrema, duplicates, empty inputs, all recursive expression forms/comparison variants and BigUint payloads beyond u64 are exercised. These finite cases supplement the universal implementation contracts; serde is only test setup for private assessment records. Three production mutants must compile after re-extraction and then fail their intended semantic proofs."
       ]
     }
   ]

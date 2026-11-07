@@ -709,8 +709,9 @@ including repeated proposals and an unused tail. Additional Rust checks exercise
 panic propagation during `into_iter` and after prefixes of lengths zero to three.
 A production mutation that drops trace entries must compile through extraction
 and then fail the implementation proof. Remaining item 16 work includes basket
-collection conversions/iteration, inspection/lookup APIs, other callback laws,
-derived traits, formatting and convenience-constructor panic contracts.
+collection conversions/iteration and inspection/lookup APIs (covered by subsequent
+batches), other callback laws, derived traits, formatting and convenience-constructor
+panic contracts.
 
 This batch passed fresh extraction and the full proof gate: 350 registered
 contracts, 3,292 audited Axionomy theorems, kernel checking, fixture equality and
@@ -719,3 +720,90 @@ new production mutation control passed, as did formatting, Clippy and documentat
 with warnings denied. The mutation keeps the extracted loop interface intact:
 appending only when the trace is empty compiles through extraction and then fails
 the refinement proof. The prior 43 production mutation controls remain in CI.
+
+## Core inspection and complete asset collection
+
+`Inspection*Refinement` connects 20 public inspection APIs and seven concrete
+iterator-consumption probes to the production Rust through Charon/Aeneas. The
+proofs remain generic in numeric payloads. Inspection transports these values;
+it does not establish their arithmetic laws or close the BigUint/BigInt backlog.
+
+`ExchangeAssessment::account` and `shortfall` return the first matching record
+or missing basket, including assessments assembled by callers with repeated
+account IDs. Whole-function monadic refinements cover all three variants. Pure
+successful comparison laws yield the `Inspection.first` specification; separate
+composed contracts propagate comparison failure after a nonmatching prefix and
+return a first match without requiring any later comparison to terminate. Lookup
+retains its original `PartialEq`-only bound and borrowed result. The explicit
+production loops replace slice `find` only to avoid a nested-lifetime extraction
+limitation. They do not collect or clone the input.
+
+`LinearInvariant::new` propagates arbitrary `Into<String>` success or failure.
+`weight` inserts or replaces a nonzero signed coefficient and removes zero
+coefficients while preserving the order of the other keys. The integer projection
+refines `Inspection.weight`, preserves the invariant name, and preserves unique
+nonzero weights from a valid input. The empty constructor establishes that input
+representation. The name accessor borrows the original UTF-8 contents; its logical
+string conversion requires a representable byte length. Asset equality and the
+IndexMap storage/hash contract remain explicit dependencies.
+
+Rate inspection returns the stored registered roles, distinct pairs,
+static baskets, computed amounts and conditions. Static lookup requires independent
+successful role comparisons. Model inspection returns accounts, rate IDs and
+invariants in insertion order, and selects a stored rate under lawful equality.
+The named private `AccountEntries` and `WeightEntries` adapters expose their
+primitive `next` and exact `size_hint` behavior to extraction. Factory contracts
+compose with finite-yield proofs and the public next/hint probes. The iterator
+proofs apply to every remaining suffix; concrete size hints equal its length.
+Logical IndexMap lengths have explicit `usize` bounds; Vec/Slice bounds follow
+from their representations. Public types, lifetimes and trait bounds are retained.
+
+The complete `Economy::asset_keys` implementation now returns exactly the sorted,
+duplicate-free union of account balance keys, static baskets reached through
+registered rate roles, computed targets, recursive expression/condition balance
+references and invariant weight keys. `model_assets_contract` proves exact
+membership, strict order, uniqueness and the output-size bound. Independent asset
+order laws and successful role comparisons are premises; each rate's computed
+reference vector must fit `usize`. No premise assumes the collection call succeeds.
+The theorem describes the stored metadata inspected by this API; validating
+arbitrarily deserialized role registration belongs to the serialization contract.
+Static collection now uses helpers that keep each borrowed field local to avoid
+an Aeneas nested-borrow mapping limitation. Numeric values are never copied by
+these helpers, and no new cloning or ordering bound is imposed on quantities.
+
+The external interface adds reviewed logical models for `indexmap` 2.14.0 `Keys`
+iteration and exact remaining lengths for its iterators and concrete std
+Slice/Vec/array iterators. Their physical storage, allocation, hashing, drops and
+iterator internals remain trusted. Aeneas' pinned generic `Iterator` dictionary
+does not contain `size_hint`. Account extraction uses its supported
+`-filter-trait-methods` mode while retaining concrete methods and all seven public
+caller probes. An exact diagnostic guard accepts only the reviewed missing-field
+warning; different, missing or duplicate warnings and all reported errors fail.
+Generated-definition guards require every public method, adapter and collection
+loop. Unsupported generic calls cannot typecheck against a missing dictionary
+field. External template hashes are updated only for the reviewed additions;
+the translator binary, version pins and existing backend patch are unchanged.
+
+Lean generates 537 scenarios: 144 assessment lookups, 153 invariant-update
+sequences and 240 model inspection/asset-collection cases. Rust checks signed
+extrema, Unicode, all recursive expression forms and comparison variants,
+duplicate IDs, empty inputs, metadata-only assets, every iterator suffix and
+borrowed pointer identity. A `PartialEq`-only identifier records comparison calls
+and panics at a selected entry, checking first-match stopping and failure
+propagation. Serde is only setup for private assessment records in these tests;
+this is not serialization proof evidence. The model tests retain separate account,
+asset, role and rate types and also inspect BigUint payloads beyond `u64`.
+These finite checks supplement the general implementation proofs. Three mutation
+controls reverse lookup acceptance, discard invariant assets or reverse zero-weight
+handling; each regenerated implementation must compile before its semantic proof
+is required to fail. Physical unwinding and foreign callback side effects remain
+outside these logical contracts.
+
+This inspection batch passed fresh extraction, the full proof gate, kernel checking,
+fixture equality and axiom auditing: 461 registered contracts and 3,654 audited
+Axionomy theorems. All 319 Rust 1.89 workspace tests, 97 boundary/gate controls and
+three new production mutation controls passed, as did formatting, Clippy,
+documentation and workspace doctests. The previous 47 production controls remain
+in CI. These counts describe verification evidence, not a percentage of core
+coverage; remaining typed APIs, serialization/schema and numeric backend work
+are tracked in the completion backlog.

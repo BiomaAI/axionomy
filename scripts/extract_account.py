@@ -18,9 +18,47 @@ GENERATED = {
     "AccountExtraction.lean": "AccountExtraction.lean",
 }
 TEMPLATES = {
-    "TypesExternal_Template.lean": "f6466e18f93d85ab84f19738621f25aeaf182050a96e19ad1c890e8174a68c8e",
-    "FunsExternal_Template.lean": "d4e01ddb4d59d20cc839443fa77e41020c8d54854b4c81ac39557addbe1a0d10",
+    "TypesExternal_Template.lean": "b8ad76496c678a024c5cde4fdabe7d3063f8c30f237d5aa3d12f527cad18b85a",
+    "FunsExternal_Template.lean": "931662c681025b297193b09d6885a2dabb6b8e4345db3e29a24b1ed923951190",
 }
+
+# The pinned backend's Iterator dictionary omits size_hint. Its supported
+# filtering mode removes that dictionary field, while preserving concrete
+# methods and their callers for extraction and proof. Generic calls through the
+# absent field cannot typecheck in Lean. Accept only this exact diagnostic;
+# every other warning/error remains fatal. Concrete iterator definitions are
+# mandatory below, so filtering cannot silently replace their implementation.
+FILTERED_TRAIT_WARNING = (
+    "When retrieving the builtin information for trait decl "
+    "'core::iter::traits::iterator::Iterator', could not find the information "
+    "for item 'size_hint'. The model defined in the Lean library seems to be "
+    "missing the corresponding field."
+)
+
+INSPECTION_DEFINITIONS = (
+    "economy.AccountEntries.Insts.CoreIterTraitsIteratorIteratorPairSharedAAccountIdSharedAAccount.next",
+    "economy.AccountEntries.Insts.CoreIterTraitsIteratorIteratorPairSharedAAccountIdSharedAAccount.size_hint",
+    "rate.WeightEntries.Insts.CoreIterTraitsIteratorIteratorPairSharedAAI64.next",
+    "rate.WeightEntries.Insts.CoreIterTraitsIteratorIteratorPairSharedAAI64.size_hint",
+    *[f"economy.ExchangeAssessment.{method}{suffix}" for method in ("account", "shortfall")
+      for suffix in ("", "_loop", "_loop.body")],
+    *[f"rate.Rate.{method}" for method in ("impl.roles", "distinct_roles", "computed_consumed",
+      "computed_produced", "computed_preserved", "impl.conditions", "consumed", "produced", "preserved")],
+    *[f"rate.LinearInvariant.{method}" for method in ("new", "weight", "impl.name", "impl.weights")],
+    *[f"economy.Economy.{method}" for method in ("impl.accounts", "rate_ids", "impl.invariants", "rate", "asset_keys")],
+    *[f"{method}{suffix}" for method in ("economy.collect_basket_assets", "economy.collect_invariant_assets",
+      "rate.Rate.collect_optional_assets") for suffix in ("", "_loop", "_loop.body")],
+    "rate.Rate.collect_assets",
+    *[f"{method}_loop{index}{suffix}" for method, count in (("rate.Rate.collect_assets", 2),
+      ("economy.Economy.asset_keys", 3)) for index in range(count) for suffix in ("", ".body")],
+)
+
+
+def validate_extraction_diagnostics(output):
+    plain = re.sub(r"\x1b\[[0-9;]*m", "", output)
+    diagnostics = re.findall(r"\[(Warn|Error)\s*\]\s*([^\n]*)", plain)
+    if diagnostics != [("Warn", FILTERED_TRAIT_WARNING)]:
+        raise ValueError("unexpected account extraction diagnostics; only the reviewed Iterator.size_hint warning is permitted")
 
 # Keep critical handoffs explicit alongside the complete caller extraction.
 # These syntactic guards supplement, rather than replace, the Lean refinements.
@@ -42,6 +80,33 @@ VALIDATION_CALL = """let rule = match self.validate_structure(proposal) {
         };"""
 
 ENTRY_CALLS = {
+    "inspect_model_accounts_next": "model.accounts().next()",
+    "inspect_model_accounts_hint": "model.accounts().size_hint()",
+    "inspect_model_rate_ids_next": "model.rate_ids().next()",
+    "inspect_model_rate_ids_hint": "model.rate_ids().size_hint()",
+    "inspect_model_invariants_next": "model.invariants().next()",
+    "inspect_model_invariants_hint": "model.invariants().size_hint()",
+    "invariant_weights_hint": "value.weights().size_hint()",
+    'assessment_account': 'value.account(id)',
+    'assessment_shortfall': 'value.shortfall(id)',
+    'inspect_rate_roles': 'rule.roles()',
+    'inspect_rate_distinct_roles': 'rule.distinct_roles()',
+    'inspect_rate_computed_consumed': 'rule.computed_consumed()',
+    'inspect_rate_computed_produced': 'rule.computed_produced()',
+    'inspect_rate_computed_preserved': 'rule.computed_preserved()',
+    'inspect_rate_conditions': 'rule.conditions()',
+    'inspect_rate_consumed': 'rule.consumed(role)',
+    'inspect_rate_produced': 'rule.produced(role)',
+    'inspect_rate_preserved': 'rule.preserved(role)',
+    'invariant_new': 'LinearInvariant::new(name)',
+    'invariant_weight': 'value.weight(asset,weight)',
+    'invariant_name': 'value.name()',
+    'invariant_weights': 'value.weights()',
+    'inspect_model_accounts': 'model.accounts()',
+    'inspect_model_rate_ids': 'model.rate_ids()',
+    'inspect_model_invariants': 'model.invariants()',
+    'inspect_model_asset_keys': 'model.asset_keys()',
+    'inspect_model_rate': 'model.rate(id)',
     "basket_try_entries": "Basket::try_from_entries(entries)",
     "basket_try_amounts": "Basket::try_from_amounts(amounts)",
     "basket_collect": "Basket::from_iter(entries)",
@@ -251,7 +316,7 @@ def validate_generated(directory):
         if re.search(r"\b(sorry|admit|axiom)\b", (directory / name).read_text()):
             raise ValueError(f"unfinished or axiomatic account extraction: {name}")
     functions = (directory / "Funs.lean").read_text()
-    for entry in (*ENTRY_CALLS, *PUBLIC_DEFINITIONS, "account.Account.prepare_exchange",
+    for entry in (*ENTRY_CALLS, *PUBLIC_DEFINITIONS, *INSPECTION_DEFINITIONS, "account.Account.prepare_exchange",
                   "account.Account.Insts.CoreCloneClone.clone",
                   "basket.construct_entries", "basket.construct_entries_loop.body",
                   "basket.Basket.try_from_entries", "basket.Basket.try_from_amounts",
@@ -368,10 +433,13 @@ def check_extraction(write=False):
         subprocess.run(command, cwd=ROOT, env=environment, check=True)
         if not llbc.is_file():
             raise ValueError("Charon did not emit fresh account LLBC")
-        subprocess.run([str(aeneas), "-backend", "lean", "-namespace", "Axionomy.AccountExtracted",
+        extraction = subprocess.run([str(aeneas), "-filter-trait-methods", "-backend", "lean", "-namespace", "Axionomy.AccountExtracted",
                         "-dest", str(generated), "-use-lean-modules", "false", "-split-files",
-                        "-gen-lib-entry", "-warnings-as-errors", "-no-progress-bar", str(llbc)],
-                       cwd=ROOT, check=True)
+                        "-gen-lib-entry", "-no-progress-bar", str(llbc)],
+                       cwd=ROOT, check=False, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        print(extraction.stdout, end="", flush=True)
+        extraction.check_returncode()
+        validate_extraction_diagnostics(extraction.stdout)
         validate_generated(generated)
         compare_generated(generated, write=write)
     print("Account extraction updated; review and recheck proofs." if write else

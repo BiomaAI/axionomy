@@ -9,6 +9,7 @@ abbrev std.hash.random.RandomState := Unit
 abbrev std.hash.random.DefaultHasher := Unit
 abbrev indexmap.map.IndexMap (K V _S : Type) := List (K × V)
 abbrev indexmap.map.iter.Iter (K V : Type) := List (K × V)
+abbrev indexmap.map.iter.Keys (K _V : Type) := List K
 
 -- Sorted logical maps/sets; allocator and tree internals are outside the model.
 abbrev alloc.collections.btree.map.BTreeMap (K V _A : Type) := List (K × V)

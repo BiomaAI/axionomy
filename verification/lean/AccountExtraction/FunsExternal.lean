@@ -137,6 +137,57 @@ def indexmap.map.IndexMap.len {K V S : Type}
 def indexmap.map.IndexMap.iter {K V S : Type}
     (entries : indexmap.map.IndexMap K V S) : Result (indexmap.map.iter.Iter K V) := .ok entries
 
+-- The pinned IndexMap iterators traverse one slice in insertion order. Their
+-- size hints and ExactSizeIterator::len equal its remaining length. These are
+-- dependency models; the concrete Axionomy adapters are extracted separately.
+def iteratorLength (remaining : Nat) : Result Std.Usize :=
+  if bound : remaining < 2^UScalarTy.Usize.numBits then .ok (Std.Usize.ofNatCore remaining bound)
+  else .fail .maximumSizeExceeded
+
+def exactIteratorHint (remaining : Nat) : Result (Std.Usize × Option Std.Usize) := do
+  let count ← iteratorLength remaining
+  .ok (count, some count)
+
+def indexmap.map.iter.Iter.Insts.CoreIterTraitsExact_sizeExactSizeIteratorPairSharedKSharedV.len
+    {K V : Type} (entries : indexmap.map.iter.Iter K V) : Result Std.Usize :=
+  iteratorLength entries.length
+
+def indexmap.map.iter.Iter.Insts.CoreIterTraitsIteratorIteratorPairSharedAKSharedAV.size_hint
+    {K V : Type} (entries : indexmap.map.iter.Iter K V) : Result (Std.Usize × Option Std.Usize) :=
+  exactIteratorHint entries.length
+
+def indexmap.map.IndexMap.keys {K V S : Type}
+    (entries : indexmap.map.IndexMap K V S) : Result (indexmap.map.iter.Keys K V) :=
+  .ok (entries.map Prod.fst)
+
+def indexmap.map.iter.Keys.Insts.CoreIterTraitsIteratorIteratorSharedAK.next
+    {K V : Type} : indexmap.map.iter.Keys K V → Result (Option K × indexmap.map.iter.Keys K V)
+  | [] => .ok (none, [])
+  | key :: rest => .ok (some key, rest)
+
+def indexmap.map.iter.Keys.Insts.CoreIterTraitsIteratorIteratorSharedAK.size_hint
+    {K V : Type} (keys : indexmap.map.iter.Keys K V) : Result (Std.Usize × Option Std.Usize) :=
+  exactIteratorHint keys.length
+
+def core.slice.iter.Iter.Insts.CoreIterTraitsIteratorIteratorSharedAT.size_hint
+    {T : Type} (iter : core.slice.iter.Iter T) : Result (Std.Usize × Option Std.Usize) :=
+  exactIteratorHint (iter.slice.val.length - iter.i)
+
+-- These concrete std methods enter the external interface when size_hint is
+-- reachable. This does not add a generic size_hint field to Aeneas's dictionary.
+def core.array.iter.IntoIter.Insts.CoreIterTraitsIteratorIterator.size_hint
+    {T : Type} {N : Std.Usize} (iter : core.array.iter.IntoIter T N) :
+    Result (Std.Usize × Option Std.Usize) := exactIteratorHint iter.length
+
+set_option linter.unusedVariables false in
+def alloc.vec.into_iter.IntoIter.Insts.CoreIterTraitsIteratorIterator.size_hint
+    {T A : Type} (iter : alloc.vec.into_iter.IntoIter T) :
+    Result (Std.Usize × Option Std.Usize) := exactIteratorHint iter.val.length
+
+def core.iter.traits.iterator.Iterator.size_hint.default
+    {Self Item : Type} (_ : core.iter.traits.iterator.Iterator Self Item) (_ : Self) :
+    Result (Std.Usize × Option Std.Usize) := .ok (0#usize, none)
+
 def indexmap.map.IndexMap.insert {K V S H : Type}
     (_ : core.hash.Hash K) (eqInst : core.cmp.Eq K) (_ : core.hash.BuildHasher S H)
     (entries : indexmap.map.IndexMap K V S) (key : K) (value : V) :

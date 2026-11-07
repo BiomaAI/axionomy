@@ -55,8 +55,9 @@ unique-key precondition used by `build`. Rate proofs cover computed effects,
 conditions, canonical distinct-role pairs, and complete recursive role/parameter/
 asset discovery, preserving borrowed Rust return types and all other rate fields.
 Vec growth and UTF-8 lengths have explicit `usize` bounds; condition labels use
-the `String` specialization. Static convenience panics, invariant constructors
-and arbitrary `Into<String>` callbacks remain in item 16.
+the `String` specialization. The inspection batch below proves invariant
+construction, including its `Into<String>` success/failure boundary. Static
+convenience panics and other arbitrary callback contracts remain in item 16.
 
 Complete structural proposal validation now has an implementation proof as well.
 It returns the selected stored rate or the exact ordered list of structural issues:
@@ -183,7 +184,7 @@ to `origin/main`; theorem counts do not measure percentage completion.
 | 2 | 13 | Ordered traces, replay prefix-on-error, isolated replay, invariant composition | Implementation proved: first error, accepted prefix state, ordered receipts and derived caller invariants; generic trace extension also proved under explicit iterator laws |
 | 2 | 14 | Goals, visibility, hidden-state noninterference, missing/zero distinctions | Implementation proved and validated; finite-input iterator construction and documented collection models |
 | 2 | 15 | Canonical state/observation keys and deterministic fingerprints | Implementation proved and validated under documented sorting/hash models and native 64-bit little-endian scope |
-| 3. Public data boundary | 16 | Remaining typed constructors/accessors/conversions/iterators/equality | Partial: foundational typed data, expression construction, iterator consumers and basket collection boundaries proved; remaining APIs listed below |
+| 3. Public data boundary | 16 | Remaining typed constructors/accessors/conversions/iterators/equality | Partial: foundational typed data, expression construction, iterator consumers, basket collection boundaries and core inspection proved; remaining APIs listed below |
 | 3 | 17 | Serialization round trips, validation/canonicalization, accurate schema contracts | Open |
 | 4. Numeric backends | 18 | BigUint/BigInt and explicit algebraic requirements for custom backends | Open |
 
@@ -271,6 +272,27 @@ doctests also passed. The prior 35 production mutation controls remain in CI.
 
 The remaining completion work is:
 
+**Completed item 16 inspection batch:** assessment lookup and
+rate/invariant/model inspection now have fresh extraction for 20 public APIs plus
+seven iterator-consumption probes. The development `Inspection*Refinement` modules
+compile, including first-match lookup with comparison failure propagation, generic
+invariant weight updates, borrowed iterator contents and exact size hints, and
+complete model asset collection from balances, registered static rate roles,
+computed effects/conditions and invariant weights. The numeric payloads remain
+generic; asset collection does not assume arithmetic laws. The pinned Aeneas
+filtering mode retains concrete iterator methods while omitting its unsupported
+generic `size_hint` dictionary field. A diagnostic guard permits only the exact
+reviewed warning; other warnings/errors and missing concrete definitions fail.
+Sixty contracts are registered in the mandatory gate, and 537 Lean-generated
+scenarios check lookup, weight updates and inspection. This batch passed the full
+proof gate (461 registered contracts; 3,654 audited Axionomy theorems), fresh
+extraction, all 319 workspace tests in 56 groups, 97 boundary/gate controls and
+all three new production mutation controls. Rust 1.89 formatting, Clippy with
+warnings denied, documentation and workspace doctests passed. The prior 47
+production mutation controls remain in CI, with all source targets checked.
+See the
+[inspection contract](ACCOUNTS.md#core-inspection-and-complete-asset-collection).
+
 - **16 — Typed public APIs:** the foundational batch now has composed proofs for
   amounts, quantity validation/conversion, account wrappers/equality, typed basket
   insertion, proposal builders, receipt/delta/assessment accessors and expression
@@ -278,8 +300,7 @@ The remaining completion work is:
   filtering are also proved under independent iterator laws. Basket construction
   from entries and typed amounts, FromIterator/array conversions, and basic borrowed
   iteration/queries including sorted views are now covered as well. Remaining work
-  includes assessment lookup by account; remaining rate/invariant/model
-  inspection APIs; remaining collection iterator and arbitrary callback contracts;
+  includes remaining collection iterator and arbitrary callback contracts;
   derived equality/hash behavior and formatting; and the explicit panic contracts
   of convenience constructors. See the [public data contracts](ACCOUNTS.md#typed-public-data-and-expression-construction)
   for the exact scope of this batch.
@@ -468,9 +489,10 @@ the initial theorems. They are a backfill plan, not an exemption for new behavio
 - Remaining finite-map adapters, serialization/schema round trips,
   remaining derived key equality/hash APIs, and portability of fingerprint encodings
   beyond the documented targets. Fingerprints are not collision-free identities.
-- Invariant constructors and other remaining convenience APIs. Runtime invariant
-  checks, intermediate `i128` overflow, and caller diagnostic totals are now
-  covered by the complete transaction contract.
+- Other remaining convenience APIs and their explicit panic contracts. Invariant
+  construction and inspection are covered by the completed batch above. Runtime
+  invariant checks, intermediate `i128` overflow, and caller diagnostic totals
+  are covered by the complete transaction contract.
 - Laws for custom `QuantityScalar` backends and BigUint/BigInt implementations.
   Rust trait bounds specify operations, not their algebraic correctness.
 

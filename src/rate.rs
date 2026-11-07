@@ -522,6 +522,34 @@ where
         parameters
     }
 
+    // Keep each metadata-field borrow local while collecting the borrowed keys.
+    pub(crate) fn collect_assets<'a>(&'a self, assets: &mut BTreeSet<&'a A>)
+    where
+        A: Ord,
+    {
+        for role in &self.roles {
+            Self::collect_optional_assets(self.consume.get(role), assets);
+            Self::collect_optional_assets(self.produce.get(role), assets);
+            Self::collect_optional_assets(self.preserve.get(role), assets);
+        }
+        for asset in self.computed_asset_keys() {
+            assets.insert(asset);
+        }
+    }
+
+    fn collect_optional_assets<'a>(
+        maybe_entries: Option<&'a Basket<A, N>>,
+        assets: &mut BTreeSet<&'a A>,
+    ) where
+        A: Ord,
+    {
+        if let Some(entries) = maybe_entries {
+            for (asset, _) in entries.iter() {
+                assets.insert(asset);
+            }
+        }
+    }
+
     pub fn computed_asset_keys(&self) -> Vec<&A> {
         let mut assets = Vec::new();
         ComputedAmount::collect_assets(&self.computed_consume, &mut assets);
@@ -698,6 +726,25 @@ pub struct LinearInvariant<A> {
     weights: IndexMap<A, i64>,
 }
 
+// A named adapter retains the borrowed asset lifetime through extraction.
+struct WeightEntries<'a, A>(indexmap::map::Iter<'a, A, i64>);
+
+impl<'a, A> Iterator for WeightEntries<'a, A> {
+    type Item = (&'a A, i64);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.0.next() {
+            Some((asset, weight)) => Some((asset, *weight)),
+            None => None,
+        }
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let remaining = self.0.len();
+        (remaining, Some(remaining))
+    }
+}
+
 impl<A> LinearInvariant<A>
 where
     A: Eq + Hash,
@@ -723,7 +770,7 @@ where
     }
 
     pub fn weights(&self) -> impl Iterator<Item = (&A, i64)> {
-        self.weights.iter().map(|(asset, weight)| (asset, *weight))
+        WeightEntries(self.weights.iter())
     }
 
     pub fn measure<AccountId, Holder, N>(

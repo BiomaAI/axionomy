@@ -50,6 +50,68 @@ def validate_coverage(root, coverage):
             # These are the implemented extraction pipelines. Future
             # claims need their own regeneration and trust-boundary checks.
             pipelines = {
+                "core_inspection_boundary": ("AccountExtraction.Funs", {
+                    "Axionomy.Inspection.first_none",
+                    "Axionomy.Inspection.first_prefix",
+                    "Axionomy.Inspection.first_member",
+                    "Axionomy.Inspection.zero_removes",
+                    "Axionomy.Inspection.other_weight_unchanged",
+                    "Axionomy.Inspection.weights_valid",
+                    "Axionomy.InspectionLookupRefinement.assessment_account",
+                    "Axionomy.InspectionLookupRefinement.assessment_shortfall",
+                    "Axionomy.InspectionLookupRefinement.account_first_match",
+                    "Axionomy.InspectionLookupRefinement.shortfall_first_match",
+                    "Axionomy.InspectionLookupRefinement.account_prefix",
+                    "Axionomy.InspectionLookupRefinement.account_comparison_failure",
+                    "Axionomy.InspectionLookupRefinement.shortfall_prefix",
+                    "Axionomy.InspectionLookupRefinement.shortfall_comparison_failure",
+                    "Axionomy.InspectionRefinement.iterator_length",
+                    "Axionomy.InspectionRefinement.exact_hint",
+                    "Axionomy.InspectionRefinement.account_next",
+                    "Axionomy.InspectionRefinement.accounts_yield",
+                    "Axionomy.InspectionRefinement.accounts_hint",
+                    "Axionomy.InspectionRefinement.weight_next",
+                    "Axionomy.InspectionRefinement.weights_yield",
+                    "Axionomy.InspectionRefinement.weights_hint",
+                    "Axionomy.InspectionRefinement.keys_yield",
+                    "Axionomy.InspectionRefinement.invariant_new",
+                    "Axionomy.InspectionRefinement.invariant_new_failure",
+                    "Axionomy.InspectionRefinement.invariant_name",
+                    "Axionomy.InspectionRefinement.invariant_weights",
+                    "Axionomy.InspectionRefinement.invariant_weight",
+                    "Axionomy.InspectionRefinement.invariant_weight_contract",
+                    "Axionomy.InspectionRefinement.rate_roles",
+                    "Axionomy.InspectionRefinement.rate_distinct",
+                    "Axionomy.InspectionRefinement.rate_computed_consumed",
+                    "Axionomy.InspectionRefinement.rate_computed_produced",
+                    "Axionomy.InspectionRefinement.rate_computed_preserved",
+                    "Axionomy.InspectionRefinement.rate_conditions",
+                    "Axionomy.InspectionRefinement.rate_consumed",
+                    "Axionomy.InspectionRefinement.rate_produced",
+                    "Axionomy.InspectionRefinement.rate_preserved",
+                    "Axionomy.InspectionRefinement.model_accounts",
+                    "Axionomy.InspectionRefinement.model_rate_ids",
+                    "Axionomy.InspectionRefinement.model_invariants",
+                    "Axionomy.InspectionRefinement.model_rate",
+                    "Axionomy.InspectionIteratorRefinement.slice_yields",
+                    "Axionomy.InspectionIteratorRefinement.slice_hint",
+                    "Axionomy.InspectionIteratorRefinement.weights_iterator",
+                    "Axionomy.InspectionIteratorRefinement.weights_public_hint",
+                    "Axionomy.InspectionIteratorRefinement.accounts_iterator",
+                    "Axionomy.InspectionIteratorRefinement.accounts_public_next",
+                    "Axionomy.InspectionIteratorRefinement.accounts_public_hint",
+                    "Axionomy.InspectionIteratorRefinement.rate_ids_iterator",
+                    "Axionomy.InspectionIteratorRefinement.rate_ids_public_next",
+                    "Axionomy.InspectionIteratorRefinement.rate_ids_public_hint",
+                    "Axionomy.InspectionIteratorRefinement.invariants_iterator",
+                    "Axionomy.InspectionIteratorRefinement.invariants_public_next",
+                    "Axionomy.InspectionIteratorRefinement.invariants_public_hint",
+                    "Axionomy.InspectionAssetsRefinement.expression_assets",
+                    "Axionomy.InspectionAssetsRefinement.computed_assets",
+                    "Axionomy.InspectionCollectionRefinement.rate_assets",
+                    "Axionomy.InspectionModelAssetsRefinement.model_assets",
+                    "Axionomy.InspectionModelAssetsRefinement.model_assets_contract",
+                }),
                 "basket_sorted_iteration": ("AccountExtraction.Funs", {
                     "Axionomy.BasketOrdering.permutation",
                     "Axionomy.BasketOrdering.ordered",
@@ -341,12 +403,12 @@ def main():
     if generated != committed:
         raise ValueError("Lean conformance cases are stale; regenerate them from Conformance.lean and review the diff")
     run("cargo", "test", "-p", "axionomy", "--all-features", "--test", "lean_conformance",
-        "--test", "transaction_conformance", "--test", "observation_conformance", "--test", "public_data_conformance", "--test", "iterator_conformance", "--test", "basket_collection_conformance", "--test", "basket_sorted_conformance")
+        "--test", "transaction_conformance", "--test", "observation_conformance", "--test", "public_data_conformance", "--test", "iterator_conformance", "--test", "basket_collection_conformance", "--test", "basket_sorted_conformance", "--test", "inspection_conformance")
     run("cargo", "test", "-p", "axionomy", "--all-features", "--lib",
         "runtime_")
     run("cargo", "test", "-p", "axionomy", "--all-features", "--doc")
     print(f"Verified {len(theorems)} registered theorems and their axiom dependencies, "
-          "fresh Aeneas extraction of u64 arithmetic, basket construction/operations, account updates/staging, model/rate construction and metadata discovery, complete transaction assessment/application and finite-input iterator filtering, fork/simulation/ordered replay, goals/views/canonical keys and scoped fingerprints, typed data APIs, expression construction, generic trace extension and basket collection boundaries including sorted borrowed iteration, snapshot evaluation/conditions, signed conservation and measurement, "
+          "fresh Aeneas extraction of u64 arithmetic, basket construction/operations, account updates/staging, model/rate construction and metadata discovery, complete transaction assessment/application and finite-input iterator filtering, fork/simulation/ordered replay, goals/views/canonical keys and scoped fingerprints, typed data APIs, expression construction, generic trace extension and basket collection boundaries including sorted borrowed iteration, generic core inspection and complete asset collection, snapshot evaluation/conditions, signed conservation and measurement, "
           "and Rust conformance/type checks. Collection storage uses an explicit trusted model. "
           "Other core implementation refinement remains unproved; see verification/README.md.")
 

@@ -55,6 +55,22 @@ class ExtractionBoundaryTests(unittest.TestCase):
 
 
 class ProductionMutationTests(unittest.TestCase):
+    def test_reversed_assessment_match_breaks_lookup(self):
+        self.check_mutation(
+            "src/economy.rs", "if assessment.account() == account {", "if !(assessment.account() == account) {",
+            "extract_account.py", "stale account model", "InspectionLookupRefinement", "AccountExtraction")
+
+    def test_discarded_invariant_assets_break_model_discovery(self):
+        self.check_mutation(
+            "src/economy.rs", "collect_invariant_assets(invariant, &mut assets);",
+            "let mut omitted = BTreeSet::new(); collect_invariant_assets(invariant, &mut omitted);",
+            "extract_account.py", "stale account model", "InspectionModelAssetsRefinement", "AccountExtraction")
+
+    def test_reversed_zero_weight_breaks_invariant_construction(self):
+        self.check_mutation(
+            "src/rate.rs", "if weight == 0 {", "if weight != 0 {",
+            "extract_account.py", "stale account model", "InspectionRefinement", "AccountExtraction")
+
     def test_reversed_basket_sort_breaks_order_contract(self):
         self.check_mutation(
             "src/basket.rs", "|(left, _), (right, _)| left.cmp(right)",

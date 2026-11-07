@@ -980,3 +980,273 @@ pub fn basket_insert_amount<A: Eq + std::hash::Hash, N: QuantityScalar>(
 ) -> Option<Quantity<N>> {
     state.insert_amount(value)
 }
+
+// Borrowed inspection and invariant construction boundaries.
+
+pub fn assessment_account<'a, AccountId: PartialEq, A, RateId, Role, N: QuantityScalar>(
+    value: &'a economy::ExchangeAssessment<AccountId, A, RateId, Role, N>,
+    id: &AccountId,
+) -> Option<&'a economy::AccountAssessment<AccountId, A, N>> {
+    value.account(id)
+}
+
+pub fn assessment_shortfall<'a, AccountId: PartialEq, A, RateId, Role, N: QuantityScalar>(
+    value: &'a economy::ExchangeAssessment<AccountId, A, RateId, Role, N>,
+    id: &AccountId,
+) -> Option<&'a Basket<A, N>> {
+    value.shortfall(id)
+}
+
+pub fn inspect_rate_roles<Role: Clone + Ord, A: Clone + Eq + std::hash::Hash, N: QuantityScalar>(
+    rule: &Rate<Role, A, N>,
+) -> impl Iterator<Item = &Role> {
+    rule.roles()
+}
+
+pub fn inspect_rate_distinct_roles<
+    Role: Clone + Ord,
+    A: Clone + Eq + std::hash::Hash,
+    N: QuantityScalar,
+>(
+    rule: &Rate<Role, A, N>,
+) -> impl Iterator<Item = &(Role, Role)> {
+    rule.distinct_roles()
+}
+
+pub fn inspect_rate_computed_consumed<
+    Role: Clone + Ord,
+    A: Clone + Eq + std::hash::Hash,
+    N: QuantityScalar,
+>(
+    rule: &Rate<Role, A, N>,
+) -> &[ComputedAmount<Role, A, N>] {
+    rule.computed_consumed()
+}
+
+pub fn inspect_rate_computed_produced<
+    Role: Clone + Ord,
+    A: Clone + Eq + std::hash::Hash,
+    N: QuantityScalar,
+>(
+    rule: &Rate<Role, A, N>,
+) -> &[ComputedAmount<Role, A, N>] {
+    rule.computed_produced()
+}
+
+pub fn inspect_rate_computed_preserved<
+    Role: Clone + Ord,
+    A: Clone + Eq + std::hash::Hash,
+    N: QuantityScalar,
+>(
+    rule: &Rate<Role, A, N>,
+) -> &[ComputedAmount<Role, A, N>] {
+    rule.computed_preserved()
+}
+
+pub fn inspect_rate_conditions<
+    Role: Clone + Ord,
+    A: Clone + Eq + std::hash::Hash,
+    N: QuantityScalar,
+>(
+    rule: &Rate<Role, A, N>,
+) -> &[RateCondition<Role, A, N>] {
+    rule.conditions()
+}
+
+pub fn inspect_rate_consumed<
+    'a,
+    Role: Clone + Ord,
+    A: Clone + Eq + std::hash::Hash,
+    N: QuantityScalar,
+>(
+    rule: &'a Rate<Role, A, N>,
+    role: &Role,
+) -> Option<&'a Basket<A, N>> {
+    rule.consumed(role)
+}
+
+pub fn inspect_rate_produced<
+    'a,
+    Role: Clone + Ord,
+    A: Clone + Eq + std::hash::Hash,
+    N: QuantityScalar,
+>(
+    rule: &'a Rate<Role, A, N>,
+    role: &Role,
+) -> Option<&'a Basket<A, N>> {
+    rule.produced(role)
+}
+
+pub fn inspect_rate_preserved<
+    'a,
+    Role: Clone + Ord,
+    A: Clone + Eq + std::hash::Hash,
+    N: QuantityScalar,
+>(
+    rule: &'a Rate<Role, A, N>,
+    role: &Role,
+) -> Option<&'a Basket<A, N>> {
+    rule.preserved(role)
+}
+
+pub fn invariant_new<A: Eq + std::hash::Hash, S: Into<String>>(name: S) -> LinearInvariant<A> {
+    LinearInvariant::new(name)
+}
+
+pub fn invariant_weight<A: Eq + std::hash::Hash>(
+    value: LinearInvariant<A>,
+    asset: A,
+    weight: i64,
+) -> LinearInvariant<A> {
+    value.weight(asset, weight)
+}
+
+pub fn invariant_name<A: Eq + std::hash::Hash>(value: &LinearInvariant<A>) -> &str {
+    value.name()
+}
+
+pub fn invariant_weights<A: Eq + std::hash::Hash>(
+    value: &LinearInvariant<A>,
+) -> impl Iterator<Item = (&A, i64)> {
+    value.weights()
+}
+
+pub fn inspect_model_accounts<
+    AccountId: Clone + Eq + std::hash::Hash + Ord,
+    A: Clone + Eq + std::hash::Hash + Ord,
+    RateId: Clone + Eq + std::hash::Hash + Ord,
+    Role: Clone + Ord,
+    N: QuantityScalar,
+>(
+    model: &economy::Economy<AccountId, A, RateId, Role, N>,
+) -> impl Iterator<Item = (&AccountId, &Account<A, N>)> {
+    model.accounts()
+}
+
+pub fn inspect_model_rate_ids<
+    AccountId: Clone + Eq + std::hash::Hash + Ord,
+    A: Clone + Eq + std::hash::Hash + Ord,
+    RateId: Clone + Eq + std::hash::Hash + Ord,
+    Role: Clone + Ord,
+    N: QuantityScalar,
+>(
+    model: &economy::Economy<AccountId, A, RateId, Role, N>,
+) -> impl Iterator<Item = &RateId> {
+    model.rate_ids()
+}
+
+pub fn inspect_model_invariants<
+    AccountId: Clone + Eq + std::hash::Hash + Ord,
+    A: Clone + Eq + std::hash::Hash + Ord,
+    RateId: Clone + Eq + std::hash::Hash + Ord,
+    Role: Clone + Ord,
+    N: QuantityScalar,
+>(
+    model: &economy::Economy<AccountId, A, RateId, Role, N>,
+) -> impl Iterator<Item = &LinearInvariant<A>> {
+    model.invariants()
+}
+
+pub fn inspect_model_asset_keys<
+    AccountId: Clone + Eq + std::hash::Hash + Ord,
+    A: Clone + Eq + std::hash::Hash + Ord,
+    RateId: Clone + Eq + std::hash::Hash + Ord,
+    Role: Clone + Ord,
+    N: QuantityScalar,
+>(
+    model: &economy::Economy<AccountId, A, RateId, Role, N>,
+) -> std::collections::BTreeSet<&A> {
+    model.asset_keys()
+}
+
+pub fn inspect_model_rate<
+    'a,
+    AccountId: Clone + Eq + std::hash::Hash + Ord,
+    A: Clone + Eq + std::hash::Hash + Ord,
+    RateId: Clone + Eq + std::hash::Hash + Ord,
+    Role: Clone + Ord,
+    N: QuantityScalar,
+>(
+    model: &'a economy::Economy<AccountId, A, RateId, Role, N>,
+    id: &RateId,
+) -> Option<&'a Rate<Role, A, N>> {
+    model.rate(id)
+}
+
+pub fn inspect_model_accounts_next<
+    AccountId: Clone + Eq + std::hash::Hash + Ord,
+    A: Clone + Eq + std::hash::Hash + Ord,
+    RateId: Clone + Eq + std::hash::Hash + Ord,
+    Role: Clone + Ord,
+    N: QuantityScalar,
+>(
+    model: &economy::Economy<AccountId, A, RateId, Role, N>,
+) -> Option<(&AccountId, &Account<A, N>)> {
+    model.accounts().next()
+}
+
+pub fn inspect_model_accounts_hint<
+    AccountId: Clone + Eq + std::hash::Hash + Ord,
+    A: Clone + Eq + std::hash::Hash + Ord,
+    RateId: Clone + Eq + std::hash::Hash + Ord,
+    Role: Clone + Ord,
+    N: QuantityScalar,
+>(
+    model: &economy::Economy<AccountId, A, RateId, Role, N>,
+) -> (usize, Option<usize>) {
+    model.accounts().size_hint()
+}
+
+pub fn inspect_model_rate_ids_next<
+    AccountId: Clone + Eq + std::hash::Hash + Ord,
+    A: Clone + Eq + std::hash::Hash + Ord,
+    RateId: Clone + Eq + std::hash::Hash + Ord,
+    Role: Clone + Ord,
+    N: QuantityScalar,
+>(
+    model: &economy::Economy<AccountId, A, RateId, Role, N>,
+) -> Option<&RateId> {
+    model.rate_ids().next()
+}
+
+pub fn inspect_model_rate_ids_hint<
+    AccountId: Clone + Eq + std::hash::Hash + Ord,
+    A: Clone + Eq + std::hash::Hash + Ord,
+    RateId: Clone + Eq + std::hash::Hash + Ord,
+    Role: Clone + Ord,
+    N: QuantityScalar,
+>(
+    model: &economy::Economy<AccountId, A, RateId, Role, N>,
+) -> (usize, Option<usize>) {
+    model.rate_ids().size_hint()
+}
+
+pub fn inspect_model_invariants_next<
+    AccountId: Clone + Eq + std::hash::Hash + Ord,
+    A: Clone + Eq + std::hash::Hash + Ord,
+    RateId: Clone + Eq + std::hash::Hash + Ord,
+    Role: Clone + Ord,
+    N: QuantityScalar,
+>(
+    model: &economy::Economy<AccountId, A, RateId, Role, N>,
+) -> Option<&LinearInvariant<A>> {
+    model.invariants().next()
+}
+
+pub fn inspect_model_invariants_hint<
+    AccountId: Clone + Eq + std::hash::Hash + Ord,
+    A: Clone + Eq + std::hash::Hash + Ord,
+    RateId: Clone + Eq + std::hash::Hash + Ord,
+    Role: Clone + Ord,
+    N: QuantityScalar,
+>(
+    model: &economy::Economy<AccountId, A, RateId, Role, N>,
+) -> (usize, Option<usize>) {
+    model.invariants().size_hint()
+}
+
+pub fn invariant_weights_hint<A: Eq + std::hash::Hash>(
+    value: &LinearInvariant<A>,
+) -> (usize, Option<usize>) {
+    value.weights().size_hint()
+}

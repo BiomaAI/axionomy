@@ -87,3 +87,11 @@ import Axionomy.BasketPublicRefinement
 import Axionomy.BasketSortedRefinement
 import Axionomy.BasketSortedConformance
 import Axionomy.BasketCollectionConformance
+import Axionomy.Inspection
+import Axionomy.InspectionLookupRefinement
+import Axionomy.InspectionRefinement
+import Axionomy.InspectionIteratorRefinement
+import Axionomy.InspectionAssetsRefinement
+import Axionomy.InspectionCollectionRefinement
+import Axionomy.InspectionModelAssetsRefinement
+import Axionomy.InspectionConformance
