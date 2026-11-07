@@ -33,24 +33,24 @@ they bypass the example's trusted action helper.
 
 ## Conformance matrix
 
-| Capability | Maze | Sokoban | Exact cover | Workshop | Job shop | Rescue | Bridge | Marketplace | Logistics | Connect Four | Mission | Perishables | Work League | Living Market |
-| --- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| Multi-account atomic rewrite | ✓ | ✓ |  |  | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| Preserved facts/catalysts | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| Declared invariants | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |  | ✓ |
-| Resource objective | ✓ |  |  | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |  | ✓ | ✓ | ✓ | ✓ |
-| Exact Pareto front | ✓ |  |  | ✓ | ✓ |  | ✓ | ✓ |  |  |  | ✓ |  |  |
-| Approximate or derived Pareto comparison |  |  |  |  |  | ✓ |  |  | ✓ |  | ✓ |  | ✓ |  |
-| Infeasible instance |  | ✓ | ✓ |  | ✓ |  |  | ✓ | ✓ |  | ✓ | ✓ |  | ✓ |
-| Specialized proposer |  |  | Algorithm X |  | Branch optimizer | Scenario/MC evaluator | Auction | Assessment clearing | Monte Carlo/MCTS | MCTS/minimax oracle | ISMCTS/scenario evaluator | Event agenda/index | Competing seeded policies | Seeded actors/Shapley |
-| Generic algorithm | BFS/A*/Dijkstra/Pareto | BFS | BFS | BFS/best-first/Pareto | Best-first/Pareto | Rollout/MC/Pareto | BFS/Pareto | Pareto | Rollout/MC/Pareto | MCTS | ISMCTS/Rollout/MC/Pareto/RL | Pareto | Replay-derived vector comparison | Exact coalition replay |
-| Hidden or stochastic state |  |  |  |  |  | ✓ |  |  | ✓ |  | ✓ |  | ✓ |  |
-| Multi-agent resolution |  |  |  |  |  |  | ✓ | ✓ |  | ✓ | ✓ |  | ✓ | ✓ |
-| Long-horizon trajectory |  |  |  |  |  |  |  |  | ✓ | ✓ |  | ✓ | ✓ | ✓ |
-| Per-step leaderboards |  |  |  |  |  |  |  |  |  |  |  |  | ✓ | ✓ |
-| Learning trajectory |  |  |  |  |  |  |  |  |  |  | ✓ |  |  |  |
-| Observation-scoped tree |  |  |  |  |  |  |  |  |  |  | ✓ |  |  |  |
-| Deterministic replay test | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Capability | Maze | Sokoban | Exact cover | Workshop | Job shop | Rescue | Bridge | Marketplace | Logistics | Connect Four | Mission | Perishables | Work League | Living Market | Lending |
+| --- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| Multi-account atomic rewrite | ✓ | ✓ |  |  | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Preserved facts/catalysts | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Declared invariants | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |  | ✓ | ✓ |
+| Resource objective | ✓ |  |  | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |  | ✓ | ✓ | ✓ | ✓ |  |
+| Exact Pareto front | ✓ |  |  | ✓ | ✓ |  | ✓ | ✓ |  |  |  | ✓ |  |  |  |
+| Approximate or derived Pareto comparison |  |  |  |  |  | ✓ |  |  | ✓ |  | ✓ |  | ✓ |  |  |
+| Infeasible instance |  | ✓ | ✓ |  | ✓ |  |  | ✓ | ✓ |  | ✓ | ✓ |  | ✓ | ✓ |
+| Specialized proposer |  |  | Algorithm X |  | Branch optimizer | Scenario/MC evaluator | Auction | Assessment clearing | Monte Carlo/MCTS | MCTS/minimax oracle | ISMCTS/scenario evaluator | Event agenda/index | Competing seeded policies | Seeded actors/Shapley | Scripted cycle and adversary |
+| Generic algorithm | BFS/A*/Dijkstra/Pareto | BFS | BFS | BFS/best-first/Pareto | Best-first/Pareto | Rollout/MC/Pareto | BFS/Pareto | Pareto | Rollout/MC/Pareto | MCTS | ISMCTS/Rollout/MC/Pareto/RL | Pareto | Replay-derived vector comparison | Exact coalition replay | Property-based round trips |
+| Hidden or stochastic state |  |  |  |  |  | ✓ |  |  | ✓ |  | ✓ |  | ✓ |  |  |
+| Multi-agent resolution |  |  |  |  |  |  | ✓ | ✓ |  | ✓ | ✓ |  | ✓ | ✓ |  |
+| Long-horizon trajectory |  |  |  |  |  |  |  |  | ✓ | ✓ |  | ✓ | ✓ | ✓ |  |
+| Per-step leaderboards |  |  |  |  |  |  |  |  |  |  |  |  | ✓ | ✓ |  |
+| Learning trajectory |  |  |  |  |  |  |  |  |  |  | ✓ |  |  |  |  |
+| Observation-scoped tree |  |  |  |  |  |  |  |  |  |  | ✓ |  |  |  |  |
+| Deterministic replay test | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 
 ## Runnable examples
 
@@ -73,6 +73,7 @@ cargo run -p axionomy-problems --example connect_four
 cargo run -p axionomy-problems --example mission
 cargo run -p axionomy-problems --example perishables
 cargo run -p axionomy-problems --example work_league
+cargo run -p axionomy-problems --example lending
 ```
 
 The examples emit structured `tracing` events at `INFO` by default. Set
@@ -1065,6 +1066,65 @@ entitlements while the remaining actors respond to changed market conditions.
   analytics state.
 - A dedicated market surface that remains a projection of Rust-owned truth.
 
+## 15. Lending market
+
+Source: `crates/axionomy-problems/src/lending.rs`
+
+This model currently has a Micro instance only; it is not yet exposed through
+the service, Studio, CLI or MCP profiles.
+
+### Specification
+
+A market account holds cash, a borrow index and the authoritative interest
+rate per period, both scaled by `WAD` (10^18). Depositors exchange cash for
+vault shares; a borrower with a credit line draws cash as scaled debt shares;
+a clock accrues one period at a time by growing the index instead of updating
+every borrower (the index pattern used by lending protocols). Interest is never
+a caller-supplied parameter. One thousand genesis shares are permanently
+locked with matching seed cash, so no first depositor can set the share price.
+
+Every division is an explicit full-width `MulDiv` rounded against the caller:
+
+```text
+Deposit       shares = ⌊cash · supply ÷ assets⌋        (receives: floor)
+Redeem        cash   = ⌊shares · assets ÷ supply⌋      (receives: floor)
+Borrow        debt   = ⌈cash · WAD ÷ index⌉           (owes: ceil)
+Repay         debt   = ⌊cash · WAD ÷ index⌋ retired    (retires: floor)
+RepayShares   cash   = ⌈debt · index ÷ WAD⌉            (pays: ceil)
+Accrue        index += ⌈index · rate ÷ WAD⌉            (owed grows: ceil)
+assets        = cash + ⌊debt supply · index ÷ WAD⌋     (credited: floor)
+```
+
+Cash, vault shares (holders plus locked against supply) and debt shares
+(holders against supply) are declared invariants. Identity witnesses bind the
+market and clock roles; a credit-line witness binds borrowers.
+
+### Acceptance laws
+
+- A twelve-period cycle at 1% charges at least the exact compound amount
+  `4000 · 1.01¹²` and at most one atom per period more, retires every debt
+  share, pays both depositors interest, and replays to the identical state.
+- Depositor interest plus the market's retained dust equals borrower interest;
+  depositors are never credited more than borrowers paid.
+- No round trip creates value: deposit-then-redeem returns at most the
+  deposit, and borrow-then-repay costs at least the loan, from any reachable
+  state (property tested).
+- The credit limit, market liquidity, one-period accrual and role identities
+  are authoritative; over-limit, illiquid and forged exchanges are rejected
+  without mutation.
+- A first-depositor inflation attack (one-atom deposit plus a large donation)
+  still leaves the victim with shares, a rounding loss below one share's
+  price, and the attacker with most of the donation lost to the locked shares.
+- Slippage bounds hold and dust deposits that would mint no shares are
+  rejected instead of absorbed.
+
+### API pressure
+
+- Full-width `MulDiv` with explicit `Rounding` inside state-evaluated laws.
+- Fixed-point indexes as ordinary balances, without a special numeric type.
+- Rounding discipline as an economic safety property enforced by invariants.
+- Derived valuation views remain disposable; the rates are the authority.
+
 ## Cross-problem acceptance tests
 
 The repository test suite additionally verifies:
@@ -1109,6 +1169,10 @@ The repository test suite additionally verifies:
 - RL action masks, shortfall features, receipts, and trajectory extraction.
 - Property laws for assessment/application parity, atomic failure, arithmetic,
   serialization, and unit conversion.
+- Rounding against the caller: every model that divides names its `Rounding`;
+  amounts a participant pays round up and amounts it receives round down, so
+  no round trip creates value and conservation invariants hold. Full-width
+  `MulDiv` agrees with a wide-integer reference and the `BigUint` backend.
 - Exhaustive fixture variation against direct domain oracles for exact cover,
   small scheduling horizons, and generated Connect Four prefixes, plus
   generated perishables inventories against an independent cohort oracle.

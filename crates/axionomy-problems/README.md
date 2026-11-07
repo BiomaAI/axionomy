@@ -37,7 +37,12 @@ cargo run -p axionomy-problems --example connect_four
 cargo run -p axionomy-problems --example mission
 cargo run -p axionomy-problems --example perishables
 cargo run -p axionomy-problems --example work_league
+cargo run -p axionomy-problems --example lending
 ```
+
+The lending fixture keeps interest in a fixed-point borrow index and rounds
+every `MulDiv` against the caller, so no deposit, borrow or repayment round
+trip can create value and rounding dust accrues to the market.
 
 The perishables fixture also demonstrates structural fungibility: thousands of
 equivalent claims aggregate into ordinary quantities, while unique cohort

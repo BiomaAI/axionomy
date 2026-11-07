@@ -4,6 +4,7 @@ pub mod amm;
 pub mod bridge;
 pub mod connect_four;
 pub mod exact_cover;
+pub mod lending;
 pub mod logistics;
 pub mod marketplace;
 pub mod maze;
