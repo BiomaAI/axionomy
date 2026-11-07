@@ -112,7 +112,7 @@ models into one-way workspace dependencies:
 | `axionomy` | Pure closed-state validation and exchange execution kernel |
 | `axionomy-search` | Non-authoritative graph and Pareto search, rollout, Monte Carlo, perfect-information and information-set MCTS, and learning projections |
 | `axionomy-problems` | Canonical problem encodings, specialized proposers, and conformance tests |
-| `axionomy-units` | Self-describing asset denominations, schema coherence, and dimension-safe `uom` authoring |
+| `axionomy-units` | Self-describing asset denominations, schema coherence, dimension-safe `uom` authoring, and fixed-precision decimal assets |
 | `axionomy-time` | Calendar-aware Jiff authoring over the same canonical timeline denominations |
 | `axionomy-mcp` | Strict stateless MCP 2026-07-28 reference server with caller-owned snapshot storage and interruptible search tasks |
 | `axionomy-view` | Runtime-neutral, replay-derived browser presentation contracts |
@@ -457,12 +457,15 @@ The default backend is `u64`, while the `bigint` feature supports exact
 non-`Copy` `BigUint` economies without changing model semantics.
 
 Unit-aware models use `UnitAsset<Id>` as their actual asset key. An
-`AssetSchema` declares each logical ID once as discrete or measured, and the
+`AssetSchema` declares each logical ID once as discrete, measured, or decimal, and the
 key carries the physical dimension, stable `uom` quantity kind, and exact
 atomic basis through equality, hashing, ordering, and Serde. Inputs may be
 expressed in any compatible unit, but every account, basket, rate, invariant,
 and goal stores the same canonical atoms. Conflicting definitions cannot
-silently alias and the schema-backed model build rejects them. Jiff uses this
+silently alias and the schema-backed model build rejects them. Decimal assets
+fix a currency-style precision (an atom is `10^-decimals` of one unit) in the
+key itself, so two-decimal and six-decimal amounts of one ID cannot mix, and
+decimal text or rationals that are not exact multiples of an atom are rejected. Jiff uses this
 same representation, so calendar and physical-time authoring cannot create
 competing clocks outside the economy.
 

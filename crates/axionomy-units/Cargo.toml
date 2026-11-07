@@ -2,7 +2,7 @@
 name = "axionomy-units"
 version = "0.1.0"
 authors = ["Alex Rozgo <alex.rozgo@gmail.com>"]
-description = "Dimension-safe physical quantity bindings for Axionomy assets"
+description = "Dimension-safe physical quantities and fixed-precision decimal assets for Axionomy"
 edition = "2024"
 license.workspace = true
 readme = "README.md"

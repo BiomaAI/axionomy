@@ -486,13 +486,17 @@ Physical and calendar types belong at authoring boundaries:
 - `axionomy-units` uses `uom` with exact rational values to declare a measured
   `UnitAsset<Id>`, validate dimensions and unit conversion, and lower an exact
   multiple of its atomic basis into `AssetAmount<UnitAsset<Id>, N>`.
+- `axionomy-units` also declares fixed-precision decimal assets for currency-like
+  values. The precision is part of the asset key, mirroring token `decimals`
+  without allowing two precisions of one logical ID to alias; exact decimal text
+  or rationals lower into atoms and inexact inputs are rejected.
 - `axionomy-time` uses Jiff to resolve timestamps, zones, daylight-saving
   transitions, and calendar spans, then lowers exact elapsed duration into the
   same schema-defined time asset representation.
 
 `AssetSchema` is the one declaration point for unit-aware logical IDs. It
-rejects repeated IDs, conflicting discrete/measured definitions, incompatible
-atomic bases, unknown keys, and definitions foreign to the model. The
+rejects repeated IDs, conflicting discrete/measured/decimal definitions,
+incompatible atomic bases or precisions, unknown keys, and definitions foreign to the model. The
 schema-backed economy build inspects initial accounts, every rate basket, and
 invariant weights; goal validation applies the same rule. Schema-issued typed
 handles accept only the `uom` dimension used at declaration.

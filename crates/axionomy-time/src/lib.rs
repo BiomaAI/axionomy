@@ -51,7 +51,7 @@ where
     ) -> Result<Self, TimelineDefinitionError<Id>> {
         let measured: TimeMeasure<Id> = schema.measured(id)?;
         let AssetDefinition::Measured(definition) = measured.asset().definition() else {
-            unreachable!("schema.measured returned a discrete asset")
+            unreachable!("schema.measured returned a non-measured asset")
         };
         let atomic_nanoseconds = base_seconds_to_nanoseconds(definition.atomic_base_value())?;
         Ok(Self {

@@ -1,6 +1,7 @@
 use crate::{
-    AssetDefinition, DimensionSignature, MeasureDefinition, MeasureDefinitionError, MeasureKind,
-    MeasureScalar, MeasuredAsset, StableMeasureKind, UnitAsset,
+    AssetDefinition, DecimalAsset, DecimalPrecision, DecimalPrecisionError, DimensionSignature,
+    MeasureDefinition, MeasureDefinitionError, MeasureKind, MeasureScalar, MeasuredAsset,
+    StableMeasureKind, UnitAsset,
 };
 use axionomy::{Economy, EconomyBuilder, Goal, ModelBuildError, QuantityScalar};
 use indexmap::IndexMap;
@@ -84,6 +85,34 @@ where
     /// Declares a countable asset with no physical dimension.
     pub fn define_discrete(&mut self, id: Id) -> Result<UnitAsset<Id>, AssetSchemaError<Id>> {
         self.insert(id, AssetDefinition::Discrete)
+    }
+
+    /// Declares a currency-like asset whose atom is `10^-decimals` of a unit.
+    ///
+    /// The precision is part of the asset key, so the same logical ID cannot
+    /// later be declared or deserialized with a different number of decimals.
+    pub fn define_decimal(
+        &mut self,
+        id: Id,
+        decimals: u8,
+    ) -> Result<DecimalAsset<Id>, AssetSchemaError<Id>> {
+        let precision = DecimalPrecision::new(decimals)?;
+        let asset = self.insert(id, AssetDefinition::Decimal(precision))?;
+        Ok(DecimalAsset::new(asset, precision))
+    }
+
+    /// Reconstructs a typed handle for an existing decimal definition.
+    pub fn decimal(&self, id: &Id) -> Result<DecimalAsset<Id>, AssetSchemaError<Id>> {
+        let Some(found) = self.definitions.get(id) else {
+            return Err(AssetSchemaError::UnknownAsset { id: id.clone() });
+        };
+        let AssetDefinition::Decimal(precision) = found else {
+            return Err(AssetSchemaError::ExpectedDecimalAsset { id: id.clone() });
+        };
+        Ok(DecimalAsset::new(
+            UnitAsset::new(id.clone(), found.clone()),
+            *precision,
+        ))
     }
 
     /// Declares a measured asset and returns its dimensionally typed handle.
@@ -282,12 +311,16 @@ pub enum AssetSchemaError<Id> {
     },
     #[error("asset is not declared by this schema")]
     UnknownAsset { id: Id },
-    #[error("asset is discrete but a measured binding was requested")]
+    #[error("asset is not measured but a measured binding was requested")]
     ExpectedMeasuredAsset { id: Id },
+    #[error("asset is not decimal but a decimal binding was requested")]
+    ExpectedDecimalAsset { id: Id },
     #[error("requested measurement type does not match the asset definition")]
     MeasurementTypeMismatch { id: Id },
     #[error(transparent)]
     InvalidDefinition(#[from] MeasureDefinitionError),
+    #[error(transparent)]
+    InvalidPrecision(#[from] DecimalPrecisionError),
 }
 
 #[derive(Debug, Error)]

@@ -171,11 +171,62 @@ impl<'de> Deserialize<'de> for MeasureDefinition {
     }
 }
 
+/// Largest decimal precision whose whole display unit still fits one `u64`
+/// atom count (`10^18 < u64::MAX < 10^19`).
+pub const MAX_DECIMALS: u8 = 18;
+
+/// Fixed decimal precision of a currency-like asset.
+///
+/// One atom is `10^-decimals` of a whole display unit, matching token
+/// `decimals` metadata. Unlike that metadata, the precision participates in
+/// the asset identity: a two-decimal and a six-decimal amount of the same
+/// logical asset can never alias in an account or basket.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize)]
+pub struct DecimalPrecision {
+    decimals: u8,
+}
+
+impl DecimalPrecision {
+    pub const fn new(decimals: u8) -> Result<Self, DecimalPrecisionError> {
+        if decimals > MAX_DECIMALS {
+            return Err(DecimalPrecisionError::TooManyDecimals { decimals });
+        }
+        Ok(Self { decimals })
+    }
+
+    pub const fn decimals(self) -> u8 {
+        self.decimals
+    }
+
+    /// Number of atoms in one whole display unit.
+    pub const fn atoms_per_unit(self) -> u64 {
+        10_u64.pow(self.decimals as u32)
+    }
+}
+
+#[derive(Deserialize)]
+struct DecimalPrecisionData {
+    decimals: u8,
+}
+
+impl<'de> Deserialize<'de> for DecimalPrecision {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let data = DecimalPrecisionData::deserialize(deserializer)?;
+        Self::new(data.decimals).map_err(serde::de::Error::custom)
+    }
+}
+
 /// The authoritative atomic definition carried by a unit-aware asset key.
+///
+/// New variants are appended so existing keys keep their relative order.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum AssetDefinition {
     Discrete,
     Measured(MeasureDefinition),
+    Decimal(DecimalPrecision),
 }
 
 /// A logical asset identity paired with its canonical atomic definition.
@@ -218,6 +269,12 @@ impl<Id> UnitAsset<Id> {
     {
         self.amount(Quantity::new(atoms))
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Error)]
+pub enum DecimalPrecisionError {
+    #[error("decimal precision {decimals} exceeds the supported maximum of 18")]
+    TooManyDecimals { decimals: u8 },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Error)]

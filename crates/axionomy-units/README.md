@@ -36,6 +36,36 @@ assert_eq!(basket.quantity(cargo.asset()), Quantity::new(12_500));
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
+Currency-like assets declare a fixed decimal precision instead of a physical
+unit. One atom is `10^-decimals` of a whole display unit, as with token
+`decimals`, but the precision is part of the asset key: the same logical ID
+cannot appear with two precisions, so cents and micro-dollars never alias.
+Text and rational inputs must be exact multiples of one atom; nothing rounds.
+
+```rust
+use axionomy::{AssetAmount, Quantity};
+use axionomy_units::{AssetSchema, UnitAsset};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+enum AssetId {
+    Usd,
+}
+
+let mut assets = AssetSchema::new();
+let usd = assets.define_decimal(AssetId::Usd, 2)?;
+let price: AssetAmount<UnitAsset<AssetId>> = usd.parse("12.50")?;
+
+assert_eq!(price.quantity(), &Quantity::new(1_250));
+assert_eq!(usd.format(price.quantity()), "12.50");
+assert!(usd.parse::<u64>("12.505").is_err());
+assert!(assets.define_decimal(AssetId::Usd, 6).is_err());
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
+The precision is capped at 18 decimals so one whole unit fits a `u64` atom
+count. Formatting always prints exactly `decimals` fraction digits and
+round-trips through `parse`.
+
 Use `define_discrete` for permissions, facts, and other atomically counted
 assets so measured and discrete values can share one `UnitAsset<Id>` basket.
 Use `AssetSchema::build_economy` and `validate_goal` to reject unknown or
