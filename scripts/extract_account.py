@@ -19,7 +19,7 @@ GENERATED = {
 }
 TEMPLATES = {
     "TypesExternal_Template.lean": "f6466e18f93d85ab84f19738621f25aeaf182050a96e19ad1c890e8174a68c8e",
-    "FunsExternal_Template.lean": "4b96a51374fad0b7228848e835f9576107f2cd86bb1d73a5d4f2b6e015edb2e4",
+    "FunsExternal_Template.lean": "d4e01ddb4d59d20cc839443fa77e41020c8d54854b4c81ac39557addbe1a0d10",
 }
 
 # Keep critical handoffs explicit alongside the complete caller extraction.
@@ -51,6 +51,7 @@ ENTRY_CALLS = {
     "basket_len": "state.len()",
     "basket_empty": "state.is_empty()",
     "basket_entries": "state.iter()",
+    "basket_sorted_entries": "state.iter_sorted()",
     "basket_get": "state.get(asset)",
     "amount_new": "AssetAmount::new(asset,value)",
     "amount_asset": "value.asset()",
@@ -259,6 +260,7 @@ def validate_generated(directory):
                   "basket.Basket.Insts.CoreConvertFromArrayPairAQuantityLEN.from",
                   "basket.Basket.get", "basket.Basket.iter", "basket.Basket.new", "basket.Basket.len",
                   "basket.Basket.is_empty", "basket.Basket.Insts.CoreDefaultDefault.default",
+                  "basket.sorted_entries", "basket.Basket.iter_sorted",
                   "account.Account.deposit", "account.Account.withdraw",
                   "account.Account.deposit_loop.body", "account.Account.withdraw_loop.body",
                   "basket.Basket.shortfall", "basket.Basket.shortfall_loop.body",

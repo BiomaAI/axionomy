@@ -55,6 +55,12 @@ class ExtractionBoundaryTests(unittest.TestCase):
 
 
 class ProductionMutationTests(unittest.TestCase):
+    def test_reversed_basket_sort_breaks_order_contract(self):
+        self.check_mutation(
+            "src/basket.rs", "|(left, _), (right, _)| left.cmp(right)",
+            "|(left, _), (right, _)| right.cmp(left)",
+            "extract_account.py", "stale account model", "BasketSortedRefinement", "AccountExtraction")
+
     def test_skipped_typed_amount_breaks_collection_contract(self):
         self.check_mutation(
             "src/basket.rs", "match self.0.next() {", "let _ = self.0.next(); match self.0.next() {",

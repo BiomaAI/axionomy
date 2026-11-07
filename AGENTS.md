@@ -33,7 +33,7 @@ into it), read `verification/README.md` and `verification/coverage.json` first.
   bounded effect aggregation, availability/preservation, preparation, atomic commit,
   receipts, generic trace extension, goals and finite-input iterator views, canonical keys and explicitly scoped fingerprints,
   foundational typed data constructors/conversions/accessors, expression construction,
-  generic basket collection construction/conversions and basic borrowed iteration/queries,
+  generic basket collection construction/conversions and borrowed iteration/queries including stable asset sorting,
   runtime signed conservation and whole-state diagnostic measurement
   against Lean specifications. Collections use
   explicit trusted models; other contracts have design proofs and finite Rust

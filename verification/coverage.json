@@ -1,12 +1,12 @@
 {
   "version": 1,
-  "assurance": "Partial implementation verification: Aeneas-extracted production u64 arithmetic, basket/account operations, model/rate construction and discovery, complete transaction assessment/application, finite-input iterator filtering, fork/simulation/ordered replay, goals, finite-input iterator views, canonical state/observation keys and scoped deterministic fingerprints, generic trace extension, basket collection boundaries, foundational typed data APIs and expression construction refine Lean specifications. Explicit collection/Arc/UTF-8/sorting/hashing models, lawful identifier operations, resource bounds, compiler/translation and primitive models remain trusted. Remaining public data APIs, serialization/schema contracts and other numeric backends remain open.",
+  "assurance": "Partial implementation verification: Aeneas-extracted production u64 arithmetic, basket/account operations, model/rate construction and discovery, complete transaction assessment/application, finite-input iterator filtering, fork/simulation/ordered replay, goals, finite-input iterator views, canonical state/observation keys and scoped deterministic fingerprints, generic trace extension, basket collection boundaries including sorted borrowed iteration, foundational typed data APIs and expression construction refine Lean specifications. Explicit collection/Arc/UTF-8/sorting/hashing models, lawful identifier operations, resource bounds, compiler/translation and primitive models remain trusted. Remaining public data APIs, serialization/schema contracts and other numeric backends remain open.",
   "sources": {
     "Cargo.toml": "414a2b181e13225e4b76aa58e70d998064174dde2d8cee603ea3af648d61a7f3",
     "Cargo.lock": "00ef263c160aeebaa49187874a4b11ec94fee9bc8fbea5a2f0cacc190607919c",
     "src/account.rs": "0eaf66937c63de2993353828e42fcfea2b80f172f5cb74fc76a28cef79fd9ff6",
     "src/amount.rs": "4c6a0599d4e7697fadb6981b88cc01e832fa6c01a0b33d1b997ba5c5bb1c705d",
-    "src/basket.rs": "1f3b10fb7a63979f88ba9af658bb202025e58dbfbdf4f649e5ab607d8747df31",
+    "src/basket.rs": "f9797280daeb1e9c4dedc795e39763f2ee1eb2b14ed6835a20a416f72a1ba419",
     "src/economy.rs": "31d3c582bb73a17c2c6b2cd8efbac8bf5f2f0d1bec3a7e9c8a168757e05f54be",
     "src/exchange.rs": "234f6e6459d2fb97a1fbb802e14afed6e5ed50a023c8c2de745e6f6eac39b455",
     "src/lib.rs": "46d6f713693714650653128e2ceabf8a895b8ad98a38a7bdbeab4ea378a5cc06",
@@ -15,7 +15,7 @@
     "verification/extract.rs": "415b34f5f4f8aa2679af860bd2a4092c96e113145919160fe7c81e33836de3e0",
     "verification/aeneas-toolchain.json": "8676d7d11be51a6f41984d874b35910e8a1a3d0a18414998feb9402ef80932fb",
     "verification/extract_basket.rs": "dc2b3a2159704c24a5261d0069a2aac7b575f30a94ae35c4c1e96933638592dd",
-    "verification/extract_account.rs": "29b38dedc366ea395e946fbea7b559e63686276ae4c35aad5be445f1859553b5",
+    "verification/extract_account.rs": "b32c6def22ef8fb793bc55de1cbead4cae81c07556bf59d7966db0c9fb8ebd72",
     "verification/patches/aeneas-namespaced-discriminant.patch": "fabac7482deb3da6ecaca60c4060dfe9d2114efdd010699e736c4a91267f3bc9"
   },
   "features": [
@@ -1052,7 +1052,42 @@
         "FromIterator and owned fixed-array conversions return the exact canonical basket or panic on duplicate assets. Under successful iterator/equality/zero laws, duplicate keys are exactly the panic condition. Aeneas models the panic class rather than its text; Rust conformance checks the current panic message. Public constructors retain their typed identifiers and QuantityScalar bounds.",
         "Basic new/default/len/is_empty/get/borrowed insertion-order iteration are refined. Length and the composed successful-construction contract have explicit usize bounds. IndexMap storage, hashing, allocation and the source-guarded shared-reference retain adapter remain trusted; the extracted zero callback itself is proved.",
         "Owned array iteration uses a reviewed executable list model of the pinned Rust alive range and forward next operation; physical MaybeUninit storage, moves, drops and iterator internals remain dependency assumptions. Array conversion forwards directly to FromIterator. A private extracted AmountEntries iterator calls next and into_parts explicitly, avoiding erased custom map overrides and preserving early rejection without precollecting inputs.",
-        "Sorted borrowed iteration remains open because the pinned Aeneas translation cannot currently finish the nested slice borrow; its public implementation and bounds are unchanged. Serialization/schema, remaining inspection/convenience/derived APIs and numeric backend arithmetic remain open. Compiler/MIR/Charon/Aeneas and primitive semantics retain their documented trust boundaries."
+        "Sorted borrowed iteration is covered by the separate basket_sorted_iteration contract. Serialization/schema, remaining inspection/convenience/derived APIs and numeric backend arithmetic remain open. Compiler/MIR/Charon/Aeneas and primitive semantics retain their documented trust boundaries."
+      ]
+    },
+    {
+      "id": "basket_sorted_iteration",
+      "status": "aeneas_refinement_proved",
+      "sources": [
+        "src/basket.rs",
+        "verification/extract_account.rs",
+        "verification/aeneas-toolchain.json"
+      ],
+      "extracted_module": "AccountExtraction.Funs",
+      "theorems": [
+        "Axionomy.BasketOrdering.permutation",
+        "Axionomy.BasketOrdering.ordered",
+        "Axionomy.BasketOrdering.unique_keys",
+        "Axionomy.BasketOrdering.positive_contents",
+        "Axionomy.BasketOrdering.strictly_ordered",
+        "Axionomy.BasketOrdering.ties_stable",
+        "Axionomy.BasketOrdering.canonical",
+        "Axionomy.BasketSortedRefinement.collect_loop",
+        "Axionomy.BasketSortedRefinement.comparator_law",
+        "Axionomy.BasketSortedRefinement.sorted_refines",
+        "Axionomy.BasketSortedRefinement.sorted_contract",
+        "Axionomy.BasketSortedRefinement.canonical_contract",
+        "Axionomy.BasketSortedRefinement.constructed_sorted"
+      ],
+      "rust_tests": [
+        "tests/basket_sorted_conformance.rs"
+      ],
+      "limitations": [
+        "Production iter_sorted and its owned-vector helper are freshly extracted. Under independent pure total asset comparison laws and a representable collection size, the returned iterator yields exactly a stable sorted permutation of the original asset/quantity pairs. Quantities have no Clone, Ord or QuantityScalar premise in the sorting contract; Rust retains borrowed output and its original asset-only Ord bound.",
+        "Independent specification proofs establish length/content preservation, sortedness, stable ties and equal canonical output for permutations with distinct keys. The composed constructor-to-sorted-view theorem derives nonzero/unique representation and size preconditions from bounded distinct input and primitive iterator/equality/zero laws; it does not assume construction or sorting succeeds.",
+        "The existing trusted std stable-sort boundary is extended to sort_by with executable state-threaded comparator plumbing. Review of pinned Rust alloc/src/slice.rs confirms stable ascending ordering and comparison through the supplied callback. The insertion-sort model specifies lawful results, not std driftsort implementation, comparison counts/order, performance, allocation, destructor effects, interior mutability or unwind state. Helper calculations over this model are not contracts for arbitrary unlawful/stateful comparators.",
+        "IndexMap storage/iteration, std Vec collection and ownership iteration, compiler/MIR/Charon/Aeneas and primitive semantics remain explicit dependencies. Rust ownership preserves borrowing; finite integration checks also confirm pointer identity and unchanged source insertion order. The source refactor scopes the temporary mutable slice inside a generic owned-vector helper and uses Vec::from_iter; no clone, type erasure or new public trait bound is introduced.",
+        "326 Lean-generated finite cases cover every ordered subset of five asset/value entries, zero omission, u64 maximum, ascending and reverse ontology order, and non-Copy BigUint payloads. Non-cloneable assets and an empty basket with an unordered non-cloneable scalar check the public bounds. These checks supplement the universal contracts and do not prove BigUint arithmetic."
       ]
     }
   ]

@@ -89,6 +89,12 @@ pub fn basket_entries<A, N>(state: &Basket<A, N>) -> impl Iterator<Item = (&A, &
     state.iter()
 }
 
+pub fn basket_sorted_entries<A: Ord, N>(
+    state: &Basket<A, N>,
+) -> impl Iterator<Item = (&A, &Quantity<N>)> {
+    state.iter_sorted()
+}
+
 pub fn basket_get<'a, A: Eq + std::hash::Hash, N: QuantityScalar>(
     state: &'a Basket<A, N>,
     asset: &A,

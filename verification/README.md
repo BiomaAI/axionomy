@@ -277,8 +277,8 @@ The remaining completion work is:
   constructors. Generic trace extension, finite-input iterator views and candidate
   filtering are also proved under independent iterator laws. Basket construction
   from entries and typed amounts, FromIterator/array conversions, and basic borrowed
-  iteration/queries are now covered as well. Remaining work includes sorted
-  iteration; assessment lookup by account; remaining rate/invariant/model
+  iteration/queries including sorted views are now covered as well. Remaining work
+  includes assessment lookup by account; remaining rate/invariant/model
   inspection APIs; remaining collection iterator and arbitrary callback contracts;
   derived equality/hash behavior and formatting; and the explicit panic contracts
   of convenience constructors. See the [public data contracts](ACCOUNTS.md#typed-public-data-and-expression-construction)
@@ -318,15 +318,30 @@ panic conditions for convenience conversions. The u64 constructor refines the
 existing natural-number specification; generic numeric instances require an
 independent successful Zero predicate law. Array iteration adds a reviewed std
 alive-range model. See [the collection boundary](BASKETS.md#public-collection-boundary).
-Sorted borrowed iteration remains open: extraction currently fails when returning
-the iterator after sorting the nested borrowed slice. No public bound or borrowed
-return type was changed to bypass that gap.
+Sorted borrowed iteration is now covered by the subsequent batch below.
 
 This basket batch passed the full proof gate (388 registered contracts;
 3,378 audited Axionomy theorems), fresh extraction, all 311 workspace tests,
 90 boundary/gate controls and both new production mutation controls. Formatting,
 Clippy with warnings denied, documentation and compile-fail doctests also passed.
 The prior 44 production mutation controls remain in CI.
+
+The sorted-view batch resolves the nested-borrow translation gap by scoping the
+temporary mutable slice inside an extracted generic owned-vector helper. The
+public API still borrows its entries, orders only by asset, and imposes no new
+scalar or cloning bounds. Thirteen contracts prove exact stable sorted contents,
+length, strict order and nonzero/unique representation for canonical baskets,
+and canonical output independent of input insertion order. The constructor-to-view
+contract derives the representation and size obligations from primitive input
+laws. The std stable-sort implementation remains modeled explicitly; its physical
+algorithm, comparator call counts and unwind behavior are not proved. See
+[sorted borrowed iteration](BASKETS.md#sorted-borrowed-iteration) for the exact
+contract, reviewed dependency extension and 326 generated conformance cases.
+This batch passed the full proof gate (401 registered contracts; 3,412 audited
+Axionomy theorems), all 314 workspace tests, 93 boundary/gate controls and the new
+production mutation control. Formatting, Clippy with warnings denied,
+documentation and compile-fail doctests passed; the prior 46 production mutation
+controls remain in CI.
 
 Every internal `expect` needs a discharged precondition. Intentionally panicking
 convenience constructors need explicit contracts; do not claim unconditional

@@ -64,6 +64,16 @@ where
     }
 }
 
+// Keep sorting's temporary mutable slice borrow inside a generic owned-vector
+// boundary. Elements may themselves borrow the basket; no cloning is needed.
+fn sorted_entries<T>(
+    mut entries: Vec<T>,
+    compare: impl FnMut(&T, &T) -> std::cmp::Ordering,
+) -> Vec<T> {
+    entries.sort_by(compare);
+    entries
+}
+
 impl<A, N> Basket<A, N> {
     pub fn new() -> Self {
         Self {
@@ -88,9 +98,8 @@ impl<A, N> Basket<A, N> {
     where
         A: Ord,
     {
-        let mut entries = self.iter().collect::<Vec<_>>();
-        entries.sort_by_key(|(asset, _)| *asset);
-        entries.into_iter()
+        let entries = Vec::from_iter(self.iter());
+        sorted_entries(entries, |(left, _), (right, _)| left.cmp(right)).into_iter()
     }
 }
 

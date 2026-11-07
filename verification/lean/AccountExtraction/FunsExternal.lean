@@ -564,6 +564,33 @@ def alloc.slice.Slice.sort {T : Type} (ordInst : core.cmp.Ord T) (values : Slice
   if fits : sorted.length ≤ Usize.max then .ok (Slice.from sorted fits)
   else .fail .panic
 
+-- Stateful comparator plumbing for the same stable logical sort boundary.
+-- The implementation refinements use pure, total, lawful asset comparisons;
+-- this model does not specify std's comparison count/order or unwind state.
+def orderedInsertState {T F : Type} (cmp : F → T × T → Result (Ordering × F))
+    (value : T) : List T → F → Result (List T × F)
+  | [], state => .ok ([value], state)
+  | head :: rest, state => do
+    let (order, state) ← cmp state (value, head)
+    if order = .gt then
+      let (tail, state) ← orderedInsertState cmp value rest state
+      .ok (head :: tail, state)
+    else .ok (value :: head :: rest, state)
+
+def stableSortState {T F : Type} (cmp : F → T × T → Result (Ordering × F)) :
+    List T → F → Result (List T × F)
+  | [], state => .ok ([], state)
+  | head :: rest, state => do
+    let (sorted, state) ← stableSortState cmp rest state
+    orderedInsertState cmp head sorted state
+
+def alloc.slice.Slice.sort_by {T F : Type}
+    (compare : core.ops.function.FnMut F (T × T) Ordering)
+    (values : Slice T) (state : F) : Result (Slice T) := do
+  let (sorted, _) ← stableSortState compare.call_mut values.val state
+  if fits : sorted.length ≤ Usize.max then .ok (Slice.from sorted fits)
+  else .fail .panic
+
 def TupleTBC.Insts.CoreHashHash.hash {T B C S : Type}
     (first : core.hash.Hash T) (second : core.hash.Hash B) (third : core.hash.Hash C)
     (hasher : core.hash.Hasher S) (value : T × B × C) (state : S) : Result S := do

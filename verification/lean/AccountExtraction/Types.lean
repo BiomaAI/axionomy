@@ -225,7 +225,7 @@ structure amount.AssetAmount (A : Type _) (N : Type _) where
   quantity : quantity.Quantity N
 
 /-- [account_extraction::basket::BasketError]
-    Source: 'verification/../src/basket.rs', lines 299:0-302:1
+    Source: 'verification/../src/basket.rs', lines 308:0-311:1
     Visibility: public -/
 @[discriminant isize]
 inductive basket.BasketError (A : Type _) where
@@ -242,6 +242,11 @@ Unit
     Source: 'verification/../src/basket.rs', lines 50:0-50:27 -/
 @[reducible]
 def basket.AmountEntries (I : Type _) := I
+
+/-- [account_extraction::basket::{account_extraction::basket::Basket<A, N>}::iter_sorted::{closure}]
+    Source: 'verification/../src/basket.rs', lines 102:32-102:71 -/
+@[reducible]
+def basket.Basket.iter_sorted.closure (A : Type _) (N : Type _) := Unit
 
 /-- [account_extraction::economy::Goal]
     Source: 'verification/../src/economy.rs', lines 21:0-23:1

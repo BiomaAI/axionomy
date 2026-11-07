@@ -84,4 +84,6 @@ import Axionomy.BasketCollection
 import Axionomy.BasketCollectionRefinement
 import Axionomy.BasketAmountsRefinement
 import Axionomy.BasketPublicRefinement
+import Axionomy.BasketSortedRefinement
+import Axionomy.BasketSortedConformance
 import Axionomy.BasketCollectionConformance

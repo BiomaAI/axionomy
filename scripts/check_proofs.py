@@ -50,6 +50,21 @@ def validate_coverage(root, coverage):
             # These are the implemented extraction pipelines. Future
             # claims need their own regeneration and trust-boundary checks.
             pipelines = {
+                "basket_sorted_iteration": ("AccountExtraction.Funs", {
+                    "Axionomy.BasketOrdering.permutation",
+                    "Axionomy.BasketOrdering.ordered",
+                    "Axionomy.BasketOrdering.unique_keys",
+                    "Axionomy.BasketOrdering.positive_contents",
+                    "Axionomy.BasketOrdering.strictly_ordered",
+                    "Axionomy.BasketOrdering.ties_stable",
+                    "Axionomy.BasketOrdering.canonical",
+                    "Axionomy.BasketSortedRefinement.collect_loop",
+                    "Axionomy.BasketSortedRefinement.comparator_law",
+                    "Axionomy.BasketSortedRefinement.sorted_refines",
+                    "Axionomy.BasketSortedRefinement.sorted_contract",
+                    "Axionomy.BasketSortedRefinement.canonical_contract",
+                    "Axionomy.BasketSortedRefinement.constructed_sorted",
+                }),
                 "basket_collection_boundary": ("AccountExtraction.Funs", {
                     "Axionomy.BasketCollection.success_iff",
                     "Axionomy.BasketCollection.preserves_order",
@@ -326,12 +341,12 @@ def main():
     if generated != committed:
         raise ValueError("Lean conformance cases are stale; regenerate them from Conformance.lean and review the diff")
     run("cargo", "test", "-p", "axionomy", "--all-features", "--test", "lean_conformance",
-        "--test", "transaction_conformance", "--test", "observation_conformance", "--test", "public_data_conformance", "--test", "iterator_conformance", "--test", "basket_collection_conformance")
+        "--test", "transaction_conformance", "--test", "observation_conformance", "--test", "public_data_conformance", "--test", "iterator_conformance", "--test", "basket_collection_conformance", "--test", "basket_sorted_conformance")
     run("cargo", "test", "-p", "axionomy", "--all-features", "--lib",
         "runtime_")
     run("cargo", "test", "-p", "axionomy", "--all-features", "--doc")
     print(f"Verified {len(theorems)} registered theorems and their axiom dependencies, "
-          "fresh Aeneas extraction of u64 arithmetic, basket construction/operations, account updates/staging, model/rate construction and metadata discovery, complete transaction assessment/application and finite-input iterator filtering, fork/simulation/ordered replay, goals/views/canonical keys and scoped fingerprints, typed data APIs, expression construction, generic trace extension and basket collection boundaries, snapshot evaluation/conditions, signed conservation and measurement, "
+          "fresh Aeneas extraction of u64 arithmetic, basket construction/operations, account updates/staging, model/rate construction and metadata discovery, complete transaction assessment/application and finite-input iterator filtering, fork/simulation/ordered replay, goals/views/canonical keys and scoped fingerprints, typed data APIs, expression construction, generic trace extension and basket collection boundaries including sorted borrowed iteration, snapshot evaluation/conditions, signed conservation and measurement, "
           "and Rust conformance/type checks. Collection storage uses an explicit trusted model. "
           "Other core implementation refinement remains unproved; see verification/README.md.")
 

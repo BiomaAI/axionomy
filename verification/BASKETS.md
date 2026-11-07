@@ -133,7 +133,7 @@ The public forwarding call is checked syntactically. The theorem specializes its
 shared implementation to vector inputs and u64 quantities. The public-collection contracts below now connect generic entry/asset-qualified
 construction and convenience conversions directly to the AccountExtraction model.
 JSON deserialization still has finite conformance evidence and remains item 17.
-Remaining sorted-iteration, serialization/schema, derived/convenience API and
+Remaining serialization/schema, derived/convenience API and
 numeric-backend gaps remain explicit in `coverage.json`.
 The subsequent [account proof](ACCOUNTS.md) covers deposit/withdrawal and their
 basket lookup, insertion, and shortfall paths under the same storage abstraction.
@@ -217,9 +217,7 @@ primitive/hash/collection boundaries remain unchanged.
 
 Basic new/default, len/is_empty, get and insertion-order borrowed iteration now
 have explicit production refinements. Length has a representable-size premise.
-Sorted borrowed iteration remains a separate open obligation: the pinned Aeneas
-backend cannot currently finish the nested slice borrow before the return. Its
-existing implementation, borrowed result and asset-only ordering bound are intact.
+Sorted borrowed iteration is covered by the subsequent contract below.
 
 The Lean generator adds 85 collection scenarios: all lists through length three
 from zero/nonzero/maximum-u64 values and overlapping typed asset identifiers.
@@ -237,3 +235,58 @@ This milestone passed the full proof gate with 388 registered contracts and
 90 boundary/gate controls and both new production mutation controls. Formatting,
 Clippy with warnings denied, documentation and compile-fail doctests also passed.
 The prior 44 production mutation controls remain in CI.
+
+## Sorted borrowed iteration
+
+`BasketOrdering` specifies stable ordering by asset alone. Its proofs establish
+permutation and length preservation, weak asset order, preservation of nonzero
+entries and distinct keys, strict order for distinct keys, stable equal-key pairs,
+and equal canonical output for permutations of a basket with unique keys.
+Quantities remain arbitrary typed payloads; these proofs never compare or clone
+them.
+
+`BasketSortedRefinement.sorted_refines` connects the extracted production
+`iter_sorted` call to that specification and proves the returned iterator's
+complete sequence. `sorted_contract` gives exact contents, order and length.
+`canonical_contract` retains the representation invariants. `constructed_sorted`
+composes the real generic constructor with sorted iteration: independent primitive
+iterator/equality/zero laws, distinct input and a size bound establish the
+representation and size premises needed by sorting. No premise assumes the
+constructor or sorting call succeeds. Asset comparison must be pure, total,
+identity-consistent and satisfy the independent `OrderedEffects.OrderLaws`.
+
+The production refactor moves the temporary mutable slice into the generic
+`sorted_entries` helper, then returns the owned vector of borrowed entries. This
+avoids the pinned translator's nested-borrow limitation without cloning, changing
+the public borrowed return type, imposing a scalar trait bound or replacing the
+storage algorithm. `Vec::from_iter(self.iter())` expresses the same collection
+call directly, avoiding the erased `Iterator::collect` dictionary method.
+`sort_by` compares asset references directly; the former `sort_by_key` also
+compared those asset references. Equality of behavior requires lawful Rust
+`Ord`/`PartialOrd`, as does the public sorted-view contract.
+
+The only added external interface is `alloc.slice.Slice.sort_by`. Review of the
+pinned nightly-2026-09-17 Rust `alloc/src/slice.rs` confirms stable ascending
+sorting through the callback; both public sorting methods call `stable_sort`.
+The existing logical sorting model now threads callback state explicitly and
+propagates callback failures. The public refinement discharges that callback
+with the extracted stateless asset comparator and assumes its independent laws.
+Calculations over this dependency model do not specify std's comparison order
+or count, unlawful/stateful comparisons, interior mutability, physical driftsort,
+performance, allocation, destructors or unwind state. Physical collection
+storage, Vec collection/iteration, compiler and translation remain trusted.
+
+The Lean generator enumerates all 326 ordered subsets of five typed asset/value
+entries, including zero and maximum-u64 quantities. Rust checks ascending and
+reverse ontology order, exact quantities, unchanged source insertion order and
+pointer identity of borrowed keys and quantities. Assets deliberately omit
+`Clone`; an empty basket with an unordered non-cloneable scalar checks the lack
+of scalar bounds. The same fixtures exercise non-Copy BigUint payloads without
+claiming arithmetic verification. A production mutation reverses the asset
+comparison; it must extract and compile successfully, then fail the refinement.
+
+This batch passed the full proof gate (401 registered contracts; 3,412 audited
+Axionomy theorems), fresh extraction, all 314 workspace tests, 93 boundary/gate
+controls and the reversed-comparator production mutation. Formatting, Clippy
+with warnings denied, documentation and compile-fail doctests also passed.
+The prior 46 production mutation controls remain in CI.

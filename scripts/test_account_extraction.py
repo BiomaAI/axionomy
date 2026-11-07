@@ -50,6 +50,11 @@ class AccountBridgeTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "not a forwarding call: " + name):
                     validate_bridge(self.root)
 
+    def test_changed_sorted_basket_entry_is_rejected(self):
+        self.target.write_text(self.target.read_text().replace("state.iter_sorted()", "state.iter()"))
+        with self.assertRaisesRegex(ValueError, "not a forwarding call: basket_sorted_entries"):
+            validate_bridge(self.root)
+
     def test_production_sources_pass(self):
         validate_bridge(self.root)
 
@@ -207,6 +212,17 @@ class AccountExtractionTests(unittest.TestCase):
         (self.directory / "FunsExternal_Template.lean").write_text("new dependency")
         with self.assertRaisesRegex(ValueError, "external model boundary changed"):
             validate_generated(self.directory)
+
+    def test_missing_sorted_basket_definitions_are_rejected(self):
+        path = self.directory / "Funs.lean"
+        original = path.read_text()
+        for definition in ("basket.sorted_entries", "basket.Basket.iter_sorted"):
+            with self.subTest(definition=definition):
+                needle = "def " + definition + "\n"
+                self.assertEqual(original.count(needle), 1)
+                path.write_text(original.replace(needle, "def bypass\n"))
+                with self.assertRaisesRegex(ValueError, "missing account production definition"):
+                    validate_generated(self.directory)
 
     def test_unexpected_generated_file_is_rejected(self):
         (self.directory / "Unexpected.lean").write_text("")
