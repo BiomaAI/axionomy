@@ -10,7 +10,7 @@ def expressionAssets : rate.QuantityExpression Role A N → List A
   | .Constant _ | .Units | .Parameter _ => []
   | .Balance _ asset => [asset]
   | .Add left right | .Subtract left right | .Multiply left right
-  | .DivideFloor left right | .Minimum left right | .Maximum left right =>
+  | .Minimum left right | .Maximum left right =>
     expressionAssets left ++ expressionAssets right
   | .MulDiv left right denominator _ =>
     expressionAssets left ++ expressionAssets right ++ expressionAssets denominator
@@ -49,7 +49,7 @@ theorem expression_assets (expression : rate.QuantityExpression Role A N)
     rw [rate.QuantityExpression.collect_assets.eq_def]
     exact pushed
   | Add left right ihl ihr | Subtract left right ihl ihr | Multiply left right ihl ihr
-  | DivideFloor left right ihl ihr | Minimum left right ihl ihr | Maximum left right ihl ihr =>
+  | Minimum left right ihl ihr | Maximum left right ihl ihr =>
     simp only [expressionAssets, List.length_append] at capacity
     obtain ⟨middle, leftCall, middleEntries⟩ := ihl accumulated (by omega)
     obtain ⟨result, rightCall, resultEntries⟩ := ihr middle (by rw [middleEntries]; simp only [List.length_append]; omega)

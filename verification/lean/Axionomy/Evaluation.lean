@@ -27,14 +27,13 @@ structure Arithmetic (Q : Type) where
   add : Q → Q → Option Q
   sub : Q → Q → Option Q
   mul : Q → Q → Option Q
-  div : Q → Q → Option Q
   min : Q → Q → Q
   max : Q → Q → Q
   isZero : Q → Bool
   mulDiv : MulDiv.Rounding → Q → Q → Q → Option Q
 
 def naturals (limit : Nat) : Arithmetic Nat :=
-  ⟨Quantity.add limit, Quantity.sub, Quantity.mul limit, Quantity.div, min, max,
+  ⟨Quantity.add limit, Quantity.sub, Quantity.mul limit, min, max,
     fun value => decide (value = 0), MulDiv.mulDiv limit⟩
 
 def checked {Q : Type} (error : Error) : Option Q → Except Error Q
@@ -53,7 +52,6 @@ def operate {Q : Type} (ops : Arithmetic Q) : Rates.Op → Q → Q → Except Er
   | .add, l, r => checked .additionOverflow (ops.add l r)
   | .sub, l, r => checked .subtractionUnderflow (ops.sub l r)
   | .mul, l, r => checked .multiplicationOverflow (ops.mul l r)
-  | .div, l, r => checked .divisionByZero (ops.div l r)
   | .min, l, r => .ok (ops.min l r)
   | .max, l, r => .ok (ops.max l r)
 
@@ -191,7 +189,6 @@ structure Hom {Q R : Type} (left : Arithmetic Q) (right : Arithmetic R) (value :
   add : ∀ l r, (left.add l r).map value = right.add (value l) (value r)
   sub : ∀ l r, (left.sub l r).map value = right.sub (value l) (value r)
   mul : ∀ l r, (left.mul l r).map value = right.mul (value l) (value r)
-  div : ∀ l r, (left.div l r).map value = right.div (value l) (value r)
   min : ∀ l r, value (left.min l r) = right.min (value l) (value r)
   max : ∀ l r, value (left.max l r) = right.max (value l) (value r)
   isZero : ∀ q, left.isZero q = right.isZero (value q)
@@ -209,7 +206,6 @@ theorem map_operate {Q R : Type} (left : Arithmetic Q) (right : Arithmetic R)
   | add => simp only [operate, map_checked, hom.add]
   | sub => simp only [operate, map_checked, hom.sub]
   | mul => simp only [operate, map_checked, hom.mul]
-  | div => simp only [operate, map_checked, hom.div]
   | min => simp [operate, mapResult, hom.min]
   | max => simp [operate, mapResult, hom.max]
 

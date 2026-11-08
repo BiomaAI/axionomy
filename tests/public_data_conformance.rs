@@ -152,10 +152,6 @@ fn construct(expression: Expression) -> Expression {
         Expression::Multiply { left, right } => {
             Expression::multiply(construct(*left), construct(*right))
         }
-        Expression::DivideFloor {
-            numerator,
-            denominator,
-        } => Expression::divide_floor(construct(*numerator), construct(*denominator)),
         Expression::Minimum { left, right } => {
             Expression::minimum(construct(*left), construct(*right))
         }

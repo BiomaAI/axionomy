@@ -83,7 +83,6 @@ fn expression(value: &Value) -> Expression {
                 "add" => Expression::plus(left, right),
                 "subtract" => Expression::subtract(left, right),
                 "multiply" => Expression::multiply(left, right),
-                "divide_floor" => Expression::divide_floor(left, right),
                 "minimum" => Expression::minimum(left, right),
                 "maximum" => Expression::maximum(left, right),
                 _ => panic!("unknown expression {kind}"),
@@ -161,8 +160,8 @@ fn recursive_expression_equality_and_clone_match_lean() {
         .iter()
         .map(expression)
         .collect::<Vec<_>>();
-    assert_eq!(values.len(), 38);
-    assert_eq!(items(&data["expressionPairs"]).len(), 1444);
+    assert_eq!(values.len(), 35);
+    assert_eq!(items(&data["expressionPairs"]).len(), 1225);
     check_pairs(&values, &data["expressionPairs"]);
     let computed = values
         .iter()

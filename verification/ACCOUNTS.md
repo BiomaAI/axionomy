@@ -225,7 +225,8 @@ children read the same immutable context. A failing left child wins over a
 failing right child; operation-specific errors occur only after both succeed.
 Parameters use sorted string lookup. Balance lookup distinguishes an unbound
 role, a bound missing account and an absent asset (zero). Addition, subtraction,
-multiplication, floor division, minimum and maximum are covered. The condition
+multiplication, minimum, maximum and the full-width rounded mul-div (the only
+division) are covered. The condition
 refinement proves the two evaluations and all three comparisons, including
 ordered propagation of evaluation failures.
 

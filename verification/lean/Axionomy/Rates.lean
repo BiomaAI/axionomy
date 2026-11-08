@@ -6,7 +6,7 @@ lookup, map iteration, and checked aggregation still need refinement proofs. -/
 namespace Axionomy.Rates
 
 inductive Op where
-  | add | sub | mul | div | min | max
+  | add | sub | mul | min | max
   deriving Repr
 
 def operate (op : Op) (left right : Nat) : Option Nat :=
@@ -14,7 +14,6 @@ def operate (op : Op) (left right : Nat) : Option Nat :=
   | .add => some (left + right)
   | .sub => Quantity.sub left right
   | .mul => some (left * right)
-  | .div => Quantity.div left right
   | .min => some (min left right)
   | .max => some (max left right)
 

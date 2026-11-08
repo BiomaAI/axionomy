@@ -492,7 +492,8 @@ let fee: Q<Role, Asset> =
 # let _ = fee;
 ```
 
-A zero denominator reports division by zero before the quotient is attempted;
+`MulDiv` is the only division; `divide(n, d, rounding)` is a mul-div by one,
+so even plain division names its direction. A zero denominator reports division by zero before the quotient is attempted;
 an unrepresentable quotient reports overflow. Lean proves the extracted `u64`
 implementation and evaluator exact for every input.
 

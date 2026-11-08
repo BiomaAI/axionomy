@@ -27,7 +27,7 @@ theorem roles_refines (expression : rate.QuantityExpression Role A Std.U64) (acc
     simp [alloc.collections.btree.set.BTreeSet.insert, exactInsert,
       Discovery.registerAll, Discovery.roles, decodeExpression]
   | Add left right ihl ihr | Subtract left right ihl ihr | Multiply left right ihl ihr
-  | DivideFloor left right ihl ihr | Minimum left right ihl ihr | Maximum left right ihl ihr =>
+  | Minimum left right ihl ihr | Maximum left right ihl ihr =>
     rw [rate.QuantityExpression.collect_roles.eq_def]
     simp [ihl, ihr, decodeExpression, Discovery.roles, Discovery.registerAll_append]
   | MulDiv left right denominator rounding ihl ihr ihd =>
@@ -66,7 +66,7 @@ theorem assets_refines {Role A : Type} (expression : rate.QuantityExpression Rol
     rw [rate.QuantityExpression.collect_assets.eq_def]
     exact pushed
   | Add left right ihl ihr | Subtract left right ihl ihr | Multiply left right ihl ihr
-  | DivideFloor left right ihl ihr | Minimum left right ihl ihr | Maximum left right ihl ihr =>
+  | Minimum left right ihl ihr | Maximum left right ihl ihr =>
     simp only [decodeExpression, Discovery.assets, List.length_append] at capacity
     obtain ⟨middle, leftCall, middleEntries⟩ := ihl accumulated (by omega)
     obtain ⟨result, rightCall, resultEntries⟩ := ihr middle (by rw [middleEntries]; simp only [List.length_append]; omega)
@@ -142,7 +142,7 @@ theorem parameters_refines {Role A : Type} (expression : rate.QuantityExpression
     simp [DiagnosticRefinement.deref_exact parameter bound, alloc.collections.btree.set.BTreeSet.insert,
       Shared0A.Insts.CoreCmpOrd.cmp, called]
   | Add left right ihl ihr | Subtract left right ihl ihr | Multiply left right ihl ihr
-  | DivideFloor left right ihl ihr | Minimum left right ihl ihr | Maximum left right ihl ihr =>
+  | Minimum left right ihl ihr | Maximum left right ihl ihr =>
     have fitsLeft : NamesFit left := by
       intro parameter member
       apply fits parameter

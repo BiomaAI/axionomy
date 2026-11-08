@@ -2,7 +2,7 @@
 //! This is not a proof that the Rust implementation refines those definitions.
 use axionomy::{
     Account, AccountError, ApplyError, AssetAmount, Basket, BasketError, EconomyBuilder, Exchange,
-    LinearInvariant, Quantity, QuantityComparison, QuantityExpression as Q, Rate, basket,
+    LinearInvariant, Quantity, QuantityComparison, QuantityExpression as Q, Rate, Rounding, basket,
 };
 use serde::Deserialize;
 
@@ -530,9 +530,11 @@ fn static_exchange_assessment_commit_and_receipt_match_lean() {
 }
 
 fn expression() -> Q<Role, Asset> {
-    Q::divide_floor(
-        Q::multiply(Q::balance(Role::Source, Asset::Token), Q::units()),
+    Q::mul_div(
+        Q::balance(Role::Source, Asset::Token),
+        Q::units(),
         Q::parameter("denominator"),
+        Rounding::Floor,
     )
 }
 

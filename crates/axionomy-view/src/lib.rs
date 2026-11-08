@@ -1848,14 +1848,6 @@ where
             expression_view(left, ontology),
             expression_view(right, ontology)
         ),
-        QuantityExpression::DivideFloor {
-            numerator,
-            denominator,
-        } => format!(
-            "floor({} ÷ {})",
-            expression_view(numerator, ontology),
-            expression_view(denominator, ontology)
-        ),
         QuantityExpression::Minimum { left, right } => format!(
             "min({}, {})",
             expression_view(left, ontology),
@@ -1871,16 +1863,29 @@ where
             right,
             denominator,
             rounding,
-        } => format!(
-            "{}({} × {} ÷ {})",
-            match rounding {
+        } => {
+            let direction = match rounding {
                 Rounding::Floor => "floor",
                 Rounding::Ceil => "ceil",
-            },
-            expression_view(left, ontology),
-            expression_view(right, ontology),
-            expression_view(denominator, ontology)
-        ),
+            };
+            let numerator = match right.as_ref() {
+                // Plain division is a mul-div by one; render it as division.
+                QuantityExpression::Constant { value }
+                    if N::from_u64(1).is_some_and(|one| value.as_scalar() == &one) =>
+                {
+                    expression_view(left, ontology)
+                }
+                _ => format!(
+                    "{} × {}",
+                    expression_view(left, ontology),
+                    expression_view(right, ontology)
+                ),
+            };
+            format!(
+                "{direction}({numerator} ÷ {})",
+                expression_view(denominator, ontology)
+            )
+        }
     }
 }
 

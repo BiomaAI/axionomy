@@ -6,7 +6,7 @@ namespace Axionomy.EvaluationRefinement
 open Aeneas Aeneas.Std AccountExtracted AccountRefinement
 
 def arithmetic : Evaluation.Arithmetic Std.U64 :=
-  ⟨U64.checked_add, U64.checked_sub, U64.checked_mul, U64.checked_div,
+  ⟨U64.checked_add, U64.checked_sub, U64.checked_mul,
     fun l r => if l.val ≤ r.val then l else r,
     fun l r => if l.val ≤ r.val then r else l,
     fun value => decide (value = 0#u64), MulDivRefinement.mulDiv⟩
@@ -22,18 +22,10 @@ theorem sub_exact (left right : Std.U64) :
     simp only [h] at spec
     simp [Quantity.sub, spec.1, spec.2.1]
 
-theorem div_exact (left right : Std.U64) :
-    (U64.checked_div left right).map UScalar.val = Quantity.div left.val right.val := by
-  have spec := U64.checked_div_bv_spec left right
-  cases h : U64.checked_div left right with
-  | none => simp only [h] at spec; simp [Quantity.div, spec]
-  | some result => simp only [h] at spec; simp [Quantity.div, spec.1, spec.2.1]
-
 theorem natural_hom : Evaluation.Hom arithmetic (Evaluation.naturals Quantity.u64Max) UScalar.val where
   add := AccountRefinement.add_exact
   sub := sub_exact
   mul := BasketOperationsRefinement.mul_exact
-  div := div_exact
   min := by intro l r; by_cases h : l.val ≤ r.val <;> simp [arithmetic, Evaluation.naturals, h, Nat.min_def]
   max := by intro l r; by_cases h : l.val ≤ r.val <;> simp [arithmetic, Evaluation.naturals, h, Nat.max_def]
   isZero := by intro q; simp [arithmetic, Evaluation.naturals, UScalar.eq_equiv]
@@ -43,13 +35,6 @@ theorem natural_hom : Evaluation.Hom arithmetic (Evaluation.naturals Quantity.u6
     quantity.Quantity.checked_sub scalar left right = .ok (U64.checked_sub left right) := by
   simp only [quantity.Quantity.checked_sub, U64.Insts.Num_traitsOpsCheckedCheckedSub.checked_sub, bind_ok]
   cases h : U64.checked_sub left right <;>
-    simp [quantity.Quantity.from_checked, quantity.Quantity.try_from_scalar,
-      U64.Insts.Account_extractionQuantityQuantityScalarI128.is_nonnegative]
-
-@[simp] theorem div_call (left right : Std.U64) :
-    quantity.Quantity.checked_div scalar left right = .ok (U64.checked_div left right) := by
-  simp only [quantity.Quantity.checked_div, U64.Insts.Num_traitsOpsCheckedCheckedDiv.checked_div, bind_ok]
-  cases h : U64.checked_div left right <;>
     simp [quantity.Quantity.from_checked, quantity.Quantity.try_from_scalar,
       U64.Insts.Account_extractionQuantityQuantityScalarI128.is_nonnegative]
 
@@ -76,7 +61,6 @@ def decodeExpression {Role A : Type} : rate.QuantityExpression Role A Std.U64 �
   | .Add left right => .binary .add (decodeExpression left) (decodeExpression right)
   | .Subtract left right => .binary .sub (decodeExpression left) (decodeExpression right)
   | .Multiply left right => .binary .mul (decodeExpression left) (decodeExpression right)
-  | .DivideFloor left right => .binary .div (decodeExpression left) (decodeExpression right)
   | .Minimum left right => .binary .min (decodeExpression left) (decodeExpression right)
   | .Maximum left right => .binary .max (decodeExpression left) (decodeExpression right)
   | .MulDiv left right denominator rounding =>
@@ -267,18 +251,6 @@ theorem eval_impl (proposal : exchange.Exchange RateId Role AccountId Std.U64)
         BasketOperationsRefinement.mul_call]
     have step := binary_call accountEq accountHash assetEq assetHash roleOrd inst () U64.checked_mul
       operationLaw proposal accounts left right _ _ .multiplicationOverflow ihl ihr
-    cases hl : Evaluation.eval arithmetic (context roleCompare proposal accounts) (decodeExpression left) <;>
-      cases hr : Evaluation.eval arithmetic (context roleCompare proposal accounts) (decodeExpression right) <;>
-      simpa [inst, decodeExpression, Evaluation.eval, Evaluation.operate, Evaluation.combine, arithmetic, encodeError, hl, hr] using step
-  | DivideFloor left right ihl ihr =>
-    rw [economy.evaluate_expression.eq_def]
-    let inst := economy.evaluate_expression.closure_4.Insts.CoreOpsFunctionFnOncePairShared0QuantityShared1QuantityOptionQuantity
-      RateId accountEq accountHash assetEq assetHash roleOrd scalar
-    have operationLaw (l r : Std.U64) : inst.call_once () (l, r) = .ok (U64.checked_div l r) := by
-      simp [inst, economy.evaluate_expression.closure_4.Insts.CoreOpsFunctionFnOncePairShared0QuantityShared1QuantityOptionQuantity.call_once,
-        div_call]
-    have step := binary_call accountEq accountHash assetEq assetHash roleOrd inst () U64.checked_div
-      operationLaw proposal accounts left right _ _ .divisionByZero ihl ihr
     cases hl : Evaluation.eval arithmetic (context roleCompare proposal accounts) (decodeExpression left) <;>
       cases hr : Evaluation.eval arithmetic (context roleCompare proposal accounts) (decodeExpression right) <;>
       simpa [inst, decodeExpression, Evaluation.eval, Evaluation.operate, Evaluation.combine, arithmetic, encodeError, hl, hr] using step

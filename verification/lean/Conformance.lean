@@ -72,7 +72,7 @@ def basketCase (entries : List (Nat × Nat)) : BasketCase :=
   | .ok output => ⟨strings, none, some (output.map (fun (asset, amount) => (asset, toString amount)))⟩
 
 def expression : Rates.Expr Unit Unit Unit :=
-  .binary .div (.binary .mul (.balance () ()) .units) (.parameter ())
+  .mulDiv .floor (.balance () ()) .units (.parameter ())
 
 structure AccountCase where
   operation : String
@@ -188,6 +188,14 @@ def rateMergeCase (target : List (Nat × List (Nat × Nat))) (role : Nat)
     RateConstruction.register compare role (target.map Prod.fst)⟩
 
 
+/-- Plain floor division: a mul-div by the constant one. -/
+def divide (left right : Evaluation.Expr Nat Nat Nat) : Evaluation.Expr Nat Nat Nat :=
+  .mulDiv .floor left (.constant 1) right
+
+/-- The binary combinators in their historical order; division is a mul-div. -/
+def combinators : List (Evaluation.Expr Nat Nat Nat → Evaluation.Expr Nat Nat Nat → Evaluation.Expr Nat Nat Nat) :=
+  [.binary .add, .binary .sub, .binary .mul, divide, .binary .min, .binary .max]
+
 def expressionJson : Evaluation.Expr Nat Nat Nat → Json
   | .constant value => Json.mkObj [("kind", toJson "constant"), ("value", toJson value)]
   | .units => Json.mkObj [("kind", toJson "units")]
@@ -196,10 +204,8 @@ def expressionJson : Evaluation.Expr Nat Nat Nat → Json
   | .binary op left right =>
     let kind := match op with
       | .add => "add" | .sub => "subtract" | .mul => "multiply"
-      | .div => "divide_floor" | .min => "minimum" | .max => "maximum"
-    let fields := match op with
-      | .div => ("numerator", "denominator") | _ => ("left", "right")
-    Json.mkObj [("kind", toJson kind), (fields.1, expressionJson left), (fields.2, expressionJson right)]
+      | .min => "minimum" | .max => "maximum"
+    Json.mkObj [("kind", toJson kind), ("left", expressionJson left), ("right", expressionJson right)]
   | .mulDiv rounding left right denominator =>
     Json.mkObj [("kind", toJson "mul_div"), ("left", expressionJson left), ("right", expressionJson right),
       ("denominator", expressionJson denominator),
@@ -541,11 +547,11 @@ def main : IO Unit := do
     for left in atoms do
       evaluation := evaluation.push (evaluationCase units left (.parameter "missing condition"))
       for right in atoms do
-        for op in [Rates.Op.add, .sub, .mul, .div, .min, .max] do
-          evaluation := evaluation.push (evaluationCase units (.binary op left right) .units)
-      for op in [Rates.Op.add, .sub, .mul, .div, .min, .max] do
+        for combine in combinators do
+          evaluation := evaluation.push (evaluationCase units (combine left right) .units)
+      for combine in combinators do
         evaluation := evaluation.push (evaluationCase units
-          (.binary op (.binary .sub (.balance 0 0) left) (.binary .div (.parameter "éλ") .units))
+          (combine (.binary .sub (.balance 0 0) left) (divide (.parameter "éλ") .units))
           (.balance 3 0))
       -- Full-width products, exact/inexact quotients, zero denominators,
       -- quotient overflow and an error in each operand position.
@@ -595,9 +601,9 @@ def main : IO Unit := do
   models := models.push (modelCase [(0, 0, 1), (1, 0, 2), (1, 0, 7), (0, 0, 8), (1, 0, 9), (2, 0, 4), (0, 1, 3)])
   let mut metadata : Array MetadataCase := #[metadataCase []]
   let mut discoveryExpressions := atoms
-  for op in [Rates.Op.add, .sub, .mul, .div, .min, .max] do
+  for combine in combinators do
     discoveryExpressions := discoveryExpressions ++
-      [.binary op (.binary .add (.balance 2 3) (.parameter "éλ"))
+      [combine (.binary .add (.balance 2 3) (.parameter "éλ"))
         (.binary .max (.balance 0 99) (.binary .sub (.parameter "a") (.balance 2 3)))]
   for rounding in [MulDiv.Rounding.floor, .ceil] do
     discoveryExpressions := discoveryExpressions ++

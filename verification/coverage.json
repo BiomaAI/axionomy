@@ -7,15 +7,15 @@
     "src/account.rs": "0eaf66937c63de2993353828e42fcfea2b80f172f5cb74fc76a28cef79fd9ff6",
     "src/amount.rs": "4c6a0599d4e7697fadb6981b88cc01e832fa6c01a0b33d1b997ba5c5bb1c705d",
     "src/basket.rs": "f9797280daeb1e9c4dedc795e39763f2ee1eb2b14ed6835a20a416f72a1ba419",
-    "src/economy.rs": "fa79ec26a470ce47cbe71e62812df2ef7e7e25665e28d623c39f4f8a4d71437d",
+    "src/economy.rs": "99d004137270329b4831e96118f7957ef5980f3b5066ce2226f5c323a18165e8",
     "src/exchange.rs": "234f6e6459d2fb97a1fbb802e14afed6e5ed50a023c8c2de745e6f6eac39b455",
     "src/lib.rs": "a30aa22ec74d2aed2436494deb39148b407d5f68dae74a57a8bc24c193998414",
     "src/quantity.rs": "ec4578a9c60b76d0a8fc0bfbe217e173bf098dbd5920e0ada83e51ec32ed65cc",
-    "src/rate.rs": "f113a91630aac2c2b01f120370aa9f5dac1701aec6f7f198f682042bc59c0e72",
+    "src/rate.rs": "34e842d1ce94bff54f1c892b981592fb39a18bb3dbd812dc7c18f66cdb02a88b",
     "verification/extract.rs": "415b34f5f4f8aa2679af860bd2a4092c96e113145919160fe7c81e33836de3e0",
     "verification/aeneas-toolchain.json": "8676d7d11be51a6f41984d874b35910e8a1a3d0a18414998feb9402ef80932fb",
     "verification/extract_basket.rs": "dc2b3a2159704c24a5261d0069a2aac7b575f30a94ae35c4c1e96933638592dd",
-    "verification/extract_account.rs": "f60ad7d1b14414d8e51cd42f14961f619e738cd4398c3ee1aadcaa01ca61b7d6",
+    "verification/extract_account.rs": "f62b445e2e4d89257964a3a684e20005da79ffa141c61c89957712b6959203ec",
     "verification/patches/aeneas-namespaced-discriminant.patch": "fabac7482deb3da6ecaca60c4060dfe9d2114efdd010699e736c4a91267f3bc9"
   },
   "features": [
@@ -933,7 +933,7 @@
         "Axionomy.ExpressionConstructionRefinement.plus",
         "Axionomy.ExpressionConstructionRefinement.subtract",
         "Axionomy.ExpressionConstructionRefinement.multiply",
-        "Axionomy.ExpressionConstructionRefinement.divide_floor",
+        "Axionomy.ExpressionConstructionRefinement.divide",
         "Axionomy.ExpressionConstructionRefinement.minimum",
         "Axionomy.ExpressionConstructionRefinement.maximum"
       ],
@@ -946,7 +946,7 @@
         "All public expression constructors and the Add operator preserve exact variants, operand order and typed identifiers. The u64 construct_refines and evaluate_constructed theorems compose recursive construction with the actual extracted evaluator and its exact error behavior.",
         "Nonconstant construction is generic in N. Recursive evaluation remains the u64 implementation contract. Into<String> parameter conversion requires an independent successful encoding law; the composed constructor uses the concrete String identity conversion.",
         "Box allocation, stack/resource behavior, collections, compiler/translation and primitive models remain dependencies. Tests reconstruct the existing Lean evaluation trees via public Rust constructors; those finite cases supplement the general implementation proofs.",
-        "The mul_div constructor and the u64 divide_ceil convenience (mul_div by one with Rounding::Ceil) are covered by the full_width_mul_div contract."
+        "MulDiv is the only division node. The mul_div constructor and the u64 divide convenience (mul_div by one with an explicit Rounding) are covered by the full_width_mul_div contract."
       ]
     },
     {
@@ -1541,10 +1541,10 @@
         "Axionomy.ExpressionConstructionRefinement.construct_refines",
         "Axionomy.ExpressionConstructionRefinement.decode_encode",
         "Axionomy.ExpressionConstructionRefinement.mul_div",
-        "Axionomy.ExpressionConstructionRefinement.divide_ceil",
+        "Axionomy.ExpressionConstructionRefinement.divide",
         "Axionomy.ExpressionConstructionRefinement.public_mul_div",
-        "Axionomy.ExpressionConstructionRefinement.public_divide_ceil",
-        "Axionomy.ExpressionConstructionRefinement.divide_ceil_quotient",
+        "Axionomy.ExpressionConstructionRefinement.public_divide",
+        "Axionomy.ExpressionConstructionRefinement.divide_quotient",
         "Axionomy.DiscoveryRefinement.roles_refines",
         "Axionomy.DiscoveryRefinement.assets_refines",
         "Axionomy.DiscoveryRefinement.parameters_refines",
@@ -1572,7 +1572,7 @@
         "QuantityExpression::MulDiv computes left × right ÷ denominator with an explicit Rounding (Floor or Ceil). For every u64 triple and both directions, the extracted production QuantityScalar::checked_mul_div widens to u128, multiplies, divides and (for Ceil with a nonzero remainder) adds one without any primitive failure, and returns exactly MulDiv.mulDiv u64Max: None iff the denominator is zero or the rounded quotient exceeds u64. The intermediate product is never range-checked. Public Quantity<u64>::checked_mul_div and the evaluator refine this specification.",
         "The evaluator evaluates left, right and denominator in order against one snapshot; the first operand error wins, then a zero denominator reports DivisionByZero before the quotient is attempted, and an out-of-range quotient reports MultiplicationOverflow. Discovery, inspection asset collection and parameter diagnostics recurse into all three operands in order. Rounding is a typed public enum whose derived equality/clone and inherited clone_from/ne are proved like QuantityComparison.",
         "The u128 operations are Aeneas's native checked primitives and casts; no new intrinsic, external declaration or compiler patch is added. The BigUint QuantityScalar implementation, arbitrary custom backends and serde/JsonSchema encoding of MulDiv and Rounding are tested but not implementation-proved. Lean-generated conformance adds 468 evaluation cases (independently recomputed in tests via a wide-integer reference), discovery, inspection and derived-trait cases; tests/mul_div.rs adds property tests against a u128 reference and BigUint agreement.",
-        "MulDiv specification theorems (bounds, floor ≤ ceil ≤ floor + 1, exactness, monotonicity, floor-by-one equals DivideFloor) are design-level facts over naturals; the existing DivideFloor variant is unchanged for compatibility."
+        "MulDiv specification theorems (bounds, floor ≤ ceil ≤ floor + 1, exactness, monotonicity, floor-by-one equals natural division) are design-level facts over naturals. MulDiv replaced the former DivideFloor node: every former floor-division fixture was regenerated as a floor mul-div by one with identical outcomes (all 2,678 evaluation, 596 transaction and 246 execution cases)."
       ]
     },
     {

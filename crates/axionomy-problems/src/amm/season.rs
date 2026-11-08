@@ -29,12 +29,6 @@ fn world_law() -> Rate<Role, Asset> {
         )
         .condition("one period event", Q::units(), C::Equal, Q::constant(1))
 }
-fn ceil(numerator: Q<Role, Asset>, denominator: Q<Role, Asset>) -> Q<Role, Asset> {
-    Q::divide_floor(
-        numerator + Q::subtract(denominator.clone(), Q::constant(1)),
-        denominator,
-    )
-}
 fn weather(seed: u64, day: u8) -> u64 {
     let mut ticket = seed.wrapping_add(u64::from(day).wrapping_mul(0x9e37_79b9_7f4a_7c15));
     ticket = (ticket ^ (ticket >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
@@ -216,11 +210,7 @@ pub(super) fn build(source: World, days: u8, scale: u64, seed: u64) -> World {
             RateId::RemoveLiquidity => {
                 rate = rate.condition(
                     "withdrawn energy fits storage",
-                    q(role, Asset::Energy)
-                        + Q::divide_floor(
-                            Q::multiply(q(Role::Pool, Asset::Energy), Q::units()),
-                            issued_lp_expression(),
-                        ),
+                    q(role, Asset::Energy) + withdrawn_reserve(Asset::Energy),
                     C::LessThanOrEqual,
                     q(role, Asset::StorageCapacity),
                 );
@@ -305,20 +295,23 @@ pub(super) fn build(source: World, days: u8, scale: u64, seed: u64) -> World {
                     next = next.produce_computed(
                         role,
                         Asset::ProductionAllowance,
-                        Q::divide_floor(
-                            Q::multiply(
-                                q(role, Asset::ProductionCapacity),
-                                q(Role::World, Asset::Sunlight(day + 1)),
-                            ),
+                        // The producer receives the allowance: round down.
+                        Q::mul_div(
+                            q(role, Asset::ProductionCapacity),
+                            q(Role::World, Asset::Sunlight(day + 1)),
                             Q::constant(100),
+                            Rounding::Floor,
                         ),
                     );
                 }
             }
             if !last {
-                let closing_price = Q::divide_floor(
-                    Q::multiply(q(Role::Pool, Asset::Credit), Q::constant(1_000)),
+                // A price signal, not a payment; floor keeps it a pure observation.
+                let closing_price = Q::mul_div(
+                    q(Role::Pool, Asset::Credit),
+                    Q::constant(1_000),
                     q(Role::Pool, Asset::Energy),
+                    Rounding::Floor,
                 );
                 next = clear(
                     clear(next, role, Asset::ReferencePrice),
@@ -328,9 +321,10 @@ pub(super) fn build(source: World, days: u8, scale: u64, seed: u64) -> World {
                 .produce_computed(
                     role,
                     Asset::ReferencePrice,
-                    Q::divide_floor(
+                    Q::divide(
                         Q::multiply(q(role, Asset::ReferencePrice), Q::constant(3)) + closing_price,
                         Q::constant(4),
+                        Rounding::Floor,
                     ),
                 )
                 .produce(
@@ -433,9 +427,11 @@ pub(super) fn build(source: World, days: u8, scale: u64, seed: u64) -> World {
         .produce_computed(
             producer,
             Asset::ProductionAllowance,
-            Q::divide_floor(
-                Q::multiply(Q::constant(400 * scale), current_sun),
+            Q::mul_div(
+                Q::constant(400 * scale),
+                current_sun,
                 Q::constant(100),
+                Rounding::Floor,
             ),
         )
         .condition(
@@ -478,14 +474,17 @@ pub(super) fn build(source: World, days: u8, scale: u64, seed: u64) -> World {
             .consume(Role::Treasury, basket([(Asset::Credit, 4_000 * scale)]))
             .distinct(Role::Consumer, Role::Treasury),
     );
-    let energy = ceil(
-        Q::multiply(q(Role::Pool, Asset::Energy), Q::units()),
-        issued_lp_expression(),
-    );
-    let credit = ceil(
-        Q::multiply(q(Role::Pool, Asset::Credit), Q::units()),
-        issued_lp_expression(),
-    );
+    // The provider pays reserves to mint shares, so each side rounds up.
+    let deposit = |reserve| {
+        Q::mul_div(
+            q(Role::Pool, reserve),
+            Q::units(),
+            issued_lp_expression(),
+            Rounding::Ceil,
+        )
+    };
+    let energy = deposit(Asset::Energy);
+    let credit = deposit(Asset::Credit);
     builder = builder.rate(
         RateId::FundLiquidity,
         actor_law(Rate::new(), Role::LiquidityProvider)

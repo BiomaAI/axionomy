@@ -116,7 +116,7 @@ def fixtures (expression : Evaluation.Expr Nat Nat Nat → Json) : Array Json :=
   cases := cases.push (add "computed-unscaled" before { blank with computedConsume := [⟨0, 0, .constant 2⟩], computedProduce := [⟨1, 0, .constant 2⟩], computedPreserve := [⟨0, 0, .constant 1⟩] } { proposal with units := 3 } [])
   cases := cases.push (add "aliases-all-channels" before { transfer with consume := [(0, [(0, 1)]), (1, [(0, 1)])], preserve := [(0, [(0, 1)]), (1, [(0, 1)])], computedProduce := [⟨0, 0, .constant 1⟩, ⟨1, 0, .constant 1⟩] }
     { proposal with bindings := [(0, 1), (1, 1)] } [])
-  let divZero : Evaluation.Expr Nat Nat Nat := .binary .div (.constant 1) (.constant 0)
+  let divZero : Evaluation.Expr Nat Nat Nat := .mulDiv .floor (.constant 1) (.constant 1) (.constant 0)
   cases := cases.push (add "condition-first-false" before { transfer with conditions := [⟨"first", .constant 1, .equal, .constant 2⟩,
     ⟨"later", divZero, .equal, .constant 0⟩] } proposal [])
   cases := cases.push (add "condition-first-error" before { transfer with conditions := [⟨"bad", divZero, .equal, .constant 0⟩,
@@ -185,7 +185,7 @@ def executionFixtures (expression : Evaluation.Expr Nat Nat Nat → Json) : Arra
   cases := cases.push (replayScenario expression "empty-rate-repeated" before blank
     (List.replicate 8 { proposal with bindings := [] }))
   cases := cases.push (replayScenario expression "computed-snapshot-revisited" before
-    { blank with computedConsume := [⟨0, 0, .binary .div (.balance 0 0) (.constant 2)⟩], computedProduce := [⟨1, 0, .binary .div (.balance 0 0) (.constant 2)⟩] }
+    { blank with computedConsume := [⟨0, 0, .mulDiv .floor (.balance 0 0) (.constant 1) (.constant 2)⟩], computedProduce := [⟨1, 0, .mulDiv .floor (.balance 0 0) (.constant 1) (.constant 2)⟩] }
     [proposal, proposal, proposal, proposal] [⟨"mass", [(0, 1)]⟩])
   return cases
 

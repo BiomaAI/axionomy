@@ -1017,7 +1017,7 @@ energy remains useful because consuming it produces goal and utility assets.
 There is no external market, stablecoin peg, or oracle.
 
 Every swap is an exact state-evaluated rate law. The kernel reads pre-exchange
-reserves, evaluates integer floor division with a 0.3% fee, checks the caller's
+reserves, evaluates a full-width mul-div rounded down for the trader with a 0.3% fee, checks the caller's
 minimum output, applies both reserve and trader deltas atomically, and emits a
 replayable receipt. Proportional liquidity deposits preserve price while
 changing depth. Withdrawals burn shares against exact pre-state ownership.

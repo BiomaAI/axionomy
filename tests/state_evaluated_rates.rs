@@ -1,6 +1,6 @@
 use axionomy::{
     Account, ApplyError, Economy, EconomyBuilder, Exchange, LinearInvariant, Quantity,
-    QuantityComparison, QuantityExpression as Q, Rate, basket,
+    QuantityComparison, QuantityExpression as Q, Rate, Rounding, basket,
 };
 use serde::{Deserialize, Serialize};
 
@@ -31,17 +31,17 @@ type World = Economy<AccountId, Asset, RateId, Role>;
 type Action = Exchange<RateId, Role, AccountId>;
 
 fn output_expression() -> Q<Role, Asset> {
-    // floor(pool_energy * 997 * input / (pool_credit * 1000 + 997 * input))
+    // floor(pool_energy * 997 * input / (pool_credit * 1000 + 997 * input)),
+    // computed at full width; the trader receives the output, so it rounds down.
     let input_after_fee = Q::multiply(Q::constant(997), Q::units());
-    Q::divide_floor(
-        Q::multiply(
-            Q::balance(Role::Pool, Asset::Energy),
-            input_after_fee.clone(),
-        ),
+    Q::mul_div(
+        Q::balance(Role::Pool, Asset::Energy),
+        input_after_fee.clone(),
         Q::plus(
             Q::multiply(Q::balance(Role::Pool, Asset::Credit), Q::constant(1_000)),
             input_after_fee,
         ),
+        Rounding::Floor,
     )
 }
 

@@ -92,7 +92,8 @@ classification and exact before/after diagnostic totals.
 The recursive expression evaluator and condition helper now have implementation
 proofs for every finite expression and u64 input. They preserve the original
 snapshot, left-to-right error precedence, missing-input distinctions and exact
-checked Nat arithmetic, including floor division and min/max. Typed internal
+checked Nat arithmetic, including full-width rounded mul-div (the only division)
+and min/max. Typed internal
 errors retain the existing public text; message rendering is proved for valid
 UTF-8 names when the resulting message fits `usize`. Static effect scaling/merging
 and computed single-quantity merging also have exact implementation proofs,
@@ -117,6 +118,15 @@ cases (all 2,678 independently recomputed with a wide-integer reference), all
 372 workspace tests, 110 boundary/gate/extraction controls and production
 mutations, including a new control that drops the ceiling increment. Formatting
 and Clippy with warnings denied also passed.
+
+`MulDiv` then replaced the former `DivideFloor` node, so it is the only
+division and every division names its rounding. Every former floor-division
+fixture was regenerated as a floor mul-div by one: all 2,678 evaluation, 596
+transaction and 246 execution outcomes are identical, and only two design-level
+expression cases changed, from intermediate-overflow rejection to the exact
+quotient. That change passed the full gate (714 registered contracts, 4,484
+audited theorems), all 372 workspace tests and 113 boundary/gate controls and
+production mutations.
 
 The complete production u64 `analyze`, `assess`, and `apply` paths now refine an
 ordered transaction specification. Rejection preserves the entire raw model.

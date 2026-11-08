@@ -946,13 +946,6 @@ pub fn expression_multiply<Role, A, N>(
     QuantityExpression::multiply(left, right)
 }
 
-pub fn expression_divide_floor<Role, A, N>(
-    left: QuantityExpression<Role, A, N>,
-    right: QuantityExpression<Role, A, N>,
-) -> QuantityExpression<Role, A, N> {
-    QuantityExpression::divide_floor(left, right)
-}
-
 pub fn expression_mul_div<Role, A, N>(
     left: QuantityExpression<Role, A, N>,
     right: QuantityExpression<Role, A, N>,
@@ -962,11 +955,12 @@ pub fn expression_mul_div<Role, A, N>(
     QuantityExpression::mul_div(left, right, denominator, rounding)
 }
 
-pub fn expression_divide_ceil<Role, A>(
+pub fn expression_divide<Role, A>(
     numerator: QuantityExpression<Role, A>,
     denominator: QuantityExpression<Role, A>,
+    rounding: Rounding,
 ) -> QuantityExpression<Role, A> {
-    QuantityExpression::divide_ceil(numerator, denominator)
+    QuantityExpression::divide(numerator, denominator, rounding)
 }
 
 pub fn quantity_mul_div(

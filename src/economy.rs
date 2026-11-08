@@ -1456,17 +1456,6 @@ where
             ExpressionError::MultiplicationOverflow,
             |left, right| left.checked_mul(right),
         ),
-        QuantityExpression::DivideFloor {
-            numerator,
-            denominator,
-        } => evaluate_binary(
-            numerator,
-            denominator,
-            proposal,
-            accounts,
-            ExpressionError::DivisionByZero,
-            |left, right| left.checked_div(right),
-        ),
         QuantityExpression::MulDiv {
             left,
             right,

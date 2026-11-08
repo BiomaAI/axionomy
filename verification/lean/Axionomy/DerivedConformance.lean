@@ -10,12 +10,12 @@ def atoms : List Expr := [.Constant 0, .Constant Quantity.u64Max, .Units, .Param
   .Balance 0 1, .Balance 1 0, .Constant 0]
 
 def expressions : List Expr := atoms ++
-  ([rate.QuantityExpression.Add, rate.QuantityExpression.Subtract, rate.QuantityExpression.Multiply, rate.QuantityExpression.DivideFloor, rate.QuantityExpression.Minimum, rate.QuantityExpression.Maximum].flatMap fun op =>
+  ([rate.QuantityExpression.Add, rate.QuantityExpression.Subtract, rate.QuantityExpression.Multiply, rate.QuantityExpression.Minimum, rate.QuantityExpression.Maximum].flatMap fun op =>
     [op (.Constant 0) .Units, op .Units (.Constant 0), op (.Balance 0 1) (.Parameter "β")]) ++
   [.Add (.Multiply .Units (.Constant 3)) (.Parameter "β"),
    .Add (.Multiply .Units (.Constant 4)) (.Parameter "β"),
    .Add (.Multiply .Units (.Constant 3)) (.Parameter "γ"),
-   .Maximum (.Minimum (.Balance 0 1) .Units) (.DivideFloor (.Constant 7) (.Constant 2))] ++
+   .Maximum (.Minimum (.Balance 0 1) .Units) (.MulDiv (.Constant 7) (.Constant 1) (.Constant 2) .Floor)] ++
   ([quantity.Rounding.Floor, quantity.Rounding.Ceil].flatMap fun rounding =>
     [.MulDiv (.Constant 7) .Units (.Constant 2) rounding, .MulDiv .Units (.Constant 7) (.Constant 2) rounding,
      .MulDiv (.Constant 7) .Units (.Balance 0 1) rounding,
@@ -32,7 +32,6 @@ def expressionJson : Expr → Json
   | .Add left right => binaryJson "add" (expressionJson left) (expressionJson right)
   | .Subtract left right => binaryJson "subtract" (expressionJson left) (expressionJson right)
   | .Multiply left right => binaryJson "multiply" (expressionJson left) (expressionJson right)
-  | .DivideFloor left right => binaryJson "divide_floor" (expressionJson left) (expressionJson right)
   | .Minimum left right => binaryJson "minimum" (expressionJson left) (expressionJson right)
   | .Maximum left right => binaryJson "maximum" (expressionJson left) (expressionJson right)
   | .MulDiv left right denominator rounding => Json.mkObj [("kind", toJson "mul_div"),

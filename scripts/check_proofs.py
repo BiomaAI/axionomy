@@ -424,7 +424,7 @@ def validate_coverage(root, coverage):
                     "Axionomy.ExpressionConstructionRefinement.add_operator", "Axionomy.ExpressionConstructionRefinement.construct_refines",
                     "Axionomy.ExpressionConstructionRefinement.decode_encode", "Axionomy.ExpressionConstructionRefinement.evaluate_constructed",
                     "Axionomy.ExpressionConstructionRefinement.plus", "Axionomy.ExpressionConstructionRefinement.subtract",
-                    "Axionomy.ExpressionConstructionRefinement.multiply", "Axionomy.ExpressionConstructionRefinement.divide_floor",
+                    "Axionomy.ExpressionConstructionRefinement.multiply", "Axionomy.ExpressionConstructionRefinement.divide",
                     "Axionomy.ExpressionConstructionRefinement.minimum", "Axionomy.ExpressionConstructionRefinement.maximum",
                 }),
                 "observations_and_goals": ("AccountExtraction.Funs", {
@@ -533,6 +533,7 @@ def validate_coverage(root, coverage):
                     "Axionomy.MulDivRefinement.quantity_refines",
                     "Axionomy.EvaluationRefinement.evaluate_refines_naturals",
                     "Axionomy.ExpressionConstructionRefinement.public_mul_div",
+                    "Axionomy.ExpressionConstructionRefinement.public_divide",
                     "Axionomy.DiscoveryRefinement.parameters_refines",
                     "Axionomy.DerivedRecordRefinement.rounding_eq"}),
                 "u64_checked_arithmetic": ("QuantityExtraction.Funs", {

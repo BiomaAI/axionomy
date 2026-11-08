@@ -14,11 +14,12 @@ use thiserror::Error;
 ///
 /// This keeps state-dependent exchange laws inside Axionomy authority without
 /// embedding domain callbacks in the kernel. Expressions intentionally expose
-/// only exact integer arithmetic. `DivideFloor` rounds down; `MulDiv` computes
-/// `left × right ÷ denominator` from a full-width product with an explicit
+/// only exact integer arithmetic. `MulDiv` is the only division: it computes
+/// `left × right ÷ denominator` from a full-width product and always names its
 /// [`Rounding`] direction, so scaled ratios cannot overflow in the
-/// intermediate product. Round amounts a participant pays up and amounts a
-/// participant receives down, so rounding dust stays with the counterparty.
+/// intermediate product and nothing rounds implicitly. Round amounts a
+/// participant pays up and amounts a participant receives down, so rounding
+/// dust stays with the counterparty.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(
     tag = "kind",
@@ -52,10 +53,6 @@ pub enum QuantityExpression<Role, A, N = u64> {
         left: Box<Self>,
         right: Box<Self>,
     },
-    DivideFloor {
-        numerator: Box<Self>,
-        denominator: Box<Self>,
-    },
     Minimum {
         left: Box<Self>,
         right: Box<Self>,
@@ -81,9 +78,9 @@ impl<Role, A> QuantityExpression<Role, A> {
         }
     }
 
-    /// `⌈numerator ÷ denominator⌉`, expressed as a rounded-up mul-div by one.
-    pub fn divide_ceil(numerator: Self, denominator: Self) -> Self {
-        Self::mul_div(numerator, Self::constant(1), denominator, Rounding::Ceil)
+    /// `numerator ÷ denominator`, rounded as stated: a mul-div by one.
+    pub fn divide(numerator: Self, denominator: Self, rounding: Rounding) -> Self {
+        Self::mul_div(numerator, Self::constant(1), denominator, rounding)
     }
 }
 
@@ -132,13 +129,6 @@ impl<Role, A, N> QuantityExpression<Role, A, N> {
         }
     }
 
-    pub fn divide_floor(numerator: Self, denominator: Self) -> Self {
-        Self::DivideFloor {
-            numerator: Box::new(numerator),
-            denominator: Box::new(denominator),
-        }
-    }
-
     pub fn minimum(left: Self, right: Self) -> Self {
         Self::Minimum {
             left: Box::new(left),
@@ -181,13 +171,6 @@ impl<Role, A, N> QuantityExpression<Role, A, N> {
                 left.collect_roles(roles);
                 right.collect_roles(roles);
             }
-            Self::DivideFloor {
-                numerator,
-                denominator,
-            } => {
-                numerator.collect_roles(roles);
-                denominator.collect_roles(roles);
-            }
             Self::MulDiv {
                 left,
                 right,
@@ -212,13 +195,6 @@ impl<Role, A, N> QuantityExpression<Role, A, N> {
             | Self::Maximum { left, right } => {
                 left.collect_assets(assets);
                 right.collect_assets(assets);
-            }
-            Self::DivideFloor {
-                numerator,
-                denominator,
-            } => {
-                numerator.collect_assets(assets);
-                denominator.collect_assets(assets);
             }
             Self::MulDiv {
                 left,
@@ -246,13 +222,6 @@ impl<Role, A, N> QuantityExpression<Role, A, N> {
             | Self::Maximum { left, right } => {
                 left.collect_parameters(parameters);
                 right.collect_parameters(parameters);
-            }
-            Self::DivideFloor {
-                numerator,
-                denominator,
-            } => {
-                numerator.collect_parameters(parameters);
-                denominator.collect_parameters(parameters);
             }
             Self::MulDiv {
                 left,

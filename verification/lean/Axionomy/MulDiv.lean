@@ -146,7 +146,7 @@ theorem ceil_anti_denominator (left right denominator denominator' : Nat)
     Nat.mul_le_mul strict h
   nlinarith
 
-/-- Floor division by a unit factor is the existing `DivideFloor` result. -/
+/-- Floor division by a unit factor is plain natural-number division. -/
 theorem floor_unit (numerator denominator : Nat) :
     quotient .floor numerator 1 denominator = numerator / denominator := by
   simp [quotient]

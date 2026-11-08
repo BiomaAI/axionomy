@@ -312,7 +312,7 @@ class AccountExtractionTests(unittest.TestCase):
         path = self.directory / "Funs.lean"
         original = path.read_text()
         for definition in ("amount.AssetAmount.new", "exchange.Exchange.bind",
-                           "economy.ExchangeAssessment.status", "rate.QuantityExpression.divide_floor"):
+                           "economy.ExchangeAssessment.status", "rate.QuantityExpression.mul_div"):
             with self.subTest(definition=definition):
                 needle = "def " + definition + "\n"
                 self.assertEqual(original.count(needle), 1)

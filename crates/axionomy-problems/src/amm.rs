@@ -7,7 +7,7 @@
 
 use axionomy::{
     Account, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Quantity,
-    QuantityComparison, QuantityExpression as Q, Rate, Trace, basket,
+    QuantityComparison, QuantityExpression as Q, Rate, Rounding, Trace, basket,
 };
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -395,14 +395,17 @@ fn build(size: MarketSize) -> World {
         .expect("the Living Market model is coherent")
 }
 
+// The trader receives the output, so it rounds down; the product is full width.
 fn swap_output_expression(input: Asset, output: Asset) -> Q<Role, Asset> {
     let input_after_fee = Q::multiply(Q::constant(FEE_NUMERATOR), Q::units());
-    Q::divide_floor(
-        Q::multiply(Q::balance(Role::Pool, output), input_after_fee.clone()),
+    Q::mul_div(
+        Q::balance(Role::Pool, output),
+        input_after_fee.clone(),
         Q::plus(
             Q::multiply(Q::balance(Role::Pool, input), Q::constant(FEE_DENOMINATOR)),
             input_after_fee,
         ),
+        Rounding::Floor,
     )
 }
 
@@ -428,17 +431,33 @@ fn issued_lp_expression() -> Q<Role, Asset> {
     )
 }
 
+// The provider receives shares, so each side rounds down.
 fn minted_lp_expression() -> Q<Role, Asset> {
     let issued = issued_lp_expression();
     Q::minimum(
-        Q::divide_floor(
-            Q::multiply(Q::parameter("energy_amount"), issued.clone()),
+        Q::mul_div(
+            Q::parameter("energy_amount"),
+            issued.clone(),
             Q::balance(Role::Pool, Asset::Energy),
+            Rounding::Floor,
         ),
-        Q::divide_floor(
-            Q::multiply(Q::parameter("credit_amount"), issued),
+        Q::mul_div(
+            Q::parameter("credit_amount"),
+            issued,
             Q::balance(Role::Pool, Asset::Credit),
+            Rounding::Floor,
         ),
+    )
+}
+
+/// Reserve paid out for `units` burned shares; the provider receives it, so it
+/// rounds down.
+pub(crate) fn withdrawn_reserve(reserve: Asset) -> Q<Role, Asset> {
+    Q::mul_div(
+        Q::balance(Role::Pool, reserve),
+        Q::units(),
+        issued_lp_expression(),
+        Rounding::Floor,
     )
 }
 
@@ -481,15 +500,8 @@ fn add_liquidity_rate() -> Rate<Role, Asset> {
 }
 
 fn remove_liquidity_rate() -> Rate<Role, Asset> {
-    let issued = issued_lp_expression();
-    let energy = Q::divide_floor(
-        Q::multiply(Q::balance(Role::Pool, Asset::Energy), Q::units()),
-        issued.clone(),
-    );
-    let credit = Q::divide_floor(
-        Q::multiply(Q::balance(Role::Pool, Asset::Credit), Q::units()),
-        issued,
-    );
+    let energy = withdrawn_reserve(Asset::Energy);
+    let credit = withdrawn_reserve(Asset::Credit);
     Rate::new()
         .consume(Role::LiquidityProvider, basket([(Asset::LpShare, 1)]))
         .produce(Role::Pool, basket([(Asset::UnissuedLpShare, 1)]))

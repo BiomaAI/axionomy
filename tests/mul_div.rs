@@ -191,7 +191,7 @@ fn world(rounding: Rounding) -> World {
             Rate::new().produce_computed(
                 Role::Trader,
                 Asset::Share,
-                Q::divide_ceil(Q::parameter("bps"), Q::parameter("scale")),
+                Q::divide(Q::parameter("bps"), Q::parameter("scale"), Rounding::Ceil),
             ),
         )
         .invariant(LinearInvariant::new("credit").weight(Asset::Credit, 1))
@@ -243,7 +243,7 @@ fn fees_round_in_the_declared_direction_and_conserve_credit() {
 }
 
 #[test]
-fn divide_ceil_rounds_up() {
+fn divide_rounds_in_the_named_direction() {
     let mut world = world(Rounding::Ceil);
     let credit = Exchange::new(RateId::Credit, Quantity::new(1))
         .bind(Role::Trader, AccountId::Trader)
@@ -255,7 +255,7 @@ fn divide_ceil_rounds_up() {
         Quantity::new(4)
     );
     assert_eq!(
-        Q::<Role, Asset>::divide_ceil(Q::constant(7), Q::constant(2)),
+        Q::<Role, Asset>::divide(Q::constant(7), Q::constant(2), Rounding::Ceil),
         Q::mul_div(
             Q::constant(7),
             Q::constant(1),

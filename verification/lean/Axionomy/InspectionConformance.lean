@@ -71,7 +71,6 @@ def expressionJson : Expression → Json
   | .Add left right => binaryJson "add" (expressionJson left) (expressionJson right)
   | .Subtract left right => binaryJson "subtract" (expressionJson left) (expressionJson right)
   | .Multiply left right => binaryJson "multiply" (expressionJson left) (expressionJson right)
-  | .DivideFloor left right => binaryJson "divide" (expressionJson left) (expressionJson right)
   | .Minimum left right => binaryJson "minimum" (expressionJson left) (expressionJson right)
   | .Maximum left right => binaryJson "maximum" (expressionJson left) (expressionJson right)
   | .MulDiv left right denominator rounding => Json.mkObj [("kind", toJson "mul_div"),
@@ -136,7 +135,7 @@ def models : Array Json := Id.run do
     let left : Expression := .Add (.Balance 4 88) (.Parameter "未知`")
     let right : Expression := .Maximum (.Balance 8 77) (.Balance 4 88)
     let expressions : List Expression := [.Constant value, .Units, .Parameter "", .Balance 4 88,
-      .Add left right, .Subtract left right, .Multiply left right, .DivideFloor left right,
+      .Add left right, .Subtract left right, .Multiply left right, .MulDiv left (.Constant 1) right .Floor,
       .Minimum left right, .Maximum left right, .MulDiv left right (.Balance 8 66) .Floor,
       .MulDiv (.Balance 8 66) right left .Ceil]
     for expression in expressions do

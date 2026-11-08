@@ -249,7 +249,6 @@ fn expression<N: QuantityScalar>(
                 "add" => E::plus(left, right),
                 "subtract" => E::subtract(left, right),
                 "multiply" => E::multiply(left, right),
-                "divide" => E::divide_floor(left, right),
                 "minimum" => E::minimum(left, right),
                 "maximum" => E::maximum(left, right),
                 _ => panic!("unknown expression {kind}"),
@@ -270,10 +269,6 @@ fn expression_json<N: QuantityScalar>(value: &QuantityExpression<Role, Asset, N>
         E::Add { left, right } => ("add", left, right),
         E::Subtract { left, right } => ("subtract", left, right),
         E::Multiply { left, right } => ("multiply", left, right),
-        E::DivideFloor {
-            numerator,
-            denominator,
-        } => ("divide", numerator, denominator),
         E::Minimum { left, right } => ("minimum", left, right),
         E::Maximum { left, right } => ("maximum", left, right),
         E::MulDiv {

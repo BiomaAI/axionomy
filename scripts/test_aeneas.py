@@ -202,8 +202,8 @@ impl<AccountId: PartialEq, A: PartialEq, N: PartialEq> PartialEq for Observation
 
     def test_swapped_division_operands_break_expression_construction(self):
         self.check_mutation(
-            "src/rate.rs", "numerator: Box::new(numerator),\n            denominator: Box::new(denominator)",
-            "numerator: Box::new(denominator),\n            denominator: Box::new(numerator)",
+            "src/rate.rs", "Self::mul_div(numerator, Self::constant(1), denominator, rounding)",
+            "Self::mul_div(denominator, Self::constant(1), numerator, rounding)",
             "extract_account.py", "stale account model", "ExpressionConstructionRefinement", "AccountExtraction")
 
     def test_missing_goal_account_acceptance_breaks_matching(self):

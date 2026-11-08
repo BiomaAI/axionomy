@@ -1,7 +1,7 @@
 //! Timed heterogeneous fleet with cargo, a shared road and finite services.
 use axionomy::{
     Account, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Quantity,
-    QuantityComparison as C, QuantityExpression as Q, Rate, Trace, basket,
+    QuantityComparison as C, QuantityExpression as Q, Rate, Rounding, Trace, basket,
 };
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Van {
@@ -414,13 +414,19 @@ pub fn initial(stress: bool, seed: u64) -> World {
                         Outcome::Delayed => 4,
                         Outcome::Breakdown => 6,
                     };
-                    let shifted = Q::divide_floor(
+                    // Bit extraction from the hidden ticket: floor is the
+                    // operation itself, not a settlement choice.
+                    let shifted = Q::divide(
                         q(Role::Nature, Asset::TicketWord(van, from, to)),
                         q(Role::Vehicle, Asset::TicketDivisor),
+                        Rounding::Floor,
                     );
                     let code = Q::subtract(
                         shifted.clone(),
-                        Q::multiply(Q::divide_floor(shifted, Q::constant(4)), Q::constant(4)),
+                        Q::multiply(
+                            Q::divide(shifted, Q::constant(4), Rounding::Floor),
+                            Q::constant(4),
+                        ),
                     );
                     let mut resolution = vehicle(law(), van)
                         .preserve(Role::Nature, basket([(Asset::NatureIdentity, 1)]))
