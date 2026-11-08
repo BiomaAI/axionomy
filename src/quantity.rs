@@ -95,11 +95,6 @@ impl QuantityScalar for u64 {
         i128::from(*self).checked_mul(i128::from(coefficient))
     }
 
-    // Aeneas models the primitive remainder operator, not `is_multiple_of`.
-    #[allow(
-        clippy::manual_is_multiple_of,
-        reason = "keep the extracted primitive remainder"
-    )]
     fn checked_mul_div(&self, rhs: &Self, denominator: &Self, rounding: Rounding) -> Option<Self> {
         if *denominator == 0 {
             return None;
@@ -110,7 +105,10 @@ impl QuantityScalar for u64 {
         match rounding {
             Rounding::Floor => narrow(quotient),
             Rounding::Ceil => {
-                if product % divisor == 0 {
+                // Aeneas models the primitive remainder operator, which the
+                // proof uses directly; `is_multiple_of` is not extracted.
+                let remainder = product % divisor;
+                if remainder == 0 {
                     narrow(quotient)
                 } else {
                     narrow(quotient + 1)

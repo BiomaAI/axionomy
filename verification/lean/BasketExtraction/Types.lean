@@ -58,7 +58,7 @@ structure num_traits.identities.Zero (Self : Type _) where
   is_zero : Self → Result Bool
 
 /-- [basket_extraction::quantity::Quantity]
-    Source: 'verification/../src/quantity.rs', lines 154:0-154:32
+    Source: 'verification/../src/quantity.rs', lines 152:0-152:32
     Visibility: public -/
 @[reducible]
 def quantity.Quantity (N : Type _) := N

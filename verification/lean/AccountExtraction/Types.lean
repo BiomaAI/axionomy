@@ -149,7 +149,7 @@ structure num_traits.ops.checked.CheckedDiv (Self : Type _) where
   checked_div : Self → Self → Result (Option Self)
 
 /-- [account_extraction::quantity::Quantity]
-    Source: 'verification/../src/quantity.rs', lines 154:0-154:32
+    Source: 'verification/../src/quantity.rs', lines 152:0-152:32
     Visibility: public -/
 @[reducible]
 def quantity.Quantity (N : Type _) := N
@@ -210,7 +210,7 @@ structure quantity.QuantityScalar (Self : Type _) (Self_SignedMeasure : Type _)
     (Option Self)
 
 /-- [account_extraction::quantity::QuantityError]
-    Source: 'verification/../src/quantity.rs', lines 324:0-327:1
+    Source: 'verification/../src/quantity.rs', lines 322:0-325:1
     Visibility: public -/
 @[discriminant isize]
 inductive quantity.QuantityError where

@@ -10,7 +10,7 @@
     "src/economy.rs": "99d004137270329b4831e96118f7957ef5980f3b5066ce2226f5c323a18165e8",
     "src/exchange.rs": "234f6e6459d2fb97a1fbb802e14afed6e5ed50a023c8c2de745e6f6eac39b455",
     "src/lib.rs": "a30aa22ec74d2aed2436494deb39148b407d5f68dae74a57a8bc24c193998414",
-    "src/quantity.rs": "ec4578a9c60b76d0a8fc0bfbe217e173bf098dbd5920e0ada83e51ec32ed65cc",
+    "src/quantity.rs": "30e724147299491a1c22abf96a1d83c1faf7add5d2f6e80013b19e1cf04c13f1",
     "src/rate.rs": "34e842d1ce94bff54f1c892b981592fb39a18bb3dbd812dc7c18f66cdb02a88b",
     "verification/extract.rs": "415b34f5f4f8aa2679af860bd2a4092c96e113145919160fe7c81e33836de3e0",
     "verification/aeneas-toolchain.json": "8676d7d11be51a6f41984d874b35910e8a1a3d0a18414998feb9402ef80932fb",

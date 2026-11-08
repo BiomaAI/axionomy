@@ -692,7 +692,7 @@ def U64.Insts.Num_traitsOpsCheckedCheckedDiv :
 }
 
 /-- [account_extraction::quantity::{impl core::clone::Clone for account_extraction::quantity::Quantity<N>}::clone]:
-    Source: 'verification/../src/quantity.rs', lines 153:16-153:21
+    Source: 'verification/../src/quantity.rs', lines 151:16-151:21
     Visibility: public -/
 def quantity.Quantity.Insts.CoreCloneClone.clone
   {N : Type _} (corecloneCloneInst : core.clone.Clone N)
@@ -703,7 +703,7 @@ def quantity.Quantity.Insts.CoreCloneClone.clone
   ok t
 
 /-- Trait implementation: [account_extraction::quantity::{impl core::clone::Clone for account_extraction::quantity::Quantity<N>}]
-    Source: 'verification/../src/quantity.rs', lines 153:16-153:21 -/
+    Source: 'verification/../src/quantity.rs', lines 151:16-151:21 -/
 @[reducible]
 impl_def quantity.Quantity.Insts.CoreCloneClone {N : Type _}
   (corecloneCloneInst : core.clone.Clone N) : core.clone.Clone
@@ -781,7 +781,7 @@ def account.Account.into_balances
   ok self.balances
 
 /-- [account_extraction::quantity::{impl core::default::Default for account_extraction::quantity::Quantity<N>}::default]:
-    Source: 'verification/../src/quantity.rs', lines 259:4-261:5
+    Source: 'verification/../src/quantity.rs', lines 257:4-259:5
     Visibility: public -/
 def quantity.Quantity.Insts.CoreDefaultDefault.default
   {N : Type _} {Clause0_SignedMeasure : Type _} (QuantityScalarInst :
@@ -792,7 +792,7 @@ def quantity.Quantity.Insts.CoreDefaultDefault.default
   ok t
 
 /-- Trait implementation: [account_extraction::quantity::{impl core::default::Default for account_extraction::quantity::Quantity<N>}]
-    Source: 'verification/../src/quantity.rs', lines 255:0-262:1 -/
+    Source: 'verification/../src/quantity.rs', lines 253:0-260:1 -/
 @[reducible]
 def quantity.Quantity.Insts.CoreDefaultDefault {N : Type _}
   {Clause0_SignedMeasure : Type _} (QuantityScalarInst :
@@ -837,7 +837,7 @@ def account.Account.balance
     quantityQuantityScalarInst self.balances asset
 
 /-- [account_extraction::quantity::{account_extraction::quantity::Quantity<N>}::try_from_scalar]:
-    Source: 'verification/../src/quantity.rs', lines 181:4-187:5
+    Source: 'verification/../src/quantity.rs', lines 179:4-185:5
     Visibility: public -/
 def quantity.Quantity.try_from_scalar
   {N : Type _} {Clause0_SignedMeasure : Type _} (QuantityScalarInst :
@@ -850,7 +850,7 @@ def quantity.Quantity.try_from_scalar
   else ok (core.result.Result.Err quantity.QuantityError.Negative)
 
 /-- [account_extraction::quantity::{account_extraction::quantity::Quantity<N>}::from_checked]:
-    Source: 'verification/../src/quantity.rs', lines 244:4-252:5 -/
+    Source: 'verification/../src/quantity.rs', lines 242:4-250:5 -/
 def quantity.Quantity.from_checked
   {N : Type _} {Clause0_SignedMeasure : Type _} (QuantityScalarInst :
   quantity.QuantityScalar N Clause0_SignedMeasure) (value : Option N) :
@@ -865,7 +865,7 @@ def quantity.Quantity.from_checked
     | core.result.Result.Err _ => ok none
 
 /-- [account_extraction::quantity::{account_extraction::quantity::Quantity<N>}::checked_add]:
-    Source: 'verification/../src/quantity.rs', lines 201:4-203:5
+    Source: 'verification/../src/quantity.rs', lines 199:4-201:5
     Visibility: public -/
 def quantity.Quantity.checked_add
   {N : Type _} {Clause0_SignedMeasure : Type _} (QuantityScalarInst :
@@ -878,7 +878,7 @@ def quantity.Quantity.checked_add
   quantity.Quantity.from_checked QuantityScalarInst o
 
 /-- [account_extraction::quantity::{account_extraction::quantity::Quantity<N>}::scalar_is_zero]:
-    Source: 'verification/../src/quantity.rs', lines 159:4-161:5 -/
+    Source: 'verification/../src/quantity.rs', lines 157:4-159:5 -/
 def quantity.Quantity.scalar_is_zero
   {N : Type _} (num_traitsidentitiesZeroInst : num_traits.identities.Zero N)
   (self : quantity.Quantity N) :
@@ -887,7 +887,7 @@ def quantity.Quantity.scalar_is_zero
   num_traitsidentitiesZeroInst.is_zero self
 
 /-- [account_extraction::quantity::{account_extraction::quantity::Quantity<N>}::is_zero]:
-    Source: 'verification/../src/quantity.rs', lines 197:4-199:5
+    Source: 'verification/../src/quantity.rs', lines 195:4-197:5
     Visibility: public -/
 def quantity.Quantity.is_zero
   {N : Type _} {Clause0_SignedMeasure : Type _} (QuantityScalarInst :
@@ -1014,7 +1014,7 @@ def account.Account.deposit
   ok (r, { balances := b })
 
 /-- [account_extraction::quantity::{account_extraction::quantity::Quantity<N>}::checked_sub]:
-    Source: 'verification/../src/quantity.rs', lines 205:4-207:5
+    Source: 'verification/../src/quantity.rs', lines 203:4-205:5
     Visibility: public -/
 def quantity.Quantity.checked_sub
   {N : Type _} {Clause0_SignedMeasure : Type _} (QuantityScalarInst :
@@ -1027,7 +1027,7 @@ def quantity.Quantity.checked_sub
   quantity.Quantity.from_checked QuantityScalarInst o
 
 /-- [account_extraction::quantity::{impl core::cmp::PartialOrd<account_extraction::quantity::Quantity<N>> for account_extraction::quantity::Quantity<N>}::partial_cmp]:
-    Source: 'verification/../src/quantity.rs', lines 153:44-153:54
+    Source: 'verification/../src/quantity.rs', lines 151:44-151:54
     Visibility: public -/
 def quantity.Quantity.Insts.CoreCmpPartialOrdQuantity.partial_cmp
   {N : Type _} (corecmpPartialOrdInst : core.cmp.PartialOrd N N)
@@ -1037,7 +1037,7 @@ def quantity.Quantity.Insts.CoreCmpPartialOrdQuantity.partial_cmp
   corecmpPartialOrdInst.partial_cmp self other
 
 /-- [account_extraction::quantity::{impl core::cmp::PartialEq<account_extraction::quantity::Quantity<N>> for account_extraction::quantity::Quantity<N>}::eq]:
-    Source: 'verification/../src/quantity.rs', lines 153:29-153:38
+    Source: 'verification/../src/quantity.rs', lines 151:29-151:38
     Visibility: public -/
 def quantity.Quantity.Insts.CoreCmpPartialEqQuantity.eq
   {N : Type _} (corecmpPartialEqInst : core.cmp.PartialEq N N)
@@ -1047,7 +1047,7 @@ def quantity.Quantity.Insts.CoreCmpPartialEqQuantity.eq
   corecmpPartialEqInst.eq self other
 
 /-- Trait implementation: [account_extraction::quantity::{impl core::cmp::PartialEq<account_extraction::quantity::Quantity<N>> for account_extraction::quantity::Quantity<N>}]
-    Source: 'verification/../src/quantity.rs', lines 153:29-153:38 -/
+    Source: 'verification/../src/quantity.rs', lines 151:29-151:38 -/
 @[reducible]
 impl_def quantity.Quantity.Insts.CoreCmpPartialEqQuantity {N : Type _}
   (corecmpPartialEqInst : core.cmp.PartialEq N N) : core.cmp.PartialEq
@@ -1059,7 +1059,7 @@ impl_def quantity.Quantity.Insts.CoreCmpPartialEqQuantity {N : Type _}
 }
 
 /-- Trait implementation: [account_extraction::quantity::{impl core::cmp::PartialOrd<account_extraction::quantity::Quantity<N>> for account_extraction::quantity::Quantity<N>}]
-    Source: 'verification/../src/quantity.rs', lines 153:44-153:54 -/
+    Source: 'verification/../src/quantity.rs', lines 151:44-151:54 -/
 @[reducible]
 impl_def quantity.Quantity.Insts.CoreCmpPartialOrdQuantity {N : Type _}
   (corecmpPartialOrdInst : core.cmp.PartialOrd N N) : core.cmp.PartialOrd
@@ -1571,7 +1571,7 @@ impl_def amount.AssetAmount.Insts.CoreCmpPartialEqAssetAmount {A : Type _} {N :
 }
 
 /-- [account_extraction::quantity::{impl core::hash::Hash for account_extraction::quantity::Quantity<N>}::hash]:
-    Source: 'verification/../src/quantity.rs', lines 153:61-153:65
+    Source: 'verification/../src/quantity.rs', lines 151:61-151:65
     Visibility: public -/
 def quantity.Quantity.Insts.CoreHashHash.hash
   {N : Type _} {__H : Type _} (corehashHashInst : core.hash.Hash N)
@@ -2112,7 +2112,7 @@ def basket.Basket.checked_add
     corehashHashInst quantityQuantityScalarInst iter self updated
 
 /-- [account_extraction::quantity::{account_extraction::quantity::Quantity<N>}::checked_mul]:
-    Source: 'verification/../src/quantity.rs', lines 209:4-211:5
+    Source: 'verification/../src/quantity.rs', lines 207:4-209:5
     Visibility: public -/
 def quantity.Quantity.checked_mul
   {N : Type _} {Clause0_SignedMeasure : Type _} (QuantityScalarInst :
@@ -4674,7 +4674,7 @@ def economy.Economy.view
   ok { economy := self, visible := visible1 }
 
 /-- [account_extraction::quantity::{impl core::cmp::Ord for account_extraction::quantity::Quantity<N>}::cmp]:
-    Source: 'verification/../src/quantity.rs', lines 153:56-153:59
+    Source: 'verification/../src/quantity.rs', lines 151:56-151:59
     Visibility: public -/
 def quantity.Quantity.Insts.CoreCmpOrd.cmp
   {N : Type _} (corecmpOrdInst : core.cmp.Ord N) (self : quantity.Quantity N)
@@ -4684,7 +4684,7 @@ def quantity.Quantity.Insts.CoreCmpOrd.cmp
   corecmpOrdInst.cmp self other
 
 /-- [account_extraction::quantity::{impl core::cmp::Eq for account_extraction::quantity::Quantity<N>}::assert_fields_are_eq]:
-    Source: 'verification/../src/quantity.rs', lines 153:40-153:42
+    Source: 'verification/../src/quantity.rs', lines 151:40-151:42
     Visibility: public -/
 def quantity.Quantity.Insts.CoreCmpEq.assert_fields_are_eq
   {N : Type _} (corecmpEqInst : core.cmp.Eq N) (self : quantity.Quantity N) :
@@ -4693,7 +4693,7 @@ def quantity.Quantity.Insts.CoreCmpEq.assert_fields_are_eq
   ok ()
 
 /-- Trait implementation: [account_extraction::quantity::{impl core::cmp::Eq for account_extraction::quantity::Quantity<N>}]
-    Source: 'verification/../src/quantity.rs', lines 153:40-153:42 -/
+    Source: 'verification/../src/quantity.rs', lines 151:40-151:42 -/
 @[reducible]
 def quantity.Quantity.Insts.CoreCmpEq {N : Type _} (corecmpEqInst : core.cmp.Eq
   N) : core.cmp.Eq (quantity.Quantity N) := {
@@ -4704,7 +4704,7 @@ def quantity.Quantity.Insts.CoreCmpEq {N : Type _} (corecmpEqInst : core.cmp.Eq
 }
 
 /-- Trait implementation: [account_extraction::quantity::{impl core::cmp::Ord for account_extraction::quantity::Quantity<N>}]
-    Source: 'verification/../src/quantity.rs', lines 153:56-153:59 -/
+    Source: 'verification/../src/quantity.rs', lines 151:56-151:59 -/
 @[reducible]
 impl_def quantity.Quantity.Insts.CoreCmpOrd {N : Type _} (corecmpOrdInst :
   core.cmp.Ord N) : core.cmp.Ord (quantity.Quantity N) := {
@@ -5026,7 +5026,7 @@ def economy.Economy.observation_key_for
   ok { visible_accounts, existing_accounts, balances := balances1 }
 
 /-- Trait implementation: [account_extraction::quantity::{impl core::hash::Hash for account_extraction::quantity::Quantity<N>}]
-    Source: 'verification/../src/quantity.rs', lines 153:61-153:65 -/
+    Source: 'verification/../src/quantity.rs', lines 151:61-151:65 -/
 @[reducible]
 impl_def quantity.Quantity.Insts.CoreHashHash {N : Type _} (corehashHashInst :
   core.hash.Hash N) : core.hash.Hash (quantity.Quantity N) := {
@@ -5185,7 +5185,7 @@ def economy.invalid_analysis
     }
 
 /-- [account_extraction::quantity::{account_extraction::quantity::Quantity<N>}::as_scalar]:
-    Source: 'verification/../src/quantity.rs', lines 189:4-191:5
+    Source: 'verification/../src/quantity.rs', lines 187:4-189:5
     Visibility: public -/
 def quantity.Quantity.as_scalar
   {N : Type _} {Clause0_SignedMeasure : Type _} (QuantityScalarInst :
@@ -6286,7 +6286,7 @@ def rate.ComputedAmount.impl.role
   ok self.role
 
 /-- [account_extraction::quantity::{account_extraction::quantity::Quantity<N>}::checked_mul_div]:
-    Source: 'verification/../src/quantity.rs', lines 232:4-239:5
+    Source: 'verification/../src/quantity.rs', lines 230:4-237:5
     Visibility: public -/
 def quantity.Quantity.checked_mul_div
   {N : Type _} {Clause0_SignedMeasure : Type _} (QuantityScalarInst :
@@ -9521,7 +9521,7 @@ def quantity.narrow (value : Std.U128) : Result (Option Std.U64) := do
        ok (some i1)
 
 /-- [account_extraction::quantity::{impl account_extraction::quantity::QuantityScalar<i128> for u64}::checked_mul_div]:
-    Source: 'verification/../src/quantity.rs', lines 103:4-120:5
+    Source: 'verification/../src/quantity.rs', lines 98:4-118:5
     Visibility: public -/
 def U64.Insts.Account_extractionQuantityQuantityScalarI128.checked_mul_div
   (self : Std.U64) (rhs : Std.U64) (denominator : Std.U64)
@@ -9539,11 +9539,11 @@ def U64.Insts.Account_extractionQuantityQuantityScalarI128.checked_mul_div
     match rounding with
     | quantity.Rounding.Floor => quantity.narrow quotient
     | quantity.Rounding.Ceil =>
-      let i2 ← product % divisor
-      if i2 = 0#u128
+      let remainder ← product % divisor
+      if remainder = 0#u128
       then quantity.narrow quotient
-      else let i3 ← quotient + 1#u128
-           quantity.narrow i3
+      else let i2 ← quotient + 1#u128
+           quantity.narrow i2
 
 /-- [account_extraction::quantity::{impl account_extraction::quantity::QuantityScalar<i128> for u64}::checked_weighted]:
     Source: 'verification/../src/quantity.rs', lines 94:4-96:5
@@ -9569,7 +9569,7 @@ def U64.Insts.Account_extractionQuantityQuantityScalarI128.is_nonnegative
   ok true
 
 /-- Trait implementation: [account_extraction::quantity::{impl account_extraction::quantity::QuantityScalar<i128> for u64}]
-    Source: 'verification/../src/quantity.rs', lines 83:0-121:1 -/
+    Source: 'verification/../src/quantity.rs', lines 83:0-119:1 -/
 @[reducible]
 def U64.Insts.Account_extractionQuantityQuantityScalarI128 :
   quantity.QuantityScalar Std.U64 Std.I128 := {
@@ -9602,21 +9602,21 @@ def U64.Insts.Account_extractionQuantityQuantityScalarI128 :
 }
 
 /-- [account_extraction::quantity::{account_extraction::quantity::Quantity<u64>}::new]:
-    Source: 'verification/../src/quantity.rs', lines 167:4-169:5
+    Source: 'verification/../src/quantity.rs', lines 165:4-167:5
     Visibility: public -/
 def quantity.QuantityU64.new
   (value : Std.U64) : Result (quantity.Quantity Std.U64) := do
   ok value
 
 /-- [account_extraction::quantity::{account_extraction::quantity::Quantity<u64>}::get]:
-    Source: 'verification/../src/quantity.rs', lines 171:4-173:5
+    Source: 'verification/../src/quantity.rs', lines 169:4-171:5
     Visibility: public -/
 def quantity.QuantityU64.get
   (self : quantity.Quantity Std.U64) : Result Std.U64 := do
   ok self
 
 /-- [account_extraction::quantity::{account_extraction::quantity::Quantity<N>}::into_scalar]:
-    Source: 'verification/../src/quantity.rs', lines 193:4-195:5
+    Source: 'verification/../src/quantity.rs', lines 191:4-193:5
     Visibility: public -/
 def quantity.Quantity.into_scalar
   {N : Type _} {Clause0_SignedMeasure : Type _} (QuantityScalarInst :
@@ -9627,14 +9627,14 @@ def quantity.Quantity.into_scalar
   ok self
 
 /-- [account_extraction::quantity::{impl core::convert::From<u64> for account_extraction::quantity::Quantity<u64>}::from]:
-    Source: 'verification/../src/quantity.rs', lines 265:4-267:5
+    Source: 'verification/../src/quantity.rs', lines 263:4-265:5
     Visibility: public -/
 def quantity.QuantityU64.Insts.CoreConvertFromU64.from
   (value : Std.U64) : Result (quantity.Quantity Std.U64) := do
   quantity.QuantityU64.new value
 
 /-- [account_extraction::quantity::{impl core::convert::From<u32> for account_extraction::quantity::Quantity<u64>}::from]:
-    Source: 'verification/../src/quantity.rs', lines 271:4-273:5
+    Source: 'verification/../src/quantity.rs', lines 269:4-271:5
     Visibility: public -/
 def quantity.QuantityU64.Insts.CoreConvertFromU32.from
   (value : Std.U32) : Result (quantity.Quantity Std.U64) := do
@@ -9642,14 +9642,14 @@ def quantity.QuantityU64.Insts.CoreConvertFromU32.from
   quantity.QuantityU64.new i
 
 /-- [account_extraction::quantity::{impl core::clone::Clone for account_extraction::quantity::QuantityError}::clone]:
-    Source: 'verification/../src/quantity.rs', lines 323:16-323:21
+    Source: 'verification/../src/quantity.rs', lines 321:16-321:21
     Visibility: public -/
 def quantity.QuantityError.Insts.CoreCloneClone.clone
   (self : quantity.QuantityError) : Result quantity.QuantityError := do
   ok self
 
 /-- Trait implementation: [account_extraction::quantity::{impl core::clone::Clone for account_extraction::quantity::QuantityError}]
-    Source: 'verification/../src/quantity.rs', lines 323:16-323:21 -/
+    Source: 'verification/../src/quantity.rs', lines 321:16-321:21 -/
 @[reducible]
 impl_def quantity.QuantityError.Insts.CoreCloneClone : core.clone.Clone
   quantity.QuantityError := {
@@ -9659,7 +9659,7 @@ impl_def quantity.QuantityError.Insts.CoreCloneClone : core.clone.Clone
 }
 
 /-- [account_extraction::quantity::{impl core::cmp::PartialEq<account_extraction::quantity::QuantityError> for account_extraction::quantity::QuantityError}::eq]:
-    Source: 'verification/../src/quantity.rs', lines 323:29-323:38
+    Source: 'verification/../src/quantity.rs', lines 321:29-321:38
     Visibility: public -/
 def quantity.QuantityError.Insts.CoreCmpPartialEqQuantityError.eq
   (self : quantity.QuantityError) (other : quantity.QuantityError) :
@@ -9668,7 +9668,7 @@ def quantity.QuantityError.Insts.CoreCmpPartialEqQuantityError.eq
   ok true
 
 /-- Trait implementation: [account_extraction::quantity::{impl core::cmp::PartialEq<account_extraction::quantity::QuantityError> for account_extraction::quantity::QuantityError}]
-    Source: 'verification/../src/quantity.rs', lines 323:29-323:38 -/
+    Source: 'verification/../src/quantity.rs', lines 321:29-321:38 -/
 @[reducible]
 impl_def quantity.QuantityError.Insts.CoreCmpPartialEqQuantityError :
   core.cmp.PartialEq quantity.QuantityError quantity.QuantityError := {
