@@ -23,6 +23,14 @@ const problem = {
   capabilities: ["weighted_search"],
 };
 
+const lending = {
+  ...problem,
+  key: "lending",
+  title: "Lending market",
+  default_strategy: "least_interest",
+  strategies: [{ key: "least_interest", label: "Least interest", description: "Dijkstra", algorithm: "dijkstra" }],
+};
+
 const artifact = {
   id: "maze:showcase:a_star:17:128",
   problem,
@@ -51,8 +59,8 @@ vi.mock("./api", async (importOriginal) => {
   const original = await importOriginal<typeof import("./api")>();
   return {
     ...original,
-    fetchProblems: vi.fn(async () => [problem]),
-    fetchStaticProblems: vi.fn(async () => [problem]),
+    fetchProblems: vi.fn(async () => [problem, lending]),
+    fetchStaticProblems: vi.fn(async () => [problem, lending]),
     fetchStaticArtifact: vi.fn(async () => artifact),
   };
 });
@@ -93,4 +101,27 @@ test("a late saved preview cannot replace a newly computed result", async () => 
   view.unmount();
   client.clear();
   for (const spy of [health, defaults, stored, start]) spy.mockRestore();
+});
+
+test("a link that omits options opens the problem's defaults without a warning", async () => {
+  window.history.replaceState(null, "", "/?problem=lending");
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const view = render(<QueryClientProvider client={client}><App /></QueryClientProvider>);
+  await waitFor(() => expect(screen.getByRole("combobox", { name: "Strategy" })).toHaveValue("least_interest"));
+  expect(screen.getByRole("combobox", { name: "Instance (size)" })).toHaveValue("showcase");
+  expect(screen.queryByText(/linked options were not valid/)).not.toBeInTheDocument();
+  view.unmount();
+  client.clear();
+  window.history.replaceState(null, "", "/");
+});
+
+test("a link with an option the problem lacks falls back with a warning", async () => {
+  window.history.replaceState(null, "", "/?problem=lending&strategy=a_star");
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const view = render(<QueryClientProvider client={client}><App /></QueryClientProvider>);
+  expect(await screen.findByText("Some linked options were not valid for Lending market; Studio selected its defaults.")).toBeInTheDocument();
+  expect(screen.getByRole("combobox", { name: "Strategy" })).toHaveValue("least_interest");
+  view.unmount();
+  client.clear();
+  window.history.replaceState(null, "", "/");
 });

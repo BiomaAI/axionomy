@@ -119,8 +119,10 @@ export function App() {
     queryFn: () => engine.catalog(),
   });
   const [problemKey, setProblemKey] = useState(initialUrl.problem ?? "maze");
-  const [instanceKey, setInstanceKey] = useState(initialUrl.instance ?? "showcase");
-  const [strategyKey, setStrategyKey] = useState(initialUrl.strategy ?? "a_star");
+  // An omitted option means the problem's default, which is only known once
+  // the catalog loads. The empty key resolves to it without a warning.
+  const [instanceKey, setInstanceKey] = useState(initialUrl.instance ?? "");
+  const [strategyKey, setStrategyKey] = useState(initialUrl.strategy ?? "");
   const [seed, setSeed] = useState(initialUrl.seed ?? 17);
   const [budget, setBudget] = useState(initialUrl.budget ?? 128);
   const [artifact, setArtifact] = useState<RunArtifact>();
@@ -211,7 +213,9 @@ export function App() {
     if (!problem) return;
     const requestedInstance = problem.instances.some((candidate) => candidate.key === instanceKey) ? instanceKey : problem.default_instance;
     const requestedStrategy = problem.strategies.some((candidate) => candidate.key === strategyKey) ? strategyKey : problem.default_strategy;
-    if (requestedInstance !== instanceKey || requestedStrategy !== strategyKey) {
+    const invalidInstance = instanceKey !== "" && requestedInstance !== instanceKey;
+    const invalidStrategy = strategyKey !== "" && requestedStrategy !== strategyKey;
+    if (invalidInstance || invalidStrategy) {
       setLinkNotice(`Some linked options were not valid for ${problem.title}; Studio selected its defaults.`);
     }
     setInstanceKey(requestedInstance);
