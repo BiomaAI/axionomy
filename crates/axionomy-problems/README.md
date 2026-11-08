@@ -40,9 +40,12 @@ cargo run -p axionomy-problems --example work_league
 cargo run -p axionomy-problems --example lending
 ```
 
-The lending fixture keeps interest in a fixed-point borrow index and rounds
-every `MulDiv` against the caller, so no deposit, borrow or repayment round
-trip can create value and rounding dust accrues to the market.
+The lending fixture finances a bill through a collateralized loan. Interest
+follows pool utilization along a kinked curve and accrues in a fixed-point
+borrow index, a reserve cut stays with the market, and a period cannot close
+on a loan past its liquidation threshold. Every `MulDiv` rounds against the
+caller, so no deposit, borrow or repayment round trip can create value and
+rounding dust accrues to the market.
 
 The perishables fixture also demonstrates structural fungibility: thousands of
 equivalent claims aggregate into ordinary quantities, while unique cohort
@@ -62,7 +65,7 @@ RUST_LOG=debug cargo run -p axionomy-problems --example maze
 Logging is initialized only by these example binaries. Problem modules,
 search, and kernel libraries never install a global subscriber.
 
-Replay-derived presentation adapters for all fourteen problems live uniformly
+Replay-derived presentation adapters for all fifteen problems live uniformly
 in `axionomy-service`. Keeping them out of this crate prevents a singled-out
 viewer from becoming part of a problem's semantics: these modules remain pure
 domain encodings and strategy helpers usable without Studio.

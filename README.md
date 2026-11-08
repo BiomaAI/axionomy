@@ -94,7 +94,7 @@ UTF-8 strings use explicit trusted models;
 other core contracts have design proofs and finite Rust conformance tests. See
 [the proof contract and coverage](verification/README.md) for exact boundaries.
 
-The fourteen reference problems expose explicit **Micro**, **Showcase**, and
+The fifteen reference problems expose explicit **Micro**, **Showcase**, and
 **Stress** instances. Micro keeps exact fixtures and independent oracles fast;
 Showcase is the default that Studio and the generated artifacts use. Stress
 raises a domain-relevant dimension—sampling, topology, board size, horizon,
@@ -165,7 +165,7 @@ adapters.
 ### Interfaces
 
 - One service contract shared by CLI, HTTP/SSE, MCP, Studio, and browser Wasm.
-- Fourteen discoverable problems with explicit Micro, Showcase, and Stress instances.
+- Fifteen discoverable problems with explicit Micro, Showcase, and Stress instances.
 - Snapshot leaderboards whose exact ranks, tradeoffs, and evidence update during replay.
 - A strict stateless MCP 2026-07-28 server with caller-owned snapshot storage.
 - Rust-owned OpenAPI, generated TypeScript, portable artifacts, and cross-interface tests.
@@ -255,7 +255,7 @@ pnpm dev
 Open `http://127.0.0.1:5173`. The native server is optional: when it is healthy,
 Studio uses HTTP/SSE and exposes pause, resume, and cancellation; otherwise it
 loads the same Rust service as WebAssembly in an isolated Worker and keeps Run
-  enabled for all fourteen problems. Worker cancellation is immediate by
+  enabled for all fifteen problems. Worker cancellation is immediate by
 terminating that disposable worker. If WebAssembly cannot initialize, the
 committed Showcase artifacts still provide read-only playback. The status badge
 is backed by a current health/initialization check rather than by a catalog that
@@ -293,6 +293,15 @@ liquidity. Read initial-to-final price and reserves side by side, then inspect
 individual effects and exact coalition attribution. Its Rust example also
 proves that a trader demanding more than the quote receives nothing and leaves
 all accounts unchanged.
+
+**What does borrowing early cost?** The
+[Lending market](https://biomaai.github.io/axionomy/?problem=lending&strategy=least_interest)
+finances a bill that falls due before revenue arrives. Compare the
+least-interest plan with fewest steps: one borrows the shortfall just before
+the bill is due and repays from each installment, the other borrows on day one.
+Then open **Over-borrowed** to watch interest and a scheduled price drop push a
+loan past its liquidation threshold, stop the clock, and hand collateral plus a
+bonus to the keeper.
 
 **Who wins, and what does winning cost?** In the
 [Work League](https://biomaai.github.io/axionomy/?problem=work_league&strategy=mixed_field&step=24&leaderboard=resource_efficiency),
@@ -563,6 +572,7 @@ contract, deployment limits, and integration details.
 | Rescue | Hidden truth, seed, observation, belief, chance, sensor use | Exact scenario evaluation, seeded Monte Carlo, approximate policy front |
 | Bridge | Capacity, bids, escrow, priority, joint resolution | BFS, first-come, auction, exact priority/credit Pareto front |
 | Living Market AMM | Closed energy/credit economy, exact constant-product swaps, fees, liquidity shares, real needs, obligations, information, actor price attribution | Market-day replay, no-whale and thin-liquidity counterfactuals, exact coalition Shapley attribution |
+| Lending market | Pooled vault shares, posted collateral, loan-to-value and liquidation limits, kinked utilization rate, borrow index, reserves, scheduled price drop | Least-interest Dijkstra and fewest-step BFS, scripted liquidation and first-depositor attack |
 | Marketplace | Buyers, sellers, carriers, tax, commission, competing orders, participant utility | Assessment matching, replayable clearing, exact allocation Pareto front |
 | Logistics | Orders, routes, fuel, time, weather, breakdown, repair | Long rollouts, risk-aware Monte Carlo, route MCTS, approximate policy front |
 | Connect Four | Identified cells, gravity, turns, line counts, wins, draw | Vector-valued MCTS with plain-board/minimax oracles |
@@ -600,6 +610,7 @@ cargo run -p axionomy-problems --example connect_four
 cargo run -p axionomy-problems --example mission
 cargo run -p axionomy-problems --example perishables
 cargo run -p axionomy-problems --example work_league
+cargo run -p axionomy-problems --example lending
 ```
 
 All runnable examples use structured console logging. `INFO` presents model

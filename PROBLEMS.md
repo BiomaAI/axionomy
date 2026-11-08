@@ -38,12 +38,12 @@ they bypass the example's trusted action helper.
 | Multi-account atomic rewrite | ✓ | ✓ |  |  | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | Preserved facts/catalysts | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | Declared invariants | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |  | ✓ | ✓ |
-| Resource objective | ✓ |  |  | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |  | ✓ | ✓ | ✓ | ✓ |  |
+| Resource objective | ✓ |  |  | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |  | ✓ | ✓ | ✓ | ✓ | ✓ |
 | Exact Pareto front | ✓ |  |  | ✓ | ✓ |  | ✓ | ✓ |  |  |  | ✓ |  |  |  |
 | Approximate or derived Pareto comparison |  |  |  |  |  | ✓ |  |  | ✓ |  | ✓ |  | ✓ |  |  |
-| Infeasible instance |  | ✓ | ✓ |  | ✓ |  |  | ✓ | ✓ |  | ✓ | ✓ |  | ✓ | ✓ |
-| Specialized proposer |  |  | Algorithm X |  | Branch optimizer | Scenario/MC evaluator | Auction | Assessment clearing | Monte Carlo/MCTS | MCTS/minimax oracle | ISMCTS/scenario evaluator | Event agenda/index | Competing seeded policies | Seeded actors/Shapley | Scripted cycle and adversary |
-| Generic algorithm | BFS/A*/Dijkstra/Pareto | BFS | BFS | BFS/best-first/Pareto | Best-first/Pareto | Rollout/MC/Pareto | BFS/Pareto | Pareto | Rollout/MC/Pareto | MCTS | ISMCTS/Rollout/MC/Pareto/RL | Pareto | Replay-derived vector comparison | Exact coalition replay | Property-based round trips |
+| Infeasible instance |  | ✓ | ✓ |  | ✓ |  |  | ✓ | ✓ |  | ✓ | ✓ |  | ✓ |  |
+| Specialized proposer |  |  | Algorithm X |  | Branch optimizer | Scenario/MC evaluator | Auction | Assessment clearing | Monte Carlo/MCTS | MCTS/minimax oracle | ISMCTS/scenario evaluator | Event agenda/index | Competing seeded policies | Seeded actors/Shapley | Scripted liquidation and first-depositor attack |
+| Generic algorithm | BFS/A*/Dijkstra/Pareto | BFS | BFS | BFS/best-first/Pareto | Best-first/Pareto | Rollout/MC/Pareto | BFS/Pareto | Pareto | Rollout/MC/Pareto | MCTS | ISMCTS/Rollout/MC/Pareto/RL | Pareto | Replay-derived vector comparison | Exact coalition replay | BFS/Dijkstra, property-based round trips |
 | Hidden or stochastic state |  |  |  |  |  | ✓ |  |  | ✓ |  | ✓ |  | ✓ |  |  |
 | Multi-agent resolution |  |  |  |  |  |  | ✓ | ✓ |  | ✓ | ✓ |  | ✓ | ✓ |  |
 | Long-horizon trajectory |  |  |  |  |  |  |  |  | ✓ | ✓ |  | ✓ | ✓ | ✓ |  |
@@ -126,6 +126,7 @@ catalog, so those two public explanations must change together:
 | Mission | 16 hidden joint scenarios, private observations, belief filtering, information exchange, hazard response, Monte Carlo, and ISMCTS |
 | Perishables | Ten crates across six potential cohorts, inherited thermal history, finite cold space, competing energy/fuel uses, processing, deliveries and a seeded outage schedule |
 | Work League | Four autonomous workers, 12 finite jobs, eight locations, shared repair/recycling facilities, seeded failures, 60+ atomic transitions, and six replay-derived standings |
+| Lending | A thin pool near its kink, a bill due before two revenue installments, a 60% loan-to-value limit, a reserve cut, a scheduled 40% price drop while the loan is open, a liquidation scenario and a first-depositor attack |
 
 **Model size** telemetry records accounts, rules, trace steps, rule-check
 probes, and compared alternatives for every result. The service test also
@@ -1070,58 +1071,88 @@ entitlements while the remaining actors respond to changed market conditions.
 
 Source: `crates/axionomy-problems/src/lending.rs`
 
-This model currently has a Micro instance only; it is not yet exposed through
-the service, Studio, CLI or MCP profiles.
-
 ### Specification
 
-A market account holds cash, a borrow index and the authoritative interest
-rate per period, both scaled by `WAD` (10^18). Depositors exchange cash for
-vault shares; a borrower with a credit line draws cash as scaled debt shares;
-a clock accrues one period at a time by growing the index instead of updating
-every borrower (the index pattern used by lending protocols). Interest is never
-a caller-supplied parameter. One thousand genesis shares are permanently
-locked with matching seed cash, so no first depositor can set the share price.
+A borrower owes a supplier's bill before its revenue arrives, and finances
+the gap from one pooled market. Depositors hold vault shares. The borrower
+posts collateral and draws cash as scaled debt shares, up to a loan-to-value
+share of the collateral's value. A clock closes one period at a time. The
+interest rate follows utilization along a kinked curve and accrues by growing
+one borrow index instead of touching every account, and a reserve cut of each
+period's interest stays with the market. An oracle lowers the collateral price
+once, at a scheduled period: the clock cannot pass that period before it. A
+period cannot close while the loan is past its liquidation threshold; the
+borrower may cure it by posting collateral or repaying, or a keeper repays it
+and seizes collateral plus a bonus. Market terms, the index, reserves and the
+price are balances, never caller parameters. One thousand genesis shares are
+permanently locked with matching seed cash, so no first depositor can set the
+share price.
 
 Every division is an explicit full-width `MulDiv` rounded against the caller:
 
 ```text
-Deposit       shares = ⌊cash · supply ÷ assets⌋        (receives: floor)
-Redeem        cash   = ⌊shares · assets ÷ supply⌋      (receives: floor)
-Borrow        debt   = ⌈cash · WAD ÷ index⌉           (owes: ceil)
-Repay         debt   = ⌊cash · WAD ÷ index⌋ retired    (retires: floor)
-RepayShares   cash   = ⌈debt · index ÷ WAD⌉            (pays: ceil)
-Accrue        index += ⌈index · rate ÷ WAD⌉            (owed grows: ceil)
-assets        = cash + ⌊debt supply · index ÷ WAD⌋     (credited: floor)
+Deposit       shares = ⌊cash · supply ÷ assets⌋              (receives: floor)
+Redeem        cash   = ⌊shares · assets ÷ supply⌋            (receives: floor)
+Borrow        debt   = ⌈cash · WAD ÷ index⌉                 (owes: ceil)
+Repay         debt   = ⌊cash · WAD ÷ index⌋ retired          (retires: floor)
+RepayShares   cash   = ⌈debt · index ÷ WAD⌉                  (pays: ceil)
+limits        ⌊posted · price · term ÷ WAD⌋                  (granted: floor)
+utilization   ⌈debt value · WAD ÷ (cash + debt value)⌉       (owed grows: ceil)
+rate          base + ⌈min(u, kink) · low ÷ WAD⌉
+                   + ⌈(max(u, kink) − kink) · high ÷ WAD⌉    (owed grows: ceil)
+Accrue        index += ⌈index · rate ÷ WAD⌉                  (owed grows: ceil)
+              reserves += ⌈interest · reserve factor ÷ WAD⌉  (dust to market)
+Liquidate     seized = min(posted, ⌊⌊owed · (1 + bonus)⌋ ÷ price⌋)
+assets        = cash + ⌊debt supply · index ÷ WAD⌋ − reserves
 ```
 
-Cash, vault shares (holders plus locked against supply) and debt shares
-(holders against supply) are declared invariants. Identity witnesses bind the
-market and clock roles; a credit-line witness binds borrowers.
+Cash, collateral (free plus posted), vault shares (holders plus locked
+against supply) and debt shares (holders against supply) are declared
+invariants. Identity witnesses bind the market, clock, oracle and borrower;
+the supplier's invoice and the customer's purchase orders bind the
+counterparties.
+
+The search policy borrows exactly the bill's shortfall while it is unpaid,
+repays everything owed or all available cash after, and returns collateral
+once the loan is closed. These are candidate choices, not semantics; the
+kernel still assesses every exchange. Dijkstra search charges each closed
+period's interest to the plan; breadth-first search counts exchanges.
 
 ### Acceptance laws
 
-- A twelve-period cycle at 1% charges at least the exact compound amount
-  `4000 · 1.01¹²` and at most one atom per period more, retires every debt
-  share, pays both depositors interest, and replays to the identical state.
-- Depositor interest plus the market's retained dust equals borrower interest;
-  depositors are never credited more than borrowers paid.
+- Least interest borrows later and repays earlier than fewest steps, and its
+  Dijkstra cost equals the interest replayed from its trace (Micro 37 against
+  56, Showcase 342 against 872). Both plans pay the bill, retire every debt
+  share, return all collateral and conserve cash.
+- With the loan repaid, the market's cash gain equals what the borrower paid
+  beyond the bill and revenue; reserves are a strict part of it, and
+  depositors' assets grow by exactly the rest.
+- The rate is the kinked curve the view computes: 7.2% a period at 90%
+  utilization, and the index grows by exactly that rate.
+- Borrowing and withdrawal respect the loan-to-value limit exactly; nothing
+  can be borrowed before collateral is posted.
+- The price drop happens once, at its scheduled period, and the clock cannot
+  pass it before.
+- A safe loan cannot be liquidated. An unsafe one stops the clock until it is
+  cured or liquidated; liquidation retires all debt and gives the keeper more
+  collateral value than it repaid, up to what was posted.
 - No round trip creates value: deposit-then-redeem returns at most the
-  deposit, and borrow-then-repay costs at least the loan, from any reachable
-  state (property tested).
-- The credit limit, market liquidity, one-period accrual and role identities
-  are authoritative; over-limit, illiquid and forged exchanges are rejected
-  without mutation.
-- A first-depositor inflation attack (one-atom deposit plus a large donation)
-  still leaves the victim with shares, a rounding loss below one share's
-  price, and the attacker with most of the donation lost to the locked shares.
+  deposit, and borrow-then-repay costs at least the loan, from reachable
+  states (property tested).
+- A first-depositor inflation attack still leaves the victim with shares, a
+  rounding loss below one share's price, and the attacker with most of the
+  donation lost to the locked shares.
 - Slippage bounds hold and dust deposits that would mint no shares are
   rejected instead of absorbed.
 
 ### API pressure
 
-- Full-width `MulDiv` with explicit `Rounding` inside state-evaluated laws.
-- Fixed-point indexes as ordinary balances, without a special numeric type.
+- Full-width `MulDiv` with explicit `Rounding` inside state-evaluated laws,
+  including a kinked curve built from `minimum`, `maximum` and `subtract`.
+- Fixed-point indexes and market terms as ordinary balances, without a special
+  numeric type.
+- Schedules and safety gates as rate conditions over balances, so time cannot
+  pass an unsafe loan or a pending price drop.
 - Rounding discipline as an economic safety property enforced by invariants.
 - Derived valuation views remain disposable; the rates are the authority.
 
@@ -1209,5 +1240,5 @@ limits clearly:
    or domain-proven pruning; approximate epsilon dominance must never be
    mislabeled as exhaustive Pareto truth.
 
-Any future abstraction must continue to pass all fourteen problems without
+Any future abstraction must continue to pass all fifteen problems without
 moving authoritative meaning into solver callbacks or an external world.

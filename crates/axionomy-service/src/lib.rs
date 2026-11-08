@@ -330,7 +330,7 @@ mod tests {
     #[test]
     fn catalog_covers_every_canonical_problem() {
         let catalog = ReferenceService.catalog();
-        assert_eq!(catalog.len(), 14);
+        assert_eq!(catalog.len(), 15);
         assert!(catalog.iter().all(|problem| !problem.strategies.is_empty()));
         assert!(catalog.iter().all(|problem| {
             problem.default_instance == "showcase"
@@ -634,6 +634,7 @@ mod tests {
                 "perishables" => (10, 5, 13),
                 "work_league" => (60, 20, 900),
                 "amm" => (14, 11, 10),
+                "lending" => (14, 10, 14),
                 other => panic!("missing showcase pressure threshold for {other}"),
             };
             assert!(

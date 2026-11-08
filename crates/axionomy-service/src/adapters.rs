@@ -147,6 +147,7 @@ mod bridge;
 mod connect_four;
 mod exact_cover;
 mod labels;
+mod lending;
 mod logistics;
 mod marketplace;
 mod maze;
@@ -586,6 +587,54 @@ pub(crate) fn catalog() -> Vec<ProblemDescriptor> {
         ),
         problem(
             ProblemCopy {
+                key: "lending",
+                title: "Lending market",
+                summary: "Finance a bill that falls due before revenue arrives. Collateral caps the loan, interest follows pool utilization along a kinked curve, a reserve cut stays with the market, and a scheduled price drop can push an over-borrowed loan into liquidation.",
+                instances: [
+                    "One pooled market and a two-period gap between the bill and revenue, with a price drop while the loan is open",
+                    "A thin pool near its kink, a bill due early, revenue in two installments and a 40% price drop while the loan is open",
+                    "The Showcase loan at four times the scale over twelve periods, with revenue in three installments",
+                ],
+            },
+            ProblemFamily::Market,
+            "least_interest",
+            &[
+                (
+                    "least_interest",
+                    "Least interest",
+                    "Dijkstra search charging each closed period's interest to the plan.",
+                    "Dijkstra search",
+                ),
+                (
+                    "fewest_steps",
+                    "Fewest steps",
+                    "Breadth-first search: the fewest exchanges, whatever the loan costs.",
+                    "breadth-first search",
+                ),
+                (
+                    "over_borrowed",
+                    "Over-borrowed",
+                    "Borrow to the limit at once and watch interest and the price drop end in liquidation.",
+                    "scripted scenario",
+                ),
+                (
+                    "first_depositor_attack",
+                    "First-depositor attack",
+                    "Try to inflate a fresh market's share price against a later depositor.",
+                    "scripted scenario",
+                ),
+            ],
+            &[
+                Capability::DeterministicSearch,
+                Capability::WeightedSearch,
+                Capability::AtomicSettlement,
+                Capability::MultiAccountExchange,
+                Capability::FeasibilityAssessment,
+                Capability::TemporalEffects,
+            ],
+        ),
+        problem(
+            ProblemCopy {
                 key: "marketplace",
                 title: "Multi-party marketplace",
                 summary: "Negotiate funded contracts, reserve scarce shipping capacity and fulfill deliveries over time. Route delays, price concessions, late rebates and refundable reservations couple buyer and seller outcomes.",
@@ -927,6 +976,7 @@ pub(crate) fn run(
         "rescue" => rescue::build(request, &descriptor),
         "bridge" => bridge::build(request, &descriptor),
         "amm" => amm::build(request, &descriptor),
+        "lending" => lending::build(request, &descriptor),
         "marketplace" => marketplace::build(request, &descriptor),
         "logistics" => logistics::build(request, &descriptor, &mut progress),
         "connect_four" => connect_four::build(request, &descriptor, &mut progress),

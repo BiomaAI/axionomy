@@ -1,59 +1,59 @@
 mod support;
 
-use axionomy_problems::lending::{
-    self, AccountId, Asset, Config, LOCKED_SHARES, SEED_CASH, balance,
-};
+use axionomy_problems::lending::{self, AccountId, Asset, Config, RateId, balance};
 use tracing::{debug, info};
 
 fn main() {
     support::init(
         "Lending",
-        "Accrue interest through a borrow index with every division rounded against the caller.",
+        "Finance a bill before revenue arrives with a collateralized loan whose every division rounds against the caller.",
     );
-    let config = Config::micro();
+    let config = Config::showcase();
     let initial = lending::world(&config);
     info!(
         accounts = initial.accounts().count(),
         rates = initial.rate_ids().count(),
-        locked_shares = LOCKED_SHARES,
-        seed_cash = SEED_CASH,
         periods = config.periods,
-        rate_per_period = "1%",
+        bill = config.bill.amount,
+        bill_due_before_period = config.bill.period + 1,
+        installments = config.revenue.len(),
         "encoded lending market ready"
     );
 
-    let (world, trace) = lending::lending_cycle(&config).expect("the micro cycle is feasible");
-    let replayed = initial
-        .replayed(&trace)
-        .expect("the cycle must pass the core on replay");
-    assert_eq!(replayed.state_key(), world.state_key());
-    assert!(world.matches(&lending::cycle_goal(&config)));
-
-    let (borrower_start, limit) = config.borrowers[0];
-    let repaid =
-        borrower_start + limit * 4 / 5 - balance(&world, AccountId::Borrower(0), Asset::Cash);
-    info!(
-        borrowed = limit * 4 / 5,
-        repaid,
-        interest = repaid - limit * 4 / 5,
-        "borrower repaid compound interest (debt rounded up each period)"
-    );
-    for depositor in [0_u8, 1] {
-        let start = config.depositors[usize::from(depositor)];
-        let end = balance(&world, AccountId::Depositor(depositor), Asset::Cash);
+    let cheapest = lending::least_interest(&config).expect("the showcase loan is feasible");
+    let fewest = lending::fewest_steps(&config).expect("the showcase loan is feasible");
+    for (label, solution) in [("least interest", &cheapest), ("fewest steps", &fewest)] {
+        let world = initial
+            .replayed(solution.trace())
+            .expect("the plan must pass the core on replay");
+        assert!(world.matches(&lending::goal(&config)));
+        let interest =
+            lending::interest_charged(&initial, solution.trace()).expect("the plan replays");
+        let borrowed_in = solution
+            .trace()
+            .exchanges()
+            .iter()
+            .take_while(|exchange| *exchange.rate() != RateId::Borrow)
+            .filter(|exchange| *exchange.rate() == RateId::Accrue)
+            .count()
+            + 1;
         info!(
-            depositor,
-            deposited = start / 2,
-            earned = end - start,
-            "depositor redeemed (payouts rounded down)"
+            plan = label,
+            exchanges = solution.trace().exchanges().len(),
+            borrowed_in_period = borrowed_in,
+            interest,
+            reserves = balance(&world, AccountId::Market, Asset::Reserves),
+            "loan repaid and collateral returned"
         );
+        debug!(trace = ?solution.trace().exchanges(), "accepted exchange trace");
     }
+
+    let (liquidated, trace) = lending::over_borrowed(&config).expect("the scripted loan replays");
     info!(
-        market_cash = balance(&world, AccountId::Market, Asset::Cash),
-        locked_shares = balance(&world, AccountId::Market, Asset::LockedShare),
         exchanges = trace.exchanges().len(),
-        replay_verified = true,
-        "rounding dust and the locked stake stayed with the market"
+        keeper_collateral = balance(&liquidated, AccountId::Keeper, Asset::Collateral),
+        borrower_collateral_left =
+            balance(&liquidated, AccountId::Borrower, Asset::PostedCollateral),
+        "over-borrowed loan liquidated with a bonus"
     );
-    debug!(trace = ?trace.exchanges(), "accepted exchange trace");
 }
