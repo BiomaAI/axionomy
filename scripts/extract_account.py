@@ -18,8 +18,8 @@ GENERATED = {
     "AccountExtraction.lean": "AccountExtraction.lean",
 }
 TEMPLATES = {
-    "TypesExternal_Template.lean": "b8ad76496c678a024c5cde4fdabe7d3063f8c30f237d5aa3d12f527cad18b85a",
-    "FunsExternal_Template.lean": "eae38cce63cb72a0578aff62076886cb1c8ecec8b4aae17f6608e088eb93f343",
+    "TypesExternal_Template.lean": "d78d125816508ceeb1f3e19fdbad34361a8bc3f878f639958d8abe34f386c57c",
+    "FunsExternal_Template.lean": "8fd02491d90d463616d2188f5946fed128f59fa012a78b5da78d6966a2857700",
 }
 
 # The pinned backend's Iterator dictionary omits size_hint. Its supported

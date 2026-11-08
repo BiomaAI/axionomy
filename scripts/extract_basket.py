@@ -18,8 +18,8 @@ GENERATED = {
     "BasketExtraction.lean": "BasketExtraction.lean",
 }
 TEMPLATES = {
-    "TypesExternal_Template.lean": "598504f1580311b20b973444909d8f67ff970a54c5085c9c1de1b4eab8f31784",
-    "FunsExternal_Template.lean": "2839ead144c80edf08e1af0c0e1072c95934fbc6dbcee934d67f93cab41e916f",
+    "TypesExternal_Template.lean": "2fc137d5d7bfb8cda00f0f65fff6fa45ee367f748f7b3e532260144ff5a2a913",
+    "FunsExternal_Template.lean": "82bba47ea1496ba291364c0ef34da072247499c6cc51bab9cd1a5aa88fe2bac4",
 }
 
 

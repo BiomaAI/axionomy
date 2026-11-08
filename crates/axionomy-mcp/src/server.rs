@@ -19,7 +19,7 @@ use rmcp::{
     model::{
         CallToolRequestParams, CallToolResponse, CallToolResult, CancelTaskParams,
         CreateTaskResult, GetTaskParams, GetTaskResult, Implementation, ProtocolVersion,
-        ServerCapabilities, ServerInfo, UpdateTaskParams,
+        ServerCapabilities, ServerConfig, UpdateTaskParams,
     },
     service::{RequestContext, RoleServer},
     task_manager::{TaskContext, TaskExit, TaskManager, TaskOptions},
@@ -312,8 +312,8 @@ where
         self.tasks.cancel_task(&request.task_id)
     }
 
-    fn get_info(&self) -> ServerInfo {
-        ServerInfo::new(
+    fn get_info(&self) -> ServerConfig {
+        ServerConfig::new(
             ServerCapabilities::builder()
                 .enable_tools()
                 .enable_tasks()

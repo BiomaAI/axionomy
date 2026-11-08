@@ -89,7 +89,7 @@ inductive alloc.collections.btree.map.entry.Entry (K : Type _) (V : Type _) (A
   alloc.collections.btree.map.entry.Entry K V A
 
 /-- Trait declaration: [equivalent::Equivalent]
-    Source: '/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/equivalent-1.0.2/src/lib.rs', lines 77:0-77:31
+    Source: '/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/equivalent-1.0.3/src/lib.rs', lines 78:0-78:31
     Name pattern: [equivalent::Equivalent]
     Visibility: public -/
 @[rust_trait "equivalent::Equivalent"]
