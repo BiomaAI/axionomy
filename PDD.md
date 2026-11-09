@@ -1360,8 +1360,10 @@ The current foundation is intentionally bounded:
   migration and explicit wire-version negotiation are not yet supported.
 - The rate book is immutable after construction; dynamic laws are not yet
   modeled.
-- `fork` clones the account index while sharing immutable laws and account
-  contents. There is no persistent map or incremental state fingerprint yet.
+- A fork shares immutable laws, the account identifiers and every account's
+  contents; replacing an account copies one path of a persistent 32-way tree,
+  so forking costs the same at 10 and at 100,000 accounts. There is no
+  incremental state fingerprint yet: `state_key` still sorts every balance.
 - Views restrict account data and observation identities preserve that
   boundary, but there is not yet a capability system for rate visibility or
   proposal authority.
@@ -1564,8 +1566,9 @@ This pressure also improved the kernel application path. Applicable exchanges
 prepare and commit only touched account contents. Global linear invariants are
 normally validated by comparing the weighted consumed and produced receipt
 deltas; a complete before/after state is constructed only to explain an actual
-violation. Fork creation still copies the top-level account index and remains
-a separate measured scaling target.
+violation. Fork creation once copied the top-level account index, which made
+an MCTS expansion about 270 times slower at 100,000 accounts than at ten; the
+index is now persistent and a fork copies two pointers.
 
 ## 14. Roadmap
 
@@ -1582,12 +1585,10 @@ factor.
    candidate instantiation without arbitrary hidden guards.
 3. Add explicit wire-schema versioning only when compatibility with deployed
    historical data becomes a real requirement.
-4. Build [storage, runs and replay](docs/STORAGE.md): a persistent
-   content-addressed tree for economic state, with pointer-copy forks and
-   incremental fingerprints; durable runs on redb under explicit durability
-   rules cheap enough for training loops; and tags, groups and metrics for
-   evaluation, Monte Carlo and MPPI. Moving the kernel onto the tree is
-   decided by a benchmark. Extract generic
+4. Build [storage, runs and replay](docs/STORAGE.md): canonical
+   content-addressed trees for stored states, durable runs on redb under
+   explicit durability rules cheap enough for training loops, and tags,
+   groups and metrics for evaluation, Monte Carlo and MPPI. Extract generic
    holdings, dependency, and event indexes only after a second domain confirms
    the perishables shapes.
 5. Extend invariants with carefully constrained local and inequality forms.
@@ -1617,11 +1618,11 @@ factor.
     pressure generated instances, long-horizon policies, coordination, work
     accounting, robustness, and replay-derived scoring.
 
-Performance work should follow semantic clarity. Application now clones only
-touched account contents and validates conserved deltas incrementally. Shared
-immutable laws and account contents reduce branch cost, but fork-time account
-index cloning and concrete rate expansion remain reference implementations
-rather than final scale targets.
+Performance work should follow semantic clarity. Application clones only
+touched account contents and validates conserved deltas incrementally, and
+forks share the account index persistently. Copying a touched account's whole
+basket, sorting every balance for `state_key`, and concrete rate expansion
+remain reference implementations rather than final scale targets.
 
 ## 15. Decision record
 

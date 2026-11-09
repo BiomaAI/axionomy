@@ -1,7 +1,8 @@
 # Storage, runs and replay
 
-Status: design. Nothing here is implemented yet; the phases at the end say in
-what order it should be, and where a measurement decides.
+Status: design, with its first step done. The kernel's forks are now
+constant-time; everything else here is planned, in the order the phases at the
+end give.
 
 Axionomy is an economic debugger and a simulation engine. Both need states
 that can be kept, revisited, compared and branched: time travel to any step,
@@ -20,38 +21,77 @@ on.
 2. **A state is a value, a run is a trace.** A state is what replaying a
    trace of exchanges from an initial state produces. Stored states are a cache
    of replay, and replay is how they are verified.
-3. **Every state has an identity; durability follows rules.** A state's content
-   hash exists as soon as the state does. What reaches disk, when, and for how
-   long is decided by a few explicit rules, not by how a state was produced.
+3. **Every recorded state has an identity; durability follows rules.** Any
+   state a run reached has a canonical content hash, available whenever it is
+   asked for. What reaches disk, when, and for how long is decided by a few
+   explicit rules, not by how a state was produced.
 4. **Content addressing makes everything mergeable.** Equal content has one
    address, so stores written independently combine by union, without
    coordination or conflicts.
-5. **Measure where a decision depends on it.** The kernel's in-memory
-   representation changes only when a benchmark shows it pays, and never its
+5. **Measure where a decision depends on it.** Performance changes to the
+   kernel are made when a benchmark shows they pay, and never change its
    meaning.
+
+## Measurements
+
+Release build on an Apple-silicon laptop; an exchange between two accounts.
+
+| Accounts | Fork, before → after | Fork and apply, before → after | Apply in place |
+| --- | --- | --- | --- |
+| 10 | 69 ns → 8 ns | 1.6 µs → 1.6 µs | 1.5 µs |
+| 1,000 | 3.2 µs → 6 ns | 5.0 µs → 1.9 µs | 1.5 µs |
+| 100,000 | 399 µs → 6 ns | 430 µs → 1.8 µs | 1.4 µs |
+
+Before, a fork copied the account index, so an MCTS expansion at 100,000
+accounts cost about 270 times what it cost at ten, and a rollout's fork cost as
+much as 280 of its steps. `benches/economy.rs` keeps the fork-and-apply
+benchmark by account count.
+
+BLAKE3 takes 122 ns for 128 bytes, 467 ns for 512 bytes and 2.1 µs for 4 KB.
+Hashing the tree nodes an exchange changes would cost as much as the exchange,
+so hashes are computed when a root is asked for and remembered in the node,
+never on the step path.
+
+## The kernel's state
+
+An economy's set of accounts is fixed when it is built: exchanges replace
+holdings, never add or remove accounts. The kernel therefore keeps account
+identifiers in one shared, immutable index and holdings in a persistent 32-way
+tree. A fork copies two pointers, and replacing an account copies one
+root-to-leaf path, in place when nothing else shares it. Accounts keep the
+order they were declared in, so every serialized artifact is byte for byte
+what it was before. This is a change of representation only; the Lean
+specification and its fixtures are untouched.
+
+The kernel does not produce content hashes. Problem ontologies are Rust types
+with `Ord` and `Hash` but no canonical byte encoding, and a canonical root
+needs one. Storage builds canonical trees from encoded states instead.
+
+Two costs remain for later, each only when a problem makes it matter:
+applying an exchange copies each touched account's whole basket, which matters
+for accounts with very many assets; and `state_key`, which graph search uses
+to recognize visited states, sorts every balance of a state.
 
 ## The tree
 
-Every large collection in an economy is a persistent ordered map from byte keys
-to byte values, built as a prolly tree:
+Stored states are persistent ordered maps from byte keys to byte values,
+built as prolly trees, in a new crate, `axionomy-tree`:
 
-- **Shape depends only on keys.** A cheap hash of each key decides where nodes
-  end. The same set of keys produces the same tree whatever order they were
-  inserted in, and changing a balance never moves a boundary, because balances
-  change every step and keys rarely do.
+- **Canonical shape.** A hash of each key's bytes decides where nodes end. The
+  same set of keys produces the same tree whatever order they were inserted in,
+  and changing a value never moves a boundary.
 - **Immutable, shared nodes.** Nodes live behind `Arc`. An update copies the
-  path from the root to the changed entries and shares everything else, so a
-  fork is a pointer copy and an exchange costs O(changed entries × log n).
-- **Content hashes.** A node's identity is the BLAKE3 hash of its deterministic
-  encoding, computed when the node is built. A node shared by a thousand states
-  is hashed once.
+  path from the root to the changed entries and shares everything else.
+- **Content hashes on request.** A node's identity is the BLAKE3 hash of its
+  deterministic encoding, computed when first asked for and remembered. A node
+  shared by a thousand states is hashed once.
 - **Counted subtrees.** Internal entries carry their subtree's entry count, so
   counts, positional access and paging are O(log n).
 - **Operations:** get, put, delete and batched updates; an ordered cursor from
   any key; prefix ranges; `diff(a, b)`, which skips subtrees whose hashes are
   equal; node encoding and decoding.
 
-An economy is a few trees:
+A stored economy is a few trees:
 
 - accounts: account ID → that account's balance-tree root and entry count;
 - balances, one per account: asset ID → quantity, 32 bytes big-endian;
@@ -59,9 +99,15 @@ An economy is a few trees:
 - invariants: name → weight tree.
 
 The **state root** is the hash of the accounts, rates and invariants roots.
+Keys and values need canonical bytes: the string-ID profile MCP uses has them
+(UTF-8 identifiers, big-endian quantities); a typed ontology is stored through
+an encoding it declares.
 
-The tree is its own crate, `axionomy-tree`, with no I/O and no knowledge of
-economies, so the kernel can use it in memory and the store can persist it.
+A recorded run keeps its tree beside the kernel's economy. After a step, the
+receipt names exactly which balances changed; the recorder reads their new
+values from the kernel, which stays the source of truth, and updates the tree
+in O(changes × log n). Tests check that building the tree from scratch gives
+the same root.
 
 ## Identity
 
@@ -75,11 +121,6 @@ Three identities answer three different questions:
   point in a history; two steps may share a root.
 - **MCP handle:** what an unauthenticated caller may read. A keyed hash, as
   today, that maps to a run and step. Training never needs one.
-
-Because nodes are hashed as they are built and shared afterwards, the root
-after an exchange costs only the nodes that exchange created. Search can use
-roots as incremental fingerprints for transposition tables, which today hash
-the whole state.
 
 ## Runs and steps
 
@@ -166,7 +207,9 @@ Patterns these support:
 
 ## Writing
 
-redb is the transaction layer for everything physical. One write transaction
+redb is the transaction layer for everything physical, and the only storage
+engine: there is no storage trait of our own. Where data lives is chosen with
+redb's backend, `FileBackend` or `InMemoryBackend`. One write transaction
 publishes an operation's nodes, its run and step records and any handle
 together, so a state or handle exists if and only if its transaction committed.
 
@@ -180,8 +223,8 @@ together, so a state or handle exists if and only if its transaction committed.
   and never coordinate with others. Merging two stores is a union of nodes plus
   run records with globally unique run IDs (a random 128-bit store ID plus a
   counter), which cannot conflict.
-- **Tests and the browser** use redb's `InMemoryBackend`: the same code, with
-  storage in memory.
+- **Tests and the browser** use `InMemoryBackend`: the same code, with storage
+  in memory.
 
 ## Reading
 
@@ -216,13 +259,12 @@ committed state while training keeps writing.
 - **The step stays in memory.** An environment step is a kernel `apply`.
   Recording it appends to the run's trace buffer, which the writer flushes in
   batches; the step never waits on disk.
-- **Reset is a fork.** Episodes start from a stored initial root. With the
-  kernel on the tree, that is a pointer copy; today it copies the account index.
+- **Reset is a fork,** which costs a few nanoseconds at any size.
 - **Parallel environments share nothing mutable.** Each environment owns its
   economy. Recording goes through the writer's channel, or into a per-worker
   store merged later.
-- **Roots are always at hand** for transposition tables, novelty counts or any
-  cache keyed by state, across processes.
+- **Roots are available on request** for transposition tables, novelty counts
+  or any cache keyed by state, across processes.
 - **Replay buffers can reference states.** A transition can be (root before,
   exchange, receipt, root after, outcome) instead of copied observations, with
   observations projected from roots on demand and cached. It is exact,
@@ -243,16 +285,15 @@ summarize.
 
 ## What changes where
 
-- **`axionomy-tree`** (new): the persistent tree. No I/O and no economics.
+- **Kernel** (done): a persistent account index, so forks are constant-time.
+- **`axionomy-tree`** (new): the canonical persistent tree. No I/O and no
+  economics.
 - **`axionomy-store`** (new): redb tables, the writer and durability rules,
   runs and steps, tags, groups, metrics and refs, merge and garbage collection.
 - **`axionomy-mcp`**: the `SnapshotStore` trait, `MemorySnapshotStore` and the
-  assessment and artifact maps give way to the store. Resources gain runs,
-  steps, groups and their summaries, tag queries, refs, watch, bisect and
-  actor views; a tool adds and removes tags and moves refs.
-- **Kernel**: baskets and the account index move onto the tree. This is a
-  change of representation only; the Lean specification and its fixtures do
-  not change.
+  assessment and artifact maps are removed in favor of the store. Resources
+  gain runs, steps, groups and their summaries, tag queries, refs, watch,
+  bisect and actor views; a tool adds and removes tags and moves refs.
 - **Studio server**: runs and artifacts move into the store, and scrubbing
   renders frames from stored roots instead of loading whole artifacts.
 - **Search and RL**: kept rollouts, sessions and RL episodes record as runs with
@@ -262,39 +303,35 @@ summarize.
 
 Each phase is a validated commit or series of commits.
 
+0. **Constant-time forks** (done): the kernel's persistent account index, with
+   every Studio artifact unchanged byte for byte and the fork benchmark in
+   `benches/economy.rs`.
 1. **`axionomy-tree`**, with tests for what makes it correct: the same keys give
-   the same root in any insertion order, diff and cursors agree with a sorted
+   the same root in any insertion order, an incrementally updated tree has the
+   same root as one built from scratch, diff and cursors agree with a sorted
    map, and encoding round-trips.
 2. **`axionomy-store`** on redb: nodes, roots, runs and steps, the durability
    rules, tags, groups with running summaries, metrics and refs, the writer
    with group commit, merge and garbage collection, tested on
-   `InMemoryBackend`. Until the kernel moves onto the tree, a state converts to
-   a tree when it is checkpointed.
-3. **MCP on the store.** Retire the snapshot trait, the in-memory store and the
-   registries; add run, step and group resources; extend the Python interop
-   suite.
-4. **Kernel on the tree**, decided by a benchmark in `benches/economy.rs` that
-   compares apply throughput and fork cost before and after, on small problems
-   and on a 100,000-asset economy. It must not slow small problems and must
-   make forks pointer copies and roots incremental on large ones. If hashing
-   shows up in search's inner loop, the tree computes hashes on first request
-   instead, which changes nothing outside it.
-5. **Recording and debugging:** runs, checkpoint rules and groups in search,
+   `InMemoryBackend`.
+3. **MCP on the store.** Remove the snapshot trait, the in-memory store and
+   the registries; add run, step and group resources; extend the Python
+   interop suite.
+4. **Recording and debugging:** runs, checkpoint rules and groups in search,
    rollouts, Monte Carlo, MPPI and RL; replay-buffer transitions by root;
    watch, bisect, actor views and the time index; Studio scrubbing from the
    store.
-6. **Distributed training:** per-worker stores, merge tooling and retention
+5. **Distributed training:** per-worker stores, merge tooling and retention
    policies.
 
 ## Open decisions
 
-1. **Basket order.** Key order, which the tree gives and content addressing
-   needs, or insertion order as today. Key order is recommended; it changes the
-   order of serialized output, not semantics.
-2. **Chunk boundaries** from the key alone, so balance changes never re-chunk
+1. **Chunk boundaries** from the key alone, so value changes never re-chunk
    (recommended), or from the key and value.
-3. **Quantity encoding** in nodes: fixed 32-byte big-endian (recommended:
+2. **Quantity encoding** in nodes: fixed 32-byte big-endian (recommended:
    simple, ordered, exact) or minimal length.
+3. **Typed ontologies in storage:** an encoding trait the ontology implements,
+   or storing typed economies through the string-ID profile.
 4. **Periodic `Immediate` commit interval** for batches nobody waits on; one
    second is a starting point.
 5. **Rates and invariants on the tree** from phase 1, or flat until a problem
