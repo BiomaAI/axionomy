@@ -125,7 +125,7 @@ async def test_the_server_describes_itself_to_a_standard_client(url: str) -> Non
         assert capabilities.tools and capabilities.resources and capabilities.completions is not None
 
         tools = (await client.list_tools()).tools
-        assert len(tools) == 9
+        assert len(tools) == 10
         for tool in tools:
             assert tool.output_schema is not None, tool.name
             assert tool.annotations is not None and tool.annotations.open_world_hint is False, tool.name
@@ -189,6 +189,25 @@ async def test_a_client_steps_through_a_replay_and_diffs_its_states(url: str) ->
         ]
         beyond = await client.call_tool("axionomy_trace_step", {"economy_id": replayed_id, "step": 4})
         assert beyond.is_error and beyond.structured_content["error"] == "invalid_request"
+
+        found = await client.call_tool(
+            "axionomy_trace_find",
+            {
+                "economy_id": replayed_id,
+                "account": "sink",
+                "asset": "token",
+                "comparison": "greater_than_or_equal",
+                "quantity": "3",
+            },
+        )
+        assert found.structured_content["step"] == 2
+        assert found.structured_content["state"]["root"] == steps[2]["root"]
+        assert any(uri.endswith(steps[2]["economy_id"]) for uri in links(found))
+        never = await client.call_tool(
+            "axionomy_trace_find",
+            {"economy_id": replayed_id, "account": "sink", "asset": "token", "comparison": "equal", "quantity": "9"},
+        )
+        assert never.structured_content == {}
 
 
 async def test_a_large_economy_is_built_in_chunks_and_read_in_pages(url: str) -> None:

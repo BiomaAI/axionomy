@@ -58,6 +58,30 @@ impl<O: Recordable> State<O> {
     }
 }
 
+/// One step of a run as a replay buffer keeps it: the exchange, the digest of
+/// its receipt, and the roots of the states before and after it.
+pub struct Transition<O: Recordable> {
+    /// The step the exchange reached.
+    pub step: u64,
+    pub before: Hash,
+    pub exchange: Exchange<O>,
+    pub receipt: Hash,
+    pub after: Hash,
+}
+
+impl<O: Recordable> std::fmt::Debug for Transition<O> {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("Transition")
+            .field("step", &self.step)
+            .field("before", &self.before)
+            .field("exchange", &self.exchange)
+            .field("receipt", &self.receipt)
+            .field("after", &self.after)
+            .finish()
+    }
+}
+
 /// A read transaction: everything it returns is from one committed state of
 /// the store, whatever is written meanwhile.
 pub struct Reader {
@@ -268,6 +292,96 @@ impl Reader {
         }
         self.replay(&mut state, run, at, last)?;
         Ok(())
+    }
+
+    /// A run's steps after step `after` as a replay buffer keeps them, at
+    /// most `limit`: each exchange between the roots of the states before and
+    /// after it, replayed and checked against its receipt.
+    pub fn transitions<O: Recordable>(
+        &self,
+        run: RunId,
+        after: u64,
+        limit: usize,
+    ) -> Result<Vec<Transition<O>>, StoreError> {
+        let Some(mut state) = self.state::<O>(Point { run, step: after })? else {
+            return Err(StoreError::UnknownRun(run));
+        };
+        let mut transitions = Vec::new();
+        for (step, record) in self.steps::<O>(run, after.saturating_add(1), limit)? {
+            let point = Point { run, step };
+            let before = state.root();
+            let receipt = state
+                .apply(record.exchange.clone())
+                .map_err(|_| StoreError::Diverged(point))?;
+            if receipt_digest::<O>(&receipt) != record.receipt {
+                return Err(StoreError::Diverged(point));
+            }
+            transitions.push(Transition {
+                step,
+                before,
+                exchange: record.exchange,
+                receipt: record.receipt,
+                after: state.root(),
+            });
+        }
+        Ok(transitions)
+    }
+
+    /// The first step from `from` through `through` of a run whose state
+    /// satisfies `holds`, or none. `holds` must keep holding once it holds,
+    /// such as "the clock has reached noon" or "the agent has delivered": the
+    /// search halves the run's stored states, loading O(log n) of them, then
+    /// replays from the last one where `holds` fails, at most the distance
+    /// between two stored states.
+    pub fn bisect<O: Recordable>(
+        &self,
+        run: RunId,
+        from: u64,
+        through: u64,
+        mut holds: impl FnMut(&Economy<O>) -> bool,
+    ) -> Result<Option<u64>, StoreError> {
+        let mut base = self
+            .state::<O>(Point { run, step: from })?
+            .ok_or(StoreError::UnknownRun(run))?;
+        if self.last_step(run)? < Some(through) {
+            return Err(StoreError::UnknownRun(run));
+        }
+        if holds(&base.economy) {
+            return Ok(Some(from));
+        }
+        let stored: Vec<(u64, Hash)> = self
+            .txn
+            .open_table(STATES)?
+            .range((run.key(), from.saturating_add(1))..=(run.key(), through))?
+            .map(|entry| entry.map(|(key, root)| (key.value().1, Hash::from_bytes(*root.value()))))
+            .collect::<Result<_, _>>()?;
+        // The stored states where `holds` fails come first; find the last.
+        let (mut low, mut high) = (0, stored.len());
+        let mut failing = None;
+        while low < high {
+            let middle = low + (high - low) / 2;
+            let (step, root) = stored[middle];
+            let tree = self.tree(&root)?;
+            let economy = state::economy::<O>(&tree)?;
+            if holds(&economy) {
+                high = middle;
+            } else {
+                failing = Some((step, State { economy, tree }));
+                low = middle + 1;
+            }
+        }
+        let mut at = from;
+        if let Some((step, state)) = failing {
+            (at, base) = (step, state);
+        }
+        let end = stored.get(low).map_or(through, |&(step, _)| step);
+        for step in at.saturating_add(1)..=end {
+            self.replay(&mut base, run, step - 1, step)?;
+            if holds(&base.economy) {
+                return Ok(Some(step));
+            }
+        }
+        Ok(None)
     }
 
     /// How many tree nodes the store holds.

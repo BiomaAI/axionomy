@@ -150,7 +150,7 @@ async fn complete(
 #[test]
 fn tools_declare_schemas_and_behavior_hints() {
     let tools = AxionomyMcp::default().tool_router.list_all();
-    assert_eq!(tools.len(), 9);
+    assert_eq!(tools.len(), 10);
     for tool in tools {
         assert!(tool.output_schema.is_some(), "{} output schema", tool.name);
         let hints = tool
@@ -837,6 +837,64 @@ async fn stepping_through_a_trace_names_each_state_and_diffs_compare_them() {
 
     assert!(step(&server, &replayed_id, 4).await.is_error);
     assert!(step(&server, &parent_id, 0).await.is_error);
+}
+
+async fn find(
+    server: &AxionomyMcp,
+    economy_id: &EconomyId,
+    account: &str,
+    comparison: axionomy::QuantityComparison,
+    quantity: u64,
+) -> Outcome {
+    outcome(
+        server
+            .trace_find(Parameters(TraceFindRequest {
+                economy_id: economy_id.clone(),
+                account: account.parse().unwrap(),
+                asset: "token".parse().unwrap(),
+                comparison,
+                quantity: axionomy::Quantity::new(quantity),
+            }))
+            .await,
+    )
+}
+
+#[tokio::test]
+async fn finding_a_balance_condition_names_the_first_state_it_holds_in() {
+    use axionomy::QuantityComparison::{Equal, GreaterThanOrEqual, LessThanOrEqual};
+
+    let server = AxionomyMcp::default();
+    let parent_id = id(&create(&server, fixture()).await);
+    let replayed_id = id(&replay(
+        &server,
+        &parent_id,
+        vec![transfer(1), transfer(2), transfer(1)],
+    )
+    .await);
+    // The sink holds 0, 1, 3 and 4 tokens; the source 5, 4, 2 and 1.
+    for (account, comparison, quantity, expected) in [
+        ("sink", GreaterThanOrEqual, 3, Some(2)),
+        ("sink", GreaterThanOrEqual, 0, Some(0)),
+        ("sink", Equal, 4, Some(3)),
+        ("source", LessThanOrEqual, 2, Some(2)),
+        ("sink", GreaterThanOrEqual, 5, None),
+        ("nobody", Equal, 0, Some(0)),
+    ] {
+        let found = find(&server, &replayed_id, account, comparison, quantity).await;
+        assert!(!found.is_error, "{}", found.value);
+        match expected {
+            Some(index) => {
+                assert_eq!(
+                    found.value["step"], index,
+                    "{account} {comparison:?} {quantity}"
+                );
+                let stepped = step(&server, &replayed_id, index).await;
+                assert_eq!(found.value["state"]["root"], stepped.value["root"]);
+            }
+            None => assert_eq!(found.value, json!({})),
+        }
+    }
+    assert!(find(&server, &parent_id, "sink", Equal, 0).await.is_error);
 }
 
 #[tokio::test]

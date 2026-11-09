@@ -243,6 +243,32 @@ pub struct ReplayRequest {
     pub exchanges: Vec<paths::Exchange>,
 }
 
+/// A balance condition to find in the states of a trace.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct TraceFindRequest {
+    /// An economy made by applying exchanges.
+    pub economy_id: EconomyId,
+    pub account: AccountPath,
+    pub asset: AssetPath,
+    /// How the account's balance of the asset compares with `quantity`.
+    pub comparison: axionomy::QuantityComparison,
+    pub quantity: Quantity,
+}
+
+/// The first state of a trace where a balance condition holds.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct TraceFindResponse {
+    /// How many of the exchanges had been applied to the parent when the
+    /// condition first holds: zero if it holds in the parent's state. Absent
+    /// when it holds in no state of the trace.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub step: Option<usize>,
+    /// That state, as `axionomy_trace_step` gives it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub state: Option<ExchangedResponse>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct TraceStepRequest {

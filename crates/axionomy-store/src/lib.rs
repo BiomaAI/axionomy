@@ -13,7 +13,7 @@ pub use ids::{
     GroupId, GroupKindPath, IdError, MetricPath, OntologyPath, Point, RefPath, RunId, TagPath, kind,
 };
 pub use ontology::{ApplyError, Economy, Exchange, Id, Receipt, Recordable};
-pub use read::{Reader, State};
+pub use read::{Reader, State, Transition};
 pub use recorder::Recorder;
 pub use records::{Checkpoints, Group, GroupRecord, Member, Run, Step, StepOf, Summary, Target};
 pub use state::StateError;

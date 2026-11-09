@@ -114,6 +114,7 @@ rates, invariants and documents for template arguments, by prefix.
 | `axionomy_exchange_apply` | new `economy_id`, change count | additive, idempotent |
 | `axionomy_trace_replay` | new `economy_id`, change count | additive, idempotent |
 | `axionomy_trace_step` | `economy_id` of the state after some of the exchanges that made a snapshot | additive, idempotent |
+| `axionomy_trace_find` | The first step of those exchanges after which a balance is equal to, at least or at most a quantity, and that state | additive, idempotent |
 | `axionomy_search` | MCP task: outcome and the snapshot a solution reaches | additive, idempotent |
 | `axionomy_problem_catalog` | Built-in problems, instances and strategies | read-only |
 | `axionomy_problem_run` | MCP task: run summary | additive, idempotent |

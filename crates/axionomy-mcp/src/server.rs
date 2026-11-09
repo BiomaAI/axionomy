@@ -1,4 +1,3 @@
-use crate::store::State;
 use crate::{
     authoring::{self, AuthoringError},
     handles::{AssessmentId, EconomyId},
@@ -7,12 +6,12 @@ use crate::{
         EconomyExtendRequest, EconomyStored, ExchangeRequest, ExchangedResponse, FailureCode,
         LineKind, ProblemCatalogRequest, ProblemCatalogResponse, QuantityLine, ReplayRequest,
         RunSummary, SearchOutcome, SearchRequest, SearchResponse, SearchSolved, StateRoot,
-        ToolFailure, TraceStepRequest,
+        ToolFailure, TraceFindRequest, TraceFindResponse, TraceStepRequest,
     },
     resources::{self, Address, IMMUTABLE_TTL_MS, LIST_TTL_MS, Target},
-    store::{Archive, Assessed, Loaded, Origin, checkpoint},
+    store::{Archive, Assessed, Loaded, Origin, State, checkpoint},
 };
-use axionomy::{AssessmentStatus, paths};
+use axionomy::{AssessmentStatus, Quantity, QuantityComparison, paths};
 use axionomy_search::{
     BfsSession, GraphSearchProgress,
     session::{Continue, SearchStatus, WorkBudget},
@@ -62,7 +61,8 @@ exist. A rate may also close accounts, once its own effects have left them empty
 path may be opened again. Every call that changes something returns a new economy_id and leaves \
 the old snapshot as it was. Check an exchange with axionomy_exchange_assess, then apply it with \
 axionomy_exchange_apply or apply several with axionomy_trace_replay; step through the exchanges \
-that made a snapshot with axionomy_trace_step. Read what a snapshot holds through axionomy:// \
+that made a snapshot with axionomy_trace_step, and find the first state where a balance \
+condition holds with axionomy_trace_find. Read what a snapshot holds through axionomy:// \
 resources: tool results link to them, paths appear in their URIs as is (an account's balances are \
 .../accounts/agents/7/wallet), every list is paged with a cursor, and a page never changes. \
 Compare two snapshots with their diff resource; equal roots mean equal states. Snapshots are kept \
@@ -242,6 +242,86 @@ impl AxionomyMcp {
             stored.deduplicated,
             &stepped,
         ))
+    }
+
+    #[tool(
+        name = "axionomy_trace_find",
+        title = "Find where a balance condition starts",
+        description = "Return the first step of the exchanges that made an economy, applied to its parent, after which an account's balance of an asset compares with a quantity as asked (`equal`, `greater_than_or_equal` or `less_than_or_equal`), with that state as axionomy_trace_step gives it. Step zero is the parent's state; no step means no state of the trace satisfies the condition.",
+        output_schema = schema_for_output::<TraceFindResponse>(),
+        annotations(destructive_hint = false, idempotent_hint = true, open_world_hint = false)
+    )]
+    async fn trace_find(
+        &self,
+        Parameters(request): Parameters<TraceFindRequest>,
+    ) -> Result<Linked<TraceFindResponse>, ToolError> {
+        let loaded = self.economy(&request.economy_id).await?;
+        let (Origin::Exchanged { .. }, Some(parent)) =
+            (loaded.record.origin, loaded.record.parent.clone())
+        else {
+            return Err(ToolError::new(
+                FailureCode::InvalidRequest,
+                format!(
+                    "`{}` was authored, not made by exchanges; it has no steps",
+                    request.economy_id
+                ),
+            ));
+        };
+        let holds = |balance: Quantity| match request.comparison {
+            QuantityComparison::Equal => balance == request.quantity,
+            QuantityComparison::GreaterThanOrEqual => balance >= request.quantity,
+            QuantityComparison::LessThanOrEqual => balance <= request.quantity,
+        };
+        // The receipts say what each exchange moved, so the balance after
+        // every step follows from the parent's without rebuilding a state.
+        let mut balance = self
+            .economy(&parent)
+            .await?
+            .state
+            .economy
+            .balance(&request.account, &request.asset);
+        let mut found = holds(balance).then_some(0);
+        for (index, receipt) in loaded.receipts.iter().enumerate() {
+            if found.is_some() {
+                break;
+            }
+            for delta in receipt.deltas() {
+                if delta.account() == &request.account {
+                    balance = balance
+                        .checked_sub(delta.consumed().quantity(&request.asset))
+                        .and_then(|left| {
+                            left.checked_add(delta.produced().quantity(&request.asset))
+                        })
+                        .ok_or_else(|| {
+                            ToolError::internal("a receipt does not follow its state")
+                        })?;
+                }
+            }
+            found = holds(balance).then_some(index + 1);
+        }
+        let Some(step) = found else {
+            return Ok(Linked::new(
+                TraceFindResponse {
+                    step: None,
+                    state: None,
+                },
+                Vec::new(),
+            ));
+        };
+        let stored = self
+            .archive
+            .step(&request.economy_id, &loaded, step)
+            .await
+            .map_err(ToolError::internal)?;
+        let stepped = self.economy(&stored.economy_id).await?;
+        Ok(
+            exchanged_response(parent, stored.economy_id, stored.deduplicated, &stepped).map(
+                |state| TraceFindResponse {
+                    step: Some(step),
+                    state: Some(state),
+                },
+            ),
+        )
     }
 
     #[tool(
@@ -622,6 +702,14 @@ pub(crate) struct Linked<T> {
 impl<T: Serialize> Linked<T> {
     fn new(value: T, links: Vec<Resource>) -> Self {
         Self { value, links }
+    }
+
+    /// The same links with the value wrapped or changed.
+    fn map<U>(self, change: impl FnOnce(T) -> U) -> Linked<U> {
+        Linked {
+            value: change(self.value),
+            links: self.links,
+        }
     }
 
     fn into_result(self) -> Result<CallToolResult, McpError> {

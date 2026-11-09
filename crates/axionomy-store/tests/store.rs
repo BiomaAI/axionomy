@@ -512,3 +512,98 @@ fn typed_economies_are_recorded_and_read_back_only_as_their_ontology() {
     assert_eq!(forked.step, 4);
     store.read().unwrap().verify::<Ledger>(forked.run).unwrap();
 }
+
+#[test]
+fn bisect_finds_where_a_lasting_condition_starts_under_every_checkpoint_rule() {
+    let store = Store::memory().unwrap();
+    for checkpoints in [
+        Checkpoints::EveryStep,
+        Checkpoints::Every(NonZeroU64::new(5).unwrap()),
+        Checkpoints::Ends,
+    ] {
+        let mut recorder = store.record::<Paths>(economy(3), checkpoints);
+        for _ in 0..40 {
+            recorder.apply(pay("bank", "agents/1", 3)).unwrap();
+        }
+        let end = recorder.finish().unwrap();
+        let reader = store.read().unwrap();
+        let reached = |target: u64| {
+            move |economy: &paths::Economy| {
+                economy.balance(&path("agents/1"), &path("cash")) >= Quantity::new(target)
+            }
+        };
+        // The agent holds 3n after step n, so it first holds at least t at
+        // step ⌈t / 3⌉.
+        for (target, step) in [
+            (0, Some(0)),
+            (1, Some(1)),
+            (30, Some(10)),
+            (59, Some(20)),
+            (120, Some(40)),
+        ] {
+            assert_eq!(
+                reader
+                    .bisect::<Paths>(end.run, 0, 40, reached(target))
+                    .unwrap(),
+                step,
+                "{checkpoints:?} reaching {target}"
+            );
+        }
+        assert_eq!(
+            reader
+                .bisect::<Paths>(end.run, 0, 40, reached(121))
+                .unwrap(),
+            None
+        );
+        assert_eq!(
+            reader
+                .bisect::<Paths>(end.run, 12, 30, reached(30))
+                .unwrap(),
+            Some(12)
+        );
+        assert_eq!(
+            reader.bisect::<Paths>(end.run, 0, 9, reached(30)).unwrap(),
+            None
+        );
+        assert!(reader.bisect::<Paths>(end.run, 0, 41, reached(1)).is_err());
+    }
+}
+
+#[test]
+fn transitions_chain_the_roots_of_a_run() {
+    let store = Store::memory().unwrap();
+    let mut recorder =
+        store.record::<Paths>(economy(4), Checkpoints::Every(NonZeroU64::new(4).unwrap()));
+    for exchange in exchanges(3, 30, 4) {
+        recorder.apply(exchange).unwrap();
+    }
+    let end = recorder.finish().unwrap();
+    let reader = store.read().unwrap();
+    let transitions = reader.transitions::<Paths>(end.run, 0, 100).unwrap();
+    assert_eq!(transitions.len(), 30);
+    for pair in transitions.windows(2) {
+        assert_eq!(pair[0].after, pair[1].before);
+        assert_eq!(pair[0].step + 1, pair[1].step);
+    }
+    for transition in &transitions {
+        let point = Point {
+            run: end.run,
+            step: transition.step,
+        };
+        if let Some(root) = reader.root(point).unwrap() {
+            assert_eq!(root, transition.after);
+        }
+        assert_eq!(
+            reader.state::<Paths>(point).unwrap().unwrap().root(),
+            transition.after
+        );
+    }
+    let tail = reader.transitions::<Paths>(end.run, 25, 3).unwrap();
+    assert_eq!(
+        tail.iter()
+            .map(|transition| transition.step)
+            .collect::<Vec<_>>(),
+        [26, 27, 28]
+    );
+    assert_eq!(tail[0].before, transitions[24].after);
+}

@@ -310,8 +310,14 @@ committed state while training keeps writing.
 - **Replay buffers can reference states.** A transition can be (root before,
   exchange, receipt, root after, outcome) instead of copied observations, with
   observations projected from roots on demand and cached. It is exact,
-  deduplicated and much smaller, and needs the episode's states stored, under
-  `every_step`.
+  deduplicated and much smaller. `Reader::transitions` reads a run's steps
+  this way, each replayed and checked against its receipt; under `every_step`
+  every root it returns is also stored.
+- **Bisection finds when something started.** `Reader::bisect` returns the
+  first step where a condition that keeps holding once it holds is true,
+  loading O(log n) stored states and replaying at most the distance between
+  two of them. A time index is the same search with "the clock has reached t"
+  as the condition.
 
 ## Retention
 
@@ -340,11 +346,12 @@ survive the members they summarize.
   and the assessment and artifact maps are gone; snapshots are points of runs
   in the store, durable across restarts with a store file. Results and
   snapshots carry state roots, `axionomy_trace_step` names any state of the
-  exchanges that made a snapshot, a `diff` resource compares two snapshots,
+  exchanges that made a snapshot, `axionomy_trace_find` names the first state
+  where a balance condition holds, a `diff` resource compares two snapshots,
   and accounts and balances page from the state tree. Run IDs, tags, refs and
   groups are store-wide names that would let one caller find another's
   snapshots, so MCP exposes only what a handle reaches until it has
-  authentication; watch, bisect and actor views follow with phase 4.
+  authentication; watch and actor views follow with phase 4.
 - **Studio server**: runs and artifacts move into the store, and scrubbing
   renders frames from stored roots instead of loading whole artifacts.
 - **Search and RL**: kept rollouts, sessions and RL episodes record as runs with
@@ -370,10 +377,10 @@ Each phase is a validated commit or series of commits.
    state roots; extend the Python interop suite.
 4. **Recording and debugging:** typed ontologies in the store (done: every
    identifier is stored as its JSON, and a run is read back only as the
-   ontology that recorded it); runs, checkpoint rules and groups in search,
-   rollouts, Monte Carlo, MPPI and RL; replay-buffer transitions by root;
-   watch, bisect, actor views and the time index; Studio scrubbing from the
-   store.
+   ontology that recorded it); replay-buffer transitions by root, bisection
+   and the time index it gives (done); runs, checkpoint rules and groups in
+   search, rollouts, Monte Carlo, MPPI and RL; watch and actor views; Studio
+   scrubbing from the store.
 5. **Distributed training:** per-worker stores, merge tooling and retention
    policies.
 

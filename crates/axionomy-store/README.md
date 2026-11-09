@@ -21,6 +21,9 @@ produces, so stored states are a cache of replay and replay verifies them.
   batches nobody waits on, durable within a second.
 - **Tags, metrics, groups and refs** organize runs for evaluation, Monte
   Carlo, MPPI and training; none of them changes what an exchange does.
+- **Reading back** gives any state of a run, its steps as replay-buffer
+  transitions between state roots, and the first step where a lasting
+  condition holds, by bisecting the stored states.
 
 ```rust
 use axionomy::{Quantity, Rate, basket, path::Path, paths::{self, Paths}};
