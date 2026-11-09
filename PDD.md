@@ -2015,7 +2015,8 @@ that ontology, and view keys sit under it (`maze/account/agent`,
 value of another ontology. A view's `ViewOntology<O>` is how views show
 ontology `O`, its keys, labels, scenes and leaderboards; it is of an ontology,
 not one. The kernel's semantics are unchanged, so the Lean specification and
-its fixtures are too.
+its fixtures are too. [Ontologies](docs/ONTOLOGY.md) is the guide to building
+one.
 
 ## 16. Success criteria
 

@@ -465,6 +465,10 @@ assert!(economy.matches(&goal));
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
+`Workshop` is the example's ontology: its vocabulary of accounts, assets,
+rates and roles under one name. [Ontologies](docs/ONTOLOGY.md) explains what
+an ontology is and how to build one, step by step.
+
 The `Build` exchange is valid only if every role binding, balance,
 preservation requirement, arithmetic operation, and invariant succeeds.
 `assess` explains validity without mutation: feasible exchanges expose the
