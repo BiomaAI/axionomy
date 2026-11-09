@@ -1582,10 +1582,13 @@ factor.
    candidate instantiation without arbitrary hidden guards.
 3. Add explicit wire-schema versioning only when compatibility with deployed
    historical data becomes a real requirement.
-4. Measure large fork trees and many-holder simulations; if the top-level
-   account-index copy dominates, adopt a persistent map and incremental
-   fingerprints. Extract generic holdings, dependency, and event indexes only
-   after a second domain confirms the perishables shapes.
+4. Build [storage, runs and replay](docs/STORAGE.md): a persistent
+   content-addressed tree for economic state, with pointer-copy forks and
+   incremental fingerprints, durable runs on redb, recording modes cheap enough
+   for training loops, and tags, groups and metrics for evaluation, Monte
+   Carlo and MPPI. Each phase is gated by measurement. Extract generic
+   holdings, dependency, and event indexes only after a second domain confirms
+   the perishables shapes.
 5. Extend invariants with carefully constrained local and inequality forms.
 6. Build an external OR adapter that compiles one closed schedule and replays
    the returned assignment.
