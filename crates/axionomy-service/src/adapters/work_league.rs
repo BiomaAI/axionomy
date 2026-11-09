@@ -841,3 +841,164 @@ mod tests {
         );
     }
 }
+
+// How Studio names and writes this problem's values.
+
+counted!(work_league::Asset);
+
+impl StudioLabel for work_league::AccountId {
+    fn studio_label(&self) -> String {
+        match self {
+            Self::Agent(agent) => format!("Worker {agent:?}"),
+            Self::Job(job) => format!("Job {}", job.0),
+            Self::Facility(facility) => format!("{facility:?} facility"),
+            Self::Nature => "Disruption model".into(),
+            Self::World => "Shared work clock and contracts".into(),
+        }
+    }
+}
+
+impl StudioLabel for work_league::Asset {
+    fn studio_label(&self) -> String {
+        match self {
+            Self::WorldIdentity => "Identity: work economy".into(),
+            Self::SeasonActive => "Season active".into(),
+            Self::SeasonEnded => "Season ended".into(),
+            Self::Tick => "World time".into(),
+            Self::Horizon => "Season horizon".into(),
+            Self::ContractsOpen => "Unresolved contracts".into(),
+            Self::ContractsClosed => "Resolved contracts".into(),
+            Self::Activities => "Activities in progress".into(),
+            Self::Permit(agent) => format!("{agent:?} may decide this tick"),
+            Self::Acted(agent) => format!("{agent:?} has decided this tick"),
+            Self::Idle => "Ready for work".into(),
+            Self::Busy => "Activity in progress".into(),
+            Self::FreeContract => "Can accept a contract".into(),
+            Self::ReadyAt => "Activity finishes at tick".into(),
+            Self::ReleaseAt => "Contract opens at tick".into(),
+            Self::Deadline => "Delivery deadline".into(),
+            Self::LeaseUntil => "Claim reserved through tick".into(),
+            Self::Expired => "Expired without delivery".into(),
+            Self::Transferable => "Handoff available".into(),
+            Self::HandedOff => "Contract handed off".into(),
+            Self::Assists => "Paid handoffs".into(),
+            Self::CompletedJob(job) => format!("Dependency completed: job {}", job.0),
+            Self::Credit => "Spendable credit".into(),
+            Self::Wear => "Equipment wear".into(),
+            Self::Repairing => "Under repair".into(),
+            Self::FacilityIdentity(facility) => format!("Identity: {facility:?}"),
+            Self::Vacant(facility) => format!("{facility:?} service slot free"),
+            Self::Occupied(facility, agent) => format!("{facility:?} occupied by {agent:?}"),
+            Self::Servicing(facility) => format!("Receiving {facility:?} service"),
+            Self::ChargingEnergy => "Energy reserved for charging".into(),
+            Self::ReclaimingMaterial => "Material being reclaimed".into(),
+            Self::EmbodiedMaterial => "Material incorporated into work".into(),
+            Self::RecyclingLoss => "Material lost during recycling".into(),
+            Self::AgentIdentity(agent) => format!("Identity: {agent:?}"),
+            Self::JobIdentity(job) => format!("Identity: job {}", job.0),
+            Self::Policy(policy) => format!("Policy: {policy:?}"),
+            Self::At(location) => format!("At {location:?}"),
+            Self::Operational => "Operational".into(),
+            Self::Energy => "Energy left".into(),
+            Self::TimeRemaining => "Time left".into(),
+            Self::Material => "Material left".into(),
+            Self::Available => "Available for claim".into(),
+            Self::Assigned(agent) => format!("Assigned to {agent:?}"),
+            Self::Claimed(job) => format!("Claim on job {}", job.0),
+            Self::Pending => "Waiting for work".into(),
+            Self::InProgress => "Work in progress".into(),
+            Self::Awaiting(job, mode) => format!("Job {} awaiting {mode:?} outcome", job.0),
+            Self::Resolved(job, mode, outcome) => {
+                format!("Job {} {mode:?} outcome: {outcome:?}", job.0)
+            }
+            Self::Completed => "Jobs completed".into(),
+            Self::Value => "Contract value earned".into(),
+            Self::Attempts => "Work attempts".into(),
+            Self::Successes => "Successful attempts".into(),
+            Self::Failures => "Failed attempts".into(),
+            Self::SpentEnergy => "Energy spent".into(),
+            Self::ElapsedTime => "Elapsed time".into(),
+            Self::MaterialSpent => "Material spent".into(),
+            Self::Waste => "Residual waste".into(),
+            Self::RecycledWaste => "Waste recycled".into(),
+            Self::Damage => "Damage requiring repair".into(),
+            Self::RepairSupply => "Repair supply".into(),
+            Self::SpentRepairSupply => "Repair supply used".into(),
+            Self::ChargeSupply => "Charging energy supply".into(),
+            Self::RecyclerCapacity => "Recycler available".into(),
+            Self::OutcomeWeight(job, mode, outcome) => {
+                format!("Job {} {mode:?} {outcome:?} weight", job.0)
+            }
+        }
+    }
+}
+
+impl StudioLabel for work_league::RateId {
+    fn studio_label(&self) -> String {
+        match self {
+            Self::Tick => "Advance the shared work clock".into(),
+            Self::Wait { agent } => format!("{agent:?} waits this tick"),
+            Self::BeginService {
+                agent,
+                facility,
+                maintenance,
+            } => format!(
+                "{agent:?} starts {} at {facility:?}",
+                if *maintenance {
+                    "preventive maintenance"
+                } else {
+                    "service"
+                }
+            ),
+            Self::EndService { agent, facility } => {
+                format!("{agent:?} finishes service and frees {facility:?}")
+            }
+            Self::Handoff {
+                agent,
+                recipient,
+                job,
+                ..
+            } => format!(
+                "{agent:?} hands job {} to {recipient:?} for 2 credits",
+                job.0
+            ),
+            Self::ReleaseClaim {
+                agent,
+                job,
+                expired,
+            } => format!(
+                "{agent:?} releases job {}{}",
+                job.0,
+                if *expired {
+                    ": claim lease expired"
+                } else {
+                    " for another worker"
+                }
+            ),
+            Self::Expire { job, .. } => format!("Job {} misses its delivery deadline", job.0),
+            Self::EndSeason => "Close the resolved work season".into(),
+            Self::Claim { agent, job } => format!("{agent:?} claims job {}", job.0),
+            Self::Move { agent, from, to } => format!("{agent:?} moves {from:?} → {to:?}"),
+            Self::Begin { agent, job, mode } => {
+                format!("{agent:?} begins job {} in {mode:?} mode", job.0)
+            }
+            Self::Resolve {
+                agent,
+                job,
+                outcome,
+                ..
+            } => format!("Resolve {agent:?} on job {}: {outcome:?}", job.0),
+            Self::Finish {
+                agent,
+                job,
+                outcome,
+                ..
+            } => format!("{agent:?} records job {} as {outcome:?}", job.0),
+            Self::Repair { agent } => format!("Repair {agent:?}"),
+            Self::Recharge { agent } => format!("Recharge {agent:?}"),
+            Self::Recycle { agent } => format!("{agent:?} recycles one waste unit"),
+        }
+    }
+}
+
+debug_labels!(work_league::Role);

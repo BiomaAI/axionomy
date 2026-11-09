@@ -1118,3 +1118,98 @@ fn decorate_scene_paths(
         };
     }
 }
+
+// How Studio names and writes this problem's values.
+
+counted!(maze::Asset);
+
+fn maze_node(node: maze::Node) -> String {
+    words(&node)
+}
+
+impl StudioLabel for maze::Node {
+    fn studio_label(&self) -> String {
+        maze_node(*self)
+    }
+}
+
+impl StudioLabel for maze::AccountId {
+    fn studio_label(&self) -> String {
+        match self {
+            Self::Agent => "Agent".into(),
+            Self::World => "Vault District".into(),
+        }
+    }
+}
+
+impl StudioLabel for maze::Asset {
+    fn studio_label(&self) -> String {
+        match *self {
+            Self::PowerTransit => "Power routed to the canal crossing".into(),
+            Self::PowerVault => "Power routed to the vault shutter".into(),
+            Self::Health => "Health reserve".into(),
+            Self::Injury => "Injuries slowing each action".into(),
+            Self::Shield => "Protective equipment charges".into(),
+            Self::UsedShield => "Spent protection".into(),
+            Self::Medicine => "Available medicine".into(),
+            Self::UsedMedicine => "Medicine used".into(),
+            Self::At(node) => format!("Standing in {}", maze_node(node)),
+            Self::Edge(from, to) => {
+                format!("Passage {} → {}", maze_node(from), maze_node(to))
+            }
+            Self::Key => "Key".into(),
+            Self::Locked => "Vault gate locked".into(),
+            Self::Open => "Vault gate open".into(),
+            Self::Energy => "Energy left".into(),
+            Self::SpentEnergy => "Energy spent".into(),
+            Self::Time => "Time left".into(),
+            Self::SpentTime => "Time spent".into(),
+            Self::Target(node) => format!("Goal: reach {}", maze_node(node)),
+            Self::Distance(node) => format!("Distance from {} to the exit", maze_node(node)),
+            Self::Active => "Expedition in progress".into(),
+            Self::Solved => "Explorer escaped".into(),
+        }
+    }
+}
+
+impl StudioLabel for maze::RateId {
+    fn studio_label(&self) -> String {
+        match *self {
+            Self::DivertPower { at, to_vault } => format!(
+                "Divert power at {} to {}",
+                maze_node(at),
+                if to_vault { "vault" } else { "canal" }
+            ),
+            Self::TakeProtection { at } => {
+                format!("Collect protective equipment at {}", maze_node(at))
+            }
+            Self::Treat { at } => format!("Treat injuries at {}", maze_node(at)),
+            Self::ProtectedMove { from, to, energy } => format!(
+                "Protected crossing {} → {} ({energy} energy)",
+                maze_node(from),
+                maze_node(to)
+            ),
+            Self::Move {
+                from,
+                to,
+                energy,
+                needs_open_door,
+            } => format!(
+                "Walk {} → {} ({} energy{})",
+                maze_node(from),
+                maze_node(to),
+                energy,
+                if needs_open_door {
+                    ", needs the vault gate open"
+                } else {
+                    ""
+                }
+            ),
+            Self::TakeKey { at } => format!("Pick up the key in {}", maze_node(at)),
+            Self::UnlockDoor { at } => format!("Unlock the gate from {}", maze_node(at)),
+            Self::Finish => "Reach the exit".into(),
+        }
+    }
+}
+
+debug_labels!(maze::Role);

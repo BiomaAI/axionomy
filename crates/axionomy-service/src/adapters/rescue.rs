@@ -303,3 +303,61 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         ]),
     )
 }
+
+// How Studio names and writes this problem's values.
+
+counted!(rescue::Asset);
+
+impl StudioLabel for rescue::AccountId {
+    fn studio_label(&self) -> String {
+        match self {
+            Self::Agent => "Responder".into(),
+            Self::Nature => "Hidden scenario".into(),
+        }
+    }
+}
+
+impl StudioLabel for rescue::Asset {
+    fn studio_label(&self) -> String {
+        match self {
+            Self::At(location) => format!("Responder at {location:?}"),
+            Self::Energy => "Energy left".into(),
+            Self::SpentEnergy => "Energy spent".into(),
+            Self::Sensor => "Sensor available".into(),
+            Self::UsedSensor => "Sensor used".into(),
+            Self::Unresolved => "Location not yet drawn".into(),
+            Self::ScenarioWeight(location, seed) => {
+                format!("Weight for {location:?}, sensor state {seed}")
+            }
+            Self::Truth(location) => format!("Survivor is at {location:?}"),
+            Self::Seed(seed) => format!("Sensor state {seed}"),
+            Self::Belief(location) => format!("Reading points to {location:?}"),
+            Self::Planning => "Choosing an action".into(),
+            Self::AwaitingObservation => "Waiting for a sensor reading".into(),
+            Self::Committed => "Destination chosen".into(),
+            Self::Rescued => "Survivor reached".into(),
+            Self::Evacuated => "Survivor evacuated".into(),
+            Self::Solved => "Rescue complete".into(),
+        }
+    }
+}
+
+impl StudioLabel for rescue::RateId {
+    fn studio_label(&self) -> String {
+        match self {
+            Self::Instantiate { truth, seed } => {
+                format!("Draw scenario: {truth:?}, sensor state {seed}")
+            }
+            Self::BeginObserve => "Use the sensor".into(),
+            Self::ResolveObservation { report, .. } => {
+                format!("Receive sensor reading: {report:?}")
+            }
+            Self::Move { from, to } => format!("Move {from:?} → {to:?}"),
+            Self::Rescue { location } => format!("Reach survivor at {location:?}"),
+            Self::Evacuate { location } => format!("Evacuate from {location:?} to Base"),
+            Self::Finish => "Complete the rescue".into(),
+        }
+    }
+}
+
+debug_labels!(rescue::Role);

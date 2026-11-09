@@ -452,3 +452,76 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
     }
     Some(scene)
 }
+
+// How Studio names and writes this problem's values.
+
+counted!(fleet::Asset);
+
+debug_labels!(fleet::Asset);
+
+debug_labels!(fleet::Role);
+
+impl StudioLabel for fleet::AccountId {
+    fn studio_label(&self) -> String {
+        match self {
+            Self::World => "Fleet clock, budget and road capacity".into(),
+            Self::Station => "Fuel, repair and towing operator".into(),
+            Self::Nature => "Seeded vehicle and route tickets".into(),
+            Self::Vehicle(van) => format!("{van:?} van"),
+            Self::Order(id) => format!("Order {}", id + 1),
+        }
+    }
+}
+
+impl StudioLabel for fleet::RateId {
+    fn studio_label(&self) -> String {
+        match self {
+            Self::Release(id) => format!("Order {} becomes available", id + 1),
+            Self::Load { van, order, at } => {
+                format!("{van:?} van loads Order {} at {at:?}", order + 1)
+            }
+            Self::Stage { van, order } => {
+                format!("{van:?} van stages Order {} at the shared hub", order + 1)
+            }
+            Self::Transfer {
+                from, to, order, ..
+            } => format!("Transfer Order {} from {from:?} to {to:?}", order + 1),
+            Self::Depart { van, from, to } => format!("{van:?} van departs {from:?} → {to:?}"),
+            Self::Resolve { van, outcome, .. } => {
+                format!("{van:?} van's trip resolves: {outcome:?}")
+            }
+            Self::Arrive { van, to, .. } => format!("{van:?} van arrives at {to:?}"),
+            Self::Deliver { van, order, late } => format!(
+                "{van:?} delivers Order {} {}",
+                order + 1,
+                if *late {
+                    "late for half payment"
+                } else {
+                    "within its window"
+                }
+            ),
+            Self::Expire { order, .. } => format!("Order {} expires undelivered", order + 1),
+            Self::Refuel(van) => format!("{van:?} occupies the pump and purchases 3 fuel"),
+            Self::EndRefuel(van) => format!("{van:?} finishes refueling and releases the pump"),
+            Self::Repair { van, damaged } => format!(
+                "{van:?} starts {} in the repair bay",
+                if *damaged {
+                    "breakdown repair"
+                } else {
+                    "preventive maintenance"
+                }
+            ),
+            Self::EndRepair { van, .. } => {
+                format!("{van:?} finishes service and releases the repair bay")
+            }
+            Self::Tow { van, from } => {
+                format!("Dispatch the shared tow truck for {van:?} at {from:?}")
+            }
+            Self::EndTow(van) => format!("Tow {van:?} to depot and release the tow truck"),
+            Self::Tick => "Advance shared fleet time one tick".into(),
+            Self::Close => {
+                "Close the fleet run with all orders and occupied services settled".into()
+            }
+        }
+    }
+}

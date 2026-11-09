@@ -392,3 +392,71 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         ]),
     )
 }
+
+// How Studio names and writes this problem's values.
+
+counted!(sokoban::Asset);
+
+impl StudioLabel for sokoban::AccountId {
+    fn studio_label(&self) -> String {
+        match self {
+            Self::Cell(cell) => format!("Cell {cell}"),
+            Self::Success => "Puzzle".into(),
+        }
+    }
+}
+
+impl StudioLabel for sokoban::Asset {
+    fn studio_label(&self) -> String {
+        match self {
+            Self::DeadSquare => "A crate cannot reach a goal from here".into(),
+            Self::ExitCell => "Warehouse exit".into(),
+            Self::AtExit => "Player at the exit".into(),
+            Self::AwayFromExit => "Player inside the warehouse".into(),
+            Self::Plate(id) => format!("Pressure plate {}", id + 1),
+            Self::Door(id) => format!("Door {}", id + 1),
+            Self::Panel(id) => format!("Latch panel {}", id + 1),
+            Self::Pressed(id) => format!("Plate {} has a crate", id + 1),
+            Self::Released(id) => format!("Plate {} is released", id + 1),
+            Self::LatchReady(id) => format!("Door {} can be latched", id + 1),
+            Self::Latched(id) => format!("Door {} latched open", id + 1),
+            Self::CellIdentity(cell) => format!("This is cell {cell}"),
+            Self::BoardWidth(width) => format!("Board width is {width}"),
+            Self::BoardHeight(height) => format!("Board height is {height}"),
+            Self::Floor => "Walkable floor".into(),
+            Self::Wall => "Wall".into(),
+            Self::Player => "Player".into(),
+            Self::Crate(crate_id) => format!("Crate {}", crate_id + 1),
+            Self::Empty => "Empty cell".into(),
+            Self::GoalCell => "Goal square".into(),
+            Self::Active => "Puzzle in progress".into(),
+            Self::Solved => "Puzzle solved".into(),
+        }
+    }
+}
+
+impl StudioLabel for sokoban::RateId {
+    fn studio_label(&self) -> String {
+        match self {
+            Self::Latch { circuit, at } => {
+                format!("Latch door {} from panel at cell {at}", circuit + 1)
+            }
+            Self::Move { from, to } => format!("Move from cell {from} to cell {to}"),
+            Self::Push {
+                behind,
+                crate_at,
+                to,
+                crate_id,
+            } => format!(
+                "Push crate {} from cell {crate_at} to cell {to} (stand at {behind})",
+                crate_id + 1
+            ),
+            Self::Finish { assignment } => format!(
+                "Finish with {} stable crates on their assigned goals",
+                assignment.len()
+            ),
+        }
+    }
+}
+
+debug_labels!(sokoban::Role);

@@ -196,3 +196,40 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         ]),
     )
 }
+
+// How Studio names and writes this problem's values.
+
+counted!(exact_cover::Asset);
+
+impl StudioLabel for exact_cover::AccountId {
+    fn studio_label(&self) -> String {
+        "Exact-cover problem".into()
+    }
+}
+
+impl StudioLabel for exact_cover::Asset {
+    fn studio_label(&self) -> String {
+        match self {
+            Self::Uncovered(element) => format!("Element {element:?} is uncovered"),
+            Self::Covered(element) => format!("Element {element:?} is covered"),
+            Self::Available(set) => format!("Subset {set:?} is available"),
+            Self::Selected(set) => format!("Subset {set:?} selected"),
+            Self::Progress(count) => format!("{count} elements covered"),
+            Self::Active => "Cover in progress".into(),
+            Self::Solved => "Exact cover found".into(),
+        }
+    }
+}
+
+impl StudioLabel for exact_cover::RateId {
+    fn studio_label(&self) -> String {
+        match self {
+            Self::Select { set, before } => {
+                format!("Select subset {set:?} after covering {before} elements")
+            }
+            Self::Finish => "Accept the exact cover".into(),
+        }
+    }
+}
+
+debug_labels!(exact_cover::Role);

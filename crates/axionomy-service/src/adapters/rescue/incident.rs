@@ -406,3 +406,60 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
     }
     Some(scene)
 }
+
+// How Studio names and writes this problem's values.
+
+counted!(incident::Asset);
+
+debug_labels!(incident::Asset);
+
+debug_labels!(incident::Role);
+
+impl StudioLabel for incident::AccountId {
+    fn studio_label(&self) -> String {
+        match self {
+            Self::World => "Incident clock and hospital".into(),
+            Self::Responder => "Evacuation crew".into(),
+            Self::Nature => "Hidden patient locations and sensor reports".into(),
+            Self::Patient(id) => format!("Patient {}", id + 1),
+        }
+    }
+}
+
+impl StudioLabel for incident::RateId {
+    fn studio_label(&self) -> String {
+        match self {
+            Self::Drive { from, to, fast } => format!(
+                "Drive {from:?} → {to:?}{}",
+                if *fast {
+                    " at emergency speed"
+                } else {
+                    " conserving fuel"
+                }
+            ),
+            Self::Search(location) => format!("Search {location:?} for casualties"),
+            Self::Scan => "Spend a sensor charge on a new location hint".into(),
+            Self::Report { location, .. } => {
+                format!("Sensor suggests {location:?}; hint may be wrong")
+            }
+            Self::Discover { patient, location } => {
+                format!("Discover Patient {} at {location:?}", patient + 1)
+            }
+            Self::Deteriorate(patient) => format!("Patient {} loses vitality", patient + 1),
+            Self::Stabilize { patient, .. } => format!(
+                "Stabilize Patient {} and extend the evacuation window",
+                patient + 1
+            ),
+            Self::Load { patient, .. } => {
+                format!("Load Patient {} into the evacuation seat", patient + 1)
+            }
+            Self::Unload(patient) => format!("Admit Patient {} to the hospital", patient + 1),
+            Self::Lose { patient, cause, .. } => {
+                format!("Resolve Patient {}: {cause:?}", patient + 1)
+            }
+            Self::Resupply => "Take the hospital's finite fuel, energy and medical reserve".into(),
+            Self::Wait => "Advance incident time by one tick".into(),
+            Self::Close => "Close the incident with all patient outcomes recorded".into(),
+        }
+    }
+}

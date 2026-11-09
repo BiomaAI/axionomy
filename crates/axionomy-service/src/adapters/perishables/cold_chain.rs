@@ -350,3 +350,72 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         ]),
     )
 }
+
+// How Studio names and writes this problem's values.
+
+counted!(chain::Asset);
+
+debug_labels!(chain::Asset);
+
+debug_labels!(chain::Role);
+
+impl StudioLabel for chain::AccountId {
+    fn studio_label(&self) -> String {
+        match self {
+            Self::World => "Cold-chain resources".into(),
+            Self::Buyer => "Funded food deliveries".into(),
+            Self::Batch(id) => format!("Cohort {}", id + 1),
+        }
+    }
+}
+
+impl StudioLabel for chain::RateId {
+    fn studio_label(&self) -> String {
+        match self {
+            Self::Split {
+                source,
+                destination,
+                ..
+            } => format!(
+                "Split Cohort {} into Cohort {} with the same heat history",
+                source + 1,
+                destination + 1
+            ),
+            Self::Move { batch, to, .. } => format!("Move Cohort {} to {to:?}", batch + 1),
+            Self::Process(batch) => format!("Preserve fresh food in Cohort {}", batch + 1),
+            Self::Deliver {
+                batch, preserved, ..
+            } => format!(
+                "Deliver {} food from Cohort {}",
+                if *preserved { "preserved" } else { "fresh" },
+                batch + 1
+            ),
+            Self::Discard { batch, .. } => format!(
+                "Discard spoiled food from Cohort {} and release space",
+                batch + 1
+            ),
+            Self::Cool => "Power refrigeration for today".into(),
+            Self::Generate => "Burn shared fuel for backup electricity".into(),
+            Self::EndDay => "Close today's decisions and settle thermal exposure".into(),
+            Self::AgeEmpty(batch) => format!("Cohort {} has no fresh food to age", batch + 1),
+            Self::AgeCold(batch) => format!(
+                "Cohort {} stays cold without resetting its prior heat",
+                batch + 1
+            ),
+            Self::AgeWarm { batch, spoil, .. } => format!(
+                "Cohort {} {}",
+                batch + 1,
+                if *spoil {
+                    "crosses the spoilage threshold"
+                } else {
+                    "accumulates heat"
+                }
+            ),
+            Self::OpenDay(day) => format!(
+                "Open day {} with the encoded grid supply and new obligations",
+                day + 1
+            ),
+            Self::Close => "Close the cold-chain horizon and record unmet demand".into(),
+        }
+    }
+}

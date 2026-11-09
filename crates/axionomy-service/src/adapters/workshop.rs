@@ -434,3 +434,87 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         .with_metrics(metrics),
     )
 }
+
+// How Studio names and writes this problem's values.
+
+counted!(workshop::Asset);
+
+impl StudioLabel for workshop::AccountId {
+    fn studio_label(&self) -> String {
+        match self {
+            Self::Workshop => "Workshop".into(),
+            Self::Customer(id) => format!("Customer {}", id + 1),
+        }
+    }
+}
+
+impl StudioLabel for workshop::Asset {
+    fn studio_label(&self) -> String {
+        match self {
+            Self::CustomerIdentity(id) => format!("Customer {} identity", id + 1),
+            Self::Credit => "Credit".into(),
+            Self::Frame => "Prepared frames".into(),
+            Self::Panel => "Prepared panel material".into(),
+            Self::Offcut => "Recyclable offcuts".into(),
+            Self::Table => "Finished tables".into(),
+            Self::Durability => "Tool durability".into(),
+            Self::Wear => "Tool wear".into(),
+            Self::ToolPotential => "Upgrade capacity".into(),
+            Self::RepairKit => "Repair kits".into(),
+            Self::UsedRepairKit => "Used repair kits".into(),
+            Self::UpgradeKit => "Available upgrade".into(),
+            Self::Upgraded => "Precision tool upgrade".into(),
+            Self::Idle => "Workbench available".into(),
+            Self::Contract(id) => format!("Contract {} available", id + 1),
+            Self::Raw(id) => format!("Contract {} awaiting components", id + 1),
+            Self::Prepared(id) => format!("Contract {} components prepared", id + 1),
+            Self::Assembled(id) => format!("Contract {} ready to deliver", id + 1),
+            Self::Fulfilled(id) => format!("Contract {} fulfilled", id + 1),
+            Self::Completed => "Contracts delivered".into(),
+            Self::Wood => "Wood left".into(),
+            Self::Labor => "Labor left".into(),
+            Self::SpentLabor => "Labor used".into(),
+            Self::Tool => "Reusable tool".into(),
+            Self::Chair => "Finished chairs".into(),
+            Self::Waste => "Scrap".into(),
+            Self::Time => "Time left".into(),
+            Self::SpentTime => "Time spent".into(),
+            Self::Active => "Order in progress".into(),
+            Self::Solved => "Order complete".into(),
+        }
+    }
+}
+
+impl StudioLabel for workshop::RateId {
+    fn studio_label(&self) -> String {
+        match self {
+            Self::Accept(id) => format!("Accept contract {}", id + 1),
+            Self::Prepare {
+                order,
+                precise,
+                upgraded,
+            } => format!(
+                "Prepare components for contract {} ({})",
+                order + 1,
+                if *upgraded {
+                    "upgraded tool"
+                } else if *precise {
+                    "precision cut"
+                } else {
+                    "fast cut"
+                }
+            ),
+            Self::Assemble(id) => format!("Assemble contract {}", id + 1),
+            Self::Deliver(id) => format!("Deliver contract {} and collect payment", id + 1),
+            Self::Repair => "Restore worn tool with a repair kit".into(),
+            Self::Upgrade => "Install the precision tool upgrade".into(),
+            Self::Recycle => "Recover wood from two offcuts".into(),
+            Self::BasicChair => "Build one chair (fast, more scrap)".into(),
+            Self::EfficientBatch => "Build two chairs (slower, less scrap)".into(),
+            Self::CounterfeitChair => "Counterfeit chair proposal".into(),
+            Self::Finish => "Complete the order".into(),
+        }
+    }
+}
+
+debug_labels!(workshop::Role);

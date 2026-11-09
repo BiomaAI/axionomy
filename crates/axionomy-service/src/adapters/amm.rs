@@ -599,3 +599,124 @@ mod tests {
         );
     }
 }
+
+// How Studio names and writes this problem's values.
+
+counted!(amm::Asset);
+
+impl StudioLabel for amm::Actor {
+    fn studio_label(&self) -> String {
+        match self {
+            Self::Founder => "Founding LP",
+            Self::Generator => "Solar Generator",
+            Self::Factory => "Factory",
+            Self::Household => "Household",
+            Self::Speculator => "Informed Speculator",
+            Self::AdaptiveLp => "Adaptive LP",
+            Self::Arbitrageur => "Internal Arbitrageur",
+            Self::Whale => "Demand Whale",
+        }
+        .into()
+    }
+}
+
+impl StudioLabel for amm::AccountId {
+    fn studio_label(&self) -> String {
+        match self {
+            Self::Pool => "Energy / Credit AMM".into(),
+            Self::Treasury => "Closed-economy Treasury".into(),
+            Self::Information => "Scarcity Information".into(),
+            Self::Actor(actor) => actor.studio_label(),
+            Self::World => "Market calendar and production conditions".into(),
+        }
+    }
+}
+
+impl StudioLabel for amm::Asset {
+    fn studio_label(&self) -> String {
+        match self {
+            Self::ActorIdentity(actor) => format!("Identity: {}", actor.studio_label()),
+            Self::PoolIdentity => "Identity: energy pool".into(),
+            Self::TreasuryIdentity => "Identity: procurement treasury".into(),
+            Self::WorldIdentity => "Identity: market calendar".into(),
+            Self::MarketActive => "Market season active".into(),
+            Self::MarketEnded => "Market season closed".into(),
+            Self::Day => "Completed market days".into(),
+            Self::AtDay(day) => format!("Market day {}", day + 1),
+            Self::Days => "Days in season".into(),
+            Self::Scale => "Production scale".into(),
+            Self::MarketOpen => "Market access open".into(),
+            Self::Trading => "Still trading today".into(),
+            Self::Done => "Trading finished for today".into(),
+            Self::Decisions => "Decisions remaining today".into(),
+            Self::StorageCapacity => "Energy storage capacity".into(),
+            Self::ProductionCapacity => "Daily generating capacity".into(),
+            Self::ProductionAllowance => "Remaining production today".into(),
+            Self::FutureCapacity => "Available capacity expansion".into(),
+            Self::PendingCapacity => "Capacity under construction".into(),
+            Self::ConstructionDue => "Construction completes at day index".into(),
+            Self::ReferencePrice => "Smoothed prior closing price (milli)".into(),
+            Self::Sunlight(day) => format!("Day {} sunlight percent", day + 1),
+            Self::CurrentSunlight => "Current sunlight percent".into(),
+            Self::LiquidityDecision => "Liquidity adjustment available".into(),
+            Self::FutureNeed(actor) => format!("{} future energy needs", actor.studio_label()),
+            Self::MissedNeed(actor) => format!("{} unmet energy needs", actor.studio_label()),
+            Self::FutureObligation(actor) => format!("{} future obligations", actor.studio_label()),
+            Self::DefaultedObligation(actor) => {
+                format!("{} missed obligations", actor.studio_label())
+            }
+            Self::UnmadeGoods => "Remaining production contracts".into(),
+            Self::Goods => "Manufactured goods awaiting sale".into(),
+            Self::DeliveredGoods => "Goods delivered to procurement".into(),
+            Self::IncomeDue => "Household income available".into(),
+            Self::FutureIncome => "Future income entitlements".into(),
+            Self::ReceivedIncome => "Income payments received".into(),
+            Self::MissedIncome => "Unpaid income entitlements".into(),
+            Self::Energy => "Usable energy".into(),
+            Self::Credit => "Settlement credit".into(),
+            Self::SolarPotential => "Unharvested solar potential".into(),
+            Self::SpentEnergy => "Energy consumed toward goals".into(),
+            Self::LpShare => "AMM liquidity share".into(),
+            Self::UnissuedLpShare => "Unissued liquidity share".into(),
+            Self::Need(actor) => format!("{} energy need", actor.studio_label()),
+            Self::SatisfiedNeed(actor) => format!("{} need satisfied", actor.studio_label()),
+            Self::Obligation(actor) => format!("{} credit obligation", actor.studio_label()),
+            Self::SettledObligation(actor) => {
+                format!("{} obligation settled", actor.studio_label())
+            }
+            Self::Uninformed(actor) => format!("{} has no shortage signal", actor.studio_label()),
+            Self::Informed(actor) => format!("{} knows about the shortage", actor.studio_label()),
+            Self::ShortageSignal => "Verified energy shortage signal".into(),
+            Self::Utility => "Realized utility".into(),
+        }
+    }
+}
+
+impl StudioLabel for amm::RateId {
+    fn studio_label(&self) -> String {
+        match self {
+            Self::EndTrading(actor) => format!("{} finishes trading today", actor.studio_label()),
+            Self::AdvanceDay(day) => format!("Close day {} and open day {}", day + 1, day + 2),
+            Self::CloseMarket => "Close the market season and record unmet needs".into(),
+            Self::InvestProduction => "Fund new generating capacity".into(),
+            Self::CommissionProduction => "Bring completed generating capacity online".into(),
+            Self::DeliverGoods => "Factory sells manufactured goods".into(),
+            Self::CollectIncome => "Household collects its daily income".into(),
+            Self::FundLiquidity => "Add liquidity at current reserves with bounded rounding".into(),
+            Self::BuyEnergy => "Buy energy from the AMM".into(),
+            Self::SellEnergy => "Sell energy into the AMM".into(),
+            Self::AddLiquidity => "Deepen AMM liquidity".into(),
+            Self::RemoveLiquidity => "Withdraw AMM liquidity".into(),
+            Self::ProduceEnergy => "Harvest solar energy".into(),
+            Self::UseEnergy(actor) => format!("{} uses energy", actor.studio_label()),
+            Self::SettleObligation(actor) => {
+                format!("{} settles a credit obligation", actor.studio_label())
+            }
+            Self::LearnShortage(actor) => {
+                format!("{} receives the shortage signal", actor.studio_label())
+            }
+        }
+    }
+}
+
+debug_labels!(amm::Role);

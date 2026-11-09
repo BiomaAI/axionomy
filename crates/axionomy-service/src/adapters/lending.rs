@@ -447,3 +447,99 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             ]),
     )
 }
+
+// How Studio names and writes this problem's values.
+
+/// The market's terms are basis points scaled by `WAD` (10^18), so 10^16 atoms
+/// are one percent; the borrow index is a `WAD`-scaled multiplier.
+impl StudioFormat for lending::Asset {
+    fn studio_format(&self) -> QuantityFormat {
+        match self {
+            Self::BorrowIndex => QuantityFormat::decimal(18),
+            Self::BaseRate
+            | Self::Kink
+            | Self::SlopeBelowKink
+            | Self::SlopeAboveKink
+            | Self::ReserveFactor
+            | Self::LoanToValue
+            | Self::LiquidationThreshold
+            | Self::LiquidationBonus => QuantityFormat::decimal(16).unit("%"),
+            _ => QuantityFormat::COUNT,
+        }
+    }
+}
+
+impl StudioLabel for lending::AccountId {
+    fn studio_label(&self) -> String {
+        match self {
+            Self::Market => "Lending market".into(),
+            Self::Clock => "Clock".into(),
+            Self::Oracle => "Price oracle".into(),
+            Self::Depositor(id) => format!("Depositor {}", id + 1),
+            Self::Borrower => "Borrower".into(),
+            Self::Keeper => "Keeper".into(),
+            Self::Supplier => "Supplier".into(),
+            Self::Customer => "Customer".into(),
+        }
+    }
+}
+
+impl StudioLabel for lending::Asset {
+    fn studio_label(&self) -> String {
+        match self {
+            Self::Cash => "Cash".into(),
+            Self::Share => "Vault share".into(),
+            Self::LockedShare => "Locked genesis share".into(),
+            Self::ShareSupply => "Vault share supply".into(),
+            Self::DebtShare => "Debt share".into(),
+            Self::DebtShareSupply => "Debt share supply".into(),
+            Self::BorrowIndex => "Borrow index".into(),
+            Self::Reserves => "Reserves".into(),
+            Self::Collateral => "Collateral".into(),
+            Self::PostedCollateral => "Posted collateral".into(),
+            Self::CollateralPrice => "Collateral price".into(),
+            Self::BaseRate => "Base rate".into(),
+            Self::Kink => "Utilization kink".into(),
+            Self::SlopeBelowKink => "Rate slope below the kink".into(),
+            Self::SlopeAboveKink => "Rate slope above the kink".into(),
+            Self::ReserveFactor => "Reserve factor".into(),
+            Self::LoanToValue => "Loan-to-value limit".into(),
+            Self::LiquidationThreshold => "Liquidation threshold".into(),
+            Self::LiquidationBonus => "Liquidation bonus".into(),
+            Self::CreditLine => "Credit line".into(),
+            Self::Invoice => "Supplier invoice".into(),
+            Self::BillPaid => "Bill paid".into(),
+            Self::PurchaseOrder(id) => format!("Purchase order {}", id + 1),
+            Self::MarketIdentity => "Market identity".into(),
+            Self::ClockIdentity => "Clock identity".into(),
+            Self::OracleIdentity => "Oracle identity".into(),
+            Self::Period => "Remaining period".into(),
+            Self::ElapsedPeriod => "Closed period".into(),
+            Self::PendingShock => "Pending price drop".into(),
+            Self::ShockAfter => "Price drop after periods".into(),
+            Self::PriceDrop => "Price drop".into(),
+        }
+    }
+}
+
+impl StudioLabel for lending::RateId {
+    fn studio_label(&self) -> String {
+        match self {
+            Self::Deposit => "Deposit cash for vault shares".into(),
+            Self::Redeem => "Redeem vault shares for cash".into(),
+            Self::Donate => "Donate cash to the market".into(),
+            Self::PostCollateral => "Post collateral".into(),
+            Self::WithdrawCollateral => "Withdraw collateral".into(),
+            Self::Borrow => "Borrow cash".into(),
+            Self::Repay => "Repay cash".into(),
+            Self::RepayShares => "Repay the whole loan".into(),
+            Self::PayBill => "Pay the supplier's bill".into(),
+            Self::CollectRevenue(id) => format!("Collect installment {}", id + 1),
+            Self::Accrue => "Close the period and accrue interest".into(),
+            Self::Reprice => "Apply the scheduled price drop".into(),
+            Self::Liquidate => "Liquidate the loan".into(),
+        }
+    }
+}
+
+debug_labels!(lending::Role);

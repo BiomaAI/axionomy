@@ -493,3 +493,131 @@ fn execution_scene(world: &World) -> Scene {
         ),
     ])
 }
+
+// How Studio names and writes this problem's values.
+
+counted!(scheduling::Asset);
+
+fn job(job: scheduling::Job) -> &'static str {
+    match job {
+        scheduling::Job::One => "Job One",
+        scheduling::Job::Two => "Job Two",
+    }
+}
+
+fn machine(machine: scheduling::Machine) -> &'static str {
+    match machine {
+        scheduling::Machine::One => "Machine One",
+        scheduling::Machine::Two => "Machine Two",
+        scheduling::Machine::Three => "Machine Three",
+    }
+}
+
+impl StudioLabel for scheduling::AccountId {
+    fn studio_label(&self) -> String {
+        match self {
+            Self::Job(value) => job(*value).into(),
+            Self::Slot(value, slot) => format!("{} at slot {slot}", machine(*value)),
+            Self::Machine(value) => machine(*value).into(),
+            Self::Success => "Schedule".into(),
+        }
+    }
+}
+
+impl StudioLabel for scheduling::Asset {
+    fn studio_label(&self) -> String {
+        match self {
+            Self::JobIdentity(value) => format!("This is {}", job(*value)),
+            Self::SlotIdentity(value, slot) => format!("{} slot {slot}", machine(*value)),
+            Self::ReadyAt(operation, slot) => format!("{operation:?} ready at {slot}"),
+            Self::CompletedAt(operation, slot) => format!("{operation:?} completed at {slot}"),
+            Self::Available => "Machine slot available".into(),
+            Self::Reserved(operation) => format!("Reserved for {operation:?}"),
+            Self::Makespan(slot) => format!("Overall finish at slot {slot}"),
+            Self::Active => "Schedule in progress".into(),
+            Self::Solved => "Schedule complete".into(),
+            Self::MachineIdentity(value) => format!("Identity: {}", machine(*value)),
+            Self::Ready(op) => format!("{op:?} ready for routing"),
+            Self::Queued(op, value) => format!("{op:?} queued on {}", machine(*value)),
+            Self::Running(op, value) => format!("{op:?} running on {}", machine(*value)),
+            Self::Paused(op, value) => format!("{op:?} paused on {}", machine(*value)),
+            Self::QueueFree => "Queue space".into(),
+            Self::QueueTicket(op) => format!("Queue reservation for {op:?}"),
+            Self::Idle => "Machine idle".into(),
+            Self::Busy => "Machine occupied".into(),
+            Self::Online => "Machine online".into(),
+            Self::Broken => "Machine broken".into(),
+            Self::Repairing => "Repair underway".into(),
+            Self::Configured(value) => format!("Configured for {}", job(*value)),
+            Self::Labor => "Available crew".into(),
+            Self::BusyLabor => "Occupied crew".into(),
+            Self::RepairKit => "Repair kit".into(),
+            Self::UsedRepairKit => "Repair kit used".into(),
+            Self::Arrival => "Job release time".into(),
+            Self::Due => "Activity completes at".into(),
+            Self::WorkRemaining => "Interrupted work remaining".into(),
+            Self::Done => "Job completed".into(),
+            Self::CompletionTime => "Actual completion time".into(),
+            Self::Now => "World time".into(),
+            Self::TimeRemaining => "Workday remaining".into(),
+            Self::FaultAt => "Scheduled disruption time".into(),
+            Self::FaultPending => "Disruption pending".into(),
+            Self::FaultOccurred => "Disruption occurred".into(),
+            Self::RepairDuration => "Repair duration".into(),
+            Self::NotStarted(op) => format!("{op:?} has not started"),
+            Self::Started(op) => format!("{op:?} execution started"),
+            Self::StartTime(op) => format!("{op:?} actual start"),
+            Self::EndTime(op) => format!("{op:?} actual completion"),
+            Self::ExecutedOn(op, value) => format!("{op:?} uses {}", machine(*value)),
+            Self::Interrupted(op) => format!("{op:?} was interrupted"),
+        }
+    }
+}
+
+impl StudioLabel for scheduling::RateId {
+    fn studio_label(&self) -> String {
+        match self {
+            Self::Schedule {
+                operation,
+                ready,
+                start,
+            } => format!("Run {operation:?} from slot {start} (ready at {ready})"),
+            Self::Finish {
+                job_one_end,
+                job_two_end,
+                makespan,
+            } => format!(
+                "Finish schedule (Job One {job_one_end}, Job Two {job_two_end}, makespan {makespan})"
+            ),
+            Self::Queue {
+                operation,
+                machine: value,
+            } => format!("Queue {operation:?} on {}", machine(*value)),
+            Self::CancelQueue {
+                operation,
+                machine: value,
+            } => format!("Release {operation:?}'s queue on {}", machine(*value)),
+            Self::Start {
+                operation,
+                machine: value,
+                configured,
+            } => format!(
+                "Start {operation:?} on {} (configured for {})",
+                machine(*value),
+                job(*configured)
+            ),
+            Self::Complete { operation, .. } => format!("Complete {operation:?}"),
+            Self::Resume { operation, .. } => format!("Resume interrupted {operation:?}"),
+            Self::Fault { operation } => format!(
+                "Machine Two fails{}",
+                operation.map_or(String::new(), |op| format!(" during {op:?}"))
+            ),
+            Self::Repair => "Begin Machine Two repair".into(),
+            Self::CompleteRepair => "Complete Machine Two repair".into(),
+            Self::Advance { to } => format!("Advance workday to {to}"),
+            Self::Close => "Close the completed workday".into(),
+        }
+    }
+}
+
+debug_labels!(scheduling::Role);

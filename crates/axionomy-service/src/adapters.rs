@@ -172,7 +172,7 @@ mod sokoban;
 mod work_league;
 mod workshop;
 
-use labels::{StudioFormat, StudioLabel};
+use labels::{StudioFormat, StudioLabel, counted, debug_labels, words};
 
 type StudioScene<O> = fn(u64, &Economy<O>) -> Option<Scene>;
 type StudioLeaderboards<O> = fn(u64, &Economy<O>) -> Vec<LeaderboardView>;

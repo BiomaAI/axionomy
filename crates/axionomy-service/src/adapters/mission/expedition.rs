@@ -469,3 +469,129 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
     }
     Some(scene)
 }
+
+// How Studio names and writes this problem's values.
+
+counted!(expedition::Asset);
+
+debug_labels!(expedition::Asset);
+
+debug_labels!(expedition::Role);
+
+impl StudioLabel for expedition::AccountId {
+    fn studio_label(&self) -> String {
+        match self {
+            Self::World => "Team clock, weather and supplies".into(),
+            Self::Nature => "Hidden mission sites and reports".into(),
+            Self::Agent(agent) => format!("{agent:?}"),
+            Self::Objective(id) => {
+                if expedition::patient(*id) {
+                    format!("Casualty {}", id / 2 + 1)
+                } else {
+                    "Research archive".into()
+                }
+            }
+        }
+    }
+}
+
+impl StudioLabel for expedition::RateId {
+    fn studio_label(&self) -> String {
+        match self {
+            Self::Depart { agent, from, to } => {
+                format!("{agent:?} starts travel {from:?} → {to:?}")
+            }
+            Self::Arrive {
+                agent,
+                to,
+                hazardous,
+            } => format!(
+                "{agent:?} arrives at {to:?}{}",
+                if *hazardous {
+                    " and is injured by the hazard"
+                } else {
+                    ""
+                }
+            ),
+            Self::Survey(location) => format!("Scout surveys {location:?}"),
+            Self::Discover {
+                objective,
+                location,
+            } => format!(
+                "Scout discovers {} at {location:?}",
+                expedition::AccountId::Objective(*objective).studio_label()
+            ),
+            Self::Scan => "Scout requests a fallible sensor report".into(),
+            Self::Report { location, .. } => format!("Private sensor report suggests {location:?}"),
+            Self::Share {
+                objective,
+                location,
+                remote,
+            } => format!(
+                "Brief Medic on {} at {location:?} {}",
+                expedition::AccountId::Objective(*objective).studio_label(),
+                if *remote {
+                    "by radio"
+                } else {
+                    "at a rendezvous"
+                }
+            ),
+            Self::Collect { .. } => "Scout starts three-tick archive recovery".into(),
+            Self::FinishCollect(_) => "Scout finishes recovery and carries the archive".into(),
+            Self::TreatPatient { objective, .. } => format!(
+                "Medic stabilizes {}",
+                expedition::AccountId::Objective(*objective).studio_label()
+            ),
+            Self::Extract { .. } => "Scout and Medic begin two-tick joint extraction".into(),
+            Self::FinishExtract(_) => "Joint extraction ends; Medic carries the casualty".into(),
+            Self::Deliver(objective) => format!(
+                "Deliver {} safely to base",
+                expedition::AccountId::Objective(*objective).studio_label()
+            ),
+            Self::TreatAgent { target, .. } => format!("Medic treats {target:?}'s injury"),
+            Self::Resupply(agent) => {
+                format!(
+                    "{agent:?} takes finite base energy{}",
+                    if *agent == expedition::Agent::Medic {
+                        " and a medical kit"
+                    } else {
+                        ""
+                    }
+                )
+            }
+            Self::Weather { location, opening } => format!(
+                "{location:?} {}",
+                if *opening {
+                    "reopens as the hazard clears"
+                } else {
+                    "closes as the hazard arrives"
+                }
+            ),
+            Self::Clinical {
+                objective, active, ..
+            } => format!(
+                "{}: {}",
+                expedition::AccountId::Objective(*objective).studio_label(),
+                if *active {
+                    "condition deteriorates"
+                } else {
+                    "outcome already settled"
+                }
+            ),
+            Self::FinishClinical(_) => "Finish the scheduled casualty assessment".into(),
+            Self::Fail {
+                objective, dead, ..
+            } => format!(
+                "{} {}",
+                expedition::AccountId::Objective(*objective).studio_label(),
+                if *dead {
+                    "dies before evacuation"
+                } else {
+                    "misses the mission deadline"
+                }
+            ),
+            Self::Tick(day) => format!("Advance shared mission time to {}", day + 1),
+            Self::Close => "Close the mission with every objective accounted for".into(),
+        }
+    }
+}

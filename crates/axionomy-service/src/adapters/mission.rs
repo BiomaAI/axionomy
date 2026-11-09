@@ -642,3 +642,81 @@ mod tests {
         }));
     }
 }
+
+// How Studio names and writes this problem's values.
+
+counted!(mission::Asset);
+
+impl StudioLabel for mission::AccountId {
+    fn studio_label(&self) -> String {
+        match self {
+            Self::Agent(agent) => format!("{agent:?}"),
+            Self::Nature => "Hidden mission scenario".into(),
+            Self::Mission => "Mission clock and state".into(),
+            Self::Success => "Mission objective".into(),
+        }
+    }
+}
+
+impl StudioLabel for mission::Asset {
+    fn studio_label(&self) -> String {
+        match self {
+            Self::AgentIdentity(agent) => format!("Identity: {agent:?}"),
+            Self::NatureIdentity => "Nature identity".into(),
+            Self::MissionIdentity => "Mission identity".into(),
+            Self::SuccessIdentity => "Objective identity".into(),
+            Self::At(location) => format!("At {location:?}"),
+            Self::Energy => "Energy left".into(),
+            Self::SpentEnergy => "Energy spent".into(),
+            Self::Sensor => "Sensor available".into(),
+            Self::UsedSensor => "Sensor used".into(),
+            Self::MedicalKit => "Medical kit available".into(),
+            Self::UsedMedicalKit => "Medical kit used".into(),
+            Self::Intel(location) => format!("Private sighting: {location:?}"),
+            Self::SharedIntel(location) => format!("Shared sighting: {location:?}"),
+            Self::Injured => "Agent injured".into(),
+            Self::Unresolved => "Scenario not yet drawn".into(),
+            Self::ScenarioWeight(location, seed, hazard) => {
+                format!("Weight: {location:?}, state {seed}, {hazard:?}")
+            }
+            Self::Truth(location) => format!("Objective at {location:?}"),
+            Self::Seed(seed) => format!("Observation state {seed}"),
+            Self::Hazard(hazard) => format!("Hazard: {hazard:?}"),
+            Self::HazardResolved => "Hazard resolved".into(),
+            Self::TimeRemaining => "Time left".into(),
+            Self::ElapsedTime => "Elapsed time".into(),
+            Self::Planning => "Choosing an action".into(),
+            Self::AwaitingScan => "Waiting for a sighting".into(),
+            Self::AwaitingEncounter => "Waiting for a hazard outcome".into(),
+            Self::NeedsTreatment => "Treatment required".into(),
+            Self::AreaSafe => "Area made safe".into(),
+            Self::Rescued => "Objective rescued".into(),
+            Self::Solved => "Mission complete".into(),
+        }
+    }
+}
+
+impl StudioLabel for mission::RateId {
+    fn studio_label(&self) -> String {
+        match self {
+            Self::Instantiate {
+                truth,
+                seed,
+                hazard,
+            } => format!("Draw scenario: {truth:?}, state {seed}, {hazard:?}"),
+            Self::BeginScan => "Scout scans the area".into(),
+            Self::ResolveScan { report, .. } => format!("Scout sees {report:?}"),
+            Self::Share(location) => format!("Scout shares sighting: {location:?}"),
+            Self::MoveTogether(location) => format!("Scout and Medic move to {location:?}"),
+            Self::MoveDirect(location) => format!("Move directly to {location:?}"),
+            Self::Encounter { location, hazard } => {
+                format!("Encounter {hazard:?} hazard at {location:?}")
+            }
+            Self::Treat => "Medic treats the injury".into(),
+            Self::Rescue(location) => format!("Rescue objective at {location:?}"),
+            Self::Finish => "Complete the mission".into(),
+        }
+    }
+}
+
+debug_labels!(mission::Role);

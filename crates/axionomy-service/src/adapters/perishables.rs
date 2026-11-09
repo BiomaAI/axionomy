@@ -319,3 +319,66 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         Some(moment),
     ))
 }
+
+// How Studio names and writes this problem's values.
+
+counted!(perishables::Asset);
+
+impl StudioLabel for perishables::AccountId {
+    fn studio_label(&self) -> String {
+        match self {
+            Self::World => "Clock and power".into(),
+            Self::Storage(location) => format!("{location:?}"),
+            Self::Cohort(cohort) => format!("{cohort:?} batch condition"),
+        }
+    }
+}
+
+impl StudioLabel for perishables::Asset {
+    fn studio_label(&self) -> String {
+        match self {
+            Self::WorldIdentity => "This account is the world clock".into(),
+            Self::LocationIdentity(location) => format!("This account is the {location:?}"),
+            Self::CohortIdentity(cohort) => format!("This is the {cohort:?} batch"),
+            Self::Claim(cohort) => format!("Units in the {cohort:?} batch"),
+            Self::Consumed(cohort) => format!("Used units from the {cohort:?} batch"),
+            Self::Fresh(cohort, exposure, expiry) => format!(
+                "{cohort:?} batch, still fresh under {exposure:?} exposure, expires at {expiry:?}"
+            ),
+            Self::Rotten(cohort) => format!("Spoiled units from the {cohort:?} batch"),
+            Self::Ambient => "Ambient storage".into(),
+            Self::Cold => "Cold storage".into(),
+            Self::Powered => "Refrigeration running".into(),
+            Self::Unpowered => "Refrigeration down".into(),
+            Self::CoolingEnergy => "Cooling energy left".into(),
+            Self::SpentCoolingEnergy => "Cooling energy spent".into(),
+            Self::Now(moment) => format!("Clock is at {moment:?}"),
+            Self::Before(moment) => format!("Before {moment:?}"),
+            Self::Reached(moment) => format!("{moment:?} passed"),
+            Self::Active => "Inventory simulation running".into(),
+            Self::Solved => "Inventory simulation complete".into(),
+            Self::Planning => "Storage plan open".into(),
+            Self::PlanSolved => "Storage plan complete".into(),
+        }
+    }
+}
+
+impl StudioLabel for perishables::RateId {
+    fn studio_label(&self) -> String {
+        match self {
+            Self::MoveToFridge => "Move ambient batch units into the fridge".into(),
+            Self::Advance { from, to } => format!("Advance time: {from:?} → {to:?}"),
+            Self::LosePower => "Refrigeration loses power".into(),
+            Self::Eat { cohort, exposure } => {
+                format!("Use fresh {cohort:?} units under {exposure:?} exposure")
+            }
+            Self::Spoil { cohort, exposure } => {
+                format!("Spoil {cohort:?} batch under {exposure:?} exposure")
+            }
+            Self::Finish => "Finish the spoilage simulation".into(),
+            Self::SealStoragePlan => "Commit the storage plan".into(),
+        }
+    }
+}
+
+debug_labels!(perishables::Role);

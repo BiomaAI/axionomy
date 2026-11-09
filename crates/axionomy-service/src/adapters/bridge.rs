@@ -613,3 +613,96 @@ mod tests {
         }
     }
 }
+
+// How Studio names and writes this problem's values.
+
+counted!(bridge::Asset);
+
+impl StudioLabel for bridge::AccountId {
+    fn studio_label(&self) -> String {
+        match self {
+            Self::Agent(agent) => format!("Agent {agent:?}"),
+            Self::Bridge => "Single-lane bridge".into(),
+        }
+    }
+}
+
+impl StudioLabel for bridge::Asset {
+    fn studio_label(&self) -> String {
+        match self {
+            Self::AgentIdentity(agent) => format!("Identity: Agent {agent:?}"),
+            Self::BridgeIdentity => "Bridge identity".into(),
+            Self::At(side) => format!("At the {side:?} bank"),
+            Self::Energy => "Crossing energy".into(),
+            Self::SpentEnergy => "Energy spent crossing".into(),
+            Self::Credit => "Credit available".into(),
+            Self::Escrow => "Credit in escrow".into(),
+            Self::SpentCredit => "Credit spent".into(),
+            Self::Bid(amount) => format!("Bid {amount}"),
+            Self::CanBid => "Can bid or claim".into(),
+            Self::Submitted => "Bid submitted".into(),
+            Self::CrossingRight => "Crossing right".into(),
+            Self::FirstTurn => "First crossing open".into(),
+            Self::SecondTurn => "Second crossing open".into(),
+            Self::PriorityBenefit => "Priority crossings won".into(),
+            Self::Waiting => "Waiting for the lane".into(),
+            Self::Crossed => "Crossed this round".into(),
+            Self::CompletedTrip => "Completed prior rounds".into(),
+            Self::RoundsRemaining => "Rounds remaining after this one".into(),
+            Self::CapacityFree => "Lane available".into(),
+            Self::Active => "Allocation in progress".into(),
+            Self::Solved => "Allocation complete".into(),
+            Self::Now => "World time".into(),
+            Self::TimeRemaining => "Time remaining".into(),
+            Self::Arrival => "Arrival time".into(),
+            Self::Deadline => "Arrival deadline".into(),
+            Self::LeaseUntil => "Reservation valid through".into(),
+            Self::ReadyAt => "Travel completes at".into(),
+            Self::InTransit => "On the bridge".into(),
+            Self::OnDetour => "On the alternate route".into(),
+            Self::Detouring => "Detouring".into(),
+            Self::OnTime => "On-time trips".into(),
+            Self::Late => "Late trips".into(),
+            Self::MissedReservation => "Expired reservations".into(),
+            Self::Round => "Prior traffic waves".into(),
+        }
+    }
+}
+
+impl StudioLabel for bridge::RateId {
+    fn studio_label(&self) -> String {
+        match self {
+            Self::SubmitBid { agent, amount } => format!("Agent {agent:?} bids {amount}"),
+            Self::Resolve {
+                winner,
+                winning_bid,
+                losing_bid,
+            } => format!("Settle auction: Agent {winner:?} wins {winning_bid} to {losing_bid}"),
+            Self::ClaimFirst { agent } => format!("Agent {agent:?} claims first crossing"),
+            Self::ClaimSecond { agent } => format!("Agent {agent:?} claims second crossing"),
+            Self::YieldToWaiting { agent } => format!("Grant waiting Agent {agent:?} the lane"),
+            Self::Cross { agent } => format!("Agent {agent:?} crosses"),
+            Self::ResetRound => "Start the next allocation round".into(),
+            Self::Finish => "Complete all crossing rounds".into(),
+            Self::Advance { to } => format!("Advance world time to {to}"),
+            Self::Complete {
+                agent,
+                detour,
+                late,
+            } => format!(
+                "Agent {agent:?} finishes {} {}",
+                if *detour { "detour" } else { "crossing" },
+                if *late { "late" } else { "on time" }
+            ),
+            Self::Detour { agent, .. } => format!("Agent {agent:?} pays for the alternate route"),
+            Self::ExpireReservation { agent } => {
+                format!("Release Agent {agent:?}'s expired reservation")
+            }
+            Self::WithdrawBid { agent, amount } => {
+                format!("Agent {agent:?} withdraws bid {amount}")
+            }
+        }
+    }
+}
+
+debug_labels!(bridge::Role);

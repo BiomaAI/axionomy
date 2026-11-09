@@ -743,3 +743,85 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
     }
     Some(scene)
 }
+
+// How Studio names and writes this problem's values.
+
+counted!(marketplace::Asset);
+
+impl StudioLabel for marketplace::AccountId {
+    fn studio_label(&self) -> String {
+        match self {
+            Self::Buyer(id) => format!("Buyer {id:?}"),
+            Self::Seller(id) => format!("Seller {id:?}"),
+            Self::Platform => "Marketplace platform".into(),
+            Self::TaxAuthority => "Tax authority".into(),
+            Self::Carrier(id) => format!("Carrier {id:?}"),
+            Self::Order(id) => format!("Order {id:?}"),
+        }
+    }
+}
+
+impl StudioLabel for marketplace::Asset {
+    fn studio_label(&self) -> String {
+        match self {
+            Self::Money => "Money".into(),
+            Self::Item(item) => format!("{item:?} inventory"),
+            Self::PurchaseIntent(order) => format!("Wants Order {order:?}"),
+            Self::PurchaseReceipt(order) => format!("Bought Order {order:?}"),
+            Self::SaleOffer(item) => format!("Offers one {item:?}"),
+            Self::CompletedSale(order) => format!("Sold Order {order:?}"),
+            Self::MarketplaceLicense => "Marketplace licence".into(),
+            Self::TaxPolicy => "Tax policy".into(),
+            Self::ShippingCapacity => "Shipping capacity left".into(),
+            Self::UsedShippingCapacity => "Shipping capacity used".into(),
+            Self::OpenOrder(order) => format!("Order {order:?} is open"),
+            Self::SettledOrder(order) => format!("Order {order:?} settled"),
+            Self::SettledValue(value) => format!("Settled value {value}"),
+            Self::Utility => "Participant benefit".into(),
+            Self::BuyerLicense => "Buyer identity".into(),
+            Self::SellerLicense => "Seller identity".into(),
+            Self::CarrierLicense => "Carrier identity".into(),
+            Self::Contract(order) => format!("Order {order:?} reserved"),
+            Self::InShipment(order) => format!("Order {order:?} in transit"),
+            Self::PurchaseLocked(order) => format!("Buyer committed to {order:?}"),
+            Self::SaleReserved(order) => format!("Seller committed to {order:?}"),
+            Self::Booking(order) => format!("Carrier booked for {order:?}"),
+            Self::DeliveredBy(order) => format!("Delivered Order {order:?}"),
+            Self::AgreedPrice(price) => format!("Agreed price {price}"),
+            Self::Arrival => "Order release time".into(),
+            Self::Deadline => "Delivery deadline".into(),
+            Self::LeaseUntil => "Dispatch reservation expires at".into(),
+            Self::ReadyAt => "Delivery available at".into(),
+            Self::Now => "World time".into(),
+            Self::TimeRemaining => "Time remaining".into(),
+            Self::TransitTime => "Base shipping duration".into(),
+            Self::DelayRisk => "Exposure to route delays".into(),
+            Self::RouteDelay => "Route delay".into(),
+            Self::OnTime => "On-time deliveries".into(),
+            Self::Late => "Late deliveries".into(),
+            Self::Refunded => "Expired reservations refunded".into(),
+        }
+    }
+}
+
+impl StudioLabel for marketplace::RateId {
+    fn studio_label(&self) -> String {
+        match self {
+            Self::SettleOrder(order) => {
+                format!("Agree Order {order:?} (Micro: settle; larger markets: reserve)")
+            }
+            Self::DiscountedContract(order) => {
+                format!("Agree Order {order:?} with a 10-credit concession")
+            }
+            Self::Dispatch(order) => format!("Dispatch Order {order:?}"),
+            Self::Deliver { order, late, .. } => format!(
+                "Deliver Order {order:?} {}",
+                if *late { "late with rebate" } else { "on time" }
+            ),
+            Self::Cancel { order, .. } => format!("Refund expired reservation for {order:?}"),
+            Self::Advance { to } => format!("Advance market time to {to}"),
+        }
+    }
+}
+
+debug_labels!(marketplace::Role);

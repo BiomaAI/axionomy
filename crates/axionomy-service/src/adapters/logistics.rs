@@ -481,3 +481,60 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         ]),
     )
 }
+
+// How Studio names and writes this problem's values.
+
+counted!(logistics::Asset);
+
+impl StudioLabel for logistics::AccountId {
+    fn studio_label(&self) -> String {
+        match self {
+            Self::Vehicle => "Delivery vehicle".into(),
+            Self::Order(order) => format!("Order {order:?}"),
+            Self::Nature => "Weather and breakdowns".into(),
+            Self::FuelStation => "Fuel station".into(),
+        }
+    }
+}
+
+impl StudioLabel for logistics::Asset {
+    fn studio_label(&self) -> String {
+        match self {
+            Self::At(location) => format!("Vehicle at {location:?}"),
+            Self::Traveling(route) => format!("Traveling on {route:?}"),
+            Self::Fuel => "Fuel left".into(),
+            Self::SpentFuel => "Fuel spent".into(),
+            Self::Money => "Money".into(),
+            Self::TimeRemaining => "Time left".into(),
+            Self::ElapsedTime => "Elapsed time".into(),
+            Self::CargoSpace => "Cargo space available".into(),
+            Self::CargoOccupied => "Cargo space occupied".into(),
+            Self::RepairTool => "Repair tool".into(),
+            Self::Waiting => "Waiting on a travel outcome".into(),
+            Self::InTransit => "Order in transit".into(),
+            Self::Delivered => "Order delivered".into(),
+            Self::Package(order) => format!("Package for Order {order:?}"),
+            Self::WeatherReady => "Nature ready for travel".into(),
+            Self::OutcomeWeight(route, outcome) => {
+                format!("Weight: {route:?} is {outcome:?}")
+            }
+            Self::Outcome(route, outcome) => format!("{route:?} outcome: {outcome:?}"),
+        }
+    }
+}
+
+impl StudioLabel for logistics::RateId {
+    fn studio_label(&self) -> String {
+        match self {
+            Self::Load(order) => format!("Load Order {order:?}"),
+            Self::Depart(route) => format!("Depart via {route:?}"),
+            Self::Resolve(route, outcome) => format!("Draw {route:?} outcome: {outcome:?}"),
+            Self::Arrive(route, outcome) => format!("Arrive via {route:?} after {outcome:?}"),
+            Self::Repair(route) => format!("Repair after breakdown on {route:?}"),
+            Self::Deliver(order) => format!("Deliver Order {order:?}"),
+            Self::Refuel => "Refuel the vehicle".into(),
+        }
+    }
+}
+
+debug_labels!(logistics::Role);

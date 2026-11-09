@@ -254,3 +254,70 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         ]),
     )
 }
+
+// How Studio names and writes this problem's values.
+
+counted!(connect_four::Asset);
+
+impl StudioLabel for connect_four::AccountId {
+    fn studio_label(&self) -> String {
+        match self {
+            Self::Game => "Connect Four game".into(),
+            Self::Column(column) => format!("Column {column}"),
+            Self::Cell { column, row } => format!("Cell ({column},{row})"),
+            Self::Result => "Game result".into(),
+        }
+    }
+}
+
+impl StudioLabel for connect_four::Asset {
+    fn studio_label(&self) -> String {
+        match self {
+            Self::SegmentVacancies(segment) => format!("Unoccupied cells in line {segment}"),
+            Self::SegmentPieces(player, segment) => format!("{player:?} pieces in line {segment}"),
+            Self::GameIdentity => "Game identity".into(),
+            Self::ColumnIdentity(column) => format!("This is column {column}"),
+            Self::CellIdentity { column, row } => format!("This is cell ({column},{row})"),
+            Self::ResultIdentity => "Result identity".into(),
+            Self::Empty => "Empty cell".into(),
+            Self::Piece(player) => format!("{player:?} piece"),
+            Self::NextRow(row) => format!("Next piece lands on row {row}"),
+            Self::ColumnFull => "Column full".into(),
+            Self::Turn(player) => format!("{player:?} to move"),
+            Self::LineCount(player, line, count) => {
+                format!("{player:?} has {count} in {line:?}")
+            }
+            Self::Winner(player) => format!("{player:?} wins"),
+            Self::Draw => "Draw".into(),
+            Self::BoardSize { width, height } => format!("Board is {width}×{height}"),
+            Self::Pending(player) => format!("Check {player:?} move result"),
+        }
+    }
+}
+
+impl StudioLabel for connect_four::RateId {
+    fn studio_label(&self) -> String {
+        match self {
+            Self::Move {
+                player,
+                column,
+                row,
+                ..
+            }
+            | Self::StandardMove {
+                player,
+                column,
+                row,
+            } => format!("{player:?} drops into column {column}, lands on row {row}"),
+            Self::Draw(player) | Self::StandardDraw(player) => {
+                format!("Declare a draw after {player:?}'s move")
+            }
+            Self::ClaimWin { player, segment } => {
+                format!("{player:?} claims winning line {segment}")
+            }
+            Self::Continue(player) => format!("No win; pass the turn after {player:?}"),
+        }
+    }
+}
+
+debug_labels!(connect_four::Role);
