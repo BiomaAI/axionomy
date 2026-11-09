@@ -3,6 +3,7 @@ name: CI
 on:
   push:
   pull_request:
+  workflow_dispatch:
 
 jobs:
   spec:
@@ -46,7 +47,10 @@ jobs:
         with:
           toolchain: "1.99"
           targets: wasm32-unknown-unknown
-      - run: cargo install wasm-pack --locked --version 0.15.0
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-pack@0.15.0
       - uses: pnpm/action-setup@v6
         with:
           version: 10.14.0
@@ -69,3 +73,39 @@ jobs:
         working-directory: studio
       - run: pnpm test:e2e:wasm
         working-directory: studio
+      # The Pages bundle reuses the WASM engine built above.
+      - name: Build the Pages site
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        working-directory: studio
+        env:
+          VITE_AXIONOMY_BASE: /axionomy/
+          VITE_AXIONOMY_ENGINE: browser
+        run: |
+          pnpm build:ui
+          test -f dist/index.html
+          test -f dist/.nojekyll
+          find dist/assets -name '*.wasm' -size +100k | grep -q .
+          grep -q '/axionomy/' dist/index.html
+      - if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: studio/dist
+
+  # Deploy only what passed every check.
+  pages:
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    needs: [spec, rust, studio]
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    concurrency:
+      group: pages
+      cancel-in-progress: true
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/configure-pages@v6
+      - id: deployment
+        uses: actions/deploy-pages@v5
