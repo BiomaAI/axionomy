@@ -137,8 +137,18 @@ impl QuantityFormat {
         self
     }
 
-    /// The exact quantity as people read it.
+    /// The exact quantity as people read it, unit included.
     pub fn write(&self, quantity: Quantity) -> String {
+        let number = self.number(quantity);
+        match &self.unit {
+            Some(unit) => format!("{number} {unit}"),
+            None => number,
+        }
+    }
+
+    /// The exact quantity as people read it, without the unit: for a view
+    /// that shows the unit on its own.
+    pub fn number(&self, quantity: Quantity) -> String {
         let atoms = quantity.to_string();
         let scale = usize::from(self.scale);
         let atoms = if atoms.len() <= scale {
@@ -149,14 +159,10 @@ impl QuantityFormat {
         let (whole, fraction) = atoms.split_at(atoms.len() - scale);
         let fraction = fraction.trim_end_matches('0');
         let digits = usize::from(self.digits).max(fraction.len());
-        let number = if digits == 0 {
+        if digits == 0 {
             whole.to_owned()
         } else {
             format!("{whole}.{fraction:0<digits$}")
-        };
-        match &self.unit {
-            Some(unit) => format!("{number} {unit}"),
-            None => number,
         }
     }
 }

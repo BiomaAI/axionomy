@@ -2,7 +2,7 @@ use crate::{
     ArtifactKey, Capability, InstanceDescriptor, InstanceProfile, ProblemDescriptor, ProblemFamily,
     RunArtifact, RunControl, RunObserver, ServiceError, ServiceProgress, StrategyDescriptor,
 };
-use axionomy::{Economy, Goal, Ontology, Trace};
+use axionomy::{Economy, Goal, Ontology, Quantity, Trace};
 use axionomy_search::GraphSearchProgress;
 use axionomy_view::{
     DebugOntology, DocumentPath, ExchangeFrame, ItemPath, LeaderboardView, MeasurePath,
@@ -48,6 +48,24 @@ pub(super) fn visual_metric(
         label: label.into(),
         value: value.to_string(),
         unit: unit.map(str::to_owned),
+        previous: None,
+    }
+}
+
+/// A scene metric showing a quantity of `asset`, written in the asset's
+/// format, so a scene and the inspectors read it in the same unit.
+pub(super) fn asset_metric<A: StudioFormat>(
+    key: MeasurePath,
+    label: impl Into<String>,
+    asset: &A,
+    quantity: impl Into<Quantity>,
+) -> SceneMetricView {
+    let format = asset.studio_format();
+    SceneMetricView {
+        key,
+        label: label.into(),
+        value: format.number(quantity.into()),
+        unit: format.unit,
         previous: None,
     }
 }
