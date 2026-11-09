@@ -74,11 +74,11 @@ single cohort or pool account carries the authoritative condition or epoch.
 
 See [PDD.md](PDD.md) for the product and technical contract,
 [PROBLEMS.md](PROBLEMS.md) for the conformance problems that drive the API,
-[STUDIO_VISUAL_LANGUAGE.md](STUDIO_VISUAL_LANGUAGE.md) for the normative Studio
+[studio/VISUAL_LANGUAGE.md](studio/VISUAL_LANGUAGE.md) for the normative Studio
 visual grammar and canonical renderer references,
-[AGENT_BENCHMARK.md](AGENT_BENCHMARK.md) for the future single- and multi-agent
+[docs/AGENT_BENCHMARK.md](docs/AGENT_BENCHMARK.md) for the future single- and multi-agent
 evaluation and rating design, and
-[CONTINUOUS_AGENT_SYSTEMS.md](CONTINUOUS_AGENT_SYSTEMS.md) for the boundary
+[docs/CONTINUOUS_AGENT_SYSTEMS.md](docs/CONTINUOUS_AGENT_SYSTEMS.md) for the boundary
 between the Work Utility System and the Autonomy Harness that owns agents,
 learning, deployment, and assurance.
 
@@ -90,7 +90,7 @@ model generates the conformance fixtures, and the Rust kernel must reproduce
 every expected outcome. The specification is proved; the Rust implementation is
 tested against it. See [verification/README.md](verification/README.md).
 
-The fifteen reference problems expose explicit **Micro**, **Showcase**, and
+The reference problems expose explicit **Micro**, **Showcase**, and
 **Stress** instances. Micro keeps exact fixtures and independent oracles fast;
 Showcase is the default that Studio and the generated artifacts use. Stress
 raises a domain-relevant dimension—sampling, topology, board size, horizon,
@@ -161,7 +161,7 @@ adapters.
 ### Interfaces
 
 - One service contract shared by CLI, HTTP/SSE, MCP, Studio, and browser Wasm.
-- Fifteen discoverable problems with explicit Micro, Showcase, and Stress instances.
+- Discoverable reference problems, each with explicit Micro, Showcase, and Stress instances.
 - Snapshot leaderboards whose exact ranks, tradeoffs, and evidence update during replay.
 - A strict stateless MCP 2026-07-28 server with caller-owned snapshot storage.
 - Rust-owned OpenAPI, generated TypeScript, portable artifacts, and cross-interface tests.
@@ -251,7 +251,7 @@ pnpm dev
 Open `http://127.0.0.1:5173`. The native server is optional: when it is healthy,
 Studio uses HTTP/SSE and exposes pause, resume, and cancellation; otherwise it
 loads the same Rust service as WebAssembly in an isolated Worker and keeps Run
-  enabled for all fifteen problems. Worker cancellation is immediate by
+  enabled for every problem. Worker cancellation is immediate by
 terminating that disposable worker. If WebAssembly cannot initialize, the
 committed Showcase artifacts still provide read-only playback. The status badge
 is backed by a current health/initialization check rather than by a catalog that
@@ -305,7 +305,7 @@ change the ranking dimension at the same economic step. Value, throughput,
 resource efficiency, waste, and reliability expose different consequences of
 competing for the same finite work.
 
-See [EXAMPLE_REVIEW.md](EXAMPLE_REVIEW.md) for the review of the existing suite
+See [docs/EXAMPLE_REVIEW.md](docs/EXAMPLE_REVIEW.md) for the review of the existing suite
 and the next improvements that deepen each demonstration.
 
 ## Studio gallery
@@ -313,7 +313,7 @@ and the next improvements that deepen each demonstration.
 Each view below is derived from the same accounts, assets, rates, exchanges,
 receipts, and replay contract used by the engine—never from a parallel
 simulation model. They also serve as checked-in examples of the
-[Studio visual language](STUDIO_VISUAL_LANGUAGE.md). Click any image for the
+[Studio visual language](studio/VISUAL_LANGUAGE.md). Click any image for the
 full-resolution view; follow its title to open the exact live replay.
 
 <table>

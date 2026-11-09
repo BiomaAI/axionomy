@@ -1,7 +1,7 @@
 # Axionomy Studio
 
 Axionomy Studio is the browser trace player and economic debugger for Axionomy.
-All fourteen problems are discoverable and runnable. **Source of truth** shows
+Every problem is discoverable and runnable. **Source of truth** shows
 accounts and assets; **The rules** shows rates, roles, goals, and invariants;
 **One step** explains the selected exchange and its exact effects.
 
@@ -15,7 +15,7 @@ scenario-wide uncertainty occupies a separate context lane. Shapes, grouping,
 and relationship lines therefore communicate what belongs where without
 inventing presentation-only mechanics.
 
-[`STUDIO_VISUAL_LANGUAGE.md`](../STUDIO_VISUAL_LANGUAGE.md) is the normative
+[`VISUAL_LANGUAGE.md`](VISUAL_LANGUAGE.md) is the normative
 design reference. It names Work League as the canonical graph scene, Sokoban
 as the canonical grid, scheduling as the canonical timeline, and Exact Cover
 as the canonical matrix, and defines the geometric checks expected before a
@@ -170,7 +170,7 @@ pnpm install
 pnpm dev
 ```
 
-Open `http://127.0.0.1:5173`. `predev` builds the Worker engine, so all fourteen
+Open `http://127.0.0.1:5173`. `predev` builds the Worker engine, so every problem
 problems can run without a server. To use native HTTP/SSE and resumable pause,
 start this optional command from the repository root:
 
@@ -219,7 +219,7 @@ The Playwright tests launch both servers, start a real run, follow its SSE
 stream, observe tactical search progress and pause/resume behavior,
 fetch and scrub its replay-verified artifact, verify structured rejection
 proofs, and inspect a structurally different static Exact Cover matrix. Rust
-adapter tests build all fourteen problem artifacts.
+adapter tests build every problem's artifacts.
 
 The Wasm suite launches Studio with native probes disabled, runs stochastic
 logistics through the Worker, verifies live and retained solver evidence,

@@ -1240,5 +1240,5 @@ limits clearly:
    or domain-proven pruning; approximate epsilon dominance must never be
    mislabeled as exhaustive Pareto truth.
 
-Any future abstraction must continue to pass all fifteen problems without
+Any future abstraction must continue to pass every problem without
 moving authoritative meaning into solver callbacks or an external world.
