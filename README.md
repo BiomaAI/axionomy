@@ -535,8 +535,9 @@ cancellation are observable for the lifetime configured by the running server.
 Snapshots live in an `axionomy-store` store: in memory by default, or in the
 file `AXIONOMY_MCP_STORE` names, which keeps snapshots and their handles across
 restarts. Each snapshot is a point of a recorded run, so the intermediate
-states of a replay can be named with `axionomy_trace_step`, any two snapshots
-can be diffed, and every result carries its state's content root.
+states of a replay can be named with `axionomy_trace_step`, the first state
+where a balance condition holds found with `axionomy_trace_find`, any two
+snapshots diffed, and every result carries its state's content root.
 
 The server accepts only MCP `2026-07-28`, disables legacy sessions, and
 requires the revision's request metadata and standard HTTP routing headers.

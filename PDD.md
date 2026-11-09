@@ -1126,8 +1126,10 @@ and applying exchanges records a run forked from the source's point, one step
 per exchange. A handle and everything it names commit in one transaction, and
 a store on disk keeps them, with the handle secret, across restarts.
 `axionomy_trace_step` names any intermediate state of the exchanges that made
-a snapshot, rebuilt by verified replay from the nearest stored state; a `diff`
-resource compares two snapshots by their trees, skipping what they share.
+a snapshot, rebuilt by verified replay from the nearest stored state;
+`axionomy_trace_find` names the first of them where a balance condition holds,
+computed exactly from the receipts; a `diff` resource compares two snapshots
+by their trees, skipping what they share.
 Accounts and balances page from the state tree in logarithmic time. Run IDs,
 tags, refs and groups are store-wide names that would let one caller find
 another's snapshots, so MCP exposes only what a handle reaches until it has
