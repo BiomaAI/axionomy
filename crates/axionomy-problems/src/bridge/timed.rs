@@ -11,13 +11,13 @@ pub fn now(world: &World) -> u64 {
 fn balance(world: &World, agent: AgentId, asset: Asset) -> u64 {
     world.balance(&AccountId::Agent(agent), &asset).to_u64()
 }
-fn clock() -> Q<Role, Asset> {
+fn clock() -> Q<Ontology> {
     Q::balance(Role::Bridge, Asset::Now)
 }
-fn clear(rate: Rate<Role, Asset>, role: Role, asset: Asset) -> Rate<Role, Asset> {
+fn clear(rate: Rate<Ontology>, role: Role, asset: Asset) -> Rate<Ontology> {
     rate.consume_computed(role, asset, Q::balance(role, asset))
 }
-fn law() -> Rate<Role, Asset> {
+fn law() -> Rate<Ontology> {
     Rate::new()
         .preserve(
             Role::Bridge,
@@ -25,12 +25,12 @@ fn law() -> Rate<Role, Asset> {
         )
         .condition("one event", Q::units(), C::Equal, Q::constant(1))
 }
-fn traveler(agent: AgentId) -> Rate<Role, Asset> {
+fn traveler(agent: AgentId) -> Rate<Ontology> {
     law()
         .preserve(Role::Traveler, basket([(Asset::AgentIdentity(agent), 1)]))
         .distinct(Role::Traveler, Role::Bridge)
 }
-fn arrived(rate: Rate<Role, Asset>, role: Role) -> Rate<Role, Asset> {
+fn arrived(rate: Rate<Ontology>, role: Role) -> Rate<Ontology> {
     rate.condition(
         "traveler has arrived",
         clock(),

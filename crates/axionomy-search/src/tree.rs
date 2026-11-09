@@ -2,6 +2,7 @@
 
 use crate::{mcts::MctsConfig, sampling::SamplingError};
 use axionomy::ApplyError;
+use axionomy::Ontology;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -16,7 +17,7 @@ pub enum TreeStatus {
 
 /// Why a tree search could not produce a decision.
 #[derive(Debug, Clone)]
-pub enum TreeSearchError<RateId, Role, AccountId, A> {
+pub enum TreeSearchError<O: Ontology> {
     NoPlayers,
     ZeroIterations,
     ZeroDepth,
@@ -44,14 +45,14 @@ pub enum TreeSearchError<RateId, Role, AccountId, A> {
         player: usize,
     },
     Sampling(SamplingError),
-    Rejected(ApplyError<RateId, Role, AccountId, A>),
-    SelectedActionRejected(ApplyError<RateId, Role, AccountId, A>),
+    Rejected(ApplyError<O>),
+    SelectedActionRejected(ApplyError<O>),
 }
 
-pub(crate) fn validate_config<RateId, Role, AccountId, A>(
+pub(crate) fn validate_config<O: Ontology>(
     config: MctsConfig,
     players: usize,
-) -> Result<(), TreeSearchError<RateId, Role, AccountId, A>> {
+) -> Result<(), TreeSearchError<O>> {
     if players == 0 {
         return Err(TreeSearchError::NoPlayers);
     }
@@ -67,10 +68,10 @@ pub(crate) fn validate_config<RateId, Role, AccountId, A>(
     Ok(())
 }
 
-pub(crate) fn validate_actor<RateId, Role, AccountId, A>(
+pub(crate) fn validate_actor<O: Ontology>(
     actor: usize,
     players: usize,
-) -> Result<(), TreeSearchError<RateId, Role, AccountId, A>> {
+) -> Result<(), TreeSearchError<O>> {
     if actor >= players {
         Err(TreeSearchError::InvalidActor { actor, players })
     } else {
@@ -79,10 +80,10 @@ pub(crate) fn validate_actor<RateId, Role, AccountId, A>(
 }
 
 /// Accepts one finite value per player.
-pub(crate) fn validate_values<RateId, Role, AccountId, A>(
+pub(crate) fn validate_values<O: Ontology>(
     values: Vec<f64>,
     players: usize,
-) -> Result<Vec<f64>, TreeSearchError<RateId, Role, AccountId, A>> {
+) -> Result<Vec<f64>, TreeSearchError<O>> {
     if values.len() != players {
         return Err(TreeSearchError::InvalidValueDimensions {
             expected: players,

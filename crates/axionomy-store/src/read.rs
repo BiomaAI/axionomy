@@ -2,14 +2,15 @@
 
 use crate::{
     GroupId, Member, MetricPath, Point, RefPath, RunId, StoreError, TagPath,
-    ontology::{ApplyError, Economy, Exchange, Receipt, Recordable},
+    ontology::Recordable,
     records::{
         GROUPS, GroupRecord, MEMBERS, NODES, PINS, REFS, RUN_METRICS, RUNS, Run, STATES,
-        STEP_METRICS, STEPS, StepOf, TAGGED, TAGS, Target,
+        STEP_METRICS, STEPS, Step, TAGGED, TAGS, Target,
     },
     state,
     transaction::{decode, receipt_digest},
 };
+use axionomy::{ApplyError, Economy, Exchange, Receipt};
 use axionomy_tree::{Hash, Tree};
 use redb::{ReadTransaction, ReadableTableMetadata};
 use std::collections::BTreeMap;
@@ -159,7 +160,7 @@ impl Reader {
     }
 
     /// The exchange that took a run of `O`'s economies to `point`.
-    pub fn step<O: Recordable>(&self, point: Point) -> Result<Option<StepOf<O>>, StoreError> {
+    pub fn step<O: Recordable>(&self, point: Point) -> Result<Option<Step<O>>, StoreError> {
         self.run_of::<O>(point.run)?;
         self.txn
             .open_table(STEPS)?
@@ -174,7 +175,7 @@ impl Reader {
         run: RunId,
         from: u64,
         limit: usize,
-    ) -> Result<Vec<(u64, StepOf<O>)>, StoreError> {
+    ) -> Result<Vec<(u64, Step<O>)>, StoreError> {
         self.run_of::<O>(run)?;
         self.txn
             .open_table(STEPS)?
@@ -250,7 +251,7 @@ impl Reader {
         let mut receipts = Vec::new();
         for step in after.saturating_add(1)..=through {
             let point = Point { run, step };
-            let record: StepOf<O> = decode(
+            let record: Step<O> = decode(
                 steps
                     .get(point.key())?
                     .ok_or(StoreError::Diverged(point))?

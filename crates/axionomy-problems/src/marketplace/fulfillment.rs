@@ -8,15 +8,15 @@ pub fn enabled(world: &World) -> bool {
 pub fn now(world: &World) -> u64 {
     world.balance(&AccountId::Platform, &Asset::Now).to_u64()
 }
-fn clock() -> Q<Role, Asset> {
+fn clock() -> Q<Ontology> {
     Q::balance(Role::Platform, Asset::Now)
 }
-fn law() -> Rate<Role, Asset> {
+fn law() -> Rate<Ontology> {
     Rate::new()
         .preserve(Role::Platform, basket([(Asset::MarketplaceLicense, 1)]))
         .condition("one market event", Q::units(), C::Equal, Q::constant(1))
 }
-fn clear(rate: Rate<Role, Asset>, role: Role, asset: Asset) -> Rate<Role, Asset> {
+fn clear(rate: Rate<Ontology>, role: Role, asset: Asset) -> Rate<Ontology> {
     rate.consume_computed(role, asset, Q::balance(role, asset))
 }
 pub(super) fn build(source: World) -> World {
@@ -454,7 +454,7 @@ fn score(world: &World, preference: Preference) -> i64 {
 }
 /// Bounded beam search, not an exact Pareto solver. Every successor is a core
 /// exchange; all preferences use the same arrivals, delays and initial funds.
-pub fn plan(initial: &World, preference: Preference) -> Option<Trace<RateId, Role, AccountId>> {
+pub fn plan(initial: &World, preference: Preference) -> Option<Trace<Ontology>> {
     let target = goal_for(&orders(initial));
     let mut beam = vec![(initial.clone(), Trace::new())];
     let mut complete = Vec::new();

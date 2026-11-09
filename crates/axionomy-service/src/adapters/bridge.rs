@@ -187,7 +187,7 @@ pub(super) fn build(
         )
         .bind(Role::Traveler, AccountId::Agent(AgentId::B))
         .bind(Role::Bridge, AccountId::Bridge);
-        view.proposals.push(proposal("bridge", ProposalSpec { id: "impersonated-bid", label: "Agent B submits Agent A bid", description: "Agent B tries to bid as Agent A. The rejection names the identity B does not hold." }, &initial, &wrong_identity));
+        view.proposals.push(proposal(ProposalSpec { id: "impersonated-bid", label: "Agent B submits Agent A bid", description: "Agent B tries to bid as Agent A. The rejection names the identity B does not hold." }, &initial, &wrong_identity));
         documents.push(view);
     }
     for index in 0..documents.len() {
@@ -254,7 +254,7 @@ fn candidate_front_view(documents: &[ViewDocument], selected: &ViewDocument) -> 
 fn pareto_trace(
     result: &bridge::ParetoResult,
     favored: AgentId,
-) -> Result<axionomy::Trace<RateId, Role, AccountId>, ServiceError> {
+) -> Result<axionomy::Trace<bridge::Ontology>, ServiceError> {
     result
         .front()
         .entries()

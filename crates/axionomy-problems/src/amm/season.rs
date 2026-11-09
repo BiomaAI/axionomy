@@ -7,18 +7,18 @@ use axionomy::QuantityComparison as C;
 
 const DECISIONS: u64 = 6;
 
-fn q(role: Role, asset: Asset) -> Q<Role, Asset> {
+fn q(role: Role, asset: Asset) -> Q<Ontology> {
     Q::balance(role, asset)
 }
-fn clear(rate: Rate<Role, Asset>, role: Role, asset: Asset) -> Rate<Role, Asset> {
+fn clear(rate: Rate<Ontology>, role: Role, asset: Asset) -> Rate<Ontology> {
     rate.consume_computed(role, asset, q(role, asset))
 }
-fn actor_law(rate: Rate<Role, Asset>, role: Role) -> Rate<Role, Asset> {
+fn actor_law(rate: Rate<Ontology>, role: Role) -> Rate<Ontology> {
     rate.preserve_computed(role, Asset::MarketOpen, Q::constant(1))
         .preserve_computed(role, Asset::Trading, Q::constant(1))
         .consume_computed(role, Asset::Decisions, Q::constant(1))
 }
-fn world_law() -> Rate<Role, Asset> {
+fn world_law() -> Rate<Ontology> {
     Rate::new()
         .preserve(Role::World, basket([(Asset::WorldIdentity, 1)]))
         .condition(
@@ -552,7 +552,7 @@ pub(super) fn build(source: World, days: u8, scale: u64, seed: u64) -> World {
 pub fn period(world: &World) -> u64 {
     world.balance(&AccountId::World, &Asset::Day).to_u64()
 }
-pub fn market_goal(world: &World) -> Goal<AccountId, Asset> {
+pub fn market_goal(world: &World) -> Goal<Ontology> {
     if world.account(&AccountId::World).is_some() {
         Goal::new().require(AccountId::World, basket([(Asset::MarketEnded, 1)]))
     } else {
@@ -778,7 +778,7 @@ pub(super) fn run(
     initial: &World,
     scenario: Scenario,
     included: &BTreeSet<Actor>,
-) -> Trace<RateId, Role, AccountId> {
+) -> Trace<Ontology> {
     let mut world = initial.clone();
     let mut trace = Trace::new();
     if scenario == Scenario::ThinLiquidity {

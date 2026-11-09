@@ -24,11 +24,22 @@ identifier!(Asset);
 identifier!(RuleId);
 identifier!(Role);
 
-type World = Economy<Holder, Asset, RuleId, Role>;
-type Proposal = Exchange<RuleId, Role, Holder>;
-type Failure = ApplyError<RuleId, Role, Holder, Asset>;
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+enum Test {}
+
+impl axionomy::Ontology for Test {
+    const NAME: &'static str = "test";
+    type Account = Holder;
+    type Asset = Asset;
+    type Rate = RuleId;
+    type Role = Role;
+}
+
+type World = Economy<Test>;
+type Proposal = Exchange<Test>;
+type Failure = ApplyError<Test>;
 type Amounts = Vec<(Asset, String)>;
-type Expression = QuantityExpression<Role, Asset>;
+type Expression = QuantityExpression<Test>;
 
 #[derive(Debug, Deserialize)]
 struct Computed {
@@ -124,7 +135,7 @@ fn snapshot(world: &World) -> Value {
     )
 }
 
-fn deltas(entries: &[AccountDelta<Holder, Asset>]) -> Value {
+fn deltas(entries: &[AccountDelta<Test>]) -> Value {
     json!(
         entries
             .iter()
@@ -136,7 +147,7 @@ fn deltas(entries: &[AccountDelta<Holder, Asset>]) -> Value {
     )
 }
 
-fn shortfalls(entries: &[AccountShortfall<Holder, Asset>]) -> Value {
+fn shortfalls(entries: &[AccountShortfall<Test>]) -> Value {
     json!(
         entries
             .iter()
@@ -147,7 +158,7 @@ fn shortfalls(entries: &[AccountShortfall<Holder, Asset>]) -> Value {
     )
 }
 
-fn assessed_accounts(entries: &[AccountAssessment<Holder, Asset>]) -> Value {
+fn assessed_accounts(entries: &[AccountAssessment<Test>]) -> Value {
     json!(entries.iter().map(|entry| json!({
         "account": entry.account(), "available": balances(entry.available()), "required": balances(entry.required()),
         "consumed": balances(entry.consumed()), "produced": balances(entry.produced()), "preserved": balances(entry.preserved()),
@@ -204,7 +215,7 @@ fn failure(error: &Failure) -> Value {
     }
 }
 
-fn assessment(value: &ExchangeAssessment<Holder, Asset, RuleId, Role>) -> Value {
+fn assessment(value: &ExchangeAssessment<Test>) -> Value {
     match value {
         ExchangeAssessment::Applicable {
             accounts,
@@ -300,7 +311,7 @@ fn build_proposal(case: &ProposalCase) -> Proposal {
     action
 }
 
-fn receipt(value: &Receipt<RuleId, Role, Holder, Asset>) -> Value {
+fn receipt(value: &Receipt<Test>) -> Value {
     json!({
         "proposal": proposal(value.exchange()), "deltas": deltas(value.deltas()),
         "opened": value.opened(), "closed": value.closed(),

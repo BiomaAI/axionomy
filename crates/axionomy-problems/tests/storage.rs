@@ -1,11 +1,12 @@
 //! Every canonical problem's economies can be stored and read back as they
 //! were: each identifier type has one JSON encoding, which the store checks.
 
+use axionomy::Economy;
 use axionomy_problems::{
     amm, bridge, connect_four, exact_cover, lending, logistics, marketplace, maze, mission,
     perishables, rescue, scheduling, sokoban, work_league, workshop,
 };
-use axionomy_store::{Checkpoints, Economy, Point, Recordable, Store, state};
+use axionomy_store::{Checkpoints, Point, Recordable, Store, state};
 
 fn round_trip<O: Recordable>(worlds: impl IntoIterator<Item = Economy<O>>) {
     let store = Store::memory().unwrap();

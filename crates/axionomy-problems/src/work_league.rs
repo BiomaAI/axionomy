@@ -293,7 +293,7 @@ pub struct JobSpec {
 #[derive(Debug, Clone)]
 pub struct League {
     initial: World,
-    goal: Goal<AccountId, Asset>,
+    goal: Goal<Ontology>,
     agents: Vec<AgentId>,
     jobs: Vec<JobSpec>,
 }
@@ -302,7 +302,7 @@ impl League {
     pub const fn initial(&self) -> &World {
         &self.initial
     }
-    pub const fn goal(&self) -> &Goal<AccountId, Asset> {
+    pub const fn goal(&self) -> &Goal<Ontology> {
         &self.goal
     }
     pub fn agents(&self) -> &[AgentId] {
@@ -315,12 +315,12 @@ impl League {
 
 #[derive(Debug, Clone)]
 pub struct MatchOutcome {
-    trace: Trace<RateId, Role, AccountId>,
+    trace: Trace<Ontology>,
     final_world: World,
 }
 
 impl MatchOutcome {
-    pub const fn trace(&self) -> &Trace<RateId, Role, AccountId> {
+    pub const fn trace(&self) -> &Trace<Ontology> {
         &self.trace
     }
     pub const fn final_world(&self) -> &World {
@@ -328,10 +328,11 @@ impl MatchOutcome {
     }
 }
 
-pub type World = Economy<AccountId, Asset, RateId, Role>;
+pub type World = Economy<Ontology>;
 
 /// The identifier types of [`World`], named `work-league` where economies are
 /// stored.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Ontology {}
 
 impl axionomy::Ontology for Ontology {
@@ -341,7 +342,7 @@ impl axionomy::Ontology for Ontology {
     type Rate = RateId;
     type Role = Role;
 }
-pub type Action = Exchange<RateId, Role, AccountId>;
+pub type Action = Exchange<Ontology>;
 
 pub fn mixed_lineup() -> [Policy; 4] {
     [
@@ -990,7 +991,7 @@ fn sampled_outcome(
 
 fn move_to(
     world: &mut World,
-    trace: &mut Trace<RateId, Role, AccountId>,
+    trace: &mut Trace<Ontology>,
     agent: AgentId,
     to: Location,
 ) -> Result<(), String> {
@@ -1024,11 +1025,7 @@ fn action(rate: RateId) -> Action {
     exchange
 }
 
-fn apply(
-    world: &mut World,
-    trace: &mut Trace<RateId, Role, AccountId>,
-    exchange: Action,
-) -> Result<(), String> {
+fn apply(world: &mut World, trace: &mut Trace<Ontology>, exchange: Action) -> Result<(), String> {
     world
         .apply(exchange.clone())
         .map_err(|error| format!("{:?}: {error:?}", exchange.rate()))?;

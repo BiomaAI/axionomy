@@ -66,7 +66,7 @@ pub(super) fn build(
                 "verified decisions and environmental responses".into(),
             )],
         ));
-        view.proposals.push(proposal("rescue", ProposalSpec { id: "undiscovered-patient", label: "Load a patient before finding them", description: "A location hint is insufficient. Physical discovery, co-location, current clinical observations, energy, and an empty evacuation seat are required." }, &initial, &rescue::action(RateId::Load { patient: 0, location: Location::North })));
+        view.proposals.push(proposal(ProposalSpec { id: "undiscovered-patient", label: "Load a patient before finding them", description: "A location hint is insufficient. Physical discovery, co-location, current clinical observations, energy, and an empty evacuation seat are required." }, &initial, &rescue::action(RateId::Load { patient: 0, location: Location::North })));
         documents.push(view);
     }
     for index in 0..documents.len() {
@@ -240,7 +240,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 .into(),
             ),
         ),
-        slug("rescue/account/responder"),
+        slug("rescue/incident/account/responder"),
     );
     crew.metrics = vec![
         visual_metric(
@@ -311,7 +311,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 },
                 Some(status.into()),
             ),
-            slug(format!("rescue/account/patient-{id}")),
+            slug(format!("rescue/incident/account/patient-{id}")),
         );
         entity.metrics = vec![
             visual_metric(

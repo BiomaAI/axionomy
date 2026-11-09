@@ -152,7 +152,6 @@ pub(super) fn build(
             .bind(Role::Actor, AccountId::Agent);
         document.proposals = vec![
             proposal(
-                "maze",
                 ProposalSpec {
                     id: "locked-door",
                     label: "Cross locked door",
@@ -162,7 +161,6 @@ pub(super) fn build(
                 &locked,
             ),
             proposal(
-                "maze",
                 ProposalSpec {
                     id: "missing-environment",
                     label: "Take key without World",
@@ -309,7 +307,7 @@ fn saved_solution_observation(
 
 fn solved_expansion(
     initial: &World,
-    trace: &axionomy::Trace<RateId, Role, AccountId>,
+    trace: &axionomy::Trace<maze::Ontology>,
 ) -> Result<MazeExpansion, ServiceError> {
     let solved = initial
         .replayed(trace)
@@ -566,7 +564,7 @@ fn observe_selected_search(
 fn frontier_trace(
     result: &maze::ParetoResult,
     energy_first: bool,
-) -> Result<axionomy::Trace<RateId, Role, AccountId>, ServiceError> {
+) -> Result<axionomy::Trace<maze::Ontology>, ServiceError> {
     result
         .front()
         .entries()
@@ -1031,10 +1029,7 @@ fn route_id(rate: &RateId) -> Option<ItemPath> {
     }
 }
 
-fn decorate_route_evidence(
-    document: &mut ViewDocument,
-    trace: &axionomy::Trace<RateId, Role, AccountId>,
-) {
+fn decorate_route_evidence(document: &mut ViewDocument, trace: &axionomy::Trace<maze::Ontology>) {
     let planned = trace
         .exchanges()
         .iter()

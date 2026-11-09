@@ -46,7 +46,18 @@ enum RateId {
     Credit,
 }
 
-type World = Economy<AccountId, Asset, RateId, Role>;
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+enum Test {}
+
+impl axionomy::Ontology for Test {
+    const NAME: &'static str = "test";
+    type Account = AccountId;
+    type Asset = Asset;
+    type Rate = RateId;
+    type Role = Role;
+}
+
+type World = Economy<Test>;
 
 /// Independent reference: a u64 × u64 product and its quotient fit u128 exactly.
 fn reference(left: u64, right: u64, denominator: u64, rounding: Rounding) -> Option<u128> {
@@ -127,7 +138,7 @@ fn intermediate_products_never_overflow() {
     assert_eq!(mul_div(quantity(7), 1, 0, Rounding::Floor), None);
 }
 
-fn fee(rounding: Rounding) -> Q<Role, Asset> {
+fn fee(rounding: Rounding) -> Q<Test> {
     // fee = units × bps ÷ 10_000, rounded in the requested direction.
     Q::mul_div(
         Q::units(),
@@ -168,15 +179,11 @@ fn world(rounding: Rounding) -> World {
         .unwrap()
 }
 
-fn charge(units: u64, bps: u64, scale: u64) -> Exchange<RateId, Role, AccountId> {
+fn charge(units: u64, bps: u64, scale: u64) -> Exchange<Test> {
     charge_exact(quantity(units), quantity(bps), quantity(scale))
 }
 
-fn charge_exact(
-    units: Quantity,
-    bps: Quantity,
-    scale: Quantity,
-) -> Exchange<RateId, Role, AccountId> {
+fn charge_exact(units: Quantity, bps: Quantity, scale: Quantity) -> Exchange<Test> {
     Exchange::new(RateId::Charge, units)
         .bind(Role::Treasury, AccountId::Treasury)
         .bind(Role::Trader, AccountId::Trader)
@@ -232,7 +239,7 @@ fn divide_rounds_in_the_named_direction() {
         Quantity::new(4)
     );
     assert_eq!(
-        Q::<Role, Asset>::divide(Q::constant(7), Q::constant(2), Rounding::Ceil),
+        Q::<Test>::divide(Q::constant(7), Q::constant(2), Rounding::Ceil),
         Q::mul_div(
             Q::constant(7),
             Q::constant(1),
@@ -242,7 +249,7 @@ fn divide_rounds_in_the_named_direction() {
     );
 }
 
-fn evaluation_error(world: &World, exchange: &Exchange<RateId, Role, AccountId>) -> String {
+fn evaluation_error(world: &World, exchange: &Exchange<Test>) -> String {
     let before = world.state_key();
     let assessment = world.assess(exchange);
     assert_eq!(world.state_key(), before);
@@ -272,8 +279,8 @@ fn zero_denominator_and_quotient_overflow_are_reported_without_mutation() {
 
 #[test]
 fn operand_errors_take_precedence_in_left_to_right_order() {
-    let world = |expression: Q<Role, Asset>| {
-        EconomyBuilder::<AccountId, Asset, RateId, Role>::new()
+    let world = |expression: Q<Test>| {
+        EconomyBuilder::<Test>::new()
             .account(AccountId::Trader, Account::default())
             .rate(
                 RateId::Credit,
@@ -341,14 +348,14 @@ fn discovery_reads_every_operand() {
         Q::parameter("denominator") + Q::balance(Role::Trader, Asset::Share),
         Rounding::Floor,
     );
-    let rate = Rate::<Role, Asset>::new().produce_computed(Role::Trader, Asset::Credit, expression);
+    let rate = Rate::<Test>::new().produce_computed(Role::Trader, Asset::Credit, expression);
     let roles = rate.roles().copied().collect::<Vec<_>>();
     assert!(roles.contains(&Role::Treasury) && roles.contains(&Role::Trader));
     assert_eq!(
         rate.parameter_names().into_iter().collect::<Vec<_>>(),
         ["denominator", "left"]
     );
-    let world = EconomyBuilder::<AccountId, Asset, RateId, Role>::new()
+    let world = EconomyBuilder::<Test>::new()
         .rate(RateId::Credit, rate)
         .build()
         .unwrap();
@@ -360,7 +367,7 @@ fn discovery_reads_every_operand() {
 
 #[test]
 fn serialized_form_names_the_rounding_direction() {
-    let expression: Q<Role, Asset> = Q::mul_div(
+    let expression: Q<Test> = Q::mul_div(
         Q::units(),
         Q::parameter("bps"),
         Q::constant(10_000),
@@ -377,10 +384,7 @@ fn serialized_form_names_the_rounding_direction() {
             "rounding": "ceil",
         })
     );
-    assert_eq!(
-        serde_json::from_value::<Q<Role, Asset>>(json).unwrap(),
-        expression
-    );
+    assert_eq!(serde_json::from_value::<Q<Test>>(json).unwrap(), expression);
     assert_eq!(serde_json::to_value(Rounding::Floor).unwrap(), "floor");
     assert!(serde_json::from_value::<Rounding>(serde_json::json!("half_even")).is_err());
     let missing = serde_json::json!({
@@ -389,12 +393,12 @@ fn serialized_form_names_the_rounding_direction() {
         "right": {"kind": "units"},
         "denominator": {"kind": "units"},
     });
-    assert!(serde_json::from_value::<Q<Role, Asset>>(missing).is_err());
+    assert!(serde_json::from_value::<Q<Test>>(missing).is_err());
 }
 
 #[test]
 fn json_schema_exposes_the_rounding_enum() {
-    let schema = serde_json::to_string(&schemars::schema_for!(Q<Role, Asset>)).unwrap();
+    let schema = serde_json::to_string(&schemars::schema_for!(Q<Test>)).unwrap();
     assert!(schema.contains("mul_div"));
     assert!(schema.contains("\"floor\"") && schema.contains("\"ceil\""));
 }

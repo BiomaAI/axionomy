@@ -204,10 +204,11 @@ pub enum Policy {
     Reliable,
     Relay,
 }
-pub type World = Economy<AccountId, Asset, RateId, Role>;
+pub type World = Economy<Ontology>;
 
 /// The identifier types of [`World`], named `logistics/fleet` where economies are
 /// stored.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Ontology {}
 
 impl axionomy::Ontology for Ontology {
@@ -217,8 +218,8 @@ impl axionomy::Ontology for Ontology {
     type Rate = RateId;
     type Role = Role;
 }
-pub type Action = Exchange<RateId, Role, AccountId>;
-pub type Proposal = Trace<RateId, Role, AccountId>;
+pub type Action = Exchange<Ontology>;
+pub type Proposal = Trace<Ontology>;
 pub fn value(world: &World, account: AccountId, asset: Asset) -> u64 {
     world.balance(&account, &asset).to_u64()
 }
@@ -251,41 +252,41 @@ pub fn express(from: Location, to: Location) -> bool {
         (Location::Depot, Location::North) | (Location::North, Location::Depot)
     )
 }
-fn q(role: Role, asset: Asset) -> Q<Role, Asset> {
+fn q(role: Role, asset: Asset) -> Q<Ontology> {
     Q::balance(role, asset)
 }
-fn clock() -> Q<Role, Asset> {
+fn clock() -> Q<Ontology> {
     q(Role::World, Asset::Time)
 }
-fn identity() -> Rate<Role, Asset> {
+fn identity() -> Rate<Ontology> {
     Rate::new()
         .preserve(Role::World, basket([(Asset::WorldIdentity, 1)]))
         .condition("one fleet event", Q::units(), C::Equal, Q::constant(1))
 }
-fn law() -> Rate<Role, Asset> {
+fn law() -> Rate<Ontology> {
     identity().preserve(Role::World, basket([(Asset::Active, 1)]))
 }
-fn vehicle(rate: Rate<Role, Asset>, van: Van) -> Rate<Role, Asset> {
+fn vehicle(rate: Rate<Ontology>, van: Van) -> Rate<Ontology> {
     rate.preserve(Role::Vehicle, basket([(Asset::VehicleIdentity(van), 1)]))
         .distinct(Role::World, Role::Vehicle)
 }
-fn order(rate: Rate<Role, Asset>, id: u8) -> Rate<Role, Asset> {
+fn order(rate: Rate<Ontology>, id: u8) -> Rate<Ontology> {
     rate.preserve(Role::Order, basket([(Asset::OrderIdentity(id), 1)]))
         .distinct(Role::Order, Role::World)
 }
-fn station(rate: Rate<Role, Asset>) -> Rate<Role, Asset> {
+fn station(rate: Rate<Ontology>) -> Rate<Ontology> {
     rate.preserve(Role::Station, basket([(Asset::StationIdentity, 1)]))
         .distinct(Role::Station, Role::World)
         .distinct(Role::Station, Role::Vehicle)
 }
-fn permit(rate: Rate<Role, Asset>, van: Van) -> Rate<Role, Asset> {
+fn permit(rate: Rate<Ontology>, van: Van) -> Rate<Ontology> {
     rate.consume(Role::World, basket([(Asset::Permit(van), 1)]))
         .produce(Role::World, basket([(Asset::UsedPermit(van), 1)]))
 }
-fn ready(van: Van) -> Rate<Role, Asset> {
+fn ready(van: Van) -> Rate<Ontology> {
     permit(vehicle(law(), van), van).preserve(Role::Vehicle, basket([(Asset::Ready, 1)]))
 }
-fn deadline(rate: Rate<Role, Asset>, duration: u64) -> Rate<Role, Asset> {
+fn deadline(rate: Rate<Ontology>, duration: u64) -> Rate<Ontology> {
     rate.condition(
         "activity fits remaining horizon",
         clock() + Q::constant(duration),
@@ -293,7 +294,7 @@ fn deadline(rate: Rate<Role, Asset>, duration: u64) -> Rate<Role, Asset> {
         q(Role::World, Asset::Horizon),
     )
 }
-fn finish(van: Van, state: Asset) -> Rate<Role, Asset> {
+fn finish(van: Van, state: Asset) -> Rate<Ontology> {
     vehicle(law(), van)
         .condition(
             "activity duration elapsed",
@@ -309,7 +310,7 @@ fn finish(van: Van, state: Asset) -> Rate<Role, Asset> {
             q(Role::Vehicle, Asset::ReadyAt),
         )
 }
-fn release_capacity(rate: Rate<Role, Asset>, id: u8, role: Role) -> Rate<Role, Asset> {
+fn release_capacity(rate: Rate<Ontology>, id: u8, role: Role) -> Rate<Ontology> {
     let rate = rate.produce(role, basket([(Asset::Space, weight(id))]));
     if cold(id) {
         rate.produce(role, basket([(Asset::ColdSpace, 1)]))
@@ -317,7 +318,7 @@ fn release_capacity(rate: Rate<Role, Asset>, id: u8, role: Role) -> Rate<Role, A
         rate
     }
 }
-fn take_capacity(rate: Rate<Role, Asset>, id: u8, role: Role) -> Rate<Role, Asset> {
+fn take_capacity(rate: Rate<Ontology>, id: u8, role: Role) -> Rate<Ontology> {
     let rate = rate.consume(role, basket([(Asset::Space, weight(id))]));
     if cold(id) {
         rate.consume(role, basket([(Asset::ColdSpace, 1)]))
@@ -1018,7 +1019,7 @@ pub fn action(rate: RateId) -> Action {
     }
     exchange
 }
-pub fn goal() -> Goal<AccountId, Asset> {
+pub fn goal() -> Goal<Ontology> {
     Goal::new().require(AccountId::World, basket([(Asset::Closed, 1)]))
 }
 pub fn location(world: &World, van: Van) -> Option<Location> {

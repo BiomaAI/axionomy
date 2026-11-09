@@ -436,6 +436,7 @@ mod ledger {
         To,
     }
 
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
     pub enum Ledger {}
 
     impl Ontology for Ledger {

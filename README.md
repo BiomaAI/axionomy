@@ -370,8 +370,8 @@ full-resolution view; follow its title to open the exact live replay.
 
 ```rust
 use axionomy::{
-    Account, EconomyBuilder, Exchange, Goal, LinearInvariant, Quantity, Rate,
-    basket,
+    Account, EconomyBuilder, Exchange, Goal, LinearInvariant, Ontology, Quantity,
+    Rate, basket,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -400,7 +400,19 @@ enum RateId {
     Finish,
 }
 
-let mut economy = EconomyBuilder::new()
+/// The workshop's vocabulary: its accounts, assets, rates and roles.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+enum Workshop {}
+
+impl Ontology for Workshop {
+    const NAME: &'static str = "workshop";
+    type Account = AccountId;
+    type Asset = Asset;
+    type Rate = RateId;
+    type Role = Role;
+}
+
+let mut economy = EconomyBuilder::<Workshop>::new()
     .account(
         AccountId::Workshop,
         Account::from(basket([(Asset::Raw, 2), (Asset::Tool, 1)])),
@@ -487,16 +499,10 @@ receives down, so rounding dust stays with the counterparty and declared
 conservation invariants still hold.
 
 ```rust
-use axionomy::{QuantityExpression as Q, Rounding};
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-enum Role { Trader }
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-enum Asset { Credit }
+use axionomy::{Rounding, paths::QuantityExpression as Q};
 
 // fee = ⌈units × bps ÷ 10_000⌉, charged to the trader.
-let fee: Q<Role, Asset> =
-    Q::mul_div(Q::units(), Q::parameter("bps"), Q::constant(10_000), Rounding::Ceil);
+let fee: Q = Q::mul_div(Q::units(), Q::parameter("bps"), Q::constant(10_000), Rounding::Ceil);
 # let _ = fee;
 ```
 

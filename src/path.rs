@@ -29,6 +29,7 @@ pub mod kind {
     pub enum Asset {}
     pub enum Rate {}
     pub enum Role {}
+    pub enum Ontology {}
 
     impl PathKind for Account {
         const SCHEMA: &'static str = "AccountPath";
@@ -42,12 +43,18 @@ pub mod kind {
     impl PathKind for Role {
         const SCHEMA: &'static str = "RolePath";
     }
+    impl PathKind for Ontology {
+        const SCHEMA: &'static str = "OntologyPath";
+    }
 }
 
 pub type AccountPath = Path<kind::Account>;
 pub type AssetPath = Path<kind::Asset>;
 pub type RatePath = Path<kind::Rate>;
 pub type RolePath = Path<kind::Role>;
+/// The name of an [`Ontology`](crate::Ontology), such as `maze` or
+/// `logistics/fleet`.
+pub type OntologyPath = Path<kind::Ontology>;
 
 /// An identifier written as a path: one or more segments separated by `/`,
 /// such as `loans/42`, `agents/7/wallet` or `market/order-book`.
@@ -93,37 +100,78 @@ impl<K> Path<K> {
 
     /// The path one level down: `loans/42` for `loans` and `42`.
     pub fn child(&self, segment: &str) -> Result<Self, PathError> {
-        check_segment(segment, self.segments().count())?;
-        Ok(Self::new(format!("{}/{segment}", self.0).into()))
+        if segment.contains('/') {
+            return Err(PathError::InvalidCharacter { character: '/' });
+        }
+        let child = format!("{}/{segment}", self.0);
+        check(&child)?;
+        Ok(Self::new(child.into()))
     }
 }
 
-fn check_segment(segment: &str, index: usize) -> Result<(), PathError> {
-    if segment.is_empty() {
-        return Err(PathError::EmptySegment { segment: index });
+impl OntologyPath {
+    /// The name of the ontology `O`. A name that is not a path fails to
+    /// compile wherever this is called.
+    pub fn of<O: crate::Ontology>() -> Self {
+        const { assert!(check(O::NAME).is_ok(), "an ontology's NAME must be a path") };
+        Self::new(O::NAME.into())
     }
-    if let Some(character) = segment
-        .chars()
-        .find(|character| !matches!(character, 'a'..='z' | '0'..='9' | '-'))
-    {
-        return Err(PathError::InvalidCharacter { character });
+}
+
+/// Checks a whole path, segment by segment, in the order its errors are
+/// reported. It runs in constant evaluation, so names known when compiling
+/// are checked when compiling.
+const fn check(path: &str) -> Result<(), PathError> {
+    let bytes = path.as_bytes();
+    if bytes.is_empty() {
+        return Err(PathError::Empty);
     }
-    if segment.starts_with('-') || segment.ends_with('-') {
-        return Err(PathError::HyphenAtEdge { segment: index });
+    let (mut index, mut segment, mut start) = (0, 0, 0);
+    while index <= bytes.len() {
+        if index == bytes.len() || bytes[index] == b'/' {
+            if index == start {
+                return Err(PathError::EmptySegment { segment });
+            }
+            if bytes[start] == b'-' || bytes[index - 1] == b'-' {
+                return Err(PathError::HyphenAtEdge { segment });
+            }
+            segment += 1;
+            start = index + 1;
+        } else if !matches!(bytes[index], b'a'..=b'z' | b'0'..=b'9' | b'-') {
+            return Err(PathError::InvalidCharacter {
+                character: character_at(bytes, index),
+            });
+        }
+        index += 1;
     }
     Ok(())
+}
+
+/// The character whose UTF-8 encoding starts at `index`.
+const fn character_at(bytes: &[u8], index: usize) -> char {
+    let lead = bytes[index] as u32;
+    let (length, mut code) = match lead {
+        0x00..=0x7f => (1, lead),
+        0xf0.. => (4, lead & 0x07),
+        0xe0.. => (3, lead & 0x0f),
+        _ => (2, lead & 0x1f),
+    };
+    let mut offset = 1;
+    while offset < length {
+        code = code << 6 | (bytes[index + offset] as u32 & 0x3f);
+        offset += 1;
+    }
+    match char::from_u32(code) {
+        Some(character) => character,
+        None => char::REPLACEMENT_CHARACTER,
+    }
 }
 
 impl<K> FromStr for Path<K> {
     type Err = PathError;
 
     fn from_str(path: &str) -> Result<Self, Self::Err> {
-        if path.is_empty() {
-            return Err(PathError::Empty);
-        }
-        for (index, segment) in path.split('/').enumerate() {
-            check_segment(segment, index)?;
-        }
+        check(path)?;
         Ok(Self::new(path.into()))
     }
 }

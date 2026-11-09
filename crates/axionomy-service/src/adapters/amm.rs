@@ -1,7 +1,5 @@
 use super::*;
-use axionomy_problems::amm::{
-    self, ACTORS, AccountId, Actor, Asset, RateId, Role, Scenario, World,
-};
+use axionomy_problems::amm::{self, ACTORS, AccountId, Actor, Asset, Scenario, World};
 use axionomy_view::{
     ExactQuantity, LeaderboardEntryView, LeaderboardView, MarketActorView, MarketPoolView,
     ObjectiveDirectionView, SceneGlyphView, SceneSurfaceView, SceneToneView, TelemetryKindView,
@@ -124,9 +122,7 @@ pub(super) fn build(
 
         let quote = amm::quote_output(&initial, Asset::Credit, 10_000).unwrap_or_default();
         let guarded = amm::buy_energy(Actor::Factory, 10_000, quote.saturating_add(1));
-        view.proposals.push(proposal(
-            "amm",
-            ProposalSpec {
+        view.proposals.push(proposal(ProposalSpec {
                 id: "impossible-minimum-output",
                 label: "Demand more than the curve returns",
                 description: "The trader supplies enough credit, but its minimum-output protection correctly refuses the AMM quote.",
@@ -135,9 +131,7 @@ pub(super) fn build(
             &guarded,
         ));
         let wrong_ratio = amm::add_liquidity(Actor::AdaptiveLp, 1_000, 9_000, 1);
-        view.proposals.push(proposal(
-            "amm",
-            ProposalSpec {
+        view.proposals.push(proposal(ProposalSpec {
                 id: "price-moving-liquidity",
                 label: "Deposit liquidity at the wrong ratio",
                 description: "Liquidity may deepen the discovered market price, but this rule refuses to rewrite that price by depositing an inconsistent reserve ratio.",
@@ -478,7 +472,7 @@ fn total_utility(world: &World) -> u64 {
 
 fn attach_contribution_leaderboards(
     initial: &World,
-    trace: &axionomy::Trace<RateId, Role, AccountId>,
+    trace: &axionomy::Trace<amm::Ontology>,
     document: &mut ViewDocument,
 ) -> Result<(), ServiceError> {
     let mut world = initial.clone();

@@ -2,9 +2,9 @@
 
 use crate::{
     Durability, MetricPath, Pending, Point, RunId, State, Store, StoreError, TagPath,
-    ontology::{ApplyError, Exchange, Receipt, Recordable},
-    records::Checkpoints,
+    ontology::Recordable, records::Checkpoints,
 };
+use axionomy::{ApplyError, Exchange, Receipt};
 
 /// Records a run step by step. Each step is a kernel `apply` and an update of
 /// the state's tree in memory; steps reach the writer in batches and never

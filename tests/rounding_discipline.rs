@@ -39,17 +39,28 @@ enum RateId {
     Withdraw,
 }
 
-type World = Economy<AccountId, Asset, RateId, Role>;
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+enum Test {}
 
-fn assets() -> Q<Role, Asset> {
+impl axionomy::Ontology for Test {
+    const NAME: &'static str = "test";
+    type Account = AccountId;
+    type Asset = Asset;
+    type Rate = RateId;
+    type Role = Role;
+}
+
+type World = Economy<Test>;
+
+fn assets() -> Q<Test> {
     Q::balance(Role::Vault, Asset::Cash)
 }
 
-fn supply() -> Q<Role, Asset> {
+fn supply() -> Q<Test> {
     Q::balance(Role::Vault, Asset::ShareSupply)
 }
 
-fn vault_rate() -> Rate<Role, Asset> {
+fn vault_rate() -> Rate<Test> {
     Rate::new()
         .preserve(Role::Vault, basket([(Asset::VaultIdentity, 1)]))
         .distinct(Role::Vault, Role::User)
@@ -125,7 +136,7 @@ fn world(total_assets: u64, total_shares: u64, user_cash: u64) -> World {
         .unwrap()
 }
 
-fn exchange(rate: RateId, units: u64) -> Exchange<RateId, Role, AccountId> {
+fn exchange(rate: RateId, units: u64) -> Exchange<Test> {
     Exchange::new(rate, Quantity::new(units))
         .bind(Role::Vault, AccountId::Vault)
         .bind(Role::User, AccountId::User)

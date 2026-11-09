@@ -19,13 +19,13 @@ const ROUTES: [(Location, Location); 9] = [
     (Location::South, Location::Charger),
 ];
 
-fn q(role: Role, asset: Asset) -> Q<Role, Asset> {
+fn q(role: Role, asset: Asset) -> Q<Ontology> {
     Q::balance(role, asset)
 }
-fn now() -> Q<Role, Asset> {
+fn now() -> Q<Ontology> {
     q(Role::World, Asset::Tick)
 }
-fn law() -> Rate<Role, Asset> {
+fn law() -> Rate<Ontology> {
     Rate::new()
         .preserve(
             Role::World,
@@ -33,23 +33,23 @@ fn law() -> Rate<Role, Asset> {
         )
         .condition("one event at a time", Q::units(), C::Equal, Q::constant(1))
 }
-fn actor(rate: Rate<Role, Asset>, agent: AgentId) -> Rate<Role, Asset> {
+fn actor(rate: Rate<Ontology>, agent: AgentId) -> Rate<Ontology> {
     rate.preserve(Role::Agent, basket([(Asset::AgentIdentity(agent), 1)]))
         .distinct(Role::Agent, Role::World)
 }
-fn turn(agent: AgentId) -> Rate<Role, Asset> {
+fn turn(agent: AgentId) -> Rate<Ontology> {
     actor(law(), agent)
         .consume(Role::World, basket([(Asset::Permit(agent), 1)]))
         .produce(Role::World, basket([(Asset::Acted(agent), 1)]))
 }
-fn job(rate: Rate<Role, Asset>, id: JobId) -> Rate<Role, Asset> {
+fn job(rate: Rate<Ontology>, id: JobId) -> Rate<Ontology> {
     rate.preserve(Role::Job, basket([(Asset::JobIdentity(id), 1)]))
         .distinct(Role::Job, Role::World)
 }
-fn clear(rate: Rate<Role, Asset>, role: Role, asset: Asset) -> Rate<Role, Asset> {
+fn clear(rate: Rate<Ontology>, role: Role, asset: Asset) -> Rate<Ontology> {
     rate.consume_computed(role, asset, q(role, asset))
 }
-fn occupy(rate: Rate<Role, Asset>, duration: u64) -> Rate<Role, Asset> {
+fn occupy(rate: Rate<Ontology>, duration: u64) -> Rate<Ontology> {
     rate.consume(Role::Agent, basket([(Asset::Idle, 1)]))
         .produce(Role::Agent, basket([(Asset::Busy, 1)]))
         .produce(Role::World, basket([(Asset::Activities, 1)]))
@@ -61,7 +61,7 @@ fn occupy(rate: Rate<Role, Asset>, duration: u64) -> Rate<Role, Asset> {
             q(Role::World, Asset::Horizon),
         )
 }
-fn finish_activity(rate: Rate<Role, Asset>) -> Rate<Role, Asset> {
+fn finish_activity(rate: Rate<Ontology>) -> Rate<Ontology> {
     clear(rate, Role::Agent, Asset::ReadyAt)
         .condition(
             "activity is due",
@@ -83,7 +83,7 @@ fn service_location(facility: Facility) -> Location {
 fn dependency(id: JobId) -> Option<JobId> {
     id.0.is_multiple_of(4).then(|| JobId(id.0 - 3))
 }
-fn prerequisite(rate: Rate<Role, Asset>, id: JobId) -> Rate<Role, Asset> {
+fn prerequisite(rate: Rate<Ontology>, id: JobId) -> Rate<Ontology> {
     if let Some(before) = dependency(id) {
         rate.preserve(Role::World, basket([(Asset::CompletedJob(before), 1)]))
     } else {
@@ -630,7 +630,7 @@ pub(super) fn build(profile: Profile, lineup: [Policy; 4]) -> League {
     }
 }
 
-fn expire_rate(id: JobId, owner: Option<AgentId>, mode: Option<WorkMode>) -> Rate<Role, Asset> {
+fn expire_rate(id: JobId, owner: Option<AgentId>, mode: Option<WorkMode>) -> Rate<Ontology> {
     let mut rate = job(law(), id)
         .condition(
             "contract deadline has elapsed",
@@ -661,7 +661,7 @@ fn expire_rate(id: JobId, owner: Option<AgentId>, mode: Option<WorkMode>) -> Rat
     rate
 }
 
-fn service_rate(agent: AgentId, facility: Facility, maintenance: bool) -> Rate<Role, Asset> {
+fn service_rate(agent: AgentId, facility: Facility, maintenance: bool) -> Rate<Ontology> {
     let duration = match facility {
         Facility::Workshop => 4,
         Facility::Charger => 3,

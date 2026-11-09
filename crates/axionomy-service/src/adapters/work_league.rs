@@ -132,9 +132,7 @@ pub(super) fn build(
         )
         .bind(Role::Agent, AccountId::Agent(AgentId::Bolt))
         .bind(Role::Job, AccountId::Job(JobId(1)));
-        view.proposals.push(proposal(
-            "work-league",
-            ProposalSpec {
+        view.proposals.push(proposal(ProposalSpec {
                 id: "claim-with-wrong-worker",
                 label: "Atlas claim rebound to Bolt",
                 description: "The rate names Atlas, but the proposed role binding points at Bolt. Identity assets must reject the mismatch.",

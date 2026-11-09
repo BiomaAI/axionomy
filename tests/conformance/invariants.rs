@@ -51,6 +51,17 @@ fn economy_loading_rejects_duplicate_invariant_assets_even_after_zero() {
             "accounts": [], "rates": [],
             "invariants": [{"name": "material", "weights": weights}],
         });
-        assert!(serde_json::from_value::<Economy<u8, u8, u8, u8>>(model).is_err());
+        assert!(serde_json::from_value::<Economy<Bytes>>(model).is_err());
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+enum Bytes {}
+
+impl axionomy::Ontology for Bytes {
+    const NAME: &'static str = "bytes";
+    type Account = u8;
+    type Asset = u8;
+    type Rate = u8;
+    type Role = u8;
 }

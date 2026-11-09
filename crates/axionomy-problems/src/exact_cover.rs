@@ -105,10 +105,11 @@ pub enum RateId {
     Finish,
 }
 
-pub type World = Economy<AccountId, Asset, RateId, Role>;
+pub type World = Economy<Ontology>;
 
 /// The identifier types of [`World`], named `exact-cover` where economies are
 /// stored.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Ontology {}
 
 impl axionomy::Ontology for Ontology {
@@ -118,9 +119,9 @@ impl axionomy::Ontology for Ontology {
     type Rate = RateId;
     type Role = Role;
 }
-pub type Action = Exchange<RateId, Role, AccountId>;
-pub type Solution = SearchSolution<RateId, Role, AccountId>;
-pub type Proposal = Trace<RateId, Role, AccountId>;
+pub type Action = Exchange<Ontology>;
+pub type Solution = SearchSolution<Ontology>;
+pub type Proposal = Trace<Ontology>;
 
 const MICRO_SETS: [SetId; 4] = [SetId::Ab, SetId::Cd, SetId::Ac, SetId::Bd];
 const MICRO_ELEMENTS: [Element; 4] = [Element::A, Element::B, Element::C, Element::D];
@@ -236,7 +237,7 @@ pub fn unsatisfiable_stress() -> World {
     )
 }
 
-pub fn goal() -> Goal<AccountId, Asset> {
+pub fn goal() -> Goal<Ontology> {
     Goal::new().require(AccountId::Problem, basket([(Asset::Solved, 1)]))
 }
 

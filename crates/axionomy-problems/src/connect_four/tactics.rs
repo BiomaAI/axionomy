@@ -258,7 +258,7 @@ pub fn play_opponent_game(
     iterations: usize,
     seed: u64,
     opponent: Opponent,
-) -> Option<Trace<RateId, Role, AccountId>> {
+) -> Option<Trace<Ontology>> {
     play_opponent_game_with_progress(iterations, seed, opponent, |_| ControlFlow::Continue(()))
 }
 
@@ -267,7 +267,7 @@ pub fn play_opponent_game_with_progress(
     seed: u64,
     opponent: Opponent,
     observer: impl FnMut(usize) -> ControlFlow<()>,
-) -> Option<Trace<RateId, Role, AccountId>> {
+) -> Option<Trace<Ontology>> {
     play_opponent_game_from_with_progress(initial_standard(), iterations, seed, opponent, observer)
 }
 
@@ -277,7 +277,7 @@ pub fn play_opponent_game_from_with_progress(
     seed: u64,
     opponent: Opponent,
     mut observer: impl FnMut(usize) -> ControlFlow<()>,
-) -> Option<Trace<RateId, Role, AccountId>> {
+) -> Option<Trace<Ontology>> {
     let mut trace = Trace::new();
     for turn in 0..85 {
         if observer(turn as usize).is_break() {

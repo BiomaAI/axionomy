@@ -167,10 +167,11 @@ pub enum Scenario {
     ThinLiquidity,
 }
 
-pub type World = Economy<AccountId, Asset, RateId, Role>;
+pub type World = Economy<Ontology>;
 
 /// The identifier types of [`World`], named `amm` where economies are
 /// stored.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Ontology {}
 
 impl axionomy::Ontology for Ontology {
@@ -180,7 +181,7 @@ impl axionomy::Ontology for Ontology {
     type Rate = RateId;
     type Role = Role;
 }
-pub type Action = Exchange<RateId, Role, AccountId>;
+pub type Action = Exchange<Ontology>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PoolState {
@@ -418,7 +419,7 @@ fn build(size: MarketSize) -> World {
 }
 
 // The trader receives the output, so it rounds down; the product is full width.
-fn swap_output_expression(input: Asset, output: Asset) -> Q<Role, Asset> {
+fn swap_output_expression(input: Asset, output: Asset) -> Q<Ontology> {
     let input_after_fee = Q::constant(FEE_NUMERATOR) * Q::units();
     Q::mul_div(
         Q::balance(Role::Pool, output),
@@ -428,7 +429,7 @@ fn swap_output_expression(input: Asset, output: Asset) -> Q<Role, Asset> {
     )
 }
 
-fn swap_rate(input: Asset, output: Asset, output_quantity: Q<Role, Asset>) -> Rate<Role, Asset> {
+fn swap_rate(input: Asset, output: Asset, output_quantity: Q<Ontology>) -> Rate<Ontology> {
     Rate::new()
         .consume(Role::Trader, basket([(input, 1)]))
         .produce(Role::Pool, basket([(input, 1)]))
@@ -443,12 +444,12 @@ fn swap_rate(input: Asset, output: Asset, output_quantity: Q<Role, Asset>) -> Ra
         .distinct(Role::Pool, Role::Trader)
 }
 
-fn issued_lp_expression() -> Q<Role, Asset> {
+fn issued_lp_expression() -> Q<Ontology> {
     Q::constant(MAX_LP_SHARES) - Q::balance(Role::Pool, Asset::UnissuedLpShare)
 }
 
 // The provider receives shares, so each side rounds down.
-fn minted_lp_expression() -> Q<Role, Asset> {
+fn minted_lp_expression() -> Q<Ontology> {
     let issued = issued_lp_expression();
     Q::minimum(
         Q::mul_div(
@@ -468,7 +469,7 @@ fn minted_lp_expression() -> Q<Role, Asset> {
 
 /// Reserve paid out for `units` burned shares; the provider receives it, so it
 /// rounds down.
-pub(crate) fn withdrawn_reserve(reserve: Asset) -> Q<Role, Asset> {
+pub(crate) fn withdrawn_reserve(reserve: Asset) -> Q<Ontology> {
     Q::mul_div(
         Q::balance(Role::Pool, reserve),
         Q::units(),
@@ -477,7 +478,7 @@ pub(crate) fn withdrawn_reserve(reserve: Asset) -> Q<Role, Asset> {
     )
 }
 
-fn add_liquidity_rate() -> Rate<Role, Asset> {
+fn add_liquidity_rate() -> Rate<Ontology> {
     let minted = minted_lp_expression();
     Rate::new()
         .consume_computed(
@@ -509,7 +510,7 @@ fn add_liquidity_rate() -> Rate<Role, Asset> {
         .distinct(Role::Pool, Role::LiquidityProvider)
 }
 
-fn remove_liquidity_rate() -> Rate<Role, Asset> {
+fn remove_liquidity_rate() -> Rate<Ontology> {
     let energy = withdrawn_reserve(Asset::Energy);
     let credit = withdrawn_reserve(Asset::Credit);
     Rate::new()
@@ -522,7 +523,7 @@ fn remove_liquidity_rate() -> Rate<Role, Asset> {
         .distinct(Role::Pool, Role::LiquidityProvider)
 }
 
-pub fn goal() -> Goal<AccountId, Asset> {
+pub fn goal() -> Goal<Ontology> {
     Goal::new()
         .require(
             AccountId::Actor(Actor::Factory),
@@ -672,14 +673,14 @@ fn guarded_sell(world: &World, actor: Actor, input: u64) -> Action {
     sell_energy(actor, input, output.saturating_mul(98) / 100)
 }
 
-fn push(world: &mut World, trace: &mut Trace<RateId, Role, AccountId>, action: Action) {
+fn push(world: &mut World, trace: &mut Trace<Ontology>, action: Action) {
     world
         .apply(action.clone())
         .expect("canonical Living Market action is applicable");
     trace.push(action);
 }
 
-pub fn trace(initial: &World, scenario: Scenario) -> Trace<RateId, Role, AccountId> {
+pub fn trace(initial: &World, scenario: Scenario) -> Trace<Ontology> {
     let mut included = ACTORS.into_iter().collect::<BTreeSet<_>>();
     if matches!(scenario, Scenario::NoWhale) {
         included.remove(&Actor::Whale);
@@ -691,10 +692,7 @@ pub fn trace(initial: &World, scenario: Scenario) -> Trace<RateId, Role, Account
 /// coalition. Missing actors make no proposals; every remaining action is
 /// re-quoted against the counterfactual reserve state before Axionomy applies
 /// it. This is the causal primitive used by exact Shapley attribution.
-pub fn market_day_with_actors(
-    initial: &World,
-    included: &BTreeSet<Actor>,
-) -> Trace<RateId, Role, AccountId> {
+pub fn market_day_with_actors(initial: &World, included: &BTreeSet<Actor>) -> Trace<Ontology> {
     trace_with_actors(initial, Scenario::MarketDay, included)
 }
 
@@ -702,7 +700,7 @@ fn trace_with_actors(
     initial: &World,
     scenario: Scenario,
     included: &BTreeSet<Actor>,
-) -> Trace<RateId, Role, AccountId> {
+) -> Trace<Ontology> {
     if initial.account(&AccountId::World).is_some() {
         return season::run(initial, scenario, included);
     }
@@ -833,7 +831,7 @@ pub fn shapley_price_contributions(initial: &World) -> Vec<ShapleyContribution> 
 
 pub fn direct_price_contributions(
     initial: &World,
-    trace: &Trace<RateId, Role, AccountId>,
+    trace: &Trace<Ontology>,
 ) -> BTreeMap<Actor, i128> {
     let mut world = initial.clone();
     let mut contributions = BTreeMap::new();

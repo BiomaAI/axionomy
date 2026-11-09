@@ -2,7 +2,7 @@
 use super::*;
 use axionomy::{QuantityComparison as C, QuantityExpression as Q};
 
-fn law(time: u64, labor: u64) -> Rate<Role, Asset> {
+fn law(time: u64, labor: u64) -> Rate<Ontology> {
     Rate::new()
         .preserve(Role::Shop, basket([(Asset::Active, 1)]))
         .consume(
@@ -14,7 +14,7 @@ fn law(time: u64, labor: u64) -> Rate<Role, Asset> {
             basket([(Asset::SpentTime, time), (Asset::SpentLabor, labor)]),
         )
 }
-fn tooling(rate: Rate<Role, Asset>, wear: u64) -> Rate<Role, Asset> {
+fn tooling(rate: Rate<Ontology>, wear: u64) -> Rate<Ontology> {
     rate.consume(Role::Shop, basket([(Asset::Durability, wear)]))
         .produce(Role::Shop, basket([(Asset::Wear, wear)]))
 }

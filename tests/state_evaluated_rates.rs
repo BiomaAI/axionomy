@@ -27,10 +27,21 @@ enum RateId {
     BuyEnergy,
 }
 
-type World = Economy<AccountId, Asset, RateId, Role>;
-type Action = Exchange<RateId, Role, AccountId>;
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+enum Test {}
 
-fn output_expression() -> Q<Role, Asset> {
+impl axionomy::Ontology for Test {
+    const NAME: &'static str = "test";
+    type Account = AccountId;
+    type Asset = Asset;
+    type Rate = RateId;
+    type Role = Role;
+}
+
+type World = Economy<Test>;
+type Action = Exchange<Test>;
+
+fn output_expression() -> Q<Test> {
     // floor(pool_energy * 997 * input / (pool_credit * 1000 + 997 * input)),
     // computed at full width; the trader receives the output, so it rounds down.
     let input_after_fee = Q::constant(997) * Q::units();

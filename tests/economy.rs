@@ -40,8 +40,19 @@ enum RateId {
     Missing,
 }
 
-type World = Economy<AccountId, Asset, RateId, Role>;
-type Action = Exchange<RateId, Role, AccountId>;
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+enum Test {}
+
+impl axionomy::Ontology for Test {
+    const NAME: &'static str = "test";
+    type Account = AccountId;
+    type Asset = Asset;
+    type Rate = RateId;
+    type Role = Role;
+}
+
+type World = Economy<Test>;
+type Action = Exchange<Test>;
 
 fn world() -> World {
     EconomyBuilder::new()
@@ -115,7 +126,7 @@ fn model_and_goal_expose_all_referenced_asset_keys() {
         ]
     );
 
-    let goal = Goal::new().require(AccountId::Goal, basket([(Asset::Solved, 1)]));
+    let goal = Goal::<Test>::new().require(AccountId::Goal, basket([(Asset::Solved, 1)]));
     assert_eq!(goal.asset_keys(), [&Asset::Solved].into_iter().collect());
 }
 
@@ -125,10 +136,7 @@ fn finish() -> Action {
         .bind(Role::Goal, AccountId::Goal)
 }
 
-fn assert_deltas_eq(
-    left: &[AccountDelta<AccountId, Asset>],
-    right: &[AccountDelta<AccountId, Asset>],
-) {
+fn assert_deltas_eq(left: &[AccountDelta<Test>], right: &[AccountDelta<Test>]) {
     assert_eq!(left.len(), right.len());
     for (left, right) in left.iter().zip(right) {
         assert_eq!(left.account(), right.account());
@@ -448,7 +456,7 @@ fn invalid_identifiers_units_and_role_aliasing_are_structured_errors() {
 
 #[test]
 fn checked_arithmetic_failures_are_atomic() {
-    let mut rate_overflow = EconomyBuilder::new()
+    let mut rate_overflow = EconomyBuilder::<Test>::new()
         .account(
             AccountId::Source,
             Account::from(Basket::from([(Asset::Input, Quantity::MAX)])),
@@ -471,7 +479,7 @@ fn checked_arithmetic_failures_are_atomic() {
     ));
     assert_eq!(rate_overflow.state_key(), before);
 
-    let mut balance_overflow = EconomyBuilder::new()
+    let mut balance_overflow = EconomyBuilder::<Test>::new()
         .account(
             AccountId::Sink,
             Account::from(Basket::from([(Asset::Output, Quantity::MAX)])),
@@ -495,13 +503,24 @@ fn checked_arithmetic_failures_are_atomic() {
     assert_eq!(balance_overflow.state_key(), before);
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+enum Bytes {}
+
+impl axionomy::Ontology for Bytes {
+    const NAME: &'static str = "bytes";
+    type Account = u8;
+    type Asset = u8;
+    type Rate = u8;
+    type Role = u8;
+}
+
 #[test]
 fn observation_keys_distinguish_missing_from_empty_visible_accounts() {
-    let empty: Economy<u8, u8, u8, u8> = EconomyBuilder::new()
+    let empty: Economy<Bytes> = EconomyBuilder::new()
         .account(0, Account::default())
         .build()
         .unwrap();
-    let missing: Economy<u8, u8, u8, u8> = EconomyBuilder::new().build().unwrap();
+    let missing: Economy<Bytes> = EconomyBuilder::new().build().unwrap();
     let present_view = empty.view([1, 0, 0]);
     let absent_view = missing.view([0, 1]);
     assert_eq!(present_view.balance(&0, &2), Some(Quantity::new(0)));

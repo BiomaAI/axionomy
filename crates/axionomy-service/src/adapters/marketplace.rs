@@ -121,7 +121,7 @@ pub(super) fn build(
             .take(3)
             .enumerate()
         {
-            view.proposals.push(proposal("marketplace", ProposalSpec { id: &format!("near-match-{index}"), label: &format!("Near match {}", index + 1), description: "A complete set of participants that almost settles; the rejection names the exact account and amount that came up short." }, &initial, assessed_match.exchange()));
+            view.proposals.push(proposal(ProposalSpec { id: &format!("near-match-{index}"), label: &format!("Near match {}", index + 1), description: "A complete set of participants that almost settles; the rejection names the exact account and amount that came up short." }, &initial, assessed_match.exchange()));
         }
         documents.push(view);
     }
@@ -137,7 +137,7 @@ pub(super) fn build(
 fn pareto_trace(
     result: &marketplace::ParetoResult,
     buyers: bool,
-) -> Result<axionomy::Trace<marketplace::RateId, marketplace::Role, AccountId>, ServiceError> {
+) -> Result<axionomy::Trace<marketplace::Ontology>, ServiceError> {
     result
         .front()
         .entries()

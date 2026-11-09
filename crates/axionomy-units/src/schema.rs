@@ -3,7 +3,7 @@ use crate::{
     MeasureDefinition, MeasureDefinitionError, MeasureKind, MeasureScalar, MeasuredAsset,
     StableMeasureKind, UnitAsset,
 };
-use axionomy::{Economy, EconomyBuilder, Goal, ModelBuildError};
+use axionomy::{Economy, EconomyBuilder, Goal, ModelBuildError, Ontology};
 use indexmap::IndexMap;
 use serde::ser::SerializeSeq;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -12,10 +12,7 @@ use thiserror::Error;
 use uom::Conversion;
 use uom::si::{Dimension, Quantity as UomQuantity, Units};
 
-pub type UnitEconomy<AccountId, Id, RateId, Role> = Economy<AccountId, UnitAsset<Id>, RateId, Role>;
-
-pub type UnitModelBuildResult<AccountId, Id, RateId, Role> =
-    Result<UnitEconomy<AccountId, Id, RateId, Role>, UnitModelBuildError<AccountId, RateId, Id>>;
+pub type UnitModelBuildResult<O, Id> = Result<Economy<O>, UnitModelBuildError<O, Id>>;
 
 /// Declares the one canonical atomic definition for every logical asset ID.
 #[derive(Debug, Clone)]
@@ -176,12 +173,11 @@ where
         }
     }
 
-    pub fn validate_goal<AccountId>(
+    pub fn validate_goal<O: Ontology<Asset = UnitAsset<Id>>>(
         &self,
-        goal: &Goal<AccountId, UnitAsset<Id>>,
+        goal: &Goal<O>,
     ) -> Result<(), AssetSchemaError<Id>>
     where
-        AccountId: Ord,
         Id: Ord,
     {
         for asset in goal.asset_keys() {
@@ -190,15 +186,12 @@ where
         Ok(())
     }
 
-    pub fn validate_economy<AccountId, RateId, Role>(
+    pub fn validate_economy<O: Ontology<Asset = UnitAsset<Id>>>(
         &self,
-        economy: &Economy<AccountId, UnitAsset<Id>, RateId, Role>,
+        economy: &Economy<O>,
     ) -> Result<(), AssetSchemaError<Id>>
     where
-        AccountId: Clone + Eq + Hash + Ord,
         Id: Ord,
-        RateId: Clone + Eq + Hash + Ord,
-        Role: Clone + Ord,
     {
         for asset in economy.asset_keys() {
             self.validate_asset(asset)?;
@@ -207,27 +200,21 @@ where
     }
 
     /// Reconstructs and validates the complete schema embedded in an economy.
-    pub fn from_economy<AccountId, RateId, Role>(
-        economy: &Economy<AccountId, UnitAsset<Id>, RateId, Role>,
+    pub fn from_economy<O: Ontology<Asset = UnitAsset<Id>>>(
+        economy: &Economy<O>,
     ) -> Result<Self, AssetSchemaError<Id>>
     where
-        AccountId: Clone + Eq + Hash + Ord,
         Id: Ord,
-        RateId: Clone + Eq + Hash + Ord,
-        Role: Clone + Ord,
     {
         Self::from_assets(economy.asset_keys())
     }
 
-    pub fn build_economy<AccountId, RateId, Role>(
+    pub fn build_economy<O: Ontology<Asset = UnitAsset<Id>>>(
         &self,
-        builder: EconomyBuilder<AccountId, UnitAsset<Id>, RateId, Role>,
-    ) -> UnitModelBuildResult<AccountId, Id, RateId, Role>
+        builder: EconomyBuilder<O>,
+    ) -> UnitModelBuildResult<O, Id>
     where
-        AccountId: Clone + Eq + Hash + Ord,
         Id: Ord,
-        RateId: Clone + Eq + Hash + Ord,
-        Role: Clone + Ord,
     {
         let economy = builder.build()?;
         self.validate_economy(&economy)?;
@@ -320,9 +307,9 @@ pub enum AssetSchemaError<Id> {
 }
 
 #[derive(Debug, Error)]
-pub enum UnitModelBuildError<AccountId, RateId, Id> {
+pub enum UnitModelBuildError<O: Ontology, Id> {
     #[error(transparent)]
-    Model(#[from] ModelBuildError<AccountId, RateId>),
+    Model(#[from] ModelBuildError<O>),
     #[error(transparent)]
     Schema(#[from] AssetSchemaError<Id>),
 }

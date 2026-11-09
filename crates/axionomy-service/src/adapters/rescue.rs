@@ -66,7 +66,7 @@ pub(super) fn build(
         ));
         view.observations.push(observation(&model));
         if let Some(candidate) = rescue::candidates(&model).first() {
-            view.proposals.push(proposal("rescue", ProposalSpec { id: "unresolved-action", label: "Act before Nature resolves", description: "Acting before Nature has decided what is true shows exactly which facts are still missing." }, &model, candidate));
+            view.proposals.push(proposal(ProposalSpec { id: "unresolved-action", label: "Act before Nature resolves", description: "Acting before Nature has decided what is true shows exactly which facts are still missing." }, &model, candidate));
         }
         documents.push(view);
     }

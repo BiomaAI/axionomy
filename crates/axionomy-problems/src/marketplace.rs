@@ -172,10 +172,11 @@ pub enum RateId {
     },
 }
 
-pub type World = Economy<AccountId, Asset, RateId, Role>;
+pub type World = Economy<Ontology>;
 
 /// The identifier types of [`World`], named `marketplace` where economies are
 /// stored.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Ontology {}
 
 impl axionomy::Ontology for Ontology {
@@ -185,9 +186,9 @@ impl axionomy::Ontology for Ontology {
     type Rate = RateId;
     type Role = Role;
 }
-pub type Action = Exchange<RateId, Role, AccountId>;
-pub type Assessment = ExchangeAssessment<AccountId, Asset, RateId, Role>;
-pub type ParetoResult = ParetoSearchResult<RateId, Role, AccountId, ObjectiveKey, u64>;
+pub type Action = Exchange<Ontology>;
+pub type Assessment = ExchangeAssessment<Ontology>;
+pub type ParetoResult = ParetoSearchResult<Ontology, ObjectiveKey, u64>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ObjectiveKey {
@@ -237,13 +238,13 @@ impl MarketMatch {
 
 #[derive(Debug, Clone)]
 pub struct ClearingProposal {
-    trace: Trace<RateId, Role, AccountId>,
+    trace: Trace<Ontology>,
     settled_orders: usize,
     gross_value: u64,
 }
 
 impl ClearingProposal {
-    pub const fn trace(&self) -> &Trace<RateId, Role, AccountId> {
+    pub const fn trace(&self) -> &Trace<Ontology> {
         &self.trace
     }
 
@@ -461,19 +462,19 @@ fn build(size: MarketSize) -> World {
         .expect("marketplace model is valid")
 }
 
-pub fn goal() -> Goal<AccountId, Asset> {
+pub fn goal() -> Goal<Ontology> {
     goal_for(&MICRO_ORDERS)
 }
 
-pub fn goal_showcase() -> Goal<AccountId, Asset> {
+pub fn goal_showcase() -> Goal<Ontology> {
     goal_for(&SHOWCASE_ORDERS)
 }
 
-pub fn goal_stress() -> Goal<AccountId, Asset> {
+pub fn goal_stress() -> Goal<Ontology> {
     goal_for(&STRESS_ORDERS)
 }
 
-fn goal_for(orders: &[OrderId]) -> Goal<AccountId, Asset> {
+fn goal_for(orders: &[OrderId]) -> Goal<Ontology> {
     orders.iter().copied().fold(Goal::new(), |goal, order| {
         goal.require(
             AccountId::Order(order),
@@ -649,7 +650,7 @@ pub fn settlement(order: OrderId, buyer: BuyerId, seller: SellerId, carrier: Car
         .bind(Role::Order, AccountId::Order(order))
 }
 
-fn settlement_rate(order: OrderId) -> Rate<Role, Asset> {
+fn settlement_rate(order: OrderId) -> Rate<Ontology> {
     let (item, gross, seller_proceeds, tax, commission, shipping) = order_terms(order);
     let (buyer_utility, seller_utility) = utility_terms(order);
     Rate::new()
@@ -727,8 +728,8 @@ const fn order_terms(order: OrderId) -> (Item, u64, u64, u64, u64, u64) {
 
 fn clear_branch(
     world: World,
-    trace: Trace<RateId, Role, AccountId>,
-    visited: &mut HashSet<axionomy::StateKey<AccountId, Asset>>,
+    trace: Trace<Ontology>,
+    visited: &mut HashSet<axionomy::StateKey<Ontology>>,
     best: &mut ClearingProposal,
 ) {
     if !visited.insert(world.state_key()) {
@@ -780,7 +781,7 @@ fn gross_value(world: &World) -> u64 {
         .sum()
 }
 
-fn all_distinct(mut rate: Rate<Role, Asset>) -> Rate<Role, Asset> {
+fn all_distinct(mut rate: Rate<Ontology>) -> Rate<Ontology> {
     let roles = [
         Role::Buyer,
         Role::Seller,

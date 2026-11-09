@@ -31,6 +31,17 @@ enum Role {
     Depot,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+enum Depot {}
+
+impl axionomy::Ontology for Depot {
+    const NAME: &'static str = "depot";
+    type Account = AccountId;
+    type Asset = UnitAsset<AssetId>;
+    type Rate = RateId;
+    type Role = Role;
+}
+
 #[test]
 fn compatible_input_units_normalize_to_one_canonical_asset() {
     let mut schema = AssetSchema::new();
@@ -134,8 +145,7 @@ fn independently_conflicting_bindings_never_alias_and_fail_model_validation() {
     let foreign = Basket::try_from_amounts([kilograms.asset().atoms(1)]).unwrap();
     let error = gram_schema
         .build_economy(
-            EconomyBuilder::<AccountId, UnitAsset<AssetId>, RateId, Role>::new()
-                .account(AccountId::Depot, Account::from(foreign)),
+            EconomyBuilder::<Depot>::new().account(AccountId::Depot, Account::from(foreign)),
         )
         .unwrap_err();
     assert!(matches!(
@@ -164,7 +174,7 @@ fn schema_validates_assets_across_accounts_rates_invariants_and_goals() {
     let required = Basket::try_from_amounts([permission.atoms(1)]).unwrap();
     let world = schema
         .build_economy(
-            EconomyBuilder::new()
+            EconomyBuilder::<Depot>::new()
                 .account(AccountId::Depot, Account::from(balances))
                 .rate(
                     RateId::Store,
@@ -175,7 +185,7 @@ fn schema_validates_assets_across_accounts_rates_invariants_and_goals() {
                 ),
         )
         .unwrap();
-    let goal = Goal::new().require(AccountId::Depot, required);
+    let goal = Goal::<Depot>::new().require(AccountId::Depot, required);
 
     assert_eq!(world.asset_keys().len(), 2);
     schema.validate_goal(&goal).unwrap();
@@ -247,7 +257,7 @@ fn embedded_definitions_reconstruct_a_schema_and_reject_conflicts() {
         .unwrap();
     let balances =
         Basket::try_from_amounts([grams.asset().atoms(1), kilograms.asset().atoms(1)]).unwrap();
-    let world = EconomyBuilder::<AccountId, UnitAsset<AssetId>, RateId, Role>::new()
+    let world = EconomyBuilder::<Depot>::new()
         .account(AccountId::Depot, Account::from(balances))
         .build()
         .unwrap();

@@ -25,8 +25,19 @@ enum Role {
     Actor,
 }
 
-type World = Economy<AccountId, Asset, RateId, Role>;
-type Action = Exchange<RateId, Role, AccountId>;
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+enum Test {}
+
+impl axionomy::Ontology for Test {
+    const NAME: &'static str = "test";
+    type Account = AccountId;
+    type Asset = Asset;
+    type Rate = RateId;
+    type Role = Role;
+}
+
+type World = Economy<Test>;
+type Action = Exchange<Test>;
 
 fn world() -> World {
     EconomyBuilder::new()
@@ -56,7 +67,7 @@ fn world() -> World {
         .expect("test model is valid")
 }
 
-fn goal() -> Goal<AccountId, Asset> {
+fn goal() -> Goal<Test> {
     Goal::new().require(AccountId::Actor, basket([(Asset::Solved, 1)]))
 }
 

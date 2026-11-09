@@ -203,7 +203,7 @@ pub(super) fn build(
                 .bind(mission::Role::Scout, AccountId::Agent(AgentId::Scout))
                 .bind(mission::Role::Medic, AccountId::Agent(AgentId::Medic))
                 .bind(mission::Role::Mission, AccountId::Mission);
-                view.proposals.push(proposal("mission", ProposalSpec {
+                view.proposals.push(proposal(ProposalSpec {
                     id: "move-before-sharing",
                     label: "Move together before sharing the sighting",
                     description: "The Scout has seen a location, but the Medic has no intelligence yet. Assessing this move at the post-scan snapshot exposes the missing shared information; sharing is a causal prerequisite for coordinated movement.",
@@ -266,7 +266,7 @@ pub(super) fn build(
         }
         if let Some(candidate) = mission::candidates(&model).first() {
             let malformed = Exchange::new(*candidate.rate(), candidate.units());
-            view.proposals.push(proposal("mission", ProposalSpec { id: "action-without-actors", label: "Mission action without roles", description: "Every mission action names an actor, Nature, the mission, and the goal. Leaving them out is rejected with the specific role missing." }, &model, &malformed));
+            view.proposals.push(proposal(ProposalSpec { id: "action-without-actors", label: "Mission action without roles", description: "Every mission action names an actor, Nature, the mission, and the goal. Leaving them out is rejected with the specific role missing." }, &model, &malformed));
         }
         documents.push(view);
     }

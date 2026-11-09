@@ -158,10 +158,11 @@ pub enum Policy {
     RapidNorth,
     StabilizeFirst,
 }
-pub type World = Economy<AccountId, Asset, RateId, Role>;
+pub type World = Economy<Ontology>;
 
 /// The identifier types of [`World`], named `rescue/incident` where economies are
 /// stored.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Ontology {}
 
 impl axionomy::Ontology for Ontology {
@@ -171,9 +172,9 @@ impl axionomy::Ontology for Ontology {
     type Rate = RateId;
     type Role = Role;
 }
-pub type Action = Exchange<RateId, Role, AccountId>;
-pub type Proposal = Trace<RateId, Role, AccountId>;
-pub type ResponderView<'a> = EconomicView<'a, AccountId, Asset, RateId, Role>;
+pub type Action = Exchange<Ontology>;
+pub type Proposal = Trace<Ontology>;
+pub type ResponderView<'a> = EconomicView<'a, Ontology>;
 
 pub fn value(world: &World, account: AccountId, asset: Asset) -> u64 {
     world.balance(&account, &asset).to_u64()
@@ -181,23 +182,23 @@ pub fn value(world: &World, account: AccountId, asset: Asset) -> u64 {
 pub fn now(world: &World) -> u64 {
     value(world, AccountId::World, Asset::Time)
 }
-fn q(role: Role, asset: Asset) -> Q<Role, Asset> {
+fn q(role: Role, asset: Asset) -> Q<Ontology> {
     Q::balance(role, asset)
 }
-fn clock() -> Q<Role, Asset> {
+fn clock() -> Q<Ontology> {
     q(Role::World, Asset::Time)
 }
-fn identity() -> Rate<Role, Asset> {
+fn identity() -> Rate<Ontology> {
     Rate::new()
         .preserve(Role::World, basket([(Asset::WorldIdentity, 1)]))
         .preserve(Role::Responder, basket([(Asset::ResponderIdentity, 1)]))
         .distinct(Role::World, Role::Responder)
         .condition("one incident event", Q::units(), C::Equal, Q::constant(1))
 }
-fn law() -> Rate<Role, Asset> {
+fn law() -> Rate<Ontology> {
     identity().preserve(Role::World, basket([(Asset::Active, 1)]))
 }
-fn work(time: u64, energy: u64) -> Rate<Role, Asset> {
+fn work(time: u64, energy: u64) -> Rate<Ontology> {
     law()
         .preserve(Role::Responder, basket([(Asset::Ready, 1)]))
         .consume(Role::World, basket([(Asset::TimeRemaining, time)]))
@@ -205,12 +206,12 @@ fn work(time: u64, energy: u64) -> Rate<Role, Asset> {
         .consume(Role::Responder, basket([(Asset::Energy, energy)]))
         .produce(Role::Responder, basket([(Asset::SpentEnergy, energy)]))
 }
-fn patient(rate: Rate<Role, Asset>, id: u8) -> Rate<Role, Asset> {
+fn patient(rate: Rate<Ontology>, id: u8) -> Rate<Ontology> {
     rate.preserve(Role::Patient, basket([(Asset::PatientIdentity(id), 1)]))
         .distinct(Role::Patient, Role::Responder)
         .distinct(Role::Patient, Role::World)
 }
-fn viable(rate: Rate<Role, Asset>) -> Rate<Role, Asset> {
+fn viable(rate: Rate<Ontology>) -> Rate<Ontology> {
     rate.preserve(Role::Patient, basket([(Asset::Alive, 1)]))
         .condition(
             "patient still has vitality",
@@ -766,7 +767,7 @@ pub fn action(rate: RateId) -> Action {
         _ => exchange,
     }
 }
-pub fn goal() -> Goal<AccountId, Asset> {
+pub fn goal() -> Goal<Ontology> {
     Goal::new().require(AccountId::World, basket([(Asset::Closed, 1)]))
 }
 pub fn responder_view(world: &World) -> ResponderView<'_> {

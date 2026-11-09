@@ -69,7 +69,7 @@ pub(super) fn build(
                 "verified fleet decisions and realized route tickets".into(),
             )],
         ));
-        view.proposals.push(proposal("logistics", ProposalSpec { id: "wrong-vehicle", label: "Put refrigerated cargo in the freight van", description: "The freight van has more payload space but no refrigerated slot. Cargo compatibility is enforced by the exchange, alongside arrival and physical location." }, &initial, &fleet::action(RateId::Load { van: Van::Freight, order: 0, at: Location::Depot })));
+        view.proposals.push(proposal(ProposalSpec { id: "wrong-vehicle", label: "Put refrigerated cargo in the freight van", description: "The freight van has more payload space but no refrigerated slot. Cargo compatibility is enforced by the exchange, alongside arrival and physical location." }, &initial, &fleet::action(RateId::Load { van: Van::Freight, order: 0, at: Location::Depot })));
         documents.push(view);
     }
     let _ = progress.emit(
@@ -244,7 +244,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 Some(status),
             ),
             slug(format!(
-                "logistics/account/vehicle-{}",
+                "logistics/fleet/account/vehicle-{}",
                 if van == Van::Cold { "cold" } else { "freight" }
             )),
         );
@@ -282,7 +282,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                             .into(),
                         ),
                     ),
-                    slug(format!("logistics/account/order-{id}")),
+                    slug(format!("logistics/fleet/account/order-{id}")),
                 );
                 cargo.metrics = vec![visual_metric(
                     slug("weight"),
@@ -347,7 +347,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 },
                 Some(status.into()),
             ),
-            slug(format!("logistics/account/order-{id}")),
+            slug(format!("logistics/fleet/account/order-{id}")),
         );
         entity.metrics = vec![
             visual_metric(

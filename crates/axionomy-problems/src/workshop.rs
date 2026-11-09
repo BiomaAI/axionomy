@@ -84,10 +84,11 @@ pub enum RateId {
     Finish,
 }
 
-pub type World = Economy<AccountId, Asset, RateId, Role>;
+pub type World = Economy<Ontology>;
 
 /// The identifier types of [`World`], named `workshop` where economies are
 /// stored.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Ontology {}
 
 impl axionomy::Ontology for Ontology {
@@ -97,10 +98,10 @@ impl axionomy::Ontology for Ontology {
     type Rate = RateId;
     type Role = Role;
 }
-pub type Action = Exchange<RateId, Role, AccountId>;
-pub type Solution = SearchSolution<RateId, Role, AccountId>;
-pub type Failure = ApplyError<RateId, Role, AccountId, Asset>;
-pub type ParetoResult = ParetoSearchResult<RateId, Role, AccountId, ObjectiveKey, u64>;
+pub type Action = Exchange<Ontology>;
+pub type Solution = SearchSolution<Ontology>;
+pub type Failure = ApplyError<Ontology>;
+pub type ParetoResult = ParetoSearchResult<Ontology, ObjectiveKey, u64>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ObjectiveKey {
@@ -216,7 +217,7 @@ fn build(wood: u64, labor: u64, time: u64, target: u64) -> World {
         .expect("workshop model is valid")
 }
 
-pub fn goal() -> Goal<AccountId, Asset> {
+pub fn goal() -> Goal<Ontology> {
     Goal::new().require(AccountId::Workshop, basket([(Asset::Solved, 1)]))
 }
 

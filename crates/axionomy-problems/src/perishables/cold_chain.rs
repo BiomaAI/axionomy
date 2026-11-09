@@ -116,10 +116,11 @@ pub enum RateId {
     OpenDay(u8),
     Close,
 }
-pub type World = Economy<AccountId, Asset, RateId, Role>;
+pub type World = Economy<Ontology>;
 
 /// The identifier types of [`World`], named `perishables/cold-chain` where economies are
 /// stored.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Ontology {}
 
 impl axionomy::Ontology for Ontology {
@@ -129,8 +130,8 @@ impl axionomy::Ontology for Ontology {
     type Rate = RateId;
     type Role = Role;
 }
-pub type Action = Exchange<RateId, Role, AccountId>;
-pub type Proposal = Trace<RateId, Role, AccountId>;
+pub type Action = Exchange<Ontology>;
+pub type Proposal = Trace<Ontology>;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Policy {
     ProtectCold,
@@ -139,36 +140,36 @@ pub enum Policy {
     RebalanceCold,
 }
 
-fn q(role: Role, asset: Asset) -> Q<Role, Asset> {
+fn q(role: Role, asset: Asset) -> Q<Ontology> {
     Q::balance(role, asset)
 }
-fn clear(rate: Rate<Role, Asset>, role: Role, asset: Asset) -> Rate<Role, Asset> {
+fn clear(rate: Rate<Ontology>, role: Role, asset: Asset) -> Rate<Ontology> {
     rate.consume_computed(role, asset, q(role, asset))
 }
-fn law() -> Rate<Role, Asset> {
+fn law() -> Rate<Ontology> {
     Rate::new().preserve(Role::World, basket([(Asset::WorldIdentity, 1)]))
 }
-fn decisions() -> Rate<Role, Asset> {
+fn decisions() -> Rate<Ontology> {
     law().preserve(Role::World, basket([(Asset::Decisions, 1)]))
 }
-fn once(rate: Rate<Role, Asset>) -> Rate<Role, Asset> {
+fn once(rate: Rate<Ontology>) -> Rate<Ontology> {
     rate.condition("one event", Q::units(), C::Equal, Q::constant(1))
 }
-fn batch(rate: Rate<Role, Asset>, id: u8) -> Rate<Role, Asset> {
+fn batch(rate: Rate<Ontology>, id: u8) -> Rate<Ontology> {
     rate.preserve(
         Role::Batch,
         basket([(Asset::BatchIdentity(id), 1), (Asset::Active, 1)]),
     )
     .distinct(Role::Batch, Role::World)
 }
-fn aging(id: u8) -> Rate<Role, Asset> {
+fn aging(id: u8) -> Rate<Ontology> {
     once(law())
         .preserve(Role::World, basket([(Asset::Aging, 1)]))
         .preserve(Role::Batch, basket([(Asset::BatchIdentity(id), 1)]))
         .consume(Role::World, basket([(Asset::PendingAge(id), 1)]))
         .distinct(Role::Batch, Role::World)
 }
-fn ages_resolved(mut rate: Rate<Role, Asset>) -> Rate<Role, Asset> {
+fn ages_resolved(mut rate: Rate<Ontology>) -> Rate<Ontology> {
     for id in BATCHES {
         rate = rate.condition(
             format!("batch {id} aging settled"),
@@ -661,7 +662,7 @@ pub fn action(rate: RateId, units: u64) -> Action {
         _ => base,
     }
 }
-pub fn goal() -> Goal<AccountId, Asset> {
+pub fn goal() -> Goal<Ontology> {
     Goal::new().require(AccountId::World, basket([(Asset::Solved, 1)]))
 }
 pub fn value(world: &World, account: AccountId, asset: Asset) -> u64 {

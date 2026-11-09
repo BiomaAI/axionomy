@@ -44,7 +44,7 @@ fn rate_builders_match_lean() {
     let cases = fixtures().rate_merges;
     assert!(!cases.is_empty());
     for case in cases {
-        let mut original = Rate::new();
+        let mut original = Rate::<Merged>::new();
         for (role, assets) in &case.target {
             original = original
                 .consume(*role, build(assets))
@@ -188,7 +188,7 @@ fn exchange_preparation_matches_lean() {
             .produce(1_u16, produced.clone());
         // Account 0 stages successfully before account 1. A later error must
         // leave both accounts untouched, including insertion order.
-        let mut world = EconomyBuilder::<u8, u64, u8, u16>::new()
+        let mut world = EconomyBuilder::<Staged>::new()
             .account(0, Account::from(basket([(9, 1)])))
             .account(1, Account::from(fixture_basket(&case.before)))
             .account(2, Account::from(basket([(8, 3)])))
@@ -367,7 +367,7 @@ enum AccountId {
     Sink,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 enum Role {
     Source,
     Sink,
@@ -376,6 +376,41 @@ enum Role {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 enum RateId {
     Change,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+enum Test {}
+
+impl axionomy::Ontology for Test {
+    const NAME: &'static str = "test";
+    type Account = AccountId;
+    type Asset = Asset;
+    type Rate = RateId;
+    type Role = Role;
+}
+
+/// Rates merged from Lean's fixtures, whose roles and assets are numbers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+enum Merged {}
+
+impl axionomy::Ontology for Merged {
+    const NAME: &'static str = "merged";
+    type Account = ();
+    type Asset = u64;
+    type Rate = ();
+    type Role = u64;
+}
+
+/// Economies staged from Lean's fixtures, every identifier a number.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+enum Staged {}
+
+impl axionomy::Ontology for Staged {
+    const NAME: &'static str = "staged";
+    type Account = u8;
+    type Asset = u64;
+    type Rate = u8;
+    type Role = u16;
 }
 
 fn fixtures() -> Fixtures {
@@ -451,7 +486,7 @@ fn basket_construction_matches_lean() {
 #[test]
 fn static_exchange_assessment_commit_and_receipt_match_lean() {
     for case in fixtures().exchanges {
-        let rate = Rate::new()
+        let rate = Rate::<Test>::new()
             .consume(
                 Role::Source,
                 Basket::from([(Asset::Token, number(&case.consumed))]),
@@ -519,7 +554,7 @@ fn static_exchange_assessment_commit_and_receipt_match_lean() {
     }
 }
 
-fn expression() -> Q<Role, Asset> {
+fn expression() -> Q<Test> {
     Q::mul_div(
         Q::balance(Role::Source, Asset::Token),
         Q::units(),

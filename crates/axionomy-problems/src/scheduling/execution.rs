@@ -17,15 +17,15 @@ pub fn enabled(world: &World) -> bool {
 pub fn now(world: &World) -> u64 {
     world.balance(&AccountId::Success, &Asset::Now).to_u64()
 }
-fn clock() -> Q<Role, Asset> {
+fn clock() -> Q<Ontology> {
     Q::balance(Role::Schedule, Asset::Now)
 }
-fn law() -> Rate<Role, Asset> {
+fn law() -> Rate<Ontology> {
     Rate::new()
         .preserve(Role::Schedule, basket([(Asset::Active, 1)]))
         .condition("one scheduling event", Q::units(), C::Equal, Q::constant(1))
 }
-fn machine_law(machine: Machine) -> Rate<Role, Asset> {
+fn machine_law(machine: Machine) -> Rate<Ontology> {
     law()
         .preserve(
             Role::Machine,
@@ -33,7 +33,7 @@ fn machine_law(machine: Machine) -> Rate<Role, Asset> {
         )
         .distinct(Role::Machine, Role::Schedule)
 }
-fn operation_law(operation: Operation, machine: Machine) -> Rate<Role, Asset> {
+fn operation_law(operation: Operation, machine: Machine) -> Rate<Ontology> {
     machine_law(machine)
         .preserve(
             Role::PrimaryJob,
@@ -42,7 +42,7 @@ fn operation_law(operation: Operation, machine: Machine) -> Rate<Role, Asset> {
         .distinct(Role::PrimaryJob, Role::Machine)
         .distinct(Role::PrimaryJob, Role::Schedule)
 }
-fn clear(rate: Rate<Role, Asset>, role: Role, asset: Asset) -> Rate<Role, Asset> {
+fn clear(rate: Rate<Ontology>, role: Role, asset: Asset) -> Rate<Ontology> {
     rate.consume_computed(role, asset, Q::balance(role, asset))
 }
 pub fn alternatives(operation: Operation) -> [(Machine, u64); 2] {

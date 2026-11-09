@@ -81,10 +81,11 @@ pub enum RateId {
     },
 }
 
-pub type World = Economy<AccountId, Asset, RateId, Role>;
+pub type World = Economy<Ontology>;
 
 /// The identifier types of [`World`], named `sokoban` where economies are
 /// stored.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Ontology {}
 
 impl axionomy::Ontology for Ontology {
@@ -94,8 +95,8 @@ impl axionomy::Ontology for Ontology {
     type Rate = RateId;
     type Role = Role;
 }
-pub type Action = Exchange<RateId, Role, AccountId>;
-pub type Solution = SearchSolution<RateId, Role, AccountId>;
+pub type Action = Exchange<Ontology>;
+pub type Solution = SearchSolution<Ontology>;
 
 const MICRO: &[&str] = &["#######", "#@ $. #", "#######"];
 const SHOWCASE: &[&str] = &[
@@ -137,7 +138,7 @@ pub fn initial_stress() -> World {
     build_board(STRESS)
 }
 
-pub fn goal() -> Goal<AccountId, Asset> {
+pub fn goal() -> Goal<Ontology> {
     Goal::new().require(AccountId::Success, basket([(Asset::Solved, 1)]))
 }
 
@@ -232,7 +233,7 @@ pub fn solve_astar(world: &World) -> Option<Solution> {
 /// Finds a legal replay from this exact source board that strands a crate on a
 /// non-goal corner. The returned trace is decision-quality counterevidence,
 /// not an invalid-proposal fixture.
-pub fn losing_trace(world: &World) -> Option<Trace<RateId, Role, AccountId>> {
+pub fn losing_trace(world: &World) -> Option<Trace<Ontology>> {
     let (width, height) = dimensions(world);
     let targets: Vec<_> = (0..width * height)
         .filter(|cell| is_dead_square(world, *cell))
@@ -425,7 +426,7 @@ fn build_board(rows: &[&str]) -> World {
             rows[usize::from(*index / width)].as_bytes()[usize::from(*index % width)] != b'#'
         })
         .collect();
-    let exit_state = |mut rate: Rate<Role, Asset>, from: u8, to: u8| {
+    let exit_state = |mut rate: Rate<Ontology>, from: u8, to: u8| {
         if tile_at(from) == 'x' {
             rate = rate
                 .consume(Role::Puzzle, basket([(Asset::AtExit, 1)]))
@@ -438,7 +439,7 @@ fn build_board(rows: &[&str]) -> World {
         }
         rate
     };
-    let gate = |mut rate: Rate<Role, Asset>, to: u8| {
+    let gate = |mut rate: Rate<Ontology>, to: u8| {
         if matches!(tile_at(to), 'd' | 'e') {
             let circuit = circuit_of(tile_at(to)).unwrap();
             rate = rate.condition(
@@ -451,7 +452,7 @@ fn build_board(rows: &[&str]) -> World {
         }
         rate
     };
-    let pressure = |mut rate: Rate<Role, Asset>, from: u8, to: u8| {
+    let pressure = |mut rate: Rate<Ontology>, from: u8, to: u8| {
         for (index, entering) in [(from, false), (to, true)] {
             if matches!(tile_at(index), 's' | 't') {
                 let circuit = circuit_of(tile_at(index)).unwrap();

@@ -1,7 +1,7 @@
 use super::*;
 use axionomy::{Exchange, Quantity, Trace};
 use axionomy_problems::scheduling::{
-    self, AccountId, Asset, Job, Machine, ObjectiveKey, Operation, RateId, World,
+    self, AccountId, Asset, Job, Machine, ObjectiveKey, Operation, World,
 };
 use axionomy_search::pareto::Objective;
 use axionomy_view::{
@@ -102,7 +102,7 @@ pub(super) fn build(
         ));
         if let Some(candidate) = scheduling::candidates(&initial).first() {
             let malformed = Exchange::new(*candidate.rate(), Quantity::new(1));
-            view.proposals.push(proposal("scheduling", ProposalSpec { id: "unbound-operation", label: "Schedule without slots", description: "The operation exists, but no job, slot, or schedule was named for it." }, &initial, &malformed));
+            view.proposals.push(proposal(ProposalSpec { id: "unbound-operation", label: "Schedule without slots", description: "The operation exists, but no job, slot, or schedule was named for it." }, &initial, &malformed));
         }
         documents.push(view);
     }
@@ -124,7 +124,7 @@ pub(super) fn build(
 fn frontier_trace(
     result: &scheduling::ParetoResult,
     one_first: bool,
-) -> Result<Trace<RateId, scheduling::Role, AccountId>, ServiceError> {
+) -> Result<Trace<scheduling::Ontology>, ServiceError> {
     result
         .front()
         .entries()

@@ -114,14 +114,14 @@ pub enum Policy {
 
 #[derive(Debug, Clone)]
 pub struct Rollout {
-    trace: Trace<RateId, Role, AccountId>,
+    trace: Trace<Ontology>,
     succeeded: bool,
     spent_energy: u64,
     used_sensor: bool,
 }
 
 impl Rollout {
-    pub fn trace(&self) -> &Trace<RateId, Role, AccountId> {
+    pub fn trace(&self) -> &Trace<Ontology> {
         &self.trace
     }
 
@@ -164,10 +164,11 @@ impl PolicyComparison {
     }
 }
 
-pub type World = Economy<AccountId, Asset, RateId, Role>;
+pub type World = Economy<Ontology>;
 
 /// The identifier types of [`World`], named `rescue` where economies are
 /// stored.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Ontology {}
 
 impl axionomy::Ontology for Ontology {
@@ -177,8 +178,8 @@ impl axionomy::Ontology for Ontology {
     type Rate = RateId;
     type Role = Role;
 }
-pub type Action = Exchange<RateId, Role, AccountId>;
-pub type AgentView<'a> = EconomicView<'a, AccountId, Asset, RateId, Role>;
+pub type Action = Exchange<Ontology>;
+pub type AgentView<'a> = EconomicView<'a, Ontology>;
 pub type PolicyFront = ParetoFront<PolicyEstimate<Policy, VectorSummary>, PolicyObjective, f64>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -497,7 +498,7 @@ fn build(nature: Account<Asset>, size: RescueSize) -> World {
         .expect("rescue model is valid")
 }
 
-pub fn goal() -> Goal<AccountId, Asset> {
+pub fn goal() -> Goal<Ontology> {
     Goal::new().require(AccountId::Agent, basket([(Asset::Solved, 1)]))
 }
 

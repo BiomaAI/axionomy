@@ -1,5 +1,6 @@
 #![doc = include_str!("../README.md")]
 
+use axionomy::Ontology;
 pub mod action_source;
 pub mod ismcts;
 pub mod mcts;
@@ -23,11 +24,12 @@ use crate::session::{AdvanceReport, Continue, SearchObserver, SearchStatus, Work
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(bound(
-    serialize = "RateId: Serialize, Role: Serialize + Ord, AccountId: Serialize",
-    deserialize = "RateId: Deserialize<'de>, Role: Deserialize<'de> + Ord, AccountId: Deserialize<'de>"
+    serialize = "O::Rate: Serialize, O::Role: Serialize, O::Account: Serialize",
+    deserialize = "O::Rate: Deserialize<'de>, O::Role: Deserialize<'de>, O::Account: Deserialize<'de>"
 ))]
-pub struct SearchSolution<RateId, Role, AccountId> {
-    trace: Trace<RateId, Role, AccountId>,
+#[schemars(bound = "O::Rate: JsonSchema, O::Role: JsonSchema, O::Account: JsonSchema")]
+pub struct SearchSolution<O: Ontology> {
+    trace: Trace<O>,
     cost: u64,
     expanded: usize,
 }
@@ -63,67 +65,57 @@ impl GraphSearchProgress {
     }
 }
 
-struct BfsState<AccountId, A, RateId, Role> {
-    world: Economy<AccountId, A, RateId, Role>,
-    trace: Trace<RateId, Role, AccountId>,
+struct BfsState<O: Ontology> {
+    world: Economy<O>,
+    trace: Trace<O>,
 }
 
 /// Resumable breadth-first search over implicit, core-validated successors.
-pub struct BfsSession<AccountId, A, RateId, Role, Candidates> {
-    goal: Goal<AccountId, A>,
+pub struct BfsSession<O: Ontology, Candidates> {
+    goal: Goal<O>,
     candidates: Candidates,
-    states: Vec<BfsState<AccountId, A, RateId, Role>>,
+    states: Vec<BfsState<O>>,
     frontier: VecDeque<usize>,
-    visited: HashSet<StateKey<AccountId, A>>,
+    visited: HashSet<StateKey<O>>,
     expanded: usize,
     generated: usize,
-    solution: Option<SearchSolution<RateId, Role, AccountId>>,
+    solution: Option<SearchSolution<O>>,
     exhausted: bool,
 }
 
-struct AStarState<AccountId, A, RateId, Role> {
-    world: Economy<AccountId, A, RateId, Role>,
-    trace: Trace<RateId, Role, AccountId>,
+struct AStarState<O: Ontology> {
+    world: Economy<O>,
+    trace: Trace<O>,
 }
 
 /// Resumable A* search over implicit, core-validated successors.
 ///
 /// The step cost and heuristic remain disposable solver policy. Only exchanges
 /// accepted by the economy enter the frontier.
-pub struct AStarSession<AccountId, A, RateId, Role, Candidates, StepCost, Heuristic> {
-    goal: Goal<AccountId, A>,
+pub struct AStarSession<O: Ontology, Candidates, StepCost, Heuristic> {
+    goal: Goal<O>,
     candidates: Candidates,
     step_cost: StepCost,
     heuristic: Heuristic,
-    states: Vec<AStarState<AccountId, A, RateId, Role>>,
+    states: Vec<AStarState<O>>,
     frontier: BinaryHeap<QueueEntry>,
-    best: HashMap<StateKey<AccountId, A>, u64>,
+    best: HashMap<StateKey<O>, u64>,
     expanded: usize,
     generated: usize,
     sequence: u64,
-    solution: Option<SearchSolution<RateId, Role, AccountId>>,
+    solution: Option<SearchSolution<O>>,
     exhausted: bool,
 }
 
-impl<AccountId, A, RateId, Role, Candidates, StepCost, Heuristic>
-    AStarSession<AccountId, A, RateId, Role, Candidates, StepCost, Heuristic>
+impl<O: Ontology, Candidates, StepCost, Heuristic> AStarSession<O, Candidates, StepCost, Heuristic>
 where
-    AccountId: Clone + Eq + Hash + Ord,
-    A: Clone + Eq + Hash + Ord,
-    RateId: Clone + Eq + Hash + Ord,
-    Role: Clone + Ord,
-    Candidates:
-        FnMut(&Economy<AccountId, A, RateId, Role>) -> Vec<Exchange<RateId, Role, AccountId>>,
-    StepCost: FnMut(
-        &Economy<AccountId, A, RateId, Role>,
-        &Exchange<RateId, Role, AccountId>,
-        &Economy<AccountId, A, RateId, Role>,
-    ) -> u64,
-    Heuristic: FnMut(&Economy<AccountId, A, RateId, Role>) -> u64,
+    Candidates: FnMut(&Economy<O>) -> Vec<Exchange<O>>,
+    StepCost: FnMut(&Economy<O>, &Exchange<O>, &Economy<O>) -> u64,
+    Heuristic: FnMut(&Economy<O>) -> u64,
 {
     pub fn new(
-        initial: &Economy<AccountId, A, RateId, Role>,
-        goal: Goal<AccountId, A>,
+        initial: &Economy<O>,
+        goal: Goal<O>,
         candidates: Candidates,
         step_cost: StepCost,
         mut heuristic: Heuristic,
@@ -180,11 +172,11 @@ where
         }
     }
 
-    pub fn solution(&self) -> Option<&SearchSolution<RateId, Role, AccountId>> {
+    pub fn solution(&self) -> Option<&SearchSolution<O>> {
         self.solution.as_ref()
     }
 
-    pub fn into_solution(self) -> Option<SearchSolution<RateId, Role, AccountId>> {
+    pub fn into_solution(self) -> Option<SearchSolution<O>> {
         self.solution
     }
 
@@ -262,20 +254,11 @@ where
     }
 }
 
-impl<AccountId, A, RateId, Role, Candidates> BfsSession<AccountId, A, RateId, Role, Candidates>
+impl<O: Ontology, Candidates> BfsSession<O, Candidates>
 where
-    AccountId: Clone + Eq + Hash + Ord,
-    A: Clone + Eq + Hash + Ord,
-    RateId: Clone + Eq + Hash + Ord,
-    Role: Clone + Ord,
-    Candidates:
-        FnMut(&Economy<AccountId, A, RateId, Role>) -> Vec<Exchange<RateId, Role, AccountId>>,
+    Candidates: FnMut(&Economy<O>) -> Vec<Exchange<O>>,
 {
-    pub fn new(
-        initial: &Economy<AccountId, A, RateId, Role>,
-        goal: Goal<AccountId, A>,
-        candidates: Candidates,
-    ) -> Self {
+    pub fn new(initial: &Economy<O>, goal: Goal<O>, candidates: Candidates) -> Self {
         let initial = initial.clone();
         let key = initial.state_key();
         let solved = initial.matches(&goal).then(|| SearchSolution {
@@ -319,11 +302,11 @@ where
         }
     }
 
-    pub fn solution(&self) -> Option<&SearchSolution<RateId, Role, AccountId>> {
+    pub fn solution(&self) -> Option<&SearchSolution<O>> {
         self.solution.as_ref()
     }
 
-    pub fn into_solution(self) -> Option<SearchSolution<RateId, Role, AccountId>> {
+    pub fn into_solution(self) -> Option<SearchSolution<O>> {
         self.solution
     }
 
@@ -384,8 +367,8 @@ where
     }
 }
 
-impl<RateId, Role, AccountId> SearchSolution<RateId, Role, AccountId> {
-    pub fn trace(&self) -> &Trace<RateId, Role, AccountId> {
+impl<O: Ontology> SearchSolution<O> {
+    pub fn trace(&self) -> &Trace<O> {
         &self.trace
     }
 
@@ -399,18 +382,13 @@ impl<RateId, Role, AccountId> SearchSolution<RateId, Role, AccountId> {
 }
 
 /// Breadth-first graph search over implicit, core-validated successors.
-pub fn bfs<AccountId, A, RateId, Role, Candidates>(
-    initial: &Economy<AccountId, A, RateId, Role>,
-    goal: &Goal<AccountId, A>,
+pub fn bfs<O: Ontology, Candidates>(
+    initial: &Economy<O>,
+    goal: &Goal<O>,
     candidates: Candidates,
-) -> Option<SearchSolution<RateId, Role, AccountId>>
+) -> Option<SearchSolution<O>>
 where
-    AccountId: Clone + Eq + Hash + Ord,
-    A: Clone + Eq + Hash + Ord,
-    RateId: Clone + Eq + Hash + Ord,
-    Role: Clone + Ord,
-    Candidates:
-        FnMut(&Economy<AccountId, A, RateId, Role>) -> Vec<Exchange<RateId, Role, AccountId>>,
+    Candidates: FnMut(&Economy<O>) -> Vec<Exchange<O>>,
 {
     let mut session = BfsSession::new(initial, goal.clone(), candidates);
     let mut observer = Continue;
@@ -424,24 +402,15 @@ where
 ///
 /// Costs are disposable solver policy. A cost that changes economic validity
 /// must instead be encoded as assets and rates.
-pub fn dijkstra<AccountId, A, RateId, Role, Candidates, StepCost>(
-    initial: &Economy<AccountId, A, RateId, Role>,
-    goal: &Goal<AccountId, A>,
+pub fn dijkstra<O: Ontology, Candidates, StepCost>(
+    initial: &Economy<O>,
+    goal: &Goal<O>,
     mut candidates: Candidates,
     mut step_cost: StepCost,
-) -> Option<SearchSolution<RateId, Role, AccountId>>
+) -> Option<SearchSolution<O>>
 where
-    AccountId: Clone + Eq + Hash + Ord,
-    A: Clone + Eq + Hash + Ord,
-    RateId: Clone + Eq + Hash + Ord,
-    Role: Clone + Ord,
-    Candidates:
-        FnMut(&Economy<AccountId, A, RateId, Role>) -> Vec<Exchange<RateId, Role, AccountId>>,
-    StepCost: FnMut(
-        &Economy<AccountId, A, RateId, Role>,
-        &Exchange<RateId, Role, AccountId>,
-        &Economy<AccountId, A, RateId, Role>,
-    ) -> u64,
+    Candidates: FnMut(&Economy<O>) -> Vec<Exchange<O>>,
+    StepCost: FnMut(&Economy<O>, &Exchange<O>, &Economy<O>) -> u64,
 {
     let start = EconomicNode::root(initial.clone());
     let mut expanded = 0;
@@ -457,26 +426,17 @@ where
 }
 
 /// A* search with caller-owned edge costs and a derived state heuristic.
-pub fn astar<AccountId, A, RateId, Role, Candidates, StepCost, Heuristic>(
-    initial: &Economy<AccountId, A, RateId, Role>,
-    goal: &Goal<AccountId, A>,
+pub fn astar<O: Ontology, Candidates, StepCost, Heuristic>(
+    initial: &Economy<O>,
+    goal: &Goal<O>,
     mut candidates: Candidates,
     mut step_cost: StepCost,
     mut heuristic: Heuristic,
-) -> Option<SearchSolution<RateId, Role, AccountId>>
+) -> Option<SearchSolution<O>>
 where
-    AccountId: Clone + Eq + Hash + Ord,
-    A: Clone + Eq + Hash + Ord,
-    RateId: Clone + Eq + Hash + Ord,
-    Role: Clone + Ord,
-    Candidates:
-        FnMut(&Economy<AccountId, A, RateId, Role>) -> Vec<Exchange<RateId, Role, AccountId>>,
-    StepCost: FnMut(
-        &Economy<AccountId, A, RateId, Role>,
-        &Exchange<RateId, Role, AccountId>,
-        &Economy<AccountId, A, RateId, Role>,
-    ) -> u64,
-    Heuristic: FnMut(&Economy<AccountId, A, RateId, Role>) -> u64,
+    Candidates: FnMut(&Economy<O>) -> Vec<Exchange<O>>,
+    StepCost: FnMut(&Economy<O>, &Exchange<O>, &Economy<O>) -> u64,
+    Heuristic: FnMut(&Economy<O>) -> u64,
 {
     let start = EconomicNode::root(initial.clone());
     let mut expanded = 0;
@@ -495,21 +455,17 @@ where
 /// State-ranked best-first compatibility search.
 ///
 /// Prefer [`dijkstra`] or [`astar`] when the objective is naturally additive.
-pub fn best_first<AccountId, A, RateId, Role, Candidates, Cost, Heuristic>(
-    initial: &Economy<AccountId, A, RateId, Role>,
-    goal: &Goal<AccountId, A>,
+pub fn best_first<O: Ontology, Candidates, Cost, Heuristic>(
+    initial: &Economy<O>,
+    goal: &Goal<O>,
     candidates: Candidates,
     cost: Cost,
     heuristic: Heuristic,
-) -> Option<SearchSolution<RateId, Role, AccountId>>
+) -> Option<SearchSolution<O>>
 where
-    AccountId: Clone + Eq + Hash + Ord,
-    A: Clone + Eq + Hash + Ord,
-    RateId: Clone + Eq + Hash + Ord,
-    Role: Clone + Ord,
-    Candidates: Fn(&Economy<AccountId, A, RateId, Role>) -> Vec<Exchange<RateId, Role, AccountId>>,
-    Cost: Fn(&Economy<AccountId, A, RateId, Role>) -> u64,
-    Heuristic: Fn(&Economy<AccountId, A, RateId, Role>) -> u64,
+    Candidates: Fn(&Economy<O>) -> Vec<Exchange<O>>,
+    Cost: Fn(&Economy<O>) -> u64,
+    Heuristic: Fn(&Economy<O>) -> u64,
 {
     let mut states = vec![(initial.clone(), Trace::new())];
     let mut heap = BinaryHeap::from([QueueEntry {
@@ -564,23 +520,16 @@ where
 }
 
 #[derive(Clone)]
-struct EconomicNode<AccountId, A, RateId, Role> {
-    world: Economy<AccountId, A, RateId, Role>,
-    key: StateKey<AccountId, A>,
-    incoming: Option<Exchange<RateId, Role, AccountId>>,
+struct EconomicNode<O: Ontology> {
+    world: Economy<O>,
+    key: StateKey<O>,
+    incoming: Option<Exchange<O>>,
 }
 
-type WeightedNodes<AccountId, A, RateId, Role> =
-    Vec<(EconomicNode<AccountId, A, RateId, Role>, u64)>;
+type WeightedNodes<O> = Vec<(EconomicNode<O>, u64)>;
 
-impl<AccountId, A, RateId, Role> EconomicNode<AccountId, A, RateId, Role>
-where
-    AccountId: Clone + Eq + Hash + Ord,
-    A: Clone + Eq + Hash + Ord,
-    RateId: Clone + Eq + Hash + Ord,
-    Role: Clone + Ord,
-{
-    fn root(world: Economy<AccountId, A, RateId, Role>) -> Self {
+impl<O: Ontology> EconomicNode<O> {
+    fn root(world: Economy<O>) -> Self {
         let key = world.state_key();
         Self {
             world,
@@ -589,10 +538,7 @@ where
         }
     }
 
-    fn successor(
-        world: Economy<AccountId, A, RateId, Role>,
-        incoming: Exchange<RateId, Role, AccountId>,
-    ) -> Self {
+    fn successor(world: Economy<O>, incoming: Exchange<O>) -> Self {
         let key = world.state_key();
         Self {
             world,
@@ -602,50 +548,28 @@ where
     }
 }
 
-impl<AccountId, A, RateId, Role> PartialEq for EconomicNode<AccountId, A, RateId, Role>
-where
-    AccountId: PartialEq,
-    A: PartialEq,
-{
+impl<O: Ontology> PartialEq for EconomicNode<O> {
     fn eq(&self, other: &Self) -> bool {
         self.key == other.key
     }
 }
 
-impl<AccountId, A, RateId, Role> Eq for EconomicNode<AccountId, A, RateId, Role>
-where
-    AccountId: Eq,
-    A: Eq,
-{
-}
+impl<O: Ontology> Eq for EconomicNode<O> {}
 
-impl<AccountId, A, RateId, Role> Hash for EconomicNode<AccountId, A, RateId, Role>
-where
-    AccountId: Hash,
-    A: Hash,
-{
+impl<O: Ontology> Hash for EconomicNode<O> {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.key.hash(state);
     }
 }
 
-fn weighted_successors<AccountId, A, RateId, Role, Candidates, StepCost>(
-    node: &EconomicNode<AccountId, A, RateId, Role>,
+fn weighted_successors<O: Ontology, Candidates, StepCost>(
+    node: &EconomicNode<O>,
     candidates: &mut Candidates,
     step_cost: &mut StepCost,
-) -> WeightedNodes<AccountId, A, RateId, Role>
+) -> WeightedNodes<O>
 where
-    AccountId: Clone + Eq + Hash + Ord,
-    A: Clone + Eq + Hash + Ord,
-    RateId: Clone + Eq + Hash + Ord,
-    Role: Clone + Ord,
-    Candidates:
-        FnMut(&Economy<AccountId, A, RateId, Role>) -> Vec<Exchange<RateId, Role, AccountId>>,
-    StepCost: FnMut(
-        &Economy<AccountId, A, RateId, Role>,
-        &Exchange<RateId, Role, AccountId>,
-        &Economy<AccountId, A, RateId, Role>,
-    ) -> u64,
+    Candidates: FnMut(&Economy<O>) -> Vec<Exchange<O>>,
+    StepCost: FnMut(&Economy<O>, &Exchange<O>, &Economy<O>) -> u64,
 {
     candidates(&node.world)
         .into_iter()
@@ -658,11 +582,11 @@ where
         .collect()
 }
 
-fn solution_from_path<AccountId, A, RateId, Role>(
-    path: Vec<EconomicNode<AccountId, A, RateId, Role>>,
+fn solution_from_path<O: Ontology>(
+    path: Vec<EconomicNode<O>>,
     cost: u64,
     expanded: usize,
-) -> SearchSolution<RateId, Role, AccountId> {
+) -> SearchSolution<O> {
     let mut trace = Trace::new();
     trace.extend(path.into_iter().skip(1).filter_map(|node| node.incoming));
     SearchSolution {

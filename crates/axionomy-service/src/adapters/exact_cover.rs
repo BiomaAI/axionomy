@@ -75,7 +75,7 @@ pub(super) fn build(
             Quantity::new(1),
         )
         .bind(Role::Problem, AccountId::Problem);
-        view.proposals.push(proposal("exact-cover", ProposalSpec { id: "wrong-progress", label: "Select AB at progress 2", description: "This proposal claims two elements are already covered, but the initial state has zero covered elements." }, &initial, &overlapping));
+        view.proposals.push(proposal(ProposalSpec { id: "wrong-progress", label: "Select AB at progress 2", description: "This proposal claims two elements are already covered, but the initial state has zero covered elements." }, &initial, &overlapping));
         documents.push(view);
     }
     let unsatisfiable = match profile {

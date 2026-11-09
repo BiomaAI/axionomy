@@ -5,6 +5,7 @@
 use crate::{AccountPath, AssetPath, Ontology, RatePath, RolePath};
 
 /// The ontology of economies whose identifiers are all paths.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Paths {}
 
 impl Ontology for Paths {
@@ -15,18 +16,18 @@ impl Ontology for Paths {
     type Role = RolePath;
 }
 
-pub type Economy = crate::Economy<AccountPath, AssetPath, RatePath, RolePath>;
-pub type EconomyBuilder = crate::EconomyBuilder<AccountPath, AssetPath, RatePath, RolePath>;
+pub type Economy = crate::Economy<Paths>;
+pub type EconomyBuilder = crate::EconomyBuilder<Paths>;
 pub type Account = crate::Account<AssetPath>;
 pub type Basket = crate::Basket<AssetPath>;
-pub type Rate = crate::Rate<RolePath, AssetPath>;
-pub type RateCondition = crate::RateCondition<RolePath, AssetPath>;
-pub type QuantityExpression = crate::QuantityExpression<RolePath, AssetPath>;
+pub type Rate = crate::Rate<Paths>;
+pub type RateCondition = crate::RateCondition<Paths>;
+pub type QuantityExpression = crate::QuantityExpression<Paths>;
 pub type LinearInvariant = crate::LinearInvariant<AssetPath>;
-pub type Exchange = crate::Exchange<RatePath, RolePath, AccountPath>;
-pub type Trace = crate::Trace<RatePath, RolePath, AccountPath>;
-pub type Receipt = crate::Receipt<RatePath, RolePath, AccountPath, AssetPath>;
-pub type AccountDelta = crate::AccountDelta<AccountPath, AssetPath>;
-pub type Assessment = crate::ExchangeAssessment<AccountPath, AssetPath, RatePath, RolePath>;
-pub type ApplyError = crate::ApplyError<RatePath, RolePath, AccountPath, AssetPath>;
-pub type Goal = crate::Goal<AccountPath, AssetPath>;
+pub type Exchange = crate::Exchange<Paths>;
+pub type Trace = crate::Trace<Paths>;
+pub type Receipt = crate::Receipt<Paths>;
+pub type AccountDelta = crate::AccountDelta<Paths>;
+pub type Assessment = crate::ExchangeAssessment<Paths>;
+pub type ApplyError = crate::ApplyError<Paths>;
+pub type Goal = crate::Goal<Paths>;

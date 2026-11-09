@@ -24,6 +24,17 @@ enum Role {
     Worker,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+enum Test {}
+
+impl axionomy::Ontology for Test {
+    const NAME: &'static str = "test";
+    type Account = AccountId;
+    type Asset = Asset;
+    type Rate = RateId;
+    type Role = Role;
+}
+
 fn benchmark(c: &mut Criterion) {
     let world = EconomyBuilder::new()
         .account(
@@ -81,7 +92,7 @@ fn benchmark(c: &mut Criterion) {
     forks.finish();
 }
 
-fn world_with_unrelated_accounts(unrelated: u32) -> Economy<AccountId, Asset, RateId, Role> {
+fn world_with_unrelated_accounts(unrelated: u32) -> Economy<Test> {
     let mut builder = EconomyBuilder::new().account(
         AccountId::Worker,
         Account::from(basket([(Asset::Input, u64::MAX)])),

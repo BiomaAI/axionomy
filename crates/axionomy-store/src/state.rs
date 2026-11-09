@@ -16,8 +16,8 @@
 //! holds the economy's logical state, not the order its accounts were created
 //! in: a rebuilt economy lists accounts in key order.
 
-use crate::ontology::{Economy, Id, Receipt, Recordable};
-use axionomy::{AccountPath, AssetPath, Quantity};
+use crate::ontology::{Id, Recordable};
+use axionomy::{AccountPath, AssetPath, Economy, Quantity, Receipt};
 use axionomy_tree::Tree;
 use serde::{Serialize, de::DeserializeOwned};
 use std::ops::Range;

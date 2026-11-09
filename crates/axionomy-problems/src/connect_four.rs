@@ -197,10 +197,11 @@ pub enum RateId {
     StandardDraw(Player),
 }
 
-pub type World = Economy<AccountId, Asset, RateId, Role>;
+pub type World = Economy<Ontology>;
 
 /// The identifier types of [`World`], named `connect-four` where economies are
 /// stored.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Ontology {}
 
 impl axionomy::Ontology for Ontology {
@@ -210,9 +211,9 @@ impl axionomy::Ontology for Ontology {
     type Rate = RateId;
     type Role = Role;
 }
-pub type Action = Exchange<RateId, Role, AccountId>;
+pub type Action = Exchange<Ontology>;
 pub type Decision = MctsDecision<Action>;
-pub type DecisionError = TreeSearchError<RateId, Role, AccountId, Asset>;
+pub type DecisionError = TreeSearchError<Ontology>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct GameProgress {
@@ -586,7 +587,7 @@ pub fn mcts(world: &World, iterations: usize, seed: u64) -> Result<Decision, Dec
     )
 }
 
-pub fn play_game(iterations_per_move: usize, seed: u64) -> Trace<RateId, Role, AccountId> {
+pub fn play_game(iterations_per_move: usize, seed: u64) -> Trace<Ontology> {
     play_game_with_progress(
         iterations_per_move,
         seed,
@@ -606,7 +607,7 @@ pub fn play_game_with_progress(
     seed: u64,
     chunk_size: usize,
     observer: impl FnMut(GameProgress) -> ControlFlow<()>,
-) -> Option<Trace<RateId, Role, AccountId>> {
+) -> Option<Trace<Ontology>> {
     play_from_with_progress(
         initial(),
         usize::from(WIDTH) * usize::from(HEIGHT) + 1,
@@ -622,7 +623,7 @@ pub fn play_standard_game_with_progress(
     seed: u64,
     chunk_size: usize,
     observer: impl FnMut(GameProgress) -> ControlFlow<()>,
-) -> Option<Trace<RateId, Role, AccountId>> {
+) -> Option<Trace<Ontology>> {
     play_from_with_progress(
         initial_standard(),
         usize::from(STANDARD_WIDTH) * usize::from(STANDARD_HEIGHT) * 2 + 1,
@@ -640,7 +641,7 @@ fn play_from_with_progress(
     seed: u64,
     chunk_size: usize,
     mut observer: impl FnMut(GameProgress) -> ControlFlow<()>,
-) -> Option<Trace<RateId, Role, AccountId>> {
+) -> Option<Trace<Ontology>> {
     let mut trace = Trace::new();
     for turn in 0..maximum_moves {
         if terminal_values(&world).is_some() {
@@ -714,7 +715,7 @@ pub fn column_of(action: &Action) -> Option<u8> {
     }
 }
 
-fn move_rate(player: Player, column: u8, row: u8, counts: LineCounts) -> Rate<Role, Asset> {
+fn move_rate(player: Player, column: u8, row: u8, counts: LineCounts) -> Rate<Ontology> {
     let mut consumed = basket([(Asset::Turn(player), 1)]);
     let mut produced = Basket::new();
     for (line, count) in counts.entries(column, row) {
@@ -762,7 +763,7 @@ fn move_rate(player: Player, column: u8, row: u8, counts: LineCounts) -> Rate<Ro
     }
 }
 
-fn standard_move_rate(player: Player, column: u8, row: u8) -> Rate<Role, Asset> {
+fn standard_move_rate(player: Player, column: u8, row: u8) -> Rate<Ontology> {
     let mut rate = Rate::new()
         .preserve(Role::Game, basket([(Asset::GameIdentity, 1)]))
         .consume(Role::Game, basket([(Asset::Turn(player), 1)]))
@@ -802,7 +803,7 @@ fn standard_move_rate(player: Player, column: u8, row: u8) -> Rate<Role, Asset> 
     rate
 }
 
-fn no_standard_win(mut rate: Rate<Role, Asset>, player: Player) -> Rate<Role, Asset> {
+fn no_standard_win(mut rate: Rate<Ontology>, player: Player) -> Rate<Ontology> {
     for segment in 0..winning_segments().len() {
         rate = rate.condition(
             format!("segment {segment} is not a win"),
@@ -814,7 +815,7 @@ fn no_standard_win(mut rate: Rate<Role, Asset>, player: Player) -> Rate<Role, As
     rate
 }
 
-fn claim_win_rate(player: Player, cells: [(u8, u8); 4]) -> Rate<Role, Asset> {
+fn claim_win_rate(player: Player, cells: [(u8, u8); 4]) -> Rate<Ontology> {
     let roles = [
         Role::Winning0,
         Role::Winning1,
@@ -847,7 +848,7 @@ fn claim_win_rate(player: Player, cells: [(u8, u8); 4]) -> Rate<Role, Asset> {
     rate
 }
 
-fn standard_draw_rate(player: Player) -> Rate<Role, Asset> {
+fn standard_draw_rate(player: Player) -> Rate<Ontology> {
     let roles = [
         Role::Column0,
         Role::Column1,

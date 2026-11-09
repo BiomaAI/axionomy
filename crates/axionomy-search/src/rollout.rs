@@ -1,7 +1,7 @@
 //! Core-validated speculative trajectory execution.
 
+use axionomy::Ontology;
 use axionomy::{ApplyError, Economy, Exchange, Goal, Receipt, Trace};
-use std::hash::Hash;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TraceRetention {
@@ -51,46 +51,46 @@ pub enum RolloutDecision<Action> {
 }
 
 #[derive(Debug, Clone)]
-pub enum RolloutTermination<RateId, Role, AccountId, A> {
+pub enum RolloutTermination<O: Ontology> {
     Terminal,
     Stopped(RolloutStop),
     HorizonReached,
-    Rejected(ApplyError<RateId, Role, AccountId, A>),
+    Rejected(ApplyError<O>),
 }
 
-impl<RateId, Role, AccountId, A> RolloutTermination<RateId, Role, AccountId, A> {
+impl<O: Ontology> RolloutTermination<O> {
     pub const fn is_terminal(&self) -> bool {
         matches!(self, Self::Terminal)
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct RolloutResult<AccountId, A, RateId, Role> {
-    world: Economy<AccountId, A, RateId, Role>,
-    trace: Option<Trace<RateId, Role, AccountId>>,
-    receipts: Vec<Receipt<RateId, Role, AccountId, A>>,
-    termination: RolloutTermination<RateId, Role, AccountId, A>,
+pub struct RolloutResult<O: Ontology> {
+    world: Economy<O>,
+    trace: Option<Trace<O>>,
+    receipts: Vec<Receipt<O>>,
+    termination: RolloutTermination<O>,
     steps: usize,
 }
 
-impl<AccountId, A, RateId, Role> RolloutResult<AccountId, A, RateId, Role> {
-    pub const fn world(&self) -> &Economy<AccountId, A, RateId, Role> {
+impl<O: Ontology> RolloutResult<O> {
+    pub const fn world(&self) -> &Economy<O> {
         &self.world
     }
 
-    pub fn into_world(self) -> Economy<AccountId, A, RateId, Role> {
+    pub fn into_world(self) -> Economy<O> {
         self.world
     }
 
-    pub const fn trace(&self) -> Option<&Trace<RateId, Role, AccountId>> {
+    pub const fn trace(&self) -> Option<&Trace<O>> {
         self.trace.as_ref()
     }
 
-    pub fn receipts(&self) -> &[Receipt<RateId, Role, AccountId, A>] {
+    pub fn receipts(&self) -> &[Receipt<O>] {
         &self.receipts
     }
 
-    pub const fn termination(&self) -> &RolloutTermination<RateId, Role, AccountId, A> {
+    pub const fn termination(&self) -> &RolloutTermination<O> {
         &self.termination
     }
 
@@ -103,22 +103,15 @@ impl<AccountId, A, RateId, Role> RolloutResult<AccountId, A, RateId, Role> {
 ///
 /// `is_terminal` must derive terminal truth from encoded economic state.
 /// `max_steps` is an algorithmic cutoff and is reported separately.
-pub fn run<AccountId, A, RateId, Role, Controller, Terminal>(
-    initial: &Economy<AccountId, A, RateId, Role>,
+pub fn run<O: Ontology, Controller, Terminal>(
+    initial: &Economy<O>,
     config: RolloutConfig,
     mut controller: Controller,
     is_terminal: Terminal,
-) -> RolloutResult<AccountId, A, RateId, Role>
+) -> RolloutResult<O>
 where
-    AccountId: Clone + Eq + Hash + Ord,
-    A: Clone + Eq + Hash + Ord,
-    RateId: Clone + Eq + Hash + Ord,
-    Role: Clone + Ord,
-    Controller: FnMut(
-        &Economy<AccountId, A, RateId, Role>,
-        usize,
-    ) -> RolloutDecision<Exchange<RateId, Role, AccountId>>,
-    Terminal: Fn(&Economy<AccountId, A, RateId, Role>) -> bool,
+    Controller: FnMut(&Economy<O>, usize) -> RolloutDecision<Exchange<O>>,
+    Terminal: Fn(&Economy<O>) -> bool,
 {
     let mut world = initial.clone();
     let mut trace = matches!(
@@ -182,32 +175,25 @@ where
     )
 }
 
-pub fn run_to_goal<AccountId, A, RateId, Role, Controller>(
-    initial: &Economy<AccountId, A, RateId, Role>,
-    goal: &Goal<AccountId, A>,
+pub fn run_to_goal<O: Ontology, Controller>(
+    initial: &Economy<O>,
+    goal: &Goal<O>,
     config: RolloutConfig,
     controller: Controller,
-) -> RolloutResult<AccountId, A, RateId, Role>
+) -> RolloutResult<O>
 where
-    AccountId: Clone + Eq + Hash + Ord,
-    A: Clone + Eq + Hash + Ord,
-    RateId: Clone + Eq + Hash + Ord,
-    Role: Clone + Ord,
-    Controller: FnMut(
-        &Economy<AccountId, A, RateId, Role>,
-        usize,
-    ) -> RolloutDecision<Exchange<RateId, Role, AccountId>>,
+    Controller: FnMut(&Economy<O>, usize) -> RolloutDecision<Exchange<O>>,
 {
     run(initial, config, controller, |world| world.matches(goal))
 }
 
-fn result<AccountId, A, RateId, Role>(
-    world: Economy<AccountId, A, RateId, Role>,
-    trace: Option<Trace<RateId, Role, AccountId>>,
-    receipts: Vec<Receipt<RateId, Role, AccountId, A>>,
-    termination: RolloutTermination<RateId, Role, AccountId, A>,
+fn result<O: Ontology>(
+    world: Economy<O>,
+    trace: Option<Trace<O>>,
+    receipts: Vec<Receipt<O>>,
+    termination: RolloutTermination<O>,
     steps: usize,
-) -> RolloutResult<AccountId, A, RateId, Role> {
+) -> RolloutResult<O> {
     RolloutResult {
         world,
         trace,

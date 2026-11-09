@@ -11,7 +11,5 @@ pub use definition::{
     AssetDefinition, DecimalPrecision, DecimalPrecisionError, DimensionSignature, MAX_DECIMALS,
     MeasureDefinition, MeasureDefinitionError, MeasureKind, StableMeasureKind, UnitAsset,
 };
-pub use schema::{
-    AssetSchema, AssetSchemaError, UnitEconomy, UnitModelBuildError, UnitModelBuildResult,
-};
+pub use schema::{AssetSchema, AssetSchemaError, UnitModelBuildError, UnitModelBuildResult};
 pub use uom::si;

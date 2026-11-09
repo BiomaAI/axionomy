@@ -1,6 +1,6 @@
 use super::*;
 use axionomy_problems::perishables::{
-    self, AccountId, Asset, Cohort, Location, Moment, ObjectiveKey, RateId, Role, World,
+    self, AccountId, Asset, Cohort, Location, Moment, ObjectiveKey, World,
 };
 use axionomy_search::pareto::Objective;
 use axionomy_view::{
@@ -65,7 +65,7 @@ pub(super) fn build(
             ),
         ],
     ));
-    outage_view.proposals.push(proposal("perishables", ProposalSpec { id: "oversized-transfer", label: "Move 8,000 claims to fridge", description: "The warehouse holds only 7,000 units. The check reports the exact shortfall and moves nothing." }, &initial, &perishables::move_to_fridge(8_000)));
+    outage_view.proposals.push(proposal(ProposalSpec { id: "oversized-transfer", label: "Move 8,000 claims to fridge", description: "The warehouse holds only 7,000 units. The check reports the exact shortfall and moves nothing." }, &initial, &perishables::move_to_fridge(8_000)));
 
     let mut documents = vec![outage_view];
     for (strategy, title, description, trace) in [
@@ -138,7 +138,7 @@ pub(super) fn build(
 fn frontier_trace(
     result: &perishables::ParetoResult,
     inventory_first: bool,
-) -> Result<axionomy::Trace<RateId, Role, AccountId>, ServiceError> {
+) -> Result<axionomy::Trace<perishables::Ontology>, ServiceError> {
     result
         .front()
         .entries()

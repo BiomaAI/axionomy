@@ -10,6 +10,7 @@ use crate::{
         validate_values,
     },
 };
+use axionomy::Ontology;
 use axionomy::{Economy, Exchange};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -90,10 +91,7 @@ impl<Action> IsmctsDecision<Action> {
     }
 }
 
-pub type IsmctsResult<RateId, Role, AccountId, A> = Result<
-    IsmctsDecision<Exchange<RateId, Role, AccountId>>,
-    TreeSearchError<RateId, Role, AccountId, A>,
->;
+pub type IsmctsResult<O> = Result<IsmctsDecision<Exchange<O>>, TreeSearchError<O>>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct IsmctsProgress {
@@ -121,8 +119,8 @@ impl IsmctsProgress {
     }
 }
 
-pub type IsmctsAdvanceResult<RateId, Role, AccountId, A> =
-    Result<AdvanceReport<IsmctsProgress, TreeStatus>, TreeSearchError<RateId, Role, AccountId, A>>;
+pub type IsmctsAdvanceResult<O> =
+    Result<AdvanceReport<IsmctsProgress, TreeStatus>, TreeSearchError<O>>;
 
 /// Random rollout selection that can inspect only the information state and
 /// the already filtered concrete actions.
@@ -142,10 +140,7 @@ where
 
 /// Resumable information-set MCTS session with one determinization per work unit.
 pub struct IsmctsSession<
-    AccountId,
-    A,
-    RateId,
-    Role,
+    O: Ontology,
     Key,
     Information,
     Determinize,
@@ -155,7 +150,7 @@ pub struct IsmctsSession<
     Cutoff,
     RolloutPolicy,
 > {
-    initial: Economy<AccountId, A, RateId, Role>,
+    initial: Economy<O>,
     config: MctsConfig,
     players: usize,
     root: InformationState<Key>,
@@ -166,67 +161,29 @@ pub struct IsmctsSession<
     terminal: Terminal,
     cutoff: Cutoff,
     rollout_policy: RolloutPolicy,
-    nodes: Vec<Node<Key, Exchange<RateId, Role, AccountId>>>,
+    nodes: Vec<Node<Key, Exchange<O>>>,
     transpositions: HashMap<InformationState<Key>, usize>,
     random: SeededSampler,
     iterations: usize,
-    decision: Option<IsmctsDecision<Exchange<RateId, Role, AccountId>>>,
+    decision: Option<IsmctsDecision<Exchange<O>>>,
 }
 
-impl<
-    AccountId,
-    A,
-    RateId,
-    Role,
-    Key,
-    Information,
-    Determinize,
-    Source,
-    Chance,
-    Terminal,
-    Cutoff,
-    RolloutPolicy,
->
-    IsmctsSession<
-        AccountId,
-        A,
-        RateId,
-        Role,
-        Key,
-        Information,
-        Determinize,
-        Source,
-        Chance,
-        Terminal,
-        Cutoff,
-        RolloutPolicy,
-    >
+impl<O: Ontology, Key, Information, Determinize, Source, Chance, Terminal, Cutoff, RolloutPolicy>
+    IsmctsSession<O, Key, Information, Determinize, Source, Chance, Terminal, Cutoff, RolloutPolicy>
 where
-    AccountId: Clone + Eq + Hash + Ord,
-    A: Clone + Eq + Hash + Ord,
-    RateId: Clone + Eq + Hash + Ord,
-    Role: Clone + Ord,
     Key: Clone + Eq + Hash,
-    Information: FnMut(&Economy<AccountId, A, RateId, Role>) -> InformationState<Key>,
-    Determinize: FnMut(
-        &InformationState<Key>,
-        &mut SeededSampler,
-    ) -> Option<Economy<AccountId, A, RateId, Role>>,
-    Source: ActionSource<InformationState<Key>, Exchange<RateId, Role, AccountId>>,
-    Chance: FnMut(
-        &Economy<AccountId, A, RateId, Role>,
-    ) -> Vec<WeightedExchange<Exchange<RateId, Role, AccountId>>>,
-    Terminal: FnMut(&Economy<AccountId, A, RateId, Role>) -> Option<Vec<f64>>,
-    Cutoff: FnMut(&Economy<AccountId, A, RateId, Role>) -> Vec<f64>,
-    RolloutPolicy: FnMut(
-        &InformationState<Key>,
-        &[Exchange<RateId, Role, AccountId>],
-        &mut SeededSampler,
-    ) -> Option<Exchange<RateId, Role, AccountId>>,
+    Information: FnMut(&Economy<O>) -> InformationState<Key>,
+    Determinize: FnMut(&InformationState<Key>, &mut SeededSampler) -> Option<Economy<O>>,
+    Source: ActionSource<InformationState<Key>, Exchange<O>>,
+    Chance: FnMut(&Economy<O>) -> Vec<WeightedExchange<Exchange<O>>>,
+    Terminal: FnMut(&Economy<O>) -> Option<Vec<f64>>,
+    Cutoff: FnMut(&Economy<O>) -> Vec<f64>,
+    RolloutPolicy:
+        FnMut(&InformationState<Key>, &[Exchange<O>], &mut SeededSampler) -> Option<Exchange<O>>,
 {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
-        initial: &Economy<AccountId, A, RateId, Role>,
+        initial: &Economy<O>,
         config: MctsConfig,
         players: usize,
         mut information: Information,
@@ -236,7 +193,7 @@ where
         mut terminal: Terminal,
         cutoff: Cutoff,
         rollout_policy: RolloutPolicy,
-    ) -> Result<Self, TreeSearchError<RateId, Role, AccountId, A>> {
+    ) -> Result<Self, TreeSearchError<O>> {
         validate_config(config, players)?;
         if terminal(initial).is_some() {
             return Err(TreeSearchError::TerminalRoot);
@@ -284,11 +241,11 @@ where
         }
     }
 
-    pub fn decision(&self) -> Option<&IsmctsDecision<Exchange<RateId, Role, AccountId>>> {
+    pub fn decision(&self) -> Option<&IsmctsDecision<Exchange<O>>> {
         self.decision.as_ref()
     }
 
-    pub fn into_decision(self) -> Option<IsmctsDecision<Exchange<RateId, Role, AccountId>>> {
+    pub fn into_decision(self) -> Option<IsmctsDecision<Exchange<O>>> {
         self.decision
     }
 
@@ -296,7 +253,7 @@ where
         &mut self,
         budget: WorkBudget,
         observer: &mut impl SearchObserver<IsmctsProgress>,
-    ) -> IsmctsAdvanceResult<RateId, Role, AccountId, A> {
+    ) -> IsmctsAdvanceResult<O> {
         if self.decision.is_some() {
             return Ok(AdvanceReport::new(
                 TreeStatus::Completed,
@@ -328,7 +285,7 @@ where
         ))
     }
 
-    fn run_iteration(&mut self) -> Result<(), TreeSearchError<RateId, Role, AccountId, A>> {
+    fn run_iteration(&mut self) -> Result<(), TreeSearchError<O>> {
         let iteration = self.iterations;
         let mut world = (self.determinize)(&self.root, &mut self.random)
             .ok_or(TreeSearchError::NoDeterminization { iteration })?;
@@ -426,7 +383,7 @@ where
         Ok(())
     }
 
-    fn finish(&mut self) -> Result<(), TreeSearchError<RateId, Role, AccountId, A>> {
+    fn finish(&mut self) -> Result<(), TreeSearchError<O>> {
         let root_player = self.root.actor();
         let mut children = self.nodes[0]
             .edges
@@ -478,10 +435,7 @@ where
 /// against `initial` before it is returned.
 #[allow(clippy::too_many_arguments)]
 pub fn search<
-    AccountId,
-    A,
-    RateId,
-    Role,
+    O: Ontology,
     Key,
     Information,
     Determinize,
@@ -491,7 +445,7 @@ pub fn search<
     Cutoff,
     RolloutPolicy,
 >(
-    initial: &Economy<AccountId, A, RateId, Role>,
+    initial: &Economy<O>,
     config: MctsConfig,
     players: usize,
     information: Information,
@@ -501,29 +455,17 @@ pub fn search<
     terminal: Terminal,
     cutoff: Cutoff,
     rollout_policy: RolloutPolicy,
-) -> IsmctsResult<RateId, Role, AccountId, A>
+) -> IsmctsResult<O>
 where
-    AccountId: Clone + Eq + Hash + Ord,
-    A: Clone + Eq + Hash + Ord,
-    RateId: Clone + Eq + Hash + Ord,
-    Role: Clone + Ord,
     Key: Clone + Eq + Hash,
-    Information: FnMut(&Economy<AccountId, A, RateId, Role>) -> InformationState<Key>,
-    Determinize: FnMut(
-        &InformationState<Key>,
-        &mut SeededSampler,
-    ) -> Option<Economy<AccountId, A, RateId, Role>>,
-    Source: ActionSource<InformationState<Key>, Exchange<RateId, Role, AccountId>>,
-    Chance: FnMut(
-        &Economy<AccountId, A, RateId, Role>,
-    ) -> Vec<WeightedExchange<Exchange<RateId, Role, AccountId>>>,
-    Terminal: FnMut(&Economy<AccountId, A, RateId, Role>) -> Option<Vec<f64>>,
-    Cutoff: FnMut(&Economy<AccountId, A, RateId, Role>) -> Vec<f64>,
-    RolloutPolicy: FnMut(
-        &InformationState<Key>,
-        &[Exchange<RateId, Role, AccountId>],
-        &mut SeededSampler,
-    ) -> Option<Exchange<RateId, Role, AccountId>>,
+    Information: FnMut(&Economy<O>) -> InformationState<Key>,
+    Determinize: FnMut(&InformationState<Key>, &mut SeededSampler) -> Option<Economy<O>>,
+    Source: ActionSource<InformationState<Key>, Exchange<O>>,
+    Chance: FnMut(&Economy<O>) -> Vec<WeightedExchange<Exchange<O>>>,
+    Terminal: FnMut(&Economy<O>) -> Option<Vec<f64>>,
+    Cutoff: FnMut(&Economy<O>) -> Vec<f64>,
+    RolloutPolicy:
+        FnMut(&InformationState<Key>, &[Exchange<O>], &mut SeededSampler) -> Option<Exchange<O>>,
 {
     let mut session = IsmctsSession::new(
         initial,
@@ -545,20 +487,8 @@ where
 }
 
 #[allow(clippy::too_many_arguments)]
-fn simulate<
-    AccountId,
-    A,
-    RateId,
-    Role,
-    Key,
-    Information,
-    Source,
-    Chance,
-    Terminal,
-    Cutoff,
-    RolloutPolicy,
->(
-    initial: &Economy<AccountId, A, RateId, Role>,
+fn simulate<O: Ontology, Key, Information, Source, Chance, Terminal, Cutoff, RolloutPolicy>(
+    initial: &Economy<O>,
     mut depth: usize,
     max_depth: usize,
     players: usize,
@@ -569,25 +499,16 @@ fn simulate<
     cutoff: &mut Cutoff,
     rollout_policy: &mut RolloutPolicy,
     random: &mut SeededSampler,
-) -> Result<Vec<f64>, TreeSearchError<RateId, Role, AccountId, A>>
+) -> Result<Vec<f64>, TreeSearchError<O>>
 where
-    AccountId: Clone + Eq + Hash + Ord,
-    A: Clone + Eq + Hash + Ord,
-    RateId: Clone + Eq + Hash + Ord,
-    Role: Clone + Ord,
     Key: Clone + Eq + Hash,
-    Information: FnMut(&Economy<AccountId, A, RateId, Role>) -> InformationState<Key>,
-    Source: ActionSource<InformationState<Key>, Exchange<RateId, Role, AccountId>>,
-    Chance: FnMut(
-        &Economy<AccountId, A, RateId, Role>,
-    ) -> Vec<WeightedExchange<Exchange<RateId, Role, AccountId>>>,
-    Terminal: FnMut(&Economy<AccountId, A, RateId, Role>) -> Option<Vec<f64>>,
-    Cutoff: FnMut(&Economy<AccountId, A, RateId, Role>) -> Vec<f64>,
-    RolloutPolicy: FnMut(
-        &InformationState<Key>,
-        &[Exchange<RateId, Role, AccountId>],
-        &mut SeededSampler,
-    ) -> Option<Exchange<RateId, Role, AccountId>>,
+    Information: FnMut(&Economy<O>) -> InformationState<Key>,
+    Source: ActionSource<InformationState<Key>, Exchange<O>>,
+    Chance: FnMut(&Economy<O>) -> Vec<WeightedExchange<Exchange<O>>>,
+    Terminal: FnMut(&Economy<O>) -> Option<Vec<f64>>,
+    Cutoff: FnMut(&Economy<O>) -> Vec<f64>,
+    RolloutPolicy:
+        FnMut(&InformationState<Key>, &[Exchange<O>], &mut SeededSampler) -> Option<Exchange<O>>,
 {
     let mut world = initial.clone();
     loop {
@@ -620,17 +541,11 @@ where
     }
 }
 
-fn applicable_actions<AccountId, A, RateId, Role, Key>(
-    source: &mut impl ActionSource<InformationState<Key>, Exchange<RateId, Role, AccountId>>,
+fn applicable_actions<O: Ontology, Key>(
+    source: &mut impl ActionSource<InformationState<Key>, Exchange<O>>,
     information: &InformationState<Key>,
-    world: &Economy<AccountId, A, RateId, Role>,
-) -> Vec<Exchange<RateId, Role, AccountId>>
-where
-    AccountId: Clone + Eq + Hash + Ord,
-    A: Clone + Eq + Hash + Ord,
-    RateId: Clone + Eq + Hash + Ord,
-    Role: Clone + Ord,
-{
+    world: &Economy<O>,
+) -> Vec<Exchange<O>> {
     unique_actions(
         collect_actions(source, information)
             .into_iter()
@@ -756,6 +671,17 @@ impl<Action> Edge<Action> {
 
 #[cfg(test)]
 mod tests {
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    enum Test {}
+
+    impl axionomy::Ontology for Test {
+        const NAME: &'static str = "test";
+        type Account = AccountId;
+        type Asset = Asset;
+        type Rate = RateId;
+        type Role = Role;
+    }
+
     use super::*;
     use crate::action_source::lazy_actions;
     use axionomy::{Account, EconomyBuilder, ObservationKey, Quantity, Rate, basket};
@@ -802,9 +728,9 @@ mod tests {
         Nature,
     }
 
-    type World = Economy<AccountId, Asset, RateId, Role>;
-    type Action = Exchange<RateId, Role, AccountId>;
-    type Observation = ObservationKey<AccountId, Asset>;
+    type World = Economy<Test>;
+    type Action = Exchange<Test>;
+    type Observation = ObservationKey<Test>;
 
     fn hidden_world(heads: bool) -> World {
         let truth = if heads {
@@ -887,7 +813,7 @@ mod tests {
             .expect("test model is valid")
     }
 
-    fn resolution(guess: Asset, truth: Asset, result: Asset) -> Rate<Role, Asset> {
+    fn resolution(guess: Asset, truth: Asset, result: Asset) -> Rate<Test> {
         Rate::new()
             .consume(Role::Agent, basket([(guess, 1)]))
             .produce(Role::Agent, basket([(result, 1)]))

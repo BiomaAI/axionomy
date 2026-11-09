@@ -144,10 +144,11 @@ pub enum Policy {
     NorthTogether,
 }
 
-pub type World = Economy<AccountId, Asset, RateId, Role>;
+pub type World = Economy<Ontology>;
 
 /// The identifier types of [`World`], named `mission` where economies are
 /// stored.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Ontology {}
 
 impl axionomy::Ontology for Ontology {
@@ -157,13 +158,13 @@ impl axionomy::Ontology for Ontology {
     type Rate = RateId;
     type Role = Role;
 }
-pub type Action = Exchange<RateId, Role, AccountId>;
-pub type AgentView<'a> = EconomicView<'a, AccountId, Asset, RateId, Role>;
-pub type MissionObservation = ObservationKey<AccountId, Asset>;
+pub type Action = Exchange<Ontology>;
+pub type AgentView<'a> = EconomicView<'a, Ontology>;
+pub type MissionObservation = ObservationKey<Ontology>;
 pub type MissionInformation = InformationState<MissionObservation>;
 pub type PolicyFront = ParetoFront<PolicyEstimate<Policy, VectorSummary>, PolicyObjective, f64>;
 pub type PlanningDecision = IsmctsDecision<Action>;
-pub type PlanningError = TreeSearchError<RateId, Role, AccountId, Asset>;
+pub type PlanningError = TreeSearchError<Ontology>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PolicyObjective {
@@ -174,7 +175,7 @@ pub enum PolicyObjective {
 
 #[derive(Debug, Clone)]
 pub struct MissionRollout {
-    trace: Trace<RateId, Role, AccountId>,
+    trace: Trace<Ontology>,
     succeeded: bool,
     elapsed_time: u64,
     used_medical_kit: bool,
@@ -197,7 +198,7 @@ pub struct PlannedMission {
 }
 
 impl MissionRollout {
-    pub const fn trace(&self) -> &Trace<RateId, Role, AccountId> {
+    pub const fn trace(&self) -> &Trace<Ontology> {
         &self.trace
     }
 
@@ -574,7 +575,7 @@ pub fn initial() -> World {
         .expect("mission model is valid")
 }
 
-fn movement_rate(location: Location, coordinated: bool) -> Rate<Role, Asset> {
+fn movement_rate(location: Location, coordinated: bool) -> Rate<Ontology> {
     let rate = Rate::new()
         .preserve(
             Role::Scout,
@@ -620,7 +621,7 @@ fn movement_rate(location: Location, coordinated: bool) -> Rate<Role, Asset> {
     }
 }
 
-pub fn goal() -> Goal<AccountId, Asset> {
+pub fn goal() -> Goal<Ontology> {
     Goal::new().require(AccountId::Success, basket([(Asset::Solved, 1)]))
 }
 
@@ -709,11 +710,7 @@ pub fn decision_source() -> impl ActionSource<MissionInformation, Action> {
 /// determinization is still a complete economy, inconsistent worlds are
 /// discarded by observation identity, and the selected live exchange is
 /// revalidated against `actual`.
-pub fn plan(
-    actual: &World,
-    beliefs: &[World],
-    config: MctsConfig,
-) -> IsmctsResult<RateId, Role, AccountId, Asset> {
+pub fn plan(actual: &World, beliefs: &[World], config: MctsConfig) -> IsmctsResult<Ontology> {
     let root = scout_information(actual);
     let compatible = beliefs
         .iter()

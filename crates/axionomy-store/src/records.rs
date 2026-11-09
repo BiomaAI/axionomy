@@ -1,7 +1,8 @@
 //! What the store records about runs, steps, groups and refs, and the redb
 //! tables that hold them.
 
-use crate::{GroupId, GroupKindPath, MetricPath, OntologyPath, Point, RunId, TagPath};
+use crate::{GroupId, GroupKindPath, MetricPath, Point, RunId, TagPath};
+use axionomy::{Exchange, Ontology, OntologyPath};
 use axionomy_tree::Hash;
 use redb::TableDefinition;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -88,18 +89,18 @@ impl Checkpoints {
     }
 }
 
-/// One exchange of a run: an [`Exchange`](crate::Exchange) of the run's
-/// ontology.
+/// One exchange of a run of `O`'s economies.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Step<Exchange> {
-    pub exchange: Exchange,
+#[serde(bound(
+    serialize = "O::Rate: Serialize, O::Role: Serialize, O::Account: Serialize",
+    deserialize = "O::Rate: Deserialize<'de>, O::Role: Deserialize<'de>, O::Account: Deserialize<'de>"
+))]
+pub struct Step<O: Ontology> {
+    pub exchange: Exchange<O>,
     /// The BLAKE3 hash of the receipt's JSON, which replay must reproduce.
     #[serde(with = "hex")]
     pub receipt: Hash,
 }
-
-/// A step of a run of `O`'s economies.
-pub type StepOf<O> = Step<crate::Exchange<O>>;
 
 /// Runs or samples produced together: the rollouts of one Monte Carlo
 /// estimate, the samples of one MPPI decision, an evaluation suite.

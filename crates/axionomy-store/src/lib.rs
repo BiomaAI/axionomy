@@ -9,16 +9,15 @@ pub mod state;
 mod transaction;
 mod writer;
 
-pub use ids::{
-    GroupId, GroupKindPath, IdError, MetricPath, OntologyPath, Point, RefPath, RunId, TagPath, kind,
-};
-pub use ontology::{ApplyError, Economy, Exchange, Id, Receipt, Recordable};
+pub use ids::{GroupId, GroupKindPath, IdError, MetricPath, Point, RefPath, RunId, TagPath, kind};
+pub use ontology::{Id, Recordable};
 pub use read::{Reader, State, Transition};
 pub use recorder::Recorder;
-pub use records::{Checkpoints, Group, GroupRecord, Member, Run, Step, StepOf, Summary, Target};
+pub use records::{Checkpoints, Group, GroupRecord, Member, Run, Step, Summary, Target};
 pub use state::StateError;
 pub use writer::{Pending, Transaction};
 
+use axionomy::{Economy, OntologyPath};
 use axionomy_tree::Hash;
 use records::{GROUPS, META, RUNS, STORE_PREFIX};
 use redb::{Database, ReadableDatabase, ReadableTable, backends::InMemoryBackend};
@@ -66,8 +65,6 @@ pub enum StoreError {
         recorded: OntologyPath,
         read: &'static str,
     },
-    #[error("ontology name `{0}` is not a path")]
-    OntologyName(&'static str),
     #[error("metric {0} is not a finite number")]
     NotFinite(MetricPath),
     #[error("the store's writer has stopped")]

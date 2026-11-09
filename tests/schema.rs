@@ -1,7 +1,7 @@
-use axionomy::{Account, Economy, EconomyBuilder, Exchange, Quantity, Rate, basket};
-
-type WireEconomy = Economy<String, String, String, String>;
-type WireExchange = Exchange<String, String, String>;
+use axionomy::{
+    Account, Quantity, basket,
+    paths::{Economy as WireEconomy, EconomyBuilder, Exchange as WireExchange, Rate},
+};
 
 #[test]
 fn economy_schema_matches_the_direct_serde_shape() {
@@ -27,19 +27,25 @@ fn economy_schema_matches_the_direct_serde_shape() {
 fn public_schema_types_round_trip_through_their_existing_serde_contract() {
     let economy: WireEconomy = EconomyBuilder::new()
         .account(
-            "workshop".to_owned(),
-            Account::from(basket([("raw".to_owned(), 1)])),
+            "workshop".parse().unwrap(),
+            Account::from(basket([("raw".parse().unwrap(), 1)])),
         )
         .rate(
-            "build".to_owned(),
+            "build".parse().unwrap(),
             Rate::new()
-                .consume("shop".to_owned(), basket([("raw".to_owned(), 1)]))
-                .produce("shop".to_owned(), basket([("finished".to_owned(), 1)])),
+                .consume(
+                    "shop".parse().unwrap(),
+                    basket([("raw".parse().unwrap(), 1)]),
+                )
+                .produce(
+                    "shop".parse().unwrap(),
+                    basket([("finished".parse().unwrap(), 1)]),
+                ),
         )
         .build()
         .expect("model is valid");
-    let exchange = WireExchange::new("build".to_owned(), Quantity::new(1))
-        .bind("shop".to_owned(), "workshop".to_owned());
+    let exchange = WireExchange::new("build".parse().unwrap(), Quantity::new(1))
+        .bind("shop".parse().unwrap(), "workshop".parse().unwrap());
 
     let economy_json = serde_json::to_value(&economy).expect("economy serializes");
     let exchange_json = serde_json::to_value(&exchange).expect("exchange serializes");

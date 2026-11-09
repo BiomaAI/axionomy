@@ -65,7 +65,7 @@ pub(super) fn build(
                 "verified physical and temporal exchanges".into(),
             )],
         ));
-        view.proposals.push(proposal("perishables", ProposalSpec { id: "overfilled-cold-store", label: "Move the entire ambient cohort into full cold storage", description: "The refrigerated space is occupied. Goods cannot move until enough physical capacity is released." }, &initial, &chain::action(RateId::Move { batch: 0, from: Place::Warehouse, to: Place::Fridge }, 1)));
+        view.proposals.push(proposal(ProposalSpec { id: "overfilled-cold-store", label: "Move the entire ambient cohort into full cold storage", description: "The refrigerated space is occupied. Goods cannot move until enough physical capacity is released." }, &initial, &chain::action(RateId::Move { batch: 0, from: Place::Warehouse, to: Place::Fridge }, 1)));
         documents.push(view);
     }
     for index in 0..documents.len() {
@@ -205,7 +205,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                     "{fresh} fresh · {stable} preserved · {spoiled} spoiled"
                 )),
             ),
-            slug(format!("perishables/account/batch-{id}")),
+            slug(format!("perishables/cold-chain/account/batch-{id}")),
         );
         entity.metrics = vec![
             visual_metric(
@@ -268,9 +268,9 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         entities.push(link_account(
             entity,
             if node == "buyer" {
-                slug("perishables/account/buyer")
+                slug("perishables/cold-chain/account/buyer")
             } else {
-                slug("perishables/account/world")
+                slug("perishables/cold-chain/account/world")
             },
         ));
     }

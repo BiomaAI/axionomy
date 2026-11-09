@@ -89,7 +89,7 @@ pub(super) fn build(
     ));
     if let Some(first) = trace.exchanges().first() {
         let malformed = Exchange::new(*first.rate(), first.units());
-        view.proposals.push(proposal("connect-four", ProposalSpec { id: "move-without-board", label: "Move without board bindings", description: "A drop must name the game, column, landing cell, and result. Without them, gravity has nothing to act on." }, &initial, &malformed));
+        view.proposals.push(proposal(ProposalSpec { id: "move-without-board", label: "Move without board bindings", description: "A drop must name the game, column, landing cell, and result. Without them, gravity has nothing to act on." }, &initial, &malformed));
     }
     let mut documents = vec![view];
     {

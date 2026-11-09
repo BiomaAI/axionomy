@@ -158,10 +158,11 @@ pub enum RateId {
     Close,
 }
 
-pub type World = Economy<AccountId, Asset, RateId, Role>;
+pub type World = Economy<Ontology>;
 
 /// The identifier types of [`World`], named `scheduling` where economies are
 /// stored.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Ontology {}
 
 impl axionomy::Ontology for Ontology {
@@ -171,9 +172,9 @@ impl axionomy::Ontology for Ontology {
     type Rate = RateId;
     type Role = Role;
 }
-pub type Action = Exchange<RateId, Role, AccountId>;
-pub type Solution = SearchSolution<RateId, Role, AccountId>;
-pub type ParetoResult = ParetoSearchResult<RateId, Role, AccountId, ObjectiveKey, u64>;
+pub type Action = Exchange<Ontology>;
+pub type Solution = SearchSolution<Ontology>;
+pub type ParetoResult = ParetoSearchResult<Ontology, ObjectiveKey, u64>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ObjectiveKey {
@@ -183,12 +184,12 @@ pub enum ObjectiveKey {
 
 #[derive(Debug, Clone)]
 pub struct OptimizedProposal {
-    trace: Trace<RateId, Role, AccountId>,
+    trace: Trace<Ontology>,
     makespan: u8,
 }
 
 impl OptimizedProposal {
-    pub fn trace(&self) -> &Trace<RateId, Role, AccountId> {
+    pub fn trace(&self) -> &Trace<Ontology> {
         &self.trace
     }
 
@@ -218,7 +219,7 @@ pub fn impossible_showcase() -> World {
     build(3, true)
 }
 
-pub fn goal() -> Goal<AccountId, Asset> {
+pub fn goal() -> Goal<Ontology> {
     Goal::new().require(AccountId::Success, basket([(Asset::Solved, 1)]))
 }
 
@@ -311,8 +312,8 @@ pub fn encoded_makespan(world: &World) -> u64 {
 
 fn optimize_branch(
     world: World,
-    trace: Trace<RateId, Role, AccountId>,
-    visited: &mut HashSet<axionomy::StateKey<AccountId, Asset>>,
+    trace: Trace<Ontology>,
+    visited: &mut HashSet<axionomy::StateKey<Ontology>>,
     best: &mut Option<OptimizedProposal>,
 ) {
     if !visited.insert(world.state_key()) {
@@ -506,7 +507,7 @@ fn schedule_rate(
     ready: u8,
     start: u8,
     final_operation: bool,
-) -> Rate<Role, Asset> {
+) -> Rate<Ontology> {
     let (job, machine, duration, _) = operation_spec(operation);
     let end = start + duration;
     let mut rate = Rate::new()

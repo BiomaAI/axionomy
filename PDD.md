@@ -408,12 +408,13 @@ the front remains caller policy.
 
 | Type or operation | Responsibility |
 | --- | --- |
+| `Ontology` | A problem's vocabulary: its account, asset, rate and role types under one checked name |
 | `Quantity` | Checked non-negative 256-bit coefficient |
 | `AssetAmount<A>` | One asset-qualified quantity at an API boundary |
 | `Basket<A>` | Sparse heterogeneous asset multiset |
 | `Account<A>` | Balance container used during initialization and internal commits |
-| `Rate<Role, A>` | Multi-role consume/produce/preserve law |
-| `Exchange<RateId, Role, AccountId>` | Concrete proposal |
+| `Rate<O>` | Multi-role consume/produce/preserve law |
+| `Exchange<O>` | Concrete proposal |
 | `EconomyBuilder` | Initial problem construction |
 | `Economy` | Private account/rate ownership and sole execution authority |
 | `ExchangeAssessment` | Applicable, infeasible, or invalid explanatory projection |
@@ -1683,7 +1684,8 @@ atomic exchange validation and produce receipts.
 ### D-003: User-defined ontology, core-owned instances
 
 Users define Rust vocabulary. The economy owns balances, laws, effects, and
-accepted history semantics.
+accepted history semantics. D-042 makes the vocabulary one type, the
+ontology.
 
 ### D-004: Rates are multi-account rewrite laws
 
@@ -1994,6 +1996,26 @@ One spelling per identifier means a link, a CLI argument, an MCP call and a
 stored artifact name the same thing the same way, and a misspelling is
 refused where it is read instead of failing to match later. Kernel parameter
 names remain text because the specification defines them as text.
+### D-042: The ontology is the kernel's type parameter
+
+A problem's vocabulary is one type. An `Ontology` names its account, asset,
+rate and role types and a path, its name. Every kernel type that mentions more
+than one kind of identifier is parameterized by it: `Economy<O>`,
+`EconomyBuilder<O>`, `Exchange<O>`, `Receipt<O>`, `Trace<O>`, `Goal<O>`,
+`Rate<O>`, `ApplyError<O>`. A value of one kind keeps that kind alone:
+`Basket<A>`, `Account<A>`, `AssetAmount<A>`, `LinearInvariant<A>`. The four
+kinds stay distinct types, and what the kernel needs of an identifier is
+declared once, on the trait, rather than at every use. An ontology is a marker,
+usually an empty enum, never a value.
+
+The name is checked when compiling (`OntologyPath::of::<O>()`), and everything
+outside the kernel uses it: a stored run records it and is read back only as
+that ontology, and view keys sit under it (`maze/account/agent`,
+`logistics/fleet/account/vehicle-cold`), so a value never shares a key with a
+value of another ontology. A view's `ViewOntology<O>` is how views show
+ontology `O`, its keys, labels, scenes and leaderboards; it is of an ontology,
+not one. The kernel's semantics are unchanged, so the Lean specification and
+its fixtures are too.
 
 ## 16. Success criteria
 

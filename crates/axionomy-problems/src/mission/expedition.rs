@@ -209,10 +209,11 @@ pub enum Policy {
     Rendezvous,
     NorthFirst,
 }
-pub type World = Economy<AccountId, Asset, RateId, Role>;
+pub type World = Economy<Ontology>;
 
 /// The identifier types of [`World`], named `mission/expedition` where economies are
 /// stored.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Ontology {}
 
 impl axionomy::Ontology for Ontology {
@@ -222,9 +223,9 @@ impl axionomy::Ontology for Ontology {
     type Rate = RateId;
     type Role = Role;
 }
-pub type Action = Exchange<RateId, Role, AccountId>;
-pub type Proposal = Trace<RateId, Role, AccountId>;
-pub type AgentView<'a> = EconomicView<'a, AccountId, Asset, RateId, Role>;
+pub type Action = Exchange<Ontology>;
+pub type Proposal = Trace<Ontology>;
+pub type AgentView<'a> = EconomicView<'a, Ontology>;
 pub fn patient(id: u8) -> bool {
     id.is_multiple_of(2)
 }
@@ -241,13 +242,13 @@ fn role(agent: Agent) -> Role {
         Role::Medic
     }
 }
-fn q(role: Role, asset: Asset) -> Q<Role, Asset> {
+fn q(role: Role, asset: Asset) -> Q<Ontology> {
     Q::balance(role, asset)
 }
-fn clock() -> Q<Role, Asset> {
+fn clock() -> Q<Ontology> {
     q(Role::World, Asset::Time)
 }
-fn identity() -> Rate<Role, Asset> {
+fn identity() -> Rate<Ontology> {
     Rate::new()
         .preserve(Role::World, basket([(Asset::WorldIdentity, 1)]))
         .preserve(
@@ -263,10 +264,10 @@ fn identity() -> Rate<Role, Asset> {
         .distinct(Role::Scout, Role::Medic)
         .condition("one mission event", Q::units(), C::Equal, Q::constant(1))
 }
-fn event() -> Rate<Role, Asset> {
+fn event() -> Rate<Ontology> {
     identity().preserve(Role::World, basket([(Asset::Active, 1)]))
 }
-fn law() -> Rate<Role, Asset> {
+fn law() -> Rate<Ontology> {
     event()
         .preserve(Role::World, basket([(Asset::EnvironmentReady, 1)]))
         .condition(
@@ -276,28 +277,28 @@ fn law() -> Rate<Role, Asset> {
             q(Role::World, Asset::NextClinical),
         )
 }
-fn permit(rate: Rate<Role, Asset>, agent: Agent, energy: u64) -> Rate<Role, Asset> {
+fn permit(rate: Rate<Ontology>, agent: Agent, energy: u64) -> Rate<Ontology> {
     rate.consume(Role::World, basket([(Asset::Permit(agent), 1)]))
         .produce(Role::World, basket([(Asset::UsedPermit(agent), 1)]))
         .consume(role(agent), basket([(Asset::Energy, energy)]))
         .produce(role(agent), basket([(Asset::SpentEnergy, energy)]))
 }
-fn work(agent: Agent, energy: u64) -> Rate<Role, Asset> {
+fn work(agent: Agent, energy: u64) -> Rate<Ontology> {
     permit(law(), agent, energy).preserve(role(agent), basket([(Asset::Ready, 1)]))
 }
-fn objective(rate: Rate<Role, Asset>, id: u8) -> Rate<Role, Asset> {
+fn objective(rate: Rate<Ontology>, id: u8) -> Rate<Ontology> {
     rate.preserve(Role::Objective, basket([(Asset::ObjectiveIdentity(id), 1)]))
         .distinct(Role::Objective, Role::World)
         .distinct(Role::Objective, Role::Scout)
         .distinct(Role::Objective, Role::Medic)
 }
-fn nature(rate: Rate<Role, Asset>) -> Rate<Role, Asset> {
+fn nature(rate: Rate<Ontology>) -> Rate<Ontology> {
     rate.preserve(Role::Nature, basket([(Asset::NatureIdentity, 1)]))
         .distinct(Role::Nature, Role::World)
         .distinct(Role::Nature, Role::Scout)
         .distinct(Role::Nature, Role::Medic)
 }
-fn before_horizon(rate: Rate<Role, Asset>, duration: Q<Role, Asset>) -> Rate<Role, Asset> {
+fn before_horizon(rate: Rate<Ontology>, duration: Q<Ontology>) -> Rate<Ontology> {
     rate.condition(
         "activity ends within mission horizon",
         clock() + duration,
@@ -1151,7 +1152,7 @@ pub fn action(rate: RateId) -> Action {
     }
     exchange
 }
-pub fn goal() -> Goal<AccountId, Asset> {
+pub fn goal() -> Goal<Ontology> {
     Goal::new().require(AccountId::World, basket([(Asset::Closed, 1)]))
 }
 pub fn agent_view(world: &World, agent: Agent) -> AgentView<'_> {

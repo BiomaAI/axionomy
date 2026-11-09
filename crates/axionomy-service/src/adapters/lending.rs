@@ -185,7 +185,6 @@ fn refusals(initial: &World) -> Vec<ProposalView> {
     .into_iter()
     .map(|(id, label, description, exchange)| {
         proposal(
-            PROBLEM,
             ProposalSpec {
                 id,
                 label,

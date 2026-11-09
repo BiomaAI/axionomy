@@ -28,6 +28,17 @@ enum AccountId {
     Treasury,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+enum Depot {}
+
+impl axionomy::Ontology for Depot {
+    const NAME: &'static str = "depot";
+    type Account = AccountId;
+    type Asset = UnitAsset<AssetId>;
+    type Rate = ();
+    type Role = ();
+}
+
 fn usd() -> (AssetSchema<AssetId>, axionomy_units::DecimalAsset<AssetId>) {
     let mut schema = AssetSchema::new();
     let usd = schema.define_decimal(AssetId::Usd, 2).unwrap();
@@ -111,7 +122,7 @@ fn schema_built_models_reject_a_foreign_precision() {
     let mut other = AssetSchema::new();
     let micros = other.define_decimal(AssetId::Usd, 6).unwrap();
 
-    let builder = EconomyBuilder::<AccountId, UnitAsset<AssetId>, (), ()>::new().account(
+    let builder = EconomyBuilder::<Depot>::new().account(
         AccountId::Treasury,
         Account::from(Basket::try_from_amounts([micros.parse("5").unwrap()]).unwrap()),
     );

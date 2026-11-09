@@ -26,7 +26,18 @@ enum Role {
     Receiver,
 }
 
-type World = Economy<AccountId, Asset, RateId, Role>;
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+enum Test {}
+
+impl axionomy::Ontology for Test {
+    const NAME: &'static str = "test";
+    type Account = AccountId;
+    type Asset = Asset;
+    type Rate = RateId;
+    type Role = Role;
+}
+
+type World = Economy<Test>;
 
 fn world(balance: u64) -> World {
     EconomyBuilder::new()
@@ -47,7 +58,7 @@ fn world(balance: u64) -> World {
         .unwrap()
 }
 
-fn transfer(units: u64) -> Exchange<RateId, Role, AccountId> {
+fn transfer(units: u64) -> Exchange<Test> {
     Exchange::new(RateId::Transfer, Quantity::new(units))
         .bind(Role::Sender, AccountId::Sender)
         .bind(Role::Receiver, AccountId::Receiver)

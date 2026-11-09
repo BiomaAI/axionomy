@@ -70,9 +70,7 @@ pub(super) fn build(
             if initial.balance(&AccountId::Cell(*crate_at), &Asset::Crate(*crate_id)).is_zero())
     }) {
         let missing_crate = sokoban::exchange(rate.clone());
-        solved.proposals.push(proposal(
-            "sokoban",
-            ProposalSpec {
+        solved.proposals.push(proposal(ProposalSpec {
                 id: "push-without-crate",
                 label: "Push an empty floor tile",
                 description: "The geometry names three real floor cells, but the middle account does not own the requested crate identity.",

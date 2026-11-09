@@ -1,47 +1,45 @@
 //! Reinforcement-learning projections over closed economic execution.
 
+use axionomy::Ontology;
 use axionomy::{ApplyError, Economy, Exchange, ExchangeAssessment, Receipt, Trace};
-use std::hash::Hash;
 
 #[derive(Debug, Clone)]
-pub enum RlExecution<RateId, Role, AccountId, A> {
-    Applied(Receipt<RateId, Role, AccountId, A>),
-    Rejected(ApplyError<RateId, Role, AccountId, A>),
+pub enum RlExecution<O: Ontology> {
+    Applied(Receipt<O>),
+    Rejected(ApplyError<O>),
 }
 
-impl<RateId, Role, AccountId, A> RlExecution<RateId, Role, AccountId, A> {
+impl<O: Ontology> RlExecution<O> {
     pub const fn applied(&self) -> bool {
         matches!(self, Self::Applied(_))
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct RlTransition<Observation, Outcome, AccountId, A, RateId, Role> {
+pub struct RlTransition<Observation, Outcome, O: Ontology> {
     before: Observation,
-    action: Exchange<RateId, Role, AccountId>,
-    assessment: ExchangeAssessment<AccountId, A, RateId, Role>,
-    execution: RlExecution<RateId, Role, AccountId, A>,
+    action: Exchange<O>,
+    assessment: ExchangeAssessment<O>,
+    execution: RlExecution<O>,
     after: Observation,
     outcome: Outcome,
     terminal: bool,
 }
 
-impl<Observation, Outcome, AccountId, A, RateId, Role>
-    RlTransition<Observation, Outcome, AccountId, A, RateId, Role>
-{
+impl<Observation, Outcome, O: Ontology> RlTransition<Observation, Outcome, O> {
     pub const fn before(&self) -> &Observation {
         &self.before
     }
 
-    pub const fn action(&self) -> &Exchange<RateId, Role, AccountId> {
+    pub const fn action(&self) -> &Exchange<O> {
         &self.action
     }
 
-    pub const fn assessment(&self) -> &ExchangeAssessment<AccountId, A, RateId, Role> {
+    pub const fn assessment(&self) -> &ExchangeAssessment<O> {
         &self.assessment
     }
 
-    pub const fn execution(&self) -> &RlExecution<RateId, Role, AccountId, A> {
+    pub const fn execution(&self) -> &RlExecution<O> {
         &self.execution
     }
 
@@ -60,21 +58,17 @@ impl<Observation, Outcome, AccountId, A, RateId, Role>
 
 /// Applies one action and emits learning projections derived from economic
 /// state before and after the sole core commit attempt.
-fn step<AccountId, A, RateId, Role, Observation, Outcome, Observe, ReadOutcome, Terminal>(
-    world: &mut Economy<AccountId, A, RateId, Role>,
-    action: Exchange<RateId, Role, AccountId>,
+fn step<O: Ontology, Observation, Outcome, Observe, ReadOutcome, Terminal>(
+    world: &mut Economy<O>,
+    action: Exchange<O>,
     observe: Observe,
     read_outcome: ReadOutcome,
     is_terminal: Terminal,
-) -> RlTransition<Observation, Outcome, AccountId, A, RateId, Role>
+) -> RlTransition<Observation, Outcome, O>
 where
-    AccountId: Clone + Eq + Hash + Ord,
-    A: Clone + Eq + Hash + Ord,
-    RateId: Clone + Eq + Hash + Ord,
-    Role: Clone + Ord,
-    Observe: Fn(&Economy<AccountId, A, RateId, Role>) -> Observation,
-    ReadOutcome: Fn(&Economy<AccountId, A, RateId, Role>) -> Outcome,
-    Terminal: Fn(&Economy<AccountId, A, RateId, Role>) -> bool,
+    Observe: Fn(&Economy<O>) -> Observation,
+    ReadOutcome: Fn(&Economy<O>) -> Outcome,
+    Terminal: Fn(&Economy<O>) -> bool,
 {
     let before = observe(world);
     let assessment = world.assess(&action);
@@ -96,37 +90,21 @@ where
     }
 }
 
-pub type RlTrajectoryResult<Observation, Outcome, AccountId, A, RateId, Role> = Result<
-    Vec<RlTransition<Observation, Outcome, AccountId, A, RateId, Role>>,
-    ApplyError<RateId, Role, AccountId, A>,
->;
+pub type RlTrajectoryResult<Observation, Outcome, O> =
+    Result<Vec<RlTransition<Observation, Outcome, O>>, ApplyError<O>>;
 
 /// Replays a trace on a fork and returns one learning transition per exchange.
-pub fn replay_transitions<
-    AccountId,
-    A,
-    RateId,
-    Role,
-    Observation,
-    Outcome,
-    Observe,
-    ReadOutcome,
-    Terminal,
->(
-    initial: &Economy<AccountId, A, RateId, Role>,
-    trace: &Trace<RateId, Role, AccountId>,
+pub fn replay_transitions<O: Ontology, Observation, Outcome, Observe, ReadOutcome, Terminal>(
+    initial: &Economy<O>,
+    trace: &Trace<O>,
     observe: Observe,
     read_outcome: ReadOutcome,
     is_terminal: Terminal,
-) -> RlTrajectoryResult<Observation, Outcome, AccountId, A, RateId, Role>
+) -> RlTrajectoryResult<Observation, Outcome, O>
 where
-    AccountId: Clone + Eq + Hash + Ord,
-    A: Clone + Eq + Hash + Ord,
-    RateId: Clone + Eq + Hash + Ord,
-    Role: Clone + Ord,
-    Observe: Fn(&Economy<AccountId, A, RateId, Role>) -> Observation,
-    ReadOutcome: Fn(&Economy<AccountId, A, RateId, Role>) -> Outcome,
-    Terminal: Fn(&Economy<AccountId, A, RateId, Role>) -> bool,
+    Observe: Fn(&Economy<O>) -> Observation,
+    ReadOutcome: Fn(&Economy<O>) -> Outcome,
+    Terminal: Fn(&Economy<O>) -> bool,
 {
     let mut world = initial.clone();
     let mut transitions = Vec::with_capacity(trace.exchanges().len());
@@ -148,6 +126,17 @@ where
 
 #[cfg(test)]
 mod tests {
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    enum Test {}
+
+    impl axionomy::Ontology for Test {
+        const NAME: &'static str = "test";
+        type Account = AccountId;
+        type Asset = Asset;
+        type Rate = RateId;
+        type Role = Role;
+    }
+
     use super::*;
     use axionomy::{Account, EconomyBuilder, Quantity, Rate, basket};
 
@@ -174,8 +163,8 @@ mod tests {
         Actor,
     }
 
-    type World = Economy<AccountId, Asset, RateId, Role>;
-    type Action = Exchange<RateId, Role, AccountId>;
+    type World = Economy<Test>;
+    type Action = Exchange<Test>;
 
     fn world() -> World {
         EconomyBuilder::new()

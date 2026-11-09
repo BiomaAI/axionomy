@@ -117,10 +117,11 @@ pub enum RateId {
     SealStoragePlan,
 }
 
-pub type World = Economy<AccountId, Asset, RateId, Role>;
+pub type World = Economy<Ontology>;
 
 /// The identifier types of [`World`], named `perishables` where economies are
 /// stored.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Ontology {}
 
 impl axionomy::Ontology for Ontology {
@@ -130,11 +131,11 @@ impl axionomy::Ontology for Ontology {
     type Rate = RateId;
     type Role = Role;
 }
-pub type Action = Exchange<RateId, Role, AccountId>;
-pub type EventTrace = Trace<RateId, Role, AccountId>;
-pub type EventReceipt = Receipt<RateId, Role, AccountId, Asset>;
-pub type Failure = ApplyError<RateId, Role, AccountId, Asset>;
-pub type ParetoResult = ParetoSearchResult<RateId, Role, AccountId, ObjectiveKey, u64>;
+pub type Action = Exchange<Ontology>;
+pub type EventTrace = Trace<Ontology>;
+pub type EventReceipt = Receipt<Ontology>;
+pub type Failure = ApplyError<Ontology>;
+pub type ParetoResult = ParetoSearchResult<Ontology, ObjectiveKey, u64>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ObjectiveKey {
@@ -282,7 +283,7 @@ pub fn initial_with_inventory(warehouse_claims: u64, fridge_claims: u64) -> Worl
         .expect("perishables model is valid")
 }
 
-pub fn goal() -> Goal<AccountId, Asset> {
+pub fn goal() -> Goal<Ontology> {
     Goal::new().require(AccountId::World, basket([(Asset::Solved, 1)]))
 }
 
@@ -355,7 +356,7 @@ pub fn candidates(world: &World) -> Vec<Action> {
     world.applicable(world.rate_ids().copied().map(|rate| action(rate, 1)))
 }
 
-pub fn storage_plan_goal() -> Goal<AccountId, Asset> {
+pub fn storage_plan_goal() -> Goal<Ontology> {
     Goal::new().require(AccountId::World, basket([(Asset::PlanSolved, 1)]))
 }
 
@@ -829,14 +830,14 @@ fn fresh_asset(cohort: Cohort, exposure: Exposure) -> Asset {
     Asset::Fresh(cohort, exposure, due(exposure))
 }
 
-fn active_world(rate: Rate<Role, Asset>) -> Rate<Role, Asset> {
+fn active_world(rate: Rate<Ontology>) -> Rate<Ontology> {
     rate.preserve(
         Role::World,
         basket([(Asset::WorldIdentity, 1), (Asset::Active, 1)]),
     )
 }
 
-fn all_distinct(mut rate: Rate<Role, Asset>, roles: &[Role]) -> Rate<Role, Asset> {
+fn all_distinct(mut rate: Rate<Ontology>, roles: &[Role]) -> Rate<Ontology> {
     for (offset, left) in roles.iter().enumerate() {
         for right in &roles[offset + 1..] {
             rate = rate.distinct(*left, *right);
@@ -845,7 +846,7 @@ fn all_distinct(mut rate: Rate<Role, Asset>, roles: &[Role]) -> Rate<Role, Asset
     rate
 }
 
-fn move_to_fridge_rate() -> Rate<Role, Asset> {
+fn move_to_fridge_rate() -> Rate<Ontology> {
     all_distinct(
         active_world(
             Rate::new()
@@ -908,7 +909,7 @@ fn move_to_fridge_rate() -> Rate<Role, Asset> {
     )
 }
 
-fn advance_rate(from: Moment, to: Moment) -> Rate<Role, Asset> {
+fn advance_rate(from: Moment, to: Moment) -> Rate<Ontology> {
     active_world(
         Rate::new()
             .consume(
@@ -922,7 +923,7 @@ fn advance_rate(from: Moment, to: Moment) -> Rate<Role, Asset> {
     )
 }
 
-fn lose_power_rate() -> Rate<Role, Asset> {
+fn lose_power_rate() -> Rate<Ontology> {
     all_distinct(
         active_world(
             Rate::new()
@@ -965,7 +966,7 @@ fn lose_power_rate() -> Rate<Role, Asset> {
     )
 }
 
-fn eat_rate(cohort: Cohort, exposure: Exposure) -> Rate<Role, Asset> {
+fn eat_rate(cohort: Cohort, exposure: Exposure) -> Rate<Ontology> {
     all_distinct(
         active_world(
             Rate::new()
@@ -985,7 +986,7 @@ fn eat_rate(cohort: Cohort, exposure: Exposure) -> Rate<Role, Asset> {
     )
 }
 
-fn spoil_rate(cohort: Cohort, exposure: Exposure) -> Rate<Role, Asset> {
+fn spoil_rate(cohort: Cohort, exposure: Exposure) -> Rate<Ontology> {
     all_distinct(
         active_world(
             Rate::new()
@@ -999,7 +1000,7 @@ fn spoil_rate(cohort: Cohort, exposure: Exposure) -> Rate<Role, Asset> {
     )
 }
 
-fn finish_rate() -> Rate<Role, Asset> {
+fn finish_rate() -> Rate<Ontology> {
     all_distinct(
         Rate::new()
             .preserve(
@@ -1043,7 +1044,7 @@ fn finish_rate() -> Rate<Role, Asset> {
     )
 }
 
-fn seal_storage_plan_rate() -> Rate<Role, Asset> {
+fn seal_storage_plan_rate() -> Rate<Ontology> {
     all_distinct(
         Rate::new()
             .preserve(

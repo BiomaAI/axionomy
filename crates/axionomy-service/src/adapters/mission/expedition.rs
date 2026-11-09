@@ -73,7 +73,7 @@ pub(super) fn build(
                 "verified timed work, communication and environmental events".into(),
             )],
         ));
-        view.proposals.push(proposal("mission", ProposalSpec { id: "extract-without-intelligence", label: "Extract a casualty before discovery or briefing", description: "Both agents need the confirmed site, physical co-location, free work capacity, energy, and a stabilized patient. An unverified sensor hint cannot satisfy these conditions." }, &initial, &mission::action(RateId::Extract { objective: 0, location: Location::North })));
+        view.proposals.push(proposal(ProposalSpec { id: "extract-without-intelligence", label: "Extract a casualty before discovery or briefing", description: "Both agents need the confirmed site, physical co-location, free work capacity, energy, and a stabilized patient. An unverified sensor hint cannot satisfy these conditions." }, &initial, &mission::action(RateId::Extract { objective: 0, location: Location::North })));
         documents.push(view);
     }
     for index in 0..documents.len() {
@@ -279,7 +279,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 Some(status),
             ),
             slug(format!(
-                "mission/account/agent-{}",
+                "mission/expedition/account/agent-{}",
                 if agent == Agent::Scout {
                     "scout"
                 } else {
@@ -382,7 +382,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 },
                 Some(status.into()),
             ),
-            slug(format!("mission/account/objective-{id}")),
+            slug(format!("mission/expedition/account/objective-{id}")),
         );
         entity.metrics = vec![
             visual_metric(

@@ -117,10 +117,11 @@ pub enum RateId {
     Finish,
 }
 
-pub type World = Economy<AccountId, Asset, RateId, Role>;
+pub type World = Economy<Ontology>;
 
 /// The identifier types of [`World`], named `maze` where economies are
 /// stored.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Ontology {}
 
 impl axionomy::Ontology for Ontology {
@@ -130,9 +131,9 @@ impl axionomy::Ontology for Ontology {
     type Rate = RateId;
     type Role = Role;
 }
-pub type Action = Exchange<RateId, Role, AccountId>;
-pub type Solution = SearchSolution<RateId, Role, AccountId>;
-pub type ParetoResult = ParetoSearchResult<RateId, Role, AccountId, ObjectiveKey, u64>;
+pub type Action = Exchange<Ontology>;
+pub type Solution = SearchSolution<Ontology>;
+pub type ParetoResult = ParetoSearchResult<Ontology, ObjectiveKey, u64>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ObjectiveKey {
@@ -440,7 +441,7 @@ fn build(
         .expect("maze model is valid")
 }
 
-pub fn goal() -> Goal<AccountId, Asset> {
+pub fn goal() -> Goal<Ontology> {
     Goal::new().require(AccountId::Agent, basket([(Asset::Solved, 1)]))
 }
 

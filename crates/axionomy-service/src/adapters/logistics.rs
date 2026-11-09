@@ -110,7 +110,6 @@ pub(super) fn build(
         if let Some(load) = logistics::candidates(&initial).first() {
             let malformed = Exchange::new(*load.rate(), Quantity::new(1));
             view.proposals.push(proposal(
-                "logistics",
                 ProposalSpec {
                     id: "load-without-roles",
                     label: "Load without vehicle/order",

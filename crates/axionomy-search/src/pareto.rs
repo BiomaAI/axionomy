@@ -5,6 +5,7 @@
 //! decide which transitions and outcomes are valid.
 
 use crate::session::{AdvanceReport, SearchObserver, SearchStatus, WorkBudget};
+use axionomy::Ontology;
 use axionomy::{Economy, Exchange, Goal, StateKey, Trace};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -325,45 +326,39 @@ impl ParetoSearchProgress {
     }
 }
 
-struct ParetoSearchState<AccountId, A, RateId, Role> {
-    world: Economy<AccountId, A, RateId, Role>,
-    trace: Trace<RateId, Role, AccountId>,
+struct ParetoSearchState<O: Ontology> {
+    world: Economy<O>,
+    trace: Trace<O>,
 }
 
 /// Resumable exhaustive search whose retained outcomes are replayable traces.
 ///
 /// The front remains [`FrontierCompleteness::Approximate`] while work remains.
 /// It becomes exact only when every reachable state has been exhausted.
-pub struct ParetoSearchSession<AccountId, A, RateId, Role, K, V, Candidates, Project> {
-    goal: Goal<AccountId, A>,
+pub struct ParetoSearchSession<O: Ontology, K, V, Candidates, Project> {
+    goal: Goal<O>,
     candidates: Candidates,
     project: Project,
-    states: Vec<ParetoSearchState<AccountId, A, RateId, Role>>,
+    states: Vec<ParetoSearchState<O>>,
     frontier: VecDeque<usize>,
-    visited: HashSet<StateKey<AccountId, A>>,
-    results: ParetoFront<Trace<RateId, Role, AccountId>, K, V>,
+    visited: HashSet<StateKey<O>>,
+    results: ParetoFront<Trace<O>, K, V>,
     expanded: usize,
     generated: usize,
     terminal_outcomes: usize,
     exhausted: bool,
 }
 
-impl<AccountId, A, RateId, Role, K, V, Candidates, Project>
-    ParetoSearchSession<AccountId, A, RateId, Role, K, V, Candidates, Project>
+impl<O: Ontology, K, V, Candidates, Project> ParetoSearchSession<O, K, V, Candidates, Project>
 where
-    AccountId: Clone + Eq + Hash + Ord,
-    A: Clone + Eq + Hash + Ord,
-    RateId: Clone + Eq + Hash + Ord,
-    Role: Clone + Ord,
     K: Eq,
     V: PartialOrd,
-    Candidates:
-        FnMut(&Economy<AccountId, A, RateId, Role>) -> Vec<Exchange<RateId, Role, AccountId>>,
-    Project: FnMut(&Economy<AccountId, A, RateId, Role>) -> ObjectiveVector<K, V>,
+    Candidates: FnMut(&Economy<O>) -> Vec<Exchange<O>>,
+    Project: FnMut(&Economy<O>) -> ObjectiveVector<K, V>,
 {
     pub fn new(
-        initial: &Economy<AccountId, A, RateId, Role>,
-        goal: Goal<AccountId, A>,
+        initial: &Economy<O>,
+        goal: Goal<O>,
         candidates: Candidates,
         project: Project,
     ) -> Self {
@@ -406,11 +401,11 @@ where
         }
     }
 
-    pub fn front(&self) -> &ParetoFront<Trace<RateId, Role, AccountId>, K, V> {
+    pub fn front(&self) -> &ParetoFront<Trace<O>, K, V> {
         &self.results
     }
 
-    pub fn into_front(self) -> ParetoFront<Trace<RateId, Role, AccountId>, K, V> {
+    pub fn into_front(self) -> ParetoFront<Trace<O>, K, V> {
         self.results
     }
 
@@ -492,17 +487,17 @@ where
 }
 
 /// The exact result of exhausting a finite reachable state space.
-pub struct ParetoSearchResult<RateId, Role, AccountId, K, V> {
-    front: ParetoFront<Trace<RateId, Role, AccountId>, K, V>,
+pub struct ParetoSearchResult<O: Ontology, K, V> {
+    front: ParetoFront<Trace<O>, K, V>,
     progress: ParetoSearchProgress,
 }
 
-impl<RateId, Role, AccountId, K, V> ParetoSearchResult<RateId, Role, AccountId, K, V> {
-    pub fn front(&self) -> &ParetoFront<Trace<RateId, Role, AccountId>, K, V> {
+impl<O: Ontology, K, V> ParetoSearchResult<O, K, V> {
+    pub fn front(&self) -> &ParetoFront<Trace<O>, K, V> {
         &self.front
     }
 
-    pub fn into_front(self) -> ParetoFront<Trace<RateId, Role, AccountId>, K, V> {
+    pub fn into_front(self) -> ParetoFront<Trace<O>, K, V> {
         self.front
     }
 
@@ -512,22 +507,17 @@ impl<RateId, Role, AccountId, K, V> ParetoSearchResult<RateId, Role, AccountId, 
 }
 
 /// Exhausts a finite reachable state space and returns its replayable Pareto front.
-pub fn search<AccountId, A, RateId, Role, K, V, Candidates, Project>(
-    initial: &Economy<AccountId, A, RateId, Role>,
-    goal: &Goal<AccountId, A>,
+pub fn search<O: Ontology, K, V, Candidates, Project>(
+    initial: &Economy<O>,
+    goal: &Goal<O>,
     candidates: Candidates,
     project: Project,
-) -> Result<ParetoSearchResult<RateId, Role, AccountId, K, V>, ParetoError>
+) -> Result<ParetoSearchResult<O, K, V>, ParetoError>
 where
-    AccountId: Clone + Eq + Hash + Ord,
-    A: Clone + Eq + Hash + Ord,
-    RateId: Clone + Eq + Hash + Ord,
-    Role: Clone + Ord,
     K: Eq,
     V: PartialOrd,
-    Candidates:
-        FnMut(&Economy<AccountId, A, RateId, Role>) -> Vec<Exchange<RateId, Role, AccountId>>,
-    Project: FnMut(&Economy<AccountId, A, RateId, Role>) -> ObjectiveVector<K, V>,
+    Candidates: FnMut(&Economy<O>) -> Vec<Exchange<O>>,
+    Project: FnMut(&Economy<O>) -> ObjectiveVector<K, V>,
 {
     let mut session = ParetoSearchSession::new(initial, goal.clone(), candidates, project);
     let mut observer = crate::session::Continue;
@@ -543,6 +533,17 @@ where
 
 #[cfg(test)]
 mod tests {
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    enum Test {}
+
+    impl axionomy::Ontology for Test {
+        const NAME: &'static str = "test";
+        type Account = AccountId;
+        type Asset = Asset;
+        type Rate = RateId;
+        type Role = Role;
+    }
+
     use super::*;
     use axionomy::Quantity;
     use axionomy::{Account, EconomyBuilder, Rate, basket};
@@ -579,7 +580,7 @@ mod tests {
         Time,
     }
 
-    type World = Economy<AccountId, Asset, RateId, Role>;
+    type World = Economy<Test>;
 
     fn vector(energy: u64, time: u64) -> ObjectiveVector<ObjectiveKey, u64> {
         ObjectiveVector::try_new([
@@ -710,7 +711,7 @@ mod tests {
             .unwrap()
     }
 
-    fn candidates(world: &World) -> Vec<Exchange<RateId, Role, AccountId>> {
+    fn candidates(world: &World) -> Vec<Exchange<Test>> {
         world.applicable(
             world.rate_ids().copied().map(|rate| {
                 Exchange::new(rate, Quantity::new(1)).bind(Role::Actor, AccountId::Agent)

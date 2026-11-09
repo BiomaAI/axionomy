@@ -109,7 +109,7 @@ pub(super) fn build(
             ],
         ));
         let counterfeit = workshop::action(RateId::CounterfeitChair);
-        view.proposals.push(proposal("workshop", ProposalSpec { id: "counterfeit", label: "Counterfeit chair", description: "This rule would create material out of nothing, and the conservation law rejects it." }, &initial, &counterfeit));
+        view.proposals.push(proposal(ProposalSpec { id: "counterfeit", label: "Counterfeit chair", description: "This rule would create material out of nothing, and the conservation law rejects it." }, &initial, &counterfeit));
         documents.push(view);
     }
     artifact(run, descriptor, documents)
@@ -118,7 +118,7 @@ pub(super) fn build(
 fn frontier_trace(
     result: &workshop::ParetoResult,
     waste_first: bool,
-) -> Result<axionomy::Trace<RateId, workshop::Role, AccountId>, ServiceError> {
+) -> Result<axionomy::Trace<workshop::Ontology>, ServiceError> {
     result
         .front()
         .entries()

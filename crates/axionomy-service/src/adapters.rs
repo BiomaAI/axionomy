@@ -2,7 +2,7 @@ use crate::{
     ArtifactKey, Capability, InstanceDescriptor, InstanceProfile, ProblemDescriptor, ProblemFamily,
     RunArtifact, RunControl, RunObserver, ServiceError, ServiceProgress, StrategyDescriptor,
 };
-use axionomy::{Economy, Goal, Trace};
+use axionomy::{Economy, Goal, Ontology, Trace};
 use axionomy_search::GraphSearchProgress;
 use axionomy_view::{
     DebugOntology, DocumentPath, ExchangeFrame, ItemPath, LeaderboardView, MeasurePath,
@@ -13,7 +13,7 @@ use axionomy_view::{
     ViewOntology, ViewSource, derive_document, derive_document_with_frames, derive_model,
     derive_proposal, slug,
 };
-use std::{collections::BTreeSet, fmt::Debug, hash::Hash, ops::ControlFlow};
+use std::{collections::BTreeSet, ops::ControlFlow};
 
 pub(super) fn visual_entity(
     key: ItemPath,
@@ -155,34 +155,29 @@ mod workshop;
 
 use labels::StudioLabel;
 
-type StudioScene<AccountId, A, RateId, Role> =
-    fn(u64, &Economy<AccountId, A, RateId, Role>) -> Option<Scene>;
-type StudioLeaderboards<AccountId, A, RateId, Role> =
-    fn(u64, &Economy<AccountId, A, RateId, Role>) -> Vec<LeaderboardView>;
-type StudioProjections<AccountId, A, RateId, Role> = (
-    StudioScene<AccountId, A, RateId, Role>,
-    StudioLeaderboards<AccountId, A, RateId, Role>,
-);
+type StudioScene<O> = fn(u64, &Economy<O>) -> Option<Scene>;
+type StudioLeaderboards<O> = fn(u64, &Economy<O>) -> Vec<LeaderboardView>;
+type StudioProjections<O> = (StudioScene<O>, StudioLeaderboards<O>);
 
-struct StudioOntology<AccountId, A, RateId, Role> {
-    fallback: DebugOntology<AccountId, A, RateId, Role>,
-    scene: Option<StudioScene<AccountId, A, RateId, Role>>,
-    leaderboards: Option<StudioLeaderboards<AccountId, A, RateId, Role>>,
+/// Studio's view of an ontology: keys from [`DebugOntology`], under the
+/// ontology's name; labels from [`StudioLabel`]; and the problem's scene and
+/// leaderboards.
+struct StudioOntology<O: Ontology> {
+    fallback: DebugOntology<O>,
+    scene: Option<StudioScene<O>>,
+    leaderboards: Option<StudioLeaderboards<O>>,
 }
 
-impl<AccountId, A, RateId, Role> StudioOntology<AccountId, A, RateId, Role> {
-    fn new(namespace: &str, scene: Option<StudioScene<AccountId, A, RateId, Role>>) -> Self {
+impl<O: Ontology> StudioOntology<O> {
+    fn new(scene: Option<StudioScene<O>>) -> Self {
         Self {
-            fallback: DebugOntology::new(slug(namespace)),
+            fallback: DebugOntology::default(),
             scene,
             leaderboards: None,
         }
     }
 
-    fn with_leaderboards(
-        mut self,
-        leaderboards: StudioLeaderboards<AccountId, A, RateId, Role>,
-    ) -> Self {
+    fn with_leaderboards(mut self, leaderboards: StudioLeaderboards<O>) -> Self {
         self.leaderboards = Some(leaderboards);
         self
     }
@@ -193,39 +188,34 @@ impl<AccountId, A, RateId, Role> StudioOntology<AccountId, A, RateId, Role> {
     }
 }
 
-impl<AccountId, A, RateId, Role> ViewOntology<AccountId, A, RateId, Role>
-    for StudioOntology<AccountId, A, RateId, Role>
+impl<O: Ontology> ViewOntology<O> for StudioOntology<O>
 where
-    AccountId: Debug + StudioLabel,
-    A: Debug + StudioLabel,
-    RateId: Debug + StudioLabel,
-    Role: Debug + StudioLabel,
+    O::Account: StudioLabel,
+    O::Asset: StudioLabel,
+    O::Rate: StudioLabel,
+    O::Role: StudioLabel,
 {
-    fn account(&self, id: &AccountId) -> ViewId {
+    fn account(&self, id: &O::Account) -> ViewId {
         Self::relabel(self.fallback.account(id), id)
     }
 
-    fn asset(&self, id: &A) -> ViewId {
+    fn asset(&self, id: &O::Asset) -> ViewId {
         Self::relabel(self.fallback.asset(id), id)
     }
 
-    fn rate(&self, id: &RateId) -> ViewId {
+    fn rate(&self, id: &O::Rate) -> ViewId {
         Self::relabel(self.fallback.rate(id), id)
     }
 
-    fn role(&self, id: &Role) -> ViewId {
+    fn role(&self, id: &O::Role) -> ViewId {
         Self::relabel(self.fallback.role(id), id)
     }
 
-    fn scene(&self, index: u64, economy: &Economy<AccountId, A, RateId, Role>) -> Option<Scene> {
+    fn scene(&self, index: u64, economy: &Economy<O>) -> Option<Scene> {
         self.scene.and_then(|scene| scene(index, economy))
     }
 
-    fn leaderboards(
-        &self,
-        index: u64,
-        economy: &Economy<AccountId, A, RateId, Role>,
-    ) -> Vec<LeaderboardView> {
+    fn leaderboards(&self, index: u64, economy: &Economy<O>) -> Vec<LeaderboardView> {
         self.leaderboards
             .map_or_else(Vec::new, |leaderboards| leaderboards(index, economy))
     }
@@ -1192,21 +1182,21 @@ pub(super) struct DocumentSpec<'a> {
     pub source_label: &'a str,
 }
 
-pub(super) fn document<AccountId, A, RateId, Role>(
+pub(super) fn document<O: Ontology>(
     spec: DocumentSpec<'_>,
-    initial: &Economy<AccountId, A, RateId, Role>,
-    goal: &Goal<AccountId, A>,
-    trace: &Trace<RateId, Role, AccountId>,
+    initial: &Economy<O>,
+    goal: &Goal<O>,
+    trace: &Trace<O>,
     objectives: Vec<ObjectiveView>,
-    scene: StudioScene<AccountId, A, RateId, Role>,
+    scene: StudioScene<O>,
 ) -> Result<ViewDocument, PlaybackError>
 where
-    AccountId: Clone + Debug + Eq + Hash + Ord + StudioLabel,
-    A: Clone + Debug + Eq + Hash + Ord + StudioLabel,
-    RateId: Clone + Debug + Eq + Hash + Ord + StudioLabel,
-    Role: Clone + Debug + Ord + StudioLabel,
+    O::Account: StudioLabel,
+    O::Asset: StudioLabel,
+    O::Rate: StudioLabel,
+    O::Role: StudioLabel,
 {
-    let ontology = StudioOntology::<AccountId, A, RateId, Role>::new(spec.problem, Some(scene));
+    let ontology = StudioOntology::<O>::new(Some(scene));
     let mut document = derive_document(
         ViewDocumentMetadata {
             id: slug(spec.strategy),
@@ -1226,24 +1216,23 @@ where
     Ok(document)
 }
 
-pub(super) fn document_with_leaderboards_observed<AccountId, A, RateId, Role>(
+pub(super) fn document_with_leaderboards_observed<O: Ontology>(
     spec: DocumentSpec<'_>,
-    initial: &Economy<AccountId, A, RateId, Role>,
-    goal: &Goal<AccountId, A>,
-    trace: &Trace<RateId, Role, AccountId>,
+    initial: &Economy<O>,
+    goal: &Goal<O>,
+    trace: &Trace<O>,
     objectives: Vec<ObjectiveView>,
-    projections: StudioProjections<AccountId, A, RateId, Role>,
+    projections: StudioProjections<O>,
     mut on_frame: impl FnMut(&ExchangeFrame),
 ) -> Result<ViewDocument, PlaybackError>
 where
-    AccountId: Clone + Debug + Eq + Hash + Ord + StudioLabel,
-    A: Clone + Debug + Eq + Hash + Ord + StudioLabel,
-    RateId: Clone + Debug + Eq + Hash + Ord + StudioLabel,
-    Role: Clone + Debug + Ord + StudioLabel,
+    O::Account: StudioLabel,
+    O::Asset: StudioLabel,
+    O::Rate: StudioLabel,
+    O::Role: StudioLabel,
 {
     let (scene, leaderboards) = projections;
-    let ontology = StudioOntology::<AccountId, A, RateId, Role>::new(spec.problem, Some(scene))
-        .with_leaderboards(leaderboards);
+    let ontology = StudioOntology::<O>::new(Some(scene)).with_leaderboards(leaderboards);
     let mut document = derive_document_with_frames(
         ViewDocumentMetadata {
             id: slug(spec.strategy),
@@ -1270,19 +1259,18 @@ pub(super) struct ProposalSpec<'a> {
     pub description: &'a str,
 }
 
-pub(super) fn proposal<AccountId, A, RateId, Role>(
-    namespace: &str,
+pub(super) fn proposal<O: Ontology>(
     spec: ProposalSpec<'_>,
-    economy: &Economy<AccountId, A, RateId, Role>,
-    exchange: &axionomy::Exchange<RateId, Role, AccountId>,
+    economy: &Economy<O>,
+    exchange: &axionomy::Exchange<O>,
 ) -> ProposalView
 where
-    AccountId: Clone + Debug + Eq + Hash + Ord + StudioLabel,
-    A: Clone + Debug + Eq + Hash + Ord + StudioLabel,
-    RateId: Clone + Debug + Eq + Hash + Ord + StudioLabel,
-    Role: Clone + Debug + Ord + StudioLabel,
+    O::Account: StudioLabel,
+    O::Asset: StudioLabel,
+    O::Rate: StudioLabel,
+    O::Role: StudioLabel,
 {
-    let ontology = StudioOntology::<AccountId, A, RateId, Role>::new(namespace, None);
+    let ontology = StudioOntology::<O>::new(None);
     derive_proposal(
         slug(spec.id),
         spec.label,

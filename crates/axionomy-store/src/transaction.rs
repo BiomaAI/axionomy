@@ -3,12 +3,13 @@
 
 use crate::{
     GroupId, Member, MetricPath, Point, RefPath, RunId, StoreError, TagPath, Transaction,
-    ontology::{Receipt, Recordable, name},
+    ontology::Recordable,
     records::{
         Checkpoints, GROUPS, Group, GroupRecord, MEMBERS, NODES, PINS, REFS, RUN_METRICS, RUNS,
         Run, STATES, STEP_METRICS, STEPS, Step, Summary, TAGGED, TAGS, Target,
     },
 };
+use axionomy::{OntologyPath, Receipt};
 use axionomy_tree::{Hash, Tree};
 use redb::{ReadableTable, TableDefinition};
 use std::collections::HashSet;
@@ -25,7 +26,7 @@ impl Transaction<'_> {
         state: &Tree,
         checkpoints: Checkpoints,
     ) -> Result<(), StoreError> {
-        let ontology = name::<O>()?;
+        let ontology = OntologyPath::of::<O>();
         if let Some(from) = from {
             let source: Run = decode(
                 self.redb()

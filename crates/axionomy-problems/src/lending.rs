@@ -157,10 +157,11 @@ pub enum RateId {
     Liquidate,
 }
 
-pub type World = Economy<AccountId, Asset, RateId, Role>;
+pub type World = Economy<Ontology>;
 
 /// The identifier types of [`World`], named `lending` where economies are
 /// stored.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Ontology {}
 
 impl axionomy::Ontology for Ontology {
@@ -170,11 +171,11 @@ impl axionomy::Ontology for Ontology {
     type Rate = RateId;
     type Role = Role;
 }
-pub type Action = Exchange<RateId, Role, AccountId>;
-pub type LoanTrace = Trace<RateId, Role, AccountId>;
-pub type LoanError = Box<ApplyError<RateId, Role, AccountId, Asset>>;
-pub type Solution = SearchSolution<RateId, Role, AccountId>;
-type Q = QuantityExpression<Role, Asset>;
+pub type Action = Exchange<Ontology>;
+pub type LoanTrace = Trace<Ontology>;
+pub type LoanError = Box<ApplyError<Ontology>>;
+pub type Solution = SearchSolution<Ontology>;
+type Q = QuantityExpression<Ontology>;
 
 /// The market's published terms, each scaled by `WAD`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -437,25 +438,25 @@ fn reserve_cut() -> Q {
     )
 }
 
-fn one_unit(rate: Rate<Role, Asset>, name: &str) -> Rate<Role, Asset> {
+fn one_unit(rate: Rate<Ontology>, name: &str) -> Rate<Ontology> {
     rate.condition(name, Q::units(), QuantityComparison::Equal, Q::constant(1))
 }
 
-fn market_rate() -> Rate<Role, Asset> {
+fn market_rate() -> Rate<Ontology> {
     Rate::new().preserve(Role::Market, basket([(Asset::MarketIdentity, 1)]))
 }
 
-fn borrower_rate() -> Rate<Role, Asset> {
+fn borrower_rate() -> Rate<Ontology> {
     market_rate()
         .preserve(Role::Borrower, basket([(Asset::CreditLine, 1)]))
         .distinct(Role::Market, Role::Borrower)
 }
 
-fn clock_bound(rate: Rate<Role, Asset>) -> Rate<Role, Asset> {
+fn clock_bound(rate: Rate<Ontology>) -> Rate<Ontology> {
     rate.preserve(Role::Clock, basket([(Asset::ClockIdentity, 1)]))
 }
 
-fn deposit_rate() -> Rate<Role, Asset> {
+fn deposit_rate() -> Rate<Ontology> {
     let minted = Q::mul_div(
         Q::units(),
         market(Asset::ShareSupply),
@@ -476,7 +477,7 @@ fn deposit_rate() -> Rate<Role, Asset> {
         .distinct(Role::Market, Role::Depositor)
 }
 
-fn redeem_rate() -> Rate<Role, Asset> {
+fn redeem_rate() -> Rate<Ontology> {
     let paid = Q::mul_div(
         Q::units(),
         total_assets(),
@@ -497,20 +498,20 @@ fn redeem_rate() -> Rate<Role, Asset> {
         .distinct(Role::Market, Role::Depositor)
 }
 
-fn donate_rate() -> Rate<Role, Asset> {
+fn donate_rate() -> Rate<Ontology> {
     market_rate()
         .consume(Role::Depositor, basket([(Asset::Cash, 1)]))
         .produce(Role::Market, basket([(Asset::Cash, 1)]))
         .distinct(Role::Market, Role::Depositor)
 }
 
-fn post_collateral_rate() -> Rate<Role, Asset> {
+fn post_collateral_rate() -> Rate<Ontology> {
     borrower_rate()
         .consume(Role::Borrower, basket([(Asset::Collateral, 1)]))
         .produce(Role::Borrower, basket([(Asset::PostedCollateral, 1)]))
 }
 
-fn withdraw_collateral_rate() -> Rate<Role, Asset> {
+fn withdraw_collateral_rate() -> Rate<Ontology> {
     borrower_rate()
         .consume(Role::Borrower, basket([(Asset::PostedCollateral, 1)]))
         .produce(Role::Borrower, basket([(Asset::Collateral, 1)]))
@@ -522,7 +523,7 @@ fn withdraw_collateral_rate() -> Rate<Role, Asset> {
         )
 }
 
-fn borrow_rate() -> Rate<Role, Asset> {
+fn borrow_rate() -> Rate<Ontology> {
     let minted = Q::mul_div(Q::units(), wad(), index(), Rounding::Ceil);
     let owed_after = owed_for(Q::balance(Role::Borrower, Asset::DebtShare) + minted.clone());
     borrower_rate()
@@ -538,7 +539,7 @@ fn borrow_rate() -> Rate<Role, Asset> {
         )
 }
 
-fn repay_rate() -> Rate<Role, Asset> {
+fn repay_rate() -> Rate<Ontology> {
     let retired = Q::mul_div(Q::units(), wad(), index(), Rounding::Floor);
     borrower_rate()
         .consume(Role::Borrower, basket([(Asset::Cash, 1)]))
@@ -553,7 +554,7 @@ fn repay_rate() -> Rate<Role, Asset> {
         )
 }
 
-fn repay_shares_rate() -> Rate<Role, Asset> {
+fn repay_shares_rate() -> Rate<Ontology> {
     let paid = owed_for(Q::units());
     borrower_rate()
         .consume(Role::Borrower, basket([(Asset::DebtShare, 1)]))
@@ -562,7 +563,7 @@ fn repay_shares_rate() -> Rate<Role, Asset> {
         .produce_computed(Role::Market, Asset::Cash, paid)
 }
 
-fn pay_bill_rate(bill: Payment) -> Rate<Role, Asset> {
+fn pay_bill_rate(bill: Payment) -> Rate<Ontology> {
     clock_bound(
         Rate::new()
             .preserve(Role::Borrower, basket([(Asset::CreditLine, 1)]))
@@ -580,7 +581,7 @@ fn pay_bill_rate(bill: Payment) -> Rate<Role, Asset> {
     .distinct(Role::Borrower, Role::Supplier)
 }
 
-fn collect_revenue_rate(installment: u8, payment: Payment) -> Rate<Role, Asset> {
+fn collect_revenue_rate(installment: u8, payment: Payment) -> Rate<Ontology> {
     clock_bound(
         Rate::new()
             .preserve(Role::Borrower, basket([(Asset::CreditLine, 1)]))
@@ -602,7 +603,7 @@ fn collect_revenue_rate(installment: u8, payment: Payment) -> Rate<Role, Asset> 
     .distinct(Role::Borrower, Role::Customer)
 }
 
-fn accrue_rate() -> Rate<Role, Asset> {
+fn accrue_rate() -> Rate<Ontology> {
     let pending = Q::balance(Role::Oracle, Asset::PendingShock);
     let rate = clock_bound(borrower_rate())
         .preserve(Role::Oracle, basket([(Asset::OracleIdentity, 1)]))
@@ -631,7 +632,7 @@ fn accrue_rate() -> Rate<Role, Asset> {
     one_unit(rate, "one period at a time")
 }
 
-fn reprice_rate() -> Rate<Role, Asset> {
+fn reprice_rate() -> Rate<Ontology> {
     let rate = clock_bound(market_rate())
         .preserve(Role::Oracle, basket([(Asset::OracleIdentity, 1)]))
         .consume(Role::Oracle, basket([(Asset::PendingShock, 1)]))
@@ -652,7 +653,7 @@ fn reprice_rate() -> Rate<Role, Asset> {
     one_unit(rate, "one price drop")
 }
 
-fn liquidate_rate() -> Rate<Role, Asset> {
+fn liquidate_rate() -> Rate<Ontology> {
     let seized = Q::minimum(
         posted(),
         Q::divide(
@@ -898,7 +899,7 @@ pub fn liquidate() -> Action {
 
 /// The bill is paid and every unit of collateral is free again, which the
 /// withdrawal rule only allows once the loan is fully repaid.
-pub fn goal(config: &Config) -> Goal<AccountId, Asset> {
+pub fn goal(config: &Config) -> Goal<Ontology> {
     Goal::new().require(
         AccountId::Borrower,
         basket([(Asset::BillPaid, 1), (Asset::Collateral, config.collateral)]),
