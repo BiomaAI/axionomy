@@ -6,10 +6,12 @@ use std::{fmt, hash::Hash, sync::Arc};
 
 /// Accounts in the order they were declared.
 ///
-/// An economy's set of accounts is fixed when it is built; exchanges only
-/// replace holdings. Identifiers are therefore shared by every fork, and
-/// holdings live in a persistent 32-way tree, so cloning an economy copies two
-/// pointers and replacing an account copies one root-to-leaf path.
+/// Accounts are declared when an economy is built, and exchanges replace the
+/// holdings of declared accounts. Identifiers are therefore shared by every
+/// fork, and holdings live in a persistent 32-way tree, so cloning an economy
+/// copies two pointers and replacing an account copies one root-to-leaf path.
+/// If exchanges come to create accounts, the identifier index becomes a
+/// persistent map and holdings grow by appending.
 #[derive(Clone)]
 pub(crate) struct Accounts<AccountId, A> {
     ids: Arc<IndexSet<AccountId>>,
