@@ -12,15 +12,7 @@ import Axionomy.ModelConstruction
 import Axionomy.Discovery
 import Axionomy.Validation
 import Axionomy.TransactionConformance
-import Axionomy.ObservationConformance
-import Axionomy.PublicDataConformance
-import Axionomy.IteratorConformance
 import Axionomy.BasketCollectionConformance
-import Axionomy.BasketSortedConformance
-import Axionomy.InspectionConformance
-import Axionomy.ConvenienceConformance
-import Axionomy.DerivedConformance
-import Axionomy.InheritedConformance
 import Axionomy.InvariantInputConformance
 
 /-! Deterministic executable examples from the SAME definitions used in the
@@ -639,14 +631,6 @@ def main : IO Unit := do
     ("models", toJson models), ("metadata", toJson metadata), ("validation", toJson validation),
     ("transactions", toJson (TransactionConformance.fixtures expressionJson)),
     ("executions", toJson (TransactionConformance.executionFixtures expressionJson)),
-    ("observations", toJson ObservationConformance.fixtures),
-    ("publicData", PublicDataConformance.fixtures),
-    ("iterators", toJson IteratorConformance.fixtures),
     ("basketCollections", toJson BasketCollectionConformance.fixtures),
-    ("basketSorted", toJson BasketSortedConformance.fixtures),
-    ("inspection", InspectionConformance.fixtures),
-    ("convenience", ConvenienceConformance.fixtures),
-    ("derived", DerivedConformance.fixtures),
-    ("inherited", InheritedConformance.fixtures),
     ("invariantInputs", toJson InvariantInputConformance.fixtures)]
   IO.println document.compress

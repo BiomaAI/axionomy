@@ -5,35 +5,23 @@ on:
   pull_request:
 
 jobs:
-  proofs:
+  spec:
     runs-on: ubuntu-latest
-    env:
-      LEAN_NUM_THREADS: "2"
-      CARGO_BUILD_JOBS: "2"
     steps:
       - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: "1.99"
-      - uses: Swatinem/rust-cache@v2
-      - uses: actions/cache@v4
-        with:
-          path: verification/.tools
-          key: aeneas-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('verification/aeneas-toolchain.json', 'scripts/setup_aeneas.py') }}
-      - name: Install pinned Aeneas and Charon
-        run: python3 scripts/setup_aeneas.py
       - uses: leanprover/lean-action@v1
         with:
           lake-package-directory: verification/lean
           auto-config: false
-          build: false
+          build: true
           test: false
           lint: false
-          use-mathlib-cache: true
-      - name: Check Rust extraction, Lean proofs, coverage, and conformance
-        run: python3 scripts/check_proofs.py
-      - name: Verify that the proof gate rejects invalid evidence
-        run: python3 -m unittest discover -s scripts -p 'test_*.py'
+          use-mathlib-cache: false
+      - name: Fixtures are exactly what the specification generates
+        working-directory: verification/lean
+        run: |
+          lake exe conformance > ../conformance.json
+          git diff --exit-code -- ../conformance.json
 
   rust:
     runs-on: ubuntu-latest

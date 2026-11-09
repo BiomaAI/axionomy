@@ -82,17 +82,13 @@ evaluation and rating design, and
 between the Work Utility System and the Autonomy Harness that owns agents,
 learning, deployment, and assurance.
 
-Core development is proof-bearing: every new or changed kernel feature must
-include a typed Lean specification, checked proofs, and Rust conformance evidence.
-Rust's ownership and ontology types remain part of the contract. The current
-baseline proves Aeneas-extracted u64 checked arithmetic, basket/account operations,
-model/rate construction and discovery, complete transaction assessment/application
-and stable finite-vector candidate filtering. This includes original-snapshot
-evaluation, effect aggregation, preservation, staging, atomic commit, receipts,
-and signed conservation diagnostics. Collections, logical Arc operations and
-UTF-8 strings use explicit trusted models;
-other core contracts have design proofs and finite Rust conformance tests. See
-[the proof contract and coverage](verification/README.md) for exact boundaries.
+The kernel's semantics are specified in Lean: exact checked arithmetic,
+rounded mul-div, baskets and accounts, rate evaluation against one snapshot,
+validation before effects, atomic commit, receipts, conservation and replay,
+with proofs of the properties that make the economy sound. The executable Lean
+model generates the conformance fixtures, and the Rust kernel must reproduce
+every expected outcome. The specification is proved; the Rust implementation is
+tested against it. See [verification/README.md](verification/README.md).
 
 The fifteen reference problems expose explicit **Micro**, **Showcase**, and
 **Stress** instances. Micro keeps exact fixtures and independent oracles fast;
@@ -153,7 +149,7 @@ adapters.
   and shares: intermediate products never overflow, and rounding is never implicit.
 - Explanatory assessments, complete shortfalls, projected deltas, and receipts.
 - Declared invariants, asset-configured goals, isolated forks, and deterministic replay.
-- Stable Serde models plus optional `BigUint`, dimension-safe `uom`, and Jiff authoring.
+- Stable Serde models plus dimension-safe `uom` and Jiff authoring.
 
 ### Search
 
@@ -463,9 +459,8 @@ affected accounts first and commits all of them together.
 ## Exact values and typed authoring
 
 An asset defines what a value means and names its atomic economic basis;
-`Quantity<N>` defines how its exact non-negative coefficient is represented.
-The default backend is `u64`, while the `bigint` feature supports exact
-non-`Copy` `BigUint` economies without changing model semantics.
+`Quantity` holds its exact non-negative coefficient as a whole number of
+atoms; arithmetic is checked and never wraps.
 
 Unit-aware models use `UnitAsset<Id>` as their actual asset key. An
 `AssetSchema` declares each logical ID once as discrete, measured, or decimal, and the
@@ -503,16 +498,13 @@ let fee: Q<Role, Asset> =
 
 `MulDiv` is the only division; `divide(n, d, rounding)` is a mul-div by one,
 so even plain division names its direction. A zero denominator reports division by zero before the quotient is attempted;
-an unrepresentable quotient reports overflow. Lean proves the extracted `u64`
-implementation and evaluator exact for every input.
+an unrepresentable quotient reports overflow. The Lean specification proves
+mul-div exact for every input, and the kernel is tested against it.
 
-The typed `uom` and Jiff adapters currently require the resulting atom count to
-fit `u64` before converting it into the economy's selected `Quantity<N>`
-backend. `BigUint` removes the core economy's arithmetic ceiling, but it does
-not expand this authoring-adapter conversion boundary.
+The typed `uom` and Jiff adapters require the resulting atom count to fit the
+economy's quantity range before converting it.
 
 ```console
-cargo run --features bigint --example bigint
 cargo run -p axionomy-units --example cargo_mass
 cargo run -p axionomy-time --example calendar_window
 ```
@@ -658,13 +650,13 @@ measure before and after. A failure leaves the economy unchanged.
 
 ## Development
 
-For core work, follow [AGENTS.md](AGENTS.md) and run the proof gate alongside the
-Rust checks below (requires Python 3.12+, rustup, Git, and elan):
+For kernel work, follow [AGENTS.md](AGENTS.md): check the specification and
+regenerate its fixtures (requires elan) alongside the Rust checks below.
 
 ```console
-python3 scripts/setup_aeneas.py
-(cd verification/lean && lake update)
-python3 scripts/check_proofs.py
+cd verification/lean
+lake build
+lake exe conformance > ../conformance.json
 ```
 
 Axionomy uses Rust Edition 2024 and supports Rust 1.99 or newer. It relies on

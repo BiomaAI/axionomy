@@ -123,41 +123,6 @@ fn intermediate_products_never_overflow() {
     assert_eq!(mul_div(7, 1, 0, Rounding::Floor), None);
 }
 
-#[cfg(feature = "bigint")]
-#[test]
-fn biguint_backend_is_exact_beyond_u64() {
-    use num_bigint::BigUint;
-    let wide = |value: u128| Quantity::try_from_scalar(BigUint::from(value)).unwrap();
-    let max = wide(u128::from(u64::MAX));
-    let doubled = max
-        .checked_mul_div(&wide(2), &wide(1), Rounding::Floor)
-        .unwrap();
-    assert_eq!(doubled.as_scalar(), &(BigUint::from(u64::MAX) * 2_u8));
-    assert_eq!(
-        wide(7).checked_mul_div(&wide(1), &wide(2), Rounding::Ceil),
-        Some(wide(4))
-    );
-    assert_eq!(
-        wide(7).checked_mul_div(&wide(1), &wide(0), Rounding::Ceil),
-        None
-    );
-    for (left, right, denominator) in [(7_u64, 3_u64, 2_u64), (10, 10, 3), (0, 5, 9), (5, 5, 25)] {
-        for rounding in [Rounding::Floor, Rounding::Ceil] {
-            let big = wide(u128::from(left))
-                .checked_mul_div(
-                    &wide(u128::from(right)),
-                    &wide(u128::from(denominator)),
-                    rounding,
-                )
-                .unwrap();
-            assert_eq!(
-                big.as_scalar(),
-                &BigUint::from(reference(left, right, denominator, rounding).unwrap())
-            );
-        }
-    }
-}
-
 fn fee(rounding: Rounding) -> Q<Role, Asset> {
     // fee = units × bps ÷ 10_000, rounded in the requested direction.
     Q::mul_div(

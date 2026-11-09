@@ -1,7 +1,11 @@
 import Axionomy.Transaction
-import Batteries.Data.List.Basic
 
 namespace Axionomy.Transaction
+
+/-- `Forall₂ R as bs`: the lists have equal length and `R` holds pairwise. -/
+inductive Forall₂ {α β : Type} (R : α → β → Prop) : List α → List β → Prop
+  | nil : Forall₂ R [] []
+  | cons {a b as bs} : R a b → Forall₂ R as bs → Forall₂ R (a :: as) (b :: bs)
 
 variable {AccountId A RateId Role : Type} [DecidableEq AccountId] [DecidableEq A]
 
@@ -33,7 +37,7 @@ theorem prepare_success (accounts : List (AccountId × Balances A)) (effects : L
     (success : prepare (RateId := RateId) (Role := Role) accounts effects accumulated = .ok result) :
     ∃ staged, result.accounts = accumulated.accounts ++ staged ∧
       result.deltas = accumulated.deltas ++ effects.map effectDelta ∧
-      List.Forall₂ (PreparedEntry accounts) effects staged := by
+      Forall₂ (PreparedEntry accounts) effects staged := by
   induction effects generalizing accumulated with
   | nil =>
     have same : accumulated = result := by simpa [prepare] using success
@@ -53,7 +57,7 @@ theorem prepare_success (accounts : List (AccountId × Balances A)) (effects : L
 
 theorem preparedEntry_keys (accounts : List (AccountId × Balances A))
     (effects : List (AccountId × Effect A)) (prepared : List (AccountId × Balances A))
-    (matched : List.Forall₂ (PreparedEntry accounts) effects prepared) :
+    (matched : Forall₂ (PreparedEntry accounts) effects prepared) :
     prepared.map Prod.fst = effects.map Prod.fst := by
   induction matched with
   | nil => rfl
@@ -61,7 +65,7 @@ theorem preparedEntry_keys (accounts : List (AccountId × Balances A))
 
 theorem preparedEntry_existing (accounts : List (AccountId × Balances A))
     (effects : List (AccountId × Effect A)) (prepared : List (AccountId × Balances A))
-    (matched : List.Forall₂ (PreparedEntry accounts) effects prepared) :
+    (matched : Forall₂ (PreparedEntry accounts) effects prepared) :
     ∀ entry ∈ prepared, entry.1 ∈ accounts.map Prod.fst := by
   induction matched with
   | nil => simp
@@ -78,7 +82,7 @@ theorem preparation_contract (accounts : List (AccountId × Balances A))
     (success : prepare (RateId := RateId) (Role := Role) accounts effects ⟨[], []⟩ = .ok result) :
     result.accounts.map Prod.fst = effects.map Prod.fst ∧
       result.deltas = effects.map effectDelta ∧
-      List.Forall₂ (PreparedEntry accounts) effects result.accounts ∧
+      Forall₂ (PreparedEntry accounts) effects result.accounts ∧
       (∀ entry ∈ result.accounts, entry.1 ∈ accounts.map Prod.fst) ∧
       ∃ committed, install accounts result.accounts = some committed := by
   obtain ⟨staged, values, deltas, matched⟩ := prepare_success accounts effects ⟨[], []⟩ result success

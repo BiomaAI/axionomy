@@ -9,9 +9,6 @@ use axionomy_units::{
 use proptest::prelude::*;
 use serde::{Deserialize, Serialize};
 
-#[cfg(feature = "bigint")]
-use num_bigint::BigUint;
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 enum AssetId {
     Usd,
@@ -291,17 +288,6 @@ fn exact_rationals_encode_without_rounding() {
             .map(|amount| atoms(&amount)),
         Ok(75)
     );
-}
-
-#[cfg(feature = "bigint")]
-#[test]
-fn formatting_supports_wide_backends() {
-    let (_, usd) = usd();
-    let wide =
-        Quantity::try_from_scalar(BigUint::from(u64::MAX) * BigUint::from(1_000_u32)).unwrap();
-    assert_eq!(usd.format(&wide), "184467440737095516150.00");
-    let parsed: AssetAmount<UnitAsset<AssetId>, BigUint> = usd.parse("1.25").unwrap();
-    assert_eq!(parsed.quantity().as_scalar(), &BigUint::from(125_u32));
 }
 
 proptest! {

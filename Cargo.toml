@@ -42,7 +42,6 @@ http-body-util = "0.1.5"
 indexmap = { version = "2.14.2", features = ["serde"] }
 jiff = { version = "0.2.41", features = ["serde"] }
 js-sys = "0.3.107"
-num-bigint = { version = "0.5.1", features = ["serde"] }
 num-rational = { version = "0.4.2", features = ["serde"] }
 num-traits = "0.2.19"
 pathfinding = "4.16.0"
@@ -88,13 +87,8 @@ license.workspace = true
 repository.workspace = true
 rust-version.workspace = true
 
-[features]
-default = []
-bigint = ["dep:num-bigint"]
-
 [dependencies]
 indexmap.workspace = true
-num-bigint = { workspace = true, optional = true }
 num-traits.workspace = true
 schemars.workspace = true
 serde = { workspace = true, features = ["rc"] }
@@ -102,7 +96,6 @@ thiserror.workspace = true
 
 [dev-dependencies]
 criterion.workspace = true
-num-bigint.workspace = true
 proptest.workspace = true
 serde_json.workspace = true
 tracing.workspace = true
@@ -115,19 +108,3 @@ path = "src/lib.rs"
 [[bench]]
 name = "economy"
 harness = false
-
-[[example]]
-name = "bigint"
-required-features = ["bigint"]
-
-[[example]]
-name = "quantity_extraction"
-path = "verification/extract.rs"
-
-[[example]]
-name = "basket_extraction"
-path = "verification/extract_basket.rs"
-
-[[example]]
-name = "account_extraction"
-path = "verification/extract_account.rs"

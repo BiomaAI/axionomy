@@ -129,7 +129,6 @@ version = "0.1.0"
 dependencies = [
  "criterion",
  "indexmap",
- "num-bigint 0.5.1",
  "num-traits",
  "proptest",
  "schemars",
@@ -188,7 +187,6 @@ name = "axionomy-search"
 version = "0.1.0"
 dependencies = [
  "axionomy",
- "num-bigint 0.5.1",
  "pathfinding",
  "rand",
  "rand_chacha",
@@ -262,7 +260,6 @@ version = "0.1.0"
 dependencies = [
  "axionomy",
  "indexmap",
- "num-bigint 0.5.1",
  "num-rational",
  "num-traits",
  "proptest",
@@ -1442,17 +1439,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "num-bigint"
-version = "0.5.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "93e7820bc0a80a0238e650327316f929ba18d5be054b647490a3a6a339f3e7c0"
-dependencies = [
- "num-integer",
- "num-traits",
- "serde",
-]
-
-[[package]]
 name = "num-complex"
 version = "0.4.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1477,7 +1463,7 @@ version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f83d14da390562dca69fc84082e73e548e1ad308d24accdedd2720017cb37824"
 dependencies = [
- "num-bigint 0.4.8",
+ "num-bigint",
  "num-integer",
  "num-traits",
  "serde",
@@ -2499,7 +2485,7 @@ version = "0.38.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a739f83872836c82a4f2527d4e54b37007b3de68cafe7edde95fd695968bf4b9"
 dependencies = [
- "num-bigint 0.4.8",
+ "num-bigint",
  "num-complex",
  "num-rational",
  "num-traits",

@@ -45,7 +45,7 @@ theorem install_find_staged {K V : Type} [DecidableEq K]
 theorem matched_effect [DecidableEq AccountId] [DecidableEq A]
     (accounts : List (AccountId × Balances A)) (effects : List (AccountId × Effect A))
     (prepared : List (AccountId × Balances A))
-    (matched : List.Forall₂ (PreparedEntry accounts) effects prepared) :
+    (matched : Forall₂ (PreparedEntry accounts) effects prepared) :
     ∀ entry ∈ effects, ∃ value ∈ prepared, PreparedEntry accounts entry value := by
   induction matched with
   | nil => simp

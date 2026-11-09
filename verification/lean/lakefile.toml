@@ -1,25 +1,11 @@
-name = "axionomy-proofs"
+name = "axionomy-spec"
 version = "0.1.0"
-defaultTargets = ["Axionomy", "Audit", "conformance"]
-
-[[require]]
-name = "aeneas"
-path = "../.tools/aeneas/backends/lean"
+defaultTargets = ["Axionomy", "conformance"]
+# A specification may not leave unfinished proofs or ignored warnings.
+moreLeanArgs = ["-DwarningAsError=true"]
 
 [[lean_lib]]
 name = "Axionomy"
-
-[[lean_lib]]
-name = "Audit"
-
-[[lean_lib]]
-name = "QuantityExtraction"
-
-[[lean_lib]]
-name = "BasketExtraction"
-
-[[lean_lib]]
-name = "AccountExtraction"
 
 [[lean_exe]]
 name = "conformance"

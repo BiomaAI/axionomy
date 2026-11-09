@@ -1,5 +1,4 @@
 import Axionomy.MulDiv
-import Mathlib.Tactic.Linarith
 
 /-! Rounding against the caller.
 
@@ -59,7 +58,9 @@ theorem deposit_redeem_never_profits (totalAssets totalShares assets : Nat) :
   have minted : shares * totalAssets ≤ assets * totalShares :=
     Nat.div_mul_le_self (assets * totalShares) totalAssets
   apply Nat.div_le_of_le_mul
-  nlinarith
+  rw [Nat.mul_add, Nat.add_mul]
+  have swap := Nat.mul_comm assets totalShares
+  omega
 
 /-- Paying the rounded-up mint cost and immediately redeeming never returns
 more than was paid. -/
@@ -71,7 +72,9 @@ theorem mint_redeem_never_profits (totalAssets totalShares shares : Nat)
   have charged : shares * totalAssets ≤ cost * totalShares :=
     charge_never_below_exact shares totalAssets totalShares nonzero
   apply Nat.div_le_of_le_mul
-  nlinarith
+  rw [Nat.mul_add, Nat.add_mul]
+  have swap := Nat.mul_comm cost totalShares
+  omega
 
 /-- Withdrawing burns at least the exact share value of the withdrawn assets. -/
 theorem withdraw_burns_enough (totalAssets totalShares assets : Nat)
@@ -90,7 +93,9 @@ theorem split_conserves (total weight totalWeight : Nat) (bounded : weight ≤ t
     · simp [first, quotient, zero]
     · have positive : 0 < totalWeight := Nat.pos_of_ne_zero zero
       apply Nat.div_le_of_le_mul
-      nlinarith
+      have scaled := Nat.mul_le_mul_left total bounded
+      have swap := Nat.mul_comm totalWeight total
+      omega
   exact ⟨fits, by omega⟩
 
 end Axionomy.RoundingDiscipline

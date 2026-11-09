@@ -98,7 +98,7 @@ impl<Id> DecimalAsset<Id> {
     /// Renders a quantity of this asset with exactly `decimals` fraction digits.
     ///
     /// The output round-trips through [`Self::parse`]. It relies on the
-    /// backend's `Display` producing base-10 digits, as `u64` and `BigUint` do.
+    /// backend's `Display` producing base-10 digits, as `u64` does.
     pub fn format<N>(&self, quantity: &Quantity<N>) -> String
     where
         N: QuantityScalar,

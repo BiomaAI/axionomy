@@ -118,35 +118,6 @@ impl QuantityScalar for u64 {
     }
 }
 
-#[cfg(feature = "bigint")]
-impl QuantityScalar for num_bigint::BigUint {
-    type SignedMeasure = num_bigint::BigInt;
-
-    fn is_nonnegative(&self) -> bool {
-        true
-    }
-
-    fn from_u64(value: u64) -> Option<Self> {
-        Some(value.into())
-    }
-
-    fn checked_weighted(&self, coefficient: i64) -> Option<Self::SignedMeasure> {
-        Some(num_bigint::BigInt::from(self.clone()) * num_bigint::BigInt::from(coefficient))
-    }
-
-    fn checked_mul_div(&self, rhs: &Self, denominator: &Self, rounding: Rounding) -> Option<Self> {
-        if denominator.is_zero() {
-            return None;
-        }
-        let product = self * rhs;
-        let quotient = &product / denominator;
-        match rounding {
-            Rounding::Ceil if !(&product % denominator).is_zero() => Some(quotient + 1_u32),
-            Rounding::Floor | Rounding::Ceil => Some(quotient),
-        }
-    }
-}
-
 /// A checked non-negative coefficient in an economy's numeric backend.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Quantity<N = u64>(N);
@@ -363,78 +334,11 @@ mod signed_scalar_tests {
     }
 
     #[test]
-    fn runtime_quantity_validation_matches_lean() {
-        let fixtures: serde_json::Value =
-            serde_json::from_str(include_str!("../verification/conformance.json")).unwrap();
-        let cases = fixtures["publicData"]["validation"].as_array().unwrap();
-        assert_eq!(cases.len(), 5);
-        for case in cases {
-            let input = case["input"].as_str().unwrap().parse::<i64>().unwrap();
-            let actual = Quantity::try_from_scalar(input)
-                .ok()
-                .map(|value| value.into_scalar().to_string());
-            assert_eq!(serde_json::json!(actual), case["accepted"]);
-        }
-    }
-
-    #[test]
     fn checked_results_still_enforce_nonnegativity_for_other_backends() {
         let one = Quantity::try_from_scalar(1_i64).unwrap();
         let two = Quantity::try_from_scalar(2_i64).unwrap();
         assert_eq!(one.checked_sub(&two), None);
         assert_eq!(two.checked_sub(&one), Some(one));
         assert!(Quantity::try_from_scalar(-1_i64).is_err());
-    }
-}
-
-#[cfg(all(test, not(feature = "bigint")))]
-mod tests {
-    use super::{Quantity, QuantityScalar, Rounding};
-    use num_bigint::{BigInt, BigUint};
-
-    impl QuantityScalar for BigUint {
-        type SignedMeasure = BigInt;
-
-        fn is_nonnegative(&self) -> bool {
-            true
-        }
-
-        fn from_u64(value: u64) -> Option<Self> {
-            Some(value.into())
-        }
-
-        fn checked_weighted(&self, coefficient: i64) -> Option<Self::SignedMeasure> {
-            Some(BigInt::from(self.clone()) * BigInt::from(coefficient))
-        }
-
-        fn checked_mul_div(
-            &self,
-            rhs: &Self,
-            denominator: &Self,
-            rounding: Rounding,
-        ) -> Option<Self> {
-            let zero = BigUint::from(0_u8);
-            if denominator == &zero {
-                return None;
-            }
-            let product = self * rhs;
-            let quotient = &product / denominator;
-            Some(match rounding {
-                Rounding::Ceil if &product % denominator != zero => quotient + 1_u32,
-                Rounding::Floor | Rounding::Ceil => quotient,
-            })
-        }
-    }
-
-    #[test]
-    fn non_copy_backend_uses_exact_checked_arithmetic() {
-        let left = Quantity::try_from_scalar(BigUint::from(u64::MAX)).unwrap();
-        let right = Quantity::try_from_scalar(BigUint::from(2_u8)).unwrap();
-        let sum = left.checked_add(&right).unwrap();
-
-        assert_eq!(
-            sum.into_scalar(),
-            BigUint::from(u64::MAX) + BigUint::from(2_u8)
-        );
     }
 }

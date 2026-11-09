@@ -1,17 +1,17 @@
+## Summary
+
 Describe the problem and resulting behavior.
 
-## Core proof contract
+## Kernel semantics
 
-For core semantic changes, provide the feature ID from
-`verification/coverage.json`, the Lean theorem names, their relevant premises,
-and the Rust conformance evidence. Explain any changes to the proof boundary.
-For changes outside the core, state that scope.
+For changes to kernel behavior, name the Lean definitions and theorems that
+changed and confirm the fixtures were regenerated from Lean. For changes outside
+the kernel, state that scope.
 
-- [ ] New or changed core behavior has a checked Lean specification and proof.
+- [ ] Changed kernel behavior is reflected in the Lean specification.
+- [ ] `verification/conformance.json` was regenerated with `lake exe conformance`.
 - [ ] Rust ontology types, ownership, and mutation boundaries remain intact.
-- [ ] The source-to-spec relationship and source hashes were reviewed.
-- [ ] Verification claims distinguish design proofs, finite tests, and Rust refinement.
 
 ## Validation
 
-List the proof gate and Rust checks run, plus any checks not run.
+List the checks run, plus any checks not run.

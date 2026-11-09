@@ -9,10 +9,6 @@ license.workspace = true
 repository.workspace = true
 rust-version.workspace = true
 
-[features]
-default = []
-bigint = ["axionomy/bigint"]
-
 [dependencies]
 axionomy.workspace = true
 pathfinding.workspace = true
@@ -24,5 +20,4 @@ statrs.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]
-num-bigint.workspace = true
 serde_json.workspace = true

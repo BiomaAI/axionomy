@@ -1,60 +1,33 @@
 # Axionomy development contract
 
-Axionomy core features must carry Lean proofs. This is a product requirement,
-alongside Rust's ownership and strong typing guarantees.
-
-Diagnostic `Debug`/`Display` formatting is outside the required Lean proof scope.
-This exclusion does not remove proof requirements for public APIs or supporting
-operations that establish core engine guarantees.
+The kernel's meaning is written down once, in Lean: `verification/lean` states
+what quantities, baskets, rates, exchanges, conservation, atomic commit,
+replay and rounding mean, and proves the properties that make the economy
+sound. The Rust kernel (`src/**`) is tested against that specification: the
+Lean model generates `verification/conformance.json`, and the Rust tests must
+reproduce every expected outcome exactly.
 
 Commit and push each completed, validated milestone to `origin/main` unless the
 user directs otherwise. Keep commits focused on the milestone's changes.
 
-For changes to the root crate (`src/**`, its dependencies, or semantics promoted
-into it), read `verification/README.md` and `verification/coverage.json` first.
+- Change the specification with the behavior. When kernel semantics change,
+  update the Lean model, prove the properties that matter, and regenerate the
+  fixtures from Lean, never by hand:
+  `cd verification/lean && lake build && lake exe conformance > ../conformance.json`.
+- `lake build` treats warnings as errors, so `sorry` cannot land. Do not add
+  axioms or premises that restate the conclusion.
+- Prove semantics, not plumbing. Theorems are for economic meaning:
+  conservation, atomicity, determinism, rounding against the caller, exact
+  arithmetic bounds. Do not write proofs or fixtures for accessors, derived
+  traits, iterators or formatting.
+- Keep `AccountId`, `Asset`, `Role` and `RateId` distinct in Rust. Keep semantic
+  state private and expose mutation only through the core. Do not replace typed
+  APIs with strings, JSON, unchecked casts or runtime-only checks.
+- Write idiomatic Rust. The specification constrains behavior, not code shape.
+- Run the Rust checks (`cargo fmt --check`, `cargo clippy --workspace
+  --all-targets --all-features -D warnings`, `cargo test --workspace
+  --all-targets --all-features`) and the spec check before completing core work.
 
-- State the behavior as a typed Lean specification and prove the relevant
-  property before treating a new or changed core feature as complete. Extend
-  existing theorems when applicable. Tests alone do not satisfy this requirement.
-- Keep `AccountId`, `Asset`, `Role`, `RateId`, and numeric backends distinct in
-  Rust. Keep semantic state private and expose mutation only through the core.
-  Do not replace typed APIs with strings, JSON, unchecked casts, or runtime-only
-  checks to make extraction easier. Lean supplements the Rust type checker.
-- Connect the specification to Rust with conformance/regression tests. For the
-  covered executable domain, regenerate fixtures from Lean, never by hand.
-- Register the feature, theorem names, Rust evidence, precise proof boundary,
-  and reviewed source hashes in `verification/coverage.json`. A source hash is
-  a review acknowledgement, not a proof; never update it merely to silence CI.
-- Do not introduce `sorry`, `admit`, new axioms, or assumptions that restate the
-  desired conclusion. The checker audits elaborated dependencies. Review
-  theorem premises for satisfiability and avoid vacuous or circular contracts.
-- Run `python3 scripts/check_proofs.py` and the appropriate Rust checks before
-  completing core work. Preserve the workspace's existing checks.
-- Report verification precisely. The current baseline proves Aeneas-extracted
-  u64 checked arithmetic, full-width rounded mul-div, basket construction/operations, account deposit/withdrawal,
-  model/rate construction and metadata discovery, complete transaction assessment/application
-  and finite-input iterator candidate filtering, fork/simulation/ordered replay, snapshot expressions/conditions,
-  bounded effect aggregation, availability/preservation, preparation, atomic commit,
-  receipts, generic trace extension, goals and finite-input iterator views, canonical keys and explicitly scoped fingerprints,
-  foundational typed data constructors/conversions/accessors, expression construction,
-  generic basket collection construction/conversions and borrowed iteration/queries including stable asset sorting,
-  generic assessment/rate/invariant/model inspection, concrete borrowed iterator
-  contents and size hints, and complete model asset collection,
-  u64 rate/basket convenience-constructor panic contracts and generic
-  string-conversion results for names and parameters,
-  generic derived equality and cloning, quantity/fingerprint ordering and
-  explicitly scoped hash composition (including all observation-key fields),
-  inherited clone replacement and inequality, quantity/fingerprint order helpers,
-  and slice hashing under the reviewed standard-library default model,
-  runtime signed conservation and whole-state diagnostic measurement
-  against Lean specifications. Collections use
-  explicit trusted models; other contracts have design proofs and finite Rust
-  conformance tests. This is not a proof of the
-  entire Rust implementation. Preserve fresh extraction and its explicit trust
-  boundary when extending implementation proofs.
-  Existing refinement gaps are recorded in `verification/README.md`; new features
-  must not silently expand those gaps or claim a stronger verification level.
-
-Search, problem encodings, transport, Studio, and authoring adapters are not the
+Search, problem encodings, transport, Studio and authoring adapters are not the
 execution kernel. Moving authority into them is not a way around this contract.
 Public type and denomination guarantees in those adapters must remain intact.

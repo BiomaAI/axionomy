@@ -1,5 +1,4 @@
 import Axionomy.Quantity
-import Mathlib.Tactic.Linarith
 
 /-! Full-width multiply-then-divide with an explicit rounding direction.
 
@@ -62,9 +61,10 @@ theorem floor_bounds (left right denominator : Nat) (nonzero : denominator ≠ 0
   constructor
   · exact Nat.div_mul_le_self _ _
   · rw [Nat.add_mul, Nat.one_mul]
-    have := Nat.lt_div_mul_add (a := left * right) positive
-    linarith [Nat.div_add_mod (left * right) denominator, Nat.mod_lt (left * right) positive,
-      Nat.mul_comm denominator (left * right / denominator)]
+    have split := Nat.div_add_mod (left * right) denominator
+    have small := Nat.mod_lt (left * right) positive
+    have swap := Nat.mul_comm denominator (left * right / denominator)
+    omega
 
 theorem ceil_bounds (left right denominator : Nat) (nonzero : denominator ≠ 0) :
     left * right ≤ quotient .ceil left right denominator * denominator ∧
@@ -75,10 +75,12 @@ theorem ceil_bounds (left right denominator : Nat) (nonzero : denominator ≠ 0)
   simp only [quotient]
   by_cases exact : left * right % denominator = 0
   · simp only [exact, ite_true, Nat.add_zero]
-    constructor <;> nlinarith [Nat.mul_comm denominator (left * right / denominator)]
-  · simp only [exact, ite_false]
+    have swap := Nat.mul_comm denominator (left * right / denominator)
+    constructor <;> omega
+  · simp only [exact, ite_false, Nat.add_mul, Nat.one_mul]
     have rem_pos : 0 < left * right % denominator := Nat.pos_of_ne_zero exact
-    constructor <;> nlinarith [Nat.mul_comm denominator (left * right / denominator)]
+    have swap := Nat.mul_comm denominator (left * right / denominator)
+    constructor <;> omega
 
 theorem floor_le_ceil (left right denominator : Nat) :
     quotient .floor left right denominator ≤ quotient .ceil left right denominator := by
@@ -137,14 +139,19 @@ theorem ceil_anti_denominator (left right denominator denominator' : Nat)
   have nonzero' : denominator' ≠ 0 := by omega
   have small := (ceil_bounds left right denominator nonzero).1
   -- The larger denominator's ceiling also covers the product.
-  by_contra greater
+  apply Nat.le_of_not_lt
+  intro greater
   have strict : quotient .ceil left right denominator + 1 ≤ quotient .ceil left right denominator' := by
     omega
   have large := (ceil_bounds left right denominator' nonzero').2
-  have : (quotient .ceil left right denominator + 1) * denominator ≤
-      quotient .ceil left right denominator' * denominator' :=
-    Nat.mul_le_mul strict h
-  nlinarith
+  -- The larger ceiling exceeds the smaller by a whole denominator, which the
+  -- smaller ceiling's own bound leaves no room for.
+  have step : (quotient .ceil left right denominator + 1) * denominator' ≤
+      quotient .ceil left right denominator' * denominator' := Nat.mul_le_mul_right _ strict
+  have grow : quotient .ceil left right denominator * denominator ≤
+      quotient .ceil left right denominator * denominator' := Nat.mul_le_mul_left _ h
+  rw [Nat.add_mul, Nat.one_mul] at step
+  omega
 
 /-- Floor division by a unit factor is plain natural-number division. -/
 theorem floor_unit (numerator denominator : Nat) :

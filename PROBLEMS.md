@@ -1162,7 +1162,7 @@ The repository test suite additionally verifies:
 
 - Exact basket shortfalls.
 - Checked scale, addition, withdrawal, and deposit.
-- Generic exact `u64` and non-`Copy` `BigUint` economies.
+- Exact checked `u64` economies.
 - Direct Serde round trips, canonical zero removal, and duplicate rejection.
 - Exact dimension-safe and calendar-aware lowering into self-describing asset
   denominations.
@@ -1203,7 +1203,7 @@ The repository test suite additionally verifies:
 - Rounding against the caller: every model that divides names its `Rounding`;
   amounts a participant pays round up and amounts it receives round down, so
   no round trip creates value and conservation invariants hold. Full-width
-  `MulDiv` agrees with a wide-integer reference and the `BigUint` backend.
+  `MulDiv` agrees with a wide-integer reference.
 - Exhaustive fixture variation against direct domain oracles for exact cover,
   small scheduling horizons, and generated Connect Four prefixes, plus
   generated perishables inventories against an independent cohort oracle.

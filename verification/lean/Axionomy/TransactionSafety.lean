@@ -14,7 +14,7 @@ def AnalysisReady [DecidableEq AccountId] [DecidableEq A]
   | .infeasible _ _ => True
   | .applicable _ deltas => ∃ effects staged,
       analysis.prepared = some staged ∧ deltas = effects.map effectDelta ∧
-      List.Forall₂ (PreparedEntry accounts) effects staged ∧ (staged.map Prod.fst).Nodup ∧
+      Forall₂ (PreparedEntry accounts) effects staged ∧ (staged.map Prod.fst).Nodup ∧
       ∀ entry ∈ staged, entry.1 ∈ accounts.map Prod.fst
 
 theorem stages_ready [DecidableEq AccountId] [DecidableEq A]

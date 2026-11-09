@@ -9,10 +9,6 @@ license.workspace = true
 repository.workspace = true
 rust-version.workspace = true
 
-[features]
-default = []
-bigint = ["axionomy/bigint"]
-
 [dependencies]
 axionomy.workspace = true
 indexmap.workspace = true
@@ -23,7 +19,6 @@ thiserror.workspace = true
 uom.workspace = true
 
 [dev-dependencies]
-num-bigint.workspace = true
 proptest.workspace = true
 serde_json.workspace = true
 tracing.workspace = true

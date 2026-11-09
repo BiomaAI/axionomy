@@ -44,14 +44,12 @@ But they have one role:
 The accepted answer is never a solver's private assignment. It is a trace of
 exchanges that the core can replay from the initial economy.
 
-The core is proof-bearing. Every new or changed kernel feature must have a
-typed Lean specification, checked proofs of the relevant contract, and Rust
-conformance evidence. Rust's strong ontology types, ownership, and private state
-remain required. [verification/README.md](verification/README.md) defines the
-proof workflow, CI gate, trust boundary, and existing refinement gaps. Current
-proofs establish mathematical design properties and partial implementation
-refinement for u64 checked arithmetic, basket construction, and account updates
-under collection models. They do not establish a universal refinement proof of the Rust implementation.
+The kernel's semantics are specified in Lean, with proofs of the properties
+that make the economy sound, and the Rust kernel is tested against that
+specification through Lean-generated conformance fixtures. Rust's strong
+ontology types, ownership, and private state remain required.
+[verification/README.md](verification/README.md) describes the specification
+and how the fixtures hold the implementation to it.
 
 ## 2. Why closure matters
 
@@ -483,10 +481,7 @@ an invented historical `V1` model hierarchy.
 defines the exact operations the authoritative economy needs:
 non-negativity, total ordering, checked addition/subtraction/multiplication,
 conversion from an atomic count, and an associated signed invariant-measure
-type. The default `u64` backend is compact and ergonomic. The optional
-`BigUint` backend proves that the complete model and search surfaces support
-exact non-`Copy` quantities beyond `u64`; its associated invariant measure is
-`BigInt`.
+type. The `u64` backend is compact and exact.
 
 Physical and calendar types belong at authoring boundaries:
 
@@ -523,9 +518,7 @@ clock. Raw atomic counts remain available explicitly through `atoms` or
 `amount`; they cannot change the denomination carried by the asset key.
 
 The current typed adapters convert a validated atom count through `u64` before
-calling `QuantityScalar::from_u64`. A larger backend such as `BigUint` therefore
-extends authoritative economy arithmetic but does not enlarge the adapters'
-input range.
+calling `QuantityScalar::from_u64`.
 
 ### 5.3 Observability boundary
 
@@ -611,7 +604,7 @@ domains without kernel access.
 
 The implementation prefers focused, mature ecosystem crates over local
 reinvention: `indexmap` for stable maps, Serde for model encoding, `num-traits`
-and `num-bigint` for exact numeric backends, `thiserror` for structured errors,
+for exact numeric bounds, `thiserror` for structured errors,
 `uom` and Jiff for authoring, `rand`/`rand_chacha` for reproducible sampling,
 `statrs` for statistical estimators, `pathfinding` for standard implicit graph
 search, `tracing`/`tracing-subscriber` for example observability, `proptest` for
@@ -1251,8 +1244,7 @@ examples, but they are not promised as reusable domain APIs.
 ## 11. Current guarantees
 
 - Asset, account, role, and rate-ID types are user-defined.
-- Quantities are generic, exact, non-negative, and checked; `u64` is the
-  default and optional `BigUint` demonstrates an unbounded non-`Copy` backend.
+- Quantities are exact, non-negative, and checked.
 - Signed invariant measurement is associated with the selected quantity
   backend.
 - Missing balances behave as zero.
@@ -1888,20 +1880,17 @@ membership remain disposable policy. Studio URLs capture the selected problem,
 outcome, replay step, and leaderboard so an explanation is reproducible on
 native HTTP, browser Wasm, and static Pages without auto-running a task.
 
-### D-038: Every core feature carries a typed Lean proof contract
+### D-038: The kernel is specified in Lean and tested against the specification
 
-Specifications, checked proofs, Rust conformance evidence, and explicit source
-coverage are required parts of core development. Lean supplements Rust's type
-system; verification must not erase ontology types or weaken ownership and
-mutation boundaries. Design proofs and finite conformance cases are labeled
-separately from Aeneas implementation refinement proofs. Implementation proofs
-cover the four u64 checked arithmetic operations, basket construction, and account
-deposit/withdrawal under explicit collection abstractions; the rest of the core
-retains explicit refinement gaps. CI regenerates the implementation model from
-production Rust and rejects stale extraction, unproved declarations, missing/stale
-coverage, and conformance drift. Source hashes establish review freshness, not
-semantic correspondence: reviewers must
-check that each theorem states the intended contract with adequate premises.
+Kernel semantics are written once as an executable Lean model with proofs of
+the properties that matter: exact arithmetic, rounding against the caller,
+validation before effects, atomic commit, conservation and deterministic
+replay. The model generates the conformance fixtures; the Rust kernel must
+reproduce every expected outcome, and CI rejects fixtures that differ from what
+the model generates. Proofs cover semantics, not plumbing: accessors, derived
+traits and iterators are ordinary tested Rust. Implementation refinement through
+extraction was removed because its cost, in proof upkeep, CI time and code
+shaped for the extractor, exceeded what it caught.
 
 ## 16. Success criteria
 

@@ -213,28 +213,3 @@ fn collection_input_conversion_failures_propagate() {
         "into_iter failure"
     );
 }
-
-#[cfg(feature = "bigint")]
-#[test]
-fn typed_amount_collection_preserves_non_copy_quantities() {
-    use num_bigint::BigUint;
-    for case in fixtures() {
-        let values = case.entries.iter().map(|(asset, value)| {
-            AssetAmount::new(
-                *asset,
-                Quantity::try_from_scalar(value.parse::<BigUint>().unwrap()).unwrap(),
-            )
-        });
-        match Basket::try_from_amounts(values) {
-            Ok(basket) => {
-                assert!(case.duplicate.is_none());
-                let observed = basket
-                    .iter()
-                    .map(|(asset, value)| (*asset, value.to_string()))
-                    .collect::<Vec<_>>();
-                assert_eq!(Some(observed), case.accepted);
-            }
-            Err(BasketError::DuplicateAsset { asset }) => assert_eq!(Some(asset), case.duplicate),
-        }
-    }
-}
