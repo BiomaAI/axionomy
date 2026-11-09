@@ -1,8 +1,7 @@
 # Storage, runs and replay
 
-Status: design, with its first step done. The kernel's forks are now
-constant-time; everything else here is planned, in the order the phases at the
-end give.
+Status: being built, in the order the phases at the end give. The kernel's
+forks are constant-time and the canonical tree exists; the rest is planned.
 
 Axionomy is an economic debugger and a simulation engine. Both need states
 that can be kept, revisited, compared and branched: time travel to any step,
@@ -52,6 +51,13 @@ Hashing the tree nodes an exchange changes would cost as much as the exchange,
 so hashes are computed when a root is asked for and remembered in the node,
 never on the step path.
 
+The tree (`crates/axionomy-tree/benches/tree.rs`), with balance-sized entries:
+
+| Entries | Set one value | Set one value and hash the root | Build from scratch |
+| --- | --- | --- | --- |
+| 1,000 | 0.9 µs | 4.9 µs | 175 µs |
+| 100,000 | 2.4 µs | 15 µs | 18 ms |
+
 ## The kernel's state
 
 Exchanges open and close accounts (specified in `Lifecycle.lean`). The kernel
@@ -60,11 +66,8 @@ slot, and a persistent hash trie from identifier to slot. A fork copies a few
 pointers; replacing, opening or closing an account copies one root-to-leaf
 path, in place when nothing else shares it; a closed account leaves an empty
 slot until more slots are empty than full, when the accounts are compacted.
-Accounts keep the order they were created in, so every serialized artifact is
-byte for byte what it was before. Accounts keep the
-order they were declared in, so every serialized artifact is byte for byte
-what it was before. This is a change of representation only; the Lean
-specification and its fixtures are untouched.
+Accounts keep the order they were created in, so every serialized artifact
+stayed byte for byte what it was before the index changed.
 
 The kernel does not produce content hashes. Problem ontologies are Rust types
 with `Ord` and `Hash` but no canonical byte encoding, and a canonical root
@@ -80,9 +83,13 @@ to recognize visited states, sorts every balance of a state.
 Stored states are persistent ordered maps from byte keys to byte values,
 built as prolly trees, in a new crate, `axionomy-tree`:
 
-- **Canonical shape.** A hash of each key's bytes decides where nodes end. The
-  same set of keys produces the same tree whatever order they were inserted in,
-  and changing a value never moves a boundary.
+- **Canonical shape.** A keyed BLAKE3 hash of each key decides where nodes
+  end: at each level a key ends its node with probability 1/32, from its own
+  five bits of that hash. The same set of keys produces the same tree whatever
+  order they were inserted in, and changing a value never moves a boundary. A
+  node also ends at 256 items, so keys chosen to never end a node cannot make
+  one larger; that boundary moves with insertions, so an edit near it
+  re-chunks up to the next key-chosen boundary.
 - **Immutable, shared nodes.** Nodes live behind `Arc`. An update copies the
   path from the root to the changed entries and shares everything else.
 - **Content hashes on request.** A node's identity is the BLAKE3 hash of its
@@ -91,8 +98,13 @@ built as prolly trees, in a new crate, `axionomy-tree`:
 - **Counted subtrees.** Internal entries carry their subtree's entry count, so
   counts, positional access and paging are O(log n).
 - **Operations:** get, put, delete and batched updates; an ordered cursor from
-  any key; prefix ranges; `diff(a, b)`, which skips subtrees whose hashes are
-  equal; node encoding and decoding.
+  any key or position; prefix ranges; ranks; `diff(a, b)`, which skips
+  subtrees whose hashes are equal; the nodes a store is missing; and loading
+  by root hash, which checks every node against its hash and the tree against
+  the shape its keys determine, so a loaded tree is canonical.
+- **Edits** walk the old tree in key order, feed a builder the edited entries
+  and hand it every unchanged subtree that chunking would rebuild as it is, so
+  an edited tree is exactly the tree a build from scratch gives.
 
 A stored economy is a few trees:
 
@@ -289,7 +301,7 @@ summarize.
 ## What changes where
 
 - **Kernel** (done): a persistent account index, so forks are constant-time.
-- **`axionomy-tree`** (new): the canonical persistent tree. No I/O and no
+- **`axionomy-tree`** (done): the canonical persistent tree. No I/O and no
   economics.
 - **`axionomy-store`** (new): redb tables, the writer and durability rules,
   runs and steps, tags, groups, metrics and refs, merge and garbage collection.
@@ -309,7 +321,7 @@ Each phase is a validated commit or series of commits.
 0. **Constant-time forks** (done): the kernel's persistent account index, with
    every Studio artifact unchanged byte for byte and the fork benchmark in
    `benches/economy.rs`.
-1. **`axionomy-tree`**, with tests for what makes it correct: the same keys give
+1. **`axionomy-tree`** (done), with tests for what makes it correct: the same keys give
    the same root in any insertion order, an incrementally updated tree has the
    same root as one built from scratch, diff and cursors agree with a sorted
    map, and encoding round-trips.
@@ -329,18 +341,16 @@ Each phase is a validated commit or series of commits.
 
 ## Open decisions
 
-1. **Chunk boundaries** from the key alone, so value changes never re-chunk
-   (recommended), or from the key and value.
-2. **Quantity encoding** in nodes: fixed 32-byte big-endian (recommended:
+1. **Quantity encoding** in nodes: fixed 32-byte big-endian (recommended:
    simple, ordered, exact) or minimal length.
-3. **Typed ontologies in storage:** an encoding trait the ontology implements,
+2. **Typed ontologies in storage:** an encoding trait the ontology implements,
    or storing typed economies through the paths profile.
-4. **Periodic `Immediate` commit interval** for batches nobody waits on; one
+3. **Periodic `Immediate` commit interval** for batches nobody waits on; one
    second is a starting point.
-5. **Rates and invariants on the tree** from phase 1, or flat until a problem
+4. **Rates and invariants on the tree** from phase 1, or flat until a problem
    with large rate sets needs it.
-6. **Tag keys:** free-form (recommended to start), or a small declared
+5. **Tag keys:** free-form (recommended to start), or a small declared
    vocabulary per store once tag queries need validation.
-7. **Running summaries** beyond count, mean, minimum, maximum and variance,
+6. **Running summaries** beyond count, mean, minimum, maximum and variance,
    such as streaming quantile sketches, only if quantiles over large groups
    become a measured cost.

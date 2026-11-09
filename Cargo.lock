@@ -549,6 +549,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "axionomy-tree"
+version = "0.1.0"
+dependencies = [
+ "blake3",
+ "criterion",
+ "thiserror",
+]
+
+[[package]]
 name = "axionomy-units"
 version = "0.1.0"
 dependencies = [

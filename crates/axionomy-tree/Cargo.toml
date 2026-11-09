@@ -1,0 +1,21 @@
+[package]
+name = "axionomy-tree"
+description = "Canonical persistent prolly trees for Axionomy's stored states"
+readme = "README.md"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+blake3.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+criterion.workspace = true
+
+[[bench]]
+name = "tree"
+harness = false

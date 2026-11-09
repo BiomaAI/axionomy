@@ -594,6 +594,7 @@ axionomy-problems ────→ axionomy
                     └─→ axionomy-search
 axionomy-units ───────→ axionomy
 axionomy-time ────────→ axionomy-units ──→ axionomy
+axionomy-tree          (no workspace dependencies)
 axionomy-view ────────→ axionomy
 axionomy-service ─────→ axionomy-problems + axionomy-view
 axionomy-cli ─────────→ axionomy-service
@@ -609,6 +610,8 @@ axionomy-studio-server → axionomy-service
   specialized proposers, and conformance tests.
 - `axionomy-units` owns optional dimension-safe physical authoring.
 - `axionomy-time` owns optional calendar-aware timeline authoring.
+- `axionomy-tree` owns the canonical persistent tree that stored states are
+  kept in, with no I/O and no economics.
 - `axionomy-mcp` owns the strict stateless MCP reference boundary, immutable
   snapshot-store contract, and process-local task orchestration.
 - `axionomy-view` owns runtime-neutral monomorphic presentation contracts and
