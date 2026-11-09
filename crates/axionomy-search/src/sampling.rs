@@ -44,29 +44,6 @@ pub trait TicketSource {
     fn ticket(&mut self, total_weight: u64) -> u64;
 }
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub struct SystematicSampler {
-    next: u64,
-}
-
-impl SystematicSampler {
-    pub const fn new() -> Self {
-        Self { next: 0 }
-    }
-
-    pub const fn from_ticket(next: u64) -> Self {
-        Self { next }
-    }
-}
-
-impl TicketSource for SystematicSampler {
-    fn ticket(&mut self, total_weight: u64) -> u64 {
-        let ticket = self.next % total_weight;
-        self.next = self.next.wrapping_add(1);
-        ticket
-    }
-}
-
 /// ChaCha8-backed deterministic generator for reproducible solver exploration.
 #[derive(Debug, Clone)]
 pub struct SeededSampler {
@@ -82,26 +59,6 @@ impl SeededSampler {
 }
 
 impl TicketSource for SeededSampler {
-    fn ticket(&mut self, total_weight: u64) -> u64 {
-        self.random.random_range(0..total_weight)
-    }
-}
-
-/// Adapts any caller-owned `rand` generator to weighted ticket sampling.
-pub struct RngTickets<'a, R: ?Sized> {
-    random: &'a mut R,
-}
-
-impl<'a, R: ?Sized> RngTickets<'a, R> {
-    pub const fn new(random: &'a mut R) -> Self {
-        Self { random }
-    }
-}
-
-impl<R> TicketSource for RngTickets<'_, R>
-where
-    R: rand::Rng + ?Sized,
-{
     fn ticket(&mut self, total_weight: u64) -> u64 {
         self.random.random_range(0..total_weight)
     }
@@ -158,22 +115,6 @@ pub fn systematic_ticket(sample_index: usize, total_weight: u64) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rand::SeedableRng;
-    use rand_chacha::ChaCha8Rng;
-
-    #[test]
-    fn systematic_sampling_respects_integer_weights() {
-        let outcomes = [
-            WeightedExchange::new("a", 1),
-            WeightedExchange::new("b", 2),
-            WeightedExchange::new("ignored", 0),
-        ];
-        let mut sampler = SystematicSampler::new();
-        let samples = (0..6)
-            .map(|_| *sample(&outcomes, &mut sampler).expect("valid support"))
-            .collect::<Vec<_>>();
-        assert_eq!(samples, ["a", "b", "b", "a", "b", "b"]);
-    }
 
     #[test]
     fn seeded_sampling_is_reproducible() {
@@ -187,18 +128,6 @@ mod tests {
         for _ in 0..100 {
             assert_eq!(sample(&outcomes, &mut left), sample(&outcomes, &mut right));
         }
-    }
-
-    #[test]
-    fn caller_owned_rand_generators_can_drive_sampling() {
-        let outcomes = [
-            WeightedExchange::new("left", 1),
-            WeightedExchange::new("right", 1),
-        ];
-        let mut random = ChaCha8Rng::seed_from_u64(7);
-        let mut tickets = RngTickets::new(&mut random);
-
-        assert!(sample(&outcomes, &mut tickets).is_ok());
     }
 
     #[test]

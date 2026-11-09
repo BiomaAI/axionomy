@@ -1,102 +1,7 @@
 //! Reinforcement-learning projections over closed economic execution.
 
-use axionomy::{
-    ApplyError, AssessmentStatus, Economy, Exchange, ExchangeAssessment, Quantity, Receipt, Trace,
-};
+use axionomy::{ApplyError, Economy, Exchange, ExchangeAssessment, Receipt, Trace};
 use std::hash::Hash;
-
-#[derive(Debug, Clone)]
-pub struct AssessedAction<Action, Assessment> {
-    action: Action,
-    assessment: Assessment,
-}
-
-impl<Action, Assessment> AssessedAction<Action, Assessment> {
-    pub const fn action(&self) -> &Action {
-        &self.action
-    }
-
-    pub const fn assessment(&self) -> &Assessment {
-        &self.assessment
-    }
-}
-
-pub type EconomicAssessedAction<AccountId, A, RateId, Role> = AssessedAction<
-    Exchange<RateId, Role, AccountId>,
-    ExchangeAssessment<AccountId, A, RateId, Role>,
->;
-
-pub fn assessed_actions<AccountId, A, RateId, Role>(
-    world: &Economy<AccountId, A, RateId, Role>,
-    candidates: impl IntoIterator<Item = Exchange<RateId, Role, AccountId>>,
-) -> Vec<EconomicAssessedAction<AccountId, A, RateId, Role>>
-where
-    AccountId: Clone + Eq + Hash + Ord,
-    A: Clone + Eq + Hash + Ord,
-    RateId: Clone + Eq + Hash + Ord,
-    Role: Clone + Ord,
-{
-    candidates
-        .into_iter()
-        .map(|action| AssessedAction {
-            assessment: world.assess(&action),
-            action,
-        })
-        .collect()
-}
-
-pub fn action_mask<AccountId, A, RateId, Role>(
-    actions: &[EconomicAssessedAction<AccountId, A, RateId, Role>],
-) -> Vec<bool> {
-    actions
-        .iter()
-        .map(|action| action.assessment().is_applicable())
-        .collect()
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ShortfallFeature<AccountId, A> {
-    account: AccountId,
-    asset: A,
-    missing: Quantity,
-}
-
-impl<AccountId, A> ShortfallFeature<AccountId, A> {
-    pub const fn account(&self) -> &AccountId {
-        &self.account
-    }
-
-    pub const fn asset(&self) -> &A {
-        &self.asset
-    }
-
-    pub const fn missing(&self) -> &Quantity {
-        &self.missing
-    }
-}
-
-pub fn shortfall_features<AccountId, A, RateId, Role>(
-    assessment: &ExchangeAssessment<AccountId, A, RateId, Role>,
-) -> Vec<ShortfallFeature<AccountId, A>>
-where
-    AccountId: Clone,
-    A: Clone + Ord,
-{
-    assessment
-        .shortfalls()
-        .iter()
-        .flat_map(|shortfall| {
-            shortfall
-                .missing()
-                .iter_sorted()
-                .map(|(asset, missing)| ShortfallFeature {
-                    account: shortfall.account().clone(),
-                    asset: asset.clone(),
-                    missing: *missing,
-                })
-        })
-        .collect()
-}
 
 #[derive(Debug, Clone)]
 pub enum RlExecution<RateId, Role, AccountId, A> {
@@ -155,7 +60,7 @@ impl<Observation, Outcome, AccountId, A, RateId, Role>
 
 /// Applies one action and emits learning projections derived from economic
 /// state before and after the sole core commit attempt.
-pub fn step<AccountId, A, RateId, Role, Observation, Outcome, Observe, ReadOutcome, Terminal>(
+fn step<AccountId, A, RateId, Role, Observation, Outcome, Observe, ReadOutcome, Terminal>(
     world: &mut Economy<AccountId, A, RateId, Role>,
     action: Exchange<RateId, Role, AccountId>,
     observe: Observe,
@@ -241,18 +146,10 @@ where
     Ok(transitions)
 }
 
-pub fn status_code(status: AssessmentStatus) -> [f32; 3] {
-    match status {
-        AssessmentStatus::Applicable => [1.0, 0.0, 0.0],
-        AssessmentStatus::Infeasible => [0.0, 1.0, 0.0],
-        AssessmentStatus::Invalid => [0.0, 0.0, 1.0],
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axionomy::{Account, EconomyBuilder, Rate, basket};
+    use axionomy::{Account, EconomyBuilder, Quantity, Rate, basket};
 
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
     enum AccountId {
@@ -312,18 +209,6 @@ mod tests {
             world.balance(&AccountId::Actor, &Asset::Progress).to_u64(),
             world.balance(&AccountId::Actor, &Asset::Solved).to_u64(),
         ]
-    }
-
-    #[test]
-    fn masks_and_shortfalls_come_from_assessment() {
-        let world = world();
-        let actions = assessed_actions(&world, [action(RateId::Advance), action(RateId::Finish)]);
-
-        assert_eq!(action_mask(&actions), vec![true, false]);
-        let features = shortfall_features(actions[1].assessment());
-        assert_eq!(features.len(), 1);
-        assert_eq!(features[0].asset(), &Asset::Progress);
-        assert_eq!(features[0].missing(), &Quantity::new(1));
     }
 
     #[test]

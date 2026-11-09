@@ -545,7 +545,7 @@ where
 /// Emitted proposals remain non-authoritative: this function retains only
 /// exchanges applicable to each simulated economy before traversing them.
 #[allow(clippy::too_many_arguments)]
-pub fn search_with_source<
+fn search_with_source<
     AccountId,
     A,
     RateId,
