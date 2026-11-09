@@ -263,29 +263,44 @@ impl AgentMetrics {
 
     fn components(&self) -> Vec<SceneMetricView> {
         vec![
-            visual_metric(slug("value"), "Contract value", self.value, Some("credits")),
+            asset_metric(slug("value"), "Contract value", &Asset::Value, self.value),
             visual_metric(
                 slug("completed"),
                 "Jobs completed",
                 self.completed,
                 Some("jobs"),
             ),
-            visual_metric(slug("elapsed"), "Elapsed time", self.elapsed, Some("ticks")),
-            visual_metric(slug("energy"), "Energy spent", self.energy, Some("units")),
-            visual_metric(
+            asset_metric(
+                slug("elapsed"),
+                "Elapsed time",
+                &Asset::ElapsedTime,
+                self.elapsed,
+            ),
+            asset_metric(
+                slug("energy"),
+                "Energy spent",
+                &Asset::SpentEnergy,
+                self.energy,
+            ),
+            asset_metric(
                 slug("material"),
                 "Material spent",
+                &Asset::MaterialSpent,
                 self.material,
-                Some("units"),
             ),
-            visual_metric(slug("waste"), "Residual waste", self.waste, Some("units")),
-            visual_metric(
+            asset_metric(slug("waste"), "Residual waste", &Asset::Waste, self.waste),
+            asset_metric(
                 slug("recycled"),
                 "Waste recycled",
+                &Asset::RecycledWaste,
                 self.recycled,
-                Some("units"),
             ),
-            visual_metric(slug("attempts"), "Attempts", self.attempts, None),
+            asset_metric(
+                slug("attempts"),
+                "Attempts",
+                &Asset::Attempts,
+                self.attempts,
+            ),
         ]
     }
 
@@ -355,7 +370,7 @@ fn ranking(
                 rank: standing.eligible.then_some((*last_rank).unwrap_or(1)),
                 participant: ViewId::new(
                     account_key::<work_league::Ontology>(&AccountId::Agent(standing.agent)),
-                    format!("{:?}", standing.agent),
+                    AccountId::Agent(standing.agent).studio_label(),
                 ),
                 value: standing.display.unwrap_or_else(|| {
                     if standing.denominator == 1 {
@@ -499,7 +514,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             let mut entity = link_balance::<work_league::Ontology>(
                 visual_entity(
                     slug(format!("league/agent/{agent:?}")),
-                    format!("{agent:?} · {policy:?}"),
+                    format!("{agent:?} · {}", policy.studio_label()),
                     SceneGlyphView::Robot,
                     SceneAnchorView::GraphNode {
                         node: slug(format!("league/location/{location:?}")),
@@ -539,11 +554,11 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 &Asset::At(location),
             );
             entity.metrics = vec![
-                visual_metric(
+                asset_metric(
                     slug("value"),
                     "Value",
+                    &Asset::Value,
                     balance(world, agent, Asset::Value),
-                    Some("credits"),
                 ),
                 visual_metric(
                     slug("jobs"),
@@ -551,38 +566,38 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                     balance(world, agent, Asset::Completed),
                     Some("jobs"),
                 ),
-                visual_metric(
+                asset_metric(
                     slug("energy"),
                     "Energy left",
+                    &Asset::Energy,
                     balance(world, agent, Asset::Energy),
-                    Some("units"),
                 ),
-                visual_metric(
+                asset_metric(
                     slug("waste"),
                     "Residual waste",
+                    &Asset::Waste,
                     balance(world, agent, Asset::Waste),
-                    Some("units"),
                 ),
             ];
             if continuous {
                 entity.metrics.extend([
-                    visual_metric(
+                    asset_metric(
                         slug("credit"),
                         "Spendable credit",
+                        &Asset::Credit,
                         balance(world, agent, Asset::Credit),
-                        Some("credits"),
                     ),
-                    visual_metric(
+                    asset_metric(
                         slug("material"),
                         "Material left",
+                        &Asset::Material,
                         balance(world, agent, Asset::Material),
-                        Some("units"),
                     ),
-                    visual_metric(
+                    asset_metric(
                         slug("wear"),
                         "Equipment wear",
+                        &Asset::Wear,
                         balance(world, agent, Asset::Wear),
-                        None,
                     ),
                     visual_metric(
                         slug("handoffs"),
@@ -645,22 +660,22 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             &account,
         );
         entity.metrics = vec![
-            visual_metric(slug("value"), "Value", spec.value, Some("credits")),
+            asset_metric(slug("value"), "Value", &Asset::Value, spec.value),
             visual_metric(slug("risk"), "Failure weight", spec.risk, Some("of 10")),
         ];
         if continuous {
-            entity.metrics.push(visual_metric(
+            entity.metrics.push(asset_metric(
                 slug("deadline"),
                 "Deadline",
+                &Asset::Deadline,
                 balance_job(world, job, Asset::Deadline),
-                Some("tick"),
             ));
             if assigned.is_some() && balance_job(world, job, Asset::Pending) > 0 {
-                entity.metrics.push(visual_metric(
+                entity.metrics.push(asset_metric(
                     slug("lease"),
                     "Claim expires after",
+                    &Asset::LeaseUntil,
                     balance_job(world, job, Asset::LeaseUntil),
-                    Some("tick"),
                 ));
             }
         }
@@ -736,20 +751,20 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 .count(),
             Some("agents"),
         ),
-        visual_metric(
+        asset_metric(
             slug("repair-supply"),
             "Repair supply",
+            &Asset::RepairSupply,
             world.balance(
                 &AccountId::Facility(Facility::Workshop),
                 &Asset::RepairSupply,
             ),
-            Some("units"),
         ),
     ];
     if continuous {
         metrics.insert(
             0,
-            visual_metric(slug("clock"), "World time", tick, Some("ticks")),
+            asset_metric(slug("clock"), "World time", &Asset::Tick, tick),
         );
         metrics.insert(
             2,
@@ -844,7 +859,76 @@ mod tests {
 
 // How Studio names and writes this problem's values.
 
-counted!(work_league::Asset);
+/// Time reads in ticks of the shared work clock, earnings in credits, and
+/// energy, material, waste and supplies in units, as the league's scene
+/// reads them.
+impl StudioFormat for work_league::Asset {
+    fn studio_format(&self) -> QuantityFormat {
+        match self {
+            Self::Tick
+            | Self::Horizon
+            | Self::ReadyAt
+            | Self::ReleaseAt
+            | Self::Deadline
+            | Self::LeaseUntil
+            | Self::TimeRemaining
+            | Self::ElapsedTime => QuantityFormat::COUNT.unit("ticks"),
+            Self::Credit | Self::Value => QuantityFormat::COUNT.unit("credits"),
+            Self::Energy
+            | Self::SpentEnergy
+            | Self::ChargingEnergy
+            | Self::ChargeSupply
+            | Self::Material
+            | Self::MaterialSpent
+            | Self::ReclaimingMaterial
+            | Self::EmbodiedMaterial
+            | Self::RecyclingLoss
+            | Self::Waste
+            | Self::RecycledWaste
+            | Self::RepairSupply
+            | Self::SpentRepairSupply => QuantityFormat::COUNT.unit("units"),
+            _ => QuantityFormat::COUNT,
+        }
+    }
+}
+
+impl StudioLabel for Policy {
+    fn studio_label(&self) -> String {
+        match self {
+            Self::Sprinter => "Sprinter",
+            Self::Steward => "Steward",
+            Self::ValueHunter => "Value hunter",
+            Self::Resilient => "Resilient",
+        }
+        .into()
+    }
+}
+
+/// A facility named inside a sentence.
+fn facility(facility: Facility) -> &'static str {
+    match facility {
+        Facility::Workshop => "workshop",
+        Facility::Charger => "charger",
+        Facility::Recycler => "recycler",
+    }
+}
+
+/// A work mode named inside a sentence.
+fn mode(mode: work_league::WorkMode) -> &'static str {
+    match mode {
+        work_league::WorkMode::Rush => "rush",
+        work_league::WorkMode::Lean => "lean",
+        work_league::WorkMode::Safe => "safe",
+    }
+}
+
+/// A job attempt's outcome named inside a sentence.
+fn outcome(outcome: work_league::Outcome) -> &'static str {
+    match outcome {
+        work_league::Outcome::Success => "success",
+        work_league::Outcome::Failure => "failure",
+    }
+}
 
 impl StudioLabel for work_league::AccountId {
     fn studio_label(&self) -> String {
@@ -874,10 +958,10 @@ impl StudioLabel for work_league::Asset {
             Self::Idle => "Ready for work".into(),
             Self::Busy => "Activity in progress".into(),
             Self::FreeContract => "Can accept a contract".into(),
-            Self::ReadyAt => "Activity finishes at tick".into(),
-            Self::ReleaseAt => "Contract opens at tick".into(),
+            Self::ReadyAt => "Activity finishes at".into(),
+            Self::ReleaseAt => "Contract opens at".into(),
             Self::Deadline => "Delivery deadline".into(),
-            Self::LeaseUntil => "Claim reserved through tick".into(),
+            Self::LeaseUntil => "Claim reserved through".into(),
             Self::Expired => "Expired without delivery".into(),
             Self::Transferable => "Handoff available".into(),
             Self::HandedOff => "Contract handed off".into(),
@@ -889,14 +973,14 @@ impl StudioLabel for work_league::Asset {
             Self::FacilityIdentity(facility) => format!("Identity: {facility:?}"),
             Self::Vacant(facility) => format!("{facility:?} service slot free"),
             Self::Occupied(facility, agent) => format!("{facility:?} occupied by {agent:?}"),
-            Self::Servicing(facility) => format!("Receiving {facility:?} service"),
+            Self::Servicing(place) => format!("Receiving {} service", facility(*place)),
             Self::ChargingEnergy => "Energy reserved for charging".into(),
             Self::ReclaimingMaterial => "Material being reclaimed".into(),
             Self::EmbodiedMaterial => "Material incorporated into work".into(),
             Self::RecyclingLoss => "Material lost during recycling".into(),
             Self::AgentIdentity(agent) => format!("Identity: {agent:?}"),
             Self::JobIdentity(job) => format!("Identity: job {}", job.0),
-            Self::Policy(policy) => format!("Policy: {policy:?}"),
+            Self::Policy(policy) => format!("{} policy", policy.studio_label()),
             Self::At(location) => format!("At {location:?}"),
             Self::Operational => "Operational".into(),
             Self::Energy => "Energy left".into(),
@@ -907,9 +991,14 @@ impl StudioLabel for work_league::Asset {
             Self::Claimed(job) => format!("Claim on job {}", job.0),
             Self::Pending => "Waiting for work".into(),
             Self::InProgress => "Work in progress".into(),
-            Self::Awaiting(job, mode) => format!("Job {} awaiting {mode:?} outcome", job.0),
-            Self::Resolved(job, mode, outcome) => {
-                format!("Job {} {mode:?} outcome: {outcome:?}", job.0)
+            Self::Awaiting(job, work) => {
+                format!("Job {} {} work awaiting its outcome", job.0, mode(*work))
+            }
+            Self::Resolved(job, work, work_league::Outcome::Success) => {
+                format!("Job {} {} work succeeded", job.0, mode(*work))
+            }
+            Self::Resolved(job, work, work_league::Outcome::Failure) => {
+                format!("Job {} {} work failed", job.0, mode(*work))
             }
             Self::Completed => "Jobs completed".into(),
             Self::Value => "Contract value earned".into(),
@@ -926,8 +1015,8 @@ impl StudioLabel for work_league::Asset {
             Self::SpentRepairSupply => "Repair supply used".into(),
             Self::ChargeSupply => "Charging energy supply".into(),
             Self::RecyclerCapacity => "Recycler available".into(),
-            Self::OutcomeWeight(job, mode, outcome) => {
-                format!("Job {} {mode:?} {outcome:?} weight", job.0)
+            Self::OutcomeWeight(job, work, result) => {
+                format!("Job {} {} {} weight", job.0, mode(*work), outcome(*result))
             }
         }
     }
@@ -940,18 +1029,25 @@ impl StudioLabel for work_league::RateId {
             Self::Wait { agent } => format!("{agent:?} waits this tick"),
             Self::BeginService {
                 agent,
-                facility,
+                facility: place,
                 maintenance,
             } => format!(
-                "{agent:?} starts {} at {facility:?}",
+                "{agent:?} starts {} at the {}",
                 if *maintenance {
                     "preventive maintenance"
                 } else {
                     "service"
-                }
+                },
+                facility(*place)
             ),
-            Self::EndService { agent, facility } => {
-                format!("{agent:?} finishes service and frees {facility:?}")
+            Self::EndService {
+                agent,
+                facility: place,
+            } => {
+                format!(
+                    "{agent:?} finishes service and frees the {}",
+                    facility(*place)
+                )
             }
             Self::Handoff {
                 agent,
@@ -965,35 +1061,65 @@ impl StudioLabel for work_league::RateId {
             Self::ReleaseClaim {
                 agent,
                 job,
-                expired,
+                expired: true,
+            } => format!("{agent:?}'s claim on job {} lapses", job.0),
+            Self::ReleaseClaim {
+                agent,
+                job,
+                expired: false,
+            } => format!("{agent:?} releases job {} for another worker", job.0),
+            Self::Expire {
+                job, agent: None, ..
+            } => format!("Job {} misses its deadline unclaimed", job.0),
+            Self::Expire {
+                job,
+                agent: Some(agent),
+                mode: None,
+            } => format!("Job {} misses its deadline while {agent:?} holds it", job.0),
+            Self::Expire {
+                job,
+                agent: Some(agent),
+                mode: Some(work),
             } => format!(
-                "{agent:?} releases job {}{}",
+                "Job {} misses its deadline during {agent:?}'s {} work",
                 job.0,
-                if *expired {
-                    ": claim lease expired"
-                } else {
-                    " for another worker"
-                }
+                mode(*work)
             ),
-            Self::Expire { job, .. } => format!("Job {} misses its delivery deadline", job.0),
             Self::EndSeason => "Close the resolved work season".into(),
             Self::Claim { agent, job } => format!("{agent:?} claims job {}", job.0),
-            Self::Move { agent, from, to } => format!("{agent:?} moves {from:?} → {to:?}"),
-            Self::Begin { agent, job, mode } => {
-                format!("{agent:?} begins job {} in {mode:?} mode", job.0)
+            Self::Move { agent, from, to } => {
+                format!("{agent:?} moves from {from:?} to {to:?}")
             }
+            Self::Begin {
+                agent,
+                job,
+                mode: work,
+            } => format!("{agent:?} begins job {} in {} mode", job.0, mode(*work)),
             Self::Resolve {
                 agent,
                 job,
-                outcome,
-                ..
-            } => format!("Resolve {agent:?} on job {}: {outcome:?}", job.0),
+                mode: work,
+                outcome: result,
+            } => format!(
+                "{agent:?}'s {} work on job {} {}",
+                mode(*work),
+                job.0,
+                match result {
+                    work_league::Outcome::Success => "succeeds",
+                    work_league::Outcome::Failure => "fails",
+                }
+            ),
             Self::Finish {
                 agent,
                 job,
-                outcome,
-                ..
-            } => format!("{agent:?} records job {} as {outcome:?}", job.0),
+                mode: work,
+                outcome: result,
+            } => format!(
+                "{agent:?} records a {} {} on job {}",
+                mode(*work),
+                outcome(*result),
+                job.0
+            ),
             Self::Repair { agent } => format!("Repair {agent:?}"),
             Self::Recharge { agent } => format!("Recharge {agent:?}"),
             Self::Recycle { agent } => format!("{agent:?} recycles one waste unit"),

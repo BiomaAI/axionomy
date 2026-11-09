@@ -162,19 +162,6 @@ fn actor_key(actor: Actor) -> &'static str {
     }
 }
 
-fn actor_label(actor: Actor) -> &'static str {
-    match actor {
-        Actor::Founder => "Founding LP",
-        Actor::Generator => "Solar Generator",
-        Actor::Factory => "Factory",
-        Actor::Household => "Household",
-        Actor::Speculator => "Informed Speculator",
-        Actor::AdaptiveLp => "Adaptive LP",
-        Actor::Arbitrageur => "Internal Arbitrageur",
-        Actor::Whale => "Demand Whale",
-    }
-}
-
 fn actor_glyph(actor: Actor) -> SceneGlyphView {
     match actor {
         Actor::Founder | Actor::AdaptiveLp => SceneGlyphView::Organization,
@@ -269,7 +256,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             MarketActorView {
                 id: ViewId::new(
                     slug(format!("amm/actor/{}", actor_key(actor))),
-                    actor_label(actor),
+                    actor.studio_label(),
                 ),
                 account: account_key::<amm::Ontology>(&account),
                 glyph: actor_glyph(actor),
@@ -284,33 +271,37 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             }
         })
         .collect::<Vec<_>>();
-    let entities = actors
-        .iter()
-        .map(|actor| SceneEntityView {
-            id: actor.id.clone(),
-            glyph: actor.glyph,
-            anchor: SceneAnchorView::Unanchored,
-            role: SceneEntityRoleView::Occupant,
-            tone: actor.tone,
-            status: actor.status.clone(),
-            account: Some(actor.account.clone()),
-            evidence: vec![SceneEvidenceRefView::Account {
-                account: actor.account.clone(),
-            }],
-            metrics: vec![
-                visual_metric(
-                    slug("energy"),
-                    "Energy",
-                    actor.energy.0.clone(),
-                    Some("units"),
-                ),
-                visual_metric(
-                    slug("credit"),
-                    "Credit",
-                    actor.credit.0.clone(),
-                    Some("credits"),
-                ),
-            ],
+    let entities = ACTORS
+        .into_iter()
+        .zip(&actors)
+        .map(|(id, actor)| {
+            let account = AccountId::Actor(id);
+            SceneEntityView {
+                id: actor.id.clone(),
+                glyph: actor.glyph,
+                anchor: SceneAnchorView::Unanchored,
+                role: SceneEntityRoleView::Occupant,
+                tone: actor.tone,
+                status: actor.status.clone(),
+                account: Some(actor.account.clone()),
+                evidence: vec![SceneEvidenceRefView::Account {
+                    account: actor.account.clone(),
+                }],
+                metrics: vec![
+                    asset_metric(
+                        slug("energy"),
+                        "Energy",
+                        &Asset::Energy,
+                        world.balance(&account, &Asset::Energy),
+                    ),
+                    asset_metric(
+                        slug("credit"),
+                        "Credit",
+                        &Asset::Credit,
+                        world.balance(&account, &Asset::Credit),
+                    ),
+                ],
+            }
         })
         .collect();
     let mut scene = Scene {
@@ -341,17 +332,17 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 format_price(state.price_milli),
                 Some("credit / energy"),
             ),
-            visual_metric(
+            asset_metric(
                 slug("energy-reserve"),
                 "Energy reserve",
+                &Asset::Energy,
                 state.energy,
-                Some("energy"),
             ),
-            visual_metric(
+            asset_metric(
                 slug("liquidity"),
-                "Liquidity shares",
+                "Liquidity shares issued",
+                &Asset::LpShare,
                 state.issued_lp_shares,
-                Some("LP"),
             ),
         ],
         legend: Vec::new(),
@@ -379,26 +370,26 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 defaults(world),
                 Some("payments"),
             ),
-            visual_metric(
+            asset_metric(
                 slug("sunlight"),
                 "Sunlight",
+                &Asset::CurrentSunlight,
                 world.balance(&AccountId::World, &Asset::CurrentSunlight),
-                Some("%"),
             ),
-            visual_metric(
+            asset_metric(
                 slug("capacity"),
                 "Generating capacity",
+                &Asset::ProductionCapacity,
                 world.balance(
                     &AccountId::Actor(Actor::Generator),
                     &Asset::ProductionCapacity,
                 ),
-                Some("energy / day"),
             ),
-            visual_metric(
+            asset_metric(
                 slug("goods"),
                 "Goods delivered",
+                &Asset::DeliveredGoods,
                 world.balance(&AccountId::Treasury, &Asset::DeliveredGoods),
-                Some("units"),
             ),
         ]);
     }
@@ -498,7 +489,7 @@ fn contribution_board(contributions: &BTreeMap<Actor, i128>) -> LeaderboardView 
                 rank: Some(rank),
                 participant: ViewId::new(
                     account_key::<amm::Ontology>(&AccountId::Actor(actor)),
-                    actor_label(actor),
+                    actor.studio_label(),
                 ),
                 value: format_signed_milli(value),
                 unit: Some("Δ credit / energy".into()),
@@ -552,7 +543,7 @@ fn causal_contribution_board(initial: &World) -> LeaderboardView {
                 rank: Some(rank),
                 participant: ViewId::new(
                     account_key::<amm::Ontology>(&AccountId::Actor(contribution.actor)),
-                    actor_label(contribution.actor),
+                    contribution.actor.studio_label(),
                 ),
                 value: format!("{reduced_numerator}/{reduced_denominator}"),
                 unit: Some("Δ credit / energy".into()),
@@ -584,37 +575,42 @@ fn gcd(mut left: u128, mut right: u128) -> u128 {
     left.max(1)
 }
 
-#[cfg(test)]
-mod tests {
-    use super::format_signed_milli;
-
-    #[test]
-    fn signed_milli_preserves_the_sign_of_fractional_moves() {
-        assert_eq!(format_signed_milli(12_345), "+12.345");
-        assert_eq!(format_signed_milli(0), "0.000");
-        assert_eq!(format_signed_milli(-500), "-0.500");
-        assert_eq!(
-            format_signed_milli(i128::MIN),
-            "-170141183460469231731687303715884105.728"
-        );
-    }
-}
-
 // How Studio names and writes this problem's values.
 
-counted!(amm::Asset);
+/// Energy is counted in units and credit in credits, as the market scene
+/// reads them; the season is counted in market days. The reference price is
+/// kept in thousandths of a credit per unit of energy.
+impl StudioFormat for amm::Asset {
+    fn studio_format(&self) -> QuantityFormat {
+        match self {
+            Self::Energy
+            | Self::SpentEnergy
+            | Self::SolarPotential
+            | Self::StorageCapacity
+            | Self::ProductionAllowance => QuantityFormat::COUNT.unit("units"),
+            Self::ProductionCapacity | Self::FutureCapacity | Self::PendingCapacity => {
+                QuantityFormat::COUNT.unit("units / day")
+            }
+            Self::Credit => QuantityFormat::COUNT.unit("credits"),
+            Self::ReferencePrice => QuantityFormat::decimal(3).unit("credit / energy"),
+            Self::Day | Self::Days | Self::ConstructionDue => QuantityFormat::COUNT.unit("days"),
+            Self::Sunlight(_) | Self::CurrentSunlight => QuantityFormat::COUNT.unit("%"),
+            _ => QuantityFormat::COUNT,
+        }
+    }
+}
 
 impl StudioLabel for amm::Actor {
     fn studio_label(&self) -> String {
         match self {
             Self::Founder => "Founding LP",
-            Self::Generator => "Solar Generator",
+            Self::Generator => "Solar generator",
             Self::Factory => "Factory",
             Self::Household => "Household",
-            Self::Speculator => "Informed Speculator",
+            Self::Speculator => "Informed speculator",
             Self::AdaptiveLp => "Adaptive LP",
-            Self::Arbitrageur => "Internal Arbitrageur",
-            Self::Whale => "Demand Whale",
+            Self::Arbitrageur => "Internal arbitrageur",
+            Self::Whale => "Demand whale",
         }
         .into()
     }
@@ -623,9 +619,9 @@ impl StudioLabel for amm::Actor {
 impl StudioLabel for amm::AccountId {
     fn studio_label(&self) -> String {
         match self {
-            Self::Pool => "Energy / Credit AMM".into(),
-            Self::Treasury => "Closed-economy Treasury".into(),
-            Self::Information => "Scarcity Information".into(),
+            Self::Pool => "Energy / credit AMM".into(),
+            Self::Treasury => "Closed-economy treasury".into(),
+            Self::Information => "Scarcity information".into(),
             Self::Actor(actor) => actor.studio_label(),
             Self::World => "Market calendar and production conditions".into(),
         }
@@ -641,49 +637,51 @@ impl StudioLabel for amm::Asset {
             Self::WorldIdentity => "Identity: market calendar".into(),
             Self::MarketActive => "Market season active".into(),
             Self::MarketEnded => "Market season closed".into(),
-            Self::Day => "Completed market days".into(),
+            Self::Day => "Time elapsed".into(),
             Self::AtDay(day) => format!("Market day {}", day + 1),
-            Self::Days => "Days in season".into(),
+            Self::Days => "Season length".into(),
             Self::Scale => "Production scale".into(),
             Self::MarketOpen => "Market access open".into(),
             Self::Trading => "Still trading today".into(),
             Self::Done => "Trading finished for today".into(),
             Self::Decisions => "Decisions remaining today".into(),
             Self::StorageCapacity => "Energy storage capacity".into(),
-            Self::ProductionCapacity => "Daily generating capacity".into(),
+            Self::ProductionCapacity => "Generating capacity".into(),
             Self::ProductionAllowance => "Remaining production today".into(),
-            Self::FutureCapacity => "Available capacity expansion".into(),
+            Self::FutureCapacity => "Capacity left to build".into(),
             Self::PendingCapacity => "Capacity under construction".into(),
-            Self::ConstructionDue => "Construction completes at day index".into(),
-            Self::ReferencePrice => "Smoothed prior closing price (milli)".into(),
-            Self::Sunlight(day) => format!("Day {} sunlight percent", day + 1),
-            Self::CurrentSunlight => "Current sunlight percent".into(),
+            Self::ConstructionDue => "Construction completes at".into(),
+            Self::ReferencePrice => "Smoothed prior closing price".into(),
+            Self::Sunlight(day) => format!("Day {} sunlight", day + 1),
+            Self::CurrentSunlight => "Current sunlight".into(),
             Self::LiquidityDecision => "Liquidity adjustment available".into(),
-            Self::FutureNeed(actor) => format!("{} future energy needs", actor.studio_label()),
-            Self::MissedNeed(actor) => format!("{} unmet energy needs", actor.studio_label()),
-            Self::FutureObligation(actor) => format!("{} future obligations", actor.studio_label()),
-            Self::DefaultedObligation(actor) => {
-                format!("{} missed obligations", actor.studio_label())
+            Self::Need(actor) => format!("{} need due today", actor.studio_label()),
+            Self::FutureNeed(actor) => format!("{} needs still to come", actor.studio_label()),
+            Self::SatisfiedNeed(actor) => format!("{} needs met", actor.studio_label()),
+            Self::MissedNeed(actor) => format!("{} needs unmet", actor.studio_label()),
+            Self::Obligation(actor) => format!("{} obligation due today", actor.studio_label()),
+            Self::FutureObligation(actor) => {
+                format!("{} obligations still to come", actor.studio_label())
             }
-            Self::UnmadeGoods => "Remaining production contracts".into(),
+            Self::SettledObligation(actor) => {
+                format!("{} obligations settled", actor.studio_label())
+            }
+            Self::DefaultedObligation(actor) => {
+                format!("{} obligations missed", actor.studio_label())
+            }
+            Self::UnmadeGoods => "Goods still to make".into(),
             Self::Goods => "Manufactured goods awaiting sale".into(),
             Self::DeliveredGoods => "Goods delivered to procurement".into(),
-            Self::IncomeDue => "Household income available".into(),
-            Self::FutureIncome => "Future income entitlements".into(),
+            Self::IncomeDue => "Income payment due today".into(),
+            Self::FutureIncome => "Income payments still to come".into(),
             Self::ReceivedIncome => "Income payments received".into(),
-            Self::MissedIncome => "Unpaid income entitlements".into(),
+            Self::MissedIncome => "Income payments missed".into(),
             Self::Energy => "Usable energy".into(),
             Self::Credit => "Settlement credit".into(),
             Self::SolarPotential => "Unharvested solar potential".into(),
             Self::SpentEnergy => "Energy consumed toward goals".into(),
             Self::LpShare => "AMM liquidity share".into(),
             Self::UnissuedLpShare => "Unissued liquidity share".into(),
-            Self::Need(actor) => format!("{} energy need", actor.studio_label()),
-            Self::SatisfiedNeed(actor) => format!("{} need satisfied", actor.studio_label()),
-            Self::Obligation(actor) => format!("{} credit obligation", actor.studio_label()),
-            Self::SettledObligation(actor) => {
-                format!("{} obligation settled", actor.studio_label())
-            }
             Self::Uninformed(actor) => format!("{} has no shortage signal", actor.studio_label()),
             Self::Informed(actor) => format!("{} knows about the shortage", actor.studio_label()),
             Self::ShortageSignal => "Verified energy shortage signal".into(),
@@ -719,4 +717,35 @@ impl StudioLabel for amm::RateId {
     }
 }
 
-debug_labels!(amm::Role);
+impl StudioLabel for amm::Role {
+    fn studio_label(&self) -> String {
+        match self {
+            Self::Pool => "Pool".into(),
+            Self::Trader => "Trader".into(),
+            Self::LiquidityProvider => "Liquidity provider".into(),
+            Self::Producer => "Producer".into(),
+            Self::Consumer => "Consumer".into(),
+            Self::Treasury => "Treasury".into(),
+            Self::Information => "Information source".into(),
+            Self::Observer => "Observer".into(),
+            Self::World => "Market calendar".into(),
+            Self::Participant(actor) => actor.studio_label(),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::format_signed_milli;
+
+    #[test]
+    fn signed_milli_preserves_the_sign_of_fractional_moves() {
+        assert_eq!(format_signed_milli(12_345), "+12.345");
+        assert_eq!(format_signed_milli(0), "0.000");
+        assert_eq!(format_signed_milli(-500), "-0.500");
+        assert_eq!(
+            format_signed_milli(i128::MIN),
+            "-170141183460469231731687303715884105.728"
+        );
+    }
+}

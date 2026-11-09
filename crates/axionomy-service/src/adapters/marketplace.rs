@@ -544,17 +544,17 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         );
         if timed {
             entity.metrics = vec![
-                visual_metric(
+                asset_metric(
                     slug("escrow"),
                     "Funds held",
+                    &marketplace::Asset::Money,
                     world.balance(&AccountId::Order(*order), &marketplace::Asset::Money),
-                    None,
                 ),
-                visual_metric(
+                asset_metric(
                     slug("deadline"),
                     "Deadline",
+                    &marketplace::Asset::Deadline,
                     world.balance(&AccountId::Order(*order), &marketplace::Asset::Deadline),
-                    Some("ticks"),
                 ),
             ];
         }
@@ -678,15 +678,16 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         ]);
     if timed {
         scene.metrics.extend([
-            visual_metric(
+            asset_metric(
                 slug("world-time"),
                 "World time",
+                &marketplace::Asset::Now,
                 marketplace::fulfillment::now(world),
-                Some("ticks"),
             ),
-            visual_metric(
+            asset_metric(
                 slug("escrow"),
                 "Funds held in contracts",
+                &marketplace::Asset::Money,
                 orders
                     .iter()
                     .map(|order| {
@@ -695,7 +696,6 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                             .to_u64()
                     })
                     .sum::<u64>(),
-                None,
             ),
             visual_metric(
                 slug("in-transit"),
@@ -746,7 +746,34 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
 
 // How Studio names and writes this problem's values.
 
-counted!(marketplace::Asset);
+/// Money reads in credits, the unit of every price and concession; the
+/// platform's clock and every time it keeps read in ticks.
+impl StudioFormat for marketplace::Asset {
+    fn studio_format(&self) -> QuantityFormat {
+        match self {
+            Self::Money => QuantityFormat::COUNT.unit("credits"),
+            Self::Arrival
+            | Self::Deadline
+            | Self::LeaseUntil
+            | Self::ReadyAt
+            | Self::Now
+            | Self::TimeRemaining
+            | Self::TransitTime
+            | Self::RouteDelay => QuantityFormat::COUNT.unit("ticks"),
+            _ => QuantityFormat::COUNT,
+        }
+    }
+}
+
+/// How a contract's price was agreed: in full, or with the 10-credit
+/// discount.
+fn priced(discounted: bool) -> &'static str {
+    if discounted {
+        "discounted"
+    } else {
+        "full-price"
+    }
+}
 
 impl StudioLabel for marketplace::AccountId {
     fn studio_label(&self) -> String {
@@ -768,7 +795,8 @@ impl StudioLabel for marketplace::Asset {
             Self::Item(item) => format!("{item:?} inventory"),
             Self::PurchaseIntent(order) => format!("Wants Order {order:?}"),
             Self::PurchaseReceipt(order) => format!("Bought Order {order:?}"),
-            Self::SaleOffer(item) => format!("Offers one {item:?}"),
+            Self::SaleOffer(marketplace::Item::Widget) => "Offers one widget".into(),
+            Self::SaleOffer(marketplace::Item::Gadget) => "Offers one gadget".into(),
             Self::CompletedSale(order) => format!("Sold Order {order:?}"),
             Self::MarketplaceLicense => "Marketplace licence".into(),
             Self::TaxPolicy => "Tax policy".into(),
@@ -776,18 +804,18 @@ impl StudioLabel for marketplace::Asset {
             Self::UsedShippingCapacity => "Shipping capacity used".into(),
             Self::OpenOrder(order) => format!("Order {order:?} is open"),
             Self::SettledOrder(order) => format!("Order {order:?} settled"),
-            Self::SettledValue(value) => format!("Settled value {value}"),
+            Self::SettledValue(value) => format!("Settled for {value} credits"),
             Self::Utility => "Participant benefit".into(),
             Self::BuyerLicense => "Buyer identity".into(),
             Self::SellerLicense => "Seller identity".into(),
             Self::CarrierLicense => "Carrier identity".into(),
             Self::Contract(order) => format!("Order {order:?} reserved"),
             Self::InShipment(order) => format!("Order {order:?} in transit"),
-            Self::PurchaseLocked(order) => format!("Buyer committed to {order:?}"),
-            Self::SaleReserved(order) => format!("Seller committed to {order:?}"),
-            Self::Booking(order) => format!("Carrier booked for {order:?}"),
+            Self::PurchaseLocked(order) => format!("Buyer committed to Order {order:?}"),
+            Self::SaleReserved(order) => format!("Seller committed to Order {order:?}"),
+            Self::Booking(order) => format!("Carrier booked for Order {order:?}"),
             Self::DeliveredBy(order) => format!("Delivered Order {order:?}"),
-            Self::AgreedPrice(price) => format!("Agreed price {price}"),
+            Self::AgreedPrice(price) => format!("Agreed price of {price} credits"),
             Self::Arrival => "Order release time".into(),
             Self::Deadline => "Delivery deadline".into(),
             Self::LeaseUntil => "Dispatch reservation expires at".into(),
@@ -807,21 +835,43 @@ impl StudioLabel for marketplace::Asset {
 impl StudioLabel for marketplace::RateId {
     fn studio_label(&self) -> String {
         match self {
-            Self::SettleOrder(order) => {
-                format!("Agree Order {order:?} (Micro: settle; larger markets: reserve)")
-            }
+            Self::SettleOrder(order) => format!("Agree Order {order:?} at full price"),
             Self::DiscountedContract(order) => {
-                format!("Agree Order {order:?} with a 10-credit concession")
+                format!("Agree Order {order:?} at a 10-credit discount")
             }
             Self::Dispatch(order) => format!("Dispatch Order {order:?}"),
-            Self::Deliver { order, late, .. } => format!(
-                "Deliver Order {order:?} {}",
-                if *late { "late with rebate" } else { "on time" }
+            Self::Deliver {
+                order,
+                discounted,
+                late,
+            } => format!(
+                "Deliver {} Order {order:?} {}",
+                priced(*discounted),
+                if *late {
+                    "late with a rebate"
+                } else {
+                    "on time"
+                }
             ),
-            Self::Cancel { order, .. } => format!("Refund expired reservation for {order:?}"),
+            Self::Cancel { order, discounted } => format!(
+                "Refund the expired {} reservation for Order {order:?}",
+                priced(*discounted)
+            ),
             Self::Advance { to } => format!("Advance market time to {to}"),
         }
     }
 }
 
-debug_labels!(marketplace::Role);
+impl StudioLabel for marketplace::Role {
+    fn studio_label(&self) -> String {
+        match self {
+            Self::Buyer => "Buyer",
+            Self::Seller => "Seller",
+            Self::Platform => "Platform",
+            Self::TaxAuthority => "Tax authority",
+            Self::Carrier => "Carrier",
+            Self::Order => "Order",
+        }
+        .into()
+    }
+}

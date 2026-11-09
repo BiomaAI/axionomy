@@ -426,17 +426,17 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                     liquidation_limit,
                     Some("cash"),
                 ),
-                visual_metric(
+                asset_metric(
                     slug("price"),
                     "Collateral price",
+                    &Asset::CollateralPrice,
                     market(Asset::CollateralPrice),
-                    Some("cash"),
                 ),
-                visual_metric(
+                asset_metric(
                     slug("reserves"),
                     "Reserves",
+                    &Asset::Reserves,
                     market(Asset::Reserves),
-                    Some("cash"),
                 ),
                 visual_metric(
                     slug("share-assets"),
@@ -451,7 +451,9 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
 // How Studio names and writes this problem's values.
 
 /// The market's terms are basis points scaled by `WAD` (10^18), so 10^16 atoms
-/// are one percent; the borrow index is a `WAD`-scaled multiplier.
+/// are one percent; the borrow index is a `WAD`-scaled multiplier. Values the
+/// market keeps in cash read as cash, and the clock counts periods. Cash
+/// itself stays a plain count: its label already names the unit.
 impl StudioFormat for lending::Asset {
     fn studio_format(&self) -> QuantityFormat {
         match self {
@@ -464,6 +466,12 @@ impl StudioFormat for lending::Asset {
             | Self::LoanToValue
             | Self::LiquidationThreshold
             | Self::LiquidationBonus => QuantityFormat::decimal(16).unit("%"),
+            Self::Reserves | Self::CollateralPrice | Self::PriceDrop => {
+                QuantityFormat::COUNT.unit("cash")
+            }
+            Self::Period | Self::ElapsedPeriod | Self::ShockAfter => {
+                QuantityFormat::COUNT.unit("periods")
+            }
             _ => QuantityFormat::COUNT,
         }
     }
@@ -513,10 +521,10 @@ impl StudioLabel for lending::Asset {
             Self::MarketIdentity => "Market identity".into(),
             Self::ClockIdentity => "Clock identity".into(),
             Self::OracleIdentity => "Oracle identity".into(),
-            Self::Period => "Remaining period".into(),
-            Self::ElapsedPeriod => "Closed period".into(),
+            Self::Period => "Time remaining".into(),
+            Self::ElapsedPeriod => "Time elapsed".into(),
             Self::PendingShock => "Pending price drop".into(),
-            Self::ShockAfter => "Price drop after periods".into(),
+            Self::ShockAfter => "Price drop after".into(),
             Self::PriceDrop => "Price drop".into(),
         }
     }

@@ -487,27 +487,27 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             &AccountId::Agent(agent),
             &asset,
         );
-        entity.metrics = vec![visual_metric(
+        entity.metrics = vec![asset_metric(
             slug("credit"),
             "Credit",
+            &Asset::Credit,
             bridge::credit(world, agent),
-            None,
         )];
         if timed {
             entity.metrics.extend([
-                visual_metric(
+                asset_metric(
                     slug("deadline"),
                     "Deadline",
+                    &Asset::Deadline,
                     value(Asset::Deadline),
-                    Some("ticks"),
                 ),
-                visual_metric(
+                asset_metric(
                     slug("ontime"),
-                    "On time",
+                    "On-time trips",
+                    &Asset::OnTime,
                     value(Asset::OnTime),
-                    Some("trips"),
                 ),
-                visual_metric(slug("late"), "Late", value(Asset::Late), Some("trips")),
+                asset_metric(slug("late"), "Late trips", &Asset::Late, value(Asset::Late)),
             ]);
         }
         entity
@@ -543,7 +543,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         ]);
     if timed {
         scene.metrics.extend([
-            visual_metric(slug("world-time"), "World time", clock, Some("ticks")),
+            asset_metric(slug("world-time"), "World time", &Asset::Now, clock),
             visual_metric(
                 slug("wave"),
                 "Traffic wave",
@@ -616,7 +616,25 @@ mod tests {
 
 // How Studio names and writes this problem's values.
 
-counted!(bridge::Asset);
+/// Energy reads in units and credit in credits; every time the bridge keeps
+/// is a tick of its world clock.
+impl StudioFormat for bridge::Asset {
+    fn studio_format(&self) -> QuantityFormat {
+        match self {
+            Self::Energy | Self::SpentEnergy => QuantityFormat::COUNT.unit("units"),
+            Self::Credit | Self::Escrow | Self::SpentCredit => {
+                QuantityFormat::COUNT.unit("credits")
+            }
+            Self::Now
+            | Self::TimeRemaining
+            | Self::Arrival
+            | Self::Deadline
+            | Self::LeaseUntil
+            | Self::ReadyAt => QuantityFormat::COUNT.unit("ticks"),
+            _ => QuantityFormat::COUNT,
+        }
+    }
+}
 
 impl StudioLabel for bridge::AccountId {
     fn studio_label(&self) -> String {
@@ -632,13 +650,15 @@ impl StudioLabel for bridge::Asset {
         match self {
             Self::AgentIdentity(agent) => format!("Identity: Agent {agent:?}"),
             Self::BridgeIdentity => "Bridge identity".into(),
-            Self::At(side) => format!("At the {side:?} bank"),
+            Self::At(Side::West) => "At the west bank".into(),
+            Self::At(Side::East) => "At the east bank".into(),
             Self::Energy => "Crossing energy".into(),
             Self::SpentEnergy => "Energy spent crossing".into(),
             Self::Credit => "Credit available".into(),
             Self::Escrow => "Credit in escrow".into(),
             Self::SpentCredit => "Credit spent".into(),
-            Self::Bid(amount) => format!("Bid {amount}"),
+            Self::Bid(1) => "Bid of 1 credit".into(),
+            Self::Bid(amount) => format!("Bid of {amount} credits"),
             Self::CanBid => "Can bid or claim".into(),
             Self::Submitted => "Bid submitted".into(),
             Self::CrossingRight => "Crossing right".into(),
@@ -694,7 +714,14 @@ impl StudioLabel for bridge::RateId {
                 if *detour { "detour" } else { "crossing" },
                 if *late { "late" } else { "on time" }
             ),
-            Self::Detour { agent, .. } => format!("Agent {agent:?} pays for the alternate route"),
+            Self::Detour {
+                agent,
+                waiting: false,
+            } => format!("Agent {agent:?} skips the lane and pays for the alternate route"),
+            Self::Detour {
+                agent,
+                waiting: true,
+            } => format!("Agent {agent:?} stops waiting and pays for the alternate route"),
             Self::ExpireReservation { agent } => {
                 format!("Release Agent {agent:?}'s expired reservation")
             }
