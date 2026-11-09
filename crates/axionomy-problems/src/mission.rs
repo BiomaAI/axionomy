@@ -7,8 +7,8 @@ use axionomy::{
 use axionomy_search::{
     action_source::{ActionSource, lazy_actions},
     ismcts::{
-        InformationState, IsmctsDecision, IsmctsError, IsmctsProgress, IsmctsResult, IsmctsSession,
-        IsmctsStatus, search as information_set_search,
+        InformationState, IsmctsDecision, IsmctsProgress, IsmctsResult, IsmctsSession,
+        search as information_set_search,
     },
     mcts::MctsConfig,
     monte_carlo::{
@@ -22,6 +22,7 @@ use axionomy_search::{
         total_weight,
     },
     session::{Continue, WorkBudget},
+    tree::{TreeSearchError, TreeStatus},
 };
 use std::ops::ControlFlow;
 pub mod expedition;
@@ -136,7 +137,7 @@ pub type MissionObservation = ObservationKey<AccountId, Asset>;
 pub type MissionInformation = InformationState<MissionObservation>;
 pub type PolicyFront = ParetoFront<PolicyEstimate<Policy, VectorSummary>, PolicyObjective, f64>;
 pub type PlanningDecision = IsmctsDecision<Action>;
-pub type PlanningError = IsmctsError<RateId, Role, AccountId, Asset>;
+pub type PlanningError = TreeSearchError<RateId, Role, AccountId, Asset>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PolicyObjective {
@@ -742,7 +743,7 @@ pub fn plan_with_progress(
         |_| vec![0.0],
         informed_rollout_action,
     )?;
-    while session.status() == IsmctsStatus::Running {
+    while session.status() == TreeStatus::Running {
         let report = session.advance(WorkBudget::new(chunk_size.max(1)), &mut Continue)?;
         if observer(*report.progress()).is_break() {
             return Ok(None);
@@ -859,7 +860,7 @@ pub fn run_planned_with_progress(
         ) {
             Ok(Some(decision)) => decision,
             Ok(None) => return Ok(None),
-            Err(IsmctsError::NoRootActions) => break,
+            Err(TreeSearchError::NoRootActions) => break,
             Err(error) => return Err(format!("{error:?}")),
         };
         let trace_index = trace.exchanges().len();

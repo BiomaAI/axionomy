@@ -9,6 +9,7 @@ pub mod rl;
 pub mod rollout;
 pub mod sampling;
 pub mod session;
+pub mod tree;
 
 use axionomy::{Economy, Exchange, Goal, Quantity, Trace};
 use pathfinding::prelude::{astar as pathfinding_astar, dijkstra as pathfinding_dijkstra};

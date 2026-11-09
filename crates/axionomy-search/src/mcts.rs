@@ -2,10 +2,14 @@
 
 use crate::{
     action_source::{ActionSource, collect_actions, eager_actions},
-    sampling::{SamplingError, SeededSampler, TicketSource, WeightedExchange, sample},
+    sampling::{SeededSampler, TicketSource, WeightedExchange, sample},
     session::{AdvanceReport, Continue, SearchObserver, WorkBudget},
+    tree::{
+        TreeSearchError, TreeStatus, mean_values, uct_score, validate_actor, validate_config,
+        validate_values,
+    },
 };
-use axionomy::{ApplyError, Economy, Exchange, Quantity};
+use axionomy::{Economy, Exchange, Quantity};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -103,40 +107,16 @@ impl<Action> MctsDecision<Action> {
     }
 }
 
-#[derive(Debug, Clone)]
-pub enum MctsError<RateId, Role, AccountId, A> {
-    NoPlayers,
-    ZeroIterations,
-    ZeroDepth,
-    InvalidExploration,
-    TerminalRoot,
-    ChanceRoot,
-    NoRootActions,
-    NoExploredAction,
-    InvalidActor { actor: usize, players: usize },
-    InvalidValueDimensions { expected: usize, actual: usize },
-    NonFiniteValue { player: usize },
-    Sampling(SamplingError),
-    Rejected(ApplyError<RateId, Role, AccountId, A>),
-    SelectedActionRejected(ApplyError<RateId, Role, AccountId, A>),
-}
-
-pub type MctsResult<RateId, Role, AccountId, A> =
-    Result<MctsDecision<Exchange<RateId, Role, AccountId>>, MctsError<RateId, Role, AccountId, A>>;
+pub type MctsResult<RateId, Role, AccountId, A> = Result<
+    MctsDecision<Exchange<RateId, Role, AccountId>>,
+    TreeSearchError<RateId, Role, AccountId, A>,
+>;
 pub type MctsAdvanceResult<RateId, Role, AccountId, A> =
-    Result<AdvanceReport<MctsProgress, MctsStatus>, MctsError<RateId, Role, AccountId, A>>;
+    Result<AdvanceReport<MctsProgress, TreeStatus>, TreeSearchError<RateId, Role, AccountId, A>>;
 
 type Transpositions<AccountId, A> = HashMap<Vec<(AccountId, A, Quantity)>, usize>;
 type ExpansionResult<RateId, Role, AccountId, A> =
-    Result<(usize, bool), MctsError<RateId, Role, AccountId, A>>;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum MctsStatus {
-    Running,
-    Completed,
-    Interrupted,
-}
+    Result<(usize, bool), TreeSearchError<RateId, Role, AccountId, A>>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct MctsProgress {
@@ -302,16 +282,16 @@ where
         mut terminal: Terminal,
         cutoff: Cutoff,
         rollout_policy: RolloutPolicy,
-    ) -> Result<Self, MctsError<RateId, Role, AccountId, A>> {
+    ) -> Result<Self, TreeSearchError<RateId, Role, AccountId, A>> {
         validate_config(config, players)?;
         if terminal(initial).is_some() {
-            return Err(MctsError::TerminalRoot);
+            return Err(TreeSearchError::TerminalRoot);
         }
         if !chance(initial).is_empty() {
-            return Err(MctsError::ChanceRoot);
+            return Err(TreeSearchError::ChanceRoot);
         }
         if applicable_actions(&mut source, initial).is_empty() {
-            return Err(MctsError::NoRootActions);
+            return Err(TreeSearchError::NoRootActions);
         }
         validate_actor(actor(initial), players)?;
 
@@ -342,11 +322,11 @@ where
         }
     }
 
-    pub fn status(&self) -> MctsStatus {
+    pub fn status(&self) -> TreeStatus {
         if self.decision.is_some() {
-            MctsStatus::Completed
+            TreeStatus::Completed
         } else {
-            MctsStatus::Running
+            TreeStatus::Running
         }
     }
 
@@ -365,7 +345,7 @@ where
     ) -> MctsAdvanceResult<RateId, Role, AccountId, A> {
         if self.decision.is_some() {
             return Ok(AdvanceReport::new(
-                MctsStatus::Completed,
+                TreeStatus::Completed,
                 0,
                 self.progress(),
             ));
@@ -375,7 +355,7 @@ where
         while completed < budget.units() && self.iterations < self.config.iterations() {
             if observer.observe(&self.progress()).is_break() {
                 return Ok(AdvanceReport::new(
-                    MctsStatus::Interrupted,
+                    TreeStatus::Interrupted,
                     completed,
                     self.progress(),
                 ));
@@ -395,7 +375,7 @@ where
         ))
     }
 
-    fn run_iteration(&mut self) -> Result<(), MctsError<RateId, Role, AccountId, A>> {
+    fn run_iteration(&mut self) -> Result<(), TreeSearchError<RateId, Role, AccountId, A>> {
         let mut node_index = 0;
         let mut path = vec![0];
         let mut depth = 0;
@@ -411,7 +391,7 @@ where
             let outcomes = (self.chance)(&self.nodes[node_index].world);
             if !outcomes.is_empty() {
                 let action = sample(&outcomes, &mut self.random)
-                    .map_err(MctsError::Sampling)?
+                    .map_err(TreeSearchError::Sampling)?
                     .clone();
                 let (child, expanded) = descend_or_expand(
                     &mut self.nodes,
@@ -501,7 +481,7 @@ where
         Ok(())
     }
 
-    fn finish(&mut self) -> Result<(), MctsError<RateId, Role, AccountId, A>> {
+    fn finish(&mut self) -> Result<(), TreeSearchError<RateId, Role, AccountId, A>> {
         let root_player = (self.actor)(&self.initial);
         validate_actor(root_player, self.players)?;
         let mut children = self.nodes[0]
@@ -512,7 +492,7 @@ where
                 MctsChild {
                     action: edge.action.clone(),
                     visits: child.visits,
-                    mean_values: mean_values(child),
+                    mean_values: mean_values(&child.value_totals, child.visits),
                 }
             })
             .collect::<Vec<_>>();
@@ -523,13 +503,13 @@ where
         });
         let action = children
             .first()
-            .ok_or(MctsError::NoExploredAction)?
+            .ok_or(TreeSearchError::NoExploredAction)?
             .action
             .clone();
         self.initial
             .clone()
             .apply(action.clone())
-            .map_err(MctsError::SelectedActionRejected)?;
+            .map_err(TreeSearchError::SelectedActionRejected)?;
         self.decision = Some(MctsDecision {
             action,
             iterations: self.iterations,
@@ -615,7 +595,7 @@ fn simulate<AccountId, A, RateId, Role, Source, Chance, Terminal, Cutoff, Rollou
     cutoff: &mut Cutoff,
     rollout_policy: &mut RolloutPolicy,
     random: &mut SeededSampler,
-) -> Result<Vec<f64>, MctsError<RateId, Role, AccountId, A>>
+) -> Result<Vec<f64>, TreeSearchError<RateId, Role, AccountId, A>>
 where
     AccountId: Clone + Eq + Hash + Ord,
     A: Clone + Eq + Hash + Ord,
@@ -654,10 +634,10 @@ where
             action
         } else {
             sample(&outcomes, random)
-                .map_err(MctsError::Sampling)?
+                .map_err(TreeSearchError::Sampling)?
                 .clone()
         };
-        world.apply(action).map_err(MctsError::Rejected)?;
+        world.apply(action).map_err(TreeSearchError::Rejected)?;
         depth += 1;
     }
 }
@@ -705,7 +685,8 @@ where
     }
 
     let mut next = nodes[parent].world.clone();
-    next.apply(action.clone()).map_err(MctsError::Rejected)?;
+    next.apply(action.clone())
+        .map_err(TreeSearchError::Rejected)?;
     let key = next.state_key();
     let (child, expanded) = if let Some(child) = transpositions.get(&key) {
         (*child, false)
@@ -731,81 +712,26 @@ fn select_uct<AccountId, A, RateId, Role>(
         .children
         .iter()
         .max_by(|left, right| {
-            let left_score = uct_score(&nodes[left.child], player, parent_visits, exploration);
-            let right_score = uct_score(&nodes[right.child], player, parent_visits, exploration);
+            let left_score = uct(&nodes[left.child], player, parent_visits, exploration);
+            let right_score = uct(&nodes[right.child], player, parent_visits, exploration);
             left_score.total_cmp(&right_score)
         })
         .expect("fully expanded decision nodes have children")
         .child
 }
 
-fn uct_score<AccountId, A, RateId, Role>(
+fn uct<AccountId, A, RateId, Role>(
     child: &Node<AccountId, A, RateId, Role>,
     player: usize,
     parent_visits: f64,
     exploration: f64,
 ) -> f64 {
-    if child.visits == 0 {
-        return f64::INFINITY;
-    }
-    let exploitation = child.value_totals[player] / child.visits as f64;
-    exploitation + exploration * (parent_visits.ln() / child.visits as f64).sqrt()
-}
-
-fn mean_values<AccountId, A, RateId, Role>(node: &Node<AccountId, A, RateId, Role>) -> Vec<f64> {
-    if node.visits == 0 {
-        return vec![0.0; node.value_totals.len()];
-    }
-    node.value_totals
-        .iter()
-        .map(|total| total / node.visits as f64)
-        .collect()
-}
-
-fn validate_config<RateId, Role, AccountId, A>(
-    config: MctsConfig,
-    players: usize,
-) -> Result<(), MctsError<RateId, Role, AccountId, A>> {
-    if players == 0 {
-        return Err(MctsError::NoPlayers);
-    }
-    if config.iterations() == 0 {
-        return Err(MctsError::ZeroIterations);
-    }
-    if config.max_depth() == 0 {
-        return Err(MctsError::ZeroDepth);
-    }
-    if !config.exploration().is_finite() || config.exploration() < 0.0 {
-        return Err(MctsError::InvalidExploration);
-    }
-    Ok(())
-}
-
-fn validate_actor<RateId, Role, AccountId, A>(
-    actor: usize,
-    players: usize,
-) -> Result<(), MctsError<RateId, Role, AccountId, A>> {
-    if actor >= players {
-        Err(MctsError::InvalidActor { actor, players })
-    } else {
-        Ok(())
-    }
-}
-
-fn validate_values<RateId, Role, AccountId, A>(
-    values: Vec<f64>,
-    players: usize,
-) -> Result<Vec<f64>, MctsError<RateId, Role, AccountId, A>> {
-    if values.len() != players {
-        return Err(MctsError::InvalidValueDimensions {
-            expected: players,
-            actual: values.len(),
-        });
-    }
-    if let Some(player) = values.iter().position(|value| !value.is_finite()) {
-        return Err(MctsError::NonFiniteValue { player });
-    }
-    Ok(values)
+    uct_score(
+        child.value_totals[player],
+        child.visits,
+        parent_visits,
+        exploration,
+    )
 }
 
 struct Node<AccountId, A, RateId, Role> {
@@ -959,7 +885,7 @@ mod tests {
         .unwrap();
         let mut observer = Continue;
         let first = session.advance(WorkBudget::new(16), &mut observer).unwrap();
-        assert_eq!(first.status(), MctsStatus::Running);
+        assert_eq!(first.status(), TreeStatus::Running);
         assert_eq!(first.progress().iterations(), 16);
 
         let mut observations = 0;
@@ -973,11 +899,11 @@ mod tests {
                 }
             })
             .unwrap();
-        assert_eq!(interrupted.status(), MctsStatus::Interrupted);
+        assert_eq!(interrupted.status(), TreeStatus::Interrupted);
         assert_eq!(interrupted.work_completed(), 1);
 
         let completed = session.advance(WorkBudget::new(47), &mut observer).unwrap();
-        assert_eq!(completed.status(), MctsStatus::Completed);
+        assert_eq!(completed.status(), TreeStatus::Completed);
         let decision = session.into_decision().unwrap();
         assert_eq!(decision.action().rate(), &RateId::Win);
         assert_eq!(decision.iterations(), 64);

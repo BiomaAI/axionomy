@@ -6,7 +6,7 @@ use axionomy::{
 };
 use axionomy_search::{
     action_source::eager_actions,
-    mcts::{MctsConfig, MctsDecision, MctsError, MctsProgress, MctsSession, MctsStatus, search},
+    mcts::{MctsConfig, MctsDecision, MctsProgress, MctsSession, search},
     monte_carlo::{
         MonteCarloConfig, MonteCarloProgress, MonteCarloSession, MonteCarloStatus, PolicyEstimate,
         ScalarStatistics, ScalarSummary, VectorStatistics, VectorSummary, evaluate,
@@ -15,6 +15,7 @@ use axionomy_search::{
     rollout::{RolloutConfig, RolloutDecision, RolloutStop, TraceRetention, run_to_goal},
     sampling::{SeededSampler, TicketSource, WeightedExchange, sample},
     session::{Continue, WorkBudget},
+    tree::{TreeSearchError, TreeStatus},
 };
 use std::ops::ControlFlow;
 pub mod fleet;
@@ -135,7 +136,7 @@ pub enum RiskCriterion {
 pub type World = Economy<AccountId, Asset, RateId, Role>;
 pub type Action = Exchange<RateId, Role, AccountId>;
 pub type PlanningDecision = MctsDecision<Action>;
-pub type PlanningError = MctsError<RateId, Role, AccountId, Asset>;
+pub type PlanningError = TreeSearchError<RateId, Role, AccountId, Asset>;
 pub type PolicyFront = ParetoFront<PolicyEstimate<Policy, VectorSummary>, PolicyObjective, f64>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -658,7 +659,7 @@ pub fn plan_action_with_progress(
                 .or_else(|| actions.first().cloned())
         },
     )?;
-    while session.status() == MctsStatus::Running {
+    while session.status() == TreeStatus::Running {
         let report = session.advance(WorkBudget::new(chunk_size.max(1)), &mut Continue)?;
         if observer(*report.progress()).is_break() {
             return Ok(None);

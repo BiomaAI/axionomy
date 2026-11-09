@@ -3,10 +3,14 @@
 use crate::{
     action_source::{ActionSource, collect_actions},
     mcts::MctsConfig,
-    sampling::{SamplingError, SeededSampler, TicketSource, WeightedExchange, sample},
+    sampling::{SeededSampler, TicketSource, WeightedExchange, sample},
     session::{AdvanceReport, Continue, SearchObserver, WorkBudget},
+    tree::{
+        TreeSearchError, TreeStatus, mean_values, uct_score, validate_actor, validate_config,
+        validate_values,
+    },
 };
-use axionomy::{ApplyError, Economy, Exchange};
+use axionomy::{Economy, Exchange};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -86,37 +90,10 @@ impl<Action> IsmctsDecision<Action> {
     }
 }
 
-#[derive(Debug, Clone)]
-pub enum IsmctsError<RateId, Role, AccountId, A> {
-    NoPlayers,
-    ZeroIterations,
-    ZeroDepth,
-    InvalidExploration,
-    TerminalRoot,
-    NoRootActions,
-    NoExploredAction,
-    NoDeterminization { iteration: usize },
-    InconsistentDeterminization,
-    InvalidActor { actor: usize, players: usize },
-    InvalidValueDimensions { expected: usize, actual: usize },
-    NonFiniteValue { player: usize },
-    Sampling(SamplingError),
-    Rejected(ApplyError<RateId, Role, AccountId, A>),
-    SelectedActionRejected(ApplyError<RateId, Role, AccountId, A>),
-}
-
 pub type IsmctsResult<RateId, Role, AccountId, A> = Result<
     IsmctsDecision<Exchange<RateId, Role, AccountId>>,
-    IsmctsError<RateId, Role, AccountId, A>,
+    TreeSearchError<RateId, Role, AccountId, A>,
 >;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum IsmctsStatus {
-    Running,
-    Completed,
-    Interrupted,
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct IsmctsProgress {
@@ -145,7 +122,7 @@ impl IsmctsProgress {
 }
 
 pub type IsmctsAdvanceResult<RateId, Role, AccountId, A> =
-    Result<AdvanceReport<IsmctsProgress, IsmctsStatus>, IsmctsError<RateId, Role, AccountId, A>>;
+    Result<AdvanceReport<IsmctsProgress, TreeStatus>, TreeSearchError<RateId, Role, AccountId, A>>;
 
 /// Random rollout selection that can inspect only the information state and
 /// the already filtered concrete actions.
@@ -259,15 +236,15 @@ where
         mut terminal: Terminal,
         cutoff: Cutoff,
         rollout_policy: RolloutPolicy,
-    ) -> Result<Self, IsmctsError<RateId, Role, AccountId, A>> {
+    ) -> Result<Self, TreeSearchError<RateId, Role, AccountId, A>> {
         validate_config(config, players)?;
         if terminal(initial).is_some() {
-            return Err(IsmctsError::TerminalRoot);
+            return Err(TreeSearchError::TerminalRoot);
         }
         let root = information(initial);
         validate_actor(root.actor(), players)?;
         if unique_actions(collect_actions(&mut source, &root)).is_empty() {
-            return Err(IsmctsError::NoRootActions);
+            return Err(TreeSearchError::NoRootActions);
         }
 
         Ok(Self {
@@ -299,11 +276,11 @@ where
         }
     }
 
-    pub fn status(&self) -> IsmctsStatus {
+    pub fn status(&self) -> TreeStatus {
         if self.decision.is_some() {
-            IsmctsStatus::Completed
+            TreeStatus::Completed
         } else {
-            IsmctsStatus::Running
+            TreeStatus::Running
         }
     }
 
@@ -322,7 +299,7 @@ where
     ) -> IsmctsAdvanceResult<RateId, Role, AccountId, A> {
         if self.decision.is_some() {
             return Ok(AdvanceReport::new(
-                IsmctsStatus::Completed,
+                TreeStatus::Completed,
                 0,
                 self.progress(),
             ));
@@ -332,7 +309,7 @@ where
         while completed < budget.units() && self.iterations < self.config.iterations() {
             if observer.observe(&self.progress()).is_break() {
                 return Ok(AdvanceReport::new(
-                    IsmctsStatus::Interrupted,
+                    TreeStatus::Interrupted,
                     completed,
                     self.progress(),
                 ));
@@ -351,12 +328,12 @@ where
         ))
     }
 
-    fn run_iteration(&mut self) -> Result<(), IsmctsError<RateId, Role, AccountId, A>> {
+    fn run_iteration(&mut self) -> Result<(), TreeSearchError<RateId, Role, AccountId, A>> {
         let iteration = self.iterations;
         let mut world = (self.determinize)(&self.root, &mut self.random)
-            .ok_or(IsmctsError::NoDeterminization { iteration })?;
+            .ok_or(TreeSearchError::NoDeterminization { iteration })?;
         if (self.information)(&world) != self.root {
-            return Err(IsmctsError::InconsistentDeterminization);
+            return Err(TreeSearchError::InconsistentDeterminization);
         }
 
         let mut depth = 0;
@@ -372,9 +349,9 @@ where
             let outcomes = (self.chance)(&world);
             if !outcomes.is_empty() {
                 let action = sample(&outcomes, &mut self.random)
-                    .map_err(IsmctsError::Sampling)?
+                    .map_err(TreeSearchError::Sampling)?
                     .clone();
-                world.apply(action).map_err(IsmctsError::Rejected)?;
+                world.apply(action).map_err(TreeSearchError::Rejected)?;
                 depth += 1;
                 continue;
             }
@@ -416,7 +393,7 @@ where
                 (unvisited[selected], true)
             };
             let action = self.nodes[node_index].edges[edge_index].action.clone();
-            world.apply(action).map_err(IsmctsError::Rejected)?;
+            world.apply(action).map_err(TreeSearchError::Rejected)?;
             path.push((node_index, edge_index));
             depth += 1;
 
@@ -449,7 +426,7 @@ where
         Ok(())
     }
 
-    fn finish(&mut self) -> Result<(), IsmctsError<RateId, Role, AccountId, A>> {
+    fn finish(&mut self) -> Result<(), TreeSearchError<RateId, Role, AccountId, A>> {
         let root_player = self.root.actor();
         let mut children = self.nodes[0]
             .edges
@@ -459,7 +436,7 @@ where
                 action: edge.action.clone(),
                 visits: edge.visits,
                 availability: edge.availability,
-                mean_values: mean_values(edge),
+                mean_values: mean_values(&edge.value_totals, edge.visits),
             })
             .collect::<Vec<_>>();
         children.sort_by(|left, right| {
@@ -469,13 +446,13 @@ where
         });
         let action = children
             .first()
-            .ok_or(IsmctsError::NoExploredAction)?
+            .ok_or(TreeSearchError::NoExploredAction)?
             .action
             .clone();
         self.initial
             .clone()
             .apply(action.clone())
-            .map_err(IsmctsError::SelectedActionRejected)?;
+            .map_err(TreeSearchError::SelectedActionRejected)?;
         self.decision = Some(IsmctsDecision {
             action,
             iterations: self.iterations,
@@ -592,7 +569,7 @@ fn simulate<
     cutoff: &mut Cutoff,
     rollout_policy: &mut RolloutPolicy,
     random: &mut SeededSampler,
-) -> Result<Vec<f64>, IsmctsError<RateId, Role, AccountId, A>>
+) -> Result<Vec<f64>, TreeSearchError<RateId, Role, AccountId, A>>
 where
     AccountId: Clone + Eq + Hash + Ord,
     A: Clone + Eq + Hash + Ord,
@@ -635,10 +612,10 @@ where
             action
         } else {
             sample(&outcomes, random)
-                .map_err(IsmctsError::Sampling)?
+                .map_err(TreeSearchError::Sampling)?
                 .clone()
         };
-        world.apply(action).map_err(IsmctsError::Rejected)?;
+        world.apply(action).map_err(TreeSearchError::Rejected)?;
         depth += 1;
     }
 }
@@ -721,76 +698,23 @@ fn select_uct<Key, Action>(
         .iter()
         .copied()
         .max_by(|left, right| {
-            let left_score = uct_score(&node.edges[*left], player, exploration);
-            let right_score = uct_score(&node.edges[*right], player, exploration);
+            let left_score = uct(&node.edges[*left], player, exploration);
+            let right_score = uct(&node.edges[*right], player, exploration);
             left_score.total_cmp(&right_score)
         })
         .expect("an information set with available actions can select one")
 }
 
-fn uct_score<Action>(edge: &Edge<Action>, player: usize, exploration: f64) -> f64 {
-    if edge.visits == 0 {
-        return f64::INFINITY;
-    }
-    let exploitation = edge.value_totals[player] / edge.visits as f64;
+/// Availability, not the parent's visits, scales exploration: an action is
+/// only a candidate in the sampled worlds where it was applicable.
+fn uct<Action>(edge: &Edge<Action>, player: usize, exploration: f64) -> f64 {
     let available = edge.availability.max(1) as f64;
-    exploitation + exploration * (available.ln() / edge.visits as f64).sqrt()
-}
-
-fn mean_values<Action>(edge: &Edge<Action>) -> Vec<f64> {
-    if edge.visits == 0 {
-        return vec![0.0; edge.value_totals.len()];
-    }
-    edge.value_totals
-        .iter()
-        .map(|total| total / edge.visits as f64)
-        .collect()
-}
-
-fn validate_config<RateId, Role, AccountId, A>(
-    config: MctsConfig,
-    players: usize,
-) -> Result<(), IsmctsError<RateId, Role, AccountId, A>> {
-    if players == 0 {
-        return Err(IsmctsError::NoPlayers);
-    }
-    if config.iterations() == 0 {
-        return Err(IsmctsError::ZeroIterations);
-    }
-    if config.max_depth() == 0 {
-        return Err(IsmctsError::ZeroDepth);
-    }
-    if !config.exploration().is_finite() || config.exploration() < 0.0 {
-        return Err(IsmctsError::InvalidExploration);
-    }
-    Ok(())
-}
-
-fn validate_actor<RateId, Role, AccountId, A>(
-    actor: usize,
-    players: usize,
-) -> Result<(), IsmctsError<RateId, Role, AccountId, A>> {
-    if actor >= players {
-        Err(IsmctsError::InvalidActor { actor, players })
-    } else {
-        Ok(())
-    }
-}
-
-fn validate_values<RateId, Role, AccountId, A>(
-    values: Vec<f64>,
-    players: usize,
-) -> Result<Vec<f64>, IsmctsError<RateId, Role, AccountId, A>> {
-    if values.len() != players {
-        return Err(IsmctsError::InvalidValueDimensions {
-            expected: players,
-            actual: values.len(),
-        });
-    }
-    if let Some(player) = values.iter().position(|value| !value.is_finite()) {
-        return Err(IsmctsError::NonFiniteValue { player });
-    }
-    Ok(values)
+    uct_score(
+        edge.value_totals[player],
+        edge.visits,
+        available,
+        exploration,
+    )
 }
 
 struct Node<Key, Action> {
@@ -1106,7 +1030,7 @@ mod tests {
         let first = session
             .advance(WorkBudget::new(128), &mut observer)
             .unwrap();
-        assert_eq!(first.status(), IsmctsStatus::Running);
+        assert_eq!(first.status(), TreeStatus::Running);
         assert_eq!(first.progress().iterations(), 128);
 
         let interrupted = session
@@ -1118,13 +1042,13 @@ mod tests {
                 }
             })
             .unwrap();
-        assert_eq!(interrupted.status(), IsmctsStatus::Interrupted);
+        assert_eq!(interrupted.status(), TreeStatus::Interrupted);
         assert_eq!(interrupted.work_completed(), 1);
 
         let completed = session
             .advance(WorkBudget::new(383), &mut observer)
             .unwrap();
-        assert_eq!(completed.status(), IsmctsStatus::Completed);
+        assert_eq!(completed.status(), TreeStatus::Completed);
         let decision = session.into_decision().unwrap();
         assert_eq!(decision.action().rate(), &RateId::Inspect);
         assert_eq!(decision.iterations(), 512);
@@ -1175,7 +1099,7 @@ mod tests {
 
         assert!(matches!(
             result,
-            Err(IsmctsError::InconsistentDeterminization)
+            Err(TreeSearchError::InconsistentDeterminization)
         ));
     }
 }

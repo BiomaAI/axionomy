@@ -6,8 +6,9 @@ use axionomy::{
 };
 use axionomy_search::{
     action_source::eager_actions,
-    mcts::{MctsConfig, MctsDecision, MctsError, MctsSession, MctsStatus, search},
+    mcts::{MctsConfig, MctsDecision, MctsSession, search},
     session::{Continue, WorkBudget},
+    tree::{TreeSearchError, TreeStatus},
 };
 use std::ops::ControlFlow;
 
@@ -185,7 +186,7 @@ pub enum RateId {
 pub type World = Economy<AccountId, Asset, RateId, Role>;
 pub type Action = Exchange<RateId, Role, AccountId>;
 pub type Decision = MctsDecision<Action>;
-pub type DecisionError = MctsError<RateId, Role, AccountId, Asset>;
+pub type DecisionError = TreeSearchError<RateId, Role, AccountId, Asset>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct GameProgress {
@@ -650,7 +651,7 @@ fn play_from_with_progress(
             tactics::rollout,
         )
         .ok()?;
-        while session.status() == MctsStatus::Running {
+        while session.status() == TreeStatus::Running {
             let report = session
                 .advance(WorkBudget::new(chunk_size.max(1)), &mut Continue)
                 .ok()?;
