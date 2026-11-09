@@ -1,40 +1,88 @@
-use crate::store::{MemorySnapshotStore, SnapshotStore};
-use crate::wire::{
-    ApplyRequest, ApplyResponse, AssessRequest, AssessResponse, EconomyPutRequest,
-    EconomyPutResponse, ProblemCatalogRequest, ProblemCatalogResponse, ReplayRequest,
-    ReplayResponse, SearchOutcome, SearchRequest, SearchResponse, WireEconomy,
+use crate::{
+    authoring::{self, AuthoringError, MAX_ENTRIES},
+    resources::{self, Address, IMMUTABLE_TTL_MS, LIST_TTL_MS, Target},
+    store::{MemorySnapshotStore, Origin, Snapshot, SnapshotStore, secret_key},
+    wire::{
+        AssessResponse, DocumentSummary, EconomyCounts, EconomyCreateRequest, EconomyEntries,
+        EconomyExtendRequest, EconomyStored, ExchangeRequest, ExchangedResponse, FailureCode,
+        LineKind, ProblemCatalogRequest, ProblemCatalogResponse, QuantityLine, ReplayRequest,
+        RunSummary, SearchOutcome, SearchRequest, SearchResponse, SearchSolved, ToolFailure,
+        WireAssessment, WireEconomy, WireExchange, WireReceipt,
+    },
 };
+use axionomy::{AccountDelta, AssessmentStatus, Basket, Goal};
 use axionomy_search::{
     BfsSession, GraphSearchProgress,
     session::{Continue, SearchStatus, WorkBudget},
 };
-use axionomy_service::{ReferenceService, RunControl, RunRequest, ServiceProgress};
+use axionomy_service::{ReferenceService, RunArtifact, RunControl, RunRequest, ServiceProgress};
 use rmcp::{
     ErrorData as McpError, ServerHandler,
     handler::server::{
         router::tool::ToolRouter,
-        tool::ToolCallContext,
-        wrapper::{Json, Parameters},
+        tool::{IntoCallToolResult, ToolCallContext, schema_for_output},
+        wrapper::Parameters,
     },
     model::{
-        CallToolRequestParams, CallToolResponse, CallToolResult, CancelTaskParams,
-        CreateTaskResult, GetTaskParams, GetTaskResult, Implementation, ProtocolVersion,
-        ServerCapabilities, ServerConfig, UpdateTaskParams,
+        CacheScope, CallToolRequestParams, CallToolResponse, CallToolResult, CancelTaskParams,
+        CompleteRequestParams, CompleteResult, ContentBlock, CreateTaskResult, GetTaskParams,
+        GetTaskResult, Implementation, JsonObject, ListResourceTemplatesResult,
+        ListResourcesResult, ListToolsResult, PaginatedRequestParams, ProtocolVersion,
+        ReadResourceRequestParams, ReadResourceResponse, ReadResourceResult, Resource,
+        ResourceContents, ServerCapabilities, ServerConfig, UpdateTaskParams,
     },
     service::{RequestContext, RoleServer},
     task_manager::{TaskContext, TaskExit, TaskManager, TaskOptions},
     tool, tool_handler, tool_router,
 };
-use std::{borrow::Cow, sync::Arc};
+use serde::{Serialize, de::DeserializeOwned};
+use std::{
+    borrow::Cow,
+    collections::HashMap,
+    sync::{Arc, RwLock},
+};
+
+#[cfg(test)]
+mod tests;
 
 const TASK_POLL_INTERVAL_MS: u64 = 100;
+/// Exchanges one replay or search may carry.
+pub(crate) const MAX_EXCHANGES: usize = 1_000;
+/// Lines a tool result shows before pointing at their resource.
+const PREVIEW_LINES: usize = 10;
+const SEARCH: &str = "axionomy_search";
+const PROBLEM_RUN: &str = "axionomy_problem_run";
+
+const INSTRUCTIONS: &str = "Axionomy is an exact economic kernel: every state change is an exchange, \
+a rate applied between the accounts bound to its roles. Create an economy with \
+axionomy_economy_create and grow it with axionomy_economy_extend, at most 10,000 entries per call. \
+Every call that changes something returns a new economy_id and leaves the old snapshot as it was. \
+Check an exchange with axionomy_exchange_assess, then apply it with axionomy_exchange_apply or \
+apply several with axionomy_trace_replay. Read what a snapshot holds through axionomy:// \
+resources: tool results link to them, every list is paged with a cursor, and a page never \
+changes. Snapshots last until the server restarts.";
+
+pub(crate) type Registry<T> = Arc<RwLock<HashMap<String, Arc<T>>>>;
+
+/// An exchange checked against the state a snapshot reached after some of a
+/// replay's exchanges.
+pub(crate) struct StoredAssessment {
+    pub economy_id: String,
+    pub after_exchanges: usize,
+    pub exchange: WireExchange,
+    pub assessment: WireAssessment,
+}
 
 #[derive(Clone)]
 pub struct AxionomyMcp<S = MemorySnapshotStore>
 where
     S: SnapshotStore,
 {
-    snapshots: S,
+    pub(crate) snapshots: S,
+    /// Keys assessment handles, so they are as hard to guess as snapshot handles.
+    key: Arc<[u8; 32]>,
+    pub(crate) assessments: Registry<StoredAssessment>,
+    pub(crate) artifacts: Registry<RunArtifact>,
     tasks: TaskManager,
     task_options: TaskOptions,
     tool_router: ToolRouter<Self>,
@@ -48,6 +96,9 @@ where
     pub fn new(snapshots: S) -> Self {
         Self {
             snapshots,
+            key: Arc::new(secret_key()),
+            assessments: Arc::default(),
+            artifacts: Arc::default(),
             tasks: TaskManager::new(),
             task_options: TaskOptions::new()
                 .with_poll_interval_ms(TASK_POLL_INTERVAL_MS)
@@ -63,137 +114,332 @@ where
     }
 
     #[tool(
-        name = "axionomy_economy_put",
-        description = "Validate and store an immutable Axionomy economy snapshot. Returns its content-addressed economy_id."
+        name = "axionomy_economy_create",
+        title = "Create an economy",
+        description = "Store a new economy with up to 10,000 entries: accounts with their balances, rates, and conservation invariants, each keyed by ID. Grow it past that with axionomy_economy_extend. Returns an economy_id that lasts until the server restarts; repeating the same call returns the same economy_id.",
+        output_schema = schema_for_output::<EconomyStored>(),
+        annotations(destructive_hint = false, idempotent_hint = true, open_world_hint = false)
     )]
-    async fn economy_put(
+    async fn economy_create(
         &self,
-        Parameters(request): Parameters<EconomyPutRequest>,
-    ) -> Result<Json<EconomyPutResponse>, String> {
-        let stored = self
-            .snapshots
-            .put(request.economy)
+        Parameters(request): Parameters<EconomyCreateRequest>,
+    ) -> Result<Linked<EconomyStored>, ToolError> {
+        self.author(None, request.entries).await
+    }
+
+    #[tool(
+        name = "axionomy_economy_extend",
+        title = "Extend an economy",
+        description = "Add up to 10,000 entries to an economy and store the result as a new economy_id; the source snapshot is unchanged. New IDs add accounts, rates or invariants; existing ones gain balances, amounts or weights, but nothing already present is replaced.",
+        output_schema = schema_for_output::<EconomyStored>(),
+        annotations(destructive_hint = false, idempotent_hint = true, open_world_hint = false)
+    )]
+    async fn economy_extend(
+        &self,
+        Parameters(request): Parameters<EconomyExtendRequest>,
+    ) -> Result<Linked<EconomyStored>, ToolError> {
+        let parent = self.snapshot(&request.economy_id).await?;
+        self.author(Some((request.economy_id, parent)), request.entries)
             .await
-            .map_err(|error| error.to_string())?;
-        Ok(Json(EconomyPutResponse {
-            economy_id: stored.economy_id,
-            deduplicated: stored.deduplicated,
-        }))
     }
 
     #[tool(
         name = "axionomy_exchange_assess",
-        description = "Explain whether a proposed exchange is applicable, infeasible, or invalid without changing its economy snapshot."
+        title = "Assess an exchange",
+        description = "Explain whether an exchange would apply to a snapshot without changing it: applicable with the quantities it would move, infeasible with what each account lacks, or invalid with why. Lists longer than the preview are paged through the linked assessment resource.",
+        output_schema = schema_for_output::<AssessResponse>(),
+        annotations(read_only_hint = true, open_world_hint = false)
     )]
     async fn exchange_assess(
         &self,
-        Parameters(request): Parameters<AssessRequest>,
-    ) -> Result<Json<AssessResponse>, String> {
-        let economy = self.require_economy(&request.economy_id).await?;
-        let assessment = economy.assess(&request.exchange);
-        let status = assessment.status();
-        Ok(Json(AssessResponse {
+        Parameters(request): Parameters<ExchangeRequest>,
+    ) -> Result<Linked<AssessResponse>, ToolError> {
+        let snapshot = self.snapshot(&request.economy_id).await?;
+        let assessment = snapshot.economy.assess(&request.exchange);
+        let (assessment_id, stored) =
+            self.keep_assessment(&request.economy_id, 0, request.exchange, assessment)?;
+        let lines = assessment_lines(&stored.assessment).count();
+        let response = AssessResponse {
             economy_id: request.economy_id,
-            status,
-            assessment,
-        }))
+            assessment_id: assessment_id.clone(),
+            status: stored.assessment.status(),
+            issues: stored.assessment.issues().to_vec(),
+            lines,
+            preview: assessment_lines(&stored.assessment)
+                .take(PREVIEW_LINES)
+                .collect(),
+        };
+        Ok(Linked::new(
+            response,
+            assessment_links(&assessment_id, lines),
+        ))
     }
 
     #[tool(
         name = "axionomy_exchange_apply",
-        description = "Apply an exchange atomically to an immutable snapshot and return a receipt plus a new economy_id."
+        title = "Apply an exchange",
+        description = "Apply one exchange atomically and store the result as a new economy_id; the source snapshot is unchanged. A failure stores nothing and explains itself like axionomy_exchange_assess.",
+        output_schema = schema_for_output::<ExchangedResponse>(),
+        annotations(destructive_hint = false, idempotent_hint = true, open_world_hint = false)
     )]
     async fn exchange_apply(
         &self,
-        Parameters(request): Parameters<ApplyRequest>,
-    ) -> Result<Json<ApplyResponse>, String> {
-        let source_economy_id = request.economy_id;
-        let mut economy = WireEconomy::clone(&*self.require_economy(&source_economy_id).await?);
-        let receipt = economy
-            .apply(request.exchange)
-            .map_err(|error| error.to_string())?;
-        let stored = self
-            .snapshots
-            .put(economy)
+        Parameters(request): Parameters<ExchangeRequest>,
+    ) -> Result<Linked<ExchangedResponse>, ToolError> {
+        self.exchange(request.economy_id, vec![request.exchange])
             .await
-            .map_err(|error| error.to_string())?;
-        Ok(Json(ApplyResponse {
-            source_economy_id,
-            economy_id: stored.economy_id,
-            receipt,
-        }))
     }
 
     #[tool(
         name = "axionomy_trace_replay",
-        description = "Replay a trace atomically on an immutable snapshot and return receipts plus a new economy_id."
+        title = "Replay exchanges",
+        description = "Apply up to 1,000 exchanges in order and store only the final state as a new economy_id. The first failure stops the replay, stores nothing, and names the failing exchange. Chain calls to replay longer traces.",
+        output_schema = schema_for_output::<ExchangedResponse>(),
+        annotations(destructive_hint = false, idempotent_hint = true, open_world_hint = false)
     )]
     async fn trace_replay(
         &self,
         Parameters(request): Parameters<ReplayRequest>,
-    ) -> Result<Json<ReplayResponse>, String> {
-        let source_economy_id = request.economy_id;
-        let economy = self.require_economy(&source_economy_id).await?;
-        let mut next = WireEconomy::clone(&economy);
-        let receipts = next
-            .replay(&request.trace)
-            .map_err(|error| error.to_string())?;
-        let stored = self
-            .snapshots
-            .put(next)
-            .await
-            .map_err(|error| error.to_string())?;
-        Ok(Json(ReplayResponse {
-            source_economy_id,
-            economy_id: stored.economy_id,
-            receipts,
-        }))
+    ) -> Result<Linked<ExchangedResponse>, ToolError> {
+        if request.exchanges.is_empty() {
+            return Err(ToolError::new(
+                FailureCode::InvalidRequest,
+                "a replay needs at least one exchange",
+            ));
+        }
+        if request.exchanges.len() > MAX_EXCHANGES {
+            return Err(too_many_exchanges(request.exchanges.len()));
+        }
+        self.exchange(request.economy_id, request.exchanges).await
     }
 
     #[tool(
         name = "axionomy_search",
-        description = "Start a cancellable breadth-first search task over an explicit candidate exchange universe. Requires MCP Tasks support."
+        title = "Search for a trace",
+        description = "Start a cancellable breadth-first search, as an MCP task, for exchanges from up to 1,000 candidates that bring the named accounts to their goal balances. A solution is stored as the snapshot it reaches; its exchanges resource is the trace. Requires the MCP tasks extension.",
+        output_schema = schema_for_output::<SearchResponse>(),
+        annotations(destructive_hint = false, idempotent_hint = true, open_world_hint = false)
     )]
     async fn search_requires_tasks(
         &self,
         Parameters(_request): Parameters<SearchRequest>,
-    ) -> Result<Json<serde_json::Value>, String> {
-        Err("axionomy_search requires the MCP io.modelcontextprotocol/tasks capability".to_owned())
+    ) -> Result<Linked<SearchResponse>, ToolError> {
+        Err(tasks_required(SEARCH))
     }
 
     #[tool(
         name = "axionomy_problem_catalog",
-        description = "List all canonical Axionomy problem models, strategies, and demonstrated capabilities."
+        title = "List problems",
+        description = "List the built-in Axionomy problems with their instances, strategies and capabilities.",
+        output_schema = schema_for_output::<ProblemCatalogResponse>(),
+        annotations(read_only_hint = true, open_world_hint = false)
     )]
     async fn problem_catalog(
         &self,
         Parameters(_request): Parameters<ProblemCatalogRequest>,
-    ) -> Result<Json<ProblemCatalogResponse>, String> {
-        Ok(Json(ProblemCatalogResponse {
-            problems: ReferenceService.catalog(),
-        }))
+    ) -> Result<Linked<ProblemCatalogResponse>, ToolError> {
+        Ok(Linked::new(
+            ProblemCatalogResponse {
+                problems: ReferenceService.catalog(),
+            },
+            Vec::new(),
+        ))
     }
 
     #[tool(
         name = "axionomy_problem_run",
-        description = "Run one canonical problem through the shared interface-neutral service and return its complete replay artifact. Requires MCP Tasks support."
+        title = "Run a problem",
+        description = "Run one built-in problem as an MCP task and return a summary; the run's documents and replay frames are linked resources. Requires the MCP tasks extension.",
+        output_schema = schema_for_output::<RunSummary>(),
+        annotations(destructive_hint = false, idempotent_hint = true, open_world_hint = false)
     )]
     async fn problem_run_requires_tasks(
         &self,
         Parameters(_request): Parameters<RunRequest>,
-    ) -> Result<Json<serde_json::Value>, String> {
-        Err(
-            "axionomy_problem_run requires the MCP io.modelcontextprotocol/tasks capability"
-                .to_owned(),
-        )
+    ) -> Result<Linked<RunSummary>, ToolError> {
+        Err(tasks_required(PROBLEM_RUN))
     }
+}
 
-    async fn require_economy(&self, economy_id: &str) -> Result<Arc<WireEconomy>, String> {
+impl<S> AxionomyMcp<S>
+where
+    S: SnapshotStore,
+{
+    pub(crate) async fn snapshot(&self, economy_id: &str) -> Result<Arc<Snapshot>, ToolError> {
         self.snapshots
             .get(economy_id)
             .await
-            .map_err(|error| error.to_string())?
-            .ok_or_else(|| format!("economy snapshot `{economy_id}` does not exist"))
+            .map_err(ToolError::internal)?
+            .ok_or_else(|| {
+                ToolError::new(
+                    FailureCode::NotFound,
+                    format!(
+                        "economy snapshot `{economy_id}` does not exist; snapshots last until the server restarts, so create it again with axionomy_economy_create"
+                    ),
+                )
+            })
+    }
+
+    async fn author(
+        &self,
+        parent: Option<(String, Arc<Snapshot>)>,
+        entries: EconomyEntries,
+    ) -> Result<Linked<EconomyStored>, ToolError> {
+        let size = entries.len();
+        let operation = operation_bytes("entries", &entries)?;
+        let (parent_id, base) = parent.unzip();
+        let economy = authoring::extend(base.as_deref().map(|snapshot| &*snapshot.economy), entries)
+            .map_err(|error| match error {
+                AuthoringError::TooLarge { entries } => ToolError::new(
+                    FailureCode::TooLarge,
+                    format!(
+                        "{entries} entries exceed the limit of {MAX_ENTRIES} per call; add the rest with axionomy_economy_extend"
+                    ),
+                ),
+                AuthoringError::Conflict(message) => ToolError::new(FailureCode::Conflict, message),
+            })?;
+        let counts = counts(&economy);
+        let stored = self
+            .snapshots
+            .put(
+                &operation,
+                Snapshot {
+                    parent_id: parent_id.clone(),
+                    origin: Origin::Authored { entries: size },
+                    economy: Arc::new(economy),
+                },
+            )
+            .await
+            .map_err(ToolError::internal)?;
+        let link = Target::Economy {
+            economy_id: stored.economy_id.clone(),
+        }
+        .link("economy", "The stored snapshot");
+        Ok(Linked::new(
+            EconomyStored {
+                economy_id: stored.economy_id,
+                parent_id,
+                deduplicated: stored.deduplicated,
+                counts,
+            },
+            vec![link],
+        ))
+    }
+
+    /// Applies `exchanges` in order to a snapshot and stores the final state.
+    async fn exchange(
+        &self,
+        source_economy_id: String,
+        exchanges: Vec<WireExchange>,
+    ) -> Result<Linked<ExchangedResponse>, ToolError> {
+        let source = self.snapshot(&source_economy_id).await?;
+        let mut economy = WireEconomy::clone(&source.economy);
+        let mut receipts = Vec::with_capacity(exchanges.len());
+        for (step, exchange) in exchanges.iter().enumerate() {
+            if let Ok(receipt) = economy.apply(exchange.clone()) {
+                receipts.push(receipt);
+                continue;
+            }
+            // Explain the failure against the state this exchange met.
+            let assessment = economy.assess(exchange);
+            let (assessment_id, stored) =
+                self.keep_assessment(&source_economy_id, step, exchange.clone(), assessment)?;
+            return Err(failed_exchange(
+                step,
+                exchanges.len(),
+                &assessment_id,
+                &stored,
+            ));
+        }
+        let stored = store_exchanged(
+            &self.snapshots,
+            source_economy_id.clone(),
+            &exchanges,
+            economy,
+            receipts.into(),
+        )
+        .await?;
+        Ok(stored.into_linked(source_economy_id))
+    }
+
+    fn keep_assessment(
+        &self,
+        economy_id: &str,
+        after_exchanges: usize,
+        exchange: WireExchange,
+        assessment: WireAssessment,
+    ) -> Result<(String, Arc<StoredAssessment>), ToolError> {
+        let mut hasher = blake3::Hasher::new_keyed(&self.key);
+        hasher.update(economy_id.as_bytes());
+        hasher.update(&after_exchanges.to_le_bytes());
+        hasher.update(&serde_json::to_vec(&exchange).map_err(ToolError::internal)?);
+        let assessment_id = format!("asm_{}", hasher.finalize().to_hex());
+        let stored = Arc::new(StoredAssessment {
+            economy_id: economy_id.to_owned(),
+            after_exchanges,
+            exchange,
+            assessment,
+        });
+        let mut assessments = self
+            .assessments
+            .write()
+            .map_err(|_| ToolError::internal("assessment registry lock is poisoned"))?;
+        let stored = Arc::clone(assessments.entry(assessment_id.clone()).or_insert(stored));
+        Ok((assessment_id, stored))
+    }
+
+    async fn start_search(
+        &self,
+        arguments: Option<JsonObject>,
+    ) -> Result<CallToolResponse, ToolError> {
+        let request: SearchRequest = arguments_of(arguments)?;
+        if request.max_expansions == 0 {
+            return Err(ToolError::new(
+                FailureCode::InvalidRequest,
+                "max_expansions must be greater than zero",
+            ));
+        }
+        if !(1..=10_000).contains(&request.chunk_size) {
+            return Err(ToolError::new(
+                FailureCode::InvalidRequest,
+                "chunk_size must be between 1 and 10000 so cancellation stays responsive",
+            ));
+        }
+        if request.candidates.len() > MAX_EXCHANGES {
+            return Err(too_many_exchanges(request.candidates.len()));
+        }
+        let goal = request
+            .goal
+            .iter()
+            .try_fold(Goal::new(), |goal, (account, amounts)| {
+                let basket = Basket::try_from_entries(
+                    amounts
+                        .iter()
+                        .map(|(asset, quantity)| (asset.clone(), *quantity)),
+                )
+                .map_err(|error| ToolError::new(FailureCode::InvalidRequest, error.to_string()))?;
+                Ok::<_, ToolError>(goal.require(account.clone(), basket))
+            })?;
+        let source = self.snapshot(&request.economy_id).await?;
+        let snapshots = self.snapshots.clone();
+        let task = self.tasks.spawn(self.task_options.clone(), move |context| {
+            Box::pin(run_search(context, snapshots, source, request, goal))
+        });
+        Ok(CreateTaskResult::new(task).into())
+    }
+
+    fn start_problem_run(
+        &self,
+        arguments: Option<JsonObject>,
+    ) -> Result<CallToolResponse, ToolError> {
+        let request: RunRequest = arguments_of(arguments)?;
+        validate_problem_run(&request)
+            .map_err(|message| ToolError::new(FailureCode::InvalidRequest, message))?;
+        let artifacts = Arc::clone(&self.artifacts);
+        let task = self.tasks.spawn(self.task_options.clone(), move |context| {
+            Box::pin(run_problem(context, artifacts, request))
+        });
+        Ok(CreateTaskResult::new(task).into())
     }
 }
 
@@ -213,78 +459,79 @@ where
         request: CallToolRequestParams,
         context: RequestContext<RoleServer>,
     ) -> Result<CallToolResponse, McpError> {
-        if request.name == "axionomy_problem_run"
-            && context
-                .client_capabilities()
-                .is_some_and(|capabilities| capabilities.supports_tasks())
-        {
-            let run = match serde_json::from_value::<RunRequest>(serde_json::Value::Object(
-                request.arguments.clone().unwrap_or_default(),
-            )) {
-                Ok(run) => run,
-                Err(error) => {
-                    return Ok(CallToolResult::structured_error(serde_json::json!({
-                        "error": "invalid_problem_run_request",
-                        "message": error.to_string()
-                    }))
-                    .into());
-                }
-            };
-            if let Err(error) = validate_problem_run(&run) {
-                return Ok(CallToolResult::structured_error(serde_json::json!({
-                    "error": "problem_run_not_started",
-                    "message": error
-                }))
-                .into());
-            }
-            let task = self.tasks.spawn(self.task_options.clone(), move |context| {
-                Box::pin(run_problem(context, run))
-            });
-            return Ok(CreateTaskResult::new(task).into());
+        let tasks = context
+            .client_capabilities()
+            .is_some_and(|capabilities| capabilities.supports_tasks());
+        if tasks && request.name == SEARCH {
+            return self
+                .start_search(request.arguments)
+                .await
+                .or_else(ToolError::into_call_tool_result);
         }
-
-        if request.name == "axionomy_search"
-            && context
-                .client_capabilities()
-                .is_some_and(|capabilities| capabilities.supports_tasks())
-        {
-            let search = match serde_json::from_value::<SearchRequest>(serde_json::Value::Object(
-                request.arguments.clone().unwrap_or_default(),
-            )) {
-                Ok(search) => search,
-                Err(error) => {
-                    return Ok(CallToolResult::structured_error(serde_json::json!({
-                        "error": "invalid_search_request",
-                        "message": error.to_string()
-                    }))
-                    .into());
-                }
-            };
-            if let Err(error) = validate_search_request(&search) {
-                return Ok(CallToolResult::structured_error(serde_json::json!({
-                    "error": "search_not_started",
-                    "message": error
-                }))
-                .into());
-            }
-            let economy = match self.require_economy(&search.economy_id).await {
-                Ok(economy) => economy,
-                Err(error) => {
-                    return Ok(CallToolResult::structured_error(serde_json::json!({
-                        "error": "search_not_started",
-                        "message": error
-                    }))
-                    .into());
-                }
-            };
-            let task = self.tasks.spawn(self.task_options.clone(), move |context| {
-                Box::pin(run_search(context, economy, search))
-            });
-            return Ok(CreateTaskResult::new(task).into());
+        if tasks && request.name == PROBLEM_RUN {
+            return self
+                .start_problem_run(request.arguments)
+                .or_else(ToolError::into_call_tool_result);
         }
-
         let context = ToolCallContext::new(self, request, context);
         self.tool_router.call(context).await
+    }
+
+    async fn list_tools(
+        &self,
+        _request: Option<PaginatedRequestParams>,
+        _context: RequestContext<RoleServer>,
+    ) -> Result<ListToolsResult, McpError> {
+        Ok(ListToolsResult::with_all_items(self.tool_router.list_all())
+            .with_ttl_ms(LIST_TTL_MS)
+            .with_cache_scope(CacheScope::Public))
+    }
+
+    async fn list_resources(
+        &self,
+        _request: Option<PaginatedRequestParams>,
+        _context: RequestContext<RoleServer>,
+    ) -> Result<ListResourcesResult, McpError> {
+        // Snapshots are reached through their handles and the links tool
+        // results carry, never through a listing shared by every caller.
+        Ok(ListResourcesResult::with_all_items(Vec::new())
+            .with_ttl_ms(LIST_TTL_MS)
+            .with_cache_scope(CacheScope::Public))
+    }
+
+    async fn list_resource_templates(
+        &self,
+        _request: Option<PaginatedRequestParams>,
+        _context: RequestContext<RoleServer>,
+    ) -> Result<ListResourceTemplatesResult, McpError> {
+        Ok(
+            ListResourceTemplatesResult::with_all_items(resources::templates())
+                .with_ttl_ms(LIST_TTL_MS)
+                .with_cache_scope(CacheScope::Public),
+        )
+    }
+
+    async fn read_resource(
+        &self,
+        request: ReadResourceRequestParams,
+        _context: RequestContext<RoleServer>,
+    ) -> Result<ReadResourceResponse, McpError> {
+        let address = Address::parse(&request.uri)?;
+        let text = self.read(&address).await?;
+        Ok(ReadResourceResult::new(vec![
+            ResourceContents::text(text, request.uri).with_mime_type("application/json"),
+        ])
+        .with_ttl_ms(IMMUTABLE_TTL_MS)
+        .with_cache_scope(CacheScope::Private)
+        .into())
+    }
+
+    async fn complete(
+        &self,
+        request: CompleteRequestParams,
+        _context: RequestContext<RoleServer>,
+    ) -> Result<CompleteResult, McpError> {
+        self.completion(request).await
     }
 
     async fn get_task(
@@ -315,19 +562,339 @@ where
     fn get_info(&self) -> ServerConfig {
         ServerConfig::new(
             ServerCapabilities::builder()
+                .enable_completions()
+                .enable_resources()
                 .enable_tools()
                 .enable_tasks()
                 .build(),
         )
-        .with_server_info(Implementation::new("axionomy-mcp", env!("CARGO_PKG_VERSION")))
-        .with_instructions(
-            "Axionomy models every valid state transition as an exchange over explicit accounts, assets, rates, and role bindings. Store an economy first, then pass its immutable economy_id to every other tool.",
-        )
+        .with_server_info(Implementation::new(
+            "axionomy-mcp",
+            env!("CARGO_PKG_VERSION"),
+        ))
+        .with_instructions(INSTRUCTIONS)
     }
 
     fn supported_protocol_versions(&self) -> Cow<'static, [ProtocolVersion]> {
         Cow::Borrowed(&[ProtocolVersion::V_2026_07_28])
     }
+}
+
+/// A structured tool result followed by links to the resources that page
+/// through what it summarizes.
+pub(crate) struct Linked<T> {
+    value: T,
+    links: Vec<Resource>,
+}
+
+impl<T: Serialize> Linked<T> {
+    fn new(value: T, links: Vec<Resource>) -> Self {
+        Self { value, links }
+    }
+
+    fn into_result(self) -> Result<CallToolResult, McpError> {
+        let value = serde_json::to_value(self.value)
+            .map_err(|error| McpError::internal_error(error.to_string(), None))?;
+        let mut result = CallToolResult::structured(value);
+        result
+            .content
+            .extend(self.links.into_iter().map(ContentBlock::resource_link));
+        Ok(result)
+    }
+}
+
+impl<T: Serialize> IntoCallToolResult for Linked<T> {
+    fn into_call_tool_result(self) -> Result<CallToolResponse, McpError> {
+        self.into_result().map(Into::into)
+    }
+}
+
+/// A tool execution error the caller can act on: reported as a result with
+/// `isError`, a stable code and links to anything too long to inline.
+#[derive(Debug)]
+pub(crate) struct ToolError {
+    failure: ToolFailure,
+    links: Vec<Resource>,
+}
+
+impl ToolError {
+    pub(crate) fn new(error: FailureCode, message: impl Into<String>) -> Self {
+        Self {
+            failure: ToolFailure {
+                error,
+                message: message.into(),
+                details: None,
+            },
+            links: Vec::new(),
+        }
+    }
+
+    pub(crate) fn internal(error: impl ToString) -> Self {
+        Self::new(FailureCode::Internal, error.to_string())
+    }
+
+    pub(crate) fn is_not_found(&self) -> bool {
+        self.failure.error == FailureCode::NotFound
+    }
+
+    pub(crate) fn message(&self) -> &str {
+        &self.failure.message
+    }
+
+    fn with_details(mut self, details: impl Serialize) -> Self {
+        self.failure.details = serde_json::to_value(details).ok();
+        self
+    }
+
+    fn with_links(mut self, links: Vec<Resource>) -> Self {
+        self.links = links;
+        self
+    }
+}
+
+impl IntoCallToolResult for ToolError {
+    fn into_call_tool_result(self) -> Result<CallToolResponse, McpError> {
+        let value = serde_json::to_value(&self.failure)
+            .map_err(|error| McpError::internal_error(error.to_string(), None))?;
+        let mut result = CallToolResult::structured_error(value);
+        result
+            .content
+            .extend(self.links.into_iter().map(ContentBlock::resource_link));
+        Ok(result.into())
+    }
+}
+
+fn tasks_required(tool: &str) -> ToolError {
+    ToolError::new(
+        FailureCode::TasksRequired,
+        format!("{tool} runs as an MCP task; declare the io.modelcontextprotocol/tasks extension"),
+    )
+}
+
+fn too_many_exchanges(count: usize) -> ToolError {
+    ToolError::new(
+        FailureCode::TooLarge,
+        format!("{count} exchanges exceed the limit of {MAX_EXCHANGES} per call; split them"),
+    )
+}
+
+fn arguments_of<T: DeserializeOwned>(arguments: Option<JsonObject>) -> Result<T, ToolError> {
+    serde_json::from_value(serde_json::Value::Object(arguments.unwrap_or_default()))
+        .map_err(|error| ToolError::new(FailureCode::InvalidRequest, error.to_string()))
+}
+
+/// The bytes a snapshot handle is derived from, tagged by kind so different
+/// operations never share them.
+fn operation_bytes(kind: &str, operation: &impl Serialize) -> Result<Vec<u8>, ToolError> {
+    let mut bytes = kind.as_bytes().to_vec();
+    bytes.push(0);
+    serde_json::to_writer(&mut bytes, operation).map_err(ToolError::internal)?;
+    Ok(bytes)
+}
+
+pub(crate) fn counts(economy: &WireEconomy) -> EconomyCounts {
+    EconomyCounts {
+        accounts: economy.accounts().count(),
+        assets: economy.asset_keys().len(),
+        rates: economy.rate_ids().count(),
+        invariants: economy.invariants().count(),
+    }
+}
+
+struct StoredExchanges {
+    economy_id: String,
+    deduplicated: bool,
+    exchanges: usize,
+    changes: usize,
+}
+
+impl StoredExchanges {
+    fn into_linked(self, source_economy_id: String) -> Linked<ExchangedResponse> {
+        let links = exchanged_links(&self.economy_id);
+        Linked::new(
+            ExchangedResponse {
+                source_economy_id,
+                economy_id: self.economy_id,
+                deduplicated: self.deduplicated,
+                exchanges: self.exchanges,
+                changes: self.changes,
+            },
+            links,
+        )
+    }
+}
+
+/// Stores the state `exchanges` reached from `parent_id`. Applying one exchange
+/// and replaying it alone are the same operation, so they share a handle.
+async fn store_exchanged<S: SnapshotStore>(
+    snapshots: &S,
+    parent_id: String,
+    exchanges: &[WireExchange],
+    economy: WireEconomy,
+    receipts: Arc<[WireReceipt]>,
+) -> Result<StoredExchanges, ToolError> {
+    let operation = operation_bytes("exchanges", &exchanges)?;
+    let changes = receipt_lines(&receipts).count();
+    let stored = snapshots
+        .put(
+            &operation,
+            Snapshot {
+                parent_id: Some(parent_id),
+                origin: Origin::Exchanged { receipts },
+                economy: Arc::new(economy),
+            },
+        )
+        .await
+        .map_err(ToolError::internal)?;
+    Ok(StoredExchanges {
+        economy_id: stored.economy_id,
+        deduplicated: stored.deduplicated,
+        exchanges: exchanges.len(),
+        changes,
+    })
+}
+
+fn exchanged_links(economy_id: &str) -> Vec<Resource> {
+    let economy_id = economy_id.to_owned();
+    vec![
+        Target::Economy {
+            economy_id: economy_id.clone(),
+        }
+        .link("economy", "The stored snapshot"),
+        Target::Changes {
+            economy_id: economy_id.clone(),
+        }
+        .link("changes", "Quantities the exchanges moved, paged"),
+        Target::Exchanges { economy_id }.link("exchanges", "The exchanges applied, paged"),
+    ]
+}
+
+fn assessment_links(assessment_id: &str, lines: usize) -> Vec<Resource> {
+    let assessment = Target::Assessment {
+        assessment_id: assessment_id.to_owned(),
+    }
+    .link("assessment", "The full assessment");
+    if lines <= PREVIEW_LINES {
+        return vec![assessment];
+    }
+    let lines_link = Target::AssessmentLines {
+        assessment_id: assessment_id.to_owned(),
+    }
+    .link("assessment-lines", format!("All {lines} lines, paged"));
+    vec![assessment, lines_link]
+}
+
+fn failed_exchange(
+    step: usize,
+    exchanges: usize,
+    assessment_id: &str,
+    stored: &StoredAssessment,
+) -> ToolError {
+    let which = if exchanges == 1 {
+        "the exchange".to_owned()
+    } else {
+        format!("exchange {step} of {exchanges}")
+    };
+    let lines = assessment_lines(&stored.assessment).count();
+    let links = assessment_links(assessment_id, lines);
+    let assessment = &stored.assessment;
+    let error = match assessment.status() {
+        AssessmentStatus::Infeasible => ToolError::new(
+            FailureCode::Infeasible,
+            format!("{which} is infeasible: accounts lack {lines} quantities; nothing was stored"),
+        )
+        .with_details(FailureDetails {
+            step,
+            assessment_id,
+            issues: &[],
+            lines,
+            preview: assessment_lines(assessment).take(PREVIEW_LINES).collect(),
+        }),
+        AssessmentStatus::Invalid => {
+            let reason = assessment
+                .issues()
+                .first()
+                .map_or_else(String::new, ToString::to_string);
+            ToolError::new(
+                FailureCode::Invalid,
+                format!("{which} is invalid: {reason}; nothing was stored"),
+            )
+            .with_details(FailureDetails {
+                step,
+                assessment_id,
+                issues: assessment.issues(),
+                lines,
+                preview: Vec::new(),
+            })
+        }
+        AssessmentStatus::Applicable => ToolError::internal(format!(
+            "{which} failed although its assessment is applicable"
+        )),
+    };
+    error.with_links(links)
+}
+
+#[derive(Serialize)]
+struct FailureDetails<'a> {
+    step: usize,
+    assessment_id: &'a str,
+    #[serde(skip_serializing_if = "<[_]>::is_empty")]
+    issues: &'a [crate::wire::WireApplyError],
+    lines: usize,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    preview: Vec<QuantityLine>,
+}
+
+pub(crate) fn delta_lines(
+    step: Option<usize>,
+    deltas: &[AccountDelta<String, String>],
+) -> impl Iterator<Item = QuantityLine> + '_ {
+    deltas.iter().flat_map(move |delta| {
+        [
+            (LineKind::Consumed, delta.consumed()),
+            (LineKind::Produced, delta.produced()),
+            (LineKind::Preserved, delta.preserved()),
+        ]
+        .into_iter()
+        .flat_map(move |(kind, basket)| {
+            basket.iter().map(move |(asset, quantity)| QuantityLine {
+                step,
+                account: delta.account().clone(),
+                asset: asset.clone(),
+                kind,
+                quantity: *quantity,
+            })
+        })
+    })
+}
+
+pub(crate) fn receipt_lines(receipts: &[WireReceipt]) -> impl Iterator<Item = QuantityLine> + '_ {
+    receipts
+        .iter()
+        .enumerate()
+        .flat_map(|(step, receipt)| delta_lines(Some(step), receipt.deltas()))
+}
+
+/// What explains an assessment: the projected changes of an applicable
+/// exchange, or what each account lacks for an infeasible one.
+pub(crate) fn assessment_lines(
+    assessment: &WireAssessment,
+) -> Box<dyn Iterator<Item = QuantityLine> + '_> {
+    if let Some(deltas) = assessment.projected_deltas() {
+        return Box::new(delta_lines(None, deltas));
+    }
+    Box::new(assessment.shortfalls().iter().flat_map(|shortfall| {
+        shortfall
+            .missing()
+            .iter()
+            .map(|(asset, quantity)| QuantityLine {
+                step: None,
+                account: shortfall.account().clone(),
+                asset: asset.clone(),
+                kind: LineKind::Missing,
+                quantity: *quantity,
+            })
+    }))
 }
 
 fn validate_problem_run(request: &RunRequest) -> Result<(), String> {
@@ -359,8 +926,13 @@ fn validate_problem_run(request: &RunRequest) -> Result<(), String> {
     Ok(())
 }
 
+fn task_error(error: impl ToString) -> TaskExit {
+    TaskExit::Error(McpError::internal_error(error.to_string(), None))
+}
+
 async fn run_problem(
     context: TaskContext,
+    artifacts: Registry<RunArtifact>,
     request: RunRequest,
 ) -> Result<CallToolResult, TaskExit> {
     let control = Arc::new(RunControl::default());
@@ -381,9 +953,7 @@ async fn run_problem(
                 }
             }
             result = &mut worker => {
-                break result
-                    .map_err(|error| TaskExit::Error(McpError::internal_error(error.to_string(), None)))?
-                    .map_err(|error| TaskExit::Error(McpError::internal_error(error.to_string(), None)))?;
+                break result.map_err(task_error)?.map_err(task_error)?;
             }
             () = tokio::time::sleep(std::time::Duration::from_millis(10)) => {
                 if context.is_cancel_requested() {
@@ -393,65 +963,76 @@ async fn run_problem(
             }
         }
     };
+    let summary = RunSummary {
+        artifact_id: artifact.id.clone(),
+        problem: artifact.problem.key.clone(),
+        instance: artifact.instance.key.clone(),
+        selected_document_id: artifact.selected_document_id.clone(),
+        documents: artifact
+            .documents
+            .iter()
+            .map(|document| DocumentSummary {
+                id: document.id.clone(),
+                title: document.title.clone(),
+                frames: document.frames.len(),
+            })
+            .collect(),
+    };
     context.set_status_message(format!(
-        "completed: {} alternatives, selected {}",
-        artifact.documents.len(),
-        artifact.selected_document_id
+        "completed: {} documents, selected {}",
+        summary.documents.len(),
+        summary.selected_document_id
     ));
-    let structured = serde_json::to_value(artifact)
-        .map_err(|error| TaskExit::Error(McpError::internal_error(error.to_string(), None)))?;
-    Ok(CallToolResult::structured(structured))
+    let links = vec![
+        Target::Artifact {
+            artifact_id: summary.artifact_id.clone(),
+        }
+        .link("artifact", "The run's request and documents"),
+        Target::Frames {
+            artifact_id: summary.artifact_id.clone(),
+            document_id: summary.selected_document_id.clone(),
+        }
+        .link("frames", "The selected document's replay frames, paged"),
+    ];
+    artifacts
+        .write()
+        .map_err(|_| task_error("artifact registry lock is poisoned"))?
+        .insert(artifact.id.clone(), Arc::new(artifact));
+    Linked::new(summary, links)
+        .into_result()
+        .map_err(TaskExit::Error)
 }
 
-fn validate_search_request(request: &SearchRequest) -> Result<(), String> {
-    if request.max_expansions == 0 {
-        return Err("max_expansions must be greater than zero".to_owned());
-    }
-    if request.chunk_size == 0 {
-        return Err("chunk_size must be greater than zero".to_owned());
-    }
-    if request.chunk_size > 10_000 {
-        return Err(
-            "chunk_size must not exceed 10000 so cancellation remains responsive".to_owned(),
-        );
-    }
-    Ok(())
-}
-
-async fn run_search(
+async fn run_search<S: SnapshotStore>(
     context: TaskContext,
-    economy: Arc<WireEconomy>,
+    snapshots: S,
+    source: Arc<Snapshot>,
     request: SearchRequest,
+    goal: Goal<String, String>,
 ) -> Result<CallToolResult, TaskExit> {
     let SearchRequest {
         economy_id,
-        goal,
         candidates,
         max_expansions,
         chunk_size,
+        ..
     } = request;
-    let mut session = BfsSession::new(economy.as_ref(), goal, move |_| candidates.clone());
+    let mut session = BfsSession::new(source.economy.as_ref(), goal, move |_| candidates.clone());
     let mut remaining = max_expansions;
 
-    loop {
-        let status = session.status();
-        if status.is_terminal() {
-            let outcome = match status {
-                SearchStatus::Solved => SearchOutcome::Solved,
-                SearchStatus::Exhausted => SearchOutcome::Exhausted,
-                SearchStatus::Running | SearchStatus::Interrupted => unreachable!(),
-            };
-            return complete_search(&context, economy_id, outcome, session);
+    let outcome = loop {
+        match session.status() {
+            SearchStatus::Solved => break SearchOutcome::Solved,
+            SearchStatus::Exhausted => break SearchOutcome::Exhausted,
+            SearchStatus::Running | SearchStatus::Interrupted => {}
         }
         if context.is_cancel_requested() {
             return Err(TaskExit::Cancelled);
         }
         if remaining == 0 {
-            return complete_search(&context, economy_id, SearchOutcome::ExpansionLimit, session);
+            break SearchOutcome::ExpansionLimit;
         }
-
-        let budget = remaining.min(chunk_size);
-        let report = session.advance(WorkBudget::new(budget), &mut Continue);
+        let report = session.advance(WorkBudget::new(remaining.min(chunk_size)), &mut Continue);
         remaining = remaining.saturating_sub(report.work_completed());
         context.set_status_message(progress_message(
             *report.progress(),
@@ -459,32 +1040,55 @@ async fn run_search(
             remaining,
         ));
         tokio::task::yield_now().await;
-    }
+    };
+
+    let progress = session.progress();
+    context.set_status_message(format!("finished: {}", describe(progress)));
+    let mut links = Vec::new();
+    let solution = match session.into_solution() {
+        Some(solution) => {
+            let exchanges = solution.trace().exchanges().to_vec();
+            let mut economy = WireEconomy::clone(&source.economy);
+            let receipts = economy.replay(solution.trace()).map_err(task_error)?;
+            let stored = store_exchanged(
+                &snapshots,
+                economy_id.clone(),
+                &exchanges,
+                economy,
+                receipts.into(),
+            )
+            .await
+            .map_err(|error| task_error(error.failure.message))?;
+            links = exchanged_links(&stored.economy_id);
+            Some(SearchSolved {
+                economy_id: stored.economy_id,
+                exchanges: stored.exchanges,
+                cost: solution.cost(),
+            })
+        }
+        None => None,
+    };
+    Linked::new(
+        SearchResponse {
+            economy_id,
+            outcome,
+            progress,
+            solution,
+        },
+        links,
+    )
+    .into_result()
+    .map_err(TaskExit::Error)
 }
 
-fn complete_search(
-    context: &TaskContext,
-    economy_id: String,
-    outcome: SearchOutcome,
-    session: BfsSession<
-        String,
-        String,
-        String,
-        String,
-        impl FnMut(&WireEconomy) -> Vec<crate::wire::WireExchange>,
-    >,
-) -> Result<CallToolResult, TaskExit> {
-    let progress = session.progress();
-    context.set_status_message(terminal_message(progress));
-    let response = SearchResponse {
-        economy_id,
-        outcome,
-        progress,
-        solution: session.into_solution(),
-    };
-    let structured = serde_json::to_value(response)
-        .map_err(|error| TaskExit::Error(McpError::internal_error(error.to_string(), None)))?;
-    Ok(CallToolResult::structured(structured))
+fn describe(progress: GraphSearchProgress) -> String {
+    format!(
+        "expanded={} generated={} frontier={} visited={}",
+        progress.expanded(),
+        progress.generated(),
+        progress.frontier(),
+        progress.visited()
+    )
 }
 
 fn progress_message(
@@ -493,203 +1097,7 @@ fn progress_message(
     remaining: usize,
 ) -> String {
     format!(
-        "expanded={}/{} generated={} frontier={} visited={} remaining={}",
-        progress.expanded(),
-        max_expansions,
-        progress.generated(),
-        progress.frontier(),
-        progress.visited(),
-        remaining
+        "{} of at most {max_expansions} expansions, remaining={remaining}",
+        describe(progress)
     )
-}
-
-fn terminal_message(progress: GraphSearchProgress) -> String {
-    format!(
-        "finished: expanded={} generated={} frontier={} visited={}",
-        progress.expanded(),
-        progress.generated(),
-        progress.frontier(),
-        progress.visited()
-    )
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::SnapshotStore;
-    use axionomy::{Account, Basket, EconomyBuilder, Exchange, Goal, Quantity, Rate, Trace};
-    use rmcp::model::{TaskPayload, TaskStatus};
-
-    fn one(asset: &str) -> Basket<String> {
-        [(asset.to_owned(), Quantity::new(1))].into_iter().collect()
-    }
-
-    fn search_fixture() -> (WireEconomy, SearchRequest) {
-        let economy = EconomyBuilder::new()
-            .account("source".to_owned(), Account::new(one("token")))
-            .account("sink".to_owned(), Account::default())
-            .rate(
-                "transfer".to_owned(),
-                Rate::new()
-                    .consume("giver".to_owned(), one("token"))
-                    .produce("receiver".to_owned(), one("token"))
-                    .distinct("giver".to_owned(), "receiver".to_owned()),
-            )
-            .build()
-            .unwrap();
-        let exchange = Exchange::new("transfer".to_owned(), Quantity::new(1))
-            .bind("giver".to_owned(), "source".to_owned())
-            .bind("receiver".to_owned(), "sink".to_owned());
-        let goal = Goal::new().require("sink".to_owned(), one("token"));
-        let request = SearchRequest {
-            economy_id: String::new(),
-            goal,
-            candidates: vec![exchange],
-            max_expansions: 8,
-            chunk_size: 1,
-        };
-        (economy, request)
-    }
-
-    async fn terminal_task(tasks: &TaskManager, task_id: &str) -> rmcp::model::DetailedTask {
-        for _ in 0..100 {
-            let task = tasks.get_task(task_id).unwrap();
-            if task.status().is_terminal() {
-                return task;
-            }
-            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
-        }
-        panic!("task did not reach a terminal state")
-    }
-
-    #[tokio::test]
-    async fn every_reference_tool_exposes_input_and_output_schemas() {
-        let server = AxionomyMcp::default();
-        let tools = server.tool_router.list_all();
-
-        assert_eq!(tools.len(), 7);
-        for tool in tools {
-            assert!(!tool.input_schema.is_empty(), "{} input schema", tool.name);
-            assert!(tool.output_schema.is_some(), "{} output schema", tool.name);
-        }
-    }
-
-    #[tokio::test]
-    async fn bfs_task_returns_a_structured_solution() {
-        let snapshots = MemorySnapshotStore::default();
-        let (economy, mut request) = search_fixture();
-        request.economy_id = snapshots.put(economy.clone()).await.unwrap().economy_id;
-        let tasks = TaskManager::new();
-        let task = tasks.spawn(TaskOptions::new(), move |context| {
-            Box::pin(run_search(context, Arc::new(economy), request))
-        });
-
-        let detailed = terminal_task(&tasks, &task.task_id).await;
-        assert_eq!(detailed.status(), TaskStatus::Completed);
-        assert!(
-            detailed
-                .task
-                .status_message
-                .as_deref()
-                .is_some_and(|message| message.starts_with("finished:"))
-        );
-        let TaskPayload::Completed { result } = detailed.payload else {
-            panic!("search should complete with a tool result")
-        };
-        let tool_result: CallToolResult =
-            serde_json::from_value(serde_json::Value::Object(result)).unwrap();
-        let response: SearchResponse =
-            serde_json::from_value(tool_result.structured_content.unwrap()).unwrap();
-        assert_eq!(response.outcome, SearchOutcome::Solved);
-        assert_eq!(response.solution.unwrap().cost(), 1);
-    }
-
-    #[tokio::test]
-    async fn bfs_task_observes_task_manager_cancellation() {
-        let (economy, request) = search_fixture();
-        let tasks = TaskManager::new();
-        let task = tasks.spawn(TaskOptions::new(), move |context| {
-            Box::pin(run_search(context, Arc::new(economy), request))
-        });
-        tasks.cancel_task(&task.task_id).unwrap();
-
-        let detailed = terminal_task(&tasks, &task.task_id).await;
-        assert_eq!(detailed.status(), TaskStatus::Cancelled);
-        assert!(matches!(detailed.payload, TaskPayload::Cancelled));
-    }
-
-    #[tokio::test]
-    async fn problem_task_returns_the_shared_service_artifact() {
-        let request = RunRequest::new("maze")
-            .with_instance("micro")
-            .with_strategy("a_star");
-        let tasks = TaskManager::new();
-        let task_request = request.clone();
-        let task = tasks.spawn(TaskOptions::new(), move |context| {
-            Box::pin(run_problem(context, task_request))
-        });
-        let detailed = terminal_task(&tasks, &task.task_id).await;
-        assert_eq!(detailed.status(), TaskStatus::Completed);
-        let TaskPayload::Completed { result } = detailed.payload else {
-            panic!("problem run should complete with a tool result")
-        };
-        let tool_result: CallToolResult =
-            serde_json::from_value(serde_json::Value::Object(result)).unwrap();
-        let mcp_artifact: axionomy_service::RunArtifact =
-            serde_json::from_value(tool_result.structured_content.unwrap()).unwrap();
-        let service_artifact = ReferenceService.run(request).unwrap();
-        assert_eq!(mcp_artifact, service_artifact);
-    }
-
-    #[test]
-    fn search_request_rejects_removed_idempotency_policy() {
-        let (_, request) = search_fixture();
-        let mut value = serde_json::to_value(request).unwrap();
-        value
-            .as_object_mut()
-            .unwrap()
-            .insert("idempotency_key".to_owned(), serde_json::json!("retry"));
-
-        assert!(serde_json::from_value::<SearchRequest>(value).is_err());
-    }
-
-    #[tokio::test]
-    async fn apply_and_replay_create_new_snapshots_without_replacing_the_source() {
-        let snapshots = MemorySnapshotStore::default();
-        let server = AxionomyMcp::new(snapshots.clone());
-        let (economy, request) = search_fixture();
-        let exchange = request.candidates[0].clone();
-        let source_id = snapshots.put(economy).await.unwrap().economy_id;
-
-        let Json(applied) = server
-            .exchange_apply(Parameters(ApplyRequest {
-                economy_id: source_id.clone(),
-                exchange: exchange.clone(),
-            }))
-            .await
-            .unwrap();
-        let mut trace = Trace::new();
-        trace.push(exchange);
-        let Json(replayed) = server
-            .trace_replay(Parameters(ReplayRequest {
-                economy_id: source_id.clone(),
-                trace,
-            }))
-            .await
-            .unwrap();
-
-        assert_ne!(source_id, applied.economy_id);
-        assert_eq!(applied.economy_id, replayed.economy_id);
-        assert_eq!(replayed.receipts.len(), 1);
-        let source = snapshots.get(&source_id).await.unwrap().unwrap();
-        let next = snapshots.get(&applied.economy_id).await.unwrap().unwrap();
-        assert_eq!(
-            source.balance(&"source".to_owned(), &"token".to_owned()),
-            Quantity::new(1)
-        );
-        assert_eq!(
-            next.balance(&"sink".to_owned(), &"token".to_owned()),
-            Quantity::new(1)
-        );
-    }
 }

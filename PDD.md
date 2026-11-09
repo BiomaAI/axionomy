@@ -459,22 +459,25 @@ substitute for validation, trace replay, collision-safe durable identity, or a
 future compatibility protocol.
 
 The MCP reference adapter's default `MemorySnapshotStore` adds one scoped
-identity policy: it hashes the exact serialized snapshot with BLAKE3 and stores
-those bytes immutably. This creates a collision-resistant process-local handle
-without changing `Economy` semantics. Semantically equal economies with
-different declared insertion order may have different handles, and a future
-serialization schema may change the hash. `AxionomyMcp<S>` accepts a
-caller-provided `SnapshotStore` so retention and physical storage remain
-integration policy; every implementation must preserve immutable-handle
-semantics.
+identity policy: a snapshot handle is a BLAKE3 hash, keyed with a per-store
+secret from the operating system, of the parent handle and the operation that
+made the snapshot. Recording an exchange therefore costs the size of the
+exchange, not of the economy; retrying an operation returns the same handle;
+and a handle cannot be derived from content without the server. Two histories
+that reach the same balances get different handles, so a handle also names how
+its state was reached. `AxionomyMcp<S>` accepts a caller-provided
+`SnapshotStore` so retention and physical storage remain integration policy;
+every implementation must preserve immutable-handle semantics.
 
 The current public types serialize directly. Axionomy does not maintain
 parallel `ModelDefinitionV1`, snapshot, or trace-envelope types before a real
 deployed compatibility requirement exists. Serde solves encoding and
-decoding; it does not by itself promise schema migration. Explicit wire types
-should be introduced only when their compatibility contract is known.
-The MCP string-ID/`u64` profile is therefore a current reference boundary, not
-an invented historical `V1` model hierarchy.
+decoding; it does not by itself promise schema migration. The one exception
+is authoring at scale: the MCP adapter accepts economies as bounded chunks of
+entries keyed by ID, because an economy with 100,000 assets cannot travel as
+one document. Those entries reach the kernel only through `EconomyBuilder`, so
+they add no second model. The MCP string-ID profile is a current reference
+boundary, not an invented historical `V1` model hierarchy.
 
 ### 5.2 Numeric and typed authoring boundaries
 
@@ -652,9 +655,9 @@ projections. These demands may change the service and view contracts. They
 move into the kernel only when they are transport-neutral parts of economic
 validation, assessment, application, or replay.
 
-Semantic parity is executable: CLI JSON, HTTP artifacts, and MCP task results
-are compared with the complete `ReferenceService` artifact, not merely a
-shared identifier. Transport events and run records are allowed to differ;
+Semantic parity is executable: CLI JSON, HTTP artifacts, and the artifacts
+MCP runs serve as resources are compared with the complete `ReferenceService`
+artifact, not merely a shared identifier. Transport events and run records are allowed to differ;
 economic documents, assessments, receipts, objectives, and traces are not.
 
 ### 6.2 Instance profiles keep examples honest
@@ -1066,30 +1069,42 @@ protocol and client metadata, and uses the revision's standardized HTTP
 routing headers. Transport statelessness is necessary but not sufficient, so
 the tool model also forbids an ambient current economy.
 
-Every operation names an immutable `economy_id`. The default
-`MemorySnapshotStore` derives that ID from a BLAKE3 hash of the exact current
-Serde bytes. Assessment returns an explanation without a new snapshot;
-successful apply and replay return a new content-addressed snapshot while
-preserving the source. The ID is a process-local handle inside the current
-reference schema, not a versioned compatibility promise or a replacement for
-replay validation.
+Every operation names an immutable `economy_id`. Authoring, apply and replay
+store a new snapshot and leave the source unchanged; assessment stores none. A
+failed operation stores nothing. The ID is a process-local handle, not a
+versioned compatibility promise or a replacement for replay validation.
+
+No request or result grows with the economy. A call adds at most 10,000
+authored entries or replays at most 1,000 exchanges, so an economy of any size
+is built by chaining `axionomy_economy_extend` calls, each of which stores a
+valid snapshot. A tool result carries handles, counts, at most ten preview
+lines, and `resource_link`s. Everything an economy, assessment or problem run
+holds is an `axionomy://` resource under RFC 6570 URI templates. `resources/read`
+is not paginated by the protocol, so each page of a list is its own resource:
+the page carries `nextCursor` under MCP's pagination rules and the next page is
+the same URI with that cursor. Snapshots never change, so pages are cached
+privately for a day and need no subscription, and a cursor tied to its listing
+cannot read another. Completion suggests accounts, assets, rates and
+invariants by prefix, and tool annotations mark assessment and the catalog
+read-only and every other tool additive and idempotent.
 
 Storage lifetime is supplied by the embedding application. `SnapshotStore`
-has only two responsibilities: store a complete immutable `WireEconomy` and
-resolve its opaque content-derived handle. `MemorySnapshotStore` serializes
-once, retains the bytes for collision checks, shares decoded snapshots through
-`Arc`, and deduplicates equal bytes. Its clones share state; a fresh instance
-or process restart starts empty. A database, object store, tenant boundary, or
-retention policy can implement the same contract when deployment pressure
-requires it without changing any tool schema or kernel rule.
+has only two responsibilities: store a snapshot under the handle derived from
+its parent and operation, and resolve a handle. `MemorySnapshotStore` keeps
+snapshots in one shared map; a snapshot made by exchanges shares its unchanged
+accounts with its parent through `Arc`. Its clones share state; a fresh
+instance or process restart starts empty, and the tools tell a caller holding
+a stale handle to create the economy again. A database, object store, tenant
+boundary, or retention policy can implement the same contract when deployment
+pressure requires it without changing any tool schema or kernel rule.
 
-The server exposes schema-backed tools for economy storage, assessment,
-application, replay, and search. The reference search request contains an
-explicit finite list of concrete candidate exchanges. That list is disposable
-proposal policy: BFS reconsiders it at every state and the core rejects
-inapplicable exchanges. The list cannot declare a successor or override a
-rate. A future declarative binding language should replace large concrete
-lists only when measured pressure justifies the new semantics.
+The reference search request contains an explicit list of at most 1,000
+concrete candidate exchanges. That list is disposable proposal policy: BFS
+reconsiders it at every state and the core rejects inapplicable exchanges. The
+list cannot declare a successor or override a rate. A solution is stored as
+the snapshot it reaches, whose `exchanges` resource is the replayable trace. A
+future declarative binding language should replace large concrete lists only
+when measured pressure justifies the new semantics.
 
 Long work uses the MCP Tasks extension:
 
@@ -1099,8 +1114,8 @@ Long work uses the MCP Tasks extension:
 3. Advance a `BfsSession` in deterministic chunks.
 4. Publish human-readable progress after each chunk.
 5. Observe cooperative cancellation intent between chunks.
-6. Return the terminal structured `CallToolResult`, including the replayable
-   solution trace, to the task manager.
+6. Return the terminal structured `CallToolResult`, linking to the snapshot a
+   solution reaches, to the task manager.
 
 Task handles, progress, terminal results, and cancellation intent live only in
 the running manager. The default `rmcp` TTL bounds their retention; callers can
@@ -1297,7 +1312,13 @@ examples, but they are not promised as reusable domain APIs.
 - The MCP reference server uses immutable explicit economy handles rather than
   session-scoped current state and returns new handles for successful changes.
 - The MCP adapter accepts caller-provided snapshot storage and defaults to a
-  process-local, content-addressed `MemorySnapshotStore`.
+  process-local `MemorySnapshotStore` whose handles are keyed hashes of the
+  parent handle and the operation.
+- No MCP request or result grows with the economy: economies are authored in
+  bounded chunks, results carry handles, counts and `resource_link`s, and
+  everything a snapshot, assessment or run holds is read as paged, immutable,
+  cacheable `axionomy://` resources with completion for their arguments. A
+  100,000-asset economy is exercised end to end.
 - MCP search tasks are registered before their handles are returned and expose
   pollable progress, terminal results, configurable retention, and cooperative
   cancellation through `rmcp::TaskManager`.
@@ -1370,8 +1391,8 @@ The current foundation is intentionally bounded:
   than the former 1,282-rate 4×4 counter cross-product—but pagination or a
   generic parameterized-rate view still awaits measured pressure from other
   domains.
-- The MCP reference binary keeps snapshots and task lifecycle in memory. Its
-  handles do not survive restart; callers can implement `SnapshotStore` when
+- The MCP reference binary keeps snapshots, assessments, run artifacts and
+  task lifecycle in memory. Its handles do not survive restart; callers can implement `SnapshotStore` when
   snapshot persistence is required, while distributed task recovery remains
   outside the reference scope.
 - The MCP reference server has no authentication, tenant isolation,
@@ -1902,7 +1923,7 @@ Axionomy succeeds when:
 - Every canonical problem is discoverable, runnable, replayable, and
   meaningfully inspectable through Studio and static Showcase artifacts, with
   explicit Micro and Stress selection on live interfaces.
-- CLI, HTTP, MCP, and the browser Worker return the same semantic problem
+- CLI, HTTP, MCP, and the browser Worker serve the same semantic problem
   artifacts for the same request, while retaining interface-appropriate
   operational behavior.
 - Infeasible proposals expose every account-and-asset shortfall without

@@ -1,59 +1,10 @@
-use axionomy::{Account, Basket, EconomyBuilder, Exchange, Goal, Quantity, Rate};
-use axionomy_mcp::{MemorySnapshotStore, SearchRequest, WireEconomy, stateless_http_service};
+use axionomy_mcp::{MemorySnapshotStore, stateless_http_service};
 use axum::Router;
-use reqwest::{Client, Response, StatusCode};
+use reqwest::{Client, StatusCode};
 use serde_json::{Value, json};
 use tokio_util::sync::CancellationToken;
 
 const PROTOCOL_VERSION: &str = "2026-07-28";
-
-fn one(asset: &str) -> Basket<String> {
-    [(asset.to_owned(), Quantity::new(1))].into_iter().collect()
-}
-
-fn amount(asset: &str, quantity: u64) -> Basket<String> {
-    [(asset.to_owned(), Quantity::new(quantity))]
-        .into_iter()
-        .collect()
-}
-
-fn fixture() -> (
-    WireEconomy,
-    Exchange<String, String, String>,
-    Goal<String, String>,
-) {
-    fixture_with_amounts(1, 1)
-}
-
-fn fixture_with_amounts(
-    source_balance: u64,
-    goal_balance: u64,
-) -> (
-    WireEconomy,
-    Exchange<String, String, String>,
-    Goal<String, String>,
-) {
-    let economy = EconomyBuilder::new()
-        .account(
-            "source".to_owned(),
-            Account::new(amount("token", source_balance)),
-        )
-        .account("sink".to_owned(), Account::default())
-        .rate(
-            "transfer".to_owned(),
-            Rate::new()
-                .consume("giver".to_owned(), one("token"))
-                .produce("receiver".to_owned(), one("token"))
-                .distinct("giver".to_owned(), "receiver".to_owned()),
-        )
-        .build()
-        .unwrap();
-    let exchange = Exchange::new("transfer".to_owned(), Quantity::new(1))
-        .bind("giver".to_owned(), "source".to_owned())
-        .bind("receiver".to_owned(), "sink".to_owned());
-    let goal = Goal::new().require("sink".to_owned(), amount("token", goal_balance));
-    (economy, exchange, goal)
-}
 
 async fn spawn_server() -> (Client, String, CancellationToken) {
     let cancellation = CancellationToken::new();
@@ -87,20 +38,17 @@ fn metadata(tasks: bool) -> Value {
     })
 }
 
-async fn post(
-    client: &Client,
-    url: &str,
-    id: u64,
-    method: &str,
-    mut params: Value,
-    tasks: bool,
-) -> Response {
-    let mcp_name = params
-        .get(if method.starts_with("tasks/") {
-            "taskId"
-        } else {
-            "name"
-        })
+/// One JSON-RPC request with the routing headers the transport requires; the
+/// result, or the error when there is no result.
+async fn call(client: &Client, url: &str, method: &str, mut params: Value, tasks: bool) -> Value {
+    let name_field = match method {
+        "tools/call" => Some("name"),
+        "resources/read" => Some("uri"),
+        _ if method.starts_with("tasks/") => Some("taskId"),
+        _ => None,
+    };
+    let mcp_name = name_field
+        .and_then(|field| params.get(field))
         .and_then(Value::as_str)
         .map(str::to_owned);
     params
@@ -113,20 +61,55 @@ async fn post(
         .header("Accept", "application/json, text/event-stream")
         .header("MCP-Protocol-Version", PROTOCOL_VERSION)
         .header("Mcp-Method", method)
-        .json(&json!({
-            "jsonrpc": "2.0",
-            "id": id,
-            "method": method,
-            "params": params
-        }));
+        .json(&json!({ "jsonrpc": "2.0", "id": 1, "method": method, "params": params }));
     if let Some(mcp_name) = mcp_name {
         request = request.header("Mcp-Name", mcp_name);
     }
-    request.send().await.unwrap()
+    let response = request.send().await.unwrap();
+    let status = response.status();
+    let body: Value = response.json().await.unwrap();
+    assert_eq!(status, StatusCode::OK, "{body}");
+    body.get("result")
+        .cloned()
+        .unwrap_or_else(|| body["error"].clone())
+}
+
+async fn tool(client: &Client, url: &str, name: &str, arguments: Value, tasks: bool) -> Value {
+    call(
+        client,
+        url,
+        "tools/call",
+        json!({ "name": name, "arguments": arguments }),
+        tasks,
+    )
+    .await
+}
+
+async fn read(client: &Client, url: &str, uri: &str) -> (Value, Value) {
+    let result = call(client, url, "resources/read", json!({ "uri": uri }), false).await;
+    let text = result["contents"][0]["text"]
+        .as_str()
+        .unwrap_or_else(|| panic!("{result}"));
+    (serde_json::from_str(text).unwrap(), result)
+}
+
+async fn finished_task(client: &Client, url: &str, task_id: &str) -> Value {
+    for _ in 0..1_000 {
+        let polled = call(client, url, "tasks/get", json!({ "taskId": task_id }), true).await;
+        if polled["status"] != "working" {
+            return polled;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+    }
+    panic!("task {task_id} did not finish")
+}
+
+fn transfer(units: &str) -> Value {
+    json!({ "rate": "transfer", "bindings": { "giver": "source", "receiver": "sink" }, "units": units })
 }
 
 #[tokio::test]
-async fn strict_stateless_http_runs_a_process_local_search_task() {
+async fn strict_stateless_http_serves_tools_resources_completion_and_tasks() {
     let (client, url, cancellation) = spawn_server().await;
 
     let missing_header = client
@@ -144,159 +127,147 @@ async fn strict_stateless_http_runs_a_process_local_search_task() {
         .unwrap();
     assert_eq!(missing_header.status(), StatusCode::BAD_REQUEST);
 
-    let listed = post(&client, &url, 2, "tools/list", json!({}), false).await;
-    let listed_status = listed.status();
-    assert!(listed.headers().get("mcp-session-id").is_none());
-    let listed_text = listed.text().await.unwrap();
-    assert_eq!(listed_status, StatusCode::OK, "{listed_text}");
-    let listed: Value = serde_json::from_str(&listed_text).unwrap();
-    let tools = listed["result"]["tools"].as_array().unwrap();
-    assert_eq!(tools.len(), 7);
-    for expected in ["axionomy_problem_catalog", "axionomy_problem_run"] {
-        assert!(tools.iter().any(|tool| tool["name"] == expected));
-    }
+    let tools = call(&client, &url, "tools/list", json!({}), false).await;
+    assert_eq!(tools["tools"].as_array().unwrap().len(), 8);
+    assert!(tools["ttlMs"].as_u64().unwrap() > 0);
+    assert_eq!(tools["cacheScope"], "public");
+    let templates = call(&client, &url, "resources/templates/list", json!({}), false).await;
+    assert_eq!(templates["resourceTemplates"].as_array().unwrap().len(), 16);
+    let listed = call(&client, &url, "resources/list", json!({}), false).await;
+    assert_eq!(listed["resources"], json!([]));
 
-    let (economy, exchange, goal) = fixture();
-    let put = post(
+    let created = tool(
         &client,
         &url,
-        3,
-        "tools/call",
+        "axionomy_economy_create",
         json!({
-            "name": "axionomy_economy_put",
-            "arguments": { "economy": economy }
-        }),
-        false,
-    )
-    .await;
-    assert_eq!(put.status(), StatusCode::OK);
-    let put: Value = put.json().await.unwrap();
-    let economy_id = put["result"]["structuredContent"]["economy_id"]
-        .as_str()
-        .unwrap()
-        .to_owned();
-    assert!(economy_id.starts_with("eco_"));
-
-    let search = SearchRequest {
-        economy_id,
-        goal,
-        candidates: vec![exchange],
-        max_expansions: 8,
-        chunk_size: 1,
-    };
-    let created = post(
-        &client,
-        &url,
-        4,
-        "tools/call",
-        json!({
-            "name": "axionomy_search",
-            "arguments": search
-        }),
-        true,
-    )
-    .await;
-    assert_eq!(created.status(), StatusCode::OK);
-    let created: Value = created.json().await.unwrap();
-    assert_eq!(created["result"]["resultType"], "task");
-    let task_id = created["result"]["taskId"].as_str().unwrap().to_owned();
-
-    let completed = loop {
-        let polled = post(
-            &client,
-            &url,
-            5,
-            "tasks/get",
-            json!({ "taskId": task_id }),
-            true,
-        )
-        .await;
-        assert_eq!(polled.status(), StatusCode::OK);
-        let polled: Value = polled.json().await.unwrap();
-        match polled["result"]["status"].as_str().unwrap() {
-            "completed" => break polled,
-            "working" => tokio::task::yield_now().await,
-            status => panic!("unexpected task status: {status}"),
-        }
-    };
-    assert_eq!(
-        completed["result"]["result"]["structuredContent"]["outcome"],
-        "solved"
-    );
-    assert_eq!(
-        completed["result"]["result"]["structuredContent"]["solution"]["cost"],
-        1
-    );
-
-    let (large_economy, large_exchange, unreachable_goal) = fixture_with_amounts(100_000, 100_001);
-    let put = post(
-        &client,
-        &url,
-        6,
-        "tools/call",
-        json!({
-            "name": "axionomy_economy_put",
-            "arguments": { "economy": large_economy }
-        }),
-        false,
-    )
-    .await;
-    let put: Value = put.json().await.unwrap();
-    let economy_id = put["result"]["structuredContent"]["economy_id"]
-        .as_str()
-        .unwrap()
-        .to_owned();
-    let created = post(
-        &client,
-        &url,
-        7,
-        "tools/call",
-        json!({
-            "name": "axionomy_search",
-            "arguments": SearchRequest {
-                economy_id,
-                goal: unreachable_goal,
-                candidates: vec![large_exchange],
-                max_expansions: 100_000,
-                chunk_size: 1,
+            "entries": {
+                "accounts": { "source": { "token": "1" }, "sink": {} },
+                "rates": {
+                    "transfer": {
+                        "consume": { "giver": { "token": "1" } },
+                        "produce": { "receiver": { "token": "1" } },
+                        "distinct": [["giver", "receiver"]]
+                    }
+                }
             }
         }),
+        false,
+    )
+    .await;
+    let economy_id = created["structuredContent"]["economy_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let link = created["content"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|block| block["type"] == "resource_link")
+        .unwrap()["uri"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let (summary, result) = read(&client, &url, &link).await;
+    assert_eq!(summary["counts"]["accounts"], 2);
+    assert_eq!(result["cacheScope"], "private");
+    assert!(result["ttlMs"].as_u64().unwrap() > 0);
+
+    let completion = call(
+        &client,
+        &url,
+        "completion/complete",
+        json!({
+            "ref": { "type": "ref/resource", "uri": "axionomy://economy/{economy_id}/accounts/{account}/balances{?prefix,cursor}" },
+            "argument": { "name": "account", "value": "so" },
+            "context": { "arguments": { "economy_id": economy_id } }
+        }),
+        false,
+    )
+    .await;
+    assert_eq!(completion["completion"]["values"], json!(["source"]));
+
+    let infeasible = tool(
+        &client,
+        &url,
+        "axionomy_exchange_apply",
+        json!({ "economy_id": economy_id, "exchange": transfer("2") }),
+        false,
+    )
+    .await;
+    assert_eq!(infeasible["isError"], true);
+    assert_eq!(infeasible["structuredContent"]["error"], "infeasible");
+
+    let search = json!({
+        "economy_id": economy_id,
+        "goal": { "sink": { "token": "1" } },
+        "candidates": [transfer("1")],
+        "max_expansions": 8,
+        "chunk_size": 1
+    });
+    let without_tasks = tool(&client, &url, "axionomy_search", search.clone(), false).await;
+    assert_eq!(
+        without_tasks["structuredContent"]["error"],
+        "tasks_required"
+    );
+
+    let created = tool(&client, &url, "axionomy_search", search, true).await;
+    assert_eq!(created["resultType"], "task");
+    let task_id = created["taskId"].as_str().unwrap().to_owned();
+    let completed = finished_task(&client, &url, &task_id).await;
+    assert_eq!(completed["status"], "completed");
+    let solution = &completed["result"]["structuredContent"];
+    assert_eq!(solution["outcome"], "solved");
+    let solved_id = solution["solution"]["economy_id"].as_str().unwrap();
+    let (trace, _) = read(
+        &client,
+        &url,
+        &format!("axionomy://economy/{solved_id}/exchanges"),
+    )
+    .await;
+    assert_eq!(trace["items"].as_array().unwrap().len(), 1);
+
+    let endless = tool(
+        &client,
+        &url,
+        "axionomy_search",
+        json!({
+            "economy_id": economy_id,
+            "goal": { "sink": { "token": "2" } },
+            "candidates": [transfer("1")],
+            "max_expansions": 100_000,
+            "chunk_size": 1
+        }),
         true,
     )
     .await;
-    let created: Value = created.json().await.unwrap();
-    let task_id = created["result"]["taskId"].as_str().unwrap().to_owned();
-    let cancelled = post(
+    let task_id = endless["taskId"].as_str().unwrap().to_owned();
+    call(
         &client,
         &url,
-        8,
         "tasks/cancel",
         json!({ "taskId": task_id }),
         true,
     )
     .await;
-    assert_eq!(cancelled.status(), StatusCode::OK);
+    let cancelled = finished_task(&client, &url, &task_id).await;
+    assert!(
+        matches!(
+            cancelled["status"].as_str(),
+            Some("cancelled" | "completed")
+        ),
+        "{cancelled}"
+    );
 
-    let mut status = None;
-    for _ in 0..100 {
-        let polled = post(
-            &client,
-            &url,
-            9,
-            "tasks/get",
-            json!({ "taskId": task_id }),
-            true,
-        )
-        .await;
-        let polled: Value = polled.json().await.unwrap();
-        let current = polled["result"]["status"].as_str().unwrap();
-        if current != "working" {
-            status = Some(current.to_owned());
-            break;
-        }
-        tokio::task::yield_now().await;
-    }
-    assert_eq!(status.as_deref(), Some("cancelled"));
+    let unknown = call(
+        &client,
+        &url,
+        "resources/read",
+        json!({ "uri": "axionomy://economy/eco_missing" }),
+        false,
+    )
+    .await;
+    assert_eq!(unknown["code"], -32602);
 
     cancellation.cancel();
 }

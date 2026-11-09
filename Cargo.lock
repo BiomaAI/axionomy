@@ -451,6 +451,8 @@ dependencies = [
  "axionomy-service",
  "axum",
  "blake3",
+ "getrandom 0.4.3",
+ "indexmap 2.14.2",
  "reqwest",
  "rmcp",
  "schemars 1.2.3",

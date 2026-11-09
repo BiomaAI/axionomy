@@ -1,50 +1,131 @@
 # axionomy-mcp
 
-`axionomy-mcp` is Axionomy's strict stateless MCP 2026-07-28 reference
-boundary. It demonstrates remote, interruptible use without putting HTTP,
-Tokio, task lifecycle, storage policy, or client policy into the core engine.
+`axionomy-mcp` is Axionomy's stateless MCP `2026-07-28` reference server. It
+lets a remote client build economies of any size, apply exchanges to them, and
+read everything they hold, without putting HTTP, Tokio, task lifecycle or
+storage policy into the core engine.
 
 ## Semantic contract
 
-The server has no hidden “current economy.” Every operation identifies an
-immutable snapshot explicitly:
+The server has no current economy. Every operation names an immutable
+snapshot, and every change stores a new one:
 
 ```text
-economy JSON ── put ──> economy_id
-economy_id + exchange ── assess ──> explanation (no new state)
-economy_id + exchange ── apply ──> receipt + new economy_id
-economy_id + trace ── replay ──> receipts + new economy_id
-economy_id + goal + candidates ── search ──> task ── poll ──> replayable trace
+entries ─────────────── economy_create ──> economy_id
+economy_id + entries ── economy_extend ──> new economy_id
+economy_id + exchange ─ exchange_assess ─> explanation, nothing stored
+economy_id + exchange ─ exchange_apply ──> new economy_id
+economy_id + exchanges  trace_replay ────> new economy_id
+economy_id + goal ───── search (task) ───> economy_id the solution reaches
 ```
 
-With the default `MemorySnapshotStore`, snapshot IDs are BLAKE3 hashes of the
-exact current Serde representation. Putting identical bytes deduplicates them.
-A source snapshot is never changed; failed apply or replay operations create
-nothing, and a successful operation stores a new snapshot. This supplies
-counterfactual branches and rollback by retaining the prior handle, without
-inventing a second transaction model.
+A source snapshot never changes. A failed operation stores nothing; the
+caller keeps the handle it had. Counterfactual branches and rollback are
+therefore just older handles.
 
-Operational data may live outside the economy only when it is derived and
-disposable. Snapshot indexes, task records, progress counters, work budgets,
-cancellation intent, candidate lists, and HTTP request metadata cannot change
-exchange validity or install a successor. Every searched edge is still a
-concrete exchange accepted by `axionomy`, and a solution is still a trace the
-kernel can replay.
+Nothing a tool accepts or returns grows with the size of an economy. A call
+adds at most 10,000 entries or replays at most 1,000 exchanges, and a result
+carries handles, counts and at most ten preview lines. Everything else is read
+as a resource, one page at a time.
 
-## Snapshot storage
+## Authoring
 
-`AxionomyMcp<S>` is generic over the small `SnapshotStore` contract. A store
-accepts a complete `WireEconomy`, returns its immutable content-derived handle,
-and resolves a handle to an `Arc<WireEconomy>` or reports that it is absent.
-Implementations must never replace the snapshot behind a live handle. This is
-the full storage contract; databases, object stores, tenant routing, retention,
-and replication belong to the integrating caller.
+`axionomy_economy_create` and `axionomy_economy_extend` take the same entries,
+keyed by ID, with every collection optional:
 
-`MemorySnapshotStore` is the default reference implementation. Its clones
-share one thread-safe map, serialized bytes are retained for collision checks,
-and resolved economies are shared by `Arc`. Handles last only as long as that
-store instance: a fresh store or restarted process cannot resolve them. A
-caller that needs a different lifetime supplies its own implementation:
+```json
+{
+  "accounts": { "source": { "token": "5" }, "sink": {} },
+  "rates": {
+    "transfer": {
+      "consume": { "giver": { "token": "1" } },
+      "produce": { "receiver": { "token": "1" } },
+      "distinct": [["giver", "receiver"]]
+    }
+  },
+  "invariants": { "supply": { "token": 1 } }
+}
+```
+
+Quantities are decimal strings, exact up to `2²⁵⁶ − 1`. A rate may also list
+`preserve` amounts, `computed` amounts evaluated from balances and parameters,
+and `conditions`. Extending adds: a new ID adds an account, rate or invariant,
+and an existing one gains balances, amounts or weights. An entry that would
+replace something already present is a `conflict`, so an economy too large for
+one call is built by chaining calls, each of which stores a valid snapshot.
+The kernel's `EconomyBuilder` builds every snapshot, so the kernel alone
+decides what a valid economy is.
+
+## Resources
+
+Resources hold the data. Their URI templates (RFC 6570) are listed by
+`resources/templates/list`:
+
+| Template | Content |
+| --- | --- |
+| `axionomy://economy/{economy_id}` | Origin, parent and counts |
+| `…/accounts{?cursor}` | Accounts and how many assets each holds |
+| `…/accounts/{account}/balances{?prefix,cursor}` | Nonzero balances, optionally by asset-ID prefix |
+| `…/rates{?asset,cursor}` | Rates and their roles, optionally only those that move `asset` |
+| `…/rates/{rate}` | Roles, distinct pairs, parameters and counts |
+| `…/rates/{rate}/amounts{?cursor}` | Fixed, then computed, amounts per unit |
+| `…/rates/{rate}/conditions{?cursor}` | Conditions every exchange must satisfy |
+| `…/invariants{?cursor}` | Conservation laws and how many assets each weights |
+| `…/invariants/{invariant}/weights{?cursor}` | Asset weights |
+| `…/changes{?cursor}` | Quantities moved by the exchanges that made the snapshot |
+| `…/exchanges{?cursor}` | Those exchanges; replaying them on the parent reproduces it |
+| `axionomy://assessment/{assessment_id}` and `…/lines{?cursor}` | An assessment and what explains it |
+| `axionomy://artifact/{artifact_id}`, `…/documents/{document_id}` and `…/frames{?cursor}` | A problem run |
+
+A list page is `{"items": [...], "nextCursor": "..."}` and follows the MCP
+pagination rules: the server chooses the page size, the cursor is opaque, the
+next page is the same URI with that cursor, and a cursor from another listing
+is refused with `-32602`. The snapshot behind a page never changes, so every
+page is cached with `cacheScope: "private"` and a one-day `ttlMs`, and needs no
+subscription. `resources/list` is empty: snapshots are reached through their
+handles and the `resource_link`s tool results carry, never through a listing
+shared by every caller. `completion/complete` suggests accounts, assets,
+rates, invariants and documents for template arguments, by prefix.
+
+## Tools
+
+| Tool | Result | Hints |
+| --- | --- | --- |
+| `axionomy_economy_create` | `economy_id`, counts | additive, idempotent |
+| `axionomy_economy_extend` | new `economy_id`, counts | additive, idempotent |
+| `axionomy_exchange_assess` | status, issues, line count and preview | read-only |
+| `axionomy_exchange_apply` | new `economy_id`, change count | additive, idempotent |
+| `axionomy_trace_replay` | new `economy_id`, change count | additive, idempotent |
+| `axionomy_search` | MCP task: outcome and the snapshot a solution reaches | additive, idempotent |
+| `axionomy_problem_catalog` | Built-in problems, instances and strategies | read-only |
+| `axionomy_problem_run` | MCP task: run summary | additive, idempotent |
+
+Every tool declares input and output schemas and `openWorldHint: false`.
+Results link to the resources that page through what they summarize. Applying
+one exchange and replaying it alone are the same operation and return the same
+handle. A failure is a result with `isError` and a stable code:
+`invalid_request`, `not_found`, `conflict`, `too_large`, `infeasible`,
+`invalid`, `tasks_required` or `internal`. An infeasible or invalid exchange
+says which exchange failed, previews what accounts lack, and links to the
+stored assessment.
+
+## Handles
+
+A snapshot handle is a BLAKE3 hash, keyed with a secret drawn from the
+operating system when the store is created, of the parent handle and the
+operation. Retrying an operation therefore returns the same handle without
+storing the economy again, and nobody without the server can derive a handle
+from an economy's content. Two different histories that reach the same
+balances get different handles, so a handle also names how its state was
+reached. Assessment handles are keyed the same way.
+
+`AxionomyMcp<S>` is generic over the small `SnapshotStore` contract: store a
+snapshot under the handle derived from its parent and operation, and resolve a
+handle. Implementations must never replace the snapshot behind a live handle.
+`MemorySnapshotStore` is the default. Its clones share one map, and a snapshot
+made by exchanges shares its unchanged accounts with its parent through `Arc`.
+Handles last as long as that store; a restarted process resolves none of them,
+and the tools say so.
 
 ```rust
 use axionomy_mcp::{AxionomyMcp, MemorySnapshotStore};
@@ -53,60 +134,23 @@ let server = AxionomyMcp::new(MemorySnapshotStore::default());
 # let _ = server;
 ```
 
-The generic boundary keeps dispatch static and makes the default free of an
-I/O runtime or database. Persistence can be added later without changing tool
-inputs, tool outputs, or economic semantics.
+Assessments and problem-run artifacts are derived data kept in process memory
+for as long as the server runs.
 
-## Tools
+## Tasks
 
-| Tool | Input | Result |
-| --- | --- | --- |
-| `axionomy_economy_put` | Directly serializable string-ID economy | Content-addressed `economy_id` and deduplication flag |
-| `axionomy_exchange_assess` | `economy_id`, exchange | Applicable/infeasible/invalid status, full shortfalls or projected deltas |
-| `axionomy_exchange_apply` | `economy_id`, exchange | Source ID, new snapshot ID, and receipt |
-| `axionomy_trace_replay` | `economy_id`, trace | Source ID, new snapshot ID, and all receipts |
-| `axionomy_search` | `economy_id`, goal, concrete candidate exchanges, bounds | MCP task handle; poll `tasks/get` for progress and the structured search result |
-| `axionomy_problem_catalog` | None | The same problem descriptors, Micro/Showcase/Stress instances, strategies, and capabilities exposed by CLI and Studio |
-| `axionomy_problem_run` | Problem, optional instance and strategy, seed, and budget | MCP task handle whose terminal result is the shared replay-derived `RunArtifact` with resolved instance identity |
+`axionomy_search` and `axionomy_problem_run` return a task handle when the
+caller declares the `io.modelcontextprotocol/tasks` extension, and a
+`tasks_required` error otherwise. `rmcp::TaskManager` registers the task
+before returning its handle. `tasks/get` reports progress and the terminal
+result, and `tasks/cancel` records cancellation intent, which the search
+observes between deterministic chunks. The default task TTL is `rmcp`'s five
+minutes with a 100 ms poll interval; `AxionomyMcp::with_task_options` replaces
+that policy. Tasks do not survive a restart.
 
-Tool inputs and outputs carry generated JSON Schemas. The reference wire
-ontology uses `String` for asset, account, rate, and role IDs. Quantities are
-decimal strings such as `"1500"`, exact up to `2²⁵⁶ − 1`. This is a deliberately usable reference profile, not a privileged
-core ontology or a versioned historical compatibility promise.
-
-The search tool currently runs breadth-first search over the caller's explicit
-finite candidate exchange universe. Candidates are reconsidered at every
-state and filtered through core application. This makes the remote action
-contract serializable and honest: the server does not hide domain-specific
-binding enumeration in a callback. Richer declarative proposal schemas should
-be added only when concrete candidate pressure justifies them.
-
-## Tasks and control
-
-`axionomy_search` and `axionomy_problem_run` return `CreateTaskResult` only
-when the caller advertises
-the `io.modelcontextprotocol/tasks` extension. Otherwise it returns a visible
-tool error. `rmcp::TaskManager` registers the task before returning its handle,
-so `tasks/get` can resolve it immediately within the running server.
-
-- `tasks/get` returns current status, a human-readable progress message, and
-  the terminal `CallToolResult` or JSON-RPC error.
-- `tasks/cancel` records cooperative cancellation intent. The worker observes
-  it between deterministic BFS chunks and settles the task as cancelled.
-- `tasks/update` acknowledges known tasks, but this implementation never asks
-  for in-task input.
-- The default task TTL is `rmcp`'s five minutes, with a suggested 100 ms poll
-  interval. Integrators can replace that policy with
-  `AxionomyMcp::with_task_options`, including unlimited process-lifetime
-  retention.
-- Task handles, progress, terminal results, and cancellation intent do not
-  survive process restart. Retry and idempotency policies stay with the caller.
-
-The core search crate supplies the runtime-neutral `BfsSession` and progress
-contract. Tokio scheduling and `rmcp::TaskManager` are adapter choices made
-here.
-Monte Carlo, MCTS, and ISMCTS now expose the same bounded session shape and can
-be added as task kinds without changing core authority.
+The search is breadth-first over the caller's explicit candidate exchanges,
+reconsidered at every state and filtered through core application, so a
+solution is a trace the kernel replays.
 
 ## Running
 
@@ -116,32 +160,19 @@ RUST_LOG=axionomy_mcp=info,rmcp=info \
   cargo run -p axionomy-mcp --bin axionomy-mcp
 ```
 
-The Streamable HTTP endpoint is `/mcp`; the health endpoint is `/health`.
-The default bind address is `127.0.0.1:8000`.
-
-The transport:
-
-- advertises and accepts only MCP `2026-07-28`;
-- disables legacy MCP sessions and uses `NeverSessionManager`;
-- prefers JSON responses and does not create `Mcp-Session-Id` state;
-- requires `MCP-Protocol-Version`, per-request protocol/client metadata, and
-  the revision's `Mcp-Method`/`Mcp-Name` routing headers.
-
-Run the complete raw HTTP reference flow—including strict-header rejection,
-snapshot storage, task creation, polling, and solution decoding—with:
-
-```console
-cargo test -p axionomy-mcp --test http
-```
+The Streamable HTTP endpoint is `/mcp` and the health endpoint is `/health`.
+The transport accepts only MCP `2026-07-28`, keeps no sessions, prefers JSON
+responses, and requires per-request protocol metadata and the `Mcp-Method` and
+`Mcp-Name` routing headers. `cargo test -p axionomy-mcp --test http` runs the
+whole flow over HTTP: tools, resource templates and pages, completion, and a
+search task with cancellation.
 
 ## Deployment boundary
 
 This crate is a local reference implementation, not a production control
-plane. It defaults to one in-memory snapshot store and `rmcp` task manager in
-one process. It does not provide restart persistence, authentication, tenant
-isolation, authorization, quotas, distributed worker leasing, cross-instance
-task notifications, search checkpoints, or schema migration. Callers may
-implement `SnapshotStore` when durable snapshot handles are actually required;
-task distribution and recovery are separate deployment concerns. Public
-deployments must also configure explicit allowed hosts/origins rather than
-loosening rmcp's DNS-rebinding protections indiscriminately.
+plane. It keeps snapshots, assessments, artifacts and tasks in one process. It
+has no authentication, tenant isolation, quotas, retention limits, persisted
+search checkpoints or distributed workers. A deployment that needs durable
+handles implements `SnapshotStore`; public deployments must also configure
+allowed hosts and origins rather than loosening `rmcp`'s DNS-rebinding
+protection.

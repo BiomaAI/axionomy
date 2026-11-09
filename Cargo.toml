@@ -35,6 +35,7 @@ axionomy-view = { version = "0.1.0", path = "crates/axionomy-view" }
 
 axum = "0.8.9"
 blake3 = "1.8.7"
+getrandom = "0.4.3"
 clap = { version = "4.6.7", features = ["derive"] }
 criterion = "0.8.2"
 futures-util = "0.3.34"
