@@ -10,14 +10,25 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: leanprover/lean-action@v1
+      # The pinned toolchain is cached, so most runs download nothing.
+      - uses: actions/cache@v4
         with:
-          lake-package-directory: verification/lean
-          auto-config: false
-          build: true
-          test: false
-          lint: false
-          use-mathlib-cache: false
+          path: ~/.elan
+          key: elan-${{ runner.os }}-${{ hashFiles('verification/lean/lean-toolchain') }}
+      - name: Install the pinned Lean toolchain
+        working-directory: verification/lean
+        run: |
+          retry() { for attempt in 1 2 3 4 5; do "$@" && return 0; sleep $((attempt * 10)); done; return 1; }
+          if [ ! -x "$HOME/.elan/bin/elan" ]; then
+            retry curl --retry 5 --retry-all-errors -sSfL -o /tmp/elan-init.sh \
+              https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh
+            retry bash /tmp/elan-init.sh -y --default-toolchain none
+          fi
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+          retry "$HOME/.elan/bin/elan" toolchain install "$(cat lean-toolchain)"
+      - name: Build the specification
+        working-directory: verification/lean
+        run: lake build
       - name: Fixtures are exactly what the specification generates
         working-directory: verification/lean
         run: |
@@ -51,6 +62,11 @@ jobs:
       - uses: taiki-e/install-action@v2
         with:
           tool: wasm-pack@0.15.0
+      # wasm-pack downloads binaryen on first use; keep it across runs.
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/.wasm-pack
+          key: wasm-pack-${{ runner.os }}-0.15.0
       - uses: pnpm/action-setup@v6
         with:
           version: 10.14.0
