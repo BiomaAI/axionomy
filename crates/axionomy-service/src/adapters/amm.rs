@@ -453,7 +453,6 @@ fn attach_contribution_leaderboards(
     let mut contributions = BTreeMap::<Actor, i128>::new();
     document.initial.leaderboards = vec![contribution_board(&contributions)];
     for (index, exchange) in trace.exchanges().iter().enumerate() {
-        let board_before = contribution_board(&contributions);
         let before = i128::from(amm::pool_state(&world).price_milli);
         world
             .apply(exchange.clone())
@@ -463,7 +462,6 @@ fn attach_contribution_leaderboards(
             *contributions.entry(actor).or_default() += after - before;
         }
         let frame = &mut document.frames[index];
-        frame.before.leaderboards = vec![board_before];
         frame.after.leaderboards = vec![contribution_board(&contributions)];
     }
     Ok(())

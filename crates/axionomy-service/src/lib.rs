@@ -589,11 +589,14 @@ mod tests {
     }
 
     fn has_linked_entity_change(document: &ViewDocument) -> bool {
-        document.frames.iter().any(|frame| {
-            let Some(before) = frame.before.scene.as_ref() else {
+        let states = std::iter::once(&document.initial)
+            .chain(document.frames.iter().map(|frame| &frame.after))
+            .collect::<Vec<_>>();
+        states.windows(2).any(|pair| {
+            let Some(before) = pair[0].scene.as_ref() else {
                 return false;
             };
-            let Some(after) = frame.after.scene.as_ref() else {
+            let Some(after) = pair[1].scene.as_ref() else {
                 return false;
             };
             before.entities.iter().any(|left| {
@@ -1052,11 +1055,10 @@ mod tests {
             }));
             assert!(artifact.documents.iter().all(|document| {
                 document.initial.scene.is_some()
-                    && document.frames.iter().all(|frame| {
-                        frame.before.scene.is_some()
-                            && frame.after.scene.is_some()
-                            && !frame.cues.is_empty()
-                    })
+                    && document
+                        .frames
+                        .iter()
+                        .all(|frame| frame.after.scene.is_some() && !frame.cues.is_empty())
                     && std::iter::once(&document.initial)
                         .chain(document.frames.iter().map(|frame| &frame.after))
                         .filter_map(|snapshot| snapshot.scene.as_ref())

@@ -1253,13 +1253,15 @@ pub struct FrameCueView {
     pub subjects: Vec<ViewId>,
 }
 
+/// One applied exchange and the state it led to. The state before it is the
+/// previous frame's `after`, or the document's `initial` for the first frame,
+/// so a replay holds each state once.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct ExchangeFrame {
     pub index: u64,
     pub exchange: ExchangeView,
     pub assessment: AssessmentView,
     pub receipt: ReceiptView,
-    pub before: ViewSnapshot,
     pub after: ViewSnapshot,
     #[serde(default)]
     pub cues: Vec<FrameCueView>,
@@ -1582,7 +1584,6 @@ where
 
     for (offset, exchange) in trace.exchanges().iter().enumerate() {
         let index = offset as u64;
-        let before = snapshot(index, &economy, ontology);
         let assessment = assessment_view(&economy.assess(exchange), ontology);
         let receipt = economy
             .apply(exchange.clone())
@@ -1599,7 +1600,6 @@ where
             exchange,
             assessment,
             receipt,
-            before,
             after,
             cues,
             observations: Vec::new(),

@@ -32,7 +32,7 @@ function SceneSurfaceView({ scene, previousScene, history, frame, motion, onAcco
     case "grid": return <GridScene scene={scene} previousScene={previousScene} frame={frame} motion={motion} surface={scene.surface} onAccount={onAccount} />;
     case "matrix": return <MatrixScene scene={scene} surface={scene.surface} onAccount={onAccount} />;
     case "timeline": return <TimelineScene scene={scene} surface={scene.surface} onAccount={onAccount} />;
-    case "market": return <MarketScene scene={scene} history={history} frame={frame} surface={scene.surface} onAccount={onAccount} />;
+    case "market": return <MarketScene scene={scene} previousScene={previousScene} history={history} frame={frame} surface={scene.surface} onAccount={onAccount} />;
   }
 }
 
@@ -47,7 +47,7 @@ function exactNumber(value: string): number {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-function MarketScene({ scene, history, frame, surface, onAccount }: { scene: Scene; history: Scene[]; frame?: ExchangeFrame; surface: MarketSurface; onAccount?: (account: string) => void }) {
+function MarketScene({ scene, previousScene, history, frame, surface, onAccount }: { scene: Scene; previousScene?: Scene | null; history: Scene[]; frame?: ExchangeFrame; surface: MarketSurface; onAccount?: (account: string) => void }) {
   const previousMarkets = marketSurfaces(history);
   const markets = previousMarkets.at(-1)?.pool.price_milli === surface.pool.price_milli
     ? previousMarkets
@@ -62,7 +62,8 @@ function MarketScene({ scene, history, frame, surface, onAccount }: { scene: Sce
   const rateKey = frame?.exchange.rate.key ?? "";
   const direction = rateKey.includes("buyenergy") ? "buy" : rateKey.includes("sellenergy") ? "sell" : rateKey.includes("liquidity") ? "liquidity" : "state";
   const activeActor = surface.actors.find((actor) => actor.account === activeAccount);
-  const previousPool = frame?.before.scene?.surface.kind === "market" ? frame.before.scene.surface.pool : undefined;
+  // The state before this exchange is the previous snapshot; a replay holds each state once.
+  const previousPool = frame && previousScene?.surface.kind === "market" ? previousScene.surface.pool : undefined;
   const energyDelta = previousPool ? energy - exactNumber(previousPool.base_reserve) : 0;
   const creditDelta = previousPool ? credit - exactNumber(previousPool.quote_reserve) : 0;
   const poolStyle = {

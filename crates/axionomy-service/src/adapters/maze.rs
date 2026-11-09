@@ -1038,7 +1038,6 @@ fn decorate_route_evidence(document: &mut ViewDocument, trace: &axionomy::Trace<
     let mut traversed = std::collections::BTreeSet::new();
     decorate_scene_paths(document.initial.scene.as_mut(), &planned, &traversed, None);
     for (frame, exchange) in document.frames.iter_mut().zip(trace.exchanges()) {
-        decorate_scene_paths(frame.before.scene.as_mut(), &planned, &traversed, None);
         let current = route_id(exchange.rate());
         decorate_scene_paths(
             frame.after.scene.as_mut(),
@@ -1196,7 +1195,7 @@ impl StudioLabel for maze::RateId {
             }
             Self::Treat { at } => format!("Treat injuries at {}", maze_node(at)),
             Self::ProtectedMove { from, to, energy } => format!(
-                "Protected crossing {} → {} ({energy} energy)",
+                "Protected crossing {} → {} for {energy} energy",
                 maze_node(from),
                 maze_node(to)
             ),
@@ -1206,12 +1205,12 @@ impl StudioLabel for maze::RateId {
                 energy,
                 needs_open_door,
             } => format!(
-                "Walk {} → {} ({} energy{})",
+                "Walk {} → {} for {} energy{}",
                 maze_node(from),
                 maze_node(to),
                 energy,
                 if needs_open_door {
-                    ", needs the vault gate open"
+                    " once the vault gate is open"
                 } else {
                     ""
                 }

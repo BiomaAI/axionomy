@@ -1361,12 +1361,9 @@ pub(super) fn artifact(
     let selected_document: DocumentPath = slug(run.strategy.as_str());
     let alternatives = documents.len() as u64;
     for document in &mut documents {
-        for snapshot in std::iter::once(&document.initial).chain(
-            document
-                .frames
-                .iter()
-                .flat_map(|frame| [&frame.before, &frame.after]),
-        ) {
+        for snapshot in std::iter::once(&document.initial)
+            .chain(document.frames.iter().map(|frame| &frame.after))
+        {
             if let Some(scene) = &snapshot.scene {
                 scene.validate().map_err(|error| ServiceError::Problem {
                     problem: descriptor.key.clone(),
