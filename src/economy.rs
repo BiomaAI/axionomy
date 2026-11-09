@@ -1,3 +1,4 @@
+use crate::accounts::Accounts;
 use crate::rate::Measure;
 use crate::{
     Account, AccountDelta, AccountError, Basket, ComputedAmount, Exchange, LinearInvariant,
@@ -68,7 +69,7 @@ where
 
 #[derive(Debug, Clone)]
 pub struct Economy<AccountId, A, RateId, Role> {
-    accounts: IndexMap<AccountId, Arc<Account<A>>>,
+    accounts: Accounts<AccountId, A>,
     rates: Arc<IndexMap<RateId, Rate<Role, A>>>,
     invariants: Arc<Vec<LinearInvariant<A>>>,
 }
@@ -334,11 +335,11 @@ where
             });
         }
         Ok(Economy {
-            accounts: self
-                .accounts
-                .into_iter()
-                .map(|(id, account)| (id, Arc::new(account)))
-                .collect(),
+            accounts: Accounts::new(
+                self.accounts
+                    .into_iter()
+                    .map(|(id, account)| (id, Arc::new(account))),
+            ),
             rates: Arc::new(self.rates),
             invariants: Arc::new(self.invariants),
         })
@@ -555,7 +556,7 @@ where
     /// same account domain when account existence matters.
     pub fn state_key(&self) -> Vec<(AccountId, A, Quantity)> {
         let mut key = Vec::new();
-        for (account_id, holder) in &self.accounts {
+        for (account_id, holder) in self.accounts.iter() {
             for (asset, value) in holder.balances().iter() {
                 key.push((account_id.clone(), asset.clone(), *value));
             }
@@ -635,7 +636,7 @@ where
                 for (account_id, holder) in
                     prepared_accounts.expect("applicable assessments have prepared accounts")
                 {
-                    self.accounts[&account_id] = holder;
+                    self.accounts.replace(&account_id, holder);
                 }
                 Ok(Receipt::new(proposal, projected_deltas))
             }
@@ -729,7 +730,7 @@ where
         let mut missing_accounts = BTreeSet::new();
         for role in rule.roles() {
             if let Some(holder) = proposal.bindings().get(role)
-                && !self.accounts.contains_key(holder)
+                && !self.accounts.contains(holder)
             {
                 missing_accounts.insert(holder.clone());
             }
@@ -782,10 +783,10 @@ where
     fn accounts_with_prepared(
         &self,
         prepared_accounts: &PreparedAccounts<AccountId, A>,
-    ) -> IndexMap<AccountId, Arc<Account<A>>> {
+    ) -> Accounts<AccountId, A> {
         let mut after_accounts = self.accounts.clone();
         for (account_id, holder) in prepared_accounts {
-            after_accounts[account_id] = holder.clone();
+            after_accounts.replace(account_id, holder.clone());
         }
         after_accounts
     }
@@ -1262,7 +1263,7 @@ impl ExpressionError {
 pub(crate) fn evaluate_expression<AccountId, A, RateId, Role>(
     expression: &QuantityExpression<Role, A>,
     proposal: &Exchange<RateId, Role, AccountId>,
-    accounts: &IndexMap<AccountId, Arc<Account<A>>>,
+    accounts: &Accounts<AccountId, A>,
 ) -> Result<Quantity, ExpressionError>
 where
     AccountId: Eq + Hash,
@@ -1333,7 +1334,7 @@ where
 pub(crate) fn evaluate_condition<AccountId, A, RateId, Role>(
     condition: &RateCondition<Role, A>,
     proposal: &Exchange<RateId, Role, AccountId>,
-    accounts: &IndexMap<AccountId, Arc<Account<A>>>,
+    accounts: &Accounts<AccountId, A>,
 ) -> Result<bool, ExpressionError>
 where
     AccountId: Eq + Hash,
@@ -1353,7 +1354,7 @@ fn evaluate_binary<AccountId, A, RateId, Role>(
     left: &QuantityExpression<Role, A>,
     right: &QuantityExpression<Role, A>,
     proposal: &Exchange<RateId, Role, AccountId>,
-    accounts: &IndexMap<AccountId, Arc<Account<A>>>,
+    accounts: &Accounts<AccountId, A>,
     error: ExpressionError,
     operation: impl FnOnce(Quantity, Quantity) -> Option<Quantity>,
 ) -> Result<Quantity, ExpressionError>
@@ -1376,7 +1377,7 @@ fn evaluate_mul_div<AccountId, A, RateId, Role>(
     denominator: &QuantityExpression<Role, A>,
     rounding: Rounding,
     proposal: &Exchange<RateId, Role, AccountId>,
-    accounts: &IndexMap<AccountId, Arc<Account<A>>>,
+    accounts: &Accounts<AccountId, A>,
 ) -> Result<Quantity, ExpressionError>
 where
     AccountId: Eq + Hash,
@@ -1509,11 +1510,11 @@ mod evaluation_conformance {
             for (parameter, amount) in &case.parameters {
                 proposal = proposal.parameter(parameter, amount.parse::<Quantity>().unwrap());
             }
-            let accounts: IndexMap<_, _> = case
-                .accounts
-                .iter()
-                .map(|(id, balances)| (id.clone(), Arc::new(Account::new(amounts(balances)))))
-                .collect();
+            let accounts = Accounts::new(
+                case.accounts
+                    .iter()
+                    .map(|(id, balances)| (id.clone(), Arc::new(Account::new(amounts(balances))))),
+            );
             let before = accounts.clone();
             let proposal_before = proposal.clone();
             let actual = evaluate_expression(&case.expression, &proposal, &accounts)
@@ -1553,7 +1554,7 @@ mod evaluation_conformance {
                     Err(_) => 2,
                 }] += 1;
             }
-            assert_eq!(accounts, before);
+            assert!(accounts.iter().eq(before.iter()));
             assert_eq!(proposal, proposal_before);
         }
         assert!(condition_outcomes.into_iter().all(|count| count > 0));
