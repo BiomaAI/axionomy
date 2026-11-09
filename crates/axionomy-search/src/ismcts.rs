@@ -6,7 +6,7 @@ use crate::{
     sampling::{SamplingError, SeededSampler, TicketSource, WeightedExchange, sample},
     session::{AdvanceReport, Continue, SearchObserver, WorkBudget},
 };
-use axionomy::{ApplyError, Economy, Exchange, QuantityScalar};
+use axionomy::{ApplyError, Economy, Exchange};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -87,10 +87,7 @@ impl<Action> IsmctsDecision<Action> {
 }
 
 #[derive(Debug, Clone)]
-pub enum IsmctsError<RateId, Role, AccountId, A, N = u64>
-where
-    N: QuantityScalar,
-{
+pub enum IsmctsError<RateId, Role, AccountId, A> {
     NoPlayers,
     ZeroIterations,
     ZeroDepth,
@@ -104,13 +101,13 @@ where
     InvalidValueDimensions { expected: usize, actual: usize },
     NonFiniteValue { player: usize },
     Sampling(SamplingError),
-    Rejected(ApplyError<RateId, Role, AccountId, A, N>),
-    SelectedActionRejected(ApplyError<RateId, Role, AccountId, A, N>),
+    Rejected(ApplyError<RateId, Role, AccountId, A>),
+    SelectedActionRejected(ApplyError<RateId, Role, AccountId, A>),
 }
 
-pub type IsmctsResult<RateId, Role, AccountId, A, N = u64> = Result<
-    IsmctsDecision<Exchange<RateId, Role, AccountId, N>>,
-    IsmctsError<RateId, Role, AccountId, A, N>,
+pub type IsmctsResult<RateId, Role, AccountId, A> = Result<
+    IsmctsDecision<Exchange<RateId, Role, AccountId>>,
+    IsmctsError<RateId, Role, AccountId, A>,
 >;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -147,8 +144,8 @@ impl IsmctsProgress {
     }
 }
 
-pub type IsmctsAdvanceResult<RateId, Role, AccountId, A, N = u64> =
-    Result<AdvanceReport<IsmctsProgress, IsmctsStatus>, IsmctsError<RateId, Role, AccountId, A, N>>;
+pub type IsmctsAdvanceResult<RateId, Role, AccountId, A> =
+    Result<AdvanceReport<IsmctsProgress, IsmctsStatus>, IsmctsError<RateId, Role, AccountId, A>>;
 
 /// Random rollout selection that can inspect only the information state and
 /// the already filtered concrete actions.
@@ -172,7 +169,6 @@ pub struct IsmctsSession<
     A,
     RateId,
     Role,
-    N,
     Key,
     Information,
     Determinize,
@@ -181,10 +177,8 @@ pub struct IsmctsSession<
     Terminal,
     Cutoff,
     RolloutPolicy,
-> where
-    N: QuantityScalar,
-{
-    initial: Economy<AccountId, A, RateId, Role, N>,
+> {
+    initial: Economy<AccountId, A, RateId, Role>,
     config: MctsConfig,
     players: usize,
     root: InformationState<Key>,
@@ -195,11 +189,11 @@ pub struct IsmctsSession<
     terminal: Terminal,
     cutoff: Cutoff,
     rollout_policy: RolloutPolicy,
-    nodes: Vec<Node<Key, Exchange<RateId, Role, AccountId, N>>>,
+    nodes: Vec<Node<Key, Exchange<RateId, Role, AccountId>>>,
     transpositions: HashMap<InformationState<Key>, usize>,
     random: SeededSampler,
     iterations: usize,
-    decision: Option<IsmctsDecision<Exchange<RateId, Role, AccountId, N>>>,
+    decision: Option<IsmctsDecision<Exchange<RateId, Role, AccountId>>>,
 }
 
 impl<
@@ -207,7 +201,6 @@ impl<
     A,
     RateId,
     Role,
-    N,
     Key,
     Information,
     Determinize,
@@ -222,7 +215,6 @@ impl<
         A,
         RateId,
         Role,
-        N,
         Key,
         Information,
         Determinize,
@@ -237,28 +229,27 @@ where
     A: Clone + Eq + Hash + Ord,
     RateId: Clone + Eq + Hash + Ord,
     Role: Clone + Ord,
-    N: QuantityScalar,
     Key: Clone + Eq + Hash,
-    Information: FnMut(&Economy<AccountId, A, RateId, Role, N>) -> InformationState<Key>,
+    Information: FnMut(&Economy<AccountId, A, RateId, Role>) -> InformationState<Key>,
     Determinize: FnMut(
         &InformationState<Key>,
         &mut SeededSampler,
-    ) -> Option<Economy<AccountId, A, RateId, Role, N>>,
-    Source: ActionSource<InformationState<Key>, Exchange<RateId, Role, AccountId, N>>,
+    ) -> Option<Economy<AccountId, A, RateId, Role>>,
+    Source: ActionSource<InformationState<Key>, Exchange<RateId, Role, AccountId>>,
     Chance: FnMut(
-        &Economy<AccountId, A, RateId, Role, N>,
-    ) -> Vec<WeightedExchange<Exchange<RateId, Role, AccountId, N>>>,
-    Terminal: FnMut(&Economy<AccountId, A, RateId, Role, N>) -> Option<Vec<f64>>,
-    Cutoff: FnMut(&Economy<AccountId, A, RateId, Role, N>) -> Vec<f64>,
+        &Economy<AccountId, A, RateId, Role>,
+    ) -> Vec<WeightedExchange<Exchange<RateId, Role, AccountId>>>,
+    Terminal: FnMut(&Economy<AccountId, A, RateId, Role>) -> Option<Vec<f64>>,
+    Cutoff: FnMut(&Economy<AccountId, A, RateId, Role>) -> Vec<f64>,
     RolloutPolicy: FnMut(
         &InformationState<Key>,
-        &[Exchange<RateId, Role, AccountId, N>],
+        &[Exchange<RateId, Role, AccountId>],
         &mut SeededSampler,
-    ) -> Option<Exchange<RateId, Role, AccountId, N>>,
+    ) -> Option<Exchange<RateId, Role, AccountId>>,
 {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
-        initial: &Economy<AccountId, A, RateId, Role, N>,
+        initial: &Economy<AccountId, A, RateId, Role>,
         config: MctsConfig,
         players: usize,
         mut information: Information,
@@ -268,7 +259,7 @@ where
         mut terminal: Terminal,
         cutoff: Cutoff,
         rollout_policy: RolloutPolicy,
-    ) -> Result<Self, IsmctsError<RateId, Role, AccountId, A, N>> {
+    ) -> Result<Self, IsmctsError<RateId, Role, AccountId, A>> {
         validate_config(config, players)?;
         if terminal(initial).is_some() {
             return Err(IsmctsError::TerminalRoot);
@@ -280,7 +271,7 @@ where
         }
 
         Ok(Self {
-            initial: initial.fork(),
+            initial: initial.clone(),
             config,
             players,
             root: root.clone(),
@@ -316,11 +307,11 @@ where
         }
     }
 
-    pub fn decision(&self) -> Option<&IsmctsDecision<Exchange<RateId, Role, AccountId, N>>> {
+    pub fn decision(&self) -> Option<&IsmctsDecision<Exchange<RateId, Role, AccountId>>> {
         self.decision.as_ref()
     }
 
-    pub fn into_decision(self) -> Option<IsmctsDecision<Exchange<RateId, Role, AccountId, N>>> {
+    pub fn into_decision(self) -> Option<IsmctsDecision<Exchange<RateId, Role, AccountId>>> {
         self.decision
     }
 
@@ -328,7 +319,7 @@ where
         &mut self,
         budget: WorkBudget,
         observer: &mut impl SearchObserver<IsmctsProgress>,
-    ) -> IsmctsAdvanceResult<RateId, Role, AccountId, A, N> {
+    ) -> IsmctsAdvanceResult<RateId, Role, AccountId, A> {
         if self.decision.is_some() {
             return Ok(AdvanceReport::new(
                 IsmctsStatus::Completed,
@@ -360,7 +351,7 @@ where
         ))
     }
 
-    fn run_iteration(&mut self) -> Result<(), IsmctsError<RateId, Role, AccountId, A, N>> {
+    fn run_iteration(&mut self) -> Result<(), IsmctsError<RateId, Role, AccountId, A>> {
         let iteration = self.iterations;
         let mut world = (self.determinize)(&self.root, &mut self.random)
             .ok_or(IsmctsError::NoDeterminization { iteration })?;
@@ -458,7 +449,7 @@ where
         Ok(())
     }
 
-    fn finish(&mut self) -> Result<(), IsmctsError<RateId, Role, AccountId, A, N>> {
+    fn finish(&mut self) -> Result<(), IsmctsError<RateId, Role, AccountId, A>> {
         let root_player = self.root.actor();
         let mut children = self.nodes[0]
             .edges
@@ -482,7 +473,7 @@ where
             .action
             .clone();
         self.initial
-            .fork()
+            .clone()
             .apply(action.clone())
             .map_err(IsmctsError::SelectedActionRejected)?;
         self.decision = Some(IsmctsDecision {
@@ -514,7 +505,6 @@ pub fn search<
     A,
     RateId,
     Role,
-    N,
     Key,
     Information,
     Determinize,
@@ -524,7 +514,7 @@ pub fn search<
     Cutoff,
     RolloutPolicy,
 >(
-    initial: &Economy<AccountId, A, RateId, Role, N>,
+    initial: &Economy<AccountId, A, RateId, Role>,
     config: MctsConfig,
     players: usize,
     information: Information,
@@ -534,30 +524,29 @@ pub fn search<
     terminal: Terminal,
     cutoff: Cutoff,
     rollout_policy: RolloutPolicy,
-) -> IsmctsResult<RateId, Role, AccountId, A, N>
+) -> IsmctsResult<RateId, Role, AccountId, A>
 where
     AccountId: Clone + Eq + Hash + Ord,
     A: Clone + Eq + Hash + Ord,
     RateId: Clone + Eq + Hash + Ord,
     Role: Clone + Ord,
-    N: QuantityScalar,
     Key: Clone + Eq + Hash,
-    Information: FnMut(&Economy<AccountId, A, RateId, Role, N>) -> InformationState<Key>,
+    Information: FnMut(&Economy<AccountId, A, RateId, Role>) -> InformationState<Key>,
     Determinize: FnMut(
         &InformationState<Key>,
         &mut SeededSampler,
-    ) -> Option<Economy<AccountId, A, RateId, Role, N>>,
-    Source: ActionSource<InformationState<Key>, Exchange<RateId, Role, AccountId, N>>,
+    ) -> Option<Economy<AccountId, A, RateId, Role>>,
+    Source: ActionSource<InformationState<Key>, Exchange<RateId, Role, AccountId>>,
     Chance: FnMut(
-        &Economy<AccountId, A, RateId, Role, N>,
-    ) -> Vec<WeightedExchange<Exchange<RateId, Role, AccountId, N>>>,
-    Terminal: FnMut(&Economy<AccountId, A, RateId, Role, N>) -> Option<Vec<f64>>,
-    Cutoff: FnMut(&Economy<AccountId, A, RateId, Role, N>) -> Vec<f64>,
+        &Economy<AccountId, A, RateId, Role>,
+    ) -> Vec<WeightedExchange<Exchange<RateId, Role, AccountId>>>,
+    Terminal: FnMut(&Economy<AccountId, A, RateId, Role>) -> Option<Vec<f64>>,
+    Cutoff: FnMut(&Economy<AccountId, A, RateId, Role>) -> Vec<f64>,
     RolloutPolicy: FnMut(
         &InformationState<Key>,
-        &[Exchange<RateId, Role, AccountId, N>],
+        &[Exchange<RateId, Role, AccountId>],
         &mut SeededSampler,
-    ) -> Option<Exchange<RateId, Role, AccountId, N>>,
+    ) -> Option<Exchange<RateId, Role, AccountId>>,
 {
     let mut session = IsmctsSession::new(
         initial,
@@ -584,7 +573,6 @@ fn simulate<
     A,
     RateId,
     Role,
-    N,
     Key,
     Information,
     Source,
@@ -593,7 +581,7 @@ fn simulate<
     Cutoff,
     RolloutPolicy,
 >(
-    initial: &Economy<AccountId, A, RateId, Role, N>,
+    initial: &Economy<AccountId, A, RateId, Role>,
     mut depth: usize,
     max_depth: usize,
     players: usize,
@@ -604,28 +592,27 @@ fn simulate<
     cutoff: &mut Cutoff,
     rollout_policy: &mut RolloutPolicy,
     random: &mut SeededSampler,
-) -> Result<Vec<f64>, IsmctsError<RateId, Role, AccountId, A, N>>
+) -> Result<Vec<f64>, IsmctsError<RateId, Role, AccountId, A>>
 where
     AccountId: Clone + Eq + Hash + Ord,
     A: Clone + Eq + Hash + Ord,
     RateId: Clone + Eq + Hash + Ord,
     Role: Clone + Ord,
-    N: QuantityScalar,
     Key: Clone + Eq + Hash,
-    Information: FnMut(&Economy<AccountId, A, RateId, Role, N>) -> InformationState<Key>,
-    Source: ActionSource<InformationState<Key>, Exchange<RateId, Role, AccountId, N>>,
+    Information: FnMut(&Economy<AccountId, A, RateId, Role>) -> InformationState<Key>,
+    Source: ActionSource<InformationState<Key>, Exchange<RateId, Role, AccountId>>,
     Chance: FnMut(
-        &Economy<AccountId, A, RateId, Role, N>,
-    ) -> Vec<WeightedExchange<Exchange<RateId, Role, AccountId, N>>>,
-    Terminal: FnMut(&Economy<AccountId, A, RateId, Role, N>) -> Option<Vec<f64>>,
-    Cutoff: FnMut(&Economy<AccountId, A, RateId, Role, N>) -> Vec<f64>,
+        &Economy<AccountId, A, RateId, Role>,
+    ) -> Vec<WeightedExchange<Exchange<RateId, Role, AccountId>>>,
+    Terminal: FnMut(&Economy<AccountId, A, RateId, Role>) -> Option<Vec<f64>>,
+    Cutoff: FnMut(&Economy<AccountId, A, RateId, Role>) -> Vec<f64>,
     RolloutPolicy: FnMut(
         &InformationState<Key>,
-        &[Exchange<RateId, Role, AccountId, N>],
+        &[Exchange<RateId, Role, AccountId>],
         &mut SeededSampler,
-    ) -> Option<Exchange<RateId, Role, AccountId, N>>,
+    ) -> Option<Exchange<RateId, Role, AccountId>>,
 {
-    let mut world = initial.fork();
+    let mut world = initial.clone();
     loop {
         if let Some(values) = terminal(&world) {
             return validate_values(values, players);
@@ -656,17 +643,16 @@ where
     }
 }
 
-fn applicable_actions<AccountId, A, RateId, Role, N, Key>(
-    source: &mut impl ActionSource<InformationState<Key>, Exchange<RateId, Role, AccountId, N>>,
+fn applicable_actions<AccountId, A, RateId, Role, Key>(
+    source: &mut impl ActionSource<InformationState<Key>, Exchange<RateId, Role, AccountId>>,
     information: &InformationState<Key>,
-    world: &Economy<AccountId, A, RateId, Role, N>,
-) -> Vec<Exchange<RateId, Role, AccountId, N>>
+    world: &Economy<AccountId, A, RateId, Role>,
+) -> Vec<Exchange<RateId, Role, AccountId>>
 where
     AccountId: Clone + Eq + Hash + Ord,
     A: Clone + Eq + Hash + Ord,
     RateId: Clone + Eq + Hash + Ord,
     Role: Clone + Ord,
-    N: QuantityScalar,
 {
     unique_actions(
         collect_actions(source, information)
@@ -761,13 +747,10 @@ fn mean_values<Action>(edge: &Edge<Action>) -> Vec<f64> {
         .collect()
 }
 
-fn validate_config<RateId, Role, AccountId, A, N>(
+fn validate_config<RateId, Role, AccountId, A>(
     config: MctsConfig,
     players: usize,
-) -> Result<(), IsmctsError<RateId, Role, AccountId, A, N>>
-where
-    N: QuantityScalar,
-{
+) -> Result<(), IsmctsError<RateId, Role, AccountId, A>> {
     if players == 0 {
         return Err(IsmctsError::NoPlayers);
     }
@@ -783,13 +766,10 @@ where
     Ok(())
 }
 
-fn validate_actor<RateId, Role, AccountId, A, N>(
+fn validate_actor<RateId, Role, AccountId, A>(
     actor: usize,
     players: usize,
-) -> Result<(), IsmctsError<RateId, Role, AccountId, A, N>>
-where
-    N: QuantityScalar,
-{
+) -> Result<(), IsmctsError<RateId, Role, AccountId, A>> {
     if actor >= players {
         Err(IsmctsError::InvalidActor { actor, players })
     } else {
@@ -797,13 +777,10 @@ where
     }
 }
 
-fn validate_values<RateId, Role, AccountId, A, N>(
+fn validate_values<RateId, Role, AccountId, A>(
     values: Vec<f64>,
     players: usize,
-) -> Result<Vec<f64>, IsmctsError<RateId, Role, AccountId, A, N>>
-where
-    N: QuantityScalar,
-{
+) -> Result<Vec<f64>, IsmctsError<RateId, Role, AccountId, A>> {
     if values.len() != players {
         return Err(IsmctsError::InvalidValueDimensions {
             expected: players,

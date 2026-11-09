@@ -319,11 +319,13 @@ mod tests {
         world.apply(action(RateId::Finish)).unwrap();
         assert!(world.matches(&goal()));
         assert_eq!(
-            world.balance(&AccountId::Workshop, &Asset::Credit).get(),
+            world.balance(&AccountId::Workshop, &Asset::Credit).to_u64(),
             29
         );
         assert_eq!(
-            world.balance(&AccountId::Customer(1), &Asset::Table).get(),
+            world
+                .balance(&AccountId::Customer(1), &Asset::Table)
+                .to_u64(),
             1
         );
         assert!(candidates(&world).is_empty());
@@ -353,7 +355,10 @@ mod tests {
         ] {
             world.apply(action(rate)).unwrap();
         }
-        assert_eq!(world.balance(&AccountId::Workshop, &Asset::Waste).get(), 1);
+        assert_eq!(
+            world.balance(&AccountId::Workshop, &Asset::Waste).to_u64(),
+            1
+        );
         assert!(
             world
                 .balance(&AccountId::Workshop, &Asset::Offcut)
@@ -381,7 +386,7 @@ mod tests {
         assert_eq!(
             upgraded
                 .balance(&AccountId::Workshop, &Asset::Durability)
-                .get(),
+                .to_u64(),
             2
         );
     }
@@ -396,7 +401,11 @@ mod tests {
             let replay = world.replayed(entry.payload()).unwrap();
             assert!(replay.matches(&goal()));
             assert_eq!(&objectives(&replay), entry.objectives());
-            revenues.insert(replay.balance(&AccountId::Workshop, &Asset::Credit).get());
+            revenues.insert(
+                replay
+                    .balance(&AccountId::Workshop, &Asset::Credit)
+                    .to_u64(),
+            );
             upgraded |= !replay
                 .balance(&AccountId::Workshop, &Asset::Upgraded)
                 .is_zero();

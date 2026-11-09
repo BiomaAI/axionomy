@@ -100,7 +100,7 @@ fn basket(entries: &Amounts) -> Basket<Asset> {
     Basket::try_from_entries(
         entries
             .iter()
-            .map(|(asset, value)| (*asset, Quantity::new(value.parse::<u64>().unwrap()))),
+            .map(|(asset, value)| (*asset, value.parse::<Quantity>().unwrap())),
     )
     .unwrap()
 }
@@ -186,9 +186,6 @@ fn failure(error: &Failure) -> Value {
         ApplyError::BalanceOverflow { account, asset } => {
             json!({"kind": "balance_overflow", "account": account, "asset": asset})
         }
-        ApplyError::InvariantOverflow { invariant } => {
-            json!({"kind": "invariant_overflow", "label": invariant})
-        }
         ApplyError::InvariantViolation {
             invariant,
             before,
@@ -230,13 +227,13 @@ fn proposal(value: &Proposal) -> Value {
 fn build(case: &Case) -> (World, Proposal) {
     let mut rule = Rate::new();
     for (role, entries) in &case.rule.consume {
-        rule = rule.try_consume(*role, basket(entries)).unwrap();
+        rule = rule.consume(*role, basket(entries));
     }
     for (role, entries) in &case.rule.produce {
-        rule = rule.try_produce(*role, basket(entries)).unwrap();
+        rule = rule.produce(*role, basket(entries));
     }
     for (role, entries) in &case.rule.preserve {
-        rule = rule.try_preserve(*role, basket(entries)).unwrap();
+        rule = rule.preserve(*role, basket(entries));
     }
     for amount in &case.rule.computed_consume {
         rule = rule.consume_computed(amount.role, amount.asset, amount.quantity.clone());
@@ -279,12 +276,12 @@ fn build(case: &Case) -> (World, Proposal) {
 }
 
 fn build_proposal(case: &ProposalCase) -> Proposal {
-    let mut action = Exchange::new(case.rate, Quantity::new(case.units.parse::<u64>().unwrap()));
+    let mut action = Exchange::new(case.rate, case.units.parse::<Quantity>().unwrap());
     for (role, account) in &case.bindings {
         action = action.bind(*role, *account);
     }
     for (key, value) in &case.parameters {
-        action = action.parameter(key, Quantity::new(value.parse::<u64>().unwrap()));
+        action = action.parameter(key, value.parse::<Quantity>().unwrap());
     }
     action
 }
@@ -306,8 +303,9 @@ fn complete_transactions_match_lean() {
         );
         let (mut world, action) = build(case);
         let before = serde_json::to_value(&world).unwrap();
-        match world.simulate(action.clone()) {
-            Ok((branch, actual)) => {
+        let mut branch = world.clone();
+        match branch.apply(action.clone()) {
+            Ok(actual) => {
                 assert!(case.expected["error"].is_null(), "simulation: {case:?}");
                 assert_eq!(
                     snapshot(&branch),
@@ -440,7 +438,7 @@ fn complete_replays_match_lean() {
         }
         assert_eq!(trace.exchanges(), actions.as_slice());
         assert_eq!(trace.clone().into_exchanges(), actions);
-        let mut branch = source.fork();
+        let mut branch = source.clone();
         assert_eq!(serde_json::to_value(&branch).unwrap(), before);
         match branch.replay(&trace) {
             Ok(receipts) => {

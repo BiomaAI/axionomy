@@ -57,7 +57,7 @@ the same closed state. Search and optimization algorithms may fork that state
 and propose exchanges, but only the core can accept a transition.
 
 ```text
-State       = Account × Asset → Quantity<N>
+State       = Account × Asset → Quantity
 Problem     = Initial accounts + available rates + declared invariants
 Computation = A sequence of valid exchanges
 Goal        = A required asset configuration
@@ -141,7 +141,7 @@ adapters.
 
 ### Kernel
 
-- User-defined asset, account, rate-ID, role, and checked `Quantity<N = u64>` types.
+- User-defined asset, account, rate-ID, and role types over one checked 256-bit `Quantity`.
 - Atomic multi-account exchanges with consume, produce, and preserve baskets.
 - Serializable state-evaluated rate laws with exact integer expressions,
   named exchange parameters, and authoritative conditions for nonlinear rules.
@@ -476,8 +476,8 @@ same representation, so calendar and physical-time authoring cannot create
 competing clocks outside the economy.
 
 Fractional rates stay exact integer arithmetic. `QuantityExpression::mul_div`
-computes `left × right ÷ denominator` from a full-width product (`u128` for the
-`u64` backend), so only the final quotient must fit. Every such division names
+computes `left × right ÷ denominator` from a full 512-bit product, so only the
+final quotient must fit. Every such division names
 its `Rounding`: round amounts a participant pays up and amounts a participant
 receives down, so rounding dust stays with the counterparty and declared
 conservation invariants still hold.

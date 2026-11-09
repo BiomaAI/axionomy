@@ -106,7 +106,7 @@ pub type Action = Exchange<RateId, Role, AccountId>;
 pub type EventTrace = Trace<RateId, Role, AccountId>;
 pub type EventReceipt = Receipt<RateId, Role, AccountId, Asset>;
 pub type Failure = ApplyError<RateId, Role, AccountId, Asset>;
-pub type ParetoResult = ParetoSearchResult<RateId, Role, AccountId, u64, ObjectiveKey, u64>;
+pub type ParetoResult = ParetoSearchResult<RateId, Role, AccountId, ObjectiveKey, u64>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ObjectiveKey {
@@ -378,7 +378,7 @@ pub fn usable_inventory(world: &World) -> u64 {
             &storage_account(Location::Fridge),
             &Asset::Claim(Cohort::Refrigerated),
         )
-        .get()
+        .to_u64()
 }
 
 pub fn spent_cooling_energy(world: &World) -> u64 {
@@ -387,7 +387,7 @@ pub fn spent_cooling_energy(world: &World) -> u64 {
             &storage_account(Location::Fridge),
             &Asset::SpentCoolingEnergy,
         )
-        .get()
+        .to_u64()
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -403,7 +403,7 @@ impl ClaimIndex {
         for (account, balances) in world.accounts() {
             for (asset, quantity) in balances.balances().iter() {
                 if let Asset::Claim(cohort) = asset {
-                    index.set(*cohort, *account, quantity.get());
+                    index.set(*cohort, *account, quantity.to_u64());
                 }
             }
         }
@@ -454,12 +454,12 @@ impl ClaimIndex {
         for delta in receipt.deltas() {
             for (asset, quantity) in delta.consumed().iter() {
                 if let Asset::Claim(cohort) = asset {
-                    self.decrease(*cohort, *delta.account(), quantity.get());
+                    self.decrease(*cohort, *delta.account(), quantity.to_u64());
                 }
             }
             for (asset, quantity) in delta.produced().iter() {
                 if let Asset::Claim(cohort) = asset {
-                    self.increase(*cohort, *delta.account(), quantity.get());
+                    self.increase(*cohort, *delta.account(), quantity.to_u64());
                 }
             }
         }
@@ -658,7 +658,7 @@ impl ScenarioRun {
 }
 
 pub fn run_outage_scenario(source: &World, moved: u64) -> Result<ScenarioRun, Failure> {
-    let mut world = source.fork();
+    let mut world = source.clone();
     let mut trace = EventTrace::new();
     let mut index = ClaimIndex::build(&world);
     let mut agenda = EffectAgenda::build(&world);
@@ -1210,7 +1210,7 @@ mod tests {
         assert_eq!(index.total(Cohort::Ambient), 6_000);
         assert_eq!(index.total(Cohort::Refrigerated), 4_000);
         assert_eq!(index.total_claims(), 10_000);
-        assert_eq!(receipt.exchange().units(), &Quantity::new(1_000));
+        assert_eq!(receipt.exchange().units(), Quantity::new(1_000));
         assert_eq!(
             world.balance(
                 &cohort_account(Cohort::Ambient),

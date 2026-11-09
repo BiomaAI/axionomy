@@ -491,7 +491,7 @@ fn standard_candidates(world: &World) -> Vec<Action> {
                             &AccountId::Game,
                             &Asset::SegmentPieces(player, *segment as u8),
                         )
-                        .get()
+                        .to_u64()
                         == 4
                 })
                 .map(|(segment, _)| {
@@ -1190,7 +1190,7 @@ mod tests {
         assert_eq!(minimax_best_column(plain), Some(3));
         let decision = mcts(&world, 512, 19).expect("red can choose a move");
         assert_eq!(column_of(decision.action()), Some(3));
-        let mut won = world.fork();
+        let mut won = world.clone();
         won.apply(decision.action().clone())
             .expect("winning move applies");
         assert_eq!(terminal_values(&won), Some(vec![1.0, 0.0]));
@@ -1269,7 +1269,7 @@ mod tests {
                 .into_iter()
                 .find(|action| column_of(action) == Some(column))
                 .expect("oracle column is encoded");
-            let mut next = world.fork();
+            let mut next = world.clone();
             next.apply(exchange).expect("generated prefix is valid");
             compare_prefixes(next, plain.played(column), depth + 1, limit);
         }

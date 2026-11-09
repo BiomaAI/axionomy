@@ -109,10 +109,8 @@ proptest! {
     }
 
     #[test]
-    fn checked_quantity_arithmetic_agrees_with_u64(left in any::<u64>(), right in any::<u64>()) {
-        let actual = Quantity::new(left).checked_add(&Quantity::new(right));
-        let expected = left.checked_add(right).map(Quantity::new);
-
-        prop_assert_eq!(actual, expected);
+    fn checked_quantity_addition_is_exact(left in any::<u64>(), right in any::<u64>()) {
+        let actual = Quantity::new(left).checked_add(Quantity::new(right)).unwrap();
+        prop_assert_eq!(u128::try_from(actual.value()), Ok(u128::from(left) + u128::from(right)));
     }
 }

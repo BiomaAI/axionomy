@@ -15,7 +15,7 @@ pub fn enabled(world: &World) -> bool {
     world.rate(&RateId::Close).is_some()
 }
 pub fn now(world: &World) -> u64 {
-    world.balance(&AccountId::Success, &Asset::Now).get()
+    world.balance(&AccountId::Success, &Asset::Now).to_u64()
 }
 fn clock() -> Q<Role, Asset> {
     Q::balance(Role::Schedule, Asset::Now)
@@ -290,7 +290,7 @@ pub(super) fn build(stress: bool) -> World {
                     .produce_computed(
                         Role::PrimaryJob,
                         Asset::WorkRemaining,
-                        Q::subtract(Q::balance(Role::PrimaryJob, Asset::Due), clock()),
+                        Q::balance(Role::PrimaryJob, Asset::Due) - clock(),
                     )
                     .consume(Role::Schedule, basket([(Asset::BusyLabor, 1)]))
                     .produce(
@@ -350,20 +350,17 @@ pub(super) fn build(stress: bool) -> World {
                     Q::constant(u64::from(to)),
                     C::LessThanOrEqual,
                     Q::balance(Role::Schedule, Asset::FaultAt)
-                        + Q::multiply(
-                            Q::balance(Role::Schedule, Asset::FaultOccurred),
-                            Q::constant(horizon),
-                        ),
+                        + Q::balance(Role::Schedule, Asset::FaultOccurred) * Q::constant(horizon),
                 )
                 .consume_computed(
                     Role::Schedule,
                     Asset::TimeRemaining,
-                    Q::subtract(Q::constant(u64::from(to)), clock()),
+                    Q::constant(u64::from(to)) - clock(),
                 )
                 .produce_computed(
                     Role::Schedule,
                     Asset::Now,
-                    Q::subtract(Q::constant(u64::from(to)), clock()),
+                    Q::constant(u64::from(to)) - clock(),
                 ),
         );
     }
@@ -452,23 +449,27 @@ pub(super) fn build(stress: bool) -> World {
 pub fn candidates(world: &World) -> Vec<Action> {
     let mut times = vec![];
     for job in [Job::One, Job::Two] {
-        times.push(world.balance(&AccountId::Job(job), &Asset::Arrival).get());
-        times.push(world.balance(&AccountId::Job(job), &Asset::Due).get());
+        times.push(
+            world
+                .balance(&AccountId::Job(job), &Asset::Arrival)
+                .to_u64(),
+        );
+        times.push(world.balance(&AccountId::Job(job), &Asset::Due).to_u64());
     }
     times.push(
         world
             .balance(&AccountId::Machine(Machine::Two), &Asset::Due)
-            .get(),
+            .to_u64(),
     );
     if world
         .balance(&AccountId::Success, &Asset::FaultPending)
-        .get()
+        .to_u64()
         > 0
     {
-        times.push(world.balance(&AccountId::Success, &Asset::FaultAt).get());
+        times.push(world.balance(&AccountId::Success, &Asset::FaultAt).to_u64());
     }
     let next = times.into_iter().filter(|time| *time > now(world)).min();
-    let value = |account, asset| world.balance(&account, &asset).get();
+    let value = |account, asset| world.balance(&account, &asset).to_u64();
     if value(AccountId::Success, Asset::Active) == 0 {
         return vec![];
     }
@@ -619,7 +620,9 @@ mod tests {
             },
         );
         assert_eq!(
-            world.balance(&AccountId::Success, &Asset::BusyLabor).get(),
+            world
+                .balance(&AccountId::Success, &Asset::BusyLabor)
+                .to_u64(),
             2
         );
         assert!(world.balance(&AccountId::Success, &Asset::Labor).is_zero());
@@ -654,7 +657,7 @@ mod tests {
         assert_eq!(
             world
                 .balance(&AccountId::Job(Job::Two), &Asset::WorkRemaining)
-                .get(),
+                .to_u64(),
             1
         );
         assert!(!world.is_applicable(&action(RateId::Resume {
@@ -683,13 +686,13 @@ mod tests {
         assert_eq!(
             world
                 .balance(&AccountId::Success, &Asset::EndTime(Operation::TwoA))
-                .get(),
+                .to_u64(),
             6
         );
         assert_eq!(
             world
                 .balance(&AccountId::Success, &Asset::UsedRepairKit)
-                .get(),
+                .to_u64(),
             1
         );
     }

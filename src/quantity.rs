@@ -1,9 +1,10 @@
-use num_traits::{CheckedAdd, CheckedDiv, CheckedMul, CheckedSub, Zero};
-use schemars::{JsonSchema, Schema, SchemaGenerator};
+use ruint::UintTryFrom;
+use ruint::aliases::{U256, U512};
+use schemars::{JsonSchema, Schema, SchemaGenerator, json_schema};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::borrow::Cow;
 use std::fmt;
-use std::hash::Hash;
+use std::str::FromStr;
 use thiserror::Error;
 
 /// Direction in which an inexact quotient is rounded.
@@ -19,214 +20,85 @@ pub enum Rounding {
     Ceil,
 }
 
-/// Scalar operations required by a quantity backend's invariant measure.
+/// An exact non-negative whole number of atoms, up to `2²⁵⁶ − 1`.
 ///
-/// The blanket implementation preserves the existing backend requirements.
-pub trait QuantityMeasure: Clone + Eq + fmt::Debug + fmt::Display + Zero + CheckedAdd {}
+/// Arithmetic is checked: every operation returns the exact result or `None`,
+/// and never wraps. Quantities serialize as decimal strings so no consumer
+/// silently loses precision.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Quantity(U256);
 
-impl<T> QuantityMeasure for T where T: Clone + Eq + fmt::Debug + fmt::Display + Zero + CheckedAdd {}
-
-/// Exact scalar behavior required by authoritative economic quantities.
-///
-/// Implementations may have a wider representable domain than Axionomy
-/// quantities. [`Quantity::try_from_scalar`] enforces non-negativity at the
-/// boundary. Floating-point implementations are intentionally unsupported:
-/// authoritative balances require exact equality and total ordering.
-pub trait QuantityScalar:
-    Clone
-    + Eq
-    + Ord
-    + Hash
-    + fmt::Debug
-    + fmt::Display
-    + Zero
-    + CheckedAdd
-    + CheckedSub
-    + CheckedMul
-    + CheckedDiv
-{
-    /// Signed exact type used while evaluating linear invariants.
-    type SignedMeasure: QuantityMeasure;
-
-    /// Returns whether this value is valid as a non-negative quantity.
-    fn is_nonnegative(&self) -> bool;
-
-    /// Converts an atomic count into this backend without loss.
-    fn from_u64(value: u64) -> Option<Self>;
-
-    /// Multiplies this non-negative value by a signed invariant coefficient.
-    fn checked_weighted(&self, coefficient: i64) -> Option<Self::SignedMeasure>;
-
-    /// Computes `self × rhs ÷ denominator` from an exact, full-width product,
-    /// rounding an inexact quotient in the given direction.
-    ///
-    /// Only the quotient must be representable: an intermediate product that
-    /// exceeds this backend must not cause a failure. Returns `None` for a zero
-    /// denominator or an unrepresentable quotient.
-    fn checked_mul_div(&self, rhs: &Self, denominator: &Self, rounding: Rounding) -> Option<Self>;
-}
-
-// A u64 × u64 product always fits u128, so widened arithmetic cannot overflow;
-// only the final quotient is narrowed back to u64.
-const fn widen(value: u64) -> u128 {
-    value as u128
-}
-
-const fn narrow(value: u128) -> Option<u64> {
-    if value > u64::MAX as u128 {
-        None
-    } else {
-        Some(value as u64)
-    }
-}
-
-impl QuantityScalar for u64 {
-    type SignedMeasure = i128;
-
-    fn is_nonnegative(&self) -> bool {
-        true
-    }
-
-    fn from_u64(value: u64) -> Option<Self> {
-        Some(value)
-    }
-
-    fn checked_weighted(&self, coefficient: i64) -> Option<Self::SignedMeasure> {
-        i128::from(*self).checked_mul(i128::from(coefficient))
-    }
-
-    fn checked_mul_div(&self, rhs: &Self, denominator: &Self, rounding: Rounding) -> Option<Self> {
-        if *denominator == 0 {
-            return None;
-        }
-        let product = widen(*self) * widen(*rhs);
-        let divisor = widen(*denominator);
-        let quotient = product / divisor;
-        match rounding {
-            Rounding::Floor => narrow(quotient),
-            Rounding::Ceil => {
-                // Aeneas models the primitive remainder operator, which the
-                // proof uses directly; `is_multiple_of` is not extracted.
-                let remainder = product % divisor;
-                if remainder == 0 {
-                    narrow(quotient)
-                } else {
-                    narrow(quotient + 1)
-                }
-            }
-        }
-    }
-}
-
-/// A checked non-negative coefficient in an economy's numeric backend.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct Quantity<N = u64>(N);
-
-impl<N: Zero> Quantity<N> {
-    // Internal operations need only the scalar behavior they actually use;
-    // the public API continues to require the complete QuantityScalar contract.
-    pub(crate) fn scalar_is_zero(&self) -> bool {
-        self.0.is_zero()
-    }
-}
-
-impl Quantity<u64> {
-    pub const ZERO: Self = Self(0);
+impl Quantity {
+    pub const ZERO: Self = Self(U256::ZERO);
+    pub const MAX: Self = Self(U256::MAX);
 
     pub const fn new(value: u64) -> Self {
-        Self(value)
+        Self(U256::from_limbs([value, 0, 0, 0]))
     }
 
-    pub const fn get(self) -> u64 {
-        self.0
-    }
-}
-
-impl<N> Quantity<N>
-where
-    N: QuantityScalar,
-{
-    /// Constructs a quantity from a scalar after validating non-negativity.
-    pub fn try_from_scalar(value: N) -> Result<Self, QuantityError> {
-        if value.is_nonnegative() {
-            Ok(Self(value))
-        } else {
-            Err(QuantityError::Negative)
-        }
-    }
-
-    pub fn as_scalar(&self) -> &N {
-        &self.0
-    }
-
-    pub fn into_scalar(self) -> N {
+    /// The exact value.
+    pub const fn value(self) -> U256 {
         self.0
     }
 
-    pub fn is_zero(&self) -> bool {
-        self.scalar_is_zero()
-    }
-
-    pub fn checked_add(&self, rhs: &Self) -> Option<Self> {
-        Self::from_checked(self.0.checked_add(&rhs.0))
-    }
-
-    pub fn checked_sub(&self, rhs: &Self) -> Option<Self> {
-        Self::from_checked(self.0.checked_sub(&rhs.0))
-    }
-
-    pub fn checked_mul(&self, rhs: &Self) -> Option<Self> {
-        Self::from_checked(self.0.checked_mul(&rhs.0))
-    }
-
-    pub fn checked_div(&self, rhs: &Self) -> Option<Self> {
-        Self::from_checked(self.0.checked_div(&rhs.0))
-    }
-
-    /// Returns `self × rhs ÷ denominator`, rounded as requested, without
-    /// intermediate overflow.
+    /// The value as a `u64`, for models whose quantities are counts known to
+    /// fit. Use `u64::try_from` when the value may be larger.
     ///
-    /// The product is computed at full width; `None` means the denominator is
-    /// zero or the rounded quotient is not a representable quantity.
+    /// # Panics
+    ///
+    /// If the value exceeds `u64::MAX`.
+    pub fn to_u64(self) -> u64 {
+        u64::try_from(self).expect("quantity exceeds u64")
+    }
+
+    pub fn is_zero(self) -> bool {
+        self.0.is_zero()
+    }
+
+    pub fn checked_add(self, rhs: Self) -> Option<Self> {
+        self.0.checked_add(rhs.0).map(Self)
+    }
+
+    pub fn checked_sub(self, rhs: Self) -> Option<Self> {
+        self.0.checked_sub(rhs.0).map(Self)
+    }
+
+    pub fn checked_mul(self, rhs: Self) -> Option<Self> {
+        self.0.checked_mul(rhs.0).map(Self)
+    }
+
+    pub fn checked_div(self, rhs: Self) -> Option<Self> {
+        self.0.checked_div(rhs.0).map(Self)
+    }
+
+    /// Returns `self × rhs ÷ denominator`, rounded as requested.
+    ///
+    /// The product is computed at full 512-bit width, so only the quotient must
+    /// fit: `None` means the denominator is zero or the rounded quotient
+    /// exceeds `Quantity::MAX`.
     ///
     /// ```
     /// use axionomy::{Quantity, Rounding};
-    /// let max = Quantity::new(u64::MAX);
-    /// assert_eq!(max.checked_mul_div(&max, &max, Rounding::Floor), Some(max));
+    /// let max = Quantity::MAX;
+    /// assert_eq!(max.checked_mul_div(max, max, Rounding::Floor), Some(max));
     /// let (seven, one, two) = (Quantity::new(7), Quantity::new(1), Quantity::new(2));
-    /// assert_eq!(seven.checked_mul_div(&one, &two, Rounding::Floor), Some(Quantity::new(3)));
-    /// assert_eq!(seven.checked_mul_div(&one, &two, Rounding::Ceil), Some(Quantity::new(4)));
-    /// assert_eq!(seven.checked_mul_div(&one, &Quantity::ZERO, Rounding::Ceil), None);
+    /// assert_eq!(seven.checked_mul_div(one, two, Rounding::Floor), Some(Quantity::new(3)));
+    /// assert_eq!(seven.checked_mul_div(one, two, Rounding::Ceil), Some(Quantity::new(4)));
+    /// assert_eq!(seven.checked_mul_div(one, Quantity::ZERO, Rounding::Ceil), None);
     /// ```
-    pub fn checked_mul_div(
-        &self,
-        rhs: &Self,
-        denominator: &Self,
-        rounding: Rounding,
-    ) -> Option<Self> {
-        Self::from_checked(self.0.checked_mul_div(&rhs.0, &denominator.0, rounding))
-    }
-
-    // Explicit matching lets Aeneas extract the complete conversion without
-    // a model of the standard library's generic Result::ok drop handling.
-    #[allow(clippy::manual_ok_err, reason = "Aeneas needs the explicit conversion")]
-    fn from_checked(value: Option<N>) -> Option<Self> {
-        match value {
-            Some(value) => match Self::try_from_scalar(value) {
-                Ok(quantity) => Some(quantity),
-                Err(_) => None,
-            },
-            None => None,
+    pub fn checked_mul_div(self, rhs: Self, denominator: Self, rounding: Rounding) -> Option<Self> {
+        if denominator.is_zero() {
+            return None;
         }
-    }
-}
-
-impl<N> Default for Quantity<N>
-where
-    N: QuantityScalar,
-{
-    fn default() -> Self {
-        Self(N::zero())
+        let product: U512 = self.0.widening_mul(rhs.0);
+        let (quotient, remainder) = product.div_rem(U512::from(denominator.0));
+        // A nonzero remainder needs a denominator above one, so the quotient is
+        // below 2^511 and the increment cannot overflow.
+        let quotient = match rounding {
+            Rounding::Ceil if !remainder.is_zero() => quotient + U512::from(1_u8),
+            Rounding::Floor | Rounding::Ceil => quotient,
+        };
+        U256::uint_try_from(quotient).ok().map(Self)
     }
 }
 
@@ -242,103 +114,113 @@ impl From<u32> for Quantity {
     }
 }
 
-impl<N> fmt::Display for Quantity<N>
-where
-    N: fmt::Display,
-{
+impl From<u128> for Quantity {
+    fn from(value: u128) -> Self {
+        Self(U256::from(value))
+    }
+}
+
+impl From<U256> for Quantity {
+    fn from(value: U256) -> Self {
+        Self(value)
+    }
+}
+
+impl TryFrom<Quantity> for u64 {
+    type Error = QuantityError;
+
+    fn try_from(quantity: Quantity) -> Result<Self, Self::Error> {
+        u64::try_from(quantity.0).map_err(|_| QuantityError::OutOfRange)
+    }
+}
+
+impl fmt::Display for Quantity {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.0.fmt(formatter)
+        fmt::Display::fmt(&self.0, formatter)
     }
 }
 
-impl<N> Serialize for Quantity<N>
-where
-    N: Serialize,
-{
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        self.0.serialize(serializer)
+impl FromStr for Quantity {
+    type Err = QuantityError;
+
+    /// Parses a decimal whole number of atoms.
+    fn from_str(text: &str) -> Result<Self, Self::Err> {
+        if text.is_empty() || !text.bytes().all(|byte| byte.is_ascii_digit()) {
+            return Err(QuantityError::Invalid);
+        }
+        U256::from_str_radix(text, 10)
+            .map(Self)
+            .map_err(|_| QuantityError::OutOfRange)
     }
 }
 
-impl<'de, N> Deserialize<'de> for Quantity<N>
-where
-    N: Deserialize<'de> + QuantityScalar,
-{
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let value = N::deserialize(deserializer)?;
-        Self::try_from_scalar(value).map_err(serde::de::Error::custom)
+impl Serialize for Quantity {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.collect_str(self)
     }
 }
 
-impl<N> JsonSchema for Quantity<N>
-where
-    N: JsonSchema,
-{
+impl<'de> Deserialize<'de> for Quantity {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let text = Cow::<str>::deserialize(deserializer)?;
+        text.parse().map_err(serde::de::Error::custom)
+    }
+}
+
+impl JsonSchema for Quantity {
     fn schema_name() -> Cow<'static, str> {
-        format!("Quantity_{}", N::schema_name()).into()
+        "Quantity".into()
     }
 
-    fn json_schema(generator: &mut SchemaGenerator) -> Schema {
-        generator.subschema_for::<N>()
+    fn json_schema(_: &mut SchemaGenerator) -> Schema {
+        json_schema!({
+            "description": "A non-negative whole number of atoms below 2^256, as decimal digits.",
+            "type": "string",
+            "pattern": "^[0-9]+$"
+        })
     }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Error)]
 pub enum QuantityError {
-    #[error("quantity cannot be negative")]
-    Negative,
+    #[error("quantity must be decimal digits")]
+    Invalid,
+    #[error("quantity is out of range")]
+    OutOfRange,
 }
 
 #[cfg(test)]
-mod signed_scalar_tests {
-    use super::{Quantity, QuantityScalar, Rounding};
+mod tests {
+    use super::*;
 
-    // A backend can represent negative intermediate results even though a
-    // Quantity cannot. Keep this generic boundary intact when proving u64.
-    impl QuantityScalar for i64 {
-        type SignedMeasure = i128;
-
-        fn is_nonnegative(&self) -> bool {
-            *self >= 0
+    #[test]
+    fn parses_and_formats_exact_decimal_values() {
+        let max = "115792089237316195423570985008687907853269984665640564039457584007913129639935";
+        assert_eq!(max.parse::<Quantity>(), Ok(Quantity::MAX));
+        assert_eq!(Quantity::MAX.to_string(), max);
+        assert_eq!(
+            "115792089237316195423570985008687907853269984665640564039457584007913129639936"
+                .parse::<Quantity>(),
+            Err(QuantityError::OutOfRange)
+        );
+        for invalid in ["", "-1", "1.5", "0x10", " 1"] {
+            assert_eq!(invalid.parse::<Quantity>(), Err(QuantityError::Invalid));
         }
-
-        fn from_u64(value: u64) -> Option<Self> {
-            Self::try_from(value).ok()
-        }
-
-        fn checked_weighted(&self, coefficient: i64) -> Option<Self::SignedMeasure> {
-            i128::from(*self).checked_mul(i128::from(coefficient))
-        }
-
-        fn checked_mul_div(
-            &self,
-            rhs: &Self,
-            denominator: &Self,
-            rounding: Rounding,
-        ) -> Option<Self> {
-            let product = i128::from(*self) * i128::from(*rhs);
-            let divisor = i128::from(*denominator);
-            let quotient = product.checked_div_euclid(divisor)?;
-            let quotient = match rounding {
-                Rounding::Ceil if product.rem_euclid(divisor) != 0 => quotient + 1,
-                Rounding::Floor | Rounding::Ceil => quotient,
-            };
-            Self::try_from(quotient).ok()
-        }
+        assert_eq!(serde_json::to_string(&Quantity::new(42)).unwrap(), "\"42\"");
+        assert_eq!(
+            serde_json::from_str::<Quantity>("\"42\"").unwrap(),
+            Quantity::new(42)
+        );
+        assert!(serde_json::from_str::<Quantity>("42").is_err());
     }
 
     #[test]
-    fn checked_results_still_enforce_nonnegativity_for_other_backends() {
-        let one = Quantity::try_from_scalar(1_i64).unwrap();
-        let two = Quantity::try_from_scalar(2_i64).unwrap();
-        assert_eq!(one.checked_sub(&two), None);
-        assert_eq!(two.checked_sub(&one), Some(one));
-        assert!(Quantity::try_from_scalar(-1_i64).is_err());
+    fn narrows_only_when_the_value_fits() {
+        assert_eq!(Quantity::new(7).to_u64(), 7);
+        assert_eq!(u64::try_from(Quantity::new(u64::MAX)), Ok(u64::MAX));
+        let beyond = Quantity::new(u64::MAX)
+            .checked_add(Quantity::new(1))
+            .unwrap();
+        assert_eq!(u64::try_from(beyond), Err(QuantityError::OutOfRange));
     }
 }

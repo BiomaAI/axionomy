@@ -625,7 +625,6 @@
           "rate_condition_failed",
           "infeasible",
           "balance_overflow",
-          "invariant_overflow",
           "invariant_violation"
         ],
         "type": "string"

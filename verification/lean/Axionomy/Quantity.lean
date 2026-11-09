@@ -1,10 +1,11 @@
 import Std
 
-/-! Exact arithmetic specification. A finite bound models u64's range; this
-does not assume that arbitrary Rust QuantityScalar implementations obey it. -/
+/-! Exact arithmetic specification. Quantities are natural numbers bounded by
+`limit`, the largest 256-bit unsigned integer; every operation is exact or
+rejects. -/
 namespace Axionomy.Quantity
 
-def u64Max : Nat := 2^64 - 1
+def limit : Nat := 2^256 - 1
 
 def checked (limit value : Nat) : Option Nat :=
   if value ≤ limit then some value else none

@@ -35,19 +35,19 @@ fn usd() -> (AssetSchema<AssetId>, axionomy_units::DecimalAsset<AssetId>) {
 }
 
 fn atoms(amount: &AssetAmount<UnitAsset<AssetId>>) -> u64 {
-    amount.quantity().get()
+    amount.quantity().to_u64()
 }
 
 #[test]
 fn decimal_text_lowers_to_exact_minor_units_and_formats_back() {
     let (_, usd) = usd();
-    let amount = usd.parse::<u64>("12.50").unwrap();
+    let amount = usd.parse("12.50").unwrap();
 
     assert_eq!(atoms(&amount), 1_250);
     assert_eq!(amount.asset(), usd.asset());
     assert_eq!(usd.format(amount.quantity()), "12.50");
-    assert_eq!(usd.format(&Quantity::new(7)), "0.07");
-    assert_eq!(usd.format(&Quantity::ZERO), "0.00");
+    assert_eq!(usd.format(Quantity::new(7)), "0.07");
+    assert_eq!(usd.format(Quantity::ZERO), "0.00");
     assert_eq!(usd.precision().atoms_per_unit(), 100);
 }
 
@@ -58,9 +58,9 @@ fn zero_decimal_assets_count_whole_units() {
 
     assert_eq!(atoms(&yen.parse("1500").unwrap()), 1_500);
     assert_eq!(atoms(&yen.parse("1500.000").unwrap()), 1_500);
-    assert_eq!(yen.format(&Quantity::new(1_500)), "1500");
+    assert_eq!(yen.format(Quantity::new(1_500)), "1500");
     assert_eq!(
-        yen.parse::<u64>("1500.5"),
+        yen.parse("1500.5"),
         Err(UnitBindingError::InexactAtomicConversion.into())
     );
 }
@@ -98,11 +98,8 @@ fn precision_is_part_of_asset_identity() {
     ));
 
     // A basket keeps the two keys apart instead of adding cents to micros.
-    let basket = Basket::try_from_amounts([
-        cents.parse::<u64>("1").unwrap(),
-        micros.parse::<u64>("1").unwrap(),
-    ])
-    .unwrap();
+    let basket =
+        Basket::try_from_amounts([cents.parse("1").unwrap(), micros.parse("1").unwrap()]).unwrap();
     assert_eq!(basket.len(), 2);
     assert_eq!(basket.quantity(cents.asset()), Quantity::new(100));
     assert_eq!(basket.quantity(micros.asset()), Quantity::new(1_000_000));
@@ -201,7 +198,7 @@ fn malformed_decimal_text_is_rejected() {
         "", ".", "1.", ".5", "-1", "+1", "1e2", " 1", "1 ", "1,000", "1_000", "1.2.3", "0x10", "١",
     ] {
         assert_eq!(
-            usd.parse::<u64>(text),
+            usd.parse(text),
             Err(DecimalParseError::InvalidSyntax),
             "{text:?}"
         );
@@ -216,41 +213,45 @@ fn excess_precision_is_rejected_unless_it_is_zero() {
     assert_eq!(atoms(&usd.parse("0.100000").unwrap()), 10);
     assert_eq!(atoms(&usd.parse("007.05").unwrap()), 705);
     assert_eq!(
-        usd.parse::<u64>("0.001"),
+        usd.parse("0.001"),
         Err(UnitBindingError::InexactAtomicConversion.into())
     );
     assert_eq!(
-        usd.parse::<u64>("0.105"),
+        usd.parse("0.105"),
         Err(UnitBindingError::InexactAtomicConversion.into())
     );
 }
 
 #[test]
-fn atom_counts_outside_u64_are_rejected() {
+fn atom_counts_up_to_the_quantity_limit_are_accepted() {
     let mut schema = AssetSchema::new();
     let whole = schema.define_decimal(AssetId::Yen, 0).unwrap();
     let (_, usd) = usd();
+    let max = "115792089237316195423570985008687907853269984665640564039457584007913129639935";
 
+    // Far beyond u64: 2^64 whole units and money with cents.
     assert_eq!(
-        atoms(&whole.parse(&u64::MAX.to_string()).unwrap()),
-        u64::MAX
+        whole
+            .parse("18446744073709551616")
+            .unwrap()
+            .quantity()
+            .to_string(),
+        "18446744073709551616"
     );
     assert_eq!(
-        whole.parse::<u64>("18446744073709551616"),
+        usd.parse("184467440737095516.16")
+            .unwrap()
+            .quantity()
+            .to_string(),
+        "18446744073709551616"
+    );
+    assert_eq!(whole.parse(max).unwrap().quantity(), Quantity::MAX);
+    assert_eq!(
+        whole.parse(&"9".repeat(80)),
         Err(UnitBindingError::NumericRange.into())
     );
-    assert_eq!(
-        whole.parse::<u64>(&"9".repeat(60)),
-        Err(UnitBindingError::NumericRange.into())
-    );
-    assert_eq!(
-        usd.parse::<u64>("184467440737095516.16"),
-        Err(UnitBindingError::NumericRange.into())
-    );
-    assert_eq!(
-        atoms(&usd.parse("184467440737095516.15").unwrap()),
-        u64::MAX
-    );
+    // The cent digits of 2^256 - 1 atoms would exceed the limit by 100x.
+    assert_eq!(usd.parse(max), Err(UnitBindingError::NumericRange.into()));
 }
 
 #[test]
@@ -260,31 +261,35 @@ fn exact_rationals_encode_without_rounding() {
     assert_eq!(atoms(&usd.encode(Rational::new(1, 4)).unwrap()), 25);
     assert_eq!(atoms(&usd.encode(Rational::from_integer(0)).unwrap()), 0);
     assert_eq!(
-        usd.encode::<u64>(Rational::new(1, 3)),
+        usd.encode(Rational::new(1, 3)),
         Err(UnitBindingError::InexactAtomicConversion)
     );
     assert_eq!(
-        usd.encode::<u64>(Rational::new(1, 1_000)),
+        usd.encode(Rational::new(1, 1_000)),
         Err(UnitBindingError::InexactAtomicConversion)
     );
     assert_eq!(
-        usd.encode::<u64>(Rational::from_integer(-1)),
+        usd.encode(Rational::from_integer(-1)),
         Err(UnitBindingError::NegativeValue)
     );
     assert_eq!(
-        usd.encode::<u64>(Rational::new_raw(1, -2)),
+        usd.encode(Rational::new_raw(1, -2)),
         Err(UnitBindingError::NegativeValue)
     );
     assert_eq!(
-        usd.encode::<u64>(Rational::new_raw(1, 0)),
+        usd.encode(Rational::new_raw(1, 0)),
         Err(UnitBindingError::InexactAtomicConversion)
     );
+    // Rational64 bounds the input, not the result: i64::MAX dollars in cents.
     assert_eq!(
-        usd.encode::<u64>(Rational::from_integer(i64::MAX)),
-        Err(UnitBindingError::NumericRange)
+        usd.encode(Rational::from_integer(i64::MAX))
+            .unwrap()
+            .quantity()
+            .to_string(),
+        "922337203685477580700"
     );
     assert_eq!(
-        usd.encode::<u64>(Rational::new_raw(-3, -4))
+        usd.encode(Rational::new_raw(-3, -4))
             .map(|amount| atoms(&amount)),
         Ok(75)
     );
@@ -295,9 +300,9 @@ proptest! {
     fn format_and_parse_round_trip(decimals in 0..=MAX_DECIMALS, value in any::<u64>()) {
         let mut schema = AssetSchema::new();
         let asset = schema.define_decimal(AssetId::Usd, decimals).unwrap();
-        let text = asset.format(&Quantity::new(value));
-        let parsed = asset.parse::<u64>(&text).unwrap();
-        prop_assert_eq!(parsed.quantity().get(), value);
+        let text = asset.format(Quantity::new(value));
+        let parsed = asset.parse(&text).unwrap();
+        prop_assert_eq!(parsed.quantity().to_u64(), value);
         if decimals > 0 {
             let (_, fraction) = text.split_once('.').unwrap();
             prop_assert_eq!(fraction.len(), usize::from(decimals));
@@ -310,8 +315,8 @@ proptest! {
     fn rational_encoding_matches_decimal_parsing(whole in 0_u64..1_000_000, cents in 0_u64..100) {
         let (_, usd) = usd();
         let ratio = Rational::new(i64::try_from(whole * 100 + cents).unwrap(), 100);
-        let encoded = usd.encode::<u64>(ratio).unwrap();
-        let parsed = usd.parse::<u64>(&format!("{whole}.{cents:02}")).unwrap();
+        let encoded = usd.encode(ratio).unwrap();
+        let parsed = usd.parse(&format!("{whole}.{cents:02}")).unwrap();
         prop_assert_eq!(encoded, parsed);
     }
 }

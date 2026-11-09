@@ -126,7 +126,7 @@ def invalid (issues : List (Failure AccountId A RateId Role)) : Analysis Account
 
 def conditionResult (rate : RateId) (context : Evaluation.Context Role A Nat) (condition : Condition Role A) :
     Except (Failure AccountId A RateId Role) Unit :=
-  match Evaluation.condition (Evaluation.naturals Quantity.u64Max) id context
+  match Evaluation.condition (Evaluation.naturals Quantity.limit) id context
       condition.comparison condition.left condition.right with
   | .error error => .error (.lawEvaluation rate error.message)
   | .ok false => .error (.conditionFailed rate condition.label)
@@ -151,12 +151,12 @@ def rateResult {T : Type} (rate : RateId) (value : Except A T) : Checked Account
 def staticScaled [DecidableEq A] (rate : RateId) (units : Nat) (target : Balances A) :
     Option (Balances A) → Checked AccountId A RateId Role (Balances A)
   | none => .ok target
-  | some source => rateResult rate (Effects.scaled (Account.naturals Quantity.u64Max) (Quantity.mul Quantity.u64Max) target source units)
+  | some source => rateResult rate (Effects.scaled (Account.naturals Quantity.limit) (Quantity.mul Quantity.limit) target source units)
 
 def staticPreserved [DecidableEq A] (rate : RateId) (target : Balances A) :
     Option (Balances A) → Checked AccountId A RateId Role (Balances A)
   | none => .ok target
-  | some source => rateResult rate (Account.credit (Account.naturals Quantity.u64Max) target source)
+  | some source => rateResult rate (Account.credit (Account.naturals Quantity.limit) target source)
 
 def mergeStatic [DecidableEq A] (cmpRole : Role → Role → Ordering) (proposal : Proposal AccountId RateId Role)
     (rule : Rule Role A) (role : Role) (effect : Effect A) : Checked AccountId A RateId Role (Effect A) := do
@@ -176,7 +176,7 @@ def staticEffects [DecidableEq A] (cmpAccount : AccountId → AccountId → Orde
     staticEffects cmpAccount cmpRole proposal rule rest (position.put updated)
 
 def mergeComputed [DecidableEq A] (direction : Direction) (asset : A) (value : Nat) (effect : Effect A) : Except A (Effect A) :=
-  let merge := fun target => Account.credit (Account.naturals Quantity.u64Max) target [(asset, value)]
+  let merge := fun target => Account.credit (Account.naturals Quantity.limit) target [(asset, value)]
   match direction with
   | .consume => (merge effect.consume).map fun result => { effect with consume := result }
   | .produce => (merge effect.produce).map fun result => { effect with produce := result }
@@ -187,7 +187,7 @@ def computedEffects [DecidableEq A] (cmpAccount : AccountId → AccountId → Or
     List (Computed Role A) → List (AccountId × Effect A) → Checked AccountId A RateId Role (List (AccountId × Effect A))
   | [], accumulated => .ok accumulated
   | amount :: rest, accumulated => do
-    let value ← match Evaluation.eval (Evaluation.naturals Quantity.u64Max) context amount.quantity with
+    let value ← match Evaluation.eval (Evaluation.naturals Quantity.limit) context amount.quantity with
       | .ok value => .ok value
       | .error error => .error (.issue (.lawEvaluation proposal.rate error.message))
     let account ← require (Evaluation.orderedFind cmpRole amount.role proposal.bindings)
@@ -211,15 +211,15 @@ def aggregate [DecidableEq A] (cmpAccount : AccountId → AccountId → Ordering
 
 def relevant [DecidableEq A] (balances required : Balances A) : Balances A :=
   required.foldl (fun result (asset, _) =>
-    Account.store (Account.naturals Quantity.u64Max) result asset (Account.balance 0 balances asset)) []
+    Account.store (Account.naturals Quantity.limit) result asset (Account.balance 0 balances asset)) []
 
 def preflight [DecidableEq AccountId] [DecidableEq A] (rate : RateId) (accounts : List (AccountId × Balances A)) :
     List (AccountId × Effect A) → Availability AccountId A → Checked AccountId A RateId Role (Availability AccountId A)
   | [], accumulated => .ok accumulated
   | (id, effect) :: rest, accumulated => do
     let balances ← require (Account.find? id accounts)
-    let required ← rateResult rate (Account.credit (Account.naturals Quantity.u64Max) effect.consume effect.preserve)
-    let missing := Account.shortfall (Account.naturals Quantity.u64Max) balances required
+    let required ← rateResult rate (Account.credit (Account.naturals Quantity.limit) effect.consume effect.preserve)
+    let missing := Account.shortfall (Account.naturals Quantity.limit) balances required
     let assessed := AccountAssessment.mk id (relevant balances required) required effect.consume effect.produce effect.preserve
     preflight rate accounts rest ⟨accumulated.accounts ++ [assessed],
       accumulated.shortfalls ++ if missing.isEmpty then [] else [(id, missing)]⟩
@@ -231,7 +231,7 @@ def accountFailure (id : AccountId) : Account.UpdateError A Nat → Failure Acco
 def prepareOne [DecidableEq AccountId] [DecidableEq A] (accounts : List (AccountId × Balances A))
     (id : AccountId) (effect : Effect A) : Checked AccountId A RateId Role (Balances A) := do
   let balances ← require (Account.find? id accounts)
-  liftIssue ((Account.prepare (Account.naturals Quantity.u64Max) balances effect.consume effect.produce).mapError (accountFailure id))
+  liftIssue ((Account.prepare (Account.naturals Quantity.limit) balances effect.consume effect.produce).mapError (accountFailure id))
 
 def prepare [DecidableEq AccountId] [DecidableEq A] (accounts : List (AccountId × Balances A)) :
     List (AccountId × Effect A) → Preparation AccountId A → Checked AccountId A RateId Role (Preparation AccountId A)
@@ -258,15 +258,15 @@ def checkInvariants [DecidableEq AccountId] [DecidableEq A] (accounts : List (Ac
   | [] => .ok ()
   | invariant :: rest =>
     let weighted := fun asset value => some (Conservation.contribution invariant.weights asset value)
-    match Conservation.conserves weighted Conservation.checkedAdd 0 prepared.deltas with
+    match Conservation.conserves weighted Conservation.exactAdd 0 prepared.deltas with
     | none => .error (.issue (.invariantOverflow invariant.label))
     | some true => checkInvariants accounts prepared rest
     | some false => do
-      let before ← match Conservation.accumulate weighted Conservation.checkedAdd 0 (accounts.flatMap Prod.snd) with
+      let before ← match Conservation.accumulate weighted Conservation.exactAdd 0 (accounts.flatMap Prod.snd) with
         | none => .error (.issue (.invariantOverflow invariant.label))
         | some value => .ok value
       let updated ← require (install accounts prepared.accounts)
-      let after ← match Conservation.accumulate weighted Conservation.checkedAdd 0 (updated.flatMap Prod.snd) with
+      let after ← match Conservation.accumulate weighted Conservation.exactAdd 0 (updated.flatMap Prod.snd) with
         | none => .error (.issue (.invariantOverflow invariant.label))
         | some value => .ok value
       .error (.issue (.invariantViolation invariant.label before after))

@@ -15,7 +15,7 @@ fn operational_cost(assessment: &Assessment) -> u64 {
                 Asset::Item(_) => 100,
                 _ => 1_000,
             };
-            weight * quantity.get()
+            weight * quantity.to_u64()
         })
         .sum()
 }
@@ -60,7 +60,7 @@ fn main() {
         .projected_deltas()
         .expect("an exact match projects its effects")
         .len();
-    let mut settlement_branch = market.fork();
+    let mut settlement_branch = market.clone();
     let receipt = settlement_branch
         .apply(settlement)
         .expect("the exact match settles");

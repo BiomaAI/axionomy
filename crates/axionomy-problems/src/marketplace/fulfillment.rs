@@ -6,7 +6,7 @@ pub fn enabled(world: &World) -> bool {
     world.rate(&RateId::Dispatch(OrderId::A)).is_some()
 }
 pub fn now(world: &World) -> u64 {
-    world.balance(&AccountId::Platform, &Asset::Now).get()
+    world.balance(&AccountId::Platform, &Asset::Now).to_u64()
 }
 fn clock() -> Q<Role, Asset> {
     Q::balance(Role::Platform, Asset::Now)
@@ -28,7 +28,7 @@ pub(super) fn build(source: World) -> World {
             AccountId::Buyer(_) => basket([(Asset::BuyerLicense, 1)]),
             AccountId::Seller(_) => basket([(Asset::SellerLicense, 1)]),
             AccountId::Carrier(carrier) => {
-                let capacity = account.balance(&Asset::ShippingCapacity).get();
+                let capacity = account.balance(&Asset::ShippingCapacity).to_u64();
                 account
                     .withdraw(&basket([(Asset::ShippingCapacity, capacity - 1)]))
                     .unwrap();
@@ -262,10 +262,8 @@ pub(super) fn build(source: World) -> World {
                         Asset::ReadyAt,
                         clock()
                             + Q::balance(Role::Carrier, Asset::TransitTime)
-                            + Q::multiply(
-                                Q::balance(Role::Carrier, Asset::DelayRisk),
-                                Q::balance(Role::Order, Asset::RouteDelay),
-                            ),
+                            + Q::balance(Role::Carrier, Asset::DelayRisk)
+                                * Q::balance(Role::Order, Asset::RouteDelay),
                     ),
             ),
         );
@@ -283,12 +281,12 @@ pub(super) fn build(source: World) -> World {
                 .consume_computed(
                     Role::Platform,
                     Asset::TimeRemaining,
-                    Q::subtract(Q::constant(u64::from(to)), clock()),
+                    Q::constant(u64::from(to)) - clock(),
                 )
                 .produce_computed(
                     Role::Platform,
                     Asset::Now,
-                    Q::subtract(Q::constant(u64::from(to)), clock()),
+                    Q::constant(u64::from(to)) - clock(),
                 ),
         );
     }
@@ -331,7 +329,7 @@ pub fn booking(world: &World, order: OrderId) -> Option<MarketMatch> {
         .find(|id| {
             world
                 .balance(&AccountId::Buyer(*id), &Asset::PurchaseLocked(order))
-                .get()
+                .to_u64()
                 > 0
         })?;
     let seller = [SellerId::A, SellerId::B, SellerId::C]
@@ -339,13 +337,13 @@ pub fn booking(world: &World, order: OrderId) -> Option<MarketMatch> {
         .find(|id| {
             world
                 .balance(&AccountId::Seller(*id), &Asset::SaleReserved(order))
-                .get()
+                .to_u64()
                 > 0
         })?;
     let carrier = [CarrierId::A, CarrierId::B].into_iter().find(|id| {
         world
             .balance(&AccountId::Carrier(*id), &Asset::Booking(order))
-            .get()
+            .to_u64()
             > 0
     })?;
     Some(MarketMatch::new(order, buyer, seller, carrier))
@@ -361,7 +359,7 @@ pub fn candidates(world: &World) -> Vec<Action> {
                 &AccountId::Order(candidate.order),
                 &Asset::OpenOrder(candidate.order),
             )
-            .get()
+            .to_u64()
             > 0
         {
             proposed.extend([
@@ -372,7 +370,7 @@ pub fn candidates(world: &World) -> Vec<Action> {
     }
     let mut times = Vec::new();
     for order in orders(world) {
-        let value = |asset| world.balance(&AccountId::Order(order), &asset).get();
+        let value = |asset| world.balance(&AccountId::Order(order), &asset).to_u64();
         if value(Asset::OpenOrder(order)) > 0 {
             times.push(value(Asset::Arrival));
         }
@@ -435,13 +433,13 @@ fn score(world: &World, preference: Preference) -> i64 {
     };
     for order in orders(world) {
         let account = AccountId::Order(order);
-        let active = world.balance(&account, &Asset::Contract(order)).get()
-            + world.balance(&account, &Asset::InShipment(order)).get();
+        let active = world.balance(&account, &Asset::Contract(order)).to_u64()
+            + world.balance(&account, &Asset::InShipment(order)).to_u64();
         if active > 0 {
             value += 40_000;
             let discounted = world
                 .balance(&account, &Asset::AgreedPrice(order_terms(order).1 - 10))
-                .get()
+                .to_u64()
                 > 0;
             let (bu, su) = utility_terms(order);
             let cut = if discounted { 10 } else { 0 };
@@ -509,13 +507,13 @@ mod tests {
         assert_eq!(
             world
                 .balance(&AccountId::Order(OrderId::A), &Asset::Money)
-                .get(),
+                .to_u64(),
             100
         );
         assert_eq!(
             world
                 .balance(&AccountId::Buyer(BuyerId::A), &Asset::Item(Item::Widget))
-                .get(),
+                .to_u64(),
             0
         );
         assert!(!world.is_applicable(
@@ -550,13 +548,13 @@ mod tests {
         assert_eq!(
             world
                 .balance(&AccountId::Carrier(CarrierId::A), &Asset::ShippingCapacity)
-                .get(),
+                .to_u64(),
             1
         );
         assert_eq!(
             world
                 .balance(&AccountId::Seller(SellerId::A), &Asset::Money)
-                .get(),
+                .to_u64(),
             80
         );
     }
@@ -586,13 +584,13 @@ mod tests {
         assert_eq!(
             world
                 .balance(&AccountId::Buyer(BuyerId::A), &Asset::Money)
-                .get(),
+                .to_u64(),
             300
         );
         assert_eq!(
             world
                 .balance(&AccountId::Seller(SellerId::A), &Asset::Item(Item::Widget))
-                .get(),
+                .to_u64(),
             2
         );
         world.apply(candidate.exchange()).unwrap();

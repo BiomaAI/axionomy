@@ -65,7 +65,7 @@ def ReceiptChanges [DecidableEq AccountId] [DecidableEq A]
     ∀ delta ∈ receipt.deltas, ∃ original committed,
       Account.find? delta.account before.accounts = some original ∧
       Account.find? delta.account after.accounts = some committed ∧
-      Account.prepare (Account.naturals Quantity.u64Max) original delta.consumed delta.produced = .ok committed
+      Account.prepare (Account.naturals Quantity.limit) original delta.consumed delta.produced = .ok committed
 
 theorem apply_receipt_changes [DecidableEq AccountId] [DecidableEq A] [DecidableEq RateId] [DecidableEq Role]
     (cmpAccount : AccountId → AccountId → Ordering) (cmpRole : Role → Role → Ordering)

@@ -97,7 +97,7 @@ theorem computedEffects_sorted (cmpAccount : AccountId → AccountId → Orderin
   induction remaining generalizing initial with
   | nil => exact (Except.ok.inj success) ▸ sorted
   | cons amount rest ih =>
-    cases evaluated : Evaluation.eval (Evaluation.naturals Quantity.u64Max) context amount.quantity with
+    cases evaluated : Evaluation.eval (Evaluation.naturals Quantity.limit) context amount.quantity with
     | error error => simp [computedEffects, evaluated] at success
     | ok value =>
       cases binding : Evaluation.orderedFind cmpRole amount.role proposal.bindings with

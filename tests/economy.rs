@@ -350,7 +350,10 @@ fn forks_and_replay_validate_a_trace_without_touching_the_source() {
     assert!(replayed.matches(&goal));
     assert_eq!(world.state_key(), before);
 
-    let (simulated, _) = world.simulate(transform(1)).expect("fork is feasible");
+    let mut simulated = world.clone();
+    simulated
+        .apply(transform(1))
+        .expect("the branch is feasible");
     assert_ne!(simulated.state_key(), world.state_key());
     assert_ne!(simulated.state_fingerprint(), before_fingerprint);
     assert_eq!(world.state_key(), before);
@@ -360,7 +363,7 @@ fn forks_and_replay_validate_a_trace_without_touching_the_source() {
 #[test]
 fn replay_stops_at_first_error_and_keeps_only_the_successful_prefix() {
     let original = world();
-    let mut expected = original.fork();
+    let mut expected = original.clone();
     let accepted = transform(2);
     let rejected = transform(1);
     expected.apply(accepted.clone()).unwrap();
@@ -371,7 +374,7 @@ fn replay_stops_at_first_error_and_keeps_only_the_successful_prefix() {
     let mut trace = Trace::new();
     trace.extend([accepted, rejected, finish()]);
     let before = original.state_key();
-    let mut actual = original.fork();
+    let mut actual = original.clone();
     assert!(matches!(
         actual.replay(&trace),
         Err(ApplyError::Infeasible { .. })
@@ -448,11 +451,11 @@ fn checked_arithmetic_failures_are_atomic() {
     let mut rate_overflow = EconomyBuilder::new()
         .account(
             AccountId::Source,
-            Account::from(basket([(Asset::Input, u64::MAX)])),
+            Account::from(Basket::from([(Asset::Input, Quantity::MAX)])),
         )
         .rate(
             RateId::Overflow,
-            Rate::new().consume(Role::Source, basket([(Asset::Input, u64::MAX)])),
+            Rate::new().consume(Role::Source, Basket::from([(Asset::Input, Quantity::MAX)])),
         )
         .build()
         .expect("test model is valid");
@@ -471,7 +474,7 @@ fn checked_arithmetic_failures_are_atomic() {
     let mut balance_overflow = EconomyBuilder::new()
         .account(
             AccountId::Sink,
-            Account::from(basket([(Asset::Output, u64::MAX)])),
+            Account::from(Basket::from([(Asset::Output, Quantity::MAX)])),
         )
         .rate(
             RateId::Overflow,

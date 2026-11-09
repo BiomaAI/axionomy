@@ -479,7 +479,7 @@ pub fn initial(stress: bool, seed: u64) -> World {
         };
         let accepted = Q::minimum(
             Q::constant(supply),
-            Q::subtract(Q::constant(6), q(Role::World, Asset::Energy)),
+            Q::constant(6) - q(Role::World, Asset::Energy),
         );
         let mut open = ages_resolved(once(law()))
             .condition(
@@ -512,7 +512,7 @@ pub fn initial(stress: bool, seed: u64) -> World {
             .produce_computed(
                 Role::World,
                 Asset::SpilledEnergy,
-                Q::subtract(Q::constant(supply), accepted),
+                Q::constant(supply) - accepted,
             );
         for (from, to) in [
             (Asset::Demand, Asset::MissedDemand),
@@ -643,12 +643,12 @@ pub fn goal() -> Goal<AccountId, Asset> {
     Goal::new().require(AccountId::World, basket([(Asset::Solved, 1)]))
 }
 pub fn value(world: &World, account: AccountId, asset: Asset) -> u64 {
-    world.balance(&account, &asset).get()
+    world.balance(&account, &asset).to_u64()
 }
 pub fn total(world: &World, asset: Asset) -> u64 {
     world
         .accounts()
-        .map(|(_, account)| account.balance(&asset).get())
+        .map(|(_, account)| account.balance(&asset).to_u64())
         .sum()
 }
 pub fn place(world: &World, id: u8) -> Option<Place> {

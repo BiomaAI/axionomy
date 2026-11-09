@@ -783,13 +783,13 @@ pub fn proposal(rate: RateId) -> Action {
 }
 
 pub fn clock(world: &World) -> u64 {
-    world.balance(&AccountId::World, &Asset::Tick).get()
+    world.balance(&AccountId::World, &Asset::Tick).to_u64()
 }
 fn balance(world: &World, agent: AgentId, asset: Asset) -> u64 {
-    world.balance(&AccountId::Agent(agent), &asset).get()
+    world.balance(&AccountId::Agent(agent), &asset).to_u64()
 }
 fn job_balance(world: &World, id: JobId, asset: Asset) -> u64 {
-    world.balance(&AccountId::Job(id), &asset).get()
+    world.balance(&AccountId::Job(id), &asset).to_u64()
 }
 fn held_job(league: &League, world: &World, agent: AgentId) -> Option<JobId> {
     league
@@ -1016,13 +1016,13 @@ fn sampled_result(world: &World, seed: u64, id: JobId, mode: WorkMode) -> Outcom
             &AccountId::Nature,
             &Asset::OutcomeWeight(id, mode, Outcome::Failure),
         )
-        .get();
+        .to_u64();
     let success = world
         .balance(
             &AccountId::Nature,
             &Asset::OutcomeWeight(id, mode, Outcome::Success),
         )
-        .get();
+        .to_u64();
     if (value ^ (value >> 31)) % (failure + success) < failure {
         Outcome::Failure
     } else {
@@ -1031,7 +1031,7 @@ fn sampled_result(world: &World, seed: u64, id: JobId, mode: WorkMode) -> Outcom
 }
 
 pub(super) fn run(league: &League, seed: u64) -> Result<MatchOutcome, String> {
-    let mut world = league.initial.fork();
+    let mut world = league.initial.clone();
     let mut trace = Trace::new();
     loop {
         // Due events are proposed from balances; every early, stale, or wrongly
@@ -1192,7 +1192,9 @@ mod tests {
             );
         }
         assert_eq!(
-            world.balance(&AccountId::World, &Asset::Activities).get(),
+            world
+                .balance(&AccountId::World, &Asset::Activities)
+                .to_u64(),
             2
         );
         let finish = RateId::Finish {
@@ -1265,7 +1267,7 @@ mod tests {
                     &AccountId::Facility(Facility::Workshop),
                     &Asset::Occupied(Facility::Workshop, AgentId::Bolt)
                 )
-                .get(),
+                .to_u64(),
             1
         );
         rejected_unchanged(
@@ -1544,7 +1546,9 @@ mod tests {
         assert_eq!(balance(&world, agent, Asset::Credit), 5);
         assert_eq!(balance(&world, agent, Asset::Busy), 0);
         assert_eq!(
-            world.balance(&AccountId::World, &Asset::Activities).get(),
+            world
+                .balance(&AccountId::World, &Asset::Activities)
+                .to_u64(),
             0
         );
     }
@@ -1568,11 +1572,13 @@ mod tests {
                             1
                         );
                     }
-                    let mut replay = league.initial.fork();
+                    let mut replay = league.initial.clone();
                     for action in outcome.trace.exchanges() {
                         replay.apply(action.clone()).unwrap();
-                        has_overlap |=
-                            replay.balance(&AccountId::World, &Asset::Activities).get() >= 2;
+                        has_overlap |= replay
+                            .balance(&AccountId::World, &Asset::Activities)
+                            .to_u64()
+                            >= 2;
                         has_handoff |= matches!(action.rate(), RateId::Handoff { .. });
                         has_recharge |= matches!(
                             action.rate(),

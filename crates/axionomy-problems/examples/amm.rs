@@ -58,7 +58,7 @@ fn main() {
     let guarded = amm::buy_energy(Actor::Factory, 10_000, quote + 1);
     let assessment = initial.assess(&guarded);
     assert!(!assessment.is_applicable());
-    let mut rejected_branch = initial.fork();
+    let mut rejected_branch = initial.clone();
     assert!(rejected_branch.apply(guarded).is_err());
     assert_eq!(rejected_branch.state_key(), source);
     info!(

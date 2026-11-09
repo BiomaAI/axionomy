@@ -1,11 +1,12 @@
-use crate::{Account, AccountDelta, Basket, Quantity, QuantityScalar, Rounding};
+use crate::{Account, AccountDelta, Basket, Quantity, Rounding};
 use indexmap::IndexMap;
-use num_traits::{CheckedAdd, Zero};
-use schemars::{JsonSchema, Schema, SchemaGenerator};
+use ruint::aliases::U384;
+use schemars::{JsonSchema, Schema, SchemaGenerator, json_schema};
 use serde::ser::SerializeStruct;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
+use std::fmt;
 use std::hash::Hash;
 use thiserror::Error;
 
@@ -21,17 +22,10 @@ use thiserror::Error;
 /// participant pays up and amounts a participant receives down, so rounding
 /// dust stays with the counterparty.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(
-    tag = "kind",
-    rename_all = "snake_case",
-    bound(
-        serialize = "Role: Serialize, A: Serialize, N: Serialize",
-        deserialize = "Role: Deserialize<'de>, A: Deserialize<'de>, N: Deserialize<'de> + QuantityScalar"
-    )
-)]
-pub enum QuantityExpression<Role, A, N = u64> {
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum QuantityExpression<Role, A> {
     Constant {
-        value: Quantity<N>,
+        value: Quantity,
     },
     Units,
     Parameter {
@@ -78,24 +72,6 @@ impl<Role, A> QuantityExpression<Role, A> {
         }
     }
 
-    /// `numerator ÷ denominator`, rounded as stated: a mul-div by one.
-    pub fn divide(numerator: Self, denominator: Self, rounding: Rounding) -> Self {
-        Self::mul_div(numerator, Self::constant(1), denominator, rounding)
-    }
-}
-
-impl<Role, A, N> std::ops::Add for QuantityExpression<Role, A, N> {
-    type Output = Self;
-
-    fn add(self, right: Self) -> Self::Output {
-        Self::Add {
-            left: Box::new(self),
-            right: Box::new(right),
-        }
-    }
-}
-
-impl<Role, A, N> QuantityExpression<Role, A, N> {
     pub const fn units() -> Self {
         Self::Units
     }
@@ -106,27 +82,6 @@ impl<Role, A, N> QuantityExpression<Role, A, N> {
 
     pub const fn balance(role: Role, asset: A) -> Self {
         Self::Balance { role, asset }
-    }
-
-    pub fn plus(left: Self, right: Self) -> Self {
-        Self::Add {
-            left: Box::new(left),
-            right: Box::new(right),
-        }
-    }
-
-    pub fn subtract(left: Self, right: Self) -> Self {
-        Self::Subtract {
-            left: Box::new(left),
-            right: Box::new(right),
-        }
-    }
-
-    pub fn multiply(left: Self, right: Self) -> Self {
-        Self::Multiply {
-            left: Box::new(left),
-            right: Box::new(right),
-        }
     }
 
     pub fn minimum(left: Self, right: Self) -> Self {
@@ -155,21 +110,22 @@ impl<Role, A, N> QuantityExpression<Role, A, N> {
         }
     }
 
-    fn collect_roles<'a>(&'a self, roles: &mut BTreeSet<&'a Role>)
-    where
-        Role: Ord,
-    {
+    /// `numerator ÷ denominator`, rounded as stated: a mul-div by one.
+    pub fn divide(numerator: Self, denominator: Self, rounding: Rounding) -> Self {
+        Self::mul_div(numerator, Self::constant(1), denominator, rounding)
+    }
+
+    /// Every subexpression, depth first, starting with this one.
+    fn walk<'a>(&'a self, visit: &mut impl FnMut(&'a Self)) {
+        visit(self);
         match self {
-            Self::Balance { role, .. } => {
-                roles.insert(role);
-            }
             Self::Add { left, right }
             | Self::Subtract { left, right }
             | Self::Multiply { left, right }
             | Self::Minimum { left, right }
             | Self::Maximum { left, right } => {
-                left.collect_roles(roles);
-                right.collect_roles(roles);
+                left.walk(visit);
+                right.walk(visit);
             }
             Self::MulDiv {
                 left,
@@ -177,79 +133,76 @@ impl<Role, A, N> QuantityExpression<Role, A, N> {
                 denominator,
                 ..
             } => {
-                left.collect_roles(roles);
-                right.collect_roles(roles);
-                denominator.collect_roles(roles);
+                left.walk(visit);
+                right.walk(visit);
+                denominator.walk(visit);
             }
-            Self::Constant { .. } | Self::Units | Self::Parameter { .. } => {}
+            Self::Constant { .. } | Self::Units | Self::Parameter { .. } | Self::Balance { .. } => {
+            }
         }
     }
 
-    fn collect_assets<'a>(&'a self, assets: &mut Vec<&'a A>) {
-        match self {
-            Self::Balance { asset, .. } => assets.push(asset),
-            Self::Add { left, right }
-            | Self::Subtract { left, right }
-            | Self::Multiply { left, right }
-            | Self::Minimum { left, right }
-            | Self::Maximum { left, right } => {
-                left.collect_assets(assets);
-                right.collect_assets(assets);
+    fn roles(&self) -> Vec<&Role> {
+        let mut roles = Vec::new();
+        self.walk(&mut |expression| {
+            if let Self::Balance { role, .. } = expression {
+                roles.push(role);
             }
-            Self::MulDiv {
-                left,
-                right,
-                denominator,
-                ..
-            } => {
-                left.collect_assets(assets);
-                right.collect_assets(assets);
-                denominator.collect_assets(assets);
-            }
-            Self::Constant { .. } | Self::Units | Self::Parameter { .. } => {}
-        }
+        });
+        roles
     }
 
-    fn collect_parameters<'a>(&'a self, parameters: &mut BTreeSet<&'a str>) {
-        match self {
-            Self::Parameter { name } => {
-                parameters.insert(name);
+    fn assets(&self) -> Vec<&A> {
+        let mut assets = Vec::new();
+        self.walk(&mut |expression| {
+            if let Self::Balance { asset, .. } = expression {
+                assets.push(asset);
             }
-            Self::Add { left, right }
-            | Self::Subtract { left, right }
-            | Self::Multiply { left, right }
-            | Self::Minimum { left, right }
-            | Self::Maximum { left, right } => {
-                left.collect_parameters(parameters);
-                right.collect_parameters(parameters);
+        });
+        assets
+    }
+
+    fn parameters(&self) -> Vec<&str> {
+        let mut parameters = Vec::new();
+        self.walk(&mut |expression| {
+            if let Self::Parameter { name } = expression {
+                parameters.push(name.as_str());
             }
-            Self::MulDiv {
-                left,
-                right,
-                denominator,
-                ..
-            } => {
-                left.collect_parameters(parameters);
-                right.collect_parameters(parameters);
-                denominator.collect_parameters(parameters);
-            }
-            Self::Constant { .. } | Self::Units | Self::Balance { .. } => {}
-        }
+        });
+        parameters
     }
 }
+
+/// `left + right`, `left - right` and `left * right` build checked arithmetic:
+/// evaluation rejects a sum or product above `Quantity::MAX` and a difference
+/// below zero.
+macro_rules! expression_operator {
+    ($trait:ident, $method:ident, $variant:ident) => {
+        impl<Role, A> std::ops::$trait for QuantityExpression<Role, A> {
+            type Output = Self;
+
+            fn $method(self, right: Self) -> Self {
+                Self::$variant {
+                    left: Box::new(self),
+                    right: Box::new(right),
+                }
+            }
+        }
+    };
+}
+
+expression_operator!(Add, add, Add);
+expression_operator!(Sub, sub, Subtract);
+expression_operator!(Mul, mul, Multiply);
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(bound(
-    serialize = "Role: Serialize, A: Serialize, N: Serialize",
-    deserialize = "Role: Deserialize<'de>, A: Deserialize<'de>, N: Deserialize<'de> + QuantityScalar"
-))]
-pub struct ComputedAmount<Role, A, N = u64> {
+pub struct ComputedAmount<Role, A> {
     role: Role,
     asset: A,
-    quantity: QuantityExpression<Role, A, N>,
+    quantity: QuantityExpression<Role, A>,
 }
 
-impl<Role, A, N> ComputedAmount<Role, A, N> {
+impl<Role, A> ComputedAmount<Role, A> {
     pub const fn role(&self) -> &Role {
         &self.role
     }
@@ -258,21 +211,8 @@ impl<Role, A, N> ComputedAmount<Role, A, N> {
         &self.asset
     }
 
-    pub const fn quantity(&self) -> &QuantityExpression<Role, A, N> {
+    pub const fn quantity(&self) -> &QuantityExpression<Role, A> {
         &self.quantity
-    }
-
-    fn collect_parameters<'a>(amounts: &'a [Self], parameters: &mut BTreeSet<&'a str>) {
-        for amount in amounts {
-            amount.quantity.collect_parameters(parameters);
-        }
-    }
-
-    fn collect_assets<'a>(amounts: &'a [Self], assets: &mut Vec<&'a A>) {
-        for amount in amounts {
-            assets.push(&amount.asset);
-            amount.quantity.collect_assets(assets);
-        }
     }
 }
 
@@ -285,23 +225,19 @@ pub enum QuantityComparison {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(bound(
-    serialize = "Role: Serialize, A: Serialize, N: Serialize",
-    deserialize = "Role: Deserialize<'de>, A: Deserialize<'de>, N: Deserialize<'de> + QuantityScalar"
-))]
-pub struct RateCondition<Role, A, N = u64> {
+pub struct RateCondition<Role, A> {
     name: String,
-    left: QuantityExpression<Role, A, N>,
+    left: QuantityExpression<Role, A>,
     comparison: QuantityComparison,
-    right: QuantityExpression<Role, A, N>,
+    right: QuantityExpression<Role, A>,
 }
 
-impl<Role, A, N> RateCondition<Role, A, N> {
+impl<Role, A> RateCondition<Role, A> {
     pub fn name(&self) -> &str {
         &self.name
     }
 
-    pub const fn left(&self) -> &QuantityExpression<Role, A, N> {
+    pub const fn left(&self) -> &QuantityExpression<Role, A> {
         &self.left
     }
 
@@ -309,29 +245,28 @@ impl<Role, A, N> RateCondition<Role, A, N> {
         self.comparison
     }
 
-    pub const fn right(&self) -> &QuantityExpression<Role, A, N> {
+    pub const fn right(&self) -> &QuantityExpression<Role, A> {
         &self.right
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct Rate<Role, A, N = u64> {
-    consume: BTreeMap<Role, Basket<A, N>>,
-    produce: BTreeMap<Role, Basket<A, N>>,
-    preserve: BTreeMap<Role, Basket<A, N>>,
+pub struct Rate<Role, A> {
+    consume: BTreeMap<Role, Basket<A>>,
+    produce: BTreeMap<Role, Basket<A>>,
+    preserve: BTreeMap<Role, Basket<A>>,
     roles: BTreeSet<Role>,
     distinct: BTreeSet<(Role, Role)>,
-    computed_consume: Vec<ComputedAmount<Role, A, N>>,
-    computed_produce: Vec<ComputedAmount<Role, A, N>>,
-    computed_preserve: Vec<ComputedAmount<Role, A, N>>,
-    conditions: Vec<RateCondition<Role, A, N>>,
+    computed_consume: Vec<ComputedAmount<Role, A>>,
+    computed_produce: Vec<ComputedAmount<Role, A>>,
+    computed_preserve: Vec<ComputedAmount<Role, A>>,
+    conditions: Vec<RateCondition<Role, A>>,
 }
 
-impl<Role, A, N> Rate<Role, A, N>
+impl<Role, A> Rate<Role, A>
 where
     Role: Clone + Ord,
     A: Clone + Eq + Hash,
-    N: QuantityScalar,
 {
     pub fn new() -> Self {
         Self {
@@ -347,58 +282,54 @@ where
         }
     }
 
-    pub fn try_consume(
+    /// Consumes `basket` per unit from the account bound to `role`.
+    ///
+    /// # Panics
+    ///
+    /// If repeated baskets for one role add up beyond `Quantity::MAX`.
+    pub fn consume(self, role: Role, basket: Basket<A>) -> Self {
+        self.with_static(Direction::Consume, role, basket)
+            .unwrap_or_else(|_| panic!("rate consume basket quantity overflow"))
+    }
+
+    /// Produces `basket` per unit into the account bound to `role`.
+    ///
+    /// # Panics
+    ///
+    /// If repeated baskets for one role add up beyond `Quantity::MAX`.
+    pub fn produce(self, role: Role, basket: Basket<A>) -> Self {
+        self.with_static(Direction::Produce, role, basket)
+            .unwrap_or_else(|_| panic!("rate produce basket quantity overflow"))
+    }
+
+    /// Requires `basket` in the account bound to `role` without consuming it.
+    ///
+    /// # Panics
+    ///
+    /// If repeated baskets for one role add up beyond `Quantity::MAX`.
+    pub fn preserve(self, role: Role, basket: Basket<A>) -> Self {
+        self.with_static(Direction::Preserve, role, basket)
+            .unwrap_or_else(|_| panic!("rate preserve basket quantity overflow"))
+    }
+
+    fn with_static(
         mut self,
+        direction: Direction,
         role: Role,
-        basket: Basket<A, N>,
+        basket: Basket<A>,
     ) -> Result<Self, RateError<Role, A>> {
         self.roles.insert(role.clone());
-        merge(&mut self.consume, role.clone(), basket)
+        let target = match direction {
+            Direction::Consume => &mut self.consume,
+            Direction::Produce => &mut self.produce,
+            Direction::Preserve => &mut self.preserve,
+        };
+        target
+            .entry(role.clone())
+            .or_default()
+            .checked_add(&basket)
             .map_err(|asset| RateError::BasketOverflow { role, asset })?;
         Ok(self)
-    }
-
-    pub fn consume(self, role: Role, basket: Basket<A, N>) -> Self {
-        match self.try_consume(role, basket) {
-            Ok(rate) => rate,
-            Err(_) => panic!("rate consume basket quantity overflow"),
-        }
-    }
-
-    pub fn try_produce(
-        mut self,
-        role: Role,
-        basket: Basket<A, N>,
-    ) -> Result<Self, RateError<Role, A>> {
-        self.roles.insert(role.clone());
-        merge(&mut self.produce, role.clone(), basket)
-            .map_err(|asset| RateError::BasketOverflow { role, asset })?;
-        Ok(self)
-    }
-
-    pub fn produce(self, role: Role, basket: Basket<A, N>) -> Self {
-        match self.try_produce(role, basket) {
-            Ok(rate) => rate,
-            Err(_) => panic!("rate produce basket quantity overflow"),
-        }
-    }
-
-    pub fn try_preserve(
-        mut self,
-        role: Role,
-        basket: Basket<A, N>,
-    ) -> Result<Self, RateError<Role, A>> {
-        self.roles.insert(role.clone());
-        merge(&mut self.preserve, role.clone(), basket)
-            .map_err(|asset| RateError::BasketOverflow { role, asset })?;
-        Ok(self)
-    }
-
-    pub fn preserve(self, role: Role, basket: Basket<A, N>) -> Self {
-        match self.try_preserve(role, basket) {
-            Ok(rate) => rate,
-            Err(_) => panic!("rate preserve basket quantity overflow"),
-        }
     }
 
     pub fn distinct(mut self, left: Role, right: Role) -> Self {
@@ -414,63 +345,63 @@ where
     }
 
     pub fn consume_computed(
-        mut self,
+        self,
         role: Role,
         asset: A,
-        quantity: QuantityExpression<Role, A, N>,
+        quantity: QuantityExpression<Role, A>,
     ) -> Self {
-        self.register_expression_roles(&role, &quantity);
-        self.computed_consume.push(ComputedAmount {
-            role,
-            asset,
-            quantity,
-        });
-        self
+        self.with_computed(Direction::Consume, role, asset, quantity)
     }
 
     pub fn produce_computed(
-        mut self,
+        self,
         role: Role,
         asset: A,
-        quantity: QuantityExpression<Role, A, N>,
+        quantity: QuantityExpression<Role, A>,
     ) -> Self {
-        self.register_expression_roles(&role, &quantity);
-        self.computed_produce.push(ComputedAmount {
-            role,
-            asset,
-            quantity,
-        });
-        self
+        self.with_computed(Direction::Produce, role, asset, quantity)
     }
 
     pub fn preserve_computed(
-        mut self,
+        self,
         role: Role,
         asset: A,
-        quantity: QuantityExpression<Role, A, N>,
+        quantity: QuantityExpression<Role, A>,
     ) -> Self {
-        self.register_expression_roles(&role, &quantity);
-        self.computed_preserve.push(ComputedAmount {
+        self.with_computed(Direction::Preserve, role, asset, quantity)
+    }
+
+    fn with_computed(
+        mut self,
+        direction: Direction,
+        role: Role,
+        asset: A,
+        quantity: QuantityExpression<Role, A>,
+    ) -> Self {
+        self.roles.insert(role.clone());
+        self.roles.extend(quantity.roles().into_iter().cloned());
+        let amount = ComputedAmount {
             role,
             asset,
             quantity,
-        });
+        };
+        match direction {
+            Direction::Consume => self.computed_consume.push(amount),
+            Direction::Produce => self.computed_produce.push(amount),
+            Direction::Preserve => self.computed_preserve.push(amount),
+        }
         self
     }
 
     pub fn condition(
         mut self,
         name: impl Into<String>,
-        left: QuantityExpression<Role, A, N>,
+        left: QuantityExpression<Role, A>,
         comparison: QuantityComparison,
-        right: QuantityExpression<Role, A, N>,
+        right: QuantityExpression<Role, A>,
     ) -> Self {
-        let mut expression_roles = BTreeSet::new();
-        left.collect_roles(&mut expression_roles);
-        right.collect_roles(&mut expression_roles);
-        for role in expression_roles {
-            self.roles.insert(role.clone());
-        }
+        self.roles.extend(left.roles().into_iter().cloned());
+        self.roles.extend(right.roles().into_iter().cloned());
         self.conditions.push(RateCondition {
             name: name.into(),
             left,
@@ -480,41 +411,23 @@ where
         self
     }
 
-    fn register_expression_roles(
-        &mut self,
-        target: &Role,
-        expression: &QuantityExpression<Role, A, N>,
-    ) {
-        self.roles.insert(target.clone());
-        let mut expression_roles = BTreeSet::new();
-        expression.collect_roles(&mut expression_roles);
-        for role in expression_roles {
-            self.roles.insert(role.clone());
-        }
-    }
-
     pub fn roles(&self) -> impl Iterator<Item = &Role> {
         self.roles.iter()
     }
 
     pub(crate) fn has_role(&self, role: &Role) -> bool {
-        for known in &self.roles {
-            if known == role {
-                return true;
-            }
-        }
-        false
+        self.roles.contains(role)
     }
 
-    pub fn consumed(&self, role: &Role) -> Option<&Basket<A, N>> {
+    pub fn consumed(&self, role: &Role) -> Option<&Basket<A>> {
         self.consume.get(role)
     }
 
-    pub fn produced(&self, role: &Role) -> Option<&Basket<A, N>> {
+    pub fn produced(&self, role: &Role) -> Option<&Basket<A>> {
         self.produce.get(role)
     }
 
-    pub fn preserved(&self, role: &Role) -> Option<&Basket<A, N>> {
+    pub fn preserved(&self, role: &Role) -> Option<&Basket<A>> {
         self.preserve.get(role)
     }
 
@@ -522,109 +435,96 @@ where
         self.distinct.iter()
     }
 
-    pub fn computed_consumed(&self) -> &[ComputedAmount<Role, A, N>] {
+    pub fn computed_consumed(&self) -> &[ComputedAmount<Role, A>] {
         &self.computed_consume
     }
 
-    pub fn computed_produced(&self) -> &[ComputedAmount<Role, A, N>] {
+    pub fn computed_produced(&self) -> &[ComputedAmount<Role, A>] {
         &self.computed_produce
     }
 
-    pub fn computed_preserved(&self) -> &[ComputedAmount<Role, A, N>] {
+    pub fn computed_preserved(&self) -> &[ComputedAmount<Role, A>] {
         &self.computed_preserve
     }
 
-    pub fn conditions(&self) -> &[RateCondition<Role, A, N>] {
+    pub fn conditions(&self) -> &[RateCondition<Role, A>] {
         &self.conditions
     }
 
+    fn computed(&self) -> impl Iterator<Item = &ComputedAmount<Role, A>> {
+        self.computed_consume
+            .iter()
+            .chain(&self.computed_produce)
+            .chain(&self.computed_preserve)
+    }
+
+    fn expressions(&self) -> impl Iterator<Item = &QuantityExpression<Role, A>> {
+        self.computed().map(ComputedAmount::quantity).chain(
+            self.conditions
+                .iter()
+                .flat_map(|condition| [&condition.left, &condition.right]),
+        )
+    }
+
+    /// Names of every parameter the rate's laws and conditions read.
     pub fn parameter_names(&self) -> BTreeSet<&str> {
-        let mut parameters = BTreeSet::new();
-        ComputedAmount::collect_parameters(&self.computed_consume, &mut parameters);
-        ComputedAmount::collect_parameters(&self.computed_produce, &mut parameters);
-        ComputedAmount::collect_parameters(&self.computed_preserve, &mut parameters);
-        for condition in &self.conditions {
-            condition.left.collect_parameters(&mut parameters);
-            condition.right.collect_parameters(&mut parameters);
-        }
-        parameters
+        self.expressions()
+            .flat_map(QuantityExpression::parameters)
+            .collect()
     }
 
-    // Keep each metadata-field borrow local while collecting the borrowed keys.
-    pub(crate) fn collect_assets<'a>(&'a self, assets: &mut BTreeSet<&'a A>)
-    where
-        A: Ord,
-    {
-        for role in &self.roles {
-            Self::collect_optional_assets(self.consume.get(role), assets);
-            Self::collect_optional_assets(self.produce.get(role), assets);
-            Self::collect_optional_assets(self.preserve.get(role), assets);
-        }
-        for asset in self.computed_asset_keys() {
-            assets.insert(asset);
-        }
-    }
-
-    fn collect_optional_assets<'a>(
-        maybe_entries: Option<&'a Basket<A, N>>,
-        assets: &mut BTreeSet<&'a A>,
-    ) where
-        A: Ord,
-    {
-        if let Some(entries) = maybe_entries {
-            for (asset, _) in entries.iter() {
-                assets.insert(asset);
-            }
-        }
-    }
-
+    /// Assets named by computed effects and the balances their laws read, in
+    /// declaration order and with repeats.
     pub fn computed_asset_keys(&self) -> Vec<&A> {
         let mut assets = Vec::new();
-        ComputedAmount::collect_assets(&self.computed_consume, &mut assets);
-        ComputedAmount::collect_assets(&self.computed_produce, &mut assets);
-        ComputedAmount::collect_assets(&self.computed_preserve, &mut assets);
+        for amount in self.computed() {
+            assets.push(&amount.asset);
+            assets.extend(amount.quantity.assets());
+        }
         for condition in &self.conditions {
-            condition.left.collect_assets(&mut assets);
-            condition.right.collect_assets(&mut assets);
+            assets.extend(condition.left.assets());
+            assets.extend(condition.right.assets());
         }
         assets
     }
+
+    /// Every asset the rate touches or reads.
+    pub(crate) fn asset_keys(&self) -> BTreeSet<&A>
+    where
+        A: Ord,
+    {
+        [&self.consume, &self.produce, &self.preserve]
+            .into_iter()
+            .flat_map(BTreeMap::values)
+            .flat_map(|basket| basket.iter().map(|(asset, _)| asset))
+            .chain(self.computed_asset_keys())
+            .collect()
+    }
 }
 
-impl<Role, A, N> Default for Rate<Role, A, N>
+impl<Role, A> Default for Rate<Role, A>
 where
     Role: Clone + Ord,
     A: Clone + Eq + Hash,
-    N: QuantityScalar,
 {
     fn default() -> Self {
         Self::new()
     }
 }
 
-fn merge<Role, A, N>(
-    target: &mut BTreeMap<Role, Basket<A, N>>,
-    role: Role,
-    assets: Basket<A, N>,
-) -> Result<(), A>
-where
-    Role: Ord,
-    A: Clone + Eq + Hash,
-    N: QuantityScalar,
-{
-    target.entry(role).or_default().checked_add(&assets)
+#[derive(Debug, Clone, Copy)]
+enum Direction {
+    Consume,
+    Produce,
+    Preserve,
 }
 
-impl<Role, A, N> Serialize for Rate<Role, A, N>
+impl<Role, A> Serialize for Rate<Role, A>
 where
     Role: Serialize + Ord,
     A: Serialize,
-    N: Serialize,
 {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         let mut state = serializer.serialize_struct("Rate", 8)?;
         state.serialize_field("consume", &self.consume.iter().collect::<Vec<_>>())?;
         state.serialize_field("produce", &self.produce.iter().collect::<Vec<_>>())?;
@@ -638,63 +538,55 @@ where
     }
 }
 
-#[derive(Deserialize)]
-#[serde(bound(
-    deserialize = "Role: Deserialize<'de> + Clone + Ord, A: Deserialize<'de> + Clone + Eq + Hash, N: Deserialize<'de> + QuantityScalar"
-))]
-struct RateData<Role, A, N> {
-    consume: Vec<(Role, Basket<A, N>)>,
-    produce: Vec<(Role, Basket<A, N>)>,
-    preserve: Vec<(Role, Basket<A, N>)>,
+#[derive(Deserialize, JsonSchema)]
+#[serde(bound(deserialize = "Role: Deserialize<'de>, A: Deserialize<'de> + Eq + Hash"))]
+struct RateData<Role, A> {
+    consume: Vec<(Role, Basket<A>)>,
+    produce: Vec<(Role, Basket<A>)>,
+    preserve: Vec<(Role, Basket<A>)>,
     distinct: Vec<(Role, Role)>,
     #[serde(default)]
-    computed_consume: Vec<ComputedAmount<Role, A, N>>,
+    computed_consume: Vec<ComputedAmount<Role, A>>,
     #[serde(default)]
-    computed_produce: Vec<ComputedAmount<Role, A, N>>,
+    computed_produce: Vec<ComputedAmount<Role, A>>,
     #[serde(default)]
-    computed_preserve: Vec<ComputedAmount<Role, A, N>>,
+    computed_preserve: Vec<ComputedAmount<Role, A>>,
     #[serde(default)]
-    conditions: Vec<RateCondition<Role, A, N>>,
+    conditions: Vec<RateCondition<Role, A>>,
 }
 
-impl<'de, Role, A, N> Deserialize<'de> for Rate<Role, A, N>
+impl<'de, Role, A> Deserialize<'de> for Rate<Role, A>
 where
     Role: Deserialize<'de> + Clone + Ord,
     A: Deserialize<'de> + Clone + Eq + Hash,
-    N: Deserialize<'de> + QuantityScalar,
 {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let data = RateData::<Role, A, N>::deserialize(deserializer)?;
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let data = RateData::<Role, A>::deserialize(deserializer)?;
         let mut rate = Self::new();
-        for (role, basket) in data.consume {
-            rate = rate
-                .try_consume(role, basket)
-                .map_err(serde::de::Error::custom)?;
-        }
-        for (role, basket) in data.produce {
-            rate = rate
-                .try_produce(role, basket)
-                .map_err(serde::de::Error::custom)?;
-        }
-        for (role, basket) in data.preserve {
-            rate = rate
-                .try_preserve(role, basket)
-                .map_err(serde::de::Error::custom)?;
+        let statics = [
+            (Direction::Consume, data.consume),
+            (Direction::Produce, data.produce),
+            (Direction::Preserve, data.preserve),
+        ];
+        for (direction, baskets) in statics {
+            for (role, basket) in baskets {
+                rate = rate
+                    .with_static(direction, role, basket)
+                    .map_err(serde::de::Error::custom)?;
+            }
         }
         for (left, right) in data.distinct {
             rate = rate.distinct(left, right);
         }
-        for amount in data.computed_consume {
-            rate = rate.consume_computed(amount.role, amount.asset, amount.quantity);
-        }
-        for amount in data.computed_produce {
-            rate = rate.produce_computed(amount.role, amount.asset, amount.quantity);
-        }
-        for amount in data.computed_preserve {
-            rate = rate.preserve_computed(amount.role, amount.asset, amount.quantity);
+        let computed = [
+            (Direction::Consume, data.computed_consume),
+            (Direction::Produce, data.computed_produce),
+            (Direction::Preserve, data.computed_preserve),
+        ];
+        for (direction, amounts) in computed {
+            for amount in amounts {
+                rate = rate.with_computed(direction, amount.role, amount.asset, amount.quantity);
+            }
         }
         for condition in data.conditions {
             rate = rate.condition(
@@ -708,44 +600,78 @@ where
     }
 }
 
-impl<Role, A, N> JsonSchema for Rate<Role, A, N>
-where
-    Role: JsonSchema,
-    A: JsonSchema,
-    N: JsonSchema,
-{
+impl<Role: JsonSchema, A: JsonSchema> JsonSchema for Rate<Role, A> {
     fn schema_name() -> Cow<'static, str> {
-        format!(
-            "Rate_{}_{}_{}",
-            Role::schema_name(),
-            A::schema_name(),
-            N::schema_name()
-        )
-        .into()
+        format!("Rate_{}_{}", Role::schema_name(), A::schema_name()).into()
     }
 
     fn json_schema(generator: &mut SchemaGenerator) -> Schema {
-        #[allow(dead_code)]
-        #[derive(JsonSchema)]
-        struct RateSchema<Role, A, N> {
-            consume: Vec<(Role, Basket<A, N>)>,
-            produce: Vec<(Role, Basket<A, N>)>,
-            preserve: Vec<(Role, Basket<A, N>)>,
-            distinct: Vec<(Role, Role)>,
-            computed_consume: Vec<ComputedAmount<Role, A, N>>,
-            computed_produce: Vec<ComputedAmount<Role, A, N>>,
-            computed_preserve: Vec<ComputedAmount<Role, A, N>>,
-            conditions: Vec<RateCondition<Role, A, N>>,
-        }
-
-        generator.subschema_for::<RateSchema<Role, A, N>>()
+        generator.subschema_for::<RateData<Role, A>>()
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
-pub enum RateError<Role, A> {
+enum RateError<Role, A> {
     #[error("rate basket quantity overflow")]
     BasketOverflow { role: Role, asset: A },
+}
+
+/// The exact value of a linear invariant over some holdings: the sum of each
+/// quantity times its asset's signed weight.
+///
+/// A quantity is below 2^256 and a weight's magnitude at most 2^63, so every
+/// term is below 2^319; fewer than 2^64 terms fit in memory, so every sum is
+/// below 2^383 and measuring never overflows.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
+pub struct Measure {
+    negative: bool,
+    magnitude: U384,
+}
+
+impl Measure {
+    fn from_parts(positive: U384, negative: U384) -> Self {
+        if positive >= negative {
+            Self {
+                negative: false,
+                magnitude: positive - negative,
+            }
+        } else {
+            Self {
+                negative: true,
+                magnitude: negative - positive,
+            }
+        }
+    }
+}
+
+impl fmt::Display for Measure {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.negative {
+            write!(formatter, "-{}", self.magnitude)
+        } else {
+            write!(formatter, "{}", self.magnitude)
+        }
+    }
+}
+
+impl Serialize for Measure {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.collect_str(self)
+    }
+}
+
+impl JsonSchema for Measure {
+    fn schema_name() -> Cow<'static, str> {
+        "Measure".into()
+    }
+
+    fn json_schema(_: &mut SchemaGenerator) -> Schema {
+        json_schema!({
+            "description": "An exact signed integer, as decimal digits.",
+            "type": "string",
+            "pattern": "^-?[0-9]+$"
+        })
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -754,29 +680,7 @@ pub struct LinearInvariant<A> {
     weights: IndexMap<A, i64>,
 }
 
-// A named adapter retains the borrowed asset lifetime through extraction.
-struct WeightEntries<'a, A>(indexmap::map::Iter<'a, A, i64>);
-
-impl<'a, A> Iterator for WeightEntries<'a, A> {
-    type Item = (&'a A, i64);
-
-    fn next(&mut self) -> Option<Self::Item> {
-        match self.0.next() {
-            Some((asset, weight)) => Some((asset, *weight)),
-            None => None,
-        }
-    }
-
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        let remaining = self.0.len();
-        (remaining, Some(remaining))
-    }
-}
-
-impl<A> LinearInvariant<A>
-where
-    A: Eq + Hash,
-{
+impl<A: Eq + Hash> LinearInvariant<A> {
     pub fn new(name: impl Into<String>) -> Self {
         Self {
             name: name.into(),
@@ -795,7 +699,7 @@ where
 
     // Keep zero weights until all input identifiers have been checked. Removing
     // them earlier would let a repeated asset evade duplicate rejection.
-    pub(crate) fn from_serialized_weights(name: String, entries: Vec<(A, i64)>) -> Result<Self, A> {
+    fn from_serialized_weights(name: String, entries: Vec<(A, i64)>) -> Result<Self, A> {
         let mut weights = IndexMap::new();
         for (asset, weight) in entries {
             if weights.contains_key(&asset) {
@@ -803,16 +707,8 @@ where
             }
             weights.insert(asset, weight);
         }
-        let mut invariant = Self {
-            name,
-            weights: IndexMap::new(),
-        };
-        for (asset, weight) in weights {
-            if weight != 0 {
-                invariant.weights.insert(asset, weight);
-            }
-        }
-        Ok(invariant)
+        weights.retain(|_, weight| *weight != 0);
+        Ok(Self { name, weights })
     }
 
     pub fn name(&self) -> &str {
@@ -820,72 +716,47 @@ where
     }
 
     pub fn weights(&self) -> impl Iterator<Item = (&A, i64)> {
-        WeightEntries(self.weights.iter())
+        self.weights.iter().map(|(asset, weight)| (asset, *weight))
     }
 
-    pub fn measure<AccountId, Holder, N>(
-        &self,
-        accounts: &IndexMap<AccountId, Holder>,
-    ) -> Option<N::SignedMeasure>
+    /// The invariant's value over every account.
+    pub fn measure<'a>(&self, accounts: impl IntoIterator<Item = &'a Account<A>>) -> Measure
     where
-        A: Clone,
-        Holder: AsRef<Account<A, N>>,
-        N: QuantityScalar,
+        A: 'a,
     {
-        let mut total = N::SignedMeasure::zero();
-        for holder in accounts.values() {
-            total = self.checked_add_basket_measure(total, holder.as_ref().balances())?;
-        }
-        Some(total)
+        self.measure_baskets(accounts.into_iter().map(Account::balances))
     }
 
-    /// Checks conservation from only the accounts changed by an exchange.
-    ///
-    /// Linear invariants are location-independent sums, so an exchange
-    /// preserves one exactly when the weighted consumed and produced baskets
-    /// have equal measures. This avoids rescanning untouched accounts on the
-    /// successful application path.
-    pub(crate) fn conserves<AccountId, N>(
-        &self,
-        deltas: &[AccountDelta<AccountId, A, N>],
-    ) -> Option<bool>
-    where
-        N: QuantityScalar,
-    {
-        let mut consumed = N::SignedMeasure::zero();
-        let mut produced = N::SignedMeasure::zero();
-        for delta in deltas {
-            consumed = self.checked_add_basket_measure(consumed, delta.consumed())?;
-            produced = self.checked_add_basket_measure(produced, delta.produced())?;
-        }
-        Some(consumed == produced)
+    /// Whether an exchange preserves this invariant, from only the accounts it
+    /// changed: a linear invariant is a location-independent sum, so it holds
+    /// exactly when everything consumed measures the same as everything produced.
+    pub(crate) fn conserves<AccountId>(&self, deltas: &[AccountDelta<AccountId, A>]) -> bool {
+        self.measure_baskets(deltas.iter().map(AccountDelta::consumed))
+            == self.measure_baskets(deltas.iter().map(AccountDelta::produced))
     }
 
-    fn checked_add_basket_measure<N>(
-        &self,
-        mut total: N::SignedMeasure,
-        assets: &Basket<A, N>,
-    ) -> Option<N::SignedMeasure>
+    fn measure_baskets<'a>(&self, baskets: impl IntoIterator<Item = &'a Basket<A>>) -> Measure
     where
-        N: QuantityScalar,
+        A: 'a,
     {
-        for (asset, amount) in assets.iter() {
-            let coefficient = *self.weights.get(asset).unwrap_or(&0);
-            let weighted = amount.as_scalar().checked_weighted(coefficient)?;
-            total = CheckedAdd::checked_add(&total, &weighted)?;
+        let (mut positive, mut negative) = (U384::ZERO, U384::ZERO);
+        for (asset, amount) in baskets.into_iter().flat_map(Basket::iter) {
+            let Some(&weight) = self.weights.get(asset) else {
+                continue;
+            };
+            let term = U384::from(amount.value()) * U384::from(weight.unsigned_abs());
+            if weight > 0 {
+                positive += term;
+            } else {
+                negative += term;
+            }
         }
-        Some(total)
+        Measure::from_parts(positive, negative)
     }
 }
 
-impl<A> Serialize for LinearInvariant<A>
-where
-    A: Serialize,
-{
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
+impl<A: Serialize> Serialize for LinearInvariant<A> {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         let mut state = serializer.serialize_struct("LinearInvariant", 2)?;
         state.serialize_field("name", &self.name)?;
         state.serialize_field("weights", &self.weights.iter().collect::<Vec<_>>())?;
@@ -893,20 +764,14 @@ where
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, JsonSchema)]
 struct InvariantData<A> {
     name: String,
     weights: Vec<(A, i64)>,
 }
 
-impl<'de, A> Deserialize<'de> for LinearInvariant<A>
-where
-    A: Deserialize<'de> + Eq + Hash,
-{
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
+impl<'de, A: Deserialize<'de> + Eq + Hash> Deserialize<'de> for LinearInvariant<A> {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let data = InvariantData::<A>::deserialize(deserializer)?;
         Self::from_serialized_weights(data.name, data.weights).map_err(|_| {
             serde::de::Error::custom("linear invariant contains a duplicate asset weight")
@@ -914,35 +779,27 @@ where
     }
 }
 
-impl<A> JsonSchema for LinearInvariant<A>
-where
-    A: JsonSchema,
-{
+impl<A: JsonSchema> JsonSchema for LinearInvariant<A> {
     fn schema_name() -> Cow<'static, str> {
         format!("LinearInvariant_{}", A::schema_name()).into()
     }
 
     fn json_schema(generator: &mut SchemaGenerator) -> Schema {
-        #[allow(dead_code)]
-        #[derive(JsonSchema)]
-        struct LinearInvariantSchema<A> {
-            name: String,
-            weights: Vec<(A, i64)>,
-        }
-
-        generator.subschema_for::<LinearInvariantSchema<A>>()
+        generator.subschema_for::<InvariantData<A>>()
     }
 }
 
-pub fn basket<A, const LEN: usize>(entries: [(A, u64); LEN]) -> Basket<A>
-where
-    A: Eq + Hash,
-{
+/// A basket from literal `u64` quantities.
+///
+/// # Panics
+///
+/// If an asset appears twice.
+pub fn basket<A: Eq + Hash, const LEN: usize>(entries: [(A, u64); LEN]) -> Basket<A> {
     entries
+        .into_iter()
         .map(|(asset, value)| (asset, Quantity::new(value)))
-        .into()
+        .collect()
 }
-
 #[cfg(test)]
 mod conservation_conformance {
     use super::*;
@@ -981,14 +838,14 @@ mod conservation_conformance {
             Basket::try_from_entries(
                 entries
                     .iter()
-                    .map(|(asset, amount)| (*asset, Quantity::new(amount.parse().unwrap()))),
+                    .map(|(asset, amount)| (*asset, amount.parse::<Quantity>().unwrap())),
             )
             .unwrap()
         }
         let fixtures: Fixtures =
             serde_json::from_str(include_str!("../verification/conformance.json")).unwrap();
         assert_eq!(fixtures.conservation.len(), 464);
-        let mut outcomes = [0; 3];
+        let mut outcomes = [0; 2];
         for case in fixtures.conservation {
             let mut invariant = LinearInvariant::new("fixture");
             for (asset, coefficient) in &case.weights {
@@ -1006,13 +863,10 @@ mod conservation_conformance {
                     )
                 })
                 .collect();
+            // Measures are exact, so every case decides.
             let actual = invariant.conserves(&deltas);
-            assert_eq!(actual, case.conserved, "{case:?}");
-            outcomes[match actual {
-                None => 0,
-                Some(false) => 1,
-                Some(true) => 2,
-            }] += 1;
+            assert_eq!(Some(actual), case.conserved, "{case:?}");
+            outcomes[usize::from(actual)] += 1;
         }
         assert!(outcomes.into_iter().all(|count| count > 0));
     }
@@ -1022,33 +876,30 @@ mod conservation_conformance {
         let fixtures: Fixtures =
             serde_json::from_str(include_str!("../verification/conformance.json")).unwrap();
         assert_eq!(fixtures.measurements.len(), 463);
-        let mut outcomes = [0; 2];
         for case in fixtures.measurements {
             let mut invariant = LinearInvariant::new("fixture");
             for (asset, coefficient) in &case.weights {
                 invariant = invariant.weight(*asset, coefficient.parse().unwrap());
             }
-            let accounts: IndexMap<_, _> = case
-                .accounts
-                .iter()
-                .map(|(id, entries)| {
-                    let balances: Basket<u64> =
-                        Basket::try_from_entries(entries.iter().map(|(asset, amount)| {
-                            (*asset, Quantity::new(amount.parse().unwrap()))
-                        }))
-                        .unwrap();
-                    (*id, std::sync::Arc::new(Account::new(balances)))
-                })
-                .collect();
+            let accounts: IndexMap<_, _> =
+                case.accounts
+                    .iter()
+                    .map(|(id, entries)| {
+                        let balances: Basket<u64> =
+                            Basket::try_from_entries(entries.iter().map(|(asset, amount)| {
+                                (*asset, amount.parse::<Quantity>().unwrap())
+                            }))
+                            .unwrap();
+                        (*id, std::sync::Arc::new(Account::new(balances)))
+                    })
+                    .collect();
             let before = accounts.clone();
             let actual = invariant
-                .measure::<_, _, u64>(&accounts)
-                .map(|value| value.to_string());
-            assert_eq!(actual, case.measured, "{case:?}");
+                .measure(accounts.values().map(AsRef::as_ref))
+                .to_string();
+            assert_eq!(Some(actual), case.measured, "{case:?}");
             assert_eq!(accounts, before);
-            outcomes[usize::from(actual.is_some())] += 1;
         }
-        assert!(outcomes.into_iter().all(|count| count > 0));
     }
 }
 

@@ -218,7 +218,7 @@ fn actor_glyph(actor: Actor) -> SceneGlyphView {
 fn actor_status(world: &World, actor: Actor) -> Option<String> {
     let account = AccountId::Actor(actor);
     if world.account(&AccountId::World).is_some() {
-        let read = |asset| world.balance(&account, &asset).get();
+        let read = |asset| world.balance(&account, &asset).to_u64();
         return Some(match actor {
             Actor::Generator => format!(
                 "{} capacity · {} building",
@@ -239,17 +239,21 @@ fn actor_status(world: &World, actor: Actor) -> Option<String> {
             _ => format!("{} stored energy", read(Asset::Energy)),
         });
     }
-    if world.balance(&account, &Asset::SatisfiedNeed(actor)).get() > 0 {
+    if world
+        .balance(&account, &Asset::SatisfiedNeed(actor))
+        .to_u64()
+        > 0
+    {
         Some("need satisfied".into())
-    } else if world.balance(&account, &Asset::Informed(actor)).get() > 0 {
+    } else if world.balance(&account, &Asset::Informed(actor)).to_u64() > 0 {
         Some("shortage informed".into())
     } else if world
         .balance(&account, &Asset::SettledObligation(actor))
-        .get()
+        .to_u64()
         > 0
     {
         Some("obligation settled".into())
-    } else if world.balance(&account, &Asset::LpShare).get() > 0 {
+    } else if world.balance(&account, &Asset::LpShare).to_u64() > 0 {
         Some("liquidity provider".into())
     } else {
         None
@@ -420,7 +424,7 @@ fn unmet_needs(world: &World) -> u64 {
         .map(|actor| {
             world
                 .balance(&AccountId::Actor(actor), &Asset::MissedNeed(actor))
-                .get()
+                .to_u64()
         })
         .sum()
 }
@@ -431,7 +435,7 @@ fn defaults(world: &World) -> u64 {
         .map(|actor| {
             world
                 .balance(&AccountId::Actor(actor), &Asset::DefaultedObligation(actor))
-                .get()
+                .to_u64()
         })
         .sum()
 }
@@ -446,7 +450,7 @@ fn satisfied_needs(world: &World) -> u64 {
         .map(|actor| {
             world
                 .balance(&AccountId::Actor(actor), &Asset::SatisfiedNeed(actor))
-                .get()
+                .to_u64()
         })
         .sum()
 }
@@ -457,7 +461,7 @@ fn total_utility(world: &World) -> u64 {
         .map(|actor| {
             world
                 .balance(&AccountId::Actor(actor), &Asset::Utility)
-                .get()
+                .to_u64()
         })
         .sum()
 }
@@ -467,7 +471,7 @@ fn attach_contribution_leaderboards(
     trace: &axionomy::Trace<RateId, Role, AccountId>,
     document: &mut ViewDocument,
 ) -> Result<(), ServiceError> {
-    let mut world = initial.fork();
+    let mut world = initial.clone();
     let mut contributions = BTreeMap::<Actor, i128>::new();
     document.initial.leaderboards = vec![contribution_board(&contributions)];
     for (index, exchange) in trace.exchanges().iter().enumerate() {

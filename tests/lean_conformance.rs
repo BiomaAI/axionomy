@@ -36,8 +36,7 @@ struct RateMergeCase {
 #[test]
 fn rate_builders_match_lean() {
     fn build(entries: &[(u64, String)]) -> Basket<u64> {
-        Basket::try_from_entries(entries.iter().map(|(a, q)| (*a, Quantity::new(number(q)))))
-            .unwrap()
+        Basket::try_from_entries(entries.iter().map(|(a, q)| (*a, number(q)))).unwrap()
     }
     fn entries(assets: &Basket<u64>) -> Vec<(u64, String)> {
         assets.iter().map(|(a, q)| (*a, q.to_string())).collect()
@@ -53,21 +52,18 @@ fn rate_builders_match_lean() {
                 .preserve(*role, build(assets));
         }
         for kind in 0..3 {
-            let updated = match kind {
-                0 => original.clone().try_consume(case.role, build(&case.assets)),
-                1 => original.clone().try_produce(case.role, build(&case.assets)),
-                _ => original
-                    .clone()
-                    .try_preserve(case.role, build(&case.assets)),
-            };
-            match (updated, &case.merged, case.overflow) {
-                (
-                    Err(axionomy::RateError::BasketOverflow { role, asset }),
-                    None,
-                    Some(expected),
-                ) => {
-                    assert_eq!((role, asset), (case.role, expected), "{case:?}");
+            // Merging past the quantity limit is a builder panic, like integer overflow.
+            let updated = std::panic::catch_unwind(|| {
+                let rate = original.clone();
+                let assets = build(&case.assets);
+                match kind {
+                    0 => rate.consume(case.role, assets),
+                    1 => rate.produce(case.role, assets),
+                    _ => rate.preserve(case.role, assets),
                 }
+            });
+            match (updated, &case.merged, case.overflow) {
+                (Err(_), None, Some(_)) => {}
                 (Ok(updated), Some(expected), None) => {
                     assert_eq!(updated.roles().copied().collect::<Vec<_>>(), case.roles);
                     for field in 0..3 {
@@ -93,7 +89,10 @@ fn rate_builders_match_lean() {
                         );
                     }
                 }
-                (actual, _, _) => panic!("rate disagrees with Lean: {case:?}: {actual:?}"),
+                (actual, _, _) => panic!(
+                    "rate disagrees with Lean: {case:?}: overflowed={}",
+                    actual.is_err()
+                ),
             }
         }
     }
@@ -116,12 +115,8 @@ struct BasketOpsCase {
 #[test]
 fn basket_operations_match_lean() {
     fn build(entries: &[(u64, String)]) -> Basket<u64> {
-        Basket::try_from_entries(
-            entries
-                .iter()
-                .map(|(asset, value)| (*asset, Quantity::new(number(value)))),
-        )
-        .unwrap()
+        Basket::try_from_entries(entries.iter().map(|(asset, value)| (*asset, number(value))))
+            .unwrap()
     }
     fn entries(basket: &Basket<u64>) -> Vec<(u64, String)> {
         basket
@@ -144,7 +139,7 @@ fn basket_operations_match_lean() {
         );
         assert_eq!(entries(&updated), case.added, "{case:?}");
         match (
-            original.checked_scale(&Quantity::new(number(&case.units))),
+            original.checked_scale(number(&case.units)),
             &case.scaled,
             case.scale_overflow,
         ) {
@@ -172,12 +167,8 @@ struct PreparationCase {
 #[test]
 fn exchange_preparation_matches_lean() {
     fn fixture_basket(entries: &[(u64, String)]) -> Basket<u64> {
-        Basket::try_from_entries(
-            entries
-                .iter()
-                .map(|(asset, value)| (*asset, Quantity::new(number(value)))),
-        )
-        .unwrap()
+        Basket::try_from_entries(entries.iter().map(|(asset, value)| (*asset, number(value))))
+            .unwrap()
     }
     fn entries(basket: &Basket<u64>) -> Vec<(u64, String)> {
         basket
@@ -204,7 +195,7 @@ fn exchange_preparation_matches_lean() {
             .rate(0, rate)
             .build()
             .unwrap();
-        let original = world.fork();
+        let original = world.clone();
         let action = Exchange::new(0, Quantity::new(1)).bind(0, 0).bind(1, 1);
         let accepted = case.overflow.is_none() && case.shortfall.is_none();
         let assessment = world.assess(&action);
@@ -242,7 +233,7 @@ fn exchange_preparation_matches_lean() {
             "{case:?}"
         );
         assert_eq!(
-            world.balance(&0, &9).get(),
+            world.balance(&0, &9).to_u64(),
             if accepted { 2 } else { 1 },
             "{case:?}"
         );
@@ -279,12 +270,8 @@ struct AccountCase {
 #[test]
 fn account_updates_match_lean() {
     fn basket(entries: &[(u64, String)]) -> Basket<u64> {
-        Basket::try_from_entries(
-            entries
-                .iter()
-                .map(|(asset, value)| (*asset, Quantity::new(number(value)))),
-        )
-        .unwrap()
+        Basket::try_from_entries(entries.iter().map(|(asset, value)| (*asset, number(value))))
+            .unwrap()
     }
     fn entries(basket: &Basket<u64>) -> Vec<(u64, String)> {
         basket
@@ -398,20 +385,20 @@ fn fixtures() -> Fixtures {
     fixtures
 }
 
-fn number(text: &str) -> u64 {
+fn number(text: &str) -> Quantity {
     text.parse().unwrap()
 }
 
 #[test]
 fn checked_quantities_match_lean() {
     for case in fixtures().scalars {
-        let left = Quantity::new(number(&case.left));
-        let right = Quantity::new(number(&case.right));
+        let left = number(&case.left);
+        let right = number(&case.right);
         for (actual, expected) in [
-            (left.checked_add(&right), &case.add),
-            (left.checked_sub(&right), &case.sub),
-            (left.checked_mul(&right), &case.mul),
-            (left.checked_div(&right), &case.div),
+            (left.checked_add(right), &case.add),
+            (left.checked_sub(right), &case.sub),
+            (left.checked_mul(right), &case.mul),
+            (left.checked_div(right), &case.div),
         ] {
             assert_eq!(
                 actual.map(|q| q.to_string()).as_ref(),
@@ -430,7 +417,7 @@ fn basket_construction_matches_lean() {
         let entries = case
             .entries
             .iter()
-            .map(|(asset, amount)| (*asset, Quantity::new(number(amount))))
+            .map(|(asset, amount)| (*asset, number(amount)))
             .collect::<Vec<_>>();
         let actual = Basket::try_from_entries(entries.clone());
         assert_eq!(
@@ -468,27 +455,27 @@ fn static_exchange_assessment_commit_and_receipt_match_lean() {
         let rate = Rate::new()
             .consume(
                 Role::Source,
-                basket([(Asset::Token, number(&case.consumed))]),
+                Basket::from([(Asset::Token, number(&case.consumed))]),
             )
             .produce(
                 Role::Source,
-                basket([(Asset::Token, number(&case.produced))]),
+                Basket::from([(Asset::Token, number(&case.produced))]),
             )
             .preserve(
                 Role::Source,
-                basket([(Asset::Token, number(&case.preserved))]),
+                Basket::from([(Asset::Token, number(&case.preserved))]),
             );
         let mut builder = EconomyBuilder::new()
             .account(
                 AccountId::Source,
-                Account::from(basket([(Asset::Token, number(&case.before))])),
+                Account::from(Basket::from([(Asset::Token, number(&case.before))])),
             )
             .rate(RateId::Change, rate);
         if case.conserve {
             builder = builder.invariant(LinearInvariant::new("tokens").weight(Asset::Token, 1));
         }
         let mut world = builder.build().unwrap();
-        let action = Exchange::new(RateId::Change, Quantity::new(number(&case.units)))
+        let action = Exchange::new(RateId::Change, number(&case.units))
             .bind(Role::Source, AccountId::Source);
         let initial = world.state_key();
         let assessment = world.assess(&action);
@@ -501,22 +488,26 @@ fn static_exchange_assessment_commit_and_receipt_match_lean() {
         let outcome = world.apply(action);
         assert_eq!(outcome.is_ok(), case.accepted, "{case:?}");
         assert_eq!(
-            world.balance(&AccountId::Source, &Asset::Token).get(),
+            world.balance(&AccountId::Source, &Asset::Token),
             number(&case.after),
             "{case:?}"
         );
         if let Ok(receipt) = outcome {
             let delta = &receipt.deltas()[0];
             assert_eq!(
-                delta.consumed().quantity(&Asset::Token).get(),
-                number(&case.consumed) * number(&case.units)
+                delta.consumed().quantity(&Asset::Token),
+                number(&case.consumed)
+                    .checked_mul(number(&case.units))
+                    .unwrap()
             );
             assert_eq!(
-                delta.produced().quantity(&Asset::Token).get(),
-                number(&case.produced) * number(&case.units)
+                delta.produced().quantity(&Asset::Token),
+                number(&case.produced)
+                    .checked_mul(number(&case.units))
+                    .unwrap()
             );
             assert_eq!(
-                delta.preserved().quantity(&Asset::Token).get(),
+                delta.preserved().quantity(&Asset::Token),
                 number(&case.preserved)
             );
         } else {
@@ -545,7 +536,7 @@ fn computed_effects_use_the_same_pre_exchange_snapshot_as_lean() {
         let mut evaluator = EconomyBuilder::new()
             .account(
                 AccountId::Source,
-                Account::from(basket([(Asset::Token, number(&case.balance))])),
+                Account::from(Basket::from([(Asset::Token, number(&case.balance))])),
             )
             .account(AccountId::Sink, Account::default())
             .rate(
@@ -554,15 +545,15 @@ fn computed_effects_use_the_same_pre_exchange_snapshot_as_lean() {
             )
             .build()
             .unwrap();
-        let action = Exchange::new(RateId::Change, Quantity::new(number(&case.units)))
+        let action = Exchange::new(RateId::Change, number(&case.units))
             .bind(Role::Source, AccountId::Source)
             .bind(Role::Sink, AccountId::Sink)
-            .parameter("denominator", Quantity::new(number(&case.denominator)));
+            .parameter("denominator", number(&case.denominator));
         let evaluated = evaluator.apply(action.clone());
         assert_eq!(evaluated.is_ok(), case.evaluated.is_some(), "{case:?}");
         if let Some(expected) = &case.evaluated {
             assert_eq!(
-                evaluator.balance(&AccountId::Sink, &Asset::Token).get(),
+                evaluator.balance(&AccountId::Sink, &Asset::Token),
                 number(expected),
                 "{case:?}"
             );
@@ -581,7 +572,7 @@ fn computed_effects_use_the_same_pre_exchange_snapshot_as_lean() {
         let mut world = EconomyBuilder::new()
             .account(
                 AccountId::Source,
-                Account::from(basket([(Asset::Token, number(&case.balance))])),
+                Account::from(Basket::from([(Asset::Token, number(&case.balance))])),
             )
             .account(AccountId::Sink, Account::default())
             .rate(RateId::Change, rate)
@@ -589,7 +580,7 @@ fn computed_effects_use_the_same_pre_exchange_snapshot_as_lean() {
             .build()
             .unwrap();
         let initial = world.state_key();
-        let action = action.parameter("minimum", Quantity::new(number(&case.minimum)));
+        let action = action.parameter("minimum", number(&case.minimum));
         assert_eq!(
             world.assess(&action).is_applicable(),
             case.accepted,
@@ -597,12 +588,12 @@ fn computed_effects_use_the_same_pre_exchange_snapshot_as_lean() {
         );
         assert_eq!(world.apply(action).is_ok(), case.accepted, "{case:?}");
         assert_eq!(
-            world.balance(&AccountId::Source, &Asset::Token).get(),
+            world.balance(&AccountId::Source, &Asset::Token),
             number(&case.source_after),
             "{case:?}"
         );
         assert_eq!(
-            world.balance(&AccountId::Sink, &Asset::Token).get(),
+            world.balance(&AccountId::Sink, &Asset::Token),
             number(&case.sink_after),
             "{case:?}"
         );

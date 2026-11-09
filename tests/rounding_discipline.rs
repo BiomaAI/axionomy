@@ -132,7 +132,7 @@ fn exchange(rate: RateId, units: u64) -> Exchange<RateId, Role, AccountId> {
 }
 
 fn balance(world: &World, account: AccountId, asset: Asset) -> u64 {
-    world.balance(&account, &asset).get()
+    world.balance(&account, &asset).to_u64()
 }
 
 proptest! {
@@ -206,12 +206,12 @@ fn split_with_explicit_remainder_conserves_the_total() {
     ] {
         let first = Quantity::new(total)
             .checked_mul_div(
-                &Quantity::new(weight),
-                &Quantity::new(total_weight),
+                Quantity::new(weight),
+                Quantity::new(total_weight),
                 Rounding::Floor,
             )
             .unwrap();
-        let second = Quantity::new(total).checked_sub(&first).unwrap();
-        assert_eq!(first.checked_add(&second), Some(Quantity::new(total)));
+        let second = Quantity::new(total).checked_sub(first).unwrap();
+        assert_eq!(first.checked_add(second), Some(Quantity::new(total)));
     }
 }

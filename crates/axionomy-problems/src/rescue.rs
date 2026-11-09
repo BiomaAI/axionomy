@@ -519,7 +519,7 @@ pub fn run_policy(world: World, policy: Policy) -> Rollout {
         spent_energy: result
             .world()
             .balance(&AccountId::Agent, &Asset::SpentEnergy)
-            .get(),
+            .to_u64(),
         trace: result
             .trace()
             .cloned()
@@ -535,7 +535,7 @@ pub fn run_policy(world: World, policy: Policy) -> Rollout {
 /// Runs a policy after one explicit Nature instantiation and returns a trace
 /// that begins at the unresolved model.
 pub fn run_sampled_policy(model: &World, sample: &Action, policy: Policy) -> Option<Rollout> {
-    let mut branch = model.fork();
+    let mut branch = model.clone();
     branch.apply(sample.clone()).ok()?;
     let rollout = run_policy(branch, policy);
     let mut trace = Trace::new();
@@ -678,7 +678,7 @@ fn encoded_scenarios(model: &World) -> Vec<WeightedExchange<Action>> {
                 exchange,
                 model
                     .balance(&AccountId::Nature, &Asset::ScenarioWeight(truth, seed))
-                    .get(),
+                    .to_u64(),
             )),
             _ => None,
         })
@@ -867,7 +867,7 @@ mod tests {
     #[test]
     fn hidden_nature_and_actor_roles_cannot_be_swapped() {
         let world = scenario(Location::South, 1);
-        let mut awaiting = world.fork();
+        let mut awaiting = world.clone();
         awaiting
             .apply(action(RateId::BeginObserve))
             .expect("public observation intent applies");

@@ -1,5 +1,5 @@
 use crate::{DecimalPrecision, MeasureScalar, UnitAsset, UnitBindingError};
-use axionomy::{AssetAmount, Quantity, QuantityScalar};
+use axionomy::{AssetAmount, Quantity};
 use thiserror::Error;
 
 /// Typed authoring handle for one schema-defined decimal asset.
@@ -29,15 +29,13 @@ impl<Id> DecimalAsset<Id> {
     /// Lowers an exact number of whole display units into canonical atoms.
     ///
     /// Values that are not an exact multiple of one atom are rejected rather
-    /// than rounded. The atom count must fit `u64` before it is converted
-    /// through [`QuantityScalar::from_u64`] into the selected backend.
-    pub fn encode<N>(
+    /// than rounded.
+    pub fn encode(
         &self,
         units: MeasureScalar,
-    ) -> Result<AssetAmount<UnitAsset<Id>, N>, UnitBindingError>
+    ) -> Result<AssetAmount<UnitAsset<Id>>, UnitBindingError>
     where
         Id: Clone,
-        N: QuantityScalar,
     {
         let numerator = i128::from(*units.numer());
         let denominator = i128::from(*units.denom());
@@ -47,25 +45,24 @@ impl<Id> DecimalAsset<Id> {
         if numerator != 0 && (numerator < 0) != (denominator < 0) {
             return Err(UnitBindingError::NegativeValue);
         }
-        // |numerator| <= 2^63 and atoms_per_unit <= 10^18, so the product fits i128.
+        // |numerator| <= 2^63 and atoms_per_unit <= 10^18, so the product fits u128.
         let scaled = numerator.unsigned_abs() * u128::from(self.precision.atoms_per_unit());
         let divisor = denominator.unsigned_abs();
         if scaled % divisor != 0 {
             return Err(UnitBindingError::InexactAtomicConversion);
         }
-        let atoms = u64::try_from(scaled / divisor).map_err(|_| UnitBindingError::NumericRange)?;
-        self.atoms(atoms)
+        Ok(self.asset.amount(Quantity::from(scaled / divisor)))
     }
 
     /// Parses a plain decimal such as `12.50` into canonical atoms.
     ///
     /// The grammar is `digits [ "." digits ]`: no sign, exponent, separators,
     /// or surrounding whitespace. Fractional digits beyond the precision are
-    /// accepted only when they are zero, so the result is always exact.
-    pub fn parse<N>(&self, text: &str) -> Result<AssetAmount<UnitAsset<Id>, N>, DecimalParseError>
+    /// accepted only when they are zero, so the result is always exact. Any
+    /// amount below `2²⁵⁶` atoms is accepted.
+    pub fn parse(&self, text: &str) -> Result<AssetAmount<UnitAsset<Id>>, DecimalParseError>
     where
         Id: Clone,
-        N: QuantityScalar,
     {
         let (whole, fraction) = match text.split_once('.') {
             Some((whole, fraction)) => (whole, Some(fraction)),
@@ -82,27 +79,16 @@ impl<Id> DecimalAsset<Id> {
         if excess.bytes().any(|byte| byte != b'0') {
             return Err(UnitBindingError::InexactAtomicConversion.into());
         }
-        let mut atoms: u128 = 0;
-        let padding = decimals - kept.len();
-        let fraction_digits = kept.bytes().chain(std::iter::repeat_n(b'0', padding));
-        for byte in whole.bytes().chain(fraction_digits) {
-            atoms = atoms
-                .checked_mul(10)
-                .and_then(|value| value.checked_add(u128::from(byte - b'0')))
-                .ok_or(UnitBindingError::NumericRange)?;
-        }
-        let atoms = u64::try_from(atoms).map_err(|_| UnitBindingError::NumericRange)?;
-        Ok(self.atoms(atoms)?)
+        let atoms = format!("{whole}{kept:0<decimals$}")
+            .parse::<Quantity>()
+            .map_err(|_| UnitBindingError::NumericRange)?;
+        Ok(self.asset.amount(atoms))
     }
 
     /// Renders a quantity of this asset with exactly `decimals` fraction digits.
     ///
-    /// The output round-trips through [`Self::parse`]. It relies on the
-    /// backend's `Display` producing base-10 digits, as `u64` does.
-    pub fn format<N>(&self, quantity: &Quantity<N>) -> String
-    where
-        N: QuantityScalar,
-    {
+    /// The output round-trips through [`Self::parse`].
+    pub fn format(&self, quantity: Quantity) -> String {
         let decimals = usize::from(self.precision.decimals());
         let digits = quantity.to_string();
         if decimals == 0 {
@@ -111,17 +97,6 @@ impl<Id> DecimalAsset<Id> {
         let padded = format!("{digits:0>width$}", width = decimals + 1);
         let (whole, fraction) = padded.split_at(padded.len() - decimals);
         format!("{whole}.{fraction}")
-    }
-
-    fn atoms<N>(&self, atoms: u64) -> Result<AssetAmount<UnitAsset<Id>, N>, UnitBindingError>
-    where
-        Id: Clone,
-        N: QuantityScalar,
-    {
-        let scalar = N::from_u64(atoms).ok_or(UnitBindingError::NumericRange)?;
-        let quantity =
-            Quantity::try_from_scalar(scalar).map_err(|_| UnitBindingError::NegativeValue)?;
-        Ok(self.asset.amount(quantity))
     }
 }
 

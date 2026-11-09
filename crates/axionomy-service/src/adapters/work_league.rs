@@ -158,7 +158,7 @@ pub(super) fn build(
 }
 
 fn balance(world: &World, agent: AgentId, asset: Asset) -> u64 {
-    world.balance(&AccountId::Agent(agent), &asset).get()
+    world.balance(&AccountId::Agent(agent), &asset).to_u64()
 }
 
 #[derive(Clone)]
@@ -761,7 +761,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
 }
 
 fn balance_job(world: &World, job: work_league::JobId, asset: Asset) -> u64 {
-    world.balance(&AccountId::Job(job), &asset).get()
+    world.balance(&AccountId::Job(job), &asset).to_u64()
 }
 
 #[cfg(test)]

@@ -49,6 +49,7 @@ proptest = "1.12.0"
 rand = { version = "0.10.3", default-features = false, features = ["std"] }
 rand_chacha = "0.10.0"
 reqwest = { version = "0.13.5", default-features = false, features = ["json"] }
+ruint = { version = "1.21.1", default-features = false, features = ["std"] }
 rmcp = { version = "3.9.0", default-features = false, features = [
     "macros",
     "request-state",
@@ -89,7 +90,7 @@ rust-version.workspace = true
 
 [dependencies]
 indexmap.workspace = true
-num-traits.workspace = true
+ruint.workspace = true
 schemars.workspace = true
 serde = { workspace = true, features = ["rc"] }
 thiserror.workspace = true

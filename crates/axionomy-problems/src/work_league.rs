@@ -722,7 +722,7 @@ pub fn run(league: &League, seed: u64) -> Result<MatchOutcome, String> {
     if league.initial.account(&AccountId::World).is_some() {
         return continuous::run(league, seed);
     }
-    let mut world = league.initial.fork();
+    let mut world = league.initial.clone();
     let mut trace = Trace::new();
     let mut available = league.jobs.iter().map(|spec| spec.id).collect::<Vec<_>>();
     let mut turn = 0usize;
@@ -782,7 +782,10 @@ pub fn run(league: &League, seed: u64) -> Result<MatchOutcome, String> {
         }
 
         if policy == Policy::Steward
-            && world.balance(&AccountId::Agent(agent), &Asset::Waste).get() > 0
+            && world
+                .balance(&AccountId::Agent(agent), &Asset::Waste)
+                .to_u64()
+                > 0
         {
             move_to(&mut world, &mut trace, agent, Location::Recycler)?;
             apply(
@@ -1009,7 +1012,7 @@ mod tests {
         let outcome = run(&league, 17).unwrap();
         assert!(outcome.trace().exchanges().len() >= 50);
         assert!(outcome.final_world().matches(league.goal()));
-        let mut replay = league.initial().fork();
+        let mut replay = league.initial().clone();
         replay.replay(outcome.trace()).unwrap();
         assert_eq!(
             replay.state_fingerprint(),
@@ -1022,7 +1025,7 @@ mod tests {
                     outcome
                         .final_world()
                         .balance(&AccountId::Agent(*agent), &Asset::Completed)
-                        .get()
+                        .to_u64()
                         > 0
                 })
                 .count()

@@ -701,7 +701,7 @@ pub fn plan(
         move |_, random| {
             (!compatible.is_empty()).then(|| {
                 let index = random.ticket(compatible.len() as u64) as usize;
-                compatible[index].fork()
+                compatible[index].clone()
             })
         },
         decision_source(),
@@ -733,7 +733,7 @@ pub fn plan_with_progress(
         move |_, random| {
             (!compatible.is_empty()).then(|| {
                 let index = random.ticket(compatible.len() as u64) as usize;
-                compatible[index].fork()
+                compatible[index].clone()
             })
         },
         decision_source(),
@@ -759,7 +759,7 @@ pub fn initial_beliefs(model: &World) -> Vec<World> {
     scenarios(model)
         .into_iter()
         .flat_map(|weighted| {
-            let mut world = model.fork();
+            let mut world = model.clone();
             world
                 .apply(weighted.exchange().clone())
                 .expect("scenario support contains applicable exchanges");
@@ -782,7 +782,7 @@ pub fn update_beliefs(
     beliefs
         .iter()
         .filter_map(|belief| {
-            let mut next = belief.fork();
+            let mut next = belief.clone();
             next.apply(public_action.clone()).ok()?;
             if let Some(response) = required_nature_response(&next) {
                 next.apply(response).ok()?;
@@ -809,7 +809,7 @@ pub fn instantiate(model: &World, sample_index: usize) -> Option<World> {
     let exchange = choose_by_ticket(&support, systematic_ticket(sample_index, total))
         .ok()?
         .clone();
-    let mut world = model.fork();
+    let mut world = model.clone();
     world.apply(exchange).ok()?;
     Some(world)
 }
@@ -838,7 +838,7 @@ pub fn run_planned_with_progress(
     let scenario = choose_by_ticket(&support, systematic_ticket(sample_index, total))
         .map_err(|error| format!("{error:?}"))?
         .clone();
-    let mut actual = model.fork();
+    let mut actual = model.clone();
     actual
         .apply(scenario.clone())
         .map_err(|error| format!("{error:?}"))?;
@@ -894,7 +894,7 @@ pub fn run_planned_with_progress(
             succeeded: replayed.matches(&goal()),
             elapsed_time: replayed
                 .balance(&AccountId::Mission, &Asset::ElapsedTime)
-                .get(),
+                .to_u64(),
             used_medical_kit: !replayed
                 .balance(&AccountId::Agent(AgentId::Medic), &Asset::UsedMedicalKit)
                 .is_zero(),
@@ -934,7 +934,7 @@ fn run_policy_with_scenario(model: &World, policy: Policy, scenario: Action) -> 
         elapsed_time: result
             .world()
             .balance(&AccountId::Mission, &Asset::ElapsedTime)
-            .get(),
+            .to_u64(),
         used_medical_kit: !result
             .world()
             .balance(&AccountId::Agent(AgentId::Medic), &Asset::UsedMedicalKit)
@@ -1294,7 +1294,7 @@ fn scenarios(model: &World) -> Vec<WeightedExchange<Action>> {
                         &AccountId::Nature,
                         &Asset::ScenarioWeight(truth, seed, hazard),
                     )
-                    .get(),
+                    .to_u64(),
             )),
             _ => None,
         })
@@ -1482,7 +1482,7 @@ mod tests {
             result.rollout.trace().exchanges(),
             run().rollout.trace().exchanges()
         );
-        let mut actual = model.fork();
+        let mut actual = model.clone();
         let mut beliefs = initial_beliefs(&model);
         for (index, exchange) in result.rollout.trace().exchanges().iter().enumerate() {
             actual.apply(exchange.clone()).unwrap();
@@ -1493,7 +1493,7 @@ mod tests {
             {
                 assert_eq!(step.decision.action(), exchange);
                 assert_eq!(step.prior_worlds, beliefs.len());
-                let mut observed = actual.fork();
+                let mut observed = actual.clone();
                 if let Some(response) = required_nature_response(&observed) {
                     observed.apply(response).unwrap();
                 }
@@ -1612,19 +1612,21 @@ mod tests {
             rollout.trace(),
             |world| {
                 [
-                    world.balance(&AccountId::Mission, &Asset::Planning).get(),
+                    world
+                        .balance(&AccountId::Mission, &Asset::Planning)
+                        .to_u64(),
                     world
                         .balance(&AccountId::Mission, &Asset::AwaitingEncounter)
-                        .get(),
-                    world.balance(&AccountId::Success, &Asset::Solved).get(),
+                        .to_u64(),
+                    world.balance(&AccountId::Success, &Asset::Solved).to_u64(),
                 ]
             },
             |world| {
                 [
-                    world.balance(&AccountId::Success, &Asset::Solved).get(),
+                    world.balance(&AccountId::Success, &Asset::Solved).to_u64(),
                     world
                         .balance(&AccountId::Mission, &Asset::ElapsedTime)
-                        .get(),
+                        .to_u64(),
                 ]
             },
             |world| world.matches(&goal()),

@@ -96,7 +96,7 @@ def scenario (expression : Evaluation.Expr Nat Nat Nat → Json) (label : String
 def blank : Rule := ⟨[], [], [], [], [], [], [], [], []⟩
 
 def fixtures (expression : Evaluation.Expr Nat Nat Nat → Json) : Array Json := Id.run do
-  let limit := Quantity.u64Max
+  let limit := Quantity.limit
   let proposal : Proposal := ⟨7, [(0, 1), (1, 0)], 1, []⟩
   let before := [(9, [(7, 11)]), (1, [(0, 5)]), (0, [(0, 1)])]
   let transfer : Rule := { blank with consume := [(0, [(0, 2)])], produce := [(1, [(0, 2)])] }
@@ -163,7 +163,7 @@ def replayScenario (expression : Evaluation.Expr Nat Nat Nat → Json) (label : 
     ("trace", toJson (actions.map proposalJson)), ("expected", expected)]
 
 def executionFixtures (expression : Evaluation.Expr Nat Nat Nat → Json) : Array Json := Id.run do
-  let limit := Quantity.u64Max
+  let limit := Quantity.limit
   let transfer : Rule := { blank with consume := [(0, [(0, 1)])], produce := [(1, [(0, 1)])] }
   let mut cases := #[]
   for source in [0, 1, 3, 5, limit] do

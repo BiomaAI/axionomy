@@ -56,7 +56,7 @@ fn main() {
         );
     }
 
-    let mut loaded = model.fork();
+    let mut loaded = model.clone();
     let load = logistics::candidates(&loaded)
         .into_iter()
         .find(|exchange| exchange.rate() == &RateId::Load(OrderId::A))

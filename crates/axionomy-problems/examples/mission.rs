@@ -40,7 +40,7 @@ fn main() {
     );
     debug!(children = ?decision.children(), "root action statistics");
 
-    let mut observed_actual = actual.fork();
+    let mut observed_actual = actual.clone();
     observed_actual
         .apply(decision.action().clone())
         .expect("public scan intent applies");
@@ -127,23 +127,23 @@ fn main() {
                         &mission::AccountId::Agent(mission::AgentId::Medic),
                         &mission::Asset::Intel(mission::Location::North),
                     )
-                    .get(),
+                    .to_u64(),
                 world
                     .balance(
                         &mission::AccountId::Agent(mission::AgentId::Medic),
                         &mission::Asset::Intel(mission::Location::South),
                     )
-                    .get(),
+                    .to_u64(),
             ]
         },
         |world| {
             [
                 world
                     .balance(&mission::AccountId::Success, &mission::Asset::Solved)
-                    .get(),
+                    .to_u64(),
                 world
                     .balance(&mission::AccountId::Mission, &mission::Asset::ElapsedTime)
-                    .get(),
+                    .to_u64(),
             ]
         },
         |world| world.matches(&mission::goal()),

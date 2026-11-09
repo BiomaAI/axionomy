@@ -147,7 +147,7 @@ pub enum RateId {
 pub type World = Economy<AccountId, Asset, RateId, Role>;
 pub type Action = Exchange<RateId, Role, AccountId>;
 pub type Solution = SearchSolution<RateId, Role, AccountId>;
-pub type ParetoResult = ParetoSearchResult<RateId, Role, AccountId, u64, ObjectiveKey, u64>;
+pub type ParetoResult = ParetoSearchResult<RateId, Role, AccountId, ObjectiveKey, u64>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ObjectiveKey {
@@ -232,7 +232,7 @@ pub fn completion_time(world: &World, job: Job) -> u64 {
     if execution::enabled(world) {
         return world
             .balance(&AccountId::Job(job), &Asset::CompletionTime)
-            .get();
+            .to_u64();
     }
     let operations = match job {
         Job::One => [Operation::OneC, Operation::OneB],

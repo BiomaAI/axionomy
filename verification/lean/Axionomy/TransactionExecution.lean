@@ -62,7 +62,7 @@ def AnalysisConserves (invariants : List (Invariant A)) (analysis : Analysis Acc
   match analysis.assessment with
   | .applicable _ deltas => ∀ invariant ∈ invariants,
       Conservation.conserves (fun asset amount => some (Conservation.contribution invariant.weights asset amount))
-        Conservation.checkedAdd 0 deltas = some true
+        Conservation.exactAdd 0 deltas = some true
   | _ => True
 
 omit [DecidableEq RateId] [DecidableEq Role] in
@@ -71,12 +71,12 @@ theorem checks_conserve (accounts : List (AccountId × Balances A)) (prepared : 
     (checked : checkInvariants (RateId := RateId) (Role := Role) accounts prepared invariants = .ok ()) :
     ∀ invariant ∈ invariants,
       Conservation.conserves (fun asset amount => some (Conservation.contribution invariant.weights asset amount))
-        Conservation.checkedAdd 0 prepared.deltas = some true := by
+        Conservation.exactAdd 0 prepared.deltas = some true := by
   induction invariants with
   | nil => simp
   | cons invariant rest ih =>
     let weighted := fun asset amount => some (Conservation.contribution invariant.weights asset amount)
-    cases conserved : Conservation.conserves weighted Conservation.checkedAdd 0 prepared.deltas with
+    cases conserved : Conservation.conserves weighted Conservation.exactAdd 0 prepared.deltas with
     | none => simp [checkInvariants, weighted, conserved] at checked
     | some result =>
       cases result with
@@ -89,17 +89,17 @@ theorem checks_conserve (accounts : List (AccountId × Balances A)) (prepared : 
         · exact ih following candidate later
       | false =>
         unfold checkInvariants at checked
-        change (match Conservation.conserves weighted Conservation.checkedAdd 0 prepared.deltas with
+        change (match Conservation.conserves weighted Conservation.exactAdd 0 prepared.deltas with
           | none => _ | some true => _ | some false => _) = _ at checked
         rw [conserved] at checked
-        cases before : Conservation.accumulate weighted Conservation.checkedAdd 0 (accounts.flatMap Prod.snd) <;>
+        cases before : Conservation.accumulate weighted Conservation.exactAdd 0 (accounts.flatMap Prod.snd) <;>
           dsimp only [weighted] at before <;>
           simp only [before, checked_bind_error, reduceCtorEq, checked_bind_ok] at checked
         case some value =>
           cases installed : install accounts prepared.accounts <;>
             simp only [installed, require, checked_bind_error, reduceCtorEq, checked_bind_ok] at checked
           case some updated =>
-            cases after : Conservation.accumulate weighted Conservation.checkedAdd 0 (updated.flatMap Prod.snd) <;>
+            cases after : Conservation.accumulate weighted Conservation.exactAdd 0 (updated.flatMap Prod.snd) <;>
               dsimp only [weighted] at after <;>
               simp only [after, reduceCtorEq] at checked
 
@@ -212,7 +212,7 @@ theorem apply_conserves (model : Model AccountId A RateId Role)
           have checked := conserved invariant member
           exact Conservation.conservation_sound _ _ id (Conservation.contribution invariant.weights)
             (fun _ _ _ equal => (Option.some.inj equal).symm)
-            (fun _ _ _ added => (Conservation.checkedAdd_exact _ _ _).mp added |>.1) 0 deltas checked
+            (fun _ _ _ added => (Conservation.exactAdd_exact _ _ _).mp added) 0 deltas checked
 
 theorem accepted_conserves {model after : Model AccountId A RateId Role}
     {actions : List (Proposal AccountId RateId Role)} {receipts : List (Receipt AccountId A RateId Role)}

@@ -322,7 +322,7 @@ pub(super) fn build(source: World, days: u8, scale: u64, seed: u64) -> World {
                     role,
                     Asset::ReferencePrice,
                     Q::divide(
-                        Q::multiply(q(role, Asset::ReferencePrice), Q::constant(3)) + closing_price,
+                        q(role, Asset::ReferencePrice) * Q::constant(3) + closing_price,
                         Q::constant(4),
                         Rounding::Floor,
                     ),
@@ -550,7 +550,7 @@ pub(super) fn build(source: World, days: u8, scale: u64, seed: u64) -> World {
 }
 
 pub fn period(world: &World) -> u64 {
-    world.balance(&AccountId::World, &Asset::Day).get()
+    world.balance(&AccountId::World, &Asset::Day).to_u64()
 }
 pub fn market_goal(world: &World) -> Goal<AccountId, Asset> {
     if world.account(&AccountId::World).is_some() {
@@ -560,7 +560,7 @@ pub fn market_goal(world: &World) -> Goal<AccountId, Asset> {
     }
 }
 fn balance(world: &World, actor: Actor, asset: Asset) -> u64 {
-    world.balance(&AccountId::Actor(actor), &asset).get()
+    world.balance(&AccountId::Actor(actor), &asset).to_u64()
 }
 fn basic(rate: RateId, role: Role, actor: Actor) -> Action {
     Exchange::new(rate, Quantity::new(1)).bind(role, AccountId::Actor(actor))
@@ -634,7 +634,7 @@ pub fn seasonal_decision(world: &World, actor: Actor) -> Option<Action> {
     if balance(world, actor, Asset::Trading) == 0 || balance(world, actor, Asset::Decisions) == 0 {
         return None;
     }
-    let scale = world.balance(&AccountId::World, &Asset::Scale).get();
+    let scale = world.balance(&AccountId::World, &Asset::Scale).to_u64();
     let price = pool_state(world).price_milli;
     let reference = balance(world, actor, Asset::ReferencePrice);
     let energy = balance(world, actor, Asset::Energy);
@@ -779,7 +779,7 @@ pub(super) fn run(
     scenario: Scenario,
     included: &BTreeSet<Actor>,
 ) -> Trace<RateId, Role, AccountId> {
-    let mut world = initial.fork();
+    let mut world = initial.clone();
     let mut trace = Trace::new();
     if scenario == Scenario::ThinLiquidity {
         let shares = pool_state(&world).issued_lp_shares / 2;
@@ -789,7 +789,7 @@ pub(super) fn run(
             remove_liquidity(Actor::Founder, shares),
         );
     }
-    let days = world.balance(&AccountId::World, &Asset::Days).get() as u8;
+    let days = world.balance(&AccountId::World, &Asset::Days).to_u64() as u8;
     for day in 0..days {
         let due = commission();
         if world.is_applicable(&due) {
@@ -831,7 +831,7 @@ mod tests {
             }
         }
         let day = period(world) as u8;
-        let last = u64::from(day + 1) == world.balance(&AccountId::World, &Asset::Days).get();
+        let last = u64::from(day + 1) == world.balance(&AccountId::World, &Asset::Days).to_u64();
         world.apply(event(day, last)).unwrap();
     }
     fn rejects_without_change(world: &mut World, action: Action) {
@@ -935,7 +935,7 @@ mod tests {
             1_200
                 * world
                     .balance(&AccountId::World, &Asset::CurrentSunlight)
-                    .get()
+                    .to_u64()
                 / 100
         );
         rejects_without_change(&mut world, commission());
@@ -974,7 +974,7 @@ mod tests {
                 initial_showcase_with_seed(seed),
                 initial_stress_with_seed(seed),
             ] {
-                let days = initial.balance(&AccountId::World, &Asset::Days).get();
+                let days = initial.balance(&AccountId::World, &Asset::Days).to_u64();
                 for scenario in [
                     Scenario::MarketDay,
                     Scenario::NoWhale,

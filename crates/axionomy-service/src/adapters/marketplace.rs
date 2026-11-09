@@ -204,7 +204,7 @@ fn objectives(world: &World) -> Vec<ObjectiveView> {
                 .map(|order| {
                     world
                         .balance(&AccountId::Order(order), &marketplace::Asset::OnTime)
-                        .get()
+                        .to_u64()
                 })
                 .sum::<u64>()
                 .to_string(),
@@ -418,7 +418,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                                 &AccountId::Carrier(*carrier),
                                 &marketplace::Asset::DeliveredBy(*order),
                             )
-                            .get()
+                            .to_u64()
                             > 0
                     })
                     .unwrap_or(CarrierId::A),
@@ -523,7 +523,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                             &AccountId::Order(*order),
                             &marketplace::Asset::InShipment(*order),
                         )
-                        .get()
+                        .to_u64()
                         > 0
                     {
                         "in transit; funds held"
@@ -532,7 +532,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                             &AccountId::Order(*order),
                             &marketplace::Asset::Contract(*order),
                         )
-                        .get()
+                        .to_u64()
                         > 0
                     {
                         "reserved; awaiting dispatch"
@@ -694,7 +694,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                     .map(|order| {
                         world
                             .balance(&AccountId::Order(*order), &marketplace::Asset::Money)
-                            .get()
+                            .to_u64()
                     })
                     .sum::<u64>(),
                 None,
@@ -710,7 +710,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                                 &AccountId::Order(*order),
                                 &marketplace::Asset::InShipment(*order),
                             )
-                            .get()
+                            .to_u64()
                     })
                     .sum::<u64>(),
                 None,
@@ -723,7 +723,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                     .map(|order| {
                         world
                             .balance(&AccountId::Order(*order), &marketplace::Asset::OnTime)
-                            .get()
+                            .to_u64()
                     })
                     .sum::<u64>(),
                 None,
@@ -736,7 +736,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                     .map(|order| {
                         world
                             .balance(&AccountId::Order(*order), &marketplace::Asset::Late)
-                            .get()
+                            .to_u64()
                     })
                     .sum::<u64>(),
                 None,

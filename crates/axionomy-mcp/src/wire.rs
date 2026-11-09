@@ -11,12 +11,12 @@ pub struct ProblemCatalogResponse {
     pub problems: Vec<axionomy_service::ProblemDescriptor>,
 }
 
-pub type WireEconomy = Economy<String, String, String, String, u64>;
-pub type WireExchange = Exchange<String, String, String, u64>;
-pub type WireGoal = Goal<String, String, u64>;
-pub type WireTrace = Trace<String, String, String, u64>;
-pub type WireReceipt = Receipt<String, String, String, String, u64>;
-pub type WireAssessment = ExchangeAssessment<String, String, String, String, u64>;
+pub type WireEconomy = Economy<String, String, String, String>;
+pub type WireExchange = Exchange<String, String, String>;
+pub type WireGoal = Goal<String, String>;
+pub type WireTrace = Trace<String, String, String>;
+pub type WireReceipt = Receipt<String, String, String, String>;
+pub type WireAssessment = ExchangeAssessment<String, String, String, String>;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct EconomyHandle {
@@ -105,5 +105,5 @@ pub struct SearchResponse {
     pub outcome: SearchOutcome,
     pub progress: axionomy_search::GraphSearchProgress,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub solution: Option<axionomy_search::SearchSolution<String, String, String, u64>>,
+    pub solution: Option<axionomy_search::SearchSolution<String, String, String>>,
 }

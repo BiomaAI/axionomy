@@ -157,7 +157,7 @@ pub enum RateId {
 pub type World = Economy<AccountId, Asset, RateId, Role>;
 pub type Action = Exchange<RateId, Role, AccountId>;
 pub type Assessment = ExchangeAssessment<AccountId, Asset, RateId, Role>;
-pub type ParetoResult = ParetoSearchResult<RateId, Role, AccountId, u64, ObjectiveKey, u64>;
+pub type ParetoResult = ParetoSearchResult<RateId, Role, AccountId, ObjectiveKey, u64>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ObjectiveKey {
@@ -606,7 +606,7 @@ pub fn objectives(world: &World) -> ObjectiveVector<ObjectiveKey, u64> {
 }
 
 pub fn utility(world: &World, account: AccountId) -> u64 {
-    world.balance(&account, &Asset::Utility).get()
+    world.balance(&account, &Asset::Utility).to_u64()
 }
 
 pub fn settlement(order: OrderId, buyer: BuyerId, seller: SellerId, carrier: CarrierId) -> Action {
@@ -711,7 +711,7 @@ fn clear_branch(
         best.gross_value = candidate.1;
     }
     for exchange in exact_matches(&world) {
-        let mut next = world.fork();
+        let mut next = world.clone();
         if next.apply(exchange.clone()).is_err() {
             continue;
         }
@@ -742,7 +742,7 @@ fn gross_value(world: &World) -> u64 {
                 .map(|value| {
                     world
                         .balance(&AccountId::Order(order), &Asset::SettledValue(value))
-                        .get()
+                        .to_u64()
                         * value
                 })
                 .sum::<u64>()
@@ -1064,7 +1064,7 @@ mod tests {
                     Asset::ShippingCapacity => capacity_weight,
                     _ => 1_000,
                 };
-                weight * quantity.get()
+                weight * quantity.to_u64()
             })
             .sum()
     }

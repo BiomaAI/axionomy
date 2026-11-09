@@ -3,7 +3,7 @@ use crate::{
     MeasureDefinition, MeasureDefinitionError, MeasureKind, MeasureScalar, MeasuredAsset,
     StableMeasureKind, UnitAsset,
 };
-use axionomy::{Economy, EconomyBuilder, Goal, ModelBuildError, QuantityScalar};
+use axionomy::{Economy, EconomyBuilder, Goal, ModelBuildError};
 use indexmap::IndexMap;
 use serde::ser::SerializeSeq;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -12,11 +12,10 @@ use thiserror::Error;
 use uom::Conversion;
 use uom::si::{Dimension, Quantity as UomQuantity, Units};
 
-pub type UnitEconomy<AccountId, Id, RateId, Role, N = u64> =
-    Economy<AccountId, UnitAsset<Id>, RateId, Role, N>;
+pub type UnitEconomy<AccountId, Id, RateId, Role> = Economy<AccountId, UnitAsset<Id>, RateId, Role>;
 
-pub type UnitModelBuildResult<AccountId, Id, RateId, Role, N = u64> =
-    Result<UnitEconomy<AccountId, Id, RateId, Role, N>, UnitModelBuildError<AccountId, RateId, Id>>;
+pub type UnitModelBuildResult<AccountId, Id, RateId, Role> =
+    Result<UnitEconomy<AccountId, Id, RateId, Role>, UnitModelBuildError<AccountId, RateId, Id>>;
 
 /// Declares the one canonical atomic definition for every logical asset ID.
 #[derive(Debug, Clone)]
@@ -177,9 +176,9 @@ where
         }
     }
 
-    pub fn validate_goal<AccountId, N>(
+    pub fn validate_goal<AccountId>(
         &self,
-        goal: &Goal<AccountId, UnitAsset<Id>, N>,
+        goal: &Goal<AccountId, UnitAsset<Id>>,
     ) -> Result<(), AssetSchemaError<Id>>
     where
         AccountId: Ord,
@@ -191,16 +190,15 @@ where
         Ok(())
     }
 
-    pub fn validate_economy<AccountId, RateId, Role, N>(
+    pub fn validate_economy<AccountId, RateId, Role>(
         &self,
-        economy: &Economy<AccountId, UnitAsset<Id>, RateId, Role, N>,
+        economy: &Economy<AccountId, UnitAsset<Id>, RateId, Role>,
     ) -> Result<(), AssetSchemaError<Id>>
     where
         AccountId: Clone + Eq + Hash + Ord,
         Id: Ord,
         RateId: Clone + Eq + Hash + Ord,
         Role: Clone + Ord,
-        N: QuantityScalar,
     {
         for asset in economy.asset_keys() {
             self.validate_asset(asset)?;
@@ -209,29 +207,27 @@ where
     }
 
     /// Reconstructs and validates the complete schema embedded in an economy.
-    pub fn from_economy<AccountId, RateId, Role, N>(
-        economy: &Economy<AccountId, UnitAsset<Id>, RateId, Role, N>,
+    pub fn from_economy<AccountId, RateId, Role>(
+        economy: &Economy<AccountId, UnitAsset<Id>, RateId, Role>,
     ) -> Result<Self, AssetSchemaError<Id>>
     where
         AccountId: Clone + Eq + Hash + Ord,
         Id: Ord,
         RateId: Clone + Eq + Hash + Ord,
         Role: Clone + Ord,
-        N: QuantityScalar,
     {
         Self::from_assets(economy.asset_keys())
     }
 
-    pub fn build_economy<AccountId, RateId, Role, N>(
+    pub fn build_economy<AccountId, RateId, Role>(
         &self,
-        builder: EconomyBuilder<AccountId, UnitAsset<Id>, RateId, Role, N>,
-    ) -> UnitModelBuildResult<AccountId, Id, RateId, Role, N>
+        builder: EconomyBuilder<AccountId, UnitAsset<Id>, RateId, Role>,
+    ) -> UnitModelBuildResult<AccountId, Id, RateId, Role>
     where
         AccountId: Clone + Eq + Hash + Ord,
         Id: Ord,
         RateId: Clone + Eq + Hash + Ord,
         Role: Clone + Ord,
-        N: QuantityScalar,
     {
         let economy = builder.build()?;
         self.validate_economy(&economy)?;

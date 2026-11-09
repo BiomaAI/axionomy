@@ -108,7 +108,7 @@ where
         Parameters(request): Parameters<ApplyRequest>,
     ) -> Result<Json<ApplyResponse>, String> {
         let source_economy_id = request.economy_id;
-        let mut economy = self.require_economy(&source_economy_id).await?.fork();
+        let mut economy = WireEconomy::clone(&*self.require_economy(&source_economy_id).await?);
         let receipt = economy
             .apply(request.exchange)
             .map_err(|error| error.to_string())?;
@@ -134,7 +134,7 @@ where
     ) -> Result<Json<ReplayResponse>, String> {
         let source_economy_id = request.economy_id;
         let economy = self.require_economy(&source_economy_id).await?;
-        let mut next = economy.fork();
+        let mut next = WireEconomy::clone(&economy);
         let receipts = next
             .replay(&request.trace)
             .map_err(|error| error.to_string())?;
@@ -471,7 +471,6 @@ fn complete_search(
         String,
         String,
         String,
-        u64,
         impl FnMut(&WireEconomy) -> Vec<crate::wire::WireExchange>,
     >,
 ) -> Result<CallToolResult, TaskExit> {

@@ -6,4 +6,4 @@
 allowing HTTP/SSE and browser Worker adapters to expose real incremental state
 without giving transport callbacks any authority over the economy.
 
-Quantities cross the JSON boundary as exact decimal strings, so JavaScript cannot silently round a `u64` or larger numeric backend. User-defined ontology identifiers are represented by a stable presentation key, a label, and optional encoded JSON; integrations control those representations through `ViewOntology` instead of exposing generic Rust types to TypeScript.
+Quantities cross the JSON boundary as exact decimal strings, so JavaScript cannot silently round a 256-bit quantity. User-defined ontology identifiers are represented by a stable presentation key, a label, and optional encoded JSON; integrations control those representations through `ViewOntology` instead of exposing generic Rust types to TypeScript.

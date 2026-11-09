@@ -2,21 +2,16 @@ import Axionomy.Account
 
 namespace Axionomy.Conservation
 
-def i128Min : Int := -(2^127)
-def i128Max : Int := 2^127 - 1
+/-- Invariant measures are exact integers: a quantity times a signed weight,
+summed over any holdings, never overflows. -/
+def exactAdd (left right : Int) : Option Int := some (left + right)
 
-def checkedAdd (left right : Int) : Option Int :=
-  let result := left + right
-  if i128Min ≤ result ∧ result ≤ i128Max then some result else none
+theorem exactAdd_exact (left right result : Int) :
+    exactAdd left right = some result ↔ result = left + right := by
+  simp [exactAdd, eq_comm]
 
-theorem checkedAdd_exact (left right result : Int) :
-    checkedAdd left right = some result ↔
-      result = left + right ∧ i128Min ≤ result ∧ result ≤ i128Max := by
-  by_cases h : i128Min ≤ left + right ∧ left + right ≤ i128Max <;>
-    simp [checkedAdd, h, eq_comm] <;> omega
-
--- Accumulation order is observable: an intermediate overflow rejects even if
--- later negative contributions would bring the mathematical total back in range.
+-- The accumulation is generic in how terms combine; the kernel instantiates it
+-- with exact addition.
 def accumulate {A Q M : Type} (weighted : A → Q → Option M)
     (add : M → M → Option M) (total : M) : List (A × Q) → Option M
   | [] => some total

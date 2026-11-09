@@ -280,7 +280,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         })
         .collect();
     let bill_paid = borrower(Asset::BillPaid) > 0;
-    let pending_installments = world.balance(&AccountId::Customer, &Asset::Cash).get();
+    let pending_installments = world.balance(&AccountId::Customer, &Asset::Cash).to_u64();
     let seized = balance(world, AccountId::Keeper, Asset::Collateral);
     let borrower_classes: &[&str] = if unsafe_loan {
         &["danger"]

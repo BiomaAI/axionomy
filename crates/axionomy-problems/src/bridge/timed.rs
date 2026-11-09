@@ -6,10 +6,10 @@ pub fn enabled(world: &World) -> bool {
     world.rate(&RateId::Advance { to: 1 }).is_some()
 }
 pub fn now(world: &World) -> u64 {
-    world.balance(&AccountId::Bridge, &Asset::Now).get()
+    world.balance(&AccountId::Bridge, &Asset::Now).to_u64()
 }
 fn balance(world: &World, agent: AgentId, asset: Asset) -> u64 {
-    world.balance(&AccountId::Agent(agent), &asset).get()
+    world.balance(&AccountId::Agent(agent), &asset).to_u64()
 }
 fn clock() -> Q<Role, Asset> {
     Q::balance(Role::Bridge, Asset::Now)
@@ -283,12 +283,12 @@ pub(super) fn build(source: World) -> World {
                 .consume_computed(
                     Role::Bridge,
                     Asset::TimeRemaining,
-                    Q::subtract(Q::constant(u64::from(to)), clock()),
+                    Q::constant(u64::from(to)) - clock(),
                 )
                 .produce_computed(
                     Role::Bridge,
                     Asset::Now,
-                    Q::subtract(Q::constant(u64::from(to)), clock()),
+                    Q::constant(u64::from(to)) - clock(),
                 ),
         );
     }
@@ -408,11 +408,18 @@ pub fn run(initial: &World, policy: Policy) -> Option<Proposal> {
         if chosen.is_none() {
             match policy {
                 Policy::Priority(first) => {
-                    let is_first = world.balance(&AccountId::Bridge, &Asset::FirstTurn).get() > 0;
+                    let is_first = world
+                        .balance(&AccountId::Bridge, &Asset::FirstTurn)
+                        .to_u64()
+                        > 0;
                     chosen = choices.iter().find(|a| matches!(a.rate(), RateId::ClaimFirst { agent } if *agent == first && is_first) || matches!(a.rate(), RateId::ClaimSecond { .. } | RateId::YieldToWaiting { .. })).cloned();
                 }
                 Policy::Auction => {
-                    if world.balance(&AccountId::Bridge, &Asset::FirstTurn).get() > 0 {
+                    if world
+                        .balance(&AccountId::Bridge, &Asset::FirstTurn)
+                        .to_u64()
+                        > 0
+                    {
                         if [AgentId::A, AgentId::B]
                             .iter()
                             .all(|agent| now(&world) >= balance(&world, *agent, Asset::Arrival))
@@ -521,7 +528,7 @@ mod tests {
         assert_eq!(
             expired
                 .balance(&AccountId::Bridge, &Asset::CapacityFree)
-                .get(),
+                .to_u64(),
             1
         );
         world

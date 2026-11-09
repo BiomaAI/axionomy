@@ -203,7 +203,7 @@ pub fn patient(id: u8) -> bool {
     id.is_multiple_of(2)
 }
 pub fn value(world: &World, account: AccountId, asset: Asset) -> u64 {
-    world.balance(&account, &asset).get()
+    world.balance(&account, &asset).to_u64()
 }
 pub fn now(world: &World) -> u64 {
     value(world, AccountId::World, Asset::Time)
@@ -529,10 +529,7 @@ pub fn initial(stress: bool, seed: u64) -> World {
                     let colocated = LOCATIONS
                         .into_iter()
                         .map(|site| {
-                            Q::multiply(
-                                q(Role::Scout, Asset::At(site)),
-                                q(Role::Medic, Asset::At(site)),
-                            )
+                            q(Role::Scout, Asset::At(site)) * q(Role::Medic, Asset::At(site))
                         })
                         .reduce(|a, b| a + b)
                         .unwrap();
@@ -804,10 +801,7 @@ pub fn initial(stress: bool, seed: u64) -> World {
                     .produce(Role::World, basket([(Asset::ClinicalCount, 1)]))
                     .condition(
                         "match living unresolved patient",
-                        Q::multiply(
-                            unresolved,
-                            Q::minimum(q(Role::Objective, Asset::Health), Q::constant(1)),
-                        ),
+                        unresolved * Q::minimum(q(Role::Objective, Asset::Health), Q::constant(1)),
                         C::Equal,
                         Q::constant(u64::from(active)),
                     );
@@ -1219,7 +1213,7 @@ pub fn response(world: &World) -> Option<Action> {
 /// Policies read only their own account, public team positions and objectives
 /// explicitly learned by that agent. They cannot inspect Nature or teammate intel.
 pub fn decision(view: &AgentView<'_>, agent: Agent, policy: Policy) -> Option<Action> {
-    let val = |account, asset| view.balance(&account, &asset).map_or(0, Quantity::get);
+    let val = |account, asset| view.balance(&account, &asset).map_or(0, Quantity::to_u64);
     let own = AccountId::Agent(agent);
     let world = AccountId::World;
     if val(own, Asset::Ready) == 0 || val(world, Asset::Permit(agent)) == 0 {

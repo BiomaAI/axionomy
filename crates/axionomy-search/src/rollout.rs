@@ -1,6 +1,6 @@
 //! Core-validated speculative trajectory execution.
 
-use axionomy::{ApplyError, Economy, Exchange, Goal, QuantityScalar, Receipt, Trace};
+use axionomy::{ApplyError, Economy, Exchange, Goal, Receipt, Trace};
 use std::hash::Hash;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -51,58 +51,46 @@ pub enum RolloutDecision<Action> {
 }
 
 #[derive(Debug, Clone)]
-pub enum RolloutTermination<RateId, Role, AccountId, A, N = u64>
-where
-    N: QuantityScalar,
-{
+pub enum RolloutTermination<RateId, Role, AccountId, A> {
     Terminal,
     Stopped(RolloutStop),
     HorizonReached,
-    Rejected(ApplyError<RateId, Role, AccountId, A, N>),
+    Rejected(ApplyError<RateId, Role, AccountId, A>),
 }
 
-impl<RateId, Role, AccountId, A, N> RolloutTermination<RateId, Role, AccountId, A, N>
-where
-    N: QuantityScalar,
-{
+impl<RateId, Role, AccountId, A> RolloutTermination<RateId, Role, AccountId, A> {
     pub const fn is_terminal(&self) -> bool {
         matches!(self, Self::Terminal)
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct RolloutResult<AccountId, A, RateId, Role, N = u64>
-where
-    N: QuantityScalar,
-{
-    world: Economy<AccountId, A, RateId, Role, N>,
-    trace: Option<Trace<RateId, Role, AccountId, N>>,
-    receipts: Vec<Receipt<RateId, Role, AccountId, A, N>>,
-    termination: RolloutTermination<RateId, Role, AccountId, A, N>,
+pub struct RolloutResult<AccountId, A, RateId, Role> {
+    world: Economy<AccountId, A, RateId, Role>,
+    trace: Option<Trace<RateId, Role, AccountId>>,
+    receipts: Vec<Receipt<RateId, Role, AccountId, A>>,
+    termination: RolloutTermination<RateId, Role, AccountId, A>,
     steps: usize,
 }
 
-impl<AccountId, A, RateId, Role, N> RolloutResult<AccountId, A, RateId, Role, N>
-where
-    N: QuantityScalar,
-{
-    pub const fn world(&self) -> &Economy<AccountId, A, RateId, Role, N> {
+impl<AccountId, A, RateId, Role> RolloutResult<AccountId, A, RateId, Role> {
+    pub const fn world(&self) -> &Economy<AccountId, A, RateId, Role> {
         &self.world
     }
 
-    pub fn into_world(self) -> Economy<AccountId, A, RateId, Role, N> {
+    pub fn into_world(self) -> Economy<AccountId, A, RateId, Role> {
         self.world
     }
 
-    pub const fn trace(&self) -> Option<&Trace<RateId, Role, AccountId, N>> {
+    pub const fn trace(&self) -> Option<&Trace<RateId, Role, AccountId>> {
         self.trace.as_ref()
     }
 
-    pub fn receipts(&self) -> &[Receipt<RateId, Role, AccountId, A, N>] {
+    pub fn receipts(&self) -> &[Receipt<RateId, Role, AccountId, A>] {
         &self.receipts
     }
 
-    pub const fn termination(&self) -> &RolloutTermination<RateId, Role, AccountId, A, N> {
+    pub const fn termination(&self) -> &RolloutTermination<RateId, Role, AccountId, A> {
         &self.termination
     }
 
@@ -115,25 +103,24 @@ where
 ///
 /// `is_terminal` must derive terminal truth from encoded economic state.
 /// `max_steps` is an algorithmic cutoff and is reported separately.
-pub fn run<AccountId, A, RateId, Role, N, Controller, Terminal>(
-    initial: &Economy<AccountId, A, RateId, Role, N>,
+pub fn run<AccountId, A, RateId, Role, Controller, Terminal>(
+    initial: &Economy<AccountId, A, RateId, Role>,
     config: RolloutConfig,
     mut controller: Controller,
     is_terminal: Terminal,
-) -> RolloutResult<AccountId, A, RateId, Role, N>
+) -> RolloutResult<AccountId, A, RateId, Role>
 where
     AccountId: Clone + Eq + Hash + Ord,
     A: Clone + Eq + Hash + Ord,
     RateId: Clone + Eq + Hash + Ord,
     Role: Clone + Ord,
-    N: QuantityScalar,
     Controller: FnMut(
-        &Economy<AccountId, A, RateId, Role, N>,
+        &Economy<AccountId, A, RateId, Role>,
         usize,
-    ) -> RolloutDecision<Exchange<RateId, Role, AccountId, N>>,
-    Terminal: Fn(&Economy<AccountId, A, RateId, Role, N>) -> bool,
+    ) -> RolloutDecision<Exchange<RateId, Role, AccountId>>,
+    Terminal: Fn(&Economy<AccountId, A, RateId, Role>) -> bool,
 {
-    let mut world = initial.fork();
+    let mut world = initial.clone();
     let mut trace = matches!(
         config.retention(),
         TraceRetention::Trace | TraceRetention::Full
@@ -195,36 +182,32 @@ where
     )
 }
 
-pub fn run_to_goal<AccountId, A, RateId, Role, N, Controller>(
-    initial: &Economy<AccountId, A, RateId, Role, N>,
-    goal: &Goal<AccountId, A, N>,
+pub fn run_to_goal<AccountId, A, RateId, Role, Controller>(
+    initial: &Economy<AccountId, A, RateId, Role>,
+    goal: &Goal<AccountId, A>,
     config: RolloutConfig,
     controller: Controller,
-) -> RolloutResult<AccountId, A, RateId, Role, N>
+) -> RolloutResult<AccountId, A, RateId, Role>
 where
     AccountId: Clone + Eq + Hash + Ord,
     A: Clone + Eq + Hash + Ord,
     RateId: Clone + Eq + Hash + Ord,
     Role: Clone + Ord,
-    N: QuantityScalar,
     Controller: FnMut(
-        &Economy<AccountId, A, RateId, Role, N>,
+        &Economy<AccountId, A, RateId, Role>,
         usize,
-    ) -> RolloutDecision<Exchange<RateId, Role, AccountId, N>>,
+    ) -> RolloutDecision<Exchange<RateId, Role, AccountId>>,
 {
     run(initial, config, controller, |world| world.matches(goal))
 }
 
-fn result<AccountId, A, RateId, Role, N>(
-    world: Economy<AccountId, A, RateId, Role, N>,
-    trace: Option<Trace<RateId, Role, AccountId, N>>,
-    receipts: Vec<Receipt<RateId, Role, AccountId, A, N>>,
-    termination: RolloutTermination<RateId, Role, AccountId, A, N>,
+fn result<AccountId, A, RateId, Role>(
+    world: Economy<AccountId, A, RateId, Role>,
+    trace: Option<Trace<RateId, Role, AccountId>>,
+    receipts: Vec<Receipt<RateId, Role, AccountId, A>>,
+    termination: RolloutTermination<RateId, Role, AccountId, A>,
     steps: usize,
-) -> RolloutResult<AccountId, A, RateId, Role, N>
-where
-    N: QuantityScalar,
-{
+) -> RolloutResult<AccountId, A, RateId, Role> {
     RolloutResult {
         world,
         trace,

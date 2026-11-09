@@ -1,4 +1,4 @@
-use crate::{Basket, Quantity, QuantityScalar};
+use crate::{Basket, Quantity};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -16,22 +16,19 @@ use std::hash::Hash;
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(bound(
-    serialize = "RateId: Serialize, Role: Serialize + Ord, AccountId: Serialize, N: Serialize",
-    deserialize = "RateId: Deserialize<'de>, Role: Deserialize<'de> + Ord, AccountId: Deserialize<'de>, N: Deserialize<'de> + QuantityScalar"
+    serialize = "RateId: Serialize, Role: Serialize + Ord, AccountId: Serialize",
+    deserialize = "RateId: Deserialize<'de>, Role: Deserialize<'de> + Ord, AccountId: Deserialize<'de>"
 ))]
-pub struct Exchange<RateId, Role, AccountId, N = u64> {
+pub struct Exchange<RateId, Role, AccountId> {
     rate: RateId,
     bindings: BTreeMap<Role, AccountId>,
-    units: Quantity<N>,
+    units: Quantity,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
-    parameters: BTreeMap<String, Quantity<N>>,
+    parameters: BTreeMap<String, Quantity>,
 }
 
-impl<RateId, Role, AccountId, N> Exchange<RateId, Role, AccountId, N>
-where
-    Role: Ord,
-{
-    pub fn new(rate: RateId, units: Quantity<N>) -> Self {
+impl<RateId, Role: Ord, AccountId> Exchange<RateId, Role, AccountId> {
+    pub fn new(rate: RateId, units: Quantity) -> Self {
         Self {
             rate,
             bindings: BTreeMap::new(),
@@ -50,7 +47,7 @@ where
     /// Parameters belong to the exchange proposal and are interpreted only by
     /// the bound rate. A common example is an AMM caller's `minimum_output`
     /// protection. Unknown and missing parameters are rejected by the economy.
-    pub fn parameter(mut self, name: impl Into<String>, value: Quantity<N>) -> Self {
+    pub fn parameter(mut self, name: impl Into<String>, value: Quantity) -> Self {
         self.parameters.insert(name.into(), value);
         self
     }
@@ -63,49 +60,33 @@ where
         &self.bindings
     }
 
-    pub fn units(&self) -> &Quantity<N> {
-        &self.units
+    pub fn units(&self) -> Quantity {
+        self.units
     }
 
-    pub fn parameters(&self) -> &BTreeMap<String, Quantity<N>> {
+    pub fn parameters(&self) -> &BTreeMap<String, Quantity> {
         &self.parameters
     }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(bound(
-    serialize = "AccountId: Serialize, A: Serialize, N: Serialize",
-    deserialize = "AccountId: Deserialize<'de>, A: Deserialize<'de> + Eq + Hash, N: Deserialize<'de> + QuantityScalar"
+    serialize = "AccountId: Serialize, A: Serialize",
+    deserialize = "AccountId: Deserialize<'de>, A: Deserialize<'de> + Eq + Hash"
 ))]
-pub struct AccountDelta<AccountId, A, N = u64> {
+pub struct AccountDelta<AccountId, A> {
     account: AccountId,
-    consumed: Basket<A, N>,
-    produced: Basket<A, N>,
-    preserved: Basket<A, N>,
+    consumed: Basket<A>,
+    produced: Basket<A>,
+    preserved: Basket<A>,
 }
 
-impl<AccountId, A, N> AccountDelta<AccountId, A, N> {
-    pub fn account(&self) -> &AccountId {
-        &self.account
-    }
-
-    pub fn consumed(&self) -> &Basket<A, N> {
-        &self.consumed
-    }
-
-    pub fn produced(&self) -> &Basket<A, N> {
-        &self.produced
-    }
-
-    pub fn preserved(&self) -> &Basket<A, N> {
-        &self.preserved
-    }
-
+impl<AccountId, A> AccountDelta<AccountId, A> {
     pub(crate) fn new(
         account: AccountId,
-        consumed: Basket<A, N>,
-        produced: Basket<A, N>,
-        preserved: Basket<A, N>,
+        consumed: Basket<A>,
+        produced: Basket<A>,
+        preserved: Basket<A>,
     ) -> Self {
         Self {
             account,
@@ -114,93 +95,102 @@ impl<AccountId, A, N> AccountDelta<AccountId, A, N> {
             preserved,
         }
     }
+
+    pub fn account(&self) -> &AccountId {
+        &self.account
+    }
+
+    pub fn consumed(&self) -> &Basket<A> {
+        &self.consumed
+    }
+
+    pub fn produced(&self) -> &Basket<A> {
+        &self.produced
+    }
+
+    pub fn preserved(&self) -> &Basket<A> {
+        &self.preserved
+    }
 }
 
-#[derive(Clone, Serialize, Deserialize, JsonSchema)]
+/// An applied exchange and the balance change it made to every account.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(bound(
-    serialize = "RateId: Serialize, Role: Serialize + Ord, AccountId: Serialize, A: Serialize, N: Serialize",
-    deserialize = "RateId: Deserialize<'de>, Role: Deserialize<'de> + Ord, AccountId: Deserialize<'de>, A: Deserialize<'de> + Eq + Hash, N: Deserialize<'de> + QuantityScalar"
+    serialize = "RateId: Serialize, Role: Serialize + Ord, AccountId: Serialize, A: Serialize",
+    deserialize = "RateId: Deserialize<'de>, Role: Deserialize<'de> + Ord, AccountId: Deserialize<'de>, A: Deserialize<'de> + Eq + Hash"
 ))]
-pub struct Receipt<RateId, Role, AccountId, A, N = u64> {
-    #[serde(rename = "exchange")]
-    proposal: Exchange<RateId, Role, AccountId, N>,
-    deltas: Vec<AccountDelta<AccountId, A, N>>,
+pub struct Receipt<RateId, Role, AccountId, A> {
+    exchange: Exchange<RateId, Role, AccountId>,
+    deltas: Vec<AccountDelta<AccountId, A>>,
 }
 
-impl<RateId, Role, AccountId, A, N> std::fmt::Debug for Receipt<RateId, Role, AccountId, A, N>
-where
-    RateId: std::fmt::Debug,
-    Role: std::fmt::Debug,
-    AccountId: std::fmt::Debug,
-    A: std::fmt::Debug,
-    N: std::fmt::Debug,
-{
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        formatter
-            .debug_struct("Receipt")
-            .field("exchange", &self.proposal)
-            .field("deltas", &self.deltas)
-            .finish()
-    }
-}
-
-impl<RateId, Role, AccountId, A, N> Receipt<RateId, Role, AccountId, A, N> {
-    pub fn exchange(&self) -> &Exchange<RateId, Role, AccountId, N> {
-        &self.proposal
+impl<RateId, Role, AccountId, A> Receipt<RateId, Role, AccountId, A> {
+    pub(crate) fn new(
+        exchange: Exchange<RateId, Role, AccountId>,
+        deltas: Vec<AccountDelta<AccountId, A>>,
+    ) -> Self {
+        Self { exchange, deltas }
     }
 
-    pub fn deltas(&self) -> &[AccountDelta<AccountId, A, N>] {
+    pub fn exchange(&self) -> &Exchange<RateId, Role, AccountId> {
+        &self.exchange
+    }
+
+    pub fn deltas(&self) -> &[AccountDelta<AccountId, A>] {
         &self.deltas
     }
-
-    pub(crate) fn new(
-        proposal: Exchange<RateId, Role, AccountId, N>,
-        deltas: Vec<AccountDelta<AccountId, A, N>>,
-    ) -> Self {
-        Self { proposal, deltas }
-    }
 }
 
+/// An ordered sequence of exchanges that replays from an initial economy.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(bound(
-    serialize = "RateId: Serialize, Role: Serialize + Ord, AccountId: Serialize, N: Serialize",
-    deserialize = "RateId: Deserialize<'de>, Role: Deserialize<'de> + Ord, AccountId: Deserialize<'de>, N: Deserialize<'de> + QuantityScalar"
+    serialize = "RateId: Serialize, Role: Serialize + Ord, AccountId: Serialize",
+    deserialize = "RateId: Deserialize<'de>, Role: Deserialize<'de> + Ord, AccountId: Deserialize<'de>"
 ))]
-pub struct Trace<RateId, Role, AccountId, N = u64> {
-    exchanges: Vec<Exchange<RateId, Role, AccountId, N>>,
+pub struct Trace<RateId, Role, AccountId> {
+    exchanges: Vec<Exchange<RateId, Role, AccountId>>,
 }
 
-impl<RateId, Role, AccountId, N> Trace<RateId, Role, AccountId, N> {
+impl<RateId, Role, AccountId> Trace<RateId, Role, AccountId> {
     pub fn new() -> Self {
         Self {
             exchanges: Vec::new(),
         }
     }
 
-    pub fn push(&mut self, proposal: Exchange<RateId, Role, AccountId, N>) {
-        self.exchanges.push(proposal);
+    pub fn push(&mut self, exchange: Exchange<RateId, Role, AccountId>) {
+        self.exchanges.push(exchange);
     }
 
-    pub fn extend(
-        &mut self,
-        exchanges: impl IntoIterator<Item = Exchange<RateId, Role, AccountId, N>>,
-    ) {
-        for proposal in exchanges {
-            self.exchanges.push(proposal);
-        }
-    }
-
-    pub fn exchanges(&self) -> &[Exchange<RateId, Role, AccountId, N>] {
+    pub fn exchanges(&self) -> &[Exchange<RateId, Role, AccountId>] {
         &self.exchanges
     }
 
-    pub fn into_exchanges(self) -> Vec<Exchange<RateId, Role, AccountId, N>> {
+    pub fn into_exchanges(self) -> Vec<Exchange<RateId, Role, AccountId>> {
         self.exchanges
     }
 }
 
-impl<RateId, Role, AccountId, N> Default for Trace<RateId, Role, AccountId, N> {
+impl<RateId, Role, AccountId> Default for Trace<RateId, Role, AccountId> {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+impl<RateId, Role, AccountId> Extend<Exchange<RateId, Role, AccountId>>
+    for Trace<RateId, Role, AccountId>
+{
+    fn extend<T: IntoIterator<Item = Exchange<RateId, Role, AccountId>>>(&mut self, exchanges: T) {
+        self.exchanges.extend(exchanges);
+    }
+}
+
+impl<RateId, Role, AccountId> FromIterator<Exchange<RateId, Role, AccountId>>
+    for Trace<RateId, Role, AccountId>
+{
+    fn from_iter<T: IntoIterator<Item = Exchange<RateId, Role, AccountId>>>(exchanges: T) -> Self {
+        Self {
+            exchanges: exchanges.into_iter().collect(),
+        }
     }
 }

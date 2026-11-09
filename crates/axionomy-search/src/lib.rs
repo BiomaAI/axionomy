@@ -10,7 +10,7 @@ pub mod rollout;
 pub mod sampling;
 pub mod session;
 
-use axionomy::{Economy, Exchange, Goal, Quantity, QuantityScalar, Trace};
+use axionomy::{Economy, Exchange, Goal, Quantity, Trace};
 use pathfinding::prelude::{astar as pathfinding_astar, dijkstra as pathfinding_dijkstra};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -22,11 +22,11 @@ use crate::session::{AdvanceReport, Continue, SearchObserver, SearchStatus, Work
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(bound(
-    serialize = "RateId: Serialize, Role: Serialize + Ord, AccountId: Serialize, N: Serialize",
-    deserialize = "RateId: Deserialize<'de>, Role: Deserialize<'de> + Ord, AccountId: Deserialize<'de>, N: Deserialize<'de> + QuantityScalar"
+    serialize = "RateId: Serialize, Role: Serialize + Ord, AccountId: Serialize",
+    deserialize = "RateId: Deserialize<'de>, Role: Deserialize<'de> + Ord, AccountId: Deserialize<'de>"
 ))]
-pub struct SearchSolution<RateId, Role, AccountId, N = u64> {
-    trace: Trace<RateId, Role, AccountId, N>,
+pub struct SearchSolution<RateId, Role, AccountId> {
+    trace: Trace<RateId, Role, AccountId>,
     cost: u64,
     expanded: usize,
 }
@@ -62,85 +62,72 @@ impl GraphSearchProgress {
     }
 }
 
-struct BfsState<AccountId, A, RateId, Role, N>
-where
-    N: QuantityScalar,
-{
-    world: Economy<AccountId, A, RateId, Role, N>,
-    trace: Trace<RateId, Role, AccountId, N>,
+struct BfsState<AccountId, A, RateId, Role> {
+    world: Economy<AccountId, A, RateId, Role>,
+    trace: Trace<RateId, Role, AccountId>,
 }
 
 /// Resumable breadth-first search over implicit, core-validated successors.
-pub struct BfsSession<AccountId, A, RateId, Role, N, Candidates>
-where
-    N: QuantityScalar,
-{
-    goal: Goal<AccountId, A, N>,
+pub struct BfsSession<AccountId, A, RateId, Role, Candidates> {
+    goal: Goal<AccountId, A>,
     candidates: Candidates,
-    states: Vec<BfsState<AccountId, A, RateId, Role, N>>,
+    states: Vec<BfsState<AccountId, A, RateId, Role>>,
     frontier: VecDeque<usize>,
-    visited: HashSet<Vec<(AccountId, A, Quantity<N>)>>,
+    visited: HashSet<Vec<(AccountId, A, Quantity)>>,
     expanded: usize,
     generated: usize,
-    solution: Option<SearchSolution<RateId, Role, AccountId, N>>,
+    solution: Option<SearchSolution<RateId, Role, AccountId>>,
     exhausted: bool,
 }
 
-struct AStarState<AccountId, A, RateId, Role, N>
-where
-    N: QuantityScalar,
-{
-    world: Economy<AccountId, A, RateId, Role, N>,
-    trace: Trace<RateId, Role, AccountId, N>,
+struct AStarState<AccountId, A, RateId, Role> {
+    world: Economy<AccountId, A, RateId, Role>,
+    trace: Trace<RateId, Role, AccountId>,
 }
 
 /// Resumable A* search over implicit, core-validated successors.
 ///
 /// The step cost and heuristic remain disposable solver policy. Only exchanges
 /// accepted by the economy enter the frontier.
-pub struct AStarSession<AccountId, A, RateId, Role, N, Candidates, StepCost, Heuristic>
-where
-    N: QuantityScalar,
-{
-    goal: Goal<AccountId, A, N>,
+pub struct AStarSession<AccountId, A, RateId, Role, Candidates, StepCost, Heuristic> {
+    goal: Goal<AccountId, A>,
     candidates: Candidates,
     step_cost: StepCost,
     heuristic: Heuristic,
-    states: Vec<AStarState<AccountId, A, RateId, Role, N>>,
+    states: Vec<AStarState<AccountId, A, RateId, Role>>,
     frontier: BinaryHeap<QueueEntry>,
-    best: HashMap<Vec<(AccountId, A, Quantity<N>)>, u64>,
+    best: HashMap<Vec<(AccountId, A, Quantity)>, u64>,
     expanded: usize,
     generated: usize,
     sequence: u64,
-    solution: Option<SearchSolution<RateId, Role, AccountId, N>>,
+    solution: Option<SearchSolution<RateId, Role, AccountId>>,
     exhausted: bool,
 }
 
-impl<AccountId, A, RateId, Role, N, Candidates, StepCost, Heuristic>
-    AStarSession<AccountId, A, RateId, Role, N, Candidates, StepCost, Heuristic>
+impl<AccountId, A, RateId, Role, Candidates, StepCost, Heuristic>
+    AStarSession<AccountId, A, RateId, Role, Candidates, StepCost, Heuristic>
 where
     AccountId: Clone + Eq + Hash + Ord,
     A: Clone + Eq + Hash + Ord,
     RateId: Clone + Eq + Hash + Ord,
     Role: Clone + Ord,
-    N: QuantityScalar,
     Candidates:
-        FnMut(&Economy<AccountId, A, RateId, Role, N>) -> Vec<Exchange<RateId, Role, AccountId, N>>,
+        FnMut(&Economy<AccountId, A, RateId, Role>) -> Vec<Exchange<RateId, Role, AccountId>>,
     StepCost: FnMut(
-        &Economy<AccountId, A, RateId, Role, N>,
-        &Exchange<RateId, Role, AccountId, N>,
-        &Economy<AccountId, A, RateId, Role, N>,
+        &Economy<AccountId, A, RateId, Role>,
+        &Exchange<RateId, Role, AccountId>,
+        &Economy<AccountId, A, RateId, Role>,
     ) -> u64,
-    Heuristic: FnMut(&Economy<AccountId, A, RateId, Role, N>) -> u64,
+    Heuristic: FnMut(&Economy<AccountId, A, RateId, Role>) -> u64,
 {
     pub fn new(
-        initial: &Economy<AccountId, A, RateId, Role, N>,
-        goal: Goal<AccountId, A, N>,
+        initial: &Economy<AccountId, A, RateId, Role>,
+        goal: Goal<AccountId, A>,
         candidates: Candidates,
         step_cost: StepCost,
         mut heuristic: Heuristic,
     ) -> Self {
-        let initial = initial.fork();
+        let initial = initial.clone();
         let key = initial.state_key();
         let solved = initial.matches(&goal).then(|| SearchSolution {
             trace: Trace::new(),
@@ -192,11 +179,11 @@ where
         }
     }
 
-    pub fn solution(&self) -> Option<&SearchSolution<RateId, Role, AccountId, N>> {
+    pub fn solution(&self) -> Option<&SearchSolution<RateId, Role, AccountId>> {
         self.solution.as_ref()
     }
 
-    pub fn into_solution(self) -> Option<SearchSolution<RateId, Role, AccountId, N>> {
+    pub fn into_solution(self) -> Option<SearchSolution<RateId, Role, AccountId>> {
         self.solution
     }
 
@@ -240,7 +227,7 @@ where
             completed += 1;
             let exchanges = (self.candidates)(&self.states[entry.index].world);
             for exchange in exchanges {
-                let mut next = self.states[entry.index].world.fork();
+                let mut next = self.states[entry.index].world.clone();
                 if next.apply(exchange.clone()).is_err() {
                     continue;
                 }
@@ -274,23 +261,21 @@ where
     }
 }
 
-impl<AccountId, A, RateId, Role, N, Candidates>
-    BfsSession<AccountId, A, RateId, Role, N, Candidates>
+impl<AccountId, A, RateId, Role, Candidates> BfsSession<AccountId, A, RateId, Role, Candidates>
 where
     AccountId: Clone + Eq + Hash + Ord,
     A: Clone + Eq + Hash + Ord,
     RateId: Clone + Eq + Hash + Ord,
     Role: Clone + Ord,
-    N: QuantityScalar,
     Candidates:
-        FnMut(&Economy<AccountId, A, RateId, Role, N>) -> Vec<Exchange<RateId, Role, AccountId, N>>,
+        FnMut(&Economy<AccountId, A, RateId, Role>) -> Vec<Exchange<RateId, Role, AccountId>>,
 {
     pub fn new(
-        initial: &Economy<AccountId, A, RateId, Role, N>,
-        goal: Goal<AccountId, A, N>,
+        initial: &Economy<AccountId, A, RateId, Role>,
+        goal: Goal<AccountId, A>,
         candidates: Candidates,
     ) -> Self {
-        let initial = initial.fork();
+        let initial = initial.clone();
         let key = initial.state_key();
         let solved = initial.matches(&goal).then(|| SearchSolution {
             trace: Trace::new(),
@@ -333,11 +318,11 @@ where
         }
     }
 
-    pub fn solution(&self) -> Option<&SearchSolution<RateId, Role, AccountId, N>> {
+    pub fn solution(&self) -> Option<&SearchSolution<RateId, Role, AccountId>> {
         self.solution.as_ref()
     }
 
-    pub fn into_solution(self) -> Option<SearchSolution<RateId, Role, AccountId, N>> {
+    pub fn into_solution(self) -> Option<SearchSolution<RateId, Role, AccountId>> {
         self.solution
     }
 
@@ -365,7 +350,7 @@ where
 
             let exchanges = (self.candidates)(&self.states[index].world);
             for exchange in exchanges {
-                let mut next = self.states[index].world.fork();
+                let mut next = self.states[index].world.clone();
                 if next.apply(exchange.clone()).is_err() {
                     continue;
                 }
@@ -398,8 +383,8 @@ where
     }
 }
 
-impl<RateId, Role, AccountId, N> SearchSolution<RateId, Role, AccountId, N> {
-    pub fn trace(&self) -> &Trace<RateId, Role, AccountId, N> {
+impl<RateId, Role, AccountId> SearchSolution<RateId, Role, AccountId> {
+    pub fn trace(&self) -> &Trace<RateId, Role, AccountId> {
         &self.trace
     }
 
@@ -413,19 +398,18 @@ impl<RateId, Role, AccountId, N> SearchSolution<RateId, Role, AccountId, N> {
 }
 
 /// Breadth-first graph search over implicit, core-validated successors.
-pub fn bfs<AccountId, A, RateId, Role, N, Candidates>(
-    initial: &Economy<AccountId, A, RateId, Role, N>,
-    goal: &Goal<AccountId, A, N>,
+pub fn bfs<AccountId, A, RateId, Role, Candidates>(
+    initial: &Economy<AccountId, A, RateId, Role>,
+    goal: &Goal<AccountId, A>,
     candidates: Candidates,
-) -> Option<SearchSolution<RateId, Role, AccountId, N>>
+) -> Option<SearchSolution<RateId, Role, AccountId>>
 where
     AccountId: Clone + Eq + Hash + Ord,
     A: Clone + Eq + Hash + Ord,
     RateId: Clone + Eq + Hash + Ord,
     Role: Clone + Ord,
-    N: QuantityScalar,
     Candidates:
-        FnMut(&Economy<AccountId, A, RateId, Role, N>) -> Vec<Exchange<RateId, Role, AccountId, N>>,
+        FnMut(&Economy<AccountId, A, RateId, Role>) -> Vec<Exchange<RateId, Role, AccountId>>,
 {
     let mut session = BfsSession::new(initial, goal.clone(), candidates);
     let mut observer = Continue;
@@ -439,27 +423,26 @@ where
 ///
 /// Costs are disposable solver policy. A cost that changes economic validity
 /// must instead be encoded as assets and rates.
-pub fn dijkstra<AccountId, A, RateId, Role, N, Candidates, StepCost>(
-    initial: &Economy<AccountId, A, RateId, Role, N>,
-    goal: &Goal<AccountId, A, N>,
+pub fn dijkstra<AccountId, A, RateId, Role, Candidates, StepCost>(
+    initial: &Economy<AccountId, A, RateId, Role>,
+    goal: &Goal<AccountId, A>,
     mut candidates: Candidates,
     mut step_cost: StepCost,
-) -> Option<SearchSolution<RateId, Role, AccountId, N>>
+) -> Option<SearchSolution<RateId, Role, AccountId>>
 where
     AccountId: Clone + Eq + Hash + Ord,
     A: Clone + Eq + Hash + Ord,
     RateId: Clone + Eq + Hash + Ord,
     Role: Clone + Ord,
-    N: QuantityScalar,
     Candidates:
-        FnMut(&Economy<AccountId, A, RateId, Role, N>) -> Vec<Exchange<RateId, Role, AccountId, N>>,
+        FnMut(&Economy<AccountId, A, RateId, Role>) -> Vec<Exchange<RateId, Role, AccountId>>,
     StepCost: FnMut(
-        &Economy<AccountId, A, RateId, Role, N>,
-        &Exchange<RateId, Role, AccountId, N>,
-        &Economy<AccountId, A, RateId, Role, N>,
+        &Economy<AccountId, A, RateId, Role>,
+        &Exchange<RateId, Role, AccountId>,
+        &Economy<AccountId, A, RateId, Role>,
     ) -> u64,
 {
-    let start = EconomicNode::root(initial.fork());
+    let start = EconomicNode::root(initial.clone());
     let mut expanded = 0;
     let (path, cost) = pathfinding_dijkstra(
         &start,
@@ -473,29 +456,28 @@ where
 }
 
 /// A* search with caller-owned edge costs and a derived state heuristic.
-pub fn astar<AccountId, A, RateId, Role, N, Candidates, StepCost, Heuristic>(
-    initial: &Economy<AccountId, A, RateId, Role, N>,
-    goal: &Goal<AccountId, A, N>,
+pub fn astar<AccountId, A, RateId, Role, Candidates, StepCost, Heuristic>(
+    initial: &Economy<AccountId, A, RateId, Role>,
+    goal: &Goal<AccountId, A>,
     mut candidates: Candidates,
     mut step_cost: StepCost,
     mut heuristic: Heuristic,
-) -> Option<SearchSolution<RateId, Role, AccountId, N>>
+) -> Option<SearchSolution<RateId, Role, AccountId>>
 where
     AccountId: Clone + Eq + Hash + Ord,
     A: Clone + Eq + Hash + Ord,
     RateId: Clone + Eq + Hash + Ord,
     Role: Clone + Ord,
-    N: QuantityScalar,
     Candidates:
-        FnMut(&Economy<AccountId, A, RateId, Role, N>) -> Vec<Exchange<RateId, Role, AccountId, N>>,
+        FnMut(&Economy<AccountId, A, RateId, Role>) -> Vec<Exchange<RateId, Role, AccountId>>,
     StepCost: FnMut(
-        &Economy<AccountId, A, RateId, Role, N>,
-        &Exchange<RateId, Role, AccountId, N>,
-        &Economy<AccountId, A, RateId, Role, N>,
+        &Economy<AccountId, A, RateId, Role>,
+        &Exchange<RateId, Role, AccountId>,
+        &Economy<AccountId, A, RateId, Role>,
     ) -> u64,
-    Heuristic: FnMut(&Economy<AccountId, A, RateId, Role, N>) -> u64,
+    Heuristic: FnMut(&Economy<AccountId, A, RateId, Role>) -> u64,
 {
-    let start = EconomicNode::root(initial.fork());
+    let start = EconomicNode::root(initial.clone());
     let mut expanded = 0;
     let (path, cost) = pathfinding_astar(
         &start,
@@ -512,25 +494,23 @@ where
 /// State-ranked best-first compatibility search.
 ///
 /// Prefer [`dijkstra`] or [`astar`] when the objective is naturally additive.
-pub fn best_first<AccountId, A, RateId, Role, N, Candidates, Cost, Heuristic>(
-    initial: &Economy<AccountId, A, RateId, Role, N>,
-    goal: &Goal<AccountId, A, N>,
+pub fn best_first<AccountId, A, RateId, Role, Candidates, Cost, Heuristic>(
+    initial: &Economy<AccountId, A, RateId, Role>,
+    goal: &Goal<AccountId, A>,
     candidates: Candidates,
     cost: Cost,
     heuristic: Heuristic,
-) -> Option<SearchSolution<RateId, Role, AccountId, N>>
+) -> Option<SearchSolution<RateId, Role, AccountId>>
 where
     AccountId: Clone + Eq + Hash + Ord,
     A: Clone + Eq + Hash + Ord,
     RateId: Clone + Eq + Hash + Ord,
     Role: Clone + Ord,
-    N: QuantityScalar,
-    Candidates:
-        Fn(&Economy<AccountId, A, RateId, Role, N>) -> Vec<Exchange<RateId, Role, AccountId, N>>,
-    Cost: Fn(&Economy<AccountId, A, RateId, Role, N>) -> u64,
-    Heuristic: Fn(&Economy<AccountId, A, RateId, Role, N>) -> u64,
+    Candidates: Fn(&Economy<AccountId, A, RateId, Role>) -> Vec<Exchange<RateId, Role, AccountId>>,
+    Cost: Fn(&Economy<AccountId, A, RateId, Role>) -> u64,
+    Heuristic: Fn(&Economy<AccountId, A, RateId, Role>) -> u64,
 {
-    let mut states = vec![(initial.fork(), Trace::new())];
+    let mut states = vec![(initial.clone(), Trace::new())];
     let mut heap = BinaryHeap::from([QueueEntry {
         priority: cost(initial).saturating_add(heuristic(initial)),
         cost: cost(initial),
@@ -556,7 +536,7 @@ where
         }
         expanded += 1;
         for exchange in candidates(&state) {
-            let mut next = state.fork();
+            let mut next = state.clone();
             if next.apply(exchange.clone()).is_err() {
                 continue;
             }
@@ -569,7 +549,7 @@ where
             let mut next_trace = trace.clone();
             next_trace.push(exchange);
             let index = states.len();
-            states.push((next.fork(), next_trace));
+            states.push((next.clone(), next_trace));
             heap.push(QueueEntry {
                 priority: next_cost.saturating_add(heuristic(&next)),
                 cost: next_cost,
@@ -583,24 +563,23 @@ where
 }
 
 #[derive(Clone)]
-struct EconomicNode<AccountId, A, RateId, Role, N> {
-    world: Economy<AccountId, A, RateId, Role, N>,
-    key: Vec<(AccountId, A, Quantity<N>)>,
-    incoming: Option<Exchange<RateId, Role, AccountId, N>>,
+struct EconomicNode<AccountId, A, RateId, Role> {
+    world: Economy<AccountId, A, RateId, Role>,
+    key: Vec<(AccountId, A, Quantity)>,
+    incoming: Option<Exchange<RateId, Role, AccountId>>,
 }
 
-type WeightedNodes<AccountId, A, RateId, Role, N> =
-    Vec<(EconomicNode<AccountId, A, RateId, Role, N>, u64)>;
+type WeightedNodes<AccountId, A, RateId, Role> =
+    Vec<(EconomicNode<AccountId, A, RateId, Role>, u64)>;
 
-impl<AccountId, A, RateId, Role, N> EconomicNode<AccountId, A, RateId, Role, N>
+impl<AccountId, A, RateId, Role> EconomicNode<AccountId, A, RateId, Role>
 where
     AccountId: Clone + Eq + Hash + Ord,
     A: Clone + Eq + Hash + Ord,
     RateId: Clone + Eq + Hash + Ord,
     Role: Clone + Ord,
-    N: QuantityScalar,
 {
-    fn root(world: Economy<AccountId, A, RateId, Role, N>) -> Self {
+    fn root(world: Economy<AccountId, A, RateId, Role>) -> Self {
         let key = world.state_key();
         Self {
             world,
@@ -610,8 +589,8 @@ where
     }
 
     fn successor(
-        world: Economy<AccountId, A, RateId, Role, N>,
-        incoming: Exchange<RateId, Role, AccountId, N>,
+        world: Economy<AccountId, A, RateId, Role>,
+        incoming: Exchange<RateId, Role, AccountId>,
     ) -> Self {
         let key = world.state_key();
         Self {
@@ -622,59 +601,55 @@ where
     }
 }
 
-impl<AccountId, A, RateId, Role, N> PartialEq for EconomicNode<AccountId, A, RateId, Role, N>
+impl<AccountId, A, RateId, Role> PartialEq for EconomicNode<AccountId, A, RateId, Role>
 where
     AccountId: PartialEq,
     A: PartialEq,
-    N: PartialEq,
 {
     fn eq(&self, other: &Self) -> bool {
         self.key == other.key
     }
 }
 
-impl<AccountId, A, RateId, Role, N> Eq for EconomicNode<AccountId, A, RateId, Role, N>
+impl<AccountId, A, RateId, Role> Eq for EconomicNode<AccountId, A, RateId, Role>
 where
     AccountId: Eq,
     A: Eq,
-    N: Eq,
 {
 }
 
-impl<AccountId, A, RateId, Role, N> Hash for EconomicNode<AccountId, A, RateId, Role, N>
+impl<AccountId, A, RateId, Role> Hash for EconomicNode<AccountId, A, RateId, Role>
 where
     AccountId: Hash,
     A: Hash,
-    N: Hash,
 {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.key.hash(state);
     }
 }
 
-fn weighted_successors<AccountId, A, RateId, Role, N, Candidates, StepCost>(
-    node: &EconomicNode<AccountId, A, RateId, Role, N>,
+fn weighted_successors<AccountId, A, RateId, Role, Candidates, StepCost>(
+    node: &EconomicNode<AccountId, A, RateId, Role>,
     candidates: &mut Candidates,
     step_cost: &mut StepCost,
-) -> WeightedNodes<AccountId, A, RateId, Role, N>
+) -> WeightedNodes<AccountId, A, RateId, Role>
 where
     AccountId: Clone + Eq + Hash + Ord,
     A: Clone + Eq + Hash + Ord,
     RateId: Clone + Eq + Hash + Ord,
     Role: Clone + Ord,
-    N: QuantityScalar,
     Candidates:
-        FnMut(&Economy<AccountId, A, RateId, Role, N>) -> Vec<Exchange<RateId, Role, AccountId, N>>,
+        FnMut(&Economy<AccountId, A, RateId, Role>) -> Vec<Exchange<RateId, Role, AccountId>>,
     StepCost: FnMut(
-        &Economy<AccountId, A, RateId, Role, N>,
-        &Exchange<RateId, Role, AccountId, N>,
-        &Economy<AccountId, A, RateId, Role, N>,
+        &Economy<AccountId, A, RateId, Role>,
+        &Exchange<RateId, Role, AccountId>,
+        &Economy<AccountId, A, RateId, Role>,
     ) -> u64,
 {
     candidates(&node.world)
         .into_iter()
         .filter_map(|exchange| {
-            let mut next = node.world.fork();
+            let mut next = node.world.clone();
             next.apply(exchange.clone()).ok()?;
             let cost = step_cost(&node.world, &exchange, &next);
             Some((EconomicNode::successor(next, exchange), cost))
@@ -682,11 +657,11 @@ where
         .collect()
 }
 
-fn solution_from_path<AccountId, A, RateId, Role, N>(
-    path: Vec<EconomicNode<AccountId, A, RateId, Role, N>>,
+fn solution_from_path<AccountId, A, RateId, Role>(
+    path: Vec<EconomicNode<AccountId, A, RateId, Role>>,
     cost: u64,
     expanded: usize,
-) -> SearchSolution<RateId, Role, AccountId, N> {
+) -> SearchSolution<RateId, Role, AccountId> {
     let mut trace = Trace::new();
     trace.extend(path.into_iter().skip(1).filter_map(|node| node.incoming));
     SearchSolution {

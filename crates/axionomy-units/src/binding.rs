@@ -1,5 +1,5 @@
 use crate::{UnitAsset, definition::MeasureDefinition};
-use axionomy::{AssetAmount, Quantity, QuantityScalar};
+use axionomy::{AssetAmount, Quantity};
 use num_rational::Ratio;
 use num_traits::{ToPrimitive, Zero};
 use std::fmt;
@@ -67,8 +67,9 @@ where
 
     /// Lowers a compatible physical value into the asset's canonical atoms.
     ///
-    /// The resulting atom count must fit `u64` before it is converted through
-    /// [`QuantityScalar::from_u64`] into the selected economy backend.
+    /// Unit arithmetic is exact over `uom`'s `Rational64` storage, so one
+    /// lowered value is at most `i64::MAX` atoms; the economy's quantities
+    /// themselves range up to `2²⁵⁶ − 1`.
     ///
     /// A handle accepts only the physical dimension with which it was defined:
     ///
@@ -92,13 +93,12 @@ where
     ///     .encode::<u64>(Length::new::<meter>(Rational::from_integer(1)))
     ///     .unwrap();
     /// ```
-    pub fn encode<N>(
+    pub fn encode(
         &self,
         value: UomQuantity<D, U, MeasureScalar>,
-    ) -> Result<AssetAmount<UnitAsset<Id>, N>, UnitBindingError>
+    ) -> Result<AssetAmount<UnitAsset<Id>>, UnitBindingError>
     where
         Id: Clone,
-        N: QuantityScalar,
     {
         let atoms = value.value / self.atomic_base_value;
         if atoms < MeasureScalar::zero() {
@@ -111,10 +111,7 @@ where
             .to_integer()
             .to_u64()
             .ok_or(UnitBindingError::NumericRange)?;
-        let scalar = N::from_u64(count).ok_or(UnitBindingError::NumericRange)?;
-        let quantity =
-            Quantity::try_from_scalar(scalar).map_err(|_| UnitBindingError::NegativeValue)?;
-        Ok(self.asset.amount(quantity))
+        Ok(self.asset.amount(Quantity::new(count)))
     }
 }
 

@@ -219,7 +219,10 @@ mod tests {
         move_to(&mut injured, Node::Exit);
         injured.apply(action(RateId::Finish)).unwrap();
         assert_eq!(spent_time(&injured), 5);
-        assert_eq!(injured.balance(&AccountId::Agent, &Asset::Injury).get(), 2);
+        assert_eq!(
+            injured.balance(&AccountId::Agent, &Asset::Injury).to_u64(),
+            2
+        );
 
         let mut protected = initial.clone();
         protected
@@ -239,7 +242,7 @@ mod tests {
         assert_eq!(
             protected
                 .balance(&AccountId::Agent, &Asset::UsedShield)
-                .get(),
+                .to_u64(),
             2
         );
         assert!(
@@ -252,7 +255,10 @@ mod tests {
         for at in [Node::Tunnel, Node::Workshop, Node::Garden] {
             move_to(&mut recovery, at);
         }
-        assert_eq!(recovery.balance(&AccountId::Agent, &Asset::Injury).get(), 1);
+        assert_eq!(
+            recovery.balance(&AccountId::Agent, &Asset::Injury).to_u64(),
+            1
+        );
         recovery
             .apply(action(RateId::Treat { at: Node::Garden }))
             .unwrap();
@@ -261,11 +267,14 @@ mod tests {
                 .balance(&AccountId::Agent, &Asset::Injury)
                 .is_zero()
         );
-        assert_eq!(recovery.balance(&AccountId::Agent, &Asset::Health).get(), 3);
+        assert_eq!(
+            recovery.balance(&AccountId::Agent, &Asset::Health).to_u64(),
+            3
+        );
         assert_eq!(
             recovery
                 .balance(&AccountId::World, &Asset::UsedMedicine)
-                .get(),
+                .to_u64(),
             1
         );
         let before = recovery.state_key();

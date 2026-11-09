@@ -80,7 +80,7 @@ pub type World = Economy<AccountId, Asset, RateId, Role>;
 pub type Action = Exchange<RateId, Role, AccountId>;
 pub type Solution = SearchSolution<RateId, Role, AccountId>;
 pub type Failure = ApplyError<RateId, Role, AccountId, Asset>;
-pub type ParetoResult = ParetoSearchResult<RateId, Role, AccountId, u64, ObjectiveKey, u64>;
+pub type ParetoResult = ParetoSearchResult<RateId, Role, AccountId, ObjectiveKey, u64>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ObjectiveKey {
@@ -227,18 +227,20 @@ pub fn objectives(world: &World) -> ObjectiveVector<ObjectiveKey, u64> {
     if world.account(&AccountId::Customer(0)).is_some() {
         values.push(Objective::maximize(
             ObjectiveKey::Revenue,
-            world.balance(&AccountId::Workshop, &Asset::Credit).get(),
+            world.balance(&AccountId::Workshop, &Asset::Credit).to_u64(),
         ));
     }
     ObjectiveVector::try_new(values).expect("workshop objective schema is static and unique")
 }
 
 pub fn waste(world: &World) -> u64 {
-    world.balance(&AccountId::Workshop, &Asset::Waste).get()
+    world.balance(&AccountId::Workshop, &Asset::Waste).to_u64()
 }
 
 pub fn spent_time(world: &World) -> u64 {
-    world.balance(&AccountId::Workshop, &Asset::SpentTime).get()
+    world
+        .balance(&AccountId::Workshop, &Asset::SpentTime)
+        .to_u64()
 }
 
 pub fn action(rate: RateId) -> Action {
@@ -281,9 +283,9 @@ mod tests {
             error,
             ApplyError::InvariantViolation {
                 invariant,
-                before: 6,
-                after: 7,
-            } if invariant == "material mass"
+                before,
+                after,
+            } if invariant == "material mass" && before.to_string() == "6" && after.to_string() == "7"
         ));
         assert_eq!(world.state_key(), before);
     }

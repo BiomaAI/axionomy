@@ -46,7 +46,7 @@ fn benchmark(c: &mut Criterion) {
     });
     c.bench_function("fork_and_apply_single_account_exchange", |bencher| {
         bencher.iter(|| {
-            let mut branch = black_box(&world).fork();
+            let mut branch = black_box(&world).clone();
             black_box(branch.apply(black_box(action.clone())).unwrap());
         });
     });

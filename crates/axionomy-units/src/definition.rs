@@ -255,7 +255,7 @@ impl<Id> UnitAsset<Id> {
     }
 
     /// Creates an amount from an already explicit quantity of asset atoms.
-    pub fn amount<N>(&self, atoms: Quantity<N>) -> AssetAmount<Self, N>
+    pub fn amount(&self, atoms: Quantity) -> AssetAmount<Self>
     where
         Id: Clone,
     {

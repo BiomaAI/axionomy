@@ -65,11 +65,11 @@ fn action(rate: RateId) -> Action {
 }
 
 fn sequential_controller(world: &World, _: usize) -> RolloutDecision<Action> {
-    let rate = if world.balance(&AccountId::Actor, &Asset::Step(0)).get() == 1 {
+    let rate = if world.balance(&AccountId::Actor, &Asset::Step(0)).to_u64() == 1 {
         RateId::Advance(0)
-    } else if world.balance(&AccountId::Actor, &Asset::Step(1)).get() == 1 {
+    } else if world.balance(&AccountId::Actor, &Asset::Step(1)).to_u64() == 1 {
         RateId::Advance(1)
-    } else if world.balance(&AccountId::Actor, &Asset::Step(2)).get() == 1 {
+    } else if world.balance(&AccountId::Actor, &Asset::Step(2)).to_u64() == 1 {
         RateId::Finish
     } else {
         return RolloutDecision::Stop(RolloutStop::NoProposal);

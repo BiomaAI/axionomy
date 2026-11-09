@@ -508,7 +508,7 @@ mod tests {
         assert!(
             warehouse_showcase
                 .accounts()
-                .any(|(_, account)| account.balance(&sokoban::Asset::ExitCell).get() == 1)
+                .any(|(_, account)| account.balance(&sokoban::Asset::ExitCell).to_u64() == 1)
         );
 
         let bridge_showcase = bridge::initial_showcase();

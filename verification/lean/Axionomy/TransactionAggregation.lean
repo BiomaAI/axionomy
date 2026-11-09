@@ -6,48 +6,48 @@ open Transaction
 variable {AccountId A RateId Role : Type} [DecidableEq A]
 
 def ValidEffect (effect : Effect A) : Prop :=
-  BasketOperations.Valid (Account.naturals Quantity.u64Max) effect.consume ∧
-    BasketOperations.Valid (Account.naturals Quantity.u64Max) effect.produce ∧
-    BasketOperations.Valid (Account.naturals Quantity.u64Max) effect.preserve
+  BasketOperations.Valid (Account.naturals Quantity.limit) effect.consume ∧
+    BasketOperations.Valid (Account.naturals Quantity.limit) effect.produce ∧
+    BasketOperations.Valid (Account.naturals Quantity.limit) effect.preserve
 
 omit [DecidableEq A] in
 @[simp] theorem empty_valid : ValidEffect ({} : Effect A) := by
   simp [ValidEffect, BasketOperations.Valid]
 
 theorem scaled_valid (target source updated : Balances A) (units : Nat)
-    (valid : BasketOperations.Valid (Account.naturals Quantity.u64Max) target)
-    (success : Effects.scaled (Account.naturals Quantity.u64Max) (Quantity.mul Quantity.u64Max) target source units = .ok updated) :
-    BasketOperations.Valid (Account.naturals Quantity.u64Max) updated := by
+    (valid : BasketOperations.Valid (Account.naturals Quantity.limit) target)
+    (success : Effects.scaled (Account.naturals Quantity.limit) (Quantity.mul Quantity.limit) target source units = .ok updated) :
+    BasketOperations.Valid (Account.naturals Quantity.limit) updated := by
   unfold Effects.scaled at success
-  cases scaled : BasketOperations.scale (Account.naturals Quantity.u64Max) (Quantity.mul Quantity.u64Max) source units with
+  cases scaled : BasketOperations.scale (Account.naturals Quantity.limit) (Quantity.mul Quantity.limit) source units with
   | error asset => simp [scaled] at success
   | ok amounts => exact BasketOperations.credit_valid _ amounts target updated valid (by simpa [scaled] using success)
 
 theorem staticScaled_valid (rate : RateId) (units : Nat) (target updated : Balances A) (source : Option (Balances A))
-    (valid : BasketOperations.Valid (Account.naturals Quantity.u64Max) target)
+    (valid : BasketOperations.Valid (Account.naturals Quantity.limit) target)
     (success : staticScaled (AccountId := AccountId) (Role := Role) rate units target source = .ok updated) :
-    BasketOperations.Valid (Account.naturals Quantity.u64Max) updated := by
+    BasketOperations.Valid (Account.naturals Quantity.limit) updated := by
   cases source with
   | none =>
     have same : target = updated := by simpa [staticScaled] using success
     exact same ▸ valid
   | some amounts =>
-    cases merged : Effects.scaled (Account.naturals Quantity.u64Max) (Quantity.mul Quantity.u64Max) target amounts units with
+    cases merged : Effects.scaled (Account.naturals Quantity.limit) (Quantity.mul Quantity.limit) target amounts units with
     | error asset => simp [staticScaled, rateResult, merged] at success
     | ok result =>
       have same : result = updated := by simpa [staticScaled, rateResult, merged] using success
       exact same ▸ scaled_valid target amounts result units valid merged
 
 theorem staticPreserved_valid (rate : RateId) (target updated : Balances A) (source : Option (Balances A))
-    (valid : BasketOperations.Valid (Account.naturals Quantity.u64Max) target)
+    (valid : BasketOperations.Valid (Account.naturals Quantity.limit) target)
     (success : staticPreserved (AccountId := AccountId) (Role := Role) rate target source = .ok updated) :
-    BasketOperations.Valid (Account.naturals Quantity.u64Max) updated := by
+    BasketOperations.Valid (Account.naturals Quantity.limit) updated := by
   cases source with
   | none =>
     have same : target = updated := by simpa [staticPreserved] using success
     exact same ▸ valid
   | some amounts =>
-    cases merged : Account.credit (Account.naturals Quantity.u64Max) target amounts with
+    cases merged : Account.credit (Account.naturals Quantity.limit) target amounts with
     | error asset => simp [staticPreserved, rateResult, merged] at success
     | ok result =>
       have same : result = updated := by simpa [staticPreserved, rateResult, merged] using success
@@ -80,21 +80,21 @@ theorem mergeComputed_valid (direction : Direction) (asset : A) (amount : Nat) (
     (valid : ValidEffect initial) (success : mergeComputed direction asset amount initial = .ok updated) : ValidEffect updated := by
   cases direction with
   | consume =>
-    cases merged : Account.credit (Account.naturals Quantity.u64Max) initial.consume [(asset, amount)] with
+    cases merged : Account.credit (Account.naturals Quantity.limit) initial.consume [(asset, amount)] with
     | error bad => simp [mergeComputed, merged, Except.map] at success
     | ok entries =>
       have same : ({ initial with consume := entries } : Effect A) = updated := by simpa [mergeComputed, merged, Except.map] using success
       rw [← same]
       exact ⟨BasketOperations.credit_valid _ _ _ _ valid.1 merged, valid.2⟩
   | produce =>
-    cases merged : Account.credit (Account.naturals Quantity.u64Max) initial.produce [(asset, amount)] with
+    cases merged : Account.credit (Account.naturals Quantity.limit) initial.produce [(asset, amount)] with
     | error bad => simp [mergeComputed, merged, Except.map] at success
     | ok entries =>
       have same : ({ initial with produce := entries } : Effect A) = updated := by simpa [mergeComputed, merged, Except.map] using success
       rw [← same]
       exact ⟨valid.1, BasketOperations.credit_valid _ _ _ _ valid.2.1 merged, valid.2.2⟩
   | preserve =>
-    cases merged : Account.credit (Account.naturals Quantity.u64Max) initial.preserve [(asset, amount)] with
+    cases merged : Account.credit (Account.naturals Quantity.limit) initial.preserve [(asset, amount)] with
     | error bad => simp [mergeComputed, merged, Except.map] at success
     | ok entries =>
       have same : ({ initial with preserve := entries } : Effect A) = updated := by simpa [mergeComputed, merged, Except.map] using success
@@ -173,7 +173,7 @@ theorem computedEffects_valid (cmpAccount : AccountId → AccountId → Ordering
     have same : initial = result := Except.ok.inj success
     exact same ▸ valid
   | cons amount rest ih =>
-    cases evaluated : Evaluation.eval (Evaluation.naturals Quantity.u64Max) context amount.quantity with
+    cases evaluated : Evaluation.eval (Evaluation.naturals Quantity.limit) context amount.quantity with
     | error error => simp [computedEffects, evaluated] at success
     | ok value =>
       obtain ⟨id, binding, present⟩ := bound amount (by simp)

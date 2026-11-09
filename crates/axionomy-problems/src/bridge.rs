@@ -128,7 +128,7 @@ pub type World = Economy<AccountId, Asset, RateId, Role>;
 pub type Action = Exchange<RateId, Role, AccountId>;
 pub type Solution = SearchSolution<RateId, Role, AccountId>;
 pub type Proposal = Trace<RateId, Role, AccountId>;
-pub type ParetoResult = ParetoSearchResult<RateId, Role, AccountId, u64, ObjectiveKey, u64>;
+pub type ParetoResult = ParetoSearchResult<RateId, Role, AccountId, ObjectiveKey, u64>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ObjectiveKey {
@@ -539,13 +539,13 @@ pub fn objectives(world: &World) -> ObjectiveVector<ObjectiveKey, u64> {
 pub fn priority(world: &World, agent: AgentId) -> u64 {
     world
         .balance(&AccountId::Agent(agent), &Asset::PriorityBenefit)
-        .get()
+        .to_u64()
 }
 
 pub fn credit(world: &World, agent: AgentId) -> u64 {
     world
         .balance(&AccountId::Agent(agent), &Asset::Credit)
-        .get()
+        .to_u64()
 }
 
 pub fn first_come_proposal(first: AgentId) -> Option<Proposal> {
@@ -784,7 +784,7 @@ mod tests {
             assert_eq!(
                 replayed
                     .balance(&AccountId::Bridge, &Asset::RoundsRemaining)
-                    .get(),
+                    .to_u64(),
                 0
             );
         }

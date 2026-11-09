@@ -48,7 +48,10 @@ fn withdrawal_reports_exact_shortfall_and_is_atomic() {
 
 #[test]
 fn deposit_overflow_is_atomic() {
-    let mut account = Account::new(basket([(Asset::Credits, 10), (Asset::Tokens, u64::MAX)]));
+    let mut account = Account::new(Basket::from([
+        (Asset::Credits, Quantity::new(10)),
+        (Asset::Tokens, Quantity::MAX),
+    ]));
     let original = account.clone();
 
     let error = account
@@ -68,12 +71,12 @@ fn deposit_overflow_is_atomic() {
 fn baskets_scale_with_checked_arithmetic() {
     let balances = basket([(Asset::Credits, 4), (Asset::Tokens, 3)]);
 
-    let scaled = balances.checked_scale(&Quantity::new(2)).unwrap();
+    let scaled = balances.checked_scale(Quantity::new(2)).unwrap();
 
     assert_eq!(scaled, basket([(Asset::Credits, 8), (Asset::Tokens, 6)]));
     assert_eq!(
-        basket([(Asset::Credits, u64::MAX)])
-            .checked_scale(&Quantity::new(2))
+        Basket::from([(Asset::Credits, Quantity::MAX)])
+            .checked_scale(Quantity::new(2))
             .unwrap_err(),
         Asset::Credits
     );
@@ -142,7 +145,7 @@ fn validated_baskets_remove_zeros_without_reordering_other_assets() {
     assert_eq!(
         balances
             .iter()
-            .map(|(asset, amount)| (*asset, amount.get()))
+            .map(|(asset, amount)| (*asset, amount.to_u64()))
             .collect::<Vec<_>>(),
         vec![("first", 2), ("last", 5)]
     );

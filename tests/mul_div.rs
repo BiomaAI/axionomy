@@ -48,8 +48,8 @@ enum RateId {
 
 type World = Economy<AccountId, Asset, RateId, Role>;
 
-/// Independent reference: exact u128 product and quotient.
-fn reference(left: u64, right: u64, denominator: u64, rounding: Rounding) -> Option<u64> {
+/// Independent reference: a u64 × u64 product and its quotient fit u128 exactly.
+fn reference(left: u64, right: u64, denominator: u64, rounding: Rounding) -> Option<u128> {
     if denominator == 0 {
         return None;
     }
@@ -59,13 +59,17 @@ fn reference(left: u64, right: u64, denominator: u64, rounding: Rounding) -> Opt
     if rounding == Rounding::Ceil && product % divisor != 0 {
         quotient += 1;
     }
-    u64::try_from(quotient).ok()
+    Some(quotient)
 }
 
-fn mul_div(left: u64, right: u64, denominator: u64, rounding: Rounding) -> Option<u64> {
+fn mul_div(left: u64, right: u64, denominator: u64, rounding: Rounding) -> Option<u128> {
     Quantity::new(left)
-        .checked_mul_div(&Quantity::new(right), &Quantity::new(denominator), rounding)
-        .map(Quantity::get)
+        .checked_mul_div(Quantity::new(right), Quantity::new(denominator), rounding)
+        .map(|quotient| u128::try_from(quotient.value()).unwrap())
+}
+
+fn quantity(value: u64) -> Quantity {
+    Quantity::new(value)
 }
 
 fn rounding() -> impl Strategy<Value = Rounding> {
@@ -106,21 +110,21 @@ proptest! {
 
 #[test]
 fn intermediate_products_never_overflow() {
-    let max = Quantity::new(u64::MAX);
-    assert_eq!(max.checked_mul(&max), None);
-    assert_eq!(max.checked_mul_div(&max, &max, Rounding::Floor), Some(max));
-    assert_eq!(max.checked_mul_div(&max, &max, Rounding::Ceil), Some(max));
+    let max = Quantity::MAX;
+    let below = max.checked_sub(quantity(1)).unwrap();
+    assert_eq!(max.checked_mul(max), None);
+    assert_eq!(max.checked_mul_div(max, max, Rounding::Floor), Some(max));
+    assert_eq!(max.checked_mul_div(max, max, Rounding::Ceil), Some(max));
     // Only the rounded quotient must fit.
-    assert_eq!(mul_div(u64::MAX, 2, 1, Rounding::Floor), None);
-    assert_eq!(mul_div(u64::MAX, 2, 2, Rounding::Floor), Some(u64::MAX));
-    assert_eq!(
-        mul_div(u64::MAX, u64::MAX - 1, u64::MAX, Rounding::Ceil),
-        Some(u64::MAX - 1)
-    );
-    // A ceiling can push a fitting floor over the edge.
-    assert_eq!(mul_div(u64::MAX, 3, 2, Rounding::Floor), None);
-    assert_eq!(mul_div(u64::MAX, 1, 1, Rounding::Ceil), Some(u64::MAX));
-    assert_eq!(mul_div(7, 1, 0, Rounding::Floor), None);
+    let mul_div = |left: Quantity, right, denominator, rounding| {
+        left.checked_mul_div(quantity(right), quantity(denominator), rounding)
+    };
+    assert_eq!(mul_div(max, 2, 1, Rounding::Floor), None);
+    assert_eq!(mul_div(max, 2, 2, Rounding::Floor), Some(max));
+    assert_eq!(max.checked_mul_div(below, max, Rounding::Ceil), Some(below));
+    assert_eq!(mul_div(max, 3, 2, Rounding::Floor), None);
+    assert_eq!(mul_div(max, 1, 1, Rounding::Ceil), Some(max));
+    assert_eq!(mul_div(quantity(7), 1, 0, Rounding::Floor), None);
 }
 
 fn fee(rounding: Rounding) -> Q<Role, Asset> {
@@ -165,11 +169,19 @@ fn world(rounding: Rounding) -> World {
 }
 
 fn charge(units: u64, bps: u64, scale: u64) -> Exchange<RateId, Role, AccountId> {
-    Exchange::new(RateId::Charge, Quantity::new(units))
+    charge_exact(quantity(units), quantity(bps), quantity(scale))
+}
+
+fn charge_exact(
+    units: Quantity,
+    bps: Quantity,
+    scale: Quantity,
+) -> Exchange<RateId, Role, AccountId> {
+    Exchange::new(RateId::Charge, units)
         .bind(Role::Treasury, AccountId::Treasury)
         .bind(Role::Trader, AccountId::Trader)
-        .parameter("bps", Quantity::new(bps))
-        .parameter("scale", Quantity::new(scale))
+        .parameter("bps", bps)
+        .parameter("scale", scale)
 }
 
 #[test]
@@ -248,11 +260,14 @@ fn zero_denominator_and_quotient_overflow_are_reported_without_mutation() {
         "division by zero"
     );
     assert_eq!(
-        evaluation_error(&world, &charge(u64::MAX, 3, 2)),
+        evaluation_error(
+            &world,
+            &charge_exact(Quantity::MAX, quantity(3), quantity(2))
+        ),
         "multiplication overflow"
     );
     // A huge product with a fitting quotient is fine.
-    assert!(world.is_applicable(&charge(u64::MAX, 1, u64::MAX)));
+    assert!(world.is_applicable(&charge_exact(Quantity::MAX, quantity(1), Quantity::MAX)));
 }
 
 #[test]
@@ -269,8 +284,12 @@ fn operand_errors_take_precedence_in_left_to_right_order() {
     };
     let exchange =
         Exchange::new(RateId::Credit, Quantity::new(1)).bind(Role::Trader, AccountId::Trader);
-    let underflow = || Q::subtract(Q::constant(0), Q::constant(1));
-    let overflow = || Q::plus(Q::constant(u64::MAX), Q::constant(1));
+    let underflow = || Q::constant(0) - Q::constant(1);
+    let overflow = || {
+        Q::Constant {
+            value: Quantity::MAX,
+        } + Q::constant(1)
+    };
     let error = |expression| evaluation_error(&world(expression), &exchange);
 
     assert_eq!(
@@ -303,7 +322,9 @@ fn operand_errors_take_precedence_in_left_to_right_order() {
     // A zero denominator is reported before the quotient range is checked.
     assert_eq!(
         error(Q::mul_div(
-            Q::constant(u64::MAX),
+            Q::Constant {
+                value: Quantity::MAX
+            },
             Q::constant(2),
             Q::constant(0),
             Rounding::Floor
@@ -317,10 +338,7 @@ fn discovery_reads_every_operand() {
     let expression = Q::mul_div(
         Q::balance(Role::Treasury, Asset::Credit),
         Q::parameter("left"),
-        Q::plus(
-            Q::parameter("denominator"),
-            Q::balance(Role::Trader, Asset::Share),
-        ),
+        Q::parameter("denominator") + Q::balance(Role::Trader, Asset::Share),
         Rounding::Floor,
     );
     let rate = Rate::<Role, Asset>::new().produce_computed(Role::Trader, Asset::Credit, expression);
@@ -355,7 +373,7 @@ fn serialized_form_names_the_rounding_direction() {
             "kind": "mul_div",
             "left": {"kind": "units"},
             "right": {"kind": "parameter", "name": "bps"},
-            "denominator": {"kind": "constant", "value": 10_000},
+            "denominator": {"kind": "constant", "value": "10000"},
             "rounding": "ceil",
         })
     );

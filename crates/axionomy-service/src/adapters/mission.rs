@@ -175,7 +175,7 @@ pub(super) fn build(
             observation(&model, AgentId::Scout),
             observation(&model, AgentId::Medic),
         ];
-        let mut replay = model.fork();
+        let mut replay = model.clone();
         for (index, frame) in view.frames.iter_mut().enumerate() {
             replay
                 .apply(rollout.trace().exchanges()[index].clone())
@@ -265,7 +265,7 @@ pub(super) fn build(
             });
         }
         if let Some(candidate) = mission::candidates(&model).first() {
-            let malformed = Exchange::new(*candidate.rate(), *candidate.units());
+            let malformed = Exchange::new(*candidate.rate(), candidate.units());
             view.proposals.push(proposal("mission", ProposalSpec { id: "action-without-actors", label: "Mission action without roles", description: "Every mission action names an actor, Nature, the mission, and the goal. Leaving them out is rejected with the specific role missing." }, &model, &malformed));
         }
         documents.push(view);

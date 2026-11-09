@@ -338,7 +338,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
 fn execution_scene(world: &World) -> Scene {
     use scheduling::execution::{MACHINES, OPERATIONS};
     let now = scheduling::execution::now(world);
-    let value = |account, asset| world.balance(&account, &asset).get();
+    let value = |account, asset| world.balance(&account, &asset).to_u64();
     let lanes = MACHINES
         .into_iter()
         .map(|machine| TimelineLaneView {

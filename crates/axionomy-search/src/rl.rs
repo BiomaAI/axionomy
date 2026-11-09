@@ -1,8 +1,7 @@
 //! Reinforcement-learning projections over closed economic execution.
 
 use axionomy::{
-    ApplyError, AssessmentStatus, Economy, Exchange, ExchangeAssessment, Quantity, QuantityScalar,
-    Receipt, Trace,
+    ApplyError, AssessmentStatus, Economy, Exchange, ExchangeAssessment, Quantity, Receipt, Trace,
 };
 use std::hash::Hash;
 
@@ -22,21 +21,20 @@ impl<Action, Assessment> AssessedAction<Action, Assessment> {
     }
 }
 
-pub type EconomicAssessedAction<AccountId, A, RateId, Role, N = u64> = AssessedAction<
-    Exchange<RateId, Role, AccountId, N>,
-    ExchangeAssessment<AccountId, A, RateId, Role, N>,
+pub type EconomicAssessedAction<AccountId, A, RateId, Role> = AssessedAction<
+    Exchange<RateId, Role, AccountId>,
+    ExchangeAssessment<AccountId, A, RateId, Role>,
 >;
 
-pub fn assessed_actions<AccountId, A, RateId, Role, N>(
-    world: &Economy<AccountId, A, RateId, Role, N>,
-    candidates: impl IntoIterator<Item = Exchange<RateId, Role, AccountId, N>>,
-) -> Vec<EconomicAssessedAction<AccountId, A, RateId, Role, N>>
+pub fn assessed_actions<AccountId, A, RateId, Role>(
+    world: &Economy<AccountId, A, RateId, Role>,
+    candidates: impl IntoIterator<Item = Exchange<RateId, Role, AccountId>>,
+) -> Vec<EconomicAssessedAction<AccountId, A, RateId, Role>>
 where
     AccountId: Clone + Eq + Hash + Ord,
     A: Clone + Eq + Hash + Ord,
     RateId: Clone + Eq + Hash + Ord,
     Role: Clone + Ord,
-    N: QuantityScalar,
 {
     candidates
         .into_iter()
@@ -47,12 +45,9 @@ where
         .collect()
 }
 
-pub fn action_mask<AccountId, A, RateId, Role, N>(
-    actions: &[EconomicAssessedAction<AccountId, A, RateId, Role, N>],
-) -> Vec<bool>
-where
-    N: QuantityScalar,
-{
+pub fn action_mask<AccountId, A, RateId, Role>(
+    actions: &[EconomicAssessedAction<AccountId, A, RateId, Role>],
+) -> Vec<bool> {
     actions
         .iter()
         .map(|action| action.assessment().is_applicable())
@@ -60,13 +55,13 @@ where
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ShortfallFeature<AccountId, A, N = u64> {
+pub struct ShortfallFeature<AccountId, A> {
     account: AccountId,
     asset: A,
-    missing: Quantity<N>,
+    missing: Quantity,
 }
 
-impl<AccountId, A, N> ShortfallFeature<AccountId, A, N> {
+impl<AccountId, A> ShortfallFeature<AccountId, A> {
     pub const fn account(&self) -> &AccountId {
         &self.account
     }
@@ -75,18 +70,17 @@ impl<AccountId, A, N> ShortfallFeature<AccountId, A, N> {
         &self.asset
     }
 
-    pub const fn missing(&self) -> &Quantity<N> {
+    pub const fn missing(&self) -> &Quantity {
         &self.missing
     }
 }
 
-pub fn shortfall_features<AccountId, A, RateId, Role, N>(
-    assessment: &ExchangeAssessment<AccountId, A, RateId, Role, N>,
-) -> Vec<ShortfallFeature<AccountId, A, N>>
+pub fn shortfall_features<AccountId, A, RateId, Role>(
+    assessment: &ExchangeAssessment<AccountId, A, RateId, Role>,
+) -> Vec<ShortfallFeature<AccountId, A>>
 where
     AccountId: Clone,
     A: Clone + Ord,
-    N: QuantityScalar,
 {
     assessment
         .shortfalls()
@@ -98,62 +92,51 @@ where
                 .map(|(asset, missing)| ShortfallFeature {
                     account: shortfall.account().clone(),
                     asset: asset.clone(),
-                    missing: missing.clone(),
+                    missing: *missing,
                 })
         })
         .collect()
 }
 
 #[derive(Debug, Clone)]
-pub enum RlExecution<RateId, Role, AccountId, A, N = u64>
-where
-    N: QuantityScalar,
-{
-    Applied(Receipt<RateId, Role, AccountId, A, N>),
-    Rejected(ApplyError<RateId, Role, AccountId, A, N>),
+pub enum RlExecution<RateId, Role, AccountId, A> {
+    Applied(Receipt<RateId, Role, AccountId, A>),
+    Rejected(ApplyError<RateId, Role, AccountId, A>),
 }
 
-impl<RateId, Role, AccountId, A, N> RlExecution<RateId, Role, AccountId, A, N>
-where
-    N: QuantityScalar,
-{
+impl<RateId, Role, AccountId, A> RlExecution<RateId, Role, AccountId, A> {
     pub const fn applied(&self) -> bool {
         matches!(self, Self::Applied(_))
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct RlTransition<Observation, Outcome, AccountId, A, RateId, Role, N = u64>
-where
-    N: QuantityScalar,
-{
+pub struct RlTransition<Observation, Outcome, AccountId, A, RateId, Role> {
     before: Observation,
-    action: Exchange<RateId, Role, AccountId, N>,
-    assessment: ExchangeAssessment<AccountId, A, RateId, Role, N>,
-    execution: RlExecution<RateId, Role, AccountId, A, N>,
+    action: Exchange<RateId, Role, AccountId>,
+    assessment: ExchangeAssessment<AccountId, A, RateId, Role>,
+    execution: RlExecution<RateId, Role, AccountId, A>,
     after: Observation,
     outcome: Outcome,
     terminal: bool,
 }
 
-impl<Observation, Outcome, AccountId, A, RateId, Role, N>
-    RlTransition<Observation, Outcome, AccountId, A, RateId, Role, N>
-where
-    N: QuantityScalar,
+impl<Observation, Outcome, AccountId, A, RateId, Role>
+    RlTransition<Observation, Outcome, AccountId, A, RateId, Role>
 {
     pub const fn before(&self) -> &Observation {
         &self.before
     }
 
-    pub const fn action(&self) -> &Exchange<RateId, Role, AccountId, N> {
+    pub const fn action(&self) -> &Exchange<RateId, Role, AccountId> {
         &self.action
     }
 
-    pub const fn assessment(&self) -> &ExchangeAssessment<AccountId, A, RateId, Role, N> {
+    pub const fn assessment(&self) -> &ExchangeAssessment<AccountId, A, RateId, Role> {
         &self.assessment
     }
 
-    pub const fn execution(&self) -> &RlExecution<RateId, Role, AccountId, A, N> {
+    pub const fn execution(&self) -> &RlExecution<RateId, Role, AccountId, A> {
         &self.execution
     }
 
@@ -172,22 +155,21 @@ where
 
 /// Applies one action and emits learning projections derived from economic
 /// state before and after the sole core commit attempt.
-pub fn step<AccountId, A, RateId, Role, N, Observation, Outcome, Observe, ReadOutcome, Terminal>(
-    world: &mut Economy<AccountId, A, RateId, Role, N>,
-    action: Exchange<RateId, Role, AccountId, N>,
+pub fn step<AccountId, A, RateId, Role, Observation, Outcome, Observe, ReadOutcome, Terminal>(
+    world: &mut Economy<AccountId, A, RateId, Role>,
+    action: Exchange<RateId, Role, AccountId>,
     observe: Observe,
     read_outcome: ReadOutcome,
     is_terminal: Terminal,
-) -> RlTransition<Observation, Outcome, AccountId, A, RateId, Role, N>
+) -> RlTransition<Observation, Outcome, AccountId, A, RateId, Role>
 where
     AccountId: Clone + Eq + Hash + Ord,
     A: Clone + Eq + Hash + Ord,
     RateId: Clone + Eq + Hash + Ord,
     Role: Clone + Ord,
-    N: QuantityScalar,
-    Observe: Fn(&Economy<AccountId, A, RateId, Role, N>) -> Observation,
-    ReadOutcome: Fn(&Economy<AccountId, A, RateId, Role, N>) -> Outcome,
-    Terminal: Fn(&Economy<AccountId, A, RateId, Role, N>) -> bool,
+    Observe: Fn(&Economy<AccountId, A, RateId, Role>) -> Observation,
+    ReadOutcome: Fn(&Economy<AccountId, A, RateId, Role>) -> Outcome,
+    Terminal: Fn(&Economy<AccountId, A, RateId, Role>) -> bool,
 {
     let before = observe(world);
     let assessment = world.assess(&action);
@@ -209,9 +191,9 @@ where
     }
 }
 
-pub type RlTrajectoryResult<Observation, Outcome, AccountId, A, RateId, Role, N = u64> = Result<
-    Vec<RlTransition<Observation, Outcome, AccountId, A, RateId, Role, N>>,
-    ApplyError<RateId, Role, AccountId, A, N>,
+pub type RlTrajectoryResult<Observation, Outcome, AccountId, A, RateId, Role> = Result<
+    Vec<RlTransition<Observation, Outcome, AccountId, A, RateId, Role>>,
+    ApplyError<RateId, Role, AccountId, A>,
 >;
 
 /// Replays a trace on a fork and returns one learning transition per exchange.
@@ -220,30 +202,28 @@ pub fn replay_transitions<
     A,
     RateId,
     Role,
-    N,
     Observation,
     Outcome,
     Observe,
     ReadOutcome,
     Terminal,
 >(
-    initial: &Economy<AccountId, A, RateId, Role, N>,
-    trace: &Trace<RateId, Role, AccountId, N>,
+    initial: &Economy<AccountId, A, RateId, Role>,
+    trace: &Trace<RateId, Role, AccountId>,
     observe: Observe,
     read_outcome: ReadOutcome,
     is_terminal: Terminal,
-) -> RlTrajectoryResult<Observation, Outcome, AccountId, A, RateId, Role, N>
+) -> RlTrajectoryResult<Observation, Outcome, AccountId, A, RateId, Role>
 where
     AccountId: Clone + Eq + Hash + Ord,
     A: Clone + Eq + Hash + Ord,
     RateId: Clone + Eq + Hash + Ord,
     Role: Clone + Ord,
-    N: QuantityScalar,
-    Observe: Fn(&Economy<AccountId, A, RateId, Role, N>) -> Observation,
-    ReadOutcome: Fn(&Economy<AccountId, A, RateId, Role, N>) -> Outcome,
-    Terminal: Fn(&Economy<AccountId, A, RateId, Role, N>) -> bool,
+    Observe: Fn(&Economy<AccountId, A, RateId, Role>) -> Observation,
+    ReadOutcome: Fn(&Economy<AccountId, A, RateId, Role>) -> Outcome,
+    Terminal: Fn(&Economy<AccountId, A, RateId, Role>) -> bool,
 {
-    let mut world = initial.fork();
+    let mut world = initial.clone();
     let mut transitions = Vec::with_capacity(trace.exchanges().len());
     for action in trace.exchanges() {
         let transition = step(
@@ -328,9 +308,9 @@ mod tests {
 
     fn observation(world: &World) -> [u64; 3] {
         [
-            world.balance(&AccountId::Actor, &Asset::Energy).get(),
-            world.balance(&AccountId::Actor, &Asset::Progress).get(),
-            world.balance(&AccountId::Actor, &Asset::Solved).get(),
+            world.balance(&AccountId::Actor, &Asset::Energy).to_u64(),
+            world.balance(&AccountId::Actor, &Asset::Progress).to_u64(),
+            world.balance(&AccountId::Actor, &Asset::Solved).to_u64(),
         ]
     }
 
@@ -353,7 +333,7 @@ mod tests {
             &mut world,
             action(RateId::Advance),
             observation,
-            |world| world.balance(&AccountId::Actor, &Asset::Progress).get(),
+            |world| world.balance(&AccountId::Actor, &Asset::Progress).to_u64(),
             |_| false,
         );
 
@@ -373,7 +353,7 @@ mod tests {
             &world(),
             &trace,
             observation,
-            |world| world.balance(&AccountId::Actor, &Asset::Solved).get(),
+            |world| world.balance(&AccountId::Actor, &Asset::Solved).to_u64(),
             |world| !world.balance(&AccountId::Actor, &Asset::Solved).is_zero(),
         )
         .expect("valid trace becomes a dataset");

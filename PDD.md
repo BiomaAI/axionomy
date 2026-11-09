@@ -115,12 +115,12 @@ Typed binding           = how a physical or calendar value is validated and lowe
 ```
 
 For example, a `uom` mass value may be converted exactly into a canonical
-`Cargo` unit asset and a `Quantity<u64>`. A unit-aware asset key carries its
+`Cargo` unit asset and a `Quantity`. A unit-aware asset key carries its
 logical ID, physical dimension, stable quantity kind, and exact atomic basis.
 The physical dimension is checked at the authoring boundary, the asset
 preserves the denomination and economic identity, and the quantity supplies
 the coefficient. A heterogeneous basket therefore does not erase meaning
-merely because it stores one numeric backend.
+merely because every quantity shares one numeric type.
 
 Units are never properties of accounts or baskets. One account may author a
 cargo balance in kilograms and another in grams, but both inputs lower through
@@ -129,11 +129,12 @@ denominations are economically distinct—such as loose grams and sealed
 25-kilogram bags—they are different logical assets connected by an explicit
 rate rather than alternate representations of one balance.
 
-One economy uses one numeric backend `N`. This gives every balance, rate,
-exchange, shortfall, receipt, and invariant one coherent arithmetic contract.
-Using a different numeric representation for every asset is deliberately out
-of scope: it would introduce dynamic value dispatch into the authoritative
-state and make conservation and generic algorithms substantially less clear.
+Every quantity is an exact unsigned 256-bit integer of atoms. This gives every
+balance, rate, exchange, shortfall, receipt, and invariant one coherent
+arithmetic contract, wide enough for 18-decimal financial assets and
+long-lived interest indexes. Arithmetic is checked: a result past `2²⁵⁶ − 1`
+or below zero rejects the exchange rather than wrapping. Invariant measures
+are exact signed integers and never overflow.
 
 ### 3.2 Fungibility is an identity relation
 
@@ -165,7 +166,7 @@ an index cannot change transition validity.
 The complete current state is a finite sparse mapping:
 
 ```text
-S : Account × Asset → Quantity<N>
+S : Account × Asset → Quantity
 ```
 
 `N` is an exact, totally ordered scalar representation and defaults to `u64`.
@@ -395,12 +396,12 @@ the front remains caller policy.
 
 | Type or operation | Responsibility |
 | --- | --- |
-| `Quantity<N = u64>` | Checked non-negative coefficient with an exact numeric backend |
-| `AssetAmount<A, N = u64>` | One asset-qualified quantity at an API boundary |
-| `Basket<A, N = u64>` | Sparse heterogeneous asset multiset with one numeric backend |
-| `Account<A, N = u64>` | Balance container used during initialization and internal commits |
-| `Rate<Role, A, N = u64>` | Multi-role consume/produce/preserve law |
-| `Exchange<RateId, Role, AccountId, N = u64>` | Concrete proposal |
+| `Quantity` | Checked non-negative 256-bit coefficient |
+| `AssetAmount<A>` | One asset-qualified quantity at an API boundary |
+| `Basket<A>` | Sparse heterogeneous asset multiset |
+| `Account<A>` | Balance container used during initialization and internal commits |
+| `Rate<Role, A>` | Multi-role consume/produce/preserve law |
+| `Exchange<RateId, Role, AccountId>` | Concrete proposal |
 | `EconomyBuilder` | Initial problem construction |
 | `Economy` | Private account/rate ownership and sole execution authority |
 | `ExchangeAssessment` | Applicable, infeasible, or invalid explanatory projection |
@@ -444,8 +445,8 @@ it uses `replayed`; the source remains unchanged.
 Model construction and deserialization share one canonical boundary.
 `EconomyBuilder::build` returns structured issues rather than silently
 replacing duplicate account or rate identifiers. Baskets likewise reject
-duplicate asset identifiers, remove zero quantities, and validate the selected
-numeric backend. Invalid serialized input cannot construct a looser economy
+duplicate asset identifiers, remove zero quantities, and accept quantities only
+as decimal strings below `2²⁵⁶`. Invalid serialized input cannot construct a looser economy
 than ordinary Rust input.
 
 Semantic maps use `IndexMap`: iteration, diagnostics, and direct Serde output
@@ -477,17 +478,16 @@ an invented historical `V1` model hierarchy.
 
 ### 5.2 Numeric and typed authoring boundaries
 
-`QuantityScalar` is intentionally narrower than a general numeric trait. It
-defines the exact operations the authoritative economy needs:
-non-negativity, total ordering, checked addition/subtraction/multiplication,
-conversion from an atomic count, and an associated signed invariant-measure
-type. The `u64` backend is compact and exact.
+`Quantity` exposes only the exact operations the authoritative economy needs:
+total ordering, checked addition, subtraction, multiplication and division,
+and full-width rounded mul-div. It is backed by `ruint`'s `U256` and
+serializes as a decimal string, so no JSON consumer silently loses precision.
 
 Physical and calendar types belong at authoring boundaries:
 
 - `axionomy-units` uses `uom` with exact rational values to declare a measured
   `UnitAsset<Id>`, validate dimensions and unit conversion, and lower an exact
-  multiple of its atomic basis into `AssetAmount<UnitAsset<Id>, N>`.
+  multiple of its atomic basis into `AssetAmount<UnitAsset<Id>>`.
 - `axionomy-units` also declares fixed-precision decimal assets for currency-like
   values. The precision is part of the asset key, mirroring token `decimals`
   without allowing two precisions of one logical ID to alias; exact decimal text
@@ -517,8 +517,10 @@ not put heterogeneous physical values inside `Quantity` or create an external
 clock. Raw atomic counts remain available explicitly through `atoms` or
 `amount`; they cannot change the denomination carried by the asset key.
 
-The current typed adapters convert a validated atom count through `u64` before
-calling `QuantityScalar::from_u64`.
+`uom` stores values as exact `Rational64`, so one physical value lowers to at
+most `i64::MAX` atoms; decimal and calendar adapters accept any count below
+`2²⁵⁶`. The economy's arithmetic is 256-bit regardless of how a value was
+authored.
 
 ### 5.3 Observability boundary
 
@@ -1734,7 +1736,7 @@ pressure justifies them.
 ### D-022: Asset meaning, numeric representation, and typed authoring are separate
 
 An asset defines what a quantity means and names its atomic basis.
-`Quantity<N>` defines exact non-negative arithmetic. `uom` and calendar-aware
+`Quantity` defines exact non-negative arithmetic. `uom` and calendar-aware
 time adapters validate richer authoring values and lower them into
 asset-qualified quantities. No physical dimension, unit, clock, or schedule
 becomes hidden authoritative state outside the economy.

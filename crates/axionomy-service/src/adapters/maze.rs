@@ -194,10 +194,10 @@ fn capture_expansion(world: &World) -> Option<MazeExpansion> {
         node: maze::position(world)?,
         has_key: maze::has_key(world),
         gate_open: maze::gate_is_open(world),
-        energy: world.balance(&AccountId::Agent, &Asset::Energy).get(),
-        time: world.balance(&AccountId::Agent, &Asset::Time).get(),
-        injury: world.balance(&AccountId::Agent, &Asset::Injury).get(),
-        protection: world.balance(&AccountId::Agent, &Asset::Shield).get(),
+        energy: world.balance(&AccountId::Agent, &Asset::Energy).to_u64(),
+        time: world.balance(&AccountId::Agent, &Asset::Time).to_u64(),
+        injury: world.balance(&AccountId::Agent, &Asset::Injury).to_u64(),
+        protection: world.balance(&AccountId::Agent, &Asset::Shield).to_u64(),
         vault_power: !world
             .balance(&AccountId::World, &Asset::PowerVault)
             .is_zero(),

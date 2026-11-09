@@ -61,7 +61,7 @@ inputs, tool outputs, or economic semantics.
 
 | Tool | Input | Result |
 | --- | --- | --- |
-| `axionomy_economy_put` | Directly serializable string-ID, `u64` economy | Content-addressed `economy_id` and deduplication flag |
+| `axionomy_economy_put` | Directly serializable string-ID economy | Content-addressed `economy_id` and deduplication flag |
 | `axionomy_exchange_assess` | `economy_id`, exchange | Applicable/infeasible/invalid status, full shortfalls or projected deltas |
 | `axionomy_exchange_apply` | `economy_id`, exchange | Source ID, new snapshot ID, and receipt |
 | `axionomy_trace_replay` | `economy_id`, trace | Source ID, new snapshot ID, and all receipts |
@@ -70,8 +70,8 @@ inputs, tool outputs, or economic semantics.
 | `axionomy_problem_run` | Problem, optional instance and strategy, seed, and budget | MCP task handle whose terminal result is the shared replay-derived `RunArtifact` with resolved instance identity |
 
 Tool inputs and outputs carry generated JSON Schemas. The reference wire
-ontology uses `String` for asset, account, rate, and role IDs and `u64` for
-quantities. This is a deliberately usable reference profile, not a privileged
+ontology uses `String` for asset, account, rate, and role IDs. Quantities are
+decimal strings such as `"1500"`, exact up to `2²⁵⁶ − 1`. This is a deliberately usable reference profile, not a privileged
 core ontology or a versioned historical compatibility promise.
 
 The search tool currently runs breadth-first search over the caller's explicit

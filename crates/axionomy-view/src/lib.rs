@@ -6,8 +6,7 @@
 
 use axionomy::{
     AccountAssessment, AccountDelta, ApplyError, Basket, Economy, Exchange, ExchangeAssessment,
-    Goal, Quantity, QuantityComparison, QuantityExpression, QuantityScalar, Receipt, Rounding,
-    Trace,
+    Goal, Quantity, QuantityComparison, QuantityExpression, Receipt, Rounding, Trace,
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -48,12 +47,15 @@ impl ViewId {
 #[serde(transparent)]
 pub struct ExactQuantity(pub String);
 
-impl<N> From<&Quantity<N>> for ExactQuantity
-where
-    N: QuantityScalar,
-{
-    fn from(value: &Quantity<N>) -> Self {
+impl From<Quantity> for ExactQuantity {
+    fn from(value: Quantity) -> Self {
         Self(value.to_string())
+    }
+}
+
+impl From<&Quantity> for ExactQuantity {
+    fn from(value: &Quantity) -> Self {
+        Self::from(*value)
     }
 }
 
@@ -132,7 +134,6 @@ pub enum AssessmentIssueKindView {
     RateConditionFailed,
     Infeasible,
     BalanceOverflow,
-    InvariantOverflow,
     InvariantViolation,
 }
 
@@ -1399,24 +1400,20 @@ impl StudioEvent {
 
 /// Converts user ontology values into stable, browser-facing identities and
 /// may derive a scene from each replayed economy snapshot.
-pub trait ViewOntology<AccountId, A, RateId, Role, N = u64> {
+pub trait ViewOntology<AccountId, A, RateId, Role> {
     fn account(&self, id: &AccountId) -> ViewId;
     fn asset(&self, id: &A) -> ViewId;
     fn rate(&self, id: &RateId) -> ViewId;
     fn role(&self, id: &Role) -> ViewId;
 
-    fn scene(
-        &self,
-        _index: u64,
-        _economy: &Economy<AccountId, A, RateId, Role, N>,
-    ) -> Option<Scene> {
+    fn scene(&self, _index: u64, _economy: &Economy<AccountId, A, RateId, Role>) -> Option<Scene> {
         None
     }
 
     fn leaderboards(
         &self,
         _index: u64,
-        _economy: &Economy<AccountId, A, RateId, Role, N>,
+        _economy: &Economy<AccountId, A, RateId, Role>,
     ) -> Vec<LeaderboardView> {
         Vec::new()
     }
@@ -1425,38 +1422,17 @@ pub trait ViewOntology<AccountId, A, RateId, Role, N = u64> {
 /// A useful default for user ontologies and reference fixtures. It preserves
 /// exact typed engine values internally while deriving stable diagnostic IDs
 /// from `Debug` output at the presentation boundary.
-type OntologyMarker<AccountId, A, RateId, Role, N> =
-    PhantomData<fn() -> (AccountId, A, RateId, Role, N)>;
-
-pub struct DebugOntology<AccountId, A, RateId, Role, N = u64, SceneFn = NoScene> {
+pub struct DebugOntology<AccountId, A, RateId, Role> {
     namespace: String,
-    scene: SceneFn,
-    marker: OntologyMarker<AccountId, A, RateId, Role, N>,
+    marker: OntologyMarker<AccountId, A, RateId, Role>,
 }
 
-#[derive(Debug, Clone, Copy, Default)]
-pub struct NoScene;
+type OntologyMarker<AccountId, A, RateId, Role> = PhantomData<fn() -> (AccountId, A, RateId, Role)>;
 
-impl<AccountId, A, RateId, Role, N> DebugOntology<AccountId, A, RateId, Role, N, NoScene> {
+impl<AccountId, A, RateId, Role> DebugOntology<AccountId, A, RateId, Role> {
     pub fn new(namespace: impl Into<String>) -> Self {
         Self {
             namespace: namespace.into(),
-            scene: NoScene,
-            marker: PhantomData,
-        }
-    }
-}
-
-impl<AccountId, A, RateId, Role, N, CurrentScene>
-    DebugOntology<AccountId, A, RateId, Role, N, CurrentScene>
-{
-    pub fn with_scene<SceneFn>(
-        self,
-        scene: SceneFn,
-    ) -> DebugOntology<AccountId, A, RateId, Role, N, SceneFn> {
-        DebugOntology {
-            namespace: self.namespace,
-            scene,
             marker: PhantomData,
         }
     }
@@ -1470,8 +1446,8 @@ impl<AccountId, A, RateId, Role, N, CurrentScene>
     }
 }
 
-impl<AccountId, A, RateId, Role, N> ViewOntology<AccountId, A, RateId, Role, N>
-    for DebugOntology<AccountId, A, RateId, Role, N, NoScene>
+impl<AccountId, A, RateId, Role> ViewOntology<AccountId, A, RateId, Role>
+    for DebugOntology<AccountId, A, RateId, Role>
 where
     AccountId: Debug,
     A: Debug,
@@ -1492,36 +1468,6 @@ where
 
     fn role(&self, id: &Role) -> ViewId {
         self.id("role", id)
-    }
-}
-
-impl<AccountId, A, RateId, Role, N, SceneFn> ViewOntology<AccountId, A, RateId, Role, N>
-    for DebugOntology<AccountId, A, RateId, Role, N, SceneFn>
-where
-    AccountId: Debug,
-    A: Debug,
-    RateId: Debug,
-    Role: Debug,
-    SceneFn: Fn(u64, &Economy<AccountId, A, RateId, Role, N>) -> Option<Scene>,
-{
-    fn account(&self, id: &AccountId) -> ViewId {
-        self.id("account", id)
-    }
-
-    fn asset(&self, id: &A) -> ViewId {
-        self.id("asset", id)
-    }
-
-    fn rate(&self, id: &RateId) -> ViewId {
-        self.id("rate", id)
-    }
-
-    fn role(&self, id: &Role) -> ViewId {
-        self.id("role", id)
-    }
-
-    fn scene(&self, index: u64, economy: &Economy<AccountId, A, RateId, Role, N>) -> Option<Scene> {
-        (self.scene)(index, economy)
     }
 }
 
@@ -1573,10 +1519,10 @@ pub enum PlaybackError {
 }
 
 /// Replays a trace and materializes a portable, self-contained view document.
-pub fn derive_document<AccountId, A, RateId, Role, N, O>(
+pub fn derive_document<AccountId, A, RateId, Role, O>(
     metadata: ViewDocumentMetadata,
-    initial: &Economy<AccountId, A, RateId, Role, N>,
-    trace: &Trace<RateId, Role, AccountId, N>,
+    initial: &Economy<AccountId, A, RateId, Role>,
+    trace: &Trace<RateId, Role, AccountId>,
     ontology: &O,
     objectives: Vec<ObjectiveView>,
 ) -> Result<ViewDocument, PlaybackError>
@@ -1585,18 +1531,17 @@ where
     A: Clone + Eq + Hash + Ord,
     RateId: Clone + Eq + Hash + Ord,
     Role: Clone + Ord,
-    N: QuantityScalar,
-    O: ViewOntology<AccountId, A, RateId, Role, N>,
+    O: ViewOntology<AccountId, A, RateId, Role>,
 {
     derive_document_with_frames(metadata, initial, trace, ontology, objectives, |_| {})
 }
 
 /// Replays a trace and reports each verified frame as soon as it is derived.
 /// The callback is transport-neutral and cannot influence economic state.
-pub fn derive_document_with_frames<AccountId, A, RateId, Role, N, O, F>(
+pub fn derive_document_with_frames<AccountId, A, RateId, Role, O, F>(
     metadata: ViewDocumentMetadata,
-    initial: &Economy<AccountId, A, RateId, Role, N>,
-    trace: &Trace<RateId, Role, AccountId, N>,
+    initial: &Economy<AccountId, A, RateId, Role>,
+    trace: &Trace<RateId, Role, AccountId>,
     ontology: &O,
     objectives: Vec<ObjectiveView>,
     mut on_frame: F,
@@ -1606,11 +1551,10 @@ where
     A: Clone + Eq + Hash + Ord,
     RateId: Clone + Eq + Hash + Ord,
     Role: Clone + Ord,
-    N: QuantityScalar,
-    O: ViewOntology<AccountId, A, RateId, Role, N>,
+    O: ViewOntology<AccountId, A, RateId, Role>,
     F: FnMut(&ExchangeFrame),
 {
-    let mut economy = initial.fork();
+    let mut economy = initial.clone();
     let initial = snapshot(0, &economy, ontology);
     let mut frames = Vec::with_capacity(trace.exchanges().len());
 
@@ -1708,9 +1652,9 @@ fn frame_cues(exchange: &ExchangeView, receipt: &ReceiptView) -> Vec<FrameCueVie
 }
 
 /// Derives the immutable model definition used by a view document.
-pub fn derive_model<AccountId, A, RateId, Role, N, O>(
-    economy: &Economy<AccountId, A, RateId, Role, N>,
-    goal: &Goal<AccountId, A, N>,
+pub fn derive_model<AccountId, A, RateId, Role, O>(
+    economy: &Economy<AccountId, A, RateId, Role>,
+    goal: &Goal<AccountId, A>,
     ontology: &O,
 ) -> ModelView
 where
@@ -1718,8 +1662,7 @@ where
     A: Clone + Eq + Hash + Ord,
     RateId: Clone + Eq + Hash + Ord,
     Role: Clone + Ord,
-    N: QuantityScalar,
-    O: ViewOntology<AccountId, A, RateId, Role, N>,
+    O: ViewOntology<AccountId, A, RateId, Role>,
 {
     let mut rates = economy
         .rate_ids()
@@ -1744,7 +1687,7 @@ where
                 .distinct_roles()
                 .map(|(left, right)| [ontology.role(left), ontology.role(right)])
                 .collect();
-            let computed_amounts = |amounts: &[axionomy::ComputedAmount<Role, A, N>]| {
+            let computed_amounts = |amounts: &[axionomy::ComputedAmount<Role, A>]| {
                 amounts
                     .iter()
                     .map(|amount| ComputedRateAmountView {
@@ -1814,13 +1757,12 @@ where
     }
 }
 
-fn expression_view<AccountId, A, RateId, Role, N, O>(
-    expression: &QuantityExpression<Role, A, N>,
+fn expression_view<AccountId, A, RateId, Role, O>(
+    expression: &QuantityExpression<Role, A>,
     ontology: &O,
 ) -> String
 where
-    N: QuantityScalar,
-    O: ViewOntology<AccountId, A, RateId, Role, N>,
+    O: ViewOntology<AccountId, A, RateId, Role>,
 {
     match expression {
         QuantityExpression::Constant { value } => value.to_string(),
@@ -1870,9 +1812,7 @@ where
             };
             let numerator = match right.as_ref() {
                 // Plain division is a mul-div by one; render it as division.
-                QuantityExpression::Constant { value }
-                    if N::from_u64(1).is_some_and(|one| value.as_scalar() == &one) =>
-                {
+                QuantityExpression::Constant { value } if *value == Quantity::new(1) => {
                     expression_view(left, ontology)
                 }
                 _ => format!(
@@ -1890,9 +1830,9 @@ where
 }
 
 /// Projects a snapshot without mutating or replaying it.
-pub fn derive_snapshot<AccountId, A, RateId, Role, N, O>(
+pub fn derive_snapshot<AccountId, A, RateId, Role, O>(
     index: u64,
-    economy: &Economy<AccountId, A, RateId, Role, N>,
+    economy: &Economy<AccountId, A, RateId, Role>,
     ontology: &O,
 ) -> ViewSnapshot
 where
@@ -1900,20 +1840,19 @@ where
     A: Clone + Eq + Hash + Ord,
     RateId: Clone + Eq + Hash + Ord,
     Role: Clone + Ord,
-    N: QuantityScalar,
-    O: ViewOntology<AccountId, A, RateId, Role, N>,
+    O: ViewOntology<AccountId, A, RateId, Role>,
 {
     snapshot(index, economy, ontology)
 }
 
 /// Projects an exchange and its non-mutating feasibility assessment.
-pub fn derive_proposal<AccountId, A, RateId, Role, N, O>(
+pub fn derive_proposal<AccountId, A, RateId, Role, O>(
     id: impl Into<String>,
     label: impl Into<String>,
     description: impl Into<String>,
     snapshot_index: u64,
-    economy: &Economy<AccountId, A, RateId, Role, N>,
-    exchange: &Exchange<RateId, Role, AccountId, N>,
+    economy: &Economy<AccountId, A, RateId, Role>,
+    exchange: &Exchange<RateId, Role, AccountId>,
     ontology: &O,
 ) -> ProposalView
 where
@@ -1921,8 +1860,7 @@ where
     A: Clone + Eq + Hash + Ord,
     RateId: Clone + Eq + Hash + Ord,
     Role: Clone + Ord,
-    N: QuantityScalar,
-    O: ViewOntology<AccountId, A, RateId, Role, N>,
+    O: ViewOntology<AccountId, A, RateId, Role>,
 {
     ProposalView {
         id: id.into(),
@@ -1934,9 +1872,9 @@ where
     }
 }
 
-fn snapshot<AccountId, A, RateId, Role, N, O>(
+fn snapshot<AccountId, A, RateId, Role, O>(
     index: u64,
-    economy: &Economy<AccountId, A, RateId, Role, N>,
+    economy: &Economy<AccountId, A, RateId, Role>,
     ontology: &O,
 ) -> ViewSnapshot
 where
@@ -1944,8 +1882,7 @@ where
     A: Clone + Eq + Hash + Ord,
     RateId: Clone + Eq + Hash + Ord,
     Role: Clone + Ord,
-    N: QuantityScalar,
-    O: ViewOntology<AccountId, A, RateId, Role, N>,
+    O: ViewOntology<AccountId, A, RateId, Role>,
 {
     let mut accounts = economy
         .accounts()
@@ -1996,13 +1933,12 @@ where
     }
 }
 
-fn basket_view<AccountId, A, RateId, Role, N, O>(
-    basket: &Basket<A, N>,
+fn basket_view<AccountId, A, RateId, Role, O>(
+    basket: &Basket<A>,
     ontology: &O,
 ) -> Vec<AssetQuantityView>
 where
-    N: QuantityScalar,
-    O: ViewOntology<AccountId, A, RateId, Role, N>,
+    O: ViewOntology<AccountId, A, RateId, Role>,
 {
     let mut entries = basket
         .iter()
@@ -2015,14 +1951,13 @@ where
     entries
 }
 
-fn exchange_view<AccountId, A, RateId, Role, N, O>(
-    exchange: &Exchange<RateId, Role, AccountId, N>,
+fn exchange_view<AccountId, A, RateId, Role, O>(
+    exchange: &Exchange<RateId, Role, AccountId>,
     ontology: &O,
 ) -> ExchangeView
 where
     Role: Ord,
-    N: QuantityScalar,
-    O: ViewOntology<AccountId, A, RateId, Role, N>,
+    O: ViewOntology<AccountId, A, RateId, Role>,
 {
     ExchangeView {
         rate: ontology.rate(exchange.rate()),
@@ -2046,13 +1981,12 @@ where
     }
 }
 
-fn delta_view<AccountId, A, RateId, Role, N, O>(
-    delta: &AccountDelta<AccountId, A, N>,
+fn delta_view<AccountId, A, RateId, Role, O>(
+    delta: &AccountDelta<AccountId, A>,
     ontology: &O,
 ) -> AccountDeltaView
 where
-    N: QuantityScalar,
-    O: ViewOntology<AccountId, A, RateId, Role, N>,
+    O: ViewOntology<AccountId, A, RateId, Role>,
 {
     AccountDeltaView {
         account: ontology.account(delta.account()),
@@ -2062,13 +1996,12 @@ where
     }
 }
 
-fn receipt_view<AccountId, A, RateId, Role, N, O>(
-    receipt: &Receipt<RateId, Role, AccountId, A, N>,
+fn receipt_view<AccountId, A, RateId, Role, O>(
+    receipt: &Receipt<RateId, Role, AccountId, A>,
     ontology: &O,
 ) -> ReceiptView
 where
-    N: QuantityScalar,
-    O: ViewOntology<AccountId, A, RateId, Role, N>,
+    O: ViewOntology<AccountId, A, RateId, Role>,
 {
     ReceiptView {
         deltas: receipt
@@ -2079,13 +2012,12 @@ where
     }
 }
 
-fn account_assessment_view<AccountId, A, RateId, Role, N, O>(
-    assessment: &AccountAssessment<AccountId, A, N>,
+fn account_assessment_view<AccountId, A, RateId, Role, O>(
+    assessment: &AccountAssessment<AccountId, A>,
     ontology: &O,
 ) -> AccountAssessmentView
 where
-    N: QuantityScalar,
-    O: ViewOntology<AccountId, A, RateId, Role, N>,
+    O: ViewOntology<AccountId, A, RateId, Role>,
 {
     AccountAssessmentView {
         account: ontology.account(assessment.account()),
@@ -2097,13 +2029,12 @@ where
     }
 }
 
-fn assessment_view<AccountId, A, RateId, Role, N, O>(
-    assessment: &ExchangeAssessment<AccountId, A, RateId, Role, N>,
+fn assessment_view<AccountId, A, RateId, Role, O>(
+    assessment: &ExchangeAssessment<AccountId, A, RateId, Role>,
     ontology: &O,
 ) -> AssessmentView
 where
-    N: QuantityScalar,
-    O: ViewOntology<AccountId, A, RateId, Role, N>,
+    O: ViewOntology<AccountId, A, RateId, Role>,
 {
     match assessment {
         ExchangeAssessment::Applicable {
@@ -2154,13 +2085,12 @@ where
     }
 }
 
-fn assessment_issue_view<AccountId, A, RateId, Role, N, O>(
-    issue: &ApplyError<RateId, Role, AccountId, A, N>,
+fn assessment_issue_view<AccountId, A, RateId, Role, O>(
+    issue: &ApplyError<RateId, Role, AccountId, A>,
     ontology: &O,
 ) -> AssessmentIssueView
 where
-    N: QuantityScalar,
-    O: ViewOntology<AccountId, A, RateId, Role, N>,
+    O: ViewOntology<AccountId, A, RateId, Role>,
 {
     let (kind, message, subjects) = match issue {
         ApplyError::MissingRate { rate } => {
@@ -2276,11 +2206,6 @@ where
                 vec![account, asset],
             )
         }
-        ApplyError::InvariantOverflow { invariant } => (
-            AssessmentIssueKindView::InvariantOverflow,
-            format!("Invariant `{invariant}` overflowed during evaluation."),
-            Vec::new(),
-        ),
         ApplyError::InvariantViolation { invariant, .. } => (
             AssessmentIssueKindView::InvariantViolation,
             format!("Declared invariant `{invariant}` would be violated."),

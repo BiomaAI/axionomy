@@ -47,11 +47,11 @@ theorem overflow_iff (limit : Nat) (rounding : Rounding) (left right denominator
   simp [nonzero]
 
 theorem full_width_example :
-    mulDiv u64Max .floor u64Max u64Max u64Max = some u64Max ∧
-      u64Max < u64Max * u64Max := by
+    mulDiv limit .floor limit limit limit = some limit ∧
+      limit < limit * limit := by
   constructor
-  · simp [mulDiv, quotient, checked, u64Max]
-  · simp [u64Max]
+  · simp [mulDiv, quotient, checked, limit]
+  · simp [limit]
 
 theorem floor_bounds (left right denominator : Nat) (nonzero : denominator ≠ 0) :
     quotient .floor left right denominator * denominator ≤ left * right ∧

@@ -5,7 +5,7 @@
 //! decide which transitions and outcomes are valid.
 
 use crate::session::{AdvanceReport, SearchObserver, SearchStatus, WorkBudget};
-use axionomy::{Economy, Exchange, Goal, Quantity, QuantityScalar, Trace};
+use axionomy::{Economy, Exchange, Goal, Quantity, Trace};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
@@ -325,56 +325,49 @@ impl ParetoSearchProgress {
     }
 }
 
-struct ParetoSearchState<AccountId, A, RateId, Role, N>
-where
-    N: QuantityScalar,
-{
-    world: Economy<AccountId, A, RateId, Role, N>,
-    trace: Trace<RateId, Role, AccountId, N>,
+struct ParetoSearchState<AccountId, A, RateId, Role> {
+    world: Economy<AccountId, A, RateId, Role>,
+    trace: Trace<RateId, Role, AccountId>,
 }
 
 /// Resumable exhaustive search whose retained outcomes are replayable traces.
 ///
 /// The front remains [`FrontierCompleteness::Approximate`] while work remains.
 /// It becomes exact only when every reachable state has been exhausted.
-pub struct ParetoSearchSession<AccountId, A, RateId, Role, N, K, V, Candidates, Project>
-where
-    N: QuantityScalar,
-{
-    goal: Goal<AccountId, A, N>,
+pub struct ParetoSearchSession<AccountId, A, RateId, Role, K, V, Candidates, Project> {
+    goal: Goal<AccountId, A>,
     candidates: Candidates,
     project: Project,
-    states: Vec<ParetoSearchState<AccountId, A, RateId, Role, N>>,
+    states: Vec<ParetoSearchState<AccountId, A, RateId, Role>>,
     frontier: VecDeque<usize>,
-    visited: HashSet<Vec<(AccountId, A, Quantity<N>)>>,
-    results: ParetoFront<Trace<RateId, Role, AccountId, N>, K, V>,
+    visited: HashSet<Vec<(AccountId, A, Quantity)>>,
+    results: ParetoFront<Trace<RateId, Role, AccountId>, K, V>,
     expanded: usize,
     generated: usize,
     terminal_outcomes: usize,
     exhausted: bool,
 }
 
-impl<AccountId, A, RateId, Role, N, K, V, Candidates, Project>
-    ParetoSearchSession<AccountId, A, RateId, Role, N, K, V, Candidates, Project>
+impl<AccountId, A, RateId, Role, K, V, Candidates, Project>
+    ParetoSearchSession<AccountId, A, RateId, Role, K, V, Candidates, Project>
 where
     AccountId: Clone + Eq + Hash + Ord,
     A: Clone + Eq + Hash + Ord,
     RateId: Clone + Eq + Hash + Ord,
     Role: Clone + Ord,
-    N: QuantityScalar,
     K: Eq,
     V: PartialOrd,
     Candidates:
-        FnMut(&Economy<AccountId, A, RateId, Role, N>) -> Vec<Exchange<RateId, Role, AccountId, N>>,
-    Project: FnMut(&Economy<AccountId, A, RateId, Role, N>) -> ObjectiveVector<K, V>,
+        FnMut(&Economy<AccountId, A, RateId, Role>) -> Vec<Exchange<RateId, Role, AccountId>>,
+    Project: FnMut(&Economy<AccountId, A, RateId, Role>) -> ObjectiveVector<K, V>,
 {
     pub fn new(
-        initial: &Economy<AccountId, A, RateId, Role, N>,
-        goal: Goal<AccountId, A, N>,
+        initial: &Economy<AccountId, A, RateId, Role>,
+        goal: Goal<AccountId, A>,
         candidates: Candidates,
         project: Project,
     ) -> Self {
-        let initial = initial.fork();
+        let initial = initial.clone();
         let key = initial.state_key();
         Self {
             goal,
@@ -413,11 +406,11 @@ where
         }
     }
 
-    pub fn front(&self) -> &ParetoFront<Trace<RateId, Role, AccountId, N>, K, V> {
+    pub fn front(&self) -> &ParetoFront<Trace<RateId, Role, AccountId>, K, V> {
         &self.results
     }
 
-    pub fn into_front(self) -> ParetoFront<Trace<RateId, Role, AccountId, N>, K, V> {
+    pub fn into_front(self) -> ParetoFront<Trace<RateId, Role, AccountId>, K, V> {
         self.results
     }
 
@@ -465,7 +458,7 @@ where
 
             let exchanges = (self.candidates)(&self.states[index].world);
             for exchange in exchanges {
-                let mut next = self.states[index].world.fork();
+                let mut next = self.states[index].world.clone();
                 if next.apply(exchange.clone()).is_err() {
                     continue;
                 }
@@ -499,17 +492,17 @@ where
 }
 
 /// The exact result of exhausting a finite reachable state space.
-pub struct ParetoSearchResult<RateId, Role, AccountId, N, K, V> {
-    front: ParetoFront<Trace<RateId, Role, AccountId, N>, K, V>,
+pub struct ParetoSearchResult<RateId, Role, AccountId, K, V> {
+    front: ParetoFront<Trace<RateId, Role, AccountId>, K, V>,
     progress: ParetoSearchProgress,
 }
 
-impl<RateId, Role, AccountId, N, K, V> ParetoSearchResult<RateId, Role, AccountId, N, K, V> {
-    pub fn front(&self) -> &ParetoFront<Trace<RateId, Role, AccountId, N>, K, V> {
+impl<RateId, Role, AccountId, K, V> ParetoSearchResult<RateId, Role, AccountId, K, V> {
+    pub fn front(&self) -> &ParetoFront<Trace<RateId, Role, AccountId>, K, V> {
         &self.front
     }
 
-    pub fn into_front(self) -> ParetoFront<Trace<RateId, Role, AccountId, N>, K, V> {
+    pub fn into_front(self) -> ParetoFront<Trace<RateId, Role, AccountId>, K, V> {
         self.front
     }
 
@@ -519,23 +512,22 @@ impl<RateId, Role, AccountId, N, K, V> ParetoSearchResult<RateId, Role, AccountI
 }
 
 /// Exhausts a finite reachable state space and returns its replayable Pareto front.
-pub fn search<AccountId, A, RateId, Role, N, K, V, Candidates, Project>(
-    initial: &Economy<AccountId, A, RateId, Role, N>,
-    goal: &Goal<AccountId, A, N>,
+pub fn search<AccountId, A, RateId, Role, K, V, Candidates, Project>(
+    initial: &Economy<AccountId, A, RateId, Role>,
+    goal: &Goal<AccountId, A>,
     candidates: Candidates,
     project: Project,
-) -> Result<ParetoSearchResult<RateId, Role, AccountId, N, K, V>, ParetoError>
+) -> Result<ParetoSearchResult<RateId, Role, AccountId, K, V>, ParetoError>
 where
     AccountId: Clone + Eq + Hash + Ord,
     A: Clone + Eq + Hash + Ord,
     RateId: Clone + Eq + Hash + Ord,
     Role: Clone + Ord,
-    N: QuantityScalar,
     K: Eq,
     V: PartialOrd,
     Candidates:
-        FnMut(&Economy<AccountId, A, RateId, Role, N>) -> Vec<Exchange<RateId, Role, AccountId, N>>,
-    Project: FnMut(&Economy<AccountId, A, RateId, Role, N>) -> ObjectiveVector<K, V>,
+        FnMut(&Economy<AccountId, A, RateId, Role>) -> Vec<Exchange<RateId, Role, AccountId>>,
+    Project: FnMut(&Economy<AccountId, A, RateId, Role>) -> ObjectiveVector<K, V>,
 {
     let mut session = ParetoSearchSession::new(initial, goal.clone(), candidates, project);
     let mut observer = crate::session::Continue;
@@ -727,8 +719,8 @@ mod tests {
 
     fn project(world: &World) -> ObjectiveVector<ObjectiveKey, u64> {
         vector(
-            world.balance(&AccountId::Agent, &Asset::Energy).get(),
-            world.balance(&AccountId::Agent, &Asset::Time).get(),
+            world.balance(&AccountId::Agent, &Asset::Energy).to_u64(),
+            world.balance(&AccountId::Agent, &Asset::Time).to_u64(),
         )
     }
 

@@ -17,7 +17,7 @@ def effectDelta (entry : AccountId × Effect A) : Delta AccountId A :=
 def PreparedEntry (accounts : List (AccountId × Balances A))
     (entry : AccountId × Effect A) (prepared : AccountId × Balances A) : Prop :=
   prepared.1 = entry.1 ∧ ∃ before, Account.find? entry.1 accounts = some before ∧
-    Account.prepare (Account.naturals Quantity.u64Max) before entry.2.consume entry.2.produce = .ok prepared.2
+    Account.prepare (Account.naturals Quantity.limit) before entry.2.consume entry.2.produce = .ok prepared.2
 
 theorem prepareOne_success (accounts : List (AccountId × Balances A)) (id : AccountId)
     (effect : Effect A) (updated : Balances A)
@@ -26,7 +26,7 @@ theorem prepareOne_success (accounts : List (AccountId × Balances A)) (id : Acc
   cases found : Account.find? id accounts with
   | none => simp [prepareOne, require, found] at success
   | some before =>
-    cases prepared : Account.prepare (Account.naturals Quantity.u64Max) before effect.consume effect.produce with
+    cases prepared : Account.prepare (Account.naturals Quantity.limit) before effect.consume effect.produce with
     | error error => simp [prepareOne, require, found, prepared, liftIssue, Except.mapError] at success
     | ok result =>
       have same : result = updated := by simpa [prepareOne, require, found, prepared, liftIssue, Except.mapError] using success

@@ -1,6 +1,6 @@
 #![doc = include_str!("../README.md")]
 
-use axionomy::{AssetAmount, Quantity, QuantityScalar};
+use axionomy::{AssetAmount, Quantity};
 use axionomy_units::si::SI;
 use axionomy_units::si::rational64::Time;
 use axionomy_units::si::time::{Dimension as TimeDimension, second};
@@ -66,15 +66,11 @@ where
 
     /// Lowers elapsed duration into the timeline asset's canonical atoms.
     ///
-    /// The resulting timeline count must fit `u64` before it is converted
-    /// through [`QuantityScalar::from_u64`] into the selected economy backend.
-    pub fn encode<N>(
+    /// Any count below `2²⁵⁶` atoms becomes an exact quantity.
+    pub fn encode(
         &self,
         duration: SignedDuration,
-    ) -> Result<AssetAmount<UnitAsset<Id>, N>, TimeBindingError>
-    where
-        N: QuantityScalar,
-    {
+    ) -> Result<AssetAmount<UnitAsset<Id>>, TimeBindingError> {
         let nanoseconds = duration.as_nanos();
         if nanoseconds < 0 {
             return Err(TimeBindingError::NegativeDuration);
@@ -82,33 +78,24 @@ where
         if nanoseconds % self.atomic_nanoseconds != 0 {
             return Err(TimeBindingError::InexactAtomicConversion);
         }
-        let count = u64::try_from(nanoseconds / self.atomic_nanoseconds)
+        let count = u128::try_from(nanoseconds / self.atomic_nanoseconds)
             .map_err(|_| TimeBindingError::NumericRange)?;
-        let scalar = N::from_u64(count).ok_or(TimeBindingError::NumericRange)?;
-        let quantity =
-            Quantity::try_from_scalar(scalar).map_err(|_| TimeBindingError::NegativeDuration)?;
-        Ok(self.asset.amount(quantity))
+        Ok(self.asset.amount(Quantity::from(count)))
     }
 
-    pub fn encode_between<N>(
+    pub fn encode_between(
         &self,
         start: Timestamp,
         end: Timestamp,
-    ) -> Result<AssetAmount<UnitAsset<Id>, N>, TimeBindingError>
-    where
-        N: QuantityScalar,
-    {
+    ) -> Result<AssetAmount<UnitAsset<Id>>, TimeBindingError> {
         self.encode(end.duration_since(start))
     }
 
-    pub fn encode_zoned_between<N>(
+    pub fn encode_zoned_between(
         &self,
         start: &Zoned,
         end: &Zoned,
-    ) -> Result<AssetAmount<UnitAsset<Id>, N>, TimeBindingError>
-    where
-        N: QuantityScalar,
-    {
+    ) -> Result<AssetAmount<UnitAsset<Id>>, TimeBindingError> {
         self.encode(end.duration_since(start))
     }
 }
@@ -174,13 +161,12 @@ impl CalendarWindow {
         self.closes.duration_since(&self.opens)
     }
 
-    pub fn encode<Id, N>(
+    pub fn encode<Id>(
         &self,
         timeline: &TimelineAsset<Id>,
-    ) -> Result<AssetAmount<UnitAsset<Id>, N>, TimeBindingError>
+    ) -> Result<AssetAmount<UnitAsset<Id>>, TimeBindingError>
     where
         Id: Clone + Eq + Hash,
-        N: QuantityScalar,
     {
         timeline.encode(self.elapsed())
     }
@@ -236,7 +222,7 @@ mod tests {
             timeline.encode(SignedDuration::from_hours(36)).unwrap();
 
         assert_eq!(amount.asset(), timeline.asset());
-        assert_eq!(amount.quantity(), &Quantity::new(36));
+        assert_eq!(amount.quantity(), Quantity::new(36));
     }
 
     #[test]
@@ -251,7 +237,7 @@ mod tests {
                 .unwrap();
         let amount: AssetAmount<UnitAsset<AssetId>> = window.encode(&timeline).unwrap();
 
-        assert_eq!(amount.quantity(), &Quantity::new(23));
+        assert_eq!(amount.quantity(), Quantity::new(23));
     }
 
     #[test]
@@ -268,6 +254,6 @@ mod tests {
         assert_eq!(timeline.asset(), measured.asset());
         let amount: AssetAmount<UnitAsset<AssetId>> =
             timeline.encode(SignedDuration::from_hours(2)).unwrap();
-        assert_eq!(amount.quantity(), &Quantity::new(2));
+        assert_eq!(amount.quantity(), Quantity::new(2));
     }
 }

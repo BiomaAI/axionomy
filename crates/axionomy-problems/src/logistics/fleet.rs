@@ -194,7 +194,7 @@ pub type World = Economy<AccountId, Asset, RateId, Role>;
 pub type Action = Exchange<RateId, Role, AccountId>;
 pub type Proposal = Trace<RateId, Role, AccountId>;
 pub fn value(world: &World, account: AccountId, asset: Asset) -> u64 {
-    world.balance(&account, &asset).get()
+    world.balance(&account, &asset).to_u64()
 }
 pub fn now(world: &World) -> u64 {
     value(world, AccountId::World, Asset::Time)
@@ -421,13 +421,8 @@ pub fn initial(stress: bool, seed: u64) -> World {
                         q(Role::Vehicle, Asset::TicketDivisor),
                         Rounding::Floor,
                     );
-                    let code = Q::subtract(
-                        shifted.clone(),
-                        Q::multiply(
-                            Q::divide(shifted, Q::constant(4), Rounding::Floor),
-                            Q::constant(4),
-                        ),
-                    );
+                    let code = shifted.clone()
+                        - (Q::divide(shifted, Q::constant(4), Rounding::Floor) * Q::constant(4));
                     let mut resolution = vehicle(law(), van)
                         .preserve(Role::Nature, basket([(Asset::NatureIdentity, 1)]))
                         .preserve(Role::Vehicle, basket([(Asset::Travelling(from, to), 1)]))
@@ -442,7 +437,7 @@ pub fn initial(stress: bool, seed: u64) -> World {
                         .produce_computed(
                             Role::Vehicle,
                             Asset::TicketDivisor,
-                            Q::multiply(q(Role::Vehicle, Asset::TicketDivisor), Q::constant(3)),
+                            q(Role::Vehicle, Asset::TicketDivisor) * Q::constant(3),
                         )
                         .produce_computed(
                             Role::Vehicle,

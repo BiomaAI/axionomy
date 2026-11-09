@@ -888,7 +888,9 @@ mod tests {
             }))
             .unwrap();
         assert_eq!(
-            world.balance(&AccountId::Success, &Asset::Pressed(0)).get(),
+            world
+                .balance(&AccountId::Success, &Asset::Pressed(0))
+                .to_u64(),
             1
         );
         for to in [30, 31, 32, 41, 42] {
@@ -914,7 +916,9 @@ mod tests {
                 .is_zero()
         );
         assert_eq!(
-            world.balance(&AccountId::Success, &Asset::Latched(0)).get(),
+            world
+                .balance(&AccountId::Success, &Asset::Latched(0))
+                .to_u64(),
             1
         );
         for to in [21, 30, 31] {
@@ -932,7 +936,7 @@ mod tests {
             assert_eq!(
                 final_world
                     .balance(&AccountId::Success, &Asset::Latched(circuit))
-                    .get(),
+                    .to_u64(),
                 1
             );
             assert!(

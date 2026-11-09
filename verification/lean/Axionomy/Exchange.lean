@@ -1,17 +1,13 @@
 import Axionomy.Quantity
 
 /-!
-Prepared-exchange design specification, checked with the pinned Lean toolchain.
+Prepared exchanges. Each Cell represents one distinct account/asset entry
+after role binding, static scaling and computed-effect evaluation and
+aggregation.
 
-This is a handwritten mathematical specification, NOT Aeneas output and NOT
-a proof of the current Rust implementation. Each Cell represents one distinct
-account/asset entry AFTER role binding, static scaling and computed-effect
-evaluation/aggregation. Those operations, collection implementations, custom
-numeric traits, serialization and signed-measure overflow are outside this spike.
-
-Nat models exact nonnegative quantities. `limit` bounds the resulting balance;
-setting it to 2^64 - 1 models that particular u64 range obligation. Global
-conservation uses mathematical Int, not Rust's checked i128 implementation.
+Nat models exact nonnegative quantities and `limit` bounds the resulting
+balance (`Quantity.limit`, 2^256 - 1, for the kernel). Conservation is
+measured in mathematical Int.
 -/
 
 namespace Axionomy.Exchange
@@ -148,9 +144,9 @@ theorem batching_requires_a_qualified_statement :
 -- an overflow. Runtime invariant error classification is outside this model.
 def prepareStatic (before consumed produced preserved units : Nat) (weight : Int) : Option Cell := do
   if units = 0 then none else do
-    let c ← Quantity.mul Quantity.u64Max consumed units
-    let p ← Quantity.mul Quantity.u64Max produced units
-    let _ ← Quantity.add Quantity.u64Max c preserved
+    let c ← Quantity.mul Quantity.limit consumed units
+    let p ← Quantity.mul Quantity.limit produced units
+    let _ ← Quantity.add Quantity.limit c preserved
     some ⟨before, c, p, preserved, weight⟩
 
 theorem static_zero_units_rejected (before consumed produced preserved : Nat) (weight : Int) :
@@ -161,7 +157,7 @@ def staticOutcome (before consumed produced preserved units : Nat) (conserve : B
   match prepareStatic before consumed produced preserved units (if conserve then 1 else 0) with
   | none => (false, before)
   | some cell =>
-    let result := applyPrepared Quantity.u64Max [cell]
+    let result := applyPrepared Quantity.limit [cell]
     (result.1, result.2.headD before)
 
 end Axionomy.Exchange

@@ -45,7 +45,7 @@ fn compatible_input_units_normalize_to_one_canonical_asset() {
         .unwrap();
 
     assert_eq!(from_kilograms, from_grams);
-    assert_eq!(from_kilograms.quantity(), &Quantity::new(1_000));
+    assert_eq!(from_kilograms.quantity(), Quantity::new(1_000));
 }
 
 #[test]
@@ -156,7 +156,7 @@ fn schema_validates_assets_across_accounts_rates_invariants_and_goals() {
     let permission = schema.define_discrete(AssetId::Permission).unwrap();
     let balances = Basket::try_from_amounts([
         cargo
-            .encode::<u64>(Mass::new::<kilogram>(Rational::from_integer(2)))
+            .encode(Mass::new::<kilogram>(Rational::from_integer(2)))
             .unwrap(),
         permission.atoms(1),
     ])
@@ -275,6 +275,6 @@ proptest! {
             .encode(Mass::new::<gram>(Rational::from_integer(grams as i64)))
             .unwrap();
 
-        prop_assert_eq!(amount.quantity(), &Quantity::new(grams));
+        prop_assert_eq!(amount.quantity(), Quantity::new(grams));
     }
 }

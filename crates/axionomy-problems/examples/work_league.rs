@@ -24,7 +24,7 @@ fn main() {
         if world.account(&AccountId::Agent(agent)).is_none() {
             continue;
         }
-        let read = |asset| world.balance(&AccountId::Agent(agent), &asset).get();
+        let read = |asset| world.balance(&AccountId::Agent(agent), &asset).to_u64();
         info!(
             agent = ?agent,
             policy = ?work_league::policy(world, agent),

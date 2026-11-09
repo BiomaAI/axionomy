@@ -12,7 +12,7 @@ def pulls (seen : List Nat) : List (Nat × Nat) → Nat
   | (asset, _) :: rest => if asset ∈ seen then 1 else 1 + pulls (seen ++ [asset]) rest
 
 def fixtures : Array Json := Id.run do
-  let atoms : List (Nat × Nat) := [(0, 0), (0, 1), (1, Quantity.u64Max), (1, 0)]
+  let atoms : List (Nat × Nat) := [(0, 0), (0, 1), (1, Quantity.limit), (1, 0)]
   let mut entries := [[]]
   let mut layer := [[]]
   for _ in [0:3] do

@@ -110,7 +110,7 @@ pub enum RateId {
 pub type World = Economy<AccountId, Asset, RateId, Role>;
 pub type Action = Exchange<RateId, Role, AccountId>;
 pub type Solution = SearchSolution<RateId, Role, AccountId>;
-pub type ParetoResult = ParetoSearchResult<RateId, Role, AccountId, u64, ObjectiveKey, u64>;
+pub type ParetoResult = ParetoSearchResult<RateId, Role, AccountId, ObjectiveKey, u64>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ObjectiveKey {
@@ -455,18 +455,20 @@ pub fn objectives(world: &World) -> ObjectiveVector<ObjectiveKey, u64> {
 }
 
 pub fn spent_energy(world: &World) -> u64 {
-    world.balance(&AccountId::Agent, &Asset::SpentEnergy).get()
+    world
+        .balance(&AccountId::Agent, &Asset::SpentEnergy)
+        .to_u64()
 }
 
 pub fn spent_time(world: &World) -> u64 {
-    world.balance(&AccountId::Agent, &Asset::SpentTime).get()
+    world.balance(&AccountId::Agent, &Asset::SpentTime).to_u64()
 }
 
 pub fn heuristic(world: &World) -> u64 {
     position(world).map_or(0, |node| {
         world
             .balance(&AccountId::World, &Asset::Distance(node))
-            .get()
+            .to_u64()
     })
 }
 
@@ -660,7 +662,7 @@ mod tests {
                 .iter()
                 .flat_map(|shortfall| shortfall.missing().iter())
                 .find(|(asset, _)| *asset == &Asset::At(Node::Gate))
-                .map(|(_, quantity)| quantity.get()),
+                .map(|(_, quantity)| quantity.to_u64()),
             Some(1),
         );
     }

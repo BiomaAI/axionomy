@@ -1,12 +1,11 @@
-use crate::{Quantity, QuantityScalar};
+use crate::Quantity;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 /// One asset-qualified economic quantity.
 ///
-/// `A` preserves what the value means and names its atomic basis. `N`
-/// determines how the exact non-negative coefficient is represented.
-/// Asset domains remain distinct at compile time:
+/// `A` preserves what the value means and names its atomic basis, so asset
+/// domains remain distinct at compile time:
 ///
 /// ```compile_fail,E0308
 /// use axionomy::{AssetAmount, Quantity};
@@ -16,17 +15,13 @@ use serde::{Deserialize, Serialize};
 /// prepare(AssetAmount::new(Fuel, Quantity::new(1)));
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
-#[serde(bound(
-    serialize = "A: Serialize, N: Serialize",
-    deserialize = "A: Deserialize<'de>, N: Deserialize<'de> + QuantityScalar"
-))]
-pub struct AssetAmount<A, N = u64> {
+pub struct AssetAmount<A> {
     asset: A,
-    quantity: Quantity<N>,
+    quantity: Quantity,
 }
 
-impl<A, N> AssetAmount<A, N> {
-    pub const fn new(asset: A, quantity: Quantity<N>) -> Self {
+impl<A> AssetAmount<A> {
+    pub const fn new(asset: A, quantity: Quantity) -> Self {
         Self { asset, quantity }
     }
 
@@ -34,23 +29,23 @@ impl<A, N> AssetAmount<A, N> {
         &self.asset
     }
 
-    pub const fn quantity(&self) -> &Quantity<N> {
-        &self.quantity
+    pub const fn quantity(&self) -> Quantity {
+        self.quantity
     }
 
-    pub fn into_parts(self) -> (A, Quantity<N>) {
+    pub fn into_parts(self) -> (A, Quantity) {
         (self.asset, self.quantity)
     }
 }
 
-impl<A, N> From<(A, Quantity<N>)> for AssetAmount<A, N> {
-    fn from((asset, quantity): (A, Quantity<N>)) -> Self {
+impl<A> From<(A, Quantity)> for AssetAmount<A> {
+    fn from((asset, quantity): (A, Quantity)) -> Self {
         Self::new(asset, quantity)
     }
 }
 
-impl<A, N> From<AssetAmount<A, N>> for (A, Quantity<N>) {
-    fn from(value: AssetAmount<A, N>) -> Self {
+impl<A> From<AssetAmount<A>> for (A, Quantity) {
+    fn from(value: AssetAmount<A>) -> Self {
         value.into_parts()
     }
 }

@@ -78,7 +78,7 @@ structure AccountCase where
 def accountCase (depositing : Bool) (before amounts : List (Nat × Nat)) : AccountCase :=
   let before := Basket.canonical before
   let amounts := Basket.canonical amounts
-  let ops := Account.naturals Quantity.u64Max
+  let ops := Account.naturals Quantity.limit
   let result := if depositing then Account.deposit ops before amounts else Account.withdraw ops before amounts
   let strings := fun entries : List (Nat × Nat) => entries.map (fun (asset, value) => (asset, toString value))
   let error := match result.1 with
@@ -102,7 +102,7 @@ def preparationCase (before consumed produced : List (Nat × Nat)) : Preparation
   let consumed := Basket.canonical consumed
   let produced := Basket.canonical produced
   let result := Account.preparedOutcome before
-    (Account.prepare (Account.naturals Quantity.u64Max) before consumed produced)
+    (Account.prepare (Account.naturals Quantity.limit) before consumed produced)
   let strings := fun entries : List (Nat × Nat) => entries.map (fun (asset, value) => (asset, toString value))
   let error := match result.1 with
     | .ok () => (none, none)
@@ -125,9 +125,9 @@ structure BasketOpsCase where
 def basketOpsCase (before other : List (Nat × Nat)) (units : Nat) : BasketOpsCase :=
   let before := Basket.canonical before
   let other := Basket.canonical other
-  let ops := Account.naturals Quantity.u64Max
+  let ops := Account.naturals Quantity.limit
   let added := BasketOperations.add ops before other
-  let scaled := BasketOperations.scale ops (Quantity.mul Quantity.u64Max) before units
+  let scaled := BasketOperations.scale ops (Quantity.mul Quantity.limit) before units
   let strings := fun entries : List (Nat × Nat) => entries.map (fun (asset, value) => (asset, toString value))
   let addError := match added.1 with | .ok () => none | .error asset => some asset
   let scaleResult := match scaled with
@@ -156,7 +156,7 @@ def conservationCase (weights : List (Nat × Int))
   ⟨weights.map (fun (asset, weight) => (asset, toString weight)),
     deltas.map (fun d => ⟨d.account, strings d.consumed, strings d.produced, strings d.preserved⟩),
     Conservation.conserves (fun a q => some (Conservation.contribution weights a q))
-      Conservation.checkedAdd 0 deltas⟩
+      Conservation.exactAdd 0 deltas⟩
 
 structure RateMergeCase where
   target : List (Nat × List (Nat × String))
@@ -172,7 +172,7 @@ def rateMergeCase (target : List (Nat × List (Nat × Nat))) (role : Nat)
   let assets := Basket.canonical assets
   let strings := fun entries : List (Nat × Nat) => entries.map fun (asset, amount) => (asset, toString amount)
   let maps := fun entries : List (Nat × List (Nat × Nat)) => entries.map fun (r, b) => (r, strings b)
-  let result := RateConstruction.merge (Account.naturals Quantity.u64Max) compare target role assets
+  let result := RateConstruction.merge (Account.naturals Quantity.limit) compare target role assets
   let outcome := match result with
     | .error asset => (none, some asset)
     | .ok merged => (some (maps merged), none)
@@ -189,7 +189,7 @@ def combinators : List (Evaluation.Expr Nat Nat Nat → Evaluation.Expr Nat Nat 
   [.binary .add, .binary .sub, .binary .mul, divide, .binary .min, .binary .max]
 
 def expressionJson : Evaluation.Expr Nat Nat Nat → Json
-  | .constant value => Json.mkObj [("kind", toJson "constant"), ("value", toJson value)]
+  | .constant value => Json.mkObj [("kind", toJson "constant"), ("value", toJson (toString value))]
   | .units => Json.mkObj [("kind", toJson "units")]
   | .parameter parameter => Json.mkObj [("kind", toJson "parameter"), ("name", toJson parameter)]
   | .balance role asset => Json.mkObj [("kind", toJson "balance"), ("role", toJson role), ("asset", toJson asset)]
@@ -216,11 +216,11 @@ structure EvaluationCase where
   deriving ToJson
 
 def evaluationCase (units : Nat) (expression right : Evaluation.Expr Nat Nat Nat) : EvaluationCase :=
-  let parameters := [("a", 3), ("z", 0), ("éλ", Quantity.u64Max)]
+  let parameters := [("a", 3), ("z", 0), ("éλ", Quantity.limit)]
   let bindings := [(0, 0), (1, 1), (2, 999)]
-  let accounts := [(0, [(0, Quantity.u64Max), (1, 3)]), (1, [(0, 1)])]
+  let accounts := [(0, [(0, Quantity.limit), (1, 3)]), (1, [(0, 1)])]
   let context := Evaluation.fromState compare 0 units parameters bindings accounts
-  let ops := Evaluation.naturals Quantity.u64Max
+  let ops := Evaluation.naturals Quantity.limit
   let outcome := match Evaluation.eval ops context expression with
     | .ok value => (some (toString value), none)
     | .error error => (none, some error.message)
@@ -242,7 +242,7 @@ def measureCase (weights : List (Nat × Int)) (accounts : List (Nat × List (Nat
   ⟨weights.map (fun (asset, weight) => (asset, toString weight)),
     accounts.map (fun (key, entries) => (key, entries.map fun (asset, value) => (asset, toString value))),
     (Conservation.accumulate (fun a q => some (Conservation.contribution weights a q))
-      Conservation.checkedAdd 0 (accounts.flatMap Prod.snd)).map toString⟩
+      Conservation.exactAdd 0 (accounts.flatMap Prod.snd)).map toString⟩
 
 structure EffectsCase where
   target : List (Nat × String)
@@ -260,8 +260,8 @@ def effectsCase (target source : List (Nat × Nat)) (units asset amount : Nat) :
   let target := Basket.canonical target
   let source := Basket.canonical source
   let strings := fun entries : List (Nat × Nat) => entries.map fun (key, value) => (key, toString value)
-  let ops := Account.naturals Quantity.u64Max
-  let scaled := match Effects.scaled ops (Quantity.mul Quantity.u64Max) target source units with
+  let ops := Account.naturals Quantity.limit
+  let scaled := match Effects.scaled ops (Quantity.mul Quantity.limit) target source units with
     | .ok entries => (strings entries, none) | .error asset => (strings target, some asset)
   let computed := match Account.credit ops target [(asset, amount)] with
     | .ok entries => (strings entries, none) | .error asset => (strings target, some asset)
@@ -409,7 +409,7 @@ def validationCase (roles : List Nat) (requiredParameters : List String) (distin
     parameters.map (fun (key, value) => (key, toString value)), accounts, accepted, issues⟩
 
 def main : IO Unit := do
-  let limit := Quantity.u64Max
+  let limit := Quantity.limit
   let boundaries := [0, 1, 2, 3, limit - 1, limit]
   let mut scalars : Array ScalarCase := #[]
   for left in boundaries do

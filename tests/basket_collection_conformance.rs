@@ -39,7 +39,7 @@ fn fixtures() -> Vec<Case> {
 fn entries(case: &Case) -> Vec<Entry> {
     case.entries
         .iter()
-        .map(|(asset, value)| (*asset, Quantity::new(value.parse().unwrap())))
+        .map(|(asset, value)| (*asset, value.parse::<Quantity>().unwrap()))
         .collect()
 }
 

@@ -56,7 +56,7 @@ pub(super) fn build(
                 (
                     final_world
                         .balance(&AccountId::Agent(favored), &Asset::OnTime)
-                        .get(),
+                        .to_u64(),
                     bridge::priority(&final_world, favored),
                     bridge::credit(&final_world, favored),
                 )
@@ -440,7 +440,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         })
         .collect();
     let agents = [AgentId::A, AgentId::B].into_iter().map(|agent| {
-        let value = |asset| world.balance(&AccountId::Agent(agent), &asset).get();
+        let value = |asset| world.balance(&AccountId::Agent(agent), &asset).to_u64();
         let east = value(Asset::At(Side::East)) > 0;
         let crossing = value(Asset::InTransit) > 0;
         let detour = value(Asset::OnDetour) > 0;
@@ -547,7 +547,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             visual_metric(
                 "wave",
                 "Traffic wave",
-                world.balance(&AccountId::Bridge, &Asset::Round).get() + 1,
+                world.balance(&AccountId::Bridge, &Asset::Round).to_u64() + 1,
                 None,
             ),
             visual_metric(
@@ -558,7 +558,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                     .map(|agent| {
                         world
                             .balance(&AccountId::Agent(agent), &Asset::OnTime)
-                            .get()
+                            .to_u64()
                     })
                     .sum::<u64>(),
                 None,
@@ -568,7 +568,11 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 "Late trips",
                 [AgentId::A, AgentId::B]
                     .into_iter()
-                    .map(|agent| world.balance(&AccountId::Agent(agent), &Asset::Late).get())
+                    .map(|agent| {
+                        world
+                            .balance(&AccountId::Agent(agent), &Asset::Late)
+                            .to_u64()
+                    })
                     .sum::<u64>(),
                 None,
             ),

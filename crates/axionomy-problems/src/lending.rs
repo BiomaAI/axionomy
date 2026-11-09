@@ -153,7 +153,7 @@ pub type World = Economy<AccountId, Asset, RateId, Role>;
 pub type Action = Exchange<RateId, Role, AccountId>;
 pub type LoanTrace = Trace<RateId, Role, AccountId>;
 pub type LoanError = Box<ApplyError<RateId, Role, AccountId, Asset>>;
-pub type Solution = SearchSolution<RateId, Role, AccountId, u64>;
+pub type Solution = SearchSolution<RateId, Role, AccountId>;
 type Q = QuantityExpression<Role, Asset>;
 
 /// The market's published terms, each scaled by `WAD`.
@@ -344,10 +344,7 @@ fn debt_value() -> Q {
 
 /// Depositors' assets: cash plus debt, less the reserves the market keeps.
 fn total_assets() -> Q {
-    Q::subtract(
-        Q::plus(market(Asset::Cash), debt_value()),
-        market(Asset::Reserves),
-    )
+    (market(Asset::Cash) + debt_value()) - market(Asset::Reserves)
 }
 
 /// Cash the borrower owes now, rounded up.
@@ -363,7 +360,7 @@ fn owed_for(debt_shares: Q) -> Q {
 /// receives borrowing room and protection, so neither rounds in its favor.
 fn collateral_limit(posted: Q, term: Asset) -> Q {
     Q::mul_div(
-        Q::multiply(posted, market(Asset::CollateralPrice)),
+        posted * market(Asset::CollateralPrice),
         market(term),
         wad(),
         Rounding::Floor,
@@ -376,7 +373,7 @@ fn posted() -> Q {
 
 /// Borrowed share of the market's cash and debt, rounded up.
 fn utilization() -> Q {
-    let gross = Q::maximum(Q::plus(market(Asset::Cash), debt_value()), Q::constant(1));
+    let gross = Q::maximum(market(Asset::Cash) + debt_value(), Q::constant(1));
     Q::mul_div(debt_value(), wad(), gross, Rounding::Ceil)
 }
 
@@ -391,15 +388,12 @@ fn rate_per_period() -> Q {
         Rounding::Ceil,
     );
     let above = Q::mul_div(
-        Q::subtract(
-            Q::maximum(utilization(), market(Asset::Kink)),
-            market(Asset::Kink),
-        ),
+        Q::maximum(utilization(), market(Asset::Kink)) - market(Asset::Kink),
         market(Asset::SlopeAboveKink),
         wad(),
         Rounding::Ceil,
     );
-    Q::plus(market(Asset::BaseRate), Q::plus(below, above))
+    market(Asset::BaseRate) + (below + above)
 }
 
 fn index_growth() -> Q {
@@ -411,12 +405,12 @@ fn index_growth() -> Q {
 fn reserve_cut() -> Q {
     let debt_after = Q::mul_div(
         market(Asset::DebtShareSupply),
-        Q::plus(index(), index_growth()),
+        index() + index_growth(),
         wad(),
         Rounding::Floor,
     );
     Q::mul_div(
-        Q::subtract(debt_after, debt_value()),
+        debt_after - debt_value(),
         market(Asset::ReserveFactor),
         wad(),
         Rounding::Ceil,
@@ -504,16 +498,13 @@ fn withdraw_collateral_rate() -> Rate<Role, Asset> {
             "the remaining collateral covers the loan",
             owed(),
             QuantityComparison::LessThanOrEqual,
-            collateral_limit(Q::subtract(posted(), Q::units()), Asset::LoanToValue),
+            collateral_limit(posted() - Q::units(), Asset::LoanToValue),
         )
 }
 
 fn borrow_rate() -> Rate<Role, Asset> {
     let minted = Q::mul_div(Q::units(), wad(), index(), Rounding::Ceil);
-    let owed_after = owed_for(Q::plus(
-        Q::balance(Role::Borrower, Asset::DebtShare),
-        minted.clone(),
-    ));
+    let owed_after = owed_for(Q::balance(Role::Borrower, Asset::DebtShare) + minted.clone());
     borrower_rate()
         .consume(Role::Market, basket([(Asset::Cash, 1)]))
         .produce(Role::Borrower, basket([(Asset::Cash, 1)]))
@@ -562,7 +553,7 @@ fn pay_bill_rate(bill: Payment) -> Rate<Role, Asset> {
     )
     .condition(
         "paid before the deadline",
-        Q::plus(elapsed(), Q::constant(1)),
+        elapsed() + Q::constant(1),
         QuantityComparison::LessThanOrEqual,
         Q::constant(bill.period),
     )
@@ -608,7 +599,7 @@ fn accrue_rate() -> Rate<Role, Asset> {
         // While the drop is pending, the clock cannot pass its period.
         .condition(
             "the scheduled price drop has happened",
-            Q::multiply(pending, Q::plus(elapsed(), Q::constant(1))),
+            pending * (elapsed() + Q::constant(1)),
             QuantityComparison::LessThanOrEqual,
             Q::balance(Role::Oracle, Asset::ShockAfter),
         )
@@ -647,7 +638,7 @@ fn liquidate_rate() -> Rate<Role, Asset> {
         Q::divide(
             Q::mul_div(
                 owed(),
-                Q::plus(wad(), market(Asset::LiquidationBonus)),
+                wad() + market(Asset::LiquidationBonus),
                 wad(),
                 Rounding::Floor,
             ),
@@ -667,10 +658,7 @@ fn liquidate_rate() -> Rate<Role, Asset> {
             "the loan is past its liquidation threshold",
             owed(),
             QuantityComparison::GreaterThanOrEqual,
-            Q::plus(
-                collateral_limit(posted(), Asset::LiquidationThreshold),
-                Q::constant(1),
-            ),
+            collateral_limit(posted(), Asset::LiquidationThreshold) + Q::constant(1),
         )
         .distinct(Role::Market, Role::Keeper)
         .distinct(Role::Borrower, Role::Keeper);
@@ -977,10 +965,10 @@ pub fn interest_step(before: &World, exchange: &Action, after: &World) -> u64 {
 
 /// Interest charged over a whole trace.
 pub fn interest_charged(initial: &World, trace: &LoanTrace) -> Result<u64, LoanError> {
-    let mut world = initial.fork();
+    let mut world = initial.clone();
     let mut total = 0;
     for exchange in trace.exchanges() {
-        let before = world.fork();
+        let before = world.clone();
         world.apply(exchange.clone()).map_err(Box::new)?;
         total += interest_step(&before, exchange, &world);
     }
@@ -1043,7 +1031,7 @@ pub fn first_depositor_attack(config: &Config) -> Result<(World, LoanTrace), Loa
 }
 
 pub fn balance(world: &World, account: AccountId, asset: Asset) -> u64 {
-    world.balance(&account, &asset).get()
+    world.balance(&account, &asset).to_u64()
 }
 
 // Disposable u128 views, independent of the kernel's expression evaluator.
@@ -1317,7 +1305,7 @@ mod tests {
                 if condition == "the loan is not liquidatable"
         )));
         // Posting the remaining collateral cures it.
-        let mut cured = world.fork();
+        let mut cured = world.clone();
         cured.apply(post_collateral(6)).unwrap();
         assert!(cured.is_applicable(&accrue()));
         assert!(!cured.is_applicable(&liquidate()));
@@ -1377,7 +1365,7 @@ mod tests {
             }
 
             // Deposit then redeem never returns more than was deposited.
-            let mut vault = world.fork();
+            let mut vault = world.clone();
             let start = balance(&vault, AccountId::Depositor(0), Asset::Cash);
             let shares_before = balance(&vault, AccountId::Depositor(0), Asset::Share);
             if vault.apply(deposit(0, amount, 1)).is_ok() {
@@ -1387,7 +1375,7 @@ mod tests {
             }
 
             // Borrow then repay everything never costs less than was borrowed.
-            let mut credit = world.fork();
+            let mut credit = world.clone();
             let start = balance(&credit, AccountId::Borrower, Asset::Cash);
             let debt_before = balance(&credit, AccountId::Borrower, Asset::DebtShare);
             if credit.apply(borrow(amount)).is_ok() {

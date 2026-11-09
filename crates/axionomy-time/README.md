@@ -33,7 +33,7 @@ let window = CalendarWindow::from_span(opens, Span::new().days(1))?;
 let amount: AssetAmount<UnitAsset<AssetId>> = window.encode(&elapsed_hour)?;
 
 // The spring daylight-saving transition makes this calendar day 23 hours.
-assert_eq!(amount.quantity(), &Quantity::new(23));
+assert_eq!(amount.quantity(), Quantity::new(23));
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
@@ -41,9 +41,7 @@ assert_eq!(amount.quantity(), &Quantity::new(23));
 asset originally declared through `uom`, proving both authoring systems share
 one denomination rather than maintaining separate clocks.
 
-Encoding currently requires the canonical timeline count to fit `u64` before
-it is converted into the selected `Quantity<N>` backend. A wider backend extends
-economy arithmetic after construction; it does not widen this adapter boundary.
+Any timeline count below `2²⁵⁶` atoms becomes an exact `Quantity`.
 
 Run the structured example at `INFO`, or set `RUST_LOG=debug` to include the
 canonical timeline definition:

@@ -150,7 +150,7 @@ pub type Proposal = Trace<RateId, Role, AccountId>;
 pub type ResponderView<'a> = EconomicView<'a, AccountId, Asset, RateId, Role>;
 
 pub fn value(world: &World, account: AccountId, asset: Asset) -> u64 {
-    world.balance(&account, &asset).get()
+    world.balance(&account, &asset).to_u64()
 }
 pub fn now(world: &World) -> u64 {
     value(world, AccountId::World, Asset::Time)
@@ -804,7 +804,7 @@ pub fn nature_response(world: &World) -> Option<Action> {
     None
 }
 pub fn decision(view: &ResponderView<'_>, policy: Policy) -> Option<Action> {
-    let val = |account, asset| view.balance(&account, &asset).map_or(0, Quantity::get);
+    let val = |account, asset| view.balance(&account, &asset).map_or(0, Quantity::to_u64);
     let count = val(AccountId::World, Asset::PatientCount) as u8;
     if val(AccountId::World, Asset::Resolved) == u64::from(count) {
         return Some(action(RateId::Close));

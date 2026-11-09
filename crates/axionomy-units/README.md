@@ -55,9 +55,9 @@ let mut assets = AssetSchema::new();
 let usd = assets.define_decimal(AssetId::Usd, 2)?;
 let price: AssetAmount<UnitAsset<AssetId>> = usd.parse("12.50")?;
 
-assert_eq!(price.quantity(), &Quantity::new(1_250));
+assert_eq!(price.quantity(), Quantity::new(1_250));
 assert_eq!(usd.format(price.quantity()), "12.50");
-assert!(usd.parse::<u64>("12.505").is_err());
+assert!(usd.parse("12.505").is_err());
 assert!(assets.define_decimal(AssetId::Usd, 6).is_err());
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
@@ -71,9 +71,9 @@ assets so measured and discrete values can share one `UnitAsset<Id>` basket.
 Use `AssetSchema::build_economy` and `validate_goal` to reject unknown or
 conflicting keys across the complete model.
 
-Encoding currently requires the canonical atom count to fit `u64` before it is
-converted into the selected `Quantity<N>` backend. A wider backend extends
-economy arithmetic after construction; it does not widen this adapter boundary.
+`uom` stores values as exact `Rational64`, so one physical value lowers to at
+most `i64::MAX` atoms; decimal assets parse any amount below `2²⁵⁶` atoms. The
+economy's arithmetic is 256-bit either way.
 
 Run the structured example at `INFO`, or set `RUST_LOG=debug` to include the
 canonical denomination definition:

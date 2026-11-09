@@ -397,14 +397,11 @@ fn build(size: MarketSize) -> World {
 
 // The trader receives the output, so it rounds down; the product is full width.
 fn swap_output_expression(input: Asset, output: Asset) -> Q<Role, Asset> {
-    let input_after_fee = Q::multiply(Q::constant(FEE_NUMERATOR), Q::units());
+    let input_after_fee = Q::constant(FEE_NUMERATOR) * Q::units();
     Q::mul_div(
         Q::balance(Role::Pool, output),
         input_after_fee.clone(),
-        Q::plus(
-            Q::multiply(Q::balance(Role::Pool, input), Q::constant(FEE_DENOMINATOR)),
-            input_after_fee,
-        ),
+        (Q::balance(Role::Pool, input) * Q::constant(FEE_DENOMINATOR)) + input_after_fee,
         Rounding::Floor,
     )
 }
@@ -425,10 +422,7 @@ fn swap_rate(input: Asset, output: Asset, output_quantity: Q<Role, Asset>) -> Ra
 }
 
 fn issued_lp_expression() -> Q<Role, Asset> {
-    Q::subtract(
-        Q::constant(MAX_LP_SHARES),
-        Q::balance(Role::Pool, Asset::UnissuedLpShare),
-    )
+    Q::constant(MAX_LP_SHARES) - Q::balance(Role::Pool, Asset::UnissuedLpShare)
 }
 
 // The provider receives shares, so each side rounds down.
@@ -480,15 +474,9 @@ fn add_liquidity_rate() -> Rate<Role, Asset> {
         .produce_computed(Role::LiquidityProvider, Asset::LpShare, minted.clone())
         .condition(
             "liquidity must preserve the discovered price",
-            Q::multiply(
-                Q::parameter("energy_amount"),
-                Q::balance(Role::Pool, Asset::Credit),
-            ),
+            Q::parameter("energy_amount") * Q::balance(Role::Pool, Asset::Credit),
             QuantityComparison::Equal,
-            Q::multiply(
-                Q::parameter("credit_amount"),
-                Q::balance(Role::Pool, Asset::Energy),
-            ),
+            Q::parameter("credit_amount") * Q::balance(Role::Pool, Asset::Energy),
         )
         .condition(
             "minimum liquidity shares",
@@ -603,11 +591,11 @@ fn obligation_cost(actor: Actor) -> u64 {
 }
 
 pub fn pool_state(world: &World) -> PoolState {
-    let energy = world.balance(&AccountId::Pool, &Asset::Energy).get();
-    let credit = world.balance(&AccountId::Pool, &Asset::Credit).get();
+    let energy = world.balance(&AccountId::Pool, &Asset::Energy).to_u64();
+    let credit = world.balance(&AccountId::Pool, &Asset::Credit).to_u64();
     let unissued = world
         .balance(&AccountId::Pool, &Asset::UnissuedLpShare)
-        .get();
+        .to_u64();
     PoolState {
         energy,
         credit,
@@ -626,8 +614,8 @@ pub fn quote_output(world: &World, input: Asset, input_amount: u64) -> Option<u6
         Asset::Energy => Asset::Credit,
         _ => return None,
     };
-    let reserve_in = u128::from(world.balance(&AccountId::Pool, &input).get());
-    let reserve_out = u128::from(world.balance(&AccountId::Pool, &output).get());
+    let reserve_in = u128::from(world.balance(&AccountId::Pool, &input).to_u64());
+    let reserve_out = u128::from(world.balance(&AccountId::Pool, &output).to_u64());
     let after_fee = u128::from(input_amount) * u128::from(FEE_NUMERATOR);
     let denominator = reserve_in * u128::from(FEE_DENOMINATOR) + after_fee;
     if denominator == 0 {
@@ -696,7 +684,7 @@ fn trace_with_actors(
     if initial.account(&AccountId::World).is_some() {
         return season::run(initial, scenario, included);
     }
-    let mut world = initial.fork();
+    let mut world = initial.clone();
     let mut trace = Trace::new();
     let stress = pool_state(initial).energy >= 40_000;
     let scale = if stress { 4 } else { 1 };
@@ -825,7 +813,7 @@ pub fn direct_price_contributions(
     initial: &World,
     trace: &Trace<RateId, Role, AccountId>,
 ) -> BTreeMap<Actor, i128> {
-    let mut world = initial.fork();
+    let mut world = initial.clone();
     let mut contributions = BTreeMap::new();
     for exchange in trace.exchanges() {
         let before = i128::from(pool_state(&world).price_milli);
@@ -901,7 +889,7 @@ mod tests {
         assert!(
             final_world
                 .balance(&AccountId::Actor(Actor::Factory), &Asset::Utility)
-                .get()
+                .to_u64()
                 > 0
         );
     }

@@ -1,7 +1,8 @@
+use crate::rate::Measure;
 use crate::{
     Account, AccountDelta, AccountError, Basket, ComputedAmount, Exchange, LinearInvariant,
-    Quantity, QuantityComparison, QuantityExpression, QuantityScalar, Rate, RateCondition, Receipt,
-    Rounding, Trace,
+    Quantity, QuantityComparison, QuantityExpression, Rate, RateCondition, Receipt, Rounding,
+    Trace,
 };
 use indexmap::IndexMap;
 use schemars::{JsonSchema, Schema, SchemaGenerator};
@@ -13,50 +14,16 @@ use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 use thiserror::Error;
 
-// Keep the lazy borrowed account projection explicit for extraction.
-struct AccountEntries<'a, AccountId, A, N>(indexmap::map::Iter<'a, AccountId, Arc<Account<A, N>>>);
-
-impl<'a, AccountId, A, N> Iterator for AccountEntries<'a, AccountId, A, N> {
-    type Item = (&'a AccountId, &'a Account<A, N>);
-
-    fn next(&mut self) -> Option<Self::Item> {
-        match self.0.next() {
-            Some((id, account)) => Some((id, account.as_ref())),
-            None => None,
-        }
-    }
-
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        let remaining = self.0.len();
-        (remaining, Some(remaining))
-    }
-}
-
-fn collect_basket_assets<'a, A: Ord, N>(contents: &'a Basket<A, N>, assets: &mut BTreeSet<&'a A>) {
-    for (asset, _) in contents.iter() {
-        assets.insert(asset);
-    }
-}
-
-fn collect_invariant_assets<'a, A: Eq + Hash + Ord>(
-    invariant: &'a LinearInvariant<A>,
-    assets: &mut BTreeSet<&'a A>,
-) {
-    for (asset, _) in invariant.weights() {
-        assets.insert(asset);
-    }
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(bound(
-    serialize = "AccountId: Serialize + Ord, A: Serialize, N: Serialize",
-    deserialize = "AccountId: Deserialize<'de> + Ord, A: Deserialize<'de> + Eq + Hash, N: Deserialize<'de> + QuantityScalar"
+    serialize = "AccountId: Serialize + Ord, A: Serialize",
+    deserialize = "AccountId: Deserialize<'de> + Ord, A: Deserialize<'de> + Eq + Hash"
 ))]
-pub struct Goal<AccountId, A, N = u64> {
-    required: BTreeMap<AccountId, Basket<A, N>>,
+pub struct Goal<AccountId, A> {
+    required: BTreeMap<AccountId, Basket<A>>,
 }
 
-impl<AccountId, A, N> Goal<AccountId, A, N>
+impl<AccountId, A> Goal<AccountId, A>
 where
     AccountId: Ord,
 {
@@ -66,17 +33,17 @@ where
         }
     }
 
-    pub fn require(mut self, account: AccountId, assets: Basket<A, N>) -> Self {
+    pub fn require(mut self, account: AccountId, assets: Basket<A>) -> Self {
         self.required.insert(account, assets);
         self
     }
 
-    pub fn requirements(&self) -> &BTreeMap<AccountId, Basket<A, N>> {
+    pub fn requirements(&self) -> &BTreeMap<AccountId, Basket<A>> {
         &self.required
     }
 }
 
-impl<AccountId, A, N> Default for Goal<AccountId, A, N>
+impl<AccountId, A> Default for Goal<AccountId, A>
 where
     AccountId: Ord,
 {
@@ -85,33 +52,24 @@ where
     }
 }
 
-impl<AccountId, A, N> Goal<AccountId, A, N>
+impl<AccountId, A> Goal<AccountId, A>
 where
     AccountId: Ord,
     A: Ord,
 {
     /// Returns every asset identity referenced by this goal.
-    // Shared map iteration uses the same reviewed Aeneas adapter as goal matching.
-    #[allow(clippy::for_kv_map)]
     pub fn asset_keys(&self) -> BTreeSet<&A> {
-        let mut assets = BTreeSet::new();
-        for (_, required) in &self.required {
-            Self::collect_assets(required, &mut assets);
-        }
-        assets
-    }
-
-    fn collect_assets<'a>(required: &'a Basket<A, N>, assets: &mut BTreeSet<&'a A>) {
-        for (asset, _) in required.iter() {
-            assets.insert(asset);
-        }
+        self.required
+            .values()
+            .flat_map(|required| required.iter().map(|(asset, _)| asset))
+            .collect()
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct Economy<AccountId, A, RateId, Role, N = u64> {
-    accounts: IndexMap<AccountId, Arc<Account<A, N>>>,
-    rates: Arc<IndexMap<RateId, Rate<Role, A, N>>>,
+pub struct Economy<AccountId, A, RateId, Role> {
+    accounts: IndexMap<AccountId, Arc<Account<A>>>,
+    rates: Arc<IndexMap<RateId, Rate<Role, A>>>,
     invariants: Arc<Vec<LinearInvariant<A>>>,
 }
 
@@ -130,25 +88,17 @@ impl StateFingerprint {
     }
 }
 
-type StructuralValidationResult<'a, AccountId, A, RateId, Role, N> =
-    Result<&'a Rate<Role, A, N>, Vec<ApplyError<RateId, Role, AccountId, A, N>>>;
+type StructuralValidationResult<'a, AccountId, A, RateId, Role> =
+    Result<&'a Rate<Role, A>, Vec<ApplyError<RateId, Role, AccountId, A>>>;
 
-pub type ApplyResult<AccountId, A, RateId, Role, N = u64> =
-    Result<Receipt<RateId, Role, AccountId, A, N>, ApplyError<RateId, Role, AccountId, A, N>>;
+pub type ApplyResult<AccountId, A, RateId, Role> =
+    Result<Receipt<RateId, Role, AccountId, A>, ApplyError<RateId, Role, AccountId, A>>;
 
-pub type ReplayResult<AccountId, A, RateId, Role, N = u64> =
-    Result<Vec<Receipt<RateId, Role, AccountId, A, N>>, ApplyError<RateId, Role, AccountId, A, N>>;
+pub type ReplayResult<AccountId, A, RateId, Role> =
+    Result<Vec<Receipt<RateId, Role, AccountId, A>>, ApplyError<RateId, Role, AccountId, A>>;
 
-pub type SimulationResult<AccountId, A, RateId, Role, N = u64> = Result<
-    (
-        Economy<AccountId, A, RateId, Role, N>,
-        Receipt<RateId, Role, AccountId, A, N>,
-    ),
-    ApplyError<RateId, Role, AccountId, A, N>,
->;
-
-pub type ModelBuildResult<AccountId, A, RateId, Role, N = u64> =
-    Result<Economy<AccountId, A, RateId, Role, N>, ModelBuildError<AccountId, RateId>>;
+pub type ModelBuildResult<AccountId, A, RateId, Role> =
+    Result<Economy<AccountId, A, RateId, Role>, ModelBuildError<AccountId, RateId>>;
 
 /// The high-level result of assessing an exchange without mutating the economy.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -161,51 +111,51 @@ pub enum AssessmentStatus {
 /// One account's complete rate-derived requirements and effects.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(bound(
-    serialize = "AccountId: Serialize, A: Serialize, N: Serialize",
-    deserialize = "AccountId: Deserialize<'de>, A: Deserialize<'de> + Eq + Hash, N: Deserialize<'de> + QuantityScalar"
+    serialize = "AccountId: Serialize, A: Serialize",
+    deserialize = "AccountId: Deserialize<'de>, A: Deserialize<'de> + Eq + Hash"
 ))]
-pub struct AccountAssessment<AccountId, A, N = u64> {
+pub struct AccountAssessment<AccountId, A> {
     account: AccountId,
-    available: Basket<A, N>,
-    required: Basket<A, N>,
-    consumed: Basket<A, N>,
-    produced: Basket<A, N>,
-    preserved: Basket<A, N>,
+    available: Basket<A>,
+    required: Basket<A>,
+    consumed: Basket<A>,
+    produced: Basket<A>,
+    preserved: Basket<A>,
 }
 
-impl<AccountId, A, N> AccountAssessment<AccountId, A, N> {
+impl<AccountId, A> AccountAssessment<AccountId, A> {
     pub fn account(&self) -> &AccountId {
         &self.account
     }
 
     /// Balances relevant to this exchange's requirements.
-    pub fn available(&self) -> &Basket<A, N> {
+    pub fn available(&self) -> &Basket<A> {
         &self.available
     }
 
-    pub fn required(&self) -> &Basket<A, N> {
+    pub fn required(&self) -> &Basket<A> {
         &self.required
     }
 
-    pub fn consumed(&self) -> &Basket<A, N> {
+    pub fn consumed(&self) -> &Basket<A> {
         &self.consumed
     }
 
-    pub fn produced(&self) -> &Basket<A, N> {
+    pub fn produced(&self) -> &Basket<A> {
         &self.produced
     }
 
-    pub fn preserved(&self) -> &Basket<A, N> {
+    pub fn preserved(&self) -> &Basket<A> {
         &self.preserved
     }
 
     fn new(
         account: AccountId,
-        available: Basket<A, N>,
-        required: Basket<A, N>,
-        consumed: Basket<A, N>,
-        produced: Basket<A, N>,
-        preserved: Basket<A, N>,
+        available: Basket<A>,
+        required: Basket<A>,
+        consumed: Basket<A>,
+        produced: Basket<A>,
+        preserved: Basket<A>,
     ) -> Self {
         Self {
             account,
@@ -221,24 +171,24 @@ impl<AccountId, A, N> AccountAssessment<AccountId, A, N> {
 /// The exact assets one account lacks for a well-formed exchange.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(bound(
-    serialize = "AccountId: Serialize, A: Serialize, N: Serialize",
-    deserialize = "AccountId: Deserialize<'de>, A: Deserialize<'de> + Eq + Hash, N: Deserialize<'de> + QuantityScalar"
+    serialize = "AccountId: Serialize, A: Serialize",
+    deserialize = "AccountId: Deserialize<'de>, A: Deserialize<'de> + Eq + Hash"
 ))]
-pub struct AccountShortfall<AccountId, A, N = u64> {
+pub struct AccountShortfall<AccountId, A> {
     account: AccountId,
-    missing: Basket<A, N>,
+    missing: Basket<A>,
 }
 
-impl<AccountId, A, N> AccountShortfall<AccountId, A, N> {
+impl<AccountId, A> AccountShortfall<AccountId, A> {
     pub fn account(&self) -> &AccountId {
         &self.account
     }
 
-    pub fn missing(&self) -> &Basket<A, N> {
+    pub fn missing(&self) -> &Basket<A> {
         &self.missing
     }
 
-    fn new(account: AccountId, missing: Basket<A, N>) -> Self {
+    fn new(account: AccountId, missing: Basket<A>) -> Self {
         Self { account, missing }
     }
 }
@@ -247,36 +197,28 @@ impl<AccountId, A, N> AccountShortfall<AccountId, A, N> {
 #[must_use]
 #[derive(Debug, Clone, Serialize, JsonSchema)]
 #[serde(bound(
-    serialize = "AccountId: Serialize, A: Serialize, RateId: Serialize, Role: Serialize, N: Serialize, N::SignedMeasure: Serialize"
+    serialize = "AccountId: Serialize, A: Serialize, RateId: Serialize, Role: Serialize"
 ))]
-#[schemars(
-    bound = "AccountId: JsonSchema, A: JsonSchema, RateId: JsonSchema, Role: JsonSchema, N: JsonSchema, N::SignedMeasure: JsonSchema"
-)]
-pub enum ExchangeAssessment<AccountId, A, RateId, Role, N = u64>
-where
-    N: QuantityScalar,
-{
+#[schemars(bound = "AccountId: JsonSchema, A: JsonSchema, RateId: JsonSchema, Role: JsonSchema")]
+pub enum ExchangeAssessment<AccountId, A, RateId, Role> {
     /// Every check succeeded; projected deltas match a subsequent receipt if
     /// the economy remains unchanged.
     Applicable {
-        accounts: Vec<AccountAssessment<AccountId, A, N>>,
-        projected_deltas: Vec<AccountDelta<AccountId, A, N>>,
+        accounts: Vec<AccountAssessment<AccountId, A>>,
+        projected_deltas: Vec<AccountDelta<AccountId, A>>,
     },
     /// The proposal is structurally valid but one or more accounts lack assets.
     Infeasible {
-        accounts: Vec<AccountAssessment<AccountId, A, N>>,
-        shortfalls: Vec<AccountShortfall<AccountId, A, N>>,
+        accounts: Vec<AccountAssessment<AccountId, A>>,
+        shortfalls: Vec<AccountShortfall<AccountId, A>>,
     },
     /// The proposal is malformed, overflows, or violates an invariant.
     Invalid {
-        issues: Vec<ApplyError<RateId, Role, AccountId, A, N>>,
+        issues: Vec<ApplyError<RateId, Role, AccountId, A>>,
     },
 }
 
-impl<AccountId, A, RateId, Role, N> ExchangeAssessment<AccountId, A, RateId, Role, N>
-where
-    N: QuantityScalar,
-{
+impl<AccountId, A, RateId, Role> ExchangeAssessment<AccountId, A, RateId, Role> {
     pub fn status(&self) -> AssessmentStatus {
         match self {
             Self::Applicable { .. } => AssessmentStatus::Applicable,
@@ -289,46 +231,40 @@ where
         matches!(self, Self::Applicable { .. })
     }
 
-    pub fn accounts(&self) -> &[AccountAssessment<AccountId, A, N>] {
+    pub fn accounts(&self) -> &[AccountAssessment<AccountId, A>] {
         match self {
             Self::Applicable { accounts, .. } | Self::Infeasible { accounts, .. } => accounts,
             Self::Invalid { .. } => &[],
         }
     }
 
-    #[allow(clippy::manual_find)] // Extract the primitive first-match loop; slice::find has unsupported lifetimes.
-    pub fn account(&self, account: &AccountId) -> Option<&AccountAssessment<AccountId, A, N>>
+    pub fn account(&self, account: &AccountId) -> Option<&AccountAssessment<AccountId, A>>
     where
         AccountId: PartialEq,
     {
-        for assessment in self.accounts() {
-            if assessment.account() == account {
-                return Some(assessment);
-            }
-        }
-        None
+        self.accounts()
+            .iter()
+            .find(|assessment| assessment.account() == account)
     }
 
-    pub fn shortfalls(&self) -> &[AccountShortfall<AccountId, A, N>] {
+    pub fn shortfalls(&self) -> &[AccountShortfall<AccountId, A>] {
         match self {
             Self::Infeasible { shortfalls, .. } => shortfalls,
             Self::Applicable { .. } | Self::Invalid { .. } => &[],
         }
     }
 
-    pub fn shortfall(&self, account: &AccountId) -> Option<&Basket<A, N>>
+    pub fn shortfall(&self, account: &AccountId) -> Option<&Basket<A>>
     where
         AccountId: PartialEq,
     {
-        for shortfall in self.shortfalls() {
-            if shortfall.account() == account {
-                return Some(shortfall.missing());
-            }
-        }
-        None
+        self.shortfalls()
+            .iter()
+            .find(|shortfall| shortfall.account() == account)
+            .map(AccountShortfall::missing)
     }
 
-    pub fn projected_deltas(&self) -> Option<&[AccountDelta<AccountId, A, N>]> {
+    pub fn projected_deltas(&self) -> Option<&[AccountDelta<AccountId, A>]> {
         match self {
             Self::Applicable {
                 projected_deltas, ..
@@ -337,7 +273,7 @@ where
         }
     }
 
-    pub fn issues(&self) -> &[ApplyError<RateId, Role, AccountId, A, N>] {
+    pub fn issues(&self) -> &[ApplyError<RateId, Role, AccountId, A>] {
         match self {
             Self::Invalid { issues } => issues,
             Self::Applicable { .. } | Self::Infeasible { .. } => &[],
@@ -346,14 +282,14 @@ where
 }
 
 #[derive(Debug)]
-pub struct EconomyBuilder<AccountId, A, RateId, Role, N = u64> {
-    accounts: IndexMap<AccountId, Account<A, N>>,
-    rates: IndexMap<RateId, Rate<Role, A, N>>,
+pub struct EconomyBuilder<AccountId, A, RateId, Role> {
+    accounts: IndexMap<AccountId, Account<A>>,
+    rates: IndexMap<RateId, Rate<Role, A>>,
     invariants: Vec<LinearInvariant<A>>,
     issues: Vec<ModelIssue<AccountId, RateId>>,
 }
 
-impl<AccountId, A, RateId, Role, N> EconomyBuilder<AccountId, A, RateId, Role, N>
+impl<AccountId, A, RateId, Role> EconomyBuilder<AccountId, A, RateId, Role>
 where
     AccountId: Eq + Hash,
     RateId: Eq + Hash,
@@ -367,7 +303,7 @@ where
         }
     }
 
-    pub fn account(mut self, id: AccountId, account: Account<A, N>) -> Self {
+    pub fn account(mut self, id: AccountId, account: Account<A>) -> Self {
         if self.accounts.contains_key(&id) {
             self.issues
                 .push(ModelIssue::DuplicateAccount { account: id });
@@ -377,7 +313,7 @@ where
         self
     }
 
-    pub fn rate(mut self, id: RateId, rate: Rate<Role, A, N>) -> Self {
+    pub fn rate(mut self, id: RateId, rate: Rate<Role, A>) -> Self {
         if self.rates.contains_key(&id) {
             self.issues.push(ModelIssue::DuplicateRate { rate: id });
         } else {
@@ -391,25 +327,25 @@ where
         self
     }
 
-    pub fn build(self) -> ModelBuildResult<AccountId, A, RateId, Role, N> {
+    pub fn build(self) -> ModelBuildResult<AccountId, A, RateId, Role> {
         if !self.issues.is_empty() {
             return Err(ModelBuildError {
                 issues: self.issues,
             });
         }
-        let mut accounts = IndexMap::new();
-        for (id, holder) in self.accounts {
-            accounts.insert(id, Arc::new(holder));
-        }
         Ok(Economy {
-            accounts,
+            accounts: self
+                .accounts
+                .into_iter()
+                .map(|(id, account)| (id, Arc::new(account)))
+                .collect(),
             rates: Arc::new(self.rates),
             invariants: Arc::new(self.invariants),
         })
     }
 }
 
-impl<AccountId, A, RateId, Role, N> Default for EconomyBuilder<AccountId, A, RateId, Role, N>
+impl<AccountId, A, RateId, Role> Default for EconomyBuilder<AccountId, A, RateId, Role>
 where
     AccountId: Eq + Hash,
     RateId: Eq + Hash,
@@ -437,13 +373,12 @@ impl<AccountId, RateId> ModelBuildError<AccountId, RateId> {
     }
 }
 
-impl<AccountId, A, RateId, Role, N> Serialize for Economy<AccountId, A, RateId, Role, N>
+impl<AccountId, A, RateId, Role> Serialize for Economy<AccountId, A, RateId, Role>
 where
     AccountId: Serialize,
     A: Serialize,
     RateId: Serialize,
     Role: Serialize + Ord,
-    N: Serialize,
 {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -465,27 +400,26 @@ where
 
 #[derive(Deserialize)]
 #[serde(bound(
-    deserialize = "AccountId: Deserialize<'de>, A: Deserialize<'de> + Clone + Eq + Hash, RateId: Deserialize<'de>, Role: Deserialize<'de> + Clone + Ord, N: Deserialize<'de> + QuantityScalar"
+    deserialize = "AccountId: Deserialize<'de>, A: Deserialize<'de> + Clone + Eq + Hash, RateId: Deserialize<'de>, Role: Deserialize<'de> + Clone + Ord"
 ))]
-struct EconomyData<AccountId, A, RateId, Role, N> {
-    accounts: Vec<(AccountId, Account<A, N>)>,
-    rates: Vec<(RateId, Rate<Role, A, N>)>,
+struct EconomyData<AccountId, A, RateId, Role> {
+    accounts: Vec<(AccountId, Account<A>)>,
+    rates: Vec<(RateId, Rate<Role, A>)>,
     invariants: Vec<LinearInvariant<A>>,
 }
 
-impl<'de, AccountId, A, RateId, Role, N> Deserialize<'de> for Economy<AccountId, A, RateId, Role, N>
+impl<'de, AccountId, A, RateId, Role> Deserialize<'de> for Economy<AccountId, A, RateId, Role>
 where
     AccountId: Deserialize<'de> + Eq + Hash,
     A: Deserialize<'de> + Clone + Eq + Hash,
     RateId: Deserialize<'de> + Eq + Hash,
     Role: Deserialize<'de> + Clone + Ord,
-    N: Deserialize<'de> + QuantityScalar,
 {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
     {
-        let data = EconomyData::<AccountId, A, RateId, Role, N>::deserialize(deserializer)?;
+        let data = EconomyData::<AccountId, A, RateId, Role>::deserialize(deserializer)?;
         let mut builder = EconomyBuilder::new();
         for (id, account) in data.accounts {
             builder = builder.account(id, account);
@@ -500,22 +434,20 @@ where
     }
 }
 
-impl<AccountId, A, RateId, Role, N> JsonSchema for Economy<AccountId, A, RateId, Role, N>
+impl<AccountId, A, RateId, Role> JsonSchema for Economy<AccountId, A, RateId, Role>
 where
     AccountId: JsonSchema,
     A: JsonSchema,
     RateId: JsonSchema,
     Role: JsonSchema,
-    N: JsonSchema,
 {
     fn schema_name() -> Cow<'static, str> {
         format!(
-            "Economy_{}_{}_{}_{}_{}",
+            "Economy_{}_{}_{}_{}",
             AccountId::schema_name(),
             A::schema_name(),
             RateId::schema_name(),
             Role::schema_name(),
-            N::schema_name()
         )
         .into()
     }
@@ -523,23 +455,22 @@ where
     fn json_schema(generator: &mut SchemaGenerator) -> Schema {
         #[allow(dead_code)]
         #[derive(JsonSchema)]
-        struct EconomySchema<AccountId, A, RateId, Role, N> {
-            accounts: Vec<(AccountId, Account<A, N>)>,
-            rates: Vec<(RateId, Rate<Role, A, N>)>,
+        struct EconomySchema<AccountId, A, RateId, Role> {
+            accounts: Vec<(AccountId, Account<A>)>,
+            rates: Vec<(RateId, Rate<Role, A>)>,
             invariants: Vec<LinearInvariant<A>>,
         }
 
-        generator.subschema_for::<EconomySchema<AccountId, A, RateId, Role, N>>()
+        generator.subschema_for::<EconomySchema<AccountId, A, RateId, Role>>()
     }
 }
 
-impl<AccountId, A, RateId, Role, N> Economy<AccountId, A, RateId, Role, N>
+impl<AccountId, A, RateId, Role> Economy<AccountId, A, RateId, Role>
 where
     AccountId: Clone + Eq + Hash + Ord,
     A: Clone + Eq + Hash + Ord,
     RateId: Clone + Eq + Hash + Ord,
     Role: Clone + Ord,
-    N: QuantityScalar,
 {
     /// Account inspection cannot bypass exchange validation by mutating balances.
     ///
@@ -550,25 +481,23 @@ where
     ///     account.deposit(&basket([(0, 1)])).unwrap();
     /// }
     /// ```
-    pub fn account(&self, id: &AccountId) -> Option<&Account<A, N>> {
-        match self.accounts.get(id) {
-            Some(holder) => Some(holder.as_ref()),
-            None => None,
-        }
+    pub fn account(&self, id: &AccountId) -> Option<&Account<A>> {
+        self.accounts.get(id).map(Arc::as_ref)
     }
 
-    pub fn balance(&self, account_id: &AccountId, asset: &A) -> Quantity<N> {
-        match self.accounts.get(account_id) {
-            Some(holder) => holder.balance(asset),
-            None => Quantity::default(),
-        }
+    /// The balance of `asset` in `account_id`, zero for a missing account.
+    pub fn balance(&self, account_id: &AccountId, asset: &A) -> Quantity {
+        self.account(account_id)
+            .map_or(Quantity::ZERO, |account| account.balance(asset))
     }
 
-    pub fn accounts(&self) -> impl Iterator<Item = (&AccountId, &Account<A, N>)> {
-        AccountEntries(self.accounts.iter())
+    pub fn accounts(&self) -> impl Iterator<Item = (&AccountId, &Account<A>)> {
+        self.accounts
+            .iter()
+            .map(|(id, account)| (id, account.as_ref()))
     }
 
-    pub fn rate(&self, id: &RateId) -> Option<&Rate<Role, A, N>> {
+    pub fn rate(&self, id: &RateId) -> Option<&Rate<Role, A>> {
         self.rates.get(id)
     }
 
@@ -591,65 +520,51 @@ where
     /// and declared invariant weights. It supports construction-time schema
     /// validation without giving validators mutation authority.
     pub fn asset_keys(&self) -> BTreeSet<&A> {
-        let mut assets = BTreeSet::new();
-
-        for holder in self.accounts.values() {
-            collect_basket_assets(holder.balances(), &mut assets);
-        }
-        for rule in self.rates.values() {
-            rule.collect_assets(&mut assets);
-        }
-        for invariant in self.invariants.iter() {
-            collect_invariant_assets(invariant, &mut assets);
-        }
-
-        assets
+        let balances = self
+            .accounts
+            .values()
+            .flat_map(|account| account.balances().iter().map(|(asset, _)| asset));
+        let rates = self.rates.values().flat_map(Rate::asset_keys);
+        let invariants = self
+            .invariants
+            .iter()
+            .flat_map(|invariant| invariant.weights().map(|(asset, _)| asset));
+        balances.chain(rates).chain(invariants).collect()
     }
 
-    pub fn matches(&self, goal: &Goal<AccountId, A, N>) -> bool {
-        for (account_id, required) in goal.requirements() {
-            let Some(holder) = self.accounts.get(account_id) else {
-                return false;
-            };
-            if !holder.balances().contains(required) {
-                return false;
-            }
-        }
-        true
+    /// Whether every required account exists and holds its required assets.
+    pub fn matches(&self, goal: &Goal<AccountId, A>) -> bool {
+        goal.requirements().iter().all(|(account_id, required)| {
+            self.account(account_id)
+                .is_some_and(|account| account.balances().contains(required))
+        })
     }
 
     pub fn view(
         &self,
         visible_accounts: impl IntoIterator<Item = AccountId>,
-    ) -> EconomicView<'_, AccountId, A, RateId, Role, N> {
-        let mut visible = BTreeSet::new();
-        for account_id in visible_accounts {
-            visible.insert(account_id);
-        }
+    ) -> EconomicView<'_, AccountId, A, RateId, Role> {
         EconomicView {
             economy: self,
-            visible,
+            visible: visible_accounts.into_iter().collect(),
         }
     }
 
     /// Canonical nonzero balances, ignoring account and asset insertion order.
     /// Empty and absent accounts have the same key; compare keys within the
     /// same account domain when account existence matters.
-    pub fn state_key(&self) -> Vec<(AccountId, A, Quantity<N>)> {
+    pub fn state_key(&self) -> Vec<(AccountId, A, Quantity)> {
         let mut key = Vec::new();
         for (account_id, holder) in &self.accounts {
             for (asset, value) in holder.balances().iter() {
-                key.push((account_id.clone(), asset.clone(), value.clone()));
+                key.push((account_id.clone(), asset.clone(), *value));
             }
         }
         key.sort();
         key
     }
 
-    fn observation_key_for(
-        &self,
-        visible: &BTreeSet<AccountId>,
-    ) -> ObservationKey<AccountId, A, N> {
+    fn observation_key_for(&self, visible: &BTreeSet<AccountId>) -> ObservationKey<AccountId, A> {
         let mut balances = Vec::new();
         let mut visible_accounts = Vec::new();
         let mut existing_accounts = Vec::new();
@@ -660,7 +575,7 @@ where
             };
             existing_accounts.push(account_id.clone());
             for (asset, value) in holder.balances().iter() {
-                balances.push((account_id.clone(), asset.clone(), value.clone()));
+                balances.push((account_id.clone(), asset.clone(), *value));
             }
         }
         balances.sort();
@@ -678,32 +593,17 @@ where
         StateFingerprint(hasher.finish())
     }
 
-    /// Creates an isolated branch for search, simulation, or speculative work.
-    pub fn fork(&self) -> Self {
-        self.clone()
-    }
-
-    /// Applies one exchange to an isolated branch, leaving this economy intact.
-    pub fn simulate(
-        &self,
-        proposal: Exchange<RateId, Role, AccountId, N>,
-    ) -> SimulationResult<AccountId, A, RateId, Role, N> {
-        let mut fork = self.fork();
-        let receipt = fork.apply(proposal)?;
-        Ok((fork, receipt))
-    }
-
     /// Explains one exchange without mutating the economy.
     pub fn assess(
         &self,
-        proposal: &Exchange<RateId, Role, AccountId, N>,
-    ) -> ExchangeAssessment<AccountId, A, RateId, Role, N> {
+        proposal: &Exchange<RateId, Role, AccountId>,
+    ) -> ExchangeAssessment<AccountId, A, RateId, Role> {
         self.analyze(proposal).assessment
     }
 
     /// Returns whether one exchange is applicable to the current snapshot.
     #[must_use]
-    pub fn is_applicable(&self, proposal: &Exchange<RateId, Role, AccountId, N>) -> bool {
+    pub fn is_applicable(&self, proposal: &Exchange<RateId, Role, AccountId>) -> bool {
         self.assess(proposal).is_applicable()
     }
 
@@ -711,21 +611,18 @@ where
     #[must_use]
     pub fn applicable(
         &self,
-        candidates: impl IntoIterator<Item = Exchange<RateId, Role, AccountId, N>>,
-    ) -> Vec<Exchange<RateId, Role, AccountId, N>> {
-        let mut applicable = Vec::new();
-        for proposal in candidates {
-            if self.is_applicable(&proposal) {
-                applicable.push(proposal);
-            }
-        }
-        applicable
+        candidates: impl IntoIterator<Item = Exchange<RateId, Role, AccountId>>,
+    ) -> Vec<Exchange<RateId, Role, AccountId>> {
+        candidates
+            .into_iter()
+            .filter(|proposal| self.is_applicable(proposal))
+            .collect()
     }
 
     pub fn apply(
         &mut self,
-        proposal: Exchange<RateId, Role, AccountId, N>,
-    ) -> ApplyResult<AccountId, A, RateId, Role, N> {
+        proposal: Exchange<RateId, Role, AccountId>,
+    ) -> ApplyResult<AccountId, A, RateId, Role> {
         let Analysis {
             assessment,
             prepared_accounts,
@@ -757,8 +654,8 @@ where
     /// when every proposal succeeds.
     pub fn replay(
         &mut self,
-        trace: &Trace<RateId, Role, AccountId, N>,
-    ) -> ReplayResult<AccountId, A, RateId, Role, N> {
+        trace: &Trace<RateId, Role, AccountId>,
+    ) -> ReplayResult<AccountId, A, RateId, Role> {
         let mut receipts = Vec::new();
         for proposal in trace.exchanges() {
             receipts.push(self.apply(proposal.clone())?);
@@ -766,20 +663,20 @@ where
         Ok(receipts)
     }
 
-    /// Validates a complete trace on an isolated branch and returns its final state.
+    /// Validates a complete trace on an isolated copy and returns its final state.
     pub fn replayed(
         &self,
-        trace: &Trace<RateId, Role, AccountId, N>,
-    ) -> Result<Self, ApplyError<RateId, Role, AccountId, A, N>> {
-        let mut fork = self.fork();
-        fork.replay(trace)?;
-        Ok(fork)
+        trace: &Trace<RateId, Role, AccountId>,
+    ) -> Result<Self, ApplyError<RateId, Role, AccountId, A>> {
+        let mut economy = self.clone();
+        economy.replay(trace)?;
+        Ok(economy)
     }
 
     pub(crate) fn validate_structure(
         &self,
-        proposal: &Exchange<RateId, Role, AccountId, N>,
-    ) -> StructuralValidationResult<'_, AccountId, A, RateId, Role, N> {
+        proposal: &Exchange<RateId, Role, AccountId>,
+    ) -> StructuralValidationResult<'_, AccountId, A, RateId, Role> {
         let mut issues = Vec::new();
         if proposal.units().is_zero() {
             issues.push(ApplyError::ZeroUnits);
@@ -850,11 +747,11 @@ where
 
     fn merge_computed_effects(
         &self,
-        amounts: &[ComputedAmount<Role, A, N>],
+        amounts: &[ComputedAmount<Role, A>],
         direction: ComputedDirection,
-        proposal: &Exchange<RateId, Role, AccountId, N>,
-        effects: &mut BTreeMap<AccountId, Effect<A, N>>,
-    ) -> Result<(), ApplyError<RateId, Role, AccountId, A, N>> {
+        proposal: &Exchange<RateId, Role, AccountId>,
+        effects: &mut BTreeMap<AccountId, Effect<A>>,
+    ) -> Result<(), ApplyError<RateId, Role, AccountId, A>> {
         for amount in amounts {
             let value = match evaluate_expression(amount.quantity(), proposal, &self.accounts) {
                 Ok(value) => value,
@@ -884,8 +781,8 @@ where
 
     fn accounts_with_prepared(
         &self,
-        prepared_accounts: &PreparedAccounts<AccountId, A, N>,
-    ) -> IndexMap<AccountId, Arc<Account<A, N>>> {
+        prepared_accounts: &PreparedAccounts<AccountId, A>,
+    ) -> IndexMap<AccountId, Arc<Account<A>>> {
         let mut after_accounts = self.accounts.clone();
         for (account_id, holder) in prepared_accounts {
             after_accounts[account_id] = holder.clone();
@@ -895,9 +792,9 @@ where
 
     fn check_conditions(
         &self,
-        rule: &Rate<Role, A, N>,
-        proposal: &Exchange<RateId, Role, AccountId, N>,
-    ) -> Result<(), ApplyError<RateId, Role, AccountId, A, N>> {
+        rule: &Rate<Role, A>,
+        proposal: &Exchange<RateId, Role, AccountId>,
+    ) -> Result<(), ApplyError<RateId, Role, AccountId, A>> {
         for condition in rule.conditions() {
             let satisfied = match evaluate_condition(condition, proposal, &self.accounts) {
                 Ok(satisfied) => satisfied,
@@ -921,10 +818,10 @@ where
 
     fn aggregate_effects(
         &self,
-        rule: &Rate<Role, A, N>,
-        proposal: &Exchange<RateId, Role, AccountId, N>,
-    ) -> AggregationResult<AccountId, A, RateId, Role, N> {
-        let mut effects: BTreeMap<AccountId, Effect<A, N>> = BTreeMap::new();
+        rule: &Rate<Role, A>,
+        proposal: &Exchange<RateId, Role, AccountId>,
+    ) -> AggregationResult<AccountId, A, RateId, Role> {
+        let mut effects: BTreeMap<AccountId, Effect<A>> = BTreeMap::new();
         for role in rule.roles() {
             let account_id = proposal
                 .bindings()
@@ -982,9 +879,9 @@ where
 
     fn preflight_effects(
         &self,
-        proposal: &Exchange<RateId, Role, AccountId, N>,
-        effects: &BTreeMap<AccountId, Effect<A, N>>,
-    ) -> AvailabilityResult<AccountId, A, RateId, Role, N> {
+        proposal: &Exchange<RateId, Role, AccountId>,
+        effects: &BTreeMap<AccountId, Effect<A>>,
+    ) -> AvailabilityResult<AccountId, A, RateId, Role> {
         let mut account_assessments = Vec::with_capacity(effects.len());
         let mut shortfalls = Vec::new();
         for (account_id, effect) in effects {
@@ -1022,8 +919,8 @@ where
 
     fn prepare_effects(
         &self,
-        effects: BTreeMap<AccountId, Effect<A, N>>,
-    ) -> PreparationResult<AccountId, A, RateId, Role, N> {
+        effects: BTreeMap<AccountId, Effect<A>>,
+    ) -> PreparationResult<AccountId, A, RateId, Role> {
         let mut prepared_accounts = Vec::with_capacity(effects.len());
         let mut deltas = Vec::with_capacity(effects.len());
         for (account_id, effect) in effects {
@@ -1055,42 +952,28 @@ where
 
     fn check_invariants(
         &self,
-        deltas: &[AccountDelta<AccountId, A, N>],
-        prepared_accounts: &PreparedAccounts<AccountId, A, N>,
-    ) -> Result<(), ApplyError<RateId, Role, AccountId, A, N>> {
-        for invariant in self.invariants.iter() {
-            let Some(conserved) = invariant.conserves(deltas) else {
-                return Err(ApplyError::InvariantOverflow {
-                    invariant: invariant.name().to_owned(),
-                });
-            };
-            if !conserved {
-                let Some(before) = invariant.measure(&self.accounts) else {
-                    return Err(ApplyError::InvariantOverflow {
-                        invariant: invariant.name().to_owned(),
-                    });
-                };
-                let after_accounts = self.accounts_with_prepared(prepared_accounts);
-                let Some(after) = invariant.measure(&after_accounts) else {
-                    return Err(ApplyError::InvariantOverflow {
-                        invariant: invariant.name().to_owned(),
-                    });
-                };
-                return Err(ApplyError::InvariantViolation {
-                    invariant: invariant.name().to_owned(),
-                    before,
-                    after,
-                });
-            }
-        }
-
-        Ok(())
+        deltas: &[AccountDelta<AccountId, A>],
+        prepared_accounts: &PreparedAccounts<AccountId, A>,
+    ) -> Result<(), ApplyError<RateId, Role, AccountId, A>> {
+        let Some(violated) = self
+            .invariants
+            .iter()
+            .find(|invariant| !invariant.conserves(deltas))
+        else {
+            return Ok(());
+        };
+        let after = self.accounts_with_prepared(prepared_accounts);
+        Err(ApplyError::InvariantViolation {
+            invariant: violated.name().to_owned(),
+            before: Box::new(violated.measure(self.accounts.values().map(Arc::as_ref))),
+            after: Box::new(violated.measure(after.values().map(Arc::as_ref))),
+        })
     }
 
     fn analyze(
         &self,
-        proposal: &Exchange<RateId, Role, AccountId, N>,
-    ) -> Analysis<AccountId, A, RateId, Role, N> {
+        proposal: &Exchange<RateId, Role, AccountId>,
+    ) -> Analysis<AccountId, A, RateId, Role> {
         let rule = match self.validate_structure(proposal) {
             Ok(rule) => rule,
             Err(issues) => return invalid_analysis(issues),
@@ -1157,8 +1040,8 @@ impl Hasher for FingerprintHasher {
     }
 }
 
-pub struct EconomicView<'a, AccountId, A, RateId, Role, N = u64> {
-    economy: &'a Economy<AccountId, A, RateId, Role, N>,
+pub struct EconomicView<'a, AccountId, A, RateId, Role> {
+    economy: &'a Economy<AccountId, A, RateId, Role>,
     visible: BTreeSet<AccountId>,
 }
 
@@ -1167,16 +1050,16 @@ pub struct EconomicView<'a, AccountId, A, RateId, Role, N = u64> {
 /// `existing_accounts`; older keys cannot recover this information from balances.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
 #[serde(bound(
-    serialize = "AccountId: Serialize, A: Serialize, N: Serialize",
-    deserialize = "AccountId: Deserialize<'de>, A: Deserialize<'de> + Eq + Hash, N: Deserialize<'de> + QuantityScalar"
+    serialize = "AccountId: Serialize, A: Serialize",
+    deserialize = "AccountId: Deserialize<'de>, A: Deserialize<'de> + Eq + Hash"
 ))]
-pub struct ObservationKey<AccountId, A, N = u64> {
+pub struct ObservationKey<AccountId, A> {
     visible_accounts: Vec<AccountId>,
     existing_accounts: Vec<AccountId>,
-    balances: Vec<(AccountId, A, Quantity<N>)>,
+    balances: Vec<(AccountId, A, Quantity)>,
 }
 
-impl<AccountId, A, N> ObservationKey<AccountId, A, N> {
+impl<AccountId, A> ObservationKey<AccountId, A> {
     pub fn visible_accounts(&self) -> &[AccountId] {
         &self.visible_accounts
     }
@@ -1186,20 +1069,19 @@ impl<AccountId, A, N> ObservationKey<AccountId, A, N> {
         &self.existing_accounts
     }
 
-    pub fn balances(&self) -> &[(AccountId, A, Quantity<N>)] {
+    pub fn balances(&self) -> &[(AccountId, A, Quantity)] {
         &self.balances
     }
 }
 
-impl<AccountId, A, RateId, Role, N> EconomicView<'_, AccountId, A, RateId, Role, N>
+impl<AccountId, A, RateId, Role> EconomicView<'_, AccountId, A, RateId, Role>
 where
     AccountId: Clone + Eq + Hash + Ord,
     A: Clone + Eq + Hash + Ord,
     RateId: Clone + Eq + Hash + Ord,
     Role: Clone + Ord,
-    N: QuantityScalar,
 {
-    pub fn account(&self, id: &AccountId) -> Option<&Account<A, N>> {
+    pub fn account(&self, id: &AccountId) -> Option<&Account<A>> {
         if self.visible.contains(id) {
             self.economy.account(id)
         } else {
@@ -1207,11 +1089,8 @@ where
         }
     }
 
-    pub fn balance(&self, account_id: &AccountId, asset: &A) -> Option<Quantity<N>> {
-        match self.account(account_id) {
-            Some(holder) => Some(holder.balance(asset)),
-            None => None,
-        }
+    pub fn balance(&self, account_id: &AccountId, asset: &A) -> Option<Quantity> {
+        self.account(account_id).map(|holder| holder.balance(asset))
     }
 
     /// Returns a canonical identity containing only visible economic state.
@@ -1219,22 +1098,17 @@ where
     /// Equal produced keys have the same visibility boundary, visible account
     /// existence, and balance-query results, including missing versus zero.
     /// They ignore storage insertion order and all hidden accounts.
-    pub fn observation_key(&self) -> ObservationKey<AccountId, A, N> {
+    pub fn observation_key(&self) -> ObservationKey<AccountId, A> {
         self.economy.observation_key_for(&self.visible)
     }
 }
 
 #[derive(Debug, Clone, Error, Serialize, JsonSchema)]
 #[serde(bound(
-    serialize = "RateId: Serialize, Role: Serialize, AccountId: Serialize, A: Serialize, N: Serialize, N::SignedMeasure: Serialize"
+    serialize = "RateId: Serialize, Role: Serialize, AccountId: Serialize, A: Serialize"
 ))]
-#[schemars(
-    bound = "RateId: JsonSchema, Role: JsonSchema, AccountId: JsonSchema, A: JsonSchema, N: JsonSchema, N::SignedMeasure: JsonSchema"
-)]
-pub enum ApplyError<RateId, Role, AccountId, A, N = u64>
-where
-    N: QuantityScalar,
-{
+#[schemars(bound = "RateId: JsonSchema, Role: JsonSchema, AccountId: JsonSchema, A: JsonSchema")]
+pub enum ApplyError<RateId, Role, AccountId, A> {
     #[error("rate does not exist")]
     MissingRate { rate: RateId },
     #[error("exchange is missing a role binding")]
@@ -1259,25 +1133,23 @@ where
     RateConditionFailed { rate: RateId, condition: String },
     #[error("exchange is infeasible")]
     Infeasible {
-        shortfalls: Vec<AccountShortfall<AccountId, A, N>>,
+        shortfalls: Vec<AccountShortfall<AccountId, A>>,
     },
     #[error("account balance overflow")]
     BalanceOverflow { account: AccountId, asset: A },
-    #[error("invariant arithmetic overflow")]
-    InvariantOverflow { invariant: String },
     #[error("declared invariant violation")]
     InvariantViolation {
         invariant: String,
-        before: N::SignedMeasure,
-        after: N::SignedMeasure,
+        before: Box<Measure>,
+        after: Box<Measure>,
     },
 }
 
 #[derive(Debug, Clone)]
-struct Effect<A, N> {
-    consume: Basket<A, N>,
-    produce: Basket<A, N>,
-    preserve: Basket<A, N>,
+struct Effect<A> {
+    consume: Basket<A>,
+    produce: Basket<A>,
+    preserve: Basket<A>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -1287,7 +1159,7 @@ enum ComputedDirection {
     Preserve,
 }
 
-impl<A, N> Default for Effect<A, N> {
+impl<A> Default for Effect<A> {
     fn default() -> Self {
         Self {
             consume: Basket::new(),
@@ -1297,33 +1169,33 @@ impl<A, N> Default for Effect<A, N> {
     }
 }
 
-type PreparedAccounts<AccountId, A, N> = Vec<(AccountId, Arc<Account<A, N>>)>;
+type PreparedAccounts<AccountId, A> = Vec<(AccountId, Arc<Account<A>>)>;
 
-type AggregationResult<AccountId, A, RateId, Role, N> =
-    Result<BTreeMap<AccountId, Effect<A, N>>, ApplyError<RateId, Role, AccountId, A, N>>;
+type AggregationResult<AccountId, A, RateId, Role> =
+    Result<BTreeMap<AccountId, Effect<A>>, ApplyError<RateId, Role, AccountId, A>>;
 
-type AvailabilityResult<AccountId, A, RateId, Role, N> =
-    Result<Availability<AccountId, A, N>, ApplyError<RateId, Role, AccountId, A, N>>;
+type AvailabilityResult<AccountId, A, RateId, Role> =
+    Result<Availability<AccountId, A>, ApplyError<RateId, Role, AccountId, A>>;
 
-type PreparationResult<AccountId, A, RateId, Role, N> =
-    Result<Preparation<AccountId, A, N>, ApplyError<RateId, Role, AccountId, A, N>>;
+type PreparationResult<AccountId, A, RateId, Role> =
+    Result<Preparation<AccountId, A>, ApplyError<RateId, Role, AccountId, A>>;
 
-struct Availability<AccountId, A, N> {
-    accounts: Vec<AccountAssessment<AccountId, A, N>>,
-    shortfalls: Vec<AccountShortfall<AccountId, A, N>>,
+struct Availability<AccountId, A> {
+    accounts: Vec<AccountAssessment<AccountId, A>>,
+    shortfalls: Vec<AccountShortfall<AccountId, A>>,
 }
 
-struct Preparation<AccountId, A, N> {
-    accounts: PreparedAccounts<AccountId, A, N>,
-    deltas: Vec<AccountDelta<AccountId, A, N>>,
+struct Preparation<AccountId, A> {
+    accounts: PreparedAccounts<AccountId, A>,
+    deltas: Vec<AccountDelta<AccountId, A>>,
 }
 
-impl<A: Clone + Eq + Hash, N: QuantityScalar> Effect<A, N> {
+impl<A: Clone + Eq + Hash> Effect<A> {
     fn merge_computed(
         &mut self,
         direction: ComputedDirection,
         asset: A,
-        value: Quantity<N>,
+        value: Quantity,
     ) -> Result<(), A> {
         match direction {
             ComputedDirection::Consume => merge_quantity(&mut self.consume, asset, value),
@@ -1333,37 +1205,28 @@ impl<A: Clone + Eq + Hash, N: QuantityScalar> Effect<A, N> {
     }
 }
 
-struct Analysis<AccountId, A, RateId, Role, N>
-where
-    N: QuantityScalar,
-{
-    assessment: ExchangeAssessment<AccountId, A, RateId, Role, N>,
-    prepared_accounts: Option<PreparedAccounts<AccountId, A, N>>,
+struct Analysis<AccountId, A, RateId, Role> {
+    assessment: ExchangeAssessment<AccountId, A, RateId, Role>,
+    prepared_accounts: Option<PreparedAccounts<AccountId, A>>,
 }
 
-pub(crate) fn merge_scaled<A, N>(
-    target: &mut Basket<A, N>,
-    source: &Basket<A, N>,
-    units: &Quantity<N>,
+pub(crate) fn merge_scaled<A>(
+    target: &mut Basket<A>,
+    source: &Basket<A>,
+    units: Quantity,
 ) -> Result<(), A>
 where
     A: Clone + Eq + Hash,
-    N: QuantityScalar,
 {
     let scaled = source.checked_scale(units)?;
     target.checked_add(&scaled)
 }
 
-pub(crate) fn merge_quantity<A, N>(
-    target: &mut Basket<A, N>,
-    asset: A,
-    amount: Quantity<N>,
-) -> Result<(), A>
+pub(crate) fn merge_quantity<A>(target: &mut Basket<A>, asset: A, amount: Quantity) -> Result<(), A>
 where
     A: Clone + Eq + Hash,
-    N: QuantityScalar,
 {
-    let Some(total) = target.quantity(&asset).checked_add(&amount) else {
+    let Some(total) = target.quantity(&asset).checked_add(amount) else {
         return Err(asset);
     };
     target.insert(asset, total);
@@ -1385,14 +1248,7 @@ pub(crate) enum ExpressionError {
 impl ExpressionError {
     pub(crate) fn into_message(self) -> String {
         match self {
-            Self::MissingParameter(name) => {
-                let mut message = String::from("missing parameter `");
-                message.push_str(&name);
-                // Both pieces use the same proved UTF-8 append operation.
-                #[allow(clippy::single_char_add_str)]
-                message.push_str("`");
-                message
-            }
+            Self::MissingParameter(name) => format!("missing parameter `{name}`"),
             Self::UnboundRole => "expression references an unbound role".to_owned(),
             Self::MissingAccount => "expression references a missing account".to_owned(),
             Self::AdditionOverflow => "addition overflow".to_owned(),
@@ -1403,24 +1259,23 @@ impl ExpressionError {
     }
 }
 
-pub(crate) fn evaluate_expression<AccountId, A, RateId, Role, N>(
-    expression: &QuantityExpression<Role, A, N>,
-    proposal: &Exchange<RateId, Role, AccountId, N>,
-    accounts: &IndexMap<AccountId, Arc<Account<A, N>>>,
-) -> Result<Quantity<N>, ExpressionError>
+pub(crate) fn evaluate_expression<AccountId, A, RateId, Role>(
+    expression: &QuantityExpression<Role, A>,
+    proposal: &Exchange<RateId, Role, AccountId>,
+    accounts: &IndexMap<AccountId, Arc<Account<A>>>,
+) -> Result<Quantity, ExpressionError>
 where
     AccountId: Eq + Hash,
     A: Eq + Hash,
     Role: Ord,
-    N: QuantityScalar,
 {
     match expression {
-        QuantityExpression::Constant { value } => Ok(value.clone()),
-        QuantityExpression::Units => Ok(proposal.units().clone()),
+        QuantityExpression::Constant { value } => Ok(*value),
+        QuantityExpression::Units => Ok(proposal.units()),
         QuantityExpression::Parameter { name } => proposal
             .parameters()
             .get(name)
-            .cloned()
+            .copied()
             .ok_or_else(|| ExpressionError::MissingParameter(name.clone())),
         QuantityExpression::Balance { role, asset } => {
             let account_id = proposal
@@ -1475,16 +1330,15 @@ where
     }
 }
 
-pub(crate) fn evaluate_condition<AccountId, A, RateId, Role, N>(
-    condition: &RateCondition<Role, A, N>,
-    proposal: &Exchange<RateId, Role, AccountId, N>,
-    accounts: &IndexMap<AccountId, Arc<Account<A, N>>>,
+pub(crate) fn evaluate_condition<AccountId, A, RateId, Role>(
+    condition: &RateCondition<Role, A>,
+    proposal: &Exchange<RateId, Role, AccountId>,
+    accounts: &IndexMap<AccountId, Arc<Account<A>>>,
 ) -> Result<bool, ExpressionError>
 where
     AccountId: Eq + Hash,
     A: Eq + Hash,
     Role: Ord,
-    N: QuantityScalar,
 {
     let left = evaluate_expression(condition.left(), proposal, accounts)?;
     let right = evaluate_expression(condition.right(), proposal, accounts)?;
@@ -1495,41 +1349,39 @@ where
     })
 }
 
-fn evaluate_binary<AccountId, A, RateId, Role, N>(
-    left: &QuantityExpression<Role, A, N>,
-    right: &QuantityExpression<Role, A, N>,
-    proposal: &Exchange<RateId, Role, AccountId, N>,
-    accounts: &IndexMap<AccountId, Arc<Account<A, N>>>,
+fn evaluate_binary<AccountId, A, RateId, Role>(
+    left: &QuantityExpression<Role, A>,
+    right: &QuantityExpression<Role, A>,
+    proposal: &Exchange<RateId, Role, AccountId>,
+    accounts: &IndexMap<AccountId, Arc<Account<A>>>,
     error: ExpressionError,
-    operation: impl FnOnce(&Quantity<N>, &Quantity<N>) -> Option<Quantity<N>>,
-) -> Result<Quantity<N>, ExpressionError>
+    operation: impl FnOnce(Quantity, Quantity) -> Option<Quantity>,
+) -> Result<Quantity, ExpressionError>
 where
     AccountId: Eq + Hash,
     A: Eq + Hash,
     Role: Ord,
-    N: QuantityScalar,
 {
     let left = evaluate_expression(left, proposal, accounts)?;
     let right = evaluate_expression(right, proposal, accounts)?;
-    operation(&left, &right).ok_or(error)
+    operation(left, right).ok_or(error)
 }
 
 // Operands are evaluated left to right against the same snapshot. A zero
 // denominator is reported before the full-width quotient is attempted; a
 // quotient outside the backend reports multiplication overflow.
-fn evaluate_mul_div<AccountId, A, RateId, Role, N>(
-    left: &QuantityExpression<Role, A, N>,
-    right: &QuantityExpression<Role, A, N>,
-    denominator: &QuantityExpression<Role, A, N>,
+fn evaluate_mul_div<AccountId, A, RateId, Role>(
+    left: &QuantityExpression<Role, A>,
+    right: &QuantityExpression<Role, A>,
+    denominator: &QuantityExpression<Role, A>,
     rounding: Rounding,
-    proposal: &Exchange<RateId, Role, AccountId, N>,
-    accounts: &IndexMap<AccountId, Arc<Account<A, N>>>,
-) -> Result<Quantity<N>, ExpressionError>
+    proposal: &Exchange<RateId, Role, AccountId>,
+    accounts: &IndexMap<AccountId, Arc<Account<A>>>,
+) -> Result<Quantity, ExpressionError>
 where
     AccountId: Eq + Hash,
     A: Eq + Hash,
     Role: Ord,
-    N: QuantityScalar,
 {
     let left = evaluate_expression(left, proposal, accounts)?;
     let right = evaluate_expression(right, proposal, accounts)?;
@@ -1537,16 +1389,13 @@ where
     if denominator.is_zero() {
         return Err(ExpressionError::DivisionByZero);
     }
-    left.checked_mul_div(&right, &denominator, rounding)
+    left.checked_mul_div(right, denominator, rounding)
         .ok_or(ExpressionError::MultiplicationOverflow)
 }
 
-fn invalid_analysis<AccountId, A, RateId, Role, N>(
-    issues: Vec<ApplyError<RateId, Role, AccountId, A, N>>,
-) -> Analysis<AccountId, A, RateId, Role, N>
-where
-    N: QuantityScalar,
-{
+fn invalid_analysis<AccountId, A, RateId, Role>(
+    issues: Vec<ApplyError<RateId, Role, AccountId, A>>,
+) -> Analysis<AccountId, A, RateId, Role> {
     debug_assert!(!issues.is_empty());
     Analysis {
         assessment: ExchangeAssessment::Invalid { issues },
@@ -1554,25 +1403,22 @@ where
     }
 }
 
-fn relevant_balances<A, N>(holder: &Account<A, N>, required: &Basket<A, N>) -> Basket<A, N>
+fn relevant_balances<A>(holder: &Account<A>, required: &Basket<A>) -> Basket<A>
 where
     A: Clone + Eq + Hash,
-    N: QuantityScalar,
 {
-    let mut relevant = Basket::new();
-    for (asset, _) in required.iter() {
-        relevant.insert(asset.clone(), holder.balance(asset));
-    }
-    relevant
+    required
+        .iter()
+        .map(|(asset, _)| (asset.clone(), holder.balance(asset)))
+        .collect()
 }
 
-fn map_account_error<RateId, Role, AccountId, A, N>(
+fn map_account_error<RateId, Role, AccountId, A>(
     holder: AccountId,
-    error: AccountError<A, N>,
-) -> ApplyError<RateId, Role, AccountId, A, N>
+    error: AccountError<A>,
+) -> ApplyError<RateId, Role, AccountId, A>
 where
     A: Eq + Hash,
-    N: QuantityScalar,
 {
     match error {
         AccountError::InsufficientBalance { shortfall } => ApplyError::Infeasible {
@@ -1637,7 +1483,7 @@ mod evaluation_conformance {
         Basket::try_from_entries(
             entries
                 .iter()
-                .map(|(asset, amount)| (asset.clone(), Quantity::new(amount.parse().unwrap()))),
+                .map(|(asset, amount)| (asset.clone(), amount.parse::<Quantity>().unwrap())),
         )
         .unwrap()
     }
@@ -1645,7 +1491,7 @@ mod evaluation_conformance {
     fn entries(basket: &Basket<Asset>) -> Vec<(Asset, String)> {
         basket
             .iter()
-            .map(|(asset, amount)| (asset.clone(), amount.as_scalar().to_string()))
+            .map(|(asset, amount)| (asset.clone(), amount.to_string()))
             .collect()
     }
 
@@ -1656,12 +1502,12 @@ mod evaluation_conformance {
         assert_eq!(fixtures.evaluation.len(), 2678);
         let mut condition_outcomes = [0; 3];
         for case in fixtures.evaluation {
-            let mut proposal = Exchange::new(Rule, Quantity::new(case.units.parse().unwrap()));
+            let mut proposal = Exchange::new(Rule, case.units.parse::<Quantity>().unwrap());
             for (role, holder) in &case.bindings {
                 proposal = proposal.bind(role.clone(), holder.clone());
             }
             for (parameter, amount) in &case.parameters {
-                proposal = proposal.parameter(parameter, Quantity::new(amount.parse().unwrap()));
+                proposal = proposal.parameter(parameter, amount.parse::<Quantity>().unwrap());
             }
             let accounts: IndexMap<_, _> = case
                 .accounts
@@ -1671,7 +1517,7 @@ mod evaluation_conformance {
             let before = accounts.clone();
             let proposal_before = proposal.clone();
             let actual = evaluate_expression(&case.expression, &proposal, &accounts)
-                .map(|value| value.into_scalar().to_string())
+                .map(|value| value.to_string())
                 .map_err(ExpressionError::into_message);
             let expected = match (&case.result, &case.error) {
                 (Some(value), None) => Ok(value.clone()),
@@ -1720,7 +1566,7 @@ mod evaluation_conformance {
             let actual = merge_scaled(
                 &mut target,
                 &source,
-                &Quantity::new(case.units.parse().unwrap()),
+                case.units.parse::<Quantity>().unwrap(),
             );
             assert_eq!(actual.err(), case.scale_error, "{case:?}");
             assert_eq!(entries(&target), case.scaled, "{case:?}");
@@ -1729,7 +1575,7 @@ mod evaluation_conformance {
             let actual = merge_quantity(
                 &mut target,
                 case.asset.clone(),
-                Quantity::new(case.amount.parse().unwrap()),
+                case.amount.parse::<Quantity>().unwrap(),
             );
             assert_eq!(actual.err(), case.computed_error, "{case:?}");
             assert_eq!(entries(&target), case.computed, "{case:?}");
@@ -1824,7 +1670,7 @@ mod construction_conformance {
                             .iter()
                             .map(|(id, holder)| (
                                 id.0,
-                                *holder.balances().quantity(&Asset(0)).as_scalar()
+                                holder.balances().quantity(&Asset(0)).to_u64()
                             ))
                             .collect::<Vec<_>>(),
                         snapshot.accounts
@@ -1835,11 +1681,10 @@ mod construction_conformance {
                             .iter()
                             .map(|(id, rule)| (
                                 id.0,
-                                *rule
-                                    .produced(&Role(0))
+                                rule.produced(&Role(0))
                                     .unwrap()
                                     .quantity(&Asset(0))
-                                    .as_scalar()
+                                    .to_u64()
                             ))
                             .collect::<Vec<_>>(),
                         snapshot.rates
@@ -1872,7 +1717,7 @@ mod construction_conformance {
                                     .iter()
                                     .map(|(id, holder)| (
                                         id.0,
-                                        *holder.balances().quantity(&Asset(0)).as_scalar()
+                                        holder.balances().quantity(&Asset(0)).to_u64()
                                     ))
                                     .collect::<Vec<_>>(),
                                 snapshot.accounts
@@ -1883,11 +1728,10 @@ mod construction_conformance {
                                     .iter()
                                     .map(|(id, rule)| (
                                         id.0,
-                                        *rule
-                                            .produced(&Role(0))
+                                        rule.produced(&Role(0))
                                             .unwrap()
                                             .quantity(&Asset(0))
-                                            .as_scalar()
+                                            .to_u64()
                                     ))
                                     .collect::<Vec<_>>(),
                                 snapshot.rates
@@ -2031,12 +1875,12 @@ mod validation_conformance {
                 }
                 let mut model = builder.build().unwrap();
                 let mut proposal =
-                    Exchange::new(case.rate, Quantity::new(case.units.parse().unwrap()));
+                    Exchange::new(case.rate, case.units.parse::<Quantity>().unwrap());
                 for (role, id) in &case.bindings {
                     proposal = proposal.bind(*role, *id);
                 }
                 for (parameter, value) in &case.parameters {
-                    proposal = proposal.parameter(parameter, Quantity::new(value.parse().unwrap()));
+                    proposal = proposal.parameter(parameter, value.parse::<Quantity>().unwrap());
                 }
                 let expected: Vec<Error> = case.issues.iter().map(Issue::error).collect();
                 for issue in &case.issues {

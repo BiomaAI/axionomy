@@ -436,7 +436,7 @@ pub fn run_policy(model: &World, policy: Policy, exploration_seed: u64) -> Missi
         elapsed_time: result
             .world()
             .balance(&AccountId::Vehicle, &Asset::ElapsedTime)
-            .get(),
+            .to_u64(),
         steps: result.steps(),
     }
 }
@@ -678,7 +678,7 @@ pub fn run_planned_with_progress(
     chunk_size: usize,
     mut observer: impl FnMut(usize, MctsProgress) -> ControlFlow<()>,
 ) -> Result<Option<PlannedLogistics>, String> {
-    let mut world = initial.fork();
+    let mut world = initial.clone();
     let mut trace = Trace::new();
     let mut decisions = Vec::new();
     let mut nature = SeededSampler::new(environment_seed);
@@ -738,7 +738,7 @@ pub fn run_planned_with_progress(
         delivered: delivered(&world),
         elapsed_time: world
             .balance(&AccountId::Vehicle, &Asset::ElapsedTime)
-            .get(),
+            .to_u64(),
         steps: trace.exchanges().len(),
         trace,
     };
@@ -797,7 +797,7 @@ fn planning_candidates(world: &World) -> Vec<Action> {
                         .map(RateId::Load)
                         .collect()
                 };
-                if world.balance(&AccountId::Vehicle, &Asset::Fuel).get() < REFUEL_AMOUNT {
+                if world.balance(&AccountId::Vehicle, &Asset::Fuel).to_u64() < REFUEL_AMOUNT {
                     rates.push(RateId::Refuel);
                 }
                 rates
@@ -831,7 +831,7 @@ fn planning_utility(world: &World) -> f64 {
     completion_bonus + delivered(world) as f64 * 100.0
         - world
             .balance(&AccountId::Vehicle, &Asset::ElapsedTime)
-            .get() as f64
+            .to_u64() as f64
 }
 
 fn risk_score(summary: &ScalarSummary, criterion: RiskCriterion) -> f64 {
@@ -879,7 +879,7 @@ fn policy_action(world: &World, policy: Policy, sampler: &mut impl TicketSource)
                     Policy::Direct => Route::DirectOut,
                     Policy::Reliable => Route::SafeOutFirst,
                 })))
-            } else if world.balance(&AccountId::Vehicle, &Asset::Fuel).get() < REFUEL_AMOUNT {
+            } else if world.balance(&AccountId::Vehicle, &Asset::Fuel).to_u64() < REFUEL_AMOUNT {
                 Some(action(RateId::Refuel))
             } else {
                 ORDERS.into_iter().find_map(|order| {
@@ -924,7 +924,7 @@ fn nature_outcomes(world: &World, route: Route) -> Vec<WeightedExchange<Action>>
                     exchange,
                     world
                         .balance(&AccountId::Nature, &Asset::OutcomeWeight(route, outcome))
-                        .get(),
+                        .to_u64(),
                 )
             })
         })
