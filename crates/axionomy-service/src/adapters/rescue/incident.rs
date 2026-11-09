@@ -243,23 +243,23 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         &AccountId::Responder,
     );
     crew.metrics = vec![
-        visual_metric(
+        asset_metric(
             slug("fuel"),
             "Fuel",
+            &Asset::Fuel,
             val(AccountId::Responder, Asset::Fuel),
-            None,
         ),
-        visual_metric(
+        asset_metric(
             slug("energy"),
             "Crew energy",
+            &Asset::Energy,
             val(AccountId::Responder, Asset::Energy),
-            None,
         ),
-        visual_metric(
+        asset_metric(
             slug("medicine"),
             "Medical kits",
+            &Asset::MedicalKit,
             val(AccountId::Responder, Asset::MedicalKit),
-            None,
         ),
     ];
     let mut entities = vec![crew];
@@ -320,17 +320,17 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 val(patient, Asset::Vitality),
                 Some("/ 3"),
             ),
-            visual_metric(
+            asset_metric(
                 slug("decline"),
                 "Next deterioration",
+                &Asset::NextDecline,
                 val(patient, Asset::NextDecline),
-                Some("tick"),
             ),
-            visual_metric(
+            asset_metric(
                 slug("deadline"),
                 "Evacuation deadline",
+                &Asset::Deadline,
                 val(patient, Asset::Deadline),
-                Some("tick"),
             ),
         ];
         entities.push(entity);
@@ -343,24 +343,29 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
     )
     .with_entities(entities)
     .with_metrics([
-        visual_metric(slug("time"), "Incident time", incident::now(world), None),
-        visual_metric(
+        asset_metric(
+            slug("time"),
+            "Incident time",
+            &Asset::Time,
+            incident::now(world),
+        ),
+        asset_metric(
             slug("saved"),
             "Patients evacuated",
+            &Asset::SavedCount,
             val(AccountId::World, Asset::SavedCount),
-            None,
         ),
-        visual_metric(
+        asset_metric(
             slug("deaths"),
             "Patients lost",
+            &Asset::DeathCount,
             val(AccountId::World, Asset::DeathCount),
-            None,
         ),
-        visual_metric(
+        asset_metric(
             slug("fuel"),
             "Fuel remaining",
+            &Asset::Fuel,
             val(AccountId::Responder, Asset::Fuel),
-            None,
         ),
     ]);
     for location in LOCATIONS.into_iter().filter(|location| present(*location)) {
@@ -387,18 +392,23 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             );
             if location == Location::Base {
                 entity.metrics = vec![
-                    visual_metric(slug("time"), "Incident time", incident::now(world), None),
-                    visual_metric(
+                    asset_metric(
+                        slug("time"),
+                        "Incident time",
+                        &Asset::Time,
+                        incident::now(world),
+                    ),
+                    asset_metric(
                         slug("saved"),
                         "Patients evacuated",
+                        &Asset::SavedCount,
                         val(AccountId::World, Asset::SavedCount),
-                        None,
                     ),
-                    visual_metric(
+                    asset_metric(
                         slug("lost"),
                         "Patients lost",
+                        &Asset::DeathCount,
                         val(AccountId::World, Asset::DeathCount),
-                        None,
                     ),
                 ];
             }
@@ -409,11 +419,93 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
 
 // How Studio names and writes this problem's values.
 
-counted!(incident::Asset);
+impl StudioFormat for incident::Asset {
+    fn studio_format(&self) -> QuantityFormat {
+        match self {
+            Self::Time
+            | Self::Horizon
+            | Self::TimeRemaining
+            | Self::NextDecline
+            | Self::Deadline => QuantityFormat::COUNT.unit("ticks"),
+            Self::Fuel | Self::SpentFuel | Self::Energy | Self::SpentEnergy => {
+                QuantityFormat::COUNT.unit("units")
+            }
+            _ => QuantityFormat::COUNT,
+        }
+    }
+}
 
-debug_labels!(incident::Asset);
+impl StudioLabel for incident::Asset {
+    fn studio_label(&self) -> String {
+        match self {
+            Self::WorldIdentity => "Incident identity".into(),
+            Self::ResponderIdentity => "Crew identity".into(),
+            Self::NatureIdentity => "Nature identity".into(),
+            Self::PatientIdentity(id) => format!("Patient {} identity", id + 1),
+            Self::Active => "Incident in progress".into(),
+            Self::Closed => "Incident closed".into(),
+            Self::Time => "Incident time".into(),
+            Self::Horizon => "Incident horizon".into(),
+            Self::TimeRemaining => "Time remaining".into(),
+            Self::PatientCount => "Patients in the incident".into(),
+            Self::Resolved => "Outcomes recorded".into(),
+            Self::SavedCount => "Patients evacuated".into(),
+            Self::DeathCount => "Patients who died".into(),
+            Self::LeftCount => "Patients left behind".into(),
+            Self::SavedVitality => "Vitality at hospital arrival".into(),
+            Self::At(location) => format!("At {location:?}"),
+            Self::Site(location) => format!("Incident site: {location:?}"),
+            Self::Surveyed(location) => format!("{location:?} searched"),
+            Self::Unsearched(location) => format!("{location:?} not yet searched"),
+            Self::Known(id, location) => format!("Patient {} found at {location:?}", id + 1),
+            Self::Truth(id, location) => format!("Patient {} is at {location:?}", id + 1),
+            Self::Ready => "Crew ready".into(),
+            Self::AwaitingScan => "Awaiting a sensor report".into(),
+            Self::Sensor => "Sensor charges".into(),
+            Self::UsedSensor => "Sensor charges used".into(),
+            Self::ScanRound(round) => format!("Sensor reports so far: {round}"),
+            Self::Signal(round, location) => {
+                format!("Sensor report {} will suggest {location:?}", round + 1)
+            }
+            Self::Hint(location) => format!("Sensor hint: {location:?}"),
+            Self::Fuel => "Fuel".into(),
+            Self::SpentFuel => "Fuel spent".into(),
+            Self::Energy => "Energy".into(),
+            Self::SpentEnergy => "Energy spent".into(),
+            Self::MedicalKit => "Medical kits".into(),
+            Self::UsedMedicalKit => "Medical kits used".into(),
+            Self::SupplyAvailable => "Resupply available".into(),
+            Self::SupplyUsed => "Resupply used".into(),
+            Self::Seat => "Free evacuation seat".into(),
+            Self::Carrying(id) => format!("Carrying Patient {}", id + 1),
+            Self::Hidden => "Not yet found".into(),
+            Self::Found => "Found".into(),
+            Self::Onboard => "On board".into(),
+            Self::Alive => "Alive".into(),
+            Self::Saved => "Evacuated".into(),
+            Self::Dead => "Died".into(),
+            Self::LeftBehind => "Left behind".into(),
+            Self::Vitality => "Vitality".into(),
+            Self::Harm => "Vitality lost".into(),
+            Self::NextDecline => "Next deterioration".into(),
+            Self::Deadline => "Evacuation deadline".into(),
+            Self::Treatable => "Can be stabilized".into(),
+            Self::Stabilized => "Stabilized".into(),
+        }
+    }
+}
 
-debug_labels!(incident::Role);
+impl StudioLabel for incident::Role {
+    fn studio_label(&self) -> String {
+        match self {
+            Self::World => "Incident",
+            Self::Responder => "Crew",
+            Self::Nature => "Nature",
+            Self::Patient => "Patient",
+        }
+        .into()
+    }
+}
 
 impl StudioLabel for incident::AccountId {
     fn studio_label(&self) -> String {
@@ -439,24 +531,55 @@ impl StudioLabel for incident::RateId {
             ),
             Self::Search(location) => format!("Search {location:?} for casualties"),
             Self::Scan => "Spend a sensor charge on a new location hint".into(),
-            Self::Report { location, .. } => {
-                format!("Sensor suggests {location:?}; hint may be wrong")
-            }
+            Self::Report { round, location } => format!(
+                "Sensor report {} suggests {location:?}; hint may be wrong",
+                round + 1
+            ),
             Self::Discover { patient, location } => {
                 format!("Discover Patient {} at {location:?}", patient + 1)
             }
             Self::Deteriorate(patient) => format!("Patient {} loses vitality", patient + 1),
-            Self::Stabilize { patient, .. } => format!(
-                "Stabilize Patient {} and extend the evacuation window",
+            Self::Stabilize {
+                patient,
+                location,
+                restore,
+            } => format!(
+                "Stabilize Patient {} at {location:?}, {}",
+                patient + 1,
+                if *restore {
+                    "restoring 1 vitality and extending the window"
+                } else {
+                    "extending the evacuation window"
+                }
+            ),
+            Self::Load { patient, location } => format!(
+                "Load Patient {} at {location:?} into the evacuation seat",
                 patient + 1
             ),
-            Self::Load { patient, .. } => {
-                format!("Load Patient {} into the evacuation seat", patient + 1)
-            }
             Self::Unload(patient) => format!("Admit Patient {} to the hospital", patient + 1),
-            Self::Lose { patient, cause, .. } => {
-                format!("Resolve Patient {}: {cause:?}", patient + 1)
-            }
+            Self::Lose {
+                patient,
+                phase,
+                cause,
+            } => format!(
+                "Patient {} {} {}: {}",
+                patient + 1,
+                if *cause == incident::Loss::Horizon {
+                    "is left behind"
+                } else {
+                    "dies"
+                },
+                match phase {
+                    incident::Phase::Hidden => "unfound",
+                    incident::Phase::Found => "at the scene",
+                    incident::Phase::Onboard => "on board",
+                },
+                match cause {
+                    incident::Loss::Deterioration => "no vitality left",
+                    incident::Loss::Deadline => "deadline passed",
+                    incident::Loss::Horizon => "incident over",
+                }
+            ),
             Self::Resupply => "Take the hospital's finite fuel, energy and medical reserve".into(),
             Self::Wait => "Advance incident time by one tick".into(),
             Self::Close => "Close the incident with all patient outcomes recorded".into(),

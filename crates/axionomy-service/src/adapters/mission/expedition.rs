@@ -279,31 +279,26 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             ),
             &own,
         );
+        let (supply, supply_label) = if agent == Agent::Scout {
+            (Asset::Radio, "Radio charges")
+        } else {
+            (Asset::MedicalKit, "Medical kits")
+        };
         entity.metrics = vec![
-            visual_metric(slug("energy"), "Energy", val(own, Asset::Energy), None),
+            asset_metric(
+                slug("energy"),
+                "Energy",
+                &Asset::Energy,
+                val(own, Asset::Energy),
+            ),
+            // Each point of health lost adds a tick to every journey.
             visual_metric(
                 slug("injury"),
                 "Injury delay",
                 val(own, Asset::Harm),
                 Some("ticks"),
             ),
-            visual_metric(
-                slug("capacity"),
-                if agent == Agent::Scout {
-                    "Radio charges"
-                } else {
-                    "Medical kits"
-                },
-                val(
-                    own,
-                    if agent == Agent::Scout {
-                        Asset::Radio
-                    } else {
-                        Asset::MedicalKit
-                    },
-                ),
-                None,
-            ),
+            asset_metric(slug("capacity"), supply_label, &supply, val(own, supply)),
         ];
         entities.push(entity);
     }
@@ -387,11 +382,11 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 },
                 None,
             ),
-            visual_metric(
+            asset_metric(
                 slug("deadline"),
                 "Deadline",
+                &Asset::Deadline,
                 val(account, Asset::Deadline),
-                None,
             ),
         ];
         if expedition::patient(id) {
@@ -415,18 +410,23 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
     )
     .with_entities(entities)
     .with_metrics([
-        visual_metric(slug("time"), "Mission time", expedition::now(world), None),
-        visual_metric(
+        asset_metric(
+            slug("time"),
+            "Mission time",
+            &Asset::Time,
+            expedition::now(world),
+        ),
+        asset_metric(
             slug("complete"),
             "Objectives complete",
+            &Asset::Completed,
             val(AccountId::World, Asset::Completed),
-            None,
         ),
-        visual_metric(
+        asset_metric(
             slug("failed"),
             "Objectives lost",
+            &Asset::FailedCount,
             val(AccountId::World, Asset::FailedCount),
-            None,
         ),
         visual_metric(
             slug("busy"),
@@ -437,11 +437,11 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 .count(),
             Some("/ 2"),
         ),
-        visual_metric(
+        asset_metric(
             slug("radio"),
             "Radio charges spent",
+            &Asset::UsedRadio,
             val(AccountId::Agent(Agent::Scout), Asset::UsedRadio),
-            None,
         ),
     ]);
     for location in LOCATIONS {
@@ -472,11 +472,138 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
 
 // How Studio names and writes this problem's values.
 
-counted!(expedition::Asset);
+/// An objective as it reads inside a sentence.
+fn objective(id: u8) -> String {
+    if expedition::patient(id) {
+        format!("Casualty {}", id / 2 + 1)
+    } else {
+        "the research archive".into()
+    }
+}
 
-debug_labels!(expedition::Asset);
+/// An objective as it reads at the start of a sentence.
+fn objective_subject(id: u8) -> String {
+    if expedition::patient(id) {
+        objective(id)
+    } else {
+        "Research archive".into()
+    }
+}
 
-debug_labels!(expedition::Role);
+impl StudioFormat for expedition::Asset {
+    fn studio_format(&self) -> QuantityFormat {
+        match self {
+            Self::Time
+            | Self::TimeRemaining
+            | Self::Horizon
+            | Self::ReadyAt
+            | Self::Deadline
+            | Self::NextClinical => QuantityFormat::COUNT.unit("ticks"),
+            Self::Energy | Self::SpentEnergy => QuantityFormat::COUNT.unit("units"),
+            _ => QuantityFormat::COUNT,
+        }
+    }
+}
+
+impl StudioLabel for expedition::Asset {
+    fn studio_label(&self) -> String {
+        match self {
+            Self::WorldIdentity => "Expedition identity".into(),
+            Self::NatureIdentity => "Nature identity".into(),
+            Self::AgentIdentity(agent) => format!("{agent:?} identity"),
+            Self::ObjectiveIdentity(id) => format!("{} identity", objective_subject(*id)),
+            Self::Active => "Mission in progress".into(),
+            Self::Closed => "Mission closed".into(),
+            Self::Time => "Mission time".into(),
+            Self::TimeRemaining => "Time remaining".into(),
+            Self::Horizon => "Mission horizon".into(),
+            Self::Count => "Objectives in the mission".into(),
+            Self::Resolved => "Objectives resolved".into(),
+            Self::Completed => "Objectives completed".into(),
+            Self::FailedCount => "Objectives lost".into(),
+            Self::SavedVitality => "Evacuated vitality".into(),
+            Self::Permit(agent) => format!("{agent:?} may act this tick"),
+            Self::UsedPermit(agent) => format!("{agent:?} has acted this tick"),
+            Self::EnvironmentReady => "No weather change pending".into(),
+            Self::WeatherDue(opening) => {
+                if *opening {
+                    "Hazard due to clear".into()
+                } else {
+                    "Hazard due to arrive".into()
+                }
+            }
+            Self::HazardSite(location) => format!("Hazard site: {location:?}"),
+            Self::WeatherOpen(location) => format!("{location:?} open"),
+            Self::WeatherBlocked(location) => format!("{location:?} blocked by the hazard"),
+            Self::At(location) => format!("At {location:?}"),
+            Self::Travelling(location) => format!("Travelling to {location:?}"),
+            Self::TeamAt(agent, location) => format!("{agent:?} at {location:?}"),
+            Self::TeamTravelling(agent) => format!("{agent:?} travelling"),
+            Self::Ready => "Ready".into(),
+            Self::ReadyAt => "Busy until".into(),
+            Self::Collecting(id) => format!("Recovering {}", objective(*id)),
+            Self::Extracting(id) => format!("Extracting {}", objective(*id)),
+            Self::AwaitingReport => "Awaiting a sensor report".into(),
+            Self::Energy => "Energy".into(),
+            Self::SpentEnergy => "Energy spent".into(),
+            Self::MedicalKit => "Medical kits".into(),
+            Self::UsedMedicalKit => "Medical kits used".into(),
+            Self::Health => "Health".into(),
+            Self::Harm => "Health lost".into(),
+            Self::Radio => "Radio charges".into(),
+            Self::UsedRadio => "Radio charges spent".into(),
+            Self::Sensor => "Sensor charges".into(),
+            Self::UsedSensor => "Sensor charges used".into(),
+            Self::ScanRound(round) => format!("Sensor reports so far: {round}"),
+            Self::Signal(round, location) => {
+                format!("Sensor report {} will suggest {location:?}", round + 1)
+            }
+            Self::Hint(round, location) => {
+                format!("Sensor report {} suggests {location:?}", round + 1)
+            }
+            Self::Unsearched(location) => format!("{location:?} not yet surveyed"),
+            Self::Surveyed(location) => format!("{location:?} surveyed"),
+            Self::Known(id, location) => format!("Knows {} is at {location:?}", objective(*id)),
+            Self::Shared(id, location) => {
+                format!("Briefed Medic: {} at {location:?}", objective(*id))
+            }
+            Self::Truth(id, location) => {
+                format!("{} is at {location:?}", objective_subject(*id))
+            }
+            Self::Deadline => "Deadline".into(),
+            Self::Hidden => "Not yet found".into(),
+            Self::Located => "Located".into(),
+            Self::Working => "Recovery under way".into(),
+            Self::Carried => "Being carried".into(),
+            Self::Complete => "Delivered to base".into(),
+            Self::Failed => "Lost".into(),
+            Self::Stable => "Stabilized".into(),
+            Self::Unstable => "Needs stabilization".into(),
+            Self::ClinicalDue(day) => format!("Assessment due at tick {day}"),
+            Self::ClinicalSettled(day) => format!("Assessed at tick {day}"),
+            Self::NextClinical => "Next casualty assessment".into(),
+            Self::ClinicalCount => "Casualties assessed this round".into(),
+            Self::Cargo(id) => format!("Carrying {}", objective(*id)),
+            Self::Seat => "Free evacuation seat".into(),
+            Self::ReservedSeat(id) => format!("Seat reserved for {}", objective(*id)),
+            Self::Supply => "Resupplies left".into(),
+            Self::UsedSupply => "Resupplies used".into(),
+        }
+    }
+}
+
+impl StudioLabel for expedition::Role {
+    fn studio_label(&self) -> String {
+        match self {
+            Self::World => "Expedition",
+            Self::Scout => "Scout",
+            Self::Medic => "Medic",
+            Self::Nature => "Nature",
+            Self::Objective => "Objective",
+        }
+        .into()
+    }
+}
 
 impl StudioLabel for expedition::AccountId {
     fn studio_label(&self) -> String {
@@ -484,13 +611,7 @@ impl StudioLabel for expedition::AccountId {
             Self::World => "Team clock, weather and supplies".into(),
             Self::Nature => "Hidden mission sites and reports".into(),
             Self::Agent(agent) => format!("{agent:?}"),
-            Self::Objective(id) => {
-                if expedition::patient(*id) {
-                    format!("Casualty {}", id / 2 + 1)
-                } else {
-                    "Research archive".into()
-                }
-            }
+            Self::Objective(id) => objective_subject(*id),
         }
     }
 }
@@ -515,40 +636,68 @@ impl StudioLabel for expedition::RateId {
             ),
             Self::Survey(location) => format!("Scout surveys {location:?}"),
             Self::Discover {
-                objective,
+                objective: id,
                 location,
-            } => format!(
-                "Scout discovers {} at {location:?}",
-                expedition::AccountId::Objective(*objective).studio_label()
-            ),
+            } => format!("Scout discovers {} at {location:?}", objective(*id)),
             Self::Scan => "Scout requests a fallible sensor report".into(),
-            Self::Report { location, .. } => format!("Private sensor report suggests {location:?}"),
+            Self::Report { round, location } => {
+                format!("Private sensor report {} suggests {location:?}", round + 1)
+            }
             Self::Share {
-                objective,
+                objective: id,
                 location,
                 remote,
             } => format!(
                 "Brief Medic on {} at {location:?} {}",
-                expedition::AccountId::Objective(*objective).studio_label(),
+                objective(*id),
                 if *remote {
                     "by radio"
                 } else {
                     "at a rendezvous"
                 }
             ),
-            Self::Collect { .. } => "Scout starts three-tick archive recovery".into(),
-            Self::FinishCollect(_) => "Scout finishes recovery and carries the archive".into(),
-            Self::TreatPatient { objective, .. } => format!(
-                "Medic stabilizes {}",
-                expedition::AccountId::Objective(*objective).studio_label()
+            Self::Collect {
+                objective: id,
+                location,
+            } => format!(
+                "Scout starts a three-tick recovery of {} at {location:?}",
+                objective(*id)
             ),
-            Self::Extract { .. } => "Scout and Medic begin two-tick joint extraction".into(),
-            Self::FinishExtract(_) => "Joint extraction ends; Medic carries the casualty".into(),
-            Self::Deliver(objective) => format!(
-                "Deliver {} safely to base",
-                expedition::AccountId::Objective(*objective).studio_label()
+            Self::FinishCollect(id) => {
+                format!("Scout finishes recovery and carries {}", objective(*id))
+            }
+            Self::TreatPatient {
+                objective: id,
+                location,
+                restore,
+            } => format!(
+                "Medic stabilizes {} at {location:?}{}",
+                objective(*id),
+                if *restore {
+                    " and restores 1 health"
+                } else {
+                    ""
+                }
             ),
-            Self::TreatAgent { target, .. } => format!("Medic treats {target:?}'s injury"),
+            Self::Extract {
+                objective: id,
+                location,
+            } => format!(
+                "Scout and Medic begin a two-tick extraction of {} at {location:?}",
+                objective(*id)
+            ),
+            Self::FinishExtract(id) => {
+                format!("Joint extraction ends; Medic carries {}", objective(*id))
+            }
+            Self::Deliver(id) => format!("Deliver {} safely to base", objective(*id)),
+            Self::TreatAgent { target, location } => match target {
+                expedition::Agent::Medic => {
+                    format!("Medic treats their own injury at {location:?}")
+                }
+                expedition::Agent::Scout => {
+                    format!("Medic treats Scout's injury at {location:?}")
+                }
+            },
             Self::Resupply(agent) => {
                 format!(
                     "{agent:?} takes finite base energy{}",
@@ -568,29 +717,39 @@ impl StudioLabel for expedition::RateId {
                 }
             ),
             Self::Clinical {
-                objective, active, ..
-            } => format!(
-                "{}: {}",
-                expedition::AccountId::Objective(*objective).studio_label(),
+                objective: id,
+                day,
+                active,
+            } => {
                 if *active {
-                    "condition deteriorates"
+                    format!("{} deteriorates at tick {day}", objective_subject(*id))
                 } else {
-                    "outcome already settled"
+                    format!(
+                        "{} at tick {day}: outcome already settled",
+                        objective_subject(*id)
+                    )
                 }
-            ),
-            Self::FinishClinical(_) => "Finish the scheduled casualty assessment".into(),
+            }
+            Self::FinishClinical(day) => format!("Finish the tick {day} casualty assessment"),
             Self::Fail {
-                objective, dead, ..
+                objective: id,
+                phase,
+                dead,
             } => format!(
-                "{} {}",
-                expedition::AccountId::Objective(*objective).studio_label(),
+                "{} {} {}",
+                objective_subject(*id),
                 if *dead {
-                    "dies before evacuation"
+                    "dies"
                 } else {
                     "misses the mission deadline"
+                },
+                match phase {
+                    expedition::Phase::Hidden => "before discovery",
+                    expedition::Phase::Located => "at its site",
+                    expedition::Phase::Carried => "while carried",
                 }
             ),
-            Self::Tick(day) => format!("Advance shared mission time to {}", day + 1),
+            Self::Tick(day) => format!("Advance mission time to tick {}", day + 1),
             Self::Close => "Close the mission with every objective accounted for".into(),
         }
     }

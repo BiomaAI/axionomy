@@ -218,41 +218,41 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         ];
         entities.push(entity);
     }
-    for (node, key, label, value, unit) in [
+    for (node, key, label, asset, value) in [
         (
             "fridge",
             "space",
             "Free cold capacity",
+            Asset::ColdSpace,
             chain::value(world, AccountId::World, Asset::ColdSpace),
-            "crates",
         ),
         (
             "power",
             "energy",
             "Stored energy",
+            Asset::Energy,
             chain::total(world, Asset::Energy),
-            "units",
         ),
         (
             "fuel",
             "fuel",
             "Fuel available",
+            Asset::Fuel,
             chain::total(world, Asset::Fuel),
-            "units",
         ),
         (
             "buyer",
             "delivered",
             "Delivered",
+            Asset::Delivered,
             chain::total(world, Asset::Delivered),
-            "crates",
         ),
         (
             "processing",
             "labor",
             "Labor available",
+            Asset::Labor,
             chain::total(world, Asset::Labor),
-            "units",
         ),
     ] {
         let mut entity = visual_entity(
@@ -264,7 +264,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             SceneToneView::Neutral,
             None,
         );
-        entity.metrics = vec![visual_metric(slug(key), label, value, Some(unit))];
+        entity.metrics = vec![asset_metric(slug(key), label, &asset, value)];
         entities.push(link_account::<chain::Ontology>(
             entity,
             if node == "buyer" {
@@ -305,17 +305,17 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 },
                 None,
             ),
-            visual_metric(
+            asset_metric(
                 slug("fresh"),
                 "Fresh stock",
+                &Asset::Fresh,
                 chain::total(world, Asset::Fresh),
-                Some("crates"),
             ),
-            visual_metric(
+            asset_metric(
                 slug("preserved"),
                 "Preserved stock",
+                &Asset::Preserved,
                 chain::total(world, Asset::Preserved),
-                Some("crates"),
             ),
             visual_metric(
                 slug("spoiled"),
@@ -323,29 +323,29 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 chain::total(world, Asset::Spoiled) + chain::total(world, Asset::Disposed),
                 Some("crates"),
             ),
-            visual_metric(
+            asset_metric(
                 slug("delivered"),
                 "Food delivered",
+                &Asset::Delivered,
                 chain::total(world, Asset::Delivered),
-                Some("crates"),
             ),
-            visual_metric(
+            asset_metric(
                 slug("missed"),
                 "Unmet obligations",
+                &Asset::MissedDemand,
                 chain::total(world, Asset::MissedDemand),
-                Some("crates"),
             ),
-            visual_metric(
+            asset_metric(
                 slug("energy"),
                 "Electricity left",
+                &Asset::Energy,
                 chain::total(world, Asset::Energy),
-                Some("units"),
             ),
-            visual_metric(
+            asset_metric(
                 slug("fuel"),
                 "Fuel left",
+                &Asset::Fuel,
                 chain::total(world, Asset::Fuel),
-                Some("units"),
             ),
         ]),
     )
@@ -353,11 +353,112 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
 
 // How Studio names and writes this problem's values.
 
-counted!(chain::Asset);
+fn place(place: Place) -> &'static str {
+    match place {
+        Place::Warehouse => "the warehouse",
+        Place::Fridge => "the fridge",
+    }
+}
 
-debug_labels!(chain::Asset);
+impl StudioFormat for chain::Asset {
+    fn studio_format(&self) -> QuantityFormat {
+        match self {
+            Self::Fresh
+            | Self::Preserved
+            | Self::Spoiled
+            | Self::Disposed
+            | Self::Delivered
+            | Self::ColdSpace
+            | Self::ColdOccupancy
+            | Self::Demand
+            | Self::FutureDemand
+            | Self::SatisfiedDemand
+            | Self::MissedDemand => QuantityFormat::COUNT.unit("crates"),
+            Self::Energy
+            | Self::SpentEnergy
+            | Self::GridPotential
+            | Self::SpilledEnergy
+            | Self::Fuel
+            | Self::GeneratorFuel
+            | Self::TransportFuel
+            | Self::Labor
+            | Self::SpentLabor
+            | Self::FutureLabor
+            | Self::UnusedLabor => QuantityFormat::COUNT.unit("units"),
+            Self::Money => QuantityFormat::COUNT.unit("credits"),
+            Self::Day | Self::Days => QuantityFormat::COUNT.unit("days"),
+            _ => QuantityFormat::COUNT,
+        }
+    }
+}
 
-debug_labels!(chain::Role);
+impl StudioLabel for chain::Asset {
+    fn studio_label(&self) -> String {
+        match self {
+            Self::WorldIdentity => "Cold chain identity".into(),
+            Self::BatchIdentity(id) => format!("Cohort {} identity", id + 1),
+            Self::BuyerIdentity => "Buyer identity".into(),
+            Self::Active => "Cohort in use".into(),
+            Self::Dormant => "Cohort not yet in use".into(),
+            Self::At(at) => format!("In {}", place(*at)),
+            Self::Fresh => "Fresh food".into(),
+            Self::Preserved => "Preserved food".into(),
+            Self::Spoiled => "Spoiled food".into(),
+            Self::Disposed => "Discarded food".into(),
+            Self::Delivered => "Food delivered".into(),
+            Self::Heat => "Heat exposure".into(),
+            Self::Origin(origin) => match origin {
+                0 => "Ambient origin".into(),
+                1 => "Cold origin".into(),
+                _ => format!("Origin {}", origin + 1),
+            },
+            Self::ColdSpace => "Free cold storage".into(),
+            Self::ColdOccupancy => "Cold storage used".into(),
+            Self::Energy => "Electricity".into(),
+            Self::SpentEnergy => "Electricity used".into(),
+            Self::GridPotential => "Grid supply still to come".into(),
+            Self::SpilledEnergy => "Grid supply spilled".into(),
+            Self::Fuel => "Fuel".into(),
+            Self::GeneratorFuel => "Fuel burned for electricity".into(),
+            Self::TransportFuel => "Fuel used for deliveries".into(),
+            Self::CoolingOn => "Refrigeration on today".into(),
+            Self::CoolingOff => "Refrigeration off".into(),
+            Self::Labor => "Labor left today".into(),
+            Self::SpentLabor => "Labor used".into(),
+            Self::FutureLabor => "Labor in later days".into(),
+            Self::UnusedLabor => "Labor left unused".into(),
+            Self::Freight => "Shipments left today".into(),
+            Self::UsedFreight => "Shipments made".into(),
+            Self::FutureFreight => "Shipments in later days".into(),
+            Self::UnusedFreight => "Shipments left unused".into(),
+            Self::Money => "Money".into(),
+            Self::Demand => "Food owed today".into(),
+            Self::FutureDemand => "Food owed in later days".into(),
+            Self::SatisfiedDemand => "Food obligations met".into(),
+            Self::MissedDemand => "Food obligations missed".into(),
+            Self::Day => "Time elapsed".into(),
+            Self::Days => "Run length".into(),
+            Self::Outage(day) => format!("Grid outage on day {}", day + 1),
+            Self::Decisions => "Taking today's decisions".into(),
+            Self::Aging => "Settling today's heat exposure".into(),
+            Self::PendingAge(id) => format!("Cohort {} still to age today", id + 1),
+            Self::Solved => "Horizon closed".into(),
+        }
+    }
+}
+
+impl StudioLabel for chain::Role {
+    fn studio_label(&self) -> String {
+        match self {
+            Self::World => "Cold chain",
+            Self::Batch => "Cohort",
+            Self::Source => "Source cohort",
+            Self::Destination => "Destination cohort",
+            Self::Buyer => "Buyer",
+        }
+        .into()
+    }
+}
 
 impl StudioLabel for chain::AccountId {
     fn studio_label(&self) -> String {
@@ -375,25 +476,37 @@ impl StudioLabel for chain::RateId {
             Self::Split {
                 source,
                 destination,
-                ..
+                at,
             } => format!(
-                "Split Cohort {} into Cohort {} with the same heat history",
+                "Split Cohort {} into Cohort {} in {}, keeping its heat history",
                 source + 1,
-                destination + 1
+                destination + 1,
+                place(*at)
             ),
-            Self::Move { batch, to, .. } => format!("Move Cohort {} to {to:?}", batch + 1),
+            Self::Move { batch, to, .. } => {
+                format!("Move Cohort {} to {}", batch + 1, place(*to))
+            }
             Self::Process(batch) => format!("Preserve fresh food in Cohort {}", batch + 1),
             Self::Deliver {
-                batch, preserved, ..
+                batch,
+                preserved,
+                at,
             } => format!(
-                "Deliver {} food from Cohort {}",
+                "Deliver {} food from Cohort {} in {}",
                 if *preserved { "preserved" } else { "fresh" },
-                batch + 1
+                batch + 1,
+                place(*at)
             ),
-            Self::Discard { batch, .. } => format!(
-                "Discard spoiled food from Cohort {} and release space",
-                batch + 1
-            ),
+            Self::Discard { batch, at } => match at {
+                Place::Fridge => format!(
+                    "Discard spoiled food from Cohort {} and free fridge space",
+                    batch + 1
+                ),
+                Place::Warehouse => format!(
+                    "Discard spoiled food from Cohort {} in the warehouse",
+                    batch + 1
+                ),
+            },
             Self::Cool => "Power refrigeration for today".into(),
             Self::Generate => "Burn shared fuel for backup electricity".into(),
             Self::EndDay => "Close today's decisions and settle thermal exposure".into(),
@@ -402,17 +515,21 @@ impl StudioLabel for chain::RateId {
                 "Cohort {} stays cold without resetting its prior heat",
                 batch + 1
             ),
-            Self::AgeWarm { batch, spoil, .. } => format!(
-                "Cohort {} {}",
+            Self::AgeWarm { batch, at, spoil } => format!(
+                "Cohort {} {} in {}",
                 batch + 1,
                 if *spoil {
                     "crosses the spoilage threshold"
                 } else {
                     "accumulates heat"
+                },
+                match at {
+                    Place::Warehouse => "the warehouse",
+                    Place::Fridge => "the unpowered fridge",
                 }
             ),
             Self::OpenDay(day) => format!(
-                "Open day {} with the encoded grid supply and new obligations",
+                "Open day {} with its scheduled grid supply and new obligations",
                 day + 1
             ),
             Self::Close => "Close the cold-chain horizon and record unmet demand".into(),

@@ -135,7 +135,11 @@ fn policy_front(front: &rescue::PolicyFront, selected: Policy) -> ParetoFrontVie
                     .map(|o| format!("{:.3}", o.value()))
                     .collect::<Vec<_>>();
                 ParetoPointView {
-                    label: format!("{policy:?}"),
+                    label: match policy {
+                        Policy::ObserveThenFollow => "Sense, then move",
+                        Policy::NorthWithoutObserving => "Go north immediately",
+                    }
+                    .into(),
                     values,
                     selected: policy == selected,
                 }
@@ -224,11 +228,11 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         &AccountId::Agent,
         &Asset::At(agent_location),
     );
-    agent.metrics = vec![visual_metric(
+    agent.metrics = vec![asset_metric(
         slug("energy"),
         "Energy",
+        &Asset::Energy,
         world.balance(&AccountId::Agent, &Asset::Energy),
-        Some("units"),
     )];
     let belief_entities = [
         Location::North,
@@ -288,17 +292,17 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 .chain(std::iter::once(nature)),
         )
         .with_metrics([
-            visual_metric(
+            asset_metric(
                 slug("energy"),
                 "Energy remaining",
+                &Asset::Energy,
                 world.balance(&AccountId::Agent, &Asset::Energy),
-                Some("units"),
             ),
-            visual_metric(
+            asset_metric(
                 slug("sensor"),
                 "Sensor charges",
+                &Asset::Sensor,
                 world.balance(&AccountId::Agent, &Asset::Sensor),
-                Some("uses"),
             ),
         ]),
     )
@@ -306,7 +310,14 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
 
 // How Studio names and writes this problem's values.
 
-counted!(rescue::Asset);
+impl StudioFormat for rescue::Asset {
+    fn studio_format(&self) -> QuantityFormat {
+        match self {
+            Self::Energy | Self::SpentEnergy => QuantityFormat::COUNT.unit("units"),
+            _ => QuantityFormat::COUNT,
+        }
+    }
+}
 
 impl StudioLabel for rescue::AccountId {
     fn studio_label(&self) -> String {
@@ -349,9 +360,14 @@ impl StudioLabel for rescue::RateId {
                 format!("Draw scenario: {truth:?}, sensor state {seed}")
             }
             Self::BeginObserve => "Use the sensor".into(),
-            Self::ResolveObservation { report, .. } => {
-                format!("Receive sensor reading: {report:?}")
-            }
+            Self::ResolveObservation {
+                truth,
+                seed,
+                report,
+                ..
+            } => format!(
+                "Receive sensor reading: {report:?} (survivor at {truth:?}, sensor state {seed})"
+            ),
             Self::Move { from, to } => format!("Move {from:?} → {to:?}"),
             Self::Rescue { location } => format!("Reach survivor at {location:?}"),
             Self::Evacuate { location } => format!("Evacuate from {location:?} to Base"),
@@ -360,4 +376,12 @@ impl StudioLabel for rescue::RateId {
     }
 }
 
-debug_labels!(rescue::Role);
+impl StudioLabel for rescue::Role {
+    fn studio_label(&self) -> String {
+        match self {
+            Self::Actor => "Responder",
+            Self::Nature => "Nature",
+        }
+        .into()
+    }
+}

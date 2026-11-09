@@ -149,8 +149,12 @@ pub(super) fn build(
     let planned =
         planned.ok_or_else(|| problem_error("logistics", "MCTS planning was interrupted"))?;
     let description = format!(
-        "Replan after deliveries and disruptions, execute every selected action, and retain the final outcome: {:?}. Search randomness is separate from realized weather. The sampled frontier compares the two fixed-policy baselines, not this planner.",
-        planned.stop
+        "Replan after deliveries and disruptions, execute every selected action, and retain the final outcome: {}. Search randomness is separate from realized weather. The sampled frontier compares the two fixed-policy baselines, not this planner.",
+        match planned.stop {
+            logistics::PlanningStop::DeliveredAllOrders => "every order delivered",
+            logistics::PlanningStop::NoFeasibleAction => "no feasible action left",
+            logistics::PlanningStop::Horizon => "the planning horizon reached",
+        }
     );
     let mut mcts = document(
         DocumentSpec {
@@ -292,14 +296,6 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             y: Some(y),
         })
         .collect();
-    let route_ends = |route| match route {
-        Route::DirectOut => (Location::Depot, Location::Customer),
-        Route::DirectBack => (Location::Customer, Location::Depot),
-        Route::SafeOutFirst => (Location::Depot, Location::Junction),
-        Route::SafeOutSecond => (Location::Junction, Location::Customer),
-        Route::SafeBackFirst => (Location::Customer, Location::Junction),
-        Route::SafeBackSecond => (Location::Junction, Location::Depot),
-    };
     let edges = logistics::ROUTES
         .into_iter()
         .map(|route| {
@@ -311,7 +307,15 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 id: slug(format!("route/{route:?}")),
                 source: slug(format!("location/{from:?}")),
                 target: slug(format!("location/{to:?}")),
-                label: Some(format!("{route:?}")),
+                label: Some(
+                    match route {
+                        Route::DirectOut => "Direct, outbound",
+                        Route::DirectBack => "Direct, return",
+                        Route::SafeOutFirst | Route::SafeOutSecond => "Safe, outbound",
+                        Route::SafeBackFirst | Route::SafeBackSecond => "Safe, return",
+                    }
+                    .into(),
+                ),
                 classes: if traveling {
                     vec![slug("current"), slug("uncertain")]
                 } else {
@@ -349,29 +353,29 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             vehicle_anchor.clone(),
             SceneEntityRoleView::Occupant,
             SceneToneView::Active,
-            traveling.map(|route| format!("traveling {route:?}")),
+            traveling.map(|route| format!("traveling the {}", road(route))),
         ),
         &AccountId::Vehicle,
         &vehicle_asset,
     );
     vehicle.metrics = vec![
-        visual_metric(
+        asset_metric(
             slug("fuel"),
             "Fuel",
+            &Asset::Fuel,
             world.balance(&AccountId::Vehicle, &Asset::Fuel),
-            Some("units"),
         ),
-        visual_metric(
+        asset_metric(
             slug("cargo"),
-            "Cargo",
+            "Orders aboard",
+            &Asset::CargoOccupied,
             world.balance(&AccountId::Vehicle, &Asset::CargoOccupied),
-            Some("orders"),
         ),
-        visual_metric(
+        asset_metric(
             slug("elapsed"),
             "Elapsed",
+            &Asset::ElapsedTime,
             world.balance(&AccountId::Vehicle, &Asset::ElapsedTime),
-            Some("ticks"),
         ),
     ];
     let order_entities = logistics::ORDERS.into_iter().map(|order| {
@@ -466,25 +470,65 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 delivered,
                 Some("orders"),
             ),
-            visual_metric(
+            asset_metric(
                 slug("remaining-time"),
                 "Time remaining",
+                &Asset::TimeRemaining,
                 world.balance(&AccountId::Vehicle, &Asset::TimeRemaining),
-                Some("ticks"),
             ),
-            visual_metric(
+            asset_metric(
                 slug("fuel"),
                 "Fuel remaining",
+                &Asset::Fuel,
                 world.balance(&AccountId::Vehicle, &Asset::Fuel),
-                Some("units"),
             ),
         ]),
     )
 }
 
+fn route_ends(route: Route) -> (Location, Location) {
+    match route {
+        Route::DirectOut => (Location::Depot, Location::Customer),
+        Route::DirectBack => (Location::Customer, Location::Depot),
+        Route::SafeOutFirst => (Location::Depot, Location::Junction),
+        Route::SafeOutSecond => (Location::Junction, Location::Customer),
+        Route::SafeBackFirst => (Location::Customer, Location::Junction),
+        Route::SafeBackSecond => (Location::Junction, Location::Depot),
+    }
+}
+
 // How Studio names and writes this problem's values.
 
-counted!(logistics::Asset);
+/// A route as people read it: whether it is the risky direct road or a leg
+/// of the safe road through the junction, and where it runs.
+fn road(route: Route) -> String {
+    let (from, to) = route_ends(route);
+    let kind = if matches!(route, Route::DirectOut | Route::DirectBack) {
+        "direct"
+    } else {
+        "safe"
+    };
+    format!("{kind} road {from:?} → {to:?}")
+}
+
+fn travel(outcome: logistics::TravelOutcome) -> &'static str {
+    match outcome {
+        logistics::TravelOutcome::Clear => "a clear trip",
+        logistics::TravelOutcome::Delayed => "a delay",
+        logistics::TravelOutcome::Breakdown => "a breakdown",
+    }
+}
+
+impl StudioFormat for logistics::Asset {
+    fn studio_format(&self) -> QuantityFormat {
+        match self {
+            Self::Fuel | Self::SpentFuel => QuantityFormat::COUNT.unit("units"),
+            Self::Money => QuantityFormat::COUNT.unit("credits"),
+            Self::TimeRemaining | Self::ElapsedTime => QuantityFormat::COUNT.unit("ticks"),
+            _ => QuantityFormat::COUNT,
+        }
+    }
+}
 
 impl StudioLabel for logistics::AccountId {
     fn studio_label(&self) -> String {
@@ -501,7 +545,7 @@ impl StudioLabel for logistics::Asset {
     fn studio_label(&self) -> String {
         match self {
             Self::At(location) => format!("Vehicle at {location:?}"),
-            Self::Traveling(route) => format!("Traveling on {route:?}"),
+            Self::Traveling(route) => format!("Traveling the {}", road(*route)),
             Self::Fuel => "Fuel left".into(),
             Self::SpentFuel => "Fuel spent".into(),
             Self::Money => "Money".into(),
@@ -510,15 +554,17 @@ impl StudioLabel for logistics::Asset {
             Self::CargoSpace => "Cargo space available".into(),
             Self::CargoOccupied => "Cargo space occupied".into(),
             Self::RepairTool => "Repair tool".into(),
-            Self::Waiting => "Waiting on a travel outcome".into(),
+            Self::Waiting => "Order waiting at the depot".into(),
             Self::InTransit => "Order in transit".into(),
             Self::Delivered => "Order delivered".into(),
             Self::Package(order) => format!("Package for Order {order:?}"),
-            Self::WeatherReady => "Nature ready for travel".into(),
+            Self::WeatherReady => "Ready to draw travel conditions".into(),
             Self::OutcomeWeight(route, outcome) => {
-                format!("Weight: {route:?} is {outcome:?}")
+                format!("Odds of {} on the {}", travel(*outcome), road(*route))
             }
-            Self::Outcome(route, outcome) => format!("{route:?} outcome: {outcome:?}"),
+            Self::Outcome(route, outcome) => {
+                format!("Drawn: {} on the {}", travel(*outcome), road(*route))
+            }
         }
     }
 }
@@ -527,14 +573,28 @@ impl StudioLabel for logistics::RateId {
     fn studio_label(&self) -> String {
         match self {
             Self::Load(order) => format!("Load Order {order:?}"),
-            Self::Depart(route) => format!("Depart via {route:?}"),
-            Self::Resolve(route, outcome) => format!("Draw {route:?} outcome: {outcome:?}"),
-            Self::Arrive(route, outcome) => format!("Arrive via {route:?} after {outcome:?}"),
-            Self::Repair(route) => format!("Repair after breakdown on {route:?}"),
+            Self::Depart(route) => format!("Depart on the {}", road(*route)),
+            Self::Resolve(route, outcome) => {
+                format!("Draw {} on the {}", travel(*outcome), road(*route))
+            }
+            Self::Arrive(route, outcome) => {
+                format!("Arrive via the {} after {}", road(*route), travel(*outcome))
+            }
+            Self::Repair(route) => format!("Repair a breakdown on the {}", road(*route)),
             Self::Deliver(order) => format!("Deliver Order {order:?}"),
             Self::Refuel => "Refuel the vehicle".into(),
         }
     }
 }
 
-debug_labels!(logistics::Role);
+impl StudioLabel for logistics::Role {
+    fn studio_label(&self) -> String {
+        match self {
+            Self::Vehicle => "Vehicle",
+            Self::Order => "Order",
+            Self::Nature => "Nature",
+            Self::FuelStation => "Fuel station",
+        }
+        .into()
+    }
+}

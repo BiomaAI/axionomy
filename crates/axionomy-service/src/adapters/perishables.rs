@@ -322,14 +322,53 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
 
 // How Studio names and writes this problem's values.
 
-counted!(perishables::Asset);
+fn cohort(cohort: Cohort) -> &'static str {
+    match cohort {
+        Cohort::Ambient => "ambient",
+        Cohort::Refrigerated => "refrigerated",
+    }
+}
+
+/// Where a batch's stock stays fresh.
+fn exposure(exposure: perishables::Exposure) -> &'static str {
+    match exposure {
+        perishables::Exposure::Ambient => "in ambient storage",
+        perishables::Exposure::Cold => "in cold storage",
+        perishables::Exposure::WarmedAfterOutage => "after warming in the outage",
+    }
+}
+
+fn moment(moment: Moment) -> &'static str {
+    match moment {
+        Moment::Harvest => "harvest",
+        Moment::AmbientExpiry => "ambient expiry",
+        Moment::WarmedExpiry => "warmed expiry",
+        Moment::ColdExpiry => "cold expiry",
+    }
+}
+
+fn sentence(text: &str) -> String {
+    let mut characters = text.chars();
+    characters.next().map_or_else(String::new, |first| {
+        first.to_uppercase().chain(characters).collect()
+    })
+}
+
+impl StudioFormat for perishables::Asset {
+    fn studio_format(&self) -> QuantityFormat {
+        match self {
+            Self::CoolingEnergy | Self::SpentCoolingEnergy => QuantityFormat::COUNT.unit("units"),
+            _ => QuantityFormat::COUNT,
+        }
+    }
+}
 
 impl StudioLabel for perishables::AccountId {
     fn studio_label(&self) -> String {
         match self {
             Self::World => "Clock and power".into(),
             Self::Storage(location) => format!("{location:?}"),
-            Self::Cohort(cohort) => format!("{cohort:?} batch condition"),
+            Self::Cohort(batch) => format!("{} batch condition", sentence(cohort(*batch))),
         }
     }
 }
@@ -337,24 +376,29 @@ impl StudioLabel for perishables::AccountId {
 impl StudioLabel for perishables::Asset {
     fn studio_label(&self) -> String {
         match self {
-            Self::WorldIdentity => "This account is the world clock".into(),
-            Self::LocationIdentity(location) => format!("This account is the {location:?}"),
-            Self::CohortIdentity(cohort) => format!("This is the {cohort:?} batch"),
-            Self::Claim(cohort) => format!("Units in the {cohort:?} batch"),
-            Self::Consumed(cohort) => format!("Used units from the {cohort:?} batch"),
-            Self::Fresh(cohort, exposure, expiry) => format!(
-                "{cohort:?} batch, still fresh under {exposure:?} exposure, expires at {expiry:?}"
+            Self::WorldIdentity => "Clock identity".into(),
+            Self::LocationIdentity(location) => format!("{location:?} identity"),
+            Self::CohortIdentity(batch) => {
+                format!("{} batch identity", sentence(cohort(*batch)))
+            }
+            Self::Claim(batch) => format!("Units in the {} batch", cohort(*batch)),
+            Self::Consumed(batch) => format!("Used units from the {} batch", cohort(*batch)),
+            Self::Fresh(batch, held, expiry) => format!(
+                "{} batch fresh {}, until {}",
+                sentence(cohort(*batch)),
+                exposure(*held),
+                moment(*expiry)
             ),
-            Self::Rotten(cohort) => format!("Spoiled units from the {cohort:?} batch"),
+            Self::Rotten(batch) => format!("Spoiled units from the {} batch", cohort(*batch)),
             Self::Ambient => "Ambient storage".into(),
             Self::Cold => "Cold storage".into(),
             Self::Powered => "Refrigeration running".into(),
             Self::Unpowered => "Refrigeration down".into(),
             Self::CoolingEnergy => "Cooling energy left".into(),
             Self::SpentCoolingEnergy => "Cooling energy spent".into(),
-            Self::Now(moment) => format!("Clock is at {moment:?}"),
-            Self::Before(moment) => format!("Before {moment:?}"),
-            Self::Reached(moment) => format!("{moment:?} passed"),
+            Self::Now(at) => format!("Clock at {}", moment(*at)),
+            Self::Before(at) => format!("Before {}", moment(*at)),
+            Self::Reached(at) => format!("{} reached", sentence(moment(*at))),
             Self::Active => "Inventory simulation running".into(),
             Self::Solved => "Inventory simulation complete".into(),
             Self::Planning => "Storage plan open".into(),
@@ -367,18 +411,36 @@ impl StudioLabel for perishables::RateId {
     fn studio_label(&self) -> String {
         match self {
             Self::MoveToFridge => "Move ambient batch units into the fridge".into(),
-            Self::Advance { from, to } => format!("Advance time: {from:?} → {to:?}"),
+            Self::Advance { from, to } => {
+                format!("Advance time: {} → {}", moment(*from), moment(*to))
+            }
             Self::LosePower => "Refrigeration loses power".into(),
-            Self::Eat { cohort, exposure } => {
-                format!("Use fresh {cohort:?} units under {exposure:?} exposure")
-            }
-            Self::Spoil { cohort, exposure } => {
-                format!("Spoil {cohort:?} batch under {exposure:?} exposure")
-            }
+            Self::Eat {
+                cohort: batch,
+                exposure: held,
+            } => format!("Use fresh {} units {}", cohort(*batch), exposure(*held)),
+            Self::Spoil {
+                cohort: batch,
+                exposure: held,
+            } => format!("Spoil the {} batch {}", cohort(*batch), exposure(*held)),
             Self::Finish => "Finish the spoilage simulation".into(),
             Self::SealStoragePlan => "Commit the storage plan".into(),
         }
     }
 }
 
-debug_labels!(perishables::Role);
+impl StudioLabel for perishables::Role {
+    fn studio_label(&self) -> String {
+        match self {
+            Self::World => "World",
+            Self::Holder => "Holder",
+            Self::Storage => "Storage",
+            Self::Cohort => "Batch",
+            Self::SourceStorage => "Source storage",
+            Self::DestinationStorage => "Destination storage",
+            Self::SourceCohort => "Source batch",
+            Self::DestinationCohort => "Destination batch",
+        }
+        .into()
+    }
+}

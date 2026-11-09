@@ -247,11 +247,11 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         );
         entity.metrics = vec![
             visual_metric(slug("fuel"), "Fuel", val(own, Asset::Fuel), Some("/ 8")),
-            visual_metric(
+            asset_metric(
                 slug("space"),
                 "Free payload space",
+                &Asset::Space,
                 val(own, Asset::Space),
-                None,
             ),
             visual_metric(slug("wear"), "Wear", val(own, Asset::Wear), Some("/ 6")),
         ];
@@ -281,11 +281,11 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                     ),
                     &AccountId::Order(id),
                 );
-                cargo.metrics = vec![visual_metric(
+                cargo.metrics = vec![asset_metric(
                     slug("weight"),
                     "Payload",
-                    fleet::weight(id),
-                    Some("units"),
+                    &Asset::Weight,
+                    val(AccountId::Order(id), Asset::Weight),
                 )];
                 entities.push(cargo);
             }
@@ -347,17 +347,17 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             &own,
         );
         entity.metrics = vec![
-            visual_metric(
+            asset_metric(
                 slug("deadline"),
                 "Delivery window",
+                &Asset::Deadline,
                 val(own, Asset::Deadline),
-                Some("tick"),
             ),
-            visual_metric(
+            asset_metric(
                 slug("arrival"),
                 "Order release",
+                &Asset::Arrival,
                 val(own, Asset::Arrival),
-                Some("tick"),
             ),
         ];
         entities.push(entity);
@@ -370,36 +370,36 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
     )
     .with_entities(entities)
     .with_metrics([
-        visual_metric(slug("time"), "Fleet time", fleet::now(world), None),
-        visual_metric(
+        asset_metric(slug("time"), "Fleet time", &Asset::Time, fleet::now(world)),
+        asset_metric(
             slug("delivered"),
             "Orders delivered",
+            &Asset::DeliveredCount,
             val(AccountId::World, Asset::DeliveredCount),
-            None,
         ),
-        visual_metric(
+        asset_metric(
             slug("on-time"),
             "Orders on time",
+            &Asset::OnTimeCount,
             val(AccountId::World, Asset::OnTimeCount),
-            None,
         ),
-        visual_metric(
+        asset_metric(
             slug("expired"),
             "Orders expired",
+            &Asset::ExpiredCount,
             val(AccountId::World, Asset::ExpiredCount),
-            None,
         ),
-        visual_metric(
+        asset_metric(
             slug("staged"),
             "Hub handoffs staged",
+            &Asset::StagedCount,
             val(AccountId::World, Asset::StagedCount),
-            None,
         ),
-        visual_metric(
+        asset_metric(
             slug("cash"),
             "Fleet cash",
+            &Asset::Money,
             val(AccountId::World, Asset::Money),
-            Some("credits"),
         ),
     ]);
     for location in LOCATIONS {
@@ -423,11 +423,11 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                         val(AccountId::Station, Asset::RepairBay),
                         Some("/ 1"),
                     ),
-                    visual_metric(
+                    asset_metric(
                         slug("fuel"),
                         "Station fuel",
+                        &Asset::Fuel,
                         val(AccountId::Station, Asset::Fuel),
-                        None,
                     ),
                 ];
             }
@@ -455,11 +455,112 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
 
 // How Studio names and writes this problem's values.
 
-counted!(fleet::Asset);
+impl StudioFormat for fleet::Asset {
+    fn studio_format(&self) -> QuantityFormat {
+        match self {
+            Self::Time
+            | Self::TimeRemaining
+            | Self::Horizon
+            | Self::DepartedAt
+            | Self::ReadyAt
+            | Self::Arrival
+            | Self::Deadline => QuantityFormat::COUNT.unit("ticks"),
+            Self::Fuel | Self::TankSpace | Self::SpentFuel => QuantityFormat::COUNT.unit("units"),
+            Self::Space | Self::Weight | Self::DockSpace | Self::DockUsed => {
+                QuantityFormat::COUNT.unit("units")
+            }
+            Self::Money | Self::Revenue | Self::Price => QuantityFormat::COUNT.unit("credits"),
+            _ => QuantityFormat::COUNT,
+        }
+    }
+}
 
-debug_labels!(fleet::Asset);
+impl StudioLabel for fleet::Asset {
+    fn studio_label(&self) -> String {
+        match self {
+            Self::WorldIdentity => "Fleet identity".into(),
+            Self::StationIdentity => "Station identity".into(),
+            Self::NatureIdentity => "Nature identity".into(),
+            Self::VehicleIdentity(van) => format!("{van:?} van identity"),
+            Self::OrderIdentity(id) => format!("Order {} identity", id + 1),
+            Self::Active => "Fleet run in progress".into(),
+            Self::Closed => "Fleet run closed".into(),
+            Self::Time => "Fleet time".into(),
+            Self::TimeRemaining => "Time remaining".into(),
+            Self::Horizon => "Fleet horizon".into(),
+            Self::Count => "Orders in the run".into(),
+            Self::Resolved => "Orders resolved".into(),
+            Self::DeliveredCount => "Orders delivered".into(),
+            Self::OnTimeCount => "Orders on time".into(),
+            Self::ExpiredCount => "Orders expired".into(),
+            Self::Permit(van) => format!("{van:?} van may act this tick"),
+            Self::UsedPermit(van) => format!("{van:?} van has acted this tick"),
+            Self::RoadSpace => "Trunk road free".into(),
+            Self::OnMainRoad => "On the trunk road".into(),
+            Self::DockSpace => "Free hub staging space".into(),
+            Self::DockUsed => "Hub staging space used".into(),
+            Self::At(location) => format!("At {location:?}"),
+            Self::Travelling(from, to) => format!("Travelling {from:?} → {to:?}"),
+            Self::AwaitingOutcome => "Awaiting the trip outcome".into(),
+            Self::Ready => "Ready".into(),
+            Self::DepartedAt => "Departed at".into(),
+            Self::ReadyAt => "Busy until".into(),
+            Self::Trip => "Trips taken".into(),
+            Self::Integrity => "Roadworthy".into(),
+            Self::Damage => "Broken down".into(),
+            Self::Wear => "Wear".into(),
+            Self::MaintainedWear => "Wear serviced".into(),
+            Self::Fuel => "Fuel".into(),
+            Self::TankSpace => "Free tank space".into(),
+            Self::SpentFuel => "Fuel spent".into(),
+            Self::Space => "Free payload space".into(),
+            Self::ColdSpace => "Free refrigerated slot".into(),
+            Self::Cargo(id) => format!("Carrying Order {}", id + 1),
+            Self::Money => "Cash".into(),
+            Self::Revenue => "Revenue".into(),
+            Self::Price => "Price".into(),
+            Self::FuelPump => "Free fuel pump".into(),
+            Self::Refueling => "Refueling".into(),
+            Self::RepairBay => "Free repair bay".into(),
+            Self::Repairing => "In the repair bay".into(),
+            Self::Part => "Spare parts".into(),
+            Self::UsedPart => "Parts used".into(),
+            Self::TowTruck => "Free tow truck".into(),
+            Self::Towing => "Being towed".into(),
+            Self::Scheduled => "Arriving later".into(),
+            Self::Waiting => "Waiting for pickup".into(),
+            Self::InTransit => "In transit".into(),
+            Self::Delivered => "Delivered".into(),
+            Self::Expired => "Expired".into(),
+            Self::Arrival => "Released at".into(),
+            Self::Deadline => "Delivery deadline".into(),
+            Self::Destination(location) => format!("Bound for {location:?}"),
+            Self::Weight => "Weight".into(),
+            Self::ColdCargo => "Needs refrigeration".into(),
+            Self::TicketWord(van, from, to) => {
+                format!("Hidden trip outcomes: {van:?} van, {from:?} → {to:?}")
+            }
+            Self::TicketDivisor => "Trip ticket cursor".into(),
+            Self::TransferCount => "Van-to-van transfers".into(),
+            Self::StagedCount => "Hub handoffs staged".into(),
+            Self::DamageCount => "Breakdowns".into(),
+        }
+    }
+}
 
-debug_labels!(fleet::Role);
+impl StudioLabel for fleet::Role {
+    fn studio_label(&self) -> String {
+        match self {
+            Self::World => "Fleet",
+            Self::Vehicle => "Van",
+            Self::Other => "Other van",
+            Self::Order => "Order",
+            Self::Station => "Station",
+            Self::Nature => "Nature",
+        }
+        .into()
+    }
+}
 
 impl StudioLabel for fleet::AccountId {
     fn studio_label(&self) -> String {
@@ -484,15 +585,33 @@ impl StudioLabel for fleet::RateId {
                 format!("{van:?} van stages Order {} at the shared hub", order + 1)
             }
             Self::Transfer {
-                from, to, order, ..
-            } => format!("Transfer Order {} from {from:?} to {to:?}", order + 1),
+                from,
+                to,
+                order,
+                at,
+            } => format!(
+                "Transfer Order {} from {from:?} van to {to:?} van at {at:?}",
+                order + 1
+            ),
             Self::Depart { van, from, to } => format!("{van:?} van departs {from:?} → {to:?}"),
-            Self::Resolve { van, outcome, .. } => {
-                format!("{van:?} van's trip resolves: {outcome:?}")
+            Self::Resolve {
+                van,
+                from,
+                to,
+                outcome,
+            } => format!(
+                "{van:?} van's trip {from:?} → {to:?} {}",
+                match outcome {
+                    fleet::Outcome::Clear => "is clear",
+                    fleet::Outcome::Delayed => "is delayed",
+                    fleet::Outcome::Breakdown => "breaks down",
+                }
+            ),
+            Self::Arrive { van, from, to } => {
+                format!("{van:?} van arrives at {to:?} from {from:?}")
             }
-            Self::Arrive { van, to, .. } => format!("{van:?} van arrives at {to:?}"),
             Self::Deliver { van, order, late } => format!(
-                "{van:?} delivers Order {} {}",
+                "{van:?} van delivers Order {} {}",
                 order + 1,
                 if *late {
                     "late for half payment"
@@ -500,24 +619,39 @@ impl StudioLabel for fleet::RateId {
                     "within its window"
                 }
             ),
-            Self::Expire { order, .. } => format!("Order {} expires undelivered", order + 1),
-            Self::Refuel(van) => format!("{van:?} occupies the pump and purchases 3 fuel"),
-            Self::EndRefuel(van) => format!("{van:?} finishes refueling and releases the pump"),
+            Self::Expire { order, carrier, at } => match carrier {
+                Some(van) => format!(
+                    "Order {} expires undelivered aboard the {van:?} van",
+                    order + 1
+                ),
+                None => format!("Order {} expires undelivered at {at:?}", order + 1),
+            },
+            Self::Refuel(van) => format!("{van:?} van occupies the pump and buys 3 fuel"),
+            Self::EndRefuel(van) => {
+                format!("{van:?} van finishes refueling and releases the pump")
+            }
             Self::Repair { van, damaged } => format!(
-                "{van:?} starts {} in the repair bay",
+                "{van:?} van starts {} in the repair bay",
                 if *damaged {
                     "breakdown repair"
                 } else {
                     "preventive maintenance"
                 }
             ),
-            Self::EndRepair { van, .. } => {
-                format!("{van:?} finishes service and releases the repair bay")
-            }
+            Self::EndRepair { van, damaged } => format!(
+                "{van:?} van finishes {} and releases the repair bay",
+                if *damaged {
+                    "breakdown repair"
+                } else {
+                    "maintenance"
+                }
+            ),
             Self::Tow { van, from } => {
-                format!("Dispatch the shared tow truck for {van:?} at {from:?}")
+                format!("Dispatch the shared tow truck for the {van:?} van at {from:?}")
             }
-            Self::EndTow(van) => format!("Tow {van:?} to depot and release the tow truck"),
+            Self::EndTow(van) => {
+                format!("Tow the {van:?} van to the depot and release the tow truck")
+            }
             Self::Tick => "Advance shared fleet time one tick".into(),
             Self::Close => {
                 "Close the fleet run with all orders and occupied services settled".into()
