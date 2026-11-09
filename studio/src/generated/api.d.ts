@@ -535,6 +535,30 @@ export interface components {
             /** Format: uint64 */
             snapshot_index: number;
         };
+        /**
+         * @description How people read quantities of one asset. The kernel counts atoms; a format
+         *     shows `atoms ÷ 10^scale` with a unit, so a balance of 1,250 cent atoms
+         *     reads `12.50 USD` and a WAD-scaled rate of 5 × 10^16 reads `5 %`.
+         *
+         *     A format never rounds. It writes every nonzero digit of the exact value,
+         *     trimming trailing zeros but keeping at least `digits` digits after the
+         *     point. It is presentation only: two assets with different formats are
+         *     still two assets, and equal atoms are equal whatever their format.
+         */
+        QuantityFormat: {
+            /**
+             * Format: uint8
+             * @description Digits always written after the point, padding with zeros.
+             */
+            digits?: number;
+            /**
+             * Format: uint8
+             * @description The power of ten one displayed unit is made of, in atoms.
+             */
+            scale: number;
+            /** @description The unit people read after the number, such as `kg`, `USD` or `%`. */
+            unit?: string | null;
+        };
         RateConditionView: {
             comparison: string;
             left: string;
@@ -935,6 +959,13 @@ export interface components {
         };
         ViewDocument: {
             description: string;
+            /**
+             * @description How to read quantities of each asset whose format is not a count, by
+             *     the asset's key.
+             */
+            formats?: {
+                [key: string]: components["schemas"]["QuantityFormat"];
+            };
             frames: components["schemas"]["ExchangeFrame"][];
             id: components["schemas"]["DocumentPath"];
             initial: components["schemas"]["ViewSnapshot"];

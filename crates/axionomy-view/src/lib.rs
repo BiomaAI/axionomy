@@ -15,7 +15,11 @@ pub use axionomy::path::slug;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::{collections::HashSet, fmt::Debug, marker::PhantomData};
+use std::{
+    collections::{BTreeMap, HashSet},
+    fmt::Debug,
+    marker::PhantomData,
+};
 use thiserror::Error;
 
 /// The kinds of identifiers in a view. Each is a distinct path type, so a
@@ -78,6 +82,84 @@ pub type ProposalPath = Path<kind::Proposal>;
 pub type PhasePath = Path<kind::Phase>;
 /// An algorithm, such as `a-star` or `exact-pareto-search`.
 pub type AlgorithmPath = Path<kind::Algorithm>;
+
+/// How people read quantities of one asset. The kernel counts atoms; a format
+/// shows `atoms ÷ 10^scale` with a unit, so a balance of 1,250 cent atoms
+/// reads `12.50 USD` and a WAD-scaled rate of 5 × 10^16 reads `5 %`.
+///
+/// A format never rounds. It writes every nonzero digit of the exact value,
+/// trimming trailing zeros but keeping at least `digits` digits after the
+/// point. It is presentation only: two assets with different formats are
+/// still two assets, and equal atoms are equal whatever their format.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct QuantityFormat {
+    /// The power of ten one displayed unit is made of, in atoms.
+    pub scale: u8,
+    /// Digits always written after the point, padding with zeros.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub digits: u8,
+    /// The unit people read after the number, such as `kg`, `USD` or `%`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unit: Option<String>,
+}
+
+fn is_zero(value: &u8) -> bool {
+    *value == 0
+}
+
+impl QuantityFormat {
+    /// A count of atoms, written as it is: the format of every asset that
+    /// declares none.
+    pub const COUNT: Self = Self {
+        scale: 0,
+        digits: 0,
+        unit: None,
+    };
+
+    /// `atoms ÷ 10^scale`.
+    pub const fn decimal(scale: u8) -> Self {
+        Self {
+            scale,
+            digits: 0,
+            unit: None,
+        }
+    }
+
+    /// Writes at least `digits` digits after the point.
+    pub const fn digits(mut self, digits: u8) -> Self {
+        self.digits = digits;
+        self
+    }
+
+    /// Writes `unit` after the number.
+    pub fn unit(mut self, unit: impl Into<String>) -> Self {
+        self.unit = Some(unit.into());
+        self
+    }
+
+    /// The exact quantity as people read it.
+    pub fn write(&self, quantity: Quantity) -> String {
+        let atoms = quantity.to_string();
+        let scale = usize::from(self.scale);
+        let atoms = if atoms.len() <= scale {
+            format!("{atoms:0>width$}", width = scale + 1)
+        } else {
+            atoms
+        };
+        let (whole, fraction) = atoms.split_at(atoms.len() - scale);
+        let fraction = fraction.trim_end_matches('0');
+        let digits = usize::from(self.digits).max(fraction.len());
+        let number = if digits == 0 {
+            whole.to_owned()
+        } else {
+            format!("{whole}.{fraction:0<digits$}")
+        };
+        match &self.unit {
+            Some(unit) => format!("{number} {unit}"),
+            None => number,
+        }
+    }
+}
 
 /// A browser-safe identity for an arbitrary user-defined ontology value.
 ///
@@ -1324,6 +1406,10 @@ pub struct ViewDocument {
     pub source: ViewSource,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub model: Option<ModelView>,
+    /// How to read quantities of each asset whose format is not a count, by
+    /// the asset's key.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub formats: BTreeMap<ItemPath, QuantityFormat>,
     pub initial: ViewSnapshot,
     pub frames: Vec<ExchangeFrame>,
     #[serde(default)]
@@ -1366,6 +1452,12 @@ pub trait ViewOntology<O: Ontology> {
     fn asset(&self, id: &O::Asset) -> ViewId;
     fn rate(&self, id: &O::Rate) -> ViewId;
     fn role(&self, id: &O::Role) -> ViewId;
+
+    /// How people read quantities of `asset`; a count unless it says
+    /// otherwise.
+    fn format(&self, _asset: &O::Asset) -> QuantityFormat {
+        QuantityFormat::COUNT
+    }
 
     fn scene(&self, _index: u64, _economy: &Economy<O>) -> Option<Scene> {
         None
@@ -1477,6 +1569,7 @@ where
     V: ViewOntology<O>,
     F: FnMut(&ExchangeFrame),
 {
+    let formats = formats(initial, ontology);
     let mut economy = initial.clone();
     let initial = snapshot(0, &economy, ontology);
     let mut frames = Vec::with_capacity(trace.exchanges().len());
@@ -1515,6 +1608,7 @@ where
         description: metadata.description,
         source: metadata.source,
         model: None,
+        formats,
         initial,
         frames,
         objectives,
@@ -1524,6 +1618,20 @@ where
         observations: Vec::new(),
         solve_observations: Vec::new(),
     })
+}
+
+/// The format of every asset the economy names, its balances, rates and
+/// invariants, whose format is not a count.
+fn formats<O: Ontology, V: ViewOntology<O>>(
+    economy: &Economy<O>,
+    ontology: &V,
+) -> BTreeMap<ItemPath, QuantityFormat> {
+    economy
+        .asset_keys()
+        .into_iter()
+        .map(|asset| (ontology.asset(asset).key, ontology.format(asset)))
+        .filter(|(_, format)| *format != QuantityFormat::COUNT)
+        .collect()
 }
 
 fn frame_cues(exchange: &ExchangeView, receipt: &ReceiptView) -> Vec<FrameCueView> {
@@ -2191,6 +2299,36 @@ mod tests {
         fn role(&self, _: &Role) -> ViewId {
             ViewId::new(slug("role/actor"), "Actor")
         }
+    }
+
+    #[test]
+    fn formats_write_exact_values_and_never_round() {
+        let write = |format: &QuantityFormat, atoms: u64| format.write(Quantity::new(atoms));
+        assert_eq!(write(&QuantityFormat::COUNT, 0), "0");
+        assert_eq!(write(&QuantityFormat::COUNT, 1_250), "1250");
+        let usd = QuantityFormat::decimal(2).digits(2).unit("USD");
+        assert_eq!(write(&usd, 1_250), "12.50 USD");
+        assert_eq!(write(&usd, 5), "0.05 USD");
+        assert_eq!(write(&usd, 0), "0.00 USD");
+        let kilograms = QuantityFormat::decimal(3).unit("kg");
+        assert_eq!(write(&kilograms, 1_000), "1 kg");
+        assert_eq!(write(&kilograms, 900), "0.9 kg");
+        assert_eq!(write(&kilograms, 1_234_567), "1234.567 kg");
+        // A WAD-scaled share read as a percentage: 10^16 atoms per percent.
+        let percent = QuantityFormat::decimal(16).unit("%");
+        assert_eq!(write(&percent, 50_000_000_000_000_000), "5 %");
+        assert_eq!(write(&percent, 1), "0.0000000000000001 %");
+        assert_eq!(
+            QuantityFormat::decimal(18).write(Quantity::MAX),
+            format!(
+                "{}.{}",
+                &Quantity::MAX.to_string()[..Quantity::MAX.to_string().len() - 18],
+                Quantity::MAX.to_string()[Quantity::MAX.to_string().len() - 18..]
+                    .trim_end_matches('0')
+            )
+        );
+        // More digits than the scale pad with zeros; they never invent precision.
+        assert_eq!(write(&QuantityFormat::COUNT.digits(2), 7), "7.00");
     }
 
     #[test]

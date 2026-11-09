@@ -30,6 +30,17 @@ test("runs a search, receives events, and scrubs its replay", async ({ page }) =
   await expect(page.locator(".replay-proof")).toContainText("replay verified");
 });
 
+test("reads scaled quantities in their units and keeps the exact atoms", async ({ page }) => {
+  await page.goto("/?problem=lending&instance=showcase&view=replay&step=0&seed=17&budget=128");
+  // The market's base rate is 20 basis points, stored as 2 × 10^15 WAD atoms.
+  const baseRate = page.locator(".account-card .balance", { hasText: "Base rate" }).locator(".amount");
+  await expect(baseRate.first()).toBeAttached();
+  await expect(baseRate.first()).toHaveText("0.2 %");
+  await expect(baseRate.first()).toHaveAttribute("title", "2000000000000000 atoms");
+  // Counted assets stay plain numbers.
+  await expect(page.locator(".account-card .balance", { hasText: "Cash" }).locator(".amount")).toHaveCount(0);
+});
+
 test("turns saved Maze search evidence into a truthful, scrubbable expansion map", async ({ page }) => {
   await page.goto("/?problem=maze&instance=showcase&strategy=a-star&document=a-star&view=solve&step=0&seed=0&budget=128");
   await expect(page.locator(".solve-map")).toBeVisible();

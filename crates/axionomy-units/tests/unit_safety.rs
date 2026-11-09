@@ -5,7 +5,8 @@ use axionomy_units::si::mass::{gram, kilogram};
 use axionomy_units::si::rational64::{Energy, Mass, Torque};
 use axionomy_units::si::torque::newton_meter;
 use axionomy_units::{
-    AssetDefinition, AssetSchema, AssetSchemaError, Rational, UnitAsset, UnitModelBuildError,
+    AssetDefinition, AssetSchema, AssetSchemaError, Rational, UnitAsset, UnitBindingError,
+    UnitModelBuildError,
 };
 use proptest::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -58,6 +59,35 @@ fn compatible_input_units_normalize_to_one_canonical_asset() {
 
     assert_eq!(from_kilograms, from_grams);
     assert_eq!(from_kilograms.quantity(), Quantity::new(1_000));
+}
+
+#[test]
+fn atoms_read_back_as_exact_physical_values() {
+    let mut schema = AssetSchema::new();
+    let cargo = schema
+        .define_measure(AssetId::Cargo, Mass::new::<gram>(Rational::from_integer(1)))
+        .unwrap();
+    // Take 100 g from 1 kg: the kernel subtracts atoms, and the rest reads
+    // back as exactly nine tenths of a kilogram.
+    let held = cargo
+        .encode(Mass::new::<kilogram>(Rational::from_integer(1)))
+        .unwrap()
+        .quantity();
+    let taken = cargo
+        .encode(Mass::new::<gram>(Rational::from_integer(100)))
+        .unwrap()
+        .quantity();
+    let left = held.checked_sub(taken).unwrap();
+    assert_eq!(left, Quantity::new(900));
+    let mass = cargo.decode(left).unwrap();
+    assert_eq!(mass.get::<kilogram>(), Rational::new(9, 10));
+    assert_eq!(mass.get::<gram>(), Rational::from_integer(900));
+    assert_eq!(cargo.encode(mass).unwrap().quantity(), left);
+    // More atoms than a physical value can hold are refused, not wrapped.
+    assert_eq!(
+        cargo.decode(Quantity::MAX).unwrap_err(),
+        UnitBindingError::NumericRange
+    );
 }
 
 #[test]
@@ -287,5 +317,9 @@ proptest! {
             .unwrap();
 
         prop_assert_eq!(amount.quantity(), Quantity::new(grams));
+        // Decoding is the exact inverse of encoding.
+        let mass = cargo.decode(amount.quantity()).unwrap();
+        prop_assert_eq!(mass.get::<gram>(), Rational::from_integer(grams as i64));
+        prop_assert_eq!(cargo.encode(mass).unwrap(), amount);
     }
 }

@@ -66,6 +66,10 @@ The precision is capped at 18 decimals so one whole unit fits a `u64` atom
 count. Formatting always prints exactly `decimals` fraction digits and
 round-trips through `parse`.
 
+`decode` is the inverse of `encode`: it turns a quantity of atoms back into
+an exact `uom` value, so 900 gram atoms read as exactly nine tenths of a
+kilogram, in whichever compatible unit the reader asks for.
+
 Use `define_discrete` for permissions, facts, and other atomically counted
 assets so measured and discrete values can share one `UnitAsset<Id>` basket.
 Use `AssetSchema::build_economy` and `validate_goal` to reject unknown or

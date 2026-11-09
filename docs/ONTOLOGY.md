@@ -126,7 +126,9 @@ Assets carry far more than goods, and the canonical problems lean on this:
   written, so taking 100 g from 1 kg is exact subtraction of atoms: 1,000 less
   100 leaves 900. A value that is not a whole number of atoms is refused rather
   than rounded. Two denominations that are meant to differ are two assets,
-  connected by an explicit rate.
+  connected by an explicit rate. `decode` turns atoms back into a typed value,
+  and a view's `QuantityFormat` says how people read them (`0.9 kg`,
+  `12.50 USD`, `5 %`) without becoming part of the asset's identity.
 
 ### 3. Rates: the laws
 

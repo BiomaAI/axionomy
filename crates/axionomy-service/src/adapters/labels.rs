@@ -2,10 +2,65 @@ use axionomy_problems::{
     amm, bridge, connect_four, exact_cover, lending, logistics, marketplace, maze, mission,
     perishables, rescue, scheduling, sokoban, work_league, workshop,
 };
+use axionomy_view::QuantityFormat;
 use std::fmt::Debug;
 
 pub(crate) trait StudioLabel {
     fn studio_label(&self) -> String;
+}
+
+/// How Studio writes quantities of an asset: a count unless the problem
+/// stores the asset scaled.
+pub(crate) trait StudioFormat {
+    fn studio_format(&self) -> QuantityFormat {
+        QuantityFormat::COUNT
+    }
+}
+
+macro_rules! counted {
+    ($($type:path),+ $(,)?) => {$(
+        impl StudioFormat for $type {}
+    )+};
+}
+
+counted!(
+    amm::Asset,
+    bridge::Asset,
+    connect_four::Asset,
+    exact_cover::Asset,
+    logistics::Asset,
+    logistics::fleet::Asset,
+    marketplace::Asset,
+    maze::Asset,
+    mission::Asset,
+    mission::expedition::Asset,
+    perishables::Asset,
+    perishables::cold_chain::Asset,
+    rescue::Asset,
+    rescue::incident::Asset,
+    scheduling::Asset,
+    sokoban::Asset,
+    work_league::Asset,
+    workshop::Asset,
+);
+
+/// The market's terms are basis points scaled by `WAD` (10^18), so 10^16 atoms
+/// are one percent; the borrow index is a `WAD`-scaled multiplier.
+impl StudioFormat for lending::Asset {
+    fn studio_format(&self) -> QuantityFormat {
+        match self {
+            Self::BorrowIndex => QuantityFormat::decimal(18),
+            Self::BaseRate
+            | Self::Kink
+            | Self::SlopeBelowKink
+            | Self::SlopeAboveKink
+            | Self::ReserveFactor
+            | Self::LoanToValue
+            | Self::LiquidationThreshold
+            | Self::LiquidationBonus => QuantityFormat::decimal(16).unit("%"),
+            _ => QuantityFormat::COUNT,
+        }
+    }
 }
 
 fn words(value: &impl Debug) -> String {

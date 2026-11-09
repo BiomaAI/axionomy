@@ -30,6 +30,7 @@ import {
   Transition,
   useSnapshot,
 } from "./Inspectors";
+import { QuantityFormats } from "./Quantity";
 
 const ParetoChart = lazy(() => import("./ParetoChart"));
 type StudioViewMode = "solve" | "replay";
@@ -439,7 +440,7 @@ export function App() {
     {problem && <section className="problem-context"><div><span>{familyLabel(problem.family)}</span><div className="problem-copy"><p>{problem.summary}</p><small><strong>{instance?.label ?? artifact?.instance.label}</strong>{instance?.description ?? artifact?.instance.description}{modelCounts && <em>{modelCounts}</em>}</small></div></div><div>{problem.capabilities.map((capability) => <span key={capability}>{capabilityLabel(capability)}</span>)}</div></section>}
     {error && <div className="error-banner" role="alert">{error}</div>}
 
-    {artifact && document && snapshot ? <main className={freshArtifact === artifact ? "fresh-artifact" : undefined}>
+    {artifact && document && snapshot ? <QuantityFormats.Provider value={document.formats ?? {}}><main className={freshArtifact === artifact ? "fresh-artifact" : undefined}>
       <section className="alternative-bar"><div><span>Alternatives</span><strong>{artifact.documents.length} replayable results</strong></div><div role="tablist">{artifact.documents.map((candidate) => <button key={candidate.id} role="tab" aria-selected={candidate.id === document.id} onClick={() => selectDocument(candidate.id)}>{candidate.title.replace(`${artifact.problem.title} · `, "")}</button>)}</div></section>
       <StrategyComparison artifact={artifact} selected={document.id} onSelect={selectDocument} />
       <section className="document-heading"><div><span className="eyebrow">{artifact.instance.label} · {document.source.label} · {artifact.problem.key}/{document.id}{freshArtifact === artifact ? " · just computed" : ""}</span><h1>{document.title}</h1><p>{document.description}</p></div><div className="objective-pills">{document.objectives.map((objective) => <div className="objective" key={objective.key}><span>{objective.label}</span><strong>{objective.value}</strong><small>{objective.direction}</small></div>)}</div></section>
@@ -490,7 +491,7 @@ export function App() {
       </section>
       </>;
       })()}
-    </main> : <div className="loading">Loading saved problem result…</div>}
+    </main></QuantityFormats.Provider> : <div className="loading">Loading saved problem result…</div>}
 
     <footer>The picture explains. The accounts, rules, and replay prove.</footer>
   </div>;

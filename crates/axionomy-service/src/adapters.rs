@@ -6,7 +6,7 @@ use axionomy::{Economy, Goal, Ontology, Trace};
 use axionomy_search::GraphSearchProgress;
 use axionomy_view::{
     DebugOntology, DocumentPath, ExchangeFrame, ItemPath, LeaderboardView, MeasurePath,
-    ObjectiveView, PhasePath, PlaybackError, ProposalView, Scene, SceneAnchorView,
+    ObjectiveView, PhasePath, PlaybackError, ProposalView, QuantityFormat, Scene, SceneAnchorView,
     SceneEntityRoleView, SceneEntityView, SceneEvidenceRefView, SceneGlyphView, SceneMetricView,
     SceneToneView, SearchObservationKindView, SearchObservationView, SearchTelemetryView,
     TelemetryKindView, TelemetryPointView, ViewDocument, ViewDocumentMetadata, ViewId,
@@ -172,7 +172,7 @@ mod sokoban;
 mod work_league;
 mod workshop;
 
-use labels::StudioLabel;
+use labels::{StudioFormat, StudioLabel};
 
 type StudioScene<O> = fn(u64, &Economy<O>) -> Option<Scene>;
 type StudioLeaderboards<O> = fn(u64, &Economy<O>) -> Vec<LeaderboardView>;
@@ -210,7 +210,7 @@ impl<O: Ontology> StudioOntology<O> {
 impl<O: Ontology> ViewOntology<O> for StudioOntology<O>
 where
     O::Account: StudioLabel,
-    O::Asset: StudioLabel,
+    O::Asset: StudioLabel + StudioFormat,
     O::Rate: StudioLabel,
     O::Role: StudioLabel,
 {
@@ -228,6 +228,10 @@ where
 
     fn role(&self, id: &O::Role) -> ViewId {
         Self::relabel(self.fallback.role(id), id)
+    }
+
+    fn format(&self, asset: &O::Asset) -> QuantityFormat {
+        asset.studio_format()
     }
 
     fn scene(&self, index: u64, economy: &Economy<O>) -> Option<Scene> {
@@ -1211,7 +1215,7 @@ pub(super) fn document<O: Ontology>(
 ) -> Result<ViewDocument, PlaybackError>
 where
     O::Account: StudioLabel,
-    O::Asset: StudioLabel,
+    O::Asset: StudioLabel + StudioFormat,
     O::Rate: StudioLabel,
     O::Role: StudioLabel,
 {
@@ -1246,7 +1250,7 @@ pub(super) fn document_with_leaderboards_observed<O: Ontology>(
 ) -> Result<ViewDocument, PlaybackError>
 where
     O::Account: StudioLabel,
-    O::Asset: StudioLabel,
+    O::Asset: StudioLabel + StudioFormat,
     O::Rate: StudioLabel,
     O::Role: StudioLabel,
 {
@@ -1285,7 +1289,7 @@ pub(super) fn proposal<O: Ontology>(
 ) -> ProposalView
 where
     O::Account: StudioLabel,
-    O::Asset: StudioLabel,
+    O::Asset: StudioLabel + StudioFormat,
     O::Rate: StudioLabel,
     O::Role: StudioLabel,
 {

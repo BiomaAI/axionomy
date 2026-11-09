@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import type { ExchangeFrame, ProposalView, ViewDocument, ViewSnapshot } from "./api";
+import { Amount, useQuantity } from "./Quantity";
 
 /** A name written as a path, such as `time-accounting`, read as words. */
 function words(path: string): string {
@@ -43,8 +44,8 @@ export function Accounts({ snapshot, previous, focus, changingBalanceKeys }: { s
   }, [snapshot, previous, changingBalanceKeys]);
   const row = (entry: BalanceRow) => <div className={`balance ${entry.changed || entry.added ? "changed" : ""}`} key={entry.balance.asset.key}>
     <span title={entry.balance.asset.key}>{entry.balance.asset.label}</span>
-    <strong>{entry.balance.quantity}</strong>
-    {entry.changed && <small>{entry.prior} →</small>}
+    <strong><Amount asset={entry.balance.asset.key} atoms={entry.balance.quantity} /></strong>
+    {entry.changed && entry.prior !== undefined && <small><Amount asset={entry.balance.asset.key} atoms={entry.prior} /> →</small>}
     {entry.added && <small>new</small>}
   </div>;
   return <div className="accounts-list">
@@ -58,8 +59,8 @@ export function Accounts({ snapshot, previous, focus, changingBalanceKeys }: { s
           {live.map(row)}
           {ghosts.map((ghost) => <div className="balance ghost" key={`ghost:${ghost.asset.key}`}>
             <span title={ghost.asset.key}>{ghost.asset.label}</span>
-            <strong>0</strong>
-            <small>{ghost.quantity} →</small>
+            <strong><Amount asset={ghost.asset.key} atoms="0" /></strong>
+            <small><Amount asset={ghost.asset.key} atoms={ghost.quantity} /> →</small>
           </div>)}
           {unchanged.length > 0 && <details className="unchanged-assets">
             <summary>{unchanged.length} unchanged {unchanged.length === 1 ? "asset" : "assets"} in this replay</summary>
@@ -131,10 +132,11 @@ export function ProposalInspector({ proposals }: { proposals: ProposalView[] }) 
 }
 
 function Assessment({ assessment, expectedRejection = false }: { assessment: ExchangeFrame["assessment"]; expectedRejection?: boolean }) {
+  const quantity = useQuantity();
   return <div className={`assessment assessment-${assessment.status} ${expectedRejection ? "expected-rejection" : ""}`}>
     <strong>{expectedRejection ? `expected rejection · ${assessment.status}` : assessment.status}</strong>
     {assessment.shortfalls.map((shortfall) => <div key={shortfall.account.key}>
-      {shortfall.account.label} lacks {shortfall.missing.map((missing) => `${missing.quantity} ${missing.asset.label}`).join(", ")}
+      {shortfall.account.label} lacks {shortfall.missing.map((missing) => `${quantity(missing.asset.key, missing.quantity)} ${missing.asset.label}`).join(", ")}
     </div>)}
     {assessment.issues.map((issue, index) => <div className="assessment-issue" key={`${issue.kind}:${index}`}><span>{issue.message}</span><small>{issue.kind.replaceAll("_", " ")}</small></div>)}
     {assessment.status === "applicable" && <div>{assessment.projected_deltas.length} accounts would change — predicted, nothing changed yet</div>}
@@ -143,7 +145,7 @@ function Assessment({ assessment, expectedRejection = false }: { assessment: Exc
 
 function DeltaGroup({ label, kind, values }: { label: string; kind: string; values: QuantityValue[] }) {
   if (values.length === 0) return null;
-  return <div className={`delta-group ${kind}`}><span>{label}</span><div>{values.map((value) => <b key={value.asset.key}>{value.asset.label} <em>×{value.quantity}</em></b>)}</div></div>;
+  return <div className={`delta-group ${kind}`}><span>{label}</span><div>{values.map((value) => <b key={value.asset.key}>{value.asset.label} <em>×<Amount asset={value.asset.key} atoms={value.quantity} /></em></b>)}</div></div>;
 }
 
 export function Telemetry({ document }: { document: ViewDocument }) {
@@ -181,7 +183,7 @@ export function ModelExplorer({ document }: { document: ViewDocument }) {
     </section>
     <section className="model-rules">
       <h3>Goal</h3>
-      {model.goal.map((goal) => <div key={goal.account.key}><strong>{goal.account.label}</strong>{goal.required.map((required) => <span key={required.asset.key}>{required.asset.label} ×{required.quantity}</span>)}</div>)}
+      {model.goal.map((goal) => <div key={goal.account.key}><strong>{goal.account.label}</strong>{goal.required.map((required) => <span key={required.asset.key}>{required.asset.label} ×<Amount asset={required.asset.key} atoms={required.quantity} /></span>)}</div>)}
       <h3>Conservation laws</h3>
       {model.invariants.map((invariant) => <details key={invariant.name}><summary>{words(invariant.name)}</summary><p>{invariant.terms.map((term) => `${term.weight}·${term.asset.label}`).join(" + ")}</p></details>)}
     </section>
@@ -190,7 +192,7 @@ export function ModelExplorer({ document }: { document: ViewDocument }) {
 
 function RateBasket({ label, values }: { label: string; values: QuantityValue[] }) {
   if (values.length === 0) return null;
-  return <div className="rate-basket"><span>{label}</span>{values.map((value) => <b key={value.asset.key}>{value.asset.label} ×{value.quantity}</b>)}</div>;
+  return <div className="rate-basket"><span>{label}</span>{values.map((value) => <b key={value.asset.key}>{value.asset.label} ×<Amount asset={value.asset.key} atoms={value.quantity} /></b>)}</div>;
 }
 
 function ComputedRateAmount({ label, amount }: { label: string; amount: { role: { key: string; label: string }; asset: { key: string; label: string }; quantity: string } }) {
@@ -203,10 +205,10 @@ export function Observations({ document, frame }: { document: ViewDocument; fram
   return <div className="observations">
     {observations.map((observation) => <article key={observation.actor.key}>
       <h3>{observation.actor.label}</h3><p>{observation.label}</p>
-      {observation.facts.map((fact) => <div className="observation-fact" key={fact.asset.key}><strong>{fact.asset.label}</strong><span>{fact.quantity}</span></div>)}
+      {observation.facts.map((fact) => <div className="observation-fact" key={fact.asset.key}><strong>{fact.asset.label}</strong><span><Amount asset={fact.asset.key} atoms={fact.quantity} /></span></div>)}
       {observation.visible_accounts.map((account) => <details key={account.account.key} className="observation-account" open>
         <summary>{account.account.label}<span>{account.balances.length} balances</span></summary>
-        {account.balances.map((balance) => <div className="observation-balance" key={balance.asset.key}><span>{balance.asset.label}</span><strong>{balance.quantity}</strong></div>)}
+        {account.balances.map((balance) => <div className="observation-balance" key={balance.asset.key}><span>{balance.asset.label}</span><strong><Amount asset={balance.asset.key} atoms={balance.quantity} /></strong></div>)}
       </details>)}
     </article>)}
   </div>;

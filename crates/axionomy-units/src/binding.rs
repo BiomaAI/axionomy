@@ -1,7 +1,7 @@
 use crate::{UnitAsset, definition::MeasureDefinition};
 use axionomy::{AssetAmount, Quantity};
 use num_rational::Ratio;
-use num_traits::{ToPrimitive, Zero};
+use num_traits::{CheckedMul, ToPrimitive, Zero};
 use std::fmt;
 use std::marker::PhantomData;
 use thiserror::Error;
@@ -112,6 +112,28 @@ where
             .to_u64()
             .ok_or(UnitBindingError::NumericRange)?;
         Ok(self.asset.amount(Quantity::new(count)))
+    }
+
+    /// The exact physical value of `quantity` atoms of this asset, the inverse
+    /// of [`encode`](Self::encode): read it in any compatible unit, such as
+    /// `decode(1_000 atoms)?.get::<kilogram>()` for gram atoms.
+    pub fn decode(
+        &self,
+        quantity: Quantity,
+    ) -> Result<UomQuantity<D, U, MeasureScalar>, UnitBindingError> {
+        let atoms = u64::try_from(quantity)
+            .ok()
+            .and_then(|atoms| i64::try_from(atoms).ok())
+            .map(MeasureScalar::from_integer)
+            .ok_or(UnitBindingError::NumericRange)?;
+        let value = atoms
+            .checked_mul(&self.atomic_base_value)
+            .ok_or(UnitBindingError::NumericRange)?;
+        Ok(UomQuantity {
+            dimension: PhantomData,
+            units: PhantomData,
+            value,
+        })
     }
 }
 

@@ -2022,6 +2022,18 @@ ontology `O`, its keys, labels, scenes and leaderboards; it is of an ontology,
 not one. The kernel's semantics are unchanged, so the Lean specification and
 its fixtures are too. [Ontologies](docs/ONTOLOGY.md) is the guide to building
 one.
+### D-043: Quantities are read in their asset's format
+
+The kernel counts atoms, and a reader must never have to know an asset's
+scale to read it: lending's WAD-scaled terms printed as 19-digit integers
+were unreadable. A view gives each asset a `QuantityFormat`, `atoms ÷
+10^scale` with at least some digits and a unit, and each document carries the
+formats of its assets that are not plain counts, once per document so
+artifacts barely grow. A format writes the exact value, trimming zeros and
+never rounding, and Studio keeps the atom count beside every formatted value.
+Formats are presentation: they are not part of an asset's identity (D-025),
+so changing how flour is shown can never merge or split two assets. Typed
+authoring reads atoms back with `decode`, the inverse of `encode`.
 
 ## 16. Success criteria
 

@@ -562,7 +562,8 @@ impl ReferenceService {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axionomy_view::{SceneSurfaceView, slug};
+    use axionomy_problems::lending;
+    use axionomy_view::{SceneSurfaceView, ViewOntology, slug};
     use std::collections::HashSet;
 
     #[derive(Default)]
@@ -882,6 +883,37 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn scaled_assets_are_read_in_their_units() {
+        let artifact = ReferenceService
+            .run(RunRequest::new(slug("lending")))
+            .expect("lending runs");
+        let document = artifact.selected().expect("a selected document");
+        let key = |asset| {
+            axionomy_view::DebugOntology::<lending::Ontology>::default()
+                .asset(&asset)
+                .key
+        };
+        let base_rate = key(lending::Asset::BaseRate);
+        let format = &document.formats[&base_rate];
+        let quantity = document
+            .initial
+            .accounts
+            .iter()
+            .flat_map(|account| &account.balances)
+            .find(|balance| balance.asset.key == base_rate)
+            .map(|balance| balance.quantity.0.parse().expect("an exact quantity"))
+            .expect("the market holds its base rate");
+        assert_eq!(format.write(quantity), "0.2 %");
+        assert!(
+            document
+                .formats
+                .contains_key(&key(lending::Asset::BorrowIndex))
+        );
+        // Counted assets need no entry.
+        assert!(!document.formats.contains_key(&key(lending::Asset::Cash)));
     }
 
     #[test]

@@ -1749,6 +1749,36 @@
         ],
         "type": "object"
       },
+      "QuantityFormat": {
+        "description": "How people read quantities of one asset. The kernel counts atoms; a format\nshows `atoms ÷ 10^scale` with a unit, so a balance of 1,250 cent atoms\nreads `12.50 USD` and a WAD-scaled rate of 5 × 10^16 reads `5 %`.\n\nA format never rounds. It writes every nonzero digit of the exact value,\ntrimming trailing zeros but keeping at least `digits` digits after the\npoint. It is presentation only: two assets with different formats are\nstill two assets, and equal atoms are equal whatever their format.",
+        "properties": {
+          "digits": {
+            "description": "Digits always written after the point, padding with zeros.",
+            "format": "uint8",
+            "maximum": 255,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "scale": {
+            "description": "The power of ten one displayed unit is made of, in atoms.",
+            "format": "uint8",
+            "maximum": 255,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "unit": {
+            "description": "The unit people read after the number, such as `kg`, `USD` or `%`.",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "scale"
+        ],
+        "type": "object"
+      },
       "RateConditionView": {
         "properties": {
           "comparison": {
@@ -3200,6 +3230,16 @@
         "properties": {
           "description": {
             "type": "string"
+          },
+          "formats": {
+            "additionalProperties": false,
+            "description": "How to read quantities of each asset whose format is not a count, by\nthe asset's key.",
+            "patternProperties": {
+              "^[a-z0-9]([a-z0-9-]*[a-z0-9])?(/[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$": {
+                "$ref": "#/components/schemas/QuantityFormat"
+              }
+            },
+            "type": "object"
           },
           "frames": {
             "items": {
