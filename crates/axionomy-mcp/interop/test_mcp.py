@@ -25,7 +25,7 @@ from mcp_types import (
 
 pytestmark = pytest.mark.anyio
 
-BALANCES = "axionomy://economy/{economy_id}/accounts/{account}/balances{?prefix,cursor}"
+BALANCES = "axionomy://economy/{economy_id}/accounts/{+account}{?prefix,cursor}"
 
 ECONOMY = {
     "accounts": {"source": {"token": "5"}, "sink": {}},
@@ -169,7 +169,7 @@ async def test_a_large_economy_is_built_in_chunks_and_read_in_pages(url: str) ->
     async with Client(url) as client:
         economy_id = await create(client, {"accounts": {"store": {}}})
         for start in range(0, assets, chunk):
-            balances = {f"sku:{index:06}": "3" for index in range(start, min(start + chunk, assets))}
+            balances = {f"sku/{index:06}": "3" for index in range(start, min(start + chunk, assets))}
             result = await client.call_tool(
                 "axionomy_economy_extend",
                 {"economy_id": economy_id, "entries": {"accounts": {"warehouse": balances}}},
@@ -177,7 +177,7 @@ async def test_a_large_economy_is_built_in_chunks_and_read_in_pages(url: str) ->
             assert len(json.dumps(result.structured_content)) < 512
             economy_id = result.structured_content["economy_id"]
 
-        first = f"axionomy://economy/{economy_id}/accounts/warehouse/balances"
+        first = f"axionomy://economy/{economy_id}/accounts/warehouse"
         seen: list[str] = []
         uri, pages = first, 0
         while True:
@@ -193,12 +193,23 @@ async def test_a_large_economy_is_built_in_chunks_and_read_in_pages(url: str) ->
 
         completion = await client.complete(
             ResourceTemplateReference(type="ref/resource", uri=BALANCES),
-            {"name": "prefix", "value": "sku:00"},
+            {"name": "prefix", "value": "sku/00"},
             {"economy_id": economy_id, "account": "warehouse"},
         )
         assert len(completion.completion.values) == 100
         assert completion.completion.total == 10_000
         assert completion.completion.has_more is True
+
+
+async def test_account_paths_compose_into_resource_uris(url: str) -> None:
+    async with Client(url) as client:
+        economy_id = await create(client, {"accounts": {"agents/7/wallet": {"cash": "5"}, "agents/8/wallet": {}}})
+        listing = await page(client, f"axionomy://economy/{economy_id}/accounts?prefix=agents/7/")
+        assert [item["account"] for item in listing["items"]] == ["agents/7/wallet"]
+        wallet = await page(client, f"axionomy://economy/{economy_id}/accounts/agents/7/wallet")
+        assert wallet["items"] == [{"asset": "cash", "quantity": "5"}]
+        refused = await client.call_tool("axionomy_economy_create", {"entries": {"accounts": {"Agents_7": {}}}})
+        assert refused.is_error
 
 
 async def test_a_search_runs_as_a_task_and_its_solution_is_a_snapshot(url: str) -> None:

@@ -109,9 +109,9 @@ A stored economy is a few trees:
 - invariants: name → weight tree.
 
 The **state root** is the hash of the accounts, rates and invariants roots.
-Keys and values need canonical bytes: the string-ID profile MCP uses has them
-(UTF-8 identifiers, big-endian quantities); a typed ontology is stored through
-an encoding it declares.
+Keys and values need canonical bytes: an economy identified by paths
+(`axionomy::paths`) has them, as UTF-8 path text and big-endian quantities; a
+problem with its own Rust ontology is stored through an encoding it declares.
 
 A recorded run keeps its tree beside the kernel's economy. After a step, the
 receipt names exactly which balances changed; the recorder reads their new
@@ -341,7 +341,7 @@ Each phase is a validated commit or series of commits.
 2. **Quantity encoding** in nodes: fixed 32-byte big-endian (recommended:
    simple, ordered, exact) or minimal length.
 3. **Typed ontologies in storage:** an encoding trait the ontology implements,
-   or storing typed economies through the string-ID profile.
+   or storing typed economies through the paths profile.
 4. **Periodic `Immediate` commit interval** for batches nobody waits on; one
    second is a starting point.
 5. **Rates and invariants on the tree** from phase 1, or flat until a problem

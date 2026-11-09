@@ -1,4 +1,5 @@
-use crate::wire::{WireEconomy, WireReceipt};
+use crate::handles::EconomyId;
+use axionomy::paths;
 use std::{
     collections::HashMap,
     future::Future,
@@ -9,9 +10,9 @@ use thiserror::Error;
 /// An immutable economy and how it was made from its parent.
 #[derive(Debug, Clone)]
 pub struct Snapshot {
-    pub parent_id: Option<String>,
+    pub parent_id: Option<EconomyId>,
     pub origin: Origin,
-    pub economy: Arc<WireEconomy>,
+    pub economy: Arc<paths::Economy>,
 }
 
 #[derive(Debug, Clone)]
@@ -19,12 +20,12 @@ pub enum Origin {
     /// Entries added by `axionomy_economy_create` or `axionomy_economy_extend`.
     Authored { entries: usize },
     /// Exchanges the kernel applied in order, with their receipts.
-    Exchanged { receipts: Arc<[WireReceipt]> },
+    Exchanged { receipts: Arc<[paths::Receipt]> },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StoredSnapshot {
-    pub economy_id: String,
+    pub economy_id: EconomyId,
     pub deduplicated: bool,
 }
 
@@ -47,7 +48,7 @@ pub trait SnapshotStore: Clone + Send + Sync + 'static {
 
     fn get<'a>(
         &'a self,
-        economy_id: &'a str,
+        economy_id: &'a EconomyId,
     ) -> impl Future<Output = Result<Option<Arc<Snapshot>>, Self::Error>> + Send + 'a;
 }
 
@@ -63,7 +64,7 @@ pub enum MemorySnapshotStoreError {
 #[derive(Debug, Clone)]
 pub struct MemorySnapshotStore {
     key: Arc<[u8; 32]>,
-    snapshots: Arc<RwLock<HashMap<String, Arc<Snapshot>>>>,
+    snapshots: Arc<RwLock<HashMap<EconomyId, Arc<Snapshot>>>>,
 }
 
 impl Default for MemorySnapshotStore {
@@ -76,12 +77,17 @@ impl Default for MemorySnapshotStore {
 }
 
 impl MemorySnapshotStore {
-    fn handle(&self, parent_id: Option<&str>, operation: &[u8]) -> String {
+    fn handle(&self, parent_id: Option<&EconomyId>, operation: &[u8]) -> EconomyId {
         let mut hasher = blake3::Hasher::new_keyed(&self.key);
-        hasher.update(parent_id.unwrap_or_default().as_bytes());
+        hasher.update(
+            parent_id
+                .map(EconomyId::as_str)
+                .unwrap_or_default()
+                .as_bytes(),
+        );
         hasher.update(&[0]);
         hasher.update(operation);
-        format!("eco_{}", hasher.finalize().to_hex())
+        EconomyId::from_digest(&hasher.finalize())
     }
 }
 
@@ -93,7 +99,7 @@ impl SnapshotStore for MemorySnapshotStore {
         operation: &[u8],
         snapshot: Snapshot,
     ) -> Result<StoredSnapshot, Self::Error> {
-        let economy_id = self.handle(snapshot.parent_id.as_deref(), operation);
+        let economy_id = self.handle(snapshot.parent_id.as_ref(), operation);
         let mut snapshots = self
             .snapshots
             .write()
@@ -108,7 +114,7 @@ impl SnapshotStore for MemorySnapshotStore {
         })
     }
 
-    async fn get(&self, economy_id: &str) -> Result<Option<Arc<Snapshot>>, Self::Error> {
+    async fn get(&self, economy_id: &EconomyId) -> Result<Option<Arc<Snapshot>>, Self::Error> {
         let snapshots = self
             .snapshots
             .read()

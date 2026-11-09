@@ -43,7 +43,7 @@ fn fixture() -> Value {
     })
 }
 
-fn transfer(units: u64) -> WireExchange {
+fn transfer(units: u64) -> paths::Exchange {
     serde_json::from_value(json!({
         "rate": "transfer",
         "bindings": { "giver": "source", "receiver": "sink" },
@@ -62,33 +62,37 @@ async fn create(server: &AxionomyMcp, entries: Value) -> Outcome {
     )
 }
 
-async fn extend(server: &AxionomyMcp, economy_id: &str, entries: Value) -> Outcome {
+async fn extend(server: &AxionomyMcp, economy_id: &EconomyId, entries: Value) -> Outcome {
     outcome(
         server
             .economy_extend(Parameters(EconomyExtendRequest {
-                economy_id: economy_id.to_owned(),
+                economy_id: economy_id.clone(),
                 entries: serde_json::from_value(entries).unwrap(),
             }))
             .await,
     )
 }
 
-async fn apply(server: &AxionomyMcp, economy_id: &str, exchange: WireExchange) -> Outcome {
+async fn apply(server: &AxionomyMcp, economy_id: &EconomyId, exchange: paths::Exchange) -> Outcome {
     outcome(
         server
             .exchange_apply(Parameters(ExchangeRequest {
-                economy_id: economy_id.to_owned(),
+                economy_id: economy_id.clone(),
                 exchange,
             }))
             .await,
     )
 }
 
-async fn replay(server: &AxionomyMcp, economy_id: &str, exchanges: Vec<WireExchange>) -> Outcome {
+async fn replay(
+    server: &AxionomyMcp,
+    economy_id: &EconomyId,
+    exchanges: Vec<paths::Exchange>,
+) -> Outcome {
     outcome(
         server
             .trace_replay(Parameters(ReplayRequest {
-                economy_id: economy_id.to_owned(),
+                economy_id: economy_id.clone(),
                 exchanges,
             }))
             .await,
@@ -100,9 +104,18 @@ async fn read(server: &AxionomyMcp, uri: &str) -> Value {
     serde_json::from_str(&text).unwrap()
 }
 
-fn id(outcome: &Outcome) -> String {
+fn id(outcome: &Outcome) -> EconomyId {
     assert!(!outcome.is_error, "{}", outcome.value);
-    outcome.value["economy_id"].as_str().unwrap().to_owned()
+    outcome.value["economy_id"]
+        .as_str()
+        .unwrap()
+        .parse()
+        .unwrap()
+}
+
+/// A well-formed handle no store issued.
+fn missing() -> EconomyId {
+    EconomyId::from_digest(&blake3::hash(b"never stored"))
 }
 
 fn uri(target: Target) -> String {
@@ -192,7 +205,7 @@ async fn authoring_adds_entries_without_replacing_any() {
     )
     .await;
     let extended_id = id(&extended);
-    assert_eq!(extended.value["parent_id"], economy_id);
+    assert_eq!(extended.value["parent_id"], economy_id.as_str());
     assert_eq!(
         extended.value["counts"],
         json!({ "accounts": 3, "assets": 2, "rates": 1, "invariants": 1 })
@@ -216,7 +229,7 @@ async fn authoring_adds_entries_without_replacing_any() {
 
     let source = Target::Balances {
         economy_id: economy_id.clone(),
-        account: "source".into(),
+        account: "source".parse().unwrap(),
         prefix: None,
     };
     assert_eq!(
@@ -227,20 +240,20 @@ async fn authoring_adds_entries_without_replacing_any() {
         &server,
         &uri(Target::RateAmounts {
             economy_id: extended_id,
-            rate: "transfer".into(),
+            rate: "transfer".parse().unwrap(),
         }),
     )
     .await;
     assert_eq!(amounts["items"].as_array().unwrap().len(), 3);
 
-    let missing = extend(&server, "eco_missing", json!({})).await;
+    let missing = extend(&server, &missing(), json!({})).await;
     assert_eq!(missing.value["error"], "not_found");
 }
 
 #[tokio::test]
 async fn one_call_adds_at_most_ten_thousand_entries() {
     let server = AxionomyMcp::default();
-    let assets: serde_json::Map<String, Value> = (0..MAX_ENTRIES)
+    let assets: serde_json::Map<String, Value> = (0..crate::authoring::MAX_ENTRIES)
         .map(|index| (format!("a{index}"), json!("1")))
         .collect();
     let refused = create(&server, json!({ "accounts": { "holder": assets } })).await;
@@ -297,7 +310,7 @@ async fn apply_and_replay_share_handles_and_keep_their_source() {
 
     let source = Target::Balances {
         economy_id: source_id,
-        account: "source".into(),
+        account: "source".parse().unwrap(),
         prefix: None,
     };
     assert_eq!(
@@ -332,7 +345,7 @@ async fn failures_explain_themselves_and_store_nothing() {
     let assessment = read(&server, &failed.links[0]).await;
     assert_eq!(assessment["after_exchanges"], 1);
 
-    let unbound: WireExchange = serde_json::from_value(json!({
+    let unbound: paths::Exchange = serde_json::from_value(json!({
         "rate": "transfer",
         "bindings": { "giver": "source", "receiver": "nobody" },
         "units": "1"
@@ -363,7 +376,7 @@ async fn failures_explain_themselves_and_store_nothing() {
 #[tokio::test]
 async fn no_result_or_page_grows_with_the_economy() {
     const ASSETS: usize = 100_000;
-    const CHUNK: usize = MAX_ENTRIES - 1;
+    const CHUNK: usize = crate::authoring::MAX_ENTRIES - 1;
     let server = AxionomyMcp::default();
     let mut economy_id = id(&create(
         &server,
@@ -371,8 +384,8 @@ async fn no_result_or_page_grows_with_the_economy() {
             "accounts": { "store": {} },
             "rates": {
                 "ship": {
-                    "consume": { "from": { "sku:000000": "1" } },
-                    "produce": { "to": { "sku:000000": "1" } },
+                    "consume": { "from": { "sku/000000": "1" } },
+                    "produce": { "to": { "sku/000000": "1" } },
                     "distinct": [["from", "to"]]
                 }
             }
@@ -381,7 +394,7 @@ async fn no_result_or_page_grows_with_the_economy() {
     .await);
     for start in (0..ASSETS).step_by(CHUNK) {
         let balances: serde_json::Map<String, Value> = (start..(start + CHUNK).min(ASSETS))
-            .map(|index| (format!("sku:{index:06}"), json!("3")))
+            .map(|index| (format!("sku/{index:06}"), json!("3")))
             .collect();
         let extended = extend(
             &server,
@@ -395,7 +408,7 @@ async fn no_result_or_page_grows_with_the_economy() {
 
     let balances = Target::Balances {
         economy_id: economy_id.clone(),
-        account: "warehouse".into(),
+        account: "warehouse".parse().unwrap(),
         prefix: None,
     };
     let mut seen = std::collections::HashSet::new();
@@ -418,8 +431,8 @@ async fn no_result_or_page_grows_with_the_economy() {
 
     let filtered = Target::Balances {
         economy_id: economy_id.clone(),
-        account: "warehouse".into(),
-        prefix: Some("sku:0999".into()),
+        account: "warehouse".parse().unwrap(),
+        prefix: Some("sku/0999".into()),
     };
     let filtered = read(&server, &filtered.uri()).await;
     assert_eq!(filtered["items"].as_array().unwrap().len(), 100);
@@ -442,8 +455,11 @@ async fn no_result_or_page_grows_with_the_economy() {
     let suggestions = complete(
         &server,
         "prefix",
-        "sku:",
-        &[("economy_id", &economy_id), ("account", "warehouse")],
+        "sku/",
+        &[
+            ("economy_id", economy_id.as_str()),
+            ("account", "warehouse"),
+        ],
     )
     .await
     .unwrap();
@@ -458,6 +474,7 @@ async fn bad_cursors_and_unknown_resources_are_refused() {
     let economy_id = id(&create(&server, fixture()).await);
     let foreign = Target::Accounts {
         economy_id: economy_id.clone(),
+        prefix: None,
     }
     .page_uri("1.00000000");
     assert!(
@@ -467,7 +484,7 @@ async fn bad_cursors_and_unknown_resources_are_refused() {
             .is_err()
     );
     let missing = Target::Economy {
-        economy_id: "eco_missing".into(),
+        economy_id: missing(),
     }
     .uri();
     assert!(
@@ -478,7 +495,7 @@ async fn bad_cursors_and_unknown_resources_are_refused() {
     );
     let account = Target::Balances {
         economy_id,
-        account: "nobody".into(),
+        account: "nobody".parse().unwrap(),
         prefix: None,
     }
     .uri();
@@ -494,9 +511,14 @@ async fn bad_cursors_and_unknown_resources_are_refused() {
 async fn completion_needs_the_arguments_it_depends_on() {
     let server = AxionomyMcp::default();
     let economy_id = id(&create(&server, fixture()).await);
-    let accounts = complete(&server, "account", "s", &[("economy_id", &economy_id)])
-        .await
-        .unwrap();
+    let accounts = complete(
+        &server,
+        "account",
+        "s",
+        &[("economy_id", economy_id.as_str())],
+    )
+    .await
+    .unwrap();
     assert_eq!(accounts.values, ["sink", "source"]);
     assert!(complete(&server, "account", "s", &[]).await.is_err());
 }
@@ -539,9 +561,9 @@ async fn search_task(server: &AxionomyMcp, max_expansions: usize) -> (TaskManage
     }))
     .unwrap();
     let source = server.snapshot(&economy_id).await.unwrap();
-    let goal = Goal::new().require(
-        "sink".to_owned(),
-        [("token".to_owned(), axionomy::Quantity::new(1))].into(),
+    let goal = paths::Goal::new().require(
+        "sink".parse().unwrap(),
+        [("token".parse().unwrap(), axionomy::Quantity::new(1))].into(),
     );
     let tasks = TaskManager::new();
     let snapshots = server.snapshots.clone();
@@ -561,7 +583,7 @@ async fn a_search_solution_is_the_snapshot_it_reaches() {
     let trace = read(
         &server,
         &uri(Target::Exchanges {
-            economy_id: solution.to_owned(),
+            economy_id: solution.parse().unwrap(),
         }),
     )
     .await;

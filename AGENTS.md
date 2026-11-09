@@ -23,6 +23,11 @@ user directs otherwise. Keep commits focused on the milestone's changes.
 - Keep `AccountId`, `Asset`, `Role` and `RateId` distinct in Rust. Keep semantic
   state private and expose mutation only through the core. Do not replace typed
   APIs with strings, JSON, unchecked casts or runtime-only checks.
+- Every identifier gets a type. A `String` is allowed only for prose people
+  read (labels, titles, messages), text a protocol defines as text (URIs,
+  completion values, resource contents), or rejected input quoted in an error,
+  and its use should make that reason obvious. Identifiers written as data are
+  paths (`axionomy::path`); handles a server mints have their own types.
 - Write idiomatic Rust. The specification constrains behavior, not code shape.
 - Run the Rust checks (`cargo fmt --check`, `cargo clippy --workspace
   --all-targets --all-features -D warnings`, `cargo test --workspace

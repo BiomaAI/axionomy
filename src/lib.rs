@@ -6,6 +6,8 @@ pub mod amount;
 pub mod basket;
 pub mod economy;
 pub mod exchange;
+pub mod path;
+pub mod paths;
 pub mod quantity;
 pub mod rate;
 
@@ -18,6 +20,7 @@ pub use economy::{
     ModelIssue, ObservationKey, ReplayResult, StateFingerprint,
 };
 pub use exchange::{AccountDelta, Exchange, Receipt, Trace};
+pub use path::{AccountPath, AssetPath, PathError, PathKind, RatePath, RolePath};
 pub use quantity::{Quantity, QuantityError, Rounding};
 pub use rate::{
     ComputedAmount, LinearInvariant, Measure, QuantityComparison, QuantityExpression, Rate,

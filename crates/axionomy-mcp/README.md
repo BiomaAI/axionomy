@@ -31,7 +31,13 @@ as a resource, one page at a time.
 ## Authoring
 
 `axionomy_economy_create` and `axionomy_economy_extend` take the same entries,
-keyed by ID, with every collection optional:
+keyed by ID, with every collection optional. Accounts, assets, rates, roles and
+invariants are identified by paths: lowercase segments of `a`–`z`, `0`–`9` and
+`-`, separated by `/`, such as `loans/42` or `agents/7/wallet`. Each kind is
+its own Rust type (`AccountPath`, `AssetPath`, `RatePath`, `RolePath`,
+`InvariantPath`), and a malformed path is refused before anything runs. The
+hierarchy is for people and tools, such as prefix queries; it never decides
+whether an exchange is valid.
 
 ```json
 {
@@ -59,19 +65,21 @@ decides what a valid economy is.
 ## Resources
 
 Resources hold the data. Their URI templates (RFC 6570) are listed by
-`resources/templates/list`:
+`resources/templates/list`. A path goes last in its URI and appears as is
+(`{+account}` expands without escaping), so an account's balances are
+`axionomy://economy/{economy_id}/accounts/agents/7/wallet`:
 
 | Template | Content |
 | --- | --- |
 | `axionomy://economy/{economy_id}` | Origin, parent and counts |
-| `…/accounts{?cursor}` | Accounts and how many assets each holds |
-| `…/accounts/{account}/balances{?prefix,cursor}` | Nonzero balances, optionally by asset-ID prefix |
+| `…/accounts{?prefix,cursor}` | Accounts and how many assets each holds, optionally by path prefix such as `agents/7/` |
+| `…/accounts/{+account}{?prefix,cursor}` | An account's nonzero balances, optionally by asset-path prefix |
 | `…/rates{?asset,cursor}` | Rates and their roles, optionally only those that move `asset` |
-| `…/rates/{rate}` | Roles, distinct pairs, parameters and counts |
-| `…/rates/{rate}/amounts{?cursor}` | Fixed, then computed, amounts per unit |
-| `…/rates/{rate}/conditions{?cursor}` | Conditions every exchange must satisfy |
+| `…/rates/{+rate}` | Roles, distinct pairs, parameters and counts |
+| `…/rate-amounts/{+rate}{?cursor}` | Fixed, then computed, amounts per unit |
+| `…/rate-conditions/{+rate}{?cursor}` | Conditions every exchange must satisfy |
 | `…/invariants{?cursor}` | Conservation laws and how many assets each weights |
-| `…/invariants/{invariant}/weights{?cursor}` | Asset weights |
+| `…/invariants/{+invariant}{?cursor}` | Asset weights |
 | `…/changes{?cursor}` | Quantities moved by the exchanges that made the snapshot |
 | `…/exchanges{?cursor}` | Those exchanges; replaying them on the parent reproduces it |
 | `axionomy://assessment/{assessment_id}` and `…/lines{?cursor}` | An assessment and what explains it |
@@ -111,13 +119,15 @@ stored assessment.
 
 ## Handles
 
-A snapshot handle is a BLAKE3 hash, keyed with a secret drawn from the
-operating system when the store is created, of the parent handle and the
-operation. Retrying an operation therefore returns the same handle without
+A snapshot handle, `EconomyId`, is written `eco-` and 64 hexadecimal digits: a
+BLAKE3 hash, keyed with a secret drawn from the operating system when the store
+is created, of the parent handle and the operation. A handle is not a path:
+the server mints it, it means nothing to read, and anything else is refused. Retrying an operation therefore returns the same handle without
 storing the economy again, and nobody without the server can derive a handle
 from an economy's content. Two different histories that reach the same
 balances get different handles, so a handle also names how its state was
-reached. Assessment handles are keyed the same way.
+reached. Assessment handles, `AssessmentId`, are written `asm-` and keyed the
+same way.
 
 `AxionomyMcp<S>` is generic over the small `SnapshotStore` contract: store a
 snapshot under the handle derived from its parent and operation, and resolve a

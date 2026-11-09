@@ -476,8 +476,17 @@ decoding; it does not by itself promise schema migration. The one exception
 is authoring at scale: the MCP adapter accepts economies as bounded chunks of
 entries keyed by ID, because an economy with 100,000 assets cannot travel as
 one document. Those entries reach the kernel only through `EconomyBuilder`, so
-they add no second model. The MCP string-ID profile is a current reference
-boundary, not an invented historical `V1` model hierarchy.
+they add no second model.
+
+An economy written as data identifies accounts, assets, rates and roles by
+paths: lowercase segments of `a`–`z`, `0`–`9` and `-` separated by `/`, such as
+`loans/42`. `axionomy::path` gives each kind its own type (`AccountPath`,
+`AssetPath`, `RatePath`, `RolePath`), so one can never stand for another, and
+`axionomy::paths` instantiates the kernel's types with them. Paths need no
+escaping in URIs, headers, JSON or command lines, and their hierarchy serves
+people and tools without ever deciding whether an exchange is valid. Problems
+with Rust ontologies keep their own enums. The paths profile is a current
+reference boundary, not an invented historical `V1` model hierarchy.
 
 ### 5.2 Numeric and typed authoring boundaries
 

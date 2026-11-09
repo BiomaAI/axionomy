@@ -2,18 +2,39 @@
 //! `EconomyBuilder`, so the kernel decides what a valid economy is; this module
 //! only refuses entries that would replace something the economy already has.
 
-use crate::wire::{Direction, EconomyEntries, RateEntries, WireEconomy};
-use axionomy::{Account, Basket, EconomyBuilder, LinearInvariant, Rate};
+use crate::handles::InvariantPath;
+use crate::messages::{Direction, EconomyEntries, RateEntries};
+use axionomy::{AccountPath, AssetPath, RatePath, RolePath, paths};
 use indexmap::IndexMap;
 use std::collections::{BTreeMap, HashSet};
+use thiserror::Error;
 
 /// Entries one call may add.
 pub(crate) const MAX_ENTRIES: usize = 10_000;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub(crate) enum AuthoringError {
+    #[error(
+        "{entries} entries exceed the limit of {MAX_ENTRIES} per call; add the rest with axionomy_economy_extend"
+    )]
     TooLarge { entries: usize },
-    Conflict(String),
+    #[error("account `{account}` already holds `{asset}`")]
+    AccountHolds {
+        account: AccountPath,
+        asset: AssetPath,
+    },
+    #[error("rate `{rate}` already has a {direction} amount of `{asset}` for role `{role}`")]
+    RateHas {
+        rate: RatePath,
+        direction: Direction,
+        role: RolePath,
+        asset: AssetPath,
+    },
+    #[error("invariant `{invariant}` already weights `{asset}`")]
+    InvariantWeights {
+        invariant: InvariantPath,
+        asset: AssetPath,
+    },
 }
 
 impl EconomyEntries {
@@ -49,20 +70,20 @@ impl RateEntries {
 /// The economy `base` becomes with `entries` added; `None` starts from an empty
 /// economy.
 pub(crate) fn extend(
-    base: Option<&WireEconomy>,
+    base: Option<&paths::Economy>,
     entries: EconomyEntries,
-) -> Result<WireEconomy, AuthoringError> {
+) -> Result<paths::Economy, AuthoringError> {
     let size = entries.len();
     if size > MAX_ENTRIES {
         return Err(AuthoringError::TooLarge { entries: size });
     }
 
-    let mut accounts: IndexMap<String, Account<String>> = base
+    let mut accounts: IndexMap<AccountPath, paths::Account> = base
         .into_iter()
-        .flat_map(WireEconomy::accounts)
+        .flat_map(paths::Economy::accounts)
         .map(|(id, account)| (id.clone(), account.clone()))
         .collect();
-    let mut rates: IndexMap<String, Rate<String, String>> = base
+    let mut rates: IndexMap<RatePath, paths::Rate> = base
         .into_iter()
         .flat_map(|economy| {
             economy
@@ -70,9 +91,9 @@ pub(crate) fn extend(
                 .filter_map(|id| Some((id.clone(), economy.rate(id)?.clone())))
         })
         .collect();
-    let mut invariants: IndexMap<String, LinearInvariant<String>> = base
+    let mut invariants: IndexMap<String, paths::LinearInvariant> = base
         .into_iter()
-        .flat_map(WireEconomy::invariants)
+        .flat_map(paths::Economy::invariants)
         .map(|invariant| (invariant.name().to_owned(), invariant.clone()))
         .collect();
 
@@ -81,13 +102,11 @@ pub(crate) fn extend(
         let mut balances = account.balances().clone();
         for (asset, quantity) in amounts {
             if balances.get(&asset).is_some() {
-                return Err(AuthoringError::Conflict(format!(
-                    "account `{id}` already holds `{asset}`"
-                )));
+                return Err(AuthoringError::AccountHolds { account: id, asset });
             }
             balances.insert(asset, quantity);
         }
-        *account = Account::new(balances);
+        *account = paths::Account::new(balances);
     }
 
     for (id, added) in entries.rates {
@@ -96,19 +115,22 @@ pub(crate) fn extend(
         rates.insert(id, rate);
     }
 
-    for (name, weights) in entries.invariants {
+    for (path, weights) in entries.invariants {
+        // The kernel names an invariant with a label; here the label is its path.
+        let name = path.to_string();
         let mut invariant = invariants
             .shift_remove(&name)
-            .unwrap_or_else(|| LinearInvariant::new(name.clone()));
-        let weighted: HashSet<String> = invariant
+            .unwrap_or_else(|| paths::LinearInvariant::new(name.clone()));
+        let weighted: HashSet<AssetPath> = invariant
             .weights()
             .map(|(asset, _)| asset.clone())
             .collect();
         for (asset, weight) in weights {
             if weighted.contains(&asset) {
-                return Err(AuthoringError::Conflict(format!(
-                    "invariant `{name}` already weights `{asset}`"
-                )));
+                return Err(AuthoringError::InvariantWeights {
+                    invariant: path,
+                    asset,
+                });
             }
             invariant = invariant.weight(asset, weight);
         }
@@ -117,7 +139,7 @@ pub(crate) fn extend(
 
     let builder = accounts
         .into_iter()
-        .fold(EconomyBuilder::new(), |builder, (id, account)| {
+        .fold(paths::EconomyBuilder::new(), |builder, (id, account)| {
             builder.account(id, account)
         });
     let builder = rates
@@ -125,17 +147,17 @@ pub(crate) fn extend(
         .fold(builder, |builder, (id, rate)| builder.rate(id, rate));
     let builder = invariants
         .into_values()
-        .fold(builder, EconomyBuilder::invariant);
+        .fold(builder, paths::EconomyBuilder::invariant);
     Ok(builder
         .build()
         .expect("authored IDs are unique keys, so the model has no duplicate identifiers"))
 }
 
 fn extend_rate(
-    id: &str,
-    mut rate: Rate<String, String>,
+    id: &RatePath,
+    mut rate: paths::Rate,
     added: RateEntries,
-) -> Result<Rate<String, String>, AuthoringError> {
+) -> Result<paths::Rate, AuthoringError> {
     let statics = [
         (Direction::Consume, added.consume),
         (Direction::Produce, added.produce),
@@ -152,11 +174,14 @@ fn extend_rate(
                 .keys()
                 .find(|asset| existing.is_some_and(|basket| basket.get(*asset).is_some()))
             {
-                return Err(AuthoringError::Conflict(format!(
-                    "rate `{id}` already has a {direction:?} amount of `{asset}` for role `{role}`"
-                )));
+                return Err(AuthoringError::RateHas {
+                    rate: id.clone(),
+                    direction,
+                    role,
+                    asset: asset.clone(),
+                });
             }
-            let basket: Basket<String> = amounts
+            let basket: paths::Basket = amounts
                 .into_iter()
                 .filter(|(_, quantity)| !quantity.is_zero())
                 .collect();

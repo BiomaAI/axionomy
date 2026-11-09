@@ -1,27 +1,18 @@
-//! Tool inputs and outputs. IDs are strings and quantities are decimal strings
-//! up to 2²⁵⁶ − 1. Every map is keyed by ID and every collection may be
-//! omitted when empty. Maps are ordered by ID, so the same entries produce the
-//! same snapshot handle however a client orders its JSON keys.
+//! Tool inputs and outputs. Accounts, assets, rates and roles are identified by
+//! paths such as `loans/42`; quantities are decimal strings up to 2²⁵⁶ − 1.
+//! Every map is keyed by ID and every collection may be omitted when empty.
+//! Maps are ordered by ID, so the same entries produce the same snapshot handle
+//! however a client orders its JSON keys.
 
-use axionomy::{
-    ApplyError, AssessmentStatus, Economy, Exchange, ExchangeAssessment, Quantity,
-    QuantityExpression, RateCondition, Receipt,
-};
+use crate::handles::{AssessmentId, EconomyId, InvariantPath};
+use axionomy::{AccountPath, AssessmentStatus, AssetPath, Quantity, RatePath, RolePath, paths};
 use axionomy_search::GraphSearchProgress;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
-pub type WireEconomy = Economy<String, String, String, String>;
-pub type WireExchange = Exchange<String, String, String>;
-pub type WireReceipt = Receipt<String, String, String, String>;
-pub type WireAssessment = ExchangeAssessment<String, String, String, String>;
-pub type WireApplyError = ApplyError<String, String, String, String>;
-pub type WireCondition = RateCondition<String, String>;
-pub type WireExpression = QuantityExpression<String, String>;
-
-/// Quantities by asset ID.
-pub type Amounts = BTreeMap<String, Quantity>;
+/// Quantities by asset.
+pub type Amounts = BTreeMap<AssetPath, Quantity>;
 
 /// Entries to add to an economy, at most 10,000 per call. Adding never
 /// replaces: an account must not already hold an asset it is given, and a
@@ -32,15 +23,15 @@ pub struct EconomyEntries {
     /// Balances by account ID. A new account ID opens that account; `{}` opens
     /// it empty.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
-    pub accounts: BTreeMap<String, Amounts>,
+    pub accounts: BTreeMap<AccountPath, Amounts>,
     /// Rates by rate ID. A new rate ID adds that rate; an existing one gains
     /// the given amounts, role pairs and conditions.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
-    pub rates: BTreeMap<String, RateEntries>,
-    /// Linear conservation laws by name: an integer weight per asset. Every
+    pub rates: BTreeMap<RatePath, RateEntries>,
+    /// Linear conservation laws by path: an integer weight per asset. Every
     /// exchange must leave each law's weighted sum over all accounts unchanged.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
-    pub invariants: BTreeMap<String, BTreeMap<String, i64>>,
+    pub invariants: BTreeMap<InvariantPath, BTreeMap<AssetPath, i64>>,
 }
 
 /// What one unit of an exchange moves, by role. An exchange binds each role to
@@ -50,23 +41,23 @@ pub struct EconomyEntries {
 pub struct RateEntries {
     /// Assets taken from each role's account.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
-    pub consume: BTreeMap<String, Amounts>,
+    pub consume: BTreeMap<RolePath, Amounts>,
     /// Assets given to each role's account.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
-    pub produce: BTreeMap<String, Amounts>,
+    pub produce: BTreeMap<RolePath, Amounts>,
     /// Assets each role's account must hold and keeps.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
-    pub preserve: BTreeMap<String, Amounts>,
+    pub preserve: BTreeMap<RolePath, Amounts>,
     /// Role pairs that must bind different accounts.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub distinct: Vec<(String, String)>,
+    pub distinct: Vec<(RolePath, RolePath)>,
     /// Amounts evaluated from balances, units and parameters when an exchange
     /// is assessed, rounded in their stated direction.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub computed: Vec<ComputedEntry>,
     /// Comparisons every exchange must satisfy.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub conditions: Vec<WireCondition>,
+    pub conditions: Vec<paths::RateCondition>,
 }
 
 /// One amount computed when an exchange is assessed.
@@ -74,9 +65,9 @@ pub struct RateEntries {
 #[serde(deny_unknown_fields)]
 pub struct ComputedEntry {
     pub direction: Direction,
-    pub role: String,
-    pub asset: String,
-    pub quantity: WireExpression,
+    pub role: RolePath,
+    pub asset: AssetPath,
+    pub quantity: paths::QuantityExpression,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -85,6 +76,16 @@ pub enum Direction {
     Consume,
     Produce,
     Preserve,
+}
+
+impl std::fmt::Display for Direction {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(match self {
+            Self::Consume => "consume",
+            Self::Produce => "produce",
+            Self::Preserve => "preserve",
+        })
+    }
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
@@ -97,16 +98,16 @@ pub struct EconomyCreateRequest {
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct EconomyExtendRequest {
-    pub economy_id: String,
+    pub economy_id: EconomyId,
     pub entries: EconomyEntries,
 }
 
 /// A stored snapshot and what it contains.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct EconomyStored {
-    pub economy_id: String,
+    pub economy_id: EconomyId,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub parent_id: Option<String>,
+    pub parent_id: Option<EconomyId>,
     /// The same operation on the same parent was stored before; this is that
     /// snapshot.
     pub deduplicated: bool,
@@ -125,8 +126,8 @@ pub struct EconomyCounts {
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ExchangeRequest {
-    pub economy_id: String,
-    pub exchange: WireExchange,
+    pub economy_id: EconomyId,
+    pub exchange: paths::Exchange,
 }
 
 /// One quantity an exchange moves or lacks, flattened from its accounts.
@@ -135,8 +136,8 @@ pub struct QuantityLine {
     /// Position of the exchange in its trace, for snapshots made by several.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub step: Option<usize>,
-    pub account: String,
-    pub asset: String,
+    pub account: AccountPath,
+    pub asset: AssetPath,
     pub kind: LineKind,
     pub quantity: Quantity,
 }
@@ -153,12 +154,12 @@ pub enum LineKind {
 
 #[derive(Debug, Clone, Serialize, JsonSchema)]
 pub struct AssessResponse {
-    pub economy_id: String,
-    pub assessment_id: String,
+    pub economy_id: EconomyId,
+    pub assessment_id: AssessmentId,
     pub status: AssessmentStatus,
     /// Why an invalid exchange cannot apply.
     #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub issues: Vec<WireApplyError>,
+    pub issues: Vec<paths::ApplyError>,
     /// Shortfalls of an infeasible exchange, or the projected changes of an
     /// applicable one.
     pub lines: usize,
@@ -169,8 +170,8 @@ pub struct AssessResponse {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct ExchangedResponse {
-    pub source_economy_id: String,
-    pub economy_id: String,
+    pub source_economy_id: EconomyId,
+    pub economy_id: EconomyId,
     pub deduplicated: bool,
     pub exchanges: usize,
     /// Quantity lines the exchanges moved; the snapshot's `changes` resource
@@ -181,20 +182,20 @@ pub struct ExchangedResponse {
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ReplayRequest {
-    pub economy_id: String,
+    pub economy_id: EconomyId,
     /// At most 1,000 exchanges, applied in order; the first failure stops the
     /// replay and stores nothing.
-    pub exchanges: Vec<WireExchange>,
+    pub exchanges: Vec<paths::Exchange>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct SearchRequest {
-    pub economy_id: String,
+    pub economy_id: EconomyId,
     /// Balances each named account must reach.
-    pub goal: BTreeMap<String, Amounts>,
+    pub goal: BTreeMap<AccountPath, Amounts>,
     /// At most 1,000 concrete exchanges, reconsidered at every state.
-    pub candidates: Vec<WireExchange>,
+    pub candidates: Vec<paths::Exchange>,
     /// Maximum states the search may expand before completing without a solution.
     pub max_expansions: usize,
     /// Deterministic number of state expansions between observable progress updates.
@@ -216,7 +217,7 @@ pub enum SearchOutcome {
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct SearchResponse {
-    pub economy_id: String,
+    pub economy_id: EconomyId,
     pub outcome: SearchOutcome,
     pub progress: GraphSearchProgress,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -226,7 +227,7 @@ pub struct SearchResponse {
 /// The snapshot a solution reaches; its `exchanges` resource is the trace.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct SearchSolved {
-    pub economy_id: String,
+    pub economy_id: EconomyId,
     pub exchanges: usize,
     pub cost: u64,
 }

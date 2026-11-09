@@ -1,14 +1,13 @@
 //! Reads `axionomy://` resources and completes their template arguments.
 
 use crate::{
-    resources::{Address, PAGE_FRAMES, PAGE_ROWS, Target, page},
+    handles::{AssessmentId, EconomyId, InvariantPath},
+    messages::{Direction, DocumentSummary, EconomyCounts},
+    resources::{Address, PAGE_FRAMES, PAGE_ROWS, Page, Target, page},
     server::{AxionomyMcp, StoredAssessment, assessment_lines, counts, receipt_lines},
     store::{Origin, Snapshot, SnapshotStore},
-    wire::{
-        Direction, DocumentSummary, EconomyCounts, WireApplyError, WireExchange, WireExpression,
-    },
 };
-use axionomy::{AssessmentStatus, Quantity, Rate};
+use axionomy::{AccountPath, AssessmentStatus, AssetPath, Quantity, RatePath, RolePath, paths};
 use axionomy_service::{RunArtifact, RunRequest};
 use rmcp::{
     ErrorData as McpError,
@@ -16,8 +15,6 @@ use rmcp::{
 };
 use serde::Serialize;
 use std::sync::Arc;
-
-type WireRate = Rate<String, String>;
 
 impl<S: SnapshotStore> AxionomyMcp<S> {
     /// The JSON content of one resource page.
@@ -101,7 +98,7 @@ impl<S: SnapshotStore> AxionomyMcp<S> {
                 )?)
             }
             Target::Economy { economy_id }
-            | Target::Accounts { economy_id }
+            | Target::Accounts { economy_id, .. }
             | Target::Balances { economy_id, .. }
             | Target::Rates { economy_id, .. }
             | Target::Rate { economy_id, .. }
@@ -123,9 +120,12 @@ impl<S: SnapshotStore> AxionomyMcp<S> {
         &self,
         request: CompleteRequestParams,
     ) -> Result<CompleteResult, McpError> {
-        if request.r#ref.as_resource_uri().is_none() {
+        let Some(template) = request.r#ref.as_resource_uri() else {
             return Ok(CompleteResult::default());
-        }
+        };
+        // `prefix` filters account paths on the accounts listing and asset
+        // paths on an account's balances.
+        let accounts_template = template.contains("/accounts{");
         let arguments = request
             .context
             .and_then(|context| context.arguments)
@@ -140,25 +140,46 @@ impl<S: SnapshotStore> AxionomyMcp<S> {
         let candidates: Vec<String> = match argument {
             "account" | "rate" | "invariant" | "asset" | "prefix" => {
                 let snapshot = self
-                    .stored(needed("economy_id")?)
+                    .stored(
+                        &needed("economy_id")?
+                            .parse::<EconomyId>()
+                            .map_err(|error| {
+                                McpError::invalid_params(format!("`economy_id`: {error}"), None)
+                            })?,
+                    )
                     .await?
                     .ok_or_else(not_found)?;
                 let economy = &snapshot.economy;
                 match argument {
-                    "account" => economy.accounts().map(|(id, _)| id.clone()).collect(),
-                    "rate" => economy.rate_ids().cloned().collect(),
+                    "account" => economy.accounts().map(|(id, _)| id.to_string()).collect(),
+                    "prefix" if accounts_template => {
+                        economy.accounts().map(|(id, _)| id.to_string()).collect()
+                    }
+                    "rate" => economy.rate_ids().map(ToString::to_string).collect(),
                     "invariant" => economy
                         .invariants()
                         .map(|invariant| invariant.name().to_owned())
                         .collect(),
-                    "asset" => economy.asset_keys().into_iter().cloned().collect(),
-                    _ => economy
-                        .account(needed("account")?)
-                        .ok_or_else(not_found)?
-                        .balances()
-                        .iter()
-                        .map(|(asset, _)| asset.clone())
+                    "asset" => economy
+                        .asset_keys()
+                        .into_iter()
+                        .map(ToString::to_string)
                         .collect(),
+                    _ => {
+                        let account: AccountPath = needed("account")?.parse().map_err(|error| {
+                            McpError::invalid_params(
+                                format!("`account` is not a path: {error}"),
+                                None,
+                            )
+                        })?;
+                        economy
+                            .account(&account)
+                            .ok_or_else(not_found)?
+                            .balances()
+                            .iter()
+                            .map(|(asset, _)| asset.to_string())
+                            .collect()
+                    }
                 }
             }
             "document_id" => self
@@ -187,7 +208,7 @@ impl<S: SnapshotStore> AxionomyMcp<S> {
         Ok(CompleteResult::new(completion))
     }
 
-    async fn stored(&self, economy_id: &str) -> Result<Option<Arc<Snapshot>>, McpError> {
+    async fn stored(&self, economy_id: &EconomyId) -> Result<Option<Arc<Snapshot>>, McpError> {
         match self.snapshot(economy_id).await {
             Ok(snapshot) => Ok(Some(snapshot)),
             Err(error) if error.is_not_found() => Ok(None),
@@ -195,7 +216,7 @@ impl<S: SnapshotStore> AxionomyMcp<S> {
         }
     }
 
-    fn assessment(&self, assessment_id: &str) -> Option<Arc<StoredAssessment>> {
+    fn assessment(&self, assessment_id: &AssessmentId) -> Option<Arc<StoredAssessment>> {
         self.assessments.read().ok()?.get(assessment_id).cloned()
     }
 
@@ -208,7 +229,7 @@ impl<S: SnapshotStore> AxionomyMcp<S> {
 /// invariant the snapshot does not have.
 fn read_snapshot(
     address: &Address,
-    economy_id: &str,
+    economy_id: &EconomyId,
     snapshot: &Snapshot,
 ) -> Option<Result<String, McpError>> {
     let economy = &snapshot.economy;
@@ -219,7 +240,7 @@ fn read_snapshot(
     let content = match &address.target {
         Target::Economy { .. } => json(&EconomyView {
             economy_id,
-            parent_id: snapshot.parent_id.as_deref(),
+            parent_id: snapshot.parent_id.as_ref(),
             origin: match &snapshot.origin {
                 Origin::Authored { entries } => OriginView::Authored { entries: *entries },
                 Origin::Exchanged { receipts } => OriginView::Exchanged {
@@ -228,11 +249,16 @@ fn read_snapshot(
             },
             counts: counts(economy),
         }),
-        Target::Accounts { .. } => page(
+        Target::Accounts { prefix, .. } => page(
             address,
             economy
                 .accounts()
                 .enumerate()
+                .filter(|(_, (account, _))| {
+                    prefix
+                        .as_ref()
+                        .is_none_or(|prefix| account.as_str().starts_with(prefix.as_str()))
+                })
                 .map(|(position, (account, holder))| {
                     (
                         position,
@@ -257,7 +283,7 @@ fn read_snapshot(
                     .filter(|(_, (asset, _))| {
                         prefix
                             .as_ref()
-                            .is_none_or(|prefix| asset.starts_with(prefix.as_str()))
+                            .is_none_or(|prefix| asset.as_str().starts_with(prefix.as_str()))
                     })
                     .map(|(position, (asset, quantity))| {
                         (
@@ -284,7 +310,7 @@ fn read_snapshot(
                         position,
                         RateRow {
                             rate: id,
-                            roles: rate.roles().map(String::as_str).collect(),
+                            roles: rate.roles().collect(),
                         },
                     )
                 }),
@@ -296,10 +322,10 @@ fn read_snapshot(
             json(&RateView {
                 economy_id,
                 rate: id,
-                roles: rate.roles().map(String::as_str).collect(),
+                roles: rate.roles().collect(),
                 distinct: rate
                     .distinct_roles()
-                    .map(|(left, right)| (left.as_str(), right.as_str()))
+                    .map(|(left, right)| (left, right))
                     .collect(),
                 parameters: rate.parameter_names().into_iter().collect(),
                 amounts: amounts(rate).count(),
@@ -321,21 +347,29 @@ fn read_snapshot(
                 .invariants()
                 .enumerate()
                 .map(|(position, invariant)| {
-                    (
-                        position,
-                        InvariantRow {
-                            invariant: invariant.name(),
+                    let row = invariant
+                        .name()
+                        .parse()
+                        .map(|path| InvariantRow {
+                            invariant: path,
                             weights: invariant.weights().count(),
-                        },
-                    )
+                        })
+                        .map_err(|error| McpError::internal_error(error.to_string(), None));
+                    (position, row)
                 }),
             PAGE_ROWS,
         )
-        .and_then(|page| json(&page)),
+        .and_then(|page| {
+            let items = page.items.into_iter().collect::<Result<Vec<_>, _>>()?;
+            json(&Page {
+                items,
+                next_cursor: page.next_cursor,
+            })
+        }),
         Target::InvariantWeights { invariant, .. } => {
             let invariant = economy
                 .invariants()
-                .find(|candidate| candidate.name() == invariant)?;
+                .find(|candidate| candidate.name() == invariant.as_str())?;
             page(
                 address,
                 invariant
@@ -367,13 +401,13 @@ fn read_snapshot(
 }
 
 /// Whether one unit of `rate` moves or requires `asset`.
-fn moves(rate: &WireRate, asset: &str) -> bool {
+fn moves(rate: &paths::Rate, asset: &AssetPath) -> bool {
     amounts(rate).any(|amount| amount.asset == asset)
 }
 
 /// What one unit of a rate consumes, produces and preserves: fixed amounts by
 /// direction and role, then computed ones.
-fn amounts(rate: &WireRate) -> impl Iterator<Item = AmountRow<'_>> {
+fn amounts(rate: &paths::Rate) -> impl Iterator<Item = AmountRow<'_>> {
     let fixed = [Direction::Consume, Direction::Produce, Direction::Preserve]
         .into_iter()
         .flat_map(move |direction| {
@@ -419,9 +453,9 @@ fn json(value: &impl Serialize) -> Result<String, McpError> {
 
 #[derive(Serialize)]
 struct EconomyView<'a> {
-    economy_id: &'a str,
+    economy_id: &'a EconomyId,
     #[serde(skip_serializing_if = "Option::is_none")]
-    parent_id: Option<&'a str>,
+    parent_id: Option<&'a EconomyId>,
     origin: OriginView,
     counts: EconomyCounts,
 }
@@ -435,28 +469,28 @@ enum OriginView {
 
 #[derive(Serialize)]
 struct AccountRow<'a> {
-    account: &'a str,
+    account: &'a AccountPath,
     assets: usize,
 }
 
 #[derive(Serialize)]
 struct BalanceRow<'a> {
-    asset: &'a str,
+    asset: &'a AssetPath,
     quantity: Quantity,
 }
 
 #[derive(Serialize)]
 struct RateRow<'a> {
-    rate: &'a str,
-    roles: Vec<&'a str>,
+    rate: &'a RatePath,
+    roles: Vec<&'a RolePath>,
 }
 
 #[derive(Serialize)]
 struct RateView<'a> {
-    economy_id: &'a str,
-    rate: &'a str,
-    roles: Vec<&'a str>,
-    distinct: Vec<(&'a str, &'a str)>,
+    economy_id: &'a EconomyId,
+    rate: &'a RatePath,
+    roles: Vec<&'a RolePath>,
+    distinct: Vec<(&'a RolePath, &'a RolePath)>,
     parameters: Vec<&'a str>,
     amounts: usize,
     conditions: usize,
@@ -465,37 +499,37 @@ struct RateView<'a> {
 #[derive(Serialize)]
 struct AmountRow<'a> {
     direction: Direction,
-    role: &'a str,
-    asset: &'a str,
+    role: &'a RolePath,
+    asset: &'a AssetPath,
     #[serde(skip_serializing_if = "Option::is_none")]
     quantity: Option<Quantity>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    computed: Option<&'a WireExpression>,
+    computed: Option<&'a paths::QuantityExpression>,
 }
 
 #[derive(Serialize)]
-struct InvariantRow<'a> {
-    invariant: &'a str,
+struct InvariantRow {
+    invariant: InvariantPath,
     weights: usize,
 }
 
 #[derive(Serialize)]
 struct WeightRow<'a> {
-    asset: &'a str,
+    asset: &'a AssetPath,
     weight: i64,
 }
 
 #[derive(Serialize)]
 struct AssessmentView<'a> {
-    assessment_id: &'a str,
-    economy_id: &'a str,
+    assessment_id: &'a AssessmentId,
+    economy_id: &'a EconomyId,
     /// Exchanges of the failing replay applied before this one; zero for a
     /// snapshot's own state.
     after_exchanges: usize,
-    exchange: &'a WireExchange,
+    exchange: &'a paths::Exchange,
     status: AssessmentStatus,
     #[serde(skip_serializing_if = "<[_]>::is_empty")]
-    issues: &'a [WireApplyError],
+    issues: &'a [paths::ApplyError],
     lines: usize,
 }
 
