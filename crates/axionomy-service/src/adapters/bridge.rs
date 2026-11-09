@@ -442,35 +442,35 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         let (node, asset, status) = if crossing {
             (
                 "bridge",
-                "intransit",
+                Asset::InTransit,
                 format!("crossing until {}", value(Asset::ReadyAt)),
             )
         } else if detour {
             (
                 "detour",
-                "ondetour",
+                Asset::OnDetour,
                 format!("detouring until {}", value(Asset::ReadyAt)),
             )
         } else if east {
-            ("east", "at-east", "arrived".into())
+            ("east", Asset::At(Side::East), "arrived".into())
         } else if timed && clock < value(Asset::Arrival) {
             (
                 "west",
-                "at-west",
+                Asset::At(Side::West),
                 format!("arrives at {}", value(Asset::Arrival)),
             )
         } else if value(Asset::CrossingRight) > 0 {
             (
                 "west",
-                "at-west",
+                Asset::At(Side::West),
                 format!("reserved through {}", value(Asset::LeaseUntil)),
             )
         } else if value(Asset::Submitted) > 0 {
-            ("west", "at-west", "bid in escrow".into())
+            ("west", Asset::At(Side::West), "bid in escrow".into())
         } else {
-            ("west", "at-west", "waiting".into())
+            ("west", Asset::At(Side::West), "waiting".into())
         };
-        let mut entity = link_balance(
+        let mut entity = link_balance::<bridge::Ontology>(
             visual_entity(
                 slug(format!("traveler/{agent:?}")),
                 format!("Agent {agent:?}"),
@@ -484,8 +484,8 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 },
                 Some(status),
             ),
-            slug(format!("bridge/account/agent-{agent:?}")),
-            slug(format!("bridge/asset/{asset}")),
+            &AccountId::Agent(agent),
+            &asset,
         );
         entity.metrics = vec![visual_metric(
             slug("credit"),

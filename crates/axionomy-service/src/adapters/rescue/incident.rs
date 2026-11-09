@@ -1,6 +1,6 @@
 use super::*;
 use axionomy_problems::rescue::incident::{
-    self as rescue, AccountId, Asset, LOCATIONS, Location, Policy, RateId, World,
+    self, AccountId, Asset, LOCATIONS, Location, Policy, RateId, World,
 };
 
 pub(super) fn build(
@@ -8,7 +8,7 @@ pub(super) fn build(
     descriptor: &ProblemDescriptor,
     profile: InstanceProfile,
 ) -> Result<RunArtifact, ServiceError> {
-    let initial = rescue::initial(matches!(profile, InstanceProfile::Stress), run.seed);
+    let initial = incident::initial(matches!(profile, InstanceProfile::Stress), run.seed);
     let mut documents = Vec::new();
     for (strategy, title, description, policy) in [
         (
@@ -30,7 +30,7 @@ pub(super) fn build(
             Policy::StabilizeFirst,
         ),
     ] {
-        let trace = rescue::run(&initial, policy);
+        let trace = incident::run(&initial, policy);
         let final_world = initial
             .replayed(&trace)
             .map_err(|error| problem_error("rescue", error))?;
@@ -43,7 +43,7 @@ pub(super) fn build(
                 source_label: "Multi-patient incident",
             },
             &initial,
-            &rescue::goal(),
+            &incident::goal(),
             &trace,
             objectives(&final_world),
             scene,
@@ -66,7 +66,7 @@ pub(super) fn build(
                 "verified decisions and environmental responses".into(),
             )],
         ));
-        view.proposals.push(proposal(ProposalSpec { id: "undiscovered-patient", label: "Load a patient before finding them", description: "A location hint is insufficient. Physical discovery, co-location, current clinical observations, energy, and an empty evacuation seat are required." }, &initial, &rescue::action(RateId::Load { patient: 0, location: Location::North })));
+        view.proposals.push(proposal(ProposalSpec { id: "undiscovered-patient", label: "Load a patient before finding them", description: "A location hint is insufficient. Physical discovery, co-location, current clinical observations, energy, and an empty evacuation seat are required." }, &initial, &incident::action(RateId::Load { patient: 0, location: Location::North })));
         documents.push(view);
     }
     for index in 0..documents.len() {
@@ -128,18 +128,18 @@ fn objectives(world: &World) -> Vec<ObjectiveView> {
     .map(|(key, label, account, asset, direction)| ObjectiveView {
         key: slug(key),
         label: label.into(),
-        value: rescue::value(world, account, asset).to_string(),
+        value: incident::value(world, account, asset).to_string(),
         direction,
     })
     .collect()
 }
 fn observation(world: &World) -> ObservationView {
-    let key = rescue::responder_view(world).observation_key();
+    let key = incident::responder_view(world).observation_key();
     ObservationView {
         actor: ViewId::new(slug("rescue/actor/responder"), "Rescue crew"),
         label: format!(
             "Crew observations at time {} · undiscovered patients and Nature omitted",
-            rescue::now(world)
+            incident::now(world)
         ),
         visible_accounts: key
             .visible_accounts()
@@ -167,7 +167,7 @@ fn observation(world: &World) -> ObservationView {
     }
 }
 fn scene(_: u64, world: &World) -> Option<Scene> {
-    let val = |account, asset| rescue::value(world, account, asset);
+    let val = |account, asset| incident::value(world, account, asset);
     let present =
         |location| location == Location::Base || val(AccountId::World, Asset::Site(location)) > 0;
     let locations = [
@@ -219,7 +219,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         .into_iter()
         .find(|location| val(AccountId::Responder, Asset::At(*location)) > 0)
         .unwrap_or(Location::Base);
-    let mut crew = link_account(
+    let mut crew = link_account::<incident::Ontology>(
         visual_entity(
             slug("crew"),
             "Evacuation crew",
@@ -240,7 +240,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 .into(),
             ),
         ),
-        slug("rescue/incident/account/responder"),
+        &AccountId::Responder,
     );
     crew.metrics = vec![
         visual_metric(
@@ -293,7 +293,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         } else {
             "Found · awaiting care"
         };
-        let mut entity = link_account(
+        let mut entity = link_account::<incident::Ontology>(
             visual_entity(
                 slug(format!("patient/{id}")),
                 format!("Patient {}", id + 1),
@@ -311,7 +311,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 },
                 Some(status.into()),
             ),
-            slug(format!("rescue/incident/account/patient-{id}")),
+            &patient,
         );
         entity.metrics = vec![
             visual_metric(
@@ -343,7 +343,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
     )
     .with_entities(entities)
     .with_metrics([
-        visual_metric(slug("time"), "Incident time", rescue::now(world), None),
+        visual_metric(slug("time"), "Incident time", incident::now(world), None),
         visual_metric(
             slug("saved"),
             "Patients evacuated",
@@ -387,7 +387,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             );
             if location == Location::Base {
                 entity.metrics = vec![
-                    visual_metric(slug("time"), "Incident time", rescue::now(world), None),
+                    visual_metric(slug("time"), "Incident time", incident::now(world), None),
                     visual_metric(
                         slug("saved"),
                         "Patients evacuated",

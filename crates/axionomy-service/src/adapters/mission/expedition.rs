@@ -1,7 +1,6 @@
 use super::*;
 use axionomy_problems::mission::expedition::{
-    self as mission, AGENTS, AccountId, Agent, Asset, LOCATIONS, Location, Policy, ROADS, RateId,
-    World,
+    self, AGENTS, AccountId, Agent, Asset, LOCATIONS, Location, Policy, ROADS, RateId, World,
 };
 
 pub(super) fn build(
@@ -9,7 +8,7 @@ pub(super) fn build(
     descriptor: &ProblemDescriptor,
     profile: InstanceProfile,
 ) -> Result<RunArtifact, ServiceError> {
-    let initial = mission::initial(matches!(profile, InstanceProfile::Stress), run.seed);
+    let initial = expedition::initial(matches!(profile, InstanceProfile::Stress), run.seed);
     let mut documents = Vec::new();
     for (strategy, title, description, policy) in [
         (
@@ -31,7 +30,7 @@ pub(super) fn build(
             Policy::Rendezvous,
         ),
     ] {
-        let trace = mission::run(&initial, policy);
+        let trace = expedition::run(&initial, policy);
         let final_world = initial
             .replayed(&trace)
             .map_err(|error| problem_error("mission", error))?;
@@ -44,7 +43,7 @@ pub(super) fn build(
                 source_label: "Cooperative expedition",
             },
             &initial,
-            &mission::goal(),
+            &expedition::goal(),
             &trace,
             objectives(&final_world),
             scene,
@@ -73,7 +72,7 @@ pub(super) fn build(
                 "verified timed work, communication and environmental events".into(),
             )],
         ));
-        view.proposals.push(proposal(ProposalSpec { id: "extract-without-intelligence", label: "Extract a casualty before discovery or briefing", description: "Both agents need the confirmed site, physical co-location, free work capacity, energy, and a stabilized patient. An unverified sensor hint cannot satisfy these conditions." }, &initial, &mission::action(RateId::Extract { objective: 0, location: Location::North })));
+        view.proposals.push(proposal(ProposalSpec { id: "extract-without-intelligence", label: "Extract a casualty before discovery or briefing", description: "Both agents need the confirmed site, physical co-location, free work capacity, energy, and a stabilized patient. An unverified sensor hint cannot satisfy these conditions." }, &initial, &expedition::action(RateId::Extract { objective: 0, location: Location::North })));
         documents.push(view);
     }
     for index in 0..documents.len() {
@@ -87,7 +86,7 @@ pub(super) fn build(
     artifact(run, descriptor, documents)
 }
 fn objectives(world: &World) -> Vec<ObjectiveView> {
-    let val = |account, asset| mission::value(world, account, asset);
+    let val = |account, asset| expedition::value(world, account, asset);
     [
         (
             "completed",
@@ -125,7 +124,7 @@ fn objectives(world: &World) -> Vec<ObjectiveView> {
         (
             "time",
             "Elapsed mission time",
-            mission::now(world),
+            expedition::now(world),
             ObjectiveDirectionView::Minimize,
         ),
     ]
@@ -139,7 +138,7 @@ fn objectives(world: &World) -> Vec<ObjectiveView> {
     .collect()
 }
 fn observation(world: &World, agent: Agent) -> ObservationView {
-    let key = mission::agent_view(world, agent).observation_key();
+    let key = expedition::agent_view(world, agent).observation_key();
     ObservationView {
         actor: ViewId::new(
             slug(format!("mission/actor/{agent:?}")),
@@ -147,7 +146,7 @@ fn observation(world: &World, agent: Agent) -> ObservationView {
         ),
         label: format!(
             "{agent:?}'s private observations at tick {}",
-            mission::now(world)
+            expedition::now(world)
         ),
         visible_accounts: key
             .visible_accounts()
@@ -196,7 +195,7 @@ fn observation(world: &World, agent: Agent) -> ObservationView {
     }
 }
 fn scene(_: u64, world: &World) -> Option<Scene> {
-    let val = |account, asset| mission::value(world, account, asset);
+    let val = |account, asset| expedition::value(world, account, asset);
     let nodes = [
         (Location::Base, 400.0, 300.0),
         (Location::North, 140.0, 100.0),
@@ -256,7 +255,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         } else {
             SceneAnchorView::Unanchored
         };
-        let mut entity = link_account(
+        let mut entity = link_account::<expedition::Ontology>(
             visual_entity(
                 slug(format!("agent/{agent:?}")),
                 format!("{agent:?}"),
@@ -278,14 +277,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 },
                 Some(status),
             ),
-            slug(format!(
-                "mission/expedition/account/agent-{}",
-                if agent == Agent::Scout {
-                    "scout"
-                } else {
-                    "medic"
-                }
-            )),
+            &own,
         );
         entity.metrics = vec![
             visual_metric(slug("energy"), "Energy", val(own, Asset::Energy), None),
@@ -326,7 +318,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         let complete = val(account, Asset::Complete) > 0;
         let failed = val(account, Asset::Failed) > 0;
         let carrying = val(account, Asset::Carried) > 0;
-        let carrier = if mission::patient(id) {
+        let carrier = if expedition::patient(id) {
             Agent::Medic
         } else {
             Agent::Scout
@@ -353,16 +345,16 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             "Carried by teammate"
         } else if val(account, Asset::Working) > 0 {
             "Recovery in progress"
-        } else if mission::patient(id) && val(account, Asset::Stable) == 0 {
+        } else if expedition::patient(id) && val(account, Asset::Stable) == 0 {
             "Needs stabilization"
         } else {
             "Ready for recovery"
         };
-        let mut entity = link_account(
+        let mut entity = link_account::<expedition::Ontology>(
             visual_entity(
                 slug(format!("objective/{id}")),
                 account.studio_label(),
-                if mission::patient(id) {
+                if expedition::patient(id) {
                     SceneGlyphView::Person
                 } else {
                     SceneGlyphView::Information
@@ -382,7 +374,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 },
                 Some(status.into()),
             ),
-            slug(format!("mission/expedition/account/objective-{id}")),
+            &account,
         );
         entity.metrics = vec![
             visual_metric(
@@ -402,7 +394,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 None,
             ),
         ];
-        if mission::patient(id) {
+        if expedition::patient(id) {
             entity.metrics.insert(
                 0,
                 visual_metric(
@@ -423,7 +415,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
     )
     .with_entities(entities)
     .with_metrics([
-        visual_metric(slug("time"), "Mission time", mission::now(world), None),
+        visual_metric(slug("time"), "Mission time", expedition::now(world), None),
         visual_metric(
             slug("complete"),
             "Objectives complete",

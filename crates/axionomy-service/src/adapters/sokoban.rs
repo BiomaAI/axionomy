@@ -189,7 +189,6 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
 
     for cell in 0..width * height {
         let account = AccountId::Cell(cell);
-        let account_key = slug(format!("sokoban/account/cell-{cell}"));
         let wall = sokoban::is_wall(world, cell);
         let goal = !world.balance(&account, &Asset::GoalCell).is_zero();
         let dead = sokoban::is_dead_square(world, cell);
@@ -213,7 +212,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 "Warehouse floor".into()
             },
             classes,
-            account: Some(account_key.clone()),
+            account: Some(account_key::<sokoban::Ontology>(&account)),
         });
 
         if !world.balance(&account, &Asset::ExitCell).is_zero() {
@@ -293,7 +292,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             }
         }
         if player == Some(cell) {
-            entities.push(link_balance(
+            entities.push(link_balance::<sokoban::Ontology>(
                 visual_entity(
                     slug("player"),
                     "Player",
@@ -306,14 +305,14 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                     SceneToneView::Active,
                     Some("player".into()),
                 ),
-                account_key.clone(),
-                slug("sokoban/asset/player"),
+                &account,
+                &Asset::Player,
             ));
         }
         if let Some((crate_id, _)) = crates.iter().find(|(_, at)| *at == cell) {
             let on_goal = goal;
             let trapped = dead && !on_goal;
-            entities.push(link_balance(
+            entities.push(link_balance::<sokoban::Ontology>(
                 visual_entity(
                     slug(format!("crate/{crate_id}")),
                     format!("Crate {}", crate_id + 1),
@@ -338,8 +337,8 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                         "crate".into()
                     }),
                 ),
-                account_key,
-                slug(format!("sokoban/asset/crate-{crate_id}")),
+                &account,
+                &Asset::Crate(*crate_id),
             ));
         }
     }

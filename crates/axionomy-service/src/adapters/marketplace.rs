@@ -495,7 +495,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 &marketplace::Asset::SettledOrder(*order),
             )
             .is_zero();
-        let mut entity = link_account(
+        let mut entity = link_account::<marketplace::Ontology>(
             visual_entity(
                 slug(format!("order-token/{order:?}")),
                 format!("Order {order:?}"),
@@ -540,7 +540,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                     .into(),
                 ),
             ),
-            slug(format!("marketplace/account/order-{order:?}")),
+            &AccountId::Order(*order),
         );
         if timed {
             entity.metrics = vec![
@@ -563,7 +563,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
     let participant_entities = [BuyerId::A, BuyerId::B, BuyerId::C]
         .into_iter()
         .map(|buyer| {
-            link_account(
+            link_account::<marketplace::Ontology>(
                 visual_entity(
                     slug(format!("actor/buyer/{buyer:?}")),
                     format!("Buyer {buyer:?}"),
@@ -575,14 +575,14 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                     SceneToneView::Neutral,
                     Some("demand".into()),
                 ),
-                slug(format!("marketplace/account/buyer-{buyer:?}")),
+                &AccountId::Buyer(buyer),
             )
         })
         .chain(
             [SellerId::A, SellerId::B, SellerId::C]
                 .into_iter()
                 .map(|seller| {
-                    link_account(
+                    link_account::<marketplace::Ontology>(
                         visual_entity(
                             slug(format!("actor/seller/{seller:?}")),
                             format!("Seller {seller:?}"),
@@ -594,12 +594,12 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                             SceneToneView::Neutral,
                             Some("supply".into()),
                         ),
-                        slug(format!("marketplace/account/seller-{seller:?}")),
+                        &AccountId::Seller(seller),
                     )
                 }),
         )
         .chain([CarrierId::A, CarrierId::B].into_iter().map(|carrier| {
-            link_account(
+            link_account::<marketplace::Ontology>(
                 visual_entity(
                     slug(format!("actor/carrier/{carrier:?}")),
                     format!("Carrier {carrier:?}"),
@@ -611,7 +611,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                     SceneToneView::Neutral,
                     Some("capacity".into()),
                 ),
-                slug(format!("marketplace/account/carrier-{carrier:?}")),
+                &AccountId::Carrier(carrier),
             )
         }))
         .chain(
@@ -620,18 +620,18 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                     slug("actor/platform"),
                     "Platform",
                     "platform",
-                    slug("marketplace/account/platform"),
+                    AccountId::Platform,
                 ),
                 (
                     slug("actor/tax"),
                     "Tax authority",
                     "tax",
-                    slug("marketplace/account/taxauthority"),
+                    AccountId::TaxAuthority,
                 ),
             ]
             .into_iter()
             .map(|(id, label, node, account)| {
-                link_account(
+                link_account::<marketplace::Ontology>(
                     visual_entity(
                         id,
                         label,
@@ -641,7 +641,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                         SceneToneView::Neutral,
                         Some("settlement role".into()),
                     ),
-                    account,
+                    &account,
                 )
             }),
         );

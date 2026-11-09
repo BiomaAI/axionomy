@@ -116,7 +116,23 @@ pub(super) fn evaluated_integer_front(
     }
 }
 
-pub(super) fn link_account(mut entity: SceneEntityView, account: ItemPath) -> SceneEntityView {
+/// The key every view of `O` gives `account`, so a scene names the account
+/// a frame shows.
+pub(super) fn account_key<O: Ontology>(account: &O::Account) -> ItemPath {
+    DebugOntology::<O>::default().account(account).key
+}
+
+/// The key every view of `O` gives `asset`.
+pub(super) fn asset_key<O: Ontology>(asset: &O::Asset) -> ItemPath {
+    DebugOntology::<O>::default().asset(asset).key
+}
+
+/// Shows `entity` as `account`, citing the account as its evidence.
+pub(super) fn link_account<O: Ontology>(
+    mut entity: SceneEntityView,
+    account: &O::Account,
+) -> SceneEntityView {
+    let account = account_key::<O>(account);
     entity.account = Some(account.clone());
     entity
         .evidence
@@ -124,15 +140,18 @@ pub(super) fn link_account(mut entity: SceneEntityView, account: ItemPath) -> Sc
     entity
 }
 
-pub(super) fn link_balance(
+/// Shows `entity` as `account`, citing its balance of `asset` as evidence.
+pub(super) fn link_balance<O: Ontology>(
     mut entity: SceneEntityView,
-    account: ItemPath,
-    asset: ItemPath,
+    account: &O::Account,
+    asset: &O::Asset,
 ) -> SceneEntityView {
+    let account = account_key::<O>(account);
     entity.account = Some(account.clone());
-    entity
-        .evidence
-        .push(SceneEvidenceRefView::Balance { account, asset });
+    entity.evidence.push(SceneEvidenceRefView::Balance {
+        account,
+        asset: asset_key::<O>(asset),
+    });
     entity
 }
 

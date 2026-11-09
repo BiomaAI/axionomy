@@ -197,36 +197,17 @@ fn refusals(initial: &World) -> Vec<ProposalView> {
     .collect()
 }
 
-fn account_key(account: AccountId) -> ItemPath {
-    let key = match account {
-        AccountId::Market => "market".to_owned(),
-        AccountId::Clock => "clock".to_owned(),
-        AccountId::Oracle => "oracle".to_owned(),
-        AccountId::Depositor(id) => format!("depositor-{id}"),
-        AccountId::Borrower => "borrower".to_owned(),
-        AccountId::Keeper => "keeper".to_owned(),
-        AccountId::Supplier => "supplier".to_owned(),
-        AccountId::Customer => "customer".to_owned(),
-    };
-    slug(format!("{PROBLEM}/account/{key}"))
-}
-
 /// Cite the balance when it exists, otherwise the account that would hold it.
 fn evidence(
     entity: SceneEntityView,
     world: &World,
     account: AccountId,
     asset: Asset,
-    key: &str,
 ) -> SceneEntityView {
     if balance(world, account, asset) > 0 {
-        link_balance(
-            entity,
-            account_key(account),
-            slug(format!("{PROBLEM}/asset/{key}")),
-        )
+        link_balance::<lending::Ontology>(entity, &account, &asset)
     } else {
-        link_account(entity, account_key(account))
+        link_account::<lending::Ontology>(entity, &account)
     }
 }
 
@@ -341,7 +322,6 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             world,
             AccountId::Market,
             Asset::Cash,
-            "cash",
         ),
         evidence(
             visual_entity(
@@ -366,7 +346,6 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             world,
             AccountId::Borrower,
             Asset::PostedCollateral,
-            "postedcollateral",
         ),
     ];
     if open_loan {
@@ -389,7 +368,6 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             world,
             AccountId::Borrower,
             Asset::DebtShare,
-            "debtshare",
         ));
     }
     if seized > 0 {
@@ -408,7 +386,6 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             world,
             AccountId::Keeper,
             Asset::Collateral,
-            "collateral",
         ));
     }
 

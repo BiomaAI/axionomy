@@ -354,7 +354,7 @@ fn ranking(
             Some(LeaderboardEntryView {
                 rank: standing.eligible.then_some((*last_rank).unwrap_or(1)),
                 participant: ViewId::new(
-                    slug(format!("work-league/account/agent-{:?}", standing.agent)),
+                    account_key::<work_league::Ontology>(&AccountId::Agent(standing.agent)),
                     format!("{:?}", standing.agent),
                 ),
                 value: standing.display.unwrap_or_else(|| {
@@ -496,7 +496,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         .map(|agent| {
             let location = work_league::location(world, agent).unwrap_or(Location::Depot);
             let policy = work_league::policy(world, agent).unwrap_or(Policy::Sprinter);
-            let mut entity = link_balance(
+            let mut entity = link_balance::<work_league::Ontology>(
                 visual_entity(
                     slug(format!("league/agent/{agent:?}")),
                     format!("{agent:?} · {policy:?}"),
@@ -535,8 +535,8 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                         )
                     }),
                 ),
-                slug(format!("work-league/account/agent-{agent:?}")),
-                slug(format!("work-league/asset/at-{location:?}")),
+                &AccountId::Agent(agent),
+                &Asset::At(location),
             );
             entity.metrics = vec![
                 visual_metric(
@@ -630,7 +630,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 format!("{} credits · risk {}", spec.value, spec.risk),
             )
         };
-        let mut entity = link_account(
+        let mut entity = link_account::<work_league::Ontology>(
             visual_entity(
                 slug(format!("league/job/{}", job.0)),
                 format!("Job {}", job.0),
@@ -642,7 +642,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 tone,
                 Some(status),
             ),
-            slug(format!("work-league/account/job-jobid-{}", job.0)),
+            &account,
         );
         entity.metrics = vec![
             visual_metric(slug("value"), "Value", spec.value, Some("credits")),
@@ -685,7 +685,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 Facility::Charger => Location::Charger,
                 Facility::Recycler => Location::Recycler,
             };
-            let mut entity = link_account(
+            let mut entity = link_account::<work_league::Ontology>(
                 visual_entity(
                     slug(format!("league/facility/{facility:?}")),
                     format!("{facility:?} bay"),
@@ -706,7 +706,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                         },
                     )),
                 ),
-                slug(format!("work-league/account/facility-{facility:?}")),
+                &AccountId::Facility(facility),
             );
             entity.metrics.push(visual_metric(
                 slug("waiting"),

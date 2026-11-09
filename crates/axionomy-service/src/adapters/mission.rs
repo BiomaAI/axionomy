@@ -280,7 +280,7 @@ fn observation(world: &World, agent: AgentId) -> ObservationView {
         .iter()
         .map(|account| AccountView {
             account: ViewId::new(
-                slug(format!("mission/account/{account:?}")),
+                account_key::<mission::Ontology>(account),
                 account.studio_label(),
             ),
             balances: key
@@ -288,10 +288,7 @@ fn observation(world: &World, agent: AgentId) -> ObservationView {
                 .iter()
                 .filter(|(owner, _, _)| owner == account)
                 .map(|(_, asset, quantity)| AssetQuantityView {
-                    asset: ViewId::new(
-                        slug(format!("mission/asset/{asset:?}")),
-                        asset.studio_label(),
-                    ),
+                    asset: ViewId::new(asset_key::<mission::Ontology>(asset), asset.studio_label()),
                     quantity: ExactQuantity(quantity.to_string()),
                 })
                 .collect(),
@@ -318,10 +315,7 @@ fn observation(world: &World, agent: AgentId) -> ObservationView {
                     )
             })
             .map(|(_, asset, quantity)| AssetQuantityView {
-                asset: ViewId::new(
-                    slug(format!("mission/asset/{asset:?}")),
-                    asset.studio_label(),
-                ),
+                asset: ViewId::new(asset_key::<mission::Ontology>(asset), asset.studio_label()),
                 quantity: ExactQuantity(quantity.to_string()),
             })
             .collect(),
@@ -452,7 +446,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                     None
                 }
             });
-        let mut entity = link_balance(
+        let mut entity = link_balance::<mission::Ontology>(
             visual_entity(
                 slug(format!("agent/{agent:?}")),
                 format!("{agent:?}"),
@@ -477,8 +471,8 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                     },
                 ),
             ),
-            slug(format!("mission/account/agent-{agent:?}")),
-            slug(format!("mission/asset/at-{location:?}")),
+            &AccountId::Agent(agent),
+            &Asset::At(location),
         );
         entity.metrics = vec![visual_metric(
             slug(format!("energy-{agent:?}")),
@@ -489,7 +483,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         entity
     });
     let system_entities = [
-        link_account(
+        link_account::<mission::Ontology>(
             visual_entity(
                 slug("system/mission"),
                 "Mission control",
@@ -501,9 +495,9 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 SceneToneView::Neutral,
                 Some("shared state".into()),
             ),
-            slug("mission/account/mission"),
+            &AccountId::Mission,
         ),
-        link_account(
+        link_account::<mission::Ontology>(
             visual_entity(
                 slug("system/nature"),
                 "Hidden scenario",
@@ -513,9 +507,9 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 SceneToneView::Uncertain,
                 Some("private truth".into()),
             ),
-            slug("mission/account/nature"),
+            &AccountId::Nature,
         ),
-        link_account(
+        link_account::<mission::Ontology>(
             visual_entity(
                 slug("system/success"),
                 "Mission outcome",
@@ -532,7 +526,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                     .into(),
                 ),
             ),
-            slug("mission/account/success"),
+            &AccountId::Success,
         ),
     ];
     Some(

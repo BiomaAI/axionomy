@@ -225,7 +225,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         } else {
             "Ready for dispatch".into()
         };
-        let mut entity = link_account(
+        let mut entity = link_account::<fleet::Ontology>(
             visual_entity(
                 slug(format!("van/{van:?}")),
                 format!("{van:?} van"),
@@ -243,10 +243,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 },
                 Some(status),
             ),
-            slug(format!(
-                "logistics/fleet/account/vehicle-{}",
-                if van == Van::Cold { "cold" } else { "freight" }
-            )),
+            &own,
         );
         entity.metrics = vec![
             visual_metric(slug("fuel"), "Fuel", val(own, Asset::Fuel), Some("/ 8")),
@@ -261,7 +258,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         entities.push(entity);
         for id in 0..val(AccountId::World, Asset::Count) as u8 {
             if val(own, Asset::Cargo(id)) > 0 {
-                let mut cargo = link_account(
+                let mut cargo = link_account::<fleet::Ontology>(
                     visual_entity(
                         slug(format!("cargo/{id}")),
                         format!("Order {} cargo", id + 1),
@@ -282,7 +279,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                             .into(),
                         ),
                     ),
-                    slug(format!("logistics/fleet/account/order-{id}")),
+                    &AccountId::Order(id),
                 );
                 cargo.metrics = vec![visual_metric(
                     slug("weight"),
@@ -312,7 +309,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         } else {
             "Cargo waiting at depot"
         };
-        let mut entity = link_account(
+        let mut entity = link_account::<fleet::Ontology>(
             visual_entity(
                 slug(format!("order/{id}")),
                 format!(
@@ -347,7 +344,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 },
                 Some(status.into()),
             ),
-            slug(format!("logistics/fleet/account/order-{id}")),
+            &own,
         );
         entity.metrics = vec![
             visual_metric(

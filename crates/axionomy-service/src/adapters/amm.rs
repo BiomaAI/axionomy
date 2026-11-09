@@ -149,16 +149,6 @@ fn exact(value: impl ToString) -> ExactQuantity {
     ExactQuantity(value.to_string())
 }
 
-fn account_key(account: AccountId) -> ItemPath {
-    match account {
-        AccountId::Pool => slug("amm/account/pool"),
-        AccountId::Treasury => slug("amm/account/treasury"),
-        AccountId::Information => slug("amm/account/information"),
-        AccountId::World => slug("amm/account/world"),
-        AccountId::Actor(actor) => slug(format!("amm/account/actor-{}", actor_debug_key(actor))),
-    }
-}
-
 fn actor_key(actor: Actor) -> &'static str {
     match actor {
         Actor::Founder => "founder",
@@ -169,13 +159,6 @@ fn actor_key(actor: Actor) -> &'static str {
         Actor::AdaptiveLp => "adaptive-lp",
         Actor::Arbitrageur => "arbitrageur",
         Actor::Whale => "whale",
-    }
-}
-
-fn actor_debug_key(actor: Actor) -> &'static str {
-    match actor {
-        Actor::AdaptiveLp => "adaptivelp",
-        actor => actor_key(actor),
     }
 }
 
@@ -288,7 +271,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                     slug(format!("amm/actor/{}", actor_key(actor))),
                     actor_label(actor),
                 ),
-                account: account_key(account),
+                account: account_key::<amm::Ontology>(&account),
                 glyph: actor_glyph(actor),
                 tone: actor_tone(world, actor),
                 x,
@@ -335,8 +318,8 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         surface: SceneSurfaceView::Market {
             pool: Box::new(MarketPoolView {
                 id: ViewId::new(slug("amm/pool/energy-credit"), "Energy / Credit AMM"),
-                base_asset: ViewId::new(slug("amm/asset/energy"), "Energy"),
-                quote_asset: ViewId::new(slug("amm/asset/credit"), "Credit"),
+                base_asset: ViewId::new(asset_key::<amm::Ontology>(&Asset::Energy), "Energy"),
+                quote_asset: ViewId::new(asset_key::<amm::Ontology>(&Asset::Credit), "Credit"),
                 base_reserve: exact(state.energy),
                 quote_reserve: exact(state.credit),
                 price_milli: exact(state.price_milli),
@@ -344,7 +327,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 issued_liquidity: exact(state.issued_lp_shares),
                 fee_numerator: amm::FEE_NUMERATOR,
                 fee_denominator: amm::FEE_DENOMINATOR,
-                account: account_key(AccountId::Pool),
+                account: account_key::<amm::Ontology>(&AccountId::Pool),
             }),
             actors,
         },
@@ -513,7 +496,10 @@ fn contribution_board(contributions: &BTreeMap<Actor, i128>) -> LeaderboardView 
             }
             LeaderboardEntryView {
                 rank: Some(rank),
-                participant: ViewId::new(account_key(AccountId::Actor(actor)), actor_label(actor)),
+                participant: ViewId::new(
+                    account_key::<amm::Ontology>(&AccountId::Actor(actor)),
+                    actor_label(actor),
+                ),
                 value: format_signed_milli(value),
                 unit: Some("Δ credit / energy".into()),
                 eligible: true,
@@ -565,7 +551,7 @@ fn causal_contribution_board(initial: &World) -> LeaderboardView {
             LeaderboardEntryView {
                 rank: Some(rank),
                 participant: ViewId::new(
-                    account_key(AccountId::Actor(contribution.actor)),
+                    account_key::<amm::Ontology>(&AccountId::Actor(contribution.actor)),
                     actor_label(contribution.actor),
                 ),
                 value: format!("{reduced_numerator}/{reduced_denominator}"),

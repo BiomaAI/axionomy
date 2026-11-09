@@ -338,15 +338,10 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         SceneAnchorView::Unanchored
     };
     let vehicle_asset = focus.map_or_else(
-        || {
-            slug(format!(
-                "logistics/asset/traveling-{:?}",
-                traveling.expect("vehicle is located or traveling")
-            ))
-        },
-        |location| slug(format!("logistics/asset/at-{location:?}")),
+        || Asset::Traveling(traveling.expect("vehicle is located or traveling")),
+        Asset::At,
     );
-    let mut vehicle = link_balance(
+    let mut vehicle = link_balance::<logistics::Ontology>(
         visual_entity(
             slug("vehicle/fleet-1"),
             "Vehicle 1",
@@ -356,8 +351,8 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             SceneToneView::Active,
             traveling.map(|route| format!("traveling {route:?}")),
         ),
-        slug("logistics/account/vehicle"),
-        vehicle_asset,
+        &AccountId::Vehicle,
+        &vehicle_asset,
     );
     vehicle.metrics = vec![
         visual_metric(
@@ -401,7 +396,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 "waiting",
             )
         };
-        link_account(
+        link_account::<logistics::Ontology>(
             visual_entity(
                 slug(format!("order/{order:?}")),
                 format!("Order {order:?}"),
@@ -411,11 +406,11 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 tone,
                 Some(status.into()),
             ),
-            slug(format!("logistics/account/order-{order:?}")),
+            &order_account,
         )
     });
     let system_entities = [
-        link_account(
+        link_account::<logistics::Ontology>(
             visual_entity(
                 slug("system/fuel-station"),
                 "Fuel station",
@@ -427,9 +422,9 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 SceneToneView::Neutral,
                 Some("refuel supply".into()),
             ),
-            slug("logistics/account/fuelstation"),
+            &AccountId::FuelStation,
         ),
-        link_account(
+        link_account::<logistics::Ontology>(
             visual_entity(
                 slug("system/nature"),
                 "Travel conditions",
@@ -441,7 +436,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 SceneToneView::Uncertain,
                 Some("sampled chance".into()),
             ),
-            slug("logistics/account/nature"),
+            &AccountId::Nature,
         ),
     ];
     let delivered = logistics::ORDERS

@@ -761,7 +761,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
     let agent = focus.map(|node| {
         let energy = world.balance(&AccountId::Agent, &Asset::Energy);
         let time = world.balance(&AccountId::Agent, &Asset::Time);
-        let mut entity = link_balance(
+        let mut entity = link_balance::<maze::Ontology>(
             visual_entity(
                 slug("agent/explorer"),
                 "Explorer",
@@ -781,8 +781,8 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                     format!("E {} · T {}", energy, time)
                 }),
             ),
-            slug("maze/account/agent"),
-            slug(format!("maze/asset/at-{node:?}")),
+            &AccountId::Agent,
+            &Asset::At(node),
         );
         entity.metrics = vec![
             visual_metric(slug("energy"), "Energy", energy, Some("units")),
@@ -791,7 +791,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         entity
     });
     let key = if !world.balance(&AccountId::World, &Asset::Key).is_zero() {
-        Some(link_balance(
+        Some(link_balance::<maze::Ontology>(
             visual_entity(
                 slug("maze/key/brass"),
                 "Brass key",
@@ -803,11 +803,11 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 SceneToneView::Warning,
                 Some("available".into()),
             ),
-            slug("maze/account/world"),
-            slug("maze/asset/key"),
+            &AccountId::World,
+            &Asset::Key,
         ))
     } else if !world.balance(&AccountId::Agent, &Asset::Key).is_zero() {
-        Some(link_balance(
+        Some(link_balance::<maze::Ontology>(
             visual_entity(
                 slug("maze/key/brass"),
                 "Brass key",
@@ -819,8 +819,8 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 SceneToneView::Active,
                 Some("carried".into()),
             ),
-            slug("maze/account/agent"),
-            slug("maze/asset/key"),
+            &AccountId::Agent,
+            &Asset::Key,
         ))
     } else {
         None
@@ -838,7 +838,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
     } else {
         "locked"
     };
-    let gate = link_balance(
+    let gate = link_balance::<maze::Ontology>(
         visual_entity(
             slug("maze/gate/state"),
             "Vault gate",
@@ -854,11 +854,11 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             },
             Some(gate_status.into()),
         ),
-        slug("maze/account/world"),
+        &AccountId::World,
         if gate_open {
-            slug("maze/asset/open")
+            &Asset::Open
         } else {
-            slug("maze/asset/locked")
+            &Asset::Locked
         },
     );
     let mut scene = Scene::graph(

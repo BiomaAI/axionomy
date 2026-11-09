@@ -181,7 +181,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         } else {
             "cold origin"
         };
-        let mut entity = link_account(
+        let mut entity = link_account::<chain::Ontology>(
             visual_entity(
                 slug(format!("cohort/{id}")),
                 format!("Cohort {}", id + 1),
@@ -205,7 +205,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                     "{fresh} fresh · {stable} preserved · {spoiled} spoiled"
                 )),
             ),
-            slug(format!("perishables/cold-chain/account/batch-{id}")),
+            &AccountId::Batch(id),
         );
         entity.metrics = vec![
             visual_metric(
@@ -265,12 +265,12 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             None,
         );
         entity.metrics = vec![visual_metric(slug(key), label, value, Some(unit))];
-        entities.push(link_account(
+        entities.push(link_account::<chain::Ontology>(
             entity,
             if node == "buyer" {
-                slug("perishables/cold-chain/account/buyer")
+                &AccountId::Buyer
             } else {
-                slug("perishables/cold-chain/account/world")
+                &AccountId::World
             },
         ));
     }

@@ -291,7 +291,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         if quantity.is_zero() {
             return None;
         }
-        let mut entity = link_balance(
+        let mut entity = link_balance::<workshop::Ontology>(
             visual_entity(
                 slug(format!("stock/{key}")),
                 label,
@@ -312,8 +312,8 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 },
                 Some(format!("{quantity} available")),
             ),
-            slug("workshop/account/workshop"),
-            slug(format!("workshop/asset/{asset:?}")),
+            &AccountId::Workshop,
+            &asset,
         );
         entity.metrics = vec![visual_metric(slug(key), label, quantity, Some("units"))];
         Some(entity)
@@ -345,7 +345,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         } else {
             "available"
         };
-        let mut entity = link_balance(
+        let mut entity = link_balance::<workshop::Ontology>(
             visual_entity(
                 slug(format!("contract/{order}")),
                 format!("Contract {}", order + 1),
@@ -361,8 +361,8 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 },
                 Some(state.into()),
             ),
-            slug(format!("workshop/account/customer-{order}")),
-            slug(format!("workshop/asset/customeridentity-{order}")),
+            id,
+            &Asset::CustomerIdentity(*order),
         );
         entity.metrics = vec![visual_metric(
             slug("escrow"),

@@ -418,7 +418,7 @@ fn execution_scene(world: &World) -> Scene {
                 ],
             });
         }
-        entities.push(link_account(
+        entities.push(link_account::<scheduling::Ontology>(
             visual_entity(
                 slug(format!("operation/{operation:?}")),
                 format!("{operation:?}"),
@@ -440,7 +440,7 @@ fn execution_scene(world: &World) -> Scene {
                 },
                 Some(status),
             ),
-            slug(format!("scheduling/account/job-{job:?}")),
+            &account,
         ));
     }
     let machine_two = AccountId::Machine(Machine::Two);

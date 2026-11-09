@@ -172,19 +172,16 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 None
             };
             let y = height - row - 1;
-            let account_key = slug(format!(
-                "connect-four/account/cell-column-{column}-row-{row}"
-            ));
             cells.push(GridCellView {
                 x: u32::from(column),
                 y: u32::from(y),
                 label: player
                     .map_or_else(|| "Open slot".into(), |player| format!("{player:?} piece")),
                 classes: vec![slug("connect-slot")],
-                account: Some(account_key.clone()),
+                account: Some(account_key::<connect_four::Ontology>(&account)),
             });
             if let Some(player) = player {
-                pieces.push(link_balance(
+                pieces.push(link_balance::<connect_four::Ontology>(
                     visual_entity(
                         slug(format!("piece/{player:?}/{column}/{row}")),
                         format!("{player:?}"),
@@ -200,8 +197,8 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                         },
                         Some(format!("{player:?}").to_ascii_lowercase()),
                     ),
-                    account_key,
-                    slug(format!("connect-four/asset/piece-{player:?}")),
+                    &account,
+                    &Asset::Piece(player),
                 ));
             }
         }

@@ -80,7 +80,7 @@ fn observation(world: &World) -> ObservationView {
         .iter()
         .map(|account| AccountView {
             account: ViewId::new(
-                slug(format!("rescue/account/{account:?}")),
+                account_key::<rescue::Ontology>(account),
                 account.studio_label(),
             ),
             balances: key
@@ -88,10 +88,7 @@ fn observation(world: &World) -> ObservationView {
                 .iter()
                 .filter(|(owner, _, _)| owner == account)
                 .map(|(_, asset, quantity)| AssetQuantityView {
-                    asset: ViewId::new(
-                        slug(format!("rescue/asset/{asset:?}")),
-                        asset.studio_label(),
-                    ),
+                    asset: ViewId::new(asset_key::<rescue::Ontology>(asset), asset.studio_label()),
                     quantity: ExactQuantity(quantity.to_string()),
                 })
                 .collect(),
@@ -203,7 +200,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
     })
     .collect();
     let agent_location = focus.expect("the responder remains at an encoded location");
-    let mut agent = link_balance(
+    let mut agent = link_balance::<rescue::Ontology>(
         visual_entity(
             slug("agent/responder"),
             "Responder",
@@ -224,8 +221,8 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 },
             ),
         ),
-        slug("rescue/account/agent"),
-        slug(format!("rescue/asset/at-{agent_location:?}")),
+        &AccountId::Agent,
+        &Asset::At(agent_location),
     );
     agent.metrics = vec![visual_metric(
         slug("energy"),
@@ -248,7 +245,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             .is_zero()
     })
     .map(|location| {
-        link_balance(
+        link_balance::<rescue::Ontology>(
             visual_entity(
                 slug(format!("belief/{location:?}")),
                 format!("Belief: {location:?}"),
@@ -260,11 +257,11 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 SceneToneView::Uncertain,
                 Some("actor belief".into()),
             ),
-            slug("rescue/account/agent"),
-            slug(format!("rescue/asset/belief-{location:?}")),
+            &AccountId::Agent,
+            &Asset::Belief(location),
         )
     });
-    let nature = link_account(
+    let nature = link_account::<rescue::Ontology>(
         visual_entity(
             slug("system/nature"),
             "Hidden victim state",
@@ -276,7 +273,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             SceneToneView::Uncertain,
             Some("not visible to actor".into()),
         ),
-        slug("rescue/account/nature"),
+        &AccountId::Nature,
     );
     Some(
         Scene::graph(
