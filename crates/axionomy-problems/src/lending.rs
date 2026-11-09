@@ -16,6 +16,8 @@
 //! locked at genesis keep the share price from being manipulated by a first
 //! depositor.
 
+use axionomy::ConditionPath;
+use axionomy::path;
 use axionomy::{
     Account, ApplyError, Basket, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant,
     Quantity, QuantityComparison, QuantityExpression, Rate, Rounding, Trace, basket,
@@ -438,7 +440,7 @@ fn reserve_cut() -> Q {
     )
 }
 
-fn one_unit(rate: Rate<Ontology>, name: &str) -> Rate<Ontology> {
+fn one_unit(rate: Rate<Ontology>, name: ConditionPath) -> Rate<Ontology> {
     rate.condition(name, Q::units(), QuantityComparison::Equal, Q::constant(1))
 }
 
@@ -469,10 +471,10 @@ fn deposit_rate() -> Rate<Ontology> {
         .produce_computed(Role::Depositor, Asset::Share, minted.clone())
         .produce_computed(Role::Market, Asset::ShareSupply, minted.clone())
         .condition(
-            "mints at least the minimum shares",
+            path!("mints-at-least-the-minimum-shares"),
             minted,
             QuantityComparison::GreaterThanOrEqual,
-            Q::maximum(Q::parameter("min_shares"), Q::constant(1)),
+            Q::maximum(Q::parameter(path!("min-shares")), Q::constant(1)),
         )
         .distinct(Role::Market, Role::Depositor)
 }
@@ -490,10 +492,10 @@ fn redeem_rate() -> Rate<Ontology> {
         .consume_computed(Role::Market, Asset::Cash, paid.clone())
         .produce_computed(Role::Depositor, Asset::Cash, paid.clone())
         .condition(
-            "pays at least the minimum cash",
+            path!("pays-at-least-the-minimum-cash"),
             paid,
             QuantityComparison::GreaterThanOrEqual,
-            Q::parameter("min_cash"),
+            Q::parameter(path!("min-cash")),
         )
         .distinct(Role::Market, Role::Depositor)
 }
@@ -516,7 +518,7 @@ fn withdraw_collateral_rate() -> Rate<Ontology> {
         .consume(Role::Borrower, basket([(Asset::PostedCollateral, 1)]))
         .produce(Role::Borrower, basket([(Asset::Collateral, 1)]))
         .condition(
-            "the remaining collateral covers the loan",
+            path!("the-remaining-collateral-covers-the-loan"),
             owed(),
             QuantityComparison::LessThanOrEqual,
             collateral_limit(posted() - Q::units(), Asset::LoanToValue),
@@ -532,7 +534,7 @@ fn borrow_rate() -> Rate<Ontology> {
         .produce_computed(Role::Borrower, Asset::DebtShare, minted.clone())
         .produce_computed(Role::Market, Asset::DebtShareSupply, minted)
         .condition(
-            "within the loan-to-value limit",
+            path!("within-the-loan-to-value-limit"),
             owed_after,
             QuantityComparison::LessThanOrEqual,
             collateral_limit(posted(), Asset::LoanToValue),
@@ -547,7 +549,7 @@ fn repay_rate() -> Rate<Ontology> {
         .consume_computed(Role::Borrower, Asset::DebtShare, retired.clone())
         .consume_computed(Role::Market, Asset::DebtShareSupply, retired.clone())
         .condition(
-            "retires debt",
+            path!("retires-debt"),
             retired,
             QuantityComparison::GreaterThanOrEqual,
             Q::constant(1),
@@ -573,7 +575,7 @@ fn pay_bill_rate(bill: Payment) -> Rate<Ontology> {
             .produce(Role::Borrower, basket([(Asset::BillPaid, 1)])),
     )
     .condition(
-        "paid before the deadline",
+        path!("paid-before-the-deadline"),
         elapsed() + Q::constant(1),
         QuantityComparison::LessThanOrEqual,
         Q::constant(bill.period),
@@ -595,7 +597,7 @@ fn collect_revenue_rate(installment: u8, payment: Payment) -> Rate<Ontology> {
             .produce(Role::Borrower, basket([(Asset::Cash, payment.amount)])),
     )
     .condition(
-        "the installment is due",
+        path!("the-installment-is-due"),
         elapsed(),
         QuantityComparison::GreaterThanOrEqual,
         Q::constant(payment.period),
@@ -612,14 +614,14 @@ fn accrue_rate() -> Rate<Ontology> {
         .produce_computed(Role::Market, Asset::BorrowIndex, index_growth())
         .produce_computed(Role::Market, Asset::Reserves, reserve_cut())
         .condition(
-            "the loan is not liquidatable",
+            path!("the-loan-is-not-liquidatable"),
             owed(),
             QuantityComparison::LessThanOrEqual,
             collateral_limit(posted(), Asset::LiquidationThreshold),
         )
         // While the drop is pending, the clock cannot pass its period.
         .condition(
-            "the scheduled price drop has happened",
+            path!("the-scheduled-price-drop-has-happened"),
             pending * (elapsed() + Q::constant(1)),
             QuantityComparison::LessThanOrEqual,
             Q::balance(Role::Oracle, Asset::ShockAfter),
@@ -629,7 +631,7 @@ fn accrue_rate() -> Rate<Ontology> {
         .distinct(Role::Borrower, Role::Clock)
         .distinct(Role::Borrower, Role::Oracle)
         .distinct(Role::Clock, Role::Oracle);
-    one_unit(rate, "one period at a time")
+    one_unit(rate, path!("one-period-at-a-time"))
 }
 
 fn reprice_rate() -> Rate<Ontology> {
@@ -642,7 +644,7 @@ fn reprice_rate() -> Rate<Ontology> {
             Q::balance(Role::Oracle, Asset::PriceDrop),
         )
         .condition(
-            "at the scheduled period",
+            path!("at-the-scheduled-period"),
             elapsed(),
             QuantityComparison::Equal,
             Q::balance(Role::Oracle, Asset::ShockAfter),
@@ -650,7 +652,7 @@ fn reprice_rate() -> Rate<Ontology> {
         .distinct(Role::Market, Role::Oracle)
         .distinct(Role::Market, Role::Clock)
         .distinct(Role::Clock, Role::Oracle);
-    one_unit(rate, "one price drop")
+    one_unit(rate, path!("one-price-drop"))
 }
 
 fn liquidate_rate() -> Rate<Ontology> {
@@ -676,14 +678,14 @@ fn liquidate_rate() -> Rate<Ontology> {
         .consume_computed(Role::Borrower, Asset::PostedCollateral, seized.clone())
         .produce_computed(Role::Keeper, Asset::Collateral, seized)
         .condition(
-            "the loan is past its liquidation threshold",
+            path!("the-loan-is-past-its-liquidation-threshold"),
             owed(),
             QuantityComparison::GreaterThanOrEqual,
             collateral_limit(posted(), Asset::LiquidationThreshold) + Q::constant(1),
         )
         .distinct(Role::Market, Role::Keeper)
         .distinct(Role::Borrower, Role::Keeper);
-    one_unit(rate, "one liquidation")
+    one_unit(rate, path!("one-liquidation"))
 }
 
 pub fn world(config: &Config) -> World {
@@ -782,20 +784,20 @@ pub fn world(config: &Config) -> World {
         );
     }
     builder
-        .invariant(LinearInvariant::new("cash").weight(Asset::Cash, 1))
+        .invariant(LinearInvariant::new(path!("cash")).weight(Asset::Cash, 1))
         .invariant(
-            LinearInvariant::new("vault shares")
+            LinearInvariant::new(path!("vault-shares"))
                 .weight(Asset::Share, 1)
                 .weight(Asset::LockedShare, 1)
                 .weight(Asset::ShareSupply, -1),
         )
         .invariant(
-            LinearInvariant::new("debt shares")
+            LinearInvariant::new(path!("debt-shares"))
                 .weight(Asset::DebtShare, 1)
                 .weight(Asset::DebtShareSupply, -1),
         )
         .invariant(
-            LinearInvariant::new("collateral")
+            LinearInvariant::new(path!("collateral"))
                 .weight(Asset::Collateral, 1)
                 .weight(Asset::PostedCollateral, 1),
         )
@@ -834,13 +836,13 @@ fn for_borrower(rate: RateId, units: u64) -> Action {
 pub fn deposit(depositor: u8, cash: u64, min_shares: u64) -> Action {
     with_market(RateId::Deposit, cash)
         .bind(Role::Depositor, AccountId::Depositor(depositor))
-        .parameter("min_shares", Quantity::new(min_shares))
+        .parameter(path!("min-shares"), Quantity::new(min_shares))
 }
 
 pub fn redeem(depositor: u8, shares: u64, min_cash: u64) -> Action {
     with_market(RateId::Redeem, shares)
         .bind(Role::Depositor, AccountId::Depositor(depositor))
-        .parameter("min_cash", Quantity::new(min_cash))
+        .parameter(path!("min-cash"), Quantity::new(min_cash))
 }
 
 pub fn donate(depositor: u8, cash: u64) -> Action {
@@ -1245,7 +1247,7 @@ mod tests {
         assert!(refused.issues().iter().any(|issue| matches!(
             issue,
             ApplyError::RateConditionFailed { condition, .. }
-                if condition == "within the loan-to-value limit"
+                if *condition == path!("within-the-loan-to-value-limit")
         )));
         world.apply(post_collateral(40)).unwrap();
         // 40 units at 100 with a 60% limit.
@@ -1323,7 +1325,7 @@ mod tests {
         assert!(stalled.issues().iter().any(|issue| matches!(
             issue,
             ApplyError::RateConditionFailed { condition, .. }
-                if condition == "the loan is not liquidatable"
+                if *condition == path!("the-loan-is-not-liquidatable")
         )));
         // Posting the remaining collateral cures it.
         let mut cured = world.clone();

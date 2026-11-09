@@ -1,5 +1,6 @@
 //! A key-door maze where action count and encoded energy cost disagree.
 
+use axionomy::path;
 use axionomy::{
     Account, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Quantity, Rate, basket,
 };
@@ -345,21 +346,21 @@ fn build(
         )
         .account(AccountId::World, Account::from(environment))
         .invariant(nodes_from_edges(edges).into_iter().fold(
-            LinearInvariant::new("one agent position"),
+            LinearInvariant::new(path!("one-agent-position")),
             |invariant, node| invariant.weight(Asset::At(node), 1),
         ))
         .invariant(
-            LinearInvariant::new("energy is only spent")
+            LinearInvariant::new(path!("energy-is-only-spent"))
                 .weight(Asset::Energy, 1)
                 .weight(Asset::SpentEnergy, 1),
         )
         .invariant(
-            LinearInvariant::new("time is only spent")
+            LinearInvariant::new(path!("time-is-only-spent"))
                 .weight(Asset::Time, 1)
                 .weight(Asset::SpentTime, 1),
         )
         .invariant(
-            LinearInvariant::new("maze lifecycle")
+            LinearInvariant::new(path!("maze-lifecycle"))
                 .weight(Asset::Active, 1)
                 .weight(Asset::Solved, 1),
         );

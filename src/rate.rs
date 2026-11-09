@@ -1,5 +1,7 @@
 use crate::Ontology;
-use crate::{Account, AccountDelta, Basket, Quantity, Rounding};
+use crate::{
+    Account, AccountDelta, Basket, ConditionPath, InvariantPath, ParameterPath, Quantity, Rounding,
+};
 use indexmap::IndexMap;
 use ruint::aliases::U384;
 use schemars::{JsonSchema, Schema, SchemaGenerator, json_schema};
@@ -35,7 +37,7 @@ pub enum QuantityExpression<O: Ontology> {
     },
     Units,
     Parameter {
-        name: String,
+        name: ParameterPath,
     },
     Balance {
         role: O::Role,
@@ -82,8 +84,8 @@ impl<O: Ontology> QuantityExpression<O> {
         Self::Units
     }
 
-    pub fn parameter(name: impl Into<String>) -> Self {
-        Self::Parameter { name: name.into() }
+    pub fn parameter(name: ParameterPath) -> Self {
+        Self::Parameter { name }
     }
 
     pub const fn balance(role: O::Role, asset: O::Asset) -> Self {
@@ -168,11 +170,11 @@ impl<O: Ontology> QuantityExpression<O> {
         assets
     }
 
-    fn parameters(&self) -> Vec<&str> {
+    fn parameters(&self) -> Vec<&ParameterPath> {
         let mut parameters = Vec::new();
         self.walk(&mut |expression| {
             if let Self::Parameter { name } = expression {
-                parameters.push(name.as_str());
+                parameters.push(name);
             }
         });
         parameters
@@ -242,14 +244,14 @@ pub enum QuantityComparison {
 ))]
 #[schemars(bound = "O::Role: JsonSchema, O::Asset: JsonSchema")]
 pub struct RateCondition<O: Ontology> {
-    name: String,
+    name: ConditionPath,
     left: QuantityExpression<O>,
     comparison: QuantityComparison,
     right: QuantityExpression<O>,
 }
 
 impl<O: Ontology> RateCondition<O> {
-    pub fn name(&self) -> &str {
+    pub fn name(&self) -> &ConditionPath {
         &self.name
     }
 
@@ -428,7 +430,7 @@ impl<O: Ontology> Rate<O> {
 
     pub fn condition(
         mut self,
-        name: impl Into<String>,
+        name: ConditionPath,
         left: QuantityExpression<O>,
         comparison: QuantityComparison,
         right: QuantityExpression<O>,
@@ -436,7 +438,7 @@ impl<O: Ontology> Rate<O> {
         self.roles.extend(left.roles().into_iter().cloned());
         self.roles.extend(right.roles().into_iter().cloned());
         self.conditions.push(RateCondition {
-            name: name.into(),
+            name,
             left,
             comparison,
             right,
@@ -510,7 +512,7 @@ impl<O: Ontology> Rate<O> {
     }
 
     /// Names of every parameter the rate's laws and conditions read.
-    pub fn parameter_names(&self) -> BTreeSet<&str> {
+    pub fn parameter_names(&self) -> BTreeSet<&ParameterPath> {
         self.expressions()
             .flat_map(QuantityExpression::parameters)
             .collect()
@@ -742,14 +744,14 @@ impl JsonSchema for Measure {
 
 #[derive(Debug, Clone)]
 pub struct LinearInvariant<A> {
-    name: String,
+    name: InvariantPath,
     weights: IndexMap<A, i64>,
 }
 
 impl<A: Eq + Hash> LinearInvariant<A> {
-    pub fn new(name: impl Into<String>) -> Self {
+    pub fn new(name: InvariantPath) -> Self {
         Self {
-            name: name.into(),
+            name,
             weights: IndexMap::new(),
         }
     }
@@ -765,7 +767,7 @@ impl<A: Eq + Hash> LinearInvariant<A> {
 
     // Keep zero weights until all input identifiers have been checked. Removing
     // them earlier would let a repeated asset evade duplicate rejection.
-    fn from_serialized_weights(name: String, entries: Vec<(A, i64)>) -> Result<Self, A> {
+    fn from_serialized_weights(name: InvariantPath, entries: Vec<(A, i64)>) -> Result<Self, A> {
         let mut weights = IndexMap::new();
         for (asset, weight) in entries {
             if weights.contains_key(&asset) {
@@ -777,7 +779,7 @@ impl<A: Eq + Hash> LinearInvariant<A> {
         Ok(Self { name, weights })
     }
 
-    pub fn name(&self) -> &str {
+    pub fn name(&self) -> &InvariantPath {
         &self.name
     }
 
@@ -832,7 +834,7 @@ impl<A: Serialize> Serialize for LinearInvariant<A> {
 
 #[derive(Deserialize, JsonSchema)]
 struct InvariantData<A> {
-    name: String,
+    name: InvariantPath,
     weights: Vec<(A, i64)>,
 }
 
@@ -924,7 +926,7 @@ mod conservation_conformance {
         assert!(!fixtures.conservation.is_empty());
         let mut outcomes = [0; 2];
         for case in fixtures.conservation {
-            let mut invariant = LinearInvariant::new("fixture");
+            let mut invariant = LinearInvariant::new(crate::path!("fixture"));
             for (asset, coefficient) in &case.weights {
                 invariant = invariant.weight(*asset, coefficient.parse().unwrap());
             }
@@ -954,7 +956,7 @@ mod conservation_conformance {
             serde_json::from_str(include_str!("../verification/conformance.json")).unwrap();
         assert!(!fixtures.measurements.is_empty());
         for case in fixtures.measurements {
-            let mut invariant = LinearInvariant::new("fixture");
+            let mut invariant = LinearInvariant::new(crate::path!("fixture"));
             for (asset, coefficient) in &case.weights {
                 invariant = invariant.weight(*asset, coefficient.parse().unwrap());
             }
@@ -1001,7 +1003,7 @@ mod metadata_conformance {
 
     type Expression = QuantityExpression<Test>;
     type AmountData = (Role, (Asset, Expression));
-    type ConditionData = (String, (Expression, (u8, Expression)));
+    type ConditionData = (ConditionPath, (Expression, (u8, Expression)));
 
     #[derive(Debug, Deserialize)]
     struct Step {
@@ -1010,7 +1012,7 @@ mod metadata_conformance {
         asset: Asset,
         expression: Expression,
         right: Expression,
-        label: String,
+        label: ConditionPath,
         comparison: u8,
     }
 
@@ -1022,7 +1024,7 @@ mod metadata_conformance {
         produced: Vec<AmountData>,
         preserved: Vec<AmountData>,
         conditions: Vec<ConditionData>,
-        parameters: Vec<String>,
+        parameters: Vec<ParameterPath>,
         assets: Vec<Asset>,
     }
 
@@ -1076,7 +1078,7 @@ mod metadata_conformance {
         }
         assert_eq!(
             rule.parameter_names().into_iter().collect::<Vec<_>>(),
-            expected.parameters
+            expected.parameters.iter().collect::<Vec<_>>()
         );
         assert_eq!(
             rule.computed_asset_keys()
@@ -1108,7 +1110,7 @@ mod metadata_conformance {
                         1 => rule.produce_computed(step.role, step.asset, step.expression.clone()),
                         2 => rule.preserve_computed(step.role, step.asset, step.expression.clone()),
                         3 => rule.condition(
-                            &step.label,
+                            step.label.clone(),
                             step.expression.clone(),
                             comparison(step.comparison),
                             step.right.clone(),

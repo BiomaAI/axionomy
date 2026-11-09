@@ -1,4 +1,5 @@
 //! Repeated search, clinical decline and capacity-one evacuation.
+use axionomy::path;
 use axionomy::{
     Account, EconomicView, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Quantity,
     QuantityComparison as C, QuantityExpression as Q, Rate, Trace, basket,
@@ -193,7 +194,12 @@ fn identity() -> Rate<Ontology> {
         .preserve(Role::World, basket([(Asset::WorldIdentity, 1)]))
         .preserve(Role::Responder, basket([(Asset::ResponderIdentity, 1)]))
         .distinct(Role::World, Role::Responder)
-        .condition("one incident event", Q::units(), C::Equal, Q::constant(1))
+        .condition(
+            path!("one-incident-event"),
+            Q::units(),
+            C::Equal,
+            Q::constant(1),
+        )
 }
 fn law() -> Rate<Ontology> {
     identity().preserve(Role::World, basket([(Asset::Active, 1)]))
@@ -214,19 +220,19 @@ fn patient(rate: Rate<Ontology>, id: u8) -> Rate<Ontology> {
 fn viable(rate: Rate<Ontology>) -> Rate<Ontology> {
     rate.preserve(Role::Patient, basket([(Asset::Alive, 1)]))
         .condition(
-            "patient still has vitality",
+            path!("patient-still-has-vitality"),
             q(Role::Patient, Asset::Vitality),
             C::GreaterThanOrEqual,
             Q::constant(1),
         )
         .condition(
-            "settle overdue deterioration first",
+            path!("settle-overdue-deterioration-first"),
             clock() + Q::constant(1),
             C::LessThanOrEqual,
             q(Role::Patient, Asset::NextDecline),
         )
         .condition(
-            "intervention before deadline",
+            path!("intervention-before-deadline"),
             clock() + Q::constant(1),
             C::LessThanOrEqual,
             q(Role::Patient, Asset::Deadline),
@@ -351,7 +357,7 @@ pub fn initial(stress: bool, seed: u64) -> World {
             patient(law(), id)
                 .preserve(Role::Patient, basket([(Asset::Alive, 1)]))
                 .condition(
-                    "clinical decline is due",
+                    path!("clinical-decline-is-due"),
                     clock(),
                     C::GreaterThanOrEqual,
                     q(Role::Patient, Asset::NextDecline),
@@ -409,7 +415,7 @@ pub fn initial(stress: bool, seed: u64) -> World {
                         .produce(Role::Patient, basket([(Asset::Vitality, 1)]));
                 } else {
                     stabilize = stabilize.condition(
-                        "no harm to restore",
+                        path!("no-harm-to-restore"),
                         q(Role::Patient, Asset::Harm),
                         C::Equal,
                         Q::constant(0),
@@ -447,19 +453,19 @@ pub fn initial(stress: bool, seed: u64) -> World {
             patient(work(1, 1), id)
                 .preserve(Role::Responder, basket([(Asset::At(Location::Base), 1)]))
                 .condition(
-                    "patient still has vitality",
+                    path!("patient-still-has-vitality"),
                     q(Role::Patient, Asset::Vitality),
                     C::GreaterThanOrEqual,
                     Q::constant(1),
                 )
                 .condition(
-                    "clinical observations current",
+                    path!("clinical-observations-current"),
                     clock() + Q::constant(1),
                     C::LessThanOrEqual,
                     q(Role::Patient, Asset::NextDecline),
                 )
                 .condition(
-                    "arrival before deadline",
+                    path!("arrival-before-deadline"),
                     clock() + Q::constant(1),
                     C::LessThanOrEqual,
                     q(Role::Patient, Asset::Deadline),
@@ -521,32 +527,32 @@ pub fn initial(stress: bool, seed: u64) -> World {
                     );
                 lost = match cause {
                     Loss::Deterioration => lost.condition(
-                        "no vitality remains",
+                        path!("no-vitality-remains"),
                         q(Role::Patient, Asset::Vitality),
                         C::Equal,
                         Q::constant(0),
                     ),
                     Loss::Deadline => lost.condition(
-                        "deadline elapsed",
+                        path!("deadline-elapsed"),
                         clock(),
                         C::GreaterThanOrEqual,
                         q(Role::Patient, Asset::Deadline) + Q::constant(1),
                     ),
                     Loss::Horizon => lost
                         .condition(
-                            "incident horizon reached",
+                            path!("incident-horizon-reached"),
                             clock(),
                             C::GreaterThanOrEqual,
                             q(Role::World, Asset::Horizon),
                         )
                         .condition(
-                            "patient still alive",
+                            path!("patient-still-alive"),
                             q(Role::Patient, Asset::Vitality),
                             C::GreaterThanOrEqual,
                             Q::constant(1),
                         )
                         .condition(
-                            "not past deadline",
+                            path!("not-past-deadline"),
                             clock(),
                             C::LessThanOrEqual,
                             q(Role::Patient, Asset::Deadline),
@@ -671,7 +677,7 @@ pub fn initial(stress: bool, seed: u64) -> World {
         RateId::Close,
         identity()
             .condition(
-                "all patients accounted for",
+                path!("all-patients-accounted-for"),
                 q(Role::World, Asset::Resolved),
                 C::Equal,
                 q(Role::World, Asset::PatientCount),
@@ -679,17 +685,17 @@ pub fn initial(stress: bool, seed: u64) -> World {
             .consume(Role::World, basket([(Asset::Active, 1)]))
             .produce(Role::World, basket([(Asset::Closed, 1)])),
     );
-    let mut seats = LinearInvariant::new("one evacuation seat").weight(Asset::Seat, 1);
+    let mut seats = LinearInvariant::new(path!("one-evacuation-seat")).weight(Asset::Seat, 1);
     for id in 0..count as u8 {
         seats = seats.weight(Asset::Carrying(id), 1);
     }
-    let mut positions = LinearInvariant::new("responder activity");
+    let mut positions = LinearInvariant::new(path!("responder-activity"));
     // Patient location facts are introduced on discovery, so encode only the
     // responder's conserved Ready/AwaitingScan state, not all At facts globally.
     positions = positions
         .weight(Asset::Ready, 1)
         .weight(Asset::AwaitingScan, 1);
-    let mut sectors = LinearInvariant::new("one survey per sector");
+    let mut sectors = LinearInvariant::new(path!("one-survey-per-sector"));
     for location in sites {
         sectors = sectors
             .weight(Asset::Unsearched(*location), 1)
@@ -700,49 +706,49 @@ pub fn initial(stress: bool, seed: u64) -> World {
         .invariant(positions)
         .invariant(sectors)
         .invariant(
-            LinearInvariant::new("patient outcomes")
+            LinearInvariant::new(path!("patient-outcomes"))
                 .weight(Asset::Alive, 1)
                 .weight(Asset::Saved, 1)
                 .weight(Asset::Dead, 1)
                 .weight(Asset::LeftBehind, 1),
         )
         .invariant(
-            LinearInvariant::new("clinical vitality")
+            LinearInvariant::new(path!("clinical-vitality"))
                 .weight(Asset::Vitality, 1)
                 .weight(Asset::Harm, 1),
         )
         .invariant(
-            LinearInvariant::new("finite medicine")
+            LinearInvariant::new(path!("finite-medicine"))
                 .weight(Asset::MedicalKit, 1)
                 .weight(Asset::UsedMedicalKit, 1),
         )
         .invariant(
-            LinearInvariant::new("finite fuel")
+            LinearInvariant::new(path!("finite-fuel"))
                 .weight(Asset::Fuel, 1)
                 .weight(Asset::SpentFuel, 1),
         )
         .invariant(
-            LinearInvariant::new("finite effort")
+            LinearInvariant::new(path!("finite-effort"))
                 .weight(Asset::Energy, 1)
                 .weight(Asset::SpentEnergy, 1),
         )
         .invariant(
-            LinearInvariant::new("sensor charges")
+            LinearInvariant::new(path!("sensor-charges"))
                 .weight(Asset::Sensor, 1)
                 .weight(Asset::UsedSensor, 1),
         )
         .invariant(
-            LinearInvariant::new("resupply opportunity")
+            LinearInvariant::new(path!("resupply-opportunity"))
                 .weight(Asset::SupplyAvailable, 1)
                 .weight(Asset::SupplyUsed, 1),
         )
         .invariant(
-            LinearInvariant::new("bounded incident time")
+            LinearInvariant::new(path!("bounded-incident-time"))
                 .weight(Asset::Time, 1)
                 .weight(Asset::TimeRemaining, 1),
         )
         .invariant(
-            LinearInvariant::new("incident lifecycle")
+            LinearInvariant::new(path!("incident-lifecycle"))
                 .weight(Asset::Active, 1)
                 .weight(Asset::Closed, 1),
         )

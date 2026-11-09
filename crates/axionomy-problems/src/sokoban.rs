@@ -5,6 +5,8 @@
 //! accounts. Crates keep stable identities so viewers and callers can follow
 //! the same object through a replay.
 
+use axionomy::path;
+use axionomy::path::slug;
 use axionomy::{
     Account, Basket, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Quantity,
     QuantityComparison as C, QuantityExpression as Q, Rate, Trace, basket,
@@ -443,7 +445,7 @@ fn build_board(rows: &[&str]) -> World {
         if matches!(tile_at(to), 'd' | 'e') {
             let circuit = circuit_of(tile_at(to)).unwrap();
             rate = rate.condition(
-                "door has pressure or a permanent latch",
+                path!("door-has-pressure-or-a-permanent-latch"),
                 Q::balance(Role::Puzzle, Asset::Pressed(circuit))
                     + Q::balance(Role::Puzzle, Asset::Latched(circuit)),
                 C::GreaterThanOrEqual,
@@ -567,12 +569,12 @@ fn build_board(rows: &[&str]) -> World {
             );
             builder = builder
                 .invariant(
-                    LinearInvariant::new(format!("circuit {circuit} pressure"))
+                    LinearInvariant::new(slug(format!("circuit {circuit} pressure")))
                         .weight(Asset::Pressed(circuit), 1)
                         .weight(Asset::Released(circuit), 1),
                 )
                 .invariant(
-                    LinearInvariant::new(format!("circuit {circuit} latch"))
+                    LinearInvariant::new(slug(format!("circuit {circuit} latch")))
                         .weight(Asset::LatchReady(circuit), 1)
                         .weight(Asset::Latched(circuit), 1),
                 );
@@ -607,25 +609,26 @@ fn build_board(rows: &[&str]) -> World {
 
     if has_exit {
         builder = builder.invariant(
-            LinearInvariant::new("player exit position")
+            LinearInvariant::new(path!("player-exit-position"))
                 .weight(Asset::AtExit, 1)
                 .weight(Asset::AwayFromExit, 1),
         );
     }
-    let mut occupancy = LinearInvariant::new("one occupant per floor")
+    let mut occupancy = LinearInvariant::new(path!("one-occupant-per-floor"))
         .weight(Asset::Player, 1)
         .weight(Asset::Empty, 1);
     for &crate_id in &crate_ids {
         builder = builder.invariant(
-            LinearInvariant::new(format!("one crate {crate_id}")).weight(Asset::Crate(crate_id), 1),
+            LinearInvariant::new(slug(format!("one crate {crate_id}")))
+                .weight(Asset::Crate(crate_id), 1),
         );
         occupancy = occupancy.weight(Asset::Crate(crate_id), 1);
     }
     builder
-        .invariant(LinearInvariant::new("one player").weight(Asset::Player, 1))
+        .invariant(LinearInvariant::new(path!("one-player")).weight(Asset::Player, 1))
         .invariant(occupancy)
         .invariant(
-            LinearInvariant::new("puzzle lifecycle")
+            LinearInvariant::new(path!("puzzle-lifecycle"))
                 .weight(Asset::Active, 1)
                 .weight(Asset::Solved, 1),
         )

@@ -1,3 +1,4 @@
+use axionomy::path;
 use axionomy::{
     Account, Basket, Economy, EconomyBuilder, Exchange, LinearInvariant, ModelIssue, Quantity,
     Rate, Trace, basket,
@@ -54,7 +55,7 @@ fn world() -> World {
                 .produce(Role::Workshop, basket([(Asset::Finished, 1)])),
         )
         .invariant(
-            LinearInvariant::new("material")
+            LinearInvariant::new(path!("material"))
                 .weight(Asset::Raw, 1)
                 .weight(Asset::Finished, 2),
         )

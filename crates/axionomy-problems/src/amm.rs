@@ -5,6 +5,7 @@
 //! access to that energy. No external price or oracle exists: the AMM reserve
 //! ratio is the economy's only public marginal price.
 
+use axionomy::path;
 use axionomy::{
     Account, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Quantity,
     QuantityComparison, QuantityExpression as Q, Rate, Rounding, Trace, basket,
@@ -384,11 +385,11 @@ fn build(size: MarketSize) -> World {
             .distinct(Role::Information, Role::Observer),
     );
 
-    let mut energy_invariant = LinearInvariant::new("closed energy accounting")
+    let mut energy_invariant = LinearInvariant::new(path!("closed-energy-accounting"))
         .weight(Asset::Energy, 1)
         .weight(Asset::SolarPotential, 1)
         .weight(Asset::SpentEnergy, 1);
-    let mut lifecycle = LinearInvariant::new("actor goal lifecycle");
+    let mut lifecycle = LinearInvariant::new(path!("actor-goal-lifecycle"));
     for actor in [Actor::Factory, Actor::Household] {
         lifecycle = lifecycle
             .weight(Asset::Need(actor), 1)
@@ -402,15 +403,15 @@ fn build(size: MarketSize) -> World {
     energy_invariant = energy_invariant.weight(Asset::Utility, 0);
     builder
         .invariant(energy_invariant)
-        .invariant(LinearInvariant::new("closed credit accounting").weight(Asset::Credit, 1))
+        .invariant(LinearInvariant::new(path!("closed-credit-accounting")).weight(Asset::Credit, 1))
         .invariant(
-            LinearInvariant::new("liquidity share accounting")
+            LinearInvariant::new(path!("liquidity-share-accounting"))
                 .weight(Asset::LpShare, 1)
                 .weight(Asset::UnissuedLpShare, 1),
         )
         .invariant(lifecycle)
         .invariant(
-            LinearInvariant::new("shortage knowledge lifecycle")
+            LinearInvariant::new(path!("shortage-knowledge-lifecycle"))
                 .weight(Asset::Uninformed(Actor::Speculator), 1)
                 .weight(Asset::Informed(Actor::Speculator), 1),
         )
@@ -436,10 +437,10 @@ fn swap_rate(input: Asset, output: Asset, output_quantity: Q<Ontology>) -> Rate<
         .consume_computed(Role::Pool, output, output_quantity.clone())
         .produce_computed(Role::Trader, output, output_quantity.clone())
         .condition(
-            "minimum output",
+            path!("minimum-output"),
             output_quantity,
             QuantityComparison::GreaterThanOrEqual,
-            Q::parameter("minimum_output"),
+            Q::parameter(path!("minimum-output")),
         )
         .distinct(Role::Pool, Role::Trader)
 }
@@ -453,13 +454,13 @@ fn minted_lp_expression() -> Q<Ontology> {
     let issued = issued_lp_expression();
     Q::minimum(
         Q::mul_div(
-            Q::parameter("energy_amount"),
+            Q::parameter(path!("energy-amount")),
             issued.clone(),
             Q::balance(Role::Pool, Asset::Energy),
             Rounding::Floor,
         ),
         Q::mul_div(
-            Q::parameter("credit_amount"),
+            Q::parameter(path!("credit-amount")),
             issued,
             Q::balance(Role::Pool, Asset::Credit),
             Rounding::Floor,
@@ -484,28 +485,36 @@ fn add_liquidity_rate() -> Rate<Ontology> {
         .consume_computed(
             Role::LiquidityProvider,
             Asset::Energy,
-            Q::parameter("energy_amount"),
+            Q::parameter(path!("energy-amount")),
         )
         .consume_computed(
             Role::LiquidityProvider,
             Asset::Credit,
-            Q::parameter("credit_amount"),
+            Q::parameter(path!("credit-amount")),
         )
-        .produce_computed(Role::Pool, Asset::Energy, Q::parameter("energy_amount"))
-        .produce_computed(Role::Pool, Asset::Credit, Q::parameter("credit_amount"))
+        .produce_computed(
+            Role::Pool,
+            Asset::Energy,
+            Q::parameter(path!("energy-amount")),
+        )
+        .produce_computed(
+            Role::Pool,
+            Asset::Credit,
+            Q::parameter(path!("credit-amount")),
+        )
         .consume_computed(Role::Pool, Asset::UnissuedLpShare, minted.clone())
         .produce_computed(Role::LiquidityProvider, Asset::LpShare, minted.clone())
         .condition(
-            "liquidity must preserve the discovered price",
-            Q::parameter("energy_amount") * Q::balance(Role::Pool, Asset::Credit),
+            path!("liquidity-must-preserve-the-discovered-price"),
+            Q::parameter(path!("energy-amount")) * Q::balance(Role::Pool, Asset::Credit),
             QuantityComparison::Equal,
-            Q::parameter("credit_amount") * Q::balance(Role::Pool, Asset::Energy),
+            Q::parameter(path!("credit-amount")) * Q::balance(Role::Pool, Asset::Energy),
         )
         .condition(
-            "minimum liquidity shares",
+            path!("minimum-liquidity-shares"),
             minted,
             QuantityComparison::GreaterThanOrEqual,
-            Q::parameter("minimum_lp_shares"),
+            Q::parameter(path!("minimum-lp-shares")),
         )
         .distinct(Role::Pool, Role::LiquidityProvider)
 }
@@ -550,23 +559,23 @@ pub fn buy_energy(actor: Actor, credit_input: u64, minimum_energy: u64) -> Actio
     Exchange::new(RateId::BuyEnergy, Quantity::new(credit_input))
         .bind(Role::Pool, AccountId::Pool)
         .bind(Role::Trader, AccountId::Actor(actor))
-        .parameter("minimum_output", Quantity::new(minimum_energy))
+        .parameter(path!("minimum-output"), Quantity::new(minimum_energy))
 }
 
 pub fn sell_energy(actor: Actor, energy_input: u64, minimum_credit: u64) -> Action {
     Exchange::new(RateId::SellEnergy, Quantity::new(energy_input))
         .bind(Role::Pool, AccountId::Pool)
         .bind(Role::Trader, AccountId::Actor(actor))
-        .parameter("minimum_output", Quantity::new(minimum_credit))
+        .parameter(path!("minimum-output"), Quantity::new(minimum_credit))
 }
 
 pub fn add_liquidity(actor: Actor, energy: u64, credit: u64, minimum_lp_shares: u64) -> Action {
     Exchange::new(RateId::AddLiquidity, Quantity::new(1))
         .bind(Role::Pool, AccountId::Pool)
         .bind(Role::LiquidityProvider, AccountId::Actor(actor))
-        .parameter("energy_amount", Quantity::new(energy))
-        .parameter("credit_amount", Quantity::new(credit))
-        .parameter("minimum_lp_shares", Quantity::new(minimum_lp_shares))
+        .parameter(path!("energy-amount"), Quantity::new(energy))
+        .parameter(path!("credit-amount"), Quantity::new(credit))
+        .parameter(path!("minimum-lp-shares"), Quantity::new(minimum_lp_shares))
 }
 
 pub fn remove_liquidity(actor: Actor, shares: u64) -> Action {

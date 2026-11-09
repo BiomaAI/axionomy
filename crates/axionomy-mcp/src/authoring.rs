@@ -2,8 +2,8 @@
 //! `EconomyBuilder`, so the kernel decides what a valid economy is; this module
 //! only refuses entries that would replace something the economy already has.
 
-use crate::handles::InvariantPath;
 use crate::messages::{Direction, EconomyEntries, RateEntries};
+use axionomy::InvariantPath;
 use axionomy::{AccountPath, AssetPath, RatePath, RolePath, paths};
 use indexmap::IndexMap;
 use std::collections::{BTreeMap, HashSet};
@@ -96,10 +96,10 @@ pub(crate) fn extend(
                 .filter_map(|id| Some((id.clone(), economy.rate(id)?.clone())))
         })
         .collect();
-    let mut invariants: IndexMap<String, paths::LinearInvariant> = base
+    let mut invariants: IndexMap<InvariantPath, paths::LinearInvariant> = base
         .into_iter()
         .flat_map(paths::Economy::invariants)
-        .map(|invariant| (invariant.name().to_owned(), invariant.clone()))
+        .map(|invariant| (invariant.name().clone(), invariant.clone()))
         .collect();
 
     for (id, amounts) in entries.accounts {
@@ -121,11 +121,9 @@ pub(crate) fn extend(
     }
 
     for (path, weights) in entries.invariants {
-        // The kernel names an invariant with a label; here the label is its path.
-        let name = path.to_string();
         let mut invariant = invariants
-            .shift_remove(&name)
-            .unwrap_or_else(|| paths::LinearInvariant::new(name.clone()));
+            .shift_remove(&path)
+            .unwrap_or_else(|| paths::LinearInvariant::new(path.clone()));
         let weighted: HashSet<AssetPath> = invariant
             .weights()
             .map(|(asset, _)| asset.clone())
@@ -139,7 +137,7 @@ pub(crate) fn extend(
             }
             invariant = invariant.weight(asset, weight);
         }
-        invariants.insert(name, invariant);
+        invariants.insert(path, invariant);
     }
 
     let builder = accounts
@@ -222,7 +220,7 @@ fn extend_rate(
     }
     for condition in added.conditions {
         rate = rate.condition(
-            condition.name(),
+            condition.name().clone(),
             condition.left().clone(),
             condition.comparison(),
             condition.right().clone(),

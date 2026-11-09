@@ -1,5 +1,7 @@
 //! A single workbench with competing contracts and persistent tooling costs.
 use super::*;
+use axionomy::path;
+use axionomy::path::slug;
 use axionomy::{QuantityComparison as C, QuantityExpression as Q};
 
 fn law(time: u64, labor: u64) -> Rate<Ontology> {
@@ -48,7 +50,7 @@ pub(super) fn build(stress: bool) -> World {
         stock.insert(Asset::Contract(order), Quantity::new(1));
     }
     let mut builder = EconomyBuilder::new().account(AccountId::Workshop, Account::from(stock));
-    let mut occupancy = LinearInvariant::new("one workbench")
+    let mut occupancy = LinearInvariant::new(path!("one-workbench"))
         .weight(Asset::Idle, 1)
         .weight(Asset::Solved, 1);
     for order in 0..orders {
@@ -150,7 +152,7 @@ pub(super) fn build(stress: bool) -> World {
                     .distinct(Role::Shop, Role::Customer),
             )
             .invariant(
-                LinearInvariant::new(format!("contract {order} lifecycle"))
+                LinearInvariant::new(slug(format!("contract {order} lifecycle")))
                     .weight(Asset::Contract(order), 1)
                     .weight(Asset::Raw(order), 1)
                     .weight(Asset::Prepared(order), 1)
@@ -169,7 +171,7 @@ pub(super) fn build(stress: bool) -> World {
             RateId::Repair,
             law(2, 1)
                 .condition(
-                    "tool has wear",
+                    path!("tool-has-wear"),
                     Q::balance(Role::Shop, Asset::Wear),
                     C::GreaterThanOrEqual,
                     Q::constant(1),
@@ -228,7 +230,7 @@ pub(super) fn build(stress: bool) -> World {
         )
         .invariant(occupancy)
         .invariant(
-            LinearInvariant::new("material mass")
+            LinearInvariant::new(path!("material-mass"))
                 .weight(Asset::Wood, 1)
                 .weight(Asset::Frame, 1)
                 .weight(Asset::Panel, 1)
@@ -238,34 +240,34 @@ pub(super) fn build(stress: bool) -> World {
                 .weight(Asset::Waste, 1),
         )
         .invariant(
-            LinearInvariant::new("tool capacity")
+            LinearInvariant::new(path!("tool-capacity"))
                 .weight(Asset::Durability, 1)
                 .weight(Asset::Wear, 1)
                 .weight(Asset::ToolPotential, 1),
         )
         .invariant(
-            LinearInvariant::new("repair supplies")
+            LinearInvariant::new(path!("repair-supplies"))
                 .weight(Asset::RepairKit, 1)
                 .weight(Asset::UsedRepairKit, 1),
         )
         .invariant(
-            LinearInvariant::new("upgrade opportunity")
+            LinearInvariant::new(path!("upgrade-opportunity"))
                 .weight(Asset::UpgradeKit, 1)
                 .weight(Asset::Upgraded, 1),
         )
-        .invariant(LinearInvariant::new("closed customer funds").weight(Asset::Credit, 1))
+        .invariant(LinearInvariant::new(path!("closed-customer-funds")).weight(Asset::Credit, 1))
         .invariant(
-            LinearInvariant::new("labor accounting")
+            LinearInvariant::new(path!("labor-accounting"))
                 .weight(Asset::Labor, 1)
                 .weight(Asset::SpentLabor, 1),
         )
         .invariant(
-            LinearInvariant::new("time accounting")
+            LinearInvariant::new(path!("time-accounting"))
                 .weight(Asset::Time, 1)
                 .weight(Asset::SpentTime, 1),
         )
         .invariant(
-            LinearInvariant::new("workshop lifecycle")
+            LinearInvariant::new(path!("workshop-lifecycle"))
                 .weight(Asset::Active, 1)
                 .weight(Asset::Solved, 1),
         )

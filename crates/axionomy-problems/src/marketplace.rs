@@ -4,6 +4,7 @@
 //! economy remains the authority for participant state, settlement terms,
 //! feasibility, effects, and completed orders.
 
+use axionomy::path;
 use axionomy::{
     Account, AssessmentStatus, Economy, EconomyBuilder, Exchange, ExchangeAssessment, Goal,
     LinearInvariant, Quantity, Rate, Trace, basket,
@@ -422,7 +423,7 @@ fn build(size: MarketSize) -> World {
             );
     }
     let buyer_lifecycle = orders.iter().copied().fold(
-        LinearInvariant::new("buyer order lifecycle"),
+        LinearInvariant::new(path!("buyer-order-lifecycle")),
         |invariant, order| {
             invariant
                 .weight(Asset::PurchaseIntent(order), 1)
@@ -430,13 +431,13 @@ fn build(size: MarketSize) -> World {
         },
     );
     let seller_lifecycle = orders.iter().copied().fold(
-        LinearInvariant::new("seller order lifecycle")
+        LinearInvariant::new(path!("seller-order-lifecycle"))
             .weight(Asset::SaleOffer(Item::Widget), 1)
             .weight(Asset::SaleOffer(Item::Gadget), 1),
         |invariant, order| invariant.weight(Asset::CompletedSale(order), 1),
     );
     let order_lifecycle = orders.iter().copied().fold(
-        LinearInvariant::new("order lifecycle"),
+        LinearInvariant::new(path!("order-lifecycle")),
         |invariant, order| {
             invariant
                 .weight(Asset::OpenOrder(order), 1)
@@ -444,16 +445,16 @@ fn build(size: MarketSize) -> World {
         },
     );
     builder
-        .invariant(LinearInvariant::new("money accounting").weight(Asset::Money, 1))
+        .invariant(LinearInvariant::new(path!("money-accounting")).weight(Asset::Money, 1))
         .invariant(
-            LinearInvariant::new("item accounting")
+            LinearInvariant::new(path!("item-accounting"))
                 .weight(Asset::Item(Item::Widget), 1)
                 .weight(Asset::Item(Item::Gadget), 1),
         )
         .invariant(buyer_lifecycle)
         .invariant(seller_lifecycle)
         .invariant(
-            LinearInvariant::new("shipping capacity accounting")
+            LinearInvariant::new(path!("shipping-capacity-accounting"))
                 .weight(Asset::ShippingCapacity, 1)
                 .weight(Asset::UsedShippingCapacity, 1),
         )

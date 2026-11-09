@@ -149,10 +149,10 @@ def fixtures (expression : Evaluation.Expr Nat Nat Nat → Json) : Array Json :=
     { blank with produce := [(0, [(2, limit)])] } { proposal with bindings := [(0, 0)] } [⟨"huge", hugeWeights⟩])
   cases := cases.push (add "negative-contribution" before { transfer with produce := [(1, [(0, 1)])] } proposal [⟨"negative", [(0, -(2^63))]⟩])
   cases := cases.push (add "missing-rate-and-units" before transfer { proposal with rate := 99, units := 0 } [])
-  cases := cases.push (add "multiple-structural-issues" before { transfer with distinct := [(0, 1)], computedConsume := [⟨0, 0, .parameter "éλ"⟩] }
+  cases := cases.push (add "multiple-structural-issues" before { transfer with distinct := [(0, 1)], computedConsume := [⟨0, 0, .parameter "z-9"⟩] }
     { proposal with units := 0, bindings := [(0, 77), (1, 77), (2, 88)], parameters := [("unknown", 1)] } [])
-  cases := cases.push (add "parameter-and-comparison" before { transfer with computedPreserve := [⟨0, 0, .parameter "éλ"⟩], conditions := [⟨"lower", .balance 0 0, .greaterOrEqual, .parameter "éλ"⟩, ⟨"upper", .parameter "éλ", .lessOrEqual, .units⟩] }
-    { proposal with parameters := [("éλ", 1)] } [])
+  cases := cases.push (add "parameter-and-comparison" before { transfer with computedPreserve := [⟨0, 0, .parameter "z-9"⟩], conditions := [⟨"lower", .balance 0 0, .greaterOrEqual, .parameter "z-9"⟩, ⟨"upper", .parameter "z-9", .lessOrEqual, .units⟩] }
+    { proposal with parameters := [("z-9", 1)] } [])
   -- Opening and closing accounts. Account 5 does not exist before.
   let fund : Rule := { transfer with opens := [1] }
   let opening : Proposal := { proposal with bindings := [(0, 1), (1, 5)] }

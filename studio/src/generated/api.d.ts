@@ -253,6 +253,8 @@ export interface components {
             role: components["schemas"]["ViewId"];
         };
         /** @description Lowercase segments of a–z, 0–9 and `-`, separated by `/`, such as `loans/42`; each segment starts and ends with a letter or digit. */
+        ConditionPath: string;
+        /** @description Lowercase segments of a–z, 0–9 and `-`, separated by `/`, such as `loans/42`; each segment starts and ends with a letter or digit. */
         DocumentPath: string;
         ErrorResponse: {
             error: string;
@@ -273,7 +275,7 @@ export interface components {
             receipt: components["schemas"]["ReceiptView"];
         };
         ExchangeParameterView: {
-            name: string;
+            name: components["schemas"]["ParameterPath"];
             value: components["schemas"]["ExactQuantity"];
         };
         ExchangeView: {
@@ -369,13 +371,15 @@ export interface components {
          * @enum {string}
          */
         InstanceProfile: "micro" | "showcase" | "stress";
+        /** @description Lowercase segments of a–z, 0–9 and `-`, separated by `/`, such as `loans/42`; each segment starts and ends with a letter or digit. */
+        InvariantPath: string;
         InvariantTermView: {
             asset: components["schemas"]["ViewId"];
             /** Format: int64 */
             weight: number;
         };
         InvariantView: {
-            name: string;
+            name: components["schemas"]["InvariantPath"];
             terms: components["schemas"]["InvariantTermView"][];
         };
         /** @description Lowercase segments of a–z, 0–9 and `-`, separated by `/`, such as `loans/42`; each segment starts and ends with a letter or digit. */
@@ -485,6 +489,8 @@ export interface components {
             label: string;
             visible_accounts: components["schemas"]["AccountView"][];
         };
+        /** @description Lowercase segments of a–z, 0–9 and `-`, separated by `/`, such as `loans/42`; each segment starts and ends with a letter or digit. */
+        ParameterPath: string;
         ParetoFrontView: {
             axes: components["schemas"]["ObjectiveAxisView"][];
             completeness: components["schemas"]["FrontierCompletenessView"];
@@ -532,7 +538,7 @@ export interface components {
         RateConditionView: {
             comparison: string;
             left: string;
-            name: string;
+            name: components["schemas"]["ConditionPath"];
             right: string;
         };
         /** @description A rate role's complete consume/produce/preserve contract. */

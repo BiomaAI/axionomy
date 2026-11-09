@@ -9,7 +9,7 @@ mod resources;
 mod server;
 mod store;
 
-pub use handles::{AssessmentId, EconomyId, HandleError, Invariant, InvariantPath};
+pub use handles::{AssessmentId, EconomyId, HandleError};
 pub use http::{StatelessHttpService, stateless_http_config, stateless_http_service};
 pub use messages::{
     Amounts, AssessResponse, ComputedEntry, Direction, DocumentSummary, EconomyCounts,

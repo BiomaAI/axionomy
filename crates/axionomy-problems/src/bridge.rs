@@ -1,5 +1,6 @@
 //! Multi-agent negotiation for a capacity-one bridge.
 
+use axionomy::path;
 use axionomy::{
     Account, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Quantity, Rate, Trace,
     basket,
@@ -449,10 +450,10 @@ fn build(rounds: u64) -> World {
         );
     }
 
-    let positions = LinearInvariant::new("two agent positions")
+    let positions = LinearInvariant::new(path!("two-agent-positions"))
         .weight(Asset::At(Side::West), 1)
         .weight(Asset::At(Side::East), 1);
-    let status = LinearInvariant::new("two agent status tokens")
+    let status = LinearInvariant::new(path!("two-agent-status-tokens"))
         .weight(Asset::CanBid, 1)
         .weight(Asset::Submitted, 1)
         .weight(Asset::CrossingRight, 1)
@@ -486,28 +487,28 @@ fn build(rounds: u64) -> World {
         .invariant(positions)
         .invariant(status)
         .invariant(
-            LinearInvariant::new("bridge lifecycle")
+            LinearInvariant::new(path!("bridge-lifecycle"))
                 .weight(Asset::Active, 1)
                 .weight(Asset::Solved, 1),
         )
         .invariant(
-            LinearInvariant::new("bridge capacity")
+            LinearInvariant::new(path!("bridge-capacity"))
                 .weight(Asset::CapacityFree, 1)
                 .weight(Asset::CrossingRight, 1),
         )
         .invariant(
-            LinearInvariant::new("crossing turn")
+            LinearInvariant::new(path!("crossing-turn"))
                 .weight(Asset::FirstTurn, 1)
                 .weight(Asset::SecondTurn, 1)
                 .weight(Asset::CrossingRight, 1),
         )
         .invariant(
-            LinearInvariant::new("energy accounting")
+            LinearInvariant::new(path!("energy-accounting"))
                 .weight(Asset::Energy, 1)
                 .weight(Asset::SpentEnergy, 1),
         )
         .invariant(
-            LinearInvariant::new("credit accounting")
+            LinearInvariant::new(path!("credit-accounting"))
                 .weight(Asset::Credit, 1)
                 .weight(Asset::Escrow, 1)
                 .weight(Asset::SpentCredit, 1),

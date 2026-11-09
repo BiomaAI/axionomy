@@ -1,5 +1,6 @@
 //! Finite cross-language regression checks against executable Lean definitions.
 //! This is not a proof that the Rust implementation refines those definitions.
+use axionomy::path;
 use axionomy::{
     Account, AccountError, ApplyError, AssetAmount, Basket, BasketError, EconomyBuilder, Exchange,
     LinearInvariant, Quantity, QuantityComparison, QuantityExpression as Q, Rate, Rounding, basket,
@@ -506,7 +507,8 @@ fn static_exchange_assessment_commit_and_receipt_match_lean() {
             )
             .rate(RateId::Change, rate);
         if case.conserve {
-            builder = builder.invariant(LinearInvariant::new("tokens").weight(Asset::Token, 1));
+            builder =
+                builder.invariant(LinearInvariant::new(path!("tokens")).weight(Asset::Token, 1));
         }
         let mut world = builder.build().unwrap();
         let action = Exchange::new(RateId::Change, number(&case.units))
@@ -558,7 +560,7 @@ fn expression() -> Q<Test> {
     Q::mul_div(
         Q::balance(Role::Source, Asset::Token),
         Q::units(),
-        Q::parameter("denominator"),
+        Q::parameter(path!("denominator")),
         Rounding::Floor,
     )
 }
@@ -582,7 +584,7 @@ fn computed_effects_use_the_same_pre_exchange_snapshot_as_lean() {
         let action = Exchange::new(RateId::Change, number(&case.units))
             .bind(Role::Source, AccountId::Source)
             .bind(Role::Sink, AccountId::Sink)
-            .parameter("denominator", number(&case.denominator));
+            .parameter(path!("denominator"), number(&case.denominator));
         let evaluated = evaluator.apply(action.clone());
         assert_eq!(evaluated.is_ok(), case.evaluated.is_some(), "{case:?}");
         if let Some(expected) = &case.evaluated {
@@ -597,10 +599,10 @@ fn computed_effects_use_the_same_pre_exchange_snapshot_as_lean() {
             .consume_computed(Role::Source, Asset::Token, expression())
             .produce_computed(Role::Sink, Asset::Token, expression())
             .condition(
-                "minimum",
+                path!("minimum"),
                 expression(),
                 QuantityComparison::GreaterThanOrEqual,
-                Q::parameter("minimum"),
+                Q::parameter(path!("minimum")),
             )
             .distinct(Role::Source, Role::Sink);
         let mut world = EconomyBuilder::new()
@@ -610,11 +612,11 @@ fn computed_effects_use_the_same_pre_exchange_snapshot_as_lean() {
             )
             .account(AccountId::Sink, Account::default())
             .rate(RateId::Change, rate)
-            .invariant(LinearInvariant::new("tokens").weight(Asset::Token, 1))
+            .invariant(LinearInvariant::new(path!("tokens")).weight(Asset::Token, 1))
             .build()
             .unwrap();
         let initial = world.state_key();
-        let action = action.parameter("minimum", number(&case.minimum));
+        let action = action.parameter(path!("minimum"), number(&case.minimum));
         assert_eq!(
             world.assess(&action).is_applicable(),
             case.accepted,

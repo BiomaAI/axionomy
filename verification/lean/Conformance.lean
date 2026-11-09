@@ -215,8 +215,10 @@ structure EvaluationCase where
   conditions : List (Option Bool × Option String)
   deriving ToJson
 
+-- Parameter, condition and invariant names are paths in Rust, so the fixtures
+-- name them with paths; `z-9` sorts after `z`, as a longer name must.
 def evaluationCase (units : Nat) (expression right : Evaluation.Expr Nat Nat Nat) : EvaluationCase :=
-  let parameters := [("a", 3), ("z", 0), ("éλ", Quantity.limit)]
+  let parameters := [("a", 3), ("z", 0), ("z-9", Quantity.limit)]
   let bindings := [(0, 0), (1, 1), (2, 999)]
   let accounts := [(0, [(0, Quantity.limit), (1, 3)]), (1, [(0, 1)])]
   let context := Evaluation.fromState compare 0 units parameters bindings accounts
@@ -335,7 +337,7 @@ def metadataCase (inputs : List (Nat × Nat × Nat × Evaluation.Expr Nat Nat Na
   let mut steps := []
   let mut snapshots := [MetadataSnapshot.mk [] [] [] [] [] [] [] []]
   for (kind, role, asset, expression, right) in inputs do
-    let label := "condition " ++ toString steps.length
+    let label := "condition-" ++ toString steps.length
     let comparison := steps.length % 3
     steps := steps ++ [⟨kind, role, asset, expressionJson expression, expressionJson right, label, comparison⟩]
     if kind < 3 then
@@ -531,32 +533,32 @@ def main : IO Unit := do
       for assets in [[], [(0, 0)], [(0, 1)], [(1, 1)], [(0, limit)], [(1, limit)], [(0, 1), (1, 1)]] do
         rateMerges := rateMerges.push (rateMergeCase target role assets)
   let atoms : List (Evaluation.Expr Nat Nat Nat) :=
-    [.constant 0, .constant 1, .constant limit, .units, .parameter "a", .parameter "éλ",
-     .parameter "", .parameter "未知`", .balance 0 0, .balance 0 99,
+    [.constant 0, .constant 1, .constant limit, .units, .parameter "a", .parameter "z-9",
+     .parameter "m", .parameter "unknown-1", .balance 0 0, .balance 0 99,
      .balance 1 0, .balance 2 0, .balance 3 0]
   let mut evaluation : Array EvaluationCase := #[]
   for units in [0, 2] do
     for left in atoms do
-      evaluation := evaluation.push (evaluationCase units left (.parameter "missing condition"))
+      evaluation := evaluation.push (evaluationCase units left (.parameter "missing-condition"))
       for right in atoms do
         for combine in combinators do
           evaluation := evaluation.push (evaluationCase units (combine left right) .units)
       for combine in combinators do
         evaluation := evaluation.push (evaluationCase units
-          (combine (.binary .sub (.balance 0 0) left) (divide (.parameter "éλ") .units))
+          (combine (.binary .sub (.balance 0 0) left) (divide (.parameter "z-9") .units))
           (.balance 3 0))
       -- Full-width products, exact/inexact quotients, zero denominators,
       -- quotient overflow and an error in each operand position.
       let mulDivOperands : List (Evaluation.Expr Nat Nat Nat × Evaluation.Expr Nat Nat Nat) :=
         [(.constant limit, .constant limit), (.parameter "a", .constant 2), (.balance 0 0, .units),
-         (.constant 1, .parameter "z"), (.constant 2, .constant 1), (.parameter "", .constant 1),
+         (.constant 1, .parameter "z"), (.constant 2, .constant 1), (.parameter "m", .constant 1),
          (.constant 1, .balance 3 0), (.units, .balance 1 0)]
       for rounding in [MulDiv.Rounding.floor, .ceil] do
         for (right, denominator) in mulDivOperands do
           evaluation := evaluation.push (evaluationCase units (.mulDiv rounding left right denominator)
             (.parameter "a"))
         evaluation := evaluation.push (evaluationCase units
-          (.binary .add (.mulDiv rounding (.balance 0 0) left (.parameter "éλ")) .units)
+          (.binary .add (.mulDiv rounding (.balance 0 0) left (.parameter "z-9")) .units)
           (.mulDiv rounding left (.constant 3) (.constant 2)))
   let mut measurements : Array MeasureCase := #[]
   for firstWeight in coefficients do
@@ -595,17 +597,17 @@ def main : IO Unit := do
   let mut discoveryExpressions := atoms
   for combine in combinators do
     discoveryExpressions := discoveryExpressions ++
-      [combine (.binary .add (.balance 2 3) (.parameter "éλ"))
+      [combine (.binary .add (.balance 2 3) (.parameter "z-9"))
         (.binary .max (.balance 0 99) (.binary .sub (.parameter "a") (.balance 2 3)))]
   for rounding in [MulDiv.Rounding.floor, .ceil] do
     discoveryExpressions := discoveryExpressions ++
-      [.mulDiv rounding (.balance 2 3) (.parameter "éλ") (.binary .sub (.parameter "a") (.balance 0 99))]
+      [.mulDiv rounding (.balance 2 3) (.parameter "z-9") (.binary .sub (.parameter "a") (.balance 0 99))]
   for expression in discoveryExpressions do
     for kind in [0, 1, 2, 3] do
       metadata := metadata.push (metadataCase [
-        (4, 4, 1, .units, .units), (kind, 3, 5, expression, .parameter "未知`"),
-        (0, 2, 7, .parameter "éλ", .units), (1, 1, 6, .balance 0 99, .units),
-        (2, 2, 7, expression, .units), (3, 0, 0, expression, .binary .add (.parameter "") (.parameter "éλ")),
+        (4, 4, 1, .units, .units), (kind, 3, 5, expression, .parameter "unknown-1"),
+        (0, 2, 7, .parameter "z-9", .units), (1, 1, 6, .balance 0 99, .units),
+        (2, 2, 7, expression, .units), (3, 0, 0, expression, .binary .add (.parameter "m") (.parameter "z-9")),
         (4, 1, 4, .units, .units), (4, 2, 2, .units, .units)])
   let mut validation : Array ValidationCase := #[]
   -- Structural errors accumulate in category order, except a missing rate
@@ -614,10 +616,10 @@ def main : IO Unit := do
     for rule in [0, 1, 2] do
       for bindings in [[], [(0, 0)], [(1, 1), (0, 0)], [(0, 0), (1, 0)],
           [(0, 9), (1, 9)], [(1, 8), (0, 9)], [(2, 7), (0, 0), (1, 1)]] do
-        for parameters in [[], [("éλ", 1)], [("éλ", limit), ("", 0)],
-            [("z", 3), ("未知`", 4), ("", 0)]] do
+        for parameters in [[], [("z-9", 1)], [("z-9", limit), ("m", 0)],
+            [("z", 3), ("unknown-1", 4), ("m", 0)]] do
           for availableAccounts in [[], [0], [1, 0]] do
-            validation := validation.push (validationCase [1, 0] ["éλ", "", "éλ"] [(1, 0)]
+            validation := validation.push (validationCase [1, 0] ["z-9", "m", "z-9"] [(1, 0)]
               units rule bindings parameters availableAccounts)
   for roles in [[], [0], [2, 0, 1]] do
     for pairs in [[], [(0, 0)], [(1, 0), (0, 1), (2, 0)]] do

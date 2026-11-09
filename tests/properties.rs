@@ -1,3 +1,4 @@
+use axionomy::path;
 use axionomy::{
     Account, Economy, EconomyBuilder, Exchange, LinearInvariant, Quantity, Rate, basket,
 };
@@ -53,7 +54,7 @@ fn world(balance: u64) -> World {
                 .produce(Role::Receiver, basket([(Asset::Token, 1)]))
                 .distinct(Role::Sender, Role::Receiver),
         )
-        .invariant(LinearInvariant::new("tokens").weight(Asset::Token, 1))
+        .invariant(LinearInvariant::new(path!("tokens")).weight(Asset::Token, 1))
         .build()
         .unwrap()
 }

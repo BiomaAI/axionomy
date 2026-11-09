@@ -1,3 +1,4 @@
+use axionomy::path;
 use axionomy::{Account, AssetAmount, Basket, EconomyBuilder, Goal, Quantity, Rate};
 use axionomy_units::si::energy::joule;
 use axionomy_units::si::mass::{gram, kilogram};
@@ -181,7 +182,7 @@ fn schema_validates_assets_across_accounts_rates_invariants_and_goals() {
                     Rate::new().preserve(Role::Depot, required.clone()),
                 )
                 .invariant(
-                    axionomy::LinearInvariant::new("cargo").weight(cargo.asset().clone(), 1),
+                    axionomy::LinearInvariant::new(path!("cargo")).weight(cargo.asset().clone(), 1),
                 ),
         )
         .unwrap();

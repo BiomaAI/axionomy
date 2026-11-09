@@ -1,5 +1,6 @@
 //! Executed job shop with queues, setup, shared labor and recoverable disruption.
 use super::*;
+use axionomy::path;
 use axionomy::{QuantityComparison as C, QuantityExpression as Q};
 
 pub const OPERATIONS: [Operation; 6] = [
@@ -23,7 +24,12 @@ fn clock() -> Q<Ontology> {
 fn law() -> Rate<Ontology> {
     Rate::new()
         .preserve(Role::Schedule, basket([(Asset::Active, 1)]))
-        .condition("one scheduling event", Q::units(), C::Equal, Q::constant(1))
+        .condition(
+            path!("one-scheduling-event"),
+            Q::units(),
+            C::Equal,
+            Q::constant(1),
+        )
 }
 fn machine_law(machine: Machine) -> Rate<Ontology> {
     law()
@@ -106,7 +112,7 @@ pub(super) fn build(stress: bool) -> World {
                 RateId::Queue { operation, machine },
                 operation_law(operation, machine)
                     .condition(
-                        "job has arrived",
+                        path!("job-has-arrived"),
                         clock(),
                         C::GreaterThanOrEqual,
                         Q::balance(Role::PrimaryJob, Asset::Arrival),
@@ -191,7 +197,7 @@ pub(super) fn build(stress: bool) -> World {
             )
             .preserve(Role::Machine, basket([(Asset::Online, 1)]))
             .condition(
-                "execution has finished",
+                path!("execution-has-finished"),
                 clock(),
                 C::GreaterThanOrEqual,
                 Q::balance(Role::PrimaryJob, Asset::Due),
@@ -245,7 +251,7 @@ pub(super) fn build(stress: bool) -> World {
     let fault = || {
         machine_law(Machine::Two)
             .condition(
-                "disruption is due",
+                path!("disruption-is-due"),
                 clock(),
                 C::Equal,
                 Q::balance(Role::Schedule, Asset::FaultAt),
@@ -274,7 +280,7 @@ pub(super) fn build(stress: bool) -> World {
                         basket([(Asset::JobIdentity(operation_spec(operation).0), 1)]),
                     )
                     .condition(
-                        "unfinished work remains",
+                        path!("unfinished-work-remains"),
                         Q::balance(Role::PrimaryJob, Asset::Due),
                         C::GreaterThanOrEqual,
                         clock() + Q::constant(1),
@@ -325,7 +331,7 @@ pub(super) fn build(stress: bool) -> World {
         RateId::CompleteRepair,
         clear(machine_law(Machine::Two), Role::Machine, Asset::Due)
             .condition(
-                "repair duration elapsed",
+                path!("repair-duration-elapsed"),
                 clock(),
                 C::GreaterThanOrEqual,
                 Q::balance(Role::Machine, Asset::Due),
@@ -340,13 +346,13 @@ pub(super) fn build(stress: bool) -> World {
             RateId::Advance { to },
             law()
                 .condition(
-                    "clock moves forward",
+                    path!("clock-moves-forward"),
                     clock() + Q::constant(1),
                     C::LessThanOrEqual,
                     Q::constant(u64::from(to)),
                 )
                 .condition(
-                    "cannot skip a scheduled disruption",
+                    path!("cannot-skip-a-scheduled-disruption"),
                     Q::constant(u64::from(to)),
                     C::LessThanOrEqual,
                     Q::balance(Role::Schedule, Asset::FaultAt)
@@ -381,9 +387,10 @@ pub(super) fn build(stress: bool) -> World {
             .distinct(Role::PrimaryJob, Role::Schedule)
             .distinct(Role::SecondaryJob, Role::Schedule),
     );
-    let mut jobs = LinearInvariant::new("job phase accounting").weight(Asset::Done, 1);
-    let mut queues = LinearInvariant::new("three machine queues").weight(Asset::QueueFree, 1);
-    let mut starts = LinearInvariant::new("each operation starts once");
+    let mut jobs = LinearInvariant::new(path!("job-phase-accounting")).weight(Asset::Done, 1);
+    let mut queues =
+        LinearInvariant::new(path!("three-machine-queues")).weight(Asset::QueueFree, 1);
+    let mut starts = LinearInvariant::new(path!("each-operation-starts-once"));
     for operation in OPERATIONS {
         jobs = jobs.weight(Asset::Ready(operation), 1);
         queues = queues.weight(Asset::QueueTicket(operation), 1);
@@ -402,43 +409,43 @@ pub(super) fn build(stress: bool) -> World {
         .invariant(queues)
         .invariant(starts)
         .invariant(
-            LinearInvariant::new("machine occupancy")
+            LinearInvariant::new(path!("machine-occupancy"))
                 .weight(Asset::Idle, 1)
                 .weight(Asset::Busy, 1),
         )
         .invariant(
-            LinearInvariant::new("machine condition")
+            LinearInvariant::new(path!("machine-condition"))
                 .weight(Asset::Online, 1)
                 .weight(Asset::Broken, 1)
                 .weight(Asset::Repairing, 1),
         )
         .invariant(
-            LinearInvariant::new("setup configuration")
+            LinearInvariant::new(path!("setup-configuration"))
                 .weight(Asset::Configured(Job::One), 1)
                 .weight(Asset::Configured(Job::Two), 1),
         )
         .invariant(
-            LinearInvariant::new("shared labor")
+            LinearInvariant::new(path!("shared-labor"))
                 .weight(Asset::Labor, 1)
                 .weight(Asset::BusyLabor, 1),
         )
         .invariant(
-            LinearInvariant::new("finite repair supply")
+            LinearInvariant::new(path!("finite-repair-supply"))
                 .weight(Asset::RepairKit, 1)
                 .weight(Asset::UsedRepairKit, 1),
         )
         .invariant(
-            LinearInvariant::new("scheduled disruption")
+            LinearInvariant::new(path!("scheduled-disruption"))
                 .weight(Asset::FaultPending, 1)
                 .weight(Asset::FaultOccurred, 1),
         )
         .invariant(
-            LinearInvariant::new("bounded workday")
+            LinearInvariant::new(path!("bounded-workday"))
                 .weight(Asset::Now, 1)
                 .weight(Asset::TimeRemaining, 1),
         )
         .invariant(
-            LinearInvariant::new("execution lifecycle")
+            LinearInvariant::new(path!("execution-lifecycle"))
                 .weight(Asset::Active, 1)
                 .weight(Asset::Solved, 1),
         )

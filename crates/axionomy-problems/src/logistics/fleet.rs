@@ -1,4 +1,6 @@
 //! Timed heterogeneous fleet with cargo, a shared road and finite services.
+use axionomy::path;
+use axionomy::path::slug;
 use axionomy::{
     Account, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Quantity,
     QuantityComparison as C, QuantityExpression as Q, Rate, Rounding, Trace, basket,
@@ -261,7 +263,12 @@ fn clock() -> Q<Ontology> {
 fn identity() -> Rate<Ontology> {
     Rate::new()
         .preserve(Role::World, basket([(Asset::WorldIdentity, 1)]))
-        .condition("one fleet event", Q::units(), C::Equal, Q::constant(1))
+        .condition(
+            path!("one-fleet-event"),
+            Q::units(),
+            C::Equal,
+            Q::constant(1),
+        )
 }
 fn law() -> Rate<Ontology> {
     identity().preserve(Role::World, basket([(Asset::Active, 1)]))
@@ -288,7 +295,7 @@ fn ready(van: Van) -> Rate<Ontology> {
 }
 fn deadline(rate: Rate<Ontology>, duration: u64) -> Rate<Ontology> {
     rate.condition(
-        "activity fits remaining horizon",
+        path!("activity-fits-remaining-horizon"),
         clock() + Q::constant(duration),
         C::LessThanOrEqual,
         q(Role::World, Asset::Horizon),
@@ -297,7 +304,7 @@ fn deadline(rate: Rate<Ontology>, duration: u64) -> Rate<Ontology> {
 fn finish(van: Van, state: Asset) -> Rate<Ontology> {
     vehicle(law(), van)
         .condition(
-            "activity duration elapsed",
+            path!("activity-duration-elapsed"),
             clock(),
             C::GreaterThanOrEqual,
             q(Role::Vehicle, Asset::ReadyAt),
@@ -387,13 +394,13 @@ pub fn initial(stress: bool, seed: u64) -> World {
                 let mut depart = deadline(permit(vehicle(law(), van), van), 6)
                     .preserve(Role::Vehicle, basket([(Asset::Integrity, 1)]))
                     .condition(
-                        "service before excessive wear",
+                        path!("service-before-excessive-wear"),
                         q(Role::Vehicle, Asset::Wear),
                         C::LessThanOrEqual,
                         Q::constant(5),
                     )
                     .condition(
-                        "finite travel tickets",
+                        path!("finite-travel-tickets"),
                         q(Role::Vehicle, Asset::Trip),
                         C::LessThanOrEqual,
                         Q::constant(23),
@@ -454,7 +461,7 @@ pub fn initial(stress: bool, seed: u64) -> World {
                         .preserve(Role::Nature, basket([(Asset::NatureIdentity, 1)]))
                         .preserve(Role::Vehicle, basket([(Asset::Travelling(from, to), 1)]))
                         .condition(
-                            "match hidden vehicle-trip route ticket",
+                            path!("match-hidden-vehicle-trip-route-ticket"),
                             code,
                             C::Equal,
                             Q::constant(outcome as u64),
@@ -491,7 +498,7 @@ pub fn initial(stress: bool, seed: u64) -> World {
                 }
                 let mut arrive = finish(van, Asset::Travelling(from, to))
                     .condition(
-                        "Nature has resolved the trip",
+                        path!("nature-has-resolved-the-trip"),
                         q(Role::Vehicle, Asset::AwaitingOutcome),
                         C::Equal,
                         Q::constant(0),
@@ -565,7 +572,7 @@ pub fn initial(stress: bool, seed: u64) -> World {
                 .consume(Role::World, basket([(Asset::Money, 2)]));
             if !damaged {
                 repair = repair.condition(
-                    "preventive service after accumulated wear",
+                    path!("preventive-service-after-accumulated-wear"),
                     q(Role::Vehicle, Asset::Wear),
                     C::GreaterThanOrEqual,
                     Q::constant(3),
@@ -644,7 +651,7 @@ pub fn initial(stress: bool, seed: u64) -> World {
             RateId::Release(id),
             order(law(), id)
                 .condition(
-                    "customer order has arrived",
+                    path!("customer-order-has-arrived"),
                     clock(),
                     C::GreaterThanOrEqual,
                     q(Role::Order, Asset::Arrival),
@@ -713,7 +720,7 @@ pub fn initial(stress: bool, seed: u64) -> World {
                     .distinct(Role::Vehicle, Role::Order);
                 if late {
                     deliver = deliver.condition(
-                        "late delivery earns half payment",
+                        path!("late-delivery-earns-half-payment"),
                         clock(),
                         C::GreaterThanOrEqual,
                         q(Role::Order, Asset::Deadline) + Q::constant(1),
@@ -721,7 +728,7 @@ pub fn initial(stress: bool, seed: u64) -> World {
                 } else {
                     deliver = deliver
                         .condition(
-                            "within customer window",
+                            path!("within-customer-window"),
                             clock(),
                             C::LessThanOrEqual,
                             q(Role::Order, Asset::Deadline),
@@ -793,14 +800,14 @@ pub fn initial(stress: bool, seed: u64) -> World {
                     );
                 expire = if cold(id) {
                     expire.condition(
-                        "cold shipment has expired",
+                        path!("cold-shipment-has-expired"),
                         clock(),
                         C::GreaterThanOrEqual,
                         q(Role::Order, Asset::Deadline) + Q::constant(1),
                     )
                 } else {
                     expire.condition(
-                        "fleet horizon reached",
+                        path!("fleet-horizon-reached"),
                         clock(),
                         C::GreaterThanOrEqual,
                         q(Role::World, Asset::Horizon),
@@ -854,7 +861,7 @@ pub fn initial(stress: bool, seed: u64) -> World {
         RateId::Close,
         identity()
             .condition(
-                "all customer orders resolved",
+                path!("all-customer-orders-resolved"),
                 q(Role::World, Asset::Resolved),
                 C::Equal,
                 q(Role::World, Asset::Count),
@@ -873,10 +880,11 @@ pub fn initial(stress: bool, seed: u64) -> World {
             .consume(Role::World, basket([(Asset::Active, 1)]))
             .produce(Role::World, basket([(Asset::Closed, 1)])),
     );
-    let mut space = LinearInvariant::new("physical vehicle cargo capacity").weight(Asset::Space, 1);
+    let mut space =
+        LinearInvariant::new(path!("physical-vehicle-cargo-capacity")).weight(Asset::Space, 1);
     let mut cold_space =
-        LinearInvariant::new("one refrigerated cargo slot").weight(Asset::ColdSpace, 1);
-    let mut activity = LinearInvariant::new("two vehicle activities")
+        LinearInvariant::new(path!("one-refrigerated-cargo-slot")).weight(Asset::ColdSpace, 1);
+    let mut activity = LinearInvariant::new(path!("two-vehicle-activities"))
         .weight(Asset::Ready, 1)
         .weight(Asset::Refueling, 1)
         .weight(Asset::Repairing, 1)
@@ -894,7 +902,7 @@ pub fn initial(stress: bool, seed: u64) -> World {
     }
     for van in VANS {
         builder = builder.invariant(
-            LinearInvariant::new(format!("{van:?} dispatch permit"))
+            LinearInvariant::new(slug(format!("{van:?} dispatch permit")))
                 .weight(Asset::Permit(van), 1)
                 .weight(Asset::UsedPermit(van), 1),
         );
@@ -904,7 +912,7 @@ pub fn initial(stress: bool, seed: u64) -> World {
         .invariant(cold_space)
         .invariant(activity)
         .invariant(
-            LinearInvariant::new("cargo lifecycle")
+            LinearInvariant::new(path!("cargo-lifecycle"))
                 .weight(Asset::Scheduled, 1)
                 .weight(Asset::Waiting, 1)
                 .weight(Asset::InTransit, 1)
@@ -912,55 +920,56 @@ pub fn initial(stress: bool, seed: u64) -> World {
                 .weight(Asset::Expired, 1),
         )
         .invariant(
-            LinearInvariant::new("one occupied trunk road")
+            LinearInvariant::new(path!("one-occupied-trunk-road"))
                 .weight(Asset::RoadSpace, 1)
                 .weight(Asset::OnMainRoad, 1),
         )
         .invariant(
-            LinearInvariant::new("finite hub staging capacity")
+            LinearInvariant::new(path!("finite-hub-staging-capacity"))
                 .weight(Asset::DockSpace, 1)
                 .weight(Asset::DockUsed, 1),
         )
         .invariant(
-            LinearInvariant::new("fuel stock")
+            LinearInvariant::new(path!("fuel-stock"))
                 .weight(Asset::Fuel, 1)
                 .weight(Asset::SpentFuel, 1),
         )
         .invariant(
-            LinearInvariant::new("funded delivery and service payments").weight(Asset::Money, 1),
+            LinearInvariant::new(path!("funded-delivery-and-service-payments"))
+                .weight(Asset::Money, 1),
         )
         .invariant(
-            LinearInvariant::new("vehicle condition")
+            LinearInvariant::new(path!("vehicle-condition"))
                 .weight(Asset::Integrity, 1)
                 .weight(Asset::Damage, 1),
         )
         .invariant(
-            LinearInvariant::new("fuel pump occupancy")
+            LinearInvariant::new(path!("fuel-pump-occupancy"))
                 .weight(Asset::FuelPump, 1)
                 .weight(Asset::Refueling, 1),
         )
         .invariant(
-            LinearInvariant::new("repair bay occupancy")
+            LinearInvariant::new(path!("repair-bay-occupancy"))
                 .weight(Asset::RepairBay, 1)
                 .weight(Asset::Repairing, 1),
         )
         .invariant(
-            LinearInvariant::new("tow truck occupancy")
+            LinearInvariant::new(path!("tow-truck-occupancy"))
                 .weight(Asset::TowTruck, 1)
                 .weight(Asset::Towing, 1),
         )
         .invariant(
-            LinearInvariant::new("finite repair parts")
+            LinearInvariant::new(path!("finite-repair-parts"))
                 .weight(Asset::Part, 1)
                 .weight(Asset::UsedPart, 1),
         )
         .invariant(
-            LinearInvariant::new("bounded fleet clock")
+            LinearInvariant::new(path!("bounded-fleet-clock"))
                 .weight(Asset::Time, 1)
                 .weight(Asset::TimeRemaining, 1),
         )
         .invariant(
-            LinearInvariant::new("fleet lifecycle")
+            LinearInvariant::new(path!("fleet-lifecycle"))
                 .weight(Asset::Active, 1)
                 .weight(Asset::Closed, 1),
         )

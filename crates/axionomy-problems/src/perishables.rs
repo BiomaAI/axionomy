@@ -6,6 +6,8 @@
 //! agenda proposes due exchanges, but the economy remains the only authority
 //! on timing, environment, identity, and effects.
 
+use axionomy::path;
+use axionomy::path::slug;
 use axionomy::{
     Account, ApplyError, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Quantity, Rate,
     Receipt, Trace, basket,
@@ -251,17 +253,17 @@ pub fn initial_with_inventory(warehouse_claims: u64, fridge_claims: u64) -> Worl
         .invariant(cohort_condition_invariant(Cohort::Ambient))
         .invariant(cohort_condition_invariant(Cohort::Refrigerated))
         .invariant(
-            LinearInvariant::new("storage environment")
+            LinearInvariant::new(path!("storage-environment"))
                 .weight(Asset::Ambient, 1)
                 .weight(Asset::Cold, 1),
         )
         .invariant(
-            LinearInvariant::new("fridge power")
+            LinearInvariant::new(path!("fridge-power"))
                 .weight(Asset::Powered, 1)
                 .weight(Asset::Unpowered, 1),
         )
         .invariant(
-            LinearInvariant::new("cooling energy")
+            LinearInvariant::new(path!("cooling-energy"))
                 .weight(Asset::CoolingEnergy, 1)
                 .weight(Asset::SpentCoolingEnergy, 1),
         )
@@ -270,12 +272,12 @@ pub fn initial_with_inventory(warehouse_claims: u64, fridge_claims: u64) -> Worl
         .invariant(deadline_invariant(Moment::WarmedExpiry))
         .invariant(deadline_invariant(Moment::ColdExpiry))
         .invariant(
-            LinearInvariant::new("scenario lifecycle")
+            LinearInvariant::new(path!("scenario-lifecycle"))
                 .weight(Asset::Active, 1)
                 .weight(Asset::Solved, 1),
         )
         .invariant(
-            LinearInvariant::new("storage planning lifecycle")
+            LinearInvariant::new(path!("storage-planning-lifecycle"))
                 .weight(Asset::Planning, 1)
                 .weight(Asset::PlanSolved, 1),
         )
@@ -1114,7 +1116,7 @@ fn storage_requirements(cohort: Cohort, exposure: Exposure) -> axionomy::Basket<
 }
 
 fn claim_invariant() -> LinearInvariant<Asset> {
-    let mut invariant = LinearInvariant::new("fruit claims");
+    let mut invariant = LinearInvariant::new(path!("fruit-claims"));
     for cohort in COHORTS {
         invariant = invariant
             .weight(Asset::Claim(cohort), 1)
@@ -1124,7 +1126,7 @@ fn claim_invariant() -> LinearInvariant<Asset> {
 }
 
 fn cohort_condition_invariant(cohort: Cohort) -> LinearInvariant<Asset> {
-    let mut invariant = LinearInvariant::new(format!("{cohort:?} cohort condition"))
+    let mut invariant = LinearInvariant::new(slug(format!("{cohort:?} cohort condition")))
         .weight(Asset::Rotten(cohort), 1);
     for (candidate, exposure, _) in TIMED_CONDITIONS {
         if candidate == cohort {
@@ -1135,7 +1137,7 @@ fn cohort_condition_invariant(cohort: Cohort) -> LinearInvariant<Asset> {
 }
 
 fn clock_invariant() -> LinearInvariant<Asset> {
-    let mut invariant = LinearInvariant::new("one current time");
+    let mut invariant = LinearInvariant::new(path!("one-current-time"));
     for moment in MOMENTS {
         invariant = invariant.weight(Asset::Now(moment), 1);
     }
@@ -1143,7 +1145,7 @@ fn clock_invariant() -> LinearInvariant<Asset> {
 }
 
 fn deadline_invariant(moment: Moment) -> LinearInvariant<Asset> {
-    LinearInvariant::new(format!("{moment:?} deadline phase"))
+    LinearInvariant::new(slug(format!("{moment:?} deadline phase")))
         .weight(Asset::Before(moment), 1)
         .weight(Asset::Reached(moment), 1)
 }

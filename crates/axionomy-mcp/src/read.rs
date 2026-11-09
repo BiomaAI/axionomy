@@ -1,7 +1,9 @@
 //! Reads `axionomy://` resources and completes their template arguments.
 
+use axionomy::{InvariantPath, ParameterPath};
+
 use crate::{
-    handles::{ArtifactId, AssessmentId, EconomyId, InvariantPath},
+    handles::{ArtifactId, AssessmentId, EconomyId},
     messages::{Direction, DocumentSummary, EconomyCounts, StateRoot},
     resources::{Address, PAGE_FRAMES, PAGE_ROWS, Page, Target, page, span_page},
     server::{AxionomyMcp, assessment_lines, counts, receipt_lines},
@@ -180,7 +182,7 @@ impl AxionomyMcp {
                         "rate" => economy.rate_ids().map(ToString::to_string).collect(),
                         "invariant" => economy
                             .invariants()
-                            .map(|invariant| invariant.name().to_owned())
+                            .map(|invariant| invariant.name().to_string())
                             .collect(),
                         "asset" => economy
                             .asset_keys()
@@ -373,29 +375,19 @@ fn read_snapshot(
                 .invariants()
                 .enumerate()
                 .map(|(position, invariant)| {
-                    let row = invariant
-                        .name()
-                        .parse()
-                        .map(|path| InvariantRow {
-                            invariant: path,
-                            weights: invariant.weights().count(),
-                        })
-                        .map_err(|error| McpError::internal_error(error.to_string(), None));
+                    let row = InvariantRow {
+                        invariant: invariant.name().clone(),
+                        weights: invariant.weights().count(),
+                    };
                     (position, row)
                 }),
             PAGE_ROWS,
         )
-        .and_then(|page| {
-            let items = page.items.into_iter().collect::<Result<Vec<_>, _>>()?;
-            json(&Page {
-                items,
-                next_cursor: page.next_cursor,
-            })
-        }),
+        .and_then(|page| json(&page)),
         Target::InvariantWeights { invariant, .. } => {
             let invariant = economy
                 .invariants()
-                .find(|candidate| candidate.name() == invariant.as_str())?;
+                .find(|candidate| candidate.name() == invariant)?;
             page(
                 address,
                 invariant
@@ -565,7 +557,7 @@ struct RateView<'a> {
     rate: &'a RatePath,
     roles: Vec<&'a RolePath>,
     distinct: Vec<(&'a RolePath, &'a RolePath)>,
-    parameters: Vec<&'a str>,
+    parameters: Vec<&'a ParameterPath>,
     /// Roles whose bound account an exchange creates.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     opens: Vec<&'a RolePath>,

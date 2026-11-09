@@ -1,5 +1,6 @@
 //! Coupled power, equipment, and persistent injury in the larger mazes.
 use super::*;
+use axionomy::path;
 use axionomy::{QuantityComparison as C, QuantityExpression as Q};
 
 fn risk(from: Node, to: Node) -> u64 {
@@ -63,7 +64,7 @@ pub(super) fn build(source: World) -> World {
                 );
                 rate = rate
                     .condition(
-                        "retain at least one health",
+                        path!("retain-at-least-one-health"),
                         Q::balance(Role::Actor, Asset::Health),
                         C::GreaterThanOrEqual,
                         Q::constant(damage + 1),
@@ -113,7 +114,7 @@ pub(super) fn build(source: World) -> World {
         RateId::Treat { at: Node::Garden },
         law(Node::Garden, 2)
             .condition(
-                "an injury needs treatment",
+                path!("an-injury-needs-treatment"),
                 Q::balance(Role::Actor, Asset::Injury),
                 C::GreaterThanOrEqual,
                 Q::constant(1),
@@ -136,22 +137,22 @@ pub(super) fn build(source: World) -> World {
     }
     builder
         .invariant(
-            LinearInvariant::new("one shared power circuit")
+            LinearInvariant::new(path!("one-shared-power-circuit"))
                 .weight(Asset::PowerTransit, 1)
                 .weight(Asset::PowerVault, 1),
         )
         .invariant(
-            LinearInvariant::new("health and injury")
+            LinearInvariant::new(path!("health-and-injury"))
                 .weight(Asset::Health, 1)
                 .weight(Asset::Injury, 1),
         )
         .invariant(
-            LinearInvariant::new("finite protective equipment")
+            LinearInvariant::new(path!("finite-protective-equipment"))
                 .weight(Asset::Shield, 1)
                 .weight(Asset::UsedShield, 1),
         )
         .invariant(
-            LinearInvariant::new("finite medicine")
+            LinearInvariant::new(path!("finite-medicine"))
                 .weight(Asset::Medicine, 1)
                 .weight(Asset::UsedMedicine, 1),
         )

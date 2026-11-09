@@ -6,6 +6,7 @@
 //! cross-check against an independent wide-integer reference, and pin the
 //! serialized form.
 
+use axionomy::path;
 use axionomy::{
     Account, ApplyError, Economy, EconomyBuilder, Exchange, LinearInvariant, Quantity,
     QuantityExpression as Q, Rate, Rounding, basket,
@@ -142,8 +143,8 @@ fn fee(rounding: Rounding) -> Q<Test> {
     // fee = units × bps ÷ 10_000, rounded in the requested direction.
     Q::mul_div(
         Q::units(),
-        Q::parameter("bps"),
-        Q::parameter("scale"),
+        Q::parameter(path!("bps")),
+        Q::parameter(path!("scale")),
         rounding,
     )
 }
@@ -171,10 +172,14 @@ fn world(rounding: Rounding) -> World {
             Rate::new().produce_computed(
                 Role::Trader,
                 Asset::Share,
-                Q::divide(Q::parameter("bps"), Q::parameter("scale"), Rounding::Ceil),
+                Q::divide(
+                    Q::parameter(path!("bps")),
+                    Q::parameter(path!("scale")),
+                    Rounding::Ceil,
+                ),
             ),
         )
-        .invariant(LinearInvariant::new("credit").weight(Asset::Credit, 1))
+        .invariant(LinearInvariant::new(path!("credit")).weight(Asset::Credit, 1))
         .build()
         .unwrap()
 }
@@ -187,8 +192,8 @@ fn charge_exact(units: Quantity, bps: Quantity, scale: Quantity) -> Exchange<Tes
     Exchange::new(RateId::Charge, units)
         .bind(Role::Treasury, AccountId::Treasury)
         .bind(Role::Trader, AccountId::Trader)
-        .parameter("bps", bps)
-        .parameter("scale", scale)
+        .parameter(path!("bps"), bps)
+        .parameter(path!("scale"), scale)
 }
 
 #[test]
@@ -231,8 +236,8 @@ fn divide_rounds_in_the_named_direction() {
     let mut world = world(Rounding::Ceil);
     let credit = Exchange::new(RateId::Credit, Quantity::new(1))
         .bind(Role::Trader, AccountId::Trader)
-        .parameter("bps", Quantity::new(7))
-        .parameter("scale", Quantity::new(2));
+        .parameter(path!("bps"), Quantity::new(7))
+        .parameter(path!("scale"), Quantity::new(2));
     world.apply(credit).unwrap();
     assert_eq!(
         world.balance(&AccountId::Trader, &Asset::Share),
@@ -344,8 +349,8 @@ fn operand_errors_take_precedence_in_left_to_right_order() {
 fn discovery_reads_every_operand() {
     let expression = Q::mul_div(
         Q::balance(Role::Treasury, Asset::Credit),
-        Q::parameter("left"),
-        Q::parameter("denominator") + Q::balance(Role::Trader, Asset::Share),
+        Q::parameter(path!("left")),
+        Q::parameter(path!("denominator")) + Q::balance(Role::Trader, Asset::Share),
         Rounding::Floor,
     );
     let rate = Rate::<Test>::new().produce_computed(Role::Trader, Asset::Credit, expression);
@@ -353,7 +358,7 @@ fn discovery_reads_every_operand() {
     assert!(roles.contains(&Role::Treasury) && roles.contains(&Role::Trader));
     assert_eq!(
         rate.parameter_names().into_iter().collect::<Vec<_>>(),
-        ["denominator", "left"]
+        [&path!("denominator"), &path!("left")]
     );
     let world = EconomyBuilder::<Test>::new()
         .rate(RateId::Credit, rate)
@@ -369,7 +374,7 @@ fn discovery_reads_every_operand() {
 fn serialized_form_names_the_rounding_direction() {
     let expression: Q<Test> = Q::mul_div(
         Q::units(),
-        Q::parameter("bps"),
+        Q::parameter(path!("bps")),
         Q::constant(10_000),
         Rounding::Ceil,
     );

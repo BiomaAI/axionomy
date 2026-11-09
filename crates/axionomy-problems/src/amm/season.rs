@@ -4,6 +4,7 @@
 
 use super::*;
 use axionomy::QuantityComparison as C;
+use axionomy::path;
 
 const DECISIONS: u64 = 6;
 
@@ -22,12 +23,17 @@ fn world_law() -> Rate<Ontology> {
     Rate::new()
         .preserve(Role::World, basket([(Asset::WorldIdentity, 1)]))
         .condition(
-            "market remains active",
+            path!("market-remains-active"),
             q(Role::World, Asset::MarketActive),
             C::Equal,
             Q::constant(1),
         )
-        .condition("one period event", Q::units(), C::Equal, Q::constant(1))
+        .condition(
+            path!("one-period-event"),
+            Q::units(),
+            C::Equal,
+            Q::constant(1),
+        )
 }
 fn weather(seed: u64, day: u8) -> u64 {
     let mut ticket = seed.wrapping_add(u64::from(day).wrapping_mul(0x9e37_79b9_7f4a_7c15));
@@ -147,7 +153,7 @@ pub(super) fn build(source: World, days: u8, scale: u64, seed: u64) -> World {
         match id {
             RateId::BuyEnergy => {
                 rate = rate.condition(
-                    "purchased energy fits storage",
+                    path!("purchased-energy-fits-storage"),
                     q(role, Asset::Energy) + swap_output_expression(Asset::Credit, Asset::Energy),
                     C::LessThanOrEqual,
                     q(role, Asset::StorageCapacity),
@@ -158,7 +164,7 @@ pub(super) fn build(source: World, days: u8, scale: u64, seed: u64) -> World {
                     .preserve_computed(role, Asset::ActorIdentity(Actor::Generator), Q::constant(1))
                     .consume_computed(role, Asset::ProductionAllowance, Q::units())
                     .condition(
-                        "production fits storage",
+                        path!("production-fits-storage"),
                         q(role, Asset::Energy) + Q::units(),
                         C::LessThanOrEqual,
                         q(role, Asset::StorageCapacity),
@@ -201,7 +207,7 @@ pub(super) fn build(source: World, days: u8, scale: u64, seed: u64) -> World {
             }
             RateId::AddLiquidity => {
                 rate = rate.condition(
-                    "one liquidity deposit",
+                    path!("one-liquidity-deposit"),
                     Q::units(),
                     C::Equal,
                     Q::constant(1),
@@ -209,7 +215,7 @@ pub(super) fn build(source: World, days: u8, scale: u64, seed: u64) -> World {
             }
             RateId::RemoveLiquidity => {
                 rate = rate.condition(
-                    "withdrawn energy fits storage",
+                    path!("withdrawn-energy-fits-storage"),
                     q(role, Asset::Energy) + withdrawn_reserve(Asset::Energy),
                     C::LessThanOrEqual,
                     q(role, Asset::StorageCapacity),
@@ -401,13 +407,13 @@ pub(super) fn build(source: World, days: u8, scale: u64, seed: u64) -> World {
             q(Role::World, Asset::Day) + Q::constant(2),
         )
         .condition(
-            "one construction project",
+            path!("one-construction-project"),
             q(producer, Asset::PendingCapacity),
             C::Equal,
             Q::constant(0),
         )
         .condition(
-            "capacity arrives before close",
+            path!("capacity-arrives-before-close"),
             q(Role::World, Asset::Day) + Q::constant(3),
             C::LessThanOrEqual,
             q(Role::World, Asset::Days),
@@ -435,7 +441,7 @@ pub(super) fn build(source: World, days: u8, scale: u64, seed: u64) -> World {
             ),
         )
         .condition(
-            "construction has finished",
+            path!("construction-has-finished"),
             q(Role::World, Asset::Day),
             C::GreaterThanOrEqual,
             q(producer, Asset::ConstructionDue),
@@ -506,7 +512,7 @@ pub(super) fn build(source: World, days: u8, scale: u64, seed: u64) -> World {
 
     for invariant in source.invariants() {
         let mut invariant = invariant.clone();
-        if invariant.name() == "actor goal lifecycle" {
+        if invariant.name().as_str() == "actor-goal-lifecycle" {
             for actor in [Actor::Factory, Actor::Household] {
                 invariant = invariant
                     .weight(Asset::FutureNeed(actor), 1)
@@ -522,24 +528,24 @@ pub(super) fn build(source: World, days: u8, scale: u64, seed: u64) -> World {
     }
     builder
         .invariant(
-            LinearInvariant::new("market lifecycle")
+            LinearInvariant::new(path!("market-lifecycle"))
                 .weight(Asset::MarketActive, 1)
                 .weight(Asset::MarketEnded, 1),
         )
         .invariant(
-            LinearInvariant::new("production capacity lifecycle")
+            LinearInvariant::new(path!("production-capacity-lifecycle"))
                 .weight(Asset::ProductionCapacity, 1)
                 .weight(Asset::FutureCapacity, 1)
                 .weight(Asset::PendingCapacity, 1),
         )
         .invariant(
-            LinearInvariant::new("manufactured goods lifecycle")
+            LinearInvariant::new(path!("manufactured-goods-lifecycle"))
                 .weight(Asset::UnmadeGoods, 1)
                 .weight(Asset::Goods, 1)
                 .weight(Asset::DeliveredGoods, 1),
         )
         .invariant(
-            LinearInvariant::new("income entitlement lifecycle")
+            LinearInvariant::new(path!("income-entitlement-lifecycle"))
                 .weight(Asset::FutureIncome, 1)
                 .weight(Asset::IncomeDue, 1)
                 .weight(Asset::ReceivedIncome, 1)

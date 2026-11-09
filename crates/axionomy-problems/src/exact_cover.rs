@@ -1,5 +1,6 @@
 //! Exact cover solved both by generic graph search and an Algorithm X proposer.
 
+use axionomy::path;
 use axionomy::{
     Account, Basket, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Quantity, Rate,
     Trace, basket,
@@ -329,7 +330,7 @@ fn build(elements: &[Element], available: &[SetId]) -> World {
     }
 
     let element_invariant = elements.iter().copied().fold(
-        LinearInvariant::new("each universe element persists"),
+        LinearInvariant::new(path!("each-universe-element-persists")),
         |invariant, element| {
             invariant
                 .weight(Asset::Uncovered(element), 1)
@@ -337,7 +338,7 @@ fn build(elements: &[Element], available: &[SetId]) -> World {
         },
     );
     let set_invariant = available.iter().copied().fold(
-        LinearInvariant::new("set choice is single use"),
+        LinearInvariant::new(path!("set-choice-is-single-use")),
         |invariant, set| {
             invariant
                 .weight(Asset::Available(set), 1)
@@ -345,7 +346,7 @@ fn build(elements: &[Element], available: &[SetId]) -> World {
         },
     );
     let progress_invariant = (0..=elements.len()).fold(
-        LinearInvariant::new("one progress token"),
+        LinearInvariant::new(path!("one-progress-token")),
         |invariant, progress| invariant.weight(Asset::Progress(progress as u8), 1),
     );
 
@@ -369,7 +370,7 @@ fn build(elements: &[Element], available: &[SetId]) -> World {
         .invariant(set_invariant)
         .invariant(progress_invariant)
         .invariant(
-            LinearInvariant::new("exact-cover lifecycle")
+            LinearInvariant::new(path!("exact-cover-lifecycle"))
                 .weight(Asset::Active, 1)
                 .weight(Asset::Solved, 1),
         )

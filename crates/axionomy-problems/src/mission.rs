@@ -1,5 +1,6 @@
 //! Partially observed, stochastic two-agent reconnaissance mission.
 
+use axionomy::path;
 use axionomy::{
     Account, EconomicView, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant,
     ObservationKey, Quantity, Rate, Trace, basket,
@@ -521,32 +522,32 @@ pub fn initial() -> World {
             [Location::Base, Location::North, Location::South]
                 .into_iter()
                 .fold(
-                    LinearInvariant::new("two agent positions"),
+                    LinearInvariant::new(path!("two-agent-positions")),
                     |invariant, location| invariant.weight(Asset::At(location), 1),
                 ),
         )
         .invariant(
-            LinearInvariant::new("energy accounting")
+            LinearInvariant::new(path!("energy-accounting"))
                 .weight(Asset::Energy, 1)
                 .weight(Asset::SpentEnergy, 1),
         )
         .invariant(
-            LinearInvariant::new("time accounting")
+            LinearInvariant::new(path!("time-accounting"))
                 .weight(Asset::TimeRemaining, 1)
                 .weight(Asset::ElapsedTime, 1),
         )
         .invariant(
-            LinearInvariant::new("sensor accounting")
+            LinearInvariant::new(path!("sensor-accounting"))
                 .weight(Asset::Sensor, 1)
                 .weight(Asset::UsedSensor, 1),
         )
         .invariant(
-            LinearInvariant::new("medical-kit accounting")
+            LinearInvariant::new(path!("medical-kit-accounting"))
                 .weight(Asset::MedicalKit, 1)
                 .weight(Asset::UsedMedicalKit, 1),
         )
         .invariant(
-            LinearInvariant::new("mission lifecycle")
+            LinearInvariant::new(path!("mission-lifecycle"))
                 .weight(Asset::Planning, 1)
                 .weight(Asset::AwaitingScan, 1)
                 .weight(Asset::AwaitingEncounter, 1)
@@ -556,16 +557,16 @@ pub fn initial() -> World {
                 .weight(Asset::Solved, 1),
         )
         .invariant([Location::North, Location::South].into_iter().fold(
-            LinearInvariant::new("one hidden truth").weight(Asset::Unresolved, 1),
+            LinearInvariant::new(path!("one-hidden-truth")).weight(Asset::Unresolved, 1),
             |invariant, location| invariant.weight(Asset::Truth(location), 1),
         ))
         .invariant((0..4).fold(
-            LinearInvariant::new("one hidden seed").weight(Asset::Unresolved, 1),
+            LinearInvariant::new(path!("one-hidden-seed")).weight(Asset::Unresolved, 1),
             |invariant, seed| invariant.weight(Asset::Seed(seed), 1),
         ))
         .invariant(
             [Hazard::Safe, Hazard::Injury].into_iter().fold(
-                LinearInvariant::new("one hidden hazard")
+                LinearInvariant::new(path!("one-hidden-hazard"))
                     .weight(Asset::Unresolved, 1)
                     .weight(Asset::HazardResolved, 1),
                 |invariant, hazard| invariant.weight(Asset::Hazard(hazard), 1),

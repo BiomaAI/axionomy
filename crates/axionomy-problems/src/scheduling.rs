@@ -1,5 +1,6 @@
 //! A two-job, two-machine scheduling problem with discrete capacity assets.
 
+use axionomy::path;
 use axionomy::{
     Account, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Quantity, Rate, Trace,
     basket,
@@ -476,7 +477,7 @@ fn build(horizon: u8, extended: bool) -> World {
     }
 
     let job_state = operations.iter().copied().fold(
-        LinearInvariant::new("two job state tokens"),
+        LinearInvariant::new(path!("two-job-state-tokens")),
         |invariant, operation| {
             (0..=horizon).fold(invariant, |invariant, time| {
                 invariant
@@ -486,7 +487,7 @@ fn build(horizon: u8, extended: bool) -> World {
         },
     );
     let capacity = operations.iter().copied().fold(
-        LinearInvariant::new("machine slot capacity").weight(Asset::Available, 1),
+        LinearInvariant::new(path!("machine-slot-capacity")).weight(Asset::Available, 1),
         |invariant, operation| invariant.weight(Asset::Reserved(operation), 1),
     );
 
@@ -494,7 +495,7 @@ fn build(horizon: u8, extended: bool) -> World {
         .invariant(job_state)
         .invariant(capacity)
         .invariant(
-            LinearInvariant::new("schedule lifecycle")
+            LinearInvariant::new(path!("schedule-lifecycle"))
                 .weight(Asset::Active, 1)
                 .weight(Asset::Solved, 1),
         )

@@ -1,5 +1,6 @@
 //! Shared-time traffic: finite leases, occupied crossings, deadlines and a detour.
 use super::*;
+use axionomy::path;
 use axionomy::{QuantityComparison as C, QuantityExpression as Q};
 
 pub fn enabled(world: &World) -> bool {
@@ -23,7 +24,7 @@ fn law() -> Rate<Ontology> {
             Role::Bridge,
             basket([(Asset::BridgeIdentity, 1), (Asset::Active, 1)]),
         )
-        .condition("one event", Q::units(), C::Equal, Q::constant(1))
+        .condition(path!("one-event"), Q::units(), C::Equal, Q::constant(1))
 }
 fn traveler(agent: AgentId) -> Rate<Ontology> {
     law()
@@ -32,7 +33,7 @@ fn traveler(agent: AgentId) -> Rate<Ontology> {
 }
 fn arrived(rate: Rate<Ontology>, role: Role) -> Rate<Ontology> {
     rate.condition(
-        "traveler has arrived",
+        path!("traveler-has-arrived"),
         clock(),
         C::GreaterThanOrEqual,
         Q::balance(role, Asset::Arrival),
@@ -59,7 +60,7 @@ pub(super) fn build(source: World) -> World {
     }
     for id in source.rate_ids() {
         let mut rate = source.rate(id).unwrap().clone().condition(
-            "one event",
+            path!("one-event"),
             Q::units(),
             C::Equal,
             Q::constant(1),
@@ -86,7 +87,7 @@ pub(super) fn build(source: World) -> World {
                 rate = clear(traveler(agent), Role::Traveler, Asset::LeaseUntil)
                     .preserve(Role::Traveler, basket([(Asset::CrossingRight, 1)]))
                     .condition(
-                        "reservation has not expired",
+                        path!("reservation-has-not-expired"),
                         clock(),
                         C::LessThanOrEqual,
                         Q::balance(Role::Traveler, Asset::LeaseUntil),
@@ -122,13 +123,13 @@ pub(super) fn build(source: World) -> World {
             for detour in [false, true] {
                 let mut complete = clear(traveler(agent), Role::Traveler, Asset::ReadyAt)
                     .condition(
-                        "travel duration elapsed",
+                        path!("travel-duration-elapsed"),
                         clock(),
                         C::GreaterThanOrEqual,
                         Q::balance(Role::Traveler, Asset::ReadyAt),
                     )
                     .condition(
-                        "deadline outcome",
+                        path!("deadline-outcome"),
                         if late {
                             clock()
                         } else {
@@ -236,7 +237,7 @@ pub(super) fn build(source: World) -> World {
             clear(traveler(agent), Role::Traveler, Asset::LeaseUntil)
                 .preserve(Role::Traveler, basket([(Asset::At(Side::West), 1)]))
                 .condition(
-                    "unused reservation expired",
+                    path!("unused-reservation-expired"),
                     clock(),
                     C::GreaterThanOrEqual,
                     Q::balance(Role::Traveler, Asset::LeaseUntil) + Q::constant(1),
@@ -275,7 +276,7 @@ pub(super) fn build(source: World) -> World {
             RateId::Advance { to },
             law()
                 .condition(
-                    "clock moves forward",
+                    path!("clock-moves-forward"),
                     clock() + Q::constant(1),
                     C::LessThanOrEqual,
                     Q::constant(u64::from(to)),
@@ -293,19 +294,19 @@ pub(super) fn build(source: World) -> World {
         );
     }
     for invariant in source.invariants() {
-        let invariant = match invariant.name() {
-            "two agent positions" => invariant
+        let invariant = match invariant.name().as_str() {
+            "two-agent-positions" => invariant
                 .clone()
                 .weight(Asset::InTransit, 1)
                 .weight(Asset::OnDetour, 1),
-            "two agent status tokens" => invariant.clone().weight(Asset::Detouring, 1),
+            "two-agent-status-tokens" => invariant.clone().weight(Asset::Detouring, 1),
             _ => invariant.clone(),
         };
         builder = builder.invariant(invariant);
     }
     builder
         .invariant(
-            LinearInvariant::new("bounded shared clock")
+            LinearInvariant::new(path!("bounded-shared-clock"))
                 .weight(Asset::Now, 1)
                 .weight(Asset::TimeRemaining, 1),
         )

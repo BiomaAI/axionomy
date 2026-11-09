@@ -1,5 +1,6 @@
 //! Long-horizon stochastic logistics over core-validated rollouts.
 
+use axionomy::path;
 use axionomy::{
     Account, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Quantity, Rate, Trace,
     basket,
@@ -400,30 +401,30 @@ fn build(pending: &[OrderId]) -> World {
                 .into_iter()
                 .fold(
                     ROUTES.into_iter().fold(
-                        LinearInvariant::new("vehicle position"),
+                        LinearInvariant::new(path!("vehicle-position")),
                         |invariant, route| invariant.weight(Asset::Traveling(route), 1),
                     ),
                     |invariant, location| invariant.weight(Asset::At(location), 1),
                 ),
         )
         .invariant(
-            LinearInvariant::new("fuel accounting")
+            LinearInvariant::new(path!("fuel-accounting"))
                 .weight(Asset::Fuel, 1)
                 .weight(Asset::SpentFuel, 1),
         )
-        .invariant(LinearInvariant::new("money accounting").weight(Asset::Money, 1))
+        .invariant(LinearInvariant::new(path!("money-accounting")).weight(Asset::Money, 1))
         .invariant(
-            LinearInvariant::new("time accounting")
+            LinearInvariant::new(path!("time-accounting"))
                 .weight(Asset::TimeRemaining, 1)
                 .weight(Asset::ElapsedTime, 1),
         )
         .invariant(
-            LinearInvariant::new("cargo capacity")
+            LinearInvariant::new(path!("cargo-capacity"))
                 .weight(Asset::CargoSpace, 1)
                 .weight(Asset::CargoOccupied, 1),
         )
         .invariant(
-            LinearInvariant::new("order lifecycle")
+            LinearInvariant::new(path!("order-lifecycle"))
                 .weight(Asset::Waiting, 1)
                 .weight(Asset::InTransit, 1)
                 .weight(Asset::Delivered, 1),

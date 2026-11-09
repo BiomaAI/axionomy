@@ -371,7 +371,7 @@ full-resolution view; follow its title to open the exact live replay.
 ```rust
 use axionomy::{
     Account, EconomyBuilder, Exchange, Goal, LinearInvariant, Ontology, Quantity,
-    Rate, basket,
+    Rate, basket, path,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -433,7 +433,7 @@ let mut economy = EconomyBuilder::<Workshop>::new()
             .distinct(Role::Shop, Role::Goal),
     )
     .invariant(
-        LinearInvariant::new("material")
+        LinearInvariant::new(path!("material"))
             .weight(Asset::Raw, 1)
             .weight(Asset::Finished, 2),
     )
@@ -503,10 +503,11 @@ receives down, so rounding dust stays with the counterparty and declared
 conservation invariants still hold.
 
 ```rust
-use axionomy::{Rounding, paths::QuantityExpression as Q};
+use axionomy::{Rounding, path, paths::QuantityExpression as Q};
 
-// fee = ⌈units × bps ÷ 10_000⌉, charged to the trader.
-let fee: Q = Q::mul_div(Q::units(), Q::parameter("bps"), Q::constant(10_000), Rounding::Ceil);
+// fee = ⌈units × bps ÷ 10_000⌉, charged to the trader. The exchange supplies
+// `bps` with `.parameter(path!("bps"), …)`.
+let fee: Q = Q::mul_div(Q::units(), Q::parameter(path!("bps")), Q::constant(10_000), Rounding::Ceil);
 # let _ = fee;
 ```
 

@@ -232,7 +232,7 @@ let mut economy = EconomyBuilder::<Bakery>::new()
             .produce(Part::Seller, basket([(Good::Coin, 3)]))
             .distinct(Part::Seller, Part::Buyer),
     )
-    .invariant(LinearInvariant::new("coins").weight(Good::Coin, 1))
+    .invariant(LinearInvariant::new(path!("coins")).weight(Good::Coin, 1))
     .build()?;
 
 // Two units of kneading use 1,000 g; two units of baking read the one slot once.

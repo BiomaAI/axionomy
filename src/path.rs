@@ -30,6 +30,9 @@ pub mod kind {
     pub enum Rate {}
     pub enum Role {}
     pub enum Ontology {}
+    pub enum Parameter {}
+    pub enum Condition {}
+    pub enum Invariant {}
 
     impl PathKind for Account {
         const SCHEMA: &'static str = "AccountPath";
@@ -46,6 +49,15 @@ pub mod kind {
     impl PathKind for Ontology {
         const SCHEMA: &'static str = "OntologyPath";
     }
+    impl PathKind for Parameter {
+        const SCHEMA: &'static str = "ParameterPath";
+    }
+    impl PathKind for Condition {
+        const SCHEMA: &'static str = "ConditionPath";
+    }
+    impl PathKind for Invariant {
+        const SCHEMA: &'static str = "InvariantPath";
+    }
 }
 
 pub type AccountPath = Path<kind::Account>;
@@ -55,6 +67,13 @@ pub type RolePath = Path<kind::Role>;
 /// The name of an [`Ontology`](crate::Ontology), such as `maze` or
 /// `logistics/fleet`.
 pub type OntologyPath = Path<kind::Ontology>;
+/// The name of a parameter an exchange supplies to its rate, such as
+/// `minimum-output`.
+pub type ParameterPath = Path<kind::Parameter>;
+/// The name of a rate's condition, such as `within-loan-to-value-limit`.
+pub type ConditionPath = Path<kind::Condition>;
+/// The name of a declared invariant, such as `money-accounting`.
+pub type InvariantPath = Path<kind::Invariant>;
 
 /// An identifier written as a path: one or more segments separated by `/`,
 /// such as `loans/42`, `agents/7/wallet` or `market/order-book`.
@@ -116,6 +135,46 @@ impl OntologyPath {
         const { assert!(check(O::NAME).is_ok(), "an ontology's NAME must be a path") };
         Self::new(O::NAME.into())
     }
+}
+
+/// Whether `text` is a path. It runs in constant evaluation, so
+/// [`path!`](crate::path!) checks literals when compiling.
+pub const fn is_path(text: &str) -> bool {
+    check(text).is_ok()
+}
+
+/// Writes text as a path of any kind: each `/`-separated segment lowercased,
+/// with every run of characters other than ASCII letters and digits made one
+/// `-`. `Road:Depot/North Gate` becomes `road-depot/north-gate`.
+///
+/// # Panics
+///
+/// If a segment has no ASCII letter or digit. Rust code writes keys from its
+/// own values, so such a key is a bug in that code.
+pub fn slug<K>(text: impl AsRef<str>) -> Path<K> {
+    let text = text.as_ref();
+    let path = text
+        .split('/')
+        .map(|segment| {
+            slug_segment(segment).unwrap_or_else(|| {
+                panic!("segment `{segment}` of `{text}` has no ASCII letter or digit")
+            })
+        })
+        .collect::<Vec<_>>()
+        .join("/");
+    Path::new(path.into())
+}
+
+/// `text` as one path segment, as [`slug`] writes it; none if it has no ASCII
+/// letter or digit.
+pub fn slug_segment(text: &str) -> Option<String> {
+    let segment = text
+        .split(|character: char| !character.is_ascii_alphanumeric())
+        .filter(|part| !part.is_empty())
+        .map(str::to_ascii_lowercase)
+        .collect::<Vec<_>>()
+        .join("-");
+    (!segment.is_empty()).then_some(segment)
 }
 
 /// Checks a whole path, segment by segment, in the order its errors are

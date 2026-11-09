@@ -2,6 +2,8 @@
 //! time, deadlines, leases, activity duration and facility ownership are laws.
 
 use super::*;
+use axionomy::path;
+use axionomy::path::slug;
 use axionomy::{QuantityComparison as C, QuantityExpression as Q};
 
 const FACILITIES: [Facility; 3] = [Facility::Workshop, Facility::Charger, Facility::Recycler];
@@ -31,7 +33,12 @@ fn law() -> Rate<Ontology> {
             Role::World,
             basket([(Asset::WorldIdentity, 1), (Asset::SeasonActive, 1)]),
         )
-        .condition("one event at a time", Q::units(), C::Equal, Q::constant(1))
+        .condition(
+            path!("one-event-at-a-time"),
+            Q::units(),
+            C::Equal,
+            Q::constant(1),
+        )
 }
 fn actor(rate: Rate<Ontology>, agent: AgentId) -> Rate<Ontology> {
     rate.preserve(Role::Agent, basket([(Asset::AgentIdentity(agent), 1)]))
@@ -55,7 +62,7 @@ fn occupy(rate: Rate<Ontology>, duration: u64) -> Rate<Ontology> {
         .produce(Role::World, basket([(Asset::Activities, 1)]))
         .produce_computed(Role::Agent, Asset::ReadyAt, now() + Q::constant(duration))
         .condition(
-            "activity fits the season",
+            path!("activity-fits-the-season"),
             now() + Q::constant(duration),
             C::LessThanOrEqual,
             q(Role::World, Asset::Horizon),
@@ -64,7 +71,7 @@ fn occupy(rate: Rate<Ontology>, duration: u64) -> Rate<Ontology> {
 fn finish_activity(rate: Rate<Ontology>) -> Rate<Ontology> {
     clear(rate, Role::Agent, Asset::ReadyAt)
         .condition(
-            "activity is due",
+            path!("activity-is-due"),
             now(),
             C::GreaterThanOrEqual,
             q(Role::Agent, Asset::ReadyAt),
@@ -153,7 +160,7 @@ pub(super) fn build(profile: Profile, lineup: [Policy; 4]) -> League {
             Facility::Recycler => {}
         }
         builder = builder.account(AccountId::Facility(facility), Account::from(assets));
-        let mut invariant = LinearInvariant::new(format!("one {facility:?} service slot"))
+        let mut invariant = LinearInvariant::new(slug(format!("one {facility:?} service slot")))
             .weight(Asset::Vacant(facility), 1);
         for agent in AGENTS {
             invariant = invariant.weight(Asset::Occupied(facility, agent), 1);
@@ -203,13 +210,13 @@ pub(super) fn build(profile: Profile, lineup: [Policy; 4]) -> League {
                     )
                     .produce_computed(Role::Job, Asset::LeaseUntil, now() + Q::constant(LEASE))
                     .condition(
-                        "contract has arrived",
+                        path!("contract-has-arrived"),
                         now(),
                         C::GreaterThanOrEqual,
                         q(Role::Job, Asset::ReleaseAt),
                     )
                     .condition(
-                        "contract remains open",
+                        path!("contract-remains-open"),
                         now() + Q::constant(1),
                         C::LessThanOrEqual,
                         q(Role::Job, Asset::Deadline),
@@ -233,7 +240,7 @@ pub(super) fn build(profile: Profile, lineup: [Policy; 4]) -> League {
                     .distinct(Role::Agent, Role::Job);
                 if expired {
                     release = release.condition(
-                        "claim lease has elapsed",
+                        path!("claim-lease-has-elapsed"),
                         now(),
                         C::GreaterThanOrEqual,
                         q(Role::Job, Asset::LeaseUntil) + Q::constant(1),
@@ -302,19 +309,19 @@ pub(super) fn build(profile: Profile, lineup: [Policy; 4]) -> League {
                     basket([(Asset::InProgress, 1), (Asset::Attempts, 1)]),
                 )
                 .condition(
-                    "claim lease remains valid",
+                    path!("claim-lease-remains-valid"),
                     now(),
                     C::LessThanOrEqual,
                     q(Role::Job, Asset::LeaseUntil),
                 )
                 .condition(
-                    "work finishes by deadline",
+                    path!("work-finishes-by-deadline"),
                     now() + Q::constant(cost.time),
                     C::LessThanOrEqual,
                     q(Role::Job, Asset::Deadline),
                 )
                 .condition(
-                    "equipment needs maintenance below wear six",
+                    path!("equipment-needs-maintenance-below-wear-six"),
                     q(Role::Agent, Asset::Wear),
                     C::LessThanOrEqual,
                     Q::constant(5),
@@ -337,7 +344,7 @@ pub(super) fn build(profile: Profile, lineup: [Policy; 4]) -> League {
                         .consume(Role::Agent, basket([(Asset::Awaiting(spec.id, mode), 1)]))
                         .consume(Role::Job, basket([(Asset::InProgress, 1)]))
                         .condition(
-                            "outcome settles before expiry",
+                            path!("outcome-settles-before-expiry"),
                             now(),
                             C::LessThanOrEqual,
                             q(Role::Job, Asset::Deadline),
@@ -450,7 +457,7 @@ pub(super) fn build(profile: Profile, lineup: [Policy; 4]) -> League {
                         )
                         .produce_computed(Role::Job, Asset::LeaseUntil, now() + Q::constant(LEASE))
                         .condition(
-                            "handoff before deadline",
+                            path!("handoff-before-deadline"),
                             now() + Q::constant(1),
                             C::LessThanOrEqual,
                             q(Role::Job, Asset::Deadline),
@@ -525,14 +532,14 @@ pub(super) fn build(profile: Profile, lineup: [Policy; 4]) -> League {
             builder = builder.rate(RateId::EndService { agent, facility }, end);
         }
         builder = builder.invariant(
-            LinearInvariant::new(format!("{agent:?} decision permission"))
+            LinearInvariant::new(slug(format!("{agent:?} decision permission")))
                 .weight(Asset::Permit(agent), 1)
                 .weight(Asset::Acted(agent), 1),
         );
     }
     let mut tick = law()
         .condition(
-            "season has time remaining",
+            path!("season-has-time-remaining"),
             now() + Q::constant(1),
             C::LessThanOrEqual,
             q(Role::World, Asset::Horizon),
@@ -558,66 +565,67 @@ pub(super) fn build(profile: Profile, lineup: [Policy; 4]) -> League {
                 .consume(Role::World, basket([(Asset::SeasonActive, 1)]))
                 .produce(Role::World, basket([(Asset::SeasonEnded, 1)]))
                 .condition(
-                    "all contracts resolved",
+                    path!("all-contracts-resolved"),
                     q(Role::World, Asset::ContractsOpen),
                     C::Equal,
                     Q::constant(0),
                 )
                 .condition(
-                    "all activities settled",
+                    path!("all-activities-settled"),
                     q(Role::World, Asset::Activities),
                     C::Equal,
                     Q::constant(0),
                 ),
         )
         .invariant(
-            LinearInvariant::new("season lifecycle")
+            LinearInvariant::new(path!("season-lifecycle"))
                 .weight(Asset::SeasonActive, 1)
                 .weight(Asset::SeasonEnded, 1),
         )
         .invariant(
-            LinearInvariant::new("finite contracts")
+            LinearInvariant::new(path!("finite-contracts"))
                 .weight(Asset::ContractsOpen, 1)
                 .weight(Asset::ContractsClosed, 1),
         )
         .invariant(
-            LinearInvariant::new("worker availability")
+            LinearInvariant::new(path!("worker-availability"))
                 .weight(Asset::Idle, 1)
                 .weight(Asset::Busy, 1),
         )
         .invariant(
-            LinearInvariant::new("worker condition")
+            LinearInvariant::new(path!("worker-condition"))
                 .weight(Asset::Operational, 1)
                 .weight(Asset::Damage, 1)
                 .weight(Asset::Repairing, 1),
         )
         .invariant(
-            LinearInvariant::new("energy lifecycle")
+            LinearInvariant::new(path!("energy-lifecycle"))
                 .weight(Asset::Energy, 1)
                 .weight(Asset::SpentEnergy, 1)
                 .weight(Asset::ChargeSupply, 1)
                 .weight(Asset::ChargingEnergy, 1),
         )
         .invariant(
-            LinearInvariant::new("material lifecycle")
+            LinearInvariant::new(path!("material-lifecycle"))
                 .weight(Asset::Material, 1)
                 .weight(Asset::Waste, 1)
                 .weight(Asset::EmbodiedMaterial, 1)
                 .weight(Asset::ReclaimingMaterial, 1)
                 .weight(Asset::RecyclingLoss, 1),
         )
-        .invariant(LinearInvariant::new("closed settlement credit").weight(Asset::Credit, 1))
+        .invariant(LinearInvariant::new(path!("closed-settlement-credit")).weight(Asset::Credit, 1))
         .invariant(
-            LinearInvariant::new("repair supplies")
+            LinearInvariant::new(path!("repair-supplies"))
                 .weight(Asset::RepairSupply, 1)
                 .weight(Asset::SpentRepairSupply, 1),
         )
         .invariant(
-            LinearInvariant::new("worker time")
+            LinearInvariant::new(path!("worker-time"))
                 .weight(Asset::TimeRemaining, 1)
                 .weight(Asset::ElapsedTime, 1),
         );
-    let mut claims = LinearInvariant::new("one contract per worker").weight(Asset::FreeContract, 1);
+    let mut claims =
+        LinearInvariant::new(path!("one-contract-per-worker")).weight(Asset::FreeContract, 1);
     for spec in &jobs {
         claims = claims.weight(Asset::Claimed(spec.id), 1);
     }
@@ -633,7 +641,7 @@ pub(super) fn build(profile: Profile, lineup: [Policy; 4]) -> League {
 fn expire_rate(id: JobId, owner: Option<AgentId>, mode: Option<WorkMode>) -> Rate<Ontology> {
     let mut rate = job(law(), id)
         .condition(
-            "contract deadline has elapsed",
+            path!("contract-deadline-has-elapsed"),
             now(),
             C::GreaterThanOrEqual,
             q(Role::Job, Asset::Deadline) + Q::constant(1),

@@ -2,9 +2,9 @@ use crate::Ontology;
 use crate::accounts::Accounts;
 use crate::rate::Measure;
 use crate::{
-    Account, AccountDelta, AccountError, Basket, ComputedAmount, Exchange, LinearInvariant,
-    Quantity, QuantityComparison, QuantityExpression, Rate, RateCondition, Receipt, Rounding,
-    Trace,
+    Account, AccountDelta, AccountError, Basket, ComputedAmount, ConditionPath, Exchange,
+    InvariantPath, LinearInvariant, ParameterPath, Quantity, QuantityComparison,
+    QuantityExpression, Rate, RateCondition, Receipt, Rounding, Trace,
 };
 use indexmap::IndexMap;
 use schemars::{JsonSchema, Schema, SchemaGenerator};
@@ -707,13 +707,11 @@ impl<O: Ontology> Economy<O> {
         let parameter_names = rule.parameter_names();
         for name in parameter_names.clone() {
             if !proposal.parameters().contains_key(name) {
-                issues.push(ApplyError::MissingParameter {
-                    name: name.to_owned(),
-                });
+                issues.push(ApplyError::MissingParameter { name: name.clone() });
             }
         }
         for name in proposal.parameters().keys() {
-            if !parameter_names.contains(name.as_str()) {
+            if !parameter_names.contains(name) {
                 issues.push(ApplyError::UnknownParameter { name: name.clone() });
             }
         }
@@ -812,7 +810,7 @@ impl<O: Ontology> Economy<O> {
             if !satisfied {
                 return Err(ApplyError::RateConditionFailed {
                     rate: proposal.rate().clone(),
-                    condition: condition.name().to_owned(),
+                    condition: condition.name().clone(),
                 });
             }
         }
@@ -964,7 +962,7 @@ impl<O: Ontology> Economy<O> {
         };
         let after = self.accounts_with_prepared(prepared_accounts);
         Err(ApplyError::InvariantViolation {
-            invariant: violated.name().to_owned(),
+            invariant: violated.name().clone(),
             before: Box::new(violated.measure(self.accounts.values().map(Arc::as_ref))),
             after: Box::new(violated.measure(after.values().map(Arc::as_ref))),
         })
@@ -1201,15 +1199,18 @@ pub enum ApplyError<O: Ontology> {
     #[error("exchange units must be greater than zero")]
     ZeroUnits,
     #[error("exchange is missing a required rate parameter")]
-    MissingParameter { name: String },
+    MissingParameter { name: ParameterPath },
     #[error("exchange contains an unknown rate parameter")]
-    UnknownParameter { name: String },
+    UnknownParameter { name: ParameterPath },
     #[error("scaled rate overflow")]
     RateOverflow { rate: O::Rate, asset: O::Asset },
     #[error("state-evaluated rate law could not be evaluated: {message}")]
     RateLawEvaluation { rate: O::Rate, message: String },
     #[error("state-evaluated rate condition failed")]
-    RateConditionFailed { rate: O::Rate, condition: String },
+    RateConditionFailed {
+        rate: O::Rate,
+        condition: ConditionPath,
+    },
     #[error("exchange is infeasible")]
     Infeasible {
         shortfalls: Vec<AccountShortfall<O>>,
@@ -1221,7 +1222,7 @@ pub enum ApplyError<O: Ontology> {
     },
     #[error("declared invariant violation")]
     InvariantViolation {
-        invariant: String,
+        invariant: InvariantPath,
         before: Box<Measure>,
         after: Box<Measure>,
     },
@@ -1337,7 +1338,7 @@ where
 /// Typed failures inside the evaluator; text is produced only for public diagnostics.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum ExpressionError {
-    MissingParameter(String),
+    MissingParameter(ParameterPath),
     UnboundRole,
     MissingAccount,
     AdditionOverflow,
@@ -1536,7 +1537,7 @@ mod evaluation_conformance {
     #[serde(rename_all = "camelCase")]
     struct EvaluationCase {
         units: String,
-        parameters: Vec<(String, String)>,
+        parameters: Vec<(ParameterPath, String)>,
         bindings: Vec<(Role, Holder)>,
         accounts: Vec<(Holder, Vec<(Asset, String)>)>,
         expression: QuantityExpression<Test>,
@@ -1594,7 +1595,8 @@ mod evaluation_conformance {
                 proposal = proposal.bind(role.clone(), holder.clone());
             }
             for (parameter, amount) in &case.parameters {
-                proposal = proposal.parameter(parameter, amount.parse::<Quantity>().unwrap());
+                proposal =
+                    proposal.parameter(parameter.clone(), amount.parse::<Quantity>().unwrap());
             }
             let accounts = Accounts::new(
                 case.accounts
@@ -1621,7 +1623,7 @@ mod evaluation_conformance {
             .zip(&case.conditions)
             {
                 let rule = Rate::new().condition(
-                    "fixture",
+                    crate::path!("fixture"),
                     case.expression.clone(),
                     comparison,
                     case.condition_right.clone(),
@@ -1756,7 +1758,7 @@ mod construction_conformance {
                             1 => builder
                                 .rate(Rule(key), Rate::new().produce(Role(0), balances(value))),
                             2 => builder.invariant(
-                                LinearInvariant::new(value.to_string())
+                                LinearInvariant::new(value.to_string().parse().unwrap())
                                     .weight(Asset(0), -(value as i64)),
                             ),
                             _ => panic!("unknown model construction step"),
@@ -1791,7 +1793,7 @@ mod construction_conformance {
                         builder
                             .invariants
                             .iter()
-                            .map(|i| i.name().parse::<u64>().unwrap())
+                            .map(|i| i.name().as_str().parse::<u64>().unwrap())
                             .collect::<Vec<_>>(),
                         snapshot.invariants
                     );
@@ -1838,7 +1840,7 @@ mod construction_conformance {
                                 model
                                     .invariants
                                     .iter()
-                                    .map(|i| i.name().parse::<u64>().unwrap())
+                                    .map(|i| i.name().as_str().parse::<u64>().unwrap())
                                     .collect::<Vec<_>>(),
                                 snapshot.invariants
                             );
@@ -1898,10 +1900,10 @@ mod validation_conformance {
                     role: Role(self.ids[0]),
                 },
                 "missingParameter" => Error::MissingParameter {
-                    name: self.parameter.clone(),
+                    name: self.parameter.parse().unwrap(),
                 },
                 "unknownParameter" => Error::UnknownParameter {
-                    name: self.parameter.clone(),
+                    name: self.parameter.parse().unwrap(),
                 },
                 "rolesMustDiffer" => Error::RolesMustDiffer {
                     left: Role(self.ids[0]),
@@ -1919,12 +1921,12 @@ mod validation_conformance {
     #[serde(rename_all = "camelCase")]
     struct Case {
         roles: Vec<Role>,
-        required_parameters: Vec<String>,
+        required_parameters: Vec<ParameterPath>,
         distinct: Vec<(Role, Role)>,
         units: String,
         rate: Rule,
         bindings: Vec<(Role, Holder)>,
-        parameters: Vec<(String, String)>,
+        parameters: Vec<(ParameterPath, String)>,
         accounts: Vec<Holder>,
         accepted: bool,
         issues: Vec<Issue>,
@@ -1950,10 +1952,10 @@ mod validation_conformance {
                 }
                 for parameter in &case.required_parameters {
                     rule = rule.condition(
-                        parameter.clone(),
-                        QuantityExpression::parameter(parameter),
+                        parameter.as_str().parse().unwrap(),
+                        QuantityExpression::parameter(parameter.clone()),
                         QuantityComparison::Equal,
-                        QuantityExpression::parameter(parameter),
+                        QuantityExpression::parameter(parameter.clone()),
                     );
                 }
                 for (left, right) in &case.distinct {
@@ -1962,7 +1964,7 @@ mod validation_conformance {
                 let fail_condition = |rule: Rate<Test>| {
                     if trap {
                         rule.condition(
-                            "after validation",
+                            crate::path!("after-validation"),
                             QuantityExpression::constant(0),
                             QuantityComparison::Equal,
                             QuantityExpression::constant(1),
@@ -1989,7 +1991,8 @@ mod validation_conformance {
                     proposal = proposal.bind(*role, *id);
                 }
                 for (parameter, value) in &case.parameters {
-                    proposal = proposal.parameter(parameter, value.parse::<Quantity>().unwrap());
+                    proposal =
+                        proposal.parameter(parameter.clone(), value.parse::<Quantity>().unwrap());
                 }
                 let expected: Vec<Error> = case.issues.iter().map(Issue::error).collect();
                 for issue in &case.issues {
@@ -2018,7 +2021,7 @@ mod validation_conformance {
                 let expected = if case.accepted && trap {
                     vec![Error::RateConditionFailed {
                         rate: case.rate,
-                        condition: "after validation".into(),
+                        condition: crate::path!("after-validation"),
                     }]
                 } else {
                     expected

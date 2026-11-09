@@ -1,5 +1,6 @@
 //! A partially observed rescue decision with an explicitly encoded Nature.
 
+use axionomy::path;
 use axionomy::{
     Account, Basket, EconomicView, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant,
     Quantity, Rate, Trace, basket,
@@ -463,30 +464,30 @@ fn build(nature: Account<Asset>, size: RescueSize) -> World {
             std::iter::once(Location::Base)
                 .chain(destinations.iter().copied())
                 .fold(
-                    LinearInvariant::new("one agent position"),
+                    LinearInvariant::new(path!("one-agent-position")),
                     |invariant, location| invariant.weight(Asset::At(location), 1),
                 ),
         )
         .invariant(
-            LinearInvariant::new("energy accounting")
+            LinearInvariant::new(path!("energy-accounting"))
                 .weight(Asset::Energy, 1)
                 .weight(Asset::SpentEnergy, 1),
         )
         .invariant(
-            LinearInvariant::new("sensor accounting")
+            LinearInvariant::new(path!("sensor-accounting"))
                 .weight(Asset::Sensor, 1)
                 .weight(Asset::UsedSensor, 1),
         )
         .invariant((0..seed_count).fold(
-            LinearInvariant::new("one nature seed state").weight(Asset::Unresolved, 1),
+            LinearInvariant::new(path!("one-nature-seed-state")).weight(Asset::Unresolved, 1),
             |invariant, seed| invariant.weight(Asset::Seed(seed), 1),
         ))
         .invariant(destinations.iter().copied().fold(
-            LinearInvariant::new("one hidden truth state").weight(Asset::Unresolved, 1),
+            LinearInvariant::new(path!("one-hidden-truth-state")).weight(Asset::Unresolved, 1),
             |invariant, location| invariant.weight(Asset::Truth(location), 1),
         ))
         .invariant(
-            LinearInvariant::new("rescue lifecycle")
+            LinearInvariant::new(path!("rescue-lifecycle"))
                 .weight(Asset::Planning, 1)
                 .weight(Asset::AwaitingObservation, 1)
                 .weight(Asset::Committed, 1)

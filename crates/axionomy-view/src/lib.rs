@@ -5,10 +5,13 @@
 //! scenes are read-only projections supplied by the caller.
 
 use axionomy::{
-    AccountAssessment, AccountDelta, ApplyError, Basket, Economy, Exchange, ExchangeAssessment,
-    Goal, Ontology, OntologyPath, PathKind, Quantity, QuantityComparison, QuantityExpression,
-    Receipt, Rounding, Trace, path::Path,
+    AccountAssessment, AccountDelta, ApplyError, Basket, ConditionPath, Economy, Exchange,
+    ExchangeAssessment, Goal, InvariantPath, Ontology, OntologyPath, ParameterPath, PathKind,
+    Quantity, QuantityComparison, QuantityExpression, Receipt, Rounding, Trace,
+    path::{Path, slug_segment},
 };
+
+pub use axionomy::path::slug;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -75,38 +78,6 @@ pub type ProposalPath = Path<kind::Proposal>;
 pub type PhasePath = Path<kind::Phase>;
 /// An algorithm, such as `a-star` or `exact-pareto-search`.
 pub type AlgorithmPath = Path<kind::Algorithm>;
-
-/// Writes text as a path of any kind: each `/`-separated segment lowercased,
-/// with every run of characters other than ASCII letters and digits made one
-/// `-`. `Road:Depot/North Gate` becomes `road-depot/north-gate`.
-///
-/// # Panics
-///
-/// If a segment has no ASCII letter or digit. Rust code writes keys from its
-/// own values, so such a key is a bug in that code.
-pub fn slug<K>(text: impl AsRef<str>) -> Path<K> {
-    let text = text.as_ref();
-    text.split('/')
-        .map(|segment| {
-            slug_segment(segment).unwrap_or_else(|| {
-                panic!("segment `{segment}` of key `{text}` has no ASCII letter or digit")
-            })
-        })
-        .collect::<Vec<_>>()
-        .join("/")
-        .parse()
-        .expect("slugs are path segments")
-}
-
-fn slug_segment(text: &str) -> Option<String> {
-    let slug = text
-        .split(|character: char| !character.is_ascii_alphanumeric())
-        .filter(|part| !part.is_empty())
-        .map(str::to_ascii_lowercase)
-        .collect::<Vec<_>>()
-        .join("-");
-    (!slug.is_empty()).then_some(slug)
-}
 
 /// A browser-safe identity for an arbitrary user-defined ontology value.
 ///
@@ -182,7 +153,7 @@ pub struct ExchangeView {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct ExchangeParameterView {
-    pub name: String,
+    pub name: ParameterPath,
     pub value: ExactQuantity,
 }
 
@@ -284,7 +255,7 @@ pub struct ComputedRateAmountView {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct RateConditionView {
-    pub name: String,
+    pub name: ConditionPath,
     pub left: String,
     pub comparison: String,
     pub right: String,
@@ -320,7 +291,7 @@ pub struct InvariantTermView {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct InvariantView {
-    pub name: String,
+    pub name: InvariantPath,
     pub terms: Vec<InvariantTermView>,
 }
 
@@ -1652,7 +1623,7 @@ where
                     .conditions()
                     .iter()
                     .map(|condition| RateConditionView {
-                        name: condition.name().into(),
+                        name: condition.name().clone(),
                         left: expression_view(condition.left(), ontology),
                         comparison: match condition.comparison() {
                             QuantityComparison::Equal => "=".into(),
@@ -1688,7 +1659,7 @@ where
                 .collect::<Vec<_>>();
             terms.sort_by(|left, right| left.asset.key.cmp(&right.asset.key));
             InvariantView {
-                name: invariant.name().into(),
+                name: invariant.name().clone(),
                 terms,
             }
         })

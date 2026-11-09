@@ -1,6 +1,11 @@
 import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import type { ExchangeFrame, ProposalView, ViewDocument, ViewSnapshot } from "./api";
 
+/** A name written as a path, such as `time-accounting`, read as words. */
+function words(path: string): string {
+  return path.replaceAll("-", " ").replaceAll("/", " · ");
+}
+
 export function PanelHeading({ kicker, title, aside, action }: { kicker: string; title: string; aside?: string; action?: ReactNode }) {
   return <div className="panel-heading"><div><span>{kicker}</span><h2>{title}</h2></div><div className="panel-heading-side">{aside && <small>{aside}</small>}{action}</div></div>;
 }
@@ -92,7 +97,7 @@ export function Transition({ frame }: { frame?: ExchangeFrame }) {
     <div className="binding-row">
       {frame.exchange.bindings.map((binding) => <span key={binding.role.key}><small>{binding.role.label}</small>{binding.account.label}</span>)}
       <span><small>Units</small>{frame.exchange.units}</span>
-      {frame.exchange.parameters?.map((parameter) => <span key={parameter.name}><small>{parameter.name.replaceAll("_", " ")}</small>{parameter.value}</span>)}
+      {frame.exchange.parameters?.map((parameter) => <span key={parameter.name}><small>{words(parameter.name)}</small>{parameter.value}</span>)}
     </div>
     <Assessment assessment={frame.assessment} />
     <div className="proof-line">Projected deltas {JSON.stringify(frame.assessment.projected_deltas) === JSON.stringify(frame.receipt.deltas) ? "match" : "do not match"} the receipt</div>
@@ -119,7 +124,7 @@ export function ProposalInspector({ proposals }: { proposals: ProposalView[] }) 
     <div className="binding-row">
       <span><small>Rate</small>{selected.exchange.rate.label}</span>
       {selected.exchange.bindings.map((binding) => <span key={binding.role.key}><small>{binding.role.label}</small>{binding.account.label}</span>)}
-      {selected.exchange.parameters?.map((parameter) => <span key={parameter.name}><small>{parameter.name.replaceAll("_", " ")}</small>{parameter.value}</span>)}
+      {selected.exchange.parameters?.map((parameter) => <span key={parameter.name}><small>{words(parameter.name)}</small>{parameter.value}</span>)}
     </div>
     <Assessment assessment={selected.assessment} expectedRejection />
   </div>;
@@ -170,7 +175,7 @@ export function ModelExplorer({ document }: { document: ViewDocument }) {
         {rate.computed_consumed?.map((amount, index) => <ComputedRateAmount key={`consume:${amount.role.key}:${amount.asset.key}:${index}`} label="Computed consume" amount={amount} />)}
         {rate.computed_produced?.map((amount, index) => <ComputedRateAmount key={`produce:${amount.role.key}:${amount.asset.key}:${index}`} label="Computed produce" amount={amount} />)}
         {rate.computed_preserved?.map((amount, index) => <ComputedRateAmount key={`preserve:${amount.role.key}:${amount.asset.key}:${index}`} label="Computed preserve" amount={amount} />)}
-        {rate.conditions?.map((condition) => <article className="rate-condition" key={condition.name}><h3>{condition.name}</h3><code>{condition.left} {condition.comparison} {condition.right}</code></article>)}
+        {rate.conditions?.map((condition) => <article className="rate-condition" key={condition.name}><h3>{words(condition.name)}</h3><code>{condition.left} {condition.comparison} {condition.right}</code></article>)}
         {rate.distinct_roles.length > 0 && <p>Distinct accounts: {rate.distinct_roles.map((pair) => pair.map((role) => role.label).join(" ≠ ")).join(", ")}</p>}
       </div>}
     </section>
@@ -178,7 +183,7 @@ export function ModelExplorer({ document }: { document: ViewDocument }) {
       <h3>Goal</h3>
       {model.goal.map((goal) => <div key={goal.account.key}><strong>{goal.account.label}</strong>{goal.required.map((required) => <span key={required.asset.key}>{required.asset.label} ×{required.quantity}</span>)}</div>)}
       <h3>Conservation laws</h3>
-      {model.invariants.map((invariant) => <details key={invariant.name}><summary>{invariant.name}</summary><p>{invariant.terms.map((term) => `${term.weight}·${term.asset.label}`).join(" + ")}</p></details>)}
+      {model.invariants.map((invariant) => <details key={invariant.name}><summary>{words(invariant.name)}</summary><p>{invariant.terms.map((term) => `${term.weight}·${term.asset.label}`).join(" + ")}</p></details>)}
     </section>
   </div>;
 }

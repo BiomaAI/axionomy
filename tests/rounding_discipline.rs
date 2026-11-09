@@ -5,6 +5,7 @@
 //! by `MulDiv` expressions, with declared conservation invariants checked on
 //! every commit.
 
+use axionomy::path;
 use axionomy::{
     Account, Economy, EconomyBuilder, Exchange, LinearInvariant, Quantity, QuantityComparison,
     QuantityExpression as Q, Rate, Rounding, basket,
@@ -112,7 +113,7 @@ fn world(total_assets: u64, total_shares: u64, user_cash: u64) -> World {
                 .consume_computed(Role::Vault, Asset::Cash, paid.clone())
                 .produce_computed(Role::User, Asset::Cash, paid.clone())
                 .condition(
-                    "pays out",
+                    path!("pays-out"),
                     paid,
                     QuantityComparison::GreaterThanOrEqual,
                     Q::constant(0),
@@ -126,9 +127,9 @@ fn world(total_assets: u64, total_shares: u64, user_cash: u64) -> World {
                 .consume_computed(Role::User, Asset::Share, burned.clone())
                 .consume_computed(Role::Vault, Asset::ShareSupply, burned),
         )
-        .invariant(LinearInvariant::new("cash").weight(Asset::Cash, 1))
+        .invariant(LinearInvariant::new(path!("cash")).weight(Asset::Cash, 1))
         .invariant(
-            LinearInvariant::new("shares")
+            LinearInvariant::new(path!("shares"))
                 .weight(Asset::Share, 1)
                 .weight(Asset::ShareSupply, -1),
         )

@@ -1,3 +1,4 @@
+use axionomy::path;
 use axionomy::{
     Account, AccountDelta, ApplyError, AssessmentStatus, Basket, Economy, EconomyBuilder, Exchange,
     ExchangeAssessment, Goal, LinearInvariant, Quantity, Rate, Trace, basket,
@@ -91,12 +92,12 @@ fn world() -> World {
                 .produce(Role::Sink, basket([(Asset::Output, 2)])),
         )
         .invariant(
-            LinearInvariant::new("input-output units")
+            LinearInvariant::new(path!("input-output-units"))
                 .weight(Asset::Input, 1)
                 .weight(Asset::Output, 2),
         )
         .invariant(
-            LinearInvariant::new("capacity units")
+            LinearInvariant::new(path!("capacity-units"))
                 .weight(Asset::Capacity, 1)
                 .weight(Asset::UsedCapacity, 1),
         )

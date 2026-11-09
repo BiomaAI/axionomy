@@ -1,5 +1,5 @@
 use crate::Ontology;
-use crate::{Basket, Quantity};
+use crate::{Basket, ParameterPath, Quantity};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -24,7 +24,7 @@ pub struct Exchange<O: Ontology> {
     bindings: BTreeMap<O::Role, O::Account>,
     units: Quantity,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
-    parameters: BTreeMap<String, Quantity>,
+    parameters: BTreeMap<ParameterPath, Quantity>,
 }
 
 impl<O: Ontology> Exchange<O> {
@@ -45,10 +45,10 @@ impl<O: Ontology> Exchange<O> {
     /// Supplies a named exact quantity to a state-evaluated rate law.
     ///
     /// Parameters belong to the exchange proposal and are interpreted only by
-    /// the bound rate. A common example is an AMM caller's `minimum_output`
+    /// the bound rate. A common example is an AMM caller's `minimum-output`
     /// protection. Unknown and missing parameters are rejected by the economy.
-    pub fn parameter(mut self, name: impl Into<String>, value: Quantity) -> Self {
-        self.parameters.insert(name.into(), value);
+    pub fn parameter(mut self, name: ParameterPath, value: Quantity) -> Self {
+        self.parameters.insert(name, value);
         self
     }
 
@@ -64,7 +64,7 @@ impl<O: Ontology> Exchange<O> {
         self.units
     }
 
-    pub fn parameters(&self) -> &BTreeMap<String, Quantity> {
+    pub fn parameters(&self) -> &BTreeMap<ParameterPath, Quantity> {
         &self.parameters
     }
 }

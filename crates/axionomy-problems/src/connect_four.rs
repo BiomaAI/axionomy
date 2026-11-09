@@ -1,5 +1,7 @@
 //! Compact adversarial Connect Four with encoded gravity and terminal truth.
 
+use axionomy::path;
+use axionomy::path::slug;
 use axionomy::{
     Account, Basket, Economy, EconomyBuilder, Exchange, LinearInvariant, Quantity,
     QuantityComparison as C, QuantityExpression as Q, Rate, Trace, basket,
@@ -338,17 +340,17 @@ pub fn initial() -> World {
 
     builder
         .invariant(
-            LinearInvariant::new("cell occupancy")
+            LinearInvariant::new(path!("cell-occupancy"))
                 .weight(Asset::Empty, 1)
                 .weight(Asset::Piece(Player::Red), 1)
                 .weight(Asset::Piece(Player::Yellow), 1),
         )
         .invariant((0..HEIGHT).fold(
-            LinearInvariant::new("column progression").weight(Asset::ColumnFull, 1),
+            LinearInvariant::new(path!("column-progression")).weight(Asset::ColumnFull, 1),
             |invariant, row| invariant.weight(Asset::NextRow(row), 1),
         ))
         .invariant(
-            LinearInvariant::new("game phase")
+            LinearInvariant::new(path!("game-phase"))
                 .weight(Asset::Turn(Player::Red), 1)
                 .weight(Asset::Turn(Player::Yellow), 1)
                 .weight(Asset::Winner(Player::Red), 1)
@@ -360,7 +362,7 @@ pub fn initial() -> World {
                 .into_iter()
                 .flat_map(|player| LINES.into_iter().map(move |line| (player, line)))
                 .fold(
-                    LinearInvariant::new("line counter tokens"),
+                    LinearInvariant::new(path!("line-counter-tokens")),
                     |invariant, (player, line)| {
                         (0..=4).fold(invariant, |invariant, count| {
                             invariant.weight(Asset::LineCount(player, line, count), 1)
@@ -447,7 +449,7 @@ pub fn initial_standard() -> World {
             );
         }
     }
-    let mut segment_invariant = LinearInvariant::new("winning-line occupancy");
+    let mut segment_invariant = LinearInvariant::new(path!("winning-line-occupancy"));
     for segment in 0..winning_segments().len() {
         segment_invariant = segment_invariant
             .weight(Asset::SegmentVacancies(segment as u8), 1)
@@ -457,17 +459,17 @@ pub fn initial_standard() -> World {
     builder = builder.invariant(segment_invariant);
     builder
         .invariant(
-            LinearInvariant::new("cell occupancy")
+            LinearInvariant::new(path!("cell-occupancy"))
                 .weight(Asset::Empty, 1)
                 .weight(Asset::Piece(Player::Red), 1)
                 .weight(Asset::Piece(Player::Yellow), 1),
         )
         .invariant((0..STANDARD_HEIGHT).fold(
-            LinearInvariant::new("column progression").weight(Asset::ColumnFull, 1),
+            LinearInvariant::new(path!("column-progression")).weight(Asset::ColumnFull, 1),
             |invariant, row| invariant.weight(Asset::NextRow(row), 1),
         ))
         .invariant(
-            LinearInvariant::new("game phase")
+            LinearInvariant::new(path!("game-phase"))
                 .weight(Asset::Turn(Player::Red), 1)
                 .weight(Asset::Turn(Player::Yellow), 1)
                 .weight(Asset::Pending(Player::Red), 1)
@@ -806,7 +808,7 @@ fn standard_move_rate(player: Player, column: u8, row: u8) -> Rate<Ontology> {
 fn no_standard_win(mut rate: Rate<Ontology>, player: Player) -> Rate<Ontology> {
     for segment in 0..winning_segments().len() {
         rate = rate.condition(
-            format!("segment {segment} is not a win"),
+            slug(format!("segment {segment} is not a win")),
             Q::balance(Role::Game, Asset::SegmentPieces(player, segment as u8)),
             C::LessThanOrEqual,
             Q::constant(3),

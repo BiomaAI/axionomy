@@ -20,7 +20,37 @@ pub use economy::{
     ModelIssue, ObservationKey, ReplayResult, StateFingerprint, StateKey,
 };
 pub use exchange::{AccountDelta, Exchange, Receipt, Trace};
-pub use path::{AccountPath, AssetPath, OntologyPath, PathError, PathKind, RatePath, RolePath};
+pub use path::{
+    AccountPath, AssetPath, ConditionPath, InvariantPath, OntologyPath, ParameterPath, PathError,
+    PathKind, RatePath, RolePath,
+};
+
+/// A path written as a literal and checked when compiling; its kind is
+/// inferred where it is used.
+///
+/// ```
+/// use axionomy::{ParameterPath, path};
+///
+/// let minimum: ParameterPath = path!("minimum-output");
+/// assert_eq!(minimum.as_str(), "minimum-output");
+/// ```
+///
+/// A literal that is not a path does not compile:
+///
+/// ```compile_fail,E0080
+/// let _: axionomy::ParameterPath = axionomy::path!("minimum_output");
+/// ```
+#[macro_export]
+macro_rules! path {
+    ($path:literal) => {{
+        const _: () = ::core::assert!(
+            $crate::path::is_path($path),
+            ::core::concat!("`", $path, "` is not a path")
+        );
+        <$crate::path::Path<_> as ::core::str::FromStr>::from_str($path)
+            .unwrap_or_else(|_| ::core::unreachable!())
+    }};
+}
 
 pub use quantity::{Quantity, QuantityError, Rounding};
 pub use rate::{

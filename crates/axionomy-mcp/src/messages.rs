@@ -4,7 +4,9 @@
 //! Maps are ordered by ID, so the same entries produce the same snapshot handle
 //! however a client orders its JSON keys.
 
-use crate::handles::{ArtifactId, AssessmentId, EconomyId, InvariantPath};
+use axionomy::InvariantPath;
+
+use crate::handles::{ArtifactId, AssessmentId, EconomyId};
 use axionomy::{AccountPath, AssessmentStatus, AssetPath, Quantity, RatePath, RolePath, paths};
 use axionomy_search::GraphSearchProgress;
 use axionomy_service::ArtifactKey;

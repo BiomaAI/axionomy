@@ -4,7 +4,9 @@
 //! returned as `nextCursor` while more items remain. The named snapshots never
 //! change, so a page's content never goes stale.
 
-use crate::handles::{ArtifactId, AssessmentId, EconomyId, InvariantPath};
+use axionomy::InvariantPath;
+
+use crate::handles::{ArtifactId, AssessmentId, EconomyId};
 use axionomy::{AccountPath, AssetPath, RatePath, path::Path};
 use axionomy_view::DocumentPath;
 use rmcp::{

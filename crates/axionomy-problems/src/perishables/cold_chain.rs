@@ -1,4 +1,6 @@
 //! A cold chain with physical storage, thermal history and competing fuel uses.
+use axionomy::path;
+use axionomy::path::slug;
 use axionomy::{
     Account, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Quantity,
     QuantityComparison as C, QuantityExpression as Q, Rate, Trace, basket,
@@ -153,7 +155,7 @@ fn decisions() -> Rate<Ontology> {
     law().preserve(Role::World, basket([(Asset::Decisions, 1)]))
 }
 fn once(rate: Rate<Ontology>) -> Rate<Ontology> {
-    rate.condition("one event", Q::units(), C::Equal, Q::constant(1))
+    rate.condition(path!("one-event"), Q::units(), C::Equal, Q::constant(1))
 }
 fn batch(rate: Rate<Ontology>, id: u8) -> Rate<Ontology> {
     rate.preserve(
@@ -172,7 +174,7 @@ fn aging(id: u8) -> Rate<Ontology> {
 fn ages_resolved(mut rate: Rate<Ontology>) -> Rate<Ontology> {
     for id in BATCHES {
         rate = rate.condition(
-            format!("batch {id} aging settled"),
+            slug(format!("batch {id} aging settled")),
             q(Role::World, Asset::PendingAge(id)),
             C::Equal,
             Q::constant(0),
@@ -256,7 +258,7 @@ pub fn initial(stress: bool, seed: u64) -> World {
                         basket([(Asset::BatchIdentity(destination), 1)]),
                     )
                     .condition(
-                        "leave a nonempty parent cohort",
+                        path!("leave-a-nonempty-parent-cohort"),
                         q(Role::Source, Asset::Fresh),
                         C::GreaterThanOrEqual,
                         Q::units() + Q::constant(1),
@@ -303,7 +305,7 @@ pub fn initial(stress: bool, seed: u64) -> World {
                 .consume(Role::Batch, basket([(Asset::At(at), 1)]))
                 .produce(Role::Batch, basket([(Asset::At(to), 1)]))
                 .condition(
-                    "move a nonempty cohort",
+                    path!("move-a-nonempty-cohort"),
                     amount.clone(),
                     C::GreaterThanOrEqual,
                     Q::constant(1),
@@ -389,13 +391,13 @@ pub fn initial(stress: bool, seed: u64) -> World {
                 let mut warm = aging(id)
                     .preserve(Role::Batch, basket([(Asset::At(at), 1)]))
                     .condition(
-                        "fresh stock is present",
+                        path!("fresh-stock-is-present"),
                         q(Role::Batch, Asset::Fresh),
                         C::GreaterThanOrEqual,
                         Q::constant(1),
                     )
                     .condition(
-                        "thermal threshold",
+                        path!("thermal-threshold"),
                         q(Role::Batch, Asset::Heat),
                         if spoil {
                             C::GreaterThanOrEqual
@@ -440,7 +442,7 @@ pub fn initial(stress: bool, seed: u64) -> World {
         builder = builder.rate(
             RateId::AgeEmpty(id),
             aging(id).condition(
-                "no fresh stock to age",
+                path!("no-fresh-stock-to-age"),
                 q(Role::Batch, Asset::Fresh),
                 C::Equal,
                 Q::constant(0),
@@ -456,7 +458,7 @@ pub fn initial(stress: bool, seed: u64) -> World {
                 .preserve(Role::World, basket([(Asset::CoolingOn, 1)])),
         );
         builder = builder.invariant(
-            LinearInvariant::new(format!("batch {id} identity"))
+            LinearInvariant::new(slug(format!("batch {id} identity")))
                 .weight(Asset::BatchIdentity(id), 1),
         );
     }
@@ -476,7 +478,7 @@ pub fn initial(stress: bool, seed: u64) -> World {
         RateId::Generate,
         once(decisions())
             .condition(
-                "battery capacity",
+                path!("battery-capacity"),
                 q(Role::World, Asset::Energy),
                 C::LessThanOrEqual,
                 Q::constant(3),
@@ -506,7 +508,7 @@ pub fn initial(stress: bool, seed: u64) -> World {
         );
         let mut open = ages_resolved(once(law()))
             .condition(
-                "next day",
+                path!("next-day"),
                 q(Role::World, Asset::Day) + Q::constant(1),
                 C::Equal,
                 Q::constant(u64::from(day)),
@@ -555,7 +557,7 @@ pub fn initial(stress: bool, seed: u64) -> World {
         RateId::Close,
         ages_resolved(once(law()))
             .condition(
-                "last day",
+                path!("last-day"),
                 q(Role::World, Asset::Day) + Q::constant(1),
                 C::Equal,
                 q(Role::World, Asset::Days),
@@ -571,7 +573,7 @@ pub fn initial(stress: bool, seed: u64) -> World {
     );
     builder
         .invariant(
-            LinearInvariant::new("food mass")
+            LinearInvariant::new(path!("food-mass"))
                 .weight(Asset::Fresh, 1)
                 .weight(Asset::Preserved, 1)
                 .weight(Asset::Spoiled, 1)
@@ -579,17 +581,17 @@ pub fn initial(stress: bool, seed: u64) -> World {
                 .weight(Asset::Delivered, 1),
         )
         .invariant(
-            LinearInvariant::new("batch activation")
+            LinearInvariant::new(path!("batch-activation"))
                 .weight(Asset::Active, 1)
                 .weight(Asset::Dormant, 1),
         )
         .invariant(
-            LinearInvariant::new("physical cold storage")
+            LinearInvariant::new(path!("physical-cold-storage"))
                 .weight(Asset::ColdSpace, 1)
                 .weight(Asset::ColdOccupancy, 1),
         )
         .invariant(
-            LinearInvariant::new("closed electricity and fuel potential")
+            LinearInvariant::new(path!("closed-electricity-and-fuel-potential"))
                 .weight(Asset::Energy, 1)
                 .weight(Asset::SpentEnergy, 1)
                 .weight(Asset::GridPotential, 1)
@@ -598,40 +600,40 @@ pub fn initial(stress: bool, seed: u64) -> World {
                 .weight(Asset::TransportFuel, 3),
         )
         .invariant(
-            LinearInvariant::new("finite fuel")
+            LinearInvariant::new(path!("finite-fuel"))
                 .weight(Asset::Fuel, 1)
                 .weight(Asset::GeneratorFuel, 1)
                 .weight(Asset::TransportFuel, 1),
         )
         .invariant(
-            LinearInvariant::new("cooling switch")
+            LinearInvariant::new(path!("cooling-switch"))
                 .weight(Asset::CoolingOn, 1)
                 .weight(Asset::CoolingOff, 1),
         )
         .invariant(
-            LinearInvariant::new("finite labor")
+            LinearInvariant::new(path!("finite-labor"))
                 .weight(Asset::Labor, 1)
                 .weight(Asset::SpentLabor, 1)
                 .weight(Asset::FutureLabor, 1)
                 .weight(Asset::UnusedLabor, 1),
         )
         .invariant(
-            LinearInvariant::new("daily transport capacity")
+            LinearInvariant::new(path!("daily-transport-capacity"))
                 .weight(Asset::Freight, 1)
                 .weight(Asset::UsedFreight, 1)
                 .weight(Asset::FutureFreight, 1)
                 .weight(Asset::UnusedFreight, 1),
         )
         .invariant(
-            LinearInvariant::new("daily food obligations")
+            LinearInvariant::new(path!("daily-food-obligations"))
                 .weight(Asset::Demand, 1)
                 .weight(Asset::FutureDemand, 1)
                 .weight(Asset::SatisfiedDemand, 1)
                 .weight(Asset::MissedDemand, 1),
         )
-        .invariant(LinearInvariant::new("funded food purchases").weight(Asset::Money, 1))
+        .invariant(LinearInvariant::new(path!("funded-food-purchases")).weight(Asset::Money, 1))
         .invariant(
-            LinearInvariant::new("cold-chain lifecycle")
+            LinearInvariant::new(path!("cold-chain-lifecycle"))
                 .weight(Asset::Decisions, 1)
                 .weight(Asset::Aging, 1)
                 .weight(Asset::Solved, 1),

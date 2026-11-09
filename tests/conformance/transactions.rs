@@ -3,9 +3,9 @@
 use crate::scripted_iterator;
 
 use axionomy::{
-    Account, AccountAssessment, AccountDelta, AccountShortfall, ApplyError, Basket, Economy,
-    EconomyBuilder, Exchange, ExchangeAssessment, LinearInvariant, Quantity, QuantityComparison,
-    QuantityExpression, Rate, Receipt, Trace,
+    Account, AccountAssessment, AccountDelta, AccountShortfall, ApplyError, Basket, ConditionPath,
+    Economy, EconomyBuilder, Exchange, ExchangeAssessment, InvariantPath, LinearInvariant,
+    ParameterPath, Quantity, QuantityComparison, QuantityExpression, Rate, Receipt, Trace,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -50,7 +50,7 @@ struct Computed {
 
 #[derive(Debug, Deserialize)]
 struct Condition {
-    label: String,
+    label: ConditionPath,
     left: Expression,
     comparison: String,
     right: Expression,
@@ -76,12 +76,12 @@ struct ProposalCase {
     rate: RuleId,
     units: String,
     bindings: Vec<(Role, Holder)>,
-    parameters: Vec<(String, String)>,
+    parameters: Vec<(ParameterPath, String)>,
 }
 
 #[derive(Debug, Deserialize)]
 struct InvariantCase {
-    label: String,
+    label: InvariantPath,
     weights: Vec<(Asset, String)>,
 }
 
@@ -271,7 +271,7 @@ fn build(case: &Case) -> (World, Proposal) {
             other => panic!("unknown comparison {other}"),
         };
         rule = rule.condition(
-            &condition.label,
+            condition.label.clone(),
             condition.left.clone(),
             comparison,
             condition.right.clone(),
@@ -291,7 +291,7 @@ fn build(case: &Case) -> (World, Proposal) {
         builder = builder.account(*id, Account::new(basket(entries)));
     }
     for invariant in &case.invariants {
-        let mut value = LinearInvariant::new(&invariant.label);
+        let mut value = LinearInvariant::new(invariant.label.clone());
         for (asset, weight) in &invariant.weights {
             value = value.weight(*asset, weight.parse::<i64>().unwrap());
         }
@@ -306,7 +306,7 @@ fn build_proposal(case: &ProposalCase) -> Proposal {
         action = action.bind(*role, *account);
     }
     for (key, value) in &case.parameters {
-        action = action.parameter(key, value.parse::<Quantity>().unwrap());
+        action = action.parameter(key.clone(), value.parse::<Quantity>().unwrap());
     }
     action
 }

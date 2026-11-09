@@ -1,4 +1,6 @@
 //! Independent teammates, private observations and timed cooperative extraction.
+use axionomy::path;
+use axionomy::path::slug;
 use axionomy::{
     Account, EconomicView, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Quantity,
     QuantityComparison as C, QuantityExpression as Q, Rate, Trace, basket,
@@ -262,7 +264,12 @@ fn identity() -> Rate<Ontology> {
         .distinct(Role::World, Role::Scout)
         .distinct(Role::World, Role::Medic)
         .distinct(Role::Scout, Role::Medic)
-        .condition("one mission event", Q::units(), C::Equal, Q::constant(1))
+        .condition(
+            path!("one-mission-event"),
+            Q::units(),
+            C::Equal,
+            Q::constant(1),
+        )
 }
 fn event() -> Rate<Ontology> {
     identity().preserve(Role::World, basket([(Asset::Active, 1)]))
@@ -271,7 +278,7 @@ fn law() -> Rate<Ontology> {
     event()
         .preserve(Role::World, basket([(Asset::EnvironmentReady, 1)]))
         .condition(
-            "settle scheduled clinical events first",
+            path!("settle-scheduled-clinical-events-first"),
             clock() + Q::constant(1),
             C::LessThanOrEqual,
             q(Role::World, Asset::NextClinical),
@@ -300,7 +307,7 @@ fn nature(rate: Rate<Ontology>) -> Rate<Ontology> {
 }
 fn before_horizon(rate: Rate<Ontology>, duration: Q<Ontology>) -> Rate<Ontology> {
     rate.condition(
-        "activity ends within mission horizon",
+        path!("activity-ends-within-mission-horizon"),
         clock() + duration,
         C::LessThanOrEqual,
         q(Role::World, Asset::Horizon),
@@ -442,7 +449,7 @@ pub fn initial(stress: bool, seed: u64) -> World {
                         )]),
                     )
                     .condition(
-                        "travel time elapsed",
+                        path!("travel-time-elapsed"),
                         clock(),
                         C::GreaterThanOrEqual,
                         q(role(agent), Asset::ReadyAt),
@@ -539,7 +546,7 @@ pub fn initial(stress: bool, seed: u64) -> World {
                 let mut share = work(Agent::Scout, 0)
                     .preserve(Role::Scout, basket([(Asset::Known(id, location), 1)]))
                     .condition(
-                        "recipient does not already know",
+                        path!("recipient-does-not-already-know"),
                         q(Role::Medic, Asset::Known(id, location)),
                         C::Equal,
                         Q::constant(0),
@@ -561,7 +568,7 @@ pub fn initial(stress: bool, seed: u64) -> World {
                         .reduce(|a, b| a + b)
                         .unwrap();
                     share = share.condition(
-                        "local briefing requires rendezvous",
+                        path!("local-briefing-requires-rendezvous"),
                         colocated,
                         C::Equal,
                         Q::constant(1),
@@ -585,7 +592,7 @@ pub fn initial(stress: bool, seed: u64) -> World {
                         )
                         .preserve(Role::Objective, basket([(Asset::Located, 1)]))
                         .condition(
-                            "patient alive",
+                            path!("patient-alive"),
                             q(Role::Objective, Asset::Health),
                             C::GreaterThanOrEqual,
                             Q::constant(1),
@@ -600,7 +607,7 @@ pub fn initial(stress: bool, seed: u64) -> World {
                             .produce(Role::Objective, basket([(Asset::Health, 1)]));
                     } else {
                         treat = treat.condition(
-                            "no damage to restore",
+                            path!("no-damage-to-restore"),
                             q(Role::Objective, Asset::Harm),
                             C::Equal,
                             Q::constant(0),
@@ -618,7 +625,7 @@ pub fn initial(stress: bool, seed: u64) -> World {
                 let mut extract = before_horizon(objective(law(), id), Q::constant(2))
                     .preserve(Role::Objective, basket([(Asset::Stable, 1)]))
                     .condition(
-                        "patient alive",
+                        path!("patient-alive"),
                         q(Role::Objective, Asset::Health),
                         C::GreaterThanOrEqual,
                         Q::constant(1),
@@ -682,7 +689,7 @@ pub fn initial(stress: bool, seed: u64) -> World {
         } {
             finish = finish
                 .condition(
-                    "work duration elapsed",
+                    path!("work-duration-elapsed"),
                     clock(),
                     C::GreaterThanOrEqual,
                     q(role(*agent), Asset::ReadyAt),
@@ -729,7 +736,7 @@ pub fn initial(stress: bool, seed: u64) -> World {
         )
         .preserve(carrier, basket([(Asset::At(Location::Base), 1)]))
         .condition(
-            "delivery before deadline",
+            path!("delivery-before-deadline"),
             clock(),
             C::LessThanOrEqual,
             q(Role::Objective, Asset::Deadline),
@@ -744,7 +751,7 @@ pub fn initial(stress: bool, seed: u64) -> World {
         if patient(id) {
             deliver = deliver
                 .condition(
-                    "evacuated alive",
+                    path!("evacuated-alive"),
                     q(Role::Objective, Asset::Health),
                     C::GreaterThanOrEqual,
                     Q::constant(1),
@@ -771,14 +778,14 @@ pub fn initial(stress: bool, seed: u64) -> World {
                     );
                 fail = if dead {
                     fail.condition(
-                        "patient died",
+                        path!("patient-died"),
                         q(Role::Objective, Asset::Health),
                         C::Equal,
                         Q::constant(0),
                     )
                 } else {
                     fail.condition(
-                        "deadline passed",
+                        path!("deadline-passed"),
                         clock(),
                         C::GreaterThanOrEqual,
                         q(Role::Objective, Asset::Deadline) + Q::constant(1),
@@ -812,13 +819,13 @@ pub fn initial(stress: bool, seed: u64) -> World {
                         id,
                     )
                     .condition(
-                        "clinical pulse time reached",
+                        path!("clinical-pulse-time-reached"),
                         clock(),
                         C::GreaterThanOrEqual,
                         Q::constant(day.into()),
                     )
                     .condition(
-                        "scheduled pulse",
+                        path!("scheduled-pulse"),
                         q(Role::World, Asset::NextClinical),
                         C::Equal,
                         Q::constant(day.into()),
@@ -827,7 +834,7 @@ pub fn initial(stress: bool, seed: u64) -> World {
                     .produce(Role::Objective, basket([(Asset::ClinicalSettled(day), 1)]))
                     .produce(Role::World, basket([(Asset::ClinicalCount, 1)]))
                     .condition(
-                        "match living unresolved patient",
+                        path!("match-living-unresolved-patient"),
                         unresolved * Q::minimum(q(Role::Objective, Asset::Health), Q::constant(1)),
                         C::Equal,
                         Q::constant(u64::from(active)),
@@ -933,7 +940,12 @@ pub fn initial(stress: bool, seed: u64) -> World {
     );
     for day in 0..horizon as u8 {
         let mut tick = law()
-            .condition("clock step", clock(), C::Equal, Q::constant(day.into()))
+            .condition(
+                path!("clock-step"),
+                clock(),
+                C::Equal,
+                Q::constant(day.into()),
+            )
             .consume(Role::World, basket([(Asset::TimeRemaining, 1)]))
             .produce(Role::World, basket([(Asset::Time, 1)]));
         for agent in AGENTS {
@@ -952,7 +964,12 @@ pub fn initial(stress: bool, seed: u64) -> World {
         // Tick and Nature settlement are distinct authoritative exchanges.
         if [5, 10].contains(&(day + 1)) {
             tick = event()
-                .condition("clock step", clock(), C::Equal, Q::constant(day.into()))
+                .condition(
+                    path!("clock-step"),
+                    clock(),
+                    C::Equal,
+                    Q::constant(day.into()),
+                )
                 .consume(
                     Role::World,
                     basket([(Asset::EnvironmentReady, 1), (Asset::TimeRemaining, 1)]),
@@ -982,13 +999,13 @@ pub fn initial(stress: bool, seed: u64) -> World {
             RateId::FinishClinical(day),
             event()
                 .condition(
-                    "scheduled pulse",
+                    path!("scheduled-pulse"),
                     q(Role::World, Asset::NextClinical),
                     C::Equal,
                     Q::constant(day.into()),
                 )
                 .condition(
-                    "all casualties assessed",
+                    path!("all-casualties-assessed"),
                     q(Role::World, Asset::ClinicalCount),
                     C::Equal,
                     Q::constant(u64::from(count.div_ceil(2))),
@@ -1004,17 +1021,17 @@ pub fn initial(stress: bool, seed: u64) -> World {
                 ),
         );
         builder = builder.invariant(
-            LinearInvariant::new(format!("clinical pulse {day}"))
+            LinearInvariant::new(slug(format!("clinical pulse {day}")))
                 .weight(Asset::ClinicalDue(day), 1)
                 .weight(Asset::ClinicalSettled(day), 1),
         );
     }
-    let mut activity = LinearInvariant::new("two independent agent activities")
+    let mut activity = LinearInvariant::new(path!("two-independent-agent-activities"))
         .weight(Asset::Ready, 1)
         .weight(Asset::AwaitingReport, 1);
-    let mut positions = LinearInvariant::new("two physical agent positions");
-    let mut surveys = LinearInvariant::new("finite sector surveys");
-    let mut seat = LinearInvariant::new("one medic evacuation seat").weight(Asset::Seat, 1);
+    let mut positions = LinearInvariant::new(path!("two-physical-agent-positions"));
+    let mut surveys = LinearInvariant::new(path!("finite-sector-surveys"));
+    let mut seat = LinearInvariant::new(path!("one-medic-evacuation-seat")).weight(Asset::Seat, 1);
     for location in LOCATIONS {
         activity = activity.weight(Asset::Travelling(location), 1);
         positions = positions
@@ -1036,7 +1053,7 @@ pub fn initial(stress: bool, seed: u64) -> World {
     }
     for agent in AGENTS {
         builder = builder.invariant(
-            LinearInvariant::new(format!("{agent:?} one decision per tick"))
+            LinearInvariant::new(slug(format!("{agent:?} one decision per tick")))
                 .weight(Asset::Permit(agent), 1)
                 .weight(Asset::UsedPermit(agent), 1),
         );
@@ -1046,7 +1063,7 @@ pub fn initial(stress: bool, seed: u64) -> World {
             RateId::Close,
             identity()
                 .condition(
-                    "all objectives resolved",
+                    path!("all-objectives-resolved"),
                     q(Role::World, Asset::Resolved),
                     C::Equal,
                     q(Role::World, Asset::Count),
@@ -1061,7 +1078,7 @@ pub fn initial(stress: bool, seed: u64) -> World {
         .invariant(surveys)
         .invariant(seat)
         .invariant(
-            LinearInvariant::new("objective lifecycle")
+            LinearInvariant::new(path!("objective-lifecycle"))
                 .weight(Asset::Hidden, 1)
                 .weight(Asset::Located, 1)
                 .weight(Asset::Working, 1)
@@ -1070,52 +1087,52 @@ pub fn initial(stress: bool, seed: u64) -> World {
                 .weight(Asset::Failed, 1),
         )
         .invariant(
-            LinearInvariant::new("health and harm")
+            LinearInvariant::new(path!("health-and-harm"))
                 .weight(Asset::Health, 1)
                 .weight(Asset::Harm, 1),
         )
         .invariant(
-            LinearInvariant::new("stabilization state")
+            LinearInvariant::new(path!("stabilization-state"))
                 .weight(Asset::Stable, 1)
                 .weight(Asset::Unstable, 1),
         )
         .invariant(
-            LinearInvariant::new("energy")
+            LinearInvariant::new(path!("energy"))
                 .weight(Asset::Energy, 1)
                 .weight(Asset::SpentEnergy, 1),
         )
         .invariant(
-            LinearInvariant::new("medical kits")
+            LinearInvariant::new(path!("medical-kits"))
                 .weight(Asset::MedicalKit, 1)
                 .weight(Asset::UsedMedicalKit, 1),
         )
         .invariant(
-            LinearInvariant::new("radio charges")
+            LinearInvariant::new(path!("radio-charges"))
                 .weight(Asset::Radio, 1)
                 .weight(Asset::UsedRadio, 1),
         )
         .invariant(
-            LinearInvariant::new("sensor charges")
+            LinearInvariant::new(path!("sensor-charges"))
                 .weight(Asset::Sensor, 1)
                 .weight(Asset::UsedSensor, 1),
         )
         .invariant(
-            LinearInvariant::new("finite resupply")
+            LinearInvariant::new(path!("finite-resupply"))
                 .weight(Asset::Supply, 1)
                 .weight(Asset::UsedSupply, 1),
         )
         .invariant(
-            LinearInvariant::new("time")
+            LinearInvariant::new(path!("time"))
                 .weight(Asset::Time, 1)
                 .weight(Asset::TimeRemaining, 1),
         )
         .invariant(
-            LinearInvariant::new("mission lifecycle")
+            LinearInvariant::new(path!("mission-lifecycle"))
                 .weight(Asset::Active, 1)
                 .weight(Asset::Closed, 1),
         )
         .invariant(
-            LinearInvariant::new("weather settlement")
+            LinearInvariant::new(path!("weather-settlement"))
                 .weight(Asset::EnvironmentReady, 1)
                 .weight(Asset::WeatherDue(false), 1)
                 .weight(Asset::WeatherDue(true), 1),

@@ -1,7 +1,6 @@
 //! Handles the server mints for what it stores, and the path kind for
 //! invariants.
 
-use axionomy::{PathKind, path::Path};
 use schemars::{JsonSchema, Schema, SchemaGenerator, json_schema};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::{borrow::Cow, fmt, str::FromStr, sync::Arc};
@@ -99,17 +98,6 @@ handle!(
     ArtifactId,
     "art-"
 );
-
-/// Invariants, which an economy authored here identifies by path.
-pub enum Invariant {}
-
-impl PathKind for Invariant {
-    const SCHEMA: &'static str = "InvariantPath";
-}
-
-/// An invariant's identifier. The kernel keeps invariant names as labels; an
-/// economy authored here uses a path as that label, so it composes into URIs.
-pub type InvariantPath = Path<Invariant>;
 
 #[cfg(test)]
 mod tests {

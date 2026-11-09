@@ -1994,8 +1994,13 @@ people read stays text.
 
 One spelling per identifier means a link, a CLI argument, an MCP call and a
 stored artifact name the same thing the same way, and a misspelling is
-refused where it is read instead of failing to match later. Kernel parameter
-names remain text because the specification defines them as text.
+refused where it is read instead of failing to match later. The kernel's own
+names are paths too: an exchange's parameters (`minimum-output`), a rate's
+conditions and an economy's invariants (`money-accounting`) are
+`ParameterPath`, `ConditionPath` and `InvariantPath`. The specification
+treats a name as text it only compares, so paths are a subset it already
+covers, and its fixtures name things with paths. `path!("minimum-output")`
+checks a literal name when compiling.
 ### D-042: The ontology is the kernel's type parameter
 
 A problem's vocabulary is one type. An `Ontology` names its account, asset,

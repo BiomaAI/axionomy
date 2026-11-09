@@ -1,3 +1,4 @@
+use axionomy::path;
 use axionomy::{
     Account, ApplyError, Economy, EconomyBuilder, Exchange, LinearInvariant, Quantity,
     QuantityComparison, QuantityExpression as Q, Rate, Rounding, basket,
@@ -72,15 +73,15 @@ fn world() -> World {
                 .consume_computed(Role::Pool, Asset::Energy, output.clone())
                 .produce_computed(Role::Trader, Asset::Energy, output.clone())
                 .condition(
-                    "minimum output",
+                    path!("minimum-output"),
                     output,
                     QuantityComparison::GreaterThanOrEqual,
-                    Q::parameter("minimum_output"),
+                    Q::parameter(path!("minimum-output")),
                 )
                 .distinct(Role::Pool, Role::Trader),
         )
-        .invariant(LinearInvariant::new("energy").weight(Asset::Energy, 1))
-        .invariant(LinearInvariant::new("credit").weight(Asset::Credit, 1))
+        .invariant(LinearInvariant::new(path!("energy")).weight(Asset::Energy, 1))
+        .invariant(LinearInvariant::new(path!("credit")).weight(Asset::Credit, 1))
         .build()
         .unwrap()
 }
@@ -89,7 +90,7 @@ fn buy(input: u64, minimum_output: u64) -> Action {
     Exchange::new(RateId::BuyEnergy, Quantity::new(input))
         .bind(Role::Pool, AccountId::Pool)
         .bind(Role::Trader, AccountId::Trader)
-        .parameter("minimum_output", Quantity::new(minimum_output))
+        .parameter(path!("minimum-output"), Quantity::new(minimum_output))
 }
 
 #[test]
@@ -129,7 +130,7 @@ fn minimum_output_is_authoritative_and_non_mutating() {
     assert!(!assessment.is_applicable());
     assert!(matches!(
         assessment.issues(),
-        [ApplyError::RateConditionFailed { condition, .. }] if condition == "minimum output"
+        [ApplyError::RateConditionFailed { condition, .. }] if *condition == path!("minimum-output")
     ));
     assert_eq!(world.state_key(), before);
 }
@@ -146,12 +147,12 @@ fn parameters_are_declared_by_the_rate_and_survive_serde() {
         .bind(Role::Trader, AccountId::Trader);
     assert!(matches!(
         decoded.assess(&missing).issues(),
-        [ApplyError::MissingParameter { name }] if name == "minimum_output"
+        [ApplyError::MissingParameter { name }] if *name == path!("minimum-output")
     ));
 
-    let unknown = buy(1_000, 90).parameter("oracle_price", Quantity::new(10));
+    let unknown = buy(1_000, 90).parameter(path!("oracle-price"), Quantity::new(10));
     assert!(matches!(
         decoded.assess(&unknown).issues(),
-        [ApplyError::UnknownParameter { name }] if name == "oracle_price"
+        [ApplyError::UnknownParameter { name }] if *name == path!("oracle-price")
     ));
 }

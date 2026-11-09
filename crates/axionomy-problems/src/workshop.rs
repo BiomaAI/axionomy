@@ -1,5 +1,6 @@
 //! A stoichiometric workshop with conserved material and labor accounting.
 
+use axionomy::path;
 use axionomy::{
     Account, ApplyError, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Quantity, Rate,
     basket,
@@ -193,23 +194,23 @@ fn build(wood: u64, labor: u64, time: u64, target: u64) -> World {
                 .produce(Role::Shop, basket([(Asset::Solved, 1)])),
         )
         .invariant(
-            LinearInvariant::new("material mass")
+            LinearInvariant::new(path!("material-mass"))
                 .weight(Asset::Wood, 1)
                 .weight(Asset::Chair, 1)
                 .weight(Asset::Waste, 1),
         )
         .invariant(
-            LinearInvariant::new("labor accounting")
+            LinearInvariant::new(path!("labor-accounting"))
                 .weight(Asset::Labor, 1)
                 .weight(Asset::SpentLabor, 1),
         )
         .invariant(
-            LinearInvariant::new("time accounting")
+            LinearInvariant::new(path!("time-accounting"))
                 .weight(Asset::Time, 1)
                 .weight(Asset::SpentTime, 1),
         )
         .invariant(
-            LinearInvariant::new("workshop lifecycle")
+            LinearInvariant::new(path!("workshop-lifecycle"))
                 .weight(Asset::Active, 1)
                 .weight(Asset::Solved, 1),
         )
@@ -306,7 +307,7 @@ mod tests {
                 invariant,
                 before,
                 after,
-            } if invariant == "material mass" && before.to_string() == "6" && after.to_string() == "7"
+            } if invariant.as_str() == "material-mass" && before.to_string() == "6" && after.to_string() == "7"
         ));
         assert_eq!(world.state_key(), before);
     }

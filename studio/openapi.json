@@ -822,6 +822,11 @@
         ],
         "type": "object"
       },
+      "ConditionPath": {
+        "description": "Lowercase segments of a–z, 0–9 and `-`, separated by `/`, such as `loans/42`; each segment starts and ends with a letter or digit.",
+        "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?(/[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$",
+        "type": "string"
+      },
       "DocumentPath": {
         "description": "Lowercase segments of a–z, 0–9 and `-`, separated by `/`, such as `loans/42`; each segment starts and ends with a letter or digit.",
         "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?(/[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$",
@@ -892,7 +897,7 @@
       "ExchangeParameterView": {
         "properties": {
           "name": {
-            "type": "string"
+            "$ref": "#/components/schemas/ParameterPath"
           },
           "value": {
             "$ref": "#/components/schemas/ExactQuantity"
@@ -1184,6 +1189,11 @@
         ],
         "type": "string"
       },
+      "InvariantPath": {
+        "description": "Lowercase segments of a–z, 0–9 and `-`, separated by `/`, such as `loans/42`; each segment starts and ends with a letter or digit.",
+        "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?(/[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$",
+        "type": "string"
+      },
       "InvariantTermView": {
         "properties": {
           "asset": {
@@ -1203,7 +1213,7 @@
       "InvariantView": {
         "properties": {
           "name": {
-            "type": "string"
+            "$ref": "#/components/schemas/InvariantPath"
           },
           "terms": {
             "items": {
@@ -1551,6 +1561,11 @@
         ],
         "type": "object"
       },
+      "ParameterPath": {
+        "description": "Lowercase segments of a–z, 0–9 and `-`, separated by `/`, such as `loans/42`; each segment starts and ends with a letter or digit.",
+        "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?(/[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$",
+        "type": "string"
+      },
       "ParetoFrontView": {
         "properties": {
           "axes": {
@@ -1743,7 +1758,7 @@
             "type": "string"
           },
           "name": {
-            "type": "string"
+            "$ref": "#/components/schemas/ConditionPath"
           },
           "right": {
             "type": "string"

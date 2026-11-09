@@ -5,6 +5,7 @@
 //! exchange. Policies only propose those exchanges; they cannot bypass the
 //! economy or manufacture a score.
 
+use axionomy::path;
 use axionomy::{
     Account, Basket, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Quantity, Rate,
     Trace, basket,
@@ -719,28 +720,28 @@ pub fn league(profile: Profile, lineup: [Policy; 4]) -> League {
 
     builder = builder
         .invariant(
-            LinearInvariant::new("league energy accounting")
+            LinearInvariant::new(path!("league-energy-accounting"))
                 .weight(Asset::Energy, 1)
                 .weight(Asset::SpentEnergy, 1)
                 .weight(Asset::ChargeSupply, 1),
         )
         .invariant(
-            LinearInvariant::new("league material accounting")
+            LinearInvariant::new(path!("league-material-accounting"))
                 .weight(Asset::Material, 1)
                 .weight(Asset::MaterialSpent, 1),
         )
         .invariant(
-            LinearInvariant::new("league time accounting")
+            LinearInvariant::new(path!("league-time-accounting"))
                 .weight(Asset::TimeRemaining, 1)
                 .weight(Asset::ElapsedTime, 1),
         )
         .invariant(
-            LinearInvariant::new("worker operational condition")
+            LinearInvariant::new(path!("worker-operational-condition"))
                 .weight(Asset::Operational, 1)
                 .weight(Asset::Damage, 1),
         )
         .invariant(
-            LinearInvariant::new("repair supply accounting")
+            LinearInvariant::new(path!("repair-supply-accounting"))
                 .weight(Asset::RepairSupply, 1)
                 .weight(Asset::SpentRepairSupply, 1),
         );

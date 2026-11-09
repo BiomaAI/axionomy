@@ -23,13 +23,13 @@ fn serialized_invariant_weights_match_lean_validation_and_normalization() {
             .iter()
             .map(|(asset, weight)| (*asset, weight.parse::<i64>().unwrap()))
             .collect();
-        let input = json!({"name": "material éλ", "weights": entries});
+        let input = json!({"name": "material", "weights": entries});
         let loaded = serde_json::from_value::<LinearInvariant<Asset>>(input);
         match case.expected {
             None => assert!(loaded.is_err(), "duplicate accepted: {:?}", case.entries),
             Some(expected) => {
                 let invariant = loaded.unwrap();
-                assert_eq!(invariant.name(), "material éλ");
+                assert_eq!(invariant.name().as_str(), "material");
                 let actual: Vec<_> = invariant
                     .weights()
                     .map(|(asset, weight)| (asset.0, weight.to_string()))

@@ -314,6 +314,7 @@ fn decode<T: Serialize + DeserializeOwned>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use axionomy::path;
     use axionomy::{
         Rate, RatePath, basket,
         paths::{self, Paths},
@@ -345,7 +346,7 @@ mod tests {
                     .produce(path("bank"), basket([(path("cash"), 10)]))
                     .closes(path("gone")),
             )
-            .invariant(paths::LinearInvariant::new("cash").weight(path("cash"), 1))
+            .invariant(paths::LinearInvariant::new(path!("cash")).weight(path("cash"), 1))
             .build()
             .unwrap();
         let mut stored = tree::<Paths>(&economy);

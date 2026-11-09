@@ -1,5 +1,6 @@
 //! Funded offers become reservations, shipments, and only then settlements.
 use super::*;
+use axionomy::path;
 use axionomy::{QuantityComparison as C, QuantityExpression as Q};
 
 pub fn enabled(world: &World) -> bool {
@@ -14,7 +15,12 @@ fn clock() -> Q<Ontology> {
 fn law() -> Rate<Ontology> {
     Rate::new()
         .preserve(Role::Platform, basket([(Asset::MarketplaceLicense, 1)]))
-        .condition("one market event", Q::units(), C::Equal, Q::constant(1))
+        .condition(
+            path!("one-market-event"),
+            Q::units(),
+            C::Equal,
+            Q::constant(1),
+        )
 }
 fn clear(rate: Rate<Ontology>, role: Role, asset: Asset) -> Rate<Ontology> {
     rate.consume_computed(role, asset, Q::balance(role, asset))
@@ -72,7 +78,7 @@ pub(super) fn build(source: World) -> World {
                     .preserve(Role::Carrier, basket([(Asset::CarrierLicense, 1)]))
                     .preserve(Role::TaxAuthority, basket([(Asset::TaxPolicy, 1)]))
                     .condition(
-                        "order has arrived",
+                        path!("order-has-arrived"),
                         clock(),
                         C::GreaterThanOrEqual,
                         Q::balance(Role::Order, Asset::Arrival),
@@ -115,7 +121,7 @@ pub(super) fn build(source: World) -> World {
             let cancel = all_distinct(
                 clear(law(), Role::Order, Asset::LeaseUntil)
                     .condition(
-                        "unshipped reservation expired",
+                        path!("unshipped-reservation-expired"),
                         clock(),
                         C::GreaterThanOrEqual,
                         Q::balance(Role::Order, Asset::LeaseUntil) + Q::constant(1),
@@ -156,13 +162,13 @@ pub(super) fn build(source: World) -> World {
                 let deliver = all_distinct(
                     clear(law(), Role::Order, Asset::ReadyAt)
                         .condition(
-                            "delivery time elapsed",
+                            path!("delivery-time-elapsed"),
                             clock(),
                             C::GreaterThanOrEqual,
                             Q::balance(Role::Order, Asset::ReadyAt),
                         )
                         .condition(
-                            "deadline outcome",
+                            path!("deadline-outcome"),
                             if late {
                                 clock()
                             } else {
@@ -250,7 +256,7 @@ pub(super) fn build(source: World) -> World {
                     .preserve(Role::Carrier, basket([(Asset::Booking(order), 1)]))
                     .preserve(Role::TaxAuthority, basket([(Asset::TaxPolicy, 1)]))
                     .condition(
-                        "reservation remains valid",
+                        path!("reservation-remains-valid"),
                         clock(),
                         C::LessThanOrEqual,
                         Q::balance(Role::Order, Asset::LeaseUntil),
@@ -273,7 +279,7 @@ pub(super) fn build(source: World) -> World {
             RateId::Advance { to },
             law()
                 .condition(
-                    "clock moves forward",
+                    path!("clock-moves-forward"),
                     clock() + Q::constant(1),
                     C::LessThanOrEqual,
                     Q::constant(u64::from(to)),
@@ -293,10 +299,10 @@ pub(super) fn build(source: World) -> World {
     for invariant in source.invariants() {
         let mut invariant = invariant.clone();
         for order in orders.iter().copied() {
-            invariant = match invariant.name() {
-                "buyer order lifecycle" => invariant.weight(Asset::PurchaseLocked(order), 1),
-                "seller order lifecycle" => invariant.weight(Asset::SaleReserved(order), 1),
-                "order lifecycle" => invariant
+            invariant = match invariant.name().as_str() {
+                "buyer-order-lifecycle" => invariant.weight(Asset::PurchaseLocked(order), 1),
+                "seller-order-lifecycle" => invariant.weight(Asset::SaleReserved(order), 1),
+                "order-lifecycle" => invariant
                     .weight(Asset::Contract(order), 1)
                     .weight(Asset::InShipment(order), 1),
                 _ => invariant,
@@ -306,7 +312,7 @@ pub(super) fn build(source: World) -> World {
     }
     builder
         .invariant(
-            LinearInvariant::new("market time budget")
+            LinearInvariant::new(path!("market-time-budget"))
                 .weight(Asset::Now, 1)
                 .weight(Asset::TimeRemaining, 1),
         )
