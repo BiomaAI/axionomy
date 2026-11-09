@@ -1,6 +1,7 @@
 #![doc = include_str!("../README.md")]
 
 mod ids;
+mod ontology;
 mod read;
 mod recorder;
 mod records;
@@ -8,14 +9,16 @@ pub mod state;
 mod transaction;
 mod writer;
 
-pub use ids::{GroupId, GroupKindPath, IdError, MetricPath, Point, RefPath, RunId, TagPath, kind};
+pub use ids::{
+    GroupId, GroupKindPath, IdError, MetricPath, OntologyPath, Point, RefPath, RunId, TagPath, kind,
+};
+pub use ontology::{ApplyError, Economy, Exchange, Id, Receipt, Recordable};
 pub use read::{Reader, State};
 pub use recorder::Recorder;
-pub use records::{Checkpoints, Group, GroupRecord, Member, Run, Step, Summary, Target};
+pub use records::{Checkpoints, Group, GroupRecord, Member, Run, Step, StepOf, Summary, Target};
 pub use state::StateError;
 pub use writer::{Pending, Transaction};
 
-use axionomy::paths;
 use axionomy_tree::Hash;
 use records::{GROUPS, META, RUNS, STORE_PREFIX};
 use redb::{Database, ReadableDatabase, ReadableTable, backends::InMemoryBackend};
@@ -57,6 +60,14 @@ pub enum StoreError {
     Diverged(Point),
     #[error("{0} is not a run of this store")]
     UnknownRun(RunId),
+    #[error("{run} records {recorded} economies, not {read}")]
+    OtherOntology {
+        run: RunId,
+        recorded: OntologyPath,
+        read: &'static str,
+    },
+    #[error("ontology name `{0}` is not a path")]
+    OntologyName(&'static str),
     #[error("metric {0} is not a finite number")]
     NotFinite(MetricPath),
     #[error("the store's writer has stopped")]
@@ -185,16 +196,24 @@ impl Store {
     }
 
     /// Starts recording a new run from `economy`.
-    pub fn record(&self, economy: paths::Economy, checkpoints: Checkpoints) -> Recorder {
+    pub fn record<O: Recordable>(
+        &self,
+        economy: Economy<O>,
+        checkpoints: Checkpoints,
+    ) -> Recorder<O> {
         Recorder::new(self.clone(), None, State::new(economy), checkpoints)
     }
 
     /// Starts recording a new run from the state at `point`, numbering its
-    /// steps on from there.
-    pub fn fork(&self, point: Point, checkpoints: Checkpoints) -> Result<Recorder, StoreError> {
+    /// steps on from there. The run it forks must be of `O`'s economies.
+    pub fn fork<O: Recordable>(
+        &self,
+        point: Point,
+        checkpoints: Checkpoints,
+    ) -> Result<Recorder<O>, StoreError> {
         let state = self
             .read()?
-            .state(point)?
+            .state::<O>(point)?
             .ok_or(StoreError::UnknownRun(point.run))?;
         Ok(Recorder::new(self.clone(), Some(point), state, checkpoints))
     }

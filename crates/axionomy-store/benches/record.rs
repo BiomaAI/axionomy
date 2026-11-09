@@ -1,4 +1,8 @@
-use axionomy::{Quantity, Rate, basket, path::Path, paths};
+use axionomy::{
+    Quantity, Rate, basket,
+    path::Path,
+    paths::{self, Paths},
+};
 use axionomy_store::{Checkpoints, Store};
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use std::{hint::black_box, num::NonZeroU64};
@@ -50,7 +54,7 @@ fn benchmark(c: &mut Criterion) {
         ] {
             group.bench_with_input(BenchmarkId::new(rule, accounts), &start, |b, start| {
                 let store = Store::memory().unwrap();
-                let mut recorder = store.record(start.clone(), checkpoints);
+                let mut recorder = store.record::<Paths>(start.clone(), checkpoints);
                 let mut next = exchanges.iter().cycle();
                 b.iter(|| black_box(recorder.apply(next.next().unwrap().clone()).unwrap()));
                 recorder.finish().unwrap();

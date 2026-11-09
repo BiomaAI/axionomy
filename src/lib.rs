@@ -26,3 +26,18 @@ pub use rate::{
     ComputedAmount, LinearInvariant, Measure, QuantityComparison, QuantityExpression, Rate,
     RateCondition, basket,
 };
+
+/// The identifier types of one kind of economy, under one name.
+///
+/// A problem's accounts, assets, rates and roles are its own Rust types; an
+/// ontology names the four together, so storage can record economies of
+/// those types and read them back only as the same types. The kernel's
+/// [`paths`] profile is the ontology [`paths::Paths`].
+pub trait Ontology {
+    /// The ontology's name, a path such as `maze` or `paths`.
+    const NAME: &'static str;
+    type Account;
+    type Asset;
+    type Rate;
+    type Role;
+}

@@ -7,7 +7,10 @@ use crate::{
     server::{AxionomyMcp, assessment_lines, counts, receipt_lines},
     store::{Loaded, Origin},
 };
-use axionomy::{AccountPath, AssessmentStatus, AssetPath, Quantity, RatePath, RolePath, paths};
+use axionomy::{
+    AccountPath, AssessmentStatus, AssetPath, Quantity, RatePath, RolePath,
+    paths::{self, Paths},
+};
 use axionomy_service::{ArtifactKey, RunArtifact};
 use axionomy_store::state;
 use axionomy_view::DocumentPath;
@@ -115,7 +118,7 @@ impl AxionomyMcp {
             } => {
                 let before = self.stored(economy_id).await?.ok_or_else(not_found)?;
                 let after = self.stored(other_id).await?.ok_or_else(not_found)?;
-                let changes = state::changes(&before.state.tree, &after.state.tree)
+                let changes = state::changes::<Paths>(&before.state.tree, &after.state.tree)
                     .map_err(internal)?
                     .into_iter()
                     .map(DiffRow::from)
@@ -528,8 +531,8 @@ enum DiffRow {
     Invariants,
 }
 
-impl From<state::Change> for DiffRow {
-    fn from(change: state::Change) -> Self {
+impl From<state::ChangeOf<Paths>> for DiffRow {
+    fn from(change: state::ChangeOf<Paths>) -> Self {
         match change {
             state::Change::Opened(account) => Self::Opened { account },
             state::Change::Closed(account) => Self::Closed { account },

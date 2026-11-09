@@ -65,8 +65,8 @@ happen on the writer thread, so the checkpoint rule barely shows.
 
 | Accounts | Kernel apply | Recorded, `ends` | Recorded, `every(64)` | Recorded, `every_step` |
 | --- | --- | --- | --- | --- |
-| 1,000 | 2.0 µs | 4.7 µs | 5.4 µs | 5.2 µs |
-| 100,000 | 2.1 µs | 7.8 µs | 9.3 µs | 9.5 µs |
+| 1,000 | 1.9 µs | 5.0 µs | 6.1 µs | 5.7 µs |
+| 100,000 | 2.2 µs | 5.6 µs | 6.4 µs | 5.9 µs |
 
 ## The kernel's state
 
@@ -125,14 +125,18 @@ A stored economy is one tree, whose keys say what each entry holds:
 | `r` rate | the rate, as the kernel serializes it |
 | `v` invariant, as the kernel serializes it | empty |
 
-Paths never contain `\0`, which sorts before every path character, so an
-account's balances are contiguous and in account order, and a prefix range
-reads one account. The **state root** is the tree's hash. Keys and values need
-canonical bytes: an economy identified by paths (`axionomy::paths`) has them;
-a problem with its own Rust ontology is stored through an encoding it
-declares (phase 4). The tree holds the logical state, not the order accounts
-were created in, so an economy rebuilt from a root lists accounts in path
-order; decoding accepts only trees an economy could have produced.
+Every identifier is written as its JSON, so a problem's own Rust types and
+paths are stored the same way: an economy of any `axionomy::Ontology` whose
+identifiers serialize can be recorded, and a run records its ontology's name
+and is read back only as that ontology. JSON never contains `\0`, which sorts
+before every other byte, so an account's balances are contiguous and in
+account order, and a prefix range reads one account. A JSON string sorts as
+its text does, so an economy identified by paths (`axionomy::paths::Paths`)
+lists its accounts in path order and a path prefix is a key prefix. The
+**state root** is the tree's hash. The tree holds the logical state, not the
+order accounts were created in, so an economy rebuilt from a root lists
+accounts in key order; decoding accepts only trees an economy could have
+produced, in exactly the encoding the store writes.
 
 A recorded run keeps its tree beside the kernel's economy. After a step, the
 receipt names exactly which balances changed; the recorder reads their new
@@ -330,7 +334,8 @@ survive the members they summarize.
 - **`axionomy-tree`** (done): the canonical persistent tree. No I/O and no
   economics.
 - **`axionomy-store`** (done): redb tables, the writer and durability rules,
-  runs and steps, tags, groups, metrics and refs, merge and garbage collection.
+  runs and steps, tags, groups, metrics and refs, merge and garbage
+  collection, for any ontology whose identifiers serialize.
 - **`axionomy-mcp`** (done): the `SnapshotStore` trait, `MemorySnapshotStore`
   and the assessment and artifact maps are gone; snapshots are points of runs
   in the store, durable across restarts with a store file. Results and
@@ -363,7 +368,9 @@ Each phase is a validated commit or series of commits.
 3. **MCP on the store** (done). Remove the snapshot trait, the in-memory
    store and the registries; name intermediate states, diff snapshots, carry
    state roots; extend the Python interop suite.
-4. **Recording and debugging:** runs, checkpoint rules and groups in search,
+4. **Recording and debugging:** typed ontologies in the store (done: every
+   identifier is stored as its JSON, and a run is read back only as the
+   ontology that recorded it); runs, checkpoint rules and groups in search,
    rollouts, Monte Carlo, MPPI and RL; replay-buffer transitions by root;
    watch, bisect, actor views and the time index; Studio scrubbing from the
    store.
@@ -372,10 +379,8 @@ Each phase is a validated commit or series of commits.
 
 ## Open decisions
 
-1. **Typed ontologies in storage:** an encoding trait the ontology implements,
-   or storing typed economies through the paths profile.
-2. **Periodic `Immediate` commit interval** for batches nobody waits on; one
+1. **Periodic `Immediate` commit interval** for batches nobody waits on; one
    second is a starting point.
-3. **Running summaries** beyond count, mean, minimum, maximum and variance,
+2. **Running summaries** beyond count, mean, minimum, maximum and variance,
    such as streaming quantile sketches, only if quantiles over large groups
    become a measured cost.

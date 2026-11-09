@@ -1629,9 +1629,9 @@ factor.
    historical data becomes a real requirement.
 4. Finish [storage, runs and replay](docs/STORAGE.md). The canonical tree,
    the redb store with runs, durability rules, tags, groups, metrics and refs,
-   and MCP on the store are built; next, typed ontologies record runs from
-   search, rollouts, Monte Carlo, MPPI and RL, and Studio scrubs from stored
-   roots. Extract generic holdings, dependency, and event indexes only after a
+   MCP on the store, and storing any ontology whose identifiers serialize are
+   built; next, problems record runs from search, rollouts, Monte Carlo, MPPI
+   and RL, and Studio scrubs from stored roots. Extract generic holdings, dependency, and event indexes only after a
    second domain confirms the perishables shapes.
 5. Extend invariants with carefully constrained local and inequality forms.
 6. Build an external OR adapter that compiles one closed schedule and replays
@@ -1961,9 +1961,12 @@ part of the state, including in state keys.
 
 Stored states are canonical trees (`axionomy-tree`) in one redb database
 (`axionomy-store`), with redb as the only storage engine and no storage trait
-of Axionomy's own. A tree holds an economy's logical state, accounts in path
+of Axionomy's own. A tree holds an economy's logical state, accounts in key
 order rather than creation order, so equal states have equal roots whatever
-their history, and stores written apart merge by union. A run records each
+their history, and stores written apart merge by union. Every identifier is
+stored as its JSON, so a problem's own Rust types and paths are stored alike;
+an `Ontology` names a problem's identifier types, and a run is read back only
+as the ontology that recorded it. A run records each
 exchange with its receipt digest and stores states by an explicit checkpoint
 rule; any other state is the nearest stored one plus replay, and replay checks
 every receipt, so storage can never make a state the kernel did not. Writes

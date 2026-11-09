@@ -8,13 +8,18 @@
 //! | `r` rate | the rate, as the kernel serializes it |
 //! | `v` invariant, as the kernel serializes it | empty |
 //!
-//! Paths never contain `\0`, which sorts before every path character, so an
-//! account's balances are contiguous and in the same order as the accounts.
-//! The tree holds the economy's logical state, not the order its accounts
-//! were created in: a rebuilt economy lists accounts in path order.
+//! Every identifier is written as its JSON. JSON never contains `\0`, which
+//! sorts before every other byte, so an account's balances are contiguous and
+//! in the same order as the accounts; and a JSON string sorts as its text
+//! does, so the accounts of a [`Paths`](axionomy::paths::Paths) economy are in
+//! path order. The tree
+//! holds the economy's logical state, not the order its accounts were created
+//! in: a rebuilt economy lists accounts in key order.
 
-use axionomy::{AccountPath, AssetPath, Quantity, RatePath, paths};
+use crate::ontology::{Economy, Id, Receipt, Recordable};
+use axionomy::{AccountPath, AssetPath, Quantity};
 use axionomy_tree::Tree;
+use serde::{Serialize, de::DeserializeOwned};
 use std::ops::Range;
 use thiserror::Error;
 
@@ -29,23 +34,20 @@ const INVARIANT: u8 = b'v';
 pub struct StateError(&'static str);
 
 /// The tree of an economy's state.
-pub fn tree(economy: &paths::Economy) -> Tree {
+pub fn tree<O: Recordable>(economy: &Economy<O>) -> Tree {
     let mut entries = Vec::new();
     for (account, holdings) in economy.accounts() {
         entries.push((account_key(account), Vec::new()));
         for (asset, quantity) in holdings.balances().iter() {
-            entries.push((
-                balance_key(account, asset.as_str()),
-                quantity.to_be_bytes().to_vec(),
-            ));
+            entries.push((balance_key(account, asset), quantity.to_be_bytes().to_vec()));
         }
     }
     for rate in economy.rate_ids() {
         let definition = economy.rate(rate).expect("listed rates exist");
-        entries.push((rate_key(rate), json(definition)));
+        entries.push((key(RATE, rate), json(definition)));
     }
     for invariant in economy.invariants() {
-        entries.push((invariant_key(invariant), Vec::new()));
+        entries.push((key(INVARIANT, invariant), Vec::new()));
     }
     entries.into_iter().collect()
 }
@@ -53,7 +55,7 @@ pub fn tree(economy: &paths::Economy) -> Tree {
 /// Updates `tree` from the state before `receipt`'s exchange to `economy`,
 /// the state after it. The receipt names every balance and account that
 /// changed; their new values come from the kernel.
-pub fn advance(tree: &mut Tree, economy: &paths::Economy, receipt: &paths::Receipt) {
+pub fn advance<O: Recordable>(tree: &mut Tree, economy: &Economy<O>, receipt: &Receipt<O>) {
     let mut edits: Vec<(Vec<u8>, Option<Vec<u8>>)> = receipt
         .opened()
         .iter()
@@ -64,7 +66,7 @@ pub fn advance(tree: &mut Tree, economy: &paths::Economy, receipt: &paths::Recei
         for (asset, _) in delta.consumed().iter().chain(delta.produced().iter()) {
             let quantity = economy.balance(account, asset);
             edits.push((
-                balance_key(account, asset.as_str()),
+                balance_key(account, asset),
                 (!quantity.is_zero()).then(|| quantity.to_be_bytes().to_vec()),
             ));
         }
@@ -81,8 +83,8 @@ pub fn advance(tree: &mut Tree, economy: &paths::Economy, receipt: &paths::Recei
 
 /// The economy whose state `tree` holds. Only a tree that [`tree`] could have
 /// produced is accepted.
-pub fn economy(tree: &Tree) -> Result<paths::Economy, StateError> {
-    let mut builder = paths::EconomyBuilder::new();
+pub fn economy<O: Recordable>(tree: &Tree) -> Result<Economy<O>, StateError> {
+    let mut builder = axionomy::EconomyBuilder::new();
     let mut read = 0u64;
     let mut balances = tree.prefix(&[BALANCE]).peekable();
     for (key, value) in tree.prefix(&[ACCOUNT]) {
@@ -90,19 +92,19 @@ pub fn economy(tree: &Tree) -> Result<paths::Economy, StateError> {
         if !value.is_empty() {
             return Err(StateError("an account entry has a value"));
         }
-        let account: AccountPath = path(&key[1..])?;
-        let prefix = balance_key(&account, "");
+        let account: O::Account = decode(&key[1..], "an account")?;
+        let prefix = [&[BALANCE][..], &key[1..], &[0]].concat();
         let mut holdings = Vec::new();
         while let Some((key, value)) = balances.next_if(|(key, _)| key.starts_with(&prefix)) {
             read += 1;
-            let asset: AssetPath = path(&key[prefix.len()..])?;
+            let asset: O::Asset = decode(&key[prefix.len()..], "an asset")?;
             let quantity = quantity(value)?;
             if quantity.is_zero() {
                 return Err(StateError("a balance is zero"));
             }
             holdings.push((asset, quantity));
         }
-        let basket = paths::Basket::try_from_entries(holdings)
+        let basket = axionomy::Basket::try_from_entries(holdings)
             .map_err(|_| StateError("an account holds an asset twice"))?;
         builder = builder.account(account, basket.into());
     }
@@ -111,22 +113,14 @@ pub fn economy(tree: &Tree) -> Result<paths::Economy, StateError> {
     }
     for (key, value) in tree.prefix(&[RATE]) {
         read += 1;
-        let rate: RatePath = path(&key[1..])?;
-        let definition: paths::Rate =
-            serde_json::from_slice(value).map_err(|_| StateError("a rate does not decode"))?;
-        if json(&definition) != value {
-            return Err(StateError("a rate is not in the kernel's encoding"));
-        }
-        builder = builder.rate(rate, definition);
+        builder = builder.rate(decode(&key[1..], "a rate")?, decode(value, "a rate")?);
     }
     for (key, value) in tree.prefix(&[INVARIANT]) {
         read += 1;
-        let invariant: paths::LinearInvariant = serde_json::from_slice(&key[1..])
-            .map_err(|_| StateError("an invariant does not decode"))?;
-        if json(&invariant) != key[1..] || !value.is_empty() {
-            return Err(StateError("an invariant is not in the kernel's encoding"));
+        if !value.is_empty() {
+            return Err(StateError("an invariant entry has a value"));
         }
-        builder = builder.invariant(invariant);
+        builder = builder.invariant(decode(&key[1..], "an invariant")?);
     }
     if read != tree.len() {
         return Err(StateError("an entry holds nothing an economy has"));
@@ -139,7 +133,7 @@ pub fn economy(tree: &Tree) -> Result<paths::Economy, StateError> {
 /// The positions in a state's tree of the accounts whose paths start with
 /// `prefix`, in path order.
 pub fn accounts(tree: &Tree, prefix: &str) -> Range<u64> {
-    span(tree, &[&[ACCOUNT], prefix.as_bytes()].concat())
+    span(tree, &[&[ACCOUNT][..], &text_prefix(prefix)].concat())
 }
 
 /// The accounts at `positions`, each with how many assets it holds.
@@ -153,8 +147,8 @@ pub fn account_rows(
             let account: AccountPath = key
                 .strip_prefix(&[ACCOUNT])
                 .ok_or(StateError("a position is not an account"))
-                .and_then(path)?;
-            let balances = span(tree, &balance_key(&account, ""));
+                .and_then(|bytes| decode(bytes, "an account"))?;
+            let balances = span(tree, &balances_key(&account));
             Ok((position, account, balances.end - balances.start))
         })
 }
@@ -162,7 +156,7 @@ pub fn account_rows(
 /// The positions in a state's tree of an account's balances whose asset
 /// paths start with `prefix`, in path order.
 pub fn balances(tree: &Tree, account: &AccountPath, prefix: &str) -> Range<u64> {
-    span(tree, &balance_key(account, prefix))
+    span(tree, &[balances_key(account), text_prefix(prefix)].concat())
 }
 
 /// The balances at `positions`, which [`balances`] gave for `account`.
@@ -171,7 +165,7 @@ pub fn balance_rows<'a>(
     account: &AccountPath,
     positions: Range<u64>,
 ) -> impl Iterator<Item = Result<(u64, AssetPath, Quantity), StateError>> + 'a {
-    let prefix = balance_key(account, "");
+    let prefix = balances_key(account);
     tree.iter_at(positions.start)
         .zip(positions)
         .map(move |((key, value), position)| {
@@ -180,30 +174,37 @@ pub fn balance_rows<'a>(
                 .ok_or(StateError(
                     "a position is not one of the account's balances",
                 ))
-                .and_then(path)?;
+                .and_then(|bytes| decode(bytes, "an asset"))?;
             Ok((position, asset, quantity(value)?))
         })
 }
 
 /// How one state differs from another.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Change {
-    Opened(AccountPath),
-    Closed(AccountPath),
+pub enum Change<Account, Asset, Rate> {
+    Opened(Account),
+    Closed(Account),
     Balance {
-        account: AccountPath,
-        asset: AssetPath,
+        account: Account,
+        asset: Asset,
         before: Quantity,
         after: Quantity,
     },
-    Rate(RatePath),
+    Rate(Rate),
     Invariants,
 }
+
+/// A change between states of an ontology's economies.
+pub type ChangeOf<O> = Change<
+    <O as axionomy::Ontology>::Account,
+    <O as axionomy::Ontology>::Asset,
+    <O as axionomy::Ontology>::Rate,
+>;
 
 /// What changed from `before` to `after`, in key order: accounts opened and
 /// closed, balances whose quantity differs, rates added, removed or redefined,
 /// and whether the invariants differ. Subtrees the states share are skipped.
-pub fn changes(before: &Tree, after: &Tree) -> Result<Vec<Change>, StateError> {
+pub fn changes<O: Recordable>(before: &Tree, after: &Tree) -> Result<Vec<ChangeOf<O>>, StateError> {
     let mut changes = Vec::new();
     let mut invariants = false;
     for change in before.diff(after) {
@@ -213,8 +214,8 @@ pub fn changes(before: &Tree, after: &Tree) -> Result<Vec<Change>, StateError> {
             .ok_or(StateError("an entry has an empty key"))?;
         match space {
             ACCOUNT => changes.push(match change.after {
-                Some(_) => Change::Opened(path(rest)?),
-                None => Change::Closed(path(rest)?),
+                Some(_) => Change::Opened(decode(rest, "an account")?),
+                None => Change::Closed(decode(rest, "an account")?),
             }),
             BALANCE => {
                 let split = rest
@@ -223,13 +224,13 @@ pub fn changes(before: &Tree, after: &Tree) -> Result<Vec<Change>, StateError> {
                     .ok_or(StateError("a balance key has no asset"))?;
                 let held = |value: Option<&[u8]>| value.map_or(Ok(Quantity::ZERO), quantity);
                 changes.push(Change::Balance {
-                    account: path(&rest[..split])?,
-                    asset: path(&rest[split + 1..])?,
+                    account: decode(&rest[..split], "an account")?,
+                    asset: decode(&rest[split + 1..], "an asset")?,
                     before: held(change.before)?,
                     after: held(change.after)?,
                 });
             }
-            RATE => changes.push(Change::Rate(path(rest)?)),
+            RATE => changes.push(Change::Rate(decode(rest, "a rate")?)),
             INVARIANT => invariants = true,
             _ => return Err(StateError("an entry holds nothing an economy has")),
         }
@@ -269,43 +270,54 @@ fn quantity(value: &[u8]) -> Result<Quantity, StateError> {
     Ok(Quantity::from_be_bytes(bytes))
 }
 
-fn account_key(account: &AccountPath) -> Vec<u8> {
-    [&[ACCOUNT], account.as_str().as_bytes()].concat()
+fn key(space: u8, value: &impl Serialize) -> Vec<u8> {
+    [&[space][..], &json(value)].concat()
 }
 
-fn balance_key(account: &AccountPath, asset: &str) -> Vec<u8> {
-    [
-        &[BALANCE],
-        account.as_str().as_bytes(),
-        &[0],
-        asset.as_bytes(),
-    ]
-    .concat()
+fn account_key(account: &impl Id) -> Vec<u8> {
+    key(ACCOUNT, account)
 }
 
-fn rate_key(rate: &RatePath) -> Vec<u8> {
-    [&[RATE], rate.as_str().as_bytes()].concat()
+fn balance_key(account: &impl Id, asset: &impl Id) -> Vec<u8> {
+    [key(BALANCE, account), vec![0], json(asset)].concat()
 }
 
-fn invariant_key(invariant: &paths::LinearInvariant) -> Vec<u8> {
-    [&[INVARIANT][..], &json(invariant)].concat()
+/// The prefix of every balance key of `account`.
+fn balances_key(account: &AccountPath) -> Vec<u8> {
+    [key(BALANCE, account), vec![0]].concat()
 }
 
-fn json(value: &impl serde::Serialize) -> Vec<u8> {
+/// What the JSON of every string starting with `prefix` starts with: its
+/// opening quote and the prefix, each character escaped as JSON escapes it.
+fn text_prefix(prefix: &str) -> Vec<u8> {
+    let mut quoted = json(&prefix);
+    quoted.pop();
+    quoted
+}
+
+fn json(value: &impl Serialize) -> Vec<u8> {
     serde_json::to_vec(value).expect("kernel values serialize")
 }
 
-fn path<K>(bytes: &[u8]) -> Result<axionomy::path::Path<K>, StateError> {
-    std::str::from_utf8(bytes)
-        .ok()
-        .and_then(|text| text.parse().ok())
-        .ok_or(StateError("a key is not a path"))
+/// Reads what `bytes` encode, accepting only the encoding [`json`] writes.
+fn decode<T: Serialize + DeserializeOwned>(
+    bytes: &[u8],
+    what: &'static str,
+) -> Result<T, StateError> {
+    let value: T = serde_json::from_slice(bytes).map_err(|_| StateError(what))?;
+    if json(&value) != bytes {
+        return Err(StateError("an entry is not in the store's encoding"));
+    }
+    Ok(value)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axionomy::{Rate, basket};
+    use axionomy::{
+        Rate, RatePath, basket,
+        paths::{self, Paths},
+    };
 
     fn path<K>(text: &str) -> axionomy::path::Path<K> {
         text.parse().unwrap()
@@ -336,7 +348,7 @@ mod tests {
             .invariant(paths::LinearInvariant::new("cash").weight(path("cash"), 1))
             .build()
             .unwrap();
-        let mut stored = tree(&economy);
+        let mut stored = tree::<Paths>(&economy);
         let initial = stored.clone();
         let steps = [
             paths::Exchange::new(open, Quantity::new(1)).bind(path("new"), path("agents/1")),
@@ -351,11 +363,11 @@ mod tests {
         let mut states = vec![stored.clone()];
         for exchange in steps {
             let receipt = economy.apply(exchange).unwrap();
-            advance(&mut stored, &economy, &receipt);
-            assert_eq!(stored.hash(), tree(&economy).hash());
-            let rebuilt = super::economy(&stored).unwrap();
+            advance::<Paths>(&mut stored, &economy, &receipt);
+            assert_eq!(stored.hash(), tree::<Paths>(&economy).hash());
+            let rebuilt = super::economy::<Paths>(&stored).unwrap();
             assert_eq!(rebuilt.state_key(), economy.state_key());
-            assert_eq!(tree(&rebuilt).hash(), stored.hash());
+            assert_eq!(tree::<Paths>(&rebuilt).hash(), stored.hash());
             states.push(stored.clone());
         }
 
@@ -368,15 +380,15 @@ mod tests {
             after: Quantity::new(after),
         };
         assert_eq!(
-            changes(&states[0], &states[1]).unwrap(),
+            changes::<Paths>(&states[0], &states[1]).unwrap(),
             [Change::Opened(agent.clone())]
         );
         assert_eq!(
-            changes(&states[1], &states[2]).unwrap(),
+            changes::<Paths>(&states[1], &states[2]).unwrap(),
             [balance(&agent, 0, 20), balance(&bank, 100, 80)]
         );
         assert_eq!(
-            changes(&states[2], &states[3]).unwrap(),
+            changes::<Paths>(&states[2], &states[3]).unwrap(),
             [
                 Change::Closed(agent.clone()),
                 balance(&agent, 20, 0),
@@ -384,7 +396,7 @@ mod tests {
             ]
         );
         // Closing what was opened returns to the same state, and the same root.
-        assert!(changes(&initial, &stored).unwrap().is_empty());
+        assert!(changes::<Paths>(&initial, &stored).unwrap().is_empty());
         assert_eq!(initial.hash(), stored.hash());
 
         let listed: Vec<_> = account_rows(&states[2], accounts(&states[2], "ba"))
@@ -405,18 +417,21 @@ mod tests {
             .account(path("bank"), basket([(path("cash"), 100)]).into())
             .build()
             .unwrap();
-        let valid = tree(&economy);
+        let valid = tree::<Paths>(&economy);
+        assert!(valid.get(br#"a"bank""#).is_some());
         for (key, value) in [
-            (&b"bbank\0gold"[..], &[0u8; 32][..]),
-            (b"bbank\0gold", b"7"),
-            (b"bnobody\0cash", &[1; 32]),
-            (b"aBank", b""),
-            (b"abank/vault", b"x"),
+            (&b"b\"bank\"\0\"gold\""[..], &[0u8; 32][..]),
+            (b"b\"bank\"\0\"gold\"", b"7"),
+            (b"b\"nobody\"\0\"cash\"", &[1; 32]),
+            (b"a\"Bank\"", b""),
+            (b"a\"bank/vault\"", b"x"),
+            (b"a \"bank/vault\"", b""),
+            (b"abank", b""),
             (b"zother", b""),
         ] {
             let mut forged = valid.clone();
             forged.insert(key, value);
-            assert!(super::economy(&forged).is_err(), "{key:?}");
+            assert!(super::economy::<Paths>(&forged).is_err(), "{key:?}");
         }
     }
 }

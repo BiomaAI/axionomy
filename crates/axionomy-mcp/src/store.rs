@@ -11,8 +11,12 @@
 
 use crate::handles::{ArtifactId, AssessmentId, EconomyId};
 use axionomy::paths;
+use axionomy::paths::Paths;
 use axionomy_service::RunArtifact;
-use axionomy_store::{Checkpoints, Durability, Point, Reader, State, Store, StoreError};
+use axionomy_store::{Checkpoints, Durability, Point, Reader, Store, StoreError};
+
+/// A snapshot's state: MCP's economies are identified by paths.
+pub(crate) type State = axionomy_store::State<Paths>;
 use redb::{ReadableTable, TableDefinition};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use std::{
@@ -171,7 +175,7 @@ impl Archive {
                 if exists(txn.redb(), &handle)? {
                     return Ok(false);
                 }
-                txn.create_run(run, None, 0, &tree, Checkpoints::Ends)?;
+                txn.create_run::<Paths>(run, None, 0, &tree, Checkpoints::Ends)?;
                 txn.pin(record.point, None)?;
                 put(txn.redb(), ECONOMIES, handle.as_str(), &record)?;
                 Ok(true)
@@ -227,13 +231,13 @@ impl Archive {
                 if exists(txn.redb(), &handle)? {
                     return Ok(false);
                 }
-                txn.create_run(run, Some(from), from.step, &first, every())?;
+                txn.create_run::<Paths>(run, Some(from), from.step, &first, every())?;
                 for (index, (receipt, state)) in steps.drain(..).enumerate() {
                     let point = Point {
                         run,
                         step: from.step + index as u64 + 1,
                     };
-                    txn.put_step(point, &receipt, state.as_ref())?;
+                    txn.put_step::<Paths>(point, &receipt, state.as_ref())?;
                 }
                 txn.pin(record.point, Some(&last))?;
                 put(txn.redb(), ECONOMIES, handle.as_str(), &record)?;
@@ -278,7 +282,7 @@ impl Archive {
             origin: Origin::Exchanged { exchanges: step },
         };
         let store = self.store.clone();
-        let state = tokio::task::spawn_blocking(move || store.read()?.state(point))
+        let state = tokio::task::spawn_blocking(move || store.read()?.state::<Paths>(point))
             .await
             .map_err(|_| StoreError::Closed)??
             .ok_or(StoreError::UnknownRun(point.run))?;
@@ -322,10 +326,10 @@ impl Archive {
             };
             let point = record.point;
             let (state, receipts) = match record.origin {
-                Origin::Authored { .. } => (reader.state(point)?, Vec::new()),
+                Origin::Authored { .. } => (reader.state::<Paths>(point)?, Vec::new()),
                 Origin::Exchanged { exchanges } => {
                     let first = point.step - exchanges as u64;
-                    let mut state = reader.state(Point {
+                    let mut state = reader.state::<Paths>(Point {
                         run: point.run,
                         step: first,
                     })?;

@@ -1,4 +1,8 @@
-use axionomy::{Quantity, Rate, basket, path::Path, paths};
+use axionomy::{
+    Quantity, Rate, basket,
+    path::Path,
+    paths::{self, Paths},
+};
 use axionomy_store::{
     Checkpoints, Durability, Group, Member, Point, State, Store, StoreError, Target,
 };
@@ -64,7 +68,7 @@ fn every(n: u64) -> Checkpoints {
 fn every_point_of_a_run_reads_back_as_the_state_it_was() {
     for checkpoints in [Checkpoints::EveryStep, every(7), Checkpoints::Ends] {
         let store = Store::memory().unwrap();
-        let mut recorder = store.record(economy(20), checkpoints);
+        let mut recorder = store.record::<Paths>(economy(20), checkpoints);
         let mut roots = vec![recorder.state().root()];
         for exchange in exchanges(1, 60, 20) {
             recorder.apply(exchange).unwrap();
@@ -75,19 +79,24 @@ fn every_point_of_a_run_reads_back_as_the_state_it_was() {
         assert_eq!(end, Point { run, step: 60 });
 
         let reader = store.read().unwrap();
-        reader.verify(run).unwrap();
+        reader.verify::<Paths>(run).unwrap();
         for (step, root) in roots.iter().enumerate() {
             let point = Point {
                 run,
                 step: step as u64,
             };
             assert_eq!(
-                reader.state(point).unwrap().unwrap().root(),
+                reader.state::<Paths>(point).unwrap().unwrap().root(),
                 *root,
                 "{checkpoints:?} {step}"
             );
         }
-        assert!(reader.state(Point { run, step: 61 }).unwrap().is_none());
+        assert!(
+            reader
+                .state::<Paths>(Point { run, step: 61 })
+                .unwrap()
+                .is_none()
+        );
         let stored = (0..=60)
             .filter(|&step| reader.root(Point { run, step }).unwrap().is_some())
             .count();
@@ -103,7 +112,7 @@ fn every_point_of_a_run_reads_back_as_the_state_it_was() {
 #[test]
 fn forks_continue_from_their_point_and_leave_the_source_as_it_was() {
     let store = Store::memory().unwrap();
-    let mut source = store.record(economy(5), every(4));
+    let mut source = store.record::<Paths>(economy(5), every(4));
     for exchange in exchanges(2, 30, 5) {
         source.apply(exchange).unwrap();
     }
@@ -112,7 +121,7 @@ fn forks_continue_from_their_point_and_leave_the_source_as_it_was() {
         run: source.run,
         step: 13,
     };
-    let mut fork = store.fork(at, Checkpoints::EveryStep).unwrap();
+    let mut fork = store.fork::<Paths>(at, Checkpoints::EveryStep).unwrap();
     assert_eq!(fork.point().step, 13);
     let before = fork.state().clone();
     fork.apply(pay("bank", "agents/0", 500)).unwrap();
@@ -120,11 +129,11 @@ fn forks_continue_from_their_point_and_leave_the_source_as_it_was() {
     assert_eq!(end.step, 14);
 
     let reader = store.read().unwrap();
-    let forked = reader.state(end).unwrap().unwrap();
+    let forked = reader.state::<Paths>(end).unwrap().unwrap();
     let changes = before.tree.diff(&forked.tree);
     assert_eq!(changes.len(), 2, "the bank's and the agent's cash");
     let original = reader
-        .state(Point {
+        .state::<Paths>(Point {
             run: source.run,
             step: 14,
         })
@@ -132,8 +141,8 @@ fn forks_continue_from_their_point_and_leave_the_source_as_it_was() {
         .unwrap();
     assert_ne!(original.root(), forked.root());
     assert_eq!(reader.run(end.run).unwrap().unwrap().from, Some(at));
-    reader.verify(end.run).unwrap();
-    reader.verify(source.run).unwrap();
+    reader.verify::<Paths>(end.run).unwrap();
+    reader.verify::<Paths>(source.run).unwrap();
 }
 
 #[test]
@@ -144,7 +153,7 @@ fn a_store_on_disk_keeps_its_runs_and_mints_new_identifiers() {
     let _ = std::fs::remove_file(&file);
     let (first, root) = {
         let store = Store::open(&file).unwrap();
-        let mut recorder = store.record(economy(3), Checkpoints::Ends);
+        let mut recorder = store.record::<Paths>(economy(3), Checkpoints::Ends);
         for exchange in exchanges(3, 25, 3) {
             recorder.apply(exchange).unwrap();
         }
@@ -153,8 +162,8 @@ fn a_store_on_disk_keeps_its_runs_and_mints_new_identifiers() {
     };
     let store = Store::open(&file).unwrap();
     let reader = store.read().unwrap();
-    assert_eq!(reader.state(first).unwrap().unwrap().root(), root);
-    reader.verify(first.run).unwrap();
+    assert_eq!(reader.state::<Paths>(first).unwrap().unwrap().root(), root);
+    reader.verify::<Paths>(first.run).unwrap();
     assert_ne!(store.mint_run(), first.run);
     assert!(store.mint_run() > first.run);
     drop(store);
@@ -167,7 +176,7 @@ fn episodes_from_one_state_store_its_nodes_once() {
     let start = economy(2_000);
     let mut runs = Vec::new();
     for episode in 0..8 {
-        let mut recorder = store.record(start.clone(), Checkpoints::Ends);
+        let mut recorder = store.record::<Paths>(start.clone(), Checkpoints::Ends);
         for exchange in exchanges(episode, 20, 2_000) {
             recorder.apply(exchange).unwrap();
         }
@@ -182,11 +191,11 @@ fn episodes_from_one_state_store_its_nodes_once() {
     }
     let reader = store.read().unwrap();
     let nodes = reader.nodes().unwrap();
-    let one = State::new(start).tree.missing(|_| false).len() as u64;
+    let one = State::<Paths>::new(start).tree.missing(|_| false).len() as u64;
     // Each later episode adds only the nodes its last state changed.
     assert!(nodes < one + 8 * 20, "{nodes} nodes for {one} per state");
     for end in runs {
-        reader.verify(end.run).unwrap();
+        reader.verify::<Paths>(end.run).unwrap();
     }
 }
 
@@ -197,7 +206,7 @@ fn tags_metrics_groups_and_refs_organize_runs() {
     let returns = [3.0, 7.0, 5.0, 1.0, 9.0];
     let mut ends = Vec::new();
     for (sample, value) in returns.iter().enumerate() {
-        let mut recorder = store.record(economy(4), Checkpoints::Ends);
+        let mut recorder = store.record::<Paths>(economy(4), Checkpoints::Ends);
         recorder.tag(
             path("split"),
             Some(if sample % 2 == 0 { "eval" } else { "train" }.into()),
@@ -277,7 +286,7 @@ fn deleting_runs_and_collecting_keeps_what_is_pinned_or_named() {
     let store = Store::memory().unwrap();
     let mut ends = Vec::new();
     for episode in 0..3 {
-        let mut recorder = store.record(economy(50), Checkpoints::EveryStep);
+        let mut recorder = store.record::<Paths>(economy(50), Checkpoints::EveryStep);
         for exchange in exchanges(episode, 15, 50) {
             recorder.apply(exchange).unwrap();
         }
@@ -309,7 +318,7 @@ fn deleting_runs_and_collecting_keeps_what_is_pinned_or_named() {
     assert_eq!(reader.nodes().unwrap(), before - collected as u64);
     assert!(reader.run(ends[0].run).unwrap().is_none());
     for end in &ends[1..] {
-        reader.verify(end.run).unwrap();
+        reader.verify::<Paths>(end.run).unwrap();
     }
     let again = store
         .transact(Durability::Immediate, |txn| txn.collect())
@@ -322,7 +331,7 @@ fn deleting_runs_and_collecting_keeps_what_is_pinned_or_named() {
 fn stores_written_apart_merge_into_one() {
     let (left, right) = (Store::memory().unwrap(), Store::memory().unwrap());
     let record = |store: &Store, seed| {
-        let mut recorder = store.record(economy(10), every(5));
+        let mut recorder = store.record::<Paths>(economy(10), every(5));
         for exchange in exchanges(seed, 12, 10) {
             recorder.apply(exchange).unwrap();
         }
@@ -341,8 +350,8 @@ fn stores_written_apart_merge_into_one() {
     let kept = left.merge(&right).wait().unwrap();
     assert_eq!(kept, vec![path("latest")]);
     let reader = left.read().unwrap();
-    reader.verify(ours.run).unwrap();
-    reader.verify(theirs.run).unwrap();
+    reader.verify::<Paths>(ours.run).unwrap();
+    reader.verify::<Paths>(theirs.run).unwrap();
     assert_eq!(
         reader.reference(&path("latest")).unwrap(),
         Some(Target::Step(ours))
@@ -358,7 +367,7 @@ fn parallel_recorders_share_one_writer() {
             .map(|worker| {
                 let store = store.clone();
                 scope.spawn(move || {
-                    let mut recorder = store.record(economy(30), every(16));
+                    let mut recorder = store.record::<Paths>(economy(30), every(16));
                     for exchange in exchanges(worker, 400, 30) {
                         recorder.apply(exchange).unwrap();
                     }
@@ -374,26 +383,132 @@ fn parallel_recorders_share_one_writer() {
     let reader = store.read().unwrap();
     for end in ends {
         assert_eq!(end.step, 400);
-        reader.verify(end.run).unwrap();
+        reader.verify::<Paths>(end.run).unwrap();
     }
 }
 
 #[test]
 fn replay_rejects_a_trace_that_does_not_reproduce_its_receipts() {
     let store = Store::memory().unwrap();
-    let mut recorder = store.record(economy(3), Checkpoints::Ends);
+    let mut recorder = store.record::<Paths>(economy(3), Checkpoints::Ends);
     recorder.apply(pay("bank", "agents/0", 4)).unwrap();
     let end = recorder.finish().unwrap();
     // Overwrite the step with an exchange whose receipt differs from the one
     // the state it meets would give.
-    let mut other = State::new(economy(3));
+    let mut other = State::<Paths>::new(economy(3));
     let wrong = other.apply(pay("bank", "agents/1", 4)).unwrap();
     store
         .transact(Durability::Immediate, move |txn| {
-            txn.put_step(end, &wrong, None)
+            txn.put_step::<Paths>(end, &wrong, None)
         })
         .wait()
         .unwrap();
     let reader = store.read().unwrap();
-    assert!(matches!(reader.verify(end.run), Err(StoreError::Diverged(point)) if point == end));
+    assert!(
+        matches!(reader.verify::<Paths>(end.run), Err(StoreError::Diverged(point)) if point == end)
+    );
+}
+
+/// A ledger with Rust types of its own for its identifiers.
+mod ledger {
+    use axionomy::Ontology;
+    use serde::{Deserialize, Serialize};
+
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+    pub enum Account {
+        Bank,
+        Agent(u8),
+    }
+
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+    pub enum Asset {
+        Cash,
+    }
+
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+    pub enum Rate {
+        Pay,
+    }
+
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+    pub enum Role {
+        From,
+        To,
+    }
+
+    pub enum Ledger {}
+
+    impl Ontology for Ledger {
+        const NAME: &'static str = "ledger";
+        type Account = Account;
+        type Asset = Asset;
+        type Rate = Rate;
+        type Role = Role;
+    }
+}
+
+#[test]
+fn typed_economies_are_recorded_and_read_back_only_as_their_ontology() {
+    use axionomy::{EconomyBuilder, Exchange};
+    use ledger::{Account, Asset, Ledger, Role};
+
+    let economy = EconomyBuilder::new()
+        .account(Account::Bank, basket([(Asset::Cash, 10)]).into())
+        .account(Account::Agent(1), basket([]).into())
+        .rate(
+            ledger::Rate::Pay,
+            Rate::new()
+                .consume(Role::From, basket([(Asset::Cash, 1)]))
+                .produce(Role::To, basket([(Asset::Cash, 1)])),
+        )
+        .build()
+        .unwrap();
+    let store = Store::memory().unwrap();
+    let mut recorder = store.record::<Ledger>(economy, Checkpoints::Ends);
+    for _ in 0..3 {
+        recorder
+            .apply(
+                Exchange::new(ledger::Rate::Pay, Quantity::new(2))
+                    .bind(Role::From, Account::Bank)
+                    .bind(Role::To, Account::Agent(1)),
+            )
+            .unwrap();
+    }
+    let end = recorder.finish().unwrap();
+
+    let reader = store.read().unwrap();
+    reader.verify::<Ledger>(end.run).unwrap();
+    let middle = reader
+        .state::<Ledger>(Point {
+            run: end.run,
+            step: 2,
+        })
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        middle.economy.balance(&Account::Agent(1), &Asset::Cash),
+        Quantity::new(4)
+    );
+    assert_eq!(
+        reader.run(end.run).unwrap().unwrap().ontology.as_str(),
+        "ledger"
+    );
+    assert!(matches!(
+        reader.state::<Paths>(end),
+        Err(StoreError::OtherOntology { run, read: "paths", .. }) if run == end.run
+    ));
+    assert!(matches!(
+        store.fork::<Paths>(end, Checkpoints::Ends),
+        Err(StoreError::OtherOntology { .. })
+    ));
+    let mut fork = store.fork::<Ledger>(end, Checkpoints::Ends).unwrap();
+    fork.apply(
+        Exchange::new(ledger::Rate::Pay, Quantity::new(1))
+            .bind(Role::From, Account::Bank)
+            .bind(Role::To, Account::Agent(1)),
+    )
+    .unwrap();
+    let forked = fork.finish().unwrap();
+    assert_eq!(forked.step, 4);
+    store.read().unwrap().verify::<Ledger>(forked.run).unwrap();
 }

@@ -2,39 +2,54 @@
 
 use crate::{
     GroupId, Member, MetricPath, Point, RefPath, RunId, StoreError, TagPath,
+    ontology::{ApplyError, Economy, Exchange, Receipt, Recordable},
     records::{
         GROUPS, GroupRecord, MEMBERS, NODES, PINS, REFS, RUN_METRICS, RUNS, Run, STATES,
-        STEP_METRICS, STEPS, Step, TAGGED, TAGS, Target,
+        STEP_METRICS, STEPS, StepOf, TAGGED, TAGS, Target,
     },
     state,
     transaction::{decode, receipt_digest},
 };
-use axionomy::paths;
 use axionomy_tree::{Hash, Tree};
 use redb::{ReadTransaction, ReadableTableMetadata};
 use std::collections::BTreeMap;
 
 /// A state the store holds or rebuilt: the kernel's economy, which decides
 /// what exchanges do, and its canonical tree, whose hash is the state root.
-#[derive(Debug, Clone)]
-pub struct State {
-    pub economy: paths::Economy,
+pub struct State<O: Recordable> {
+    pub economy: Economy<O>,
     pub tree: Tree,
 }
 
-impl State {
-    pub fn new(economy: paths::Economy) -> Self {
-        let tree = state::tree(&economy);
+impl<O: Recordable> Clone for State<O> {
+    fn clone(&self) -> Self {
+        Self {
+            economy: self.economy.clone(),
+            tree: self.tree.clone(),
+        }
+    }
+}
+
+impl<O: Recordable> std::fmt::Debug for State<O> {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("State")
+            .field("ontology", &O::NAME)
+            .field("root", &self.root())
+            .finish()
+    }
+}
+
+impl<O: Recordable> State<O> {
+    pub fn new(economy: Economy<O>) -> Self {
+        let tree = state::tree::<O>(&economy);
         Self { economy, tree }
     }
 
     /// Applies an exchange to both, keeping them the same state.
-    pub fn apply(
-        &mut self,
-        exchange: paths::Exchange,
-    ) -> Result<paths::Receipt, paths::ApplyError> {
+    pub fn apply(&mut self, exchange: Exchange<O>) -> Result<Receipt<O>, ApplyError<O>> {
         let receipt = self.economy.apply(exchange)?;
-        state::advance(&mut self.tree, &self.economy, &receipt);
+        state::advance::<O>(&mut self.tree, &self.economy, &receipt);
         Ok(receipt)
     }
 
@@ -103,8 +118,24 @@ impl Reader {
         Ok(Some(last))
     }
 
-    /// The exchange that took a run to `point`.
-    pub fn step(&self, point: Point) -> Result<Option<Step>, StoreError> {
+    /// A run of `O`'s economies; another ontology's run is refused.
+    pub fn run_of<O: Recordable>(&self, run: RunId) -> Result<Option<Run>, StoreError> {
+        let Some(record) = self.run(run)? else {
+            return Ok(None);
+        };
+        if record.ontology.as_str() != O::NAME {
+            return Err(StoreError::OtherOntology {
+                run,
+                recorded: record.ontology,
+                read: O::NAME,
+            });
+        }
+        Ok(Some(record))
+    }
+
+    /// The exchange that took a run of `O`'s economies to `point`.
+    pub fn step<O: Recordable>(&self, point: Point) -> Result<Option<StepOf<O>>, StoreError> {
+        self.run_of::<O>(point.run)?;
         self.txn
             .open_table(STEPS)?
             .get(point.key())?
@@ -113,12 +144,13 @@ impl Reader {
     }
 
     /// A run's steps from `from` on, at most `limit`.
-    pub fn steps(
+    pub fn steps<O: Recordable>(
         &self,
         run: RunId,
         from: u64,
         limit: usize,
-    ) -> Result<Vec<(u64, Step)>, StoreError> {
+    ) -> Result<Vec<(u64, StepOf<O>)>, StoreError> {
+        self.run_of::<O>(run)?;
         self.txn
             .open_table(STEPS)?
             .range((run.key(), from)..=(run.key(), u64::MAX))?
@@ -156,8 +188,8 @@ impl Reader {
 
     /// The state at `point`: the nearest stored state at or before it, plus
     /// the run's exchanges in between, each checked against its receipt.
-    pub fn state(&self, point: Point) -> Result<Option<State>, StoreError> {
-        let Some(record) = self.run(point.run)? else {
+    pub fn state<O: Recordable>(&self, point: Point) -> Result<Option<State<O>>, StoreError> {
+        let Some(record) = self.run_of::<O>(point.run)? else {
             return Ok(None);
         };
         if point.step < record.first || self.last_step(point.run)? < Some(point.step) {
@@ -172,7 +204,7 @@ impl Reader {
             .map(|(key, root)| (key.value().1, Hash::from_bytes(*root.value())))
             .ok_or(StoreError::Malformed("a run without its first state"))?;
         let tree = self.tree(&root)?;
-        let economy = state::economy(&tree)?;
+        let economy = state::economy::<O>(&tree)?;
         let mut state = State { economy, tree };
         self.replay(&mut state, point.run, stored, point.step)?;
         Ok(Some(state))
@@ -181,18 +213,19 @@ impl Reader {
     /// Applies a run's exchanges after step `after` through step `through` to
     /// `state`, the state at `after`, checking each against its recorded
     /// receipt, and returns their receipts.
-    pub fn replay(
+    pub fn replay<O: Recordable>(
         &self,
-        state: &mut State,
+        state: &mut State<O>,
         run: RunId,
         after: u64,
         through: u64,
-    ) -> Result<Vec<paths::Receipt>, StoreError> {
+    ) -> Result<Vec<Receipt<O>>, StoreError> {
+        self.run_of::<O>(run)?;
         let steps = self.txn.open_table(STEPS)?;
         let mut receipts = Vec::new();
         for step in after.saturating_add(1)..=through {
             let point = Point { run, step };
-            let record: Step = decode(
+            let record: StepOf<O> = decode(
                 steps
                     .get(point.key())?
                     .ok_or(StoreError::Diverged(point))?
@@ -201,7 +234,7 @@ impl Reader {
             let receipt = state
                 .apply(record.exchange)
                 .map_err(|_| StoreError::Diverged(point))?;
-            if receipt_digest(&receipt) != record.receipt {
+            if receipt_digest::<O>(&receipt) != record.receipt {
                 return Err(StoreError::Diverged(point));
             }
             receipts.push(receipt);
@@ -211,12 +244,12 @@ impl Reader {
 
     /// Replays a whole run from its first state, checking every receipt and
     /// every stored state against what replay produces.
-    pub fn verify(&self, run: RunId) -> Result<(), StoreError> {
-        let record = self.run(run)?.ok_or(StoreError::Malformed("no such run"))?;
+    pub fn verify<O: Recordable>(&self, run: RunId) -> Result<(), StoreError> {
+        let record = self.run_of::<O>(run)?.ok_or(StoreError::UnknownRun(run))?;
         let last = self.last_step(run)?.unwrap_or(record.first);
         let tree = self.tree(&record.root)?;
-        let mut state = State {
-            economy: state::economy(&tree)?,
+        let mut state = State::<O> {
+            economy: state::economy::<O>(&tree)?,
             tree,
         };
         let stored: Vec<(u64, Hash)> = self

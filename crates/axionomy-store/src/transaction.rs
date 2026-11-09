@@ -3,19 +3,21 @@
 
 use crate::{
     GroupId, Member, MetricPath, Point, RefPath, RunId, StoreError, TagPath, Transaction,
+    ontology::{Receipt, Recordable, name},
     records::{
         Checkpoints, GROUPS, Group, GroupRecord, MEMBERS, NODES, PINS, REFS, RUN_METRICS, RUNS,
         Run, STATES, STEP_METRICS, STEPS, Step, Summary, TAGGED, TAGS, Target,
     },
 };
-use axionomy::paths;
 use axionomy_tree::{Hash, Tree};
 use redb::{ReadableTable, TableDefinition};
 use std::collections::HashSet;
 
 impl Transaction<'_> {
-    /// Records a new run whose first state, at step `first`, is `state`.
-    pub fn create_run(
+    /// Records a new run of `O`'s economies whose first state, at step
+    /// `first`, is `state`. A run forked from another records the same
+    /// ontology.
+    pub fn create_run<O: Recordable>(
         &mut self,
         run: RunId,
         from: Option<Point>,
@@ -23,8 +25,26 @@ impl Transaction<'_> {
         state: &Tree,
         checkpoints: Checkpoints,
     ) -> Result<(), StoreError> {
+        let ontology = name::<O>()?;
+        if let Some(from) = from {
+            let source: Run = decode(
+                self.redb()
+                    .open_table(RUNS)?
+                    .get(from.run.key())?
+                    .ok_or(StoreError::UnknownRun(from.run))?
+                    .value(),
+            )?;
+            if source.ontology != ontology {
+                return Err(StoreError::OtherOntology {
+                    run: from.run,
+                    recorded: source.ontology,
+                    read: O::NAME,
+                });
+            }
+        }
         let root = self.put_tree(state)?;
         let record = Run {
+            ontology,
             from,
             first,
             root,
@@ -42,15 +62,15 @@ impl Transaction<'_> {
 
     /// Records the exchange that took a run to `point`, with its receipt, and
     /// the state it reached when the run's checkpoints keep it.
-    pub fn put_step(
+    pub fn put_step<O: Recordable>(
         &mut self,
         point: Point,
-        receipt: &paths::Receipt,
+        receipt: &Receipt<O>,
         state: Option<&Tree>,
     ) -> Result<(), StoreError> {
         let step = Step {
             exchange: receipt.exchange().clone(),
-            receipt: receipt_digest(receipt),
+            receipt: receipt_digest::<O>(receipt),
         };
         self.redb()
             .open_table(STEPS)?
@@ -350,7 +370,7 @@ fn copy<K: redb::Key + 'static, V: redb::Value + 'static>(
 }
 
 /// The digest a step records for its receipt.
-pub(crate) fn receipt_digest(receipt: &paths::Receipt) -> Hash {
+pub(crate) fn receipt_digest<O: Recordable>(receipt: &Receipt<O>) -> Hash {
     blake3::hash(&json(receipt))
 }
 

@@ -2,7 +2,18 @@
 //! an economy written down entirely as data, by remote clients, by storage, or
 //! by a problem defined without Rust types of its own.
 
-use crate::{AccountPath, AssetPath, RatePath, RolePath};
+use crate::{AccountPath, AssetPath, Ontology, RatePath, RolePath};
+
+/// The ontology of economies whose identifiers are all paths.
+pub enum Paths {}
+
+impl Ontology for Paths {
+    const NAME: &'static str = "paths";
+    type Account = AccountPath;
+    type Asset = AssetPath;
+    type Rate = RatePath;
+    type Role = RolePath;
+}
 
 pub type Economy = crate::Economy<AccountPath, AssetPath, RatePath, RolePath>;
 pub type EconomyBuilder = crate::EconomyBuilder<AccountPath, AssetPath, RatePath, RolePath>;

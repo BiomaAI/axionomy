@@ -1,7 +1,7 @@
 //! What the store records about runs, steps, groups and refs, and the redb
 //! tables that hold them.
 
-use crate::{GroupId, GroupKindPath, MetricPath, Point, RunId, TagPath};
+use crate::{GroupId, GroupKindPath, MetricPath, OntologyPath, Point, RunId, TagPath};
 use axionomy_tree::Hash;
 use redb::TableDefinition;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -48,6 +48,8 @@ pub(crate) fn create_tables(txn: &redb::WriteTransaction) -> Result<(), redb::Ta
 /// A recorded run: where it starts and which of its states are stored.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Run {
+    /// The ontology of the run's economies, which it is read back as.
+    pub ontology: OntologyPath,
     /// The point this run forked from, whose state is its first; none for a
     /// run that starts from a state of its own.
     pub from: Option<Point>,
@@ -86,14 +88,18 @@ impl Checkpoints {
     }
 }
 
-/// One exchange of a run.
+/// One exchange of a run: an [`Exchange`](crate::Exchange) of the run's
+/// ontology.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Step {
-    pub exchange: axionomy::paths::Exchange,
+pub struct Step<Exchange> {
+    pub exchange: Exchange,
     /// The BLAKE3 hash of the receipt's JSON, which replay must reproduce.
     #[serde(with = "hex")]
     pub receipt: Hash,
 }
+
+/// A step of a run of `O`'s economies.
+pub type StepOf<O> = Step<crate::Exchange<O>>;
 
 /// Runs or samples produced together: the rollouts of one Monte Carlo
 /// estimate, the samples of one MPPI decision, an evaluation suite.

@@ -112,6 +112,7 @@ pub mod kind {
     pub enum Metric {}
     pub enum Ref {}
     pub enum Group {}
+    pub enum Ontology {}
 
     impl PathKind for Tag {
         const SCHEMA: &'static str = "TagPath";
@@ -125,6 +126,9 @@ pub mod kind {
     impl PathKind for Group {
         const SCHEMA: &'static str = "GroupKindPath";
     }
+    impl PathKind for Ontology {
+        const SCHEMA: &'static str = "OntologyPath";
+    }
 }
 
 /// A tag's key, such as `experiment` or `split`.
@@ -135,6 +139,9 @@ pub type MetricPath = Path<kind::Metric>;
 pub type RefPath = Path<kind::Ref>;
 /// What produced a group, such as `monte-carlo`, `mppi` or `eval-suite`.
 pub type GroupKindPath = Path<kind::Group>;
+/// The ontology a run's economies belong to, such as `paths` or `maze`: an
+/// [`Ontology::NAME`](axionomy::Ontology::NAME).
+pub type OntologyPath = Path<kind::Ontology>;
 
 #[cfg(test)]
 mod tests {

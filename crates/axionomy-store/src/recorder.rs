@@ -2,34 +2,34 @@
 
 use crate::{
     Durability, MetricPath, Pending, Point, RunId, State, Store, StoreError, TagPath,
+    ontology::{ApplyError, Exchange, Receipt, Recordable},
     records::Checkpoints,
 };
-use axionomy::paths;
 
 /// Records a run step by step. Each step is a kernel `apply` and an update of
 /// the state's tree in memory; steps reach the writer in batches and never
 /// wait on disk. [`commit`](Self::commit) and [`finish`](Self::finish) wait
 /// until everything recorded so far is durable.
-pub struct Recorder {
+pub struct Recorder<O: Recordable> {
     store: Store,
     run: RunId,
     step: u64,
     checkpoints: Checkpoints,
-    state: State,
-    ops: Vec<Op>,
+    state: State<O>,
+    ops: Vec<Op<O>>,
     in_flight: Vec<Pending<()>>,
     /// The first write that failed, reported by the next commit.
     failed: Option<StoreError>,
 }
 
-enum Op {
+enum Op<O: Recordable> {
     Run {
         from: Option<Point>,
         state: axionomy_tree::Tree,
     },
     Step {
         step: u64,
-        receipt: paths::Receipt,
+        receipt: Receipt<O>,
         state: Option<axionomy_tree::Tree>,
     },
     Pin {
@@ -54,11 +54,11 @@ enum Op {
 /// Steps recorded before they are sent to the writer.
 const BATCH: usize = 256;
 
-impl Recorder {
+impl<O: Recordable> Recorder<O> {
     pub(crate) fn new(
         store: Store,
         from: Option<Point>,
-        state: State,
+        state: State<O>,
         checkpoints: Checkpoints,
     ) -> Self {
         let run = store.mint_run();
@@ -90,16 +90,13 @@ impl Recorder {
         }
     }
 
-    pub fn state(&self) -> &State {
+    pub fn state(&self) -> &State<O> {
         &self.state
     }
 
     /// Applies an exchange and records it. A failed exchange changes nothing
     /// and records nothing.
-    pub fn apply(
-        &mut self,
-        exchange: paths::Exchange,
-    ) -> Result<paths::Receipt, paths::ApplyError> {
+    pub fn apply(&mut self, exchange: Exchange<O>) -> Result<Receipt<O>, ApplyError<O>> {
         let receipt = self.state.apply(exchange)?;
         self.step += 1;
         self.ops.push(Op::Step {
@@ -181,13 +178,13 @@ impl Recorder {
                 match op {
                     Op::Run { from, state } => {
                         let first = from.map_or(0, |from| from.step);
-                        txn.create_run(run, from, first, &state, checkpoints)?;
+                        txn.create_run::<O>(run, from, first, &state, checkpoints)?;
                     }
                     Op::Step {
                         step,
                         receipt,
                         state,
-                    } => txn.put_step(Point { run, step }, &receipt, state.as_ref())?,
+                    } => txn.put_step::<O>(Point { run, step }, &receipt, state.as_ref())?,
                     Op::Pin { step, state } => txn.pin(Point { run, step }, Some(&state))?,
                     Op::Tag { key, value } => txn.tag(run, &key, value.as_deref())?,
                     Op::Metric { step, name, value } => txn.metric(run, step, &name, value)?,
@@ -213,7 +210,7 @@ impl Recorder {
     }
 }
 
-impl Drop for Recorder {
+impl<O: Recordable> Drop for Recorder<O> {
     /// Sends what was recorded but not yet sent; it becomes durable with the
     /// writer's next durable commit.
     fn drop(&mut self) {
