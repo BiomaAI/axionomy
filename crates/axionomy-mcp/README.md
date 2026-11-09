@@ -163,9 +163,22 @@ RUST_LOG=axionomy_mcp=info,rmcp=info \
 The Streamable HTTP endpoint is `/mcp` and the health endpoint is `/health`.
 The transport accepts only MCP `2026-07-28`, keeps no sessions, prefers JSON
 responses, and requires per-request protocol metadata and the `Mcp-Method` and
-`Mcp-Name` routing headers. `cargo test -p axionomy-mcp --test http` runs the
-whole flow over HTTP: tools, resource templates and pages, completion, and a
-search task with cancellation.
+`Mcp-Name` routing headers.
+
+## Testing
+
+The Rust unit tests hold the economic behavior: authoring conflicts and limits,
+paging a 100,000-asset economy, failures, tasks. `interop/` checks that a
+standard client reaches all of it: the official MCP Python SDK drives the
+server binary over Streamable HTTP through discovery, tools, resource links and
+pages, completion, task-backed search and cancellation, a problem run, error
+codes, and the routing-header rule. The SDK does not ship the tasks extension,
+so the suite declares it, as SEP-2663 describes. Python is managed with uv:
+
+```console
+cargo build -p axionomy-mcp --bin axionomy-mcp
+cd crates/axionomy-mcp/interop && uv run --locked pytest
+```
 
 ## Deployment boundary
 

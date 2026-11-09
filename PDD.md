@@ -1322,9 +1322,9 @@ examples, but they are not promised as reusable domain APIs.
 - MCP search tasks are registered before their handles are returned and expose
   pollable progress, terminal results, configurable retention, and cooperative
   cancellation through `rmcp::TaskManager`.
-- Strict Streamable HTTP conformance is exercised end to end with MCP
-  `2026-07-28` metadata and standardized routing headers, without legacy
-  sessions.
+- Strict Streamable HTTP conformance is exercised end to end by an
+  independent client, the official MCP Python SDK, with MCP `2026-07-28`
+  metadata and standardized routing headers, without legacy sessions.
 - Built-in benchmark results replay and specialized solvers agree where an
   oracle is provided.
 - Property laws cover assessment/application agreement, atomic failure,

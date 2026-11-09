@@ -1,0 +1,12 @@
+[project]
+name = "axionomy-mcp-interop"
+version = "0.1.0"
+description = "Drives the Axionomy MCP server with the official MCP Python SDK"
+requires-python = ">=3.12"
+dependencies = ["httpx>=0.28", "mcp>=2.3.0", "pytest>=8.4"]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["."]

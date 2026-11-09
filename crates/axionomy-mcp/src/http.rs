@@ -32,17 +32,3 @@ where
         stateless_http_config(cancellation_token),
     )
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn reference_transport_is_strictly_stateless() {
-        let config = stateless_http_config(CancellationToken::new());
-        assert!(!config.legacy_session_mode);
-        assert!(config.json_response);
-        assert!(config.stateless_protocol_metadata_required);
-        assert!(config.sse_keep_alive.is_none());
-    }
-}
