@@ -239,6 +239,15 @@ impl Tree {
     }
 }
 
+/// The hashes of the children a node's encoding names, none for a leaf: what
+/// a garbage collector follows from a root.
+pub fn children(encoding: &[u8]) -> Result<Vec<Hash>, &'static str> {
+    Ok(match decode(encoding)? {
+        Decoded::Leaf(_) => Vec::new(),
+        Decoded::Branch { children, .. } => children.into_iter().map(|(_, _, hash)| hash).collect(),
+    })
+}
+
 impl Default for Tree {
     fn default() -> Self {
         Self::new()

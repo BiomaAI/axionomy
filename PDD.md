@@ -595,6 +595,7 @@ axionomy-problems ────→ axionomy
 axionomy-units ───────→ axionomy
 axionomy-time ────────→ axionomy-units ──→ axionomy
 axionomy-tree          (no workspace dependencies)
+axionomy-store ───────→ axionomy-tree + axionomy
 axionomy-view ────────→ axionomy
 axionomy-service ─────→ axionomy-problems + axionomy-view
 axionomy-cli ─────────→ axionomy-service
@@ -612,6 +613,9 @@ axionomy-studio-server → axionomy-service
 - `axionomy-time` owns optional calendar-aware timeline authoring.
 - `axionomy-tree` owns the canonical persistent tree that stored states are
   kept in, with no I/O and no economics.
+- `axionomy-store` owns runs, stored states and their organization on redb.
+  It remembers what the kernel decided and verifies it by replay; it never
+  decides what an exchange does.
 - `axionomy-mcp` owns the strict stateless MCP reference boundary, immutable
   snapshot-store contract, and process-local task orchestration.
 - `axionomy-view` owns runtime-neutral monomorphic presentation contracts and

@@ -41,6 +41,15 @@ impl Quantity {
         self.0
     }
 
+    /// The value as 32 big-endian bytes, which sort as the quantities do.
+    pub fn to_be_bytes(self) -> [u8; 32] {
+        self.0.to_be_bytes()
+    }
+
+    pub fn from_be_bytes(bytes: [u8; 32]) -> Self {
+        Self(U256::from_be_bytes(bytes))
+    }
+
     /// The value as a `u64`, for models whose quantities are counts known to
     /// fit. Use `u64::try_from` when the value may be larger.
     ///

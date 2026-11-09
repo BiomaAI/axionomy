@@ -1,7 +1,8 @@
 # Storage, runs and replay
 
 Status: being built, in the order the phases at the end give. The kernel's
-forks are constant-time and the canonical tree exists; the rest is planned.
+forks are constant-time, and the canonical tree and the store exist; MCP,
+Studio, search and training move onto them next.
 
 Axionomy is an economic debugger and a simulation engine. Both need states
 that can be kept, revisited, compared and branched: time travel to any step,
@@ -58,6 +59,15 @@ The tree (`crates/axionomy-tree/benches/tree.rs`), with balance-sized entries:
 | 1,000 | 0.9 µs | 4.9 µs | 175 µs |
 | 100,000 | 2.4 µs | 15 µs | 18 ms |
 
+Recording a run (`crates/axionomy-store/benches/record.rs`): one payment
+between two accounts, as the stepping thread sees it. Hashing and writing
+happen on the writer thread, so the checkpoint rule barely shows.
+
+| Accounts | Kernel apply | Recorded, `ends` | Recorded, `every(64)` | Recorded, `every_step` |
+| --- | --- | --- | --- | --- |
+| 1,000 | 2.0 µs | 4.7 µs | 5.4 µs | 5.2 µs |
+| 100,000 | 2.1 µs | 7.8 µs | 9.3 µs | 9.5 µs |
+
 ## The kernel's state
 
 Exchanges open and close accounts (specified in `Lifecycle.lean`). The kernel
@@ -106,17 +116,23 @@ built as prolly trees, in a new crate, `axionomy-tree`:
   and hand it every unchanged subtree that chunking would rebuild as it is, so
   an edited tree is exactly the tree a build from scratch gives.
 
-A stored economy is a few trees:
+A stored economy is one tree, whose keys say what each entry holds:
 
-- accounts: account ID → that account's balance-tree root and entry count;
-- balances, one per account: asset ID → quantity, 32 bytes big-endian;
-- rates: rate ID → rate record, with large baskets as their own trees;
-- invariants: name → weight tree.
+| Key | Value |
+| --- | --- |
+| `a` account | empty: the account exists |
+| `b` account `\0` asset | the balance, 32 bytes big-endian, never zero |
+| `r` rate | the rate, as the kernel serializes it |
+| `v` invariant, as the kernel serializes it | empty |
 
-The **state root** is the hash of the accounts, rates and invariants roots.
-Keys and values need canonical bytes: an economy identified by paths
-(`axionomy::paths`) has them, as UTF-8 path text and big-endian quantities; a
-problem with its own Rust ontology is stored through an encoding it declares.
+Paths never contain `\0`, which sorts before every path character, so an
+account's balances are contiguous and in account order, and a prefix range
+reads one account. The **state root** is the tree's hash. Keys and values need
+canonical bytes: an economy identified by paths (`axionomy::paths`) has them;
+a problem with its own Rust ontology is stored through an encoding it
+declares (phase 4). The tree holds the logical state, not the order accounts
+were created in, so an economy rebuilt from a root lists accounts in path
+order; decoding accepts only trees an economy could have produced.
 
 A recorded run keeps its tree beside the kernel's economy. After a step, the
 receipt names exactly which balances changed; the recorder reads their new
@@ -139,13 +155,16 @@ Three identities answer three different questions:
 
 ## Runs and steps
 
-A **run** records where it starts (an initial root, or a parent run and step
-for a fork), its seed, strategy or policy and their versions, budget, kernel
-version, checkpoint rule and simulated-time origin. The trace reproduces
-states; the seed and policy reproduce the decisions.
+A **run** records where it starts: its first state, always stored, and for a
+fork the point it forked from, whose step number its own steps continue from.
+It also records its checkpoint rule and whether it finished. Seeds, policies
+and their versions are tags for now; they become typed provenance when search
+and training record runs (phase 4), with the simulated-time origin. The trace
+reproduces states; the seed and policy reproduce the decisions.
 
-A **step** records its exchange, a receipt digest, its simulated time, its root
-when the checkpoint rule keeps it, and optional metrics.
+A **step** records its exchange and the digest of its receipt. A separate
+table holds the roots of stored states, by run and step, so the nearest stored
+state before any step is one range lookup.
 
 Anything that should leave no record is not a run: the nodes of a search tree
 and rollouts nobody keeps live and die in memory.
@@ -182,25 +201,27 @@ authoritative: tags, groups and metrics never change what an exchange does or
 whether a trace is valid, so they may be plain strings and numbers without
 weakening the economy's closure.
 
-- **Tags** are string key-value labels on runs and steps, such as
+- **Tags** are key-value labels on runs, such as
   `experiment=pricing-v3`, `split=eval`, `policy=ppo@412`, `kind=counterexample`
-  or `note=suspicious`. Provenance (seed, policy, versions) stays typed in the
-  run record and never changes; tags can be added and removed later. An index
-  answers "runs where these tags hold", paged.
+  or `note=suspicious`. Keys are paths; values are text people read. Tags can
+  be added and removed later. An index answers "runs where this tag holds",
+  paged. Tags on steps wait for a use that needs them.
 - **Groups** collect what was produced together. A group has a kind (for
   example `monte_carlo`, `mppi`, `eval_suite`, `epoch`), its source (the run
   and step or root its members started from), its parameters as tags, and its
   members with their sample index. A member is either a run, or a record of its
   seed and metrics that becomes a run when someone asks, by running the
   sampler again from the group's source. A run may belong to several groups.
-- **Metrics** are named numbers on runs, steps and group members: reward,
+- **Metrics** are numbers named by path on runs, steps and group members: reward,
   return, cost, importance weight, value estimate, objective values. They are
   `f64` for analysis; exact economic outcomes remain in the state and can
   always be derived again by replay. Each group keeps a running summary per
   metric (count, mean, minimum, maximum, variance), updated in the same
   transaction as its members, and computes quantiles on request.
 - **Refs** are mutable names for a run, step or group, like Git refs:
-  `baseline`, `best/ppo`, `regressions/overdraft-17`.
+  `baseline`, `best/ppo`, `regressions/overdraft-17`. Ref names, metric names,
+  tag keys and group kinds are paths (`axionomy_store::{RefPath, MetricPath,
+  TagPath, GroupKindPath}`); run and group IDs are minted types.
 
 Patterns these support:
 
@@ -236,8 +257,10 @@ together, so a state or handle exists if and only if its transaction committed.
   are harmless, and the initial state of ten thousand episodes is stored once.
 - **Merge later.** A worker thread, process or machine may write its own store
   and never coordinate with others. Merging two stores is a union of nodes plus
-  run records with globally unique run IDs (a random 128-bit store ID plus a
-  counter), which cannot conflict.
+  run records with globally unique run IDs (the store's random 64-bit prefix
+  and a 64-bit counter), which cannot conflict. Refs are the one mutable
+  name: when both stores name something different, the merging store keeps
+  its own and reports the name.
 - **Tests and the browser** use `InMemoryBackend`: the same code, with storage
   in memory.
 
@@ -293,17 +316,20 @@ everything it reaches: debugging sessions, counterexamples, benchmark results,
 live MCP handles. Refs pin what they name. Retention policies select by tags,
 groups and age, for example "keep every `split=eval` run", "keep the five best
 members of each Monte Carlo group", or "drop `kind=mppi` runs after a day".
-Garbage collection marks from what is kept and sweeps unreachable nodes and
-traces in bounded batches inside write transactions; redb reuses the freed
-pages, and compaction runs offline. Group summaries survive the members they
-summarize.
+Deleting a run removes its trace, stored states, tags and metrics, and is
+refused while a point of it is pinned or a ref names it. Garbage collection
+marks every node reachable from a stored state and sweeps the rest, inside one
+write transaction so no concurrent write can revive a node being swept; redb
+reuses the freed pages, and compaction runs offline. Sweeping in bounded
+batches waits until stores are large enough to need it. Group summaries
+survive the members they summarize.
 
 ## What changes where
 
 - **Kernel** (done): a persistent account index, so forks are constant-time.
 - **`axionomy-tree`** (done): the canonical persistent tree. No I/O and no
   economics.
-- **`axionomy-store`** (new): redb tables, the writer and durability rules,
+- **`axionomy-store`** (done): redb tables, the writer and durability rules,
   runs and steps, tags, groups, metrics and refs, merge and garbage collection.
 - **`axionomy-mcp`**: the `SnapshotStore` trait, `MemorySnapshotStore` and the
   assessment and artifact maps are removed in favor of the store. Resources
@@ -325,7 +351,7 @@ Each phase is a validated commit or series of commits.
    the same root in any insertion order, an incrementally updated tree has the
    same root as one built from scratch, diff and cursors agree with a sorted
    map, and encoding round-trips.
-2. **`axionomy-store`** on redb: nodes, roots, runs and steps, the durability
+2. **`axionomy-store`** (done) on redb: nodes, roots, runs and steps, the durability
    rules, tags, groups with running summaries, metrics and refs, the writer
    with group commit, merge and garbage collection, tested on
    `InMemoryBackend`.
@@ -341,16 +367,10 @@ Each phase is a validated commit or series of commits.
 
 ## Open decisions
 
-1. **Quantity encoding** in nodes: fixed 32-byte big-endian (recommended:
-   simple, ordered, exact) or minimal length.
-2. **Typed ontologies in storage:** an encoding trait the ontology implements,
+1. **Typed ontologies in storage:** an encoding trait the ontology implements,
    or storing typed economies through the paths profile.
-3. **Periodic `Immediate` commit interval** for batches nobody waits on; one
+2. **Periodic `Immediate` commit interval** for batches nobody waits on; one
    second is a starting point.
-4. **Rates and invariants on the tree** from phase 1, or flat until a problem
-   with large rate sets needs it.
-5. **Tag keys:** free-form (recommended to start), or a small declared
-   vocabulary per store once tag queries need validation.
-6. **Running summaries** beyond count, mean, minimum, maximum and variance,
+3. **Running summaries** beyond count, mean, minimum, maximum and variance,
    such as streaming quantile sketches, only if quantiles over large groups
    become a measured cost.

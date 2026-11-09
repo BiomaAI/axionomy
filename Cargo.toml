@@ -6,6 +6,7 @@ members = [
     "crates/axionomy-units",
     "crates/axionomy-time",
     "crates/axionomy-tree",
+    "crates/axionomy-store",
     "crates/axionomy-mcp",
     "crates/axionomy-view",
     "crates/axionomy-service",
@@ -32,6 +33,7 @@ axionomy-problems = { version = "0.1.0", path = "crates/axionomy-problems" }
 axionomy-search = { version = "0.1.0", path = "crates/axionomy-search" }
 axionomy-tree = { version = "0.1.0", path = "crates/axionomy-tree" }
 axionomy-service = { version = "0.1.0", path = "crates/axionomy-service" }
+axionomy-store = { version = "0.1.0", path = "crates/axionomy-store" }
 axionomy-units = { version = "0.1.0", path = "crates/axionomy-units" }
 axionomy-view = { version = "0.1.0", path = "crates/axionomy-view" }
 
@@ -51,6 +53,7 @@ pathfinding = "4.16.0"
 proptest = "1.12.0"
 rand = { version = "0.10.3", default-features = false, features = ["std"] }
 rand_chacha = "0.10.0"
+redb = "4.5.0"
 ruint = { version = "1.21.1", default-features = false, features = ["std"] }
 rmcp = { version = "3.9.0", default-features = false, features = [
     "macros",

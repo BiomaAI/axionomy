@@ -111,6 +111,7 @@ models into one-way workspace dependencies:
 | `axionomy-units` | Self-describing asset denominations, schema coherence, dimension-safe `uom` authoring, and fixed-precision decimal assets |
 | `axionomy-time` | Calendar-aware Jiff authoring over the same canonical timeline denominations |
 | `axionomy-tree` | Canonical persistent prolly trees: the content-addressed maps stored states are kept in |
+| `axionomy-store` | Runs, stored states, replay verification, tags, groups, metrics and refs, on redb |
 | `axionomy-mcp` | Strict stateless MCP 2026-07-28 reference server with caller-owned snapshot storage and interruptible search tasks |
 | `axionomy-view` | Runtime-neutral, replay-derived browser presentation contracts |
 | `axionomy-service` | Interface-neutral catalog, run control, progress, and replay-derived artifacts for every canonical problem |
@@ -125,6 +126,7 @@ axionomy-problems ────→ axionomy
 axionomy-units ───────→ axionomy
 axionomy-time ────────→ axionomy-units ──→ axionomy
 axionomy-tree          (no workspace dependencies)
+axionomy-store ───────→ axionomy-tree + axionomy
 axionomy-view ────────→ axionomy
 axionomy-service ─────→ axionomy-problems + axionomy-view
 axionomy-cli ─────────→ axionomy-service
@@ -679,6 +681,7 @@ cargo package -p axionomy-search --list
 cargo package -p axionomy-units --list
 cargo package -p axionomy-time --list
 cargo package -p axionomy-tree --list
+cargo package -p axionomy-store --list
 cargo package -p axionomy-problems --list
 cargo package -p axionomy-mcp --list
 ```
