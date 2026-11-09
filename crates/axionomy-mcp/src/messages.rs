@@ -58,6 +58,16 @@ pub struct RateEntries {
     /// Comparisons every exchange must satisfy.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub conditions: Vec<paths::RateCondition>,
+    /// Roles whose bound account an exchange of this rate creates, empty,
+    /// before its effects. The exchange names the new account's path; it must
+    /// not exist, and no other role may bind it.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub opens: Vec<RolePath>,
+    /// Roles whose bound account an exchange of this rate removes. Its effects
+    /// must leave that account empty, so closing never destroys anything; the
+    /// path may be opened again later.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub closes: Vec<RolePath>,
 }
 
 /// One amount computed when an exchange is assessed.
@@ -177,6 +187,12 @@ pub struct ExchangedResponse {
     /// Quantity lines the exchanges moved; the snapshot's `changes` resource
     /// pages through them.
     pub changes: usize,
+    /// Accounts the exchanges created, in order.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub opened: Vec<AccountPath>,
+    /// Accounts the exchanges removed, in order.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub closed: Vec<AccountPath>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]

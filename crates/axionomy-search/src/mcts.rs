@@ -9,7 +9,7 @@ use crate::{
         validate_values,
     },
 };
-use axionomy::{Economy, Exchange, Quantity};
+use axionomy::{Economy, Exchange, StateKey};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -114,7 +114,7 @@ pub type MctsResult<RateId, Role, AccountId, A> = Result<
 pub type MctsAdvanceResult<RateId, Role, AccountId, A> =
     Result<AdvanceReport<MctsProgress, TreeStatus>, TreeSearchError<RateId, Role, AccountId, A>>;
 
-type Transpositions<AccountId, A> = HashMap<Vec<(AccountId, A, Quantity)>, usize>;
+type Transpositions<AccountId, A> = HashMap<StateKey<AccountId, A>, usize>;
 type ExpansionResult<RateId, Role, AccountId, A> =
     Result<(usize, bool), TreeSearchError<RateId, Role, AccountId, A>>;
 
@@ -761,6 +761,7 @@ struct Edge<RateId, Role, AccountId> {
 mod tests {
     use super::*;
     use crate::action_source::lazy_actions;
+    use axionomy::Quantity;
     use axionomy::{Account, EconomyBuilder, Rate, basket};
 
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]

@@ -212,6 +212,42 @@ async def test_account_paths_compose_into_resource_uris(url: str) -> None:
         assert refused.is_error
 
 
+async def test_exchanges_open_and_close_accounts(url: str) -> None:
+    spawn_and_retire = {
+        "accounts": {"treasury": {"cash": "10"}},
+        "rates": {
+            "agents/spawn": {
+                "consume": {"treasury": {"cash": "3"}},
+                "produce": {"agent": {"cash": "3"}},
+                "opens": ["agent"],
+            },
+            "agents/retire": {
+                "consume": {"agent": {"cash": "3"}},
+                "produce": {"treasury": {"cash": "3"}},
+                "closes": ["agent"],
+            },
+        },
+    }
+
+    def exchange(rate: str) -> dict[str, Any]:
+        return {"rate": rate, "bindings": {"treasury": "treasury", "agent": "agents/7/wallet"}, "units": "1"}
+
+    async with Client(url) as client:
+        economy_id = await create(client, spawn_and_retire)
+        spawned = await client.call_tool("axionomy_exchange_apply", {"economy_id": economy_id, "exchange": exchange("agents/spawn")})
+        assert spawned.structured_content["opened"] == ["agents/7/wallet"]
+        spawned_id = spawned.structured_content["economy_id"]
+        wallet = await page(client, f"axionomy://economy/{spawned_id}/accounts/agents/7/wallet")
+        assert wallet["items"] == [{"asset": "cash", "quantity": "3"}]
+        rate = await page(client, f"axionomy://economy/{spawned_id}/rates/agents/spawn")
+        assert rate["opens"] == ["agent"]
+
+        retired = await client.call_tool("axionomy_exchange_apply", {"economy_id": spawned_id, "exchange": exchange("agents/retire")})
+        assert retired.structured_content["closed"] == ["agents/7/wallet"]
+        accounts = await page(client, f"axionomy://economy/{retired.structured_content['economy_id']}/accounts")
+        assert [item["account"] for item in accounts["items"]] == ["treasury"]
+
+
 async def test_a_search_runs_as_a_task_and_its_solution_is_a_snapshot(url: str) -> None:
     async with Client(url) as plain:
         economy_id = await create(plain, ECONOMY)

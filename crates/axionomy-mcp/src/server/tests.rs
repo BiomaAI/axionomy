@@ -651,3 +651,112 @@ async fn a_problem_run_returns_a_summary_and_pages_its_frames() {
     assert_eq!(document["frames"], frames);
     assert_eq!(document["document"]["frames"], json!([]));
 }
+
+#[tokio::test]
+async fn exchanges_open_and_close_accounts_named_by_their_paths() {
+    let server = AxionomyMcp::default();
+    let economy_id = id(&create(
+        &server,
+        json!({
+            "accounts": { "treasury": { "cash": "10" } },
+            "rates": {
+                "agents/spawn": {
+                    "consume": { "treasury": { "cash": "3" } },
+                    "produce": { "agent": { "cash": "3" } },
+                    "opens": ["agent"]
+                },
+                "agents/retire": {
+                    "consume": { "agent": { "cash": "3" } },
+                    "produce": { "treasury": { "cash": "3" } },
+                    "closes": ["agent"]
+                }
+            },
+            "invariants": { "cash": { "cash": 1 } }
+        }),
+    )
+    .await);
+    let exchange = |rate: &str, agent: &str| -> paths::Exchange {
+        serde_json::from_value(json!({
+            "rate": rate,
+            "bindings": { "treasury": "treasury", "agent": agent },
+            "units": "1"
+        }))
+        .unwrap()
+    };
+
+    let spawned = apply(
+        &server,
+        &economy_id,
+        exchange("agents/spawn", "agents/7/wallet"),
+    )
+    .await;
+    assert_eq!(spawned.value["opened"], json!(["agents/7/wallet"]));
+    let spawned_id = id(&spawned);
+    let wallet = read(
+        &server,
+        &uri(Target::Balances {
+            economy_id: spawned_id.clone(),
+            account: "agents/7/wallet".parse().unwrap(),
+            prefix: None,
+        }),
+    )
+    .await;
+    assert_eq!(
+        wallet["items"],
+        json!([{ "asset": "cash", "quantity": "3" }])
+    );
+
+    let again = apply(
+        &server,
+        &spawned_id,
+        exchange("agents/spawn", "agents/7/wallet"),
+    )
+    .await;
+    assert_eq!(again.value["error"], "invalid");
+    assert_eq!(
+        again.value["details"]["issues"][0]["AccountExists"]["account"],
+        "agents/7/wallet"
+    );
+
+    let retired = apply(
+        &server,
+        &spawned_id,
+        exchange("agents/retire", "agents/7/wallet"),
+    )
+    .await;
+    assert_eq!(retired.value["closed"], json!(["agents/7/wallet"]));
+    let retired_id = id(&retired);
+    let accounts = read(
+        &server,
+        &uri(Target::Accounts {
+            economy_id: retired_id.clone(),
+            prefix: None,
+        }),
+    )
+    .await;
+    assert_eq!(
+        accounts["items"],
+        json!([{ "account": "treasury", "assets": 1 }])
+    );
+
+    let reopened = apply(
+        &server,
+        &retired_id,
+        exchange("agents/spawn", "agents/7/wallet"),
+    )
+    .await;
+    assert_eq!(reopened.value["opened"], json!(["agents/7/wallet"]));
+
+    let rich = id(&extend(
+        &server,
+        &spawned_id,
+        json!({ "accounts": { "agents/7/wallet": { "gem": "1" } } }),
+    )
+    .await);
+    let stuck = apply(&server, &rich, exchange("agents/retire", "agents/7/wallet")).await;
+    assert_eq!(stuck.value["error"], "invalid");
+    assert_eq!(
+        stuck.value["details"]["issues"][0]["ClosedNotEmpty"]["remaining"],
+        json!([["gem", "1"]])
+    );
+}

@@ -698,7 +698,7 @@ const fn order_terms(order: OrderId) -> (Item, u64, u64, u64, u64, u64) {
 fn clear_branch(
     world: World,
     trace: Trace<RateId, Role, AccountId>,
-    visited: &mut HashSet<Vec<(AccountId, Asset, Quantity)>>,
+    visited: &mut HashSet<axionomy::StateKey<AccountId, Asset>>,
     best: &mut ClearingProposal,
 ) {
     if !visited.insert(world.state_key()) {

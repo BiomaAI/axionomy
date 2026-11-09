@@ -13,6 +13,7 @@ import Axionomy.Execution
 import Axionomy.Inspection
 import Axionomy.InvariantInput
 import Axionomy.InvariantInputConformance
+import Axionomy.Lifecycle
 import Axionomy.ModelConstruction
 import Axionomy.MulDiv
 import Axionomy.Observations

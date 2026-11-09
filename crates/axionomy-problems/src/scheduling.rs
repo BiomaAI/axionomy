@@ -286,7 +286,7 @@ pub fn encoded_makespan(world: &World) -> u64 {
 fn optimize_branch(
     world: World,
     trace: Trace<RateId, Role, AccountId>,
-    visited: &mut HashSet<Vec<(AccountId, Asset, Quantity)>>,
+    visited: &mut HashSet<axionomy::StateKey<AccountId, Asset>>,
     best: &mut Option<OptimizedProposal>,
 ) {
     if !visited.insert(world.state_key()) {

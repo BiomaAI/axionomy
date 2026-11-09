@@ -1,5 +1,5 @@
 import Lean
-import Axionomy.Transaction
+import Axionomy.Lifecycle
 import Axionomy.Execution
 import Axionomy.Basket
 
@@ -47,6 +47,9 @@ def failure : Transaction.Failure Nat Nat Nat Nat → Json
   | .invariantOverflow label => tagged "invariant_overflow" [("label", toJson label)]
   | .invariantViolation label before after => tagged "invariant_violation"
       [("label", toJson label), ("before", toJson (toString before)), ("after", toJson (toString after))]
+  | .accountExists id => tagged "account_exists" [("account", toJson id)]
+  | .openingShared role => tagged "opening_shared" [("role", toJson role)]
+  | .closedNotEmpty id remaining => tagged "closed_not_empty" [("account", toJson id), ("remaining", balances remaining)]
 
 def accountAssessment (value : Transaction.AccountAssessment Nat Nat) : Json := Json.mkObj [
   ("account", toJson value.account), ("available", balances value.available), ("required", balances value.required),
@@ -57,13 +60,19 @@ def assessment : Transaction.Assessment Nat Nat Nat Nat → Json
   | .infeasible entries missing => tagged "infeasible" [("accounts", toJson (entries.map accountAssessment)), ("shortfalls", shortfalls missing)]
   | .invalid issues => tagged "invalid" [("issues", toJson (issues.map failure))]
 
+def receiptJson (value : Lifecycle.Receipt Nat Nat Nat Nat) : Json := Json.mkObj [
+  ("proposal", proposalJson value.proposal), ("deltas", toJson (value.deltas.map delta)),
+  ("opened", toJson value.opened), ("closed", toJson value.closed)]
+
 def normalize (rule : Rule) : Rule :=
   let amounts := rule.computedConsume ++ rule.computedProduce ++ rule.computedPreserve
   let roles := rule.roles ++ (rule.consume ++ rule.produce ++ rule.preserve).map Prod.fst ++
     amounts.flatMap (fun amount => amount.role :: Discovery.roles amount.quantity) ++
     rule.conditions.flatMap (fun condition => Discovery.roles condition.left ++ Discovery.roles condition.right) ++
-    rule.distinct.flatMap (fun (left, right) => [left, right])
+    rule.distinct.flatMap (fun (left, right) => [left, right]) ++ rule.opens ++ rule.closes
   { rule with roles := Discovery.registerAll compare roles []
+              opens := Discovery.registerAll compare rule.opens []
+              closes := Discovery.registerAll compare rule.closes []
               distinct := Discovery.registerAll (Discovery.pairCompare compare) (rule.distinct.map (fun (left, right) => Discovery.orderedPair compare left right)) [] }
 
 def ruleJson (expression : Evaluation.Expr Nat Nat Nat → Json) (rule : Rule) : Json :=
@@ -75,25 +84,24 @@ def ruleJson (expression : Evaluation.Expr Nat Nat Nat → Json) (rule : Rule) :
   Json.mkObj [("consume", accounts rule.consume), ("produce", accounts rule.produce), ("preserve", accounts rule.preserve),
     ("computedConsume", toJson (rule.computedConsume.map amount)), ("computedProduce", toJson (rule.computedProduce.map amount)),
     ("computedPreserve", toJson (rule.computedPreserve.map amount)), ("conditions", toJson (rule.conditions.map condition)),
-    ("distinct", toJson rule.distinct)]
+    ("distinct", toJson rule.distinct), ("opens", toJson rule.opens), ("closes", toJson rule.closes)]
 
 def scenario (expression : Evaluation.Expr Nat Nat Nat → Json) (label : String) (before : List (Nat × List (Nat × Nat)))
     (rawRule : Rule) (proposal : Proposal) (invariants : List (Transaction.Invariant Nat) := []) : Json :=
   let rule := normalize rawRule
   let before := before.map fun (id, entries) => (id, Basket.canonical entries)
   let model : Model := ⟨before, [(7, rule)], invariants⟩
-  let expected := match Transaction.analyze compare compare model proposal, Transaction.apply compare compare model proposal with
+  let expected := match Lifecycle.analyze compare compare model proposal, Lifecycle.apply compare compare model proposal with
     | some analyzed, some (applied, after) => Json.mkObj [
         ("assessment", assessment analyzed.assessment), ("after", accounts after.accounts),
         ("error", match applied with | .ok _ => Json.null | .error error => failure error),
-        ("receipt", match applied with | .error _ => Json.null | .ok receipt => Json.mkObj [
-          ("proposal", proposalJson receipt.proposal), ("deltas", toJson (receipt.deltas.map delta))])]
+        ("receipt", match applied with | .error _ => Json.null | .ok receipt => receiptJson receipt)]
     | _, _ => tagged "panic"
   Json.mkObj [("label", toJson label), ("accounts", accounts before), ("rule", ruleJson expression rule), ("proposal", proposalJson proposal),
     ("invariants", toJson (invariants.map fun inv => Json.mkObj [("label", toJson inv.label),
       ("weights", toJson (inv.weights.map fun (asset, value) => (asset, toString value)))])), ("expected", expected)]
 
-def blank : Rule := ⟨[], [], [], [], [], [], [], [], []⟩
+def blank : Rule := ⟨[], [], [], [], [], [], [], [], [], [], []⟩
 
 def fixtures (expression : Evaluation.Expr Nat Nat Nat → Json) : Array Json := Id.run do
   let limit := Quantity.limit
@@ -145,16 +153,30 @@ def fixtures (expression : Evaluation.Expr Nat Nat Nat → Json) : Array Json :=
     { proposal with units := 0, bindings := [(0, 77), (1, 77), (2, 88)], parameters := [("unknown", 1)] } [])
   cases := cases.push (add "parameter-and-comparison" before { transfer with computedPreserve := [⟨0, 0, .parameter "éλ"⟩], conditions := [⟨"lower", .balance 0 0, .greaterOrEqual, .parameter "éλ"⟩, ⟨"upper", .parameter "éλ", .lessOrEqual, .units⟩] }
     { proposal with parameters := [("éλ", 1)] } [])
+  -- Opening and closing accounts. Account 5 does not exist before.
+  let fund : Rule := { transfer with opens := [1] }
+  let opening : Proposal := { proposal with bindings := [(0, 1), (1, 5)] }
+  cases := cases.push (add "open-funded" before fund opening [⟨"mass", [(0, 1)]⟩])
+  cases := cases.push (add "open-existing" before fund proposal [])
+  cases := cases.push (add "open-shared" before fund { proposal with bindings := [(0, 5), (1, 5)] } [])
+  cases := cases.push (add "open-unbound" before fund { proposal with bindings := [(0, 1)] } [])
+  let alone : Proposal := { proposal with bindings := [(1, 5)] }
+  cases := cases.push (add "open-requires-from-empty" before { blank with consume := [(1, [(0, 1)])], opens := [1] } alone [])
+  cases := cases.push (add "open-and-close-transient" before { blank with opens := [1], closes := [1] } alone [])
+  let drain : Rule := { blank with consume := [(0, [(0, 1)])], produce := [(1, [(0, 1)])], closes := [0] }
+  cases := cases.push (add "close-drained" before drain { proposal with bindings := [(0, 0), (1, 1)] } [⟨"mass", [(0, 1)]⟩])
+  cases := cases.push (add "close-not-empty" before drain proposal [])
+  cases := cases.push (add "close-untouched-empty" [(9, [(7, 11)]), (1, [(0, 5)]), (0, [])]
+    { blank with closes := [0] } { proposal with bindings := [(0, 0)] } [])
+  cases := cases.push (add "close-missing" before { blank with closes := [0] } { proposal with bindings := [(0, 6)] } [])
   return cases
 
-def receiptJson (value : Transaction.Receipt Nat Nat Nat Nat) : Json := Json.mkObj [
-  ("proposal", proposalJson value.proposal), ("deltas", toJson (value.deltas.map delta))]
 
 def replayScenario (expression : Evaluation.Expr Nat Nat Nat → Json) (label : String)
     (before : List (Nat × List (Nat × Nat))) (rule : Rule) (actions : List Proposal)
     (invariants : List (Transaction.Invariant Nat) := []) : Json :=
   let model : Model := ⟨before.map (fun (id, entries) => (id, Basket.canonical entries)), [(7, normalize rule)], invariants⟩
-  let expected := match Execution.run (Transaction.apply compare compare) model actions [] with
+  let expected := match Execution.run (Lifecycle.apply compare compare) model actions [] with
     | none => tagged "panic"
     | some (result, after) => Json.mkObj [("after", accounts after.accounts),
         ("error", match result with | .error error => failure error | .ok _ => Json.null),
@@ -187,6 +209,14 @@ def executionFixtures (expression : Evaluation.Expr Nat Nat Nat → Json) : Arra
   cases := cases.push (replayScenario expression "computed-snapshot-revisited" before
     { blank with computedConsume := [⟨0, 0, .mulDiv .floor (.balance 0 0) (.constant 1) (.constant 2)⟩], computedProduce := [⟨1, 0, .mulDiv .floor (.balance 0 0) (.constant 1) (.constant 2)⟩] }
     [proposal, proposal, proposal, proposal] [⟨"mass", [(0, 1)]⟩])
+  -- Move everything from one account into a new one and close the old, then
+  -- back: the closed identifier opens again.
+  let migrate : Rule := { blank with consume := [(0, [(0, 1)])], produce := [(1, [(0, 1)])], opens := [1], closes := [0] }
+  let forth : Proposal := { proposal with bindings := [(0, 0), (1, 5)] }
+  let back : Proposal := { proposal with bindings := [(0, 5), (1, 0)] }
+  for actions in [[forth], [forth, back], [forth, back, forth], [forth, forth], [back]] do
+    cases := cases.push (replayScenario expression "close-and-reopen" [(9, [(7, 11)]), (1, [(0, 5)]), (0, [(0, 1)])]
+      migrate actions [⟨"mass", [(0, 1)]⟩])
   return cases
 
 end TransactionConformance

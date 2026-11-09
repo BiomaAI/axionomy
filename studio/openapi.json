@@ -625,7 +625,10 @@
           "rate_condition_failed",
           "infeasible",
           "balance_overflow",
-          "invariant_violation"
+          "invariant_violation",
+          "account_exists",
+          "opening_shared",
+          "closed_not_empty"
         ],
         "type": "string"
       },

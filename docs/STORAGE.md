@@ -54,21 +54,14 @@ never on the step path.
 
 ## The kernel's state
 
-In the current kernel, accounts are part of the problem definition: they are
-declared when an economy is built, and an exchange that binds an undeclared
-account is rejected. A new actor is modeled today by declaring its account in
-advance and activating it with an asset. The kernel therefore keeps account
-identifiers in one shared index and holdings in a persistent 32-way tree. A
-fork copies two pointers, and replacing an account copies one root-to-leaf
-path, in place when nothing else shares it.
-
-Creating accounts by exchange, for spawned actors, opened positions or firms
-entering a market, would change the kernel's semantics and starts in the Lean
-specification: how a rate opens an account, how its identifier is chosen so
-replay reproduces it, and how existence interacts with conservation. The
-representation already accommodates it: the identifier index becomes a
-persistent map and holdings grow by appending, in O(log n), so forks stay
-constant-time. Accounts keep the
+Exchanges open and close accounts (specified in `Lifecycle.lean`). The kernel
+keeps identifiers and holdings in persistent 32-way trees indexed by creation
+slot, and a persistent hash trie from identifier to slot. A fork copies a few
+pointers; replacing, opening or closing an account copies one root-to-leaf
+path, in place when nothing else shares it; a closed account leaves an empty
+slot until more slots are empty than full, when the accounts are compacted.
+Accounts keep the order they were created in, so every serialized artifact is
+byte for byte what it was before. Accounts keep the
 order they were declared in, so every serialized artifact is byte for byte
 what it was before. This is a change of representation only; the Lean
 specification and its fixtures are untouched.

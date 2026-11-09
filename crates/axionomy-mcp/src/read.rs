@@ -328,6 +328,8 @@ fn read_snapshot(
                     .map(|(left, right)| (left, right))
                     .collect(),
                 parameters: rate.parameter_names().into_iter().collect(),
+                opens: rate.opened_roles().collect(),
+                closes: rate.closed_roles().collect(),
                 amounts: amounts(rate).count(),
                 conditions: rate.conditions().len(),
             })
@@ -492,6 +494,12 @@ struct RateView<'a> {
     roles: Vec<&'a RolePath>,
     distinct: Vec<(&'a RolePath, &'a RolePath)>,
     parameters: Vec<&'a str>,
+    /// Roles whose bound account an exchange creates.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    opens: Vec<&'a RolePath>,
+    /// Roles whose bound account an exchange removes once its effects leave it empty.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    closes: Vec<&'a RolePath>,
     amounts: usize,
     conditions: usize,
 }

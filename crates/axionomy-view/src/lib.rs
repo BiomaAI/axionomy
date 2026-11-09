@@ -135,6 +135,9 @@ pub enum AssessmentIssueKindView {
     Infeasible,
     BalanceOverflow,
     InvariantViolation,
+    AccountExists,
+    OpeningShared,
+    ClosedNotEmpty,
 }
 
 /// One structured reason why a proposal is invalid.
@@ -2211,6 +2214,39 @@ where
             format!("Declared invariant `{invariant}` would be violated."),
             Vec::new(),
         ),
+        ApplyError::AccountExists { account } => {
+            let account = ontology.account(account);
+            (
+                AssessmentIssueKindView::AccountExists,
+                format!(
+                    "Account `{}` already exists, so the exchange cannot open it.",
+                    account.label
+                ),
+                vec![account],
+            )
+        }
+        ApplyError::OpeningShared { role } => {
+            let role = ontology.role(role);
+            (
+                AssessmentIssueKindView::OpeningShared,
+                format!(
+                    "Another role binds the account that role `{}` opens.",
+                    role.label
+                ),
+                vec![role],
+            )
+        }
+        ApplyError::ClosedNotEmpty { account, .. } => {
+            let account = ontology.account(account);
+            (
+                AssessmentIssueKindView::ClosedNotEmpty,
+                format!(
+                    "The exchange leaves assets in account `{}`, which it closes.",
+                    account.label
+                ),
+                vec![account],
+            )
+        }
     };
     AssessmentIssueView {
         kind,

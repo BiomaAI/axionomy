@@ -1150,7 +1150,10 @@ mod tests {
         let large = initial();
         let index = ClaimIndex::build(&large);
 
-        assert_eq!(large.state_key().len(), small.state_key().len());
+        assert_eq!(
+            large.state_key().balances().len(),
+            small.state_key().balances().len()
+        );
         assert_eq!(index.total_claims(), 10_000);
         assert_eq!(index.balance_entries(), 2);
         assert_eq!(index.usable_total(&large), 10_000);

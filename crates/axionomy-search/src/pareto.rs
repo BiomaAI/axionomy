@@ -5,7 +5,7 @@
 //! decide which transitions and outcomes are valid.
 
 use crate::session::{AdvanceReport, SearchObserver, SearchStatus, WorkBudget};
-use axionomy::{Economy, Exchange, Goal, Quantity, Trace};
+use axionomy::{Economy, Exchange, Goal, StateKey, Trace};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
@@ -340,7 +340,7 @@ pub struct ParetoSearchSession<AccountId, A, RateId, Role, K, V, Candidates, Pro
     project: Project,
     states: Vec<ParetoSearchState<AccountId, A, RateId, Role>>,
     frontier: VecDeque<usize>,
-    visited: HashSet<Vec<(AccountId, A, Quantity)>>,
+    visited: HashSet<StateKey<AccountId, A>>,
     results: ParetoFront<Trace<RateId, Role, AccountId>, K, V>,
     expanded: usize,
     generated: usize,
@@ -544,6 +544,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use axionomy::Quantity;
     use axionomy::{Account, EconomyBuilder, Rate, basket};
     use std::ops::ControlFlow;
 

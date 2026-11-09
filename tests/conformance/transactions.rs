@@ -1,5 +1,5 @@
-//! Whole-transaction regression bridge to the executable Lean specification.
-//! The universal implementation guarantee comes from the Aeneas refinements.
+//! Whole transactions and replays, including accounts they open and close,
+//! replayed from the executable Lean specification's fixtures.
 use crate::scripted_iterator;
 
 use axionomy::{
@@ -56,6 +56,8 @@ struct RuleCase {
     computed_preserve: Vec<Computed>,
     conditions: Vec<Condition>,
     distinct: Vec<(Role, Role)>,
+    opens: Vec<Role>,
+    closes: Vec<Role>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -192,6 +194,13 @@ fn failure(error: &Failure) -> Value {
         } => json!({
             "kind": "invariant_violation", "label": invariant, "before": before.to_string(), "after": after.to_string(),
         }),
+        ApplyError::AccountExists { account } => {
+            json!({"kind": "account_exists", "account": account})
+        }
+        ApplyError::OpeningShared { role } => json!({"kind": "opening_shared", "role": role}),
+        ApplyError::ClosedNotEmpty { account, remaining } => {
+            json!({"kind": "closed_not_empty", "account": account, "remaining": balances(remaining)})
+        }
     }
 }
 
@@ -260,6 +269,12 @@ fn build(case: &Case) -> (World, Proposal) {
     for (left, right) in &case.rule.distinct {
         rule = rule.distinct(*left, *right);
     }
+    for role in &case.rule.opens {
+        rule = rule.opens(*role);
+    }
+    for role in &case.rule.closes {
+        rule = rule.closes(*role);
+    }
     let mut builder = EconomyBuilder::new().rate(RuleId(7), rule);
     for (id, entries) in &case.accounts {
         builder = builder.account(*id, Account::new(basket(entries)));
@@ -286,7 +301,10 @@ fn build_proposal(case: &ProposalCase) -> Proposal {
 }
 
 fn receipt(value: &Receipt<RuleId, Role, Holder, Asset>) -> Value {
-    json!({"proposal": proposal(value.exchange()), "deltas": deltas(value.deltas())})
+    json!({
+        "proposal": proposal(value.exchange()), "deltas": deltas(value.deltas()),
+        "opened": value.opened(), "closed": value.closed(),
+    })
 }
 
 #[test]
@@ -374,9 +392,9 @@ fn complete_transactions_match_lean() {
                     case.label
                 );
                 assert_eq!(receipt.exchange(), &action);
-                let actual = json!({"proposal": proposal(receipt.exchange()), "deltas": deltas(receipt.deltas())});
                 assert_eq!(
-                    actual, case.expected["receipt"],
+                    super::transactions::receipt(&receipt),
+                    case.expected["receipt"],
                     "case {index}: {}",
                     case.label
                 );

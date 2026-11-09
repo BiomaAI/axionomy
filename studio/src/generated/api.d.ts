@@ -202,7 +202,7 @@ export interface components {
             balances: components["schemas"]["AssetQuantityView"][];
         };
         /** @enum {string} */
-        AssessmentIssueKindView: "missing_rate" | "missing_binding" | "unknown_binding" | "roles_must_differ" | "missing_account" | "zero_units" | "missing_parameter" | "unknown_parameter" | "rate_overflow" | "rate_law_evaluation" | "rate_condition_failed" | "infeasible" | "balance_overflow" | "invariant_violation";
+        AssessmentIssueKindView: "missing_rate" | "missing_binding" | "unknown_binding" | "roles_must_differ" | "missing_account" | "zero_units" | "missing_parameter" | "unknown_parameter" | "rate_overflow" | "rate_law_evaluation" | "rate_condition_failed" | "infeasible" | "balance_overflow" | "invariant_violation" | "account_exists" | "opening_shared" | "closed_not_empty";
         /**
          * @description One structured reason why a proposal is invalid.
          *

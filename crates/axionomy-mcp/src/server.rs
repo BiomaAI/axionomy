@@ -10,7 +10,7 @@ use crate::{
     resources::{self, Address, IMMUTABLE_TTL_MS, LIST_TTL_MS, Target},
     store::{MemorySnapshotStore, Origin, Snapshot, SnapshotStore, secret_key},
 };
-use axionomy::{AssessmentStatus, paths};
+use axionomy::{AccountPath, AssessmentStatus, paths};
 use axionomy_search::{
     BfsSession, GraphSearchProgress,
     session::{Continue, SearchStatus, WorkBudget},
@@ -57,13 +57,15 @@ const INSTRUCTIONS: &str = "Axionomy is an exact economic kernel: every state ch
 a rate applied between the accounts bound to its roles. Accounts, assets, rates and roles are \
 identified by paths: lowercase segments of a-z, 0-9 and '-', separated by '/', such as \
 'loans/42' or 'agents/7/wallet'. Create an economy with axionomy_economy_create and grow it with \
-axionomy_economy_extend, at most 10,000 entries per call. Every call that changes something \
-returns a new economy_id and leaves the old snapshot as it was. Check an exchange with \
-axionomy_exchange_assess, then apply it with axionomy_exchange_apply or apply several with \
-axionomy_trace_replay. Read what a snapshot holds through axionomy:// resources: tool results \
-link to them, paths appear in their URIs as is (an account's balances are \
-.../accounts/agents/7/wallet), every list is paged with a cursor, and a page never changes. \
-Snapshots last until the server restarts.";
+axionomy_economy_extend, at most 10,000 entries per call. A rate may open accounts, for spawned \
+actors, new positions or new firms: the exchange names the new account's path, which must not \
+exist. A rate may also close accounts, once its own effects have left them empty, and a closed \
+path may be opened again. Every call that changes something returns a new economy_id and leaves \
+the old snapshot as it was. Check an exchange with axionomy_exchange_assess, then apply it with \
+axionomy_exchange_apply or apply several with axionomy_trace_replay. Read what a snapshot holds \
+through axionomy:// resources: tool results link to them, paths appear in their URIs as is (an \
+account's balances are .../accounts/agents/7/wallet), every list is paged with a cursor, and a \
+page never changes. Snapshots last until the server restarts.";
 
 pub(crate) type Registry<K, T> = Arc<RwLock<HashMap<K, Arc<T>>>>;
 
@@ -717,6 +719,8 @@ struct StoredExchanges {
     deduplicated: bool,
     exchanges: usize,
     changes: usize,
+    opened: Vec<AccountPath>,
+    closed: Vec<AccountPath>,
 }
 
 impl StoredExchanges {
@@ -729,6 +733,8 @@ impl StoredExchanges {
                 deduplicated: self.deduplicated,
                 exchanges: self.exchanges,
                 changes: self.changes,
+                opened: self.opened,
+                closed: self.closed,
             },
             links,
         )
@@ -746,6 +752,16 @@ async fn store_exchanged<S: SnapshotStore>(
 ) -> Result<StoredExchanges, ToolError> {
     let operation = operation_bytes("exchanges", &exchanges)?;
     let changes = receipt_lines(&receipts).count();
+    let opened = receipts
+        .iter()
+        .flat_map(|receipt| receipt.opened())
+        .cloned()
+        .collect();
+    let closed = receipts
+        .iter()
+        .flat_map(|receipt| receipt.closed())
+        .cloned()
+        .collect();
     let stored = snapshots
         .put(
             &operation,
@@ -762,6 +778,8 @@ async fn store_exchanged<S: SnapshotStore>(
         deduplicated: stored.deduplicated,
         exchanges: exchanges.len(),
         changes,
+        opened,
+        closed,
     })
 }
 

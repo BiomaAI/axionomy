@@ -17,7 +17,7 @@ pub use basket::{Basket, BasketError};
 pub use economy::{
     AccountAssessment, AccountShortfall, ApplyError, ApplyResult, AssessmentStatus, EconomicView,
     Economy, EconomyBuilder, ExchangeAssessment, Goal, ModelBuildError, ModelBuildResult,
-    ModelIssue, ObservationKey, ReplayResult, StateFingerprint,
+    ModelIssue, ObservationKey, ReplayResult, StateFingerprint, StateKey,
 };
 pub use exchange::{AccountDelta, Exchange, Receipt, Trace};
 pub use path::{AccountPath, AssetPath, PathError, PathKind, RatePath, RolePath};

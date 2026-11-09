@@ -11,7 +11,7 @@ pub mod sampling;
 pub mod session;
 pub mod tree;
 
-use axionomy::{Economy, Exchange, Goal, Quantity, Trace};
+use axionomy::{Economy, Exchange, Goal, StateKey, Trace};
 use pathfinding::prelude::{astar as pathfinding_astar, dijkstra as pathfinding_dijkstra};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -74,7 +74,7 @@ pub struct BfsSession<AccountId, A, RateId, Role, Candidates> {
     candidates: Candidates,
     states: Vec<BfsState<AccountId, A, RateId, Role>>,
     frontier: VecDeque<usize>,
-    visited: HashSet<Vec<(AccountId, A, Quantity)>>,
+    visited: HashSet<StateKey<AccountId, A>>,
     expanded: usize,
     generated: usize,
     solution: Option<SearchSolution<RateId, Role, AccountId>>,
@@ -97,7 +97,7 @@ pub struct AStarSession<AccountId, A, RateId, Role, Candidates, StepCost, Heuris
     heuristic: Heuristic,
     states: Vec<AStarState<AccountId, A, RateId, Role>>,
     frontier: BinaryHeap<QueueEntry>,
-    best: HashMap<Vec<(AccountId, A, Quantity)>, u64>,
+    best: HashMap<StateKey<AccountId, A>, u64>,
     expanded: usize,
     generated: usize,
     sequence: u64,
@@ -566,7 +566,7 @@ where
 #[derive(Clone)]
 struct EconomicNode<AccountId, A, RateId, Role> {
     world: Economy<AccountId, A, RateId, Role>,
-    key: Vec<(AccountId, A, Quantity)>,
+    key: StateKey<AccountId, A>,
     incoming: Option<Exchange<RateId, Role, AccountId>>,
 }
 

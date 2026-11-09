@@ -74,6 +74,24 @@ pub struct Economy<AccountId, A, RateId, Role> {
     invariants: Arc<Vec<LinearInvariant<A>>>,
 }
 
+/// The logical state of an economy's accounts, independent of creation order:
+/// which accounts exist and their nonzero balances.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct StateKey<AccountId, A> {
+    accounts: Vec<AccountId>,
+    balances: Vec<(AccountId, A, Quantity)>,
+}
+
+impl<AccountId, A> StateKey<AccountId, A> {
+    pub fn accounts(&self) -> &[AccountId] {
+        &self.accounts
+    }
+
+    pub fn balances(&self) -> &[(AccountId, A, Quantity)] {
+        &self.balances
+    }
+}
+
 /// Compact logical-state identity for in-process search and transpositions.
 ///
 /// The fingerprint is deterministic for a fixed ontology implementation and
@@ -292,7 +310,7 @@ pub struct EconomyBuilder<AccountId, A, RateId, Role> {
 
 impl<AccountId, A, RateId, Role> EconomyBuilder<AccountId, A, RateId, Role>
 where
-    AccountId: Eq + Hash,
+    AccountId: Clone + Eq + Hash,
     RateId: Eq + Hash,
 {
     pub fn new() -> Self {
@@ -348,7 +366,7 @@ where
 
 impl<AccountId, A, RateId, Role> Default for EconomyBuilder<AccountId, A, RateId, Role>
 where
-    AccountId: Eq + Hash,
+    AccountId: Clone + Eq + Hash,
     RateId: Eq + Hash,
 {
     fn default() -> Self {
@@ -411,7 +429,7 @@ struct EconomyData<AccountId, A, RateId, Role> {
 
 impl<'de, AccountId, A, RateId, Role> Deserialize<'de> for Economy<AccountId, A, RateId, Role>
 where
-    AccountId: Deserialize<'de> + Eq + Hash,
+    AccountId: Deserialize<'de> + Clone + Eq + Hash,
     A: Deserialize<'de> + Clone + Eq + Hash,
     RateId: Deserialize<'de> + Eq + Hash,
     Role: Deserialize<'de> + Clone + Ord,
@@ -551,18 +569,22 @@ where
         }
     }
 
-    /// Canonical nonzero balances, ignoring account and asset insertion order.
-    /// Empty and absent accounts have the same key; compare keys within the
-    /// same account domain when account existence matters.
-    pub fn state_key(&self) -> Vec<(AccountId, A, Quantity)> {
-        let mut key = Vec::new();
+    /// Which accounts exist and every nonzero balance, ignoring the order
+    /// accounts and assets were created in. Accounts open and close, so an
+    /// empty account and an absent one have different keys: only the first can
+    /// be bound by an exchange.
+    pub fn state_key(&self) -> StateKey<AccountId, A> {
+        let mut accounts = Vec::new();
+        let mut balances = Vec::new();
         for (account_id, holder) in self.accounts.iter() {
+            accounts.push(account_id.clone());
             for (asset, value) in holder.balances().iter() {
-                key.push((account_id.clone(), asset.clone(), *value));
+                balances.push((account_id.clone(), asset.clone(), *value));
             }
         }
-        key.sort();
-        key
+        accounts.sort();
+        balances.sort();
+        StateKey { accounts, balances }
     }
 
     fn observation_key_for(&self, visible: &BTreeSet<AccountId>) -> ObservationKey<AccountId, A> {
@@ -599,7 +621,7 @@ where
         &self,
         proposal: &Exchange<RateId, Role, AccountId>,
     ) -> ExchangeAssessment<AccountId, A, RateId, Role> {
-        self.analyze(proposal).assessment
+        self.analyze(proposal).analysis.assessment
     }
 
     /// Returns whether one exchange is applicable to the current snapshot.
@@ -624,21 +646,33 @@ where
         &mut self,
         proposal: Exchange<RateId, Role, AccountId>,
     ) -> ApplyResult<AccountId, A, RateId, Role> {
-        let Analysis {
-            assessment,
-            prepared_accounts,
+        let Lifecycle {
+            analysis:
+                Analysis {
+                    assessment,
+                    prepared_accounts,
+                },
+            extended,
+            opened,
+            closed,
         } = self.analyze(&proposal);
 
         match assessment {
             ExchangeAssessment::Applicable {
                 projected_deltas, ..
             } => {
+                if let Some(extended) = extended {
+                    *self = extended;
+                }
                 for (account_id, holder) in
                     prepared_accounts.expect("applicable assessments have prepared accounts")
                 {
                     self.accounts.replace(&account_id, holder);
                 }
-                Ok(Receipt::new(proposal, projected_deltas))
+                for account in &closed {
+                    self.accounts.close(account);
+                }
+                Ok(Receipt::new(proposal, projected_deltas, opened, closed))
             }
             ExchangeAssessment::Infeasible { shortfalls, .. } => {
                 Err(ApplyError::Infeasible { shortfalls })
@@ -971,7 +1005,95 @@ where
         })
     }
 
+    /// The exchange analyzed with its accounts' lifecycle: an opened account
+    /// must be absent and bound by no other role, and exists, empty, before the
+    /// effects; a closed account must be left empty by them.
     fn analyze(
+        &self,
+        proposal: &Exchange<RateId, Role, AccountId>,
+    ) -> Lifecycle<Self, AccountId, A, RateId, Role> {
+        let unchanged = |analysis| Lifecycle {
+            analysis,
+            extended: None,
+            opened: Vec::new(),
+            closed: Vec::new(),
+        };
+        let Some(rule) = self.rates.get(proposal.rate()) else {
+            return unchanged(self.analyze_transition(proposal));
+        };
+        let bindings = proposal.bindings();
+        let opening: Vec<_> = rule
+            .opened_roles()
+            .filter_map(|role| {
+                let account = bindings.get(role)?;
+                if self.accounts.contains(account) {
+                    Some(ApplyError::AccountExists {
+                        account: account.clone(),
+                    })
+                } else if bindings
+                    .iter()
+                    .any(|(other, bound)| other != role && bound == account)
+                {
+                    Some(ApplyError::OpeningShared { role: role.clone() })
+                } else {
+                    None
+                }
+            })
+            .collect();
+        if !opening.is_empty() {
+            return unchanged(invalid_analysis(opening));
+        }
+        let bound = |roles: &mut dyn Iterator<Item = &Role>| -> Vec<AccountId> {
+            roles
+                .filter_map(|role| bindings.get(role).cloned())
+                .collect()
+        };
+        let opened = bound(&mut rule.opened_roles());
+        let closed = bound(&mut rule.closed_roles());
+        let extended = (!opened.is_empty()).then(|| {
+            let mut extended = self.clone();
+            for account in &opened {
+                extended.accounts.open(account.clone(), Arc::default());
+            }
+            extended
+        });
+        let economy = extended.as_ref().unwrap_or(self);
+        let mut analysis = economy.analyze_transition(proposal);
+        let closing: Vec<_> = match (&analysis.assessment, &analysis.prepared_accounts) {
+            (ExchangeAssessment::Applicable { .. }, Some(prepared)) => closed
+                .iter()
+                .filter_map(|account| {
+                    let remaining = prepared
+                        .iter()
+                        .find(|(id, _)| id == account)
+                        .map(|(_, holder)| holder.balances())
+                        .or_else(|| {
+                            economy
+                                .accounts
+                                .get(account)
+                                .map(|holder| holder.balances())
+                        })?;
+                    (!remaining.is_empty()).then(|| ApplyError::ClosedNotEmpty {
+                        account: account.clone(),
+                        remaining: remaining.clone(),
+                    })
+                })
+                .collect(),
+            _ => Vec::new(),
+        };
+        if !closing.is_empty() {
+            analysis = invalid_analysis(closing);
+        }
+        Lifecycle {
+            analysis,
+            extended,
+            opened,
+            closed,
+        }
+    }
+
+    /// The exchange analyzed against this economy's accounts as they are.
+    fn analyze_transition(
         &self,
         proposal: &Exchange<RateId, Role, AccountId>,
     ) -> Analysis<AccountId, A, RateId, Role> {
@@ -1144,6 +1266,15 @@ pub enum ApplyError<RateId, Role, AccountId, A> {
         before: Box<Measure>,
         after: Box<Measure>,
     },
+    #[error("an account the exchange opens already exists")]
+    AccountExists { account: AccountId },
+    #[error("another role binds the account an opening role creates")]
+    OpeningShared { role: Role },
+    #[error("the exchange leaves assets in an account it closes")]
+    ClosedNotEmpty {
+        account: AccountId,
+        remaining: Basket<A>,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -1209,6 +1340,15 @@ impl<A: Clone + Eq + Hash> Effect<A> {
 struct Analysis<AccountId, A, RateId, Role> {
     assessment: ExchangeAssessment<AccountId, A, RateId, Role>,
     prepared_accounts: Option<PreparedAccounts<AccountId, A>>,
+}
+
+/// An analysis together with what the exchange does to the set of accounts.
+struct Lifecycle<E, AccountId, A, RateId, Role> {
+    analysis: Analysis<AccountId, A, RateId, Role>,
+    /// The economy with the exchange's opened accounts added, when it opens any.
+    extended: Option<E>,
+    opened: Vec<AccountId>,
+    closed: Vec<AccountId>,
 }
 
 pub(crate) fn merge_scaled<A>(

@@ -63,7 +63,12 @@ impl RateEntries {
             .flat_map(BTreeMap::values)
             .map(BTreeMap::len)
             .sum::<usize>();
-        1 + amounts + self.distinct.len() + self.computed.len() + self.conditions.len()
+        1 + amounts
+            + self.distinct.len()
+            + self.computed.len()
+            + self.conditions.len()
+            + self.opens.len()
+            + self.closes.len()
     }
 }
 
@@ -208,6 +213,12 @@ fn extend_rate(
                 rate.preserve_computed(computed.role, computed.asset, computed.quantity)
             }
         };
+    }
+    for role in added.opens {
+        rate = rate.opens(role);
+    }
+    for role in added.closes {
+        rate = rate.closes(role);
     }
     for condition in added.conditions {
         rate = rate.condition(

@@ -55,7 +55,10 @@ whether an exchange is valid.
 
 Quantities are decimal strings, exact up to `2²⁵⁶ − 1`. A rate may also list
 `preserve` amounts, `computed` amounts evaluated from balances and parameters,
-and `conditions`. Extending adds: a new ID adds an account, rate or invariant,
+`conditions`, and the roles whose account it `opens` or `closes`. An exchange
+names each account it opens, which must not exist, and may close an account
+only once its own effects leave it empty; results list the accounts opened and
+closed, and a closed path may be opened again. Extending adds: a new ID adds an account, rate or invariant,
 and an existing one gains balances, amounts or weights. An entry that would
 replace something already present is a `conflict`, so an economy too large for
 one call is built by chaining calls, each of which stores a valid snapshot.

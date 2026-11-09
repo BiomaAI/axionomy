@@ -261,6 +261,8 @@ pub struct Rate<Role, A> {
     computed_produce: Vec<ComputedAmount<Role, A>>,
     computed_preserve: Vec<ComputedAmount<Role, A>>,
     conditions: Vec<RateCondition<Role, A>>,
+    opens: BTreeSet<Role>,
+    closes: BTreeSet<Role>,
 }
 
 impl<Role, A> Rate<Role, A>
@@ -279,7 +281,26 @@ where
             computed_produce: Vec::new(),
             computed_preserve: Vec::new(),
             conditions: Vec::new(),
+            opens: BTreeSet::new(),
+            closes: BTreeSet::new(),
         }
+    }
+
+    /// Creates the account bound to `role`, empty, before the exchange's
+    /// effects. The proposal names it; it must not exist, and no other role
+    /// may bind it.
+    pub fn opens(mut self, role: Role) -> Self {
+        self.roles.insert(role.clone());
+        self.opens.insert(role);
+        self
+    }
+
+    /// Removes the account bound to `role` after the exchange's effects, which
+    /// must leave it empty, so closing never destroys anything.
+    pub fn closes(mut self, role: Role) -> Self {
+        self.roles.insert(role.clone());
+        self.closes.insert(role);
+        self
     }
 
     /// Consumes `basket` per unit from the account bound to `role`.
@@ -451,6 +472,16 @@ where
         &self.conditions
     }
 
+    /// Roles whose bound account the exchange opens, in role order.
+    pub fn opened_roles(&self) -> impl Iterator<Item = &Role> {
+        self.opens.iter()
+    }
+
+    /// Roles whose bound account the exchange closes, in role order.
+    pub fn closed_roles(&self) -> impl Iterator<Item = &Role> {
+        self.closes.iter()
+    }
+
     fn computed(&self) -> impl Iterator<Item = &ComputedAmount<Role, A>> {
         self.computed_consume
             .iter()
@@ -525,7 +556,7 @@ where
     A: Serialize,
 {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        let mut state = serializer.serialize_struct("Rate", 8)?;
+        let mut state = serializer.serialize_struct("Rate", 10)?;
         state.serialize_field("consume", &self.consume.iter().collect::<Vec<_>>())?;
         state.serialize_field("produce", &self.produce.iter().collect::<Vec<_>>())?;
         state.serialize_field("preserve", &self.preserve.iter().collect::<Vec<_>>())?;
@@ -534,6 +565,16 @@ where
         state.serialize_field("computed_produce", &self.computed_produce)?;
         state.serialize_field("computed_preserve", &self.computed_preserve)?;
         state.serialize_field("conditions", &self.conditions)?;
+        if self.opens.is_empty() {
+            state.skip_field("opens")?;
+        } else {
+            state.serialize_field("opens", &self.opens)?;
+        }
+        if self.closes.is_empty() {
+            state.skip_field("closes")?;
+        } else {
+            state.serialize_field("closes", &self.closes)?;
+        }
         state.end()
     }
 }
@@ -553,6 +594,10 @@ struct RateData<Role, A> {
     computed_preserve: Vec<ComputedAmount<Role, A>>,
     #[serde(default)]
     conditions: Vec<RateCondition<Role, A>>,
+    #[serde(default)]
+    opens: Vec<Role>,
+    #[serde(default)]
+    closes: Vec<Role>,
 }
 
 impl<'de, Role, A> Deserialize<'de> for Rate<Role, A>
@@ -595,6 +640,12 @@ where
                 condition.comparison,
                 condition.right,
             );
+        }
+        for role in data.opens {
+            rate = rate.opens(role);
+        }
+        for role in data.closes {
+            rate = rate.closes(role);
         }
         Ok(rate)
     }

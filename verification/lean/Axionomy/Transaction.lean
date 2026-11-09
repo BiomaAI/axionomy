@@ -33,6 +33,10 @@ structure Rule (Role A : Type) where
   computedProduce : List (Computed Role A)
   computedPreserve : List (Computed Role A)
   conditions : List (Condition Role A)
+  /-- Roles whose bound account the exchange creates, empty, before its effects. -/
+  opens : List Role := []
+  /-- Roles whose bound account the exchange removes; its effects must leave it empty. -/
+  closes : List Role := []
 
 def Rule.parameters {Role A : Type} (rule : Rule Role A) : List String :=
   Discovery.registerAll compare
@@ -81,6 +85,12 @@ inductive Failure (AccountId A RateId Role : Type) where
   | balanceOverflow (account : AccountId) (asset : A)
   | invariantOverflow (label : String)
   | invariantViolation (label : String) (before after : Int)
+  /-- An account the exchange would open already exists. -/
+  | accountExists (account : AccountId)
+  /-- Another role binds the account an opening role creates. -/
+  | openingShared (role : Role)
+  /-- The exchange's effects leave something in an account it closes. -/
+  | closedNotEmpty (account : AccountId) (remaining : Balances A)
 
 -- A violated internal lookup precondition is distinguished from a handled
 -- application error. Implementation proofs must rule it out for valid models.

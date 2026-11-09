@@ -122,14 +122,37 @@ impl<AccountId, A> AccountDelta<AccountId, A> {
 pub struct Receipt<RateId, Role, AccountId, A> {
     exchange: Exchange<RateId, Role, AccountId>,
     deltas: Vec<AccountDelta<AccountId, A>>,
+    /// Accounts the exchange created, in role order.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    opened: Vec<AccountId>,
+    /// Accounts the exchange removed, in role order.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    closed: Vec<AccountId>,
 }
 
 impl<RateId, Role, AccountId, A> Receipt<RateId, Role, AccountId, A> {
     pub(crate) fn new(
         exchange: Exchange<RateId, Role, AccountId>,
         deltas: Vec<AccountDelta<AccountId, A>>,
+        opened: Vec<AccountId>,
+        closed: Vec<AccountId>,
     ) -> Self {
-        Self { exchange, deltas }
+        Self {
+            exchange,
+            deltas,
+            opened,
+            closed,
+        }
+    }
+
+    /// Accounts the exchange created, in role order.
+    pub fn opened(&self) -> &[AccountId] {
+        &self.opened
+    }
+
+    /// Accounts the exchange removed, in role order.
+    pub fn closed(&self) -> &[AccountId] {
+        &self.closed
     }
 
     pub fn exchange(&self) -> &Exchange<RateId, Role, AccountId> {

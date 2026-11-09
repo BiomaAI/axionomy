@@ -32,6 +32,7 @@ implementation itself is tested, not proved.
 | Holdings | `Basket`, `BasketOperations`, `BasketCollection`, `Account`, `AccountMap`, `State` | Construction rejects duplicates before dropping zeros; deposits and withdrawals are exact and fail without mutation |
 | Rates and expressions | `Rates`, `Evaluation`, `RateConstruction`, `Discovery`, `ModelConstruction` | Expressions evaluate against one pre-exchange snapshot; the first error wins; metadata discovery is complete |
 | Exchanges | `Exchange`, `Effects`, `OrderedEffects`, `Transaction`, `TransactionAggregation`, `TransactionPreparation`, `TransactionSafety`, `TransactionReceipts`, `TransactionExecution`, `Validation`, `InvariantInput` | Validation precedes effects; every account is prepared before any commits; a failed exchange changes nothing; receipts describe the actual balance change |
+| Account lifecycle | `Lifecycle` | Opened accounts are new and closed accounts are left empty by the exchange's own effects; a rejected exchange changes nothing; every receipt conserves every invariant; the accounts afterwards are exactly those before plus the opened less the closed |
 | Conservation | `Conservation` | Declared linear invariants are preserved exactly by accepted exchanges |
 | History | `Execution`, `Replay`, `Observations`, `Inspection` | Ordered execution and replay compose deterministically; read-only queries cannot mutate |
 

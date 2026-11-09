@@ -175,6 +175,11 @@ represent negative values. Signed values exist only as derived invariant
 measurements, never as account balances. Missing entries have quantity zero,
 and zero entries are canonicalized away.
 
+Which accounts exist is part of the state too. An exchange may open accounts,
+for spawned actors, new positions or firms entering a market, and close them;
+an empty account and an absent one are different states, because only the
+first can be bound.
+
 The complete problem definition is:
 
 ```text
@@ -244,14 +249,21 @@ behavior. Rates can prohibit aliases with `distinct`.
 
 Application has a prepare-and-commit boundary:
 
-1. Validate units, rate ID, bindings, distinctness, and account existence.
-2. Scale and merge all effects with checked arithmetic.
-3. Check complete consume-plus-preserve requirements.
-4. Apply withdrawals and deposits to cloned accounts.
-5. Check each declared linear invariant using weighted consumed/produced deltas;
+1. Check the accounts the rate opens: each is named by the proposal, must not
+   exist, and may be bound by no other role. They then exist, empty, for the
+   remaining steps.
+2. Validate units, rate ID, bindings, distinctness, and account existence.
+3. Scale and merge all effects with checked arithmetic.
+4. Check complete consume-plus-preserve requirements.
+5. Apply withdrawals and deposits to cloned accounts.
+6. Check each declared linear invariant using weighted consumed/produced deltas;
    measure full before/after states when reporting a conservation violation.
-6. Commit all cloned accounts together.
-7. Return a receipt containing the bound exchange and every account delta.
+7. Check that the accounts the rate closes are left empty, so closing never
+   destroys anything.
+8. Commit all cloned accounts together, add the opened accounts and remove
+   the closed ones.
+9. Return a receipt containing the bound exchange, every account delta, and
+   the accounts opened and closed.
 
 Any error leaves the stored economy unchanged.
 
@@ -1258,6 +1270,13 @@ examples, but they are not promised as reusable domain APIs.
 - Signed invariant measurement is associated with the selected quantity
   backend.
 - Missing balances behave as zero.
+- Exchanges open and close accounts. An opened account is named by the
+  proposal and must be new; a closed account must be left empty by the
+  exchange's own effects; a closed identifier may be opened again. The Lean
+  specification proves that a rejected exchange changes nothing, that every
+  receipt conserves every invariant, that the accounts afterwards are exactly
+  those before plus the opened less the closed, and that an applicable
+  exchange leaves its closed accounts empty.
 - Stable maps preserve declared iteration order, while semantic state keys and
   fingerprints are independent of construction order.
 - Core model, proposal, receipt, trace, and goal types serialize directly
@@ -1912,6 +1931,17 @@ the model generates. Proofs cover semantics, not plumbing: accessors, derived
 traits and iterators are ordinary tested Rust. Implementation refinement through
 extraction was removed because its cost, in proof upkeep, CI time and code
 shaped for the extractor, exceeded what it caught.
+
+### D-039: Exchanges open and close accounts the proposal names
+
+Spawned actors, opened positions and firms entering a market are new
+accounts, so an exchange may create them and remove them. The proposal names
+each new account, because the kernel cannot and should not invent identifiers
+in a user's ontology; a kernel-allocated counter would also make equal
+balances reached by different paths different states. Closing requires the
+exchange's own effects to leave the account empty, so value never disappears
+implicitly, and a closed identifier may return. Account existence is therefore
+part of the state, including in state keys.
 
 ## 16. Success criteria
 
