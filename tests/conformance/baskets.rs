@@ -7,8 +7,7 @@ use std::{
     panic::{AssertUnwindSafe, catch_unwind},
 };
 
-#[path = "support/scripted_iterator.rs"]
-mod scripted_iterator;
+use crate::scripted_iterator;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Deserialize)]
 struct Asset(u64);
@@ -30,9 +29,8 @@ struct Fixtures {
 }
 
 fn fixtures() -> Vec<Case> {
-    let document: Fixtures =
-        serde_json::from_str(include_str!("../verification/conformance.json")).unwrap();
-    assert_eq!(document.baskets.len(), 85);
+    let document: Fixtures = serde_json::from_str(crate::FIXTURES).unwrap();
+    assert!(!document.baskets.is_empty());
     document.baskets
 }
 

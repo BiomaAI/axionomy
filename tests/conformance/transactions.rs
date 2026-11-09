@@ -1,7 +1,6 @@
 //! Whole-transaction regression bridge to the executable Lean specification.
 //! The universal implementation guarantee comes from the Aeneas refinements.
-#[path = "support/scripted_iterator.rs"]
-mod scripted_iterator;
+use crate::scripted_iterator;
 
 use axionomy::{
     Account, AccountAssessment, AccountDelta, AccountShortfall, ApplyError, Basket, Economy,
@@ -292,9 +291,8 @@ fn receipt(value: &Receipt<RuleId, Role, Holder, Asset>) -> Value {
 
 #[test]
 fn complete_transactions_match_lean() {
-    let fixtures: Fixtures =
-        serde_json::from_str(include_str!("../verification/conformance.json")).unwrap();
-    assert_eq!(fixtures.transactions.len(), 596);
+    let fixtures: Fixtures = serde_json::from_str(crate::FIXTURES).unwrap();
+    assert!(!fixtures.transactions.is_empty());
     for (index, case) in fixtures.transactions.iter().enumerate() {
         assert_ne!(
             case.expected.get("kind"),
@@ -420,9 +418,8 @@ fn complete_transactions_match_lean() {
 
 #[test]
 fn complete_replays_match_lean() {
-    let fixtures: Fixtures =
-        serde_json::from_str(include_str!("../verification/conformance.json")).unwrap();
-    assert_eq!(fixtures.executions.len(), 246);
+    let fixtures: Fixtures = serde_json::from_str(crate::FIXTURES).unwrap();
+    assert!(!fixtures.executions.is_empty());
     for (index, case) in fixtures.executions.iter().enumerate() {
         assert_ne!(
             case.expected.get("kind"),

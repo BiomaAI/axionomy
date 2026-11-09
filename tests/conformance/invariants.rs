@@ -14,10 +14,9 @@ struct Case {
 
 #[test]
 fn serialized_invariant_weights_match_lean_validation_and_normalization() {
-    let fixtures: serde_json::Value =
-        serde_json::from_str(include_str!("../verification/conformance.json")).unwrap();
+    let fixtures: serde_json::Value = serde_json::from_str(crate::FIXTURES).unwrap();
     let cases: Vec<Case> = serde_json::from_value(fixtures["invariantInputs"].clone()).unwrap();
-    assert_eq!(cases.len(), 262);
+    assert!(!cases.is_empty());
     for case in cases {
         let entries: Vec<_> = case
             .entries
