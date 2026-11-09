@@ -448,15 +448,32 @@ impl StudioLabel for sokoban::RateId {
                 to,
                 crate_id,
             } => format!(
-                "Push crate {} from cell {crate_at} to cell {to} (stand at {behind})",
+                "Push crate {} from cell {crate_at} to cell {to}, standing at cell {behind}",
                 crate_id + 1
             ),
-            Self::Finish { assignment } => format!(
-                "Finish with {} stable crates on their assigned goals",
-                assignment.len()
-            ),
+            Self::Finish { assignment } => {
+                let placed = assignment
+                    .iter()
+                    .map(|(crate_id, goal)| format!("crate {} on cell {goal}", crate_id + 1))
+                    .collect::<Vec<_>>();
+                match placed.split_last() {
+                    Some((last, [])) => format!("Finish with {last}"),
+                    Some((last, rest)) => format!("Finish with {} and {last}", rest.join(", ")),
+                    None => "Finish".into(),
+                }
+            }
         }
     }
 }
 
-debug_labels!(sokoban::Role);
+impl StudioLabel for sokoban::Role {
+    fn studio_label(&self) -> String {
+        match self {
+            Self::From => "Player's cell".into(),
+            Self::Middle => "Crate's cell".into(),
+            Self::To => "Destination cell".into(),
+            Self::Puzzle => "Puzzle".into(),
+            Self::Goal(crate_id) => format!("Goal for crate {}", crate_id + 1),
+        }
+    }
+}

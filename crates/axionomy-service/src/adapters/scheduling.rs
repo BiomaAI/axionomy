@@ -217,10 +217,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
     let lanes = [Machine::One, Machine::Two, Machine::Three]
         .into_iter()
         .map(|machine| TimelineLaneView {
-            id: ViewId::new(
-                slug(format!("machine/{machine:?}")),
-                format!("Machine {machine:?}"),
-            ),
+            id: ViewId::new(slug(format!("machine/{machine:?}")), machine_name(machine)),
             classes: Vec::new(),
         })
         .collect();
@@ -250,7 +247,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                     lane: slug(format!("machine/{machine:?}")),
                     start: u64::from(*start),
                     end: u64::from(*end + 1),
-                    label: format!("{operation:?}"),
+                    label: operation_name(operation),
                     classes: vec![slug(format!(
                         "job-{:?}",
                         if matches!(
@@ -287,7 +284,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
     let pending_entities = pending.clone().map(|operation| {
         visual_entity(
             slug(format!("pending/{operation:?}")),
-            format!("{operation:?}"),
+            operation_name(operation),
             SceneGlyphView::Task,
             SceneAnchorView::Unanchored,
             SceneEntityRoleView::Attachment,
@@ -305,17 +302,12 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         )
         .with_entities(pending_entities)
         .with_metrics([
-            visual_metric(
-                slug("pending"),
-                "Pending operations",
-                pending_count,
-                Some("tasks"),
-            ),
+            visual_metric(slug("pending"), "Pending operations", pending_count, None),
             visual_metric(
                 slug("scheduled"),
                 "Scheduled operations",
                 operations.len() - pending_count,
-                Some("tasks"),
+                None,
             ),
             visual_metric(
                 slug("makespan"),
@@ -334,10 +326,7 @@ fn execution_scene(world: &World) -> Scene {
     let lanes = MACHINES
         .into_iter()
         .map(|machine| TimelineLaneView {
-            id: ViewId::new(
-                slug(format!("machine/{machine:?}")),
-                format!("Machine {machine:?}"),
-            ),
+            id: ViewId::new(slug(format!("machine/{machine:?}")), machine_name(machine)),
             classes: if value(AccountId::Machine(machine), Asset::Broken) > 0 {
                 vec![slug("blocked")]
             } else {
@@ -405,7 +394,8 @@ fn execution_scene(world: &World) -> Scene {
                 start,
                 end,
                 label: format!(
-                    "{operation:?}{}",
+                    "{}{}",
+                    operation_name(operation),
                     if interrupted { " · interrupted" } else { "" }
                 ),
                 classes: vec![
@@ -421,7 +411,7 @@ fn execution_scene(world: &World) -> Scene {
         entities.push(link_account::<scheduling::Ontology>(
             visual_entity(
                 slug(format!("operation/{operation:?}")),
-                format!("{operation:?}"),
+                operation_name(operation),
                 SceneGlyphView::Task,
                 queued.or(running).or(paused).or(executed).map_or(
                     SceneAnchorView::Unanchored,
@@ -459,66 +449,99 @@ fn execution_scene(world: &World) -> Scene {
     );
     timeline.entities.clear();
     timeline.with_entities(entities).with_metrics([
-        visual_metric(slug("world-time"), "World time", now, Some("ticks")),
-        visual_metric(
+        asset_metric(slug("world-time"), "World time", &Asset::Now, now),
+        asset_metric(
             slug("labor"),
             "Available crew",
+            &Asset::Labor,
             value(AccountId::Success, Asset::Labor),
-            None,
         ),
-        visual_metric(
+        asset_metric(
             slug("busy-labor"),
             "Occupied crew",
+            &Asset::BusyLabor,
             value(AccountId::Success, Asset::BusyLabor),
-            None,
         ),
         visual_metric(slug("machine-two"), "Machine Two", condition, None),
-        visual_metric(
+        asset_metric(
             slug("repair-kits"),
             "Repair kits left",
+            &Asset::RepairKit,
             value(AccountId::Success, Asset::RepairKit),
-            None,
         ),
-        visual_metric(
+        asset_metric(
             slug("one-done"),
             "Job One completion",
+            &Asset::CompletionTime,
             scheduling::completion_time(world, Job::One),
-            Some("ticks"),
         ),
-        visual_metric(
+        asset_metric(
             slug("two-done"),
             "Job Two completion",
+            &Asset::CompletionTime,
             scheduling::completion_time(world, Job::Two),
-            Some("ticks"),
         ),
     ])
 }
 
 // How Studio names and writes this problem's values.
 
-counted!(scheduling::Asset);
-
-fn job(job: scheduling::Job) -> &'static str {
-    match job {
-        scheduling::Job::One => "Job One",
-        scheduling::Job::Two => "Job Two",
+impl StudioFormat for scheduling::Asset {
+    fn studio_format(&self) -> QuantityFormat {
+        match self {
+            Self::Arrival
+            | Self::Due
+            | Self::WorkRemaining
+            | Self::CompletionTime
+            | Self::Now
+            | Self::TimeRemaining
+            | Self::FaultAt
+            | Self::RepairDuration
+            | Self::StartTime(_)
+            | Self::EndTime(_) => QuantityFormat::COUNT.unit("ticks"),
+            _ => QuantityFormat::COUNT,
+        }
     }
 }
 
-fn machine(machine: scheduling::Machine) -> &'static str {
+fn job_name(job: Job) -> &'static str {
+    match job {
+        Job::One => "Job One",
+        Job::Two => "Job Two",
+    }
+}
+
+fn job_of(operation: Operation) -> Job {
+    match operation {
+        Operation::OneA | Operation::OneB | Operation::OneC => Job::One,
+        Operation::TwoA | Operation::TwoB | Operation::TwoC => Job::Two,
+    }
+}
+
+/// An operation as its job's step: `Job One step A`.
+fn operation_name(operation: Operation) -> String {
+    let step = match operation {
+        Operation::OneA | Operation::TwoA => "A",
+        Operation::OneB | Operation::TwoB => "B",
+        Operation::OneC | Operation::TwoC => "C",
+    };
+    format!("{} step {step}", job_name(job_of(operation)))
+}
+
+fn machine_name(machine: Machine) -> &'static str {
     match machine {
-        scheduling::Machine::One => "Machine One",
-        scheduling::Machine::Two => "Machine Two",
-        scheduling::Machine::Three => "Machine Three",
+        Machine::One => "Machine One",
+        Machine::Two => "Machine Two",
+        Machine::Three => "Machine Three",
     }
 }
 
 impl StudioLabel for scheduling::AccountId {
     fn studio_label(&self) -> String {
-        match self {
-            Self::Job(value) => job(*value).into(),
-            Self::Slot(value, slot) => format!("{} at slot {slot}", machine(*value)),
-            Self::Machine(value) => machine(*value).into(),
+        match *self {
+            Self::Job(value) => job_name(value).into(),
+            Self::Slot(value, slot) => format!("{} at slot {slot}", machine_name(value)),
+            Self::Machine(value) => machine_name(value).into(),
             Self::Success => "Schedule".into(),
         }
     }
@@ -526,29 +549,39 @@ impl StudioLabel for scheduling::AccountId {
 
 impl StudioLabel for scheduling::Asset {
     fn studio_label(&self) -> String {
-        match self {
-            Self::JobIdentity(value) => format!("This is {}", job(*value)),
-            Self::SlotIdentity(value, slot) => format!("{} slot {slot}", machine(*value)),
-            Self::ReadyAt(operation, slot) => format!("{operation:?} ready at {slot}"),
-            Self::CompletedAt(operation, slot) => format!("{operation:?} completed at {slot}"),
+        match *self {
+            Self::JobIdentity(value) => format!("This is {}", job_name(value)),
+            Self::SlotIdentity(value, slot) => {
+                format!("This is {} at slot {slot}", machine_name(value))
+            }
+            Self::ReadyAt(op, slot) => format!("{} ready at slot {slot}", operation_name(op)),
+            Self::CompletedAt(op, slot) => {
+                format!("{} completed at slot {slot}", operation_name(op))
+            }
             Self::Available => "Machine slot available".into(),
-            Self::Reserved(operation) => format!("Reserved for {operation:?}"),
+            Self::Reserved(op) => format!("Reserved for {}", operation_name(op)),
             Self::Makespan(slot) => format!("Overall finish at slot {slot}"),
             Self::Active => "Schedule in progress".into(),
             Self::Solved => "Schedule complete".into(),
-            Self::MachineIdentity(value) => format!("Identity: {}", machine(*value)),
-            Self::Ready(op) => format!("{op:?} ready for routing"),
-            Self::Queued(op, value) => format!("{op:?} queued on {}", machine(*value)),
-            Self::Running(op, value) => format!("{op:?} running on {}", machine(*value)),
-            Self::Paused(op, value) => format!("{op:?} paused on {}", machine(*value)),
+            Self::MachineIdentity(value) => format!("This is {}", machine_name(value)),
+            Self::Ready(op) => format!("{} ready for routing", operation_name(op)),
+            Self::Queued(op, value) => {
+                format!("{} queued on {}", operation_name(op), machine_name(value))
+            }
+            Self::Running(op, value) => {
+                format!("{} running on {}", operation_name(op), machine_name(value))
+            }
+            Self::Paused(op, value) => {
+                format!("{} paused on {}", operation_name(op), machine_name(value))
+            }
             Self::QueueFree => "Queue space".into(),
-            Self::QueueTicket(op) => format!("Queue reservation for {op:?}"),
+            Self::QueueTicket(op) => format!("Queue reservation for {}", operation_name(op)),
             Self::Idle => "Machine idle".into(),
             Self::Busy => "Machine occupied".into(),
             Self::Online => "Machine online".into(),
             Self::Broken => "Machine broken".into(),
             Self::Repairing => "Repair underway".into(),
-            Self::Configured(value) => format!("Configured for {}", job(*value)),
+            Self::Configured(value) => format!("Set up for {}", job_name(value)),
             Self::Labor => "Available crew".into(),
             Self::BusyLabor => "Occupied crew".into(),
             Self::RepairKit => "Repair kit".into(),
@@ -564,60 +597,98 @@ impl StudioLabel for scheduling::Asset {
             Self::FaultPending => "Disruption pending".into(),
             Self::FaultOccurred => "Disruption occurred".into(),
             Self::RepairDuration => "Repair duration".into(),
-            Self::NotStarted(op) => format!("{op:?} has not started"),
-            Self::Started(op) => format!("{op:?} execution started"),
-            Self::StartTime(op) => format!("{op:?} actual start"),
-            Self::EndTime(op) => format!("{op:?} actual completion"),
-            Self::ExecutedOn(op, value) => format!("{op:?} uses {}", machine(*value)),
-            Self::Interrupted(op) => format!("{op:?} was interrupted"),
+            Self::NotStarted(op) => format!("{} has not started", operation_name(op)),
+            Self::Started(op) => format!("{} started", operation_name(op)),
+            Self::StartTime(op) => format!("{} start time", operation_name(op)),
+            Self::EndTime(op) => format!("{} completion time", operation_name(op)),
+            Self::ExecutedOn(op, value) => {
+                format!("{} uses {}", operation_name(op), machine_name(value))
+            }
+            Self::Interrupted(op) => format!("{} was interrupted", operation_name(op)),
         }
     }
 }
 
 impl StudioLabel for scheduling::RateId {
     fn studio_label(&self) -> String {
-        match self {
+        match *self {
             Self::Schedule {
-                operation,
+                operation: op,
                 ready,
                 start,
-            } => format!("Run {operation:?} from slot {start} (ready at {ready})"),
+            } => format!(
+                "Run {} from slot {start}, ready at slot {ready}",
+                operation_name(op)
+            ),
             Self::Finish {
                 job_one_end,
                 job_two_end,
                 makespan,
             } => format!(
-                "Finish schedule (Job One {job_one_end}, Job Two {job_two_end}, makespan {makespan})"
+                "Finish with Job One done at slot {job_one_end}, Job Two at slot {job_two_end}, \
+                 makespan {makespan}"
             ),
             Self::Queue {
-                operation,
+                operation: op,
                 machine: value,
-            } => format!("Queue {operation:?} on {}", machine(*value)),
+            } => format!("Queue {} on {}", operation_name(op), machine_name(value)),
             Self::CancelQueue {
-                operation,
+                operation: op,
                 machine: value,
-            } => format!("Release {operation:?}'s queue on {}", machine(*value)),
+            } => format!(
+                "Withdraw {} from the {} queue",
+                operation_name(op),
+                machine_name(value)
+            ),
             Self::Start {
-                operation,
+                operation: op,
                 machine: value,
                 configured,
-            } => format!(
-                "Start {operation:?} on {} (configured for {})",
-                machine(*value),
-                job(*configured)
-            ),
-            Self::Complete { operation, .. } => format!("Complete {operation:?}"),
-            Self::Resume { operation, .. } => format!("Resume interrupted {operation:?}"),
-            Self::Fault { operation } => format!(
-                "Machine Two fails{}",
-                operation.map_or(String::new(), |op| format!(" during {op:?}"))
-            ),
+            } => {
+                if configured == job_of(op) {
+                    format!(
+                        "Start {} on {}, already set up",
+                        operation_name(op),
+                        machine_name(value)
+                    )
+                } else {
+                    format!(
+                        "Start {} on {}, switching setup from {}",
+                        operation_name(op),
+                        machine_name(value),
+                        job_name(configured)
+                    )
+                }
+            }
+            Self::Complete {
+                operation: op,
+                machine: value,
+            } => format!("Complete {} on {}", operation_name(op), machine_name(value)),
+            Self::Resume {
+                operation: op,
+                machine: value,
+            } => format!("Resume {} on {}", operation_name(op), machine_name(value)),
+            Self::Fault { operation: op } => match op {
+                Some(op) => format!("Machine Two fails during {}", operation_name(op)),
+                None => "Machine Two fails".into(),
+            },
             Self::Repair => "Begin Machine Two repair".into(),
             Self::CompleteRepair => "Complete Machine Two repair".into(),
-            Self::Advance { to } => format!("Advance workday to {to}"),
+            Self::Advance { to } => format!("Advance the workday to tick {to}"),
             Self::Close => "Close the completed workday".into(),
         }
     }
 }
 
-debug_labels!(scheduling::Role);
+impl StudioLabel for scheduling::Role {
+    fn studio_label(&self) -> String {
+        match self {
+            Self::PrimaryJob => "Job".into(),
+            Self::SecondaryJob => "Second job".into(),
+            Self::Slot0 => "First time slot".into(),
+            Self::Slot1 => "Second time slot".into(),
+            Self::Schedule => "Schedule".into(),
+            Self::Machine => "Machine".into(),
+        }
+    }
+}

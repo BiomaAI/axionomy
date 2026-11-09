@@ -785,8 +785,8 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             &Asset::At(node),
         );
         entity.metrics = vec![
-            visual_metric(slug("energy"), "Energy", energy, Some("units")),
-            visual_metric(slug("time"), "Time", time, Some("ticks")),
+            asset_metric(slug("energy"), "Energy", &Asset::Energy, energy),
+            asset_metric(slug("time"), "Time", &Asset::Time, time),
         ];
         entity
     });
@@ -869,17 +869,17 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
     )
     .with_entities(agent.into_iter().chain(key).chain([gate]))
     .with_metrics([
-        visual_metric(
+        asset_metric(
             slug("energy-left"),
             "Explorer energy",
+            &Asset::Energy,
             world.balance(&AccountId::Agent, &Asset::Energy),
-            Some("units"),
         ),
-        visual_metric(
+        asset_metric(
             slug("time-left"),
             "Time remaining",
+            &Asset::Time,
             world.balance(&AccountId::Agent, &Asset::Time),
-            Some("ticks"),
         ),
         visual_metric(
             slug("key-state"),
@@ -909,23 +909,23 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 },
                 None,
             ),
-            visual_metric(
+            asset_metric(
                 slug("injury"),
                 "Injury delay per action",
+                &Asset::Injury,
                 world.balance(&AccountId::Agent, &Asset::Injury),
-                Some("ticks"),
             ),
-            visual_metric(
+            asset_metric(
                 slug("shield"),
                 "Protection remaining",
+                &Asset::Shield,
                 world.balance(&AccountId::Agent, &Asset::Shield),
-                Some("charges"),
             ),
-            visual_metric(
+            asset_metric(
                 slug("health"),
                 "Health",
+                &Asset::Health,
                 world.balance(&AccountId::Agent, &Asset::Health),
-                None,
             ),
         ]);
         for (key, label, at, glyph, state) in [
@@ -1121,7 +1121,18 @@ fn decorate_scene_paths(
 
 // How Studio names and writes this problem's values.
 
-counted!(maze::Asset);
+impl StudioFormat for maze::Asset {
+    fn studio_format(&self) -> QuantityFormat {
+        match self {
+            Self::Energy | Self::SpentEnergy | Self::Distance(_) => {
+                QuantityFormat::COUNT.unit("units")
+            }
+            Self::Time | Self::SpentTime | Self::Injury => QuantityFormat::COUNT.unit("ticks"),
+            Self::Shield | Self::UsedShield => QuantityFormat::COUNT.unit("charges"),
+            _ => QuantityFormat::COUNT,
+        }
+    }
+}
 
 fn maze_node(node: maze::Node) -> String {
     words(&node)
@@ -1136,7 +1147,7 @@ impl StudioLabel for maze::Node {
 impl StudioLabel for maze::AccountId {
     fn studio_label(&self) -> String {
         match self {
-            Self::Agent => "Agent".into(),
+            Self::Agent => "Explorer".into(),
             Self::World => "Vault District".into(),
         }
     }
@@ -1148,8 +1159,8 @@ impl StudioLabel for maze::Asset {
             Self::PowerTransit => "Power routed to the canal crossing".into(),
             Self::PowerVault => "Power routed to the vault shutter".into(),
             Self::Health => "Health reserve".into(),
-            Self::Injury => "Injuries slowing each action".into(),
-            Self::Shield => "Protective equipment charges".into(),
+            Self::Injury => "Injury delay per action".into(),
+            Self::Shield => "Protective equipment".into(),
             Self::UsedShield => "Spent protection".into(),
             Self::Medicine => "Available medicine".into(),
             Self::UsedMedicine => "Medicine used".into(),

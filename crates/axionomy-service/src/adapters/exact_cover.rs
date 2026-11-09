@@ -107,7 +107,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
     let rows = sets
         .iter()
         .copied()
-        .map(|set| ViewId::new(slug(format!("set/{set:?}")), format!("{set:?}")))
+        .map(|set| ViewId::new(slug(format!("set/{set:?}")), subset(set)))
         .collect();
     let columns = elements
         .iter()
@@ -164,7 +164,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             ),
             visual_metric(
                 slug("selected"),
-                "Sets selected",
+                "Subsets selected",
                 sets.iter()
                     .filter(|set| {
                         !world
@@ -201,6 +201,11 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
 
 counted!(exact_cover::Asset);
 
+/// A subset named by its elements, as the matrix and proposals write it: `AB`.
+fn subset(set: SetId) -> String {
+    format!("{set:?}").to_ascii_uppercase()
+}
+
 impl StudioLabel for exact_cover::AccountId {
     fn studio_label(&self) -> String {
         "Exact-cover problem".into()
@@ -212,8 +217,8 @@ impl StudioLabel for exact_cover::Asset {
         match self {
             Self::Uncovered(element) => format!("Element {element:?} is uncovered"),
             Self::Covered(element) => format!("Element {element:?} is covered"),
-            Self::Available(set) => format!("Subset {set:?} is available"),
-            Self::Selected(set) => format!("Subset {set:?} selected"),
+            Self::Available(set) => format!("Subset {} is available", subset(*set)),
+            Self::Selected(set) => format!("Subset {} selected", subset(*set)),
             Self::Progress(count) => format!("{count} elements covered"),
             Self::Active => "Cover in progress".into(),
             Self::Solved => "Exact cover found".into(),
@@ -224,9 +229,10 @@ impl StudioLabel for exact_cover::Asset {
 impl StudioLabel for exact_cover::RateId {
     fn studio_label(&self) -> String {
         match self {
-            Self::Select { set, before } => {
-                format!("Select subset {set:?} after covering {before} elements")
-            }
+            Self::Select { set, before } => format!(
+                "Select subset {} after covering {before} elements",
+                subset(*set)
+            ),
             Self::Finish => "Accept the exact cover".into(),
         }
     }

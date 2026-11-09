@@ -310,12 +310,15 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 } else {
                     SceneToneView::Active
                 },
-                Some(format!("{quantity} available")),
+                Some(format!(
+                    "{} available",
+                    asset.studio_format().write(quantity)
+                )),
             ),
             &AccountId::Workshop,
             &asset,
         );
-        entity.metrics = vec![visual_metric(slug(key), label, quantity, Some("units"))];
+        entity.metrics = vec![asset_metric(slug(key), label, &asset, quantity)];
         Some(entity)
     });
     let contracts = world.accounts().filter_map(|(id, _)| {
@@ -364,39 +367,39 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             id,
             &Asset::CustomerIdentity(*order),
         );
-        entity.metrics = vec![visual_metric(
+        entity.metrics = vec![asset_metric(
             slug("escrow"),
             "Customer funds",
+            &Asset::Credit,
             world.balance(id, &Asset::Credit),
-            Some("credit"),
         )];
         Some(entity)
     });
     let metrics = if world.account(&AccountId::Customer(0)).is_some() {
         vec![
-            visual_metric(
+            asset_metric(
                 slug("completed"),
                 "Contracts delivered",
+                &Asset::Completed,
                 world.balance(&AccountId::Workshop, &Asset::Completed),
-                None,
             ),
-            visual_metric(
+            asset_metric(
                 slug("revenue"),
                 "Revenue",
+                &Asset::Credit,
                 world.balance(&AccountId::Workshop, &Asset::Credit),
-                Some("credit"),
             ),
-            visual_metric(
+            asset_metric(
                 slug("durability"),
                 "Tool durability",
+                &Asset::Durability,
                 world.balance(&AccountId::Workshop, &Asset::Durability),
-                None,
             ),
-            visual_metric(
+            asset_metric(
                 slug("repairs"),
                 "Repair kits remaining",
+                &Asset::RepairKit,
                 world.balance(&AccountId::Workshop, &Asset::RepairKit),
-                None,
             ),
             visual_metric(
                 slug("upgrade"),
@@ -414,12 +417,17 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         ]
     } else {
         vec![
-            visual_metric(slug("waste"), "Waste", workshop::waste(world), None),
-            visual_metric(
+            asset_metric(
+                slug("waste"),
+                "Waste",
+                &Asset::Waste,
+                workshop::waste(world),
+            ),
+            asset_metric(
                 slug("time"),
                 "Process time",
+                &Asset::SpentTime,
                 workshop::spent_time(world),
-                Some("ticks"),
             ),
         ]
     };
@@ -437,7 +445,18 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
 
 // How Studio names and writes this problem's values.
 
-counted!(workshop::Asset);
+impl StudioFormat for workshop::Asset {
+    fn studio_format(&self) -> QuantityFormat {
+        match self {
+            Self::Wood | Self::Panel | Self::Waste | Self::Labor | Self::SpentLabor => {
+                QuantityFormat::COUNT.unit("units")
+            }
+            Self::Time | Self::SpentTime => QuantityFormat::COUNT.unit("ticks"),
+            Self::Credit => QuantityFormat::COUNT.unit("credits"),
+            _ => QuantityFormat::COUNT,
+        }
+    }
+}
 
 impl StudioLabel for workshop::AccountId {
     fn studio_label(&self) -> String {
@@ -494,14 +513,14 @@ impl StudioLabel for workshop::RateId {
                 precise,
                 upgraded,
             } => format!(
-                "Prepare components for contract {} ({})",
+                "Prepare components for contract {} with {}",
                 order + 1,
                 if *upgraded {
-                    "upgraded tool"
+                    "the upgraded tool"
                 } else if *precise {
-                    "precision cut"
+                    "a precision cut"
                 } else {
-                    "fast cut"
+                    "a fast cut"
                 }
             ),
             Self::Assemble(id) => format!("Assemble contract {}", id + 1),
@@ -509,8 +528,8 @@ impl StudioLabel for workshop::RateId {
             Self::Repair => "Restore worn tool with a repair kit".into(),
             Self::Upgrade => "Install the precision tool upgrade".into(),
             Self::Recycle => "Recover wood from two offcuts".into(),
-            Self::BasicChair => "Build one chair (fast, more scrap)".into(),
-            Self::EfficientBatch => "Build two chairs (slower, less scrap)".into(),
+            Self::BasicChair => "Build one chair, fast but with more scrap".into(),
+            Self::EfficientBatch => "Build two chairs, slower but with less scrap".into(),
             Self::CounterfeitChair => "Counterfeit chair proposal".into(),
             Self::Finish => "Complete the order".into(),
         }
