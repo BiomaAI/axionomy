@@ -20,7 +20,9 @@ pub const PLATFORM_COMMISSION: u64 = 5;
 pub const SHIPPING_FEE: u64 = 5;
 pub const SECOND_GROSS_PAYMENT: u64 = 90;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
 pub enum OrderId {
     A,
     B,
@@ -48,33 +50,43 @@ enum MarketSize {
     Stress,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
 pub enum Item {
     Widget,
     Gadget,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
 pub enum BuyerId {
     A,
     B,
     C,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
 pub enum SellerId {
     A,
     B,
     C,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
 pub enum CarrierId {
     A,
     B,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
 pub enum AccountId {
     Buyer(BuyerId),
     Seller(SellerId),
@@ -84,7 +96,9 @@ pub enum AccountId {
     Order(OrderId),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
 pub enum Asset {
     Money,
     Item(Item),
@@ -125,7 +139,9 @@ pub enum Asset {
     Refunded,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
 pub enum Role {
     Buyer,
     Seller,
@@ -135,7 +151,9 @@ pub enum Role {
     Order,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
 pub enum RateId {
     SettleOrder(OrderId),
     DiscountedContract(OrderId),
@@ -155,6 +173,18 @@ pub enum RateId {
 }
 
 pub type World = Economy<AccountId, Asset, RateId, Role>;
+
+/// The identifier types of [`World`], named `marketplace` where economies are
+/// stored.
+pub enum Ontology {}
+
+impl axionomy::Ontology for Ontology {
+    const NAME: &'static str = "marketplace";
+    type Account = AccountId;
+    type Asset = Asset;
+    type Rate = RateId;
+    type Role = Role;
+}
 pub type Action = Exchange<RateId, Role, AccountId>;
 pub type Assessment = ExchangeAssessment<AccountId, Asset, RateId, Role>;
 pub type ParetoResult = ParetoSearchResult<RateId, Role, AccountId, ObjectiveKey, u64>;

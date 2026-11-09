@@ -23,7 +23,9 @@ pub const HEIGHT: u8 = 4;
 pub const STANDARD_WIDTH: u8 = 7;
 pub const STANDARD_HEIGHT: u8 = 6;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
 pub enum Player {
     Red,
     Yellow,
@@ -45,7 +47,9 @@ impl Player {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
 pub enum Line {
     Row(u8),
     Column(u8),
@@ -67,7 +71,9 @@ pub const LINES: [Line; 10] = [
     Line::AntiDiagonal,
 ];
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
 pub enum AccountId {
     Game,
     Column(u8),
@@ -75,7 +81,9 @@ pub enum AccountId {
     Result,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
 pub enum Asset {
     GameIdentity,
     ColumnIdentity(u8),
@@ -95,7 +103,9 @@ pub enum Asset {
     SegmentPieces(Player, u8),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
 pub enum Role {
     Game,
     Column,
@@ -114,7 +124,9 @@ pub enum Role {
     Winning3,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
 pub struct LineCounts {
     row: u8,
     column: u8,
@@ -161,7 +173,9 @@ impl LineCounts {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
 pub enum RateId {
     Move {
         player: Player,
@@ -184,6 +198,18 @@ pub enum RateId {
 }
 
 pub type World = Economy<AccountId, Asset, RateId, Role>;
+
+/// The identifier types of [`World`], named `connect-four` where economies are
+/// stored.
+pub enum Ontology {}
+
+impl axionomy::Ontology for Ontology {
+    const NAME: &'static str = "connect-four";
+    type Account = AccountId;
+    type Asset = Asset;
+    type Rate = RateId;
+    type Role = Role;
+}
 pub type Action = Exchange<RateId, Role, AccountId>;
 pub type Decision = MctsDecision<Action>;
 pub type DecisionError = TreeSearchError<RateId, Role, AccountId, Asset>;

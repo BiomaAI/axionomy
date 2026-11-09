@@ -20,26 +20,34 @@ pub const DEFAULT_WAREHOUSE_CLAIMS: u64 = 7_000;
 pub const DEFAULT_FRIDGE_CLAIMS: u64 = 3_000;
 pub const DEFAULT_TRANSFER: u64 = 1_000;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
 pub enum Location {
     Warehouse,
     Fridge,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
 pub enum Cohort {
     Ambient,
     Refrigerated,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
 pub enum Exposure {
     Ambient,
     Cold,
     WarmedAfterOutage,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
 pub enum Moment {
     Harvest,
     AmbientExpiry,
@@ -47,14 +55,18 @@ pub enum Moment {
     ColdExpiry,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
 pub enum AccountId {
     World,
     Storage(Location),
     Cohort(Cohort),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
 pub enum Asset {
     WorldIdentity,
     LocationIdentity(Location),
@@ -78,7 +90,9 @@ pub enum Asset {
     PlanSolved,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
 pub enum Role {
     World,
     Holder,
@@ -90,7 +104,9 @@ pub enum Role {
     DestinationCohort,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
 pub enum RateId {
     MoveToFridge,
     Advance { from: Moment, to: Moment },
@@ -102,6 +118,18 @@ pub enum RateId {
 }
 
 pub type World = Economy<AccountId, Asset, RateId, Role>;
+
+/// The identifier types of [`World`], named `perishables` where economies are
+/// stored.
+pub enum Ontology {}
+
+impl axionomy::Ontology for Ontology {
+    const NAME: &'static str = "perishables";
+    type Account = AccountId;
+    type Asset = Asset;
+    type Rate = RateId;
+    type Role = Role;
+}
 pub type Action = Exchange<RateId, Role, AccountId>;
 pub type EventTrace = Trace<RateId, Role, AccountId>;
 pub type EventReceipt = Receipt<RateId, Role, AccountId, Asset>;

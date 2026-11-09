@@ -7,7 +7,9 @@ use axionomy::{
 use axionomy_search::{SearchSolution, bfs};
 use std::collections::BTreeSet;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
 pub enum Element {
     A,
     B,
@@ -23,7 +25,9 @@ pub enum Element {
     L,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
 pub enum SetId {
     Ab,
     Cd,
@@ -66,12 +70,16 @@ pub enum SetId {
     Al,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
 pub enum AccountId {
     Problem,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
 pub enum Asset {
     Uncovered(Element),
     Covered(Element),
@@ -82,18 +90,34 @@ pub enum Asset {
     Solved,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
 pub enum Role {
     Problem,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
 pub enum RateId {
     Select { set: SetId, before: u8 },
     Finish,
 }
 
 pub type World = Economy<AccountId, Asset, RateId, Role>;
+
+/// The identifier types of [`World`], named `exact-cover` where economies are
+/// stored.
+pub enum Ontology {}
+
+impl axionomy::Ontology for Ontology {
+    const NAME: &'static str = "exact-cover";
+    type Account = AccountId;
+    type Asset = Asset;
+    type Rate = RateId;
+    type Role = Role;
+}
 pub type Action = Exchange<RateId, Role, AccountId>;
 pub type Solution = SearchSolution<RateId, Role, AccountId>;
 pub type Proposal = Trace<RateId, Role, AccountId>;

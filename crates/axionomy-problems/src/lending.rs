@@ -34,7 +34,9 @@ pub const fn basis_points(value: u64) -> u64 {
     WAD / 10_000 * value
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
 pub enum AccountId {
     Market,
     Clock,
@@ -46,7 +48,9 @@ pub enum AccountId {
     Customer,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
 pub enum Asset {
     /// The settlement asset.
     Cash,
@@ -107,7 +111,9 @@ pub enum Asset {
     PriceDrop,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
 pub enum Role {
     Market,
     Depositor,
@@ -119,7 +125,9 @@ pub enum Role {
     Customer,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
 pub enum RateId {
     /// Pay cash, receive ⌊cash · supply ÷ assets⌋ shares.
     Deposit,
@@ -150,6 +158,18 @@ pub enum RateId {
 }
 
 pub type World = Economy<AccountId, Asset, RateId, Role>;
+
+/// The identifier types of [`World`], named `lending` where economies are
+/// stored.
+pub enum Ontology {}
+
+impl axionomy::Ontology for Ontology {
+    const NAME: &'static str = "lending";
+    type Account = AccountId;
+    type Asset = Asset;
+    type Rate = RateId;
+    type Role = Role;
+}
 pub type Action = Exchange<RateId, Role, AccountId>;
 pub type LoanTrace = Trace<RateId, Role, AccountId>;
 pub type LoanError = Box<ApplyError<RateId, Role, AccountId, Asset>>;

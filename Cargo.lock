@@ -474,8 +474,10 @@ version = "0.1.0"
 dependencies = [
  "axionomy",
  "axionomy-search",
+ "axionomy-store",
  "criterion",
  "proptest",
+ "serde",
  "tracing",
  "tracing-subscriber",
 ]

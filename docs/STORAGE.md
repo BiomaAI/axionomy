@@ -354,8 +354,12 @@ survive the members they summarize.
   authentication; watch and actor views follow with phase 4.
 - **Studio server**: runs and artifacts move into the store, and scrubbing
   renders frames from stored roots instead of loading whole artifacts.
+- **Problems** (done): every canonical problem's `World` has an `Ontology`,
+  and its runs are stored and read back unchanged.
 - **Search and RL**: kept rollouts, sessions and RL episodes record as runs with
-  checkpoint rules; Monte Carlo and MPPI record groups.
+  checkpoint rules; Monte Carlo and MPPI record groups. A problem's rollouts
+  already record this way through the store's own API, as
+  `axionomy-problems/tests/storage.rs` does for logistics.
 
 ## Phases
 
@@ -378,8 +382,9 @@ Each phase is a validated commit or series of commits.
 4. **Recording and debugging:** typed ontologies in the store (done: every
    identifier is stored as its JSON, and a run is read back only as the
    ontology that recorded it); replay-buffer transitions by root, bisection
-   and the time index it gives (done); runs, checkpoint rules and groups in
-   search, rollouts, Monte Carlo, MPPI and RL; watch and actor views; Studio
+   and the time index it gives; every canonical problem recordable, with
+   rollouts recorded as runs in a Monte Carlo group (done); recording from
+   inside search sessions, MPPI and RL; watch and actor views; Studio
    scrubbing from the store.
 5. **Distributed training:** per-worker stores, merge tooling and retention
    policies.

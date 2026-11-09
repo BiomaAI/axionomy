@@ -18,7 +18,9 @@ pub const FEE_DENOMINATOR: u64 = 1_000;
 pub const FEE_NUMERATOR: u64 = 997;
 pub const MAX_LP_SHARES: u64 = 1_000_000;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
 pub enum Actor {
     Founder,
     Generator,
@@ -54,7 +56,9 @@ pub const PRICE_ACTORS: [Actor; 7] = [
     Actor::Whale,
 ];
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
 pub enum AccountId {
     Pool,
     Treasury,
@@ -63,7 +67,9 @@ pub enum AccountId {
     World,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
 pub enum Asset {
     ActorIdentity(Actor),
     PoolIdentity,
@@ -116,7 +122,9 @@ pub enum Asset {
     Utility,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
 pub enum Role {
     Pool,
     Trader,
@@ -130,7 +138,9 @@ pub enum Role {
     Participant(Actor),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
 pub enum RateId {
     EndTrading(Actor),
     AdvanceDay(u8),
@@ -158,6 +168,18 @@ pub enum Scenario {
 }
 
 pub type World = Economy<AccountId, Asset, RateId, Role>;
+
+/// The identifier types of [`World`], named `amm` where economies are
+/// stored.
+pub enum Ontology {}
+
+impl axionomy::Ontology for Ontology {
+    const NAME: &'static str = "amm";
+    type Account = AccountId;
+    type Asset = Asset;
+    type Rate = RateId;
+    type Role = Role;
+}
 pub type Action = Exchange<RateId, Role, AccountId>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

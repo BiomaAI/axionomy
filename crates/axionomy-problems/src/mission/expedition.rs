@@ -4,13 +4,17 @@ use axionomy::{
     QuantityComparison as C, QuantityExpression as Q, Rate, Trace, basket,
 };
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
+)]
 pub enum Agent {
     Scout,
     Medic,
 }
 pub const AGENTS: [Agent; 2] = [Agent::Scout, Agent::Medic];
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
+)]
 pub enum Location {
     Base,
     North,
@@ -33,14 +37,18 @@ pub const ROADS: [(Location, Location); 6] = [
     (Location::South, Location::West),
     (Location::West, Location::North),
 ];
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
+)]
 pub enum AccountId {
     World,
     Nature,
     Agent(Agent),
     Objective(u8),
 }
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
+)]
 pub enum Asset {
     WorldIdentity,
     NatureIdentity,
@@ -109,7 +117,9 @@ pub enum Asset {
     Supply,
     UsedSupply,
 }
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
+)]
 pub enum Role {
     World,
     Scout,
@@ -117,13 +127,17 @@ pub enum Role {
     Nature,
     Objective,
 }
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
+)]
 pub enum Phase {
     Hidden,
     Located,
     Carried,
 }
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
+)]
 pub enum RateId {
     Depart {
         agent: Agent,
@@ -196,6 +210,18 @@ pub enum Policy {
     NorthFirst,
 }
 pub type World = Economy<AccountId, Asset, RateId, Role>;
+
+/// The identifier types of [`World`], named `mission/expedition` where economies are
+/// stored.
+pub enum Ontology {}
+
+impl axionomy::Ontology for Ontology {
+    const NAME: &'static str = "mission/expedition";
+    type Account = AccountId;
+    type Asset = Asset;
+    type Rate = RateId;
+    type Role = Role;
+}
 pub type Action = Exchange<RateId, Role, AccountId>;
 pub type Proposal = Trace<RateId, Role, AccountId>;
 pub type AgentView<'a> = EconomicView<'a, AccountId, Asset, RateId, Role>;

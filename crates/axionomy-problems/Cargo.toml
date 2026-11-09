@@ -12,8 +12,10 @@ rust-version.workspace = true
 [dependencies]
 axionomy.workspace = true
 axionomy-search.workspace = true
+serde.workspace = true
 
 [dev-dependencies]
+axionomy-store.workspace = true
 criterion.workspace = true
 proptest.workspace = true
 tracing.workspace = true

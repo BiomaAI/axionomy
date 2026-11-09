@@ -24,7 +24,9 @@ const REFUEL_AMOUNT: u64 = 4;
 const REPAIR_TIME: u64 = 2;
 const ROLLOUT_HORIZON: usize = 120;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
 pub enum OrderId {
     A,
     B,
@@ -34,14 +36,18 @@ pub enum OrderId {
 
 pub const ORDERS: [OrderId; 4] = [OrderId::A, OrderId::B, OrderId::C, OrderId::D];
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
 pub enum Location {
     Depot,
     Junction,
     Customer,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
 pub enum Route {
     DirectOut,
     DirectBack,
@@ -60,7 +66,9 @@ pub const ROUTES: [Route; 6] = [
     Route::SafeBackSecond,
 ];
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
 pub enum TravelOutcome {
     Clear,
     Delayed,
@@ -73,7 +81,9 @@ pub const OUTCOMES: [TravelOutcome; 3] = [
     TravelOutcome::Breakdown,
 ];
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
 pub enum AccountId {
     Vehicle,
     Order(OrderId),
@@ -81,7 +91,9 @@ pub enum AccountId {
     FuelStation,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
 pub enum Asset {
     At(Location),
     Traveling(Route),
@@ -102,7 +114,9 @@ pub enum Asset {
     Outcome(Route, TravelOutcome),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
 pub enum Role {
     Vehicle,
     Order,
@@ -110,7 +124,9 @@ pub enum Role {
     FuelStation,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
 pub enum RateId {
     Load(OrderId),
     Depart(Route),
@@ -134,6 +150,18 @@ pub enum RiskCriterion {
 }
 
 pub type World = Economy<AccountId, Asset, RateId, Role>;
+
+/// The identifier types of [`World`], named `logistics` where economies are
+/// stored.
+pub enum Ontology {}
+
+impl axionomy::Ontology for Ontology {
+    const NAME: &'static str = "logistics";
+    type Account = AccountId;
+    type Asset = Asset;
+    type Rate = RateId;
+    type Role = Role;
+}
 pub type Action = Exchange<RateId, Role, AccountId>;
 pub type PlanningDecision = MctsDecision<Action>;
 pub type PlanningError = TreeSearchError<RateId, Role, AccountId, Asset>;

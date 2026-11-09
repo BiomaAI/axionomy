@@ -5,18 +5,24 @@ use axionomy::{
 };
 
 pub const BATCHES: [u8; 6] = [0, 1, 2, 3, 4, 5];
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
+)]
 pub enum Place {
     Warehouse,
     Fridge,
 }
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
+)]
 pub enum AccountId {
     World,
     Batch(u8),
     Buyer,
 }
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
+)]
 pub enum Asset {
     WorldIdentity,
     BatchIdentity(u8),
@@ -63,7 +69,9 @@ pub enum Asset {
     PendingAge(u8),
     Solved,
 }
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
+)]
 pub enum Role {
     World,
     Batch,
@@ -71,7 +79,9 @@ pub enum Role {
     Destination,
     Buyer,
 }
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
+)]
 pub enum RateId {
     Split {
         source: u8,
@@ -107,6 +117,18 @@ pub enum RateId {
     Close,
 }
 pub type World = Economy<AccountId, Asset, RateId, Role>;
+
+/// The identifier types of [`World`], named `perishables/cold-chain` where economies are
+/// stored.
+pub enum Ontology {}
+
+impl axionomy::Ontology for Ontology {
+    const NAME: &'static str = "perishables/cold-chain";
+    type Account = AccountId;
+    type Asset = Asset;
+    type Rate = RateId;
+    type Role = Role;
+}
 pub type Action = Exchange<RateId, Role, AccountId>;
 pub type Proposal = Trace<RateId, Role, AccountId>;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

@@ -20,6 +20,12 @@ approximate fronts. In both cases the objective values come from encoded
 outcomes; dominance is disposable comparison policy, never a parallel domain
 model.
 
+Every model's `World` has an `Ontology` naming its identifier types, such as
+`maze::Ontology` or `logistics::fleet::Ontology`, and every identifier
+serializes, so `axionomy-store` can record its runs: a training loop records
+each rollout as a run and a Monte Carlo estimate as a group of them
+(`tests/storage.rs`).
+
 Each model has a matching runnable example:
 
 ```console
