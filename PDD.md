@@ -1584,9 +1584,10 @@ factor.
    historical data becomes a real requirement.
 4. Build [storage, runs and replay](docs/STORAGE.md): a persistent
    content-addressed tree for economic state, with pointer-copy forks and
-   incremental fingerprints, durable runs on redb, recording modes cheap enough
-   for training loops, and tags, groups and metrics for evaluation, Monte
-   Carlo and MPPI. Each phase is gated by measurement. Extract generic
+   incremental fingerprints; durable runs on redb under explicit durability
+   rules cheap enough for training loops; and tags, groups and metrics for
+   evaluation, Monte Carlo and MPPI. Moving the kernel onto the tree is
+   decided by a benchmark. Extract generic
    holdings, dependency, and event indexes only after a second domain confirms
    the perishables shapes.
 5. Extend invariants with carefully constrained local and inequality forms.
