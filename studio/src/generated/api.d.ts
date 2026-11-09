@@ -201,13 +201,6 @@ export interface components {
             account: components["schemas"]["ViewId"];
             balances: components["schemas"]["AssetQuantityView"][];
         };
-        ArtifactDocumentPath: {
-            artifact_id: string;
-            document_id: string;
-        };
-        ArtifactPath: {
-            artifact_id: string;
-        };
         /** @enum {string} */
         AssessmentIssueKindView: "missing_rate" | "missing_binding" | "unknown_binding" | "roles_must_differ" | "missing_account" | "zero_units" | "missing_parameter" | "unknown_parameter" | "rate_overflow" | "rate_law_evaluation" | "rate_condition_failed" | "infeasible" | "balance_overflow" | "invariant_overflow" | "invariant_violation";
         /**
@@ -293,18 +286,6 @@ export interface components {
             from: number;
             /** Format: uint64 */
             total: number;
-        };
-        FrameQuery: {
-            /**
-             * Format: uint64
-             * @default 0
-             */
-            from: number;
-            /**
-             * Format: uint64
-             * @default 100
-             */
-            limit: number;
         };
         /** @enum {string} */
         FrontierCompletenessView: "exact" | "approximate";
@@ -555,9 +536,6 @@ export interface components {
             problem: components["schemas"]["ProblemDescriptor"];
             request: components["schemas"]["RunRequest"];
             selected_document_id: string;
-        };
-        RunPath: {
-            run_id: string;
         };
         RunRequest: {
             /**

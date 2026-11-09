@@ -667,7 +667,7 @@ python3 scripts/setup_aeneas.py
 python3 scripts/check_proofs.py
 ```
 
-Axionomy uses Rust Edition 2024 and supports Rust 1.89 or newer. It relies on
+Axionomy uses Rust Edition 2024 and supports Rust 1.99 or newer. It relies on
 mature ecosystem crates for ordered maps, serialization, exact numeric traits,
 typed units, civil time, randomness, statistics, pathfinding, errors, property
 testing, benchmarking, and structured example diagnostics while keeping

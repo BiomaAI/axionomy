@@ -8,7 +8,7 @@
 | Product | Axionomy Cargo workspace |
 | Version | `0.1.0` |
 | Rust edition | 2024 |
-| Minimum Rust | 1.89 |
+| Minimum Rust | 1.99 |
 | Last updated | 2026-11-06 |
 
 ## 1. Product thesis

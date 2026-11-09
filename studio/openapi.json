@@ -450,10 +450,10 @@
             "in": "query",
             "name": "from",
             "schema": {
-              "type": "integer",
-              "format": "uint64",
               "default": 0,
-              "minimum": 0
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
             },
             "style": "form"
           },
@@ -461,10 +461,10 @@
             "in": "query",
             "name": "limit",
             "schema": {
-              "type": "integer",
-              "format": "uint64",
               "default": 100,
-              "minimum": 0
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
             },
             "style": "form"
           }
@@ -497,40 +497,39 @@
   "components": {
     "schemas": {
       "AccountAssessmentView": {
-        "type": "object",
         "properties": {
           "account": {
             "$ref": "#/components/schemas/ViewId"
           },
           "available": {
-            "type": "array",
             "items": {
               "$ref": "#/components/schemas/AssetQuantityView"
-            }
+            },
+            "type": "array"
           },
           "consumed": {
-            "type": "array",
             "items": {
               "$ref": "#/components/schemas/AssetQuantityView"
-            }
+            },
+            "type": "array"
           },
           "preserved": {
-            "type": "array",
             "items": {
               "$ref": "#/components/schemas/AssetQuantityView"
-            }
+            },
+            "type": "array"
           },
           "produced": {
-            "type": "array",
             "items": {
               "$ref": "#/components/schemas/AssetQuantityView"
-            }
+            },
+            "type": "array"
           },
           "required": {
-            "type": "array",
             "items": {
               "$ref": "#/components/schemas/AssetQuantityView"
-            }
+            },
+            "type": "array"
           }
         },
         "required": [
@@ -540,31 +539,31 @@
           "consumed",
           "produced",
           "preserved"
-        ]
+        ],
+        "type": "object"
       },
       "AccountDeltaView": {
-        "type": "object",
         "properties": {
           "account": {
             "$ref": "#/components/schemas/ViewId"
           },
           "consumed": {
-            "type": "array",
             "items": {
               "$ref": "#/components/schemas/AssetQuantityView"
-            }
+            },
+            "type": "array"
           },
           "preserved": {
-            "type": "array",
             "items": {
               "$ref": "#/components/schemas/AssetQuantityView"
-            }
+            },
+            "type": "array"
           },
           "produced": {
-            "type": "array",
             "items": {
               "$ref": "#/components/schemas/AssetQuantityView"
-            }
+            },
+            "type": "array"
           }
         },
         "required": [
@@ -572,72 +571,46 @@
           "consumed",
           "produced",
           "preserved"
-        ]
+        ],
+        "type": "object"
       },
       "AccountShortfallView": {
-        "type": "object",
         "properties": {
           "account": {
             "$ref": "#/components/schemas/ViewId"
           },
           "missing": {
-            "type": "array",
             "items": {
               "$ref": "#/components/schemas/AssetQuantityView"
-            }
+            },
+            "type": "array"
           }
         },
         "required": [
           "account",
           "missing"
-        ]
+        ],
+        "type": "object"
       },
       "AccountView": {
-        "type": "object",
         "properties": {
           "account": {
             "$ref": "#/components/schemas/ViewId"
           },
           "balances": {
-            "type": "array",
             "items": {
               "$ref": "#/components/schemas/AssetQuantityView"
-            }
+            },
+            "type": "array"
           }
         },
         "required": [
           "account",
           "balances"
-        ]
-      },
-      "ArtifactDocumentPath": {
-        "type": "object",
-        "properties": {
-          "artifact_id": {
-            "type": "string"
-          },
-          "document_id": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "artifact_id",
-          "document_id"
-        ]
-      },
-      "ArtifactPath": {
-        "type": "object",
-        "properties": {
-          "artifact_id": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "artifact_id"
-        ]
+        ],
+        "type": "object"
       },
       "AssessmentIssueKindView": {
-        "type": "string",
         "enum": [
           "missing_rate",
           "missing_binding",
@@ -654,11 +627,11 @@
           "balance_overflow",
           "invariant_overflow",
           "invariant_violation"
-        ]
+        ],
+        "type": "string"
       },
       "AssessmentIssueView": {
         "description": "One structured reason why a proposal is invalid.\n\nSubjects retain the browser-facing identities of the roles, accounts,\nrates, and assets involved instead of flattening distinct failures into the\nsame generic error string.",
-        "type": "object",
         "properties": {
           "kind": {
             "$ref": "#/components/schemas/AssessmentIssueKindView"
@@ -667,52 +640,52 @@
             "type": "string"
           },
           "subjects": {
-            "type": "array",
             "items": {
               "$ref": "#/components/schemas/ViewId"
-            }
+            },
+            "type": "array"
           }
         },
         "required": [
           "kind",
           "message",
           "subjects"
-        ]
+        ],
+        "type": "object"
       },
       "AssessmentStatusView": {
-        "type": "string",
         "enum": [
           "applicable",
           "infeasible",
           "invalid"
-        ]
+        ],
+        "type": "string"
       },
       "AssessmentView": {
-        "type": "object",
         "properties": {
           "accounts": {
-            "type": "array",
             "items": {
               "$ref": "#/components/schemas/AccountAssessmentView"
-            }
+            },
+            "type": "array"
           },
           "issues": {
-            "type": "array",
             "items": {
               "$ref": "#/components/schemas/AssessmentIssueView"
-            }
+            },
+            "type": "array"
           },
           "projected_deltas": {
-            "type": "array",
             "items": {
               "$ref": "#/components/schemas/AccountDeltaView"
-            }
+            },
+            "type": "array"
           },
           "shortfalls": {
-            "type": "array",
             "items": {
               "$ref": "#/components/schemas/AccountShortfallView"
-            }
+            },
+            "type": "array"
           },
           "status": {
             "$ref": "#/components/schemas/AssessmentStatusView"
@@ -724,10 +697,10 @@
           "projected_deltas",
           "shortfalls",
           "issues"
-        ]
+        ],
+        "type": "object"
       },
       "AssetQuantityView": {
-        "type": "object",
         "properties": {
           "asset": {
             "$ref": "#/components/schemas/ViewId"
@@ -739,10 +712,10 @@
         "required": [
           "asset",
           "quantity"
-        ]
+        ],
+        "type": "object"
       },
       "Capability": {
-        "type": "string",
         "enum": [
           "deterministic_search",
           "weighted_search",
@@ -763,10 +736,10 @@
           "non_fungible_facts",
           "rl_projection",
           "replay_derived_leaderboards"
-        ]
+        ],
+        "type": "string"
       },
       "ComputedRateAmountView": {
-        "type": "object",
         "properties": {
           "asset": {
             "$ref": "#/components/schemas/ViewId"
@@ -782,10 +755,10 @@
           "role",
           "asset",
           "quantity"
-        ]
+        ],
+        "type": "object"
       },
       "ErrorResponse": {
-        "type": "object",
         "properties": {
           "error": {
             "type": "string"
@@ -793,14 +766,14 @@
         },
         "required": [
           "error"
-        ]
+        ],
+        "type": "object"
       },
       "ExactQuantity": {
         "description": "An exact, non-negative quantity encoded as text for JavaScript safety.",
         "type": "string"
       },
       "ExchangeFrame": {
-        "type": "object",
         "properties": {
           "after": {
             "$ref": "#/components/schemas/ViewSnapshot"
@@ -812,26 +785,26 @@
             "$ref": "#/components/schemas/ViewSnapshot"
           },
           "cues": {
-            "type": "array",
             "default": [],
             "items": {
               "$ref": "#/components/schemas/FrameCueView"
-            }
+            },
+            "type": "array"
           },
           "exchange": {
             "$ref": "#/components/schemas/ExchangeView"
           },
           "index": {
-            "type": "integer",
             "format": "uint64",
-            "minimum": 0
+            "minimum": 0,
+            "type": "integer"
           },
           "observations": {
-            "type": "array",
             "default": [],
             "items": {
               "$ref": "#/components/schemas/ObservationView"
-            }
+            },
+            "type": "array"
           },
           "receipt": {
             "$ref": "#/components/schemas/ReceiptView"
@@ -844,10 +817,10 @@
           "receipt",
           "before",
           "after"
-        ]
+        ],
+        "type": "object"
       },
       "ExchangeParameterView": {
-        "type": "object",
         "properties": {
           "name": {
             "type": "string"
@@ -859,22 +832,22 @@
         "required": [
           "name",
           "value"
-        ]
+        ],
+        "type": "object"
       },
       "ExchangeView": {
-        "type": "object",
         "properties": {
           "bindings": {
-            "type": "array",
             "items": {
               "$ref": "#/components/schemas/RoleBindingView"
-            }
+            },
+            "type": "array"
           },
           "parameters": {
-            "type": "array",
             "items": {
               "$ref": "#/components/schemas/ExchangeParameterView"
-            }
+            },
+            "type": "array"
           },
           "rate": {
             "$ref": "#/components/schemas/ViewId"
@@ -887,10 +860,10 @@
           "rate",
           "units",
           "bindings"
-        ]
+        ],
+        "type": "object"
       },
       "FrameCueKindView": {
-        "type": "string",
         "enum": [
           "atomic_exchange",
           "consumed",
@@ -900,18 +873,18 @@
           "information",
           "chance",
           "completion"
-        ]
+        ],
+        "type": "string"
       },
       "FrameCueView": {
         "description": "A readable explanation derived from the applied exchange and its receipt.\nCues make economically meaningful transitions visible even when a domain\nprojection chooses identical geometry before and after the exchange.",
-        "type": "object",
         "properties": {
           "details": {
-            "type": "array",
             "default": [],
             "items": {
               "type": "string"
-            }
+            },
+            "type": "array"
           },
           "kind": {
             "$ref": "#/components/schemas/FrameCueKindView"
@@ -920,20 +893,20 @@
             "type": "string"
           },
           "subjects": {
-            "type": "array",
             "default": [],
             "items": {
               "$ref": "#/components/schemas/ViewId"
-            }
+            },
+            "type": "array"
           }
         },
         "required": [
           "kind",
           "label"
-        ]
+        ],
+        "type": "object"
       },
       "FramePage": {
-        "type": "object",
         "properties": {
           "artifact_id": {
             "type": "string"
@@ -942,20 +915,20 @@
             "type": "string"
           },
           "frames": {
-            "type": "array",
             "items": {
               "$ref": "#/components/schemas/ExchangeFrame"
-            }
+            },
+            "type": "array"
           },
           "from": {
-            "type": "integer",
             "format": "uint64",
-            "minimum": 0
+            "minimum": 0,
+            "type": "integer"
           },
           "total": {
-            "type": "integer",
             "format": "uint64",
-            "minimum": 0
+            "minimum": 0,
+            "type": "integer"
           }
         },
         "required": [
@@ -964,59 +937,42 @@
           "from",
           "total",
           "frames"
-        ]
-      },
-      "FrameQuery": {
-        "type": "object",
-        "properties": {
-          "from": {
-            "type": "integer",
-            "format": "uint64",
-            "default": 0,
-            "minimum": 0
-          },
-          "limit": {
-            "type": "integer",
-            "format": "uint64",
-            "default": 100,
-            "minimum": 0
-          }
-        }
+        ],
+        "type": "object"
       },
       "FrontierCompletenessView": {
-        "type": "string",
         "enum": [
           "exact",
           "approximate"
-        ]
+        ],
+        "type": "string"
       },
       "GoalRequirementView": {
-        "type": "object",
         "properties": {
           "account": {
             "$ref": "#/components/schemas/ViewId"
           },
           "required": {
-            "type": "array",
             "items": {
               "$ref": "#/components/schemas/AssetQuantityView"
-            }
+            },
+            "type": "array"
           }
         },
         "required": [
           "account",
           "required"
-        ]
+        ],
+        "type": "object"
       },
       "GraphEdgeView": {
-        "type": "object",
         "properties": {
           "classes": {
-            "type": "array",
             "default": [],
             "items": {
               "type": "string"
-            }
+            },
+            "type": "array"
           },
           "id": {
             "type": "string"
@@ -1038,42 +994,42 @@
           "id",
           "source",
           "target"
-        ]
+        ],
+        "type": "object"
       },
       "GraphNodeView": {
-        "type": "object",
         "properties": {
           "classes": {
-            "type": "array",
             "default": [],
             "items": {
               "type": "string"
-            }
+            },
+            "type": "array"
           },
           "id": {
             "$ref": "#/components/schemas/ViewId"
           },
           "x": {
+            "format": "double",
             "type": [
               "number",
               "null"
-            ],
-            "format": "double"
+            ]
           },
           "y": {
+            "format": "double",
             "type": [
               "number",
               "null"
-            ],
-            "format": "double"
+            ]
           }
         },
         "required": [
           "id"
-        ]
+        ],
+        "type": "object"
       },
       "GridCellView": {
-        "type": "object",
         "properties": {
           "account": {
             "description": "Optional authoritative account represented by this cell. This makes\nreceipt-derived cell emphasis and account inspection portable without\nturning the grid projection into state of its own.",
@@ -1083,36 +1039,36 @@
             ]
           },
           "classes": {
-            "type": "array",
             "default": [],
             "items": {
               "type": "string"
-            }
+            },
+            "type": "array"
           },
           "label": {
             "description": "Human-readable terrain or cell state. Renderers may keep repetitive\nlabels (for example, `Floor`) accessible without drawing them in every\ncell.",
             "type": "string"
           },
           "x": {
-            "type": "integer",
             "format": "uint32",
-            "minimum": 0
+            "minimum": 0,
+            "type": "integer"
           },
           "y": {
-            "type": "integer",
             "format": "uint32",
-            "minimum": 0
+            "minimum": 0,
+            "type": "integer"
           }
         },
         "required": [
           "x",
           "y",
           "label"
-        ]
+        ],
+        "type": "object"
       },
       "HealthResponse": {
         "description": "A deliberately small liveness contract. A successful response proves that\nthe native engine adapter is reachable now; loading a cached catalog does\nnot.",
-        "type": "object",
         "properties": {
           "engine": {
             "type": "string"
@@ -1124,10 +1080,10 @@
         "required": [
           "status",
           "engine"
-        ]
+        ],
+        "type": "object"
       },
       "InstanceDescriptor": {
-        "type": "object",
         "properties": {
           "description": {
             "type": "string"
@@ -1147,59 +1103,59 @@
           "label",
           "description",
           "profile"
-        ]
+        ],
+        "type": "object"
       },
       "InstanceProfile": {
-        "type": "string",
         "enum": [
           "micro",
           "showcase",
           "stress"
-        ]
+        ],
+        "type": "string"
       },
       "InvariantTermView": {
-        "type": "object",
         "properties": {
           "asset": {
             "$ref": "#/components/schemas/ViewId"
           },
           "weight": {
-            "type": "integer",
-            "format": "int64"
+            "format": "int64",
+            "type": "integer"
           }
         },
         "required": [
           "asset",
           "weight"
-        ]
+        ],
+        "type": "object"
       },
       "InvariantView": {
-        "type": "object",
         "properties": {
           "name": {
             "type": "string"
           },
           "terms": {
-            "type": "array",
             "items": {
               "$ref": "#/components/schemas/InvariantTermView"
-            }
+            },
+            "type": "array"
           }
         },
         "required": [
           "name",
           "terms"
-        ]
+        ],
+        "type": "object"
       },
       "LeaderboardEntryView": {
-        "type": "object",
         "properties": {
           "components": {
-            "type": "array",
             "default": [],
             "items": {
               "$ref": "#/components/schemas/SceneMetricView"
-            }
+            },
+            "type": "array"
           },
           "eligible": {
             "type": "boolean"
@@ -1209,12 +1165,12 @@
           },
           "rank": {
             "description": "Eligible entries use one-based competition ranking. Ineligible entries\nremain visible but deliberately have no rank.",
+            "format": "uint64",
+            "minimum": 0,
             "type": [
               "integer",
               "null"
-            ],
-            "format": "uint64",
-            "minimum": 0
+            ]
           },
           "unit": {
             "type": [
@@ -1231,10 +1187,10 @@
           "participant",
           "value",
           "eligible"
-        ]
+        ],
+        "type": "object"
       },
       "LeaderboardView": {
-        "type": "object",
         "properties": {
           "description": {
             "type": "string"
@@ -1243,11 +1199,11 @@
             "$ref": "#/components/schemas/ObjectiveDirectionView"
           },
           "entries": {
-            "type": "array",
             "default": [],
             "items": {
               "$ref": "#/components/schemas/LeaderboardEntryView"
-            }
+            },
+            "type": "array"
           },
           "key": {
             "type": "string"
@@ -1261,11 +1217,11 @@
           "label",
           "description",
           "direction"
-        ]
+        ],
+        "type": "object"
       },
       "MarketActorView": {
         "description": "One participant positioned around a market pool. Balances and status are\nreplay-derived presentation data linked back to the represented account.",
-        "type": "object",
         "properties": {
           "account": {
             "type": "string"
@@ -1298,12 +1254,12 @@
             "$ref": "#/components/schemas/ExactQuantity"
           },
           "x": {
-            "type": "number",
-            "format": "double"
+            "format": "double",
+            "type": "number"
           },
           "y": {
-            "type": "number",
-            "format": "double"
+            "format": "double",
+            "type": "number"
           }
         },
         "required": [
@@ -1317,11 +1273,11 @@
           "credit",
           "liquidity",
           "utility"
-        ]
+        ],
+        "type": "object"
       },
       "MarketPoolView": {
         "description": "One constant-product pool projected from an authoritative replay snapshot.\nValues remain exact text so renderers cannot silently round economic state.",
-        "type": "object",
         "properties": {
           "account": {
             "type": "string"
@@ -1333,14 +1289,14 @@
             "$ref": "#/components/schemas/ExactQuantity"
           },
           "fee_denominator": {
-            "type": "integer",
             "format": "uint64",
-            "minimum": 0
+            "minimum": 0,
+            "type": "integer"
           },
           "fee_numerator": {
-            "type": "integer",
             "format": "uint64",
-            "minimum": 0
+            "minimum": 0,
+            "type": "integer"
           },
           "id": {
             "$ref": "#/components/schemas/ViewId"
@@ -1349,12 +1305,12 @@
             "$ref": "#/components/schemas/ExactQuantity"
           },
           "price_milli": {
-            "description": "Quote per base, scaled by 1,000.",
             "allOf": [
               {
                 "$ref": "#/components/schemas/ExactQuantity"
               }
-            ]
+            ],
+            "description": "Quote per base, scaled by 1,000."
           },
           "product": {
             "$ref": "#/components/schemas/ExactQuantity"
@@ -1378,17 +1334,17 @@
           "fee_numerator",
           "fee_denominator",
           "account"
-        ]
+        ],
+        "type": "object"
       },
       "MatrixCellView": {
-        "type": "object",
         "properties": {
           "classes": {
-            "type": "array",
             "default": [],
             "items": {
               "type": "string"
-            }
+            },
+            "type": "array"
           },
           "column": {
             "type": "string"
@@ -1404,39 +1360,39 @@
           "row",
           "column",
           "label"
-        ]
+        ],
+        "type": "object"
       },
       "ModelView": {
         "description": "Read-only explanation of the authoritative economy definition.",
-        "type": "object",
         "properties": {
           "goal": {
-            "type": "array",
             "items": {
               "$ref": "#/components/schemas/GoalRequirementView"
-            }
+            },
+            "type": "array"
           },
           "invariants": {
-            "type": "array",
             "items": {
               "$ref": "#/components/schemas/InvariantView"
-            }
+            },
+            "type": "array"
           },
           "rates": {
-            "type": "array",
             "items": {
               "$ref": "#/components/schemas/RateView"
-            }
+            },
+            "type": "array"
           }
         },
         "required": [
           "rates",
           "goal",
           "invariants"
-        ]
+        ],
+        "type": "object"
       },
       "ObjectiveAxisView": {
-        "type": "object",
         "properties": {
           "direction": {
             "$ref": "#/components/schemas/ObjectiveDirectionView"
@@ -1452,17 +1408,17 @@
           "key",
           "label",
           "direction"
-        ]
+        ],
+        "type": "object"
       },
       "ObjectiveDirectionView": {
-        "type": "string",
         "enum": [
           "minimize",
           "maximize"
-        ]
+        ],
+        "type": "string"
       },
       "ObjectiveView": {
-        "type": "object",
         "properties": {
           "direction": {
             "$ref": "#/components/schemas/ObjectiveDirectionView"
@@ -1482,55 +1438,55 @@
           "label",
           "direction",
           "value"
-        ]
+        ],
+        "type": "object"
       },
       "ObservationView": {
         "description": "An actor-relative observation. Omitted accounts and assets are intentionally\nnot visible to that actor; this is not a filtered copy of authoritative\nstate pretending to be complete.",
-        "type": "object",
         "properties": {
           "actor": {
             "$ref": "#/components/schemas/ViewId"
           },
           "facts": {
-            "type": "array",
             "default": [],
             "items": {
               "$ref": "#/components/schemas/AssetQuantityView"
-            }
+            },
+            "type": "array"
           },
           "label": {
             "type": "string"
           },
           "visible_accounts": {
-            "type": "array",
             "items": {
               "$ref": "#/components/schemas/AccountView"
-            }
+            },
+            "type": "array"
           }
         },
         "required": [
           "actor",
           "label",
           "visible_accounts"
-        ]
+        ],
+        "type": "object"
       },
       "ParetoFrontView": {
-        "type": "object",
         "properties": {
           "axes": {
-            "type": "array",
             "items": {
               "$ref": "#/components/schemas/ObjectiveAxisView"
-            }
+            },
+            "type": "array"
           },
           "completeness": {
             "$ref": "#/components/schemas/FrontierCompletenessView"
           },
           "points": {
-            "type": "array",
             "items": {
               "$ref": "#/components/schemas/ParetoPointView"
-            }
+            },
+            "type": "array"
           },
           "title": {
             "type": "string"
@@ -1541,10 +1497,10 @@
           "completeness",
           "axes",
           "points"
-        ]
+        ],
+        "type": "object"
       },
       "ParetoPointView": {
-        "type": "object",
         "properties": {
           "label": {
             "type": "string"
@@ -1554,26 +1510,26 @@
           },
           "values": {
             "description": "Ordered exactly like `ParetoFrontView.axes`; values remain exact text.",
-            "type": "array",
             "items": {
               "type": "string"
-            }
+            },
+            "type": "array"
           }
         },
         "required": [
           "label",
           "values",
           "selected"
-        ]
+        ],
+        "type": "object"
       },
       "ProblemDescriptor": {
-        "type": "object",
         "properties": {
           "capabilities": {
-            "type": "array",
             "items": {
               "$ref": "#/components/schemas/Capability"
-            }
+            },
+            "type": "array"
           },
           "default_instance": {
             "type": "string"
@@ -1585,19 +1541,19 @@
             "$ref": "#/components/schemas/ProblemFamily"
           },
           "instances": {
-            "type": "array",
             "items": {
               "$ref": "#/components/schemas/InstanceDescriptor"
-            }
+            },
+            "type": "array"
           },
           "key": {
             "type": "string"
           },
           "strategies": {
-            "type": "array",
             "items": {
               "$ref": "#/components/schemas/StrategyDescriptor"
-            }
+            },
+            "type": "array"
           },
           "summary": {
             "type": "string"
@@ -1616,10 +1572,10 @@
           "default_strategy",
           "strategies",
           "capabilities"
-        ]
+        ],
+        "type": "object"
       },
       "ProblemFamily": {
-        "type": "string",
         "enum": [
           "pathfinding",
           "constraint",
@@ -1632,25 +1588,25 @@
           "partial_observation",
           "temporal_simulation",
           "multi_agent_competition"
-        ]
+        ],
+        "type": "string"
       },
       "ProblemList": {
-        "type": "object",
         "properties": {
           "problems": {
-            "type": "array",
             "items": {
               "$ref": "#/components/schemas/ProblemDescriptor"
-            }
+            },
+            "type": "array"
           }
         },
         "required": [
           "problems"
-        ]
+        ],
+        "type": "object"
       },
       "ProposalView": {
         "description": "A proposal assessed against an exact snapshot, including rejected actions.",
-        "type": "object",
         "properties": {
           "assessment": {
             "$ref": "#/components/schemas/AssessmentView"
@@ -1668,9 +1624,9 @@
             "type": "string"
           },
           "snapshot_index": {
-            "type": "integer",
             "format": "uint64",
-            "minimum": 0
+            "minimum": 0,
+            "type": "integer"
           }
         },
         "required": [
@@ -1680,10 +1636,10 @@
           "snapshot_index",
           "exchange",
           "assessment"
-        ]
+        ],
+        "type": "object"
       },
       "RateConditionView": {
-        "type": "object",
         "properties": {
           "comparison": {
             "type": "string"
@@ -1703,29 +1659,29 @@
           "left",
           "comparison",
           "right"
-        ]
+        ],
+        "type": "object"
       },
       "RateRoleView": {
         "description": "A rate role's complete consume/produce/preserve contract.",
-        "type": "object",
         "properties": {
           "consumed": {
-            "type": "array",
             "items": {
               "$ref": "#/components/schemas/AssetQuantityView"
-            }
+            },
+            "type": "array"
           },
           "preserved": {
-            "type": "array",
             "items": {
               "$ref": "#/components/schemas/AssetQuantityView"
-            }
+            },
+            "type": "array"
           },
           "produced": {
-            "type": "array",
             "items": {
               "$ref": "#/components/schemas/AssetQuantityView"
-            }
+            },
+            "type": "array"
           },
           "role": {
             "$ref": "#/components/schemas/ViewId"
@@ -1736,79 +1692,79 @@
           "consumed",
           "produced",
           "preserved"
-        ]
+        ],
+        "type": "object"
       },
       "RateView": {
         "description": "One immutable transition rule in the closed model.",
-        "type": "object",
         "properties": {
           "computed_consumed": {
-            "type": "array",
             "items": {
               "$ref": "#/components/schemas/ComputedRateAmountView"
-            }
+            },
+            "type": "array"
           },
           "computed_preserved": {
-            "type": "array",
             "items": {
               "$ref": "#/components/schemas/ComputedRateAmountView"
-            }
+            },
+            "type": "array"
           },
           "computed_produced": {
-            "type": "array",
             "items": {
               "$ref": "#/components/schemas/ComputedRateAmountView"
-            }
+            },
+            "type": "array"
           },
           "conditions": {
-            "type": "array",
             "items": {
               "$ref": "#/components/schemas/RateConditionView"
-            }
+            },
+            "type": "array"
           },
           "distinct_roles": {
-            "type": "array",
             "items": {
-              "type": "array",
               "items": {
                 "$ref": "#/components/schemas/ViewId"
               },
               "maxItems": 2,
-              "minItems": 2
-            }
+              "minItems": 2,
+              "type": "array"
+            },
+            "type": "array"
           },
           "rate": {
             "$ref": "#/components/schemas/ViewId"
           },
           "roles": {
-            "type": "array",
             "items": {
               "$ref": "#/components/schemas/RateRoleView"
-            }
+            },
+            "type": "array"
           }
         },
         "required": [
           "rate",
           "roles",
           "distinct_roles"
-        ]
+        ],
+        "type": "object"
       },
       "ReceiptView": {
-        "type": "object",
         "properties": {
           "deltas": {
-            "type": "array",
             "items": {
               "$ref": "#/components/schemas/AccountDeltaView"
-            }
+            },
+            "type": "array"
           }
         },
         "required": [
           "deltas"
-        ]
+        ],
+        "type": "object"
       },
       "RoleBindingView": {
-        "type": "object",
         "properties": {
           "account": {
             "$ref": "#/components/schemas/ViewId"
@@ -1820,23 +1776,23 @@
         "required": [
           "role",
           "account"
-        ]
+        ],
+        "type": "object"
       },
       "RunArtifact": {
-        "type": "object",
         "properties": {
           "assessed_proposals": {
-            "type": "array",
             "default": [],
             "items": {
               "$ref": "#/components/schemas/ProposalView"
-            }
+            },
+            "type": "array"
           },
           "documents": {
-            "type": "array",
             "items": {
               "$ref": "#/components/schemas/ViewDocument"
-            }
+            },
+            "type": "array"
           },
           "id": {
             "type": "string"
@@ -1861,27 +1817,17 @@
           "request",
           "selected_document_id",
           "documents"
-        ]
-      },
-      "RunPath": {
-        "type": "object",
-        "properties": {
-          "run_id": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "run_id"
-        ]
+        ],
+        "type": "object"
       },
       "RunRequest": {
-        "type": "object",
+        "additionalProperties": false,
         "properties": {
           "budget": {
-            "type": "integer",
-            "format": "uint64",
             "default": 128,
-            "minimum": 0
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
           },
           "instance": {
             "type": [
@@ -1893,10 +1839,10 @@
             "type": "string"
           },
           "seed": {
-            "type": "integer",
-            "format": "uint64",
             "default": 17,
-            "minimum": 0
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
           },
           "strategy": {
             "type": [
@@ -1905,23 +1851,22 @@
             ]
           }
         },
-        "additionalProperties": false,
         "required": [
           "problem"
-        ]
+        ],
+        "type": "object"
       },
       "RunStatus": {
-        "type": "string",
         "enum": [
           "running",
           "paused",
           "completed",
           "cancelled",
           "failed"
-        ]
+        ],
+        "type": "string"
       },
       "RunSummary": {
-        "type": "object",
         "properties": {
           "artifact_id": {
             "type": [
@@ -1930,9 +1875,9 @@
             ]
           },
           "completed": {
-            "type": "integer",
             "format": "uint64",
-            "minimum": 0
+            "minimum": 0,
+            "type": "integer"
           },
           "id": {
             "type": "string"
@@ -1966,12 +1911,12 @@
             "$ref": "#/components/schemas/RunStatus"
           },
           "total": {
+            "format": "uint64",
+            "minimum": 0,
             "type": [
               "integer",
               "null"
-            ],
-            "format": "uint64",
-            "minimum": 0
+            ]
           }
         },
         "required": [
@@ -1979,46 +1924,46 @@
           "request",
           "status",
           "completed"
-        ]
+        ],
+        "type": "object"
       },
       "Scene": {
         "description": "Optional problem picture derived from the economic state.\nPictures explain and animate; they never decide whether an exchange applies.",
-        "type": "object",
         "properties": {
           "annotations": {
-            "type": "array",
             "default": [],
             "items": {
               "$ref": "#/components/schemas/SceneAnnotationView"
-            }
+            },
+            "type": "array"
           },
           "entities": {
-            "type": "array",
             "default": [],
             "items": {
               "$ref": "#/components/schemas/SceneEntityView"
-            }
+            },
+            "type": "array"
           },
           "legend": {
-            "type": "array",
             "default": [],
             "items": {
               "$ref": "#/components/schemas/SceneLegendView"
-            }
+            },
+            "type": "array"
           },
           "metrics": {
-            "type": "array",
             "default": [],
             "items": {
               "$ref": "#/components/schemas/SceneMetricView"
-            }
+            },
+            "type": "array"
           },
           "paths": {
-            "type": "array",
             "default": [],
             "items": {
               "$ref": "#/components/schemas/ScenePathView"
-            }
+            },
+            "type": "array"
           },
           "surface": {
             "$ref": "#/components/schemas/SceneSurfaceView"
@@ -2030,16 +1975,16 @@
         "required": [
           "title",
           "surface"
-        ]
+        ],
+        "type": "object"
       },
       "SceneAnchorView": {
         "oneOf": [
           {
-            "type": "object",
             "properties": {
               "kind": {
-                "type": "string",
-                "const": "graph_node"
+                "const": "graph_node",
+                "type": "string"
               },
               "node": {
                 "type": "string"
@@ -2048,64 +1993,64 @@
             "required": [
               "kind",
               "node"
-            ]
+            ],
+            "type": "object"
           },
           {
-            "type": "object",
             "properties": {
               "edge": {
                 "type": "string"
               },
               "kind": {
-                "type": "string",
-                "const": "graph_edge"
+                "const": "graph_edge",
+                "type": "string"
               },
               "progress": {
+                "format": "double",
                 "type": [
                   "number",
                   "null"
-                ],
-                "format": "double"
+                ]
               }
             },
             "required": [
               "kind",
               "edge"
-            ]
+            ],
+            "type": "object"
           },
           {
-            "type": "object",
             "properties": {
               "kind": {
-                "type": "string",
-                "const": "grid_cell"
+                "const": "grid_cell",
+                "type": "string"
               },
               "x": {
-                "type": "integer",
                 "format": "uint32",
-                "minimum": 0
+                "minimum": 0,
+                "type": "integer"
               },
               "y": {
-                "type": "integer",
                 "format": "uint32",
-                "minimum": 0
+                "minimum": 0,
+                "type": "integer"
               }
             },
             "required": [
               "kind",
               "x",
               "y"
-            ]
+            ],
+            "type": "object"
           },
           {
-            "type": "object",
             "properties": {
               "column": {
                 "type": "string"
               },
               "kind": {
-                "type": "string",
-                "const": "matrix_cell"
+                "const": "matrix_cell",
+                "type": "string"
               },
               "row": {
                 "type": "string"
@@ -2115,19 +2060,19 @@
               "kind",
               "row",
               "column"
-            ]
+            ],
+            "type": "object"
           },
           {
-            "type": "object",
             "properties": {
               "at": {
-                "type": "integer",
                 "format": "uint64",
-                "minimum": 0
+                "minimum": 0,
+                "type": "integer"
               },
               "kind": {
-                "type": "string",
-                "const": "timeline"
+                "const": "timeline",
+                "type": "string"
               },
               "lane": {
                 "type": "string"
@@ -2137,41 +2082,41 @@
               "kind",
               "lane",
               "at"
-            ]
+            ],
+            "type": "object"
           },
           {
             "description": "Attach presentation state to another stable scene entity. This is used\nfor inventory, cargo, equipment, and similar ownership relationships\nthat would be misleading if attached only to a shared location.",
-            "type": "object",
             "properties": {
               "entity": {
                 "type": "string"
               },
               "kind": {
-                "type": "string",
-                "const": "entity"
+                "const": "entity",
+                "type": "string"
               }
             },
             "required": [
               "kind",
               "entity"
-            ]
+            ],
+            "type": "object"
           },
           {
-            "type": "object",
             "properties": {
               "kind": {
-                "type": "string",
-                "const": "unanchored"
+                "const": "unanchored",
+                "type": "string"
               }
             },
             "required": [
               "kind"
-            ]
+            ],
+            "type": "object"
           }
         ]
       },
       "SceneAnnotationView": {
-        "type": "object",
         "properties": {
           "anchor": {
             "$ref": "#/components/schemas/SceneAnchorView"
@@ -2191,21 +2136,21 @@
           "label",
           "anchor",
           "tone"
-        ]
+        ],
+        "type": "object"
       },
       "SceneEntityRoleView": {
         "description": "How a semantic entity relates to the geometric surface it is anchored to.\n\nThis is presentation metadata only. It lets generic viewers distinguish a\nplace from something occupying it, a task attached to it, state describing\nit, or scenario context that should remain outside the topology.",
-        "type": "string",
         "enum": [
           "structure",
           "occupant",
           "attachment",
           "state",
           "context"
-        ]
+        ],
+        "type": "string"
       },
       "SceneEntityView": {
-        "type": "object",
         "properties": {
           "account": {
             "type": [
@@ -2217,10 +2162,10 @@
             "$ref": "#/components/schemas/SceneAnchorView"
           },
           "evidence": {
-            "type": "array",
             "items": {
               "$ref": "#/components/schemas/SceneEvidenceRefView"
-            }
+            },
+            "type": "array"
           },
           "glyph": {
             "$ref": "#/components/schemas/SceneGlyphView"
@@ -2229,11 +2174,11 @@
             "$ref": "#/components/schemas/ViewId"
           },
           "metrics": {
-            "type": "array",
             "default": [],
             "items": {
               "$ref": "#/components/schemas/SceneMetricView"
-            }
+            },
+            "type": "array"
           },
           "role": {
             "$ref": "#/components/schemas/SceneEntityRoleView"
@@ -2254,29 +2199,29 @@
           "anchor",
           "role",
           "tone"
-        ]
+        ],
+        "type": "object"
       },
       "SceneEvidenceRefView": {
         "description": "Exact economic evidence illustrated by a disposable scene entity.\n\nThese references never create state or authorize a transition. They let a\nrenderer connect replay-derived motion and emphasis back to the accounts\nand balances that prove why the picture changed.",
         "oneOf": [
           {
-            "type": "object",
             "properties": {
               "account": {
                 "type": "string"
               },
               "kind": {
-                "type": "string",
-                "const": "account"
+                "const": "account",
+                "type": "string"
               }
             },
             "required": [
               "kind",
               "account"
-            ]
+            ],
+            "type": "object"
           },
           {
-            "type": "object",
             "properties": {
               "account": {
                 "type": "string"
@@ -2285,21 +2230,21 @@
                 "type": "string"
               },
               "kind": {
-                "type": "string",
-                "const": "balance"
+                "const": "balance",
+                "type": "string"
               }
             },
             "required": [
               "kind",
               "account",
               "asset"
-            ]
+            ],
+            "type": "object"
           }
         ]
       },
       "SceneGlyphView": {
         "description": "A semantic icon key owned by the portable Rust contract. The browser maps\nthese keys to its chosen icon implementation; documents never contain SVG,\nCSS class names masquerading as meaning, or React component names.",
-        "type": "string",
         "enum": [
           "agent",
           "robot",
@@ -2331,10 +2276,10 @@
           "machine",
           "token",
           "shield"
-        ]
+        ],
+        "type": "string"
       },
       "SceneLegendView": {
-        "type": "object",
         "properties": {
           "glyph": {
             "$ref": "#/components/schemas/SceneGlyphView"
@@ -2350,10 +2295,10 @@
           "label",
           "glyph",
           "tone"
-        ]
+        ],
+        "type": "object"
       },
       "SceneMetricView": {
-        "type": "object",
         "properties": {
           "key": {
             "type": "string"
@@ -2382,10 +2327,10 @@
           "key",
           "label",
           "value"
-        ]
+        ],
+        "type": "object"
       },
       "ScenePathStatusView": {
-        "type": "string",
         "enum": [
           "available",
           "candidate",
@@ -2396,16 +2341,16 @@
           "rejected",
           "blocked",
           "uncertain"
-        ]
+        ],
+        "type": "string"
       },
       "ScenePathView": {
-        "type": "object",
         "properties": {
           "anchors": {
-            "type": "array",
             "items": {
               "$ref": "#/components/schemas/SceneAnchorView"
-            }
+            },
+            "type": "array"
           },
           "id": {
             "type": "string"
@@ -2422,19 +2367,19 @@
           "label",
           "anchors",
           "status"
-        ]
+        ],
+        "type": "object"
       },
       "SceneSurfaceView": {
         "description": "The geometric substrate for a derived scene. Surface geometry and semantic\nentities are deliberately separate so one vehicle can move through a graph,\ngrid, matrix, or timeline without inventing four domain models.",
         "oneOf": [
           {
-            "type": "object",
             "properties": {
               "edges": {
-                "type": "array",
                 "items": {
                   "$ref": "#/components/schemas/GraphEdgeView"
-                }
+                },
+                "type": "array"
               },
               "focus": {
                 "type": [
@@ -2443,44 +2388,44 @@
                 ]
               },
               "kind": {
-                "type": "string",
-                "const": "graph"
+                "const": "graph",
+                "type": "string"
               },
               "nodes": {
-                "type": "array",
                 "items": {
                   "$ref": "#/components/schemas/GraphNodeView"
-                }
+                },
+                "type": "array"
               }
             },
             "required": [
               "kind",
               "nodes",
               "edges"
-            ]
+            ],
+            "type": "object"
           },
           {
-            "type": "object",
             "properties": {
               "cells": {
-                "type": "array",
                 "items": {
                   "$ref": "#/components/schemas/GridCellView"
-                }
+                },
+                "type": "array"
               },
               "height": {
-                "type": "integer",
                 "format": "uint32",
-                "minimum": 0
+                "minimum": 0,
+                "type": "integer"
               },
               "kind": {
-                "type": "string",
-                "const": "grid"
+                "const": "grid",
+                "type": "string"
               },
               "width": {
-                "type": "integer",
                 "format": "uint32",
-                "minimum": 0
+                "minimum": 0,
+                "type": "integer"
               }
             },
             "required": [
@@ -2488,32 +2433,32 @@
               "width",
               "height",
               "cells"
-            ]
+            ],
+            "type": "object"
           },
           {
-            "type": "object",
             "properties": {
               "cells": {
-                "type": "array",
                 "items": {
                   "$ref": "#/components/schemas/MatrixCellView"
-                }
+                },
+                "type": "array"
               },
               "columns": {
-                "type": "array",
                 "items": {
                   "$ref": "#/components/schemas/ViewId"
-                }
+                },
+                "type": "array"
               },
               "kind": {
-                "type": "string",
-                "const": "matrix"
+                "const": "matrix",
+                "type": "string"
               },
               "rows": {
-                "type": "array",
                 "items": {
                   "$ref": "#/components/schemas/ViewId"
-                }
+                },
+                "type": "array"
               }
             },
             "required": [
@@ -2521,54 +2466,54 @@
               "rows",
               "columns",
               "cells"
-            ]
+            ],
+            "type": "object"
           },
           {
-            "type": "object",
             "properties": {
               "cursor": {
+                "format": "uint64",
+                "minimum": 0,
                 "type": [
                   "integer",
                   "null"
-                ],
-                "format": "uint64",
-                "minimum": 0
+                ]
               },
               "kind": {
-                "type": "string",
-                "const": "timeline"
+                "const": "timeline",
+                "type": "string"
               },
               "lanes": {
-                "type": "array",
                 "items": {
                   "$ref": "#/components/schemas/TimelineLaneView"
-                }
+                },
+                "type": "array"
               },
               "spans": {
-                "type": "array",
                 "items": {
                   "$ref": "#/components/schemas/TimelineSpanView"
-                }
+                },
+                "type": "array"
               }
             },
             "required": [
               "kind",
               "lanes",
               "spans"
-            ]
+            ],
+            "type": "object"
           },
           {
-            "type": "object",
             "properties": {
               "actors": {
-                "type": "array",
                 "items": {
                   "$ref": "#/components/schemas/MarketActorView"
-                }
+                },
+                "type": "array"
               },
               "kind": {
-                "type": "string",
-                "const": "market"
+                "const": "market",
+                "type": "string"
               },
               "pool": {
                 "$ref": "#/components/schemas/MarketPoolView"
@@ -2578,12 +2523,12 @@
               "kind",
               "pool",
               "actors"
-            ]
+            ],
+            "type": "object"
           }
         ]
       },
       "SceneToneView": {
-        "type": "string",
         "enum": [
           "neutral",
           "active",
@@ -2593,10 +2538,10 @@
           "danger",
           "uncertain",
           "muted"
-        ]
+        ],
+        "type": "string"
       },
       "SearchObservationKindView": {
-        "type": "string",
         "enum": [
           "phase",
           "frontier",
@@ -2607,19 +2552,19 @@
           "incumbent",
           "prune",
           "artifact"
-        ]
+        ],
+        "type": "string"
       },
       "SearchObservationView": {
         "description": "A bounded, transport-neutral view of solver work. Search crates expose\ntyped session state; the service maps it into this presentation contract so\nHTTP, WASM, saved artifacts, and Studio use identical evidence.",
-        "type": "object",
         "properties": {
           "algorithm": {
             "type": "string"
           },
           "completed": {
-            "type": "integer",
             "format": "uint64",
-            "minimum": 0
+            "minimum": 0,
+            "type": "integer"
           },
           "kind": {
             "$ref": "#/components/schemas/SearchObservationKindView"
@@ -2628,31 +2573,31 @@
             "type": "string"
           },
           "metrics": {
-            "type": "array",
             "default": [],
             "items": {
               "$ref": "#/components/schemas/SceneMetricView"
-            }
+            },
+            "type": "array"
           },
           "phase": {
             "type": "string"
           },
           "sequence": {
-            "type": "integer",
             "format": "uint64",
-            "minimum": 0
+            "minimum": 0,
+            "type": "integer"
           },
           "subjects": {
             "description": "Stable Rust-owned scene subjects affected by this observation. Generic\nviewers may emphasize matching nodes or entities without understanding\nthe problem's domain model.",
-            "type": "array",
             "items": {
               "$ref": "#/components/schemas/ViewId"
-            }
+            },
+            "type": "array"
           },
           "total": {
-            "type": "integer",
             "format": "uint64",
-            "minimum": 0
+            "minimum": 0,
+            "type": "integer"
           }
         },
         "required": [
@@ -2663,10 +2608,10 @@
           "label",
           "completed",
           "total"
-        ]
+        ],
+        "type": "object"
       },
       "SearchTelemetryView": {
-        "type": "object",
         "properties": {
           "algorithm": {
             "type": "string"
@@ -2675,20 +2620,20 @@
             "type": "boolean"
           },
           "points": {
-            "type": "array",
             "default": [],
             "items": {
               "$ref": "#/components/schemas/TelemetryPointView"
-            }
+            },
+            "type": "array"
           }
         },
         "required": [
           "algorithm",
           "exact"
-        ]
+        ],
+        "type": "object"
       },
       "StrategyDescriptor": {
-        "type": "object",
         "properties": {
           "algorithm": {
             "type": "string"
@@ -2708,17 +2653,17 @@
           "label",
           "description",
           "algorithm"
-        ]
+        ],
+        "type": "object"
       },
       "StudioEvent": {
         "description": "Lifecycle events emitted by a Studio run. `sequence` orders transport\nevents; it is not economic time and has no effect on replay.",
         "oneOf": [
           {
-            "type": "object",
             "properties": {
               "kind": {
-                "type": "string",
-                "const": "run_started"
+                "const": "run_started",
+                "type": "string"
               },
               "problem": {
                 "type": "string"
@@ -2727,9 +2672,9 @@
                 "type": "string"
               },
               "sequence": {
-                "type": "integer",
                 "format": "uint64",
-                "minimum": 0
+                "minimum": 0,
+                "type": "integer"
               },
               "strategy": {
                 "type": "string"
@@ -2741,19 +2686,19 @@
               "sequence",
               "problem",
               "strategy"
-            ]
+            ],
+            "type": "object"
           },
           {
-            "type": "object",
             "properties": {
               "completed": {
-                "type": "integer",
                 "format": "uint64",
-                "minimum": 0
+                "minimum": 0,
+                "type": "integer"
               },
               "kind": {
-                "type": "string",
-                "const": "progress"
+                "const": "progress",
+                "type": "string"
               },
               "message": {
                 "type": "string"
@@ -2762,17 +2707,17 @@
                 "type": "string"
               },
               "sequence": {
-                "type": "integer",
                 "format": "uint64",
-                "minimum": 0
+                "minimum": 0,
+                "type": "integer"
               },
               "total": {
+                "format": "uint64",
+                "minimum": 0,
                 "type": [
                   "integer",
                   "null"
-                ],
-                "format": "uint64",
-                "minimum": 0
+                ]
               }
             },
             "required": [
@@ -2781,14 +2726,14 @@
               "sequence",
               "completed",
               "message"
-            ]
+            ],
+            "type": "object"
           },
           {
-            "type": "object",
             "properties": {
               "kind": {
-                "type": "string",
-                "const": "search_observation"
+                "const": "search_observation",
+                "type": "string"
               },
               "observation": {
                 "$ref": "#/components/schemas/SearchObservationView"
@@ -2797,9 +2742,9 @@
                 "type": "string"
               },
               "sequence": {
-                "type": "integer",
                 "format": "uint64",
-                "minimum": 0
+                "minimum": 0,
+                "type": "integer"
               }
             },
             "required": [
@@ -2807,10 +2752,10 @@
               "run_id",
               "sequence",
               "observation"
-            ]
+            ],
+            "type": "object"
           },
           {
-            "type": "object",
             "properties": {
               "document_id": {
                 "type": "string"
@@ -2819,21 +2764,21 @@
                 "$ref": "#/components/schemas/ExchangeFrame"
               },
               "frame_index": {
-                "type": "integer",
                 "format": "uint64",
-                "minimum": 0
+                "minimum": 0,
+                "type": "integer"
               },
               "kind": {
-                "type": "string",
-                "const": "frame_appended"
+                "const": "frame_appended",
+                "type": "string"
               },
               "run_id": {
                 "type": "string"
               },
               "sequence": {
-                "type": "integer",
                 "format": "uint64",
-                "minimum": 0
+                "minimum": 0,
+                "type": "integer"
               }
             },
             "required": [
@@ -2843,30 +2788,30 @@
               "document_id",
               "frame_index",
               "frame"
-            ]
+            ],
+            "type": "object"
           },
           {
-            "type": "object",
             "properties": {
               "artifact_id": {
                 "type": "string"
               },
               "documents": {
-                "type": "integer",
                 "format": "uint64",
-                "minimum": 0
+                "minimum": 0,
+                "type": "integer"
               },
               "kind": {
-                "type": "string",
-                "const": "artifact_published"
+                "const": "artifact_published",
+                "type": "string"
               },
               "run_id": {
                 "type": "string"
               },
               "sequence": {
-                "type": "integer",
                 "format": "uint64",
-                "minimum": 0
+                "minimum": 0,
+                "type": "integer"
               }
             },
             "required": [
@@ -2875,54 +2820,54 @@
               "sequence",
               "artifact_id",
               "documents"
-            ]
+            ],
+            "type": "object"
           },
           {
-            "type": "object",
             "properties": {
               "kind": {
-                "type": "string",
-                "const": "run_paused"
+                "const": "run_paused",
+                "type": "string"
               },
               "run_id": {
                 "type": "string"
               },
               "sequence": {
-                "type": "integer",
                 "format": "uint64",
-                "minimum": 0
+                "minimum": 0,
+                "type": "integer"
               }
             },
             "required": [
               "kind",
               "run_id",
               "sequence"
-            ]
+            ],
+            "type": "object"
           },
           {
-            "type": "object",
             "properties": {
               "kind": {
-                "type": "string",
-                "const": "run_resumed"
+                "const": "run_resumed",
+                "type": "string"
               },
               "run_id": {
                 "type": "string"
               },
               "sequence": {
-                "type": "integer",
                 "format": "uint64",
-                "minimum": 0
+                "minimum": 0,
+                "type": "integer"
               }
             },
             "required": [
               "kind",
               "run_id",
               "sequence"
-            ]
+            ],
+            "type": "object"
           },
           {
-            "type": "object",
             "properties": {
               "artifact_id": {
                 "type": "string"
@@ -2931,16 +2876,16 @@
                 "type": "string"
               },
               "kind": {
-                "type": "string",
-                "const": "run_completed"
+                "const": "run_completed",
+                "type": "string"
               },
               "run_id": {
                 "type": "string"
               },
               "sequence": {
-                "type": "integer",
                 "format": "uint64",
-                "minimum": 0
+                "minimum": 0,
+                "type": "integer"
               }
             },
             "required": [
@@ -2949,36 +2894,36 @@
               "sequence",
               "artifact_id",
               "document_id"
-            ]
+            ],
+            "type": "object"
           },
           {
-            "type": "object",
             "properties": {
               "kind": {
-                "type": "string",
-                "const": "run_cancelled"
+                "const": "run_cancelled",
+                "type": "string"
               },
               "run_id": {
                 "type": "string"
               },
               "sequence": {
-                "type": "integer",
                 "format": "uint64",
-                "minimum": 0
+                "minimum": 0,
+                "type": "integer"
               }
             },
             "required": [
               "kind",
               "run_id",
               "sequence"
-            ]
+            ],
+            "type": "object"
           },
           {
-            "type": "object",
             "properties": {
               "kind": {
-                "type": "string",
-                "const": "run_failed"
+                "const": "run_failed",
+                "type": "string"
               },
               "message": {
                 "type": "string"
@@ -2987,9 +2932,9 @@
                 "type": "string"
               },
               "sequence": {
-                "type": "integer",
                 "format": "uint64",
-                "minimum": 0
+                "minimum": 0,
+                "type": "integer"
               }
             },
             "required": [
@@ -2997,12 +2942,12 @@
               "run_id",
               "sequence",
               "message"
-            ]
+            ],
+            "type": "object"
           }
         ]
       },
       "TelemetryKindView": {
-        "type": "string",
         "enum": [
           "expanded",
           "generated",
@@ -3015,11 +2960,11 @@
           "constraints",
           "alternatives",
           "message"
-        ]
+        ],
+        "type": "string"
       },
       "TelemetryPointView": {
         "description": "A transport-neutral progress observation. Counters are exact text so the\nsame contract remains safe in native and JavaScript consumers.",
-        "type": "object",
         "properties": {
           "kind": {
             "$ref": "#/components/schemas/TelemetryKindView"
@@ -3028,9 +2973,9 @@
             "type": "string"
           },
           "sequence": {
-            "type": "integer",
             "format": "uint64",
-            "minimum": 0
+            "minimum": 0,
+            "type": "integer"
           },
           "value": {
             "type": "string"
@@ -3041,17 +2986,17 @@
           "kind",
           "value",
           "label"
-        ]
+        ],
+        "type": "object"
       },
       "TimelineLaneView": {
-        "type": "object",
         "properties": {
           "classes": {
-            "type": "array",
             "default": [],
             "items": {
               "type": "string"
-            }
+            },
+            "type": "array"
           },
           "id": {
             "$ref": "#/components/schemas/ViewId"
@@ -3059,22 +3004,22 @@
         },
         "required": [
           "id"
-        ]
+        ],
+        "type": "object"
       },
       "TimelineSpanView": {
-        "type": "object",
         "properties": {
           "classes": {
-            "type": "array",
             "default": [],
             "items": {
               "type": "string"
-            }
+            },
+            "type": "array"
           },
           "end": {
-            "type": "integer",
             "format": "uint64",
-            "minimum": 0
+            "minimum": 0,
+            "type": "integer"
           },
           "id": {
             "type": "string"
@@ -3086,9 +3031,9 @@
             "type": "string"
           },
           "start": {
-            "type": "integer",
             "format": "uint64",
-            "minimum": 0
+            "minimum": 0,
+            "type": "integer"
           }
         },
         "required": [
@@ -3097,19 +3042,19 @@
           "start",
           "end",
           "label"
-        ]
+        ],
+        "type": "object"
       },
       "ViewDocument": {
-        "type": "object",
         "properties": {
           "description": {
             "type": "string"
           },
           "frames": {
-            "type": "array",
             "items": {
               "$ref": "#/components/schemas/ExchangeFrame"
-            }
+            },
+            "type": "array"
           },
           "id": {
             "type": "string"
@@ -3128,50 +3073,50 @@
             ]
           },
           "objectives": {
-            "type": "array",
             "default": [],
             "items": {
               "$ref": "#/components/schemas/ObjectiveView"
-            }
+            },
+            "type": "array"
           },
           "observations": {
-            "type": "array",
             "default": [],
             "items": {
               "$ref": "#/components/schemas/ObservationView"
-            }
+            },
+            "type": "array"
           },
           "pareto_fronts": {
-            "type": "array",
             "default": [],
             "items": {
               "$ref": "#/components/schemas/ParetoFrontView"
-            }
+            },
+            "type": "array"
           },
           "proposals": {
-            "type": "array",
             "default": [],
             "items": {
               "$ref": "#/components/schemas/ProposalView"
-            }
+            },
+            "type": "array"
           },
           "solve_observations": {
-            "description": "Bounded solver history retained so a fast native run or a static Pages\nartifact is as inspectable as a live stream.",
-            "type": "array",
             "default": [],
+            "description": "Bounded solver history retained so a fast native run or a static Pages\nartifact is as inspectable as a live stream.",
             "items": {
               "$ref": "#/components/schemas/SearchObservationView"
-            }
+            },
+            "type": "array"
           },
           "source": {
             "$ref": "#/components/schemas/ViewSource"
           },
           "telemetry": {
-            "type": "array",
             "default": [],
             "items": {
               "$ref": "#/components/schemas/SearchTelemetryView"
-            }
+            },
+            "type": "array"
           },
           "title": {
             "type": "string"
@@ -3184,11 +3129,11 @@
           "source",
           "initial",
           "frames"
-        ]
+        ],
+        "type": "object"
       },
       "ViewId": {
         "description": "A browser-safe identity for an arbitrary user-defined ontology value.\n\n`key` is used for joins, `label` is for people, and `value` is optional\ndiagnostic context. None of these fields replaces the underlying Rust value\nas semantic authority.",
-        "type": "object",
         "properties": {
           "key": {
             "type": "string"
@@ -3201,29 +3146,29 @@
         "required": [
           "key",
           "label"
-        ]
+        ],
+        "type": "object"
       },
       "ViewSnapshot": {
-        "type": "object",
         "properties": {
           "accounts": {
-            "type": "array",
             "items": {
               "$ref": "#/components/schemas/AccountView"
-            }
+            },
+            "type": "array"
           },
           "index": {
-            "type": "integer",
             "format": "uint64",
-            "minimum": 0
+            "minimum": 0,
+            "type": "integer"
           },
           "leaderboards": {
-            "description": "Disposable rankings derived from this exact replay-verified state.\nThey explain comparative outcomes; they never authorize an exchange.",
-            "type": "array",
             "default": [],
+            "description": "Disposable rankings derived from this exact replay-verified state.\nThey explain comparative outcomes; they never authorize an exchange.",
             "items": {
               "$ref": "#/components/schemas/LeaderboardView"
-            }
+            },
+            "type": "array"
           },
           "scene": {
             "anyOf": [
@@ -3239,10 +3184,10 @@
         "required": [
           "index",
           "accounts"
-        ]
+        ],
+        "type": "object"
       },
       "ViewSource": {
-        "type": "object",
         "properties": {
           "key": {
             "type": "string"
@@ -3254,7 +3199,8 @@
         "required": [
           "key",
           "label"
-        ]
+        ],
+        "type": "object"
       }
     }
   }

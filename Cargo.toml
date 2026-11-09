@@ -15,38 +15,98 @@ members = [
 resolver = "3"
 
 [workspace.package]
+version = "0.1.0"
+authors = ["Alex Rozgo <alex.rozgo@gmail.com>"]
+edition = "2024"
 license = "MIT"
+repository = "https://github.com/BiomaAI/axionomy"
+rust-version = "1.99"
+
+# One version for every crate. Floors are the locked, tested versions; members
+# add only the features they use. Optional dependencies are declared optional
+# by the member that owns the feature, never here.
+[workspace.dependencies]
+axionomy = { version = "0.1.0", path = "." }
+axionomy-problems = { version = "0.1.0", path = "crates/axionomy-problems" }
+axionomy-search = { version = "0.1.0", path = "crates/axionomy-search" }
+axionomy-service = { version = "0.1.0", path = "crates/axionomy-service" }
+axionomy-units = { version = "0.1.0", path = "crates/axionomy-units" }
+axionomy-view = { version = "0.1.0", path = "crates/axionomy-view" }
+
+axum = "0.8.9"
+blake3 = "1.8.7"
+clap = { version = "4.6.7", features = ["derive"] }
+criterion = "0.8.2"
+futures-util = "0.3.34"
+http-body-util = "0.1.5"
+indexmap = { version = "2.14.2", features = ["serde"] }
+jiff = { version = "0.2.41", features = ["serde"] }
+js-sys = "0.3.107"
+num-bigint = { version = "0.5.1", features = ["serde"] }
+num-rational = { version = "0.4.2", features = ["serde"] }
+num-traits = "0.2.19"
+pathfinding = "4.16.0"
+proptest = "1.12.0"
+rand = { version = "0.10.3", default-features = false, features = ["std"] }
+rand_chacha = "0.10.0"
+reqwest = { version = "0.13.5", default-features = false, features = ["json"] }
+rmcp = { version = "3.9.0", default-features = false, features = [
+    "macros",
+    "request-state",
+    "server",
+    "transport-streamable-http-server",
+] }
+schemars = "1.2.3"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+statrs = { version = "0.19.1", default-features = false, features = ["std"] }
+thiserror = "2.0.21"
+tokio = "1.54.1"
+tokio-stream = { version = "0.1.19", features = ["sync"] }
+tokio-util = "0.7.20"
+tower = { version = "0.5.3", features = ["util"] }
+tower-http = { version = "0.7.1", features = ["cors", "fs", "trace"] }
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
+uom = { version = "0.38.0", default-features = false, features = [
+    "autoconvert",
+    "rational64",
+    "serde",
+    "si",
+    "std",
+] }
+wasm-bindgen = "0.2.130"
 
 [package]
 name = "axionomy"
-version = "0.1.0"
-authors = ["Alex Rozgo <alex.rozgo@gmail.com>"]
 description = "Closed economic state-machine primitives for verifiable problem solving"
-edition = "2024"
-license.workspace = true
 readme = "README.md"
-repository = "https://github.com/BiomaAI/axionomy"
-rust-version = "1.89"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
 
 [features]
 default = []
 bigint = ["dep:num-bigint"]
 
 [dependencies]
-indexmap = { version = "2.14.0", features = ["serde"] }
-num-bigint = { version = "0.5.1", features = ["serde"], optional = true }
-num-traits = "0.2.19"
-serde = { version = "1.0.229", features = ["derive", "rc"] }
-schemars = "1.2.2"
-thiserror = "2.0.19"
+indexmap.workspace = true
+num-bigint = { workspace = true, optional = true }
+num-traits.workspace = true
+schemars.workspace = true
+serde = { workspace = true, features = ["rc"] }
+thiserror.workspace = true
 
 [dev-dependencies]
-criterion = "0.8.2"
-num-bigint = { version = "0.5.1", features = ["serde"] }
-proptest = "1.11.0"
-serde_json = "1.0.149"
-tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+criterion.workspace = true
+num-bigint.workspace = true
+proptest.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
 
 [lib]
 name = "axionomy"

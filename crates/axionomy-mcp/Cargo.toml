@@ -1,34 +1,29 @@
 [package]
 name = "axionomy-mcp"
-version = "0.1.0"
-authors = ["Alex Rozgo <alex.rozgo@gmail.com>"]
 description = "Stateless MCP reference server for Axionomy"
-edition = "2024"
-license.workspace = true
 readme = "README.md"
-repository = "https://github.com/BiomaAI/axionomy"
-rust-version = "1.89"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
 
 [dependencies]
-axionomy = { version = "0.1.0", path = "../.." }
-axionomy-search = { version = "0.1.0", path = "../axionomy-search" }
-axionomy-service = { version = "0.1.0", path = "../axionomy-service" }
-axum = "0.8.9"
-blake3 = "1.8.5"
-rmcp = { version = "3.1.0", default-features = false, features = [
-    "macros",
-    "request-state",
-    "server",
-    "transport-streamable-http-server",
-] }
-schemars = "1.2.2"
-serde = { version = "1.0.229", features = ["derive"] }
-serde_json = "1.0.151"
-thiserror = "2.0.19"
-tokio = { version = "1.53.1", features = ["macros", "net", "rt-multi-thread", "signal", "sync", "time"] }
-tokio-util = "0.7.19"
-tracing = "0.1.44"
-tracing-subscriber = { version = "0.3.22", features = ["env-filter"] }
+axionomy.workspace = true
+axionomy-search.workspace = true
+axionomy-service.workspace = true
+axum.workspace = true
+blake3.workspace = true
+rmcp.workspace = true
+schemars.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["macros", "net", "rt-multi-thread", "signal", "sync", "time"] }
+tokio-util.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
 
 [dev-dependencies]
-reqwest = { version = "0.13.4", default-features = false, features = ["json"] }
+reqwest.workspace = true

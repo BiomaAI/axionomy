@@ -1,28 +1,28 @@
 [package]
 name = "axionomy-search"
-version = "0.1.0"
-authors = ["Alex Rozgo <alex.rozgo@gmail.com>"]
 description = "Reference search strategies over closed Axionomy economies"
-edition = "2024"
-license.workspace = true
 readme = "README.md"
-repository = "https://github.com/BiomaAI/axionomy"
-rust-version = "1.89"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
 
 [features]
 default = []
 bigint = ["axionomy/bigint"]
 
 [dependencies]
-axionomy = { version = "0.1.0", path = "../.." }
-pathfinding = "4.15.0"
-rand = { version = "0.10.2", default-features = false, features = ["std"] }
-rand_chacha = "0.10.0"
-schemars = "1.2.2"
-serde = { version = "1.0.229", features = ["derive"] }
-statrs = { version = "0.19.0", default-features = false, features = ["std"] }
-thiserror = "2.0.19"
+axionomy.workspace = true
+pathfinding.workspace = true
+rand.workspace = true
+rand_chacha.workspace = true
+schemars.workspace = true
+serde.workspace = true
+statrs.workspace = true
+thiserror.workspace = true
 
 [dev-dependencies]
-num-bigint = "0.5.1"
-serde_json = "1.0.151"
+num-bigint.workspace = true
+serde_json.workspace = true

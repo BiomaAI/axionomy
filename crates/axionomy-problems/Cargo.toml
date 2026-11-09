@@ -1,24 +1,23 @@
 [package]
 name = "axionomy-problems"
-version = "0.1.0"
-authors = ["Alex Rozgo <alex.rozgo@gmail.com>"]
 description = "Canonical problem encodings and conformance models for Axionomy"
-edition = "2024"
-license.workspace = true
 readme = "README.md"
-repository = "https://github.com/BiomaAI/axionomy"
-rust-version = "1.89"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
 
 [dependencies]
-axionomy = { version = "0.1.0", path = "../.." }
-axionomy-search = { version = "0.1.0", path = "../axionomy-search" }
-thiserror = "2.0.19"
+axionomy.workspace = true
+axionomy-search.workspace = true
 
 [dev-dependencies]
-criterion = "0.8.2"
-proptest = "1.11.0"
-tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+criterion.workspace = true
+proptest.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
 
 [[bench]]
 name = "rollout_throughput"

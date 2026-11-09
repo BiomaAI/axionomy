@@ -1,23 +1,23 @@
 //! Native HTTP adapter for the interface-neutral Axionomy service.
 
-use aide::{
-    IntoApi, UseApi,
-    axum::{ApiRouter, routing},
-    openapi::{Info, OpenApi},
-};
+mod openapi;
+
+pub use openapi::OpenApiDocument;
+
 use axionomy_service::{
     ProblemDescriptor, ReferenceService, RunArtifact, RunControl, RunObserver, RunRequest,
     ServiceError, ServiceProgress,
 };
 use axionomy_view::{ExchangeFrame, SearchObservationView, StudioEvent, ViewDocument};
 use axum::{
-    Extension, Json, Router,
+    Json, Router,
     extract::{Path, Query, State},
     http::{HeaderValue, StatusCode},
     response::{IntoResponse, Sse, sse::Event},
-    routing::get,
+    routing::{delete, get, post},
 };
 use futures_util::StreamExt;
+use openapi::Endpoint;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -119,39 +119,6 @@ const fn default_frame_limit() -> u64 {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct ErrorResponse {
     pub error: String,
-}
-
-struct EventStreamContract;
-
-impl aide::OperationOutput for EventStreamContract {
-    type Inner = StudioEvent;
-
-    fn operation_response(
-        context: &mut aide::generate::GenContext,
-        operation: &mut aide::openapi::Operation,
-    ) -> Option<aide::openapi::Response> {
-        let mut response =
-            <String as aide::OperationOutput>::operation_response(context, operation)?;
-        let mut media = response.content.shift_remove("text/plain; charset=utf-8")?;
-        media.schema = Some(aide::openapi::SchemaObject {
-            json_schema: context.schema.subschema_for::<StudioEvent>(),
-            example: None,
-            external_docs: None,
-        });
-        response.content.insert("text/event-stream".into(), media);
-        response.description = "Tagged StudioEvent values encoded in SSE data fields".into();
-        Some(response)
-    }
-
-    fn inferred_responses(
-        context: &mut aide::generate::GenContext,
-        operation: &mut aide::openapi::Operation,
-    ) -> Vec<(Option<aide::openapi::StatusCode>, aide::openapi::Response)> {
-        Self::operation_response(context, operation)
-            .into_iter()
-            .map(|response| (Some(aide::openapi::StatusCode::Code(200)), response))
-            .collect()
-    }
 }
 
 #[derive(Debug)]
@@ -259,149 +226,113 @@ impl IntoResponse for ApiError {
     }
 }
 
-impl aide::OperationOutput for ApiError {
-    type Inner = ErrorResponse;
-
-    fn operation_response(
-        context: &mut aide::generate::GenContext,
-        operation: &mut aide::openapi::Operation,
-    ) -> Option<aide::openapi::Response> {
-        <Json<ErrorResponse> as aide::OperationOutput>::operation_response(context, operation)
-    }
-
-    fn inferred_responses(
-        context: &mut aide::generate::GenContext,
-        operation: &mut aide::openapi::Operation,
-    ) -> Vec<(Option<aide::openapi::StatusCode>, aide::openapi::Response)> {
-        Self::operation_response(context, operation)
-            .into_iter()
-            .map(|response| (None, response))
-            .collect()
-    }
-}
-
 pub fn problem_catalog() -> Vec<ProblemDescriptor> {
     ReferenceService.catalog()
 }
 
-/// Builds both the Axum router and its OpenAPI 3.1 contract from the same Rust
-/// handlers and Schemars types.
-pub fn api(state: StudioState) -> (Router, OpenApi) {
-    let mut openapi = OpenApi {
-        info: Info {
-            title: "Axionomy Service API".into(),
-            version: env!("CARGO_PKG_VERSION").into(),
-            description: Some(
-                "Interface-neutral problem commands, replay artifacts, lifecycle control, and Studio data."
-                    .into(),
-            ),
-            ..Info::default()
-        },
-        ..OpenApi::default()
-    };
-
-    let api = ApiRouter::new()
-        .api_route(
-            "/api/health",
-            routing::get_with(health, |operation| {
-                operation
-                    .id("getHealth")
-                    .summary("Check whether the native Studio engine is reachable")
-                    .tag("system")
-            }),
-        )
-        .api_route(
-            "/api/problems",
-            routing::get_with(list_problems, |operation| {
-                operation
-                    .id("listProblems")
-                    .summary("List problems, strategies, and capabilities")
-                    .tag("problems")
-            }),
-        )
-        .api_route(
-            "/api/runs",
-            routing::post_with(create_run, |operation| {
-                operation
-                    .id("createRun")
-                    .summary("Start a reproducible, cooperatively controlled run")
-                    .tag("runs")
-            }),
-        )
-        .api_route(
-            "/api/runs/{run_id}",
-            routing::get_with(get_run, |operation| {
-                operation
-                    .id("getRun")
-                    .summary("Inspect run state")
-                    .tag("runs")
-            })
-            .delete_with(cancel_run, |operation| {
-                operation
-                    .id("cancelRun")
-                    .summary("Cancel a run")
-                    .tag("runs")
-            }),
-        )
-        .api_route(
-            "/api/runs/{run_id}/pause",
-            routing::post_with(pause_run, |operation| {
-                operation.id("pauseRun").summary("Pause a run").tag("runs")
-            }),
-        )
-        .api_route(
-            "/api/runs/{run_id}/resume",
-            routing::post_with(resume_run, |operation| {
-                operation
-                    .id("resumeRun")
-                    .summary("Resume a paused run")
-                    .tag("runs")
-            }),
-        )
-        .api_route(
-            "/api/runs/{run_id}/events",
-            routing::get_with(run_events, |operation| {
-                operation
-                    .id("streamRunEvents")
-                    .summary("Follow resumable ordered lifecycle events over SSE")
-                    .tag("runs")
-            }),
-        )
-        .api_route(
-            "/api/artifacts/{artifact_id}",
-            routing::get_with(get_artifact, |operation| {
-                operation
-                    .id("getRunArtifact")
-                    .summary("Load a complete portable problem artifact")
-                    .tag("artifacts")
-            }),
-        )
-        .api_route(
+/// Every route, declared once with its handler and contract.
+fn endpoints() -> Vec<Endpoint<StudioState>> {
+    vec![
+        Endpoint::new::<HealthResponse>("get", "/api/health", get(health)).describe(
+            "getHealth",
+            "Check whether the native Studio engine is reachable",
+            "system",
+        ),
+        Endpoint::new::<ProblemList>("get", "/api/problems", get(list_problems)).describe(
+            "listProblems",
+            "List problems, strategies, and capabilities",
+            "problems",
+        ),
+        Endpoint::new::<RunSummary>("post", "/api/runs", post(create_run))
+            .describe(
+                "createRun",
+                "Start a reproducible, cooperatively controlled run",
+                "runs",
+            )
+            .json_body::<RunRequest>()
+            .fallible(),
+        Endpoint::new::<RunSummary>("get", "/api/runs/{run_id}", get(get_run))
+            .describe("getRun", "Inspect run state", "runs")
+            .path_parameters::<RunPath>()
+            .fallible(),
+        Endpoint::new::<RunSummary>("delete", "/api/runs/{run_id}", delete(cancel_run))
+            .describe("cancelRun", "Cancel a run", "runs")
+            .path_parameters::<RunPath>()
+            .fallible(),
+        Endpoint::new::<RunSummary>("post", "/api/runs/{run_id}/pause", post(pause_run))
+            .describe("pauseRun", "Pause a run", "runs")
+            .path_parameters::<RunPath>()
+            .fallible(),
+        Endpoint::new::<RunSummary>("post", "/api/runs/{run_id}/resume", post(resume_run))
+            .describe("resumeRun", "Resume a paused run", "runs")
+            .path_parameters::<RunPath>()
+            .fallible(),
+        Endpoint::new::<StudioEvent>("get", "/api/runs/{run_id}/events", get(run_events))
+            .describe(
+                "streamRunEvents",
+                "Follow resumable ordered lifecycle events over SSE",
+                "runs",
+            )
+            .path_parameters::<RunPath>()
+            .event_stream::<StudioEvent>()
+            .fallible(),
+        Endpoint::new::<RunArtifact>("get", "/api/artifacts/{artifact_id}", get(get_artifact))
+            .describe(
+                "getRunArtifact",
+                "Load a complete portable problem artifact",
+                "artifacts",
+            )
+            .path_parameters::<ArtifactPath>()
+            .fallible(),
+        Endpoint::new::<ViewDocument>(
+            "get",
             "/api/artifacts/{artifact_id}/documents/{document_id}",
-            routing::get_with(get_document, |operation| {
-                operation
-                    .id("getViewDocument")
-                    .summary("Load one replay-derived alternative")
-                    .tag("artifacts")
-            }),
+            get(get_document),
         )
-        .api_route(
+        .describe(
+            "getViewDocument",
+            "Load one replay-derived alternative",
+            "artifacts",
+        )
+        .path_parameters::<ArtifactDocumentPath>()
+        .fallible(),
+        Endpoint::new::<FramePage>(
+            "get",
             "/api/artifacts/{artifact_id}/documents/{document_id}/frames",
-            routing::get_with(get_frames, |operation| {
-                operation
-                    .id("getTraceFrames")
-                    .summary("Page through replay-derived exchange frames")
-                    .tag("artifacts")
-            }),
+            get(get_frames),
         )
-        .with_state(state)
-        .finish_api(&mut openapi)
-        .layer(Extension(Arc::new(openapi.clone())))
-        .route("/api/openapi.json", get(serve_openapi))
+        .describe(
+            "getTraceFrames",
+            "Page through replay-derived exchange frames",
+            "artifacts",
+        )
+        .path_parameters::<ArtifactDocumentPath>()
+        .query::<FrameQuery>()
+        .fallible(),
+    ]
+}
+
+/// Builds both the Axum router and its OpenAPI 3.1 contract from one endpoint
+/// table, so a route cannot exist without its contract or the reverse.
+pub fn api(state: StudioState) -> (Router, OpenApiDocument) {
+    let endpoints = endpoints();
+    let document = openapi::document(&endpoints);
+    let routes = endpoints
+        .into_iter()
+        .fold(Router::new(), |router, endpoint| {
+            let (path, route) = endpoint.into_route();
+            router.route(path, route)
+        })
+        .with_state(state);
+    let served = document.clone();
+    let router = routes
+        .route(
+            "/api/openapi.json",
+            get(move || std::future::ready(Json(served.clone()))),
+        )
         .layer(CorsLayer::new().allow_origin(HeaderValue::from_static("*")))
         .layer(TraceLayer::new_for_http());
-
-    (api, openapi)
+    (router, document)
 }
 
 pub fn with_studio_frontend(router: Router, directory: impl Into<PathBuf>) -> Router {
@@ -412,10 +343,6 @@ pub fn with_studio_frontend(router: Router, directory: impl Into<PathBuf>) -> Ro
     } else {
         router
     }
-}
-
-async fn serve_openapi(Extension(api): Extension<Arc<OpenApi>>) -> Json<OpenApi> {
-    Json((*api).clone())
 }
 
 async fn list_problems() -> Json<ProblemList> {
@@ -831,10 +758,7 @@ async fn run_events(
     State(state): State<StudioState>,
     Path(path): Path<RunPath>,
 ) -> Result<
-    UseApi<
-        Sse<impl futures_util::Stream<Item = Result<Event, Infallible>> + Send + 'static>,
-        EventStreamContract,
-    >,
+    Sse<impl futures_util::Stream<Item = Result<Event, Infallible>> + Send + 'static>,
     ApiError,
 > {
     let record = find_run(&state, &path.run_id).await?;
@@ -865,7 +789,7 @@ async fn run_events(
             .json_data(event)
             .expect("StudioEvent always serializes"))
     });
-    Ok(Sse::new(stream).into_api())
+    Ok(Sse::new(stream))
 }
 
 #[cfg(test)]

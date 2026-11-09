@@ -2,8 +2,8 @@
   "version": 1,
   "assurance": "Partial implementation verification: Aeneas-extracted production u64 arithmetic, basket/account operations, model/rate construction and discovery, complete transaction assessment/application, finite-input iterator filtering, fork/simulation/ordered replay, goals, finite-input iterator views, canonical state/observation keys and scoped deterministic fingerprints, generic trace extension, basket collection boundaries including sorted borrowed iteration, foundational typed data APIs, expression construction and generic core inspection/asset discovery, u64 convenience constructor panic contracts and generic string-conversion callbacks, full-width rounded mul-div with explicit rounding, generic derived equality/clone/order, inherited clone replacement/inequality/order helpers and scoped hashing refine Lean specifications. Explicit collection/Arc/UTF-8/sorting/hashing models, lawful identifier operations, resource bounds, compiler/translation and primitive models remain trusted. Remaining public data APIs, serialization/schema contracts and other numeric backends remain open.",
   "sources": {
-    "Cargo.toml": "414a2b181e13225e4b76aa58e70d998064174dde2d8cee603ea3af648d61a7f3",
-    "Cargo.lock": "8cdb68cd0af53d1c9925ebff52391cd91c913d167f17fedf722d38ba0a2f8041",
+    "Cargo.toml": "40bde8be2bbee8489c0f50e8672f2522d1759e178c11581ad0c6b5d3fa91238f",
+    "Cargo.lock": "bdfc9db6e41d6e0576b39d8437c2ce739cd1c69414ae9716d090a129ab9a5a9d",
     "src/account.rs": "0eaf66937c63de2993353828e42fcfea2b80f172f5cb74fc76a28cef79fd9ff6",
     "src/amount.rs": "4c6a0599d4e7697fadb6981b88cc01e832fa6c01a0b33d1b997ba5c5bb1c705d",
     "src/basket.rs": "f9797280daeb1e9c4dedc795e39763f2ee1eb2b14ed6835a20a416f72a1ba419",
