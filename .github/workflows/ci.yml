@@ -79,8 +79,10 @@ jobs:
         working-directory: studio
       - run: pnpm check:contracts
         working-directory: studio
-      - run: pnpm build
+      # On a cold cache wasm-pack downloads binaryen from GitHub releases.
+      - name: Build Studio
         working-directory: studio
+        run: for attempt in 1 2 3; do pnpm build && exit 0; sleep $((attempt * 20)); done; exit 1
       - run: pnpm test:ui
         working-directory: studio
       - run: pnpm exec playwright install --with-deps chromium
