@@ -7,4 +7,8 @@ studio/dist/
 studio/playwright-report/
 studio/test-results/
 studio/src/generated/wasm/
+# Generated from the Rust source by `pnpm generate`; never committed.
+studio/openapi.json
+studio/src/generated/api.d.ts
+studio/public/artifacts/
 verification/lean/.lake/

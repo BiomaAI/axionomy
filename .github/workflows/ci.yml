@@ -87,8 +87,6 @@ jobs:
           cache-dependency-path: studio/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
         working-directory: studio
-      - run: pnpm check:contracts
-        working-directory: studio
       # On a cold cache wasm-pack downloads binaryen from GitHub releases.
       - name: Build Studio
         working-directory: studio

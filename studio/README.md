@@ -192,11 +192,10 @@ site. It requires no application server, database, WebSocket, or
 
 ## One source of browser types
 
-Rust DTOs in `axionomy-view` derive Serde and Schemars. The server turns them into OpenAPI 3.1 with Aide, then `openapi-typescript` generates `src/generated/api.d.ts`. Do not edit the JSON contract or TypeScript declaration manually.
+Rust DTOs in `axionomy-view` derive Serde and Schemars. The server turns them into OpenAPI 3.1 with Aide, then `openapi-typescript` generates `src/generated/api.d.ts`. `pnpm generate` writes that contract, its TypeScript declarations and the replay artifacts in `public/artifacts` from the Rust source; `pnpm dev`, `pnpm test` and `pnpm build` run it first. None of it is committed, so it can never be stale.
 
 ```sh
-pnpm generate:contracts
-pnpm check:contracts
+pnpm generate
 ```
 
 Quantities are exact decimal strings. `ViewId` joins user-defined ontology values by an item path such as `maze/account/agent` while keeping labels and optional diagnostic JSON separate from semantic authority. Problems, strategies, documents and every other key are kebab-case paths, so Studio links read `?problem=work-league&strategy=mixed-field`; a run started from Studio gets a minted ID such as `run-7`, and its artifact is fetched through that run.

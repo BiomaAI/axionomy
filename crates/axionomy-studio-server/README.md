@@ -20,7 +20,8 @@ On startup the command prints clickable Studio, health, and OpenAPI URLs using
 the address and port the operating system actually bound. It also reports when
 the frontend has not been built and prints the command needed to build it.
 
-Regenerate the committed browser contract and the complete static catalog with:
+Studio generates its browser contract and complete static catalog with
+`pnpm generate`, which runs:
 
 ```sh
 cargo run -p axionomy-studio-server --bin export-openapi -- studio/openapi.json
