@@ -9,10 +9,10 @@ test("scrubbing changes private observations and transfers intelligence only aft
   const share = document.frames.find((frame) => frame.exchange.rate.label.startsWith("Brief Medic on Casualty"))!;
   const { rerender } = render(<Observations document={document} frame={scan} />);
   const medic = () => within(screen.getByRole("heading", { name: "Medic" }).closest("article")!);
-  expect(medic().queryByText("Known 0, East")).not.toBeInTheDocument();
+  expect(medic().queryByText("Knows Casualty 1 is at East")).not.toBeInTheDocument();
   rerender(<Observations document={document} frame={share} />);
-  expect(medic().getAllByText("Known 0, East").length).toBeGreaterThan(0);
+  expect(medic().getAllByText("Knows Casualty 1 is at East").length).toBeGreaterThan(0);
   expect(screen.queryByText("Hidden mission sites and reports")).not.toBeInTheDocument();
   rerender(<Observations document={document} />);
-  expect(screen.queryByText("Known 0, East")).not.toBeInTheDocument();
+  expect(screen.queryByText("Knows Casualty 1 is at East")).not.toBeInTheDocument();
 });

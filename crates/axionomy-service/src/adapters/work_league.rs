@@ -514,7 +514,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             let mut entity = link_balance::<work_league::Ontology>(
                 visual_entity(
                     slug(format!("league/agent/{agent:?}")),
-                    format!("{agent:?} · {}", policy.studio_label()),
+                    format!("{agent:?}"),
                     SceneGlyphView::Robot,
                     SceneAnchorView::GraphNode {
                         node: slug(format!("league/location/{location:?}")),
@@ -554,6 +554,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 &Asset::At(location),
             );
             entity.metrics = vec![
+                visual_metric(slug("policy"), "Policy", policy.studio_label(), None),
                 asset_metric(
                     slug("value"),
                     "Value",

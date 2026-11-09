@@ -37,8 +37,9 @@ test("reads scaled quantities in their units and keeps the exact atoms", async (
   await expect(baseRate.first()).toBeAttached();
   await expect(baseRate.first()).toHaveText("0.2 %");
   await expect(baseRate.first()).toHaveAttribute("title", "2000000000000000 atoms");
-  // Counted assets stay plain numbers.
-  await expect(page.locator(".account-card .balance", { hasText: "Cash" }).locator(".amount")).toHaveCount(0);
+  // Cash reads in its unit; counted assets such as vault shares stay plain numbers.
+  await expect(page.locator(".account-card .balance", { hasText: "Cash" }).locator(".amount").first()).toHaveText(/ cash$/);
+  await expect(page.locator(".account-card .balance", { hasText: "Vault share" }).locator(".amount")).toHaveCount(0);
 });
 
 test("turns saved Maze search evidence into a truthful, scrubbable expansion map", async ({ page }) => {

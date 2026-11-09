@@ -913,7 +913,61 @@ mod tests {
                 .contains_key(&key(lending::Asset::BorrowIndex))
         );
         // Counted assets need no entry.
-        assert!(!document.formats.contains_key(&key(lending::Asset::Cash)));
+        assert!(!document.formats.contains_key(&key(lending::Asset::Share)));
+    }
+
+    /// Studio labels read as words, not code, and each names one thing: no two
+    /// different accounts, assets, rates or roles of a document share a label.
+    fn assert_readable_labels(problem: &str, artifact: &RunArtifact) {
+        use axionomy_view::{ItemPath, ViewId};
+        use std::collections::{BTreeMap, BTreeSet};
+        type Labels<'a> = BTreeMap<(&'static str, &'a str), BTreeSet<&'a ItemPath>>;
+        fn name<'a>(labels: &mut Labels<'a>, kind: &'static str, id: &'a ViewId) {
+            labels
+                .entry((kind, id.label.as_str()))
+                .or_default()
+                .insert(&id.key);
+        }
+        let reads_as_code = |label: &str| {
+            label.contains("::")
+                || label.contains('_')
+                || label
+                    .as_bytes()
+                    .windows(2)
+                    .any(|pair| pair[0].is_ascii_lowercase() && pair[1].is_ascii_uppercase())
+        };
+        for document in &artifact.documents {
+            let mut labels = Labels::new();
+            let snapshots = std::iter::once(&document.initial)
+                .chain(document.frames.iter().map(|frame| &frame.after));
+            for snapshot in snapshots {
+                for account in &snapshot.accounts {
+                    name(&mut labels, "account", &account.account);
+                    for balance in &account.balances {
+                        name(&mut labels, "asset", &balance.asset);
+                    }
+                }
+            }
+            for frame in &document.frames {
+                for binding in &frame.exchange.bindings {
+                    name(&mut labels, "role", &binding.role);
+                }
+            }
+            for rate in document.model.iter().flat_map(|model| &model.rates) {
+                name(&mut labels, "rate", &rate.rate);
+            }
+            for ((kind, label), keys) in &labels {
+                assert!(
+                    !reads_as_code(label),
+                    "{problem}: {kind} label `{label}` reads as code"
+                );
+                assert!(
+                    keys.len() == 1,
+                    "{problem}: {} different {kind}s are all labeled `{label}`: {keys:?}",
+                    keys.len()
+                );
+            }
+        }
     }
 
     #[test]
@@ -937,6 +991,7 @@ mod tests {
                 "{}",
                 problem.key
             );
+            assert_readable_labels(problem.key.as_str(), &artifact);
             let maximum_frames = artifact
                 .documents
                 .iter()

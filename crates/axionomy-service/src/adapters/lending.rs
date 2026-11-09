@@ -413,18 +413,18 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                     percent(lending::rate_view(world)),
                     Some("%"),
                 ),
-                visual_metric(slug("owed"), "Borrower owes", owed, Some("cash")),
-                visual_metric(
+                asset_metric(slug("owed"), "Borrower owes", &Asset::Cash, owed),
+                asset_metric(
                     slug("borrow-limit"),
                     "Borrowing limit",
+                    &Asset::Cash,
                     lending::borrow_limit_view(world),
-                    Some("cash"),
                 ),
-                visual_metric(
+                asset_metric(
                     slug("liquidation-limit"),
                     "Liquidation threshold",
+                    &Asset::Cash,
                     liquidation_limit,
-                    Some("cash"),
                 ),
                 asset_metric(
                     slug("price"),
@@ -438,11 +438,11 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                     &Asset::Reserves,
                     market(Asset::Reserves),
                 ),
-                visual_metric(
+                asset_metric(
                     slug("share-assets"),
                     "Depositors' assets",
+                    &Asset::Cash,
                     lending::total_assets_view(world),
-                    Some("cash"),
                 ),
             ]),
     )
@@ -466,7 +466,7 @@ impl StudioFormat for lending::Asset {
             | Self::LoanToValue
             | Self::LiquidationThreshold
             | Self::LiquidationBonus => QuantityFormat::decimal(16).unit("%"),
-            Self::Reserves | Self::CollateralPrice | Self::PriceDrop => {
+            Self::Cash | Self::Reserves | Self::CollateralPrice | Self::PriceDrop => {
                 QuantityFormat::COUNT.unit("cash")
             }
             Self::Period | Self::ElapsedPeriod | Self::ShockAfter => {
