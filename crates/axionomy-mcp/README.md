@@ -2,8 +2,9 @@
 
 `axionomy-mcp` is Axionomy's stateless MCP `2026-07-28` reference server. It
 lets a remote client build economies of any size, apply exchanges to them, and
-read everything they hold, without putting HTTP, Tokio, task lifecycle or
-storage policy into the core engine.
+read everything they hold, without putting HTTP, Tokio or task lifecycle into
+the core engine. Snapshots are kept in an `axionomy-store` store, in memory or
+on disk.
 
 ## Semantic contract
 
@@ -16,12 +17,14 @@ economy_id + entries ── economy_extend ──> new economy_id
 economy_id + exchange ─ exchange_assess ─> explanation, nothing stored
 economy_id + exchange ─ exchange_apply ──> new economy_id
 economy_id + exchanges  trace_replay ────> new economy_id
+economy_id + step ───── trace_step ──────> economy_id of an intermediate state
 economy_id + goal ───── search (task) ───> economy_id the solution reaches
 ```
 
 A source snapshot never changes. A failed operation stores nothing; the
 caller keeps the handle it had. Counterfactual branches and rollback are
-therefore just older handles.
+therefore just older handles. Every result and snapshot carries its state's
+`root`, a content hash: equal roots mean equal states, however they were made.
 
 Nothing a tool accepts or returns grows with the size of an economy. A call
 adds at most 10,000 entries or replays at most 1,000 exchanges, and a result
@@ -74,9 +77,9 @@ Resources hold the data. Their URI templates (RFC 6570) are listed by
 
 | Template | Content |
 | --- | --- |
-| `axionomy://economy/{economy_id}` | Origin, parent and counts |
-| `…/accounts{?prefix,cursor}` | Accounts and how many assets each holds, optionally by path prefix such as `agents/7/` |
-| `…/accounts/{+account}{?prefix,cursor}` | An account's nonzero balances, optionally by asset-path prefix |
+| `axionomy://economy/{economy_id}` | Origin, parent, state root and counts |
+| `…/accounts{?prefix,cursor}` | Accounts in path order and how many assets each holds, optionally by path prefix such as `agents/7/` |
+| `…/accounts/{+account}{?prefix,cursor}` | An account's nonzero balances in asset path order, optionally by asset-path prefix |
 | `…/rates{?asset,cursor}` | Rates and their roles, optionally only those that move `asset` |
 | `…/rates/{+rate}` | Roles, distinct pairs, parameters and counts |
 | `…/rate-amounts/{+rate}{?cursor}` | Fixed, then computed, amounts per unit |
@@ -85,6 +88,7 @@ Resources hold the data. Their URI templates (RFC 6570) are listed by
 | `…/invariants/{+invariant}{?cursor}` | Asset weights |
 | `…/changes{?cursor}` | Quantities moved by the exchanges that made the snapshot |
 | `…/exchanges{?cursor}` | Those exchanges; replaying them on the parent reproduces it |
+| `…/diff/{other_id}{?cursor}` | What differs from this snapshot to another: accounts opened and closed, balances with both quantities, rates and invariants |
 | `axionomy://assessment/{assessment_id}` and `…/lines{?cursor}` | An assessment and what explains it |
 | `axionomy://artifact/{artifact_id}`, `…/documents/{document_id}` and `…/frames{?cursor}` | A problem run |
 
@@ -93,7 +97,9 @@ pagination rules: the server chooses the page size, the cursor is opaque, the
 next page is the same URI with that cursor, and a cursor from another listing
 is refused with `-32602`. The snapshot behind a page never changes, so every
 page is cached with `cacheScope: "private"` and a one-day `ttlMs`, and needs no
-subscription. `resources/list` is empty: snapshots are reached through their
+subscription. Accounts and balances are read from the snapshot's state tree,
+so a page and a prefix filter cost the logarithm of the economy's size, and a
+diff skips everything the two states share. `resources/list` is empty: snapshots are reached through their
 handles and the `resource_link`s tool results carry, never through a listing
 shared by every caller. `completion/complete` suggests accounts, assets,
 rates, invariants and documents for template arguments, by prefix.
@@ -107,6 +113,7 @@ rates, invariants and documents for template arguments, by prefix.
 | `axionomy_exchange_assess` | status, issues, line count and preview | read-only |
 | `axionomy_exchange_apply` | new `economy_id`, change count | additive, idempotent |
 | `axionomy_trace_replay` | new `economy_id`, change count | additive, idempotent |
+| `axionomy_trace_step` | `economy_id` of the state after some of the exchanges that made a snapshot | additive, idempotent |
 | `axionomy_search` | MCP task: outcome and the snapshot a solution reaches | additive, idempotent |
 | `axionomy_problem_catalog` | Built-in problems, instances and strategies | read-only |
 | `axionomy_problem_run` | MCP task: run summary | additive, idempotent |
@@ -120,35 +127,40 @@ handle. A failure is a result with `isError` and a stable code:
 says which exchange failed, previews what accounts lack, and links to the
 stored assessment.
 
-## Handles
+## Handles and storage
 
 A snapshot handle, `EconomyId`, is written `eco-` and 64 hexadecimal digits: a
-BLAKE3 hash, keyed with a secret drawn from the operating system when the store
-is created, of the parent handle and the operation. A handle is not a path:
-the server mints it, it means nothing to read, and anything else is refused. Retrying an operation therefore returns the same handle without
-storing the economy again, and nobody without the server can derive a handle
-from an economy's content. Two different histories that reach the same
-balances get different handles, so a handle also names how its state was
-reached. Assessment handles, `AssessmentId`, are written `asm-` and keyed the
-same way.
+BLAKE3 hash of the parent handle and the operation, keyed with a secret the
+store keeps. A handle is not a path: the server mints it, it means nothing to
+read, and anything else is refused. Retrying an operation therefore returns
+the same handle without storing the economy again, and nobody without the
+server can derive a handle from an economy's content. Two different histories
+that reach the same balances get different handles, so a handle also names how
+its state was reached; their equal `root`s say they reached the same state.
+Assessment handles, `AssessmentId`, are written `asm-` and keyed the same way.
 
-`AxionomyMcp<S>` is generic over the small `SnapshotStore` contract: store a
-snapshot under the handle derived from its parent and operation, and resolve a
-handle. Implementations must never replace the snapshot behind a live handle.
-`MemorySnapshotStore` is the default. Its clones share one map, and a snapshot
-made by exchanges shares its unchanged accounts with its parent through `Arc`.
-Handles last as long as that store; a restarted process resolves none of them,
-and the tools say so.
+Every snapshot is a point of a run in the store. Authoring records a run that
+starts from the authored state; applying exchanges records a run forked from
+the source snapshot's point, one step per exchange, storing every 64th state
+and the last. A handle, its run, its steps and its states commit in one
+transaction, so a handle exists exactly when everything it names does. An
+intermediate state that `axionomy_trace_step` names is rebuilt from the
+nearest stored state by replay, with every receipt checked against the one
+recorded. Assessments are stored as their inputs and computed again when read;
+problem-run artifacts are stored whole. Recently used snapshots stay in memory.
 
 ```rust
-use axionomy_mcp::{AxionomyMcp, MemorySnapshotStore};
+use axionomy_mcp::AxionomyMcp;
+use axionomy_store::Store;
 
-let server = AxionomyMcp::new(MemorySnapshotStore::default());
+let server = AxionomyMcp::new(Store::memory()?)?;
 # let _ = server;
+# Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
-Assessments and problem-run artifacts are derived data kept in process memory
-for as long as the server runs.
+A store in a file (`Store::open`) keeps snapshots, handles and the secret
+across restarts; an in-memory store, the default, keeps them until the server
+stops.
 
 ## Tasks
 
@@ -169,9 +181,12 @@ solution is a trace the kernel replays.
 
 ```console
 AXIONOMY_MCP_BIND=127.0.0.1:8000 \
+AXIONOMY_MCP_STORE=snapshots.redb \
 RUST_LOG=axionomy_mcp=info,rmcp=info \
   cargo run -p axionomy-mcp --bin axionomy-mcp
 ```
+
+Without `AXIONOMY_MCP_STORE` the server keeps snapshots in memory.
 
 The Streamable HTTP endpoint is `/mcp` and the health endpoint is `/health`.
 The transport accepts only MCP `2026-07-28`, keeps no sessions, prefers JSON
@@ -181,11 +196,13 @@ responses, and requires per-request protocol metadata and the `Mcp-Method` and
 ## Testing
 
 The Rust unit tests hold the economic behavior: authoring conflicts and limits,
-paging a 100,000-asset economy, failures, tasks. `interop/` checks that a
-standard client reaches all of it: the official MCP Python SDK drives the
-server binary over Streamable HTTP through discovery, tools, resource links and
-pages, completion, task-backed search and cancellation, a problem run, error
-codes, and the routing-header rule. The SDK does not ship the tasks extension,
+paging a 100,000-asset economy, failures, tasks, stepping and diffs, and a
+store on disk across restarts. `interop/` checks that a standard client reaches
+all of it: the official MCP Python SDK drives the server binary over
+Streamable HTTP through discovery, tools, resource links and pages,
+completion, stepping and diffs, task-backed search and cancellation, a
+problem run, error codes, the routing-header rule, and snapshots that outlive
+a restart. The SDK does not ship the tasks extension,
 so the suite declares it, as SEP-2663 describes. Python is managed with uv:
 
 ```console
@@ -196,9 +213,8 @@ cd crates/axionomy-mcp/interop && uv run --locked pytest
 ## Deployment boundary
 
 This crate is a local reference implementation, not a production control
-plane. It keeps snapshots, assessments, artifacts and tasks in one process. It
-has no authentication, tenant isolation, quotas, retention limits, persisted
-search checkpoints or distributed workers. A deployment that needs durable
-handles implements `SnapshotStore`; public deployments must also configure
-allowed hosts and origins rather than loosening `rmcp`'s DNS-rebinding
-protection.
+plane. Snapshots, assessments and artifacts persist in its store; tasks live in
+the process. It has no authentication, tenant isolation, quotas, retention
+limits, persisted search checkpoints or distributed workers. Public
+deployments must also configure allowed hosts and origins rather than
+loosening `rmcp`'s DNS-rebinding protection.

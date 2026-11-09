@@ -1,8 +1,8 @@
 # Storage, runs and replay
 
 Status: being built, in the order the phases at the end give. The kernel's
-forks are constant-time, and the canonical tree and the store exist; MCP,
-Studio, search and training move onto them next.
+forks are constant-time, the canonical tree and the store exist, and MCP keeps
+its snapshots in the store; Studio, search and training move onto it next.
 
 Axionomy is an economic debugger and a simulation engine. Both need states
 that can be kept, revisited, compared and branched: time travel to any step,
@@ -331,10 +331,15 @@ survive the members they summarize.
   economics.
 - **`axionomy-store`** (done): redb tables, the writer and durability rules,
   runs and steps, tags, groups, metrics and refs, merge and garbage collection.
-- **`axionomy-mcp`**: the `SnapshotStore` trait, `MemorySnapshotStore` and the
-  assessment and artifact maps are removed in favor of the store. Resources
-  gain runs, steps, groups and their summaries, tag queries, refs, watch,
-  bisect and actor views; a tool adds and removes tags and moves refs.
+- **`axionomy-mcp`** (done): the `SnapshotStore` trait, `MemorySnapshotStore`
+  and the assessment and artifact maps are gone; snapshots are points of runs
+  in the store, durable across restarts with a store file. Results and
+  snapshots carry state roots, `axionomy_trace_step` names any state of the
+  exchanges that made a snapshot, a `diff` resource compares two snapshots,
+  and accounts and balances page from the state tree. Run IDs, tags, refs and
+  groups are store-wide names that would let one caller find another's
+  snapshots, so MCP exposes only what a handle reaches until it has
+  authentication; watch, bisect and actor views follow with phase 4.
 - **Studio server**: runs and artifacts move into the store, and scrubbing
   renders frames from stored roots instead of loading whole artifacts.
 - **Search and RL**: kept rollouts, sessions and RL episodes record as runs with
@@ -355,9 +360,9 @@ Each phase is a validated commit or series of commits.
    rules, tags, groups with running summaries, metrics and refs, the writer
    with group commit, merge and garbage collection, tested on
    `InMemoryBackend`.
-3. **MCP on the store.** Remove the snapshot trait, the in-memory store and
-   the registries; add run, step and group resources; extend the Python
-   interop suite.
+3. **MCP on the store** (done). Remove the snapshot trait, the in-memory
+   store and the registries; name intermediate states, diff snapshots, carry
+   state roots; extend the Python interop suite.
 4. **Recording and debugging:** runs, checkpoint rules and groups in search,
    rollouts, Monte Carlo, MPPI and RL; replay-buffer transitions by root;
    watch, bisect, actor views and the time index; Studio scrubbing from the

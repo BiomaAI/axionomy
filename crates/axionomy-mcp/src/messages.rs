@@ -121,7 +121,43 @@ pub struct EconomyStored {
     /// The same operation on the same parent was stored before; this is that
     /// snapshot.
     pub deduplicated: bool,
+    /// The state's content hash: snapshots with equal roots hold equal
+    /// states, however they were made.
+    pub root: StateRoot,
     pub counts: EconomyCounts,
+}
+
+/// A state's content hash, as 64 hexadecimal digits.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct StateRoot(pub axionomy_tree::Hash);
+
+impl Serialize for StateRoot {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.collect_str(&self.0.to_hex())
+    }
+}
+
+impl<'de> Deserialize<'de> for StateRoot {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let text = std::borrow::Cow::<str>::deserialize(deserializer)?;
+        axionomy_tree::Hash::from_hex(text.as_bytes())
+            .map(Self)
+            .map_err(serde::de::Error::custom)
+    }
+}
+
+impl JsonSchema for StateRoot {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "StateRoot".into()
+    }
+
+    fn json_schema(_: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({
+            "description": "A state's content hash: 64 lowercase hexadecimal digits.",
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+        })
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -183,6 +219,7 @@ pub struct ExchangedResponse {
     pub source_economy_id: EconomyId,
     pub economy_id: EconomyId,
     pub deduplicated: bool,
+    pub root: StateRoot,
     pub exchanges: usize,
     /// Quantity lines the exchanges moved; the snapshot's `changes` resource
     /// pages through them.
@@ -202,6 +239,16 @@ pub struct ReplayRequest {
     /// At most 1,000 exchanges, applied in order; the first failure stops the
     /// replay and stores nothing.
     pub exchanges: Vec<paths::Exchange>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct TraceStepRequest {
+    /// An economy made by applying exchanges.
+    pub economy_id: EconomyId,
+    /// How many of the exchanges that made it to apply to its parent: zero
+    /// for the parent's state, all of them for the economy itself.
+    pub step: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]

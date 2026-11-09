@@ -5,6 +5,7 @@ import socket
 import subprocess
 import time
 from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 
 import httpx
@@ -19,14 +20,18 @@ def anyio_backend() -> str:
     return "asyncio"
 
 
-@pytest.fixture(scope="session")
-def base_url() -> Iterator[str]:
+@contextmanager
+def running(store: Path | None = None) -> Iterator[str]:
+    """Runs the server until the block ends, keeping snapshots in `store` if
+    given, and yields its base URL."""
     if not BINARY.exists():
         pytest.fail(f"{BINARY} is missing; build it with `cargo build -p axionomy-mcp --bin axionomy-mcp`")
     with socket.socket() as probe:
         probe.bind(("127.0.0.1", 0))
         port = probe.getsockname()[1]
     environment = {**os.environ, "AXIONOMY_MCP_BIND": f"127.0.0.1:{port}", "RUST_LOG": "warn"}
+    if store is not None:
+        environment["AXIONOMY_MCP_STORE"] = str(store)
     server = subprocess.Popen([BINARY], env=environment)
     base_url = f"http://127.0.0.1:{port}"
     try:
@@ -44,6 +49,12 @@ def base_url() -> Iterator[str]:
     finally:
         server.terminate()
         server.wait(timeout=10)
+
+
+@pytest.fixture(scope="session")
+def base_url() -> Iterator[str]:
+    with running() as base_url:
+        yield base_url
 
 
 @pytest.fixture

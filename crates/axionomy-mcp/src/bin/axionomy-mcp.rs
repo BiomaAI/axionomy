@@ -1,4 +1,5 @@
-use axionomy_mcp::{MemorySnapshotStore, stateless_http_service};
+use axionomy_mcp::stateless_http_service;
+use axionomy_store::Store;
 use axum::{Router, routing::get};
 use std::{env, error::Error, net::SocketAddr};
 use tokio_util::sync::CancellationToken;
@@ -18,9 +19,17 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let bind = env::var("AXIONOMY_MCP_BIND")
         .unwrap_or_else(|_| "127.0.0.1:8000".to_owned())
         .parse::<SocketAddr>()?;
-    let snapshots = MemorySnapshotStore::default();
+    // A store file keeps snapshots across restarts; without one they last
+    // until the server stops.
+    let store = match env::var_os("AXIONOMY_MCP_STORE") {
+        Some(path) => {
+            info!(store = %path.to_string_lossy(), "keeping snapshots on disk");
+            Store::open(path)?
+        }
+        None => Store::memory()?,
+    };
     let cancellation = CancellationToken::new();
-    let service = stateless_http_service(snapshots, cancellation.clone());
+    let service = stateless_http_service(store, cancellation.clone())?;
     let app = Router::new()
         .route("/health", get(|| async { "ok" }))
         .nest_service("/mcp", service);

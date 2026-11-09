@@ -148,7 +148,7 @@ async fn complete(
 #[test]
 fn tools_declare_schemas_and_behavior_hints() {
     let tools = AxionomyMcp::default().tool_router.list_all();
-    assert_eq!(tools.len(), 8);
+    assert_eq!(tools.len(), 9);
     for tool in tools {
         assert!(tool.output_schema.is_some(), "{} output schema", tool.name);
         let hints = tool
@@ -560,15 +560,15 @@ async fn search_task(server: &AxionomyMcp, max_expansions: usize) -> (TaskManage
         "chunk_size": 1
     }))
     .unwrap();
-    let source = server.snapshot(&economy_id).await.unwrap();
+    let source = server.economy(&economy_id).await.unwrap();
     let goal = paths::Goal::new().require(
         "sink".parse().unwrap(),
         [("token".parse().unwrap(), axionomy::Quantity::new(1))].into(),
     );
     let tasks = TaskManager::new();
-    let snapshots = server.snapshots.clone();
+    let archive = server.archive.clone();
     let task = tasks.spawn(TaskOptions::new(), move |context| {
-        Box::pin(run_search(context, snapshots, source, request, goal))
+        Box::pin(run_search(context, archive, source, request, goal))
     });
     (tasks, task.task_id)
 }
@@ -609,14 +609,14 @@ async fn a_problem_run_returns_a_summary_and_pages_its_frames() {
         .with_instance("micro")
         .with_strategy("a_star");
     let tasks = TaskManager::new();
-    let artifacts = Arc::clone(&server.artifacts);
+    let archive = server.archive.clone();
     let task_request = request.clone();
     let task = tasks.spawn(TaskOptions::new(), move |context| {
-        Box::pin(run_problem(context, artifacts, task_request))
+        Box::pin(run_problem(context, archive, task_request))
     });
     let summary = completed(terminal_task(&tasks, &task.task_id).await);
     let artifact_id = summary["artifact_id"].as_str().unwrap().to_owned();
-    let served = server.artifact(&artifact_id).unwrap();
+    let served = server.artifact(&artifact_id).await.unwrap().unwrap();
     assert_eq!(*served, ReferenceService.run(request).unwrap());
     let document_id = summary["selected_document_id"].as_str().unwrap().to_owned();
     let frames = summary["documents"]
@@ -759,4 +759,112 @@ async fn exchanges_open_and_close_accounts_named_by_their_paths() {
         stuck.value["details"]["issues"][0]["ClosedNotEmpty"]["remaining"],
         json!([["gem", "1"]])
     );
+}
+
+async fn step(server: &AxionomyMcp, economy_id: &EconomyId, step: usize) -> Outcome {
+    outcome(
+        server
+            .trace_step(Parameters(TraceStepRequest {
+                economy_id: economy_id.clone(),
+                step,
+            }))
+            .await,
+    )
+}
+
+#[tokio::test]
+async fn stepping_through_a_trace_names_each_state_and_diffs_compare_them() {
+    let server = AxionomyMcp::default();
+    let parent = create(&server, fixture()).await;
+    let parent_id = id(&parent);
+    let replayed = replay(
+        &server,
+        &parent_id,
+        vec![transfer(1), transfer(2), transfer(1)],
+    )
+    .await;
+    let replayed_id = id(&replayed);
+
+    let mut states = Vec::new();
+    for index in 0..=3 {
+        let stepped = step(&server, &replayed_id, index).await;
+        assert!(!stepped.is_error, "{}", stepped.value);
+        assert_eq!(stepped.value["exchanges"], index);
+        assert_eq!(stepped.value["source_economy_id"], parent_id.as_str());
+        states.push(stepped);
+    }
+    // The ends of a trace are the states it connects.
+    assert_eq!(states[0].value["root"], parent.value["root"]);
+    assert_eq!(states[3].value["root"], replayed.value["root"]);
+    assert_eq!(step(&server, &replayed_id, 2).await.value, {
+        let mut again = states[2].value.clone();
+        again["deduplicated"] = json!(true);
+        again
+    });
+
+    let diff = read(
+        &server,
+        &uri(Target::Diff {
+            economy_id: id(&states[1]),
+            other_id: id(&states[3]),
+        }),
+    )
+    .await;
+    assert_eq!(
+        diff["items"],
+        json!([
+            { "kind": "balance", "account": "sink", "asset": "token", "before": "1", "after": "4" },
+            { "kind": "balance", "account": "source", "asset": "token", "before": "4", "after": "1" }
+        ])
+    );
+    let same = read(
+        &server,
+        &uri(Target::Diff {
+            economy_id: id(&states[3]),
+            other_id: replayed_id.clone(),
+        }),
+    )
+    .await;
+    assert_eq!(same["items"], json!([]));
+
+    assert!(step(&server, &replayed_id, 4).await.is_error);
+    assert!(step(&server, &parent_id, 0).await.is_error);
+}
+
+#[tokio::test]
+async fn a_store_on_disk_keeps_snapshots_and_handles_across_restarts() {
+    let directory = std::env::temp_dir().join(format!("axionomy-mcp-{}", std::process::id()));
+    std::fs::create_dir_all(&directory).unwrap();
+    let file = directory.join("snapshots.redb");
+    let _ = std::fs::remove_file(&file);
+    let (parent_id, applied) = {
+        let server = AxionomyMcp::new(axionomy_store::Store::open(&file).unwrap()).unwrap();
+        let parent_id = id(&create(&server, fixture()).await);
+        let applied = apply(&server, &parent_id, transfer(2)).await;
+        (parent_id, applied)
+    };
+    let server = AxionomyMcp::new(axionomy_store::Store::open(&file).unwrap()).unwrap();
+    let economy = read(
+        &server,
+        &uri(Target::Economy {
+            economy_id: id(&applied),
+        }),
+    )
+    .await;
+    assert_eq!(economy["root"], applied.value["root"]);
+    assert_eq!(economy["parent_id"], parent_id.as_str());
+    let changes = read(
+        &server,
+        &uri(Target::Changes {
+            economy_id: id(&applied),
+        }),
+    )
+    .await;
+    assert_eq!(changes["items"].as_array().unwrap().len(), 2);
+    // The handle secret survived, so the same operation names the same snapshot.
+    let again = apply(&server, &parent_id, transfer(2)).await;
+    assert_eq!(id(&again), id(&applied));
+    assert_eq!(again.value["deduplicated"], true);
+    drop(server);
+    std::fs::remove_dir_all(&directory).unwrap();
 }

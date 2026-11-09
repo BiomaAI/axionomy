@@ -5,17 +5,19 @@ use crate::{
         AssessResponse, DocumentSummary, EconomyCounts, EconomyCreateRequest, EconomyEntries,
         EconomyExtendRequest, EconomyStored, ExchangeRequest, ExchangedResponse, FailureCode,
         LineKind, ProblemCatalogRequest, ProblemCatalogResponse, QuantityLine, ReplayRequest,
-        RunSummary, SearchOutcome, SearchRequest, SearchResponse, SearchSolved, ToolFailure,
+        RunSummary, SearchOutcome, SearchRequest, SearchResponse, SearchSolved, StateRoot,
+        ToolFailure, TraceStepRequest,
     },
     resources::{self, Address, IMMUTABLE_TTL_MS, LIST_TTL_MS, Target},
-    store::{MemorySnapshotStore, Origin, Snapshot, SnapshotStore, secret_key},
+    store::{Archive, Assessed, Loaded, Origin, checkpoint},
 };
-use axionomy::{AccountPath, AssessmentStatus, paths};
+use axionomy::{AssessmentStatus, paths};
 use axionomy_search::{
     BfsSession, GraphSearchProgress,
     session::{Continue, SearchStatus, WorkBudget},
 };
-use axionomy_service::{ReferenceService, RunArtifact, RunControl, RunRequest, ServiceProgress};
+use axionomy_service::{ReferenceService, RunControl, RunRequest, ServiceProgress};
+use axionomy_store::{State, Store, StoreError};
 use rmcp::{
     ErrorData as McpError, ServerHandler,
     handler::server::{
@@ -36,11 +38,7 @@ use rmcp::{
     tool, tool_handler, tool_router,
 };
 use serde::{Serialize, de::DeserializeOwned};
-use std::{
-    borrow::Cow,
-    collections::HashMap,
-    sync::{Arc, RwLock},
-};
+use std::{borrow::Cow, sync::Arc};
 
 #[cfg(test)]
 mod tests;
@@ -62,55 +60,34 @@ actors, new positions or new firms: the exchange names the new account's path, w
 exist. A rate may also close accounts, once its own effects have left them empty, and a closed \
 path may be opened again. Every call that changes something returns a new economy_id and leaves \
 the old snapshot as it was. Check an exchange with axionomy_exchange_assess, then apply it with \
-axionomy_exchange_apply or apply several with axionomy_trace_replay. Read what a snapshot holds \
-through axionomy:// resources: tool results link to them, paths appear in their URIs as is (an \
-account's balances are .../accounts/agents/7/wallet), every list is paged with a cursor, and a \
-page never changes. Snapshots last until the server restarts.";
-
-pub(crate) type Registry<K, T> = Arc<RwLock<HashMap<K, Arc<T>>>>;
-
-/// An exchange checked against the state a snapshot reached after some of a
-/// replay's exchanges.
-pub(crate) struct StoredAssessment {
-    pub economy_id: EconomyId,
-    pub after_exchanges: usize,
-    pub exchange: paths::Exchange,
-    pub assessment: paths::Assessment,
-}
+axionomy_exchange_apply or apply several with axionomy_trace_replay; step through the exchanges \
+that made a snapshot with axionomy_trace_step. Read what a snapshot holds through axionomy:// \
+resources: tool results link to them, paths appear in their URIs as is (an account's balances are \
+.../accounts/agents/7/wallet), every list is paged with a cursor, and a page never changes. \
+Compare two snapshots with their diff resource; equal roots mean equal states. Snapshots are kept \
+in the server's store, across restarts when it keeps one on disk.";
 
 #[derive(Clone)]
-pub struct AxionomyMcp<S = MemorySnapshotStore>
-where
-    S: SnapshotStore,
-{
-    pub(crate) snapshots: S,
-    /// Keys assessment handles, so they are as hard to guess as snapshot handles.
-    key: Arc<[u8; 32]>,
-    pub(crate) assessments: Registry<AssessmentId, StoredAssessment>,
-    /// Run artifacts by the service's artifact ID.
-    pub(crate) artifacts: Registry<String, RunArtifact>,
+pub struct AxionomyMcp {
+    pub(crate) archive: Archive,
     tasks: TaskManager,
     task_options: TaskOptions,
     tool_router: ToolRouter<Self>,
 }
 
 #[tool_router]
-impl<S> AxionomyMcp<S>
-where
-    S: SnapshotStore,
-{
-    pub fn new(snapshots: S) -> Self {
-        Self {
-            snapshots,
-            key: Arc::new(secret_key()),
-            assessments: Arc::default(),
-            artifacts: Arc::default(),
+impl AxionomyMcp {
+    /// A server that keeps its snapshots in `store`. A store on disk keeps
+    /// them, and the secret their handles are keyed with, across restarts.
+    pub fn new(store: Store) -> Result<Self, StoreError> {
+        Ok(Self {
+            archive: Archive::open(store)?,
             tasks: TaskManager::new(),
             task_options: TaskOptions::new()
                 .with_poll_interval_ms(TASK_POLL_INTERVAL_MS)
                 .with_status_message("queued"),
             tool_router: Self::tool_router(),
-        }
+        })
     }
 
     /// Overrides retention, polling, and initial-status policy for new tasks.
@@ -122,7 +99,7 @@ where
     #[tool(
         name = "axionomy_economy_create",
         title = "Create an economy",
-        description = "Store a new economy with up to 10,000 entries: accounts with their balances, rates, and conservation invariants, each keyed by its path, such as `loans/42`. Grow it past that with axionomy_economy_extend. Returns an economy_id that lasts until the server restarts; repeating the same call returns the same economy_id.",
+        description = "Store a new economy with up to 10,000 entries: accounts with their balances, rates, and conservation invariants, each keyed by its path, such as `loans/42`. Grow it past that with axionomy_economy_extend. Returns an economy_id and the state's root; repeating the same call returns the same economy_id.",
         output_schema = schema_for_output::<EconomyStored>(),
         annotations(destructive_hint = false, idempotent_hint = true, open_world_hint = false)
     )]
@@ -144,7 +121,7 @@ where
         &self,
         Parameters(request): Parameters<EconomyExtendRequest>,
     ) -> Result<Linked<EconomyStored>, ToolError> {
-        let parent = self.snapshot(&request.economy_id).await?;
+        let parent = self.economy(&request.economy_id).await?;
         self.author(Some((request.economy_id, parent)), request.entries)
             .await
     }
@@ -160,10 +137,11 @@ where
         &self,
         Parameters(request): Parameters<ExchangeRequest>,
     ) -> Result<Linked<AssessResponse>, ToolError> {
-        let snapshot = self.snapshot(&request.economy_id).await?;
-        let assessment = snapshot.economy.assess(&request.exchange);
-        let (assessment_id, stored) =
-            self.keep_assessment(&request.economy_id, 0, request.exchange, assessment)?;
+        let source = self.economy(&request.economy_id).await?;
+        let assessment = source.state.economy.assess(&request.exchange);
+        let (assessment_id, stored) = self
+            .keep_assessment(&request.economy_id, &[], &request.exchange, assessment)
+            .await?;
         let lines = assessment_lines(&stored.assessment).count();
         let response = AssessResponse {
             economy_id: request.economy_id,
@@ -220,6 +198,52 @@ where
     }
 
     #[tool(
+        name = "axionomy_trace_step",
+        title = "Step through a trace",
+        description = "Return the economy_id of the state after the first `step` of the exchanges that made an economy, applied to its parent: zero gives the parent's state, all of them the economy itself. Read it, or diff it against its neighbors, to see what each exchange did.",
+        output_schema = schema_for_output::<ExchangedResponse>(),
+        annotations(destructive_hint = false, idempotent_hint = true, open_world_hint = false)
+    )]
+    async fn trace_step(
+        &self,
+        Parameters(request): Parameters<TraceStepRequest>,
+    ) -> Result<Linked<ExchangedResponse>, ToolError> {
+        let loaded = self.economy(&request.economy_id).await?;
+        let (Origin::Exchanged { exchanges }, Some(parent)) =
+            (loaded.record.origin, loaded.record.parent.clone())
+        else {
+            return Err(ToolError::new(
+                FailureCode::InvalidRequest,
+                format!(
+                    "`{}` was authored, not made by exchanges; it has no steps",
+                    request.economy_id
+                ),
+            ));
+        };
+        if request.step > exchanges {
+            return Err(ToolError::new(
+                FailureCode::InvalidRequest,
+                format!(
+                    "step {} is past the {exchanges} exchanges that made `{}`",
+                    request.step, request.economy_id
+                ),
+            ));
+        }
+        let stored = self
+            .archive
+            .step(&request.economy_id, &loaded, request.step)
+            .await
+            .map_err(ToolError::internal)?;
+        let stepped = self.economy(&stored.economy_id).await?;
+        Ok(exchanged_response(
+            parent,
+            stored.economy_id,
+            stored.deduplicated,
+            &stepped,
+        ))
+    }
+
+    #[tool(
         name = "axionomy_search",
         title = "Search for a trace",
         description = "Start a cancellable breadth-first search, as an MCP task, for exchanges from up to 1,000 candidates that bring the named accounts to their goal balances. A solution is stored as the snapshot it reaches; its exchanges resource is the trace. Requires the MCP tasks extension.",
@@ -267,23 +291,17 @@ where
     }
 }
 
-impl<S> AxionomyMcp<S>
-where
-    S: SnapshotStore,
-{
-    pub(crate) async fn snapshot(
-        &self,
-        economy_id: &EconomyId,
-    ) -> Result<Arc<Snapshot>, ToolError> {
-        self.snapshots
-            .get(economy_id)
+impl AxionomyMcp {
+    pub(crate) async fn economy(&self, economy_id: &EconomyId) -> Result<Arc<Loaded>, ToolError> {
+        self.archive
+            .economy(economy_id)
             .await
             .map_err(ToolError::internal)?
             .ok_or_else(|| {
                 ToolError::new(
                     FailureCode::NotFound,
                     format!(
-                        "economy snapshot `{economy_id}` does not exist; snapshots last until the server restarts, so create it again with axionomy_economy_create"
+                        "economy snapshot `{economy_id}` does not exist in this server's store; create it with axionomy_economy_create"
                     ),
                 )
             })
@@ -291,14 +309,14 @@ where
 
     async fn author(
         &self,
-        parent: Option<(EconomyId, Arc<Snapshot>)>,
+        parent: Option<(EconomyId, Arc<Loaded>)>,
         entries: EconomyEntries,
     ) -> Result<Linked<EconomyStored>, ToolError> {
         let size = entries.len();
         let operation = operation_bytes("entries", &entries)?;
         let (parent_id, base) = parent.unzip();
         let economy =
-            authoring::extend(base.as_deref().map(|snapshot| &*snapshot.economy), entries)
+            authoring::extend(base.as_deref().map(|loaded| &loaded.state.economy), entries)
                 .map_err(|error| {
                     let code = match error {
                         AuthoringError::TooLarge { .. } => FailureCode::TooLarge,
@@ -310,17 +328,11 @@ where
                 })?;
         let counts = counts(&economy);
         let stored = self
-            .snapshots
-            .put(
-                &operation,
-                Snapshot {
-                    parent_id: parent_id.clone(),
-                    origin: Origin::Authored { entries: size },
-                    economy: Arc::new(economy),
-                },
-            )
+            .archive
+            .author(parent_id.clone(), &operation, size, economy)
             .await
             .map_err(ToolError::internal)?;
+        let root = self.economy(&stored.economy_id).await?.state.root();
         let link = Target::Economy {
             economy_id: stored.economy_id.clone(),
         }
@@ -330,6 +342,7 @@ where
                 economy_id: stored.economy_id,
                 parent_id,
                 deduplicated: stored.deduplicated,
+                root: StateRoot(root),
                 counts,
             },
             vec![link],
@@ -342,60 +355,54 @@ where
         source_economy_id: EconomyId,
         exchanges: Vec<paths::Exchange>,
     ) -> Result<Linked<ExchangedResponse>, ToolError> {
-        let source = self.snapshot(&source_economy_id).await?;
-        let mut economy = paths::Economy::clone(&source.economy);
-        let mut receipts = Vec::with_capacity(exchanges.len());
-        for (step, exchange) in exchanges.iter().enumerate() {
-            if let Ok(receipt) = economy.apply(exchange.clone()) {
-                receipts.push(receipt);
+        let source = self.economy(&source_economy_id).await?;
+        let mut state = source.state.clone();
+        let mut steps = Vec::with_capacity(exchanges.len());
+        for (index, exchange) in exchanges.iter().enumerate() {
+            if let Ok(receipt) = state.apply(exchange.clone()) {
+                let step = source.record.point.step + index as u64 + 1;
+                steps.push((receipt, checkpoint(step).then(|| state.tree.clone())));
                 continue;
             }
             // Explain the failure against the state this exchange met.
-            let assessment = economy.assess(exchange);
-            let (assessment_id, stored) =
-                self.keep_assessment(&source_economy_id, step, exchange.clone(), assessment)?;
+            let assessment = state.economy.assess(exchange);
+            let (assessment_id, stored) = self
+                .keep_assessment(
+                    &source_economy_id,
+                    &exchanges[..index],
+                    exchange,
+                    assessment,
+                )
+                .await?;
             return Err(failed_exchange(
-                step,
+                index,
                 exchanges.len(),
                 &assessment_id,
                 &stored,
             ));
         }
-        let stored = store_exchanged(
-            &self.snapshots,
-            source_economy_id.clone(),
+        store_exchanged(
+            &self.archive,
+            source_economy_id,
+            &source,
             &exchanges,
-            economy,
-            receipts.into(),
+            steps,
+            state,
         )
-        .await?;
-        Ok(stored.into_linked(source_economy_id))
+        .await
     }
 
-    fn keep_assessment(
+    async fn keep_assessment(
         &self,
         economy_id: &EconomyId,
-        after_exchanges: usize,
-        exchange: paths::Exchange,
+        before: &[paths::Exchange],
+        exchange: &paths::Exchange,
         assessment: paths::Assessment,
-    ) -> Result<(AssessmentId, Arc<StoredAssessment>), ToolError> {
-        let mut hasher = blake3::Hasher::new_keyed(&self.key);
-        hasher.update(economy_id.as_str().as_bytes());
-        hasher.update(&after_exchanges.to_le_bytes());
-        hasher.update(&serde_json::to_vec(&exchange).map_err(ToolError::internal)?);
-        let assessment_id = AssessmentId::from_digest(&hasher.finalize());
-        let stored = Arc::new(StoredAssessment {
-            economy_id: economy_id.to_owned(),
-            after_exchanges,
-            exchange,
-            assessment,
-        });
-        let mut assessments = self
-            .assessments
-            .write()
-            .map_err(|_| ToolError::internal("assessment registry lock is poisoned"))?;
-        let stored = Arc::clone(assessments.entry(assessment_id.clone()).or_insert(stored));
-        Ok((assessment_id, stored))
+    ) -> Result<(AssessmentId, Arc<Assessed>), ToolError> {
+        self.archive
+            .keep_assessment(economy_id, before, exchange, assessment)
+            .await
+            .map_err(ToolError::internal)
     }
 
     async fn start_search(
@@ -433,10 +440,10 @@ where
                     })?;
                     Ok::<_, ToolError>(goal.require(account.clone(), basket))
                 })?;
-        let source = self.snapshot(&request.economy_id).await?;
-        let snapshots = self.snapshots.clone();
+        let source = self.economy(&request.economy_id).await?;
+        let archive = self.archive.clone();
         let task = self.tasks.spawn(self.task_options.clone(), move |context| {
-            Box::pin(run_search(context, snapshots, source, request, goal))
+            Box::pin(run_search(context, archive, source, request, goal))
         });
         Ok(CreateTaskResult::new(task).into())
     }
@@ -448,25 +455,29 @@ where
         let request: RunRequest = arguments_of(arguments)?;
         validate_problem_run(&request)
             .map_err(|message| ToolError::new(FailureCode::InvalidRequest, message))?;
-        let artifacts = Arc::clone(&self.artifacts);
+        let archive = self.archive.clone();
         let task = self.tasks.spawn(self.task_options.clone(), move |context| {
-            Box::pin(run_problem(context, artifacts, request))
+            Box::pin(run_problem(context, archive, request))
         });
         Ok(CreateTaskResult::new(task).into())
     }
 }
 
-impl Default for AxionomyMcp<MemorySnapshotStore> {
+impl Default for AxionomyMcp {
+    /// A server that keeps its snapshots in memory, until it stops.
+    ///
+    /// # Panics
+    ///
+    /// If an in-memory store cannot be created, or the operating system
+    /// provides no randomness for the handle secret.
     fn default() -> Self {
-        Self::new(MemorySnapshotStore::default())
+        Self::new(Store::memory().expect("an in-memory store opens"))
+            .expect("an in-memory store keeps the server's tables")
     }
 }
 
 #[tool_handler(router = self.tool_router)]
-impl<S> ServerHandler for AxionomyMcp<S>
-where
-    S: SnapshotStore,
-{
+impl ServerHandler for AxionomyMcp {
     async fn call_tool(
         &self,
         request: CallToolRequestParams,
@@ -646,14 +657,6 @@ impl ToolError {
         Self::new(FailureCode::Internal, error.to_string())
     }
 
-    pub(crate) fn is_not_found(&self) -> bool {
-        self.failure.error == FailureCode::NotFound
-    }
-
-    pub(crate) fn message(&self) -> &str {
-        &self.failure.message
-    }
-
     fn with_details(mut self, details: impl Serialize) -> Self {
         self.failure.details = serde_json::to_value(details).ok();
         self
@@ -714,73 +717,64 @@ pub(crate) fn counts(economy: &paths::Economy) -> EconomyCounts {
     }
 }
 
-struct StoredExchanges {
-    economy_id: EconomyId,
-    deduplicated: bool,
-    exchanges: usize,
-    changes: usize,
-    opened: Vec<AccountPath>,
-    closed: Vec<AccountPath>,
-}
-
-impl StoredExchanges {
-    fn into_linked(self, source_economy_id: EconomyId) -> Linked<ExchangedResponse> {
-        let links = exchanged_links(&self.economy_id);
-        Linked::new(
-            ExchangedResponse {
-                source_economy_id,
-                economy_id: self.economy_id,
-                deduplicated: self.deduplicated,
-                exchanges: self.exchanges,
-                changes: self.changes,
-                opened: self.opened,
-                closed: self.closed,
-            },
-            links,
-        )
-    }
-}
-
-/// Stores the state `exchanges` reached from `parent_id`. Applying one exchange
-/// and replaying it alone are the same operation, so they share a handle.
-async fn store_exchanged<S: SnapshotStore>(
-    snapshots: &S,
-    parent_id: EconomyId,
+/// Stores the state a call's exchanges reached from `source` and describes it.
+/// Applying one exchange and replaying it alone are the same operation, so
+/// they share a handle.
+async fn store_exchanged(
+    archive: &Archive,
+    source_economy_id: EconomyId,
+    source: &Loaded,
     exchanges: &[paths::Exchange],
-    economy: paths::Economy,
-    receipts: Arc<[paths::Receipt]>,
-) -> Result<StoredExchanges, ToolError> {
+    steps: Vec<(paths::Receipt, Option<axionomy_tree::Tree>)>,
+    state: State,
+) -> Result<Linked<ExchangedResponse>, ToolError> {
     let operation = operation_bytes("exchanges", &exchanges)?;
-    let changes = receipt_lines(&receipts).count();
-    let opened = receipts
-        .iter()
-        .flat_map(|receipt| receipt.opened())
-        .cloned()
-        .collect();
-    let closed = receipts
-        .iter()
-        .flat_map(|receipt| receipt.closed())
-        .cloned()
-        .collect();
-    let stored = snapshots
-        .put(
-            &operation,
-            Snapshot {
-                parent_id: Some(parent_id),
-                origin: Origin::Exchanged { receipts },
-                economy: Arc::new(economy),
-            },
-        )
+    let stored = archive
+        .exchanged(&source_economy_id, source, &operation, steps, state)
         .await
         .map_err(ToolError::internal)?;
-    Ok(StoredExchanges {
-        economy_id: stored.economy_id,
-        deduplicated: stored.deduplicated,
-        exchanges: exchanges.len(),
-        changes,
-        opened,
-        closed,
-    })
+    let loaded = archive
+        .economy(&stored.economy_id)
+        .await
+        .map_err(ToolError::internal)?
+        .ok_or_else(|| ToolError::internal("a stored economy cannot be read back"))?;
+    Ok(exchanged_response(
+        source_economy_id,
+        stored.economy_id,
+        stored.deduplicated,
+        &loaded,
+    ))
+}
+
+fn exchanged_response(
+    source_economy_id: EconomyId,
+    economy_id: EconomyId,
+    deduplicated: bool,
+    loaded: &Loaded,
+) -> Linked<ExchangedResponse> {
+    let receipts = &loaded.receipts;
+    let links = exchanged_links(&economy_id);
+    Linked::new(
+        ExchangedResponse {
+            source_economy_id,
+            economy_id,
+            deduplicated,
+            root: StateRoot(loaded.state.root()),
+            exchanges: receipts.len(),
+            changes: receipt_lines(receipts).count(),
+            opened: receipts
+                .iter()
+                .flat_map(|receipt| receipt.opened())
+                .cloned()
+                .collect(),
+            closed: receipts
+                .iter()
+                .flat_map(|receipt| receipt.closed())
+                .cloned()
+                .collect(),
+        },
+        links,
+    )
 }
 
 fn exchanged_links(economy_id: &EconomyId) -> Vec<Resource> {
@@ -817,7 +811,7 @@ fn failed_exchange(
     step: usize,
     exchanges: usize,
     assessment_id: &AssessmentId,
-    stored: &StoredAssessment,
+    stored: &Assessed,
 ) -> ToolError {
     let which = if exchanges == 1 {
         "the exchange".to_owned()
@@ -963,7 +957,7 @@ fn task_error(error: impl ToString) -> TaskExit {
 
 async fn run_problem(
     context: TaskContext,
-    artifacts: Registry<String, RunArtifact>,
+    archive: Archive,
     request: RunRequest,
 ) -> Result<CallToolResult, TaskExit> {
     let control = Arc::new(RunControl::default());
@@ -1025,19 +1019,16 @@ async fn run_problem(
         }
         .link("frames", "The selected document's replay frames, paged"),
     ];
-    artifacts
-        .write()
-        .map_err(|_| task_error("artifact registry lock is poisoned"))?
-        .insert(artifact.id.clone(), Arc::new(artifact));
+    archive.keep_artifact(artifact).await.map_err(task_error)?;
     Linked::new(summary, links)
         .into_result()
         .map_err(TaskExit::Error)
 }
 
-async fn run_search<S: SnapshotStore>(
+async fn run_search(
     context: TaskContext,
-    snapshots: S,
-    source: Arc<Snapshot>,
+    archive: Archive,
+    source: Arc<Loaded>,
     request: SearchRequest,
     goal: paths::Goal,
 ) -> Result<CallToolResult, TaskExit> {
@@ -1048,7 +1039,7 @@ async fn run_search<S: SnapshotStore>(
         chunk_size,
         ..
     } = request;
-    let mut session = BfsSession::new(source.economy.as_ref(), goal, move |_| candidates.clone());
+    let mut session = BfsSession::new(&source.state.economy, goal, move |_| candidates.clone());
     let mut remaining = max_expansions;
 
     let outcome = loop {
@@ -1079,17 +1070,24 @@ async fn run_search<S: SnapshotStore>(
     let solution = match session.into_solution() {
         Some(solution) => {
             let exchanges = solution.trace().exchanges().to_vec();
-            let mut economy = paths::Economy::clone(&source.economy);
-            let receipts = economy.replay(solution.trace()).map_err(task_error)?;
+            let mut state = source.state.clone();
+            let mut steps = Vec::with_capacity(exchanges.len());
+            for (index, exchange) in exchanges.iter().enumerate() {
+                let receipt = state.apply(exchange.clone()).map_err(task_error)?;
+                let step = source.record.point.step + index as u64 + 1;
+                steps.push((receipt, checkpoint(step).then(|| state.tree.clone())));
+            }
             let stored = store_exchanged(
-                &snapshots,
+                &archive,
                 economy_id.clone(),
+                &source,
                 &exchanges,
-                economy,
-                receipts.into(),
+                steps,
+                state,
             )
             .await
-            .map_err(|error| task_error(error.failure.message))?;
+            .map_err(|error| task_error(error.failure.message))?
+            .value;
             links = exchanged_links(&stored.economy_id);
             Some(SearchSolved {
                 economy_id: stored.economy_id,

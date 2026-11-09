@@ -15,6 +15,7 @@
 
 use axionomy::{AccountPath, AssetPath, Quantity, RatePath, paths};
 use axionomy_tree::Tree;
+use std::ops::Range;
 use thiserror::Error;
 
 const ACCOUNT: u8 = b'a';
@@ -95,10 +96,7 @@ pub fn economy(tree: &Tree) -> Result<paths::Economy, StateError> {
         while let Some((key, value)) = balances.next_if(|(key, _)| key.starts_with(&prefix)) {
             read += 1;
             let asset: AssetPath = path(&key[prefix.len()..])?;
-            let bytes: [u8; 32] = value
-                .try_into()
-                .map_err(|_| StateError("a balance is not 32 bytes"))?;
-            let quantity = Quantity::from_be_bytes(bytes);
+            let quantity = quantity(value)?;
             if quantity.is_zero() {
                 return Err(StateError("a balance is zero"));
             }
@@ -136,6 +134,139 @@ pub fn economy(tree: &Tree) -> Result<paths::Economy, StateError> {
     builder
         .build()
         .map_err(|_| StateError("the entries do not make a valid economy"))
+}
+
+/// The positions in a state's tree of the accounts whose paths start with
+/// `prefix`, in path order.
+pub fn accounts(tree: &Tree, prefix: &str) -> Range<u64> {
+    span(tree, &[&[ACCOUNT], prefix.as_bytes()].concat())
+}
+
+/// The accounts at `positions`, each with how many assets it holds.
+pub fn account_rows(
+    tree: &Tree,
+    positions: Range<u64>,
+) -> impl Iterator<Item = Result<(u64, AccountPath, u64), StateError>> + '_ {
+    tree.iter_at(positions.start)
+        .zip(positions)
+        .map(move |((key, _), position)| {
+            let account: AccountPath = key
+                .strip_prefix(&[ACCOUNT])
+                .ok_or(StateError("a position is not an account"))
+                .and_then(path)?;
+            let balances = span(tree, &balance_key(&account, ""));
+            Ok((position, account, balances.end - balances.start))
+        })
+}
+
+/// The positions in a state's tree of an account's balances whose asset
+/// paths start with `prefix`, in path order.
+pub fn balances(tree: &Tree, account: &AccountPath, prefix: &str) -> Range<u64> {
+    span(tree, &balance_key(account, prefix))
+}
+
+/// The balances at `positions`, which [`balances`] gave for `account`.
+pub fn balance_rows<'a>(
+    tree: &'a Tree,
+    account: &AccountPath,
+    positions: Range<u64>,
+) -> impl Iterator<Item = Result<(u64, AssetPath, Quantity), StateError>> + 'a {
+    let prefix = balance_key(account, "");
+    tree.iter_at(positions.start)
+        .zip(positions)
+        .map(move |((key, value), position)| {
+            let asset = key
+                .strip_prefix(prefix.as_slice())
+                .ok_or(StateError(
+                    "a position is not one of the account's balances",
+                ))
+                .and_then(path)?;
+            Ok((position, asset, quantity(value)?))
+        })
+}
+
+/// How one state differs from another.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Change {
+    Opened(AccountPath),
+    Closed(AccountPath),
+    Balance {
+        account: AccountPath,
+        asset: AssetPath,
+        before: Quantity,
+        after: Quantity,
+    },
+    Rate(RatePath),
+    Invariants,
+}
+
+/// What changed from `before` to `after`, in key order: accounts opened and
+/// closed, balances whose quantity differs, rates added, removed or redefined,
+/// and whether the invariants differ. Subtrees the states share are skipped.
+pub fn changes(before: &Tree, after: &Tree) -> Result<Vec<Change>, StateError> {
+    let mut changes = Vec::new();
+    let mut invariants = false;
+    for change in before.diff(after) {
+        let (&space, rest) = change
+            .key
+            .split_first()
+            .ok_or(StateError("an entry has an empty key"))?;
+        match space {
+            ACCOUNT => changes.push(match change.after {
+                Some(_) => Change::Opened(path(rest)?),
+                None => Change::Closed(path(rest)?),
+            }),
+            BALANCE => {
+                let split = rest
+                    .iter()
+                    .position(|&byte| byte == 0)
+                    .ok_or(StateError("a balance key has no asset"))?;
+                let held = |value: Option<&[u8]>| value.map_or(Ok(Quantity::ZERO), quantity);
+                changes.push(Change::Balance {
+                    account: path(&rest[..split])?,
+                    asset: path(&rest[split + 1..])?,
+                    before: held(change.before)?,
+                    after: held(change.after)?,
+                });
+            }
+            RATE => changes.push(Change::Rate(path(rest)?)),
+            INVARIANT => invariants = true,
+            _ => return Err(StateError("an entry holds nothing an economy has")),
+        }
+    }
+    if invariants {
+        changes.push(Change::Invariants);
+    }
+    Ok(changes)
+}
+
+/// The positions of the keys that start with `prefix`.
+fn span(tree: &Tree, prefix: &[u8]) -> Range<u64> {
+    let start = tree.rank(prefix);
+    let end = match successor(prefix) {
+        Some(end) => tree.rank(&end),
+        None => tree.len(),
+    };
+    start..end
+}
+
+/// The least key greater than every key that starts with `prefix`.
+fn successor(prefix: &[u8]) -> Option<Vec<u8>> {
+    let mut end = prefix.to_vec();
+    while let Some(last) = end.pop() {
+        if last < u8::MAX {
+            end.push(last + 1);
+            return Some(end);
+        }
+    }
+    None
+}
+
+fn quantity(value: &[u8]) -> Result<Quantity, StateError> {
+    let bytes: [u8; 32] = value
+        .try_into()
+        .map_err(|_| StateError("a balance is not 32 bytes"))?;
+    Ok(Quantity::from_be_bytes(bytes))
 }
 
 fn account_key(account: &AccountPath) -> Vec<u8> {
@@ -206,6 +337,7 @@ mod tests {
             .build()
             .unwrap();
         let mut stored = tree(&economy);
+        let initial = stored.clone();
         let steps = [
             paths::Exchange::new(open, Quantity::new(1)).bind(path("new"), path("agents/1")),
             paths::Exchange::new(fund, Quantity::new(2))
@@ -216,16 +348,55 @@ mod tests {
                 .bind(path("bank"), path("bank")),
         ];
         assert!(economy.apply(steps[2].clone()).is_err());
+        let mut states = vec![stored.clone()];
         for exchange in steps {
-            let before = stored.clone();
             let receipt = economy.apply(exchange).unwrap();
             advance(&mut stored, &economy, &receipt);
             assert_eq!(stored.hash(), tree(&economy).hash());
-            assert!(!stored.diff(&before).is_empty());
             let rebuilt = super::economy(&stored).unwrap();
             assert_eq!(rebuilt.state_key(), economy.state_key());
             assert_eq!(tree(&rebuilt).hash(), stored.hash());
+            states.push(stored.clone());
         }
+
+        let (bank, agent): (AccountPath, AccountPath) = (path("bank"), path("agents/1"));
+        let cash: AssetPath = path("cash");
+        let balance = |account: &AccountPath, before, after| Change::Balance {
+            account: account.clone(),
+            asset: cash.clone(),
+            before: Quantity::new(before),
+            after: Quantity::new(after),
+        };
+        assert_eq!(
+            changes(&states[0], &states[1]).unwrap(),
+            [Change::Opened(agent.clone())]
+        );
+        assert_eq!(
+            changes(&states[1], &states[2]).unwrap(),
+            [balance(&agent, 0, 20), balance(&bank, 100, 80)]
+        );
+        assert_eq!(
+            changes(&states[2], &states[3]).unwrap(),
+            [
+                Change::Closed(agent.clone()),
+                balance(&agent, 20, 0),
+                balance(&bank, 80, 100)
+            ]
+        );
+        // Closing what was opened returns to the same state, and the same root.
+        assert!(changes(&initial, &stored).unwrap().is_empty());
+        assert_eq!(initial.hash(), stored.hash());
+
+        let listed: Vec<_> = account_rows(&states[2], accounts(&states[2], "ba"))
+            .map(|row| row.unwrap())
+            .map(|(_, account, assets)| (account.to_string(), assets))
+            .collect();
+        assert_eq!(listed, [("bank".into(), 1), ("bank/vault".into(), 1)]);
+        let held: Vec<_> = balance_rows(&states[2], &agent, balances(&states[2], &agent, "c"))
+            .map(|row| row.unwrap())
+            .map(|(_, asset, quantity)| (asset, quantity))
+            .collect();
+        assert_eq!(held, [(cash, Quantity::new(20))]);
     }
 
     #[test]

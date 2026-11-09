@@ -112,7 +112,7 @@ models into one-way workspace dependencies:
 | `axionomy-time` | Calendar-aware Jiff authoring over the same canonical timeline denominations |
 | `axionomy-tree` | Canonical persistent prolly trees: the content-addressed maps stored states are kept in |
 | `axionomy-store` | Runs, stored states, replay verification, tags, groups, metrics and refs, on redb |
-| `axionomy-mcp` | Strict stateless MCP 2026-07-28 reference server with caller-owned snapshot storage and interruptible search tasks |
+| `axionomy-mcp` | Strict stateless MCP 2026-07-28 reference server with stored, steppable, diffable snapshots and interruptible search tasks |
 | `axionomy-view` | Runtime-neutral, replay-derived browser presentation contracts |
 | `axionomy-service` | Interface-neutral catalog, run control, progress, and replay-derived artifacts for every canonical problem |
 | `axionomy-cli` | Human- and script-friendly access to the shared problem service |
@@ -167,7 +167,7 @@ adapters.
 - One service contract shared by CLI, HTTP/SSE, MCP, Studio, and browser Wasm.
 - Discoverable reference problems, each with explicit Micro, Showcase, and Stress instances.
 - Snapshot leaderboards whose exact ranks, tradeoffs, and evidence update during replay.
-- A strict stateless MCP 2026-07-28 server with caller-owned snapshot storage.
+- A strict stateless MCP 2026-07-28 server whose snapshots persist in a store, with state roots, trace stepping and diffs.
 - Rust-owned OpenAPI, generated TypeScript, portable artifacts, and cross-interface tests.
 
 ### Studio
@@ -526,18 +526,17 @@ will produce the same ID.
 
 `axionomy-mcp` demonstrates how a remote, interruptible Axionomy integration
 can remain faithful to the closed model. It keeps no hidden “current economy.”
-`axionomy_economy_put` returns an immutable `economy_id`; assessment names that
-snapshot, while apply and replay return a new ID and leave the source
+`axionomy_economy_create` returns an immutable `economy_id`; assessment names
+that snapshot, while apply and replay return a new ID and leave the source
 available. `axionomy_search` accepts an explicit candidate exchange universe
 and returns an MCP task handle whose progress, terminal result, and cooperative
 cancellation are observable for the lifetime configured by the running server.
 
-Snapshot lifetime is caller policy. `AxionomyMcp<S>` accepts any
-`SnapshotStore`; the reference binary uses `MemorySnapshotStore`, whose clones
-share immutable content-addressed snapshots for one process. A restarted
-reference server intentionally starts empty. Applications that genuinely need
-longer-lived handles can provide database or object-store implementations
-without changing the MCP tools or the core engine.
+Snapshots live in an `axionomy-store` store: in memory by default, or in the
+file `AXIONOMY_MCP_STORE` names, which keeps snapshots and their handles across
+restarts. Each snapshot is a point of a recorded run, so the intermediate
+states of a replay can be named with `axionomy_trace_step`, any two snapshots
+can be diffed, and every result carries its state's content root.
 
 The server accepts only MCP `2026-07-28`, disables legacy sessions, and
 requires the revision's request metadata and standard HTTP routing headers.

@@ -2,21 +2,22 @@
 
 use crate::{
     handles::{AssessmentId, EconomyId, InvariantPath},
-    messages::{Direction, DocumentSummary, EconomyCounts},
-    resources::{Address, PAGE_FRAMES, PAGE_ROWS, Page, Target, page},
-    server::{AxionomyMcp, StoredAssessment, assessment_lines, counts, receipt_lines},
-    store::{Origin, Snapshot, SnapshotStore},
+    messages::{Direction, DocumentSummary, EconomyCounts, StateRoot},
+    resources::{Address, PAGE_FRAMES, PAGE_ROWS, Page, Target, page, span_page},
+    server::{AxionomyMcp, assessment_lines, counts, receipt_lines},
+    store::{Loaded, Origin},
 };
 use axionomy::{AccountPath, AssessmentStatus, AssetPath, Quantity, RatePath, RolePath, paths};
 use axionomy_service::{RunArtifact, RunRequest};
+use axionomy_store::state;
 use rmcp::{
     ErrorData as McpError,
     model::{CompleteRequestParams, CompleteResult, CompletionInfo},
 };
 use serde::Serialize;
-use std::sync::Arc;
+use std::{ops::Range, sync::Arc};
 
-impl<S: SnapshotStore> AxionomyMcp<S> {
+impl AxionomyMcp {
     /// The JSON content of one resource page.
     pub(crate) async fn read(&self, address: &Address) -> Result<String, McpError> {
         let not_found = || {
@@ -27,7 +28,10 @@ impl<S: SnapshotStore> AxionomyMcp<S> {
         };
         match &address.target {
             Target::Assessment { assessment_id } => {
-                let stored = self.assessment(assessment_id).ok_or_else(not_found)?;
+                let stored = self
+                    .assessment(assessment_id)
+                    .await?
+                    .ok_or_else(not_found)?;
                 let assessment = &stored.assessment;
                 json(&AssessmentView {
                     assessment_id,
@@ -40,7 +44,10 @@ impl<S: SnapshotStore> AxionomyMcp<S> {
                 })
             }
             Target::AssessmentLines { assessment_id } => {
-                let stored = self.assessment(assessment_id).ok_or_else(not_found)?;
+                let stored = self
+                    .assessment(assessment_id)
+                    .await?
+                    .ok_or_else(not_found)?;
                 json(&page(
                     address,
                     assessment_lines(&stored.assessment).enumerate(),
@@ -48,7 +55,7 @@ impl<S: SnapshotStore> AxionomyMcp<S> {
                 )?)
             }
             Target::Artifact { artifact_id } => {
-                let artifact = self.artifact(artifact_id).ok_or_else(not_found)?;
+                let artifact = self.artifact(artifact_id).await?.ok_or_else(not_found)?;
                 json(&ArtifactView {
                     artifact_id,
                     problem: &artifact.problem.key,
@@ -70,7 +77,7 @@ impl<S: SnapshotStore> AxionomyMcp<S> {
                 artifact_id,
                 document_id,
             } => {
-                let artifact = self.artifact(artifact_id).ok_or_else(not_found)?;
+                let artifact = self.artifact(artifact_id).await?.ok_or_else(not_found)?;
                 let document = artifact
                     .documents
                     .iter()
@@ -85,7 +92,7 @@ impl<S: SnapshotStore> AxionomyMcp<S> {
                 artifact_id,
                 document_id,
             } => {
-                let artifact = self.artifact(artifact_id).ok_or_else(not_found)?;
+                let artifact = self.artifact(artifact_id).await?.ok_or_else(not_found)?;
                 let document = artifact
                     .documents
                     .iter()
@@ -108,8 +115,21 @@ impl<S: SnapshotStore> AxionomyMcp<S> {
             | Target::InvariantWeights { economy_id, .. }
             | Target::Changes { economy_id }
             | Target::Exchanges { economy_id } => {
-                let snapshot = self.stored(economy_id).await?.ok_or_else(not_found)?;
-                read_snapshot(address, economy_id, &snapshot).ok_or_else(not_found)?
+                let loaded = self.stored(economy_id).await?.ok_or_else(not_found)?;
+                read_snapshot(address, economy_id, &loaded).ok_or_else(not_found)?
+            }
+            Target::Diff {
+                economy_id,
+                other_id,
+            } => {
+                let before = self.stored(economy_id).await?.ok_or_else(not_found)?;
+                let after = self.stored(other_id).await?.ok_or_else(not_found)?;
+                let changes = state::changes(&before.state.tree, &after.state.tree)
+                    .map_err(internal)?
+                    .into_iter()
+                    .map(DiffRow::from)
+                    .enumerate();
+                json(&page(address, changes, PAGE_ROWS)?)
             }
         }
     }
@@ -137,9 +157,10 @@ impl<S: SnapshotStore> AxionomyMcp<S> {
             })
         };
         let not_found = || McpError::resource_not_found("Resource not found", None);
+        let prefix = request.argument.value.as_str();
         let candidates: Vec<String> = match argument {
             "account" | "rate" | "invariant" | "asset" | "prefix" => {
-                let snapshot = self
+                let loaded = self
                     .stored(
                         &needed("economy_id")?
                             .parse::<EconomyId>()
@@ -149,11 +170,19 @@ impl<S: SnapshotStore> AxionomyMcp<S> {
                     )
                     .await?
                     .ok_or_else(not_found)?;
-                let economy = &snapshot.economy;
+                let (economy, tree) = (&loaded.state.economy, &loaded.state.tree);
                 match argument {
-                    "account" => economy.accounts().map(|(id, _)| id.to_string()).collect(),
-                    "prefix" if accounts_template => {
-                        economy.accounts().map(|(id, _)| id.to_string()).collect()
+                    "account" | "prefix" if argument == "account" || accounts_template => {
+                        // Accounts are read by prefix from the state's tree,
+                        // however many there are.
+                        let span = state::accounts(tree, prefix);
+                        let total = span.end - span.start;
+                        let shown = span.start..span.end.min(span.start + MAX_COMPLETIONS);
+                        let values = state::account_rows(tree, shown)
+                            .map(|row| row.map(|(_, account, _)| account.to_string()))
+                            .collect::<Result<Vec<_>, _>>()
+                            .map_err(internal)?;
+                        return completed(values, total);
                     }
                     "rate" => economy.rate_ids().map(ToString::to_string).collect(),
                     "invariant" => economy
@@ -172,18 +201,21 @@ impl<S: SnapshotStore> AxionomyMcp<S> {
                                 None,
                             )
                         })?;
-                        economy
-                            .account(&account)
-                            .ok_or_else(not_found)?
-                            .balances()
-                            .iter()
-                            .map(|(asset, _)| asset.to_string())
-                            .collect()
+                        economy.account(&account).ok_or_else(not_found)?;
+                        let span = state::balances(tree, &account, prefix);
+                        let total = span.end - span.start;
+                        let shown = span.start..span.end.min(span.start + MAX_COMPLETIONS);
+                        let values = state::balance_rows(tree, &account, shown)
+                            .map(|row| row.map(|(_, asset, _)| asset.to_string()))
+                            .collect::<Result<Vec<_>, _>>()
+                            .map_err(internal)?;
+                        return completed(values, total);
                     }
                 }
             }
             "document_id" => self
                 .artifact(needed("artifact_id")?)
+                .await?
                 .ok_or_else(not_found)?
                 .documents
                 .iter()
@@ -191,38 +223,63 @@ impl<S: SnapshotStore> AxionomyMcp<S> {
                 .collect(),
             _ => Vec::new(),
         };
-        let prefix = request.argument.value.as_str();
         let matches: Vec<String> = candidates
             .into_iter()
             .filter(|candidate| candidate.starts_with(prefix))
             .collect();
-        let total = matches.len();
-        let values: Vec<String> = matches
-            .into_iter()
-            .take(CompletionInfo::MAX_VALUES)
-            .collect();
-        let has_more = total > values.len();
-        let completion =
-            CompletionInfo::with_pagination(values, u32::try_from(total).ok(), has_more)
-                .map_err(|message| McpError::internal_error(message, None))?;
-        Ok(CompleteResult::new(completion))
+        let total = matches.len() as u64;
+        completed(
+            matches.into_iter().take(MAX_COMPLETIONS as usize).collect(),
+            total,
+        )
     }
 
-    async fn stored(&self, economy_id: &EconomyId) -> Result<Option<Arc<Snapshot>>, McpError> {
-        match self.snapshot(economy_id).await {
-            Ok(snapshot) => Ok(Some(snapshot)),
-            Err(error) if error.is_not_found() => Ok(None),
-            Err(error) => Err(McpError::internal_error(error.message().to_owned(), None)),
-        }
+    async fn stored(&self, economy_id: &EconomyId) -> Result<Option<Arc<Loaded>>, McpError> {
+        self.archive.economy(economy_id).await.map_err(internal)
     }
 
-    fn assessment(&self, assessment_id: &AssessmentId) -> Option<Arc<StoredAssessment>> {
-        self.assessments.read().ok()?.get(assessment_id).cloned()
+    async fn assessment(
+        &self,
+        assessment_id: &AssessmentId,
+    ) -> Result<Option<Arc<crate::store::Assessed>>, McpError> {
+        self.archive
+            .assessment(assessment_id)
+            .await
+            .map_err(internal)
     }
 
-    pub(crate) fn artifact(&self, artifact_id: &str) -> Option<Arc<RunArtifact>> {
-        self.artifacts.read().ok()?.get(artifact_id).cloned()
+    pub(crate) async fn artifact(
+        &self,
+        artifact_id: &str,
+    ) -> Result<Option<Arc<RunArtifact>>, McpError> {
+        self.archive.artifact(artifact_id).await.map_err(internal)
     }
+}
+
+const MAX_COMPLETIONS: u64 = CompletionInfo::MAX_VALUES as u64;
+
+fn completed(values: Vec<String>, total: u64) -> Result<CompleteResult, McpError> {
+    let has_more = total > values.len() as u64;
+    let completion = CompletionInfo::with_pagination(values, u32::try_from(total).ok(), has_more)
+        .map_err(|message| McpError::internal_error(message, None))?;
+    Ok(CompleteResult::new(completion))
+}
+
+fn internal(error: impl ToString) -> McpError {
+    McpError::internal_error(error.to_string(), None)
+}
+
+/// A page of rows read from positions of a state's tree.
+fn tree_page<T: Serialize>(
+    address: &Address,
+    span: Range<u64>,
+    rows: impl FnOnce(Range<u64>) -> Result<Vec<T>, state::StateError>,
+) -> Result<String, McpError> {
+    let span = usize::try_from(span.start).map_err(internal)?
+        ..usize::try_from(span.end).map_err(internal)?;
+    let (positions, next_cursor) = span_page(address, span, PAGE_ROWS)?;
+    let items = rows(positions.start as u64..positions.end as u64).map_err(internal)?;
+    json(&Page { items, next_cursor })
 }
 
 /// One snapshot resource, or `None` when it names an account, rate or
@@ -230,73 +287,43 @@ impl<S: SnapshotStore> AxionomyMcp<S> {
 fn read_snapshot(
     address: &Address,
     economy_id: &EconomyId,
-    snapshot: &Snapshot,
+    loaded: &Loaded,
 ) -> Option<Result<String, McpError>> {
-    let economy = &snapshot.economy;
-    let receipts = match &snapshot.origin {
-        Origin::Exchanged { receipts } => &receipts[..],
-        Origin::Authored { .. } => &[],
-    };
+    let (economy, tree) = (&loaded.state.economy, &loaded.state.tree);
+    let receipts = &loaded.receipts[..];
     let content = match &address.target {
         Target::Economy { .. } => json(&EconomyView {
             economy_id,
-            parent_id: snapshot.parent_id.as_ref(),
-            origin: match &snapshot.origin {
-                Origin::Authored { entries } => OriginView::Authored { entries: *entries },
-                Origin::Exchanged { receipts } => OriginView::Exchanged {
-                    exchanges: receipts.len(),
-                },
+            parent_id: loaded.record.parent.as_ref(),
+            origin: match loaded.record.origin {
+                Origin::Authored { entries } => OriginView::Authored { entries },
+                Origin::Exchanged { exchanges } => OriginView::Exchanged { exchanges },
             },
+            root: StateRoot(loaded.state.root()),
             counts: counts(economy),
         }),
-        Target::Accounts { prefix, .. } => page(
+        Target::Accounts { prefix, .. } => tree_page(
             address,
-            economy
-                .accounts()
-                .enumerate()
-                .filter(|(_, (account, _))| {
-                    prefix
-                        .as_ref()
-                        .is_none_or(|prefix| account.as_str().starts_with(prefix.as_str()))
-                })
-                .map(|(position, (account, holder))| {
-                    (
-                        position,
-                        AccountRow {
-                            account,
-                            assets: holder.balances().len(),
-                        },
-                    )
-                }),
-            PAGE_ROWS,
-        )
-        .and_then(|page| json(&page)),
+            state::accounts(tree, prefix.as_deref().unwrap_or_default()),
+            |positions| {
+                state::account_rows(tree, positions)
+                    .map(|row| row.map(|(_, account, assets)| AccountRow { account, assets }))
+                    .collect()
+            },
+        ),
         Target::Balances {
             account, prefix, ..
         } => {
-            let balances = economy.account(account)?.balances();
-            page(
+            economy.account(account)?;
+            tree_page(
                 address,
-                balances
-                    .iter()
-                    .enumerate()
-                    .filter(|(_, (asset, _))| {
-                        prefix
-                            .as_ref()
-                            .is_none_or(|prefix| asset.as_str().starts_with(prefix.as_str()))
-                    })
-                    .map(|(position, (asset, quantity))| {
-                        (
-                            position,
-                            BalanceRow {
-                                asset,
-                                quantity: *quantity,
-                            },
-                        )
-                    }),
-                PAGE_ROWS,
+                state::balances(tree, account, prefix.as_deref().unwrap_or_default()),
+                |positions| {
+                    state::balance_rows(tree, account, positions)
+                        .map(|row| row.map(|(_, asset, quantity)| BalanceRow { asset, quantity }))
+                        .collect()
+                },
             )
-            .and_then(|page| json(&page))
         }
         Target::Rates { asset, .. } => page(
             address,
@@ -393,7 +420,8 @@ fn read_snapshot(
             PAGE_ROWS,
         )
         .and_then(|page| json(&page)),
-        Target::Assessment { .. }
+        Target::Diff { .. }
+        | Target::Assessment { .. }
         | Target::AssessmentLines { .. }
         | Target::Artifact { .. }
         | Target::Document { .. }
@@ -459,6 +487,8 @@ struct EconomyView<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     parent_id: Option<&'a EconomyId>,
     origin: OriginView,
+    /// Equal roots mean equal states, however they were made.
+    root: StateRoot,
     counts: EconomyCounts,
 }
 
@@ -470,15 +500,60 @@ enum OriginView {
 }
 
 #[derive(Serialize)]
-struct AccountRow<'a> {
-    account: &'a AccountPath,
-    assets: usize,
+struct AccountRow {
+    account: AccountPath,
+    assets: u64,
 }
 
 #[derive(Serialize)]
-struct BalanceRow<'a> {
-    asset: &'a AssetPath,
+struct BalanceRow {
+    asset: AssetPath,
     quantity: Quantity,
+}
+
+/// One difference between two snapshots.
+#[derive(Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+enum DiffRow {
+    Opened {
+        account: AccountPath,
+    },
+    Closed {
+        account: AccountPath,
+    },
+    Balance {
+        account: AccountPath,
+        asset: AssetPath,
+        before: Quantity,
+        after: Quantity,
+    },
+    /// A rate added, removed or redefined.
+    Rate {
+        rate: RatePath,
+    },
+    Invariants,
+}
+
+impl From<state::Change> for DiffRow {
+    fn from(change: state::Change) -> Self {
+        match change {
+            state::Change::Opened(account) => Self::Opened { account },
+            state::Change::Closed(account) => Self::Closed { account },
+            state::Change::Balance {
+                account,
+                asset,
+                before,
+                after,
+            } => Self::Balance {
+                account,
+                asset,
+                before,
+                after,
+            },
+            state::Change::Rate(rate) => Self::Rate { rate },
+            state::Change::Invariants => Self::Invariants,
+        }
+    }
 }
 
 #[derive(Serialize)]

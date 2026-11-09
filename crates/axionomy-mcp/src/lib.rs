@@ -16,9 +16,6 @@ pub use messages::{
     EconomyCreateRequest, EconomyEntries, EconomyExtendRequest, EconomyStored, ExchangeRequest,
     ExchangedResponse, FailureCode, LineKind, ProblemCatalogRequest, ProblemCatalogResponse,
     QuantityLine, RateEntries, ReplayRequest, RunSummary, SearchOutcome, SearchRequest,
-    SearchResponse, SearchSolved, ToolFailure,
+    SearchResponse, SearchSolved, StateRoot, ToolFailure, TraceStepRequest,
 };
 pub use server::AxionomyMcp;
-pub use store::{
-    MemorySnapshotStore, MemorySnapshotStoreError, Origin, Snapshot, SnapshotStore, StoredSnapshot,
-};

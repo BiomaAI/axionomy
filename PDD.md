@@ -470,16 +470,15 @@ model-scoped caches. Neither stable presentation nor a 64-bit fingerprint is a
 substitute for validation, trace replay, collision-safe durable identity, or a
 future compatibility protocol.
 
-The MCP reference adapter's default `MemorySnapshotStore` adds one scoped
-identity policy: a snapshot handle is a BLAKE3 hash, keyed with a per-store
-secret from the operating system, of the parent handle and the operation that
-made the snapshot. Recording an exchange therefore costs the size of the
-exchange, not of the economy; retrying an operation returns the same handle;
-and a handle cannot be derived from content without the server. Two histories
-that reach the same balances get different handles, so a handle also names how
-its state was reached. `AxionomyMcp<S>` accepts a caller-provided
-`SnapshotStore` so retention and physical storage remain integration policy;
-every implementation must preserve immutable-handle semantics.
+Storage adds the collision-safe durable identity: `axionomy-store` keeps each
+state as a canonical tree whose BLAKE3 root is equal for equal logical states,
+whatever their history (`docs/STORAGE.md`). The MCP reference adapter adds one
+scoped identity policy on top: a snapshot handle is a BLAKE3 hash, keyed with a
+secret its store keeps, of the parent handle and the operation that made the
+snapshot. Retrying an operation returns the same handle, and a handle cannot
+be derived from content without the server. Two histories that reach the same
+balances get different handles, so a handle also names how its state was
+reached, while their equal roots say they reached the same state.
 
 The current public types serialize directly. Axionomy does not maintain
 parallel `ModelDefinitionV1`, snapshot, or trace-envelope types before a real
@@ -616,8 +615,9 @@ axionomy-studio-server → axionomy-service
 - `axionomy-store` owns runs, stored states and their organization on redb.
   It remembers what the kernel decided and verifies it by replay; it never
   decides what an exchange does.
-- `axionomy-mcp` owns the strict stateless MCP reference boundary, immutable
-  snapshot-store contract, and process-local task orchestration.
+- `axionomy-mcp` owns the strict stateless MCP reference boundary, handles
+  over snapshots kept in an `axionomy-store` store, and process-local task
+  orchestration.
 - `axionomy-view` owns runtime-neutral monomorphic presentation contracts and
   replay-derived frames, without owning a domain ontology or runtime.
 - `axionomy-service` owns the interface-neutral problem catalog, reproducible
@@ -1116,15 +1116,18 @@ cannot read another. Completion suggests accounts, assets, rates and
 invariants by prefix, and tool annotations mark assessment and the catalog
 read-only and every other tool additive and idempotent.
 
-Storage lifetime is supplied by the embedding application. `SnapshotStore`
-has only two responsibilities: store a snapshot under the handle derived from
-its parent and operation, and resolve a handle. `MemorySnapshotStore` keeps
-snapshots in one shared map; a snapshot made by exchanges shares its unchanged
-accounts with its parent through `Arc`. Its clones share state; a fresh
-instance or process restart starts empty, and the tools tell a caller holding
-a stale handle to create the economy again. A database, object store, tenant
-boundary, or retention policy can implement the same contract when deployment
-pressure requires it without changing any tool schema or kernel rule.
+Snapshots live in an `axionomy-store` store, in memory or in a file. Every
+snapshot is a point of a run: authoring records a run from the authored state,
+and applying exchanges records a run forked from the source's point, one step
+per exchange. A handle and everything it names commit in one transaction, and
+a store on disk keeps them, with the handle secret, across restarts.
+`axionomy_trace_step` names any intermediate state of the exchanges that made
+a snapshot, rebuilt by verified replay from the nearest stored state; a `diff`
+resource compares two snapshots by their trees, skipping what they share.
+Accounts and balances page from the state tree in logarithmic time. Run IDs,
+tags, refs and groups are store-wide names that would let one caller find
+another's snapshots, so MCP exposes only what a handle reaches until it has
+authentication.
 
 The reference search request contains an explicit list of at most 1,000
 concrete candidate exchanges. That list is disposable proposal policy: BFS
@@ -1346,9 +1349,10 @@ examples, but they are not promised as reusable domain APIs.
   cooperative interruption.
 - The MCP reference server uses immutable explicit economy handles rather than
   session-scoped current state and returns new handles for successful changes.
-- The MCP adapter accepts caller-provided snapshot storage and defaults to a
-  process-local `MemorySnapshotStore` whose handles are keyed hashes of the
-  parent handle and the operation.
+- The MCP adapter keeps snapshots in an `axionomy-store` store, in memory or
+  on disk across restarts, under handles that are keyed hashes of the parent
+  handle and the operation; results carry each state's root, intermediate
+  states of a trace can be named, and snapshots can be diffed.
 - No MCP request or result grows with the economy: economies are authored in
   bounded chunks, results carry handles, counts and `resource_link`s, and
   everything a snapshot, assessment or run holds is read as paged, immutable,
@@ -1428,10 +1432,9 @@ The current foundation is intentionally bounded:
   than the former 1,282-rate 4×4 counter cross-product—but pagination or a
   generic parameterized-rate view still awaits measured pressure from other
   domains.
-- The MCP reference binary keeps snapshots, assessments, run artifacts and
-  task lifecycle in memory. Its handles do not survive restart; callers can implement `SnapshotStore` when
-  snapshot persistence is required, while distributed task recovery remains
-  outside the reference scope.
+- The MCP reference binary keeps snapshots, assessments and run artifacts in
+  its store, durable with `AXIONOMY_MCP_STORE`; task lifecycle stays in the
+  process, and distributed task recovery remains outside the reference scope.
 - The MCP reference server has no authentication, tenant isolation,
   authorization, quotas, TTL garbage collection, distributed worker leasing,
   cross-instance notifications, signatures, consensus, or production

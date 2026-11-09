@@ -72,6 +72,10 @@ pub(crate) enum Target {
     Exchanges {
         economy_id: EconomyId,
     },
+    Diff {
+        economy_id: EconomyId,
+        other_id: EconomyId,
+    },
     Assessment {
         assessment_id: AssessmentId,
     },
@@ -145,9 +149,9 @@ impl Serialize for Cursor {
 /// One URI template per kind of resource, in RFC 6570 syntax.
 pub(crate) fn templates() -> Vec<ResourceTemplate> {
     [
-        ("axionomy://economy/{economy_id}", "economy", "Economy snapshot", "How the snapshot was made and how many accounts, assets, rates and invariants it has."),
-        ("axionomy://economy/{economy_id}/accounts{?prefix,cursor}", "accounts", "Accounts", "Accounts in the order they were declared, each with how many assets it holds, optionally only paths that start with `prefix`, such as `agents/7/`."),
-        ("axionomy://economy/{economy_id}/accounts/{+account}{?prefix,cursor}", "balances", "Account balances", "An account's nonzero balances, optionally only assets whose path starts with `prefix`. The account path appears as is, as in `accounts/agents/7/wallet`."),
+        ("axionomy://economy/{economy_id}", "economy", "Economy snapshot", "How the snapshot was made, its state root, and how many accounts, assets, rates and invariants it has."),
+        ("axionomy://economy/{economy_id}/accounts{?prefix,cursor}", "accounts", "Accounts", "Accounts in path order, each with how many assets it holds, optionally only paths that start with `prefix`, such as `agents/7/`."),
+        ("axionomy://economy/{economy_id}/accounts/{+account}{?prefix,cursor}", "balances", "Account balances", "An account's nonzero balances in asset path order, optionally only assets whose path starts with `prefix`. The account path appears as is, as in `accounts/agents/7/wallet`."),
         ("axionomy://economy/{economy_id}/rates{?asset,cursor}", "rates", "Rates", "Rates with their roles, optionally only rates that move `asset`."),
         ("axionomy://economy/{economy_id}/rates/{+rate}", "rate", "Rate", "A rate's roles, distinct role pairs, parameters and how many amounts and conditions it has."),
         ("axionomy://economy/{economy_id}/rate-amounts/{+rate}{?cursor}", "rate-amounts", "Rate amounts", "What one unit of the rate consumes, produces and preserves, by role: fixed quantities, then computed ones."),
@@ -156,6 +160,7 @@ pub(crate) fn templates() -> Vec<ResourceTemplate> {
         ("axionomy://economy/{economy_id}/invariants/{+invariant}{?cursor}", "invariant-weights", "Invariant weights", "The integer weight of each asset in one conservation law."),
         ("axionomy://economy/{economy_id}/changes{?cursor}", "changes", "Changes", "The quantities moved by the exchanges that made this snapshot from its parent."),
         ("axionomy://economy/{economy_id}/exchanges{?cursor}", "exchanges", "Exchanges", "The exchanges that made this snapshot from its parent, in order; replaying them on the parent reproduces it."),
+        ("axionomy://economy/{economy_id}/diff/{other_id}{?cursor}", "diff", "Diff", "What differs from this snapshot to another, in path order: accounts opened and closed, balances with both quantities, rates added, removed or redefined, and whether the invariants differ. Equal snapshots have no rows."),
         ("axionomy://assessment/{assessment_id}", "assessment", "Assessment", "An exchange checked against a snapshot: its status, issues and how many lines explain it."),
         ("axionomy://assessment/{assessment_id}/lines{?cursor}", "assessment-lines", "Assessment lines", "What each account lacks for an infeasible exchange, or what an applicable one would move."),
         ("axionomy://artifact/{artifact_id}", "artifact", "Run artifact", "A finished problem run: its request and documents."),
@@ -231,6 +236,13 @@ impl Target {
             Self::Exchanges { economy_id } => {
                 (vec!["economy", economy_id.as_str(), "exchanges"], vec![])
             }
+            Self::Diff {
+                economy_id,
+                other_id,
+            } => (
+                vec!["economy", economy_id.as_str(), "diff", other_id.as_str()],
+                vec![],
+            ),
             Self::Assessment { assessment_id } => {
                 (vec!["assessment", assessment_id.as_str()], vec![])
             }
@@ -362,6 +374,10 @@ impl Address {
             ["economy", id, "exchanges"] => Target::Exchanges {
                 economy_id: id.parse().map_err(|_| unknown())?,
             },
+            ["economy", id, "diff", other] => Target::Diff {
+                economy_id: id.parse().map_err(|_| unknown())?,
+                other_id: other.parse().map_err(|_| unknown())?,
+            },
             ["assessment", id] => Target::Assessment {
                 assessment_id: id.parse().map_err(|_| unknown())?,
             },
@@ -469,6 +485,29 @@ pub(crate) fn page<T>(
         items: page,
         next_cursor,
     })
+}
+
+/// One page of a listing that occupies the positions `span`: the positions to
+/// read for this page, and the cursor of the next one. Positions are those of
+/// the unfiltered sequence, so a cursor locates its item directly.
+pub(crate) fn span_page(
+    address: &Address,
+    span: std::ops::Range<usize>,
+    size: usize,
+) -> Result<(std::ops::Range<usize>, Option<Cursor>), McpError> {
+    let start = match address.cursor {
+        None => span.start,
+        Some(cursor) => {
+            let position = address.start()?;
+            if !span.contains(&position) {
+                return Err(invalid_cursor(cursor));
+            }
+            position
+        }
+    };
+    let end = span.end.min(start.saturating_add(size));
+    let next_cursor = (end < span.end).then(|| Cursor::new(&address.target, end));
+    Ok((start..end, next_cursor))
 }
 
 fn push_query(uri: &mut String, query: &[(&str, &str)]) {

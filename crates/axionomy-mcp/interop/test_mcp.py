@@ -10,6 +10,7 @@ from typing import Any, Literal
 import anyio
 import httpx
 import pytest
+from conftest import running
 from mcp import Client
 from mcp.client.extension import ClaimContext, ClientExtension, ResultClaim
 from mcp.shared.exceptions import MCPError
@@ -124,12 +125,12 @@ async def test_the_server_describes_itself_to_a_standard_client(url: str) -> Non
         assert capabilities.tools and capabilities.resources and capabilities.completions is not None
 
         tools = (await client.list_tools()).tools
-        assert len(tools) == 8
+        assert len(tools) == 9
         for tool in tools:
             assert tool.output_schema is not None, tool.name
             assert tool.annotations is not None and tool.annotations.open_world_hint is False, tool.name
         templates = (await client.list_resource_templates()).resource_templates
-        assert len(templates) == 16
+        assert len(templates) == 17
         assert BALANCES in {template.uri_template for template in templates}
         assert (await client.list_resources()).resources == []
 
@@ -162,6 +163,32 @@ async def test_a_client_authors_applies_and_reads_back_through_links(url: str) -
         assert failed.structured_content["error"] == "infeasible"
         assessment = await page(client, links(failed)[0])
         assert assessment["status"] == "Infeasible"
+
+
+async def test_a_client_steps_through_a_replay_and_diffs_its_states(url: str) -> None:
+    async with Client(url) as client:
+        parent_id = await create(client, ECONOMY)
+        replayed = await client.call_tool(
+            "axionomy_trace_replay",
+            {"economy_id": parent_id, "exchanges": [transfer(1), transfer(2), transfer(1)]},
+        )
+        replayed_id = replayed.structured_content["economy_id"]
+        steps = []
+        for step in range(4):
+            stepped = await client.call_tool("axionomy_trace_step", {"economy_id": replayed_id, "step": step})
+            assert not stepped.is_error, stepped.structured_content
+            steps.append(stepped.structured_content)
+        assert steps[3]["root"] == replayed.structured_content["root"]
+        parent = await page(client, f"axionomy://economy/{parent_id}")
+        assert steps[0]["root"] == parent["root"]
+
+        diff = await page(client, f"axionomy://economy/{steps[0]['economy_id']}/diff/{steps[2]['economy_id']}")
+        assert diff["items"] == [
+            {"kind": "balance", "account": "sink", "asset": "token", "before": "0", "after": "3"},
+            {"kind": "balance", "account": "source", "asset": "token", "before": "5", "after": "2"},
+        ]
+        beyond = await client.call_tool("axionomy_trace_step", {"economy_id": replayed_id, "step": 4})
+        assert beyond.is_error and beyond.structured_content["error"] == "invalid_request"
 
 
 async def test_a_large_economy_is_built_in_chunks_and_read_in_pages(url: str) -> None:
@@ -317,3 +344,20 @@ def test_requests_without_routing_headers_are_refused(base_url: str) -> None:
         json={"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}},
     )
     assert response.status_code == 400
+
+
+async def test_snapshots_on_disk_outlive_the_server(tmp_path) -> None:
+    store = tmp_path / "snapshots.redb"
+    with running(store) as base_url:
+        async with Client(f"{base_url}/mcp") as client:
+            economy_id = await create(client, ECONOMY)
+            applied = await client.call_tool("axionomy_exchange_apply", {"economy_id": economy_id, "exchange": transfer(2)})
+            applied_id = applied.structured_content["economy_id"]
+    with running(store) as base_url:
+        async with Client(f"{base_url}/mcp") as client:
+            summary = await page(client, f"axionomy://economy/{applied_id}")
+            assert summary["parent_id"] == economy_id
+            assert summary["root"] == applied.structured_content["root"]
+            again = await client.call_tool("axionomy_exchange_apply", {"economy_id": economy_id, "exchange": transfer(2)})
+            assert again.structured_content["economy_id"] == applied_id
+            assert again.structured_content["deduplicated"] is True
