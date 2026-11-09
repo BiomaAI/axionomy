@@ -153,7 +153,7 @@ fn observation(world: &World, agent: Agent) -> ObservationView {
             .iter()
             .map(|account| AccountView {
                 account: ViewId::new(
-                    slug(format!("mission/observed/{account:?}")),
+                    account_key::<expedition::Ontology>(account),
                     account.studio_label(),
                 ),
                 balances: key
@@ -162,7 +162,7 @@ fn observation(world: &World, agent: Agent) -> ObservationView {
                     .filter(|(owner, _, _)| owner == account)
                     .map(|(_, asset, quantity)| AssetQuantityView {
                         asset: ViewId::new(
-                            slug(format!("mission/observed/{asset:?}")),
+                            asset_key::<expedition::Ontology>(asset),
                             asset.studio_label(),
                         ),
                         quantity: ExactQuantity(quantity.to_string()),
@@ -186,7 +186,7 @@ fn observation(world: &World, agent: Agent) -> ObservationView {
             })
             .map(|(_, asset, quantity)| AssetQuantityView {
                 asset: ViewId::new(
-                    slug(format!("mission/fact/{asset:?}")),
+                    asset_key::<expedition::Ontology>(asset),
                     asset.studio_label(),
                 ),
                 quantity: ExactQuantity(quantity.to_string()),

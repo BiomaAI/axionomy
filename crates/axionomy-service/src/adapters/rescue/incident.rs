@@ -146,7 +146,7 @@ fn observation(world: &World) -> ObservationView {
             .iter()
             .map(|account| AccountView {
                 account: ViewId::new(
-                    slug(format!("rescue/observed/{account:?}")),
+                    account_key::<incident::Ontology>(account),
                     account.studio_label(),
                 ),
                 balances: key
@@ -155,7 +155,7 @@ fn observation(world: &World) -> ObservationView {
                     .filter(|(owner, _, _)| owner == account)
                     .map(|(_, asset, quantity)| AssetQuantityView {
                         asset: ViewId::new(
-                            slug(format!("rescue/observed/{asset:?}")),
+                            asset_key::<incident::Ontology>(asset),
                             asset.studio_label(),
                         ),
                         quantity: ExactQuantity(quantity.to_string()),
