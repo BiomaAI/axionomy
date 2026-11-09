@@ -17,9 +17,9 @@ const problem = {
   summary: "A fixture problem",
   family: "pathfinding",
   default_instance: "showcase",
-  instances: [{ key: "showcase", label: "Showcase", description: "A default interactive workload", profile: "showcase" }],
-  default_strategy: "a_star",
-  strategies: [{ key: "a_star", label: "Least energy", description: "A*", algorithm: "a*" }],
+  instances: [{ profile: "showcase", label: "Showcase", description: "A default interactive workload" }],
+  default_strategy: "a-star",
+  strategies: [{ key: "a-star", label: "Least energy", description: "A*", algorithm: "a*" }],
   capabilities: ["weighted_search"],
 };
 
@@ -27,19 +27,18 @@ const lending = {
   ...problem,
   key: "lending",
   title: "Lending market",
-  default_strategy: "least_interest",
-  strategies: [{ key: "least_interest", label: "Least interest", description: "Dijkstra", algorithm: "dijkstra" }],
+  default_strategy: "least-interest",
+  strategies: [{ key: "least-interest", label: "Least interest", description: "Dijkstra", algorithm: "dijkstra" }],
 };
 
 const artifact = {
-  id: "maze:showcase:a_star:17:128",
+  key: { problem: "maze", instance: "showcase", strategy: "a-star", seed: 17, budget: 128 },
   problem,
   instance: problem.instances[0],
-  request: { problem: "maze", instance: "showcase", strategy: "a_star", seed: 17, budget: 128 },
-  selected_document_id: "maze:a_star",
+  selected_document: "a-star",
   assessed_proposals: [],
   documents: [{
-    id: "maze:a_star",
+    id: "a-star",
     title: "Maze · least energy",
     description: "Replay fixture",
     source: { key: "maze", label: "Key-door maze" },
@@ -80,21 +79,22 @@ test("a late saved preview cannot replace a newly computed result", async () => 
   let finishPreview!: (artifact: RunArtifact) => void;
   const preview = new Promise<RunArtifact>((resolve) => { finishPreview = resolve; });
   let listener!: EngineEventListener;
-  const result = { ...artifact, id: "computed-branch", documents: [{ ...artifact.documents[0], title: "New computed branch" }] } as RunArtifact;
+  const result = { ...artifact, key: { ...artifact.key, seed: 18 }, documents: [{ ...artifact.documents[0], title: "New computed branch" }] } as RunArtifact;
   const health = vi.spyOn(nativeEngine, "health").mockResolvedValue(true);
   const defaults = vi.spyOn(nativeEngine, "defaultArtifact").mockReturnValue(preview);
   const stored = vi.spyOn(nativeEngine, "artifact").mockResolvedValue(result);
   const start = vi.spyOn(nativeEngine, "start").mockImplementation(async (request, onEvent) => {
     listener = onEvent;
-    return { summary: { id: "test-run", request, status: "running", completed: 0 }, close() {} };
+    return { summary: { id: "run-1", request, status: "running", completed: 0 }, close() {} };
   });
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const view = render(<QueryClientProvider client={client}><App /></QueryClientProvider>);
   await waitFor(() => expect(defaults).toHaveBeenCalled());
   await userEvent.click(screen.getByRole("button", { name: /^Run$/ }));
   await act(async () => {
-    await listener({ kind: "run_completed", run_id: "test-run", sequence: 1, artifact_id: result.id, document_id: result.selected_document_id });
+    await listener({ kind: "run_completed", run_id: "run-1", sequence: 1, document: result.selected_document });
   });
+  expect(stored).toHaveBeenCalledWith("run-1");
   expect(await screen.findByRole("heading", { name: "New computed branch" })).toBeInTheDocument();
   await act(async () => { finishPreview(artifact as RunArtifact); await preview; });
   expect(screen.getByRole("heading", { name: "New computed branch" })).toBeInTheDocument();
@@ -107,7 +107,7 @@ test("a link that omits options opens the problem's defaults without a warning",
   window.history.replaceState(null, "", "/?problem=lending");
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const view = render(<QueryClientProvider client={client}><App /></QueryClientProvider>);
-  await waitFor(() => expect(screen.getByRole("combobox", { name: "Strategy" })).toHaveValue("least_interest"));
+  await waitFor(() => expect(screen.getByRole("combobox", { name: "Strategy" })).toHaveValue("least-interest"));
   expect(screen.getByRole("combobox", { name: "Instance (size)" })).toHaveValue("showcase");
   expect(screen.queryByText(/linked options were not valid/)).not.toBeInTheDocument();
   view.unmount();
@@ -116,11 +116,11 @@ test("a link that omits options opens the problem's defaults without a warning",
 });
 
 test("a link with an option the problem lacks falls back with a warning", async () => {
-  window.history.replaceState(null, "", "/?problem=lending&strategy=a_star");
+  window.history.replaceState(null, "", "/?problem=lending&strategy=a-star");
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const view = render(<QueryClientProvider client={client}><App /></QueryClientProvider>);
   expect(await screen.findByText("Some linked options were not valid for Lending market; Studio selected its defaults.")).toBeInTheDocument();
-  expect(screen.getByRole("combobox", { name: "Strategy" })).toHaveValue("least_interest");
+  expect(screen.getByRole("combobox", { name: "Strategy" })).toHaveValue("least-interest");
   view.unmount();
   client.clear();
   window.history.replaceState(null, "", "/");

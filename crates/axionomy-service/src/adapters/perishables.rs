@@ -11,12 +11,12 @@ use axionomy_view::{
 mod cold_chain;
 
 pub(super) fn build(
-    request: &RunRequest,
+    run: &ArtifactKey,
     descriptor: &ProblemDescriptor,
 ) -> Result<RunArtifact, ServiceError> {
-    let profile = instance_profile(request, descriptor);
+    let profile = run.instance;
     if !matches!(profile, InstanceProfile::Micro) {
-        return cold_chain::build(request, descriptor, profile);
+        return cold_chain::build(run, descriptor, profile);
     }
     let (initial, transfer) = match profile {
         InstanceProfile::Micro => (perishables::initial_with_inventory(70, 30), 10),
@@ -33,8 +33,8 @@ pub(super) fn build(
     let inventory_trace = frontier_trace(&front, true)?;
     let energy_trace = frontier_trace(&front, false)?;
     let mut outage_view = document(DocumentSpec { problem: "perishables", strategy: "outage", title: "Perishables · power outage", description: "Ten thousand interchangeable units belong to two batches. Time and power act on the batch, so one change ages thousands of units at once.", source_label: "Perishable inventory" }, &initial, &perishables::goal(), outage.trace(), vec![
-        ObjectiveView { key: "claims".into(), label: "Total claims".into(), direction: ObjectiveDirectionView::Maximize, value: outage.claim_index().total_claims().to_string() },
-        ObjectiveView { key: "usable".into(), label: "Usable claims".into(), direction: ObjectiveDirectionView::Maximize, value: outage.claim_index().usable_total(outage.world()).to_string() },
+        ObjectiveView { key: slug("claims"), label: "Total claims".into(), direction: ObjectiveDirectionView::Maximize, value: outage.claim_index().total_claims().to_string() },
+        ObjectiveView { key: slug("usable"), label: "Usable claims".into(), direction: ObjectiveDirectionView::Maximize, value: outage.claim_index().usable_total(outage.world()).to_string() },
     ], scene).map_err(|error| problem_error("perishables", error))?;
     outage_view.telemetry.push(telemetry(
         "indexed temporal effect agenda",
@@ -70,13 +70,13 @@ pub(super) fn build(
     let mut documents = vec![outage_view];
     for (strategy, title, description, trace) in [
         (
-            "pareto_inventory",
+            "pareto-inventory",
             "Perishables Pareto · save stock",
             "The storage plan that keeps the most usable stock.",
             inventory_trace,
         ),
         (
-            "pareto_energy",
+            "pareto-energy",
             "Perishables Pareto · save cooling energy",
             "The storage plan that spends the least cooling energy.",
             energy_trace,
@@ -98,13 +98,13 @@ pub(super) fn build(
             &trace,
             vec![
                 ObjectiveView {
-                    key: "usable".into(),
+                    key: slug("usable"),
                     label: "Usable inventory".into(),
                     direction: ObjectiveDirectionView::Maximize,
                     value: perishables::usable_inventory(&final_world).to_string(),
                 },
                 ObjectiveView {
-                    key: "energy".into(),
+                    key: slug("energy"),
                     label: "Cooling energy".into(),
                     direction: ObjectiveDirectionView::Minimize,
                     value: perishables::spent_cooling_energy(&final_world).to_string(),
@@ -132,12 +132,7 @@ pub(super) fn build(
         ));
         documents.push(view);
     }
-    artifact(
-        request,
-        descriptor,
-        selected_strategy(request, descriptor),
-        documents,
-    )
+    artifact(run, descriptor, documents)
 }
 
 fn frontier_trace(
@@ -181,12 +176,12 @@ fn front_view(result: &perishables::ParetoResult, selected: &ViewDocument) -> Pa
         completeness: FrontierCompletenessView::Exact,
         axes: vec![
             ObjectiveAxisView {
-                key: "usable".into(),
+                key: slug("usable"),
                 label: "Usable inventory".into(),
                 direction: ObjectiveDirectionView::Maximize,
             },
             ObjectiveAxisView {
-                key: "energy".into(),
+                key: slug("energy"),
                 label: "Cooling energy".into(),
                 direction: ObjectiveDirectionView::Minimize,
             },
@@ -225,7 +220,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
     ]
     .into_iter()
     .map(|(key, label)| TimelineLaneView {
-        id: ViewId::new(key, label),
+        id: ViewId::new(slug(key), label),
         classes: Vec::new(),
     })
     .collect();
@@ -267,8 +262,8 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
     );
     let spans = vec![
         TimelineSpanView {
-            id: "ambient-condition".into(),
-            lane: "ambient".into(),
+            id: slug("ambient-condition"),
+            lane: slug("ambient"),
             start: 0,
             end: 1,
             label: if ambient_rotten {
@@ -277,14 +272,14 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 "Fresh until ambient expiry".into()
             },
             classes: if ambient_rotten {
-                vec!["failed".into()]
+                vec![slug("failed")]
             } else {
                 Vec::new()
             },
         },
         TimelineSpanView {
-            id: "cold-condition".into(),
-            lane: "refrigerated".into(),
+            id: slug("cold-condition"),
+            lane: slug("refrigerated"),
             start: 0,
             end: if powered { 3 } else { 2 },
             label: if cold_rotten {
@@ -295,22 +290,22 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 "Warming after outage".into()
             },
             classes: if powered {
-                vec!["selected".into()]
+                vec![slug("selected")]
             } else {
-                vec!["uncertain".into()]
+                vec![slug("uncertain")]
             },
         },
         TimelineSpanView {
-            id: "warehouse-claims".into(),
-            lane: "warehouse".into(),
+            id: slug("warehouse-claims"),
+            lane: slug("warehouse"),
             start: 0,
             end: 3,
             label: format!("{warehouse} fungible claims"),
             classes: Vec::new(),
         },
         TimelineSpanView {
-            id: "fridge-claims".into(),
-            lane: "fridge".into(),
+            id: slug("fridge-claims"),
+            lane: slug("fridge"),
             start: 0,
             end: 3,
             label: format!("{fridge} fungible claims"),

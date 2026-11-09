@@ -63,9 +63,9 @@ export async function resumeRun(runId: string): Promise<RunSummary> {
   return data;
 }
 
-export async function fetchArtifact(artifactId: string): Promise<RunArtifact> {
-  const { data, error } = await api.GET("/api/artifacts/{artifact_id}", {
-    params: { path: { artifact_id: artifactId } },
+export async function fetchArtifact(runId: string): Promise<RunArtifact> {
+  const { data, error } = await api.GET("/api/runs/{run_id}/artifact", {
+    params: { path: { run_id: runId } },
   });
   if (error || !data) throw new Error(readError(error));
   return data;

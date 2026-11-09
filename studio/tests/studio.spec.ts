@@ -31,7 +31,7 @@ test("runs a search, receives events, and scrubs its replay", async ({ page }) =
 });
 
 test("turns saved Maze search evidence into a truthful, scrubbable expansion map", async ({ page }) => {
-  await page.goto("/?problem=maze&instance=showcase&strategy=a_star&document=maze%3Aa_star&view=solve&step=0&seed=0&budget=128");
+  await page.goto("/?problem=maze&instance=showcase&strategy=a-star&document=a-star&view=solve&step=0&seed=0&budget=128");
   await expect(page.locator(".solve-map")).toBeVisible();
   await expect(page.locator(".solve-summary")).toContainText("A* solution");
   await expect(page.locator(".react-flow__node.search-explored")).not.toHaveCount(0);
@@ -42,34 +42,34 @@ test("turns saved Maze search evidence into a truthful, scrubbable expansion map
 
   const scrubber = page.getByRole("slider", { name: "Solver observation position" });
   await scrubber.fill("0");
-  await expect(page.locator('.react-flow__node[data-id="node:start"]')).toHaveClass(/search-current/);
+  await expect(page.locator('.react-flow__node[data-id="node/start"]')).toHaveClass(/search-current/);
   await expect(page.locator(".solve-map > header")).toContainText("Expanded Start");
 
-  await page.goto("/?problem=maze&instance=showcase&strategy=dijkstra&document=maze%3Adijkstra&view=solve&step=0&seed=0&budget=128");
+  await page.goto("/?problem=maze&instance=showcase&strategy=dijkstra&document=dijkstra&view=solve&step=0&seed=0&budget=128");
   await expect(page.locator(".solve-summary")).toContainText("Dijkstra solution");
   await expect(page.locator(".solve-observation-card").first()).toContainText("Expanded Start");
 
   for (const [strategy, document, algorithm] of [
-    ["breadth_first", "maze:breadth_first", "Breadth-first search"],
-    ["pareto_energy", "maze:pareto_energy", "Exact Pareto search"],
+    ["breadth-first", "breadth-first", "Breadth-first search"],
+    ["pareto-energy", "pareto-energy", "Exact Pareto search"],
   ]) {
     await page.goto(`/?problem=maze&instance=showcase&strategy=${strategy}&document=${encodeURIComponent(document)}&view=solve&step=0&seed=0&budget=128`);
     await expect(page.locator(".solve-summary")).toContainText(algorithm);
-    await expect(page.locator('.react-flow__node[data-id="node:exit"]')).toHaveClass(/search-current/);
+    await expect(page.locator('.react-flow__node[data-id="node/exit"]')).toHaveClass(/search-current/);
   }
 });
 
 test("keeps every Maze replay frame aligned and tells the key-and-gate story", async ({ page }) => {
   test.setTimeout(45_000);
   const artifact = await (await page.request.get("/artifacts/maze.json")).json();
-  const frames = artifact.documents.find((document: { id: string }) => document.id === "maze:a_star").frames;
+  const frames = artifact.documents.find((document: { id: string }) => document.id === "a-star").frames;
   const metricStep = (key: string, value: string) => frames.findIndex((frame: { after: { scene: { metrics: Array<{ key: string; value: string }> } } }) =>
     frame.after.scene.metrics.some((metric) => metric.key === key && metric.value === value)) + 1;
-  const keyStep = metricStep("key_state", "carried");
-  const openStep = metricStep("gate_state", "open");
+  const keyStep = metricStep("key-state", "carried");
+  const openStep = metricStep("gate-state", "open");
   expect(keyStep).toBeGreaterThan(0);
   expect(openStep).toBeGreaterThan(keyStep);
-  await page.goto("/?problem=maze&instance=showcase&strategy=a_star&document=maze%3Aa_star&view=replay&step=0&seed=0&budget=128");
+  await page.goto("/?problem=maze&instance=showcase&strategy=a-star&document=a-star&view=replay&step=0&seed=0&budget=128");
   const scrubber = page.getByRole("slider", { name: "Trace position" });
   const frameCount = Number(await scrubber.getAttribute("max"));
   expect(frameCount).toBeGreaterThanOrEqual(10);
@@ -83,7 +83,7 @@ test("keeps every Maze replay frame aligned and tells the key-and-gate story", a
   await expect(page.locator(".occupant-inventory")).toContainText("Brass key");
   await scrubber.fill(String(openStep));
   await expect(page.locator(".occupant-inventory")).toHaveCount(0);
-  await expect(page.locator('.react-flow__node[data-id="node:gate"]')).toContainText("open");
+  await expect(page.locator('.react-flow__node[data-id="node/gate"]')).toContainText("open");
 
   await scrubber.fill("1");
   await expect(page.locator(".react-flow__edge.current")).toHaveCount(1);
@@ -94,9 +94,9 @@ test("keeps every Maze replay frame aligned and tells the key-and-gate story", a
 
 test("keeps every frame of every Maze result geometrically sound", async ({ page }) => {
   test.setTimeout(60_000);
-  const results = ["breadth_first", "dijkstra", "a_star", "pareto_energy", "pareto_time"];
+  const results = ["breadth-first", "dijkstra", "a-star", "pareto-energy", "pareto-time"];
   for (const result of results) {
-    await page.goto(`/?problem=maze&instance=showcase&strategy=${result}&document=${encodeURIComponent(`maze:${result}`)}&view=replay&step=0&seed=0&budget=128`);
+    await page.goto(`/?problem=maze&instance=showcase&strategy=${result}&document=${result}&view=replay&step=0&seed=0&budget=128`);
     const scrubber = page.getByRole("slider", { name: "Trace position" });
     const frames = Number(await scrubber.getAttribute("max"));
     for (let step = 0; step <= frames; step += 1) {
@@ -112,7 +112,7 @@ test("keeps every frame of every Maze result geometrically sound", async ({ page
 test("shows incremental tactical search and responsive pause control", async ({ page }) => {
   test.setTimeout(60_000);
   await page.goto("/");
-  await page.getByRole("combobox", { name: "Problem", exact: true }).selectOption("connect_four");
+  await page.getByRole("combobox", { name: "Problem", exact: true }).selectOption("connect-four");
   await page.getByRole("combobox", { name: "Instance (size)", exact: true }).selectOption("micro");
   await page.getByLabel("Seed").fill("42");
   await page.getByLabel("Budget").fill("32");
@@ -131,7 +131,7 @@ test("shows incremental tactical search and responsive pause control", async ({ 
 
 test("loads a distinct static problem and its specialized renderer", async ({ page }) => {
   await page.goto("/");
-  await page.getByRole("combobox", { name: "Problem", exact: true }).selectOption("exact_cover");
+  await page.getByRole("combobox", { name: "Problem", exact: true }).selectOption("exact-cover");
   await expect(page.getByRole("heading", { name: /Exact cover · Algorithm X/ })).toBeVisible();
   await expect(page.locator(".matrix-scene")).toBeVisible();
   await expect(page.getByText("Which subset contains which element", { exact: false })).toBeVisible();
@@ -139,13 +139,13 @@ test("loads a distinct static problem and its specialized renderer", async ({ pa
 
 test("shows endogenous AMM price discovery, exact curve evidence, and causal attribution", async ({ page }) => {
   const artifact = await (await page.request.get("/artifacts/amm.json")).json();
-  const steps = artifact.documents.find((document: { id: string }) => document.id === "amm:market_day").frames.length;
-  await page.goto(`/?problem=amm&instance=showcase&strategy=market_day&document=amm%3Amarket_day&view=replay&step=${steps}&leaderboard=causal_price_contribution&seed=17&budget=128`);
+  const steps = artifact.documents.find((document: { id: string }) => document.id === "market-day").frames.length;
+  await page.goto(`/?problem=amm&instance=showcase&strategy=market-day&document=market-day&view=replay&step=${steps}&leaderboard=causal-price-contribution&seed=17&budget=128`);
   await expect(page.getByRole("heading", { name: "Living Market · endogenous price discovery" })).toBeVisible();
   await expect(page.locator(".market-scene")).toBeVisible();
   await expect(page.getByRole("img", { name: /Discovered price history/ })).toBeVisible();
   await expect(page.getByRole("img", { name: /Constant-product bonding curve/ })).toBeVisible();
-  await expect(page.getByRole("combobox", { name: "Leaderboard ranking dimension" })).toHaveValue("causal_price_contribution");
+  await expect(page.getByRole("combobox", { name: "Leaderboard ranking dimension" })).toHaveValue("causal-price-contribution");
   await expect(page.locator(".leaderboard-entries article")).toHaveCount(7);
   await expect(page.locator(".market-price-history circle")).toHaveCount(steps + 1);
   await expect(page.locator(".scene-metric").filter({ hasText: "Market day" })).toContainText("8 day");
@@ -158,12 +158,12 @@ test("shows endogenous AMM price discovery, exact curve evidence, and causal att
 });
 
 test("shows overlapping Work League activity, service occupancy, and missed deadlines", async ({ page }) => {
-  const artifact = await (await page.request.get("/artifacts/work_league.json")).json();
-  const document = artifact.documents.find((candidate: { id: string }) => candidate.id === "work_league:mixed_field");
+  const artifact = await (await page.request.get("/artifacts/work-league.json")).json();
+  const document = artifact.documents.find((candidate: { id: string }) => candidate.id === "mixed-field");
   const busyStep = document.frames.findIndex((frame: { after: { scene: { metrics: Array<{ key: string; value: string }> } } }) =>
     frame.after.scene.metrics.some((metric) => metric.key === "activities" && Number(metric.value) >= 2)) + 1;
   expect(busyStep).toBeGreaterThan(0);
-  await page.goto(`/?problem=work_league&instance=showcase&strategy=mixed_field&document=work_league%3Amixed_field&view=replay&step=${busyStep}`);
+  await page.goto(`/?problem=work-league&instance=showcase&strategy=mixed-field&document=mixed-field&view=replay&step=${busyStep}`);
   await expect(page.locator(".scene-metric").filter({ hasText: "Simultaneous activities" })).toContainText(/[2-4] workers/);
   await expect(page.locator(".scene-metric").filter({ hasText: "World time" })).toBeVisible();
   await expect(page.locator(".graph-scene")).toContainText("bay");
@@ -174,10 +174,10 @@ test("shows overlapping Work League activity, service occupancy, and missed dead
 
 test("shows an executed adaptive Logistics journey instead of a two-step prefix", async ({ page }) => {
   const artifact = await (await page.request.get("/artifacts/logistics.json")).json();
-  const document = artifact.documents.find((candidate: { id: string }) => candidate.id === "logistics:mcts");
+  const document = artifact.documents.find((candidate: { id: string }) => candidate.id === "mcts");
   expect(document.frames.length).toBeGreaterThan(2);
   expect(document.objectives.some((objective: { key: string; value: string }) => objective.key === "delivered" && Number(objective.value) > 0)).toBe(true);
-  await page.goto(`/?problem=logistics&instance=showcase&strategy=mcts&document=logistics%3Amcts&view=replay&step=${document.frames.length}`);
+  await page.goto(`/?problem=logistics&instance=showcase&strategy=mcts&document=mcts&view=replay&step=${document.frames.length}`);
   await expect(page.getByRole("heading", { name: "Logistics · adaptive delivery" })).toBeVisible();
   await expect(page.locator(".replay-proof")).toContainText("replay verified");
 });
@@ -188,9 +188,9 @@ test("renders the generic cockpit for every canonical problem without browser er
   page.on("pageerror", (error) => browserErrors.push(error.message));
   await page.goto("/");
   const problems = [
-    "maze", "sokoban", "exact_cover", "bridge", "scheduling", "workshop", "amm",
-    "marketplace", "logistics", "connect_four", "rescue", "mission",
-    "perishables", "work_league",
+    "maze", "sokoban", "exact-cover", "bridge", "scheduling", "workshop", "amm",
+    "marketplace", "logistics", "connect-four", "rescue", "mission",
+    "perishables", "work-league",
   ];
   for (const problem of problems) {
     await page.getByRole("combobox", { name: "Problem", exact: true }).selectOption(problem);
@@ -203,21 +203,21 @@ test("renders the generic cockpit for every canonical problem without browser er
 });
 
 test("opens a shared Work League replay at the exact leaderboard and step", async ({ page }) => {
-  await page.goto("/?problem=work_league&instance=showcase&strategy=mixed_field&document=work_league%3Amixed_field&view=replay&step=12&leaderboard=resource_efficiency&seed=17&budget=128");
-  await expect(page.getByRole("combobox", { name: "Problem", exact: true })).toHaveValue("work_league");
+  await page.goto("/?problem=work-league&instance=showcase&strategy=mixed-field&document=mixed-field&view=replay&step=12&leaderboard=resource-efficiency&seed=17&budget=128");
+  await expect(page.getByRole("combobox", { name: "Problem", exact: true })).toHaveValue("work-league");
   await expect(page.getByRole("heading", { name: "Work League · Mixed policy field" })).toBeVisible();
-  await expect(page.getByRole("combobox", { name: "Leaderboard ranking dimension" })).toHaveValue("resource_efficiency");
+  await expect(page.getByRole("combobox", { name: "Leaderboard ranking dimension" })).toHaveValue("resource-efficiency");
   await expect(page.locator(".leaderboard-step")).toContainText("12");
   await expect(page.locator(".leaderboard-entries article")).toHaveCount(4);
-  await page.getByRole("combobox", { name: "Leaderboard ranking dimension" }).selectOption("least_waste");
-  await expect(page).toHaveURL(/leaderboard=least_waste/);
+  await page.getByRole("combobox", { name: "Leaderboard ranking dimension" }).selectOption("least-waste");
+  await expect(page).toHaveURL(/leaderboard=least-waste/);
   await page.getByRole("button", { name: "Next exchange" }).click();
   await expect(page).toHaveURL(/step=13/);
   await expect(page.locator(".leaderboard-step")).toContainText("13");
 });
 
 test("keeps replay shortcuts scoped to the cockpit and preserves economic wording", async ({ page }) => {
-  await page.goto("/?problem=work_league&instance=showcase&strategy=mixed_field&document=work_league%3Amixed_field&view=replay&step=12&leaderboard=resource_efficiency&seed=17&budget=128");
+  await page.goto("/?problem=work-league&instance=showcase&strategy=mixed-field&document=mixed-field&view=replay&step=12&leaderboard=resource-efficiency&seed=17&budget=128");
   await expect(page.locator(".stage .world-panel")).toBeVisible();
   await expect(page.locator(".stage .accounts-panel")).toBeVisible();
   await expect(page.getByText(/unchanged assets? in this replay/).first()).toBeVisible();
@@ -246,7 +246,7 @@ test("keeps replay shortcuts scoped to the cockpit and preserves economic wordin
 
 test("keeps the replay cockpit within a narrow viewport", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("/?problem=work_league&instance=showcase&strategy=mixed_field&document=work_league%3Amixed_field&view=replay&step=12&leaderboard=resource_efficiency&seed=17&budget=128");
+  await page.goto("/?problem=work-league&instance=showcase&strategy=mixed-field&document=mixed-field&view=replay&step=12&leaderboard=resource-efficiency&seed=17&budget=128");
   await expect(page.locator(".stage .world-panel")).toBeVisible();
   await expect(page.locator(".stage .accounts-panel")).toBeVisible();
   await expect(page.getByRole("button", { name: "Next exchange" })).toBeVisible();
@@ -255,9 +255,9 @@ test("keeps the replay cockpit within a narrow viewport", async ({ page }) => {
 });
 
 test("animates Logistics travel without reflowing the replay layout", async ({ page }) => {
-  await page.goto("/?problem=logistics&instance=showcase&strategy=reliable&document=logistics%3Areliable&view=replay&step=8&seed=0&budget=128");
-  const vehicle = page.locator('.react-flow__node[data-id="entity:van:Cold"]');
-  const depot = page.locator('.react-flow__node[data-id="Depot"]');
+  await page.goto("/?problem=logistics&instance=showcase&strategy=reliable&document=reliable&view=replay&step=8&seed=0&budget=128");
+  const vehicle = page.locator('.react-flow__node[data-id="entity:van/cold"]');
+  const depot = page.locator('.react-flow__node[data-id="depot"]');
   const stage = page.locator(".stage");
   // Expanded comparisons may put playback below the fold. Clicking Next can
   // scroll it into view; measure document geometry, not viewport scrolling.
@@ -280,7 +280,7 @@ test("animates Logistics travel without reflowing the replay layout", async ({ p
     easing: getComputedStyle(element).transitionTimingFunction,
     radius: getComputedStyle(element).borderRadius,
   }));
-  const depotEffect = await page.locator('.react-flow__node[data-id="Hub"]').evaluate((element) => ({
+  const depotEffect = await page.locator('.react-flow__node[data-id="hub"]').evaluate((element) => ({
     animationNames: element.getAnimations().map((animation) => animation instanceof CSSAnimation ? animation.animationName : ""),
     radius: getComputedStyle(element).borderRadius,
   }));
@@ -316,7 +316,7 @@ test("animates Logistics travel without reflowing the replay layout", async ({ p
 
 test("keeps every Sokoban replay entity centered on its authoritative cell", async ({ page }) => {
   test.setTimeout(60_000);
-  await page.goto("/?problem=sokoban&instance=showcase&strategy=a_star&document=sokoban%3Aa_star&view=replay&step=0&seed=0&budget=128");
+  await page.goto("/?problem=sokoban&instance=showcase&strategy=a-star&document=a-star&view=replay&step=0&seed=0&budget=128");
 
   const frameCount = Number(await page.getByRole("slider", { name: "Trace position" }).getAttribute("max"));
   for (let step = 0; step <= frameCount; step += 1) {
@@ -355,9 +355,9 @@ test("keeps every Sokoban replay entity centered on its authoritative cell", asy
 });
 
 test("gives graph semantics depth, distinct shapes, and direction-aware ports", async ({ page }) => {
-  await page.goto("/?problem=logistics&instance=showcase&strategy=reliable&document=logistics%3Areliable&view=replay&step=2&seed=0&budget=128");
-  const depot = page.locator('.react-flow__node[data-id="Depot"]');
-  const vehicle = page.locator('.react-flow__node[data-id="entity:van:Cold"]');
+  await page.goto("/?problem=logistics&instance=showcase&strategy=reliable&document=reliable&view=replay&step=2&seed=0&budget=128");
+  const depot = page.locator('.react-flow__node[data-id="depot"]');
+  const vehicle = page.locator('.react-flow__node[data-id="entity:van/cold"]');
   await expect(depot).toBeVisible();
   await expect(vehicle).toBeVisible();
   const appearance = await depot.evaluate((element) => ({
@@ -366,15 +366,15 @@ test("gives graph semantics depth, distinct shapes, and direction-aware ports", 
   }));
   expect(appearance.radius).toBe("50%");
   expect(appearance.shadow).not.toBe("none");
-  await expect(depot.locator('[data-handleid="source:road:Depot:Hub"]')).toHaveAttribute("data-handlepos", "right");
+  await expect(depot.locator('[data-handleid="source:road/depot/hub"]')).toHaveAttribute("data-handlepos", "right");
   await expect(vehicle).toHaveCSS("border-radius", "999px");
-  const trunk = await page.locator('.react-flow__edge[data-id="road:Depot:Hub"] .react-flow__edge-path').getAttribute("d");
-  const express = await page.locator('.react-flow__edge[data-id="road:Depot:North"] .react-flow__edge-path').getAttribute("d");
+  const trunk = await page.locator('.react-flow__edge[data-id="road/depot/hub"] .react-flow__edge-path').getAttribute("d");
+  const express = await page.locator('.react-flow__edge[data-id="road/depot/north"] .react-flow__edge-path').getAttribute("d");
   expect(trunk).not.toBe(express);
 });
 
 test("keeps graph node titles and metadata in separate readable regions", async ({ page }) => {
-  await page.goto("/?problem=work_league&instance=showcase&strategy=mixed_field&document=work_league%3Amixed_field&view=replay&step=12&seed=17&budget=128");
+  await page.goto("/?problem=work-league&instance=showcase&strategy=mixed-field&document=mixed-field&view=replay&step=12&seed=17&budget=128");
 
   const occupants = page.locator(".react-flow__node.occupant-overlay");
   await expect(occupants.first()).toBeVisible();
@@ -413,7 +413,7 @@ test("keeps graph node titles and metadata in separate readable regions", async 
     expect(occupant.overlaps, `${occupant.label} content regions must not overlap`).toBe(false);
   }
 
-  await page.goto("/?problem=marketplace&instance=showcase&strategy=market_clearing&document=marketplace%3Amarket_clearing&view=replay&step=4&seed=17&budget=128");
+  await page.goto("/?problem=marketplace&instance=showcase&strategy=market-clearing&document=market-clearing&view=replay&step=4&seed=17&budget=128");
   const labels = page.locator(".structure-label");
   await expect(labels.first()).toBeVisible();
   const structureLabels = await labels.evaluateAll((labels) => labels.map((label) => {
@@ -434,7 +434,7 @@ test("uses the generic motion compositor across every graph problem", async ({ p
   test.setTimeout(60_000);
   const browserErrors: string[] = [];
   page.on("pageerror", (error) => browserErrors.push(error.message));
-  const problems = ["maze", "bridge", "workshop", "marketplace", "logistics", "mission", "rescue", "work_league"];
+  const problems = ["maze", "bridge", "workshop", "marketplace", "logistics", "mission", "rescue", "work-league"];
   for (const problem of problems) {
     await page.goto(`/?problem=${problem}&instance=micro&view=replay&step=0&seed=17&budget=8`);
     await expect(page.locator(".graph-scene")).toBeVisible();
@@ -450,7 +450,7 @@ test("uses the generic motion compositor across every graph problem", async ({ p
 test("keeps active graph structures legible across every problem and replay frame", async ({ page }) => {
   test.setTimeout(180_000);
   await page.emulateMedia({ colorScheme: "dark" });
-  const problems = ["maze", "bridge", "workshop", "marketplace", "logistics", "mission", "rescue", "work_league"];
+  const problems = ["maze", "bridge", "workshop", "marketplace", "logistics", "mission", "rescue", "work-league"];
   let auditedNodes = 0;
 
   for (const problem of problems) {
@@ -521,24 +521,24 @@ test("keeps active graph structures legible across every problem and replay fram
 });
 
 test("composes state, attachments, occupants, and context by relationship", async ({ page }) => {
-  await page.goto("/?problem=workshop&instance=showcase&strategy=minimum_waste&document=workshop%3Aminimum_waste&view=replay&step=0&seed=17&budget=128");
+  await page.goto("/?problem=workshop&instance=showcase&strategy=minimum-waste&document=minimum-waste&view=replay&step=0&seed=17&budget=128");
   const wood = page.locator('.react-flow__node[data-id="wood"]');
   await expect(wood).toContainText(/10 units wood/i);
-  await expect(page.locator('.react-flow__node[data-id="entity:stock:wood"]')).toHaveCount(0);
+  await expect(page.locator('.react-flow__node[data-id="entity:stock/wood"]')).toHaveCount(0);
 
-  await page.goto("/?problem=work_league&instance=showcase&strategy=mixed_field&document=work_league%3Amixed_field&view=replay&step=0&seed=17&budget=128");
+  await page.goto("/?problem=work-league&instance=showcase&strategy=mixed-field&document=mixed-field&view=replay&step=0&seed=17&budget=128");
   await expect(page.locator(".attachment-group").filter({ hasText: "North · items" })).toContainText("Job 1");
   await expect(page.locator(".react-flow__edge.attachment-relation").first()).toBeVisible();
   await expect(page.locator(".occupant-overlay").filter({ hasText: "Atlas" })).toBeVisible();
 
-  await page.goto("/?problem=logistics&instance=showcase&strategy=reliable&document=logistics%3Areliable&view=replay&step=0&seed=17&budget=128");
+  await page.goto("/?problem=logistics&instance=showcase&strategy=reliable&document=reliable&view=replay&step=0&seed=17&budget=128");
   await expect(page.locator(".attachment-group").filter({ hasText: "North customer · item" })).toContainText("Order 1");
   await page.goto("/?problem=mission&instance=showcase&strategy=coordinated&view=replay&step=4");
   await expect(page.locator(".scene-context")).toContainText("Travelling to East");
 });
 
 test("browser history restores a prior problem deep link", async ({ page }) => {
-  await page.goto("/?problem=work_league&instance=showcase&strategy=mixed_field&view=replay&step=7&leaderboard=contract_value&seed=17&budget=128");
+  await page.goto("/?problem=work-league&instance=showcase&strategy=mixed-field&view=replay&step=7&leaderboard=contract-value&seed=17&budget=128");
   await expect(page.getByRole("heading", { name: "Work League · Mixed policy field" })).toBeVisible();
   await page.getByRole("combobox", { name: "Problem", exact: true }).selectOption("maze");
   await expect(page.getByRole("heading", { name: /Maze · least energy/ })).toBeVisible();
@@ -548,7 +548,7 @@ test("browser history restores a prior problem deep link", async ({ page }) => {
 });
 
 test("streams replay-verified Work League standings before publishing the artifact", async ({ page }) => {
-  await page.goto("/?problem=work_league&instance=micro&strategy=mixed_field&view=solve&step=0&seed=17&budget=32");
+  await page.goto("/?problem=work-league&instance=micro&strategy=mixed-field&view=solve&step=0&seed=17&budget=32");
   await expect(page.getByRole("heading", { name: "Work League · Mixed policy field" })).toBeVisible();
   await page.getByRole("button", { name: "Run", exact: true }).click();
   await expect(page.locator(".live-standings")).toContainText(/(?:Live|Last) verified frame/, { timeout: 15_000 });
@@ -559,11 +559,11 @@ test("streams replay-verified Work League standings before publishing the artifa
 
 test("exposes coupled warehouse mechanisms and the far-side exit", async ({ page }) => {
   const artifact = await (await page.request.get("/artifacts/sokoban.json")).json();
-  const document = artifact.documents.find((candidate: { id: string }) => candidate.id === "sokoban:a_star");
+  const document = artifact.documents.find((candidate: { id: string }) => candidate.id === "a-star");
   const held = document.frames.findIndex((frame: { after: { scene: { metrics: Array<{ key: string; value: string }> } } }) =>
-    frame.after.scene.metrics.some((metric) => metric.key === "held_plates" && metric.value === "1")) + 1;
+    frame.after.scene.metrics.some((metric) => metric.key === "held-plates" && metric.value === "1")) + 1;
   expect(held).toBeGreaterThan(0);
-  await page.goto(`/?problem=sokoban&instance=showcase&strategy=a_star&view=replay&step=${held}`);
+  await page.goto(`/?problem=sokoban&instance=showcase&strategy=a-star&view=replay&step=${held}`);
   await expect(page.locator(".scene-metric").filter({ hasText: "Crates holding plates" })).toContainText("1");
   await expect(page.locator('.grid-entity[aria-label*="Door 1"]')).toBeVisible();
   await expect(page.locator('.grid-entity[aria-label*="Exit"]')).toBeVisible();
@@ -578,7 +578,7 @@ test("exposes coupled warehouse mechanisms and the far-side exit", async ({ page
 });
 
 test("exposes tactical threats and distinct Connect Four opponents", async ({ page }) => {
-  await page.goto("/?problem=connect_four&instance=showcase&strategy=search_opponent&document=connect_four%3Asearch_opponent&view=replay&step=0");
+  await page.goto("/?problem=connect-four&instance=showcase&strategy=search-opponent&document=search-opponent&view=replay&step=0");
   await expect(page.getByRole("heading", { name: "Connect Four · against a depth-five opponent" })).toBeVisible();
   await expect(page.locator(".scene-metric").filter({ hasText: "Double-threat moves" })).toBeVisible();
   await expect(page.locator(".scene-metric").filter({ hasText: "Opponent threats" })).toBeVisible();
@@ -590,7 +590,7 @@ test("exposes tactical threats and distinct Connect Four opponents", async ({ pa
 
 
 test("shows workshop contract choices and three production objectives", async ({ page }) => {
-  await page.goto("/?problem=workshop&instance=showcase&strategy=minimum_waste&document=workshop%3Apareto_revenue&view=replay&step=10");
+  await page.goto("/?problem=workshop&instance=showcase&strategy=minimum-waste&document=pareto-revenue&view=replay&step=10");
   await expect(page.getByRole("heading", { name: "Workshop Pareto · highest revenue" })).toBeVisible();
   await expect(page.locator(".scene-metric").filter({ hasText: "Contracts delivered" })).toContainText("2");
   await expect(page.locator(".scene-metric").filter({ hasText: "Revenue" })).toContainText("35 credit");
@@ -601,11 +601,11 @@ test("shows workshop contract choices and three production objectives", async ({
 
 test("shows simultaneous bridge traffic and deadline outcomes", async ({ page }) => {
   const artifact = await (await page.request.get("/artifacts/bridge.json")).json();
-  const document = artifact.documents.find((candidate: { id: string }) => candidate.id === "bridge:adaptive");
+  const document = artifact.documents.find((candidate: { id: string }) => candidate.id === "adaptive");
   const overlap = document.frames.findIndex((frame: { after: { scene: { entities: Array<{ status?: string }> } } }) =>
     frame.after.scene.entities.some((entity) => entity.status?.startsWith("crossing until")) && frame.after.scene.entities.some((entity) => entity.status?.startsWith("detouring until"))) + 1;
   expect(overlap).toBeGreaterThan(0);
-  await page.goto(`/?problem=bridge&instance=showcase&strategy=auction&document=bridge%3Aadaptive&view=replay&step=${overlap}`);
+  await page.goto(`/?problem=bridge&instance=showcase&strategy=auction&document=adaptive&view=replay&step=${overlap}`);
   await expect(page.getByRole("heading", { name: "Bridge · responsive routing" })).toBeVisible();
   await expect(page.locator(".occupant-overlay").filter({ hasText: "Agent A" })).toBeVisible();
   await expect(page.locator('.react-flow__node[data-id="detour"]')).toContainText("Paid alternate route");
@@ -617,11 +617,11 @@ test("shows simultaneous bridge traffic and deadline outcomes", async ({ page })
 
 test("shows funded marketplace contracts before delivery settlement", async ({ page }) => {
   const artifact = await (await page.request.get("/artifacts/marketplace.json")).json();
-  const document = artifact.documents.find((candidate: { id: string }) => candidate.id === "marketplace:market_clearing");
+  const document = artifact.documents.find((candidate: { id: string }) => candidate.id === "market-clearing");
   const inTransit = document.frames.findIndex((frame: { after: { scene: { metrics: Array<{ key: string; value: string }> } } }) =>
-    frame.after.scene.metrics.some((metric) => metric.key === "in_transit" && Number(metric.value) > 0)) + 1;
+    frame.after.scene.metrics.some((metric) => metric.key === "in-transit" && Number(metric.value) > 0)) + 1;
   expect(inTransit).toBeGreaterThan(0);
-  await page.goto(`/?problem=marketplace&instance=showcase&strategy=market_clearing&view=replay&step=${inTransit}`);
+  await page.goto(`/?problem=marketplace&instance=showcase&strategy=market-clearing&view=replay&step=${inTransit}`);
   await expect(page.locator(".scene-metric").filter({ hasText: "Funds held in contracts" })).not.toContainText(/^Funds held in contracts0$/);
   await expect(page.locator(".graph-scene")).toContainText("in transit; funds held");
   await page.getByRole("slider", { name: "Trace position" }).fill(String(document.frames.length));
@@ -632,11 +632,11 @@ test("shows funded marketplace contracts before delivery settlement", async ({ p
 
 test("shows executed scheduling time and real crew occupancy", async ({ page }) => {
   const artifact = await (await page.request.get("/artifacts/scheduling.json")).json();
-  const document = artifact.documents.find((candidate: { id: string }) => candidate.id === "scheduling:bounded_optimizer");
+  const document = artifact.documents.find((candidate: { id: string }) => candidate.id === "bounded-optimizer");
   const occupied = document.frames.findIndex((frame: { after: { scene: { metrics: Array<{ key: string; value: string }> } } }) =>
-    frame.after.scene.metrics.some((metric) => metric.key === "busy_labor" && Number(metric.value) > 0)) + 1;
+    frame.after.scene.metrics.some((metric) => metric.key === "busy-labor" && Number(metric.value) > 0)) + 1;
   expect(occupied).toBeGreaterThan(0);
-  await page.goto(`/?problem=scheduling&instance=showcase&strategy=bounded_optimizer&view=replay&step=${occupied}`);
+  await page.goto(`/?problem=scheduling&instance=showcase&strategy=bounded-optimizer&view=replay&step=${occupied}`);
   await expect(page.locator(".timeline-scene")).toBeVisible();
   await expect(page.locator(".scene-metric").filter({ hasText: "Occupied crew" })).toBeVisible();
   await page.getByRole("slider", { name: "Trace position" }).fill(String(document.frames.length));
@@ -648,10 +648,10 @@ test("shows executed scheduling time and real crew occupancy", async ({ page }) 
 
 test("shows split cold-chain cohorts, inherited exposure and shared fuel", async ({ page }) => {
   const artifact = await (await page.request.get("/artifacts/perishables.json")).json();
-  const document = artifact.documents.find((candidate: { id: string }) => candidate.id === "perishables:storage_buffer");
+  const document = artifact.documents.find((candidate: { id: string }) => candidate.id === "storage-buffer");
   const split = document.frames.findIndex((frame: { exchange: { rate: { key: string } } }) => frame.exchange.rate.key.includes("split")) + 1;
   expect(split).toBeGreaterThan(0);
-  await page.goto(`/?problem=perishables&instance=showcase&strategy=outage&document=perishables%3Astorage_buffer&view=replay&step=${split}`);
+  await page.goto(`/?problem=perishables&instance=showcase&strategy=outage&document=storage-buffer&view=replay&step=${split}`);
   await expect(page.getByRole("heading", { name: "Perishables · rebalance cold storage" })).toBeVisible();
   await expect(page.locator(".attachment-group")).toContainText(["Cohort 3"]);
   await expect(page.locator(".scene-metric").filter({ hasText: "Fuel left" })).toBeVisible();
@@ -675,8 +675,8 @@ test("shows split cold-chain cohorts, inherited exposure and shared fuel", async
 
 test("reveals rescued patients only after physical discovery and records hospital outcomes", async ({ page }) => {
   const artifact = await (await page.request.get("/artifacts/rescue.json")).json();
-  const document = artifact.documents.find((candidate: { id: string }) => candidate.id === "rescue:stabilize_first");
-  await page.goto("/?problem=rescue&instance=showcase&strategy=observe_then_follow&document=rescue%3Astabilize_first&view=replay&step=0");
+  const document = artifact.documents.find((candidate: { id: string }) => candidate.id === "stabilize-first");
+  await page.goto("/?problem=rescue&instance=showcase&strategy=observe-then-follow&document=stabilize-first&view=replay&step=0");
   await expect(page.getByRole("heading", { name: "Rescue · stabilize before transport" })).toBeVisible();
   await expect(page.locator(".attachment-group").filter({ hasText: "Patient" })).toHaveCount(0);
   const carrying = document.frames.findIndex((frame: { after: { scene: { entities: Array<{ status?: string }> } } }) => frame.after.scene.entities.some((entity) => entity.status === "In transit")) + 1;
@@ -694,7 +694,7 @@ test("reveals rescued patients only after physical discovery and records hospita
 
 test("shows independent mission travel, private briefings and cooperative extraction", async ({ page }) => {
   const artifact = await (await page.request.get("/artifacts/mission.json")).json();
-  const document = artifact.documents.find((candidate: { id: string }) => candidate.id === "mission:coordinated");
+  const document = artifact.documents.find((candidate: { id: string }) => candidate.id === "coordinated");
   const discovery = document.frames.findIndex((frame: { exchange: { rate: { label: string } } }) => frame.exchange.rate.label.startsWith("Scout discovers Casualty"));
   const briefing = document.frames.findIndex((frame: { exchange: { rate: { label: string } } }) => frame.exchange.rate.label.startsWith("Brief Medic on Casualty"));
   expect(briefing).toBeGreaterThan(discovery);
@@ -715,10 +715,10 @@ test("shows independent mission travel, private briefings and cooperative extrac
 
 test("shows fleet cargo staging, shared-road capacity and funded delivery outcomes", async ({ page }) => {
   const artifact = await (await page.request.get("/artifacts/logistics.json")).json();
-  const document = artifact.documents.find((candidate: { id: string }) => candidate.id === "logistics:mcts");
+  const document = artifact.documents.find((candidate: { id: string }) => candidate.id === "mcts");
   const staged = document.frames.findIndex((frame: { exchange: { rate: { label: string } } }) => frame.exchange.rate.label.includes("stages Order")) + 1;
   expect(staged).toBeGreaterThan(0);
-  await page.goto(`/?problem=logistics&instance=showcase&strategy=mcts&document=logistics%3Amcts&view=replay&step=${staged}`);
+  await page.goto(`/?problem=logistics&instance=showcase&strategy=mcts&document=mcts&view=replay&step=${staged}`);
   await expect(page.locator(".graph-scene")).toContainText("Staged at hub for another van");
   await expect(page.locator(".scene-metric").filter({ hasText: "Hub handoffs staged" })).toContainText("1");
   await page.getByRole("slider", { name: "Trace position" }).fill(String(document.frames.length));

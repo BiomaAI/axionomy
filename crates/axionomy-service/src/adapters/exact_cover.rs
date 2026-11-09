@@ -4,23 +4,23 @@ use axionomy_problems::exact_cover::{self, AccountId, Asset, RateId, Role, SetId
 use axionomy_view::{MatrixCellView, TelemetryKindView, ViewId};
 
 pub(super) fn build(
-    request: &RunRequest,
+    run: &ArtifactKey,
     descriptor: &ProblemDescriptor,
 ) -> Result<RunArtifact, ServiceError> {
-    let profile = instance_profile(request, descriptor);
+    let profile = run.instance;
     let initial = match profile {
         InstanceProfile::Micro => exact_cover::initial(),
         InstanceProfile::Showcase => exact_cover::initial_showcase(),
         InstanceProfile::Stress => exact_cover::initial_stress(),
     };
     let bfs = exact_cover::solve_bfs(&initial)
-        .ok_or_else(|| problem_error("exact_cover", "BFS found no cover"))?;
+        .ok_or_else(|| problem_error("exact-cover", "BFS found no cover"))?;
     let algorithm_x = exact_cover::algorithm_x(&initial)
-        .ok_or_else(|| problem_error("exact_cover", "Algorithm X found no cover"))?;
+        .ok_or_else(|| problem_error("exact-cover", "Algorithm X found no cover"))?;
     let mut documents = Vec::new();
     for (strategy, title, description, trace, algorithm, expanded) in [
         (
-            "breadth_first",
+            "breadth-first",
             "Exact cover · plain search",
             "Breadth-first search finds a cover with the fewest selections. Larger sets can beat a cover made from pairs.",
             bfs.trace().clone(),
@@ -28,7 +28,7 @@ pub(super) fn build(
             Some(bfs.expanded() as u64),
         ),
         (
-            "algorithm_x",
+            "algorithm-x",
             "Exact cover · Algorithm X",
             "Algorithm X branches on the most constrained uncovered element. It can select a different complete cover than shortest-path search.",
             algorithm_x,
@@ -38,7 +38,7 @@ pub(super) fn build(
     ] {
         let mut view = document(
             DocumentSpec {
-                problem: "exact_cover",
+                problem: "exact-cover",
                 strategy,
                 title,
                 description,
@@ -50,7 +50,7 @@ pub(super) fn build(
             Vec::new(),
             scene,
         )
-        .map_err(|error| problem_error("exact_cover", error))?;
+        .map_err(|error| problem_error("exact-cover", error))?;
         let mut points = vec![(
             TelemetryKindView::Generated,
             trace.exchanges().len() as u64,
@@ -75,7 +75,7 @@ pub(super) fn build(
             Quantity::new(1),
         )
         .bind(Role::Problem, AccountId::Problem);
-        view.proposals.push(proposal("exact_cover", ProposalSpec { id: "wrong-progress", label: "Select AB at progress 2", description: "This proposal claims two elements are already covered, but the initial state has zero covered elements." }, &initial, &overlapping));
+        view.proposals.push(proposal("exact-cover", ProposalSpec { id: "wrong-progress", label: "Select AB at progress 2", description: "This proposal claims two elements are already covered, but the initial state has zero covered elements." }, &initial, &overlapping));
         documents.push(view);
     }
     let unsatisfiable = match profile {
@@ -83,12 +83,12 @@ pub(super) fn build(
         InstanceProfile::Showcase => exact_cover::unsatisfiable_showcase(),
         InstanceProfile::Stress => exact_cover::unsatisfiable_stress(),
     };
-    let mut unsat = document(DocumentSpec { problem: "exact_cover", strategy: "unsatisfiable", title: "Exact cover · no solution exists", description: "Same rules, different subsets: no combination covers every element exactly once. The impossibility is a result, not an error.", source_label: "Exact cover" }, &unsatisfiable, &exact_cover::goal(), &Trace::new(), Vec::new(), scene).map_err(|error| problem_error("exact_cover", error))?;
+    let mut unsat = document(DocumentSpec { problem: "exact-cover", strategy: "unsatisfiable", title: "Exact cover · no solution exists", description: "Same rules, different subsets: no combination covers every element exactly once. The impossibility is a result, not an error.", source_label: "Exact cover" }, &unsatisfiable, &exact_cover::goal(), &Trace::new(), Vec::new(), scene).map_err(|error| problem_error("exact-cover", error))?;
     if exact_cover::algorithm_x(&unsatisfiable).is_some()
         || exact_cover::solve_bfs(&unsatisfiable).is_some()
     {
         return Err(problem_error(
-            "exact_cover",
+            "exact-cover",
             "supposed unsatisfiable instance has a cover",
         ));
     }
@@ -98,12 +98,7 @@ pub(super) fn build(
         [(TelemetryKindView::Message, 0, "no exact cover".into())],
     ));
     documents.push(unsat);
-    artifact(
-        request,
-        descriptor,
-        selected_strategy(request, descriptor),
-        documents,
-    )
+    artifact(run, descriptor, documents)
 }
 
 fn scene(_: u64, world: &World) -> Option<Scene> {
@@ -112,12 +107,12 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
     let rows = sets
         .iter()
         .copied()
-        .map(|set| ViewId::new(format!("set:{set:?}"), format!("{set:?}")))
+        .map(|set| ViewId::new(slug(format!("set/{set:?}")), format!("{set:?}")))
         .collect();
     let columns = elements
         .iter()
         .copied()
-        .map(|element| ViewId::new(format!("element:{element:?}"), format!("{element:?}")))
+        .map(|element| ViewId::new(slug(format!("element/{element:?}")), format!("{element:?}")))
         .collect();
     let cells = sets
         .iter()
@@ -138,13 +133,13 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                                 .is_zero()
                         });
                     MatrixCellView {
-                        row: format!("set:{set:?}"),
-                        column: format!("element:{element:?}"),
+                        row: slug(format!("set/{set:?}")),
+                        column: slug(format!("element/{element:?}")),
                         label: "×".into(),
                         classes: if selected {
-                            vec!["selected".into()]
+                            vec![slug("selected")]
                         } else if blocked {
-                            vec!["blocked".into()]
+                            vec![slug("blocked")]
                         } else {
                             Vec::new()
                         },
@@ -155,7 +150,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
     Some(
         Scene::matrix("Which subset contains which element", rows, columns, cells).with_metrics([
             visual_metric(
-                "covered",
+                slug("covered"),
                 "Elements covered",
                 elements
                     .iter()
@@ -168,7 +163,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 None,
             ),
             visual_metric(
-                "selected",
+                slug("selected"),
                 "Sets selected",
                 sets.iter()
                     .filter(|set| {
@@ -180,7 +175,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 None,
             ),
             visual_metric(
-                "choices",
+                slug("choices"),
                 "Legal next selections",
                 exact_cover::candidates(world)
                     .iter()
@@ -189,7 +184,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 None,
             ),
             visual_metric(
-                "completion",
+                slug("completion"),
                 "Completion possible",
                 if exact_cover::algorithm_x(world).is_some() {
                     "yes"

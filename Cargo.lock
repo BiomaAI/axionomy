@@ -451,6 +451,7 @@ dependencies = [
  "axionomy-service",
  "axionomy-store",
  "axionomy-tree",
+ "axionomy-view",
  "axum",
  "blake3",
  "getrandom 0.4.3",
@@ -504,6 +505,7 @@ dependencies = [
  "axionomy-view",
  "schemars 1.2.3",
  "serde",
+ "serde_json",
  "thiserror",
 ]
 

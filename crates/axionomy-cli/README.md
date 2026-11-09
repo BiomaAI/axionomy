@@ -11,5 +11,7 @@ cargo run -p axionomy-cli -- run marketplace --instance micro --format json > ma
 ```
 
 Every problem advertises Micro, Showcase, and Stress instances. Omitting
-`--instance` selects Showcase and the resolved identity is recorded in the
-artifact.
+`--instance` selects Showcase, and the artifact records its key: the problem,
+instance, strategy, seed and budget it was computed from. Problems and
+strategies are written in kebab-case (`work-league`, `a-star`), and the CLI
+refuses any other spelling when it reads them.

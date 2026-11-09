@@ -29,7 +29,7 @@ test("cancels browser computation by terminating its isolated Worker", async ({ 
 });
 
 test("browser Worker streams the same verified Work League frames", async ({ page }) => {
-  await page.goto("/?problem=work_league&instance=micro&strategy=mixed_field&view=solve&step=0&seed=17&budget=32");
+  await page.goto("/?problem=work-league&instance=micro&strategy=mixed-field&view=solve&step=0&seed=17&budget=32");
   await expect(page.getByText("Running in your browser", { exact: true })).toBeVisible({ timeout: 30_000 });
   await expect(page.getByRole("heading", { name: "Work League · Mixed policy field" })).toBeVisible();
   await page.getByRole("button", { name: "Run", exact: true }).click();

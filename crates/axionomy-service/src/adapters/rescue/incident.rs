@@ -4,27 +4,27 @@ use axionomy_problems::rescue::incident::{
 };
 
 pub(super) fn build(
-    request: &RunRequest,
+    run: &ArtifactKey,
     descriptor: &ProblemDescriptor,
     profile: InstanceProfile,
 ) -> Result<RunArtifact, ServiceError> {
-    let initial = rescue::initial(matches!(profile, InstanceProfile::Stress), request.seed);
+    let initial = rescue::initial(matches!(profile, InstanceProfile::Stress), run.seed);
     let mut documents = Vec::new();
     for (strategy, title, description, policy) in [
         (
-            "observe_then_follow",
+            "observe-then-follow",
             "Rescue · responsive triage",
             "Spend limited sensor charges on fallible hints, search sectors, prioritize observed casualties, and choose treatment or rapid evacuation against continuing deterioration.",
             Policy::Triage,
         ),
         (
-            "direct_north",
+            "direct-north",
             "Rescue · rapid sector sweep",
             "Begin north without a scan, search successive sectors, and use fast transport. Each rescued patient occupies the only evacuation seat until hospital arrival.",
             Policy::RapidNorth,
         ),
         (
-            "stabilize_first",
+            "stabilize-first",
             "Rescue · stabilize before transport",
             "Treat discovered patients before loading when a kit remains. Restored vitality and delayed deterioration cost time that other casualties may not have.",
             Policy::StabilizeFirst,
@@ -77,12 +77,7 @@ pub(super) fn build(
         );
         documents[index].pareto_fronts.push(front);
     }
-    artifact(
-        request,
-        descriptor,
-        selected_strategy(request, descriptor),
-        documents,
-    )
+    artifact(run, descriptor, documents)
 }
 fn objectives(world: &World) -> Vec<ObjectiveView> {
     [
@@ -131,7 +126,7 @@ fn objectives(world: &World) -> Vec<ObjectiveView> {
     ]
     .into_iter()
     .map(|(key, label, account, asset, direction)| ObjectiveView {
-        key: key.into(),
+        key: slug(key),
         label: label.into(),
         value: rescue::value(world, account, asset).to_string(),
         direction,
@@ -141,7 +136,7 @@ fn objectives(world: &World) -> Vec<ObjectiveView> {
 fn observation(world: &World) -> ObservationView {
     let key = rescue::responder_view(world).observation_key();
     ObservationView {
-        actor: ViewId::new("rescue:actor:responder", "Rescue crew"),
+        actor: ViewId::new(slug("rescue/actor/responder"), "Rescue crew"),
         label: format!(
             "Crew observations at time {} · undiscovered patients and Nature omitted",
             rescue::now(world)
@@ -151,7 +146,7 @@ fn observation(world: &World) -> ObservationView {
             .iter()
             .map(|account| AccountView {
                 account: ViewId::new(
-                    format!("rescue:observed:{account:?}"),
+                    slug(format!("rescue/observed/{account:?}")),
                     account.studio_label(),
                 ),
                 balances: key
@@ -160,7 +155,7 @@ fn observation(world: &World) -> ObservationView {
                     .filter(|(owner, _, _)| owner == account)
                     .map(|(_, asset, quantity)| AssetQuantityView {
                         asset: ViewId::new(
-                            format!("rescue:observed:{asset:?}"),
+                            slug(format!("rescue/observed/{asset:?}")),
                             asset.studio_label(),
                         ),
                         quantity: ExactQuantity(quantity.to_string()),
@@ -188,14 +183,14 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         .filter(|(location, _, _)| present(*location))
         .map(|(location, x, y)| GraphNodeView {
             id: ViewId::new(
-                format!("{location:?}"),
+                slug(format!("{location:?}")),
                 if location == Location::Base {
                     "Base hospital".into()
                 } else {
                     format!("{location:?}")
                 },
             ),
-            classes: vec!["location".into()],
+            classes: vec![slug("location")],
             x: Some(x),
             y: Some(y),
         })
@@ -213,9 +208,9 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         .into_iter()
         .filter(|(a, b)| present(*a) && present(*b))
         .map(|(a, b)| GraphEdgeView {
-            id: format!("road:{a:?}:{b:?}"),
-            source: format!("{a:?}"),
-            target: format!("{b:?}"),
+            id: slug(format!("road/{a:?}/{b:?}")),
+            source: slug(format!("{a:?}")),
+            target: slug(format!("{b:?}")),
             label: Some("2 ticks / 1 fuel · fast 1 / 2".into()),
             classes: vec![],
         })
@@ -226,11 +221,11 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         .unwrap_or(Location::Base);
     let mut crew = link_account(
         visual_entity(
-            "crew",
+            slug("crew"),
             "Evacuation crew",
             SceneGlyphView::Vehicle,
             SceneAnchorView::GraphNode {
-                node: format!("{at:?}"),
+                node: slug(format!("{at:?}")),
             },
             SceneEntityRoleView::Occupant,
             SceneToneView::Active,
@@ -245,18 +240,23 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 .into(),
             ),
         ),
-        "rescue:account:responder",
+        slug("rescue/account/responder"),
     );
     crew.metrics = vec![
-        visual_metric("fuel", "Fuel", val(AccountId::Responder, Asset::Fuel), None),
         visual_metric(
-            "energy",
+            slug("fuel"),
+            "Fuel",
+            val(AccountId::Responder, Asset::Fuel),
+            None,
+        ),
+        visual_metric(
+            slug("energy"),
             "Crew energy",
             val(AccountId::Responder, Asset::Energy),
             None,
         ),
         visual_metric(
-            "medicine",
+            slug("medicine"),
             "Medical kits",
             val(AccountId::Responder, Asset::MedicalKit),
             None,
@@ -295,11 +295,11 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         };
         let mut entity = link_account(
             visual_entity(
-                format!("patient:{id}"),
+                slug(format!("patient/{id}")),
                 format!("Patient {}", id + 1),
                 SceneGlyphView::Person,
                 SceneAnchorView::GraphNode {
-                    node: format!("{node:?}"),
+                    node: slug(format!("{node:?}")),
                 },
                 SceneEntityRoleView::Attachment,
                 if saved {
@@ -311,23 +311,23 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 },
                 Some(status.into()),
             ),
-            format!("rescue:account:patient-{id}"),
+            slug(format!("rescue/account/patient-{id}")),
         );
         entity.metrics = vec![
             visual_metric(
-                "vitality",
+                slug("vitality"),
                 "Vitality",
                 val(patient, Asset::Vitality),
                 Some("/ 3"),
             ),
             visual_metric(
-                "decline",
+                slug("decline"),
                 "Next deterioration",
                 val(patient, Asset::NextDecline),
                 Some("tick"),
             ),
             visual_metric(
-                "deadline",
+                slug("deadline"),
                 "Evacuation deadline",
                 val(patient, Asset::Deadline),
                 Some("tick"),
@@ -343,21 +343,21 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
     )
     .with_entities(entities)
     .with_metrics([
-        visual_metric("time", "Incident time", rescue::now(world), None),
+        visual_metric(slug("time"), "Incident time", rescue::now(world), None),
         visual_metric(
-            "saved",
+            slug("saved"),
             "Patients evacuated",
             val(AccountId::World, Asset::SavedCount),
             None,
         ),
         visual_metric(
-            "deaths",
+            slug("deaths"),
             "Patients lost",
             val(AccountId::World, Asset::DeathCount),
             None,
         ),
         visual_metric(
-            "fuel",
+            slug("fuel"),
             "Fuel remaining",
             val(AccountId::Responder, Asset::Fuel),
             None,
@@ -367,7 +367,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         if let Some(entity) = scene
             .entities
             .iter_mut()
-            .find(|entity| entity.id.key == format!("{location:?}"))
+            .find(|entity| entity.id.key == slug(format!("{location:?}")))
         {
             entity.status = Some(
                 if location == Location::Base {
@@ -387,15 +387,15 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             );
             if location == Location::Base {
                 entity.metrics = vec![
-                    visual_metric("time", "Incident time", rescue::now(world), None),
+                    visual_metric(slug("time"), "Incident time", rescue::now(world), None),
                     visual_metric(
-                        "saved",
+                        slug("saved"),
                         "Patients evacuated",
                         val(AccountId::World, Asset::SavedCount),
                         None,
                     ),
                     visual_metric(
-                        "lost",
+                        slug("lost"),
                         "Patients lost",
                         val(AccountId::World, Asset::DeathCount),
                         None,

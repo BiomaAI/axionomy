@@ -14,26 +14,26 @@ use axionomy_view::{
 };
 
 pub(super) fn build(
-    request: &RunRequest,
+    run: &ArtifactKey,
     descriptor: &ProblemDescriptor,
     progress: &mut ProgressSink<'_>,
 ) -> Result<RunArtifact, ServiceError> {
-    let initial = match instance_profile(request, descriptor) {
+    let initial = match run.instance {
         InstanceProfile::Micro => maze::initial(),
         InstanceProfile::Showcase => maze::initial_showcase(),
         InstanceProfile::Stress => maze::initial_stress(),
     };
-    let selected = selected_strategy(request, descriptor);
+    let selected = run.strategy.as_str();
     observe_selected_search(&initial, selected, progress)?;
     let bfs = maze::solve_bfs(&initial).ok_or_else(|| problem_error("maze", "no BFS route"))?;
     let dijkstra =
         maze::solve_dijkstra(&initial).ok_or_else(|| problem_error("maze", "no Dijkstra route"))?;
     let astar = maze::solve_astar(&initial).ok_or_else(|| problem_error("maze", "no A* route"))?;
     let pareto = maze::pareto_front(&initial).map_err(|error| problem_error("maze", error))?;
-    if selected.starts_with("pareto_") {
+    if selected.starts_with("pareto-") {
         let state = pareto.progress();
         let _ = progress.emit(
-            "pareto_frontier",
+            slug("pareto-frontier"),
             state.expanded() as u64,
             state.expanded() as u64,
             format!(
@@ -49,7 +49,7 @@ pub(super) fn build(
 
     let traces = [
         (
-            "breadth_first",
+            "breadth-first",
             "Maze · fewest moves",
             "Breadth-first search minimizes exchange count. In larger mazes, untreated injuries can make a short sequence take longer than a prepared route.",
             bfs.trace().clone(),
@@ -65,7 +65,7 @@ pub(super) fn build(
             dijkstra.expanded(),
         ),
         (
-            "a_star",
+            "a-star",
             "Maze · least energy",
             "A* uses the encoded distance estimate to find the efficient key-and-gate route with less search.",
             astar.trace().clone(),
@@ -73,7 +73,7 @@ pub(super) fn build(
             astar.expanded(),
         ),
         (
-            "pareto_energy",
+            "pareto-energy",
             "Maze Pareto · least energy",
             "The cheapest route on the frontier; every step was replayed to confirm it.",
             energy_trace,
@@ -81,7 +81,7 @@ pub(super) fn build(
             pareto.progress().expanded(),
         ),
         (
-            "pareto_time",
+            "pareto-time",
             "Maze Pareto · least time",
             "The fastest route on the frontier; every step was replayed to confirm it.",
             time_trace,
@@ -127,7 +127,7 @@ pub(super) fn build(
                 ),
             ],
         ));
-        document.solve_observations = if strategy.starts_with("pareto_") {
+        document.solve_observations = if strategy.starts_with("pareto-") {
             saved_pareto_observations(&pareto)
         } else {
             saved_graph_observations(&initial, strategy)?
@@ -174,7 +174,7 @@ pub(super) fn build(
         ];
         documents.push(document);
     }
-    artifact(request, descriptor, selected, documents)
+    artifact(run, descriptor, documents)
 }
 
 #[derive(Clone, Copy)]
@@ -232,7 +232,7 @@ fn expansion_label(expansion: MazeExpansion) -> String {
 
 fn expansion_subject(expansion: MazeExpansion) -> ViewId {
     ViewId::new(
-        format!("node:{:?}", expansion.node).to_ascii_lowercase(),
+        slug(format!("node/{:?}", expansion.node)),
         expansion.node.studio_label(),
     )
 }
@@ -244,18 +244,23 @@ fn saved_graph_observation(
 ) -> SearchObservationView {
     SearchObservationView {
         sequence: state.expanded() as u64,
-        phase: phase.into(),
-        algorithm: phase.trim_end_matches("_frontier").into(),
+        phase: slug(phase),
+        algorithm: slug(phase.trim_end_matches("-frontier")),
         kind: SearchObservationKindView::Frontier,
         label: expansion_label(expansion),
         completed: state.expanded() as u64,
         total: 0,
         subjects: vec![expansion_subject(expansion)],
         metrics: vec![
-            visual_metric("expanded", "States expanded", state.expanded(), None),
-            visual_metric("generated", "States generated", state.generated(), None),
-            visual_metric("frontier", "Frontier", state.frontier(), None),
-            visual_metric("visited", "States visited", state.visited(), None),
+            visual_metric(slug("expanded"), "States expanded", state.expanded(), None),
+            visual_metric(
+                slug("generated"),
+                "States generated",
+                state.generated(),
+                None,
+            ),
+            visual_metric(slug("frontier"), "Frontier", state.frontier(), None),
+            visual_metric(slug("visited"), "States visited", state.visited(), None),
         ],
     }
 }
@@ -276,19 +281,24 @@ fn saved_solution_observation(
 ) -> SearchObservationView {
     SearchObservationView {
         sequence: state.expanded() as u64 + 1,
-        phase: phase.into(),
-        algorithm: phase.trim_end_matches("_solution").into(),
+        phase: slug(phase),
+        algorithm: slug(phase.trim_end_matches("-solution")),
         kind: SearchObservationKindView::Incumbent,
         label: solution_label(expansion),
         completed: state.expanded() as u64,
         total: state.expanded() as u64,
         subjects: vec![expansion_subject(expansion)],
         metrics: vec![
-            visual_metric("expanded", "States expanded", state.expanded(), None),
-            visual_metric("generated", "States generated", state.generated(), None),
-            visual_metric("visited", "States visited", state.visited(), None),
+            visual_metric(slug("expanded"), "States expanded", state.expanded(), None),
             visual_metric(
-                "solution_cost",
+                slug("generated"),
+                "States generated",
+                state.generated(),
+                None,
+            ),
+            visual_metric(slug("visited"), "States visited", state.visited(), None),
+            visual_metric(
+                slug("solution-cost"),
                 "Solution cost",
                 state.solution_depth().unwrap_or_default(),
                 None,
@@ -323,7 +333,7 @@ fn saved_graph_observations(
 ) -> Result<Vec<SearchObservationView>, ServiceError> {
     let expanded = std::rc::Rc::new(std::cell::RefCell::new(None));
     let mut observations = Vec::new();
-    if strategy == "breadth_first" {
+    if strategy == "breadth-first" {
         let capture = std::rc::Rc::clone(&expanded);
         let mut session = BfsSession::new(initial, maze::goal(), move |world| {
             *capture.borrow_mut() = capture_expansion(world);
@@ -334,7 +344,7 @@ fn saved_graph_observations(
             session.advance(WorkBudget::new(1), &mut observer);
             if let Some(expansion) = expanded.borrow_mut().take() {
                 let observation = saved_graph_observation(
-                    "breadth_first_frontier",
+                    "breadth-first-frontier",
                     session.progress(),
                     expansion,
                 );
@@ -344,15 +354,15 @@ fn saved_graph_observations(
         if let Some(solution) = session.solution() {
             let expansion = solved_expansion(initial, solution.trace())?;
             let observation =
-                saved_solution_observation("breadth_first_solution", session.progress(), expansion);
+                saved_solution_observation("breadth-first-solution", session.progress(), expansion);
             retain_observation(&mut observations, observation);
         }
     } else {
         let capture = std::rc::Rc::clone(&expanded);
         let (phase, heuristic): (&str, fn(&World) -> u64) = if strategy == "dijkstra" {
-            ("dijkstra_frontier", zero_heuristic)
+            ("dijkstra-frontier", zero_heuristic)
         } else {
-            ("a_star_frontier", maze::heuristic)
+            ("a-star-frontier", maze::heuristic)
         };
         let mut session = AStarSession::new(
             initial,
@@ -376,9 +386,9 @@ fn saved_graph_observations(
             let expansion = solved_expansion(initial, solution.trace())?;
             let observation = saved_solution_observation(
                 if strategy == "dijkstra" {
-                    "dijkstra_solution"
+                    "dijkstra-solution"
                 } else {
-                    "a_star_solution"
+                    "a-star-solution"
                 },
                 session.progress(),
                 expansion,
@@ -399,8 +409,8 @@ fn saved_pareto_observations(result: &maze::ParetoResult) -> Vec<SearchObservati
     let progress = result.progress();
     vec![SearchObservationView {
         sequence: 0,
-        phase: "pareto_frontier".into(),
-        algorithm: "exact_pareto_search".into(),
+        phase: slug("pareto-frontier"),
+        algorithm: slug("exact-pareto-search"),
         kind: SearchObservationKindView::Frontier,
         label: format!(
             "Exact frontier exhausted · {} terminal routes · {} non-dominated tradeoffs",
@@ -409,18 +419,28 @@ fn saved_pareto_observations(result: &maze::ParetoResult) -> Vec<SearchObservati
         ),
         completed: progress.expanded() as u64,
         total: progress.expanded() as u64,
-        subjects: vec![ViewId::new("node:exit", "Exit")],
+        subjects: vec![ViewId::new(slug("node/exit"), "Exit")],
         metrics: vec![
-            visual_metric("expanded", "States expanded", progress.expanded(), None),
-            visual_metric("generated", "States generated", progress.generated(), None),
             visual_metric(
-                "terminal",
+                slug("expanded"),
+                "States expanded",
+                progress.expanded(),
+                None,
+            ),
+            visual_metric(
+                slug("generated"),
+                "States generated",
+                progress.generated(),
+                None,
+            ),
+            visual_metric(
+                slug("terminal"),
                 "Terminal routes",
                 progress.terminal_outcomes(),
                 None,
             ),
             visual_metric(
-                "pareto",
+                slug("pareto"),
                 "Pareto outcomes",
                 progress.pareto_outcomes(),
                 None,
@@ -436,7 +456,7 @@ fn emit_expansion(
     progress: &mut ProgressSink<'_>,
 ) -> Result<(), ServiceError> {
     let _ = progress.graph_with_subjects(
-        phase,
+        slug(phase),
         state,
         expansion_label(expansion),
         [expansion_subject(expansion)],
@@ -451,7 +471,7 @@ fn emit_solution(
     progress: &mut ProgressSink<'_>,
 ) -> Result<(), ServiceError> {
     let _ = progress.graph_with_subjects(
-        phase,
+        slug(phase),
         state,
         solution_label(expansion),
         [expansion_subject(expansion)],
@@ -464,11 +484,11 @@ fn observe_selected_search(
     strategy: &str,
     progress: &mut ProgressSink<'_>,
 ) -> Result<(), ServiceError> {
-    if strategy.starts_with("pareto_") {
+    if strategy.starts_with("pareto-") {
         return Ok(());
     }
     let expanded = std::rc::Rc::new(std::cell::RefCell::new(None));
-    if strategy == "breadth_first" {
+    if strategy == "breadth-first" {
         let capture = std::rc::Rc::clone(&expanded);
         let mut session = BfsSession::new(initial, maze::goal(), move |world| {
             *capture.borrow_mut() = capture_expansion(world);
@@ -479,7 +499,7 @@ fn observe_selected_search(
             session.advance(WorkBudget::new(1), &mut observer);
             if let Some(expansion) = expanded.borrow_mut().take() {
                 emit_expansion(
-                    "breadth_first_frontier",
+                    "breadth-first-frontier",
                     session.progress(),
                     expansion,
                     progress,
@@ -488,7 +508,7 @@ fn observe_selected_search(
         }
         if let Some(solution) = session.solution() {
             emit_solution(
-                "breadth_first_solution",
+                "breadth-first-solution",
                 session.progress(),
                 solved_expansion(initial, solution.trace())?,
                 progress,
@@ -517,9 +537,9 @@ fn observe_selected_search(
             if let Some(expansion) = expanded.borrow_mut().take() {
                 emit_expansion(
                     if strategy == "dijkstra" {
-                        "dijkstra_frontier"
+                        "dijkstra-frontier"
                     } else {
-                        "a_star_frontier"
+                        "a-star-frontier"
                     },
                     session.progress(),
                     expansion,
@@ -530,9 +550,9 @@ fn observe_selected_search(
         if let Some(solution) = session.solution() {
             emit_solution(
                 if strategy == "dijkstra" {
-                    "dijkstra_solution"
+                    "dijkstra-solution"
                 } else {
-                    "a_star_solution"
+                    "a-star-solution"
                 },
                 session.progress(),
                 solved_expansion(initial, solution.trace())?,
@@ -574,13 +594,13 @@ fn objective_value(values: &[Objective<ObjectiveKey, u64>], key: ObjectiveKey) -
 fn objectives(world: &World) -> Vec<ObjectiveView> {
     vec![
         ObjectiveView {
-            key: "energy".into(),
+            key: slug("energy"),
             label: "Energy spent".into(),
             direction: ObjectiveDirectionView::Minimize,
             value: maze::spent_energy(world).to_string(),
         },
         ObjectiveView {
-            key: "time".into(),
+            key: slug("time"),
             label: "Time spent".into(),
             direction: ObjectiveDirectionView::Minimize,
             value: maze::spent_time(world).to_string(),
@@ -599,12 +619,12 @@ fn front_view(result: &maze::ParetoResult, selected: &ViewDocument) -> ParetoFro
         completeness: FrontierCompletenessView::Exact,
         axes: vec![
             ObjectiveAxisView {
-                key: "energy".into(),
+                key: slug("energy"),
                 label: "Energy spent".into(),
                 direction: ObjectiveDirectionView::Minimize,
             },
             ObjectiveAxisView {
-                key: "time".into(),
+                key: slug("time"),
                 label: "Time spent".into(),
                 direction: ObjectiveDirectionView::Minimize,
             },
@@ -678,22 +698,22 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         (false, Node::Ruins) => (180.0, 1030.0),
         (false, Node::Chapel) => (600.0, 1030.0),
     };
-    let node_key = |node| format!("node:{node:?}").to_lowercase();
+    let node_key = |node| slug(format!("node/{node:?}"));
     let graph_nodes = nodes
         .iter()
         .copied()
         .map(|node| {
             let (x, y) = positions(node);
             let mut classes = if node == Node::Gate {
-                vec!["facility".into()]
+                vec![slug("facility")]
             } else {
-                vec!["location".into()]
+                vec![slug("location")]
             };
             if focus == Some(node) {
-                classes.push("current".into());
+                classes.push(slug("current"));
             }
             if node == Node::Exit {
-                classes.push("goal".into());
+                classes.push(slug("goal"));
             }
             GraphNodeView {
                 id: ViewId::new(node_key(node), node.studio_label()),
@@ -712,7 +732,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 energy,
                 needs_open_door,
             } => Some(GraphEdgeView {
-                id: format!("edge:{from:?}:{to:?}"),
+                id: slug(format!("edge/{from:?}/{to:?}")),
                 source: node_key(*from),
                 target: node_key(*to),
                 label: Some(if *needs_open_door {
@@ -732,7 +752,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                             .is_zero()
                         && !world.balance(&AccountId::Agent, &Asset::Health).is_zero())
                 {
-                    vec!["locked".into()]
+                    vec![slug("locked")]
                 } else {
                     Vec::new()
                 },
@@ -745,7 +765,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         let time = world.balance(&AccountId::Agent, &Asset::Time);
         let mut entity = link_balance(
             visual_entity(
-                "agent:explorer",
+                slug("agent/explorer"),
                 "Explorer",
                 SceneGlyphView::Agent,
                 SceneAnchorView::GraphNode {
@@ -763,19 +783,19 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                     format!("E {} · T {}", energy, time)
                 }),
             ),
-            "maze:account:agent",
-            format!("maze:asset:at-{node:?}").to_ascii_lowercase(),
+            slug("maze/account/agent"),
+            slug(format!("maze/asset/at-{node:?}")),
         );
         entity.metrics = vec![
-            visual_metric("energy", "Energy", energy, Some("units")),
-            visual_metric("time", "Time", time, Some("ticks")),
+            visual_metric(slug("energy"), "Energy", energy, Some("units")),
+            visual_metric(slug("time"), "Time", time, Some("ticks")),
         ];
         entity
     });
     let key = if !world.balance(&AccountId::World, &Asset::Key).is_zero() {
         Some(link_balance(
             visual_entity(
-                "maze:key:brass",
+                slug("maze/key/brass"),
                 "Brass key",
                 SceneGlyphView::Key,
                 SceneAnchorView::GraphNode {
@@ -785,24 +805,24 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 SceneToneView::Warning,
                 Some("available".into()),
             ),
-            "maze:account:world",
-            "maze:asset:key",
+            slug("maze/account/world"),
+            slug("maze/asset/key"),
         ))
     } else if !world.balance(&AccountId::Agent, &Asset::Key).is_zero() {
         Some(link_balance(
             visual_entity(
-                "maze:key:brass",
+                slug("maze/key/brass"),
                 "Brass key",
                 SceneGlyphView::Key,
                 SceneAnchorView::Entity {
-                    entity: "agent:explorer".into(),
+                    entity: slug("agent/explorer"),
                 },
                 SceneEntityRoleView::Attachment,
                 SceneToneView::Active,
                 Some("carried".into()),
             ),
-            "maze:account:agent",
-            "maze:asset:key",
+            slug("maze/account/agent"),
+            slug("maze/asset/key"),
         ))
     } else {
         None
@@ -822,7 +842,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
     };
     let gate = link_balance(
         visual_entity(
-            "maze:gate:state",
+            slug("maze/gate/state"),
             "Vault gate",
             SceneGlyphView::Door,
             SceneAnchorView::GraphNode {
@@ -836,11 +856,11 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             },
             Some(gate_status.into()),
         ),
-        "maze:account:world",
+        slug("maze/account/world"),
         if gate_open {
-            "maze:asset:open"
+            slug("maze/asset/open")
         } else {
-            "maze:asset:locked"
+            slug("maze/asset/locked")
         },
     );
     let mut scene = Scene::graph(
@@ -852,19 +872,19 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
     .with_entities(agent.into_iter().chain(key).chain([gate]))
     .with_metrics([
         visual_metric(
-            "energy_left",
+            slug("energy-left"),
             "Explorer energy",
             world.balance(&AccountId::Agent, &Asset::Energy),
             Some("units"),
         ),
         visual_metric(
-            "time_left",
+            slug("time-left"),
             "Time remaining",
             world.balance(&AccountId::Agent, &Asset::Time),
             Some("ticks"),
         ),
         visual_metric(
-            "key_state",
+            slug("key-state"),
             "Key",
             if world.balance(&AccountId::World, &Asset::Key).is_zero() {
                 if world.balance(&AccountId::Agent, &Asset::Key).is_zero() {
@@ -877,12 +897,12 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             },
             None,
         ),
-        visual_metric("gate_state", "Vault gate", gate_status, None),
+        visual_metric(slug("gate-state"), "Vault gate", gate_status, None),
     ]);
     if enhanced {
         scene.metrics.extend([
             visual_metric(
-                "power",
+                slug("power"),
                 "Shared power",
                 if vault_power {
                     "vault shutter"
@@ -892,19 +912,19 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 None,
             ),
             visual_metric(
-                "injury",
+                slug("injury"),
                 "Injury delay per action",
                 world.balance(&AccountId::Agent, &Asset::Injury),
                 Some("ticks"),
             ),
             visual_metric(
-                "shield",
+                slug("shield"),
                 "Protection remaining",
                 world.balance(&AccountId::Agent, &Asset::Shield),
                 Some("charges"),
             ),
             visual_metric(
-                "health",
+                slug("health"),
                 "Health",
                 world.balance(&AccountId::Agent, &Asset::Health),
                 None,
@@ -953,7 +973,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             ),
         ] {
             scene.entities.push(visual_entity(
-                key,
+                slug(key),
                 label,
                 glyph,
                 SceneAnchorView::GraphNode { node: node_key(at) },
@@ -1002,10 +1022,10 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
     Some(scene)
 }
 
-fn route_id(rate: &RateId) -> Option<String> {
+fn route_id(rate: &RateId) -> Option<ItemPath> {
     match rate {
         RateId::Move { from, to, .. } | RateId::ProtectedMove { from, to, .. } => {
-            Some(format!("edge:{from:?}:{to:?}"))
+            Some(slug(format!("edge/{from:?}/{to:?}")))
         }
         _ => None,
     }
@@ -1029,7 +1049,7 @@ fn decorate_route_evidence(
             frame.after.scene.as_mut(),
             &planned,
             &traversed,
-            current.as_deref(),
+            current.as_ref(),
         );
         if let Some(current) = current {
             traversed.insert(current);
@@ -1039,9 +1059,9 @@ fn decorate_route_evidence(
 
 fn decorate_scene_paths(
     scene: Option<&mut Scene>,
-    planned: &std::collections::BTreeSet<String>,
-    traversed: &std::collections::BTreeSet<String>,
-    current: Option<&str>,
+    planned: &std::collections::BTreeSet<ItemPath>,
+    traversed: &std::collections::BTreeSet<ItemPath>,
+    current: Option<&ItemPath>,
 ) {
     let Some(scene) = scene else { return };
     scene.legend.retain(|entry| {
@@ -1051,7 +1071,7 @@ fn decorate_scene_paths(
     });
     let remaining = planned
         .iter()
-        .any(|path| !traversed.contains(path) && current != Some(path.as_str()));
+        .any(|path| !traversed.contains(path) && current != Some(path));
     if remaining {
         scene.legend.push(SceneLegendView {
             label: "Planned next".into(),
@@ -1075,19 +1095,22 @@ fn decorate_scene_paths(
     }
     if let SceneSurfaceView::Graph { edges, .. } = &mut scene.surface {
         for edge in edges {
-            edge.classes
-                .retain(|class| class != "current" && class != "traversed" && class != "candidate");
-            if current == Some(edge.id.as_str()) {
-                edge.classes.push("current".into());
+            edge.classes.retain(|class| {
+                class.as_str() != "current"
+                    && class.as_str() != "traversed"
+                    && class.as_str() != "candidate"
+            });
+            if current == Some(&edge.id) {
+                edge.classes.push(slug("current"));
             } else if traversed.contains(&edge.id) {
-                edge.classes.push("traversed".into());
+                edge.classes.push(slug("traversed"));
             } else if planned.contains(&edge.id) {
-                edge.classes.push("candidate".into());
+                edge.classes.push(slug("candidate"));
             }
         }
     }
     for path in &mut scene.paths {
-        path.status = if current == Some(path.id.as_str()) {
+        path.status = if current == Some(&path.id) {
             ScenePathStatusView::Current
         } else if traversed.contains(&path.id) {
             ScenePathStatusView::Traversed

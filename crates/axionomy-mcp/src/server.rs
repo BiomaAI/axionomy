@@ -453,8 +453,15 @@ impl AxionomyMcp {
         arguments: Option<JsonObject>,
     ) -> Result<CallToolResponse, ToolError> {
         let request: RunRequest = arguments_of(arguments)?;
-        validate_problem_run(&request)
-            .map_err(|message| ToolError::new(FailureCode::InvalidRequest, message))?;
+        if request.budget == 0 {
+            return Err(ToolError::new(
+                FailureCode::InvalidRequest,
+                "budget must be greater than zero",
+            ));
+        }
+        ReferenceService
+            .resolve(&request)
+            .map_err(|error| ToolError::new(FailureCode::InvalidRequest, error.to_string()))?;
         let archive = self.archive.clone();
         let task = self.tasks.spawn(self.task_options.clone(), move |context| {
             Box::pin(run_problem(context, archive, request))
@@ -922,35 +929,6 @@ pub(crate) fn assessment_lines(
     }))
 }
 
-fn validate_problem_run(request: &RunRequest) -> Result<(), String> {
-    if request.budget == 0 {
-        return Err("budget must be greater than zero".into());
-    }
-    let problem = ReferenceService
-        .problem(&request.problem)
-        .ok_or_else(|| format!("unknown problem `{}`", request.problem))?;
-    if let Some(strategy) = &request.strategy
-        && !problem
-            .strategies
-            .iter()
-            .any(|known| &known.key == strategy)
-    {
-        return Err(format!(
-            "unknown strategy `{strategy}` for problem `{}`",
-            request.problem
-        ));
-    }
-    if let Some(instance) = &request.instance
-        && !problem.instances.iter().any(|known| &known.key == instance)
-    {
-        return Err(format!(
-            "unknown instance `{instance}` for problem `{}`",
-            request.problem
-        ));
-    }
-    Ok(())
-}
-
 fn task_error(error: impl ToString) -> TaskExit {
     TaskExit::Error(McpError::internal_error(error.to_string(), None))
 }
@@ -988,38 +966,40 @@ async fn run_problem(
             }
         }
     };
+    let documents = artifact
+        .documents
+        .iter()
+        .map(|document| DocumentSummary {
+            id: document.id.clone(),
+            title: document.title.clone(),
+            frames: document.frames.len(),
+        })
+        .collect();
+    let key = artifact.key.clone();
+    let selected_document = artifact.selected_document.clone();
+    let artifact_id = archive.keep_artifact(artifact).await.map_err(task_error)?;
     let summary = RunSummary {
-        artifact_id: artifact.id.clone(),
-        problem: artifact.problem.key.clone(),
-        instance: artifact.instance.key.clone(),
-        selected_document_id: artifact.selected_document_id.clone(),
-        documents: artifact
-            .documents
-            .iter()
-            .map(|document| DocumentSummary {
-                id: document.id.clone(),
-                title: document.title.clone(),
-                frames: document.frames.len(),
-            })
-            .collect(),
+        artifact_id,
+        key,
+        selected_document,
+        documents,
     };
     context.set_status_message(format!(
         "completed: {} documents, selected {}",
         summary.documents.len(),
-        summary.selected_document_id
+        summary.selected_document
     ));
     let links = vec![
         Target::Artifact {
             artifact_id: summary.artifact_id.clone(),
         }
-        .link("artifact", "The run's request and documents"),
+        .link("artifact", "The run's key and documents"),
         Target::Frames {
             artifact_id: summary.artifact_id.clone(),
-            document_id: summary.selected_document_id.clone(),
+            document: summary.selected_document.clone(),
         }
         .link("frames", "The selected document's replay frames, paged"),
     ];
-    archive.keep_artifact(artifact).await.map_err(task_error)?;
     Linked::new(summary, links)
         .into_result()
         .map_err(TaskExit::Error)

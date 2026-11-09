@@ -4,8 +4,9 @@
 //! returned as `nextCursor` while more items remain. The named snapshots never
 //! change, so a page's content never goes stale.
 
-use crate::handles::{AssessmentId, EconomyId, InvariantPath};
+use crate::handles::{ArtifactId, AssessmentId, EconomyId, InvariantPath};
 use axionomy::{AccountPath, AssetPath, RatePath, path::Path};
+use axionomy_view::DocumentPath;
 use rmcp::{
     ErrorData as McpError,
     model::{Resource, ResourceTemplate},
@@ -83,15 +84,15 @@ pub(crate) enum Target {
         assessment_id: AssessmentId,
     },
     Artifact {
-        artifact_id: String,
+        artifact_id: ArtifactId,
     },
     Document {
-        artifact_id: String,
-        document_id: String,
+        artifact_id: ArtifactId,
+        document: DocumentPath,
     },
     Frames {
-        artifact_id: String,
-        document_id: String,
+        artifact_id: ArtifactId,
+        document: DocumentPath,
     },
 }
 
@@ -164,8 +165,8 @@ pub(crate) fn templates() -> Vec<ResourceTemplate> {
         ("axionomy://assessment/{assessment_id}", "assessment", "Assessment", "An exchange checked against a snapshot: its status, issues and how many lines explain it."),
         ("axionomy://assessment/{assessment_id}/lines{?cursor}", "assessment-lines", "Assessment lines", "What each account lacks for an infeasible exchange, or what an applicable one would move."),
         ("axionomy://artifact/{artifact_id}", "artifact", "Run artifact", "A finished problem run: its request and documents."),
-        ("axionomy://artifact/{artifact_id}/documents/{document_id}", "document", "Run document", "One strategy's document without its frames: initial state, objectives and solver evidence."),
-        ("axionomy://artifact/{artifact_id}/documents/{document_id}/frames{?cursor}", "frames", "Run frames", "A document's replay frames in order."),
+        ("axionomy://artifact/{artifact_id}/documents/{document}", "document", "Run document", "One outcome's document without its frames: initial state, objectives and solver evidence."),
+        ("axionomy://artifact/{artifact_id}/documents/{document}/frames{?cursor}", "frames", "Run frames", "A document's replay frames in order."),
     ]
     .into_iter()
     .map(|(template, name, title, description)| {
@@ -249,19 +250,30 @@ impl Target {
             Self::AssessmentLines { assessment_id } => {
                 (vec!["assessment", assessment_id.as_str(), "lines"], vec![])
             }
-            Self::Artifact { artifact_id } => (vec!["artifact", artifact_id], vec![]),
+            Self::Artifact { artifact_id } => (vec!["artifact", artifact_id.as_str()], vec![]),
             Self::Document {
                 artifact_id,
-                document_id,
+                document,
             } => (
-                vec!["artifact", artifact_id, "documents", document_id],
+                vec![
+                    "artifact",
+                    artifact_id.as_str(),
+                    "documents",
+                    document.as_str(),
+                ],
                 vec![],
             ),
             Self::Frames {
                 artifact_id,
-                document_id,
+                document,
             } => (
-                vec!["artifact", artifact_id, "documents", document_id, "frames"],
+                vec![
+                    "artifact",
+                    artifact_id.as_str(),
+                    "documents",
+                    document.as_str(),
+                    "frames",
+                ],
                 vec![],
             ),
         };
@@ -328,7 +340,6 @@ impl Address {
         };
         let cursor = take("cursor").map(|cursor| cursor.parse()).transpose()?;
         let segments: Vec<&str> = segments.iter().map(String::as_str).collect();
-        let owned = |text: &str| text.to_owned();
         let target = match segments.as_slice() {
             ["economy", id] => Target::Economy {
                 economy_id: id.parse().map_err(|_| unknown())?,
@@ -385,15 +396,15 @@ impl Address {
                 assessment_id: id.parse().map_err(|_| unknown())?,
             },
             ["artifact", id] => Target::Artifact {
-                artifact_id: owned(id),
+                artifact_id: id.parse().map_err(|_| unknown())?,
             },
             ["artifact", id, "documents", document] => Target::Document {
-                artifact_id: owned(id),
-                document_id: owned(document),
+                artifact_id: id.parse().map_err(|_| unknown())?,
+                document: document.parse().map_err(|_| unknown())?,
             },
             ["artifact", id, "documents", document, "frames"] => Target::Frames {
-                artifact_id: owned(id),
-                document_id: owned(document),
+                artifact_id: id.parse().map_err(|_| unknown())?,
+                document: document.parse().map_err(|_| unknown())?,
             },
             _ => return Err(unknown()),
         };
@@ -586,8 +597,8 @@ mod tests {
                 invariant: "supply/cash".parse().unwrap(),
             },
             Target::Frames {
-                artifact_id: "maze:micro:a_star:7:16".into(),
-                document_id: "a=b".into(),
+                artifact_id: format!("art-{}", "0".repeat(64)).parse().unwrap(),
+                document: "outcomes/a-star".parse().unwrap(),
             },
         ];
         for target in targets {

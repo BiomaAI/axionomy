@@ -15,6 +15,7 @@ axionomy-search.workspace = true
 axionomy-service.workspace = true
 axionomy-store.workspace = true
 axionomy-tree.workspace = true
+axionomy-view.workspace = true
 axum.workspace = true
 blake3.workspace = true
 getrandom.workspace = true

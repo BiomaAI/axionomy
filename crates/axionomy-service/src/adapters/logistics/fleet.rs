@@ -4,12 +4,12 @@ use axionomy_problems::logistics::fleet::{
 };
 
 pub(super) fn build(
-    request: &RunRequest,
+    run: &ArtifactKey,
     descriptor: &ProblemDescriptor,
     profile: InstanceProfile,
     progress: &mut ProgressSink<'_>,
 ) -> Result<RunArtifact, ServiceError> {
-    let initial = fleet::initial(matches!(profile, InstanceProfile::Stress), request.seed);
+    let initial = fleet::initial(matches!(profile, InstanceProfile::Stress), run.seed);
     let mut documents = Vec::new();
     for (strategy, title, description, policy) in [
         (
@@ -32,7 +32,7 @@ pub(super) fn build(
         ),
     ] {
         let _ = progress.emit(
-            "fleet_dispatch",
+            slug("fleet-dispatch"),
             documents.len() as u64,
             3,
             format!(
@@ -73,7 +73,7 @@ pub(super) fn build(
         documents.push(view);
     }
     let _ = progress.emit(
-        "fleet_dispatch",
+        slug("fleet-dispatch"),
         3,
         3,
         "Three fleet policies completed and replay verified",
@@ -87,12 +87,7 @@ pub(super) fn build(
         );
         documents[index].pareto_fronts.push(front);
     }
-    artifact(
-        request,
-        descriptor,
-        selected_strategy(request, descriptor),
-        documents,
-    )
+    artifact(run, descriptor, documents)
 }
 fn objectives(world: &World) -> Vec<ObjectiveView> {
     let val = |account, asset| fleet::value(world, account, asset);
@@ -104,7 +99,7 @@ fn objectives(world: &World) -> Vec<ObjectiveView> {
             ObjectiveDirectionView::Maximize,
         ),
         (
-            "on_time",
+            "on-time",
             "Orders on time",
             val(AccountId::World, Asset::OnTimeCount),
             ObjectiveDirectionView::Maximize,
@@ -138,7 +133,7 @@ fn objectives(world: &World) -> Vec<ObjectiveView> {
     ]
     .into_iter()
     .map(|(key, label, value, direction)| ObjectiveView {
-        key: key.into(),
+        key: slug(key),
         label: label.into(),
         value: value.to_string(),
         direction,
@@ -156,8 +151,8 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
     ]
     .into_iter()
     .map(|(location, label, x, y)| GraphNodeView {
-        id: ViewId::new(format!("{location:?}"), label),
-        classes: vec!["location".into()],
+        id: ViewId::new(slug(format!("{location:?}")), label),
+        classes: vec![slug("location")],
         x: Some(x),
         y: Some(y),
     })
@@ -165,9 +160,9 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
     let edges = ROADS
         .into_iter()
         .map(|(from, to)| GraphEdgeView {
-            id: format!("road:{from:?}:{to:?}"),
-            source: format!("{from:?}"),
-            target: format!("{to:?}"),
+            id: slug(format!("road/{from:?}/{to:?}")),
+            source: slug(format!("{from:?}")),
+            target: slug(format!("{to:?}")),
             label: Some(
                 if fleet::main_road(from, to) {
                     "one vehicle at a time"
@@ -191,7 +186,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             .find(|(from, to)| val(own, Asset::Travelling(*from, *to)) > 0);
         let anchor = if let Some(at) = at {
             SceneAnchorView::GraphNode {
-                node: format!("{at:?}"),
+                node: slug(format!("{at:?}")),
             }
         } else if let Some((from, to)) = travel {
             let (a, b) = ROADS
@@ -207,7 +202,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 0.0
             };
             SceneAnchorView::GraphEdge {
-                edge: format!("road:{a:?}:{b:?}"),
+                edge: slug(format!("road/{a:?}/{b:?}")),
                 progress: Some(if a == from { progress } else { 1.0 - progress }),
             }
         } else {
@@ -232,7 +227,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         };
         let mut entity = link_account(
             visual_entity(
-                format!("van:{van:?}"),
+                slug(format!("van/{van:?}")),
                 format!("{van:?} van"),
                 SceneGlyphView::Vehicle,
                 anchor,
@@ -248,26 +243,31 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 },
                 Some(status),
             ),
-            format!(
-                "logistics:account:vehicle-{}",
+            slug(format!(
+                "logistics/account/vehicle-{}",
                 if van == Van::Cold { "cold" } else { "freight" }
-            ),
+            )),
         );
         entity.metrics = vec![
-            visual_metric("fuel", "Fuel", val(own, Asset::Fuel), Some("/ 8")),
-            visual_metric("space", "Free payload space", val(own, Asset::Space), None),
-            visual_metric("wear", "Wear", val(own, Asset::Wear), Some("/ 6")),
+            visual_metric(slug("fuel"), "Fuel", val(own, Asset::Fuel), Some("/ 8")),
+            visual_metric(
+                slug("space"),
+                "Free payload space",
+                val(own, Asset::Space),
+                None,
+            ),
+            visual_metric(slug("wear"), "Wear", val(own, Asset::Wear), Some("/ 6")),
         ];
         entities.push(entity);
         for id in 0..val(AccountId::World, Asset::Count) as u8 {
             if val(own, Asset::Cargo(id)) > 0 {
                 let mut cargo = link_account(
                     visual_entity(
-                        format!("cargo:{id}"),
+                        slug(format!("cargo/{id}")),
                         format!("Order {} cargo", id + 1),
                         SceneGlyphView::Package,
                         SceneAnchorView::Entity {
-                            entity: format!("van:{van:?}"),
+                            entity: slug(format!("van/{van:?}")),
                         },
                         SceneEntityRoleView::Attachment,
                         SceneToneView::Neutral,
@@ -282,10 +282,10 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                             .into(),
                         ),
                     ),
-                    format!("logistics:account:order-{id}"),
+                    slug(format!("logistics/account/order-{id}")),
                 );
                 cargo.metrics = vec![visual_metric(
-                    "weight",
+                    slug("weight"),
                     "Payload",
                     fleet::weight(id),
                     Some("units"),
@@ -314,7 +314,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         };
         let mut entity = link_account(
             visual_entity(
-                format!("order:{id}"),
+                slug(format!("order/{id}")),
                 format!(
                     "Order {} · {}",
                     id + 1,
@@ -328,14 +328,14 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 ),
                 SceneGlyphView::Task,
                 SceneAnchorView::GraphNode {
-                    node: format!(
+                    node: slug(format!(
                         "{:?}",
                         if staged {
                             Location::Hub
                         } else {
                             fleet::destination(id)
                         }
-                    ),
+                    )),
                 },
                 SceneEntityRoleView::Attachment,
                 if delivered {
@@ -347,17 +347,17 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 },
                 Some(status.into()),
             ),
-            format!("logistics:account:order-{id}"),
+            slug(format!("logistics/account/order-{id}")),
         );
         entity.metrics = vec![
             visual_metric(
-                "deadline",
+                slug("deadline"),
                 "Delivery window",
                 val(own, Asset::Deadline),
                 Some("tick"),
             ),
             visual_metric(
-                "arrival",
+                slug("arrival"),
                 "Order release",
                 val(own, Asset::Arrival),
                 Some("tick"),
@@ -373,33 +373,33 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
     )
     .with_entities(entities)
     .with_metrics([
-        visual_metric("time", "Fleet time", fleet::now(world), None),
+        visual_metric(slug("time"), "Fleet time", fleet::now(world), None),
         visual_metric(
-            "delivered",
+            slug("delivered"),
             "Orders delivered",
             val(AccountId::World, Asset::DeliveredCount),
             None,
         ),
         visual_metric(
-            "on_time",
+            slug("on-time"),
             "Orders on time",
             val(AccountId::World, Asset::OnTimeCount),
             None,
         ),
         visual_metric(
-            "expired",
+            slug("expired"),
             "Orders expired",
             val(AccountId::World, Asset::ExpiredCount),
             None,
         ),
         visual_metric(
-            "staged",
+            slug("staged"),
             "Hub handoffs staged",
             val(AccountId::World, Asset::StagedCount),
             None,
         ),
         visual_metric(
-            "cash",
+            slug("cash"),
             "Fleet cash",
             val(AccountId::World, Asset::Money),
             Some("credits"),
@@ -409,25 +409,25 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         if let Some(entity) = scene
             .entities
             .iter_mut()
-            .find(|entity| entity.id.key == format!("{location:?}"))
+            .find(|entity| entity.id.key == slug(format!("{location:?}")))
         {
             if location == Location::Depot {
                 entity.status = Some("Shared paid services".into());
                 entity.metrics = vec![
                     visual_metric(
-                        "pump",
+                        slug("pump"),
                         "Free fuel pump",
                         val(AccountId::Station, Asset::FuelPump),
                         Some("/ 1"),
                     ),
                     visual_metric(
-                        "bay",
+                        slug("bay"),
                         "Free repair bay",
                         val(AccountId::Station, Asset::RepairBay),
                         Some("/ 1"),
                     ),
                     visual_metric(
-                        "fuel",
+                        slug("fuel"),
                         "Station fuel",
                         val(AccountId::Station, Asset::Fuel),
                         None,
@@ -438,13 +438,13 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 entity.status = Some("Finite cargo relay".into());
                 entity.metrics = vec![
                     visual_metric(
-                        "dock",
+                        slug("dock"),
                         "Free staging space",
                         val(AccountId::World, Asset::DockSpace),
                         Some("/ 2"),
                     ),
                     visual_metric(
-                        "road",
+                        slug("road"),
                         "Trunk road available",
                         val(AccountId::World, Asset::RoadSpace),
                         Some("/ 1"),

@@ -1,5 +1,7 @@
 use super::*;
-use crate::resources::Address;
+use crate::{handles::ArtifactId, resources::Address};
+use axionomy_service::InstanceProfile;
+use axionomy_view::DocumentPath;
 use rmcp::model::{
     ArgumentInfo, CompletionContext, CompletionInfo, Reference, TaskPayload, TaskStatus,
 };
@@ -605,9 +607,9 @@ async fn a_search_observes_cancellation() {
 #[tokio::test]
 async fn a_problem_run_returns_a_summary_and_pages_its_frames() {
     let server = AxionomyMcp::default();
-    let request = RunRequest::new("maze")
-        .with_instance("micro")
-        .with_strategy("a_star");
+    let request = RunRequest::new("maze".parse().unwrap())
+        .with_instance(InstanceProfile::Micro)
+        .with_strategy("a-star".parse().unwrap());
     let tasks = TaskManager::new();
     let archive = server.archive.clone();
     let task_request = request.clone();
@@ -615,15 +617,21 @@ async fn a_problem_run_returns_a_summary_and_pages_its_frames() {
         Box::pin(run_problem(context, archive, task_request))
     });
     let summary = completed(terminal_task(&tasks, &task.task_id).await);
-    let artifact_id = summary["artifact_id"].as_str().unwrap().to_owned();
+    let artifact_id: ArtifactId = summary["artifact_id"].as_str().unwrap().parse().unwrap();
     let served = server.artifact(&artifact_id).await.unwrap().unwrap();
     assert_eq!(*served, ReferenceService.run(request).unwrap());
-    let document_id = summary["selected_document_id"].as_str().unwrap().to_owned();
+    assert_eq!(summary["key"]["strategy"], "a-star");
+    assert_eq!(summary["selected_document"], "a-star");
+    let document: DocumentPath = summary["selected_document"]
+        .as_str()
+        .unwrap()
+        .parse()
+        .unwrap();
     let frames = summary["documents"]
         .as_array()
         .unwrap()
         .iter()
-        .find(|document| document["id"] == document_id.as_str())
+        .find(|entry| entry["id"] == document.as_str())
         .unwrap()["frames"]
         .as_u64()
         .unwrap();
@@ -632,7 +640,7 @@ async fn a_problem_run_returns_a_summary_and_pages_its_frames() {
         &server,
         &uri(Target::Frames {
             artifact_id: artifact_id.clone(),
-            document_id: document_id.clone(),
+            document: document.clone(),
         }),
     )
     .await;
@@ -644,7 +652,7 @@ async fn a_problem_run_returns_a_summary_and_pages_its_frames() {
         &server,
         &uri(Target::Document {
             artifact_id,
-            document_id,
+            document,
         }),
     )
     .await;

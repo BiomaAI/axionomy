@@ -11,41 +11,41 @@ use axionomy_view::{
 use std::cmp::Ordering;
 
 pub(super) fn build(
-    request: &RunRequest,
+    run: &ArtifactKey,
     descriptor: &ProblemDescriptor,
     progress: &mut ProgressSink<'_>,
 ) -> Result<RunArtifact, ServiceError> {
-    let profile = match instance_profile(request, descriptor) {
+    let profile = match run.instance {
         InstanceProfile::Micro => Profile::Micro,
         InstanceProfile::Showcase => Profile::Showcase,
         InstanceProfile::Stress => Profile::Stress,
     };
     let configurations = [
         (
-            "mixed_field",
+            "mixed-field",
             work_league::mixed_lineup(),
             "Mixed policy field",
             "A sprinter, steward, value hunter, and resilient worker compete in the same finite job market.",
         ),
         (
-            "throughput_field",
+            "throughput-field",
             work_league::throughput_lineup(),
             "Throughput field",
             "A speed-biased field shows what is gained—and wasted—when most workers optimize for short completion times.",
         ),
         (
-            "sustainable_field",
+            "sustainable-field",
             work_league::sustainable_lineup(),
             "Sustainable field",
             "A resource-conscious field recycles aggressively and exposes the opportunity cost of minimizing residual waste.",
         ),
     ];
-    let selected = selected_strategy(request, descriptor).to_owned();
+    let selected = run.strategy.as_str().to_owned();
     let mut documents = Vec::new();
     for (offset, (strategy, lineup, title, description)) in configurations.into_iter().enumerate() {
         let league = work_league::league(profile, lineup);
-        let outcome = work_league::run(&league, request.seed)
-            .map_err(|error| problem_error("work_league", error))?;
+        let outcome = work_league::run(&league, run.seed)
+            .map_err(|error| problem_error("work-league", error))?;
         let final_world = outcome.final_world();
         let total_value = league
             .agents()
@@ -62,10 +62,10 @@ pub(super) fn build(
             .iter()
             .map(|agent| balance(final_world, *agent, Asset::Waste))
             .sum::<u64>();
-        let document_id = format!("work_league:{strategy}");
+        let document_id: DocumentPath = slug(strategy);
         let mut view = document_with_leaderboards_observed(
             DocumentSpec {
-                problem: "work_league",
+                problem: "work-league",
                 strategy,
                 title: &format!("Work League · {title}"),
                 description,
@@ -76,19 +76,19 @@ pub(super) fn build(
             outcome.trace(),
             vec![
                 ObjectiveView {
-                    key: "value".into(),
+                    key: slug("value"),
                     label: "Contract value".into(),
                     direction: ObjectiveDirectionView::Maximize,
                     value: total_value.to_string(),
                 },
                 ObjectiveView {
-                    key: "completed".into(),
+                    key: slug("completed"),
                     label: "Jobs completed".into(),
                     direction: ObjectiveDirectionView::Maximize,
                     value: completed.to_string(),
                 },
                 ObjectiveView {
-                    key: "waste".into(),
+                    key: slug("waste"),
                     label: "Residual waste".into(),
                     direction: ObjectiveDirectionView::Minimize,
                     value: waste.to_string(),
@@ -101,7 +101,7 @@ pub(super) fn build(
                 }
             },
         )
-        .map_err(|error| problem_error("work_league", error))?;
+        .map_err(|error| problem_error("work-league", error))?;
         view.telemetry.push(telemetry(
             "Seeded multi-agent policy match",
             true,
@@ -133,7 +133,7 @@ pub(super) fn build(
         .bind(Role::Agent, AccountId::Agent(AgentId::Bolt))
         .bind(Role::Job, AccountId::Job(JobId(1)));
         view.proposals.push(proposal(
-            "work_league",
+            "work-league",
             ProposalSpec {
                 id: "claim-with-wrong-worker",
                 label: "Atlas claim rebound to Bolt",
@@ -144,7 +144,7 @@ pub(super) fn build(
         ));
         documents.push(view);
         let _ = progress.emit(
-            "multi_agent_match",
+            slug("multi-agent-match"),
             offset as u64 + 1,
             configurations.len() as u64,
             format!(
@@ -154,7 +154,7 @@ pub(super) fn build(
         );
         progress.ensure()?;
     }
-    artifact(request, descriptor, &selected, documents)
+    artifact(run, descriptor, documents)
 }
 
 fn balance(world: &World, agent: AgentId, asset: Asset) -> u64 {
@@ -183,7 +183,7 @@ fn leaderboards(_: u64, world: &World) -> Vec<LeaderboardView> {
         .collect::<Vec<_>>();
     vec![
         ranking(
-            "contract_value",
+            "contract-value",
             "Contract value",
             "Total value earned from completed jobs.",
             ObjectiveDirectionView::Maximize,
@@ -201,7 +201,7 @@ fn leaderboards(_: u64, world: &World) -> Vec<LeaderboardView> {
                 .collect(),
         ),
         ranking(
-            "resource_efficiency",
+            "resource-efficiency",
             "Resource efficiency",
             "Contract value per unit of energy and material spent.",
             ObjectiveDirectionView::Maximize,
@@ -211,7 +211,7 @@ fn leaderboards(_: u64, world: &World) -> Vec<LeaderboardView> {
                 .collect(),
         ),
         ranking(
-            "least_waste",
+            "least-waste",
             "Least residual waste",
             "Waste still held after recycling; only agents that completed work are ranked.",
             ObjectiveDirectionView::Minimize,
@@ -265,14 +265,29 @@ impl AgentMetrics {
 
     fn components(&self) -> Vec<SceneMetricView> {
         vec![
-            visual_metric("value", "Contract value", self.value, Some("credits")),
-            visual_metric("completed", "Jobs completed", self.completed, Some("jobs")),
-            visual_metric("elapsed", "Elapsed time", self.elapsed, Some("ticks")),
-            visual_metric("energy", "Energy spent", self.energy, Some("units")),
-            visual_metric("material", "Material spent", self.material, Some("units")),
-            visual_metric("waste", "Residual waste", self.waste, Some("units")),
-            visual_metric("recycled", "Waste recycled", self.recycled, Some("units")),
-            visual_metric("attempts", "Attempts", self.attempts, None),
+            visual_metric(slug("value"), "Contract value", self.value, Some("credits")),
+            visual_metric(
+                slug("completed"),
+                "Jobs completed",
+                self.completed,
+                Some("jobs"),
+            ),
+            visual_metric(slug("elapsed"), "Elapsed time", self.elapsed, Some("ticks")),
+            visual_metric(slug("energy"), "Energy spent", self.energy, Some("units")),
+            visual_metric(
+                slug("material"),
+                "Material spent",
+                self.material,
+                Some("units"),
+            ),
+            visual_metric(slug("waste"), "Residual waste", self.waste, Some("units")),
+            visual_metric(
+                slug("recycled"),
+                "Waste recycled",
+                self.recycled,
+                Some("units"),
+            ),
+            visual_metric(slug("attempts"), "Attempts", self.attempts, None),
         ]
     }
 
@@ -341,7 +356,7 @@ fn ranking(
             Some(LeaderboardEntryView {
                 rank: standing.eligible.then_some((*last_rank).unwrap_or(1)),
                 participant: ViewId::new(
-                    format!("work_league:account:agent-{:?}", standing.agent).to_ascii_lowercase(),
+                    slug(format!("work-league/account/agent-{:?}", standing.agent)),
                     format!("{:?}", standing.agent),
                 ),
                 value: standing.display.unwrap_or_else(|| {
@@ -358,7 +373,7 @@ fn ranking(
         })
         .collect();
     LeaderboardView {
-        key: key.into(),
+        key: slug(key),
         label: label.into(),
         description: description.into(),
         direction,
@@ -398,7 +413,7 @@ fn pareto_ranking(rows: &[AgentMetrics]) -> LeaderboardView {
         })
         .collect();
     ranking(
-        "pareto_standing",
+        "pareto-standing",
         "Pareto standing",
         "Non-dominated agents are not worse on value, completions, residual waste, and elapsed time all at once.",
         ObjectiveDirectionView::Maximize,
@@ -437,14 +452,14 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         .into_iter()
         .map(|(location, x, y)| GraphNodeView {
             id: ViewId::new(
-                format!("league:location:{location:?}").to_ascii_lowercase(),
+                slug(format!("league/location/{location:?}")),
                 format!("{location:?}"),
             ),
             classes: if matches!(
                 location,
                 Location::Workshop | Location::Charger | Location::Recycler
             ) {
-                vec!["facility".into()]
+                vec![slug("facility")]
             } else {
                 Vec::new()
             },
@@ -463,15 +478,15 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         .into_iter()
         .enumerate()
         .map(|(index, (from, to))| GraphEdgeView {
-            id: format!("league:route:{index}"),
-            source: format!("league:location:{from:?}").to_ascii_lowercase(),
-            target: format!("league:location:{to:?}").to_ascii_lowercase(),
+            id: slug(format!("league/route/{index}")),
+            source: slug(format!("league/location/{from:?}")),
+            target: slug(format!("league/location/{to:?}")),
             label: Some("1 energy · 1 tick".into()),
             classes: if AGENTS.into_iter().any(|agent| {
                 world.account(&AccountId::Agent(agent)).is_some()
                     && work_league::location(world, agent) == Some(to)
             }) {
-                vec!["current".into()]
+                vec![slug("current")]
             } else {
                 Vec::new()
             },
@@ -485,11 +500,11 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             let policy = work_league::policy(world, agent).unwrap_or(Policy::Sprinter);
             let mut entity = link_balance(
                 visual_entity(
-                    format!("league:agent:{agent:?}").to_ascii_lowercase(),
+                    slug(format!("league/agent/{agent:?}")),
                     format!("{agent:?} · {policy:?}"),
                     SceneGlyphView::Robot,
                     SceneAnchorView::GraphNode {
-                        node: format!("league:location:{location:?}").to_ascii_lowercase(),
+                        node: slug(format!("league/location/{location:?}")),
                     },
                     SceneEntityRoleView::Occupant,
                     if balance(world, agent, Asset::Damage) > 0 {
@@ -522,30 +537,30 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                         )
                     }),
                 ),
-                format!("work_league:account:agent-{agent:?}").to_ascii_lowercase(),
-                format!("work_league:asset:at-{location:?}").to_ascii_lowercase(),
+                slug(format!("work-league/account/agent-{agent:?}")),
+                slug(format!("work-league/asset/at-{location:?}")),
             );
             entity.metrics = vec![
                 visual_metric(
-                    "value",
+                    slug("value"),
                     "Value",
                     balance(world, agent, Asset::Value),
                     Some("credits"),
                 ),
                 visual_metric(
-                    "jobs",
+                    slug("jobs"),
                     "Completed",
                     balance(world, agent, Asset::Completed),
                     Some("jobs"),
                 ),
                 visual_metric(
-                    "energy",
+                    slug("energy"),
                     "Energy left",
                     balance(world, agent, Asset::Energy),
                     Some("units"),
                 ),
                 visual_metric(
-                    "waste",
+                    slug("waste"),
                     "Residual waste",
                     balance(world, agent, Asset::Waste),
                     Some("units"),
@@ -554,25 +569,25 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             if continuous {
                 entity.metrics.extend([
                     visual_metric(
-                        "credit",
+                        slug("credit"),
                         "Spendable credit",
                         balance(world, agent, Asset::Credit),
                         Some("credits"),
                     ),
                     visual_metric(
-                        "material",
+                        slug("material"),
                         "Material left",
                         balance(world, agent, Asset::Material),
                         Some("units"),
                     ),
                     visual_metric(
-                        "wear",
+                        slug("wear"),
                         "Equipment wear",
                         balance(world, agent, Asset::Wear),
                         None,
                     ),
                     visual_metric(
-                        "handoffs",
+                        slug("handoffs"),
                         "Paid handoffs",
                         balance(world, agent, Asset::Assists),
                         Some("contracts"),
@@ -619,32 +634,32 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         };
         let mut entity = link_account(
             visual_entity(
-                format!("league:job:{}", job.0),
+                slug(format!("league/job/{}", job.0)),
                 format!("Job {}", job.0),
                 SceneGlyphView::Task,
                 SceneAnchorView::GraphNode {
-                    node: format!("league:location:{:?}", spec.location).to_ascii_lowercase(),
+                    node: slug(format!("league/location/{:?}", spec.location)),
                 },
                 SceneEntityRoleView::Attachment,
                 tone,
                 Some(status),
             ),
-            format!("work_league:account:job-jobid-{}", job.0),
+            slug(format!("work-league/account/job-jobid-{}", job.0)),
         );
         entity.metrics = vec![
-            visual_metric("value", "Value", spec.value, Some("credits")),
-            visual_metric("risk", "Failure weight", spec.risk, Some("of 10")),
+            visual_metric(slug("value"), "Value", spec.value, Some("credits")),
+            visual_metric(slug("risk"), "Failure weight", spec.risk, Some("of 10")),
         ];
         if continuous {
             entity.metrics.push(visual_metric(
-                "deadline",
+                slug("deadline"),
                 "Deadline",
                 balance_job(world, job, Asset::Deadline),
                 Some("tick"),
             ));
             if assigned.is_some() && balance_job(world, job, Asset::Pending) > 0 {
                 entity.metrics.push(visual_metric(
-                    "lease",
+                    slug("lease"),
                     "Claim expires after",
                     balance_job(world, job, Asset::LeaseUntil),
                     Some("tick"),
@@ -674,11 +689,11 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             };
             let mut entity = link_account(
                 visual_entity(
-                    format!("league:facility:{facility:?}").to_ascii_lowercase(),
+                    slug(format!("league/facility/{facility:?}")),
                     format!("{facility:?} bay"),
                     SceneGlyphView::Task,
                     SceneAnchorView::GraphNode {
-                        node: format!("league:location:{location:?}").to_ascii_lowercase(),
+                        node: slug(format!("league/location/{location:?}")),
                     },
                     SceneEntityRoleView::Attachment,
                     if occupant.is_some() {
@@ -693,10 +708,10 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                         },
                     )),
                 ),
-                format!("work_league:account:facility-{facility:?}").to_ascii_lowercase(),
+                slug(format!("work-league/account/facility-{facility:?}")),
             );
             entity.metrics.push(visual_metric(
-                "waiting",
+                slug("waiting"),
                 "Workers waiting",
                 AGENTS
                     .into_iter()
@@ -713,9 +728,9 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         .filter(|number| balance_job(world, work_league::JobId(*number), Asset::Completed) > 0)
         .count();
     let mut metrics = vec![
-        visual_metric("completed", "Jobs completed", completed, Some("jobs")),
+        visual_metric(slug("completed"), "Jobs completed", completed, Some("jobs")),
         visual_metric(
-            "active_agents",
+            slug("active-agents"),
             "Competing agents",
             AGENTS
                 .into_iter()
@@ -724,7 +739,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             Some("agents"),
         ),
         visual_metric(
-            "repair_supply",
+            slug("repair-supply"),
             "Repair supply",
             world.balance(
                 &AccountId::Facility(Facility::Workshop),
@@ -734,11 +749,14 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         ),
     ];
     if continuous {
-        metrics.insert(0, visual_metric("clock", "World time", tick, Some("ticks")));
+        metrics.insert(
+            0,
+            visual_metric(slug("clock"), "World time", tick, Some("ticks")),
+        );
         metrics.insert(
             2,
             visual_metric(
-                "expired",
+                slug("expired"),
                 "Missed deadlines",
                 (1u8..=24)
                     .filter(|number| balance_job(world, JobId(*number), Asset::Expired) > 0)
@@ -747,7 +765,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             ),
         );
         metrics.push(visual_metric(
-            "activities",
+            slug("activities"),
             "Simultaneous activities",
             world.balance(&AccountId::World, &Asset::Activities),
             Some("workers"),
@@ -767,20 +785,22 @@ fn balance_job(world: &World, job: work_league::JobId, asset: Asset) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{ReferenceService, RunRequest};
 
     #[test]
     fn every_snapshot_has_multiple_rankings_and_they_change() {
-        let request = RunRequest::new("work_league")
-            .with_instance("showcase")
-            .with_strategy("mixed_field");
-        let descriptor = ReferenceService.problem("work_league").unwrap();
+        let request = RunRequest::new(slug("work-league"))
+            .with_instance(InstanceProfile::Showcase)
+            .with_strategy(slug("mixed-field"));
+        let run = ReferenceService.resolve(&request).unwrap();
+        let descriptor = ReferenceService.problem(&run.problem).unwrap();
         let artifact = build(
-            &request,
+            &run,
             &descriptor,
             &mut ProgressSink::new(&RunControl::default(), &mut |_| {}),
         )
         .unwrap();
-        let document = artifact.selected_document().unwrap();
+        let document = artifact.selected().unwrap();
         assert_eq!(document.initial.leaderboards.len(), 6);
         assert!(document.frames.len() >= 50);
         assert!(
@@ -797,7 +817,7 @@ mod tests {
                     .after
                     .leaderboards
                     .iter()
-                    .find(|board| board.key == "contract_value")?
+                    .find(|board| board.key.as_str() == "contract-value")?
                     .entries
                     .first()
                     .map(|entry| entry.participant.key.as_str())

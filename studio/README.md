@@ -199,7 +199,7 @@ pnpm generate:contracts
 pnpm check:contracts
 ```
 
-Quantities are exact decimal strings. `ViewId` joins user-defined ontology values by a presentation key while keeping labels and optional diagnostic JSON separate from semantic authority.
+Quantities are exact decimal strings. `ViewId` joins user-defined ontology values by an item path such as `maze/account/agent` while keeping labels and optional diagnostic JSON separate from semantic authority. Problems, strategies, documents and every other key are kebab-case paths, so Studio links read `?problem=work-league&strategy=mixed-field`; a run started from Studio gets a minted ID such as `run-7`, and its artifact is fetched through that run.
 
 ## Verify
 

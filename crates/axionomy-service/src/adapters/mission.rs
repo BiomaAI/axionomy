@@ -10,29 +10,29 @@ use axionomy_view::{
 };
 
 pub(super) fn build(
-    request: &RunRequest,
+    run: &ArtifactKey,
     descriptor: &ProblemDescriptor,
     progress: &mut ProgressSink<'_>,
 ) -> Result<RunArtifact, ServiceError> {
-    let profile = instance_profile(request, descriptor);
+    let profile = run.instance;
     if !matches!(profile, InstanceProfile::Micro) {
-        return expedition::build(request, descriptor, profile);
+        return expedition::build(run, descriptor, profile);
     }
     let model = mission::initial();
-    let sample_index = (request.seed as usize) % 16;
+    let sample_index = (run.seed as usize) % 16;
     let samples = match profile {
-        InstanceProfile::Micro => request.budget.clamp(2, 16),
-        InstanceProfile::Showcase => request.budget.max(2),
-        InstanceProfile::Stress => request.budget.max(256),
+        InstanceProfile::Micro => run.budget.clamp(2, 16),
+        InstanceProfile::Showcase => run.budget.max(2),
+        InstanceProfile::Stress => run.budget.max(256),
     } as usize;
     let comparison = mission::monte_carlo_with_progress(
         &model,
         samples,
-        request.seed,
+        run.seed,
         samples.clamp(1, 8),
         |state| {
             progress.emit(
-                "monte_carlo",
+                slug("monte-carlo"),
                 state.completed_samples() as u64,
                 state.total_samples() as u64,
                 format!(
@@ -48,11 +48,11 @@ pub(super) fn build(
     let front = mission::policy_front_with_progress(
         &model,
         samples,
-        request.seed,
+        run.seed,
         samples.clamp(1, 8),
         |state| {
             progress.emit(
-                "pareto_sampling",
+                slug("pareto-sampling"),
                 state.completed_samples() as u64,
                 state.total_samples() as u64,
                 format!(
@@ -68,17 +68,17 @@ pub(super) fn build(
     let baseline_observations = progress
         .observations()
         .iter()
-        .filter(|item| item.phase == "monte_carlo")
+        .filter(|item| item.phase.as_str() == "monte-carlo")
         .cloned()
         .collect::<Vec<_>>();
     let planned = mission::run_planned_with_progress(
         &model,
         sample_index,
-        MctsConfig::new(samples, 12).with_seed(request.seed),
+        MctsConfig::new(samples, 12).with_seed(run.seed),
         samples.clamp(1, 8),
         |decision, state| {
             progress.emit(
-                "ismcts",
+                slug("ismcts"),
                 state.iterations() as u64,
                 state.target_iterations() as u64,
                 format!(
@@ -97,12 +97,12 @@ pub(super) fn build(
     let planning_observations = progress
         .observations()
         .iter()
-        .filter(|item| item.phase == "ismcts")
+        .filter(|item| item.phase.as_str() == "ismcts")
         .cloned()
         .collect::<Vec<_>>();
     let policies = [
         ("coordinated", Policy::ShareAndCoordinate),
-        ("direct_north", Policy::NorthTogether),
+        ("direct-north", Policy::NorthTogether),
     ];
     let mut documents = Vec::new();
     for (strategy, policy) in policies {
@@ -112,9 +112,9 @@ pub(super) fn build(
             mission::run_policy(&model, policy, sample_index)
         };
         let mut view = document(DocumentSpec { problem: "mission", strategy, title: if policy == Policy::ShareAndCoordinate { "Mission · observe, decide, replan" } else { "Mission · both go north" }, description: if policy == Policy::ShareAndCoordinate { "ISMCTS chooses every public action from the Scout’s observation. After each action and Nature response, compatible belief worlds are retained and the next decision is searched again. Compare the resulting costs with committing north without information." } else { "Both agents commit without looking or sharing. The replay keeps every failure and what it cost." }, source_label: "Hidden-information mission" }, &model, &mission::goal(), rollout.trace(), vec![
-            ObjectiveView { key: "success".into(), label: "Succeeded".into(), direction: ObjectiveDirectionView::Maximize, value: u8::from(rollout.succeeded()).to_string() },
-            ObjectiveView { key: "time".into(), label: "Elapsed time".into(), direction: ObjectiveDirectionView::Minimize, value: rollout.elapsed_time().to_string() },
-            ObjectiveView { key: "medical".into(), label: "Medical kit used".into(), direction: ObjectiveDirectionView::Minimize, value: u8::from(rollout.used_medical_kit()).to_string() },
+            ObjectiveView { key: slug("success"), label: "Succeeded".into(), direction: ObjectiveDirectionView::Maximize, value: u8::from(rollout.succeeded()).to_string() },
+            ObjectiveView { key: slug("time"), label: "Elapsed time".into(), direction: ObjectiveDirectionView::Minimize, value: rollout.elapsed_time().to_string() },
+            ObjectiveView { key: slug("medical"), label: "Medical kit used".into(), direction: ObjectiveDirectionView::Minimize, value: u8::from(rollout.used_medical_kit()).to_string() },
         ], scene).map_err(|error| problem_error("mission", error))?;
         view.pareto_fronts.push(policy_front(
             &front,
@@ -270,12 +270,7 @@ pub(super) fn build(
         }
         documents.push(view);
     }
-    artifact(
-        request,
-        descriptor,
-        selected_strategy(request, descriptor),
-        documents,
-    )
+    artifact(run, descriptor, documents)
 }
 
 fn observation(world: &World, agent: AgentId) -> ObservationView {
@@ -285,7 +280,7 @@ fn observation(world: &World, agent: AgentId) -> ObservationView {
         .iter()
         .map(|account| AccountView {
             account: ViewId::new(
-                format!("mission:account:{account:?}"),
+                slug(format!("mission/account/{account:?}")),
                 account.studio_label(),
             ),
             balances: key
@@ -293,14 +288,20 @@ fn observation(world: &World, agent: AgentId) -> ObservationView {
                 .iter()
                 .filter(|(owner, _, _)| owner == account)
                 .map(|(_, asset, quantity)| AssetQuantityView {
-                    asset: ViewId::new(format!("mission:asset:{asset:?}"), asset.studio_label()),
+                    asset: ViewId::new(
+                        slug(format!("mission/asset/{asset:?}")),
+                        asset.studio_label(),
+                    ),
                     quantity: ExactQuantity(quantity.to_string()),
                 })
                 .collect(),
         })
         .collect();
     ObservationView {
-        actor: ViewId::new(format!("mission:actor:{agent:?}"), format!("{agent:?}")),
+        actor: ViewId::new(
+            slug(format!("mission/actor/{agent:?}")),
+            format!("{agent:?}"),
+        ),
         label: format!("{agent:?}-visible economic state; Nature remains hidden"),
         visible_accounts: accounts,
         facts: key
@@ -317,7 +318,10 @@ fn observation(world: &World, agent: AgentId) -> ObservationView {
                     )
             })
             .map(|(_, asset, quantity)| AssetQuantityView {
-                asset: ViewId::new(format!("mission:asset:{asset:?}"), asset.studio_label()),
+                asset: ViewId::new(
+                    slug(format!("mission/asset/{asset:?}")),
+                    asset.studio_label(),
+                ),
                 quantity: ExactQuantity(quantity.to_string()),
             })
             .collect(),
@@ -332,17 +336,17 @@ fn policy_front(front: &mission::PolicyFront, selected: Option<Policy>) -> Paret
         completeness: FrontierCompletenessView::Approximate,
         axes: vec![
             ObjectiveAxisView {
-                key: "success".into(),
+                key: slug("success"),
                 label: "Success probability".into(),
                 direction: ObjectiveDirectionView::Maximize,
             },
             ObjectiveAxisView {
-                key: "time".into(),
+                key: slug("time"),
                 label: "Mean time".into(),
                 direction: ObjectiveDirectionView::Minimize,
             },
             ObjectiveAxisView {
-                key: "medical".into(),
+                key: slug("medical"),
                 label: "Medical-kit use".into(),
                 direction: ObjectiveDirectionView::Minimize,
             },
@@ -383,9 +387,12 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                     .is_zero()
             });
             GraphNodeView {
-                id: ViewId::new(format!("location:{location:?}"), format!("{location:?}")),
+                id: ViewId::new(
+                    slug(format!("location/{location:?}")),
+                    format!("{location:?}"),
+                ),
                 classes: if occupied {
-                    vec!["current".into()]
+                    vec![slug("current")]
                 } else {
                     Vec::new()
                 },
@@ -397,18 +404,18 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
     let edges = [Location::North, Location::South]
         .into_iter()
         .map(|location| GraphEdgeView {
-            id: format!("mission:{location:?}"),
-            source: "location:Base".into(),
-            target: format!("location:{location:?}"),
+            id: slug(format!("mission/{location:?}")),
+            source: slug("location/Base"),
+            target: slug(format!("location/{location:?}")),
             label: Some("hidden truth + hazard".into()),
             classes: if [AgentId::Scout, AgentId::Medic].into_iter().any(|agent| {
                 !world
                     .balance(&AccountId::Agent(agent), &Asset::At(location))
                     .is_zero()
             }) {
-                vec!["current".into(), "uncertain".into()]
+                vec![slug("current"), slug("uncertain")]
             } else {
-                vec!["uncertain".into()]
+                vec![slug("uncertain")]
             },
         })
         .collect();
@@ -447,7 +454,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             });
         let mut entity = link_balance(
             visual_entity(
-                format!("agent:{agent:?}"),
+                slug(format!("agent/{agent:?}")),
                 format!("{agent:?}"),
                 if agent == AgentId::Scout {
                     SceneGlyphView::Sensor
@@ -455,7 +462,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                     SceneGlyphView::Agent
                 },
                 SceneAnchorView::GraphNode {
-                    node: format!("location:{location:?}"),
+                    node: slug(format!("location/{location:?}")),
                 },
                 SceneEntityRoleView::Occupant,
                 SceneToneView::Active,
@@ -470,11 +477,11 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                     },
                 ),
             ),
-            format!("mission:account:agent-{agent:?}").to_ascii_lowercase(),
-            format!("mission:asset:at-{location:?}").to_ascii_lowercase(),
+            slug(format!("mission/account/agent-{agent:?}")),
+            slug(format!("mission/asset/at-{location:?}")),
         );
         entity.metrics = vec![visual_metric(
-            format!("energy-{agent:?}"),
+            slug(format!("energy-{agent:?}")),
             "Energy",
             world.balance(&AccountId::Agent(agent), &Asset::Energy),
             Some("units"),
@@ -484,21 +491,21 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
     let system_entities = [
         link_account(
             visual_entity(
-                "system:mission",
+                slug("system/mission"),
                 "Mission control",
                 SceneGlyphView::Task,
                 SceneAnchorView::GraphNode {
-                    node: "location:Base".into(),
+                    node: slug("location/Base"),
                 },
                 SceneEntityRoleView::State,
                 SceneToneView::Neutral,
                 Some("shared state".into()),
             ),
-            "mission:account:mission",
+            slug("mission/account/mission"),
         ),
         link_account(
             visual_entity(
-                "system:nature",
+                slug("system/nature"),
                 "Hidden scenario",
                 SceneGlyphView::Weather,
                 SceneAnchorView::Unanchored,
@@ -506,11 +513,11 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 SceneToneView::Uncertain,
                 Some("private truth".into()),
             ),
-            "mission:account:nature",
+            slug("mission/account/nature"),
         ),
         link_account(
             visual_entity(
-                "system:success",
+                slug("system/success"),
                 "Mission outcome",
                 SceneGlyphView::Goal,
                 SceneAnchorView::Unanchored,
@@ -525,7 +532,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                     .into(),
                 ),
             ),
-            "mission:account:success",
+            slug("mission/account/success"),
         ),
     ];
     Some(
@@ -533,13 +540,13 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             .with_entities(agent_entities.chain(system_entities))
             .with_metrics([
                 visual_metric(
-                    "time",
+                    slug("time"),
                     "Mission time remaining",
                     world.balance(&AccountId::Mission, &Asset::TimeRemaining),
                     Some("ticks"),
                 ),
                 visual_metric(
-                    "shared-intel",
+                    slug("shared-intel"),
                     "Shared intel",
                     [Location::North, Location::South]
                         .into_iter()
@@ -560,11 +567,12 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{ReferenceService, RunRequest};
+    use crate::{InstanceProfile, ReferenceService, RunRequest};
+    use axionomy_view::slug;
 
     #[test]
     fn mission_replays_actual_search_and_private_information_transfer() {
-        let mut request = RunRequest::new("mission").with_instance("micro");
+        let mut request = RunRequest::new(slug("mission")).with_instance(InstanceProfile::Micro);
         request.seed = 11;
         let artifact = ReferenceService.run(request).unwrap();
         let planned = &artifact.documents[0];
@@ -576,13 +584,13 @@ mod tests {
             planned
                 .solve_observations
                 .iter()
-                .all(|item| item.phase == "ismcts")
+                .all(|item| item.phase.as_str() == "ismcts")
         );
         assert!(
             direct
                 .solve_observations
                 .iter()
-                .all(|item| item.phase == "monte_carlo")
+                .all(|item| item.phase.as_str() == "monte-carlo")
         );
         let scan = planned
             .frames
@@ -602,7 +610,7 @@ mod tests {
             scene
                 .metrics
                 .iter()
-                .find(|metric| metric.key == "shared-intel")
+                .find(|metric| metric.key.as_str() == "shared-intel")
                 .unwrap()
                 .value,
             "1"
@@ -611,18 +619,18 @@ mod tests {
             scene
                 .entities
                 .iter()
-                .filter(
-                    |entity| entity.id.key == "system:nature" || entity.id.key == "system:success"
-                )
+                .filter(|entity| entity.id.key.as_str() == "system/nature"
+                    || entity.id.key.as_str() == "system/success")
                 .all(|entity| matches!(entity.anchor, axionomy_view::SceneAnchorView::Unanchored))
         );
         for frame in &planned.frames {
             for observation in &frame.observations {
                 assert!(
-                    observation
-                        .visible_accounts
-                        .iter()
-                        .all(|account| !account.account.key.contains("Nature"))
+                    observation.visible_accounts.iter().all(|account| !account
+                        .account
+                        .key
+                        .as_str()
+                        .contains("nature"))
                 );
             }
         }

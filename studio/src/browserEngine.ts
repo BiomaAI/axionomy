@@ -4,7 +4,7 @@ import type { EngineClient, EngineEventListener, EngineRunSubscription } from ".
 type WorkerMessage =
   | { kind: "ready"; protocol: string; catalog: ProblemDescriptor[] }
   | { kind: "event"; event: StudioEvent }
-  | { kind: "artifact"; artifact: RunArtifact };
+  | { kind: "artifact"; runId: string; artifact: RunArtifact };
 
 class BrowserEngine implements EngineClient {
   readonly kind = "browser" as const;
@@ -16,6 +16,7 @@ class BrowserEngine implements EngineClient {
   private resolveReady!: (catalog: ProblemDescriptor[]) => void;
   private rejectReady!: (error: Error) => void;
   private artifacts = new Map<string, RunArtifact>();
+  private runs = 0;
   private active?: { id: string; request: RunRequest; listener: EngineEventListener; lastSequence: number };
 
   private spawn() {
@@ -28,7 +29,7 @@ class BrowserEngine implements EngineClient {
         if (data.protocol !== "axionomy-studio-worker/1") this.rejectReady(new Error(`unsupported browser engine protocol ${data.protocol}`));
         else { this.catalogValue = data.catalog; this.resolveReady(data.catalog); }
       } else if (data.kind === "artifact") {
-        this.artifacts.set(data.artifact.id, data.artifact);
+        this.artifacts.set(data.runId, data.artifact);
       } else if (this.active && data.event.run_id === this.active.id) {
         this.active.lastSequence = Math.max(this.active.lastSequence, data.event.sequence);
         void this.active.listener(data.event);
@@ -52,16 +53,17 @@ class BrowserEngine implements EngineClient {
   async start(request: RunRequest, listener: EngineEventListener, _onError: (message: string) => void): Promise<EngineRunSubscription> {
     this.ensureSpawned();
     await this.ready;
-    const id = `browser-${Date.now().toString(36)}-${request.seed}`;
+    this.runs += 1;
+    const id = `run-${this.runs}`;
     const summary: RunSummary = { id, request, status: "running", completed: 0 };
     this.active = { id, request, listener, lastSequence: 0 };
     this.worker?.postMessage({ kind: "run", runId: id, request });
     return { summary, close: () => { if (this.active?.id === id) this.active = undefined; } };
   }
 
-  async artifact(artifactId: string) {
-    const artifact = this.artifacts.get(artifactId);
-    if (!artifact) throw new Error(`browser artifact ${artifactId} was not published`);
+  async artifact(runId: string) {
+    const artifact = this.artifacts.get(runId);
+    if (!artifact) throw new Error(`browser run ${runId} has not published an artifact`);
     return artifact;
   }
 

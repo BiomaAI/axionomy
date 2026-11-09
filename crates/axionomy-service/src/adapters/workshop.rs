@@ -8,10 +8,10 @@ use axionomy_view::{
 };
 
 pub(super) fn build(
-    request: &RunRequest,
+    run: &ArtifactKey,
     descriptor: &ProblemDescriptor,
 ) -> Result<RunArtifact, ServiceError> {
-    let initial = match instance_profile(request, descriptor) {
+    let initial = match run.instance {
         InstanceProfile::Micro => workshop::initial(),
         InstanceProfile::Showcase => workshop::initial_showcase(),
         InstanceProfile::Stress => workshop::initial_stress(),
@@ -26,7 +26,7 @@ pub(super) fn build(
     let time_trace = frontier_trace(&pareto, false)?;
     let mut traces = vec![
         (
-            "breadth_first",
+            "breadth-first",
             "Workshop · fewest steps",
             "Breadth-first search minimises the number of steps, ignoring how much material is wasted.",
             bfs.trace().clone(),
@@ -34,7 +34,7 @@ pub(super) fn build(
             bfs.expanded() as u64,
         ),
         (
-            "minimum_waste",
+            "minimum-waste",
             "Workshop · least waste",
             "Best-first search minimizes irreversible scrap; unused offcuts become scrap when the shift closes.",
             best.trace().clone(),
@@ -42,7 +42,7 @@ pub(super) fn build(
             best.expanded() as u64,
         ),
         (
-            "pareto_waste",
+            "pareto-waste",
             "Workshop Pareto · least waste",
             "A least-waste plan on the frontier of scrap, time and earned revenue.",
             waste_trace,
@@ -50,7 +50,7 @@ pub(super) fn build(
             pareto.progress().expanded() as u64,
         ),
         (
-            "pareto_time",
+            "pareto-time",
             "Workshop Pareto · least time",
             "A fastest plan on the frontier, including setup, component production, repair and delivery.",
             time_trace,
@@ -67,7 +67,7 @@ pub(super) fn build(
                 objective_value(entry.objectives().objectives(), ObjectiveKey::Revenue)
             })
             .unwrap();
-        traces.push(("pareto_revenue", "Workshop Pareto · highest revenue",
+        traces.push(("pareto-revenue", "Workshop Pareto · highest revenue",
             "The highest contract revenue on the exact frontier; tables require more material, labor and tooling than chairs.",
             entry.payload().clone(), "exact Pareto search", pareto.progress().expanded() as u64));
     }
@@ -112,12 +112,7 @@ pub(super) fn build(
         view.proposals.push(proposal("workshop", ProposalSpec { id: "counterfeit", label: "Counterfeit chair", description: "This rule would create material out of nothing, and the conservation law rejects it." }, &initial, &counterfeit));
         documents.push(view);
     }
-    artifact(
-        request,
-        descriptor,
-        selected_strategy(request, descriptor),
-        documents,
-    )
+    artifact(run, descriptor, documents)
 }
 
 fn frontier_trace(
@@ -163,7 +158,7 @@ fn objectives(world: &World) -> Vec<ObjectiveView> {
                 ),
             };
             ObjectiveView {
-                key: key.into(),
+                key: slug(key),
                 label: label.into(),
                 direction,
                 value: objective.value().to_string(),
@@ -246,11 +241,11 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         .copied()
         .enumerate()
         .map(|(index, (key, label, asset))| GraphNodeView {
-            id: ViewId::new(key, label),
+            id: ViewId::new(slug(key), label),
             classes: if matches!(asset, Asset::Chair) {
-                vec!["goal".into()]
+                vec![slug("goal")]
             } else {
-                vec!["resource".into()]
+                vec![slug("resource")]
             },
             x: Some((index as f64 % 3.0) * 220.0 + 80.0),
             y: Some((index / 3) as f64 * 150.0 + 70.0),
@@ -284,9 +279,9 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         .into_iter()
         .enumerate()
         .map(|(index, (from, to, label))| GraphEdgeView {
-            id: format!("recipe:{index}"),
-            source: from.into(),
-            target: to.into(),
+            id: slug(format!("recipe/{index}")),
+            source: slug(from),
+            target: slug(to),
             label: Some(label.into()),
             classes: vec![],
         })
@@ -298,7 +293,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         }
         let mut entity = link_balance(
             visual_entity(
-                format!("stock:{key}"),
+                slug(format!("stock/{key}")),
                 label,
                 match asset {
                     Asset::Tool => SceneGlyphView::Tool,
@@ -306,7 +301,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                     Asset::Waste => SceneGlyphView::Material,
                     _ => SceneGlyphView::Material,
                 },
-                SceneAnchorView::GraphNode { node: key.into() },
+                SceneAnchorView::GraphNode { node: slug(key) },
                 SceneEntityRoleView::State,
                 if matches!(asset, Asset::Chair) {
                     SceneToneView::Success
@@ -317,10 +312,10 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 },
                 Some(format!("{quantity} available")),
             ),
-            "workshop:account:workshop",
-            format!("workshop:asset:{asset:?}").to_ascii_lowercase(),
+            slug("workshop/account/workshop"),
+            slug(format!("workshop/asset/{asset:?}")),
         );
-        entity.metrics = vec![visual_metric(key, label, quantity, Some("units"))];
+        entity.metrics = vec![visual_metric(slug(key), label, quantity, Some("units"))];
         Some(entity)
     });
     let contracts = world.accounts().filter_map(|(id, _)| {
@@ -352,11 +347,11 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         };
         let mut entity = link_balance(
             visual_entity(
-                format!("contract:{order}"),
+                slug(format!("contract/{order}")),
                 format!("Contract {}", order + 1),
                 SceneGlyphView::Task,
                 SceneAnchorView::GraphNode {
-                    node: "credit".into(),
+                    node: slug("credit"),
                 },
                 SceneEntityRoleView::Attachment,
                 if state == "delivered and paid" {
@@ -366,11 +361,11 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 },
                 Some(state.into()),
             ),
-            format!("workshop:account:customer-{order}"),
-            format!("workshop:asset:customeridentity-{order}"),
+            slug(format!("workshop/account/customer-{order}")),
+            slug(format!("workshop/asset/customeridentity-{order}")),
         );
         entity.metrics = vec![visual_metric(
-            "escrow",
+            slug("escrow"),
             "Customer funds",
             world.balance(id, &Asset::Credit),
             Some("credit"),
@@ -380,31 +375,31 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
     let metrics = if world.account(&AccountId::Customer(0)).is_some() {
         vec![
             visual_metric(
-                "completed",
+                slug("completed"),
                 "Contracts delivered",
                 world.balance(&AccountId::Workshop, &Asset::Completed),
                 None,
             ),
             visual_metric(
-                "revenue",
+                slug("revenue"),
                 "Revenue",
                 world.balance(&AccountId::Workshop, &Asset::Credit),
                 Some("credit"),
             ),
             visual_metric(
-                "durability",
+                slug("durability"),
                 "Tool durability",
                 world.balance(&AccountId::Workshop, &Asset::Durability),
                 None,
             ),
             visual_metric(
-                "repairs",
+                slug("repairs"),
                 "Repair kits remaining",
                 world.balance(&AccountId::Workshop, &Asset::RepairKit),
                 None,
             ),
             visual_metric(
-                "upgrade",
+                slug("upgrade"),
                 "Precision upgrade",
                 if world
                     .balance(&AccountId::Workshop, &Asset::Upgraded)
@@ -419,9 +414,9 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         ]
     } else {
         vec![
-            visual_metric("waste", "Waste", workshop::waste(world), None),
+            visual_metric(slug("waste"), "Waste", workshop::waste(world), None),
             visual_metric(
-                "time",
+                slug("time"),
                 "Process time",
                 workshop::spent_time(world),
                 Some("ticks"),

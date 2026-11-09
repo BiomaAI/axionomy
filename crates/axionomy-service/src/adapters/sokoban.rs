@@ -10,20 +10,20 @@ use axionomy_view::{
 };
 
 pub(super) fn build(
-    request: &RunRequest,
+    run: &ArtifactKey,
     descriptor: &ProblemDescriptor,
     progress: &mut ProgressSink<'_>,
 ) -> Result<RunArtifact, ServiceError> {
-    let profile = instance_profile(request, descriptor);
+    let profile = run.instance;
     let initial = match profile {
         InstanceProfile::Micro => sokoban::initial(),
         InstanceProfile::Showcase => sokoban::initial_showcase(),
         InstanceProfile::Stress => sokoban::initial_stress(),
     };
-    let strategy = selected_strategy(request, descriptor);
-    let chunk = usize::try_from(request.budget.clamp(8, 256)).unwrap_or(64);
+    let strategy = run.strategy.as_str();
+    let chunk = usize::try_from(run.budget.clamp(8, 256)).unwrap_or(64);
     let (solution, search) = search(&initial, strategy, chunk, progress)?;
-    let strategy_label = if strategy == "a_star" {
+    let strategy_label = if strategy == "a-star" {
         "A* with crate-to-goal lower bound"
     } else {
         "breadth-first search"
@@ -118,7 +118,7 @@ pub(super) fn build(
         documents.push(deadlock);
     }
 
-    artifact(request, descriptor, strategy, documents)
+    artifact(run, descriptor, documents)
 }
 
 fn search(
@@ -127,7 +127,7 @@ fn search(
     chunk: usize,
     progress: &mut ProgressSink<'_>,
 ) -> Result<(Solution, GraphSearchProgress), ServiceError> {
-    if strategy == "a_star" {
+    if strategy == "a-star" {
         let mut session = AStarSession::new(
             initial,
             sokoban::goal(),
@@ -140,7 +140,7 @@ fn search(
             session.advance(WorkBudget::new(chunk), &mut observer);
             let state = session.progress();
             let _ = progress.graph(
-                "a_star_frontier",
+                slug("a-star-frontier"),
                 state,
                 format!(
                     "{} expanded · {} frontier · {} distinct states",
@@ -163,7 +163,7 @@ fn search(
             session.advance(WorkBudget::new(chunk), &mut observer);
             let state = session.progress();
             let _ = progress.graph(
-                "breadth_first_frontier",
+                slug("breadth-first-frontier"),
                 state,
                 format!(
                     "{} expanded · {} frontier · {} distinct states",
@@ -191,16 +191,16 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
 
     for cell in 0..width * height {
         let account = AccountId::Cell(cell);
-        let account_key = format!("sokoban:account:cell-{cell}");
+        let account_key = slug(format!("sokoban/account/cell-{cell}"));
         let wall = sokoban::is_wall(world, cell);
         let goal = !world.balance(&account, &Asset::GoalCell).is_zero();
         let dead = sokoban::is_dead_square(world, cell);
-        let mut classes = vec![if wall { "wall".into() } else { "floor".into() }];
+        let mut classes = vec![if wall { slug("wall") } else { slug("floor") }];
         if goal {
-            classes.push("goal".into());
+            classes.push(slug("goal"));
         }
         if dead {
-            classes.push("dead-square".into());
+            classes.push(slug("dead-square"));
         }
         cells.push(GridCellView {
             x: u32::from(cell % width),
@@ -220,7 +220,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
 
         if !world.balance(&account, &Asset::ExitCell).is_zero() {
             entities.push(visual_entity(
-                "exit",
+                slug("exit"),
                 "Exit",
                 SceneGlyphView::Goal,
                 SceneAnchorView::GridCell {
@@ -277,7 +277,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                     }
                 };
                 entities.push(visual_entity(
-                    format!("mechanism:{name}:{circuit}"),
+                    slug(format!("mechanism/{name}/{circuit}")),
                     format!("{name} {}", circuit + 1),
                     glyph,
                     SceneAnchorView::GridCell {
@@ -297,7 +297,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         if player == Some(cell) {
             entities.push(link_balance(
                 visual_entity(
-                    "player",
+                    slug("player"),
                     "Player",
                     SceneGlyphView::Agent,
                     SceneAnchorView::GridCell {
@@ -309,7 +309,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                     Some("player".into()),
                 ),
                 account_key.clone(),
-                "sokoban:asset:player",
+                slug("sokoban/asset/player"),
             ));
         }
         if let Some((crate_id, _)) = crates.iter().find(|(_, at)| *at == cell) {
@@ -317,7 +317,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             let trapped = dead && !on_goal;
             entities.push(link_balance(
                 visual_entity(
-                    format!("crate:{crate_id}"),
+                    slug(format!("crate/{crate_id}")),
                     format!("Crate {}", crate_id + 1),
                     SceneGlyphView::Package,
                     SceneAnchorView::GridCell {
@@ -341,7 +341,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                     }),
                 ),
                 account_key,
-                format!("sokoban:asset:crate-{crate_id}"),
+                slug(format!("sokoban/asset/crate-{crate_id}")),
             ));
         }
     }
@@ -356,7 +356,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         .with_entities(entities)
         .with_metrics([
             visual_metric(
-                "held_plates",
+                slug("held-plates"),
                 "Crates holding plates",
                 (0..2)
                     .filter(|circuit| {
@@ -368,7 +368,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 None,
             ),
             visual_metric(
-                "latched",
+                slug("latched"),
                 "Doors latched open",
                 (0..2)
                     .filter(|circuit| {
@@ -380,7 +380,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 None,
             ),
             visual_metric(
-                "goals",
+                slug("goals"),
                 "Crates on goals",
                 crates
                     .iter()

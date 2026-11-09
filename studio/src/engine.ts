@@ -37,7 +37,8 @@ export interface EngineClient {
   defaultArtifact(problem: string): Promise<RunArtifact>;
   health(): Promise<boolean>;
   start(request: RunRequest, listener: EngineEventListener, onError: (message: string) => void): Promise<EngineRunSubscription>;
-  artifact(artifactId: string): Promise<RunArtifact>;
+  /** The artifact a run published. */
+  artifact(runId: string): Promise<RunArtifact>;
   pause(runId: string): Promise<RunSummary>;
   resume(runId: string): Promise<RunSummary>;
   cancel(runId: string): Promise<RunSummary>;

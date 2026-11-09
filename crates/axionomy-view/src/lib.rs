@@ -6,13 +6,107 @@
 
 use axionomy::{
     AccountAssessment, AccountDelta, ApplyError, Basket, Economy, Exchange, ExchangeAssessment,
-    Goal, Quantity, QuantityComparison, QuantityExpression, Receipt, Rounding, Trace,
+    Goal, PathKind, Quantity, QuantityComparison, QuantityExpression, Receipt, Rounding, Trace,
+    path::Path,
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{collections::HashSet, fmt::Debug, hash::Hash, marker::PhantomData};
 use thiserror::Error;
+
+/// The kinds of identifiers in a view. Each is a distinct path type, so a
+/// metric's key can never stand where an account's is expected.
+pub mod kind {
+    use super::PathKind;
+
+    /// Anything a view shows and joins on: accounts, assets, rates, roles,
+    /// scene entities, graph nodes and edges, lanes, rows, columns, paths,
+    /// annotations, spans and document sources.
+    pub enum Item {}
+    /// A measured value: scene and observation metrics, objectives, Pareto
+    /// axes and leaderboards.
+    pub enum Measure {}
+    /// A semantic class a renderer may style, such as `location` or `current`.
+    pub enum Class {}
+    /// One document of an artifact, such as one strategy's outcome.
+    pub enum Document {}
+    /// A proposal assessed against a snapshot.
+    pub enum Proposal {}
+    /// A phase of solver work, such as `a-star-frontier`.
+    pub enum Phase {}
+    /// The algorithm doing solver work, such as `a-star`.
+    pub enum Algorithm {}
+
+    impl PathKind for Item {
+        const SCHEMA: &'static str = "ItemPath";
+    }
+    impl PathKind for Measure {
+        const SCHEMA: &'static str = "MeasurePath";
+    }
+    impl PathKind for Class {
+        const SCHEMA: &'static str = "ClassPath";
+    }
+    impl PathKind for Document {
+        const SCHEMA: &'static str = "DocumentPath";
+    }
+    impl PathKind for Proposal {
+        const SCHEMA: &'static str = "ProposalPath";
+    }
+    impl PathKind for Phase {
+        const SCHEMA: &'static str = "PhasePath";
+    }
+    impl PathKind for Algorithm {
+        const SCHEMA: &'static str = "AlgorithmPath";
+    }
+}
+
+/// What a view shows, such as `maze/account/agent` or `node/start`.
+pub type ItemPath = Path<kind::Item>;
+/// A measured value, such as `energy` or `states-expanded`.
+pub type MeasurePath = Path<kind::Measure>;
+/// A semantic class, such as `location` or `search-explored`.
+pub type ClassPath = Path<kind::Class>;
+/// A document of an artifact, such as `a-star` or `deadlock`.
+pub type DocumentPath = Path<kind::Document>;
+/// A proposal, such as `locked-door`.
+pub type ProposalPath = Path<kind::Proposal>;
+/// A phase of solver work, such as `monte-carlo` or `a-star-frontier`.
+pub type PhasePath = Path<kind::Phase>;
+/// An algorithm, such as `a-star` or `exact-pareto-search`.
+pub type AlgorithmPath = Path<kind::Algorithm>;
+
+/// Writes text as a path of any kind: each `/`-separated segment lowercased,
+/// with every run of characters other than ASCII letters and digits made one
+/// `-`. `Road:Depot/North Gate` becomes `road-depot/north-gate`.
+///
+/// # Panics
+///
+/// If a segment has no ASCII letter or digit. Rust code writes keys from its
+/// own values, so such a key is a bug in that code.
+pub fn slug<K>(text: impl AsRef<str>) -> Path<K> {
+    let text = text.as_ref();
+    text.split('/')
+        .map(|segment| {
+            slug_segment(segment).unwrap_or_else(|| {
+                panic!("segment `{segment}` of key `{text}` has no ASCII letter or digit")
+            })
+        })
+        .collect::<Vec<_>>()
+        .join("/")
+        .parse()
+        .expect("slugs are path segments")
+}
+
+fn slug_segment(text: &str) -> Option<String> {
+    let slug = text
+        .split(|character: char| !character.is_ascii_alphanumeric())
+        .filter(|part| !part.is_empty())
+        .map(str::to_ascii_lowercase)
+        .collect::<Vec<_>>()
+        .join("-");
+    (!slug.is_empty()).then_some(slug)
+}
 
 /// A browser-safe identity for an arbitrary user-defined ontology value.
 ///
@@ -21,16 +115,16 @@ use thiserror::Error;
 /// as semantic authority.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct ViewId {
-    pub key: String,
+    pub key: ItemPath,
     pub label: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub value: Option<Value>,
 }
 
 impl ViewId {
-    pub fn new(key: impl Into<String>, label: impl Into<String>) -> Self {
+    pub fn new(key: ItemPath, label: impl Into<String>) -> Self {
         Self {
-            key: key.into(),
+            key,
             label: label.into(),
             value: None,
         }
@@ -242,7 +336,7 @@ pub struct ModelView {
 pub struct GraphNodeView {
     pub id: ViewId,
     #[serde(default)]
-    pub classes: Vec<String>,
+    pub classes: Vec<ClassPath>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub x: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -251,13 +345,13 @@ pub struct GraphNodeView {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct GraphEdgeView {
-    pub id: String,
-    pub source: String,
-    pub target: String,
+    pub id: ItemPath,
+    pub source: ItemPath,
+    pub target: ItemPath,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub label: Option<String>,
     #[serde(default)]
-    pub classes: Vec<String>,
+    pub classes: Vec<ClassPath>,
 }
 
 /// A semantic icon key owned by the portable Rust contract. The browser maps
@@ -330,10 +424,10 @@ pub enum SceneEntityRoleView {
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum SceneAnchorView {
     GraphNode {
-        node: String,
+        node: ItemPath,
     },
     GraphEdge {
-        edge: String,
+        edge: ItemPath,
         #[serde(skip_serializing_if = "Option::is_none")]
         progress: Option<f64>,
     },
@@ -342,25 +436,25 @@ pub enum SceneAnchorView {
         y: u32,
     },
     MatrixCell {
-        row: String,
-        column: String,
+        row: ItemPath,
+        column: ItemPath,
     },
     Timeline {
-        lane: String,
+        lane: ItemPath,
         at: u64,
     },
     /// Attach presentation state to another stable scene entity. This is used
     /// for inventory, cargo, equipment, and similar ownership relationships
     /// that would be misleading if attached only to a shared location.
     Entity {
-        entity: String,
+        entity: ItemPath,
     },
     Unanchored,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct SceneMetricView {
-    pub key: String,
+    pub key: MeasurePath,
     pub label: String,
     /// Exact text preserves arbitrarily large quantities and caller units.
     pub value: String,
@@ -378,8 +472,8 @@ pub struct SceneMetricView {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum SceneEvidenceRefView {
-    Account { account: String },
-    Balance { account: String, asset: String },
+    Account { account: ItemPath },
+    Balance { account: ItemPath, asset: ItemPath },
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -389,10 +483,11 @@ pub struct SceneEntityView {
     pub anchor: SceneAnchorView,
     pub role: SceneEntityRoleView,
     pub tone: SceneToneView,
+    /// A short status line for people, such as `2 crates aboard`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub status: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub account: Option<String>,
+    pub account: Option<ItemPath>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub evidence: Vec<SceneEvidenceRefView>,
     #[serde(default)]
@@ -415,7 +510,7 @@ pub enum ScenePathStatusView {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct ScenePathView {
-    pub id: String,
+    pub id: ItemPath,
     pub label: String,
     pub anchors: Vec<SceneAnchorView>,
     pub status: ScenePathStatusView,
@@ -423,7 +518,7 @@ pub struct ScenePathView {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct SceneAnnotationView {
-    pub id: String,
+    pub id: ItemPath,
     pub label: String,
     pub anchor: SceneAnchorView,
     pub tone: SceneToneView,
@@ -451,7 +546,7 @@ pub struct MarketPoolView {
     pub issued_liquidity: ExactQuantity,
     pub fee_numerator: u64,
     pub fee_denominator: u64,
-    pub account: String,
+    pub account: ItemPath,
 }
 
 /// One participant positioned around a market pool. Balances and status are
@@ -459,7 +554,7 @@ pub struct MarketPoolView {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct MarketActorView {
     pub id: ViewId,
-    pub account: String,
+    pub account: ItemPath,
     pub glyph: SceneGlyphView,
     pub tone: SceneToneView,
     pub x: f64,
@@ -482,7 +577,7 @@ pub enum SceneSurfaceView {
         nodes: Vec<GraphNodeView>,
         edges: Vec<GraphEdgeView>,
         #[serde(skip_serializing_if = "Option::is_none")]
-        focus: Option<String>,
+        focus: Option<ItemPath>,
     },
     Grid {
         width: u32,
@@ -533,39 +628,39 @@ pub struct GridCellView {
     /// cell.
     pub label: String,
     #[serde(default)]
-    pub classes: Vec<String>,
+    pub classes: Vec<ClassPath>,
     /// Optional authoritative account represented by this cell. This makes
     /// receipt-derived cell emphasis and account inspection portable without
     /// turning the grid projection into state of its own.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub account: Option<String>,
+    pub account: Option<ItemPath>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct MatrixCellView {
-    pub row: String,
-    pub column: String,
+    pub row: ItemPath,
+    pub column: ItemPath,
     pub label: String,
     #[serde(default)]
-    pub classes: Vec<String>,
+    pub classes: Vec<ClassPath>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct TimelineLaneView {
     pub id: ViewId,
     #[serde(default)]
-    pub classes: Vec<String>,
+    pub classes: Vec<ClassPath>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct TimelineSpanView {
-    pub id: String,
-    pub lane: String,
+    pub id: ItemPath,
+    pub lane: ItemPath,
     pub start: u64,
     pub end: u64,
     pub label: String,
     #[serde(default)]
-    pub classes: Vec<String>,
+    pub classes: Vec<ClassPath>,
 }
 
 impl Scene {
@@ -573,7 +668,7 @@ impl Scene {
         title: impl Into<String>,
         nodes: Vec<GraphNodeView>,
         edges: Vec<GraphEdgeView>,
-        focus: Option<String>,
+        focus: Option<ItemPath>,
     ) -> Self {
         let entities = nodes
             .iter()
@@ -585,7 +680,7 @@ impl Scene {
                 },
                 role: SceneEntityRoleView::Structure,
                 tone: inferred_tone(&node.classes),
-                status: node.classes.first().cloned(),
+                status: node.classes.first().map(ToString::to_string),
                 account: None,
                 evidence: Vec::new(),
                 metrics: Vec::new(),
@@ -595,7 +690,7 @@ impl Scene {
             .iter()
             .map(|edge| ScenePathView {
                 id: edge.id.clone(),
-                label: edge.label.clone().unwrap_or_else(|| edge.id.clone()),
+                label: edge.label.clone().unwrap_or_else(|| edge.id.to_string()),
                 anchors: vec![
                     SceneAnchorView::GraphNode {
                         node: edge.source.clone(),
@@ -658,7 +753,7 @@ impl Scene {
             .filter(|cell| !cell.label.trim().is_empty() && cell.label != "·")
             .map(|cell| SceneEntityView {
                 id: ViewId::new(
-                    format!("matrix:{}:{}", cell.row, cell.column),
+                    slug(format!("matrix/{}/{}", cell.row, cell.column)),
                     cell.label.clone(),
                 ),
                 glyph: SceneGlyphView::Constraint,
@@ -668,7 +763,7 @@ impl Scene {
                 },
                 role: SceneEntityRoleView::Structure,
                 tone: inferred_tone(&cell.classes),
-                status: cell.classes.first().cloned(),
+                status: cell.classes.first().map(ToString::to_string),
                 account: None,
                 evidence: Vec::new(),
                 metrics: Vec::new(),
@@ -698,7 +793,7 @@ impl Scene {
         let entities = spans
             .iter()
             .map(|span| SceneEntityView {
-                id: ViewId::new(&span.id, &span.label),
+                id: ViewId::new(span.id.clone(), &span.label),
                 glyph: inferred_glyph(&span.label, &span.classes),
                 anchor: SceneAnchorView::Timeline {
                     lane: span.lane.clone(),
@@ -706,11 +801,11 @@ impl Scene {
                 },
                 role: SceneEntityRoleView::Structure,
                 tone: inferred_tone(&span.classes),
-                status: span.classes.first().cloned(),
+                status: span.classes.first().map(ToString::to_string),
                 account: None,
                 evidence: Vec::new(),
                 metrics: vec![SceneMetricView {
-                    key: "duration".into(),
+                    key: slug("duration"),
                     label: "Duration".into(),
                     value: span.end.saturating_sub(span.start).to_string(),
                     unit: None,
@@ -759,7 +854,7 @@ impl Scene {
         let entity_ids = self
             .entities
             .iter()
-            .map(|entity| entity.id.key.as_str())
+            .map(|entity| &entity.id.key)
             .collect::<HashSet<_>>();
         if entity_ids.len() != self.entities.len() {
             return Err(SceneValidationError::DuplicateEntity);
@@ -768,13 +863,11 @@ impl Scene {
             SceneSurfaceView::Graph { nodes, edges, .. } => {
                 let nodes = nodes
                     .iter()
-                    .map(|node| node.id.key.as_str())
+                    .map(|node| &node.id.key)
                     .collect::<HashSet<_>>();
                 for edge in edges {
-                    if !nodes.contains(edge.source.as_str())
-                        || !nodes.contains(edge.target.as_str())
-                    {
-                        return Err(SceneValidationError::UnknownAnchor(edge.id.clone()));
+                    if !nodes.contains(&edge.source) || !nodes.contains(&edge.target) {
+                        return Err(SceneValidationError::UnknownAnchor(edge.id.to_string()));
                     }
                 }
             }
@@ -795,26 +888,24 @@ impl Scene {
                 columns,
                 cells,
             } => {
-                let rows = rows
-                    .iter()
-                    .map(|row| row.key.as_str())
-                    .collect::<HashSet<_>>();
+                let rows = rows.iter().map(|row| &row.key).collect::<HashSet<_>>();
                 let columns = columns
                     .iter()
-                    .map(|column| column.key.as_str())
+                    .map(|column| &column.key)
                     .collect::<HashSet<_>>();
-                if cells.iter().any(|cell| {
-                    !rows.contains(cell.row.as_str()) || !columns.contains(cell.column.as_str())
-                }) {
+                if cells
+                    .iter()
+                    .any(|cell| !rows.contains(&cell.row) || !columns.contains(&cell.column))
+                {
                     return Err(SceneValidationError::UnknownAnchor("matrix cell".into()));
                 }
             }
             SceneSurfaceView::Timeline { lanes, spans, .. } => {
                 let lanes = lanes
                     .iter()
-                    .map(|lane| lane.id.key.as_str())
+                    .map(|lane| &lane.id.key)
                     .collect::<HashSet<_>>();
-                if spans.iter().any(|span| !lanes.contains(span.lane.as_str())) {
+                if spans.iter().any(|span| !lanes.contains(&span.lane)) {
                     return Err(SceneValidationError::UnknownAnchor("timeline span".into()));
                 }
             }
@@ -842,7 +933,7 @@ impl Scene {
                         .iter()
                         .any(|candidate| candidate.account.key == *account)
                     {
-                        return Err(SceneValidationError::UnknownEvidence(account.clone()));
+                        return Err(SceneValidationError::UnknownEvidence(account.to_string()));
                     }
                 }
                 SceneEvidenceRefView::Balance { account, asset } => {
@@ -850,7 +941,7 @@ impl Scene {
                         .iter()
                         .find(|candidate| candidate.account.key == *account)
                     else {
-                        return Err(SceneValidationError::UnknownEvidence(account.clone()));
+                        return Err(SceneValidationError::UnknownEvidence(account.to_string()));
                     };
                     if !owner
                         .balances
@@ -858,7 +949,7 @@ impl Scene {
                         .any(|balance| balance.asset.key == *asset)
                     {
                         return Err(SceneValidationError::UnknownEvidence(format!(
-                            "{account}/{asset}"
+                            "{asset} in {account}"
                         )));
                     }
                 }
@@ -919,14 +1010,18 @@ pub enum SceneValidationError {
     UnknownEvidence(String),
 }
 
-fn inferred_glyph(label: &str, classes: &[String]) -> SceneGlyphView {
-    let words = format!("{} {}", label, classes.join(" ")).to_ascii_lowercase();
+fn inferred_glyph(label: &str, classes: &[ClassPath]) -> SceneGlyphView {
+    let words = std::iter::once(label)
+        .chain(classes.iter().map(ClassPath::as_str))
+        .collect::<Vec<_>>()
+        .join(" ")
+        .to_ascii_lowercase();
     // Explicit Rust-owned semantic classes win over label heuristics. A room
     // called "Key Room" is still a location; the key itself must be a distinct
     // asset-backed entity rather than an icon inferred from prose.
-    if classes.iter().any(|class| class == "location") {
+    if has_class(classes, &["location"]) {
         SceneGlyphView::Location
-    } else if classes.iter().any(|class| class == "facility")
+    } else if has_class(classes, &["facility"])
         && (words.contains("door") || words.contains("gate"))
     {
         SceneGlyphView::Door
@@ -975,59 +1070,42 @@ fn inferred_glyph(label: &str, classes: &[String]) -> SceneGlyphView {
     }
 }
 
-fn inferred_tone(classes: &[String]) -> SceneToneView {
-    if classes
-        .iter()
-        .any(|class| class == "current" || class == "active")
-    {
+fn has_class(classes: &[ClassPath], names: &[&str]) -> bool {
+    classes.iter().any(|class| names.contains(&class.as_str()))
+}
+
+fn inferred_tone(classes: &[ClassPath]) -> SceneToneView {
+    if has_class(classes, &["current", "active"]) {
         SceneToneView::Active
-    } else if classes.iter().any(|class| class == "goal") {
+    } else if has_class(classes, &["goal"]) {
         SceneToneView::Goal
-    } else if classes
-        .iter()
-        .any(|class| class == "success" || class == "selected")
-    {
+    } else if has_class(classes, &["success", "selected"]) {
         SceneToneView::Success
-    } else if classes
-        .iter()
-        .any(|class| class == "danger" || class == "invalid")
-    {
+    } else if has_class(classes, &["danger", "invalid"]) {
         SceneToneView::Danger
-    } else if classes
-        .iter()
-        .any(|class| class == "warning" || class == "blocked")
-    {
+    } else if has_class(classes, &["warning", "blocked"]) {
         SceneToneView::Warning
-    } else if classes.iter().any(|class| class == "uncertain") {
+    } else if has_class(classes, &["uncertain"]) {
         SceneToneView::Uncertain
-    } else if classes
-        .iter()
-        .any(|class| class == "muted" || class == "inactive")
-    {
+    } else if has_class(classes, &["muted", "inactive"]) {
         SceneToneView::Muted
     } else {
         SceneToneView::Neutral
     }
 }
 
-fn inferred_path_status(classes: &[String]) -> ScenePathStatusView {
-    if classes.iter().any(|class| class == "current") {
+fn inferred_path_status(classes: &[ClassPath]) -> ScenePathStatusView {
+    if has_class(classes, &["current"]) {
         ScenePathStatusView::Current
-    } else if classes
-        .iter()
-        .any(|class| class == "selected" || class == "incumbent")
-    {
+    } else if has_class(classes, &["selected", "incumbent"]) {
         ScenePathStatusView::Incumbent
-    } else if classes.iter().any(|class| class == "traversed") {
+    } else if has_class(classes, &["traversed"]) {
         ScenePathStatusView::Traversed
-    } else if classes
-        .iter()
-        .any(|class| class == "rejected" || class == "invalid")
-    {
+    } else if has_class(classes, &["rejected", "invalid"]) {
         ScenePathStatusView::Rejected
-    } else if classes.iter().any(|class| class == "blocked") {
+    } else if has_class(classes, &["blocked"]) {
         ScenePathStatusView::Blocked
-    } else if classes.iter().any(|class| class == "uncertain") {
+    } else if has_class(classes, &["uncertain"]) {
         ScenePathStatusView::Uncertain
     } else {
         ScenePathStatusView::Available
@@ -1065,7 +1143,7 @@ pub struct ViewSnapshot {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct LeaderboardView {
-    pub key: String,
+    pub key: MeasurePath,
     pub label: String,
     pub description: String,
     pub direction: ObjectiveDirectionView,
@@ -1132,7 +1210,7 @@ pub struct ExchangeFrame {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct ObjectiveView {
-    pub key: String,
+    pub key: MeasurePath,
     pub label: String,
     pub direction: ObjectiveDirectionView,
     pub value: String,
@@ -1154,7 +1232,7 @@ pub enum FrontierCompletenessView {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct ObjectiveAxisView {
-    pub key: String,
+    pub key: MeasurePath,
     pub label: String,
     pub direction: ObjectiveDirectionView,
 }
@@ -1178,7 +1256,7 @@ pub struct ParetoFrontView {
 /// A proposal assessed against an exact snapshot, including rejected actions.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct ProposalView {
-    pub id: String,
+    pub id: ProposalPath,
     pub label: String,
     pub description: String,
     pub snapshot_index: u64,
@@ -1252,8 +1330,8 @@ pub enum SearchObservationKindView {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct SearchObservationView {
     pub sequence: u64,
-    pub phase: String,
-    pub algorithm: String,
+    pub phase: PhasePath,
+    pub algorithm: AlgorithmPath,
     pub kind: SearchObservationKindView,
     pub label: String,
     pub completed: u64,
@@ -1269,7 +1347,7 @@ pub struct SearchObservationView {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct ViewDocument {
-    pub id: String,
+    pub id: DocumentPath,
     pub title: String,
     pub description: String,
     pub source: ViewSource,
@@ -1295,110 +1373,16 @@ pub struct ViewDocument {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct ViewSource {
-    pub key: String,
+    pub key: ItemPath,
     pub label: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct ViewDocumentMetadata {
-    pub id: String,
+    pub id: DocumentPath,
     pub title: String,
     pub description: String,
     pub source: ViewSource,
-}
-
-/// Lifecycle events emitted by a Studio run. `sequence` orders transport
-/// events; it is not economic time and has no effect on replay.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(tag = "kind", rename_all = "snake_case")]
-pub enum StudioEvent {
-    RunStarted {
-        run_id: String,
-        sequence: u64,
-        problem: String,
-        strategy: String,
-    },
-    Progress {
-        run_id: String,
-        sequence: u64,
-        completed: u64,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        total: Option<u64>,
-        message: String,
-    },
-    SearchObservation {
-        run_id: String,
-        sequence: u64,
-        observation: SearchObservationView,
-    },
-    FrameAppended {
-        run_id: String,
-        sequence: u64,
-        document_id: String,
-        frame_index: u64,
-        frame: Box<ExchangeFrame>,
-    },
-    ArtifactPublished {
-        run_id: String,
-        sequence: u64,
-        artifact_id: String,
-        documents: u64,
-    },
-    RunPaused {
-        run_id: String,
-        sequence: u64,
-    },
-    RunResumed {
-        run_id: String,
-        sequence: u64,
-    },
-    RunCompleted {
-        run_id: String,
-        sequence: u64,
-        artifact_id: String,
-        document_id: String,
-    },
-    RunCancelled {
-        run_id: String,
-        sequence: u64,
-    },
-    RunFailed {
-        run_id: String,
-        sequence: u64,
-        message: String,
-    },
-}
-
-impl StudioEvent {
-    pub const fn sequence(&self) -> u64 {
-        match self {
-            Self::RunStarted { sequence, .. }
-            | Self::Progress { sequence, .. }
-            | Self::SearchObservation { sequence, .. }
-            | Self::FrameAppended { sequence, .. }
-            | Self::ArtifactPublished { sequence, .. }
-            | Self::RunPaused { sequence, .. }
-            | Self::RunResumed { sequence, .. }
-            | Self::RunCompleted { sequence, .. }
-            | Self::RunCancelled { sequence, .. }
-            | Self::RunFailed { sequence, .. } => *sequence,
-        }
-    }
-
-    pub fn run_id(&self) -> &str {
-        match self {
-            Self::RunStarted { run_id, .. }
-            | Self::Progress { run_id, .. }
-            | Self::SearchObservation { run_id, .. }
-            | Self::FrameAppended { run_id, .. }
-            | Self::ArtifactPublished { run_id, .. }
-            | Self::RunPaused { run_id, .. }
-            | Self::RunResumed { run_id, .. }
-            | Self::RunCompleted { run_id, .. }
-            | Self::RunCancelled { run_id, .. }
-            | Self::RunFailed { run_id, .. } => run_id,
-        }
-    }
 }
 
 /// Converts user ontology values into stable, browser-facing identities and
@@ -1423,27 +1407,31 @@ pub trait ViewOntology<AccountId, A, RateId, Role> {
 }
 
 /// A useful default for user ontologies and reference fixtures. It preserves
-/// exact typed engine values internally while deriving stable diagnostic IDs
-/// from `Debug` output at the presentation boundary.
+/// exact typed engine values internally while deriving stable diagnostic keys
+/// from `Debug` output at the presentation boundary: `maze/account/agent` for
+/// the account `Agent` in the namespace `maze`.
 pub struct DebugOntology<AccountId, A, RateId, Role> {
-    namespace: String,
+    namespace: ItemPath,
     marker: OntologyMarker<AccountId, A, RateId, Role>,
 }
 
 type OntologyMarker<AccountId, A, RateId, Role> = PhantomData<fn() -> (AccountId, A, RateId, Role)>;
 
 impl<AccountId, A, RateId, Role> DebugOntology<AccountId, A, RateId, Role> {
-    pub fn new(namespace: impl Into<String>) -> Self {
+    pub fn new(namespace: ItemPath) -> Self {
         Self {
-            namespace: namespace.into(),
+            namespace,
             marker: PhantomData,
         }
     }
 
     fn id<T: Debug>(&self, category: &str, value: &T) -> ViewId {
         let debug = format!("{value:?}");
+        // A value whose `Debug` output has no letter or digit, such as `()`,
+        // still needs a segment.
+        let value = slug_segment(&debug).unwrap_or_else(|| "value".into());
         ViewId::new(
-            format!("{}:{category}:{}", self.namespace, debug_key(&debug)),
+            slug(format!("{}/{category}/{value}", self.namespace)),
             humanize_debug(&debug),
         )
     }
@@ -1472,23 +1460,6 @@ where
     fn role(&self, id: &Role) -> ViewId {
         self.id("role", id)
     }
-}
-
-fn debug_key(debug: &str) -> String {
-    debug
-        .chars()
-        .map(|character| {
-            if character.is_ascii_alphanumeric() {
-                character.to_ascii_lowercase()
-            } else {
-                '-'
-            }
-        })
-        .collect::<String>()
-        .split('-')
-        .filter(|part| !part.is_empty())
-        .collect::<Vec<_>>()
-        .join("-")
 }
 
 fn humanize_debug(debug: &str) -> String {
@@ -1850,7 +1821,7 @@ where
 
 /// Projects an exchange and its non-mutating feasibility assessment.
 pub fn derive_proposal<AccountId, A, RateId, Role, O>(
-    id: impl Into<String>,
+    id: ProposalPath,
     label: impl Into<String>,
     description: impl Into<String>,
     snapshot_index: u64,
@@ -1866,7 +1837,7 @@ where
     O: ViewOntology<AccountId, A, RateId, Role>,
 {
     ProposalView {
-        id: id.into(),
+        id,
         label: label.into(),
         description: description.into(),
         snapshot_index,
@@ -1903,21 +1874,21 @@ where
         if !matches!(scene.surface, SceneSurfaceView::Market { .. }) {
             scene.metrics.extend([
                 SceneMetricView {
-                    key: "snapshot".into(),
+                    key: slug("snapshot"),
                     label: "Economic step".into(),
                     value: index.to_string(),
                     unit: Some("exchanges".into()),
                     previous: index.checked_sub(1).map(|value| value.to_string()),
                 },
                 SceneMetricView {
-                    key: "accounts".into(),
+                    key: slug("accounts"),
                     label: "Accounts".into(),
                     value: accounts.len().to_string(),
                     unit: None,
                     previous: None,
                 },
                 SceneMetricView {
-                    key: "balances".into(),
+                    key: slug("balances"),
                     label: "Non-zero balances".into(),
                     value: balance_entries.to_string(),
                     unit: None,
@@ -2286,22 +2257,22 @@ mod tests {
 
     impl ViewOntology<AccountId, Asset, RateId, Role> for Ontology {
         fn account(&self, _: &AccountId) -> ViewId {
-            ViewId::new("account:agent", "Agent")
+            ViewId::new(slug("account/agent"), "Agent")
         }
 
         fn asset(&self, asset: &Asset) -> ViewId {
             match asset {
-                Asset::Ready => ViewId::new("asset:ready", "Ready"),
-                Asset::Done => ViewId::new("asset:done", "Done"),
+                Asset::Ready => ViewId::new(slug("asset/ready"), "Ready"),
+                Asset::Done => ViewId::new(slug("asset/done"), "Done"),
             }
         }
 
         fn rate(&self, _: &RateId) -> ViewId {
-            ViewId::new("rate:finish", "Finish")
+            ViewId::new(slug("rate/finish"), "Finish")
         }
 
         fn role(&self, _: &Role) -> ViewId {
-            ViewId::new("role:actor", "Actor")
+            ViewId::new(slug("role/actor"), "Actor")
         }
     }
 
@@ -2316,15 +2287,15 @@ mod tests {
                     x: 0,
                     y: 0,
                     label: "Floor with player".into(),
-                    classes: vec!["floor".into()],
-                    account: Some("cell:0".into()),
+                    classes: vec![slug("floor")],
+                    account: Some(slug("cell/0")),
                 },
                 GridCellView {
                     x: 1,
                     y: 0,
                     label: "Floor".into(),
-                    classes: vec!["floor".into()],
-                    account: Some("cell:1".into()),
+                    classes: vec![slug("floor")],
+                    account: Some(slug("cell/1")),
                 },
             ],
         );
@@ -2352,11 +2323,11 @@ mod tests {
 
         let document = derive_document(
             ViewDocumentMetadata {
-                id: "test".into(),
+                id: slug("test"),
                 title: "Test".into(),
                 description: "A test trace".into(),
                 source: ViewSource {
-                    key: "test".into(),
+                    key: slug("test"),
                     label: "Test".into(),
                 },
             },
@@ -2393,7 +2364,7 @@ mod tests {
             .build()
             .unwrap();
         let proposal = derive_proposal(
-            "missing-actor",
+            slug("missing-actor"),
             "Missing actor",
             "An intentionally unbound exchange",
             0,
@@ -2411,22 +2382,25 @@ mod tests {
             proposal.assessment.issues[0].message,
             "Missing account binding for role `Actor`."
         );
-        assert_eq!(proposal.assessment.issues[0].subjects[0].key, "role:actor");
+        assert_eq!(
+            proposal.assessment.issues[0].subjects[0].key.as_str(),
+            "role/actor"
+        );
     }
 
     #[test]
     fn scene_evidence_must_resolve_to_an_exact_snapshot_balance() {
         let accounts = vec![AccountView {
-            account: ViewId::new("account:agent", "Agent"),
+            account: ViewId::new(slug("account/agent"), "Agent"),
             balances: vec![AssetQuantityView {
-                asset: ViewId::new("asset:ready", "Ready"),
+                asset: ViewId::new(slug("asset/ready"), "Ready"),
                 quantity: ExactQuantity("1".into()),
             }],
         }];
         let mut scene = Scene::graph(
             "Evidence",
             vec![GraphNodeView {
-                id: ViewId::new("node:agent", "Agent"),
+                id: ViewId::new(slug("node/agent"), "Agent"),
                 classes: Vec::new(),
                 x: Some(0.0),
                 y: Some(0.0),
@@ -2435,19 +2409,19 @@ mod tests {
             None,
         );
         scene.entities[0].evidence = vec![SceneEvidenceRefView::Balance {
-            account: "account:agent".into(),
-            asset: "asset:ready".into(),
+            account: slug("account/agent"),
+            asset: slug("asset/ready"),
         }];
         assert_eq!(scene.validate_evidence(&accounts), Ok(()));
 
         scene.entities[0].evidence = vec![SceneEvidenceRefView::Balance {
-            account: "account:agent".into(),
-            asset: "asset:missing".into(),
+            account: slug("account/agent"),
+            asset: slug("asset/missing"),
         }];
         assert_eq!(
             scene.validate_evidence(&accounts),
             Err(SceneValidationError::UnknownEvidence(
-                "account:agent/asset:missing".into()
+                "asset/missing in account/agent".into()
             ))
         );
     }
@@ -2457,7 +2431,7 @@ mod tests {
         let scene = Scene::graph(
             "Roles",
             vec![GraphNodeView {
-                id: ViewId::new("node:depot", "Depot"),
+                id: ViewId::new(slug("node/depot"), "Depot"),
                 classes: Vec::new(),
                 x: Some(0.0),
                 y: Some(0.0),
@@ -2471,24 +2445,6 @@ mod tests {
             serde_json::to_value(scene.entities[0].role).unwrap(),
             json!("structure")
         );
-    }
-
-    #[test]
-    fn studio_events_are_discriminated_unions() {
-        let event = StudioEvent::Progress {
-            run_id: "run-1".into(),
-            sequence: 2,
-            completed: 3,
-            total: Some(5),
-            message: "replaying".into(),
-        };
-        let value = serde_json::to_value(event).unwrap();
-        assert_eq!(value["kind"], "progress");
-        assert_eq!(value["completed"], 3);
-
-        let decoded: StudioEvent = serde_json::from_value(value).unwrap();
-        assert_eq!(decoded.run_id(), "run-1");
-        assert_eq!(decoded.sequence(), 2);
     }
 
     #[test]

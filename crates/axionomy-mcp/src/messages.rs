@@ -4,9 +4,11 @@
 //! Maps are ordered by ID, so the same entries produce the same snapshot handle
 //! however a client orders its JSON keys.
 
-use crate::handles::{AssessmentId, EconomyId, InvariantPath};
+use crate::handles::{ArtifactId, AssessmentId, EconomyId, InvariantPath};
 use axionomy::{AccountPath, AssessmentStatus, AssetPath, Quantity, RatePath, RolePath, paths};
 use axionomy_search::GraphSearchProgress;
+use axionomy_service::ArtifactKey;
+use axionomy_view::DocumentPath;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -307,16 +309,18 @@ pub struct ProblemCatalogResponse {
 /// A finished problem run. Its documents and their frames are resources.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct RunSummary {
-    pub artifact_id: String,
-    pub problem: String,
-    pub instance: String,
-    pub selected_document_id: String,
+    pub artifact_id: ArtifactId,
+    /// What the artifact was computed from: the problem, instance, strategy,
+    /// seed and budget.
+    pub key: ArtifactKey,
+    /// The document of the requested strategy.
+    pub selected_document: DocumentPath,
     pub documents: Vec<DocumentSummary>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct DocumentSummary {
-    pub id: String,
+    pub id: DocumentPath,
     pub title: String,
     pub frames: usize,
 }

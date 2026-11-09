@@ -9,7 +9,7 @@ type Command =
 type WorkerMessage =
   | { kind: "ready"; protocol: string; catalog: ProblemDescriptor[] }
   | { kind: "event"; event: StudioEvent }
-  | { kind: "artifact"; artifact: RunArtifact };
+  | { kind: "artifact"; runId: string; artifact: RunArtifact };
 
 const scope = self as DedicatedWorkerGlobalScope;
 let initialized: Promise<void> | undefined;
@@ -39,11 +39,12 @@ scope.onmessage = async (message: MessageEvent<Command>) => {
     })) as RunArtifact;
     // Artifact storage is announced before completion so the client can load
     // it synchronously when handling the ordered completion event.
-    post({ kind: "artifact", artifact });
-    post({ kind: "event", event: { kind: "artifact_published", run_id: runId, sequence: sequence++, artifact_id: artifact.id, documents: artifact.documents.length } });
-    post({ kind: "event", event: { kind: "run_completed", run_id: runId, sequence, artifact_id: artifact.id, document_id: artifact.selected_document_id } });
+    post({ kind: "artifact", runId, artifact });
+    post({ kind: "event", event: { kind: "artifact_published", run_id: runId, sequence: sequence++, key: artifact.key, documents: artifact.documents.length } });
+    post({ kind: "event", event: { kind: "run_completed", run_id: runId, sequence, document: artifact.selected_document } });
   } catch (cause) {
-    const runId = message.data.kind === "run" ? message.data.runId : "browser-initialization";
+    // Runs are numbered from 1, so a failure before any run never matches one.
+    const runId = message.data.kind === "run" ? message.data.runId : "run-0";
     post({ kind: "event", event: { kind: "run_failed", run_id: runId, sequence: Number.MAX_SAFE_INTEGER, message: cause instanceof Error ? cause.message : String(cause) } });
   }
 };

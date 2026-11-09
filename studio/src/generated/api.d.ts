@@ -124,14 +124,14 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/artifacts/{artifact_id}": {
+    "/api/runs/{run_id}/artifact": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** Load a complete portable problem artifact */
+        /** Load the complete portable artifact a run published */
         get: operations["getRunArtifact"];
         put?: never;
         post?: never;
@@ -141,7 +141,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/artifacts/{artifact_id}/documents/{document_id}": {
+    "/api/runs/{run_id}/artifact/documents/{document}": {
         parameters: {
             query?: never;
             header?: never;
@@ -158,7 +158,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/artifacts/{artifact_id}/documents/{document_id}/frames": {
+    "/api/runs/{run_id}/artifact/documents/{document}/frames": {
         parameters: {
             query?: never;
             header?: never;
@@ -201,6 +201,21 @@ export interface components {
             account: components["schemas"]["ViewId"];
             balances: components["schemas"]["AssetQuantityView"][];
         };
+        /** @description Lowercase segments of a–z, 0–9 and `-`, separated by `/`, such as `loans/42`; each segment starts and ends with a letter or digit. */
+        AlgorithmPath: string;
+        /**
+         * @description What an artifact was computed from: a request with its instance and
+         *     strategy decided. The same key always gives the same artifact.
+         */
+        ArtifactKey: {
+            /** Format: uint64 */
+            budget: number;
+            instance: components["schemas"]["InstanceProfile"];
+            problem: components["schemas"]["ProblemPath"];
+            /** Format: uint64 */
+            seed: number;
+            strategy: components["schemas"]["StrategyPath"];
+        };
         /** @enum {string} */
         AssessmentIssueKindView: "missing_rate" | "missing_binding" | "unknown_binding" | "roles_must_differ" | "missing_account" | "zero_units" | "missing_parameter" | "unknown_parameter" | "rate_overflow" | "rate_law_evaluation" | "rate_condition_failed" | "infeasible" | "balance_overflow" | "invariant_violation" | "account_exists" | "opening_shared" | "closed_not_empty";
         /**
@@ -230,11 +245,15 @@ export interface components {
         };
         /** @enum {string} */
         Capability: "deterministic_search" | "weighted_search" | "specialized_algorithm" | "exact_pareto" | "approximate_pareto" | "feasibility_assessment" | "multi_account_exchange" | "atomic_settlement" | "branch_optimization" | "monte_carlo" | "mcts" | "information_set_search" | "partial_observation" | "chance" | "temporal_effects" | "fungible_cohorts" | "non_fungible_facts" | "rl_projection" | "replay_derived_leaderboards";
+        /** @description Lowercase segments of a–z, 0–9 and `-`, separated by `/`, such as `loans/42`; each segment starts and ends with a letter or digit. */
+        ClassPath: string;
         ComputedRateAmountView: {
             asset: components["schemas"]["ViewId"];
             quantity: string;
             role: components["schemas"]["ViewId"];
         };
+        /** @description Lowercase segments of a–z, 0–9 and `-`, separated by `/`, such as `loans/42`; each segment starts and ends with a letter or digit. */
+        DocumentPath: string;
         ErrorResponse: {
             error: string;
         };
@@ -279,11 +298,11 @@ export interface components {
             subjects: components["schemas"]["ViewId"][];
         };
         FramePage: {
-            artifact_id: string;
-            document_id: string;
+            document: components["schemas"]["DocumentPath"];
             frames: components["schemas"]["ExchangeFrame"][];
             /** Format: uint64 */
             from: number;
+            run_id: components["schemas"]["StudioRunId"];
             /** Format: uint64 */
             total: number;
         };
@@ -295,15 +314,15 @@ export interface components {
         };
         GraphEdgeView: {
             /** @default [] */
-            classes: string[];
-            id: string;
+            classes: components["schemas"]["ClassPath"][];
+            id: components["schemas"]["ItemPath"];
             label?: string | null;
-            source: string;
-            target: string;
+            source: components["schemas"]["ItemPath"];
+            target: components["schemas"]["ItemPath"];
         };
         GraphNodeView: {
             /** @default [] */
-            classes: string[];
+            classes: components["schemas"]["ClassPath"][];
             id: components["schemas"]["ViewId"];
             /** Format: double */
             x?: number | null;
@@ -316,9 +335,9 @@ export interface components {
              *     receipt-derived cell emphasis and account inspection portable without
              *     turning the grid projection into state of its own.
              */
-            account?: string | null;
+            account?: components["schemas"]["ItemPath"] | null;
             /** @default [] */
-            classes: string[];
+            classes: components["schemas"]["ClassPath"][];
             /**
              * @description Human-readable terrain or cell state. Renderers may keep repetitive
              *     labels (for example, `Floor`) accessible without drawing them in every
@@ -341,11 +360,14 @@ export interface components {
         };
         InstanceDescriptor: {
             description: string;
-            key: string;
             label: string;
             profile: components["schemas"]["InstanceProfile"];
         };
-        /** @enum {string} */
+        /**
+         * @description How large an instance of a problem is. Every problem has one instance of
+         *     each size.
+         * @enum {string}
+         */
         InstanceProfile: "micro" | "showcase" | "stress";
         InvariantTermView: {
             asset: components["schemas"]["ViewId"];
@@ -356,6 +378,8 @@ export interface components {
             name: string;
             terms: components["schemas"]["InvariantTermView"][];
         };
+        /** @description Lowercase segments of a–z, 0–9 and `-`, separated by `/`, such as `loans/42`; each segment starts and ends with a letter or digit. */
+        ItemPath: string;
         LeaderboardEntryView: {
             /** @default [] */
             components: components["schemas"]["SceneMetricView"][];
@@ -379,7 +403,7 @@ export interface components {
             direction: components["schemas"]["ObjectiveDirectionView"];
             /** @default [] */
             entries: components["schemas"]["LeaderboardEntryView"][];
-            key: string;
+            key: components["schemas"]["MeasurePath"];
             label: string;
         };
         /**
@@ -387,7 +411,7 @@ export interface components {
          *     replay-derived presentation data linked back to the represented account.
          */
         MarketActorView: {
-            account: string;
+            account: components["schemas"]["ItemPath"];
             credit: components["schemas"]["ExactQuantity"];
             energy: components["schemas"]["ExactQuantity"];
             glyph: components["schemas"]["SceneGlyphView"];
@@ -406,7 +430,7 @@ export interface components {
          *     Values remain exact text so renderers cannot silently round economic state.
          */
         MarketPoolView: {
-            account: string;
+            account: components["schemas"]["ItemPath"];
             base_asset: components["schemas"]["ViewId"];
             base_reserve: components["schemas"]["ExactQuantity"];
             /** Format: uint64 */
@@ -423,11 +447,13 @@ export interface components {
         };
         MatrixCellView: {
             /** @default [] */
-            classes: string[];
-            column: string;
+            classes: components["schemas"]["ClassPath"][];
+            column: components["schemas"]["ItemPath"];
             label: string;
-            row: string;
+            row: components["schemas"]["ItemPath"];
         };
+        /** @description Lowercase segments of a–z, 0–9 and `-`, separated by `/`, such as `loans/42`; each segment starts and ends with a letter or digit. */
+        MeasurePath: string;
         /** @description Read-only explanation of the authoritative economy definition. */
         ModelView: {
             goal: components["schemas"]["GoalRequirementView"][];
@@ -436,14 +462,14 @@ export interface components {
         };
         ObjectiveAxisView: {
             direction: components["schemas"]["ObjectiveDirectionView"];
-            key: string;
+            key: components["schemas"]["MeasurePath"];
             label: string;
         };
         /** @enum {string} */
         ObjectiveDirectionView: "minimize" | "maximize";
         ObjectiveView: {
             direction: components["schemas"]["ObjectiveDirectionView"];
-            key: string;
+            key: components["schemas"]["MeasurePath"];
             label: string;
             value: string;
         };
@@ -471,13 +497,15 @@ export interface components {
             /** @description Ordered exactly like `ParetoFrontView.axes`; values remain exact text. */
             values: string[];
         };
+        /** @description Lowercase segments of a–z, 0–9 and `-`, separated by `/`, such as `loans/42`; each segment starts and ends with a letter or digit. */
+        PhasePath: string;
         ProblemDescriptor: {
             capabilities: components["schemas"]["Capability"][];
-            default_instance: string;
-            default_strategy: string;
+            default_instance: components["schemas"]["InstanceProfile"];
+            default_strategy: components["schemas"]["StrategyPath"];
             family: components["schemas"]["ProblemFamily"];
             instances: components["schemas"]["InstanceDescriptor"][];
-            key: string;
+            key: components["schemas"]["ProblemPath"];
             strategies: components["schemas"]["StrategyDescriptor"][];
             summary: string;
             title: string;
@@ -487,12 +515,16 @@ export interface components {
         ProblemList: {
             problems: components["schemas"]["ProblemDescriptor"][];
         };
+        /** @description Lowercase segments of a–z, 0–9 and `-`, separated by `/`, such as `loans/42`; each segment starts and ends with a letter or digit. */
+        ProblemPath: string;
+        /** @description Lowercase segments of a–z, 0–9 and `-`, separated by `/`, such as `loans/42`; each segment starts and ends with a letter or digit. */
+        ProposalPath: string;
         /** @description A proposal assessed against an exact snapshot, including rejected actions. */
         ProposalView: {
             assessment: components["schemas"]["AssessmentView"];
             description: string;
             exchange: components["schemas"]["ExchangeView"];
-            id: string;
+            id: components["schemas"]["ProposalPath"];
             label: string;
             /** Format: uint64 */
             snapshot_index: number;
@@ -531,38 +563,43 @@ export interface components {
             /** @default [] */
             assessed_proposals: components["schemas"]["ProposalView"][];
             documents: components["schemas"]["ViewDocument"][];
-            id: string;
             instance: components["schemas"]["InstanceDescriptor"];
+            key: components["schemas"]["ArtifactKey"];
             problem: components["schemas"]["ProblemDescriptor"];
-            request: components["schemas"]["RunRequest"];
-            selected_document_id: string;
+            /** @description The document of the requested strategy. */
+            selected_document: components["schemas"]["DocumentPath"];
         };
+        /**
+         * @description A request to run a problem. The instance and strategy default to the
+         *     problem's own.
+         */
         RunRequest: {
             /**
              * Format: uint64
              * @default 128
              */
             budget: number;
-            instance?: string | null;
-            problem: string;
+            instance?: components["schemas"]["InstanceProfile"] | null;
+            problem: components["schemas"]["ProblemPath"];
             /**
              * Format: uint64
              * @default 17
              */
             seed: number;
-            strategy?: string | null;
+            strategy?: components["schemas"]["StrategyPath"] | null;
         };
         /** @enum {string} */
         RunStatus: "running" | "paused" | "completed" | "cancelled" | "failed";
         RunSummary: {
-            artifact_id?: string | null;
             /** Format: uint64 */
             completed: number;
-            id: string;
+            id: components["schemas"]["StudioRunId"];
+            /** @description What the run's artifact was computed from, once it is published. */
+            key?: components["schemas"]["ArtifactKey"] | null;
             last_event?: components["schemas"]["StudioEvent"] | null;
             message?: string | null;
             request: components["schemas"]["RunRequest"];
-            selected_document_id?: string | null;
+            selected_document?: components["schemas"]["DocumentPath"] | null;
             status: components["schemas"]["RunStatus"];
             /** Format: uint64 */
             total?: number | null;
@@ -588,9 +625,9 @@ export interface components {
         SceneAnchorView: {
             /** @constant */
             kind: "graph_node";
-            node: string;
+            node: components["schemas"]["ItemPath"];
         } | {
-            edge: string;
+            edge: components["schemas"]["ItemPath"];
             /** @constant */
             kind: "graph_edge";
             /** Format: double */
@@ -603,18 +640,18 @@ export interface components {
             /** Format: uint32 */
             y: number;
         } | {
-            column: string;
+            column: components["schemas"]["ItemPath"];
             /** @constant */
             kind: "matrix_cell";
-            row: string;
+            row: components["schemas"]["ItemPath"];
         } | {
             /** Format: uint64 */
             at: number;
             /** @constant */
             kind: "timeline";
-            lane: string;
+            lane: components["schemas"]["ItemPath"];
         } | {
-            entity: string;
+            entity: components["schemas"]["ItemPath"];
             /** @constant */
             kind: "entity";
         } | {
@@ -623,7 +660,7 @@ export interface components {
         };
         SceneAnnotationView: {
             anchor: components["schemas"]["SceneAnchorView"];
-            id: string;
+            id: components["schemas"]["ItemPath"];
             label: string;
             tone: components["schemas"]["SceneToneView"];
         };
@@ -637,7 +674,7 @@ export interface components {
          */
         SceneEntityRoleView: "structure" | "occupant" | "attachment" | "state" | "context";
         SceneEntityView: {
-            account?: string | null;
+            account?: components["schemas"]["ItemPath"] | null;
             anchor: components["schemas"]["SceneAnchorView"];
             evidence?: components["schemas"]["SceneEvidenceRefView"][];
             glyph: components["schemas"]["SceneGlyphView"];
@@ -645,6 +682,7 @@ export interface components {
             /** @default [] */
             metrics: components["schemas"]["SceneMetricView"][];
             role: components["schemas"]["SceneEntityRoleView"];
+            /** @description A short status line for people, such as `2 crates aboard`. */
             status?: string | null;
             tone: components["schemas"]["SceneToneView"];
         };
@@ -656,12 +694,12 @@ export interface components {
          *     and balances that prove why the picture changed.
          */
         SceneEvidenceRefView: {
-            account: string;
+            account: components["schemas"]["ItemPath"];
             /** @constant */
             kind: "account";
         } | {
-            account: string;
-            asset: string;
+            account: components["schemas"]["ItemPath"];
+            asset: components["schemas"]["ItemPath"];
             /** @constant */
             kind: "balance";
         };
@@ -678,7 +716,7 @@ export interface components {
             tone: components["schemas"]["SceneToneView"];
         };
         SceneMetricView: {
-            key: string;
+            key: components["schemas"]["MeasurePath"];
             label: string;
             previous?: string | null;
             unit?: string | null;
@@ -689,7 +727,7 @@ export interface components {
         ScenePathStatusView: "available" | "candidate" | "explored" | "traversed" | "current" | "incumbent" | "rejected" | "blocked" | "uncertain";
         ScenePathView: {
             anchors: components["schemas"]["SceneAnchorView"][];
-            id: string;
+            id: components["schemas"]["ItemPath"];
             label: string;
             status: components["schemas"]["ScenePathStatusView"];
         };
@@ -700,7 +738,7 @@ export interface components {
          */
         SceneSurfaceView: {
             edges: components["schemas"]["GraphEdgeView"][];
-            focus?: string | null;
+            focus?: components["schemas"]["ItemPath"] | null;
             /** @constant */
             kind: "graph";
             nodes: components["schemas"]["GraphNodeView"][];
@@ -741,14 +779,14 @@ export interface components {
          *     HTTP, WASM, saved artifacts, and Studio use identical evidence.
          */
         SearchObservationView: {
-            algorithm: string;
+            algorithm: components["schemas"]["AlgorithmPath"];
             /** Format: uint64 */
             completed: number;
             kind: components["schemas"]["SearchObservationKindView"];
             label: string;
             /** @default [] */
             metrics: components["schemas"]["SceneMetricView"][];
-            phase: string;
+            phase: components["schemas"]["PhasePath"];
             /** Format: uint64 */
             sequence: number;
             /**
@@ -767,11 +805,14 @@ export interface components {
             points: components["schemas"]["TelemetryPointView"][];
         };
         StrategyDescriptor: {
+            /** @description The algorithm in words, such as `breadth-first search`. */
             algorithm: string;
             description: string;
-            key: string;
+            key: components["schemas"]["StrategyPath"];
             label: string;
         };
+        /** @description Lowercase segments of a–z, 0–9 and `-`, separated by `/`, such as `loans/42`; each segment starts and ends with a letter or digit. */
+        StrategyPath: string;
         /**
          * @description Lifecycle events emitted by a Studio run. `sequence` orders transport
          *     events; it is not economic time and has no effect on replay.
@@ -779,18 +820,18 @@ export interface components {
         StudioEvent: {
             /** @constant */
             kind: "run_started";
-            problem: string;
-            run_id: string;
+            problem: components["schemas"]["ProblemPath"];
+            run_id: components["schemas"]["StudioRunId"];
             /** Format: uint64 */
             sequence: number;
-            strategy: string;
+            strategy: components["schemas"]["StrategyPath"];
         } | {
             /** Format: uint64 */
             completed: number;
             /** @constant */
             kind: "progress";
             message: string;
-            run_id: string;
+            run_id: components["schemas"]["StudioRunId"];
             /** Format: uint64 */
             sequence: number;
             /** Format: uint64 */
@@ -799,62 +840,64 @@ export interface components {
             /** @constant */
             kind: "search_observation";
             observation: components["schemas"]["SearchObservationView"];
-            run_id: string;
+            run_id: components["schemas"]["StudioRunId"];
             /** Format: uint64 */
             sequence: number;
         } | {
-            document_id: string;
+            document: components["schemas"]["DocumentPath"];
             frame: components["schemas"]["ExchangeFrame"];
             /** Format: uint64 */
             frame_index: number;
             /** @constant */
             kind: "frame_appended";
-            run_id: string;
+            run_id: components["schemas"]["StudioRunId"];
             /** Format: uint64 */
             sequence: number;
         } | {
-            artifact_id: string;
             /** Format: uint64 */
             documents: number;
+            key: components["schemas"]["ArtifactKey"];
             /** @constant */
             kind: "artifact_published";
-            run_id: string;
+            run_id: components["schemas"]["StudioRunId"];
             /** Format: uint64 */
             sequence: number;
         } | {
             /** @constant */
             kind: "run_paused";
-            run_id: string;
+            run_id: components["schemas"]["StudioRunId"];
             /** Format: uint64 */
             sequence: number;
         } | {
             /** @constant */
             kind: "run_resumed";
-            run_id: string;
+            run_id: components["schemas"]["StudioRunId"];
             /** Format: uint64 */
             sequence: number;
         } | {
-            artifact_id: string;
-            document_id: string;
+            /** @description The artifact's selected document. */
+            document: components["schemas"]["DocumentPath"];
             /** @constant */
             kind: "run_completed";
-            run_id: string;
+            run_id: components["schemas"]["StudioRunId"];
             /** Format: uint64 */
             sequence: number;
         } | {
             /** @constant */
             kind: "run_cancelled";
-            run_id: string;
+            run_id: components["schemas"]["StudioRunId"];
             /** Format: uint64 */
             sequence: number;
         } | {
             /** @constant */
             kind: "run_failed";
             message: string;
-            run_id: string;
+            run_id: components["schemas"]["StudioRunId"];
             /** Format: uint64 */
             sequence: number;
         };
+        /** @description A Studio run: `run-` and a number, such as `run-7`. */
+        StudioRunId: string;
         /** @enum {string} */
         TelemetryKindView: "expanded" | "generated" | "iteration" | "sample" | "information_set" | "accounts" | "rates" | "transitions" | "constraints" | "alternatives" | "message";
         /**
@@ -870,24 +913,24 @@ export interface components {
         };
         TimelineLaneView: {
             /** @default [] */
-            classes: string[];
+            classes: components["schemas"]["ClassPath"][];
             id: components["schemas"]["ViewId"];
         };
         TimelineSpanView: {
             /** @default [] */
-            classes: string[];
+            classes: components["schemas"]["ClassPath"][];
             /** Format: uint64 */
             end: number;
-            id: string;
+            id: components["schemas"]["ItemPath"];
             label: string;
-            lane: string;
+            lane: components["schemas"]["ItemPath"];
             /** Format: uint64 */
             start: number;
         };
         ViewDocument: {
             description: string;
             frames: components["schemas"]["ExchangeFrame"][];
-            id: string;
+            id: components["schemas"]["DocumentPath"];
             initial: components["schemas"]["ViewSnapshot"];
             model?: components["schemas"]["ModelView"] | null;
             /** @default [] */
@@ -917,7 +960,7 @@ export interface components {
          *     as semantic authority.
          */
         ViewId: {
-            key: string;
+            key: components["schemas"]["ItemPath"];
             label: string;
             value?: unknown;
         };
@@ -934,7 +977,7 @@ export interface components {
             scene?: components["schemas"]["Scene"] | null;
         };
         ViewSource: {
-            key: string;
+            key: components["schemas"]["ItemPath"];
             label: string;
         };
     };
@@ -1198,7 +1241,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                artifact_id: string;
+                run_id: string;
             };
             cookie?: never;
         };
@@ -1227,8 +1270,8 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                artifact_id: string;
-                document_id: string;
+                document: string;
+                run_id: string;
             };
             cookie?: never;
         };
@@ -1260,8 +1303,8 @@ export interface operations {
             };
             header?: never;
             path: {
-                artifact_id: string;
-                document_id: string;
+                document: string;
+                run_id: string;
             };
             cookie?: never;
         };

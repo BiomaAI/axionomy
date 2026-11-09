@@ -132,6 +132,8 @@
             "name": "run_id",
             "required": true,
             "schema": {
+              "description": "A Studio run: `run-` and a number, such as `run-7`.",
+              "pattern": "^run-(0|[1-9][0-9]*)$",
               "type": "string"
             },
             "style": "simple"
@@ -172,6 +174,8 @@
             "name": "run_id",
             "required": true,
             "schema": {
+              "description": "A Studio run: `run-` and a number, such as `run-7`.",
+              "pattern": "^run-(0|[1-9][0-9]*)$",
               "type": "string"
             },
             "style": "simple"
@@ -214,6 +218,8 @@
             "name": "run_id",
             "required": true,
             "schema": {
+              "description": "A Studio run: `run-` and a number, such as `run-7`.",
+              "pattern": "^run-(0|[1-9][0-9]*)$",
               "type": "string"
             },
             "style": "simple"
@@ -256,6 +262,8 @@
             "name": "run_id",
             "required": true,
             "schema": {
+              "description": "A Studio run: `run-` and a number, such as `run-7`.",
+              "pattern": "^run-(0|[1-9][0-9]*)$",
               "type": "string"
             },
             "style": "simple"
@@ -298,6 +306,8 @@
             "name": "run_id",
             "required": true,
             "schema": {
+              "description": "A Studio run: `run-` and a number, such as `run-7`.",
+              "pattern": "^run-(0|[1-9][0-9]*)$",
               "type": "string"
             },
             "style": "simple"
@@ -327,19 +337,21 @@
         }
       }
     },
-    "/api/artifacts/{artifact_id}": {
+    "/api/runs/{run_id}/artifact": {
       "get": {
         "tags": [
           "artifacts"
         ],
-        "summary": "Load a complete portable problem artifact",
+        "summary": "Load the complete portable artifact a run published",
         "operationId": "getRunArtifact",
         "parameters": [
           {
             "in": "path",
-            "name": "artifact_id",
+            "name": "run_id",
             "required": true,
             "schema": {
+              "description": "A Studio run: `run-` and a number, such as `run-7`.",
+              "pattern": "^run-(0|[1-9][0-9]*)$",
               "type": "string"
             },
             "style": "simple"
@@ -369,7 +381,7 @@
         }
       }
     },
-    "/api/artifacts/{artifact_id}/documents/{document_id}": {
+    "/api/runs/{run_id}/artifact/documents/{document}": {
       "get": {
         "tags": [
           "artifacts"
@@ -379,18 +391,22 @@
         "parameters": [
           {
             "in": "path",
-            "name": "artifact_id",
+            "name": "document",
             "required": true,
             "schema": {
+              "description": "Lowercase segments of a–z, 0–9 and `-`, separated by `/`, such as `loans/42`; each segment starts and ends with a letter or digit.",
+              "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?(/[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$",
               "type": "string"
             },
             "style": "simple"
           },
           {
             "in": "path",
-            "name": "document_id",
+            "name": "run_id",
             "required": true,
             "schema": {
+              "description": "A Studio run: `run-` and a number, such as `run-7`.",
+              "pattern": "^run-(0|[1-9][0-9]*)$",
               "type": "string"
             },
             "style": "simple"
@@ -420,7 +436,7 @@
         }
       }
     },
-    "/api/artifacts/{artifact_id}/documents/{document_id}/frames": {
+    "/api/runs/{run_id}/artifact/documents/{document}/frames": {
       "get": {
         "tags": [
           "artifacts"
@@ -430,18 +446,22 @@
         "parameters": [
           {
             "in": "path",
-            "name": "artifact_id",
+            "name": "document",
             "required": true,
             "schema": {
+              "description": "Lowercase segments of a–z, 0–9 and `-`, separated by `/`, such as `loans/42`; each segment starts and ends with a letter or digit.",
+              "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?(/[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$",
               "type": "string"
             },
             "style": "simple"
           },
           {
             "in": "path",
-            "name": "document_id",
+            "name": "run_id",
             "required": true,
             "schema": {
+              "description": "A Studio run: `run-` and a number, such as `run-7`.",
+              "pattern": "^run-(0|[1-9][0-9]*)$",
               "type": "string"
             },
             "style": "simple"
@@ -610,6 +630,43 @@
         ],
         "type": "object"
       },
+      "AlgorithmPath": {
+        "description": "Lowercase segments of a–z, 0–9 and `-`, separated by `/`, such as `loans/42`; each segment starts and ends with a letter or digit.",
+        "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?(/[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$",
+        "type": "string"
+      },
+      "ArtifactKey": {
+        "description": "What an artifact was computed from: a request with its instance and\nstrategy decided. The same key always gives the same artifact.",
+        "properties": {
+          "budget": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "instance": {
+            "$ref": "#/components/schemas/InstanceProfile"
+          },
+          "problem": {
+            "$ref": "#/components/schemas/ProblemPath"
+          },
+          "seed": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "strategy": {
+            "$ref": "#/components/schemas/StrategyPath"
+          }
+        },
+        "required": [
+          "problem",
+          "instance",
+          "strategy",
+          "seed",
+          "budget"
+        ],
+        "type": "object"
+      },
       "AssessmentIssueKindView": {
         "enum": [
           "missing_rate",
@@ -741,6 +798,11 @@
         ],
         "type": "string"
       },
+      "ClassPath": {
+        "description": "Lowercase segments of a–z, 0–9 and `-`, separated by `/`, such as `loans/42`; each segment starts and ends with a letter or digit.",
+        "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?(/[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$",
+        "type": "string"
+      },
       "ComputedRateAmountView": {
         "properties": {
           "asset": {
@@ -759,6 +821,11 @@
           "quantity"
         ],
         "type": "object"
+      },
+      "DocumentPath": {
+        "description": "Lowercase segments of a–z, 0–9 and `-`, separated by `/`, such as `loans/42`; each segment starts and ends with a letter or digit.",
+        "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?(/[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$",
+        "type": "string"
       },
       "ErrorResponse": {
         "properties": {
@@ -910,11 +977,8 @@
       },
       "FramePage": {
         "properties": {
-          "artifact_id": {
-            "type": "string"
-          },
-          "document_id": {
-            "type": "string"
+          "document": {
+            "$ref": "#/components/schemas/DocumentPath"
           },
           "frames": {
             "items": {
@@ -927,6 +991,9 @@
             "minimum": 0,
             "type": "integer"
           },
+          "run_id": {
+            "$ref": "#/components/schemas/StudioRunId"
+          },
           "total": {
             "format": "uint64",
             "minimum": 0,
@@ -934,8 +1001,8 @@
           }
         },
         "required": [
-          "artifact_id",
-          "document_id",
+          "run_id",
+          "document",
           "from",
           "total",
           "frames"
@@ -972,12 +1039,12 @@
           "classes": {
             "default": [],
             "items": {
-              "type": "string"
+              "$ref": "#/components/schemas/ClassPath"
             },
             "type": "array"
           },
           "id": {
-            "type": "string"
+            "$ref": "#/components/schemas/ItemPath"
           },
           "label": {
             "type": [
@@ -986,10 +1053,10 @@
             ]
           },
           "source": {
-            "type": "string"
+            "$ref": "#/components/schemas/ItemPath"
           },
           "target": {
-            "type": "string"
+            "$ref": "#/components/schemas/ItemPath"
           }
         },
         "required": [
@@ -1004,7 +1071,7 @@
           "classes": {
             "default": [],
             "items": {
-              "type": "string"
+              "$ref": "#/components/schemas/ClassPath"
             },
             "type": "array"
           },
@@ -1034,16 +1101,20 @@
       "GridCellView": {
         "properties": {
           "account": {
-            "description": "Optional authoritative account represented by this cell. This makes\nreceipt-derived cell emphasis and account inspection portable without\nturning the grid projection into state of its own.",
-            "type": [
-              "string",
-              "null"
-            ]
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ItemPath"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional authoritative account represented by this cell. This makes\nreceipt-derived cell emphasis and account inspection portable without\nturning the grid projection into state of its own."
           },
           "classes": {
             "default": [],
             "items": {
-              "type": "string"
+              "$ref": "#/components/schemas/ClassPath"
             },
             "type": "array"
           },
@@ -1090,9 +1161,6 @@
           "description": {
             "type": "string"
           },
-          "key": {
-            "type": "string"
-          },
           "label": {
             "type": "string"
           },
@@ -1101,14 +1169,14 @@
           }
         },
         "required": [
-          "key",
+          "profile",
           "label",
-          "description",
-          "profile"
+          "description"
         ],
         "type": "object"
       },
       "InstanceProfile": {
+        "description": "How large an instance of a problem is. Every problem has one instance of\neach size.",
         "enum": [
           "micro",
           "showcase",
@@ -1149,6 +1217,11 @@
           "terms"
         ],
         "type": "object"
+      },
+      "ItemPath": {
+        "description": "Lowercase segments of a–z, 0–9 and `-`, separated by `/`, such as `loans/42`; each segment starts and ends with a letter or digit.",
+        "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?(/[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$",
+        "type": "string"
       },
       "LeaderboardEntryView": {
         "properties": {
@@ -1208,7 +1281,7 @@
             "type": "array"
           },
           "key": {
-            "type": "string"
+            "$ref": "#/components/schemas/MeasurePath"
           },
           "label": {
             "type": "string"
@@ -1226,7 +1299,7 @@
         "description": "One participant positioned around a market pool. Balances and status are\nreplay-derived presentation data linked back to the represented account.",
         "properties": {
           "account": {
-            "type": "string"
+            "$ref": "#/components/schemas/ItemPath"
           },
           "credit": {
             "$ref": "#/components/schemas/ExactQuantity"
@@ -1282,7 +1355,7 @@
         "description": "One constant-product pool projected from an authoritative replay snapshot.\nValues remain exact text so renderers cannot silently round economic state.",
         "properties": {
           "account": {
-            "type": "string"
+            "$ref": "#/components/schemas/ItemPath"
           },
           "base_asset": {
             "$ref": "#/components/schemas/ViewId"
@@ -1344,18 +1417,18 @@
           "classes": {
             "default": [],
             "items": {
-              "type": "string"
+              "$ref": "#/components/schemas/ClassPath"
             },
             "type": "array"
           },
           "column": {
-            "type": "string"
+            "$ref": "#/components/schemas/ItemPath"
           },
           "label": {
             "type": "string"
           },
           "row": {
-            "type": "string"
+            "$ref": "#/components/schemas/ItemPath"
           }
         },
         "required": [
@@ -1364,6 +1437,11 @@
           "label"
         ],
         "type": "object"
+      },
+      "MeasurePath": {
+        "description": "Lowercase segments of a–z, 0–9 and `-`, separated by `/`, such as `loans/42`; each segment starts and ends with a letter or digit.",
+        "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?(/[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$",
+        "type": "string"
       },
       "ModelView": {
         "description": "Read-only explanation of the authoritative economy definition.",
@@ -1400,7 +1478,7 @@
             "$ref": "#/components/schemas/ObjectiveDirectionView"
           },
           "key": {
-            "type": "string"
+            "$ref": "#/components/schemas/MeasurePath"
           },
           "label": {
             "type": "string"
@@ -1426,7 +1504,7 @@
             "$ref": "#/components/schemas/ObjectiveDirectionView"
           },
           "key": {
-            "type": "string"
+            "$ref": "#/components/schemas/MeasurePath"
           },
           "label": {
             "type": "string"
@@ -1525,6 +1603,11 @@
         ],
         "type": "object"
       },
+      "PhasePath": {
+        "description": "Lowercase segments of a–z, 0–9 and `-`, separated by `/`, such as `loans/42`; each segment starts and ends with a letter or digit.",
+        "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?(/[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$",
+        "type": "string"
+      },
       "ProblemDescriptor": {
         "properties": {
           "capabilities": {
@@ -1534,10 +1617,10 @@
             "type": "array"
           },
           "default_instance": {
-            "type": "string"
+            "$ref": "#/components/schemas/InstanceProfile"
           },
           "default_strategy": {
-            "type": "string"
+            "$ref": "#/components/schemas/StrategyPath"
           },
           "family": {
             "$ref": "#/components/schemas/ProblemFamily"
@@ -1549,7 +1632,7 @@
             "type": "array"
           },
           "key": {
-            "type": "string"
+            "$ref": "#/components/schemas/ProblemPath"
           },
           "strategies": {
             "items": {
@@ -1607,6 +1690,16 @@
         ],
         "type": "object"
       },
+      "ProblemPath": {
+        "description": "Lowercase segments of a–z, 0–9 and `-`, separated by `/`, such as `loans/42`; each segment starts and ends with a letter or digit.",
+        "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?(/[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$",
+        "type": "string"
+      },
+      "ProposalPath": {
+        "description": "Lowercase segments of a–z, 0–9 and `-`, separated by `/`, such as `loans/42`; each segment starts and ends with a letter or digit.",
+        "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?(/[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$",
+        "type": "string"
+      },
       "ProposalView": {
         "description": "A proposal assessed against an exact snapshot, including rejected actions.",
         "properties": {
@@ -1620,7 +1713,7 @@
             "$ref": "#/components/schemas/ExchangeView"
           },
           "id": {
-            "type": "string"
+            "$ref": "#/components/schemas/ProposalPath"
           },
           "label": {
             "type": "string"
@@ -1796,34 +1889,36 @@
             },
             "type": "array"
           },
-          "id": {
-            "type": "string"
-          },
           "instance": {
             "$ref": "#/components/schemas/InstanceDescriptor"
+          },
+          "key": {
+            "$ref": "#/components/schemas/ArtifactKey"
           },
           "problem": {
             "$ref": "#/components/schemas/ProblemDescriptor"
           },
-          "request": {
-            "$ref": "#/components/schemas/RunRequest"
-          },
-          "selected_document_id": {
-            "type": "string"
+          "selected_document": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DocumentPath"
+              }
+            ],
+            "description": "The document of the requested strategy."
           }
         },
         "required": [
-          "id",
+          "key",
           "problem",
           "instance",
-          "request",
-          "selected_document_id",
+          "selected_document",
           "documents"
         ],
         "type": "object"
       },
       "RunRequest": {
         "additionalProperties": false,
+        "description": "A request to run a problem. The instance and strategy default to the\nproblem's own.",
         "properties": {
           "budget": {
             "default": 128,
@@ -1832,13 +1927,17 @@
             "type": "integer"
           },
           "instance": {
-            "type": [
-              "string",
-              "null"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/InstanceProfile"
+              },
+              {
+                "type": "null"
+              }
             ]
           },
           "problem": {
-            "type": "string"
+            "$ref": "#/components/schemas/ProblemPath"
           },
           "seed": {
             "default": 17,
@@ -1847,9 +1946,13 @@
             "type": "integer"
           },
           "strategy": {
-            "type": [
-              "string",
-              "null"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StrategyPath"
+              },
+              {
+                "type": "null"
+              }
             ]
           }
         },
@@ -1870,19 +1973,24 @@
       },
       "RunSummary": {
         "properties": {
-          "artifact_id": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
           "completed": {
             "format": "uint64",
             "minimum": 0,
             "type": "integer"
           },
           "id": {
-            "type": "string"
+            "$ref": "#/components/schemas/StudioRunId"
+          },
+          "key": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ArtifactKey"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "What the run's artifact was computed from, once it is published."
           },
           "last_event": {
             "anyOf": [
@@ -1903,10 +2011,14 @@
           "request": {
             "$ref": "#/components/schemas/RunRequest"
           },
-          "selected_document_id": {
-            "type": [
-              "string",
-              "null"
+          "selected_document": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DocumentPath"
+              },
+              {
+                "type": "null"
+              }
             ]
           },
           "status": {
@@ -1989,7 +2101,7 @@
                 "type": "string"
               },
               "node": {
-                "type": "string"
+                "$ref": "#/components/schemas/ItemPath"
               }
             },
             "required": [
@@ -2001,7 +2113,7 @@
           {
             "properties": {
               "edge": {
-                "type": "string"
+                "$ref": "#/components/schemas/ItemPath"
               },
               "kind": {
                 "const": "graph_edge",
@@ -2048,14 +2160,14 @@
           {
             "properties": {
               "column": {
-                "type": "string"
+                "$ref": "#/components/schemas/ItemPath"
               },
               "kind": {
                 "const": "matrix_cell",
                 "type": "string"
               },
               "row": {
-                "type": "string"
+                "$ref": "#/components/schemas/ItemPath"
               }
             },
             "required": [
@@ -2077,7 +2189,7 @@
                 "type": "string"
               },
               "lane": {
-                "type": "string"
+                "$ref": "#/components/schemas/ItemPath"
               }
             },
             "required": [
@@ -2091,7 +2203,7 @@
             "description": "Attach presentation state to another stable scene entity. This is used\nfor inventory, cargo, equipment, and similar ownership relationships\nthat would be misleading if attached only to a shared location.",
             "properties": {
               "entity": {
-                "type": "string"
+                "$ref": "#/components/schemas/ItemPath"
               },
               "kind": {
                 "const": "entity",
@@ -2124,7 +2236,7 @@
             "$ref": "#/components/schemas/SceneAnchorView"
           },
           "id": {
-            "type": "string"
+            "$ref": "#/components/schemas/ItemPath"
           },
           "label": {
             "type": "string"
@@ -2155,9 +2267,13 @@
       "SceneEntityView": {
         "properties": {
           "account": {
-            "type": [
-              "string",
-              "null"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ItemPath"
+              },
+              {
+                "type": "null"
+              }
             ]
           },
           "anchor": {
@@ -2186,6 +2302,7 @@
             "$ref": "#/components/schemas/SceneEntityRoleView"
           },
           "status": {
+            "description": "A short status line for people, such as `2 crates aboard`.",
             "type": [
               "string",
               "null"
@@ -2210,7 +2327,7 @@
           {
             "properties": {
               "account": {
-                "type": "string"
+                "$ref": "#/components/schemas/ItemPath"
               },
               "kind": {
                 "const": "account",
@@ -2226,10 +2343,10 @@
           {
             "properties": {
               "account": {
-                "type": "string"
+                "$ref": "#/components/schemas/ItemPath"
               },
               "asset": {
-                "type": "string"
+                "$ref": "#/components/schemas/ItemPath"
               },
               "kind": {
                 "const": "balance",
@@ -2303,7 +2420,7 @@
       "SceneMetricView": {
         "properties": {
           "key": {
-            "type": "string"
+            "$ref": "#/components/schemas/MeasurePath"
           },
           "label": {
             "type": "string"
@@ -2355,7 +2472,7 @@
             "type": "array"
           },
           "id": {
-            "type": "string"
+            "$ref": "#/components/schemas/ItemPath"
           },
           "label": {
             "type": "string"
@@ -2384,9 +2501,13 @@
                 "type": "array"
               },
               "focus": {
-                "type": [
-                  "string",
-                  "null"
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/ItemPath"
+                  },
+                  {
+                    "type": "null"
+                  }
                 ]
               },
               "kind": {
@@ -2561,7 +2682,7 @@
         "description": "A bounded, transport-neutral view of solver work. Search crates expose\ntyped session state; the service maps it into this presentation contract so\nHTTP, WASM, saved artifacts, and Studio use identical evidence.",
         "properties": {
           "algorithm": {
-            "type": "string"
+            "$ref": "#/components/schemas/AlgorithmPath"
           },
           "completed": {
             "format": "uint64",
@@ -2582,7 +2703,7 @@
             "type": "array"
           },
           "phase": {
-            "type": "string"
+            "$ref": "#/components/schemas/PhasePath"
           },
           "sequence": {
             "format": "uint64",
@@ -2638,13 +2759,14 @@
       "StrategyDescriptor": {
         "properties": {
           "algorithm": {
+            "description": "The algorithm in words, such as `breadth-first search`.",
             "type": "string"
           },
           "description": {
             "type": "string"
           },
           "key": {
-            "type": "string"
+            "$ref": "#/components/schemas/StrategyPath"
           },
           "label": {
             "type": "string"
@@ -2658,6 +2780,11 @@
         ],
         "type": "object"
       },
+      "StrategyPath": {
+        "description": "Lowercase segments of a–z, 0–9 and `-`, separated by `/`, such as `loans/42`; each segment starts and ends with a letter or digit.",
+        "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?(/[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$",
+        "type": "string"
+      },
       "StudioEvent": {
         "description": "Lifecycle events emitted by a Studio run. `sequence` orders transport\nevents; it is not economic time and has no effect on replay.",
         "oneOf": [
@@ -2668,10 +2795,10 @@
                 "type": "string"
               },
               "problem": {
-                "type": "string"
+                "$ref": "#/components/schemas/ProblemPath"
               },
               "run_id": {
-                "type": "string"
+                "$ref": "#/components/schemas/StudioRunId"
               },
               "sequence": {
                 "format": "uint64",
@@ -2679,7 +2806,7 @@
                 "type": "integer"
               },
               "strategy": {
-                "type": "string"
+                "$ref": "#/components/schemas/StrategyPath"
               }
             },
             "required": [
@@ -2706,7 +2833,7 @@
                 "type": "string"
               },
               "run_id": {
-                "type": "string"
+                "$ref": "#/components/schemas/StudioRunId"
               },
               "sequence": {
                 "format": "uint64",
@@ -2741,7 +2868,7 @@
                 "$ref": "#/components/schemas/SearchObservationView"
               },
               "run_id": {
-                "type": "string"
+                "$ref": "#/components/schemas/StudioRunId"
               },
               "sequence": {
                 "format": "uint64",
@@ -2759,8 +2886,8 @@
           },
           {
             "properties": {
-              "document_id": {
-                "type": "string"
+              "document": {
+                "$ref": "#/components/schemas/DocumentPath"
               },
               "frame": {
                 "$ref": "#/components/schemas/ExchangeFrame"
@@ -2775,7 +2902,7 @@
                 "type": "string"
               },
               "run_id": {
-                "type": "string"
+                "$ref": "#/components/schemas/StudioRunId"
               },
               "sequence": {
                 "format": "uint64",
@@ -2787,28 +2914,29 @@
               "kind",
               "run_id",
               "sequence",
-              "document_id",
+              "document",
               "frame_index",
               "frame"
             ],
             "type": "object"
           },
           {
+            "description": "The run's artifact can be fetched.",
             "properties": {
-              "artifact_id": {
-                "type": "string"
-              },
               "documents": {
                 "format": "uint64",
                 "minimum": 0,
                 "type": "integer"
+              },
+              "key": {
+                "$ref": "#/components/schemas/ArtifactKey"
               },
               "kind": {
                 "const": "artifact_published",
                 "type": "string"
               },
               "run_id": {
-                "type": "string"
+                "$ref": "#/components/schemas/StudioRunId"
               },
               "sequence": {
                 "format": "uint64",
@@ -2820,7 +2948,7 @@
               "kind",
               "run_id",
               "sequence",
-              "artifact_id",
+              "key",
               "documents"
             ],
             "type": "object"
@@ -2832,7 +2960,7 @@
                 "type": "string"
               },
               "run_id": {
-                "type": "string"
+                "$ref": "#/components/schemas/StudioRunId"
               },
               "sequence": {
                 "format": "uint64",
@@ -2854,7 +2982,7 @@
                 "type": "string"
               },
               "run_id": {
-                "type": "string"
+                "$ref": "#/components/schemas/StudioRunId"
               },
               "sequence": {
                 "format": "uint64",
@@ -2871,18 +2999,20 @@
           },
           {
             "properties": {
-              "artifact_id": {
-                "type": "string"
-              },
-              "document_id": {
-                "type": "string"
+              "document": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/DocumentPath"
+                  }
+                ],
+                "description": "The artifact's selected document."
               },
               "kind": {
                 "const": "run_completed",
                 "type": "string"
               },
               "run_id": {
-                "type": "string"
+                "$ref": "#/components/schemas/StudioRunId"
               },
               "sequence": {
                 "format": "uint64",
@@ -2894,8 +3024,7 @@
               "kind",
               "run_id",
               "sequence",
-              "artifact_id",
-              "document_id"
+              "document"
             ],
             "type": "object"
           },
@@ -2906,7 +3035,7 @@
                 "type": "string"
               },
               "run_id": {
-                "type": "string"
+                "$ref": "#/components/schemas/StudioRunId"
               },
               "sequence": {
                 "format": "uint64",
@@ -2931,7 +3060,7 @@
                 "type": "string"
               },
               "run_id": {
-                "type": "string"
+                "$ref": "#/components/schemas/StudioRunId"
               },
               "sequence": {
                 "format": "uint64",
@@ -2948,6 +3077,11 @@
             "type": "object"
           }
         ]
+      },
+      "StudioRunId": {
+        "description": "A Studio run: `run-` and a number, such as `run-7`.",
+        "pattern": "^run-(0|[1-9][0-9]*)$",
+        "type": "string"
       },
       "TelemetryKindView": {
         "enum": [
@@ -2996,7 +3130,7 @@
           "classes": {
             "default": [],
             "items": {
-              "type": "string"
+              "$ref": "#/components/schemas/ClassPath"
             },
             "type": "array"
           },
@@ -3014,7 +3148,7 @@
           "classes": {
             "default": [],
             "items": {
-              "type": "string"
+              "$ref": "#/components/schemas/ClassPath"
             },
             "type": "array"
           },
@@ -3024,13 +3158,13 @@
             "type": "integer"
           },
           "id": {
-            "type": "string"
+            "$ref": "#/components/schemas/ItemPath"
           },
           "label": {
             "type": "string"
           },
           "lane": {
-            "type": "string"
+            "$ref": "#/components/schemas/ItemPath"
           },
           "start": {
             "format": "uint64",
@@ -3059,7 +3193,7 @@
             "type": "array"
           },
           "id": {
-            "type": "string"
+            "$ref": "#/components/schemas/DocumentPath"
           },
           "initial": {
             "$ref": "#/components/schemas/ViewSnapshot"
@@ -3138,7 +3272,7 @@
         "description": "A browser-safe identity for an arbitrary user-defined ontology value.\n\n`key` is used for joins, `label` is for people, and `value` is optional\ndiagnostic context. None of these fields replaces the underlying Rust value\nas semantic authority.",
         "properties": {
           "key": {
-            "type": "string"
+            "$ref": "#/components/schemas/ItemPath"
           },
           "label": {
             "type": "string"
@@ -3192,7 +3326,7 @@
       "ViewSource": {
         "properties": {
           "key": {
-            "type": "string"
+            "$ref": "#/components/schemas/ItemPath"
           },
           "label": {
             "type": "string"

@@ -10,10 +10,10 @@ use axionomy_view::{
 };
 
 pub(super) fn build(
-    request: &RunRequest,
+    run: &ArtifactKey,
     descriptor: &ProblemDescriptor,
 ) -> Result<RunArtifact, ServiceError> {
-    let profile = instance_profile(request, descriptor);
+    let profile = run.instance;
     let initial = match profile {
         InstanceProfile::Micro => scheduling::initial(),
         InstanceProfile::Showcase => scheduling::initial_showcase(),
@@ -29,7 +29,7 @@ pub(super) fn build(
     let two = frontier_trace(&pareto, false)?;
     let traces = [
         (
-            "best_first",
+            "best-first",
             "Scheduling · shortest makespan",
             "A generic search for the earliest overall finish time.",
             best.trace().clone(),
@@ -37,7 +37,7 @@ pub(super) fn build(
             Some(best.expanded() as u64),
         ),
         (
-            "bounded_optimizer",
+            "bounded-optimizer",
             "Scheduling · branch optimizer",
             "Branch-and-bound proposes a schedule; the economy replays every step before accepting it.",
             bounded.trace().clone(),
@@ -45,7 +45,7 @@ pub(super) fn build(
             None,
         ),
         (
-            "pareto_job_one",
+            "pareto-job-one",
             "Scheduling Pareto · Job One first",
             "The frontier schedule that gets Job One done soonest — at Job Two's expense.",
             one,
@@ -53,7 +53,7 @@ pub(super) fn build(
             Some(pareto.progress().expanded() as u64),
         ),
         (
-            "pareto_job_two",
+            "pareto-job-two",
             "Scheduling Pareto · Job Two first",
             "The frontier schedule that gets Job Two done soonest — at Job One's expense.",
             two,
@@ -111,19 +111,14 @@ pub(super) fn build(
     } else {
         scheduling::impossible()
     };
-    let mut impossible_view = document(DocumentSpec { problem: "scheduling", strategy: "infeasible_horizon", title: "Scheduling · not enough time slots", description: "With only two slots the work cannot fit. That is an answer you can inspect, not an error the optimizer swallowed.", source_label: "Job-shop scheduling" }, &impossible, &scheduling::goal(), &Trace::new(), Vec::new(), scene).map_err(|error| problem_error("scheduling", error))?;
+    let mut impossible_view = document(DocumentSpec { problem: "scheduling", strategy: "infeasible-horizon", title: "Scheduling · not enough time slots", description: "With only two slots the work cannot fit. That is an answer you can inspect, not an error the optimizer swallowed.", source_label: "Job-shop scheduling" }, &impossible, &scheduling::goal(), &Trace::new(), Vec::new(), scene).map_err(|error| problem_error("scheduling", error))?;
     impossible_view.telemetry.push(telemetry(
         "exhaustive feasibility",
         true,
         [(TelemetryKindView::Message, 0, "no complete schedule".into())],
     ));
     documents.push(impossible_view);
-    artifact(
-        request,
-        descriptor,
-        selected_strategy(request, descriptor),
-        documents,
-    )
+    artifact(run, descriptor, documents)
 }
 
 fn frontier_trace(
@@ -157,13 +152,13 @@ fn objective_value(values: &[Objective<ObjectiveKey, u64>], key: ObjectiveKey) -
 fn objectives(world: &World) -> Vec<ObjectiveView> {
     vec![
         ObjectiveView {
-            key: "job_one".into(),
+            key: slug("job-one"),
             label: "Job One completion".into(),
             direction: ObjectiveDirectionView::Minimize,
             value: scheduling::completion_time(world, Job::One).to_string(),
         },
         ObjectiveView {
-            key: "job_two".into(),
+            key: slug("job-two"),
             label: "Job Two completion".into(),
             direction: ObjectiveDirectionView::Minimize,
             value: scheduling::completion_time(world, Job::Two).to_string(),
@@ -181,12 +176,12 @@ fn front_view(result: &scheduling::ParetoResult, selected: &ViewDocument) -> Par
         completeness: FrontierCompletenessView::Exact,
         axes: vec![
             ObjectiveAxisView {
-                key: "job_one".into(),
+                key: slug("job-one"),
                 label: "Job One".into(),
                 direction: ObjectiveDirectionView::Minimize,
             },
             ObjectiveAxisView {
-                key: "job_two".into(),
+                key: slug("job-two"),
                 label: "Job Two".into(),
                 direction: ObjectiveDirectionView::Minimize,
             },
@@ -223,7 +218,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         .into_iter()
         .map(|machine| TimelineLaneView {
             id: ViewId::new(
-                format!("machine:{machine:?}"),
+                slug(format!("machine/{machine:?}")),
                 format!("Machine {machine:?}"),
             ),
             classes: Vec::new(),
@@ -251,25 +246,22 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 .collect::<Vec<_>>();
             if let (Some(start), Some(end)) = (occupied.first(), occupied.last()) {
                 spans.push(TimelineSpanView {
-                    id: format!("{machine:?}:{operation:?}"),
-                    lane: format!("machine:{machine:?}"),
+                    id: slug(format!("{machine:?}/{operation:?}")),
+                    lane: slug(format!("machine/{machine:?}")),
                     start: u64::from(*start),
                     end: u64::from(*end + 1),
                     label: format!("{operation:?}"),
-                    classes: vec![
-                        format!(
-                            "job-{:?}",
-                            if matches!(
-                                operation,
-                                Operation::OneA | Operation::OneB | Operation::OneC
-                            ) {
-                                Job::One
-                            } else {
-                                Job::Two
-                            }
-                        )
-                        .to_lowercase(),
-                    ],
+                    classes: vec![slug(format!(
+                        "job-{:?}",
+                        if matches!(
+                            operation,
+                            Operation::OneA | Operation::OneB | Operation::OneC
+                        ) {
+                            Job::One
+                        } else {
+                            Job::Two
+                        }
+                    ))],
                 });
             }
         }
@@ -294,7 +286,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
     });
     let pending_entities = pending.clone().map(|operation| {
         visual_entity(
-            format!("pending:{operation:?}"),
+            slug(format!("pending/{operation:?}")),
             format!("{operation:?}"),
             SceneGlyphView::Task,
             SceneAnchorView::Unanchored,
@@ -314,19 +306,19 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         .with_entities(pending_entities)
         .with_metrics([
             visual_metric(
-                "pending",
+                slug("pending"),
                 "Pending operations",
                 pending_count,
                 Some("tasks"),
             ),
             visual_metric(
-                "scheduled",
+                slug("scheduled"),
                 "Scheduled operations",
                 operations.len() - pending_count,
                 Some("tasks"),
             ),
             visual_metric(
-                "makespan",
+                slug("makespan"),
                 "Current makespan",
                 scheduling::encoded_makespan(world),
                 Some("ticks"),
@@ -343,11 +335,11 @@ fn execution_scene(world: &World) -> Scene {
         .into_iter()
         .map(|machine| TimelineLaneView {
             id: ViewId::new(
-                format!("machine:{machine:?}"),
+                slug(format!("machine/{machine:?}")),
                 format!("Machine {machine:?}"),
             ),
             classes: if value(AccountId::Machine(machine), Asset::Broken) > 0 {
-                vec!["blocked".into()]
+                vec![slug("blocked")]
             } else {
                 vec![]
             },
@@ -408,8 +400,8 @@ fn execution_scene(world: &World) -> Scene {
             };
             let interrupted = value(AccountId::Success, Asset::Interrupted(operation)) > 0;
             spans.push(TimelineSpanView {
-                id: format!("operation:{operation:?}"),
-                lane: format!("machine:{machine:?}"),
+                id: slug(format!("operation/{operation:?}")),
+                lane: slug(format!("machine/{machine:?}")),
                 start,
                 end,
                 label: format!(
@@ -417,24 +409,24 @@ fn execution_scene(world: &World) -> Scene {
                     if interrupted { " · interrupted" } else { "" }
                 ),
                 classes: vec![
-                    format!("job-{job:?}").to_lowercase(),
+                    slug(format!("job-{job:?}")),
                     if completed_at > 0 {
-                        "completed".into()
+                        slug("completed")
                     } else {
-                        "active".into()
+                        slug("active")
                     },
                 ],
             });
         }
         entities.push(link_account(
             visual_entity(
-                format!("operation:{operation:?}"),
+                slug(format!("operation/{operation:?}")),
                 format!("{operation:?}"),
                 SceneGlyphView::Task,
                 queued.or(running).or(paused).or(executed).map_or(
                     SceneAnchorView::Unanchored,
                     |machine| SceneAnchorView::Timeline {
-                        lane: format!("machine:{machine:?}"),
+                        lane: slug(format!("machine/{machine:?}")),
                         at: now,
                     },
                 ),
@@ -448,7 +440,7 @@ fn execution_scene(world: &World) -> Scene {
                 },
                 Some(status),
             ),
-            format!("scheduling:account:job-{job:?}").to_lowercase(),
+            slug(format!("scheduling/account/job-{job:?}")),
         ));
     }
     let machine_two = AccountId::Machine(Machine::Two);
@@ -467,34 +459,34 @@ fn execution_scene(world: &World) -> Scene {
     );
     timeline.entities.clear();
     timeline.with_entities(entities).with_metrics([
-        visual_metric("world_time", "World time", now, Some("ticks")),
+        visual_metric(slug("world-time"), "World time", now, Some("ticks")),
         visual_metric(
-            "labor",
+            slug("labor"),
             "Available crew",
             value(AccountId::Success, Asset::Labor),
             None,
         ),
         visual_metric(
-            "busy_labor",
+            slug("busy-labor"),
             "Occupied crew",
             value(AccountId::Success, Asset::BusyLabor),
             None,
         ),
-        visual_metric("machine_two", "Machine Two", condition, None),
+        visual_metric(slug("machine-two"), "Machine Two", condition, None),
         visual_metric(
-            "repair_kits",
+            slug("repair-kits"),
             "Repair kits left",
             value(AccountId::Success, Asset::RepairKit),
             None,
         ),
         visual_metric(
-            "one_done",
+            slug("one-done"),
             "Job One completion",
             scheduling::completion_time(world, Job::One),
             Some("ticks"),
         ),
         visual_metric(
-            "two_done",
+            slug("two-done"),
             "Job Two completion",
             scheduling::completion_time(world, Job::Two),
             Some("ticks"),

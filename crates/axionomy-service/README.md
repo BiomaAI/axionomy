@@ -9,9 +9,14 @@ browser.
 interfaces call the same service and are tested for semantic parity.
 
 Its deliberately small vocabulary is `ProblemDescriptor`, `RunRequest`,
-`RunControl`, `ServiceProgress`, `SearchObservationView`, and `RunArtifact`. A run artifact includes all
-replayable alternatives, the selected document, model and observation
-projections, decision evidence, and assessed proposals. Pause, resume, and
+`RunControl`, `ServiceProgress`, `SearchObservationView`, `RunArtifact` and
+`StudioEvent`. Problems and strategies are paths (`work-league`, `a-star`),
+and an instance is named by its profile: `micro`, `showcase` or `stress`.
+`ReferenceService::resolve` decides a request's instance and strategy and
+returns the `ArtifactKey` the artifact records: the same key always gives the
+same artifact. A run artifact includes all replayable alternatives, the
+selected document, model and observation projections, decision evidence, and
+assessed proposals. Pause, resume, and
 cancel are cooperative runtime signals; they cannot mutate an economy or
 authorize an exchange.
 

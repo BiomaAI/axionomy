@@ -9,7 +9,7 @@
 //! with a secret the store keeps, so they stay valid across restarts of a
 //! server that keeps its store on disk, and stay infeasible to guess.
 
-use crate::handles::{AssessmentId, EconomyId};
+use crate::handles::{ArtifactId, AssessmentId, EconomyId};
 use axionomy::paths;
 use axionomy_service::RunArtifact;
 use axionomy_store::{Checkpoints, Durability, Point, Reader, State, Store, StoreError};
@@ -84,7 +84,7 @@ pub(crate) struct Archive {
     secret: Arc<[u8; 32]>,
     economies: Cache<EconomyId, Loaded>,
     assessments: Cache<AssessmentId, Assessed>,
-    artifacts: Cache<String, RunArtifact>,
+    artifacts: Cache<ArtifactId, RunArtifact>,
 }
 
 /// Whether a stored economy was stored by this call or an earlier one.
@@ -416,37 +416,40 @@ impl Archive {
         ))
     }
 
-    pub async fn keep_artifact(&self, artifact: RunArtifact) -> Result<(), StoreError> {
-        let id = artifact.id.clone();
+    /// Keeps a run's artifact under a handle minted from its key, so the same
+    /// run always has the same handle.
+    pub async fn keep_artifact(&self, artifact: RunArtifact) -> Result<ArtifactId, StoreError> {
+        let key = serde_json::to_vec(&artifact.key).expect("artifact keys serialize");
+        let id = ArtifactId::from_digest(&self.keyed(&[b"artifact", &key]));
         let bytes = serde_json::to_vec(&artifact).expect("artifacts serialize");
-        let key = id.clone();
+        let stored = id.clone();
         self.store
             .transact(Durability::Eventual, move |txn| {
                 txn.redb()
                     .open_table(ARTIFACTS)?
-                    .insert(key.as_str(), bytes.as_slice())?;
+                    .insert(stored.as_str(), bytes.as_slice())?;
                 Ok(())
             })
             .await?;
-        self.artifacts.insert(id, artifact);
-        Ok(())
+        self.artifacts.insert(id.clone(), artifact);
+        Ok(id)
     }
 
     pub async fn artifact(
         &self,
-        artifact_id: &str,
+        artifact_id: &ArtifactId,
     ) -> Result<Option<Arc<RunArtifact>>, StoreError> {
         if let Some(artifact) = self.artifacts.get(artifact_id) {
             return Ok(Some(artifact));
         }
         let store = self.store.clone();
-        let key = artifact_id.to_owned();
+        let key = artifact_id.as_str().to_owned();
         let artifact = tokio::task::spawn_blocking(move || {
             get::<RunArtifact>(&store.read()?, ARTIFACTS, &key)
         })
         .await
         .map_err(|_| StoreError::Closed)??;
-        Ok(artifact.map(|artifact| self.artifacts.insert(artifact_id.to_owned(), artifact)))
+        Ok(artifact.map(|artifact| self.artifacts.insert(artifact_id.clone(), artifact)))
     }
 }
 

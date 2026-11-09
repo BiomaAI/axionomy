@@ -207,7 +207,7 @@ weakening the economy's closure.
   be added and removed later. An index answers "runs where this tag holds",
   paged. Tags on steps wait for a use that needs them.
 - **Groups** collect what was produced together. A group has a kind (for
-  example `monte_carlo`, `mppi`, `eval_suite`, `epoch`), its source (the run
+  example `monte-carlo`, `mppi`, `eval-suite`, `epoch`), its source (the run
   and step or root its members started from), its parameters as tags, and its
   members with their sample index. A member is either a run, or a record of its
   seed and metrics that becomes a run when someone asks, by running the

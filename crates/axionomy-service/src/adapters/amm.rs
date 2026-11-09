@@ -9,29 +9,29 @@ use axionomy_view::{
 use std::collections::BTreeMap;
 
 pub(super) fn build(
-    request: &RunRequest,
+    run: &ArtifactKey,
     descriptor: &ProblemDescriptor,
 ) -> Result<RunArtifact, ServiceError> {
-    let initial = match instance_profile(request, descriptor) {
+    let initial = match run.instance {
         InstanceProfile::Micro => amm::initial(),
-        InstanceProfile::Showcase => amm::initial_showcase_with_seed(request.seed),
-        InstanceProfile::Stress => amm::initial_stress_with_seed(request.seed),
+        InstanceProfile::Showcase => amm::initial_showcase_with_seed(run.seed),
+        InstanceProfile::Stress => amm::initial_stress_with_seed(run.seed),
     };
     let scenarios = [
         (
-            "market_day",
+            "market-day",
             Scenario::MarketDay,
             "Living Market · endogenous price discovery",
             "Actors repeatedly reconsider trades as production, inventory, daily needs and obligations change. Capacity investment takes two days; scarce storage and cloudy days change the cost of waiting. No external price exists.",
         ),
         (
-            "no_whale",
+            "no-whale",
             Scenario::NoWhale,
             "Living Market · without the demand whale",
             "The same closed economy replays without its largest buyer, exposing that actor's causal effect on the discovered exchange value.",
         ),
         (
-            "thin_liquidity",
+            "thin-liquidity",
             Scenario::ThinLiquidity,
             "Living Market · thin-liquidity reality",
             "Half the founding liquidity exits at the opening. Actors respond to the changed prices and depth across the same production conditions and daily obligations.",
@@ -58,31 +58,31 @@ pub(super) fn build(
             &trace,
             vec![
                 ObjectiveView {
-                    key: "needs".into(),
+                    key: slug("needs"),
                     label: "Needs satisfied".into(),
                     direction: ObjectiveDirectionView::Maximize,
                     value: satisfied_needs(&final_world).to_string(),
                 },
                 ObjectiveView {
-                    key: "utility".into(),
+                    key: slug("utility"),
                     label: "Realized utility".into(),
                     direction: ObjectiveDirectionView::Maximize,
                     value: total_utility(&final_world).to_string(),
                 },
                 ObjectiveView {
-                    key: "depth".into(),
+                    key: slug("depth"),
                     label: "Energy liquidity".into(),
                     direction: ObjectiveDirectionView::Maximize,
                     value: final_pool.energy.to_string(),
                 },
                 ObjectiveView {
-                    key: "unmet".into(),
+                    key: slug("unmet"),
                     label: "Unmet daily needs".into(),
                     direction: ObjectiveDirectionView::Minimize,
                     value: unmet_needs(&final_world).to_string(),
                 },
                 ObjectiveView {
-                    key: "defaults".into(),
+                    key: slug("defaults"),
                     label: "Missed obligations".into(),
                     direction: ObjectiveDirectionView::Minimize,
                     value: defaults(&final_world).to_string(),
@@ -148,25 +148,20 @@ pub(super) fn build(
         documents.push(view);
     }
 
-    artifact(
-        request,
-        descriptor,
-        selected_strategy(request, descriptor),
-        documents,
-    )
+    artifact(run, descriptor, documents)
 }
 
 fn exact(value: impl ToString) -> ExactQuantity {
     ExactQuantity(value.to_string())
 }
 
-fn account_key(account: AccountId) -> String {
+fn account_key(account: AccountId) -> ItemPath {
     match account {
-        AccountId::Pool => "amm:account:pool".into(),
-        AccountId::Treasury => "amm:account:treasury".into(),
-        AccountId::Information => "amm:account:information".into(),
-        AccountId::World => "amm:account:world".into(),
-        AccountId::Actor(actor) => format!("amm:account:actor-{}", actor_debug_key(actor)),
+        AccountId::Pool => slug("amm/account/pool"),
+        AccountId::Treasury => slug("amm/account/treasury"),
+        AccountId::Information => slug("amm/account/information"),
+        AccountId::World => slug("amm/account/world"),
+        AccountId::Actor(actor) => slug(format!("amm/account/actor-{}", actor_debug_key(actor))),
     }
 }
 
@@ -296,7 +291,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             let account = AccountId::Actor(actor);
             MarketActorView {
                 id: ViewId::new(
-                    format!("amm:actor:{}", actor_key(actor)),
+                    slug(format!("amm/actor/{}", actor_key(actor))),
                     actor_label(actor),
                 ),
                 account: account_key(account),
@@ -326,8 +321,18 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 account: actor.account.clone(),
             }],
             metrics: vec![
-                visual_metric("energy", "Energy", actor.energy.0.clone(), Some("units")),
-                visual_metric("credit", "Credit", actor.credit.0.clone(), Some("credits")),
+                visual_metric(
+                    slug("energy"),
+                    "Energy",
+                    actor.energy.0.clone(),
+                    Some("units"),
+                ),
+                visual_metric(
+                    slug("credit"),
+                    "Credit",
+                    actor.credit.0.clone(),
+                    Some("credits"),
+                ),
             ],
         })
         .collect();
@@ -335,9 +340,9 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         title: "The Living Market".into(),
         surface: SceneSurfaceView::Market {
             pool: Box::new(MarketPoolView {
-                id: ViewId::new("amm:pool:energy-credit", "Energy / Credit AMM"),
-                base_asset: ViewId::new("amm:asset:energy", "Energy"),
-                quote_asset: ViewId::new("amm:asset:credit", "Credit"),
+                id: ViewId::new(slug("amm/pool/energy-credit"), "Energy / Credit AMM"),
+                base_asset: ViewId::new(slug("amm/asset/energy"), "Energy"),
+                quote_asset: ViewId::new(slug("amm/asset/credit"), "Credit"),
                 base_reserve: exact(state.energy),
                 quote_reserve: exact(state.credit),
                 price_milli: exact(state.price_milli),
@@ -354,19 +359,19 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         annotations: Vec::new(),
         metrics: vec![
             visual_metric(
-                "price",
+                slug("price"),
                 "Discovered price",
                 format_price(state.price_milli),
                 Some("credit / energy"),
             ),
             visual_metric(
-                "energy_reserve",
+                slug("energy-reserve"),
                 "Energy reserve",
                 state.energy,
                 Some("energy"),
             ),
             visual_metric(
-                "liquidity",
+                slug("liquidity"),
                 "Liquidity shares",
                 state.issued_lp_shares,
                 Some("LP"),
@@ -377,29 +382,34 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
     if world.account(&AccountId::World).is_some() {
         scene.metrics.insert(
             0,
-            visual_metric("day", "Market day", amm::period(world) + 1, Some("day")),
+            visual_metric(
+                slug("day"),
+                "Market day",
+                amm::period(world) + 1,
+                Some("day"),
+            ),
         );
         scene.metrics.extend([
             visual_metric(
-                "unmet",
+                slug("unmet"),
                 "Unmet daily needs",
                 unmet_needs(world),
                 Some("needs"),
             ),
             visual_metric(
-                "defaults",
+                slug("defaults"),
                 "Missed obligations",
                 defaults(world),
                 Some("payments"),
             ),
             visual_metric(
-                "sunlight",
+                slug("sunlight"),
                 "Sunlight",
                 world.balance(&AccountId::World, &Asset::CurrentSunlight),
                 Some("%"),
             ),
             visual_metric(
-                "capacity",
+                slug("capacity"),
                 "Generating capacity",
                 world.balance(
                     &AccountId::Actor(Actor::Generator),
@@ -408,7 +418,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 Some("energy / day"),
             ),
             visual_metric(
-                "goods",
+                slug("goods"),
                 "Goods delivered",
                 world.balance(&AccountId::Treasury, &Asset::DeliveredGoods),
                 Some("units"),
@@ -518,7 +528,7 @@ fn contribution_board(contributions: &BTreeMap<Actor, i128>) -> LeaderboardView 
         })
         .collect();
     LeaderboardView {
-        key: "price_contribution".into(),
+        key: slug("price-contribution"),
         label: "Direct price contribution".into(),
         description: "Each actor's cumulative change in the replayed reserve price. Contributions sum exactly to total price movement because proportional liquidity does not move price.".into(),
         direction: ObjectiveDirectionView::Maximize,
@@ -568,7 +578,7 @@ fn causal_contribution_board(initial: &World) -> LeaderboardView {
                 unit: Some("Δ credit / energy".into()),
                 eligible: true,
                 components: vec![visual_metric(
-                    "coalitions",
+                    slug("coalitions"),
                     "Counterfactual coalitions",
                     1_u64 << amm::PRICE_ACTORS.len(),
                     None,
@@ -577,7 +587,7 @@ fn causal_contribution_board(initial: &World) -> LeaderboardView {
         })
         .collect();
     LeaderboardView {
-        key: "causal_price_contribution".into(),
+        key: slug("causal-price-contribution"),
         label: "Causal price contribution".into(),
         description: "Exact Shapley allocation across every coalition of active market actors. Each coalition is independently re-quoted and replayed through Axionomy; the reduced fractions sum to the full counterfactual price change.".into(),
         direction: ObjectiveDirectionView::Maximize,

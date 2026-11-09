@@ -5,11 +5,11 @@ use axionomy_problems::mission::expedition::{
 };
 
 pub(super) fn build(
-    request: &RunRequest,
+    run: &ArtifactKey,
     descriptor: &ProblemDescriptor,
     profile: InstanceProfile,
 ) -> Result<RunArtifact, ServiceError> {
-    let initial = mission::initial(matches!(profile, InstanceProfile::Stress), request.seed);
+    let initial = mission::initial(matches!(profile, InstanceProfile::Stress), run.seed);
     let mut documents = Vec::new();
     for (strategy, title, description, policy) in [
         (
@@ -19,7 +19,7 @@ pub(super) fn build(
             Policy::RadioCoordination,
         ),
         (
-            "direct_north",
+            "direct-north",
             "Mission · north-first sector search",
             "Scout starts north without sensing. Intelligence travels through in-person briefings, and each teammate responds to the same changing hazards and clinical deadlines.",
             Policy::NorthFirst,
@@ -84,12 +84,7 @@ pub(super) fn build(
         );
         documents[index].pareto_fronts.push(front);
     }
-    artifact(
-        request,
-        descriptor,
-        selected_strategy(request, descriptor),
-        documents,
-    )
+    artifact(run, descriptor, documents)
 }
 fn objectives(world: &World) -> Vec<ObjectiveView> {
     let val = |account, asset| mission::value(world, account, asset);
@@ -136,7 +131,7 @@ fn objectives(world: &World) -> Vec<ObjectiveView> {
     ]
     .into_iter()
     .map(|(key, label, value, direction)| ObjectiveView {
-        key: key.into(),
+        key: slug(key),
         label: label.into(),
         value: value.to_string(),
         direction,
@@ -146,7 +141,10 @@ fn objectives(world: &World) -> Vec<ObjectiveView> {
 fn observation(world: &World, agent: Agent) -> ObservationView {
     let key = mission::agent_view(world, agent).observation_key();
     ObservationView {
-        actor: ViewId::new(format!("mission:actor:{agent:?}"), format!("{agent:?}")),
+        actor: ViewId::new(
+            slug(format!("mission/actor/{agent:?}")),
+            format!("{agent:?}"),
+        ),
         label: format!(
             "{agent:?}'s private observations at tick {}",
             mission::now(world)
@@ -156,7 +154,7 @@ fn observation(world: &World, agent: Agent) -> ObservationView {
             .iter()
             .map(|account| AccountView {
                 account: ViewId::new(
-                    format!("mission:observed:{account:?}"),
+                    slug(format!("mission/observed/{account:?}")),
                     account.studio_label(),
                 ),
                 balances: key
@@ -165,7 +163,7 @@ fn observation(world: &World, agent: Agent) -> ObservationView {
                     .filter(|(owner, _, _)| owner == account)
                     .map(|(_, asset, quantity)| AssetQuantityView {
                         asset: ViewId::new(
-                            format!("mission:observed:{asset:?}"),
+                            slug(format!("mission/observed/{asset:?}")),
                             asset.studio_label(),
                         ),
                         quantity: ExactQuantity(quantity.to_string()),
@@ -188,7 +186,10 @@ fn observation(world: &World, agent: Agent) -> ObservationView {
                     )
             })
             .map(|(_, asset, quantity)| AssetQuantityView {
-                asset: ViewId::new(format!("mission:fact:{asset:?}"), asset.studio_label()),
+                asset: ViewId::new(
+                    slug(format!("mission/fact/{asset:?}")),
+                    asset.studio_label(),
+                ),
                 quantity: ExactQuantity(quantity.to_string()),
             })
             .collect(),
@@ -205,8 +206,8 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
     ]
     .into_iter()
     .map(|(location, x, y)| GraphNodeView {
-        id: ViewId::new(format!("{location:?}"), format!("{location:?}")),
-        classes: vec!["location".into()],
+        id: ViewId::new(slug(format!("{location:?}")), format!("{location:?}")),
+        classes: vec![slug("location")],
         x: Some(x),
         y: Some(y),
     })
@@ -214,9 +215,9 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
     let edges = ROADS
         .into_iter()
         .map(|(from, to)| GraphEdgeView {
-            id: format!("road:{from:?}:{to:?}"),
-            source: format!("{from:?}"),
-            target: format!("{to:?}"),
+            id: slug(format!("road/{from:?}/{to:?}")),
+            source: slug(format!("{from:?}")),
+            target: slug(format!("{to:?}")),
             label: Some("1 tick + injury delay".into()),
             classes: vec![],
         })
@@ -250,14 +251,14 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         };
         let anchor = if let Some(at) = at {
             SceneAnchorView::GraphNode {
-                node: format!("{at:?}"),
+                node: slug(format!("{at:?}")),
             }
         } else {
             SceneAnchorView::Unanchored
         };
         let mut entity = link_account(
             visual_entity(
-                format!("agent:{agent:?}"),
+                slug(format!("agent/{agent:?}")),
                 format!("{agent:?}"),
                 if agent == Agent::Scout {
                     SceneGlyphView::Sensor
@@ -277,25 +278,25 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 },
                 Some(status),
             ),
-            format!(
-                "mission:account:agent-{}",
+            slug(format!(
+                "mission/account/agent-{}",
                 if agent == Agent::Scout {
                     "scout"
                 } else {
                     "medic"
                 }
-            ),
+            )),
         );
         entity.metrics = vec![
-            visual_metric("energy", "Energy", val(own, Asset::Energy), None),
+            visual_metric(slug("energy"), "Energy", val(own, Asset::Energy), None),
             visual_metric(
-                "injury",
+                slug("injury"),
                 "Injury delay",
                 val(own, Asset::Harm),
                 Some("ticks"),
             ),
             visual_metric(
-                "capacity",
+                slug("capacity"),
                 if agent == Agent::Scout {
                     "Radio charges"
                 } else {
@@ -341,7 +342,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         };
         let anchor = node.map_or(SceneAnchorView::Unanchored, |location| {
             SceneAnchorView::GraphNode {
-                node: format!("{location:?}"),
+                node: slug(format!("{location:?}")),
             }
         });
         let status = if complete {
@@ -359,7 +360,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         };
         let mut entity = link_account(
             visual_entity(
-                format!("objective:{id}"),
+                slug(format!("objective/{id}")),
                 account.studio_label(),
                 if mission::patient(id) {
                     SceneGlyphView::Person
@@ -381,11 +382,11 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 },
                 Some(status.into()),
             ),
-            format!("mission:account:objective-{id}"),
+            slug(format!("mission/account/objective-{id}")),
         );
         entity.metrics = vec![
             visual_metric(
-                "knowledge",
+                slug("knowledge"),
                 "Medic briefed",
                 if val(AccountId::Agent(Agent::Medic), Asset::Known(id, site)) > 0 {
                     "yes"
@@ -394,13 +395,18 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 },
                 None,
             ),
-            visual_metric("deadline", "Deadline", val(account, Asset::Deadline), None),
+            visual_metric(
+                slug("deadline"),
+                "Deadline",
+                val(account, Asset::Deadline),
+                None,
+            ),
         ];
         if mission::patient(id) {
             entity.metrics.insert(
                 0,
                 visual_metric(
-                    "health",
+                    slug("health"),
                     "Vitality",
                     val(account, Asset::Health),
                     Some("/ 3"),
@@ -417,21 +423,21 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
     )
     .with_entities(entities)
     .with_metrics([
-        visual_metric("time", "Mission time", mission::now(world), None),
+        visual_metric(slug("time"), "Mission time", mission::now(world), None),
         visual_metric(
-            "complete",
+            slug("complete"),
             "Objectives complete",
             val(AccountId::World, Asset::Completed),
             None,
         ),
         visual_metric(
-            "failed",
+            slug("failed"),
             "Objectives lost",
             val(AccountId::World, Asset::FailedCount),
             None,
         ),
         visual_metric(
-            "busy",
+            slug("busy"),
             "Teammates occupied",
             AGENTS
                 .into_iter()
@@ -440,7 +446,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             Some("/ 2"),
         ),
         visual_metric(
-            "radio",
+            slug("radio"),
             "Radio charges spent",
             val(AccountId::Agent(Agent::Scout), Asset::UsedRadio),
             None,
@@ -450,7 +456,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         if let Some(entity) = scene
             .entities
             .iter_mut()
-            .find(|entity| entity.id.key == format!("{location:?}"))
+            .find(|entity| entity.id.key == slug(format!("{location:?}")))
         {
             entity.status = Some(
                 if val(AccountId::World, Asset::WeatherBlocked(location)) > 0 {

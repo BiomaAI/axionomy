@@ -10,10 +10,10 @@ use axionomy_view::{
 };
 
 pub(super) fn build(
-    request: &RunRequest,
+    run: &ArtifactKey,
     descriptor: &ProblemDescriptor,
 ) -> Result<RunArtifact, ServiceError> {
-    let profile = instance_profile(request, descriptor);
+    let profile = run.instance;
     let initial = match profile {
         InstanceProfile::Micro => bridge::initial(),
         InstanceProfile::Showcase => bridge::initial_showcase(),
@@ -79,7 +79,7 @@ pub(super) fn build(
         .map(|result| result.progress().expanded() as u64);
     let mut traces = vec![
         (
-            "breadth_first",
+            "breadth-first",
             "Bridge · plain search",
             "Breadth-first search over routing choices; timed traffic resolves ready completions immediately and excludes auctions and deliberate reservation expiry.",
             bfs.trace().clone(),
@@ -87,7 +87,7 @@ pub(super) fn build(
             Some(bfs.expanded() as u64),
         ),
         (
-            "first_come_a",
+            "first-come-a",
             "Bridge · Agent A first",
             "Fixed priority waits for Agent A, then gives the other traveler the lane. Arrival times and deadlines remain identical across policies.",
             first_a,
@@ -95,7 +95,7 @@ pub(super) fn build(
             None,
         ),
         (
-            "first_come_b",
+            "first-come-b",
             "Bridge · Agent B first",
             "Fixed priority waits for Agent B, then gives the other traveler the lane. The wait can waste capacity and make later arrivals late.",
             first_b,
@@ -111,7 +111,7 @@ pub(super) fn build(
             None,
         ),
         (
-            "pareto_a",
+            "pareto-a",
             if pareto.is_some() {
                 "Bridge Pareto · Agent A"
             } else {
@@ -127,7 +127,7 @@ pub(super) fn build(
             pareto_expanded,
         ),
         (
-            "pareto_b",
+            "pareto-b",
             if pareto.is_some() {
                 "Bridge Pareto · Agent B"
             } else {
@@ -198,12 +198,7 @@ pub(super) fn build(
         };
         documents[index].pareto_fronts.push(front);
     }
-    artifact(
-        request,
-        descriptor,
-        selected_strategy(request, descriptor),
-        documents,
-    )
+    artifact(run, descriptor, documents)
 }
 
 fn candidate_front_view(documents: &[ViewDocument], selected: &ViewDocument) -> ParetoFrontView {
@@ -295,13 +290,13 @@ fn objectives(world: &World) -> Vec<ObjectiveView> {
         .flat_map(|agent| {
             [
                 ObjectiveView {
-                    key: format!("priority_{agent:?}").to_lowercase(),
+                    key: slug(format!("priority-{agent:?}")),
                     label: format!("Agent {agent:?} priority"),
                     direction: ObjectiveDirectionView::Maximize,
                     value: bridge::priority(world, agent).to_string(),
                 },
                 ObjectiveView {
-                    key: format!("credit_{agent:?}").to_lowercase(),
+                    key: slug(format!("credit-{agent:?}")),
                     label: format!("Agent {agent:?} credit"),
                     direction: ObjectiveDirectionView::Maximize,
                     value: bridge::credit(world, agent).to_string(),
@@ -312,7 +307,7 @@ fn objectives(world: &World) -> Vec<ObjectiveView> {
     if bridge::timed::enabled(world) {
         for agent in [AgentId::A, AgentId::B] {
             values.push(ObjectiveView {
-                key: format!("ontime_{agent:?}"),
+                key: slug(format!("ontime-{agent:?}")),
                 label: format!("Agent {agent:?} on-time trips"),
                 direction: ObjectiveDirectionView::Maximize,
                 value: world
@@ -321,7 +316,7 @@ fn objectives(world: &World) -> Vec<ObjectiveView> {
             });
         }
         values.push(ObjectiveView {
-            key: "elapsed".into(),
+            key: slug("elapsed"),
             label: "Elapsed time".into(),
             direction: ObjectiveDirectionView::Minimize,
             value: bridge::timed::now(world).to_string(),
@@ -343,7 +338,7 @@ fn front_view(result: &bridge::ParetoResult, selected: &ViewDocument) -> ParetoF
             .into_iter()
             .enumerate()
             .map(|(index, label)| ObjectiveAxisView {
-                key: format!("axis_{index}"),
+                key: slug(format!("axis-{index}")),
                 label: label.into(),
                 direction: ObjectiveDirectionView::Maximize,
             })
@@ -401,9 +396,9 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
     let nodes = places
         .into_iter()
         .map(|(key, label, x, y)| GraphNodeView {
-            id: ViewId::new(key, label),
+            id: ViewId::new(slug(key), label),
             classes: if key == "bridge" {
-                vec!["resource".into()]
+                vec![slug("resource")]
             } else {
                 vec![]
             },
@@ -432,9 +427,9 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
     let edges = routes
         .into_iter()
         .map(|(from, to, label)| GraphEdgeView {
-            id: format!("route:{from}:{to}"),
-            source: from.into(),
-            target: to.into(),
+            id: slug(format!("route/{from}/{to}")),
+            source: slug(from),
+            target: slug(to),
             label: Some(label),
             classes: vec![],
         })
@@ -477,10 +472,10 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         };
         let mut entity = link_balance(
             visual_entity(
-                format!("traveler:{agent:?}"),
+                slug(format!("traveler/{agent:?}")),
                 format!("Agent {agent:?}"),
                 SceneGlyphView::Agent,
-                SceneAnchorView::GraphNode { node: node.into() },
+                SceneAnchorView::GraphNode { node: slug(node) },
                 SceneEntityRoleView::Occupant,
                 if east {
                     SceneToneView::Success
@@ -489,11 +484,11 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 },
                 Some(status),
             ),
-            format!("bridge:account:agent-{agent:?}").to_lowercase(),
-            format!("bridge:asset:{asset}"),
+            slug(format!("bridge/account/agent-{agent:?}")),
+            slug(format!("bridge/asset/{asset}")),
         );
         entity.metrics = vec![visual_metric(
-            "credit",
+            slug("credit"),
             "Credit",
             bridge::credit(world, agent),
             None,
@@ -501,13 +496,18 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         if timed {
             entity.metrics.extend([
                 visual_metric(
-                    "deadline",
+                    slug("deadline"),
                     "Deadline",
                     value(Asset::Deadline),
                     Some("ticks"),
                 ),
-                visual_metric("ontime", "On time", value(Asset::OnTime), Some("trips")),
-                visual_metric("late", "Late", value(Asset::Late), Some("trips")),
+                visual_metric(
+                    slug("ontime"),
+                    "On time",
+                    value(Asset::OnTime),
+                    Some("trips"),
+                ),
+                visual_metric(slug("late"), "Late", value(Asset::Late), Some("trips")),
             ]);
         }
         entity
@@ -516,7 +516,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         .with_entities(agents)
         .with_metrics([
             visual_metric(
-                "capacity",
+                slug("capacity"),
                 "Bridge capacity",
                 if world
                     .balance(&AccountId::Bridge, &Asset::CapacityFree)
@@ -529,13 +529,13 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 None,
             ),
             visual_metric(
-                "priority_a",
+                slug("priority-a"),
                 "A priority",
                 bridge::priority(world, AgentId::A),
                 None,
             ),
             visual_metric(
-                "priority_b",
+                slug("priority-b"),
                 "B priority",
                 bridge::priority(world, AgentId::B),
                 None,
@@ -543,15 +543,15 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         ]);
     if timed {
         scene.metrics.extend([
-            visual_metric("world_time", "World time", clock, Some("ticks")),
+            visual_metric(slug("world-time"), "World time", clock, Some("ticks")),
             visual_metric(
-                "wave",
+                slug("wave"),
                 "Traffic wave",
                 world.balance(&AccountId::Bridge, &Asset::Round).to_u64() + 1,
                 None,
             ),
             visual_metric(
-                "ontime",
+                slug("ontime"),
                 "On-time trips",
                 [AgentId::A, AgentId::B]
                     .into_iter()
@@ -564,7 +564,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 None,
             ),
             visual_metric(
-                "late",
+                slug("late"),
                 "Late trips",
                 [AgentId::A, AgentId::B]
                     .into_iter()
@@ -584,10 +584,11 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{ReferenceService, RunRequest};
     #[test]
     fn exact_front_pairs_each_travelers_priority_with_their_credit() {
         let artifact = ReferenceService
-            .run(RunRequest::new("bridge").with_instance("micro"))
+            .run(RunRequest::new(slug("bridge")).with_instance(InstanceProfile::Micro))
             .unwrap();
         for document in artifact.documents {
             for point in &document.pareto_fronts[0].points {

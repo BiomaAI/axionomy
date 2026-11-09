@@ -8,26 +8,23 @@ use axionomy_view::{
 };
 
 pub(super) fn build(
-    request: &RunRequest,
+    run: &ArtifactKey,
     descriptor: &ProblemDescriptor,
     progress: &mut ProgressSink<'_>,
 ) -> Result<RunArtifact, ServiceError> {
-    let profile = instance_profile(request, descriptor);
+    let profile = run.instance;
     if !matches!(profile, InstanceProfile::Micro) {
-        return fleet::build(request, descriptor, profile, progress);
+        return fleet::build(run, descriptor, profile, progress);
     }
-    let initial = if matches!(
-        instance_profile(request, descriptor),
-        InstanceProfile::Micro
-    ) {
+    let initial = if matches!(run.instance, InstanceProfile::Micro) {
         logistics::initial_micro()
     } else {
         logistics::initial()
     };
-    let samples = match instance_profile(request, descriptor) {
-        InstanceProfile::Micro => request.budget.clamp(2, 16),
-        InstanceProfile::Showcase => request.budget.max(2),
-        InstanceProfile::Stress => request.budget.max(256),
+    let samples = match run.instance {
+        InstanceProfile::Micro => run.budget.clamp(2, 16),
+        InstanceProfile::Showcase => run.budget.max(2),
+        InstanceProfile::Stress => run.budget.max(256),
     } as usize;
     let estimate = logistics::monte_carlo_with_risk_progress(
         &initial,
@@ -36,7 +33,7 @@ pub(super) fn build(
         samples.clamp(1, 8),
         |state| {
             progress.emit(
-                "monte_carlo",
+                slug("monte-carlo"),
                 state.completed_samples() as u64,
                 state.total_samples() as u64,
                 format!(
@@ -52,7 +49,7 @@ pub(super) fn build(
     let front =
         logistics::policy_front_with_progress(&initial, samples, samples.clamp(1, 8), |state| {
             progress.emit(
-                "pareto_sampling",
+                slug("pareto-sampling"),
                 state.completed_samples() as u64,
                 state.total_samples() as u64,
                 format!(
@@ -66,7 +63,7 @@ pub(super) fn build(
     let front = front.ok_or_else(|| problem_error("logistics", "policy front failed"))?;
     let mut documents = Vec::new();
     for (strategy, policy) in [("direct", Policy::Direct), ("reliable", Policy::Reliable)] {
-        let rollout = logistics::run_policy(&initial, policy, request.seed);
+        let rollout = logistics::run_policy(&initial, policy, run.seed);
         let mut view = document(
             DocumentSpec {
                 problem: "logistics",
@@ -129,12 +126,12 @@ pub(super) fn build(
     let planned = logistics::run_planned_with_progress(
         &initial,
         samples,
-        request.seed,
-        request.seed ^ 0x4c4f_4749_5354_4943,
+        run.seed,
+        run.seed ^ 0x4c4f_4749_5354_4943,
         samples.clamp(1, 8),
         |decision, state| {
             progress.emit(
-                "mcts",
+                slug("mcts"),
                 state.iterations() as u64,
                 state.target_iterations() as u64,
                 format!(
@@ -197,30 +194,25 @@ pub(super) fn build(
         ],
     ));
     documents.push(mcts);
-    artifact(
-        request,
-        descriptor,
-        selected_strategy(request, descriptor),
-        documents,
-    )
+    artifact(run, descriptor, documents)
 }
 
 fn objectives(rollout: &logistics::MissionRollout) -> Vec<ObjectiveView> {
     vec![
         ObjectiveView {
-            key: "completed".into(),
+            key: slug("completed"),
             label: "Completed".into(),
             direction: ObjectiveDirectionView::Maximize,
             value: u8::from(rollout.completed()).to_string(),
         },
         ObjectiveView {
-            key: "delivered".into(),
+            key: slug("delivered"),
             label: "Orders delivered".into(),
             direction: ObjectiveDirectionView::Maximize,
             value: rollout.delivered().to_string(),
         },
         ObjectiveView {
-            key: "time".into(),
+            key: slug("time"),
             label: "Elapsed time".into(),
             direction: ObjectiveDirectionView::Minimize,
             value: rollout.elapsed_time().to_string(),
@@ -233,17 +225,17 @@ fn policy_front(front: &logistics::PolicyFront, selected: Policy) -> ParetoFront
         completeness: FrontierCompletenessView::Approximate,
         axes: vec![
             ObjectiveAxisView {
-                key: "completion".into(),
+                key: slug("completion"),
                 label: "Completion".into(),
                 direction: ObjectiveDirectionView::Maximize,
             },
             ObjectiveAxisView {
-                key: "delivered".into(),
+                key: slug("delivered"),
                 label: "Delivered".into(),
                 direction: ObjectiveDirectionView::Maximize,
             },
             ObjectiveAxisView {
-                key: "time".into(),
+                key: slug("time"),
                 label: "Mean time".into(),
                 direction: ObjectiveDirectionView::Minimize,
             },
@@ -286,11 +278,14 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
     let nodes = locations
         .into_iter()
         .map(|(location, x, y)| GraphNodeView {
-            id: ViewId::new(format!("location:{location:?}"), format!("{location:?}")),
+            id: ViewId::new(
+                slug(format!("location/{location:?}")),
+                format!("{location:?}"),
+            ),
             classes: if focus == Some(location) {
-                vec!["current".into()]
+                vec![slug("current")]
             } else if location == Location::Customer {
-                vec!["goal".into()]
+                vec![slug("goal")]
             } else {
                 Vec::new()
             },
@@ -314,14 +309,14 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 .balance(&AccountId::Vehicle, &Asset::Traveling(route))
                 .is_zero();
             GraphEdgeView {
-                id: format!("route:{route:?}"),
-                source: format!("location:{from:?}"),
-                target: format!("location:{to:?}"),
+                id: slug(format!("route/{route:?}")),
+                source: slug(format!("location/{from:?}")),
+                target: slug(format!("location/{to:?}")),
                 label: Some(format!("{route:?}")),
                 classes: if traveling {
-                    vec!["current".into(), "uncertain".into()]
+                    vec![slug("current"), slug("uncertain")]
                 } else {
-                    vec!["uncertain".into()]
+                    vec![slug("uncertain")]
                 },
             }
         })
@@ -333,11 +328,11 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
     });
     let vehicle_anchor = if let Some(location) = focus {
         SceneAnchorView::GraphNode {
-            node: format!("location:{location:?}"),
+            node: slug(format!("location/{location:?}")),
         }
     } else if let Some(route) = traveling {
         SceneAnchorView::GraphEdge {
-            edge: format!("route:{route:?}"),
+            edge: slug(format!("route/{route:?}")),
             progress: Some(0.5),
         }
     } else {
@@ -345,17 +340,16 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
     };
     let vehicle_asset = focus.map_or_else(
         || {
-            format!(
-                "logistics:asset:traveling-{:?}",
+            slug(format!(
+                "logistics/asset/traveling-{:?}",
                 traveling.expect("vehicle is located or traveling")
-            )
-            .to_ascii_lowercase()
+            ))
         },
-        |location| format!("logistics:asset:at-{location:?}").to_ascii_lowercase(),
+        |location| slug(format!("logistics/asset/at-{location:?}")),
     );
     let mut vehicle = link_balance(
         visual_entity(
-            "vehicle:fleet-1",
+            slug("vehicle/fleet-1"),
             "Vehicle 1",
             SceneGlyphView::Vehicle,
             vehicle_anchor.clone(),
@@ -363,24 +357,24 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             SceneToneView::Active,
             traveling.map(|route| format!("traveling {route:?}")),
         ),
-        "logistics:account:vehicle",
+        slug("logistics/account/vehicle"),
         vehicle_asset,
     );
     vehicle.metrics = vec![
         visual_metric(
-            "fuel",
+            slug("fuel"),
             "Fuel",
             world.balance(&AccountId::Vehicle, &Asset::Fuel),
             Some("units"),
         ),
         visual_metric(
-            "cargo",
+            slug("cargo"),
             "Cargo",
             world.balance(&AccountId::Vehicle, &Asset::CargoOccupied),
             Some("orders"),
         ),
         visual_metric(
-            "elapsed",
+            slug("elapsed"),
             "Elapsed",
             world.balance(&AccountId::Vehicle, &Asset::ElapsedTime),
             Some("ticks"),
@@ -392,7 +386,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         {
             (
                 SceneAnchorView::GraphNode {
-                    node: "location:Customer".into(),
+                    node: slug("location/Customer"),
                 },
                 SceneToneView::Success,
                 "delivered",
@@ -402,7 +396,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         } else {
             (
                 SceneAnchorView::GraphNode {
-                    node: "location:Depot".into(),
+                    node: slug("location/Depot"),
                 },
                 SceneToneView::Neutral,
                 "waiting",
@@ -410,7 +404,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         };
         link_account(
             visual_entity(
-                format!("order:{order:?}"),
+                slug(format!("order/{order:?}")),
                 format!("Order {order:?}"),
                 SceneGlyphView::Package,
                 anchor,
@@ -418,37 +412,37 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 tone,
                 Some(status.into()),
             ),
-            format!("logistics:account:order-{order:?}").to_ascii_lowercase(),
+            slug(format!("logistics/account/order-{order:?}")),
         )
     });
     let system_entities = [
         link_account(
             visual_entity(
-                "system:fuel-station",
+                slug("system/fuel-station"),
                 "Fuel station",
                 SceneGlyphView::Fuel,
                 SceneAnchorView::GraphNode {
-                    node: "location:Depot".into(),
+                    node: slug("location/Depot"),
                 },
                 SceneEntityRoleView::State,
                 SceneToneView::Neutral,
                 Some("refuel supply".into()),
             ),
-            "logistics:account:fuelstation",
+            slug("logistics/account/fuelstation"),
         ),
         link_account(
             visual_entity(
-                "system:nature",
+                slug("system/nature"),
                 "Travel conditions",
                 SceneGlyphView::Weather,
                 SceneAnchorView::GraphNode {
-                    node: "location:Junction".into(),
+                    node: slug("location/Junction"),
                 },
                 SceneEntityRoleView::Context,
                 SceneToneView::Uncertain,
                 Some("sampled chance".into()),
             ),
-            "logistics:account:nature",
+            slug("logistics/account/nature"),
         ),
     ];
     let delivered = logistics::ORDERS
@@ -464,7 +458,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             "Route network and travel risk",
             nodes,
             edges,
-            focus.map(|location| format!("location:{location:?}")),
+            focus.map(|location| slug(format!("location/{location:?}"))),
         )
         .with_entities(
             std::iter::once(vehicle)
@@ -472,15 +466,20 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 .chain(system_entities),
         )
         .with_metrics([
-            visual_metric("delivered", "Orders delivered", delivered, Some("orders")),
             visual_metric(
-                "remaining_time",
+                slug("delivered"),
+                "Orders delivered",
+                delivered,
+                Some("orders"),
+            ),
+            visual_metric(
+                slug("remaining-time"),
                 "Time remaining",
                 world.balance(&AccountId::Vehicle, &Asset::TimeRemaining),
                 Some("ticks"),
             ),
             visual_metric(
-                "fuel",
+                slug("fuel"),
                 "Fuel remaining",
                 world.balance(&AccountId::Vehicle, &Asset::Fuel),
                 Some("units"),

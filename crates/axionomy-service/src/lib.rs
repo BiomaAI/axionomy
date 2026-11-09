@@ -6,11 +6,41 @@
 
 mod adapters;
 
-use axionomy_view::{ExchangeFrame, ProposalView, SearchObservationView, ViewDocument};
-use schemars::JsonSchema;
-use serde::{Deserialize, Serialize};
-use std::sync::atomic::{AtomicBool, Ordering};
+use axionomy::path::Path;
+use axionomy_view::{
+    DocumentPath, ExchangeFrame, PhasePath, ProposalView, SearchObservationView, ViewDocument,
+};
+use schemars::{JsonSchema, Schema, SchemaGenerator, json_schema};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use std::{
+    borrow::Cow,
+    fmt,
+    str::FromStr,
+    sync::atomic::{AtomicBool, Ordering},
+};
 use thiserror::Error;
+
+/// The kinds of identifiers the service defines.
+pub mod kind {
+    use axionomy::PathKind;
+
+    /// A problem in the catalog.
+    pub enum Problem {}
+    /// A strategy for solving a problem.
+    pub enum Strategy {}
+
+    impl PathKind for Problem {
+        const SCHEMA: &'static str = "ProblemPath";
+    }
+    impl PathKind for Strategy {
+        const SCHEMA: &'static str = "StrategyPath";
+    }
+}
+
+/// A problem, such as `maze` or `work-league`.
+pub type ProblemPath = Path<kind::Problem>;
+/// A strategy, such as `a-star` or `pareto-energy`.
+pub type StrategyPath = Path<kind::Strategy>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
@@ -54,13 +84,16 @@ pub enum Capability {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct StrategyDescriptor {
-    pub key: String,
+    pub key: StrategyPath,
     pub label: String,
     pub description: String,
+    /// The algorithm in words, such as `breadth-first search`.
     pub algorithm: String,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+/// How large an instance of a problem is. Every problem has one instance of
+/// each size.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum InstanceProfile {
     Micro,
@@ -68,35 +101,63 @@ pub enum InstanceProfile {
     Stress,
 }
 
+impl InstanceProfile {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Micro => "micro",
+            Self::Showcase => "showcase",
+            Self::Stress => "stress",
+        }
+    }
+}
+
+impl fmt::Display for InstanceProfile {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(self.as_str())
+    }
+}
+
+impl FromStr for InstanceProfile {
+    type Err = String;
+
+    fn from_str(text: &str) -> Result<Self, Self::Err> {
+        [Self::Micro, Self::Showcase, Self::Stress]
+            .into_iter()
+            .find(|profile| profile.as_str() == text)
+            .ok_or_else(|| format!("`{text}` is not micro, showcase or stress"))
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct InstanceDescriptor {
-    pub key: String,
+    pub profile: InstanceProfile,
     pub label: String,
     pub description: String,
-    pub profile: InstanceProfile,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct ProblemDescriptor {
-    pub key: String,
+    pub key: ProblemPath,
     pub title: String,
     pub summary: String,
     pub family: ProblemFamily,
-    pub default_instance: String,
+    pub default_instance: InstanceProfile,
     pub instances: Vec<InstanceDescriptor>,
-    pub default_strategy: String,
+    pub default_strategy: StrategyPath,
     pub strategies: Vec<StrategyDescriptor>,
     pub capabilities: Vec<Capability>,
 }
 
+/// A request to run a problem. The instance and strategy default to the
+/// problem's own.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct RunRequest {
-    pub problem: String,
+    pub problem: ProblemPath,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub instance: Option<String>,
+    pub instance: Option<InstanceProfile>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub strategy: Option<String>,
+    pub strategy: Option<StrategyPath>,
     #[serde(default = "default_seed")]
     pub seed: u64,
     #[serde(default = "default_budget")]
@@ -112,9 +173,9 @@ const fn default_budget() -> u64 {
 }
 
 impl RunRequest {
-    pub fn new(problem: impl Into<String>) -> Self {
+    pub fn new(problem: ProblemPath) -> Self {
         Self {
-            problem: problem.into(),
+            problem,
             instance: None,
             strategy: None,
             seed: default_seed(),
@@ -122,41 +183,64 @@ impl RunRequest {
         }
     }
 
-    pub fn with_strategy(mut self, strategy: impl Into<String>) -> Self {
-        self.strategy = Some(strategy.into());
+    pub fn with_strategy(mut self, strategy: StrategyPath) -> Self {
+        self.strategy = Some(strategy);
         self
     }
 
-    pub fn with_instance(mut self, instance: impl Into<String>) -> Self {
-        self.instance = Some(instance.into());
+    pub fn with_instance(mut self, instance: InstanceProfile) -> Self {
+        self.instance = Some(instance);
         self
+    }
+}
+
+/// What an artifact was computed from: a request with its instance and
+/// strategy decided. The same key always gives the same artifact.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+pub struct ArtifactKey {
+    pub problem: ProblemPath,
+    pub instance: InstanceProfile,
+    pub strategy: StrategyPath,
+    pub seed: u64,
+    pub budget: u64,
+}
+
+impl fmt::Display for ArtifactKey {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            formatter,
+            "{} · {} · {} · seed {} · budget {}",
+            self.problem, self.instance, self.strategy, self.seed, self.budget
+        )
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct RunArtifact {
-    pub id: String,
+    pub key: ArtifactKey,
     pub problem: ProblemDescriptor,
     pub instance: InstanceDescriptor,
-    pub request: RunRequest,
-    pub selected_document_id: String,
+    /// The document of the requested strategy.
+    pub selected_document: DocumentPath,
     pub documents: Vec<ViewDocument>,
     #[serde(default)]
     pub assessed_proposals: Vec<ProposalView>,
 }
 
 impl RunArtifact {
-    pub fn selected_document(&self) -> Option<&ViewDocument> {
-        self.documents
-            .iter()
-            .find(|document| document.id == self.selected_document_id)
+    pub fn selected(&self) -> Option<&ViewDocument> {
+        self.document(&self.selected_document)
+    }
+
+    pub fn document(&self, id: &DocumentPath) -> Option<&ViewDocument> {
+        self.documents.iter().find(|document| &document.id == id)
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct ServiceProgress {
     pub sequence: u64,
-    pub phase: String,
+    pub phase: PhasePath,
     pub completed: u64,
     pub total: u64,
     pub message: String,
@@ -167,7 +251,7 @@ pub trait RunObserver {
 
     fn observation(&mut self, _observation: SearchObservationView) {}
 
-    fn frame(&mut self, _document_id: &str, _frame: ExchangeFrame) {}
+    fn frame(&mut self, _document: &DocumentPath, _frame: ExchangeFrame) {}
 }
 
 impl<F> RunObserver for F
@@ -176,6 +260,167 @@ where
 {
     fn progress(&mut self, progress: ServiceProgress) {
         self(progress);
+    }
+}
+
+/// A Studio run, written `run-` and a number. Each Studio engine numbers its
+/// own runs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct StudioRunId(u64);
+
+impl StudioRunId {
+    pub const fn new(number: u64) -> Self {
+        Self(number)
+    }
+}
+
+impl fmt::Display for StudioRunId {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(formatter, "run-{}", self.0)
+    }
+}
+
+/// Text that is not a Studio run ID.
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
+#[error("`{0}` is not a Studio run ID such as `run-7`")]
+pub struct StudioRunIdError(String);
+
+impl FromStr for StudioRunId {
+    type Err = StudioRunIdError;
+
+    fn from_str(text: &str) -> Result<Self, Self::Err> {
+        text.strip_prefix("run-")
+            .filter(|digits| {
+                !digits.is_empty()
+                    && digits.bytes().all(|byte| byte.is_ascii_digit())
+                    && (*digits == "0" || !digits.starts_with('0'))
+            })
+            .and_then(|digits| digits.parse().ok())
+            .map(Self)
+            .ok_or_else(|| StudioRunIdError(text.to_owned()))
+    }
+}
+
+impl Serialize for StudioRunId {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.collect_str(self)
+    }
+}
+
+impl<'de> Deserialize<'de> for StudioRunId {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Cow::<str>::deserialize(deserializer)?
+            .parse()
+            .map_err(serde::de::Error::custom)
+    }
+}
+
+impl JsonSchema for StudioRunId {
+    fn schema_name() -> Cow<'static, str> {
+        "StudioRunId".into()
+    }
+
+    fn json_schema(_: &mut SchemaGenerator) -> Schema {
+        json_schema!({
+            "description": "A Studio run: `run-` and a number, such as `run-7`.",
+            "type": "string",
+            "pattern": "^run-(0|[1-9][0-9]*)$"
+        })
+    }
+}
+
+/// Lifecycle events emitted by a Studio run. `sequence` orders transport
+/// events; it is not economic time and has no effect on replay.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum StudioEvent {
+    RunStarted {
+        run_id: StudioRunId,
+        sequence: u64,
+        problem: ProblemPath,
+        strategy: StrategyPath,
+    },
+    Progress {
+        run_id: StudioRunId,
+        sequence: u64,
+        completed: u64,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        total: Option<u64>,
+        message: String,
+    },
+    SearchObservation {
+        run_id: StudioRunId,
+        sequence: u64,
+        observation: SearchObservationView,
+    },
+    FrameAppended {
+        run_id: StudioRunId,
+        sequence: u64,
+        document: DocumentPath,
+        frame_index: u64,
+        frame: Box<ExchangeFrame>,
+    },
+    /// The run's artifact can be fetched.
+    ArtifactPublished {
+        run_id: StudioRunId,
+        sequence: u64,
+        key: ArtifactKey,
+        documents: u64,
+    },
+    RunPaused {
+        run_id: StudioRunId,
+        sequence: u64,
+    },
+    RunResumed {
+        run_id: StudioRunId,
+        sequence: u64,
+    },
+    RunCompleted {
+        run_id: StudioRunId,
+        sequence: u64,
+        /// The artifact's selected document.
+        document: DocumentPath,
+    },
+    RunCancelled {
+        run_id: StudioRunId,
+        sequence: u64,
+    },
+    RunFailed {
+        run_id: StudioRunId,
+        sequence: u64,
+        message: String,
+    },
+}
+
+impl StudioEvent {
+    pub const fn sequence(&self) -> u64 {
+        match self {
+            Self::RunStarted { sequence, .. }
+            | Self::Progress { sequence, .. }
+            | Self::SearchObservation { sequence, .. }
+            | Self::FrameAppended { sequence, .. }
+            | Self::ArtifactPublished { sequence, .. }
+            | Self::RunPaused { sequence, .. }
+            | Self::RunResumed { sequence, .. }
+            | Self::RunCompleted { sequence, .. }
+            | Self::RunCancelled { sequence, .. }
+            | Self::RunFailed { sequence, .. } => *sequence,
+        }
+    }
+
+    pub const fn run_id(&self) -> StudioRunId {
+        match self {
+            Self::RunStarted { run_id, .. }
+            | Self::Progress { run_id, .. }
+            | Self::SearchObservation { run_id, .. }
+            | Self::FrameAppended { run_id, .. }
+            | Self::ArtifactPublished { run_id, .. }
+            | Self::RunPaused { run_id, .. }
+            | Self::RunResumed { run_id, .. }
+            | Self::RunCompleted { run_id, .. }
+            | Self::RunCancelled { run_id, .. }
+            | Self::RunFailed { run_id, .. } => *run_id,
+        }
     }
 }
 
@@ -227,17 +472,26 @@ impl RunControl {
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum ServiceError {
     #[error("unknown problem `{0}`")]
-    UnknownProblem(String),
+    UnknownProblem(ProblemPath),
     #[error("unknown strategy `{strategy}` for problem `{problem}`")]
-    UnknownStrategy { problem: String, strategy: String },
-    #[error("unknown instance `{instance}` for problem `{problem}`")]
-    UnknownInstance { problem: String, instance: String },
+    UnknownStrategy {
+        problem: ProblemPath,
+        strategy: StrategyPath,
+    },
+    #[error("problem `{problem}` has no {instance} instance")]
+    UnknownInstance {
+        problem: ProblemPath,
+        instance: InstanceProfile,
+    },
     #[error("run was cancelled")]
     Cancelled,
     #[error("run is paused")]
     Paused,
     #[error("problem `{problem}` could not produce an artifact: {message}")]
-    Problem { problem: String, message: String },
+    Problem {
+        problem: ProblemPath,
+        message: String,
+    },
 }
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -248,10 +502,46 @@ impl ReferenceService {
         adapters::catalog()
     }
 
-    pub fn problem(&self, key: &str) -> Option<ProblemDescriptor> {
+    pub fn problem(&self, key: &ProblemPath) -> Option<ProblemDescriptor> {
         self.catalog()
             .into_iter()
-            .find(|problem| problem.key == key)
+            .find(|problem| &problem.key == key)
+    }
+
+    /// Decides a request's instance and strategy, checking the problem
+    /// offers them.
+    pub fn resolve(&self, request: &RunRequest) -> Result<ArtifactKey, ServiceError> {
+        let problem = self
+            .problem(&request.problem)
+            .ok_or_else(|| ServiceError::UnknownProblem(request.problem.clone()))?;
+        let instance = request.instance.unwrap_or(problem.default_instance);
+        if !problem
+            .instances
+            .iter()
+            .any(|known| known.profile == instance)
+        {
+            return Err(ServiceError::UnknownInstance {
+                problem: problem.key,
+                instance,
+            });
+        }
+        let strategy = request
+            .strategy
+            .clone()
+            .unwrap_or_else(|| problem.default_strategy.clone());
+        if !problem.strategies.iter().any(|known| known.key == strategy) {
+            return Err(ServiceError::UnknownStrategy {
+                problem: problem.key,
+                strategy,
+            });
+        }
+        Ok(ArtifactKey {
+            problem: problem.key,
+            instance,
+            strategy,
+            seed: request.seed,
+            budget: request.budget,
+        })
     }
 
     pub fn run(&self, request: RunRequest) -> Result<RunArtifact, ServiceError> {
@@ -265,27 +555,27 @@ impl ReferenceService {
         observer: &mut dyn RunObserver,
     ) -> Result<RunArtifact, ServiceError> {
         control.checkpoint()?;
-        adapters::run(request, control, observer)
+        adapters::run(&self.resolve(request)?, control, observer)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axionomy_view::SceneSurfaceView;
+    use axionomy_view::{SceneSurfaceView, slug};
     use std::collections::HashSet;
 
     #[derive(Default)]
     struct FrameObserver {
-        documents: Vec<String>,
+        documents: Vec<DocumentPath>,
         frames: Vec<ExchangeFrame>,
     }
 
     impl RunObserver for FrameObserver {
         fn progress(&mut self, _: ServiceProgress) {}
 
-        fn frame(&mut self, document_id: &str, frame: ExchangeFrame) {
-            self.documents.push(document_id.into());
+        fn frame(&mut self, document: &DocumentPath, frame: ExchangeFrame) {
+            self.documents.push(document.clone());
             self.frames.push(frame);
         }
     }
@@ -328,12 +618,32 @@ mod tests {
     }
 
     #[test]
+    fn studio_events_are_discriminated_unions_of_minted_runs() {
+        let event = StudioEvent::Progress {
+            run_id: StudioRunId::new(1),
+            sequence: 2,
+            completed: 3,
+            total: Some(5),
+            message: "replaying".into(),
+        };
+        let value = serde_json::to_value(&event).unwrap();
+        assert_eq!(value["kind"], "progress");
+        assert_eq!(value["run_id"], "run-1");
+        let decoded: StudioEvent = serde_json::from_value(value).unwrap();
+        assert_eq!(decoded, event);
+        assert_eq!(decoded.run_id(), StudioRunId::new(1));
+        for forged in ["run-", "run-01", "run--1", "Run-1", "run-1x", "browser-1"] {
+            assert!(forged.parse::<StudioRunId>().is_err(), "{forged}");
+        }
+    }
+
+    #[test]
     fn catalog_covers_every_canonical_problem() {
         let catalog = ReferenceService.catalog();
         assert_eq!(catalog.len(), 15);
         assert!(catalog.iter().all(|problem| !problem.strategies.is_empty()));
         assert!(catalog.iter().all(|problem| {
-            problem.default_instance == "showcase"
+            problem.default_instance == InstanceProfile::Showcase
                 && problem
                     .instances
                     .iter()
@@ -367,45 +677,37 @@ mod tests {
 
         let artifact = ReferenceService
             .run(
-                RunRequest::new("maze")
-                    .with_instance("showcase")
-                    .with_strategy("a_star"),
+                RunRequest::new(slug("maze"))
+                    .with_instance(InstanceProfile::Showcase)
+                    .with_strategy(slug("a-star")),
             )
             .unwrap();
-        for (document_id, algorithm) in [
-            ("maze:breadth_first", "breadth_first"),
-            ("maze:dijkstra", "dijkstra"),
-            ("maze:a_star", "a_star"),
+        for (document, algorithm) in [
+            ("breadth-first", "breadth-first"),
+            ("dijkstra", "dijkstra"),
+            ("a-star", "a-star"),
         ] {
-            let document = artifact
-                .documents
-                .iter()
-                .find(|document| document.id == document_id)
-                .unwrap();
+            let document = artifact.document(&slug(document)).unwrap();
             assert!(
                 document
                     .solve_observations
                     .iter()
-                    .all(|observation| observation.algorithm == algorithm)
+                    .all(|observation| observation.algorithm.as_str() == algorithm)
             );
             let accepted = document.solve_observations.last().unwrap();
             assert_eq!(accepted.kind, SearchObservationKindView::Incumbent);
             assert!(accepted.label.starts_with("Solution accepted at Exit"));
-            assert_eq!(accepted.subjects[0].key, "node:exit");
+            assert_eq!(accepted.subjects[0].key.as_str(), "node/exit");
         }
-        for document_id in ["maze:pareto_energy", "maze:pareto_time"] {
-            let document = artifact
-                .documents
-                .iter()
-                .find(|document| document.id == document_id)
-                .unwrap();
+        for document in ["pareto-energy", "pareto-time"] {
+            let document = artifact.document(&slug(document)).unwrap();
             let observation = document.solve_observations.last().unwrap();
-            assert_eq!(observation.algorithm, "exact_pareto_search");
+            assert_eq!(observation.algorithm.as_str(), "exact-pareto-search");
             assert_eq!(observation.kind, SearchObservationKindView::Frontier);
             assert!(observation.label.contains("4 non-dominated tradeoffs"));
         }
 
-        let selected = artifact.selected_document().unwrap();
+        let selected = artifact.selected().unwrap();
         assert!(
             selected
                 .initial
@@ -445,14 +747,14 @@ mod tests {
 
     #[test]
     fn selected_replay_frames_stream_with_the_same_snapshot_contract() {
-        let request = RunRequest::new("work_league")
-            .with_instance("micro")
-            .with_strategy("mixed_field");
+        let request = RunRequest::new(slug("work-league"))
+            .with_instance(InstanceProfile::Micro)
+            .with_strategy(slug("mixed-field"));
         let mut observer = FrameObserver::default();
         let artifact = ReferenceService
             .run_with(&request, &RunControl::default(), &mut observer)
             .unwrap();
-        let selected = artifact.selected_document().unwrap();
+        let selected = artifact.selected().unwrap();
         assert_eq!(observer.frames.len(), selected.frames.len());
         assert!(
             observer
@@ -536,15 +838,15 @@ mod tests {
     fn every_micro_problem_remains_a_fast_replayable_contract_fixture() {
         let service = ReferenceService;
         for problem in service.catalog() {
-            let mut request = RunRequest::new(&problem.key)
-                .with_instance("micro")
-                .with_strategy(&problem.default_strategy);
+            let mut request = RunRequest::new(problem.key.clone())
+                .with_instance(InstanceProfile::Micro)
+                .with_strategy(problem.default_strategy.clone());
             request.budget = 8;
             let artifact = service
                 .run(request)
                 .unwrap_or_else(|error| panic!("{} micro failed: {error}", problem.key));
             assert_eq!(artifact.instance.profile, InstanceProfile::Micro);
-            let selected = artifact.selected_document().expect("selected document");
+            let selected = artifact.selected().expect("selected document");
             assert!(selected.frames.iter().all(|frame| {
                 !frame.exchange.rate.label.contains('{')
                     && !frame.exchange.rate.label.contains("encoded")
@@ -562,7 +864,7 @@ mod tests {
                     | "logistics"
                     | "mission"
                     | "rescue"
-                    | "work_league"
+                    | "work-league"
             ) {
                 assert!(
                     std::iter::once(&selected.initial)
@@ -587,9 +889,12 @@ mod tests {
         let service = ReferenceService;
         for problem in service.catalog() {
             let artifact = service
-                .run(RunRequest::new(&problem.key).with_strategy(&problem.default_strategy))
+                .run(
+                    RunRequest::new(problem.key.clone())
+                        .with_strategy(problem.default_strategy.clone()),
+                )
                 .unwrap_or_else(|error| panic!("{} failed: {error}", problem.key));
-            assert!(artifact.selected_document().is_some(), "{}", problem.key);
+            assert!(artifact.selected().is_some(), "{}", problem.key);
             assert!(!artifact.documents.is_empty(), "{}", problem.key);
             assert_eq!(artifact.instance.profile, InstanceProfile::Showcase);
             assert!(
@@ -622,17 +927,17 @@ mod tests {
             let (minimum_frames, minimum_accounts, minimum_rates) = match problem.key.as_str() {
                 "maze" => (8, 2, 19),
                 "sokoban" => (20, 36, 100),
-                "exact_cover" => (5, 1, 40),
+                "exact-cover" => (5, 1, 40),
                 "workshop" => (7, 1, 4),
                 "scheduling" => (20, 6, 80),
                 "rescue" => (7, 2, 70),
                 "bridge" => (10, 3, 18),
                 "marketplace" => (4, 14, 4),
                 "logistics" => (40, 7, 50),
-                "connect_four" => (15, 50, 200),
+                "connect-four" => (15, 50, 200),
                 "mission" => (6, 5, 39),
                 "perishables" => (10, 5, 13),
-                "work_league" => (60, 20, 900),
+                "work-league" => (60, 20, 900),
                 "amm" => (14, 11, 10),
                 "lending" => (14, 10, 14),
                 other => panic!("missing showcase pressure threshold for {other}"),
@@ -679,7 +984,7 @@ mod tests {
             for document in &artifact.documents {
                 let model = document.model.as_ref().expect("model definition");
                 assert_unique(
-                    &problem.key,
+                    problem.key.as_str(),
                     "invariant name",
                     model
                         .invariants
@@ -691,17 +996,17 @@ mod tests {
                     .filter_map(|snapshot| snapshot.scene.as_ref())
                 {
                     assert_unique(
-                        &problem.key,
+                        problem.key.as_str(),
                         "scene entity ID",
                         scene.entities.iter().map(|entity| entity.id.key.as_str()),
                     );
                     assert_unique(
-                        &problem.key,
+                        problem.key.as_str(),
                         "scene path ID",
                         scene.paths.iter().map(|path| path.id.as_str()),
                     );
                     assert_unique(
-                        &problem.key,
+                        problem.key.as_str(),
                         "scene annotation ID",
                         scene
                             .annotations
@@ -710,12 +1015,12 @@ mod tests {
                     );
                     if let SceneSurfaceView::Graph { nodes, edges, .. } = &scene.surface {
                         assert_unique(
-                            &problem.key,
+                            problem.key.as_str(),
                             "graph node ID",
                             nodes.iter().map(|node| node.id.key.as_str()),
                         );
                         assert_unique(
-                            &problem.key,
+                            problem.key.as_str(),
                             "graph edge ID",
                             edges.iter().map(|edge| edge.id.as_str()),
                         );
@@ -728,7 +1033,7 @@ mod tests {
                     .iter()
                     .all(|document| !document.solve_observations.is_empty())
             );
-            if problem.key == "connect_four" {
+            if problem.key.as_str() == "connect-four" {
                 assert!(maximum_rates < 300, "compact standard board regressed");
             }
         }
@@ -741,7 +1046,7 @@ mod tests {
         let worker_control = std::sync::Arc::clone(&control);
         let worker = std::thread::spawn(move || {
             ReferenceService.run_with(
-                &RunRequest::new("maze").with_strategy("a_star"),
+                &RunRequest::new(slug("maze")).with_strategy(slug("a-star")),
                 &worker_control,
                 &mut |_| {},
             )
@@ -758,15 +1063,15 @@ mod tests {
         let mut observed = Vec::new();
         let result = ReferenceService.run_with(
             &RunRequest {
-                problem: "logistics".into(),
-                instance: Some("micro".into()),
-                strategy: Some("reliable".into()),
+                problem: slug("logistics"),
+                instance: Some(InstanceProfile::Micro),
+                strategy: Some(slug("reliable")),
                 seed: 42,
                 budget: 64,
             },
             &control,
             &mut |progress: ServiceProgress| {
-                if progress.phase == "monte_carlo" && progress.completed >= 16 {
+                if progress.phase.as_str() == "monte-carlo" && progress.completed >= 16 {
                     control.cancel();
                 }
                 observed.push(progress);
@@ -776,7 +1081,7 @@ mod tests {
         assert_eq!(result, Err(ServiceError::Cancelled));
         let monte_carlo = observed
             .iter()
-            .filter(|progress| progress.phase == "monte_carlo")
+            .filter(|progress| progress.phase.as_str() == "monte-carlo")
             .collect::<Vec<_>>();
         assert!(monte_carlo.len() >= 2);
         assert!(
@@ -801,15 +1106,15 @@ mod tests {
         let mut paused_once = false;
         let result = ReferenceService.run_with(
             &RunRequest {
-                problem: "logistics".into(),
-                instance: Some("micro".into()),
-                strategy: Some("reliable".into()),
+                problem: slug("logistics"),
+                instance: Some(InstanceProfile::Micro),
+                strategy: Some(slug("reliable")),
                 seed: 42,
                 budget: 16,
             },
             &control,
             &mut |progress: ServiceProgress| {
-                if !paused_once && progress.phase == "monte_carlo" {
+                if !paused_once && progress.phase.as_str() == "monte-carlo" {
                     paused_once = true;
                     control.pause();
                     paused_tx.send(()).unwrap();

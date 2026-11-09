@@ -8,10 +8,10 @@ use axionomy_view::{
 };
 
 pub(super) fn build(
-    request: &RunRequest,
+    run: &ArtifactKey,
     descriptor: &ProblemDescriptor,
 ) -> Result<RunArtifact, ServiceError> {
-    let profile = instance_profile(request, descriptor);
+    let profile = run.instance;
     let initial = match profile {
         InstanceProfile::Micro => marketplace::initial(),
         InstanceProfile::Showcase => marketplace::initial_showcase(),
@@ -42,7 +42,7 @@ pub(super) fn build(
     };
     let traces = [
         (
-            "market_clearing",
+            "market-clearing",
             "Marketplace · compatible clearing",
             "Micro settles directly. Larger markets reserve funds and goods, dispatch through occupied carriers, then settle on delivery. Delays can trigger buyer rebates.",
             clearing.trace().clone(),
@@ -53,7 +53,7 @@ pub(super) fn build(
             },
         ),
         (
-            "pareto_buyers",
+            "pareto-buyers",
             "Marketplace Pareto · buyer utility",
             "Choose price concessions and delivery allocations for buyer benefit. Larger markets use a bounded beam of 24 states and compare evaluated plans.",
             buyer_trace,
@@ -64,7 +64,7 @@ pub(super) fn build(
             },
         ),
         (
-            "pareto_sellers",
+            "pareto-sellers",
             "Marketplace Pareto · seller utility",
             "Choose contract prices and delivery allocations for seller benefit under the same arrivals, routes and available funds.",
             seller_trace,
@@ -131,12 +131,7 @@ pub(super) fn build(
             documents[index].pareto_fronts.push(front);
         }
     }
-    artifact(
-        request,
-        descriptor,
-        selected_strategy(request, descriptor),
-        documents,
-    )
+    artifact(run, descriptor, documents)
 }
 
 fn pareto_trace(
@@ -166,14 +161,14 @@ fn pareto_trace(
 }
 fn objectives(world: &World) -> Vec<ObjectiveView> {
     let mut values: Vec<_> = [
-        ("buyer_a", "Buyer A", AccountId::Buyer(BuyerId::A)),
-        ("buyer_b", "Buyer B", AccountId::Buyer(BuyerId::B)),
-        ("seller_a", "Seller A", AccountId::Seller(SellerId::A)),
-        ("seller_b", "Seller B", AccountId::Seller(SellerId::B)),
+        ("buyer-a", "Buyer A", AccountId::Buyer(BuyerId::A)),
+        ("buyer-b", "Buyer B", AccountId::Buyer(BuyerId::B)),
+        ("seller-a", "Seller A", AccountId::Seller(SellerId::A)),
+        ("seller-b", "Seller B", AccountId::Seller(SellerId::B)),
     ]
     .into_iter()
     .map(|(key, label, account)| ObjectiveView {
-        key: key.into(),
+        key: slug(key),
         label: format!("{label} utility"),
         direction: ObjectiveDirectionView::Maximize,
         value: marketplace::utility(world, account).to_string(),
@@ -181,22 +176,22 @@ fn objectives(world: &World) -> Vec<ObjectiveView> {
     .collect();
     if marketplace::fulfillment::enabled(world) {
         for (key, label, account) in [
-            ("buyer_c", "Buyer C utility", AccountId::Buyer(BuyerId::C)),
+            ("buyer-c", "Buyer C utility", AccountId::Buyer(BuyerId::C)),
             (
-                "seller_c",
+                "seller-c",
                 "Seller C utility",
                 AccountId::Seller(SellerId::C),
             ),
         ] {
             values.push(ObjectiveView {
-                key: key.into(),
+                key: slug(key),
                 label: label.into(),
                 direction: ObjectiveDirectionView::Maximize,
                 value: marketplace::utility(world, account).to_string(),
             });
         }
         values.push(ObjectiveView {
-            key: "ontime".into(),
+            key: slug("ontime"),
             label: "On-time deliveries".into(),
             direction: ObjectiveDirectionView::Maximize,
             value: marketplace::orders(world)
@@ -210,7 +205,7 @@ fn objectives(world: &World) -> Vec<ObjectiveView> {
                 .to_string(),
         });
         values.push(ObjectiveView {
-            key: "elapsed".into(),
+            key: slug("elapsed"),
             label: "Elapsed time".into(),
             direction: ObjectiveDirectionView::Minimize,
             value: marketplace::fulfillment::now(world).to_string(),
@@ -285,7 +280,7 @@ fn front_view(result: &marketplace::ParetoResult, selected: &ViewDocument) -> Pa
             .into_iter()
             .enumerate()
             .map(|(index, label)| ObjectiveAxisView {
-                key: format!("utility_{index}"),
+                key: slug(format!("utility-{index}")),
                 label: label.into(),
                 direction: ObjectiveDirectionView::Maximize,
             })
@@ -319,39 +314,42 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
     let mut nodes = Vec::new();
     for buyer in [BuyerId::A, BuyerId::B, BuyerId::C] {
         nodes.push(GraphNodeView {
-            id: ViewId::new(format!("buyer:{buyer:?}"), format!("Buyer {buyer:?}")),
-            classes: vec!["buyer".into()],
+            id: ViewId::new(slug(format!("buyer/{buyer:?}")), format!("Buyer {buyer:?}")),
+            classes: vec![slug("buyer")],
             x: Some(30.0),
             y: Some(60.0 + (buyer as u8 as f64) * 95.0),
         });
     }
     for seller in [SellerId::A, SellerId::B, SellerId::C] {
         nodes.push(GraphNodeView {
-            id: ViewId::new(format!("seller:{seller:?}"), format!("Seller {seller:?}")),
-            classes: vec!["seller".into()],
+            id: ViewId::new(
+                slug(format!("seller/{seller:?}")),
+                format!("Seller {seller:?}"),
+            ),
+            classes: vec![slug("seller")],
             x: Some(760.0),
             y: Some(60.0 + (seller as u8 as f64) * 95.0),
         });
     }
     nodes.push(GraphNodeView {
-        id: ViewId::new("platform", "Platform"),
-        classes: vec!["resource".into()],
+        id: ViewId::new(slug("platform"), "Platform"),
+        classes: vec![slug("resource")],
         x: Some(510.0),
         y: Some(30.0),
     });
     nodes.push(GraphNodeView {
-        id: ViewId::new("tax", "Tax authority"),
-        classes: vec!["resource".into()],
+        id: ViewId::new(slug("tax"), "Tax authority"),
+        classes: vec![slug("resource")],
         x: Some(650.0),
         y: Some(30.0),
     });
     for carrier in [CarrierId::A, CarrierId::B] {
         nodes.push(GraphNodeView {
             id: ViewId::new(
-                format!("carrier:{carrier:?}"),
+                slug(format!("carrier/{carrier:?}")),
                 format!("Carrier {carrier:?}"),
             ),
-            classes: vec!["carrier".into()],
+            classes: vec![slug("carrier")],
             x: Some(510.0),
             y: Some(200.0 + (carrier as u8 as f64) * 85.0),
         });
@@ -359,7 +357,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
     let orders = marketplace::orders(world);
     for (index, order) in orders.iter().enumerate() {
         nodes.push(GraphNodeView {
-            id: ViewId::new(format!("order:{order:?}"), format!("Order {order:?}")),
+            id: ViewId::new(slug(format!("order/{order:?}")), format!("Order {order:?}")),
             classes: if !world
                 .balance(
                     &AccountId::Order(*order),
@@ -367,9 +365,9 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 )
                 .is_zero()
             {
-                vec!["completed".into()]
+                vec![slug("completed")]
             } else {
-                vec!["resource".into()]
+                vec![slug("resource")]
             },
             x: Some(265.0),
             y: Some(55.0 + index as f64 * 78.0),
@@ -436,33 +434,33 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             )
             .is_zero();
         let classes = if settled {
-            vec!["completed".into()]
+            vec![slug("completed")]
         } else {
-            vec!["uncertain".into()]
+            vec![slug("uncertain")]
         };
         edges.push(GraphEdgeView {
-            id: format!(
-                "candidate:{:?}:{:?}:{:?}:{:?}:in",
+            id: slug(format!(
+                "candidate/{:?}/{:?}/{:?}/{:?}/in",
                 candidate.order(),
                 candidate.buyer(),
                 candidate.seller(),
                 candidate.carrier()
-            ),
-            source: format!("buyer:{:?}", candidate.buyer()),
-            target: format!("order:{:?}", candidate.order()),
+            )),
+            source: slug(format!("buyer/{:?}", candidate.buyer())),
+            target: slug(format!("order/{:?}", candidate.order())),
             label: Some(format!("via {:?}", candidate.carrier())),
             classes: classes.clone(),
         });
         edges.push(GraphEdgeView {
-            id: format!(
-                "candidate:{:?}:{:?}:{:?}:{:?}:out",
+            id: slug(format!(
+                "candidate/{:?}/{:?}/{:?}/{:?}/out",
                 candidate.order(),
                 candidate.buyer(),
                 candidate.seller(),
                 candidate.carrier()
-            ),
-            source: format!("order:{:?}", candidate.order()),
-            target: format!("seller:{:?}", candidate.seller()),
+            )),
+            source: slug(format!("order/{:?}", candidate.order())),
+            target: slug(format!("seller/{:?}", candidate.seller())),
             label: Some(if settled {
                 "atomic split".into()
             } else {
@@ -472,20 +470,20 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         });
         if settled {
             for (suffix, target, label) in [
-                ("platform", "platform".to_owned(), "commission"),
-                ("tax", "tax".to_owned(), "tax"),
+                ("platform", slug("platform"), "commission"),
+                ("tax", slug("tax"), "tax"),
                 (
                     "carrier",
-                    format!("carrier:{:?}", candidate.carrier()),
+                    slug(format!("carrier/{:?}", candidate.carrier())),
                     "shipping fee",
                 ),
             ] {
                 edges.push(GraphEdgeView {
-                    id: format!("settlement:{:?}:{suffix}", candidate.order()),
-                    source: format!("order:{:?}", candidate.order()),
+                    id: slug(format!("settlement/{:?}/{suffix}", candidate.order())),
+                    source: slug(format!("order/{:?}", candidate.order())),
                     target,
                     label: Some(label.into()),
-                    classes: vec!["completed".into()],
+                    classes: vec![slug("completed")],
                 });
             }
         }
@@ -499,14 +497,14 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             .is_zero();
         let mut entity = link_account(
             visual_entity(
-                format!("order-token:{order:?}"),
+                slug(format!("order-token/{order:?}")),
                 format!("Order {order:?}"),
                 SceneGlyphView::Package,
                 SceneAnchorView::GraphNode {
                     node: if settled && !timed {
-                        "platform".into()
+                        slug("platform")
                     } else {
-                        format!("order:{order:?}")
+                        slug(format!("order/{order:?}"))
                     },
                 },
                 SceneEntityRoleView::State,
@@ -542,18 +540,18 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                     .into(),
                 ),
             ),
-            format!("marketplace:account:order-{order:?}").to_ascii_lowercase(),
+            slug(format!("marketplace/account/order-{order:?}")),
         );
         if timed {
             entity.metrics = vec![
                 visual_metric(
-                    "escrow",
+                    slug("escrow"),
                     "Funds held",
                     world.balance(&AccountId::Order(*order), &marketplace::Asset::Money),
                     None,
                 ),
                 visual_metric(
-                    "deadline",
+                    slug("deadline"),
                     "Deadline",
                     world.balance(&AccountId::Order(*order), &marketplace::Asset::Deadline),
                     Some("ticks"),
@@ -567,17 +565,17 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         .map(|buyer| {
             link_account(
                 visual_entity(
-                    format!("actor:buyer:{buyer:?}"),
+                    slug(format!("actor/buyer/{buyer:?}")),
                     format!("Buyer {buyer:?}"),
                     SceneGlyphView::Person,
                     SceneAnchorView::GraphNode {
-                        node: format!("buyer:{buyer:?}"),
+                        node: slug(format!("buyer/{buyer:?}")),
                     },
                     SceneEntityRoleView::State,
                     SceneToneView::Neutral,
                     Some("demand".into()),
                 ),
-                format!("marketplace:account:buyer-{buyer:?}").to_ascii_lowercase(),
+                slug(format!("marketplace/account/buyer-{buyer:?}")),
             )
         })
         .chain(
@@ -586,49 +584,49 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 .map(|seller| {
                     link_account(
                         visual_entity(
-                            format!("actor:seller:{seller:?}"),
+                            slug(format!("actor/seller/{seller:?}")),
                             format!("Seller {seller:?}"),
                             SceneGlyphView::Organization,
                             SceneAnchorView::GraphNode {
-                                node: format!("seller:{seller:?}"),
+                                node: slug(format!("seller/{seller:?}")),
                             },
                             SceneEntityRoleView::State,
                             SceneToneView::Neutral,
                             Some("supply".into()),
                         ),
-                        format!("marketplace:account:seller-{seller:?}").to_ascii_lowercase(),
+                        slug(format!("marketplace/account/seller-{seller:?}")),
                     )
                 }),
         )
         .chain([CarrierId::A, CarrierId::B].into_iter().map(|carrier| {
             link_account(
                 visual_entity(
-                    format!("actor:carrier:{carrier:?}"),
+                    slug(format!("actor/carrier/{carrier:?}")),
                     format!("Carrier {carrier:?}"),
                     SceneGlyphView::Vehicle,
                     SceneAnchorView::GraphNode {
-                        node: format!("carrier:{carrier:?}"),
+                        node: slug(format!("carrier/{carrier:?}")),
                     },
                     SceneEntityRoleView::State,
                     SceneToneView::Neutral,
                     Some("capacity".into()),
                 ),
-                format!("marketplace:account:carrier-{carrier:?}").to_ascii_lowercase(),
+                slug(format!("marketplace/account/carrier-{carrier:?}")),
             )
         }))
         .chain(
             [
                 (
-                    "actor:platform",
+                    slug("actor/platform"),
                     "Platform",
                     "platform",
-                    "marketplace:account:platform",
+                    slug("marketplace/account/platform"),
                 ),
                 (
-                    "actor:tax",
+                    slug("actor/tax"),
                     "Tax authority",
                     "tax",
-                    "marketplace:account:taxauthority",
+                    slug("marketplace/account/taxauthority"),
                 ),
             ]
             .into_iter()
@@ -638,7 +636,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                         id,
                         label,
                         SceneGlyphView::Organization,
-                        SceneAnchorView::GraphNode { node: node.into() },
+                        SceneAnchorView::GraphNode { node: slug(node) },
                         SceneEntityRoleView::State,
                         SceneToneView::Neutral,
                         Some("settlement role".into()),
@@ -662,14 +660,14 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         .with_entities(order_entities.chain(participant_entities))
         .with_metrics([
             visual_metric(
-                "open",
+                slug("open"),
                 "Open orders",
                 orders.len() - settled,
                 Some("orders"),
             ),
-            visual_metric("settled", "Settled orders", settled, Some("orders")),
+            visual_metric(slug("settled"), "Settled orders", settled, Some("orders")),
             visual_metric(
-                "feasible",
+                slug("feasible"),
                 "Feasible bindings",
                 assessed
                     .iter()
@@ -681,13 +679,13 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
     if timed {
         scene.metrics.extend([
             visual_metric(
-                "world_time",
+                slug("world-time"),
                 "World time",
                 marketplace::fulfillment::now(world),
                 Some("ticks"),
             ),
             visual_metric(
-                "escrow",
+                slug("escrow"),
                 "Funds held in contracts",
                 orders
                     .iter()
@@ -700,7 +698,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 None,
             ),
             visual_metric(
-                "in_transit",
+                slug("in-transit"),
                 "Shipments underway",
                 orders
                     .iter()
@@ -716,7 +714,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 None,
             ),
             visual_metric(
-                "ontime",
+                slug("ontime"),
                 "On-time deliveries",
                 orders
                     .iter()
@@ -729,7 +727,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 None,
             ),
             visual_metric(
-                "late",
+                slug("late"),
                 "Late deliveries",
                 orders
                     .iter()

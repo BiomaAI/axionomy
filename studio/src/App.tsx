@@ -80,7 +80,7 @@ function writeUrl(state: Required<Pick<StudioUrlState, "problem" | "instance" | 
 }
 
 type CompletionNotice = {
-  artifactId: string;
+  runId: string;
   problem: string;
   instance: string;
   strategy: string;
@@ -140,7 +140,7 @@ export function App() {
   const [error, setError] = useState<string>();
   const [elapsedMs, setElapsedMs] = useState(0);
   const [completion, setCompletion] = useState<CompletionNotice>();
-  const [freshArtifactId, setFreshArtifactId] = useState<string>();
+  const [freshArtifact, setFreshArtifact] = useState<RunArtifact>();
   const [linkNotice, setLinkNotice] = useState<string>();
   const [copied, setCopied] = useState(false);
   const eventSource = useRef<EngineRunSubscription | null>(null);
@@ -148,8 +148,8 @@ export function App() {
   const previewGeneration = useRef(0);
 
   const problem = catalog.data?.find((candidate) => candidate.key === problemKey);
-  const instance = problem?.instances.find((candidate) => candidate.key === instanceKey);
-  const document = artifact?.documents.find((candidate) => candidate.id === documentId) ?? artifact?.documents.find((candidate) => candidate.id === artifact.selected_document_id) ?? artifact?.documents[0];
+  const instance = problem?.instances.find((candidate) => candidate.profile === instanceKey);
+  const document = artifact?.documents.find((candidate) => candidate.id === documentId) ?? artifact?.documents.find((candidate) => candidate.id === artifact.selected_document) ?? artifact?.documents[0];
   const snapshot = useSnapshot(document, position);
   const previous = useSnapshot(document, Math.max(0, position - 1));
   const frame = position > 0 ? document?.frames[position - 1] : undefined;
@@ -211,7 +211,7 @@ export function App() {
 
   useEffect(() => {
     if (!problem) return;
-    const requestedInstance = problem.instances.some((candidate) => candidate.key === instanceKey) ? instanceKey : problem.default_instance;
+    const requestedInstance = problem.instances.some((candidate) => candidate.profile === instanceKey) ? instanceKey : problem.default_instance;
     const requestedStrategy = problem.strategies.some((candidate) => candidate.key === strategyKey) ? strategyKey : problem.default_strategy;
     const invalidInstance = instanceKey !== "" && requestedInstance !== instanceKey;
     const invalidStrategy = strategyKey !== "" && requestedStrategy !== strategyKey;
@@ -221,14 +221,14 @@ export function App() {
     setInstanceKey(requestedInstance);
     setStrategyKey(requestedStrategy);
     setError(undefined);
-    setFreshArtifactId(undefined);
+    setFreshArtifact(undefined);
     const generation = ++previewGeneration.current;
     let disposed = false;
     engine.defaultArtifact(problem.key).then((next) => {
       if (disposed || generation !== previewGeneration.current) return;
       const requestedDocument = next.documents.find((candidate) => candidate.id === documentId)?.id
-        ?? next.documents.find((candidate) => candidate.id === `${problem.key}:${requestedStrategy}`)?.id
-        ?? next.selected_document_id;
+        ?? next.documents.find((candidate) => candidate.id === requestedStrategy)?.id
+        ?? next.selected_document;
       setArtifact(next);
       setDocumentId(requestedDocument);
     }).catch((cause: unknown) => {
@@ -248,9 +248,9 @@ export function App() {
     if (!artifact || artifact.problem.key !== problemKey || !documentId) return;
     if (!artifact.documents.some((candidate) => candidate.id === documentId)) {
       setLinkNotice(`The linked outcome “${documentId}” does not exist in ${artifact.problem.title}; opened the default outcome instead.`);
-      setDocumentId(artifact.selected_document_id);
+      setDocumentId(artifact.selected_document);
     }
-  }, [artifact?.id, documentId, problemKey]);
+  }, [artifact, documentId, problemKey]);
 
   useEffect(() => {
     if (!snapshot) return;
@@ -264,7 +264,7 @@ export function App() {
   }, [snapshot?.index, document?.id]);
 
   useEffect(() => {
-    if (!problem || !problem.instances.some((candidate) => candidate.key === instanceKey) || !problem.strategies.some((candidate) => candidate.key === strategyKey)) return;
+    if (!problem || !problem.instances.some((candidate) => candidate.profile === instanceKey) || !problem.strategies.some((candidate) => candidate.key === strategyKey)) return;
     writeUrl(urlState(), "replace");
   }, [problemKey, instanceKey, strategyKey, documentId, viewMode, position, leaderboardKey, seed, budget]);
 
@@ -321,21 +321,22 @@ export function App() {
   const start = async () => {
     previewGeneration.current += 1;
     const submittedProblem = problem?.title ?? problemKey;
-    const submittedInstance = problem?.instances.find((candidate) => candidate.key === instanceKey)?.label ?? instanceKey;
+    const submittedInstance = problem?.instances.find((candidate) => candidate.profile === instanceKey)?.label ?? instanceKey;
     const submittedStrategy = problem?.strategies.find((candidate) => candidate.key === strategyKey)?.label ?? strategyKey;
     setError(undefined); setEvents([]); setCompletion(undefined); eventSource.current?.close();
     setViewMode("solve");
     runStartedAt.current = performance.now(); setElapsedMs(0); setLaunching(true);
     try {
-      const subscription = await engine.start({ problem: problemKey, instance: instanceKey, strategy: strategyKey, seed, budget }, async (event) => {
+      const profile = problem?.instances.find((candidate) => candidate.profile === instanceKey)?.profile;
+      const subscription = await engine.start({ problem: problemKey, instance: profile, strategy: strategyKey, seed, budget }, async (event) => {
         setEvents((current) => current.some((known) => known.sequence === event.sequence) ? current : [...current, event]);
         if (event.kind === "run_completed") {
           eventSource.current?.close();
-          const next = await engine.artifact(event.artifact_id);
+          const next = await engine.artifact(event.run_id);
           const durationMs = runStartedAt.current === undefined ? 0 : performance.now() - runStartedAt.current;
           previewGeneration.current += 1;
-          setArtifact(next); setDocumentId(event.document_id); setFreshArtifactId(event.artifact_id);
-          setCompletion({ artifactId: event.artifact_id, problem: submittedProblem, instance: submittedInstance, strategy: submittedStrategy, seed, budget, durationMs, documents: next.documents.length });
+          setArtifact(next); setDocumentId(event.document); setFreshArtifact(next);
+          setCompletion({ runId: event.run_id, problem: submittedProblem, instance: submittedInstance, strategy: submittedStrategy, seed, budget, durationMs, documents: next.documents.length });
           setElapsedMs(durationMs); setRun(undefined);
         } else if (event.kind === "run_cancelled" || event.kind === "run_failed") {
           eventSource.current?.close(); setRun(undefined);
@@ -356,8 +357,8 @@ export function App() {
     previewGeneration.current += 1;
     try {
       const next = JSON.parse(await file.text()) as RunArtifact;
-      if (!Array.isArray(next.documents) || !next.selected_document_id) throw new Error("missing artifact documents");
-      setArtifact(next); setProblemKey(next.problem.key); setInstanceKey(next.instance.key); setStrategyKey(next.request.strategy ?? next.problem.default_strategy); setDocumentId(next.selected_document_id); setFreshArtifactId(undefined); setError(undefined);
+      if (!Array.isArray(next.documents) || !next.selected_document) throw new Error("missing artifact documents");
+      setArtifact(next); setProblemKey(next.problem.key); setInstanceKey(next.instance.profile); setStrategyKey(next.key.strategy); setDocumentId(next.selected_document); setFreshArtifact(undefined); setError(undefined);
     } catch (cause) { setError(cause instanceof Error ? cause.message : "the selected file is not a RunArtifact"); }
   };
 
@@ -389,7 +390,7 @@ export function App() {
     setInstanceKey(key); setPosition(0); setCompletion(undefined);
   };
   const selectStrategy = (key: string) => {
-    const match = artifact?.documents.find((candidate) => candidate.id === `${problemKey}:${key}`);
+    const match = artifact?.documents.find((candidate) => candidate.id === key);
     writeUrl(urlState({ strategy: key, document: match?.id, step: 0 }), "push");
     setStrategyKey(key); setPosition(0); if (match) setDocumentId(match.id);
   };
@@ -416,7 +417,7 @@ export function App() {
 
     <section className="command-bar" aria-label="Problem controls">
       <label className="field problem-field"><span>Problem</span><select name="problem" value={problemKey} onChange={(event) => selectProblem(event.target.value)} disabled={active}>{catalog.data?.map((candidate) => <option value={candidate.key} key={candidate.key}>{candidate.title}</option>)}</select></label>
-      <label className="field instance-field"><span>Instance (size)</span><select name="instance" value={instanceKey} onChange={(event) => selectInstance(event.target.value)} disabled={active}>{problem?.instances.map((candidate) => <option value={candidate.key} key={candidate.key}>{candidate.label}</option>)}</select></label>
+      <label className="field instance-field"><span>Instance (size)</span><select name="instance" value={instanceKey} onChange={(event) => selectInstance(event.target.value)} disabled={active}>{problem?.instances.map((candidate) => <option value={candidate.profile} key={candidate.profile}>{candidate.label}</option>)}</select></label>
       <label className="field strategy-field"><span>Strategy</span><select name="strategy" value={strategyKey} onChange={(event) => selectStrategy(event.target.value)} disabled={active}>{problem?.strategies.map((strategy) => <option value={strategy.key} key={strategy.key}>{strategy.label}</option>)}</select></label>
       <label className="field numeric-field"><span>Seed</span><input name="seed" type="number" min="0" value={seed} disabled={active} onChange={(event) => setSeed(Number(event.target.value))} /></label>
       <label className="field numeric-field"><span>Budget</span><input name="budget" type="number" min="1" value={budget} disabled={active} onChange={(event) => setBudget(Math.max(1, Number(event.target.value)))} /></label>
@@ -438,10 +439,10 @@ export function App() {
     {problem && <section className="problem-context"><div><span>{familyLabel(problem.family)}</span><div className="problem-copy"><p>{problem.summary}</p><small><strong>{instance?.label ?? artifact?.instance.label}</strong>{instance?.description ?? artifact?.instance.description}{modelCounts && <em>{modelCounts}</em>}</small></div></div><div>{problem.capabilities.map((capability) => <span key={capability}>{capabilityLabel(capability)}</span>)}</div></section>}
     {error && <div className="error-banner" role="alert">{error}</div>}
 
-    {artifact && document && snapshot ? <main className={freshArtifactId === artifact.id ? "fresh-artifact" : undefined}>
+    {artifact && document && snapshot ? <main className={freshArtifact === artifact ? "fresh-artifact" : undefined}>
       <section className="alternative-bar"><div><span>Alternatives</span><strong>{artifact.documents.length} replayable results</strong></div><div role="tablist">{artifact.documents.map((candidate) => <button key={candidate.id} role="tab" aria-selected={candidate.id === document.id} onClick={() => selectDocument(candidate.id)}>{candidate.title.replace(`${artifact.problem.title} · `, "")}</button>)}</div></section>
       <StrategyComparison artifact={artifact} selected={document.id} onSelect={selectDocument} />
-      <section className="document-heading"><div><span className="eyebrow">{artifact.instance.label} · {document.source.label} · {document.id}{freshArtifactId === artifact.id ? " · just computed" : ""}</span><h1>{document.title}</h1><p>{document.description}</p></div><div className="objective-pills">{document.objectives.map((objective) => <div className="objective" key={objective.key}><span>{objective.label}</span><strong>{objective.value}</strong><small>{objective.direction}</small></div>)}</div></section>
+      <section className="document-heading"><div><span className="eyebrow">{artifact.instance.label} · {document.source.label} · {artifact.problem.key}/{document.id}{freshArtifact === artifact ? " · just computed" : ""}</span><h1>{document.title}</h1><p>{document.description}</p></div><div className="objective-pills">{document.objectives.map((objective) => <div className="objective" key={objective.key}><span>{objective.label}</span><strong>{objective.value}</strong><small>{objective.direction}</small></div>)}</div></section>
       <div className="view-tabs" role="tablist" aria-label="Studio evidence mode"><button type="button" role="tab" aria-selected={viewMode === "solve"} onClick={() => selectView("solve")}>How it was solved <small>{active ? "live" : document.solve_observations.length}</small></button><button type="button" role="tab" aria-selected={viewMode === "replay"} onClick={() => selectView("replay")}>Step-by-step replay <small>{document.frames.length}</small></button></div>
       {viewMode === "solve" ? <SolveWorkspace key={document.id} scene={document.initial.scene} observations={active ? events.flatMap((event) => event.kind === "search_observation" ? [event.observation] : []) : document.solve_observations} active={active} /> : (() => {
         const surface = snapshot.scene?.surface;
@@ -523,7 +524,7 @@ function VerifiedStandings({ events, live }: { events: StudioEvent[]; live: bool
 function CompletionBanner({ notice, onDismiss }: { notice: CompletionNotice; onDismiss: () => void }) {
   return <section className="completion-banner" role="status">
     <div className="completion-mark" aria-hidden="true">✓</div>
-    <div><strong>New artifact computed and loaded</strong><span>{notice.problem} · {notice.instance} · {notice.strategy} · seed {notice.seed} · budget {notice.budget}</span><small>{notice.documents} replayable {notice.documents === 1 ? "outcome" : "outcomes"} · completed in {formatDuration(notice.durationMs)} · <code>{notice.artifactId}</code></small></div>
+    <div><strong>New artifact computed and loaded</strong><span>{notice.problem} · {notice.instance} · {notice.strategy} · seed {notice.seed} · budget {notice.budget}</span><small>{notice.documents} replayable {notice.documents === 1 ? "outcome" : "outcomes"} · completed in {formatDuration(notice.durationMs)} · <code>{notice.runId}</code></small></div>
     <button type="button" onClick={onDismiss}>Dismiss</button>
   </section>;
 }
@@ -551,12 +552,12 @@ function SolveWorkspace({ scene, observations, active }: { scene?: Scene | null;
 
 function algorithmLabel(algorithm: string): string {
   const labels: Record<string, string> = {
-    a_star: "A*",
-    breadth_first: "Breadth-first search",
+    "a-star": "A*",
+    "breadth-first": "Breadth-first search",
     dijkstra: "Dijkstra",
-    exact_pareto_search: "Exact Pareto search",
+    "exact-pareto-search": "Exact Pareto search",
   };
-  return labels[algorithm] ?? algorithm.replaceAll("_", " ");
+  return labels[algorithm] ?? algorithm.replaceAll("-", " ");
 }
 
 function solverEvidenceScene(scene: Scene | null | undefined, observations: SearchObservation[]): Scene | undefined {
@@ -655,21 +656,21 @@ function phaseLabel(phase: string): string {
   const labels: Record<string, string> = {
     prepare: "Preparing",
     artifact: "Building the result",
-    monte_carlo: "Monte Carlo sampling",
-    pareto_sampling: "Sampling the frontier",
+    "monte-carlo": "Monte Carlo sampling",
+    "pareto-sampling": "Sampling the frontier",
     mcts: "MCTS",
-    mcts_game: "MCTS",
+    "mcts-game": "MCTS",
     ismcts: "ISMCTS",
-    multi_agent_match: "Multi-agent match",
-    breadth_first_frontier: "Breadth-first frontier",
-    dijkstra_frontier: "Dijkstra frontier",
-    a_star_frontier: "A* frontier",
-    pareto_frontier: "Exact Pareto frontier",
-    breadth_first_solution: "Breadth-first solution",
-    dijkstra_solution: "Dijkstra solution",
-    a_star_solution: "A* solution",
+    "multi-agent-match": "Multi-agent match",
+    "breadth-first-frontier": "Breadth-first frontier",
+    "dijkstra-frontier": "Dijkstra frontier",
+    "a-star-frontier": "A* frontier",
+    "pareto-frontier": "Exact Pareto frontier",
+    "breadth-first-solution": "Breadth-first solution",
+    "dijkstra-solution": "Dijkstra solution",
+    "a-star-solution": "A* solution",
   };
-  return labels[phase] ?? phase.replaceAll("_", " ");
+  return labels[phase] ?? phase.replaceAll("-", " ");
 }
 
 function StrategyComparison({ artifact, selected, onSelect }: { artifact: RunArtifact; selected: string; onSelect: (id: string) => void }) {

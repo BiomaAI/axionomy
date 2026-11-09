@@ -9,10 +9,10 @@ const PROBLEM: &str = "lending";
 const SOURCE: &str = "Lending market";
 
 pub(super) fn build(
-    request: &RunRequest,
+    run: &ArtifactKey,
     descriptor: &ProblemDescriptor,
 ) -> Result<RunArtifact, ServiceError> {
-    let config = match instance_profile(request, descriptor) {
+    let config = match run.instance {
         InstanceProfile::Micro => Config::micro(),
         InstanceProfile::Showcase => Config::showcase(),
         InstanceProfile::Stress => Config::stress(),
@@ -26,14 +26,14 @@ pub(super) fn build(
     let mut documents = Vec::new();
     for (strategy, title, description, solution, algorithm) in [
         (
-            "least_interest",
+            "least-interest",
             "Bridge loan · least interest",
             "Dijkstra search charges each closed period's interest to the plan. It borrows the shortfall just before the bill is due, keeps the loan safe through the price drop, and repays from each installment as it arrives.",
             &cheapest,
             "Dijkstra search",
         ),
         (
-            "fewest_steps",
+            "fewest-steps",
             "Bridge loan · fewest steps",
             "Breadth-first search counts exchanges, not interest. It borrows in the first period and repays once at the end, so the loan runs longest.",
             &fewest,
@@ -80,7 +80,7 @@ pub(super) fn build(
     let mut view = document(
         DocumentSpec {
             problem: PROBLEM,
-            strategy: "over_borrowed",
+            strategy: "over-borrowed",
             title: "Bridge loan · over-borrowed",
             description: "The borrower posts all its collateral and borrows to the limit in the first period. Interest at high utilization or the price drop pushes the loan past its liquidation threshold, the clock refuses to close the period, and a keeper repays the loan and seizes collateral plus the bonus.",
             source_label: SOURCE,
@@ -101,7 +101,7 @@ pub(super) fn build(
     let mut view = document(
         DocumentSpec {
             problem: PROBLEM,
-            strategy: "first_depositor_attack",
+            strategy: "first-depositor-attack",
             title: "Fresh market · first-depositor attack",
             description: "An attacker deposits one unit into a fresh market and donates heavily to inflate the share price before a victim deposits. Shares locked at genesis absorb the donation: the victim loses less than one share's worth to rounding, and the attacker cannot recover what it gave.",
             source_label: SOURCE,
@@ -116,12 +116,7 @@ pub(super) fn build(
     view.telemetry.push(scripted(&attack));
     documents.push(view);
 
-    artifact(
-        request,
-        descriptor,
-        selected_strategy(request, descriptor),
-        documents,
-    )
+    artifact(run, descriptor, documents)
 }
 
 fn scripted(trace: &LoanTrace) -> SearchTelemetryView {
@@ -146,19 +141,19 @@ fn objectives(initial: &World, trace: &LoanTrace) -> Result<Vec<ObjectiveView>, 
         + balance(&after, AccountId::Borrower, Asset::PostedCollateral);
     Ok(vec![
         ObjectiveView {
-            key: "interest".into(),
+            key: slug("interest"),
             label: "Interest charged".into(),
             direction: ObjectiveDirectionView::Minimize,
             value: interest.to_string(),
         },
         ObjectiveView {
-            key: "collateral".into(),
+            key: slug("collateral"),
             label: "Collateral kept".into(),
             direction: ObjectiveDirectionView::Maximize,
             value: collateral.to_string(),
         },
         ObjectiveView {
-            key: "cash".into(),
+            key: slug("cash"),
             label: "Borrower cash at the end".into(),
             direction: ObjectiveDirectionView::Maximize,
             value: balance(&after, AccountId::Borrower, Asset::Cash).to_string(),
@@ -203,7 +198,7 @@ fn refusals(initial: &World) -> Vec<ProposalView> {
     .collect()
 }
 
-fn account_key(account: AccountId) -> String {
+fn account_key(account: AccountId) -> ItemPath {
     let key = match account {
         AccountId::Market => "market".to_owned(),
         AccountId::Clock => "clock".to_owned(),
@@ -214,7 +209,7 @@ fn account_key(account: AccountId) -> String {
         AccountId::Supplier => "supplier".to_owned(),
         AccountId::Customer => "customer".to_owned(),
     };
-    format!("{PROBLEM}:account:{key}")
+    slug(format!("{PROBLEM}/account/{key}"))
 }
 
 /// Cite the balance when it exists, otherwise the account that would hold it.
@@ -229,7 +224,7 @@ fn evidence(
         link_balance(
             entity,
             account_key(account),
-            format!("{PROBLEM}:asset:{key}"),
+            slug(format!("{PROBLEM}/asset/{key}")),
         )
     } else {
         link_account(entity, account_key(account))
@@ -244,8 +239,8 @@ fn percent(value: u128) -> String {
 
 fn node(key: &str, label: &str, classes: &[&str], x: f64, y: f64) -> GraphNodeView {
     GraphNodeView {
-        id: ViewId::new(key, label),
-        classes: classes.iter().map(|class| (*class).into()).collect(),
+        id: ViewId::new(slug(key), label),
+        classes: classes.iter().map(slug).collect(),
         x: Some(x),
         y: Some(y),
     }
@@ -253,12 +248,12 @@ fn node(key: &str, label: &str, classes: &[&str], x: f64, y: f64) -> GraphNodeVi
 
 fn edge(id: &str, source: &str, target: &str, label: &str, active: bool) -> GraphEdgeView {
     GraphEdgeView {
-        id: id.into(),
-        source: source.into(),
-        target: target.into(),
+        id: slug(id),
+        source: slug(source),
+        target: slug(target),
         label: Some(label.into()),
         classes: if active {
-            vec!["active".into()]
+            vec![slug("active")]
         } else {
             Vec::new()
         },
@@ -334,11 +329,11 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
     let mut entities = vec![
         evidence(
             visual_entity(
-                "market-cash",
+                slug("market-cash"),
                 "Market cash",
                 SceneGlyphView::Money,
                 SceneAnchorView::GraphNode {
-                    node: "market".into(),
+                    node: slug("market"),
                 },
                 SceneEntityRoleView::State,
                 SceneToneView::Active,
@@ -351,11 +346,11 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         ),
         evidence(
             visual_entity(
-                "posted-collateral",
+                slug("posted-collateral"),
                 "Posted collateral",
                 SceneGlyphView::Shield,
                 SceneAnchorView::GraphNode {
-                    node: "borrower".into(),
+                    node: slug("borrower"),
                 },
                 SceneEntityRoleView::State,
                 if unsafe_loan {
@@ -378,11 +373,11 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
     if open_loan {
         entities.push(evidence(
             visual_entity(
-                "debt",
+                slug("debt"),
                 "Loan",
                 SceneGlyphView::Token,
                 SceneAnchorView::GraphNode {
-                    node: "borrower".into(),
+                    node: slug("borrower"),
                 },
                 SceneEntityRoleView::State,
                 if unsafe_loan {
@@ -401,11 +396,11 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
     if seized > 0 {
         entities.push(evidence(
             visual_entity(
-                "seized",
+                slug("seized"),
                 "Seized collateral",
                 SceneGlyphView::Shield,
                 SceneAnchorView::GraphNode {
-                    node: "keeper".into(),
+                    node: slug("keeper"),
                 },
                 SceneEntityRoleView::State,
                 SceneToneView::Warning,
@@ -425,50 +420,50 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             .with_entities(entities)
             .with_metrics([
                 visual_metric(
-                    "period",
+                    slug("period"),
                     "Period",
                     format!("{} of {}", elapsed + 1, elapsed + remaining),
                     None,
                 ),
                 visual_metric(
-                    "utilization",
+                    slug("utilization"),
                     "Utilization",
                     percent(lending::utilization_view(world)),
                     Some("%"),
                 ),
                 visual_metric(
-                    "rate",
+                    slug("rate"),
                     "Interest per period",
                     percent(lending::rate_view(world)),
                     Some("%"),
                 ),
-                visual_metric("owed", "Borrower owes", owed, Some("cash")),
+                visual_metric(slug("owed"), "Borrower owes", owed, Some("cash")),
                 visual_metric(
-                    "borrow_limit",
+                    slug("borrow-limit"),
                     "Borrowing limit",
                     lending::borrow_limit_view(world),
                     Some("cash"),
                 ),
                 visual_metric(
-                    "liquidation_limit",
+                    slug("liquidation-limit"),
                     "Liquidation threshold",
                     liquidation_limit,
                     Some("cash"),
                 ),
                 visual_metric(
-                    "price",
+                    slug("price"),
                     "Collateral price",
                     market(Asset::CollateralPrice),
                     Some("cash"),
                 ),
                 visual_metric(
-                    "reserves",
+                    slug("reserves"),
                     "Reserves",
                     market(Asset::Reserves),
                     Some("cash"),
                 ),
                 visual_metric(
-                    "share_assets",
+                    slug("share-assets"),
                     "Depositors' assets",
                     lending::total_assets_view(world),
                     Some("cash"),

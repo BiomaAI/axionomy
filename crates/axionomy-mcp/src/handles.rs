@@ -94,6 +94,11 @@ handle!(
     AssessmentId,
     "asm-"
 );
+handle!(
+    /// A stored problem run artifact.
+    ArtifactId,
+    "art-"
+);
 
 /// Invariants, which an economy authored here identifies by path.
 pub enum Invariant {}

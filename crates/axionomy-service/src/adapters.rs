@@ -1,22 +1,22 @@
 use crate::{
-    Capability, InstanceDescriptor, InstanceProfile, ProblemDescriptor, ProblemFamily,
-    ReferenceService, RunArtifact, RunControl, RunObserver, RunRequest, ServiceError,
-    ServiceProgress, StrategyDescriptor,
+    ArtifactKey, Capability, InstanceDescriptor, InstanceProfile, ProblemDescriptor, ProblemFamily,
+    RunArtifact, RunControl, RunObserver, ServiceError, ServiceProgress, StrategyDescriptor,
 };
 use axionomy::{Economy, Goal, Trace};
 use axionomy_search::GraphSearchProgress;
 use axionomy_view::{
-    DebugOntology, ExchangeFrame, LeaderboardView, ObjectiveView, PlaybackError, ProposalView,
-    Scene, SceneAnchorView, SceneEntityRoleView, SceneEntityView, SceneEvidenceRefView,
-    SceneGlyphView, SceneMetricView, SceneToneView, SearchObservationKindView,
-    SearchObservationView, SearchTelemetryView, TelemetryKindView, TelemetryPointView,
-    ViewDocument, ViewDocumentMetadata, ViewId, ViewOntology, ViewSource, derive_document,
-    derive_document_with_frames, derive_model, derive_proposal,
+    DebugOntology, DocumentPath, ExchangeFrame, ItemPath, LeaderboardView, MeasurePath,
+    ObjectiveView, PhasePath, PlaybackError, ProposalView, Scene, SceneAnchorView,
+    SceneEntityRoleView, SceneEntityView, SceneEvidenceRefView, SceneGlyphView, SceneMetricView,
+    SceneToneView, SearchObservationKindView, SearchObservationView, SearchTelemetryView,
+    TelemetryKindView, TelemetryPointView, ViewDocument, ViewDocumentMetadata, ViewId,
+    ViewOntology, ViewSource, derive_document, derive_document_with_frames, derive_model,
+    derive_proposal, slug,
 };
 use std::{collections::BTreeSet, fmt::Debug, hash::Hash, ops::ControlFlow};
 
 pub(super) fn visual_entity(
-    key: impl Into<String>,
+    key: ItemPath,
     label: impl Into<String>,
     glyph: SceneGlyphView,
     anchor: SceneAnchorView,
@@ -38,13 +38,13 @@ pub(super) fn visual_entity(
 }
 
 pub(super) fn visual_metric(
-    key: impl Into<String>,
+    key: MeasurePath,
     label: impl Into<String>,
     value: impl ToString,
     unit: Option<&str>,
 ) -> SceneMetricView {
     SceneMetricView {
-        key: key.into(),
+        key,
         label: label.into(),
         value: value.to_string(),
         unit: unit.map(str::to_owned),
@@ -116,11 +116,7 @@ pub(super) fn evaluated_integer_front(
     }
 }
 
-pub(super) fn link_account(
-    mut entity: SceneEntityView,
-    account: impl Into<String>,
-) -> SceneEntityView {
-    let account = account.into();
+pub(super) fn link_account(mut entity: SceneEntityView, account: ItemPath) -> SceneEntityView {
     entity.account = Some(account.clone());
     entity
         .evidence
@@ -130,15 +126,13 @@ pub(super) fn link_account(
 
 pub(super) fn link_balance(
     mut entity: SceneEntityView,
-    account: impl Into<String>,
-    asset: impl Into<String>,
+    account: ItemPath,
+    asset: ItemPath,
 ) -> SceneEntityView {
-    let account = account.into();
     entity.account = Some(account.clone());
-    entity.evidence.push(SceneEvidenceRefView::Balance {
-        account,
-        asset: asset.into(),
-    });
+    entity
+        .evidence
+        .push(SceneEvidenceRefView::Balance { account, asset });
     entity
 }
 
@@ -177,12 +171,9 @@ struct StudioOntology<AccountId, A, RateId, Role> {
 }
 
 impl<AccountId, A, RateId, Role> StudioOntology<AccountId, A, RateId, Role> {
-    fn new(
-        namespace: impl Into<String>,
-        scene: Option<StudioScene<AccountId, A, RateId, Role>>,
-    ) -> Self {
+    fn new(namespace: &str, scene: Option<StudioScene<AccountId, A, RateId, Role>>) -> Self {
         Self {
-            fallback: DebugOntology::new(namespace),
+            fallback: DebugOntology::new(slug(namespace)),
             scene,
             leaderboards: None,
         }
@@ -240,11 +231,25 @@ where
     }
 }
 
+type Build = fn(
+    &ArtifactKey,
+    &ProblemDescriptor,
+    &mut ProgressSink<'_>,
+) -> Result<RunArtifact, ServiceError>;
+
 pub(crate) fn catalog() -> Vec<ProblemDescriptor> {
+    problems()
+        .into_iter()
+        .map(|(descriptor, _)| descriptor)
+        .collect()
+}
+
+fn problems() -> Vec<(ProblemDescriptor, Build)> {
     vec![
         problem(
             ProblemCopy {
                 key: "maze",
+                build: maze::build,
                 title: "Key-door maze",
                 summary: "Reach the exit under limited energy and time. The key-and-gate route saves energy, direct routes save time, and the exact frontier preserves four tradeoffs that one score would hide.",
                 instances: [
@@ -254,10 +259,10 @@ pub(crate) fn catalog() -> Vec<ProblemDescriptor> {
                 ],
             },
             ProblemFamily::Pathfinding,
-            "a_star",
+            "a-star",
             &[
                 (
-                    "breadth_first",
+                    "breadth-first",
                     "Fewest moves",
                     "Breadth-first search: the shortest sequence, whatever it costs.",
                     "breadth-first search",
@@ -269,19 +274,19 @@ pub(crate) fn catalog() -> Vec<ProblemDescriptor> {
                     "Dijkstra",
                 ),
                 (
-                    "a_star",
+                    "a-star",
                     "Least energy",
                     "A*, guided by an admissible distance estimate stored in the economy itself.",
                     "A*",
                 ),
                 (
-                    "pareto_energy",
+                    "pareto-energy",
                     "Pareto: least energy",
                     "The lowest-energy point on the exact Pareto frontier, where no route is better on both energy and time.",
                     "exact Pareto search",
                 ),
                 (
-                    "pareto_time",
+                    "pareto-time",
                     "Pareto: least time",
                     "The fastest point on that exact frontier.",
                     "exact Pareto search",
@@ -297,6 +302,7 @@ pub(crate) fn catalog() -> Vec<ProblemDescriptor> {
         problem(
             ProblemCopy {
                 key: "sokoban",
+                build: sokoban::build,
                 title: "Sokoban",
                 summary: "Push crates onto their goal squares. Every push rewrites three cells at once, and some positions can never be recovered.",
                 instances: [
@@ -306,16 +312,16 @@ pub(crate) fn catalog() -> Vec<ProblemDescriptor> {
                 ],
             },
             ProblemFamily::Pathfinding,
-            "a_star",
+            "a-star",
             &[
                 (
-                    "a_star",
+                    "a-star",
                     "Goal-directed A*",
                     "A* prioritises states using an admissible crate-to-goal distance bound.",
                     "A*",
                 ),
                 (
-                    "breadth_first",
+                    "breadth-first",
                     "Fewest exchanges",
                     "Breadth-first search explores every shorter replay before accepting a solution.",
                     "breadth-first search",
@@ -329,7 +335,8 @@ pub(crate) fn catalog() -> Vec<ProblemDescriptor> {
         ),
         problem(
             ProblemCopy {
-                key: "exact_cover",
+                key: "exact-cover",
+                build: |run, descriptor, _| exact_cover::build(run, descriptor),
                 title: "Exact cover",
                 summary: "Choose subsets that cover every element exactly once. A plain search and Algorithm X reach the same answer by different routes.",
                 instances: [
@@ -339,16 +346,16 @@ pub(crate) fn catalog() -> Vec<ProblemDescriptor> {
                 ],
             },
             ProblemFamily::Constraint,
-            "algorithm_x",
+            "algorithm-x",
             &[
                 (
-                    "breadth_first",
+                    "breadth-first",
                     "Plain search",
                     "Breadth-first search with no knowledge of cover structure; it just tries selections.",
                     "breadth-first search",
                 ),
                 (
-                    "algorithm_x",
+                    "algorithm-x",
                     "Algorithm X",
                     "Knuth's Algorithm X chooses the moves; the economy still validates every one.",
                     "Algorithm X",
@@ -363,6 +370,7 @@ pub(crate) fn catalog() -> Vec<ProblemDescriptor> {
         problem(
             ProblemCopy {
                 key: "workshop",
+                build: |run, descriptor, _| workshop::build(run, descriptor),
                 title: "Workshop",
                 summary: "Choose funded contracts, prepare components, manage tool wear and deliver products. Exact tradeoffs expose faster work, lower waste and higher revenue.",
                 instances: [
@@ -372,28 +380,28 @@ pub(crate) fn catalog() -> Vec<ProblemDescriptor> {
                 ],
             },
             ProblemFamily::Production,
-            "minimum_waste",
+            "minimum-waste",
             &[
                 (
-                    "breadth_first",
+                    "breadth-first",
                     "Fewest steps",
                     "Breadth-first search: the fewest recipe firings, whatever they waste.",
                     "breadth-first search",
                 ),
                 (
-                    "minimum_waste",
+                    "minimum-waste",
                     "Least waste",
                     "Best-first search guided by scrap accumulated in the workshop account.",
                     "best-first search",
                 ),
                 (
-                    "pareto_waste",
+                    "pareto-waste",
                     "Pareto: least waste",
                     "The lowest-scrap point on the exact Pareto frontier.",
                     "exact Pareto search",
                 ),
                 (
-                    "pareto_time",
+                    "pareto-time",
                     "Pareto: least time",
                     "The fastest point on that exact frontier.",
                     "exact Pareto search",
@@ -409,6 +417,7 @@ pub(crate) fn catalog() -> Vec<ProblemDescriptor> {
         problem(
             ProblemCopy {
                 key: "scheduling",
+                build: |run, descriptor, _| scheduling::build(run, descriptor),
                 title: "Job-shop scheduling",
                 summary: "Route arriving jobs through queues and actual execution. Alternative machines, setup changes, shared crews and a recoverable machine failure change which schedule finishes first.",
                 instances: [
@@ -418,28 +427,28 @@ pub(crate) fn catalog() -> Vec<ProblemDescriptor> {
                 ],
             },
             ProblemFamily::Scheduling,
-            "bounded_optimizer",
+            "bounded-optimizer",
             &[
                 (
-                    "best_first",
+                    "best-first",
                     "Shortest makespan",
                     "Best-first search on the finish time recorded in the schedule.",
                     "best-first search",
                 ),
                 (
-                    "bounded_optimizer",
+                    "bounded-optimizer",
                     "Branch optimizer",
                     "Depth-first branch-and-bound abandons schedules it can already prove are worse.",
                     "branch-and-bound",
                 ),
                 (
-                    "pareto_job_one",
+                    "pareto-job-one",
                     "Pareto: Job One first",
                     "The frontier schedule that finishes Job One earliest.",
                     "exact Pareto search",
                 ),
                 (
-                    "pareto_job_two",
+                    "pareto-job-two",
                     "Pareto: Job Two first",
                     "The frontier schedule that finishes Job Two earliest.",
                     "exact Pareto search",
@@ -455,6 +464,7 @@ pub(crate) fn catalog() -> Vec<ProblemDescriptor> {
         problem(
             ProblemCopy {
                 key: "rescue",
+                build: |run, descriptor, _| rescue::build(run, descriptor),
                 title: "Uncertain rescue",
                 summary: "Search for several hidden casualties while their condition worsens. Trade treatment time, limited medicine, noisy hints and transport fuel against one evacuation seat.",
                 instances: [
@@ -464,16 +474,16 @@ pub(crate) fn catalog() -> Vec<ProblemDescriptor> {
                 ],
             },
             ProblemFamily::PartialObservation,
-            "observe_then_follow",
+            "observe-then-follow",
             &[
                 (
-                    "observe_then_follow",
+                    "observe-then-follow",
                     "Observe and triage",
                     "Micro evaluates the single search gamble; larger incidents repeatedly scan, search, triage, stabilize and evacuate from public observations.",
                     "Responsive triage; Micro Monte Carlo",
                 ),
                 (
-                    "direct_north",
+                    "direct-north",
                     "Rapid sector sweep",
                     "Start north without sensing, then revisit search and evacuation decisions as the incident evolves.",
                     "Responsive rapid sweep; Micro Monte Carlo",
@@ -489,6 +499,7 @@ pub(crate) fn catalog() -> Vec<ProblemDescriptor> {
         problem(
             ProblemCopy {
                 key: "bridge",
+                build: |run, descriptor, _| bridge::build(run, descriptor),
                 title: "Bridge allocation",
                 summary: "Timed traffic competes for one occupied lane. Compare fixed priority, urgency-based bids and a paid concurrent detour against arrivals, deadlines and expiring reservations.",
                 instances: [
@@ -501,19 +512,19 @@ pub(crate) fn catalog() -> Vec<ProblemDescriptor> {
             "auction",
             &[
                 (
-                    "breadth_first",
+                    "breadth-first",
                     "Plain search",
                     "Breadth-first routing search with immediate ready completions; timed search excludes bidding and deliberate lease expiry.",
                     "breadth-first search",
                 ),
                 (
-                    "first_come_a",
+                    "first-come-a",
                     "First come: A",
                     "Wait for Agent A, give A first priority, then serve B.",
                     "first-come allocation",
                 ),
                 (
-                    "first_come_b",
+                    "first-come-b",
                     "First come: B",
                     "Wait for Agent B, give B first priority, then serve A.",
                     "first-come allocation",
@@ -525,13 +536,13 @@ pub(crate) fn catalog() -> Vec<ProblemDescriptor> {
                     "auction mechanism",
                 ),
                 (
-                    "pareto_a",
+                    "pareto-a",
                     "Pareto: favors A",
                     "Micro: exact frontier. Timed traffic: A's preference among the evaluated routing and auction policies.",
                     "exact Pareto search",
                 ),
                 (
-                    "pareto_b",
+                    "pareto-b",
                     "Pareto: favors B",
                     "Micro: exact frontier. Timed traffic: B's preference among the evaluated routing and auction policies.",
                     "exact Pareto search",
@@ -547,6 +558,7 @@ pub(crate) fn catalog() -> Vec<ProblemDescriptor> {
         problem(
             ProblemCopy {
                 key: "amm",
+                build: |run, descriptor, _| amm::build(run, descriptor),
                 title: "The Living Market",
                 summary: "Watch repeated production and trade reshape a closed economy. Daily needs and obligations, cloudy periods, limited storage, delayed capacity investment, and responsive liquidity interact through an exact constant-product AMM. Missed needs and defaults remain visible.",
                 instances: [
@@ -556,22 +568,22 @@ pub(crate) fn catalog() -> Vec<ProblemDescriptor> {
                 ],
             },
             ProblemFamily::Market,
-            "market_day",
+            "market-day",
             &[
                 (
-                    "market_day",
+                    "market-day",
                     "Responsive market",
                     "Actors revisit production, trade, investment, and liquidity decisions throughout the market season.",
                     "verified autonomous market replay",
                 ),
                 (
-                    "no_whale",
+                    "no-whale",
                     "Counterfactual: no whale",
                     "Replay the same economy without its largest buyer and inspect the causal price difference.",
                     "counterfactual replay",
                 ),
                 (
-                    "thin_liquidity",
+                    "thin-liquidity",
                     "Counterfactual: thin liquidity",
                     "Withdraw half the founding liquidity and inspect how the same actors adapt to different depth and prices.",
                     "counterfactual replay",
@@ -588,6 +600,7 @@ pub(crate) fn catalog() -> Vec<ProblemDescriptor> {
         problem(
             ProblemCopy {
                 key: "lending",
+                build: |run, descriptor, _| lending::build(run, descriptor),
                 title: "Lending market",
                 summary: "Finance a bill that falls due before revenue arrives. Collateral caps the loan, interest follows pool utilization along a kinked curve, a reserve cut stays with the market, and a scheduled price drop can push an over-borrowed loan into liquidation.",
                 instances: [
@@ -597,28 +610,28 @@ pub(crate) fn catalog() -> Vec<ProblemDescriptor> {
                 ],
             },
             ProblemFamily::Market,
-            "least_interest",
+            "least-interest",
             &[
                 (
-                    "least_interest",
+                    "least-interest",
                     "Least interest",
                     "Dijkstra search charging each closed period's interest to the plan.",
                     "Dijkstra search",
                 ),
                 (
-                    "fewest_steps",
+                    "fewest-steps",
                     "Fewest steps",
                     "Breadth-first search: the fewest exchanges, whatever the loan costs.",
                     "breadth-first search",
                 ),
                 (
-                    "over_borrowed",
+                    "over-borrowed",
                     "Over-borrowed",
                     "Borrow to the limit at once and watch interest and the price drop end in liquidation.",
                     "scripted scenario",
                 ),
                 (
-                    "first_depositor_attack",
+                    "first-depositor-attack",
                     "First-depositor attack",
                     "Try to inflate a fresh market's share price against a later depositor.",
                     "scripted scenario",
@@ -636,6 +649,7 @@ pub(crate) fn catalog() -> Vec<ProblemDescriptor> {
         problem(
             ProblemCopy {
                 key: "marketplace",
+                build: |run, descriptor, _| marketplace::build(run, descriptor),
                 title: "Multi-party marketplace",
                 summary: "Negotiate funded contracts, reserve scarce shipping capacity and fulfill deliveries over time. Route delays, price concessions, late rebates and refundable reservations couple buyer and seller outcomes.",
                 instances: [
@@ -645,22 +659,22 @@ pub(crate) fn catalog() -> Vec<ProblemDescriptor> {
                 ],
             },
             ProblemFamily::Market,
-            "market_clearing",
+            "market-clearing",
             &[
                 (
-                    "market_clearing",
+                    "market-clearing",
                     "Clear the market",
                     "Pick orders that can all settle together without overdrawing any account.",
                     "market clearing",
                 ),
                 (
-                    "pareto_buyers",
+                    "pareto-buyers",
                     "Pareto: favors buyers",
                     "Micro: exact clearing frontier. Larger markets: bounded fulfillment search favoring buyer benefit.",
                     "exact Pareto clearing",
                 ),
                 (
-                    "pareto_sellers",
+                    "pareto-sellers",
                     "Pareto: favors sellers",
                     "Micro: exact clearing frontier. Larger markets: bounded fulfillment search favoring seller benefit.",
                     "exact Pareto clearing",
@@ -676,6 +690,7 @@ pub(crate) fn catalog() -> Vec<ProblemDescriptor> {
         problem(
             ProblemCopy {
                 key: "logistics",
+                build: logistics::build,
                 title: "Stochastic logistics",
                 summary: "Coordinate refrigerated and heavy-freight vans across three customers. Arriving orders, delivery windows, a shared trunk road, finite fuel, occupied service bays and hub handoffs interact with route disruptions.",
                 instances: [
@@ -715,7 +730,8 @@ pub(crate) fn catalog() -> Vec<ProblemDescriptor> {
         ),
         problem(
             ProblemCopy {
-                key: "connect_four",
+                key: "connect-four",
+                build: connect_four::build,
                 title: "Connect Four",
                 summary: "Tactical Connect Four with forced blocks, double threats, positional search, and distinct opponents; gravity and terminal outcomes are core rules.",
                 instances: [
@@ -725,22 +741,22 @@ pub(crate) fn catalog() -> Vec<ProblemDescriptor> {
                 ],
             },
             ProblemFamily::AdversarialGame,
-            "mcts_game",
+            "mcts-game",
             &[
                 (
-                    "mcts_game",
+                    "mcts-game",
                     "Tactical MCTS self-play",
                     "Both players recognize wins, forced blocks and double threats before exploring positional continuations.",
                     "tactical Monte Carlo tree search",
                 ),
                 (
-                    "center_opponent",
+                    "center-opponent",
                     "Center-first opponent",
                     "Red uses tactical MCTS against a center-first Yellow baseline on the standard board.",
                     "tactical MCTS versus positional baseline",
                 ),
                 (
-                    "search_opponent",
+                    "search-opponent",
                     "Depth-five opponent",
                     "Red uses tactical MCTS against depth-five alpha-beta Yellow on the standard board.",
                     "tactical MCTS versus alpha-beta",
@@ -750,7 +766,8 @@ pub(crate) fn catalog() -> Vec<ProblemDescriptor> {
         ),
         problem(
             ProblemCopy {
-                key: "work_league",
+                key: "work-league",
+                build: work_league::build,
                 title: "Autonomous Work League",
                 summary: "Four workers share one clock: jobs overlap, repair and charging bays fill, claims expire, and deadlines can be missed. Earned credit funds recovery; recycling restores material; a worker can pay to take over another's contract. Outcomes compare the same job-attempt disruptions across policy fields.",
                 instances: [
@@ -760,22 +777,22 @@ pub(crate) fn catalog() -> Vec<ProblemDescriptor> {
                 ],
             },
             ProblemFamily::MultiAgentCompetition,
-            "mixed_field",
+            "mixed-field",
             &[
                 (
-                    "mixed_field",
+                    "mixed-field",
                     "Mixed policy field",
                     "A sprinter, steward, value hunter, and resilient worker reveal genuine cross-objective tradeoffs.",
                     "deterministic policy league with seeded chance",
                 ),
                 (
-                    "throughput_field",
+                    "throughput-field",
                     "Throughput field",
                     "Most workers prioritize short jobs and fast execution; one still chases contract value.",
                     "throughput-biased policy league with seeded chance",
                 ),
                 (
-                    "sustainable_field",
+                    "sustainable-field",
                     "Sustainable field",
                     "Most workers minimize material loss and recycle, while one specializes in reliability.",
                     "resource-biased policy league with seeded chance",
@@ -793,6 +810,7 @@ pub(crate) fn catalog() -> Vec<ProblemDescriptor> {
         problem(
             ProblemCopy {
                 key: "mission",
+                build: mission::build,
                 title: "Hidden-information mission",
                 summary: "Coordinate independent Scout and Medic timelines. Share private discoveries, recover archives, stabilize casualties and rendezvous for extraction as hazards close sectors and resources run short.",
                 instances: [
@@ -811,7 +829,7 @@ pub(crate) fn catalog() -> Vec<ProblemDescriptor> {
                     "Private-view policies; Micro information-set MCTS",
                 ),
                 (
-                    "direct_north",
+                    "direct-north",
                     "Search north first",
                     "Larger missions begin north, then coordinate through local briefings. Micro retains the blind joint-movement baseline.",
                     "North-first local coordination; Micro Monte Carlo",
@@ -829,6 +847,7 @@ pub(crate) fn catalog() -> Vec<ProblemDescriptor> {
         problem(
             ProblemCopy {
                 key: "perishables",
+                build: |run, descriptor, _| perishables::build(run, descriptor),
                 title: "Perishable inventory",
                 summary: "Manage scarce refrigerated space, thermal history and daily food obligations. Cooling and processing compete for electricity; backup generation and deliveries compete for fuel.",
                 instances: [
@@ -847,13 +866,13 @@ pub(crate) fn catalog() -> Vec<ProblemDescriptor> {
                     "indexed temporal effects",
                 ),
                 (
-                    "pareto_inventory",
+                    "pareto-inventory",
                     "Pareto: save stock",
                     "Micro: exact storage frontier. Larger cold chains: a processing-first policy on the same outage schedule.",
                     "exact Pareto search",
                 ),
                 (
-                    "pareto_energy",
+                    "pareto-energy",
                     "Pareto: save energy",
                     "Micro: minimum-energy storage frontier. Larger cold chains: alternate-day shipping to conserve fuel, with missed demand kept visible.",
                     "exact Pareto search",
@@ -871,6 +890,7 @@ pub(crate) fn catalog() -> Vec<ProblemDescriptor> {
 
 struct ProblemCopy<'a> {
     key: &'a str,
+    build: Build,
     title: &'a str,
     summary: &'a str,
     instances: [&'a str; 3],
@@ -882,111 +902,62 @@ fn problem(
     default_strategy: &str,
     strategies: &[(&str, &str, &str, &str)],
     capabilities: &[Capability],
-) -> ProblemDescriptor {
-    ProblemDescriptor {
-        key: copy.key.into(),
+) -> (ProblemDescriptor, Build) {
+    let descriptor = ProblemDescriptor {
+        key: slug(copy.key),
         title: copy.title.into(),
         summary: copy.summary.into(),
         family,
-        default_instance: "showcase".into(),
-        instances: vec![
-            InstanceDescriptor {
-                key: "micro".into(),
-                label: "Micro".into(),
-                description: copy.instances[0].into(),
-                profile: InstanceProfile::Micro,
-            },
-            InstanceDescriptor {
-                key: "showcase".into(),
-                label: "Showcase".into(),
-                description: copy.instances[1].into(),
-                profile: InstanceProfile::Showcase,
-            },
-            InstanceDescriptor {
-                key: "stress".into(),
-                label: "Stress".into(),
-                description: copy.instances[2].into(),
-                profile: InstanceProfile::Stress,
-            },
-        ],
-        default_strategy: default_strategy.into(),
+        default_instance: InstanceProfile::Showcase,
+        instances: [
+            InstanceProfile::Micro,
+            InstanceProfile::Showcase,
+            InstanceProfile::Stress,
+        ]
+        .into_iter()
+        .zip(["Micro", "Showcase", "Stress"])
+        .zip(copy.instances)
+        .map(|((profile, label), description)| InstanceDescriptor {
+            profile,
+            label: label.into(),
+            description: description.into(),
+        })
+        .collect(),
+        default_strategy: slug(default_strategy),
         strategies: strategies
             .iter()
             .map(|(key, label, description, algorithm)| StrategyDescriptor {
-                key: (*key).into(),
+                key: slug(key),
                 label: (*label).into(),
                 description: (*description).into(),
                 algorithm: (*algorithm).into(),
             })
             .collect(),
         capabilities: capabilities.to_vec(),
-    }
+    };
+    (descriptor, copy.build)
 }
 
 pub(crate) fn run(
-    request: &RunRequest,
+    run: &ArtifactKey,
     control: &RunControl,
     observer: &mut dyn RunObserver,
 ) -> Result<RunArtifact, ServiceError> {
-    let descriptor = ReferenceService
-        .problem(&request.problem)
-        .ok_or_else(|| ServiceError::UnknownProblem(request.problem.clone()))?;
-    let strategy = request
-        .strategy
-        .as_deref()
-        .unwrap_or(&descriptor.default_strategy);
-    if !descriptor
-        .strategies
-        .iter()
-        .any(|item| item.key == strategy)
-    {
-        return Err(ServiceError::UnknownStrategy {
-            problem: descriptor.key,
-            strategy: strategy.into(),
-        });
-    }
-    let instance_key = request
-        .instance
-        .as_deref()
-        .unwrap_or(&descriptor.default_instance);
-    if !descriptor
-        .instances
-        .iter()
-        .any(|item| item.key == instance_key)
-    {
-        return Err(ServiceError::UnknownInstance {
-            problem: descriptor.key,
-            instance: instance_key.into(),
-        });
-    }
+    let (descriptor, build) = problems()
+        .into_iter()
+        .find(|(descriptor, _)| descriptor.key == run.problem)
+        .ok_or_else(|| ServiceError::UnknownProblem(run.problem.clone()))?;
     let mut progress = ProgressSink::new(control, observer);
     let _ = progress.emit(
-        "prepare",
+        slug("prepare"),
         0,
         1,
-        format!("preparing {} · {instance_key}", request.problem),
+        format!("preparing {} · {}", run.problem, run.instance),
     );
     progress.ensure()?;
-    let mut artifact = match request.problem.as_str() {
-        "maze" => maze::build(request, &descriptor, &mut progress),
-        "sokoban" => sokoban::build(request, &descriptor, &mut progress),
-        "exact_cover" => exact_cover::build(request, &descriptor),
-        "workshop" => workshop::build(request, &descriptor),
-        "scheduling" => scheduling::build(request, &descriptor),
-        "rescue" => rescue::build(request, &descriptor),
-        "bridge" => bridge::build(request, &descriptor),
-        "amm" => amm::build(request, &descriptor),
-        "lending" => lending::build(request, &descriptor),
-        "marketplace" => marketplace::build(request, &descriptor),
-        "logistics" => logistics::build(request, &descriptor, &mut progress),
-        "connect_four" => connect_four::build(request, &descriptor, &mut progress),
-        "mission" => mission::build(request, &descriptor, &mut progress),
-        "perishables" => perishables::build(request, &descriptor),
-        "work_league" => work_league::build(request, &descriptor, &mut progress),
-        _ => unreachable!("catalog and dispatch must agree"),
-    }?;
+    let mut artifact = build(run, &descriptor, &mut progress)?;
     progress.ensure()?;
-    if let Some(document) = artifact.selected_document()
+    if let Some(document) = artifact.selected()
         && !progress.has_frames(&document.id)
     {
         for frame in &document.frames {
@@ -995,7 +966,7 @@ pub(crate) fn run(
     }
     for (offset, document) in artifact.documents.iter().enumerate() {
         let _ = progress.emit(
-            "artifact",
+            slug("artifact"),
             offset as u64 + 1,
             artifact.documents.len() as u64,
             format!("derived {}", document.title),
@@ -1030,7 +1001,7 @@ pub(super) struct ProgressSink<'a> {
     sequence: u64,
     error: Option<ServiceError>,
     observations: Vec<SearchObservationView>,
-    framed_documents: BTreeSet<String>,
+    framed_documents: BTreeSet<DocumentPath>,
 }
 
 impl<'a> ProgressSink<'a> {
@@ -1047,7 +1018,7 @@ impl<'a> ProgressSink<'a> {
 
     pub fn emit(
         &mut self,
-        phase: impl Into<String>,
+        phase: PhasePath,
         completed: u64,
         total: u64,
         message: impl Into<String>,
@@ -1059,7 +1030,6 @@ impl<'a> ProgressSink<'a> {
             self.error = Some(error);
             return ControlFlow::Break(());
         }
-        let phase = phase.into();
         let message = message.into();
         self.observer.progress(ServiceProgress {
             sequence: self.sequence,
@@ -1070,10 +1040,12 @@ impl<'a> ProgressSink<'a> {
         });
         let observation = SearchObservationView {
             sequence: self.sequence,
-            algorithm: phase
-                .trim_end_matches("_frontier")
-                .trim_end_matches("_solution")
-                .into(),
+            algorithm: slug(
+                phase
+                    .as_str()
+                    .trim_end_matches("-frontier")
+                    .trim_end_matches("-solution"),
+            ),
             kind: observation_kind(&phase),
             phase,
             label: message,
@@ -1081,9 +1053,9 @@ impl<'a> ProgressSink<'a> {
             total,
             subjects: Vec::new(),
             metrics: vec![
-                visual_metric("completed", "Work completed", completed, None),
+                visual_metric(slug("completed"), "Work completed", completed, None),
                 visual_metric(
-                    "remaining",
+                    slug("remaining"),
                     "Work remaining",
                     total.saturating_sub(completed),
                     None,
@@ -1103,7 +1075,7 @@ impl<'a> ProgressSink<'a> {
     /// has a knowable completion percentage.
     pub fn graph(
         &mut self,
-        phase: impl Into<String>,
+        phase: PhasePath,
         progress: GraphSearchProgress,
         message: impl Into<String>,
     ) -> ControlFlow<()> {
@@ -1114,7 +1086,7 @@ impl<'a> ProgressSink<'a> {
     /// subjects expanded during this checkpoint.
     pub fn graph_with_subjects(
         &mut self,
-        phase: impl Into<String>,
+        phase: PhasePath,
         progress: GraphSearchProgress,
         message: impl Into<String>,
         subjects: impl IntoIterator<Item = ViewId>,
@@ -1126,7 +1098,6 @@ impl<'a> ProgressSink<'a> {
             self.error = Some(error);
             return ControlFlow::Break(());
         }
-        let phase = phase.into();
         let message = message.into();
         let completed = progress.expanded() as u64;
         self.observer.progress(ServiceProgress {
@@ -1140,7 +1111,7 @@ impl<'a> ProgressSink<'a> {
         });
         let observation = SearchObservationView {
             sequence: self.sequence,
-            algorithm: phase.clone(),
+            algorithm: slug(phase.as_str()),
             kind: observation_kind(&phase),
             phase,
             label: message,
@@ -1148,10 +1119,20 @@ impl<'a> ProgressSink<'a> {
             total: 0,
             subjects: subjects.into_iter().collect(),
             metrics: vec![
-                visual_metric("expanded", "States expanded", progress.expanded(), None),
-                visual_metric("generated", "States generated", progress.generated(), None),
-                visual_metric("frontier", "Frontier", progress.frontier(), None),
-                visual_metric("visited", "States visited", progress.visited(), None),
+                visual_metric(
+                    slug("expanded"),
+                    "States expanded",
+                    progress.expanded(),
+                    None,
+                ),
+                visual_metric(
+                    slug("generated"),
+                    "States generated",
+                    progress.generated(),
+                    None,
+                ),
+                visual_metric(slug("frontier"), "Frontier", progress.frontier(), None),
+                visual_metric(slug("visited"), "States visited", progress.visited(), None),
             ],
         };
         self.observer.observation(observation.clone());
@@ -1174,19 +1155,20 @@ impl<'a> ProgressSink<'a> {
         &self.observations
     }
 
-    pub fn frame(&mut self, document_id: &str, frame: &ExchangeFrame) {
+    pub fn frame(&mut self, document: &DocumentPath, frame: &ExchangeFrame) {
         if self.error.is_none() {
-            self.framed_documents.insert(document_id.into());
-            self.observer.frame(document_id, frame.clone());
+            self.framed_documents.insert(document.clone());
+            self.observer.frame(document, frame.clone());
         }
     }
 
-    fn has_frames(&self, document_id: &str) -> bool {
-        self.framed_documents.contains(document_id)
+    fn has_frames(&self, document: &DocumentPath) -> bool {
+        self.framed_documents.contains(document)
     }
 }
 
-fn observation_kind(phase: &str) -> SearchObservationKindView {
+fn observation_kind(phase: &PhasePath) -> SearchObservationKindView {
+    let phase = phase.as_str();
     if phase.contains("solution") || phase.contains("incumbent") {
         SearchObservationKindView::Incumbent
     } else if phase.contains("pareto") || phase.contains("frontier") {
@@ -1227,11 +1209,11 @@ where
     let ontology = StudioOntology::<AccountId, A, RateId, Role>::new(spec.problem, Some(scene));
     let mut document = derive_document(
         ViewDocumentMetadata {
-            id: format!("{}:{}", spec.problem, spec.strategy),
+            id: slug(spec.strategy),
             title: spec.title.into(),
             description: spec.description.into(),
             source: ViewSource {
-                key: spec.problem.into(),
+                key: slug(spec.problem),
                 label: spec.source_label.into(),
             },
         },
@@ -1264,11 +1246,11 @@ where
         .with_leaderboards(leaderboards);
     let mut document = derive_document_with_frames(
         ViewDocumentMetadata {
-            id: format!("{}:{}", spec.problem, spec.strategy),
+            id: slug(spec.strategy),
             title: spec.title.into(),
             description: spec.description.into(),
             source: ViewSource {
-                key: spec.problem.into(),
+                key: slug(spec.problem),
                 label: spec.source_label.into(),
             },
         },
@@ -1302,7 +1284,7 @@ where
 {
     let ontology = StudioOntology::<AccountId, A, RateId, Role>::new(namespace, None);
     derive_proposal(
-        spec.id,
+        slug(spec.id),
         spec.label,
         spec.description,
         0,
@@ -1334,15 +1316,20 @@ pub(super) fn telemetry(
 }
 
 pub(super) fn artifact(
-    request: &RunRequest,
+    run: &ArtifactKey,
     descriptor: &ProblemDescriptor,
-    selected_strategy: &str,
     mut documents: Vec<ViewDocument>,
 ) -> Result<RunArtifact, ServiceError> {
-    let instance = selected_instance(request, descriptor)
-        .expect("service validates instance identity before adapter dispatch")
+    let instance = descriptor
+        .instances
+        .iter()
+        .find(|instance| instance.profile == run.instance)
+        .ok_or_else(|| ServiceError::UnknownInstance {
+            problem: run.problem.clone(),
+            instance: run.instance,
+        })?
         .clone();
-    let selected_document_id = format!("{}:{}", descriptor.key, selected_strategy);
+    let selected_document: DocumentPath = slug(run.strategy.as_str());
     let alternatives = documents.len() as u64;
     for document in &mut documents {
         for snapshot in std::iter::once(&document.initial).chain(
@@ -1406,63 +1393,26 @@ pub(super) fn artifact(
     }
     if !documents
         .iter()
-        .any(|document| document.id == selected_document_id)
+        .any(|document| document.id == selected_document)
     {
         return Err(ServiceError::Problem {
             problem: descriptor.key.clone(),
-            message: format!("strategy `{selected_strategy}` produced no document"),
+            message: format!("strategy `{}` produced no document", run.strategy),
         });
     }
     Ok(RunArtifact {
-        id: format!(
-            "{}:{}:{}:{}:{}",
-            descriptor.key, instance.key, selected_strategy, request.seed, request.budget
-        ),
+        key: run.clone(),
         problem: descriptor.clone(),
         instance,
-        request: request.clone(),
-        selected_document_id,
+        selected_document,
         documents,
         assessed_proposals: Vec::new(),
     })
 }
 
-pub(super) fn selected_instance<'a>(
-    request: &RunRequest,
-    descriptor: &'a ProblemDescriptor,
-) -> Option<&'a InstanceDescriptor> {
-    let key = request
-        .instance
-        .as_deref()
-        .unwrap_or(&descriptor.default_instance);
-    descriptor
-        .instances
-        .iter()
-        .find(|instance| instance.key == key)
-}
-
-pub(super) fn instance_profile(
-    request: &RunRequest,
-    descriptor: &ProblemDescriptor,
-) -> InstanceProfile {
-    selected_instance(request, descriptor)
-        .expect("service validates instance identity before adapter dispatch")
-        .profile
-}
-
-pub(super) fn selected_strategy<'a>(
-    request: &'a RunRequest,
-    descriptor: &'a ProblemDescriptor,
-) -> &'a str {
-    request
-        .strategy
-        .as_deref()
-        .unwrap_or(&descriptor.default_strategy)
-}
-
 pub(super) fn problem_error(problem: &str, error: impl ToString) -> ServiceError {
     ServiceError::Problem {
-        problem: problem.into(),
+        problem: slug(problem),
         message: error.to_string(),
     }
 }

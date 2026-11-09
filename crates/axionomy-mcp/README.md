@@ -90,7 +90,7 @@ Resources hold the data. Their URI templates (RFC 6570) are listed by
 | `…/exchanges{?cursor}` | Those exchanges; replaying them on the parent reproduces it |
 | `…/diff/{other_id}{?cursor}` | What differs from this snapshot to another: accounts opened and closed, balances with both quantities, rates and invariants |
 | `axionomy://assessment/{assessment_id}` and `…/lines{?cursor}` | An assessment and what explains it |
-| `axionomy://artifact/{artifact_id}`, `…/documents/{document_id}` and `…/frames{?cursor}` | A problem run |
+| `axionomy://artifact/{artifact_id}`, `…/documents/{document}` and `…/frames{?cursor}` | A problem run: its key and documents, one document, or its frames |
 
 A list page is `{"items": [...], "nextCursor": "..."}` and follows the MCP
 pagination rules: the server chooses the page size, the cursor is opaque, the
@@ -138,6 +138,12 @@ server can derive a handle from an economy's content. Two different histories
 that reach the same balances get different handles, so a handle also names how
 its state was reached; their equal `root`s say they reached the same state.
 Assessment handles, `AssessmentId`, are written `asm-` and keyed the same way.
+Artifact handles, `ArtifactId`, are written `art-` and keyed by what the
+artifact was computed from, so the same problem, instance, strategy, seed and
+budget always get the same handle. A problem run takes the problem and strategy
+as kebab-case paths (`work-league`, `a-star`) and the instance as `micro`,
+`showcase` or `stress`; its summary carries the artifact handle, that key, the
+selected document and every document's frame count.
 
 Every snapshot is a point of a run in the store. Authoring records a run that
 starts from the authored state; applying exchanges records a run forked from

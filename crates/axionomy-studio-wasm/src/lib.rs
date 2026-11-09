@@ -4,8 +4,11 @@
 //! observations, replay validation, and artifacts all cross the boundary as
 //! Rust-owned contracts. The JavaScript Worker only schedules and transports.
 
-use axionomy_service::{ReferenceService, RunControl, RunObserver, RunRequest, ServiceProgress};
-use axionomy_view::{ExchangeFrame, SearchObservationView, StudioEvent};
+use axionomy_service::{
+    ReferenceService, RunControl, RunObserver, RunRequest, ServiceProgress, StudioEvent,
+    StudioRunId,
+};
+use axionomy_view::{DocumentPath, ExchangeFrame, SearchObservationView};
 use js_sys::Function;
 use wasm_bindgen::prelude::*;
 
@@ -22,23 +25,18 @@ pub fn catalog() -> Result<String, JsValue> {
 #[wasm_bindgen]
 pub fn run(request_json: &str, run_id: &str, emit: &Function) -> Result<String, JsValue> {
     let request: RunRequest = serde_json::from_str(request_json).map_err(js_error)?;
-    let problem = ReferenceService
-        .problem(&request.problem)
-        .ok_or_else(|| JsValue::from_str("unknown problem"))?;
-    let strategy = request
-        .strategy
-        .clone()
-        .unwrap_or_else(|| problem.default_strategy.clone());
+    let run_id: StudioRunId = run_id.parse().map_err(js_error)?;
+    let key = ReferenceService.resolve(&request).map_err(js_error)?;
     let mut observer = WorkerObserver {
         emit,
         run_id,
         next_sequence: 1,
     };
     observer.event(StudioEvent::RunStarted {
-        run_id: run_id.into(),
+        run_id,
         sequence: 0,
-        problem: request.problem.clone(),
-        strategy,
+        problem: key.problem,
+        strategy: key.strategy,
     })?;
     let artifact = ReferenceService
         .run_with(&request, &RunControl::default(), &mut observer)
@@ -48,7 +46,7 @@ pub fn run(request_json: &str, run_id: &str, emit: &Function) -> Result<String, 
 
 struct WorkerObserver<'a> {
     emit: &'a Function,
-    run_id: &'a str,
+    run_id: StudioRunId,
     next_sequence: u64,
 }
 
@@ -71,7 +69,7 @@ impl RunObserver for WorkerObserver<'_> {
     fn progress(&mut self, progress: ServiceProgress) {
         let sequence = self.sequence();
         let _ = self.event(StudioEvent::Progress {
-            run_id: self.run_id.into(),
+            run_id: self.run_id,
             sequence,
             completed: progress.completed,
             total: Some(progress.total),
@@ -82,18 +80,18 @@ impl RunObserver for WorkerObserver<'_> {
     fn observation(&mut self, observation: SearchObservationView) {
         let sequence = self.sequence();
         let _ = self.event(StudioEvent::SearchObservation {
-            run_id: self.run_id.into(),
+            run_id: self.run_id,
             sequence,
             observation,
         });
     }
 
-    fn frame(&mut self, document_id: &str, frame: ExchangeFrame) {
+    fn frame(&mut self, document: &DocumentPath, frame: ExchangeFrame) {
         let sequence = self.sequence();
         let _ = self.event(StudioEvent::FrameAppended {
-            run_id: self.run_id.into(),
+            run_id: self.run_id,
             sequence,
-            document_id: document_id.into(),
+            document: document.clone(),
             frame_index: frame.index,
             frame: Box::new(frame),
         });

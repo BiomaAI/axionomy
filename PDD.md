@@ -722,9 +722,10 @@ to 72 hidden scenarios; the other seven profiles retain their board, horizon,
 target, inventory, or sampling pressure.
 
 Profiles remain closed problem definitions. Their accounts, assets, rates,
-invariants, goals, and initial quantities are ordinary model data; the
-`InstanceDescriptor` is interface identity, not semantic authority. Every
-artifact resolves and records that identity. Micro continues to support exact
+invariants, goals, and initial quantities are ordinary model data; an
+instance is named by its profile (`micro`, `showcase` or `stress`), which is
+interface identity, not semantic authority. Every artifact records its key:
+the problem, instance, strategy, seed and budget it was computed from. Micro continues to support exact
 oracles even when exhaustive search over Showcase would be inappropriate, and
 an approximate or candidate-bounded Showcase frontier must be labeled as such.
 
@@ -752,7 +753,7 @@ as `Economy<MyAccount, MyAsset, MyRate, MyRole>` cannot be known statically by
 a TypeScript build, so the Rust adapter lowers them into:
 
 ```text
-ViewId        = stable presentation key + human label + optional JSON context
+ViewId        = stable item path + human label + optional JSON context
 ExactQuantity = decimal text
 ViewSnapshot  = ordered accounts and balances + optional derived scene
                 + replay-derived leaderboards
@@ -782,7 +783,10 @@ declare a task complete. Ratios are reduced and transported as exact text; an
 agent with no meaningful work remains visible but ineligible instead of
 receiving a misleading first-place zero.
 
-Stable keys and human labels are deliberately separate. Reference adapters
+Stable keys and human labels are deliberately separate. Every key a view
+carries is a typed path: items such as `maze/account/agent` or `node/start`,
+measures, classes, documents, proposals, phases and algorithms each have their
+own kind, so one cannot stand where another is expected. Reference adapters
 implement typed labels for their account, asset, rate, and role enums while
 retaining the same Debug-derived keys used by artifacts and scene links.
 User-defined economies keep the generic Debug-label fallback unless their
@@ -806,9 +810,9 @@ Schemars-1-native Aide line because duplicating the entire DTO graph for an old
 schema-trait release would create two contract systems.
 
 The native server exposes the canonical catalog, starts runs, reports state,
-pauses, resumes, or cancels computation cooperatively, serves completed
-artifacts, documents, and paginated frames, and streams tagged `StudioEvent`
-values through Server-Sent Events.
+pauses, resumes, or cancels computation cooperatively, serves each run's
+artifact, documents, and paginated frames under the run's minted ID (`run-7`),
+and streams tagged `StudioEvent` values through Server-Sent Events.
 The service emits one monotonic event sequence across adapter phases.
 `FrameAppended` carries the complete newly verified frame and its document
 identity, so native SSE and browser Wasm can show authoritative progress while
@@ -1629,39 +1633,29 @@ factor.
    search, rollouts, Monte Carlo, MPPI and RL, and Studio scrubs from stored
    roots. Extract generic holdings, dependency, and event indexes only after a
    second domain confirms the perishables shapes.
-5. Give the service and Studio identifiers their own types. Economy
-   identifiers are paths and MCP's handles are minted types, but problem,
-   instance and strategy keys, artifact and document IDs, Studio run IDs and
-   the view layer's presentation keys are still strings. They are written in
-   `snake_case` and appear in Studio URLs, CLI arguments and the tracked
-   artifacts, so typing them as paths means renaming them to `kebab-case`
-   everywhere at once: catalog keys as `Path` kinds, an artifact ID as a
-   typed problem, instance, strategy, seed and budget, a document ID as its
-   strategy, and Studio run IDs as minted handles, with the artifacts
-   regenerated.
-6. Extend invariants with carefully constrained local and inequality forms.
-7. Build an external OR adapter that compiles one closed schedule and replays
+5. Extend invariants with carefully constrained local and inequality forms.
+6. Build an external OR adapter that compiles one closed schedule and replays
    the returned assignment.
-8. Extend encoded Nature schemas and distribution updates beyond finite
+7. Extend encoded Nature schemas and distribution updates beyond finite
    weighted supports.
-9. Extend the exact-cover, scheduling, and Connect Four reference-oracle tests
+8. Extend the exact-cover, scheduling, and Connect Four reference-oracle tests
    into broader bounded model checking where failures justify the cost.
-10. Decide whether dynamic rate availability is represented by rate assets,
-    capability assets, or immutable schemas plus explicit enabling state.
-11. Add PUCT priors, progressive widening, and deterministic parallel workers
+9. Decide whether dynamic rate availability is represented by rate assets,
+   capability assets, or immutable schemas plus explicit enabling state.
+10. Add PUCT priors, progressive widening, and deterministic parallel workers
     when learned priors, measured branching, or throughput justify them.
-12. Add capability-scoped proposal visibility and richer multi-agent belief
+11. Add capability-scoped proposal visibility and richer multi-agent belief
     and communication protocols.
-13. Integrate external learned policies through the implemented RL
+12. Integrate external learned policies through the implemented RL
     projections without granting mutation authority.
-14. Add persisted search checkpoints, worker leases, task notifications, and
+13. Add persisted search checkpoints, worker leases, task notifications, and
     tenant-aware authorization only when the MCP reference boundary is moved
     into a real multi-process deployment.
-15. Measure full-artifact transfer and rendering across the Studio
+14. Measure full-artifact transfer and rendering across the Studio
     adapters; add paged model projection, incremental Pareto/Monte Carlo
     publication, or compact rate schemas only where measured pressure warrants
     them.
-16. Build the [agent benchmark and rating layer](docs/AGENT_BENCHMARK.md) across
+15. Build the [agent benchmark and rating layer](docs/AGENT_BENCHMARK.md) across
     single-agent, cooperative, competitive, and mixed-motive designs. Use it to
     pressure generated instances, long-horizon policies, coordination, work
     accounting, robustness, and replay-derived scoring.
@@ -1977,6 +1971,24 @@ state their durability, and one writer commits many callers' batches per
 transaction. Tags, metrics, groups and refs organize runs without changing what
 an exchange does. MCP keeps its snapshots as points of runs in a store, and
 exposes only what a handle reaches.
+
+### D-041: Identifiers are paths; vocabularies are snake_case
+
+Everything a caller names is written as a path of kebab-case segments and
+read into its own type: accounts and assets, problems and strategies
+(`work-league`, `a-star`), documents, view items (`maze/account/agent`),
+measures, classes, phases and algorithms, and store tags, metrics, refs and
+group kinds. What a server mints has its own handle type instead: economy,
+assessment and artifact handles in MCP, run and group IDs in the store, and
+Studio run IDs (`run-7`). JSON field names and closed vocabularies, such as
+capabilities, families, glyphs, tones and event kinds, stay snake_case like
+the schema they belong to, and an instance is named by its profile. Text that
+people read stays text.
+
+One spelling per identifier means a link, a CLI argument, an MCP call and a
+stored artifact name the same thing the same way, and a misspelling is
+refused where it is read instead of failing to match later. Kernel parameter
+names remain text because the specification defines them as text.
 
 ## 16. Success criteria
 

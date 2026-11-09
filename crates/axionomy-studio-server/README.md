@@ -3,10 +3,11 @@
 This crate is the native reference backend for Axionomy Studio. It adapts the
 same `axionomy-service` used by CLI and MCP into one problem catalog,
 pausable/resumable/cancellable in-memory runs, replay-derived artifacts,
-paginated frames, Server-Sent Events, and an OpenAPI 3.1 contract. It
-intentionally has no database: a run is operational UI state, while a portable
-`RunArtifact` can be exported to JSON whenever durable or static playback is
-wanted.
+paginated frames, Server-Sent Events, and an OpenAPI 3.1 contract. Each run
+gets a minted ID such as `run-7`; its artifact, documents and frames are served
+under `/api/runs/{run_id}/artifact`. It intentionally has no database: a run
+is operational UI state, while a portable `RunArtifact` can be exported to
+JSON whenever durable or static playback is wanted.
 
 Run the API and optional built Studio frontend:
 

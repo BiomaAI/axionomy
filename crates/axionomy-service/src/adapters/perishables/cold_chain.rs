@@ -5,11 +5,11 @@ use axionomy_problems::perishables::cold_chain::{
 use axionomy_view::{GraphEdgeView, GraphNodeView};
 
 pub(super) fn build(
-    request: &RunRequest,
+    run: &ArtifactKey,
     descriptor: &ProblemDescriptor,
     profile: InstanceProfile,
 ) -> Result<RunArtifact, ServiceError> {
-    let initial = chain::initial(matches!(profile, InstanceProfile::Stress), request.seed);
+    let initial = chain::initial(matches!(profile, InstanceProfile::Stress), run.seed);
     let mut documents = Vec::new();
     for (strategy, title, description, policy) in [
         (
@@ -19,19 +19,19 @@ pub(super) fn build(
             Policy::ProtectCold,
         ),
         (
-            "pareto_inventory",
+            "pareto-inventory",
             "Perishables · process before cooling",
             "Preserve ambient stock before powering refrigeration. Processing consumes electricity and labor, then the policy revisits shipment and storage choices each day.",
             Policy::ProcessFirst,
         ),
         (
-            "pareto_energy",
+            "pareto-energy",
             "Perishables · conserve transport fuel",
             "Ship on alternating days and process what the energy budget permits. Fewer trips save fuel but can leave food obligations unmet.",
             Policy::ConserveFuel,
         ),
         (
-            "storage_buffer",
+            "storage-buffer",
             "Perishables · rebalance cold storage",
             "Ship refrigerated stock to free capacity, split a warm cohort to fit that space, and move it into cooling while preserving its prior heat exposure.",
             Policy::RebalanceCold,
@@ -76,12 +76,7 @@ pub(super) fn build(
         );
         documents[index].pareto_fronts.push(front);
     }
-    artifact(
-        request,
-        descriptor,
-        selected_strategy(request, descriptor),
-        documents,
-    )
+    artifact(run, descriptor, documents)
 }
 fn objectives(world: &World) -> Vec<ObjectiveView> {
     let usable = chain::total(world, Asset::Fresh)
@@ -127,7 +122,7 @@ fn objectives(world: &World) -> Vec<ObjectiveView> {
     ]
     .into_iter()
     .map(|(key, label, value, direction)| ObjectiveView {
-        key: key.into(),
+        key: slug(key),
         label: label.into(),
         value: value.to_string(),
         direction,
@@ -146,8 +141,8 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
     let nodes = locations
         .into_iter()
         .map(|(key, label, x, y)| GraphNodeView {
-            id: ViewId::new(key, label),
-            classes: vec!["resource".into()],
+            id: ViewId::new(slug(key), label),
+            classes: vec![slug("resource")],
             x: Some(x),
             y: Some(y),
         })
@@ -165,9 +160,9 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
     let edges = routes
         .into_iter()
         .map(|(from, to, label)| GraphEdgeView {
-            id: format!("cold:{from}:{to}"),
-            source: from.into(),
-            target: to.into(),
+            id: slug(format!("cold/{from}/{to}")),
+            source: slug(from),
+            target: slug(to),
             label: Some(label.into()),
             classes: vec![],
         })
@@ -188,14 +183,14 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         };
         let mut entity = link_account(
             visual_entity(
-                format!("cohort:{id}"),
+                slug(format!("cohort/{id}")),
                 format!("Cohort {}", id + 1),
                 SceneGlyphView::Package,
                 SceneAnchorView::GraphNode {
                     node: if place == Place::Fridge {
-                        "fridge".into()
+                        slug("fridge")
                     } else {
-                        "warehouse".into()
+                        slug("warehouse")
                     },
                 },
                 SceneEntityRoleView::Attachment,
@@ -210,11 +205,16 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                     "{fresh} fresh · {stable} preserved · {spoiled} spoiled"
                 )),
             ),
-            format!("perishables:account:batch-{id}"),
+            slug(format!("perishables/account/batch-{id}")),
         );
         entity.metrics = vec![
-            visual_metric("heat", "Heat exposure", value(Asset::Heat), Some("/ 4")),
-            visual_metric("origin", "Thermal lineage", origin, None),
+            visual_metric(
+                slug("heat"),
+                "Heat exposure",
+                value(Asset::Heat),
+                Some("/ 4"),
+            ),
+            visual_metric(slug("origin"), "Thermal lineage", origin, None),
         ];
         entities.push(entity);
     }
@@ -256,21 +256,21 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         ),
     ] {
         let mut entity = visual_entity(
-            format!("stock:{key}"),
+            slug(format!("stock/{key}")),
             label,
             SceneGlyphView::Material,
-            SceneAnchorView::GraphNode { node: node.into() },
+            SceneAnchorView::GraphNode { node: slug(node) },
             SceneEntityRoleView::State,
             SceneToneView::Neutral,
             None,
         );
-        entity.metrics = vec![visual_metric(key, label, value, Some(unit))];
+        entity.metrics = vec![visual_metric(slug(key), label, value, Some(unit))];
         entities.push(link_account(
             entity,
             if node == "buyer" {
-                "perishables:account:buyer"
+                slug("perishables/account/buyer")
             } else {
-                "perishables:account:world"
+                slug("perishables/account/world")
             },
         ));
     }
@@ -284,9 +284,9 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         )
         .with_entities(entities)
         .with_metrics([
-            visual_metric("day", "Day", day + 1, None),
+            visual_metric(slug("day"), "Day", day + 1, None),
             visual_metric(
-                "grid",
+                slug("grid"),
                 "Grid supply",
                 if chain::value(world, AccountId::World, Asset::Outage(day as u8)) > 0 {
                     "outage"
@@ -296,7 +296,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 None,
             ),
             visual_metric(
-                "cooling",
+                slug("cooling"),
                 "Refrigeration",
                 if chain::total(world, Asset::CoolingOn) > 0 {
                     "powered"
@@ -306,43 +306,43 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 None,
             ),
             visual_metric(
-                "fresh",
+                slug("fresh"),
                 "Fresh stock",
                 chain::total(world, Asset::Fresh),
                 Some("crates"),
             ),
             visual_metric(
-                "preserved",
+                slug("preserved"),
                 "Preserved stock",
                 chain::total(world, Asset::Preserved),
                 Some("crates"),
             ),
             visual_metric(
-                "spoiled",
+                slug("spoiled"),
                 "Spoiled or discarded",
                 chain::total(world, Asset::Spoiled) + chain::total(world, Asset::Disposed),
                 Some("crates"),
             ),
             visual_metric(
-                "delivered",
+                slug("delivered"),
                 "Food delivered",
                 chain::total(world, Asset::Delivered),
                 Some("crates"),
             ),
             visual_metric(
-                "missed",
+                slug("missed"),
                 "Unmet obligations",
                 chain::total(world, Asset::MissedDemand),
                 Some("crates"),
             ),
             visual_metric(
-                "energy",
+                slug("energy"),
                 "Electricity left",
                 chain::total(world, Asset::Energy),
                 Some("units"),
             ),
             visual_metric(
-                "fuel",
+                slug("fuel"),
                 "Fuel left",
                 chain::total(world, Asset::Fuel),
                 Some("units"),

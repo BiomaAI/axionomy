@@ -27,12 +27,12 @@ simulation, and learned policies without duplicating domain logic; exact forks
 enable counterfactual exploration, while replayable traces make decisions
 auditable, comparable, and independently verifiable.
 
-[![Axionomy Studio visualizing autonomous agents, jobs, facilities, and economic relationships in the Work League](assets/studio-gallery/work_league.webp)](https://biomaai.github.io/axionomy/?problem=work_league&instance=showcase&strategy=mixed_field&document=work_league%3Amixed_field&view=replay&step=0&leaderboard=contract_value&seed=17&budget=128)
+[![Axionomy Studio visualizing autonomous agents, jobs, facilities, and economic relationships in the Work League](assets/studio-gallery/work_league.webp)](https://biomaai.github.io/axionomy/?problem=work-league&instance=showcase&strategy=mixed-field&document=mixed-field&view=replay&step=0&leaderboard=contract-value&seed=17&budget=128)
 
-<p align="center"><sub>Autonomous Work League makes topology, agents, jobs, facilities, relationships, and economic state readable in one verified replay. <a href="https://biomaai.github.io/axionomy/?problem=work_league&instance=showcase&strategy=mixed_field&document=work_league%3Amixed_field&view=replay&step=0&leaderboard=contract_value&seed=17&budget=128">Open this view in the live Studio</a>.</sub></p>
+<p align="center"><sub>Autonomous Work League makes topology, agents, jobs, facilities, relationships, and economic state readable in one verified replay. <a href="https://biomaai.github.io/axionomy/?problem=work-league&instance=showcase&strategy=mixed-field&document=mixed-field&view=replay&step=0&leaderboard=contract-value&seed=17&budget=128">Open this view in the live Studio</a>.</sub></p>
 
 Try the
-[Autonomous Work League](https://biomaai.github.io/axionomy/?problem=work_league&instance=showcase&strategy=mixed_field&document=work_league%3Amixed_field&view=replay&step=24&leaderboard=resource_efficiency&seed=17&budget=128)
+[Autonomous Work League](https://biomaai.github.io/axionomy/?problem=work-league&instance=showcase&strategy=mixed-field&document=mixed-field&view=replay&step=24&leaderboard=resource-efficiency&seed=17&budget=128)
 to see several agents lead different replay-derived rankings at the same
 economic step.
 
@@ -287,7 +287,7 @@ can still lead to failure. Actor observations follow the replay step, and the
 premature coordinated move is rejected for missing shared information.
 
 **How much does one participant change the outcome?** The
-[Living Market](https://biomaai.github.io/axionomy/?problem=amm&strategy=market_day)
+[Living Market](https://biomaai.github.io/axionomy/?problem=amm&strategy=market-day)
 compares its market day with the same economy without the whale and with thin
 liquidity. Read initial-to-final price and reserves side by side, then inspect
 individual effects and exact coalition attribution. Its Rust example also
@@ -295,7 +295,7 @@ proves that a trader demanding more than the quote receives nothing and leaves
 all accounts unchanged.
 
 **What does borrowing early cost?** The
-[Lending market](https://biomaai.github.io/axionomy/?problem=lending&strategy=least_interest)
+[Lending market](https://biomaai.github.io/axionomy/?problem=lending&strategy=least-interest)
 finances a bill that falls due before revenue arrives. Compare the
 least-interest plan with fewest steps: one borrows the shortfall just before
 the bill is due and repays from each installment, the other borrows on day one.
@@ -304,7 +304,7 @@ loan past its liquidation threshold, stop the clock, and hand collateral plus a
 bonus to the keeper.
 
 **Who wins, and what does winning cost?** In the
-[Work League](https://biomaai.github.io/axionomy/?problem=work_league&strategy=mixed_field&step=24&leaderboard=resource_efficiency),
+[Work League](https://biomaai.github.io/axionomy/?problem=work-league&strategy=mixed-field&step=24&leaderboard=resource-efficiency),
 change the ranking dimension at the same economic step. Value, throughput,
 resource efficiency, waste, and reliability expose different consequences of
 competing for the same finite work.
@@ -324,31 +324,31 @@ full-resolution view; follow its title to open the exact live replay.
   <tr>
     <td colspan="2">
       <a href="assets/studio-gallery/maze.webp"><img src="assets/studio-gallery/maze.webp" alt="Axionomy Studio replaying the Vault District maze as the Explorer opens its gate"></a><br>
-      <strong><a href="https://biomaai.github.io/axionomy/?problem=maze&amp;instance=showcase&amp;strategy=a_star&amp;document=maze%3Aa_star&amp;view=replay&amp;step=8&amp;seed=0&amp;budget=128">Key-door Maze · Vault District</a></strong><br>
+      <strong><a href="https://biomaai.github.io/axionomy/?problem=maze&amp;instance=showcase&amp;strategy=a-star&amp;document=a-star&amp;view=replay&amp;step=8&amp;seed=0&amp;budget=128">Key-door Maze · Vault District</a></strong><br>
       The default onboarding graph: 15 rooms, cyclic alternatives, an explicit key transfer, a stateful gate, planned and traversed route evidence, and a replay-verified A* result.
     </td>
   </tr>
   <tr>
     <td width="50%">
       <a href="assets/studio-gallery/work_league.webp"><img src="assets/studio-gallery/work_league.webp" alt="Axionomy Studio visualizing autonomous agents, jobs, facilities, and economic relationships in the Work League"></a><br>
-      <strong><a href="https://biomaai.github.io/axionomy/?problem=work_league&amp;instance=showcase&amp;strategy=mixed_field&amp;document=work_league%3Amixed_field&amp;view=replay&amp;step=0&amp;leaderboard=contract_value&amp;seed=17&amp;budget=128">Autonomous Work League</a></strong><br>
+      <strong><a href="https://biomaai.github.io/axionomy/?problem=work-league&amp;instance=showcase&amp;strategy=mixed-field&amp;document=mixed-field&amp;view=replay&amp;step=0&amp;leaderboard=contract-value&amp;seed=17&amp;budget=128">Autonomous Work League</a></strong><br>
       The canonical graph scene: four agents, finite jobs, shared facilities, resource costs, stable relationships, and several replay-derived rankings.
     </td>
     <td width="50%">
       <a href="assets/studio-gallery/logistics.webp"><img src="assets/studio-gallery/logistics.webp" alt="Axionomy Studio replaying a stochastic logistics route"></a><br>
-      <strong><a href="https://biomaai.github.io/axionomy/?problem=logistics&amp;instance=showcase&amp;strategy=reliable&amp;document=logistics%3Areliable&amp;view=replay&amp;step=27&amp;seed=0&amp;budget=128">Stochastic logistics</a></strong><br>
+      <strong><a href="https://biomaai.github.io/axionomy/?problem=logistics&amp;instance=showcase&amp;strategy=reliable&amp;document=reliable&amp;view=replay&amp;step=27&amp;seed=0&amp;budget=128">Stochastic logistics</a></strong><br>
       Monte Carlo policy comparison, MCTS evidence, random travel events, and a replayed route through four deliveries.
     </td>
   </tr>
   <tr>
     <td width="50%">
       <a href="assets/studio-gallery/marketplace.webp"><img src="assets/studio-gallery/marketplace.webp" alt="Axionomy Studio replaying an atomic multi-party marketplace clearing"></a><br>
-      <strong><a href="https://biomaai.github.io/axionomy/?problem=marketplace&amp;instance=showcase&amp;strategy=market_clearing&amp;document=marketplace%3Amarket_clearing&amp;view=replay&amp;step=4&amp;seed=17&amp;budget=128">Multi-party marketplace</a></strong><br>
+      <strong><a href="https://biomaai.github.io/axionomy/?problem=marketplace&amp;instance=showcase&amp;strategy=market-clearing&amp;document=market-clearing&amp;view=replay&amp;step=4&amp;seed=17&amp;budget=128">Multi-party marketplace</a></strong><br>
       Atomic settlement across buyers, sellers, carriers, platform, and tax, with exact Pareto utility tradeoffs.
     </td>
     <td width="50%">
       <a href="assets/studio-gallery/sokoban.webp"><img src="assets/studio-gallery/sokoban.webp" alt="Axionomy Studio replaying stable crates and a player moving through a Sokoban warehouse"></a><br>
-      <strong><a href="https://biomaai.github.io/axionomy/?problem=sokoban&amp;instance=showcase&amp;strategy=a_star&amp;document=sokoban%3Aa_star&amp;view=replay&amp;step=8&amp;seed=17&amp;budget=128">Sokoban</a></strong><br>
+      <strong><a href="https://biomaai.github.io/axionomy/?problem=sokoban&amp;instance=showcase&amp;strategy=a-star&amp;document=a-star&amp;view=replay&amp;step=8&amp;seed=17&amp;budget=128">Sokoban</a></strong><br>
       The canonical grid scene: stable terrain, independently animated entities, exact cell anchoring, dead squares, and atomic multi-cell pushes.
     </td>
   </tr>
