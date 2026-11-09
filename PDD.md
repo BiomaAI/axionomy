@@ -1623,35 +1623,45 @@ factor.
    candidate instantiation without arbitrary hidden guards.
 3. Add explicit wire-schema versioning only when compatibility with deployed
    historical data becomes a real requirement.
-4. Build [storage, runs and replay](docs/STORAGE.md): canonical
-   content-addressed trees for stored states, durable runs on redb under
-   explicit durability rules cheap enough for training loops, and tags,
-   groups and metrics for evaluation, Monte Carlo and MPPI. Extract generic
-   holdings, dependency, and event indexes only after a second domain confirms
-   the perishables shapes.
-5. Extend invariants with carefully constrained local and inequality forms.
-6. Build an external OR adapter that compiles one closed schedule and replays
+4. Finish [storage, runs and replay](docs/STORAGE.md). The canonical tree,
+   the redb store with runs, durability rules, tags, groups, metrics and refs,
+   and MCP on the store are built; next, typed ontologies record runs from
+   search, rollouts, Monte Carlo, MPPI and RL, and Studio scrubs from stored
+   roots. Extract generic holdings, dependency, and event indexes only after a
+   second domain confirms the perishables shapes.
+5. Give the service and Studio identifiers their own types. Economy
+   identifiers are paths and MCP's handles are minted types, but problem,
+   instance and strategy keys, artifact and document IDs, Studio run IDs and
+   the view layer's presentation keys are still strings. They are written in
+   `snake_case` and appear in Studio URLs, CLI arguments and the tracked
+   artifacts, so typing them as paths means renaming them to `kebab-case`
+   everywhere at once: catalog keys as `Path` kinds, an artifact ID as a
+   typed problem, instance, strategy, seed and budget, a document ID as its
+   strategy, and Studio run IDs as minted handles, with the artifacts
+   regenerated.
+6. Extend invariants with carefully constrained local and inequality forms.
+7. Build an external OR adapter that compiles one closed schedule and replays
    the returned assignment.
-7. Extend encoded Nature schemas and distribution updates beyond finite
+8. Extend encoded Nature schemas and distribution updates beyond finite
    weighted supports.
-8. Extend the exact-cover, scheduling, and Connect Four reference-oracle tests
+9. Extend the exact-cover, scheduling, and Connect Four reference-oracle tests
    into broader bounded model checking where failures justify the cost.
-9. Decide whether dynamic rate availability is represented by rate assets,
+10. Decide whether dynamic rate availability is represented by rate assets,
     capability assets, or immutable schemas plus explicit enabling state.
-10. Add PUCT priors, progressive widening, and deterministic parallel workers
+11. Add PUCT priors, progressive widening, and deterministic parallel workers
     when learned priors, measured branching, or throughput justify them.
-11. Add capability-scoped proposal visibility and richer multi-agent belief
+12. Add capability-scoped proposal visibility and richer multi-agent belief
     and communication protocols.
-12. Integrate external learned policies through the implemented RL
+13. Integrate external learned policies through the implemented RL
     projections without granting mutation authority.
-13. Add persisted search checkpoints, worker leases, task notifications, and
+14. Add persisted search checkpoints, worker leases, task notifications, and
     tenant-aware authorization only when the MCP reference boundary is moved
     into a real multi-process deployment.
-14. Measure full-artifact transfer and rendering across the Studio
+15. Measure full-artifact transfer and rendering across the Studio
     adapters; add paged model projection, incremental Pareto/Monte Carlo
     publication, or compact rate schemas only where measured pressure warrants
     them.
-15. Build the [agent benchmark and rating layer](docs/AGENT_BENCHMARK.md) across
+16. Build the [agent benchmark and rating layer](docs/AGENT_BENCHMARK.md) across
     single-agent, cooperative, competitive, and mixed-motive designs. Use it to
     pressure generated instances, long-horizon policies, coordination, work
     accounting, robustness, and replay-derived scoring.
@@ -1952,6 +1962,21 @@ balances reached by different paths different states. Closing requires the
 exchange's own effects to leave the account empty, so value never disappears
 implicitly, and a closed identifier may return. Account existence is therefore
 part of the state, including in state keys.
+
+### D-040: Storage remembers what the kernel decided
+
+Stored states are canonical trees (`axionomy-tree`) in one redb database
+(`axionomy-store`), with redb as the only storage engine and no storage trait
+of Axionomy's own. A tree holds an economy's logical state, accounts in path
+order rather than creation order, so equal states have equal roots whatever
+their history, and stores written apart merge by union. A run records each
+exchange with its receipt digest and stores states by an explicit checkpoint
+rule; any other state is the nearest stored one plus replay, and replay checks
+every receipt, so storage can never make a state the kernel did not. Writes
+state their durability, and one writer commits many callers' batches per
+transaction. Tags, metrics, groups and refs organize runs without changing what
+an exchange does. MCP keeps its snapshots as points of runs in a store, and
+exposes only what a handle reaches.
 
 ## 16. Success criteria
 
