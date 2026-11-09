@@ -113,9 +113,9 @@ test("shows incremental tactical search and responsive pause control", async ({ 
   test.setTimeout(60_000);
   await page.goto("/");
   await page.getByRole("combobox", { name: "Problem", exact: true }).selectOption("connect_four");
-  await page.getByRole("combobox", { name: "Instance (size)", exact: true }).selectOption("stress");
+  await page.getByRole("combobox", { name: "Instance (size)", exact: true }).selectOption("micro");
   await page.getByLabel("Seed").fill("42");
-  await page.getByLabel("Budget").fill("128");
+  await page.getByLabel("Budget").fill("32");
   await page.getByRole("button", { name: "Run", exact: true }).click();
   await expect(page.getByRole("button", { name: "Running…" })).toBeDisabled();
   await expect(page.locator(".run-activity")).toContainText(/MCTS iterations/);
@@ -123,7 +123,7 @@ test("shows incremental tactical search and responsive pause control", async ({ 
   await expect(page.getByText("Run paused", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Resume" }).click();
   await expect(page.getByText("New artifact computed and loaded")).toBeVisible({ timeout: 50_000 });
-  await expect(page.getByText(/Connect Four · Stress · Tactical MCTS self-play · seed 42 · budget 128/)).toBeVisible();
+  await expect(page.getByText(/Connect Four · Micro · Tactical MCTS self-play · seed 42 · budget 32/)).toBeVisible();
   await page.getByRole("tab", { name: /Step-by-step replay/ }).click();
   await expect(page.locator(".grid-scene")).toBeVisible();
   await expect(page.locator(".replay-proof")).toContainText("replay verified");
