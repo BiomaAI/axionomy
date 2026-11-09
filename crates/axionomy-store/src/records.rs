@@ -68,12 +68,12 @@ pub struct Run {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Checkpoints {
-    /// Every state: debugging, regression scenarios, replay buffers.
+    /// Every state: debugging, regression scenarios, transitions by root.
     EveryStep,
     /// Every state whose step is a multiple of n, and the last: any step is
     /// at most n - 1 replays from a stored state.
     Every(NonZeroU64),
-    /// The first and last states: training episodes and rollouts.
+    /// The first and last states: rollouts and episodes of any kind.
     Ends,
 }
 

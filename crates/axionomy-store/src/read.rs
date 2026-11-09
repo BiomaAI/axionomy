@@ -58,8 +58,9 @@ impl<O: Recordable> State<O> {
     }
 }
 
-/// One step of a run as a replay buffer keeps it: the exchange, the digest of
-/// its receipt, and the roots of the states before and after it.
+/// One step of a run as something consuming it step by step keeps it, such as
+/// a replay buffer, a dataset or an audit: the exchange, the digest of its
+/// receipt, and the roots of the states before and after it.
 pub struct Transition<O: Recordable> {
     /// The step the exchange reached.
     pub step: u64,
@@ -294,9 +295,9 @@ impl Reader {
         Ok(())
     }
 
-    /// A run's steps after step `after` as a replay buffer keeps them, at
-    /// most `limit`: each exchange between the roots of the states before and
-    /// after it, replayed and checked against its receipt.
+    /// A run's steps after step `after` as transitions, at most `limit`: each
+    /// exchange between the roots of the states before and after it, replayed
+    /// and checked against its receipt.
     pub fn transitions<O: Recordable>(
         &self,
         run: RunId,

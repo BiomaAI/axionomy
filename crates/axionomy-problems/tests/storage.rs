@@ -127,9 +127,9 @@ fn every_problem_economy_is_stored_and_read_back_unchanged() {
     ]);
 }
 
-/// Monte Carlo rollouts of a canonical problem recorded as they would be in a
-/// training loop: one run per rollout, a group holding them with their
-/// metrics, and the questions asked of them afterwards.
+/// Monte Carlo rollouts of a canonical problem recorded as any sampler would
+/// record them: one run per rollout, a group holding them with their metrics,
+/// and the questions asked of them afterwards.
 #[test]
 fn rollouts_record_as_a_monte_carlo_group_with_a_time_index() {
     use axionomy_store::{Durability, Group, Member};

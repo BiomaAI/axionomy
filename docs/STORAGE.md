@@ -2,7 +2,8 @@
 
 Status: being built, in the order the phases at the end give. The kernel's
 forks are constant-time, the canonical tree and the store exist, and MCP keeps
-its snapshots in the store; Studio, search and training move onto it next.
+its snapshots in the store; Studio, search and every other producer of runs
+move onto it next.
 
 Axionomy is an economic debugger and a simulation engine. Both need states
 that can be kept, revisited, compared and branched: time travel to any step,
@@ -10,8 +11,8 @@ step-by-step debugging, replay verification, counterfactual forks, rollouts and
 Monte Carlo ensembles, counterexample search, and reinforcement-learning loops
 that run many environments in parallel. This document describes how states,
 runs and steps are represented, recorded, organized and stored so that all of
-these are cheap, without slowing the step loop that search and training depend
-on.
+these are cheap, without slowing the step loop of whatever produces the runs:
+search, simulation, evaluation, agents, servers or learning.
 
 ## Principles
 
@@ -155,15 +156,16 @@ Three identities answer three different questions:
 - **Run and step:** where a state occurred. A run ID and a step index name a
   point in a history; two steps may share a root.
 - **MCP handle:** what an unauthenticated caller may read. A keyed hash, as
-  today, that maps to a run and step. Training never needs one.
+  today, that maps to a run and step. Code that records its own runs never
+  needs one.
 
 ## Runs and steps
 
 A **run** records where it starts: its first state, always stored, and for a
 fork the point it forked from, whose step number its own steps continue from.
 It also records its checkpoint rule and whether it finished. Seeds, policies
-and their versions are tags for now; they become typed provenance when search
-and training record runs (phase 4), with the simulated-time origin. The trace
+and their versions are tags for now; they become typed provenance when the
+producers of runs record them (phase 4), with the simulated-time origin. The trace
 reproduces states; the seed and policy reproduce the decisions.
 
 A **step** records its exchange and the digest of its receipt. A separate
@@ -186,7 +188,7 @@ and rollouts nobody keeps live and die in memory.
    | --- | --- | --- |
    | `every_step` | Every state | Debugging, regression scenarios, replay buffers |
    | `every(n)` | Every nth state and the last | Long simulations: any step is at most n replays away |
-   | `ends` | The first and last states | Training episodes, Monte Carlo and MPPI rollouts |
+   | `ends` | The first and last states | Rollouts and episodes: Monte Carlo and MPPI samples, simulations, learning |
 
 3. **Retention decides deletion.** Pins, refs, tags, groups and age select what
    stays; garbage collection removes the rest (see Retention).
@@ -199,8 +201,8 @@ and rollouts nobody keeps live and die in memory.
 ## Tags, groups and metrics
 
 Runs come in families: the rollouts of one Monte Carlo estimate, the sampled
-trajectories of one MPPI decision, an evaluation suite, the episodes of a
-training epoch. Organizing them takes four kinds of metadata. None of it is
+trajectories of one MPPI decision, an evaluation suite, the branches of one
+search, the episodes of one learning epoch. Organizing them takes four kinds of metadata. None of it is
 authoritative: tags, groups and metrics never change what an exchange does or
 whether a trace is valid, so they may be plain strings and numbers without
 weakening the economy's closure.
@@ -239,9 +241,10 @@ Patterns these support:
   scored, and how they were weighted. Members are usually seed-and-metrics
   records, so thousands of samples per decision stay cheap, and any one of them
   can be replayed as a run.
-- **Training and evaluation.** Episodes are tagged by experiment, policy
-  version, split, epoch and environment seed; evaluation suites are groups
-  whose summaries compare policies; promoting a policy moves a ref.
+- **Experiments.** Runs are tagged by experiment, configuration or policy
+  version, split and seed; suites are groups whose summaries compare the
+  variants; promoting a variant moves a ref. Benchmarks, parameter sweeps,
+  A/B comparisons of strategies and learning all take this shape.
 - **Counterexamples.** Failures found by adversarial search are tagged with the
   property they violate, pinned and given refs, and become regression scenarios.
 
@@ -258,9 +261,9 @@ together, so a state or handle exists if and only if its transaction committed.
   of growing memory, and the writer commits many batches per transaction.
   Nothing holds a write transaction while the kernel computes.
 - **Idempotent writes.** Nodes are inserted by hash, so retries and duplicates
-  are harmless, and the initial state of ten thousand episodes is stored once.
-- **Merge later.** A worker thread, process or machine may write its own store
-  and never coordinate with others. Merging two stores is a union of nodes plus
+  are harmless, and the initial state of ten thousand runs is stored once.
+- **Merge later.** Any writer, a thread, a process, a machine or a server,
+  may write its own store and never coordinate with others. Merging two stores is a union of nodes plus
   run records with globally unique run IDs (the store's random 64-bit prefix
   and a 64-bit counter), which cannot conflict. Refs are the one mutable
   name: when both stores name something different, the merging store keeps
@@ -271,7 +274,7 @@ together, so a state or handle exists if and only if its transaction committed.
 ## Reading
 
 Readers use redb read transactions, so a debugger or Studio sees one consistent
-committed state while training keeps writing.
+committed state while producers keep writing.
 
 - **Time travel.** Opening step k opens its root if it is a checkpoint;
   otherwise the nearest checkpoint before it, plus the exchanges in between.
@@ -296,20 +299,27 @@ committed state while training keeps writing.
 - **Simulated time.** Step records carry simulated time, indexed so that
   "state at time t" resolves to a step.
 
-## Training loops
+## Recording at speed
 
-- **The step stays in memory.** An environment step is a kernel `apply`.
-  Recording it appends to the run's trace buffer, which the writer flushes in
-  batches; the step never waits on disk.
-- **Reset is a fork,** which costs a few nanoseconds at any size.
-- **Parallel environments share nothing mutable.** Each environment owns its
-  economy. Recording goes through the writer's channel, or into a per-worker
-  store merged later.
+Search expanding states, a simulation advancing, Monte Carlo and MPPI sampling
+futures, an agent session, a server handling calls and a learning loop all do
+the same thing: apply exchanges fast, and often from many places at once.
+Storage serves them the same way.
+
+- **The step stays in memory.** A step is a kernel `apply`. Recording it
+  appends to the run's trace buffer, which the writer flushes in batches; the
+  step never waits on disk.
+- **Branching and resetting are forks,** which cost a few nanoseconds at any
+  size.
+- **Parallel producers share nothing mutable.** Each owns its economy.
+  Recording goes through one store's writer, or into a store of its own merged
+  later.
 - **Roots are available on request** for transposition tables, novelty counts
   or any cache keyed by state, across processes.
-- **Replay buffers can reference states.** A transition can be (root before,
+- **Transitions can reference states.** A transition can be (root before,
   exchange, receipt, root after, outcome) instead of copied observations, with
-  observations projected from roots on demand and cached. It is exact,
+  observations projected from roots on demand and cached: for replay buffers,
+  datasets, audits or anything that consumes a run step by step. It is exact,
   deduplicated and much smaller. `Reader::transitions` reads a run's steps
   this way, each replayed and checked against its receipt; under `every_step`
   every root it returns is also stored.
@@ -321,7 +331,8 @@ committed state while training keeps writing.
 
 ## Retention
 
-Training produces far more than anyone keeps. A **pin** keeps a run or step and
+Whatever produces runs, search, simulation, evaluation, servers or learning,
+produces far more than anyone keeps. A **pin** keeps a run or step and
 everything it reaches: debugging sessions, counterexamples, benchmark results,
 live MCP handles. Refs pin what they name. Retention policies select by tags,
 groups and age, for example "keep every `split=eval` run", "keep the five best
@@ -356,8 +367,9 @@ survive the members they summarize.
   renders frames from stored roots instead of loading whole artifacts.
 - **Problems** (done): every canonical problem's `World` has an `Ontology`,
   and its runs are stored and read back unchanged.
-- **Search and RL**: kept rollouts, sessions and RL episodes record as runs with
-  checkpoint rules; Monte Carlo and MPPI record groups. A problem's rollouts
+- **Producers of runs**: kept search branches and solutions, rollouts,
+  simulations, sessions and episodes record as runs with checkpoint rules;
+  Monte Carlo and MPPI record groups. A problem's rollouts
   already record this way through the store's own API, as
   `axionomy-problems/tests/storage.rs` does for logistics.
 
@@ -386,8 +398,11 @@ Each phase is a validated commit or series of commits.
    rollouts recorded as runs in a Monte Carlo group (done); recording from
    inside search sessions, MPPI and RL; watch and actor views; Studio
    scrubbing from the store.
-5. **Distributed training:** per-worker stores, merge tooling and retention
-   policies.
+5. **Many writers, one history:** stores written independently by any
+   producer, a thread, process, machine or server, merged by tooling that
+   inspects, verifies and combines them; and retention policies that keep
+   what tags, groups, metrics, refs, pins and age select, for whatever
+   produced the runs.
 
 ## Open decisions
 

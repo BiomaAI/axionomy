@@ -22,8 +22,9 @@ model.
 
 Every model's `World` has an `Ontology` naming its identifier types, such as
 `maze::Ontology` or `logistics::fleet::Ontology`, and every identifier
-serializes, so `axionomy-store` can record its runs: a training loop records
-each rollout as a run and a Monte Carlo estimate as a group of them
+serializes, so `axionomy-store` can record its runs: whatever explores a
+model records each rollout as a run and a Monte Carlo estimate as a group of
+them
 (`tests/storage.rs`).
 
 Each model has a matching runnable example:

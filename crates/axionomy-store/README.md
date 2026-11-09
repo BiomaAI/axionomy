@@ -19,8 +19,9 @@ produces, so stored states are a cache of replay and replay verifies them.
 - **One writer** commits many callers' batches per transaction. Each write
   states its durability: `Immediate` for callers that wait, `Eventual` for
   batches nobody waits on, durable within a second.
-- **Tags, metrics, groups and refs** organize runs for evaluation, Monte
-  Carlo, MPPI and training; none of them changes what an exchange does.
+- **Tags, metrics, groups and refs** organize runs, whatever produced them:
+  search, simulation, evaluation, Monte Carlo, MPPI, agents or learning; none
+  of them changes what an exchange does.
 - **Reading back** gives any state of a run, its steps as replay-buffer
   transitions between state roots, and the first step where a lasting
   condition holds, by bisecting the stored states.
