@@ -86,37 +86,37 @@ fn objectives(world: &World) -> Vec<ObjectiveView> {
         + chain::total(world, Asset::Delivered);
     [
         (
-            "saved",
+            path!("saved"),
             "Food saved or delivered",
             usable,
             ObjectiveDirectionView::Maximize,
         ),
         (
-            "delivered",
+            path!("delivered"),
             "Food delivered",
             chain::total(world, Asset::Delivered),
             ObjectiveDirectionView::Maximize,
         ),
         (
-            "revenue",
+            path!("revenue"),
             "Sales revenue",
             chain::value(world, AccountId::World, Asset::Money),
             ObjectiveDirectionView::Maximize,
         ),
         (
-            "energy",
+            path!("energy"),
             "Energy used",
             chain::total(world, Asset::SpentEnergy),
             ObjectiveDirectionView::Minimize,
         ),
         (
-            "fuel",
+            path!("fuel"),
             "Fuel used",
             chain::total(world, Asset::GeneratorFuel) + chain::total(world, Asset::TransportFuel),
             ObjectiveDirectionView::Minimize,
         ),
         (
-            "missed",
+            path!("missed"),
             "Missed food obligations",
             chain::total(world, Asset::MissedDemand),
             ObjectiveDirectionView::Minimize,
@@ -124,7 +124,7 @@ fn objectives(world: &World) -> Vec<ObjectiveView> {
     ]
     .into_iter()
     .map(|(key, label, value, direction)| ObjectiveView {
-        key: slug(key),
+        key,
         label: label.into(),
         value: value.to_string(),
         direction,
@@ -144,7 +144,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         .into_iter()
         .map(|(key, label, x, y)| GraphNodeView {
             id: ViewId::new(key, label),
-            classes: vec![slug("resource")],
+            classes: vec![path!("resource")],
             x: Some(x),
             y: Some(y),
         })
@@ -190,9 +190,9 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 SceneGlyphView::Package,
                 SceneAnchorView::GraphNode {
                     node: if place == Place::Fridge {
-                        slug("fridge")
+                        path!("fridge")
                     } else {
-                        slug("warehouse")
+                        path!("warehouse")
                     },
                 },
                 SceneEntityRoleView::Attachment,
@@ -211,12 +211,12 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         );
         entity.metrics = vec![
             visual_metric(
-                slug("heat"),
+                path!("heat"),
                 "Heat exposure",
                 value(Asset::Heat),
                 Some("/ 4"),
             ),
-            visual_metric(slug("origin"), "Thermal lineage", origin, None),
+            visual_metric(path!("origin"), "Thermal lineage", origin, None),
         ];
         entities.push(entity);
     }
@@ -292,9 +292,9 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         )
         .with_entities(entities)
         .with_metrics([
-            visual_metric(slug("day"), "Day", day + 1, None),
+            visual_metric(path!("day"), "Day", day + 1, None),
             visual_metric(
-                slug("grid"),
+                path!("grid"),
                 "Grid supply",
                 if chain::value(world, AccountId::World, Asset::Outage(day as u8)) > 0 {
                     "outage"
@@ -304,7 +304,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 None,
             ),
             visual_metric(
-                slug("cooling"),
+                path!("cooling"),
                 "Refrigeration",
                 if chain::total(world, Asset::CoolingOn) > 0 {
                     "powered"
@@ -314,43 +314,43 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 None,
             ),
             asset_metric(
-                slug("fresh"),
+                path!("fresh"),
                 "Fresh stock",
                 &Asset::Fresh,
                 chain::total(world, Asset::Fresh),
             ),
             asset_metric(
-                slug("preserved"),
+                path!("preserved"),
                 "Preserved stock",
                 &Asset::Preserved,
                 chain::total(world, Asset::Preserved),
             ),
             visual_metric(
-                slug("spoiled"),
+                path!("spoiled"),
                 "Spoiled or discarded",
                 chain::total(world, Asset::Spoiled) + chain::total(world, Asset::Disposed),
                 Some("crates"),
             ),
             asset_metric(
-                slug("delivered"),
+                path!("delivered"),
                 "Food delivered",
                 &Asset::Delivered,
                 chain::total(world, Asset::Delivered),
             ),
             asset_metric(
-                slug("missed"),
+                path!("missed"),
                 "Unmet obligations",
                 &Asset::MissedDemand,
                 chain::total(world, Asset::MissedDemand),
             ),
             asset_metric(
-                slug("energy"),
+                path!("energy"),
                 "Electricity left",
                 &Asset::Energy,
                 chain::total(world, Asset::Energy),
             ),
             asset_metric(
-                slug("fuel"),
+                path!("fuel"),
                 "Fuel left",
                 &Asset::Fuel,
                 chain::total(world, Asset::Fuel),

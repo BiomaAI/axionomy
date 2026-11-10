@@ -32,7 +32,7 @@ pub(super) fn build(
         ),
     ] {
         let _ = progress.emit(
-            slug("fleet-dispatch"),
+            path!("fleet-dispatch"),
             documents.len() as u64,
             3,
             format!(
@@ -72,7 +72,7 @@ pub(super) fn build(
         documents.push(view);
     }
     let _ = progress.emit(
-        slug("fleet-dispatch"),
+        path!("fleet-dispatch"),
         3,
         3,
         "Three fleet policies completed and replay verified",
@@ -92,31 +92,31 @@ fn objectives(world: &World) -> Vec<ObjectiveView> {
     let val = |account, asset| fleet::value(world, account, asset);
     [
         (
-            "delivered",
+            path!("delivered"),
             "Orders delivered",
             val(AccountId::World, Asset::DeliveredCount),
             ObjectiveDirectionView::Maximize,
         ),
         (
-            "on-time",
+            path!("on-time"),
             "Orders on time",
             val(AccountId::World, Asset::OnTimeCount),
             ObjectiveDirectionView::Maximize,
         ),
         (
-            "expired",
+            path!("expired"),
             "Orders expired",
             val(AccountId::World, Asset::ExpiredCount),
             ObjectiveDirectionView::Minimize,
         ),
         (
-            "cash",
+            path!("cash"),
             "Fleet cash remaining",
             val(AccountId::World, Asset::Money),
             ObjectiveDirectionView::Maximize,
         ),
         (
-            "fuel",
+            path!("fuel"),
             "Fuel used",
             VANS.into_iter()
                 .map(|van| val(AccountId::Vehicle(van), Asset::SpentFuel))
@@ -124,7 +124,7 @@ fn objectives(world: &World) -> Vec<ObjectiveView> {
             ObjectiveDirectionView::Minimize,
         ),
         (
-            "time",
+            path!("time"),
             "Elapsed fleet time",
             fleet::now(world),
             ObjectiveDirectionView::Minimize,
@@ -132,7 +132,7 @@ fn objectives(world: &World) -> Vec<ObjectiveView> {
     ]
     .into_iter()
     .map(|(key, label, value, direction)| ObjectiveView {
-        key: slug(key),
+        key,
         label: label.into(),
         value: value.to_string(),
         direction,
@@ -151,7 +151,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
     .into_iter()
     .map(|(location, label, x, y)| GraphNodeView {
         id: ViewId::new(path::write(&location), label),
-        classes: vec![slug("location")],
+        classes: vec![path!("location")],
         x: Some(x),
         y: Some(y),
     })
@@ -245,14 +245,14 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             &own,
         );
         entity.metrics = vec![
-            visual_metric(slug("fuel"), "Fuel", val(own, Asset::Fuel), Some("/ 8")),
+            visual_metric(path!("fuel"), "Fuel", val(own, Asset::Fuel), Some("/ 8")),
             asset_metric(
-                slug("space"),
+                path!("space"),
                 "Free payload space",
                 &Asset::Space,
                 val(own, Asset::Space),
             ),
-            visual_metric(slug("wear"), "Wear", val(own, Asset::Wear), Some("/ 6")),
+            visual_metric(path!("wear"), "Wear", val(own, Asset::Wear), Some("/ 6")),
         ];
         entities.push(entity);
         for id in 0..val(AccountId::World, Asset::Count) as u8 {
@@ -281,7 +281,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                     &AccountId::Order(id),
                 );
                 cargo.metrics = vec![asset_metric(
-                    slug("weight"),
+                    path!("weight"),
                     "Payload",
                     &Asset::Weight,
                     val(AccountId::Order(id), Asset::Weight),
@@ -345,13 +345,13 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         );
         entity.metrics = vec![
             asset_metric(
-                slug("deadline"),
+                path!("deadline"),
                 "Delivery window",
                 &Asset::Deadline,
                 val(own, Asset::Deadline),
             ),
             asset_metric(
-                slug("arrival"),
+                path!("arrival"),
                 "Order release",
                 &Asset::Arrival,
                 val(own, Asset::Arrival),
@@ -367,33 +367,33 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
     )
     .with_entities(entities)
     .with_metrics([
-        asset_metric(slug("time"), "Fleet time", &Asset::Time, fleet::now(world)),
+        asset_metric(path!("time"), "Fleet time", &Asset::Time, fleet::now(world)),
         asset_metric(
-            slug("delivered"),
+            path!("delivered"),
             "Orders delivered",
             &Asset::DeliveredCount,
             val(AccountId::World, Asset::DeliveredCount),
         ),
         asset_metric(
-            slug("on-time"),
+            path!("on-time"),
             "Orders on time",
             &Asset::OnTimeCount,
             val(AccountId::World, Asset::OnTimeCount),
         ),
         asset_metric(
-            slug("expired"),
+            path!("expired"),
             "Orders expired",
             &Asset::ExpiredCount,
             val(AccountId::World, Asset::ExpiredCount),
         ),
         asset_metric(
-            slug("staged"),
+            path!("staged"),
             "Hub handoffs staged",
             &Asset::StagedCount,
             val(AccountId::World, Asset::StagedCount),
         ),
         asset_metric(
-            slug("cash"),
+            path!("cash"),
             "Fleet cash",
             &Asset::Money,
             val(AccountId::World, Asset::Money),
@@ -409,19 +409,19 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 entity.status = Some("Shared paid services".into());
                 entity.metrics = vec![
                     visual_metric(
-                        slug("pump"),
+                        path!("pump"),
                         "Free fuel pump",
                         val(AccountId::Station, Asset::FuelPump),
                         Some("/ 1"),
                     ),
                     visual_metric(
-                        slug("bay"),
+                        path!("bay"),
                         "Free repair bay",
                         val(AccountId::Station, Asset::RepairBay),
                         Some("/ 1"),
                     ),
                     asset_metric(
-                        slug("fuel"),
+                        path!("fuel"),
                         "Station fuel",
                         &Asset::Fuel,
                         val(AccountId::Station, Asset::Fuel),
@@ -432,13 +432,13 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 entity.status = Some("Finite cargo relay".into());
                 entity.metrics = vec![
                     visual_metric(
-                        slug("dock"),
+                        path!("dock"),
                         "Free staging space",
                         val(AccountId::World, Asset::DockSpace),
                         Some("/ 2"),
                     ),
                     visual_metric(
-                        slug("road"),
+                        path!("road"),
                         "Trunk road available",
                         val(AccountId::World, Asset::RoadSpace),
                         Some("/ 1"),

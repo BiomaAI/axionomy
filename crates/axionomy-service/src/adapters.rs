@@ -1005,7 +1005,7 @@ pub(crate) fn study(
             |instance| instance.label.clone(),
         );
     let _ = progress.emit(
-        slug("prepare"),
+        path!("prepare"),
         0,
         1,
         format!("Preparing the {instance} instance of {}", descriptor.title),
@@ -1022,7 +1022,7 @@ pub(crate) fn study(
     }
     for (offset, document) in study.documents.iter().enumerate() {
         let _ = progress.emit(
-            slug("documents"),
+            path!("documents"),
             offset as u64 + 1,
             study.documents.len() as u64,
             format!("Recorded the replay “{}”", document.title),
@@ -1109,9 +1109,9 @@ impl<'a> ProgressSink<'a> {
             total,
             subjects: Vec::new(),
             metrics: vec![
-                visual_metric(slug("completed"), "Work completed", completed, None),
+                visual_metric(path!("completed"), "Work completed", completed, None),
                 visual_metric(
-                    slug("remaining"),
+                    path!("remaining"),
                     "Work remaining",
                     total.saturating_sub(completed),
                     None,
@@ -1176,19 +1176,19 @@ impl<'a> ProgressSink<'a> {
             subjects: subjects.into_iter().collect(),
             metrics: vec![
                 visual_metric(
-                    slug("expanded"),
+                    path!("expanded"),
                     "States expanded",
                     progress.expanded(),
                     None,
                 ),
                 visual_metric(
-                    slug("generated"),
+                    path!("generated"),
                     "States generated",
                     progress.generated(),
                     None,
                 ),
-                visual_metric(slug("frontier"), "Frontier", progress.frontier(), None),
-                visual_metric(slug("visited"), "States visited", progress.visited(), None),
+                visual_metric(path!("frontier"), "Frontier", progress.frontier(), None),
+                visual_metric(path!("visited"), "States visited", progress.visited(), None),
             ],
         };
         self.observer.observation(observation.clone());

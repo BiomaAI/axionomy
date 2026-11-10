@@ -35,7 +35,7 @@ pub(super) fn build(
         samples.clamp(1, 8),
         |state| {
             progress.emit(
-                slug("monte-carlo"),
+                path!("monte-carlo"),
                 state.completed_samples() as u64,
                 state.total_samples() as u64,
                 format!(
@@ -55,7 +55,7 @@ pub(super) fn build(
         samples.clamp(1, 8),
         |state| {
             progress.emit(
-                slug("pareto-sampling"),
+                path!("pareto-sampling"),
                 state.completed_samples() as u64,
                 state.total_samples() as u64,
                 format!(
@@ -138,7 +138,7 @@ pub(super) fn build(
         samples.clamp(1, 8),
         |decision, state| {
             progress.emit(
-                slug("mcts"),
+                path!("mcts"),
                 state.iterations() as u64,
                 state.target_iterations() as u64,
                 format!(
@@ -212,19 +212,19 @@ pub(super) fn build(
 fn objectives(rollout: &logistics::MissionRollout) -> Vec<ObjectiveView> {
     vec![
         ObjectiveView {
-            key: slug("completed"),
+            key: path!("completed"),
             label: "Completed".into(),
             direction: ObjectiveDirectionView::Maximize,
             value: u8::from(rollout.completed()).to_string(),
         },
         ObjectiveView {
-            key: slug("delivered"),
+            key: path!("delivered"),
             label: "Orders delivered".into(),
             direction: ObjectiveDirectionView::Maximize,
             value: rollout.delivered().to_string(),
         },
         ObjectiveView {
-            key: slug("time"),
+            key: path!("time"),
             label: "Elapsed time".into(),
             direction: ObjectiveDirectionView::Minimize,
             value: rollout.elapsed_time().to_string(),
@@ -237,17 +237,17 @@ fn policy_front(front: &logistics::PolicyFront, selected: Policy) -> ParetoFront
         completeness: FrontierCompletenessView::Approximate,
         axes: vec![
             ObjectiveAxisView {
-                key: slug("completion"),
+                key: path!("completion"),
                 label: "Completion".into(),
                 direction: ObjectiveDirectionView::Maximize,
             },
             ObjectiveAxisView {
-                key: slug("delivered"),
+                key: path!("delivered"),
                 label: "Delivered".into(),
                 direction: ObjectiveDirectionView::Maximize,
             },
             ObjectiveAxisView {
-                key: slug("time"),
+                key: path!("time"),
                 label: "Mean time".into(),
                 direction: ObjectiveDirectionView::Minimize,
             },
@@ -292,9 +292,9 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         .map(|(location, x, y)| GraphNodeView {
             id: ViewId::new(path!("location").then(&location), format!("{location:?}")),
             classes: if focus == Some(location) {
-                vec![slug("current")]
+                vec![path!("current")]
             } else if location == Location::Customer {
-                vec![slug("goal")]
+                vec![path!("goal")]
             } else {
                 Vec::new()
             },
@@ -323,9 +323,9 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                     .into(),
                 ),
                 classes: if traveling {
-                    vec![slug("current"), slug("uncertain")]
+                    vec![path!("current"), path!("uncertain")]
                 } else {
-                    vec![slug("uncertain")]
+                    vec![path!("uncertain")]
                 },
             }
         })
@@ -353,7 +353,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
     );
     let mut vehicle = link_balance::<logistics::Ontology>(
         visual_entity(
-            slug("vehicle/fleet-1"),
+            path!("vehicle/fleet-1"),
             "Vehicle 1",
             SceneGlyphView::Vehicle,
             vehicle_anchor.clone(),
@@ -366,19 +366,19 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
     );
     vehicle.metrics = vec![
         asset_metric(
-            slug("fuel"),
+            path!("fuel"),
             "Fuel",
             &Asset::Fuel,
             world.balance(&AccountId::Vehicle, &Asset::Fuel),
         ),
         asset_metric(
-            slug("cargo"),
+            path!("cargo"),
             "Orders aboard",
             &Asset::CargoOccupied,
             world.balance(&AccountId::Vehicle, &Asset::CargoOccupied),
         ),
         asset_metric(
-            slug("elapsed"),
+            path!("elapsed"),
             "Elapsed",
             &Asset::ElapsedTime,
             world.balance(&AccountId::Vehicle, &Asset::ElapsedTime),
@@ -422,7 +422,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
     let system_entities = [
         link_account::<logistics::Ontology>(
             visual_entity(
-                slug("system/fuel-station"),
+                path!("system/fuel-station"),
                 "Fuel station",
                 SceneGlyphView::Fuel,
                 SceneAnchorView::GraphNode {
@@ -436,7 +436,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         ),
         link_account::<logistics::Ontology>(
             visual_entity(
-                slug("system/nature"),
+                path!("system/nature"),
                 "Travel conditions",
                 SceneGlyphView::Weather,
                 SceneAnchorView::GraphNode {
@@ -471,19 +471,19 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         )
         .with_metrics([
             visual_metric(
-                slug("delivered"),
+                path!("delivered"),
                 "Orders delivered",
                 delivered,
                 Some("orders"),
             ),
             asset_metric(
-                slug("remaining-time"),
+                path!("remaining-time"),
                 "Time remaining",
                 &Asset::TimeRemaining,
                 world.balance(&AccountId::Vehicle, &Asset::TimeRemaining),
             ),
             asset_metric(
-                slug("fuel"),
+                path!("fuel"),
                 "Fuel remaining",
                 &Asset::Fuel,
                 world.balance(&AccountId::Vehicle, &Asset::Fuel),

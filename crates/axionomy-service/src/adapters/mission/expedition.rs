@@ -89,31 +89,31 @@ fn objectives(world: &World) -> Vec<ObjectiveView> {
     let val = |account, asset| expedition::value(world, account, asset);
     [
         (
-            "completed",
+            path!("completed"),
             "Objectives completed",
             val(AccountId::World, Asset::Completed),
             ObjectiveDirectionView::Maximize,
         ),
         (
-            "failed",
+            path!("failed"),
             "Objectives lost",
             val(AccountId::World, Asset::FailedCount),
             ObjectiveDirectionView::Minimize,
         ),
         (
-            "vitality",
+            path!("vitality"),
             "Evacuated vitality",
             val(AccountId::World, Asset::SavedVitality),
             ObjectiveDirectionView::Maximize,
         ),
         (
-            "radio",
+            path!("radio"),
             "Radio charges spent",
             val(AccountId::Agent(Agent::Scout), Asset::UsedRadio),
             ObjectiveDirectionView::Minimize,
         ),
         (
-            "energy",
+            path!("energy"),
             "Team energy spent",
             AGENTS
                 .into_iter()
@@ -122,7 +122,7 @@ fn objectives(world: &World) -> Vec<ObjectiveView> {
             ObjectiveDirectionView::Minimize,
         ),
         (
-            "time",
+            path!("time"),
             "Elapsed mission time",
             expedition::now(world),
             ObjectiveDirectionView::Minimize,
@@ -130,7 +130,7 @@ fn objectives(world: &World) -> Vec<ObjectiveView> {
     ]
     .into_iter()
     .map(|(key, label, value, direction)| ObjectiveView {
-        key: slug(key),
+        key,
         label: label.into(),
         value: value.to_string(),
         direction,
@@ -203,7 +203,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
     .into_iter()
     .map(|(location, x, y)| GraphNodeView {
         id: ViewId::new(path::write(&location), format!("{location:?}")),
-        classes: vec![slug("location")],
+        classes: vec![path!("location")],
         x: Some(x),
         y: Some(y),
     })
@@ -283,19 +283,19 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         };
         entity.metrics = vec![
             asset_metric(
-                slug("energy"),
+                path!("energy"),
                 "Energy",
                 &Asset::Energy,
                 val(own, Asset::Energy),
             ),
             // Each point of health lost adds a tick to every journey.
             visual_metric(
-                slug("injury"),
+                path!("injury"),
                 "Injury delay",
                 val(own, Asset::Harm),
                 Some("ticks"),
             ),
-            asset_metric(slug("capacity"), supply_label, &supply, val(own, supply)),
+            asset_metric(path!("capacity"), supply_label, &supply, val(own, supply)),
         ];
         entities.push(entity);
     }
@@ -370,7 +370,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         );
         entity.metrics = vec![
             visual_metric(
-                slug("knowledge"),
+                path!("knowledge"),
                 "Medic briefed",
                 if val(AccountId::Agent(Agent::Medic), Asset::Known(id, site)) > 0 {
                     "yes"
@@ -380,7 +380,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 None,
             ),
             asset_metric(
-                slug("deadline"),
+                path!("deadline"),
                 "Deadline",
                 &Asset::Deadline,
                 val(account, Asset::Deadline),
@@ -390,7 +390,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             entity.metrics.insert(
                 0,
                 visual_metric(
-                    slug("health"),
+                    path!("health"),
                     "Vitality",
                     val(account, Asset::Health),
                     Some("/ 3"),
@@ -408,25 +408,25 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
     .with_entities(entities)
     .with_metrics([
         asset_metric(
-            slug("time"),
+            path!("time"),
             "Mission time",
             &Asset::Time,
             expedition::now(world),
         ),
         asset_metric(
-            slug("complete"),
+            path!("complete"),
             "Objectives complete",
             &Asset::Completed,
             val(AccountId::World, Asset::Completed),
         ),
         asset_metric(
-            slug("failed"),
+            path!("failed"),
             "Objectives lost",
             &Asset::FailedCount,
             val(AccountId::World, Asset::FailedCount),
         ),
         visual_metric(
-            slug("busy"),
+            path!("busy"),
             "Teammates occupied",
             AGENTS
                 .into_iter()
@@ -435,7 +435,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             Some("/ 2"),
         ),
         asset_metric(
-            slug("radio"),
+            path!("radio"),
             "Radio charges spent",
             &Asset::UsedRadio,
             val(AccountId::Agent(Agent::Scout), Asset::UsedRadio),

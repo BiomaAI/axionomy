@@ -145,19 +145,19 @@ fn objectives(initial: &World, trace: &LoanTrace) -> Result<Vec<ObjectiveView>, 
         + balance(&after, AccountId::Borrower, Asset::PostedCollateral);
     Ok(vec![
         ObjectiveView {
-            key: slug("interest"),
+            key: path!("interest"),
             label: "Interest charged".into(),
             direction: ObjectiveDirectionView::Minimize,
             value: interest.to_string(),
         },
         ObjectiveView {
-            key: slug("collateral"),
+            key: path!("collateral"),
             label: "Collateral kept".into(),
             direction: ObjectiveDirectionView::Maximize,
             value: collateral.to_string(),
         },
         ObjectiveView {
-            key: slug("cash"),
+            key: path!("cash"),
             label: "Borrower cash at the end".into(),
             direction: ObjectiveDirectionView::Maximize,
             value: balance(&after, AccountId::Borrower, Asset::Cash).to_string(),
@@ -237,7 +237,7 @@ fn edge(id: &str, source: &str, target: &str, label: &str, active: bool) -> Grap
         target: slug(target),
         label: Some(label.into()),
         classes: if active {
-            vec![slug("active")]
+            vec![path!("active")]
         } else {
             Vec::new()
         },
@@ -313,11 +313,11 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
     let mut entities = vec![
         evidence(
             visual_entity(
-                slug("market-cash"),
+                path!("market-cash"),
                 "Market cash",
                 SceneGlyphView::Money,
                 SceneAnchorView::GraphNode {
-                    node: slug("market"),
+                    node: path!("market"),
                 },
                 SceneEntityRoleView::State,
                 SceneToneView::Active,
@@ -329,11 +329,11 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         ),
         evidence(
             visual_entity(
-                slug("posted-collateral"),
+                path!("posted-collateral"),
                 "Posted collateral",
                 SceneGlyphView::Shield,
                 SceneAnchorView::GraphNode {
-                    node: slug("borrower"),
+                    node: path!("borrower"),
                 },
                 SceneEntityRoleView::State,
                 if unsafe_loan {
@@ -355,11 +355,11 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
     if open_loan {
         entities.push(evidence(
             visual_entity(
-                slug("debt"),
+                path!("debt"),
                 "Loan",
                 SceneGlyphView::Token,
                 SceneAnchorView::GraphNode {
-                    node: slug("borrower"),
+                    node: path!("borrower"),
                 },
                 SceneEntityRoleView::State,
                 if unsafe_loan {
@@ -377,11 +377,11 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
     if seized > 0 {
         entities.push(evidence(
             visual_entity(
-                slug("seized"),
+                path!("seized"),
                 "Seized collateral",
                 SceneGlyphView::Shield,
                 SceneAnchorView::GraphNode {
-                    node: slug("keeper"),
+                    node: path!("keeper"),
                 },
                 SceneEntityRoleView::State,
                 SceneToneView::Warning,
@@ -400,50 +400,50 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             .with_entities(entities)
             .with_metrics([
                 visual_metric(
-                    slug("period"),
+                    path!("period"),
                     "Period",
                     format!("{} of {}", elapsed + 1, elapsed + remaining),
                     None,
                 ),
                 visual_metric(
-                    slug("utilization"),
+                    path!("utilization"),
                     "Utilization",
                     percent(lending::utilization_view(world)),
                     Some("%"),
                 ),
                 visual_metric(
-                    slug("rate"),
+                    path!("rate"),
                     "Interest per period",
                     percent(lending::rate_view(world)),
                     Some("%"),
                 ),
-                asset_metric(slug("owed"), "Borrower owes", &Asset::Cash, owed),
+                asset_metric(path!("owed"), "Borrower owes", &Asset::Cash, owed),
                 asset_metric(
-                    slug("borrow-limit"),
+                    path!("borrow-limit"),
                     "Borrowing limit",
                     &Asset::Cash,
                     lending::borrow_limit_view(world),
                 ),
                 asset_metric(
-                    slug("liquidation-limit"),
+                    path!("liquidation-limit"),
                     "Liquidation threshold",
                     &Asset::Cash,
                     liquidation_limit,
                 ),
                 asset_metric(
-                    slug("price"),
+                    path!("price"),
                     "Collateral price",
                     &Asset::CollateralPrice,
                     market(Asset::CollateralPrice),
                 ),
                 asset_metric(
-                    slug("reserves"),
+                    path!("reserves"),
                     "Reserves",
                     &Asset::Reserves,
                     market(Asset::Reserves),
                 ),
                 asset_metric(
-                    slug("share-assets"),
+                    path!("share-assets"),
                     "Depositors' assets",
                     &Asset::Cash,
                     lending::total_assets_view(world),

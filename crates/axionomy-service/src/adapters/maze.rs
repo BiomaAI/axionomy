@@ -33,7 +33,7 @@ pub(super) fn build(
     if selected.starts_with("pareto-") {
         let state = pareto.progress();
         let _ = progress.emit(
-            slug("pareto-frontier"),
+            path!("pareto-frontier"),
             state.expanded() as u64,
             state.expanded() as u64,
             format!(
@@ -251,15 +251,15 @@ fn saved_graph_observation(
         total: 0,
         subjects: vec![expansion_subject(expansion)],
         metrics: vec![
-            visual_metric(slug("expanded"), "States expanded", state.expanded(), None),
+            visual_metric(path!("expanded"), "States expanded", state.expanded(), None),
             visual_metric(
-                slug("generated"),
+                path!("generated"),
                 "States generated",
                 state.generated(),
                 None,
             ),
-            visual_metric(slug("frontier"), "Frontier", state.frontier(), None),
-            visual_metric(slug("visited"), "States visited", state.visited(), None),
+            visual_metric(path!("frontier"), "Frontier", state.frontier(), None),
+            visual_metric(path!("visited"), "States visited", state.visited(), None),
         ],
     }
 }
@@ -288,16 +288,16 @@ fn saved_solution_observation(
         total: state.expanded() as u64,
         subjects: vec![expansion_subject(expansion)],
         metrics: vec![
-            visual_metric(slug("expanded"), "States expanded", state.expanded(), None),
+            visual_metric(path!("expanded"), "States expanded", state.expanded(), None),
             visual_metric(
-                slug("generated"),
+                path!("generated"),
                 "States generated",
                 state.generated(),
                 None,
             ),
-            visual_metric(slug("visited"), "States visited", state.visited(), None),
+            visual_metric(path!("visited"), "States visited", state.visited(), None),
             visual_metric(
-                slug("solution-cost"),
+                path!("solution-cost"),
                 "Solution cost",
                 state.solution_depth().unwrap_or_default(),
                 None,
@@ -408,8 +408,8 @@ fn saved_pareto_observations(result: &maze::ParetoResult) -> Vec<SearchObservati
     let progress = result.progress();
     vec![SearchObservationView {
         sequence: 0,
-        phase: slug("pareto-frontier"),
-        algorithm: slug("exact-pareto-search"),
+        phase: path!("pareto-frontier"),
+        algorithm: path!("exact-pareto-search"),
         kind: SearchObservationKindView::Frontier,
         label: format!(
             "Exact frontier exhausted · {} terminal routes · {} non-dominated tradeoffs",
@@ -418,28 +418,28 @@ fn saved_pareto_observations(result: &maze::ParetoResult) -> Vec<SearchObservati
         ),
         completed: progress.expanded() as u64,
         total: progress.expanded() as u64,
-        subjects: vec![ViewId::new(slug("node/exit"), "Exit")],
+        subjects: vec![ViewId::new(path!("node/exit"), "Exit")],
         metrics: vec![
             visual_metric(
-                slug("expanded"),
+                path!("expanded"),
                 "States expanded",
                 progress.expanded(),
                 None,
             ),
             visual_metric(
-                slug("generated"),
+                path!("generated"),
                 "States generated",
                 progress.generated(),
                 None,
             ),
             visual_metric(
-                slug("terminal"),
+                path!("terminal"),
                 "Terminal routes",
                 progress.terminal_outcomes(),
                 None,
             ),
             visual_metric(
-                slug("pareto"),
+                path!("pareto"),
                 "Pareto outcomes",
                 progress.pareto_outcomes(),
                 None,
@@ -593,13 +593,13 @@ fn objective_value(values: &[Objective<ObjectiveKey, u64>], key: ObjectiveKey) -
 fn objectives(world: &World) -> Vec<ObjectiveView> {
     vec![
         ObjectiveView {
-            key: slug("energy"),
+            key: path!("energy"),
             label: "Energy spent".into(),
             direction: ObjectiveDirectionView::Minimize,
             value: maze::spent_energy(world).to_string(),
         },
         ObjectiveView {
-            key: slug("time"),
+            key: path!("time"),
             label: "Time spent".into(),
             direction: ObjectiveDirectionView::Minimize,
             value: maze::spent_time(world).to_string(),
@@ -618,12 +618,12 @@ fn front_view(result: &maze::ParetoResult, selected: &ViewDocument) -> ParetoFro
         completeness: FrontierCompletenessView::Exact,
         axes: vec![
             ObjectiveAxisView {
-                key: slug("energy"),
+                key: path!("energy"),
                 label: "Energy spent".into(),
                 direction: ObjectiveDirectionView::Minimize,
             },
             ObjectiveAxisView {
-                key: slug("time"),
+                key: path!("time"),
                 label: "Time spent".into(),
                 direction: ObjectiveDirectionView::Minimize,
             },
@@ -704,15 +704,15 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         .map(|node| {
             let (x, y) = positions(node);
             let mut classes = if node == Node::Gate {
-                vec![slug("facility")]
+                vec![path!("facility")]
             } else {
-                vec![slug("location")]
+                vec![path!("location")]
             };
             if focus == Some(node) {
-                classes.push(slug("current"));
+                classes.push(path!("current"));
             }
             if node == Node::Exit {
-                classes.push(slug("goal"));
+                classes.push(path!("goal"));
             }
             GraphNodeView {
                 id: ViewId::new(node_key(node), node.studio_label()),
@@ -751,7 +751,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                             .is_zero()
                         && !world.balance(&AccountId::Agent, &Asset::Health).is_zero())
                 {
-                    vec![slug("locked")]
+                    vec![path!("locked")]
                 } else {
                     Vec::new()
                 },
@@ -764,7 +764,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         let time = world.balance(&AccountId::Agent, &Asset::Time);
         let mut entity = link_balance::<maze::Ontology>(
             visual_entity(
-                slug("agent/explorer"),
+                path!("agent/explorer"),
                 "Explorer",
                 SceneGlyphView::Agent,
                 SceneAnchorView::GraphNode {
@@ -786,15 +786,15 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             &Asset::At(node),
         );
         entity.metrics = vec![
-            asset_metric(slug("energy"), "Energy", &Asset::Energy, energy),
-            asset_metric(slug("time"), "Time", &Asset::Time, time),
+            asset_metric(path!("energy"), "Energy", &Asset::Energy, energy),
+            asset_metric(path!("time"), "Time", &Asset::Time, time),
         ];
         entity
     });
     let key = if !world.balance(&AccountId::World, &Asset::Key).is_zero() {
         Some(link_balance::<maze::Ontology>(
             visual_entity(
-                slug("maze/key/brass"),
+                path!("maze/key/brass"),
                 "Brass key",
                 SceneGlyphView::Key,
                 SceneAnchorView::GraphNode {
@@ -810,11 +810,11 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
     } else if !world.balance(&AccountId::Agent, &Asset::Key).is_zero() {
         Some(link_balance::<maze::Ontology>(
             visual_entity(
-                slug("maze/key/brass"),
+                path!("maze/key/brass"),
                 "Brass key",
                 SceneGlyphView::Key,
                 SceneAnchorView::Entity {
-                    entity: slug("agent/explorer"),
+                    entity: path!("agent/explorer"),
                 },
                 SceneEntityRoleView::Attachment,
                 SceneToneView::Active,
@@ -841,7 +841,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
     };
     let gate = link_balance::<maze::Ontology>(
         visual_entity(
-            slug("maze/gate/state"),
+            path!("maze/gate/state"),
             "Vault gate",
             SceneGlyphView::Door,
             SceneAnchorView::GraphNode {
@@ -871,19 +871,19 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
     .with_entities(agent.into_iter().chain(key).chain([gate]))
     .with_metrics([
         asset_metric(
-            slug("energy-left"),
+            path!("energy-left"),
             "Explorer energy",
             &Asset::Energy,
             world.balance(&AccountId::Agent, &Asset::Energy),
         ),
         asset_metric(
-            slug("time-left"),
+            path!("time-left"),
             "Time remaining",
             &Asset::Time,
             world.balance(&AccountId::Agent, &Asset::Time),
         ),
         visual_metric(
-            slug("key-state"),
+            path!("key-state"),
             "Key",
             if world.balance(&AccountId::World, &Asset::Key).is_zero() {
                 if world.balance(&AccountId::Agent, &Asset::Key).is_zero() {
@@ -896,12 +896,12 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             },
             None,
         ),
-        visual_metric(slug("gate-state"), "Vault gate", gate_status, None),
+        visual_metric(path!("gate-state"), "Vault gate", gate_status, None),
     ]);
     if enhanced {
         scene.metrics.extend([
             visual_metric(
-                slug("power"),
+                path!("power"),
                 "Shared power",
                 if vault_power {
                     "vault shutter"
@@ -911,19 +911,19 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 None,
             ),
             asset_metric(
-                slug("injury"),
+                path!("injury"),
                 "Injury delay per action",
                 &Asset::Injury,
                 world.balance(&AccountId::Agent, &Asset::Injury),
             ),
             asset_metric(
-                slug("shield"),
+                path!("shield"),
                 "Protection remaining",
                 &Asset::Shield,
                 world.balance(&AccountId::Agent, &Asset::Shield),
             ),
             asset_metric(
-                slug("health"),
+                path!("health"),
                 "Health",
                 &Asset::Health,
                 world.balance(&AccountId::Agent, &Asset::Health),
@@ -931,7 +931,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         ]);
         for (key, label, at, glyph, state) in [
             (
-                "power-library",
+                path!("power-library"),
                 "Power switch",
                 Node::Library,
                 SceneGlyphView::Energy,
@@ -942,7 +942,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 },
             ),
             (
-                "power-workshop",
+                path!("power-workshop"),
                 "Power switch",
                 Node::Workshop,
                 SceneGlyphView::Energy,
@@ -953,14 +953,14 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 },
             ),
             (
-                "medical",
+                path!("medical"),
                 "Aid station",
                 Node::Garden,
                 SceneGlyphView::Repair,
                 "treat injuries · 2 ticks",
             ),
             (
-                "protection",
+                path!("protection"),
                 "Protective equipment",
                 Node::Start,
                 SceneGlyphView::Shield,
@@ -972,7 +972,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             ),
         ] {
             scene.entities.push(visual_entity(
-                slug(key),
+                key,
                 label,
                 glyph,
                 SceneAnchorView::GraphNode { node: node_key(at) },
@@ -1096,11 +1096,11 @@ fn decorate_scene_paths(
                     && class.as_str() != "candidate"
             });
             if current == Some(&edge.id) {
-                edge.classes.push(slug("current"));
+                edge.classes.push(path!("current"));
             } else if traversed.contains(&edge.id) {
-                edge.classes.push(slug("traversed"));
+                edge.classes.push(path!("traversed"));
             } else if planned.contains(&edge.id) {
-                edge.classes.push(slug("candidate"));
+                edge.classes.push(path!("candidate"));
             }
         }
     }

@@ -45,9 +45,9 @@ pub(super) fn build(
             progress,
             DocumentSpec { problem: "rescue", strategy, title: if policy == Policy::ObserveThenFollow { "Rescue · sense, then move" } else { "Rescue · go north immediately" }, description: if policy == Policy::ObserveThenFollow { "The agent spends the sensor, receives a reading, and follows it." } else { "The agent commits north without looking. In this scenario the survivor is south, and the replay keeps the failure." }, source_label: "Uncertain rescue" },
             &model, &rescue::goal(), rollout.trace(), vec![
-                ObjectiveView { key: slug("success"), label: "Succeeded".into(), direction: ObjectiveDirectionView::Maximize, value: u8::from(rollout.succeeded()).to_string() },
-                ObjectiveView { key: slug("sensor"), label: "Sensor used".into(), direction: ObjectiveDirectionView::Minimize, value: u8::from(rollout.used_sensor()).to_string() },
-                ObjectiveView { key: slug("energy"), label: "Energy spent".into(), direction: ObjectiveDirectionView::Minimize, value: rollout.spent_energy().to_string() },
+                ObjectiveView { key: path!("success"), label: "Succeeded".into(), direction: ObjectiveDirectionView::Maximize, value: u8::from(rollout.succeeded()).to_string() },
+                ObjectiveView { key: path!("sensor"), label: "Sensor used".into(), direction: ObjectiveDirectionView::Minimize, value: u8::from(rollout.used_sensor()).to_string() },
+                ObjectiveView { key: path!("energy"), label: "Energy spent".into(), direction: ObjectiveDirectionView::Minimize, value: rollout.spent_energy().to_string() },
             ], scene,
         ).map_err(|error| problem_error("rescue", error))?;
         view.pareto_fronts.push(policy_front(&front, policy));
@@ -98,7 +98,7 @@ fn observation(world: &World) -> ObservationView {
         })
         .collect();
     ObservationView {
-        actor: ViewId::new(slug("rescue/actor/agent"), "Rescue agent"),
+        actor: ViewId::new(path!("rescue/actor/agent"), "Rescue agent"),
         label: "Agent-visible state; Nature truth and seed are omitted".into(),
         visible_accounts: accounts,
         facts: Vec::new(),
@@ -111,17 +111,17 @@ fn policy_front(front: &rescue::PolicyFront, selected: Policy) -> ParetoFrontVie
         completeness: FrontierCompletenessView::Approximate,
         axes: vec![
             ObjectiveAxisView {
-                key: slug("success"),
+                key: path!("success"),
                 label: "Success probability".into(),
                 direction: ObjectiveDirectionView::Maximize,
             },
             ObjectiveAxisView {
-                key: slug("sensor"),
+                key: path!("sensor"),
                 label: "Sensor use".into(),
                 direction: ObjectiveDirectionView::Minimize,
             },
             ObjectiveAxisView {
-                key: slug("energy"),
+                key: path!("energy"),
                 label: "Mean energy".into(),
                 direction: ObjectiveDirectionView::Minimize,
             },
@@ -174,7 +174,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         .map(|(location, x, y)| GraphNodeView {
             id: ViewId::new(path!("location").then(&location), format!("{location:?}")),
             classes: if focus == Some(location) {
-                vec![slug("current")]
+                vec![path!("current")]
             } else {
                 Vec::new()
             },
@@ -197,16 +197,16 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         target: path!("location").then(&location),
         label: Some("hidden victim prior".into()),
         classes: if focus == Some(location) {
-            vec![slug("current"), slug("uncertain")]
+            vec![path!("current"), path!("uncertain")]
         } else {
-            vec![slug("uncertain")]
+            vec![path!("uncertain")]
         },
     })
     .collect();
     let agent_location = focus.expect("the responder remains at an encoded location");
     let mut agent = link_balance::<rescue::Ontology>(
         visual_entity(
-            slug("agent/responder"),
+            path!("agent/responder"),
             "Responder",
             SceneGlyphView::Agent,
             SceneAnchorView::GraphNode {
@@ -229,7 +229,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         &Asset::At(agent_location),
     );
     agent.metrics = vec![asset_metric(
-        slug("energy"),
+        path!("energy"),
         "Energy",
         &Asset::Energy,
         world.balance(&AccountId::Agent, &Asset::Energy),
@@ -267,7 +267,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
     });
     let nature = link_account::<rescue::Ontology>(
         visual_entity(
-            slug("system/nature"),
+            path!("system/nature"),
             "Hidden victim state",
             SceneGlyphView::Information,
             SceneAnchorView::GraphNode {
@@ -293,13 +293,13 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         )
         .with_metrics([
             asset_metric(
-                slug("energy"),
+                path!("energy"),
                 "Energy remaining",
                 &Asset::Energy,
                 world.balance(&AccountId::Agent, &Asset::Energy),
             ),
             asset_metric(
-                slug("sensor"),
+                path!("sensor"),
                 "Sensor charges",
                 &Asset::Sensor,
                 world.balance(&AccountId::Agent, &Asset::Sensor),

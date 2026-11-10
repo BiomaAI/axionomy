@@ -7,7 +7,7 @@
 use axionomy::{
     AccountAssessment, AccountDelta, ApplyError, Basket, ConditionPath, Economy, Exchange,
     ExchangeAssessment, Goal, InvariantPath, Ontology, OntologyPath, ParameterPath, PathKind,
-    Quantity, QuantityComparison, QuantityExpression, Receipt, Rounding, Trace, path::Path,
+    Quantity, QuantityComparison, QuantityExpression, Receipt, Rounding, Trace, path, path::Path,
 };
 
 pub use axionomy::path::slug;
@@ -811,7 +811,7 @@ impl Scene {
             .filter(|cell| !cell.label.trim().is_empty() && cell.label != "·")
             .map(|cell| SceneEntityView {
                 id: ViewId::new(
-                    axionomy::path!("matrix").join(&cell.row).join(&cell.column),
+                    path!("matrix").join(&cell.row).join(&cell.column),
                     cell.label.clone(),
                 ),
                 glyph: SceneGlyphView::Constraint,
@@ -863,7 +863,7 @@ impl Scene {
                 account: None,
                 evidence: Vec::new(),
                 metrics: vec![SceneMetricView {
-                    key: slug("duration"),
+                    key: path!("duration"),
                     label: "Duration".into(),
                     value: span.end.saturating_sub(span.start).to_string(),
                     unit: None,
@@ -1932,21 +1932,21 @@ where
         if !matches!(scene.surface, SceneSurfaceView::Market { .. }) {
             scene.metrics.extend([
                 SceneMetricView {
-                    key: slug("snapshot"),
+                    key: path!("snapshot"),
                     label: "Economic step".into(),
                     value: index.to_string(),
                     unit: Some("exchanges".into()),
                     previous: index.checked_sub(1).map(|value| value.to_string()),
                 },
                 SceneMetricView {
-                    key: slug("accounts"),
+                    key: path!("accounts"),
                     label: "Accounts".into(),
                     value: accounts.len().to_string(),
                     unit: None,
                     previous: None,
                 },
                 SceneMetricView {
-                    key: slug("balances"),
+                    key: path!("balances"),
                     label: "Non-zero balances".into(),
                     value: balance_entries.to_string(),
                     unit: None,
@@ -2310,22 +2310,22 @@ mod tests {
 
     impl ViewOntology<Test> for Labels {
         fn account(&self, _: &AccountId) -> ViewId {
-            ViewId::new(slug("account/agent"), "Agent")
+            ViewId::new(path!("account/agent"), "Agent")
         }
 
         fn asset(&self, asset: &Asset) -> ViewId {
             match asset {
-                Asset::Ready => ViewId::new(slug("asset/ready"), "Ready"),
-                Asset::Done => ViewId::new(slug("asset/done"), "Done"),
+                Asset::Ready => ViewId::new(path!("asset/ready"), "Ready"),
+                Asset::Done => ViewId::new(path!("asset/done"), "Done"),
             }
         }
 
         fn rate(&self, _: &RateId) -> ViewId {
-            ViewId::new(slug("rate/finish"), "Finish")
+            ViewId::new(path!("rate/finish"), "Finish")
         }
 
         fn role(&self, _: &Role) -> ViewId {
-            ViewId::new(slug("role/actor"), "Actor")
+            ViewId::new(path!("role/actor"), "Actor")
         }
     }
 
@@ -2436,15 +2436,15 @@ mod tests {
                     x: 0,
                     y: 0,
                     label: "Floor with player".into(),
-                    classes: vec![slug("floor")],
-                    account: Some(slug("cell/0")),
+                    classes: vec![path!("floor")],
+                    account: Some(path!("cell/0")),
                 },
                 GridCellView {
                     x: 1,
                     y: 0,
                     label: "Floor".into(),
-                    classes: vec![slug("floor")],
-                    account: Some(slug("cell/1")),
+                    classes: vec![path!("floor")],
+                    account: Some(path!("cell/1")),
                 },
             ],
         );
@@ -2472,11 +2472,11 @@ mod tests {
 
         let document = derive_document(
             ViewDocumentMetadata {
-                id: slug("test"),
+                id: path!("test"),
                 title: "Test".into(),
                 description: "A test trace".into(),
                 source: ViewSource {
-                    key: slug("test"),
+                    key: path!("test"),
                     label: "Test".into(),
                 },
             },
@@ -2513,7 +2513,7 @@ mod tests {
             .build()
             .unwrap();
         let proposal = derive_proposal(
-            slug("missing-actor"),
+            path!("missing-actor"),
             "Missing actor",
             "An intentionally unbound exchange",
             0,
@@ -2540,16 +2540,16 @@ mod tests {
     #[test]
     fn scene_evidence_must_resolve_to_an_exact_snapshot_balance() {
         let accounts = vec![AccountView {
-            account: ViewId::new(slug("account/agent"), "Agent"),
+            account: ViewId::new(path!("account/agent"), "Agent"),
             balances: vec![AssetQuantityView {
-                asset: ViewId::new(slug("asset/ready"), "Ready"),
+                asset: ViewId::new(path!("asset/ready"), "Ready"),
                 quantity: ExactQuantity("1".into()),
             }],
         }];
         let mut scene = Scene::graph(
             "Evidence",
             vec![GraphNodeView {
-                id: ViewId::new(slug("node/agent"), "Agent"),
+                id: ViewId::new(path!("node/agent"), "Agent"),
                 classes: Vec::new(),
                 x: Some(0.0),
                 y: Some(0.0),
@@ -2558,14 +2558,14 @@ mod tests {
             None,
         );
         scene.entities[0].evidence = vec![SceneEvidenceRefView::Balance {
-            account: slug("account/agent"),
-            asset: slug("asset/ready"),
+            account: path!("account/agent"),
+            asset: path!("asset/ready"),
         }];
         assert_eq!(scene.validate_evidence(&accounts), Ok(()));
 
         scene.entities[0].evidence = vec![SceneEvidenceRefView::Balance {
-            account: slug("account/agent"),
-            asset: slug("asset/missing"),
+            account: path!("account/agent"),
+            asset: path!("asset/missing"),
         }];
         assert_eq!(
             scene.validate_evidence(&accounts),
@@ -2580,7 +2580,7 @@ mod tests {
         let scene = Scene::graph(
             "Roles",
             vec![GraphNodeView {
-                id: ViewId::new(slug("node/depot"), "Depot"),
+                id: ViewId::new(path!("node/depot"), "Depot"),
                 classes: Vec::new(),
                 x: Some(0.0),
                 y: Some(0.0),

@@ -82,42 +82,42 @@ pub(super) fn build(
 fn objectives(world: &World) -> Vec<ObjectiveView> {
     [
         (
-            "saved",
+            path!("saved"),
             "Patients evacuated",
             AccountId::World,
             Asset::SavedCount,
             ObjectiveDirectionView::Maximize,
         ),
         (
-            "vitality",
+            path!("vitality"),
             "Vitality at hospital arrival",
             AccountId::World,
             Asset::SavedVitality,
             ObjectiveDirectionView::Maximize,
         ),
         (
-            "deaths",
+            path!("deaths"),
             "Patients lost",
             AccountId::World,
             Asset::DeathCount,
             ObjectiveDirectionView::Minimize,
         ),
         (
-            "fuel",
+            path!("fuel"),
             "Fuel spent",
             AccountId::Responder,
             Asset::SpentFuel,
             ObjectiveDirectionView::Minimize,
         ),
         (
-            "medicine",
+            path!("medicine"),
             "Kits used",
             AccountId::Responder,
             Asset::UsedMedicalKit,
             ObjectiveDirectionView::Minimize,
         ),
         (
-            "time",
+            path!("time"),
             "Elapsed time",
             AccountId::World,
             Asset::Time,
@@ -126,7 +126,7 @@ fn objectives(world: &World) -> Vec<ObjectiveView> {
     ]
     .into_iter()
     .map(|(key, label, account, asset, direction)| ObjectiveView {
-        key: slug(key),
+        key,
         label: label.into(),
         value: incident::value(world, account, asset).to_string(),
         direction,
@@ -136,7 +136,7 @@ fn objectives(world: &World) -> Vec<ObjectiveView> {
 fn observation(world: &World) -> ObservationView {
     let key = incident::responder_view(world).observation_key();
     ObservationView {
-        actor: ViewId::new(slug("rescue/actor/responder"), "Rescue crew"),
+        actor: ViewId::new(path!("rescue/actor/responder"), "Rescue crew"),
         label: format!(
             "Crew observations at time {} · undiscovered patients and Nature omitted",
             incident::now(world)
@@ -190,7 +190,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                     format!("{location:?}")
                 },
             ),
-            classes: vec![slug("location")],
+            classes: vec![path!("location")],
             x: Some(x),
             y: Some(y),
         })
@@ -221,7 +221,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         .unwrap_or(Location::Base);
     let mut crew = link_account::<incident::Ontology>(
         visual_entity(
-            slug("crew"),
+            path!("crew"),
             "Evacuation crew",
             SceneGlyphView::Vehicle,
             SceneAnchorView::GraphNode {
@@ -244,19 +244,19 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
     );
     crew.metrics = vec![
         asset_metric(
-            slug("fuel"),
+            path!("fuel"),
             "Fuel",
             &Asset::Fuel,
             val(AccountId::Responder, Asset::Fuel),
         ),
         asset_metric(
-            slug("energy"),
+            path!("energy"),
             "Crew energy",
             &Asset::Energy,
             val(AccountId::Responder, Asset::Energy),
         ),
         asset_metric(
-            slug("medicine"),
+            path!("medicine"),
             "Medical kits",
             &Asset::MedicalKit,
             val(AccountId::Responder, Asset::MedicalKit),
@@ -315,19 +315,19 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         );
         entity.metrics = vec![
             visual_metric(
-                slug("vitality"),
+                path!("vitality"),
                 "Vitality",
                 val(patient, Asset::Vitality),
                 Some("/ 3"),
             ),
             asset_metric(
-                slug("decline"),
+                path!("decline"),
                 "Next deterioration",
                 &Asset::NextDecline,
                 val(patient, Asset::NextDecline),
             ),
             asset_metric(
-                slug("deadline"),
+                path!("deadline"),
                 "Evacuation deadline",
                 &Asset::Deadline,
                 val(patient, Asset::Deadline),
@@ -344,25 +344,25 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
     .with_entities(entities)
     .with_metrics([
         asset_metric(
-            slug("time"),
+            path!("time"),
             "Incident time",
             &Asset::Time,
             incident::now(world),
         ),
         asset_metric(
-            slug("saved"),
+            path!("saved"),
             "Patients evacuated",
             &Asset::SavedCount,
             val(AccountId::World, Asset::SavedCount),
         ),
         asset_metric(
-            slug("deaths"),
+            path!("deaths"),
             "Patients lost",
             &Asset::DeathCount,
             val(AccountId::World, Asset::DeathCount),
         ),
         asset_metric(
-            slug("fuel"),
+            path!("fuel"),
             "Fuel remaining",
             &Asset::Fuel,
             val(AccountId::Responder, Asset::Fuel),
@@ -393,19 +393,19 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             if location == Location::Base {
                 entity.metrics = vec![
                     asset_metric(
-                        slug("time"),
+                        path!("time"),
                         "Incident time",
                         &Asset::Time,
                         incident::now(world),
                     ),
                     asset_metric(
-                        slug("saved"),
+                        path!("saved"),
                         "Patients evacuated",
                         &Asset::SavedCount,
                         val(AccountId::World, Asset::SavedCount),
                     ),
                     asset_metric(
-                        slug("lost"),
+                        path!("lost"),
                         "Patients lost",
                         &Asset::DeathCount,
                         val(AccountId::World, Asset::DeathCount),

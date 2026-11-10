@@ -140,7 +140,7 @@ fn search(
             session.advance(WorkBudget::new(chunk), &mut observer);
             let state = session.progress();
             let _ = progress.graph(
-                slug("a-star-frontier"),
+                path!("a-star-frontier"),
                 state,
                 format!(
                     "{} expanded · {} frontier · {} distinct states",
@@ -163,7 +163,7 @@ fn search(
             session.advance(WorkBudget::new(chunk), &mut observer);
             let state = session.progress();
             let _ = progress.graph(
-                slug("breadth-first-frontier"),
+                path!("breadth-first-frontier"),
                 state,
                 format!(
                     "{} expanded · {} frontier · {} distinct states",
@@ -194,12 +194,12 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         let wall = sokoban::is_wall(world, cell);
         let goal = !world.balance(&account, &Asset::GoalCell).is_zero();
         let dead = sokoban::is_dead_square(world, cell);
-        let mut classes = vec![if wall { slug("wall") } else { slug("floor") }];
+        let mut classes = vec![if wall { path!("wall") } else { path!("floor") }];
         if goal {
-            classes.push(slug("goal"));
+            classes.push(path!("goal"));
         }
         if dead {
-            classes.push(slug("dead-square"));
+            classes.push(path!("dead-square"));
         }
         cells.push(GridCellView {
             x: u32::from(cell % width),
@@ -219,7 +219,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
 
         if !world.balance(&account, &Asset::ExitCell).is_zero() {
             entities.push(visual_entity(
-                slug("exit"),
+                path!("exit"),
                 "Exit",
                 SceneGlyphView::Goal,
                 SceneAnchorView::GridCell {
@@ -296,7 +296,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         if player == Some(cell) {
             entities.push(link_balance::<sokoban::Ontology>(
                 visual_entity(
-                    slug("player"),
+                    path!("player"),
                     "Player",
                     SceneGlyphView::Agent,
                     SceneAnchorView::GridCell {
@@ -355,7 +355,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         .with_entities(entities)
         .with_metrics([
             visual_metric(
-                slug("held-plates"),
+                path!("held-plates"),
                 "Crates holding plates",
                 (0..2)
                     .filter(|circuit| {
@@ -367,7 +367,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 None,
             ),
             visual_metric(
-                slug("latched"),
+                path!("latched"),
                 "Doors latched open",
                 (0..2)
                     .filter(|circuit| {
@@ -379,7 +379,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 None,
             ),
             visual_metric(
-                slug("goals"),
+                path!("goals"),
                 "Crates on goals",
                 crates
                     .iter()

@@ -139,9 +139,9 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                         column: path!("element").then(&element),
                         label: "×".into(),
                         classes: if selected {
-                            vec![slug("selected")]
+                            vec![path!("selected")]
                         } else if blocked {
-                            vec![slug("blocked")]
+                            vec![path!("blocked")]
                         } else {
                             Vec::new()
                         },
@@ -152,7 +152,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
     Some(
         Scene::matrix("Which subset contains which element", rows, columns, cells).with_metrics([
             visual_metric(
-                slug("covered"),
+                path!("covered"),
                 "Elements covered",
                 elements
                     .iter()
@@ -165,7 +165,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 None,
             ),
             visual_metric(
-                slug("selected"),
+                path!("selected"),
                 "Subsets selected",
                 sets.iter()
                     .filter(|set| {
@@ -177,7 +177,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 None,
             ),
             visual_metric(
-                slug("choices"),
+                path!("choices"),
                 "Legal next selections",
                 exact_cover::candidates(world)
                     .iter()
@@ -186,7 +186,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 None,
             ),
             visual_metric(
-                slug("completion"),
+                path!("completion"),
                 "Completion possible",
                 if exact_cover::algorithm_x(world).is_some() {
                     "yes"

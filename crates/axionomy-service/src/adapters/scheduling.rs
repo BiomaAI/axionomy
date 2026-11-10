@@ -154,13 +154,13 @@ fn objective_value(values: &[Objective<ObjectiveKey, u64>], key: ObjectiveKey) -
 fn objectives(world: &World) -> Vec<ObjectiveView> {
     vec![
         ObjectiveView {
-            key: slug("job-one"),
+            key: path!("job-one"),
             label: "Job One completion".into(),
             direction: ObjectiveDirectionView::Minimize,
             value: scheduling::completion_time(world, Job::One).to_string(),
         },
         ObjectiveView {
-            key: slug("job-two"),
+            key: path!("job-two"),
             label: "Job Two completion".into(),
             direction: ObjectiveDirectionView::Minimize,
             value: scheduling::completion_time(world, Job::Two).to_string(),
@@ -178,12 +178,12 @@ fn front_view(result: &scheduling::ParetoResult, selected: &ViewDocument) -> Par
         completeness: FrontierCompletenessView::Exact,
         axes: vec![
             ObjectiveAxisView {
-                key: slug("job-one"),
+                key: path!("job-one"),
                 label: "Job One".into(),
                 direction: ObjectiveDirectionView::Minimize,
             },
             ObjectiveAxisView {
-                key: slug("job-two"),
+                key: path!("job-two"),
                 label: "Job Two".into(),
                 direction: ObjectiveDirectionView::Minimize,
             },
@@ -302,15 +302,15 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         )
         .with_entities(pending_entities)
         .with_metrics([
-            visual_metric(slug("pending"), "Pending operations", pending_count, None),
+            visual_metric(path!("pending"), "Pending operations", pending_count, None),
             visual_metric(
-                slug("scheduled"),
+                path!("scheduled"),
                 "Scheduled operations",
                 operations.len() - pending_count,
                 None,
             ),
             visual_metric(
-                slug("makespan"),
+                path!("makespan"),
                 "Current makespan",
                 scheduling::encoded_makespan(world),
                 Some("ticks"),
@@ -328,7 +328,7 @@ fn execution_scene(world: &World) -> Scene {
         .map(|machine| TimelineLaneView {
             id: ViewId::new(path!("machine").then(&machine), machine_name(machine)),
             classes: if value(AccountId::Machine(machine), Asset::Broken) > 0 {
-                vec![slug("blocked")]
+                vec![path!("blocked")]
             } else {
                 vec![]
             },
@@ -401,9 +401,9 @@ fn execution_scene(world: &World) -> Scene {
                 classes: vec![
                     path!("job").then(&job),
                     if completed_at > 0 {
-                        slug("completed")
+                        path!("completed")
                     } else {
-                        slug("active")
+                        path!("active")
                     },
                 ],
             });
@@ -449,34 +449,34 @@ fn execution_scene(world: &World) -> Scene {
     );
     timeline.entities.clear();
     timeline.with_entities(entities).with_metrics([
-        asset_metric(slug("world-time"), "World time", &Asset::Now, now),
+        asset_metric(path!("world-time"), "World time", &Asset::Now, now),
         asset_metric(
-            slug("labor"),
+            path!("labor"),
             "Available crew",
             &Asset::Labor,
             value(AccountId::Success, Asset::Labor),
         ),
         asset_metric(
-            slug("busy-labor"),
+            path!("busy-labor"),
             "Occupied crew",
             &Asset::BusyLabor,
             value(AccountId::Success, Asset::BusyLabor),
         ),
-        visual_metric(slug("machine-two"), "Machine Two", condition, None),
+        visual_metric(path!("machine-two"), "Machine Two", condition, None),
         asset_metric(
-            slug("repair-kits"),
+            path!("repair-kits"),
             "Repair kits left",
             &Asset::RepairKit,
             value(AccountId::Success, Asset::RepairKit),
         ),
         asset_metric(
-            slug("one-done"),
+            path!("one-done"),
             "Job One completion",
             &Asset::CompletionTime,
             scheduling::completion_time(world, Job::One),
         ),
         asset_metric(
-            slug("two-done"),
+            path!("two-done"),
             "Job Two completion",
             &Asset::CompletionTime,
             scheduling::completion_time(world, Job::Two),

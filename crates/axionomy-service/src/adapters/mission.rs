@@ -34,7 +34,7 @@ pub(super) fn build(
         samples.clamp(1, 8),
         |state| {
             progress.emit(
-                slug("monte-carlo"),
+                path!("monte-carlo"),
                 state.completed_samples() as u64,
                 state.total_samples() as u64,
                 format!(
@@ -55,7 +55,7 @@ pub(super) fn build(
         samples.clamp(1, 8),
         |state| {
             progress.emit(
-                slug("pareto-sampling"),
+                path!("pareto-sampling"),
                 state.completed_samples() as u64,
                 state.total_samples() as u64,
                 format!(
@@ -81,7 +81,7 @@ pub(super) fn build(
         samples.clamp(1, 8),
         |decision, state| {
             progress.emit(
-                slug("ismcts"),
+                path!("ismcts"),
                 state.iterations() as u64,
                 state.target_iterations() as u64,
                 format!(
@@ -115,9 +115,9 @@ pub(super) fn build(
             mission::run_policy(&mut model.clone(), policy, sample_index)
         };
         let mut view = document(progress, DocumentSpec { problem: "mission", strategy, title: if policy == Policy::ShareAndCoordinate { "Mission · observe, decide, replan" } else { "Mission · both go north" }, description: if policy == Policy::ShareAndCoordinate { "ISMCTS chooses every public action from the Scout’s observation. After each action and Nature response, compatible belief worlds are retained and the next decision is searched again. Compare the resulting costs with committing north without information." } else { "Both agents commit without looking or sharing. The replay keeps every failure and what it cost." }, source_label: "Hidden-information mission" }, &model, &mission::goal(), rollout.trace(), vec![
-            ObjectiveView { key: slug("success"), label: "Succeeded".into(), direction: ObjectiveDirectionView::Maximize, value: u8::from(rollout.succeeded()).to_string() },
-            ObjectiveView { key: slug("time"), label: "Elapsed time".into(), direction: ObjectiveDirectionView::Minimize, value: rollout.elapsed_time().to_string() },
-            ObjectiveView { key: slug("medical"), label: "Medical kit used".into(), direction: ObjectiveDirectionView::Minimize, value: u8::from(rollout.used_medical_kit()).to_string() },
+            ObjectiveView { key: path!("success"), label: "Succeeded".into(), direction: ObjectiveDirectionView::Maximize, value: u8::from(rollout.succeeded()).to_string() },
+            ObjectiveView { key: path!("time"), label: "Elapsed time".into(), direction: ObjectiveDirectionView::Minimize, value: rollout.elapsed_time().to_string() },
+            ObjectiveView { key: path!("medical"), label: "Medical kit used".into(), direction: ObjectiveDirectionView::Minimize, value: u8::from(rollout.used_medical_kit()).to_string() },
         ], scene).map_err(|error| problem_error("mission", error))?;
         view.pareto_fronts.push(policy_front(
             &front,
@@ -330,17 +330,17 @@ fn policy_front(front: &mission::PolicyFront, selected: Option<Policy>) -> Paret
         completeness: FrontierCompletenessView::Approximate,
         axes: vec![
             ObjectiveAxisView {
-                key: slug("success"),
+                key: path!("success"),
                 label: "Success probability".into(),
                 direction: ObjectiveDirectionView::Maximize,
             },
             ObjectiveAxisView {
-                key: slug("time"),
+                key: path!("time"),
                 label: "Mean time".into(),
                 direction: ObjectiveDirectionView::Minimize,
             },
             ObjectiveAxisView {
-                key: slug("medical"),
+                key: path!("medical"),
                 label: "Medical-kit use".into(),
                 direction: ObjectiveDirectionView::Minimize,
             },
@@ -387,7 +387,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             GraphNodeView {
                 id: ViewId::new(path!("location").then(&location), format!("{location:?}")),
                 classes: if occupied {
-                    vec![slug("current")]
+                    vec![path!("current")]
                 } else {
                     Vec::new()
                 },
@@ -408,9 +408,9 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                     .balance(&AccountId::Agent(agent), &Asset::At(location))
                     .is_zero()
             }) {
-                vec![slug("current"), slug("uncertain")]
+                vec![path!("current"), path!("uncertain")]
             } else {
-                vec![slug("uncertain")]
+                vec![path!("uncertain")]
             },
         })
         .collect();
@@ -486,7 +486,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
     let system_entities = [
         link_account::<mission::Ontology>(
             visual_entity(
-                slug("system/mission"),
+                path!("system/mission"),
                 "Mission control",
                 SceneGlyphView::Task,
                 SceneAnchorView::GraphNode {
@@ -500,7 +500,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         ),
         link_account::<mission::Ontology>(
             visual_entity(
-                slug("system/nature"),
+                path!("system/nature"),
                 "Hidden scenario",
                 SceneGlyphView::Weather,
                 SceneAnchorView::Unanchored,
@@ -512,7 +512,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         ),
         link_account::<mission::Ontology>(
             visual_entity(
-                slug("system/success"),
+                path!("system/success"),
                 "Mission outcome",
                 SceneGlyphView::Goal,
                 SceneAnchorView::Unanchored,
@@ -535,13 +535,13 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             .with_entities(agent_entities.chain(system_entities))
             .with_metrics([
                 asset_metric(
-                    slug("time"),
+                    path!("time"),
                     "Mission time remaining",
                     &Asset::TimeRemaining,
                     world.balance(&AccountId::Mission, &Asset::TimeRemaining),
                 ),
                 visual_metric(
-                    slug("shared-intel"),
+                    path!("shared-intel"),
                     "Shared intel",
                     [Location::North, Location::South]
                         .into_iter()
@@ -680,11 +680,11 @@ impl StudioLabel for mission::Role {
 #[cfg(test)]
 mod tests {
     use crate::{InstanceProfile, ReferenceService, StudyRequest};
-    use axionomy_view::slug;
+    use axionomy::path;
 
     #[test]
     fn mission_replays_actual_search_and_private_information_transfer() {
-        let mut request = StudyRequest::new(slug("mission")).with_instance(InstanceProfile::Micro);
+        let mut request = StudyRequest::new(path!("mission")).with_instance(InstanceProfile::Micro);
         request.seed = 11;
         let study = ReferenceService.study(request).unwrap();
         let planned = &study.documents[0];

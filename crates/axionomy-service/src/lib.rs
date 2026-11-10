@@ -598,8 +598,9 @@ impl ReferenceService {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use axionomy::path;
     use axionomy_problems::lending;
-    use axionomy_view::{SceneSurfaceView, ViewOntology, slug};
+    use axionomy_view::{SceneSurfaceView, ViewOntology};
     use std::collections::HashSet;
 
     #[derive(Default)]
@@ -725,30 +726,30 @@ mod tests {
 
         let study = ReferenceService
             .study(
-                StudyRequest::new(slug("maze"))
+                StudyRequest::new(path!("maze"))
                     .with_instance(InstanceProfile::Showcase)
-                    .with_strategy(slug("a-star")),
+                    .with_strategy(path!("a-star")),
             )
             .unwrap();
         for (document, algorithm) in [
-            ("breadth-first", "breadth-first"),
-            ("dijkstra", "dijkstra"),
-            ("a-star", "a-star"),
+            (path!("breadth-first"), path!("breadth-first")),
+            (path!("dijkstra"), path!("dijkstra")),
+            (path!("a-star"), path!("a-star")),
         ] {
-            let document = study.document(&slug(document)).unwrap();
+            let document = study.document(&document).unwrap();
             assert!(
                 document
                     .thinking
                     .iter()
-                    .all(|observation| observation.algorithm.as_str() == algorithm)
+                    .all(|observation| observation.algorithm == algorithm)
             );
             let accepted = document.thinking.last().unwrap();
             assert_eq!(accepted.kind, SearchObservationKindView::Incumbent);
             assert!(accepted.label.starts_with("Solution accepted at Exit"));
             assert_eq!(accepted.subjects[0].key.as_str(), "node/exit");
         }
-        for document in ["pareto-energy", "pareto-time"] {
-            let document = study.document(&slug(document)).unwrap();
+        for document in [path!("pareto-energy"), path!("pareto-time")] {
+            let document = study.document(&document).unwrap();
             let observation = document.thinking.last().unwrap();
             assert_eq!(observation.algorithm.as_str(), "exact-pareto-search");
             assert_eq!(observation.kind, SearchObservationKindView::Frontier);
@@ -795,9 +796,9 @@ mod tests {
 
     #[test]
     fn selected_replay_frames_stream_with_the_same_snapshot_contract() {
-        let request = StudyRequest::new(slug("work-league"))
+        let request = StudyRequest::new(path!("work-league"))
             .with_instance(InstanceProfile::Micro)
-            .with_strategy(slug("mixed-field"));
+            .with_strategy(path!("mixed-field"));
         let mut observer = FrameObserver::default();
         let study = ReferenceService
             .study_with(&request, &StudyControl::default(), &mut observer)
@@ -1007,7 +1008,7 @@ mod tests {
     #[test]
     fn scaled_assets_are_read_in_their_units() {
         let study = ReferenceService
-            .study(StudyRequest::new(slug("lending")))
+            .study(StudyRequest::new(path!("lending")))
             .expect("lending is studied");
         let document = study.selected().expect("a selected document");
         let key = |asset| {
@@ -1264,7 +1265,7 @@ mod tests {
     #[test]
     fn a_proposal_names_the_snapshot_it_was_assessed_against() {
         let study = ReferenceService
-            .study(StudyRequest::new(slug("mission")).with_instance(InstanceProfile::Micro))
+            .study(StudyRequest::new(path!("mission")).with_instance(InstanceProfile::Micro))
             .unwrap();
         let (document, proposal) = study
             .documents
@@ -1304,7 +1305,7 @@ mod tests {
         let worker_control = std::sync::Arc::clone(&control);
         let worker = std::thread::spawn(move || {
             ReferenceService.study_with(
-                &StudyRequest::new(slug("maze")).with_strategy(slug("a-star")),
+                &StudyRequest::new(path!("maze")).with_strategy(path!("a-star")),
                 &worker_control,
                 &mut |_| {},
             )
@@ -1321,9 +1322,9 @@ mod tests {
         let mut observed = Vec::new();
         let result = ReferenceService.study_with(
             &StudyRequest {
-                problem: slug("logistics"),
+                problem: path!("logistics"),
                 instance: Some(InstanceProfile::Micro),
-                strategy: Some(slug("reliable")),
+                strategy: Some(path!("reliable")),
                 seed: 42,
                 budget: 64,
             },
@@ -1364,9 +1365,9 @@ mod tests {
         let mut paused_once = false;
         let result = ReferenceService.study_with(
             &StudyRequest {
-                problem: slug("logistics"),
+                problem: path!("logistics"),
                 instance: Some(InstanceProfile::Micro),
-                strategy: Some(slug("reliable")),
+                strategy: Some(path!("reliable")),
                 seed: 42,
                 budget: 16,
             },

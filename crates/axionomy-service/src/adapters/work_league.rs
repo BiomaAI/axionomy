@@ -76,19 +76,19 @@ pub(super) fn build(
             outcome.trace(),
             vec![
                 ObjectiveView {
-                    key: slug("value"),
+                    key: path!("value"),
                     label: "Contract value".into(),
                     direction: ObjectiveDirectionView::Maximize,
                     value: total_value.to_string(),
                 },
                 ObjectiveView {
-                    key: slug("completed"),
+                    key: path!("completed"),
                     label: "Jobs completed".into(),
                     direction: ObjectiveDirectionView::Maximize,
                     value: completed.to_string(),
                 },
                 ObjectiveView {
-                    key: slug("waste"),
+                    key: path!("waste"),
                     label: "Residual waste".into(),
                     direction: ObjectiveDirectionView::Minimize,
                     value: waste.to_string(),
@@ -138,7 +138,7 @@ pub(super) fn build(
         ));
         documents.push(view);
         let _ = progress.emit(
-            slug("multi-agent-match"),
+            path!("multi-agent-match"),
             offset as u64 + 1,
             configurations.len() as u64,
             format!(
@@ -259,40 +259,40 @@ impl AgentMetrics {
 
     fn components(&self) -> Vec<SceneMetricView> {
         vec![
-            asset_metric(slug("value"), "Contract value", &Asset::Value, self.value),
+            asset_metric(path!("value"), "Contract value", &Asset::Value, self.value),
             visual_metric(
-                slug("completed"),
+                path!("completed"),
                 "Jobs completed",
                 self.completed,
                 Some("jobs"),
             ),
             asset_metric(
-                slug("elapsed"),
+                path!("elapsed"),
                 "Elapsed time",
                 &Asset::ElapsedTime,
                 self.elapsed,
             ),
             asset_metric(
-                slug("energy"),
+                path!("energy"),
                 "Energy spent",
                 &Asset::SpentEnergy,
                 self.energy,
             ),
             asset_metric(
-                slug("material"),
+                path!("material"),
                 "Material spent",
                 &Asset::MaterialSpent,
                 self.material,
             ),
-            asset_metric(slug("waste"), "Residual waste", &Asset::Waste, self.waste),
+            asset_metric(path!("waste"), "Residual waste", &Asset::Waste, self.waste),
             asset_metric(
-                slug("recycled"),
+                path!("recycled"),
                 "Waste recycled",
                 &Asset::RecycledWaste,
                 self.recycled,
             ),
             asset_metric(
-                slug("attempts"),
+                path!("attempts"),
                 "Attempts",
                 &Asset::Attempts,
                 self.attempts,
@@ -468,7 +468,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 location,
                 Location::Workshop | Location::Charger | Location::Recycler
             ) {
-                vec![slug("facility")]
+                vec![path!("facility")]
             } else {
                 Vec::new()
             },
@@ -495,7 +495,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 world.account(&AccountId::Agent(agent)).is_some()
                     && work_league::location(world, agent) == Some(to)
             }) {
-                vec![slug("current")]
+                vec![path!("current")]
             } else {
                 Vec::new()
             },
@@ -550,27 +550,27 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 &Asset::At(location),
             );
             entity.metrics = vec![
-                visual_metric(slug("policy"), "Policy", policy.studio_label(), None),
+                visual_metric(path!("policy"), "Policy", policy.studio_label(), None),
                 asset_metric(
-                    slug("value"),
+                    path!("value"),
                     "Value",
                     &Asset::Value,
                     balance(world, agent, Asset::Value),
                 ),
                 visual_metric(
-                    slug("jobs"),
+                    path!("jobs"),
                     "Completed",
                     balance(world, agent, Asset::Completed),
                     Some("jobs"),
                 ),
                 asset_metric(
-                    slug("energy"),
+                    path!("energy"),
                     "Energy left",
                     &Asset::Energy,
                     balance(world, agent, Asset::Energy),
                 ),
                 asset_metric(
-                    slug("waste"),
+                    path!("waste"),
                     "Residual waste",
                     &Asset::Waste,
                     balance(world, agent, Asset::Waste),
@@ -579,25 +579,25 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             if continuous {
                 entity.metrics.extend([
                     asset_metric(
-                        slug("credit"),
+                        path!("credit"),
                         "Spendable credit",
                         &Asset::Credit,
                         balance(world, agent, Asset::Credit),
                     ),
                     asset_metric(
-                        slug("material"),
+                        path!("material"),
                         "Material left",
                         &Asset::Material,
                         balance(world, agent, Asset::Material),
                     ),
                     asset_metric(
-                        slug("wear"),
+                        path!("wear"),
                         "Equipment wear",
                         &Asset::Wear,
                         balance(world, agent, Asset::Wear),
                     ),
                     visual_metric(
-                        slug("handoffs"),
+                        path!("handoffs"),
                         "Paid handoffs",
                         balance(world, agent, Asset::Assists),
                         Some("contracts"),
@@ -657,19 +657,19 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             &account,
         );
         entity.metrics = vec![
-            asset_metric(slug("value"), "Value", &Asset::Value, spec.value),
-            visual_metric(slug("risk"), "Failure weight", spec.risk, Some("of 10")),
+            asset_metric(path!("value"), "Value", &Asset::Value, spec.value),
+            visual_metric(path!("risk"), "Failure weight", spec.risk, Some("of 10")),
         ];
         if continuous {
             entity.metrics.push(asset_metric(
-                slug("deadline"),
+                path!("deadline"),
                 "Deadline",
                 &Asset::Deadline,
                 balance_job(world, job, Asset::Deadline),
             ));
             if assigned.is_some() && balance_job(world, job, Asset::Pending) > 0 {
                 entity.metrics.push(asset_metric(
-                    slug("lease"),
+                    path!("lease"),
                     "Claim expires after",
                     &Asset::LeaseUntil,
                     balance_job(world, job, Asset::LeaseUntil),
@@ -721,7 +721,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 &AccountId::Facility(facility),
             );
             entity.metrics.push(visual_metric(
-                slug("waiting"),
+                path!("waiting"),
                 "Workers waiting",
                 AGENTS
                     .into_iter()
@@ -738,9 +738,14 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         .filter(|number| balance_job(world, work_league::JobId(*number), Asset::Completed) > 0)
         .count();
     let mut metrics = vec![
-        visual_metric(slug("completed"), "Jobs completed", completed, Some("jobs")),
         visual_metric(
-            slug("active-agents"),
+            path!("completed"),
+            "Jobs completed",
+            completed,
+            Some("jobs"),
+        ),
+        visual_metric(
+            path!("active-agents"),
             "Competing agents",
             AGENTS
                 .into_iter()
@@ -749,7 +754,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             Some("agents"),
         ),
         asset_metric(
-            slug("repair-supply"),
+            path!("repair-supply"),
             "Repair supply",
             &Asset::RepairSupply,
             world.balance(
@@ -761,12 +766,12 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
     if continuous {
         metrics.insert(
             0,
-            asset_metric(slug("clock"), "World time", &Asset::Tick, tick),
+            asset_metric(path!("clock"), "World time", &Asset::Tick, tick),
         );
         metrics.insert(
             2,
             visual_metric(
-                slug("expired"),
+                path!("expired"),
                 "Missed deadlines",
                 (1u8..=24)
                     .filter(|number| balance_job(world, JobId(*number), Asset::Expired) > 0)
@@ -775,7 +780,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             ),
         );
         metrics.push(visual_metric(
-            slug("activities"),
+            path!("activities"),
             "Simultaneous activities",
             world.balance(&AccountId::World, &Asset::Activities),
             Some("workers"),
@@ -799,9 +804,9 @@ mod tests {
 
     #[test]
     fn every_snapshot_has_multiple_rankings_and_they_change() {
-        let request = StudyRequest::new(slug("work-league"))
+        let request = StudyRequest::new(path!("work-league"))
             .with_instance(InstanceProfile::Showcase)
-            .with_strategy(slug("mixed-field"));
+            .with_strategy(path!("mixed-field"));
         let key = ReferenceService.resolve(&request).unwrap();
         let descriptor = ReferenceService.problem(&key.problem).unwrap();
         let study = build(

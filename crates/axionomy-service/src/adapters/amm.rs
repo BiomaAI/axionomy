@@ -58,31 +58,31 @@ pub(super) fn build(
             &trace,
             vec![
                 ObjectiveView {
-                    key: slug("needs"),
+                    key: path!("needs"),
                     label: "Needs satisfied".into(),
                     direction: ObjectiveDirectionView::Maximize,
                     value: satisfied_needs(&final_world).to_string(),
                 },
                 ObjectiveView {
-                    key: slug("utility"),
+                    key: path!("utility"),
                     label: "Realized utility".into(),
                     direction: ObjectiveDirectionView::Maximize,
                     value: total_utility(&final_world).to_string(),
                 },
                 ObjectiveView {
-                    key: slug("depth"),
+                    key: path!("depth"),
                     label: "Energy liquidity".into(),
                     direction: ObjectiveDirectionView::Maximize,
                     value: final_pool.energy.to_string(),
                 },
                 ObjectiveView {
-                    key: slug("unmet"),
+                    key: path!("unmet"),
                     label: "Unmet daily needs".into(),
                     direction: ObjectiveDirectionView::Minimize,
                     value: unmet_needs(&final_world).to_string(),
                 },
                 ObjectiveView {
-                    key: slug("defaults"),
+                    key: path!("defaults"),
                     label: "Missed obligations".into(),
                     direction: ObjectiveDirectionView::Minimize,
                     value: defaults(&final_world).to_string(),
@@ -275,13 +275,13 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 }],
                 metrics: vec![
                     asset_metric(
-                        slug("energy"),
+                        path!("energy"),
                         "Energy",
                         &Asset::Energy,
                         world.balance(&account, &Asset::Energy),
                     ),
                     asset_metric(
-                        slug("credit"),
+                        path!("credit"),
                         "Credit",
                         &Asset::Credit,
                         world.balance(&account, &Asset::Credit),
@@ -294,7 +294,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         title: "The Living Market".into(),
         surface: SceneSurfaceView::Market {
             pool: Box::new(MarketPoolView {
-                id: ViewId::new(slug("amm/pool/energy-credit"), "Energy / Credit AMM"),
+                id: ViewId::new(path!("amm/pool/energy-credit"), "Energy / Credit AMM"),
                 base_asset: ViewId::new(asset_key::<amm::Ontology>(&Asset::Energy), "Energy"),
                 quote_asset: ViewId::new(asset_key::<amm::Ontology>(&Asset::Credit), "Credit"),
                 base_reserve: exact(state.energy),
@@ -313,19 +313,19 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         annotations: Vec::new(),
         metrics: vec![
             visual_metric(
-                slug("price"),
+                path!("price"),
                 "Discovered price",
                 format_price(state.price_milli),
                 Some("credit / energy"),
             ),
             asset_metric(
-                slug("energy-reserve"),
+                path!("energy-reserve"),
                 "Energy reserve",
                 &Asset::Energy,
                 state.energy,
             ),
             asset_metric(
-                slug("liquidity"),
+                path!("liquidity"),
                 "Liquidity shares issued",
                 &Asset::LpShare,
                 state.issued_lp_shares,
@@ -337,7 +337,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         scene.metrics.insert(
             0,
             visual_metric(
-                slug("day"),
+                path!("day"),
                 "Market day",
                 amm::period(world) + 1,
                 Some("day"),
@@ -345,25 +345,25 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         );
         scene.metrics.extend([
             visual_metric(
-                slug("unmet"),
+                path!("unmet"),
                 "Unmet daily needs",
                 unmet_needs(world),
                 Some("needs"),
             ),
             visual_metric(
-                slug("defaults"),
+                path!("defaults"),
                 "Missed obligations",
                 defaults(world),
                 Some("payments"),
             ),
             asset_metric(
-                slug("sunlight"),
+                path!("sunlight"),
                 "Sunlight",
                 &Asset::CurrentSunlight,
                 world.balance(&AccountId::World, &Asset::CurrentSunlight),
             ),
             asset_metric(
-                slug("capacity"),
+                path!("capacity"),
                 "Generating capacity",
                 &Asset::ProductionCapacity,
                 world.balance(
@@ -372,7 +372,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 ),
             ),
             asset_metric(
-                slug("goods"),
+                path!("goods"),
                 "Goods delivered",
                 &Asset::DeliveredGoods,
                 world.balance(&AccountId::Treasury, &Asset::DeliveredGoods),
@@ -483,7 +483,7 @@ fn contribution_board(contributions: &BTreeMap<Actor, i128>) -> LeaderboardView 
         })
         .collect();
     LeaderboardView {
-        key: slug("price-contribution"),
+        key: path!("price-contribution"),
         label: "Direct price contribution".into(),
         description: "Each actor's cumulative change in the replayed reserve price. Contributions sum exactly to total price movement because proportional liquidity does not move price.".into(),
         direction: ObjectiveDirectionView::Maximize,
@@ -533,7 +533,7 @@ fn causal_contribution_board(initial: &World) -> LeaderboardView {
                 unit: Some("Δ credit / energy".into()),
                 eligible: true,
                 components: vec![visual_metric(
-                    slug("coalitions"),
+                    path!("coalitions"),
                     "Counterfactual coalitions",
                     1_u64 << amm::PRICE_ACTORS.len(),
                     None,
@@ -542,7 +542,7 @@ fn causal_contribution_board(initial: &World) -> LeaderboardView {
         })
         .collect();
     LeaderboardView {
-        key: slug("causal-price-contribution"),
+        key: path!("causal-price-contribution"),
         label: "Causal price contribution".into(),
         description: "Exact Shapley allocation across every coalition of active market actors. Each coalition is independently re-quoted and replayed through Axionomy; the reduced fractions sum to the full counterfactual price change.".into(),
         direction: ObjectiveDirectionView::Maximize,

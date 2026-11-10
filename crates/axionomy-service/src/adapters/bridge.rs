@@ -318,7 +318,7 @@ fn objectives(world: &World) -> Vec<ObjectiveView> {
             });
         }
         values.push(ObjectiveView {
-            key: slug("elapsed"),
+            key: path!("elapsed"),
             label: "Elapsed time".into(),
             direction: ObjectiveDirectionView::Minimize,
             value: bridge::timed::now(world).to_string(),
@@ -399,7 +399,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         .into_iter()
         .map(|(key, label, x, y)| GraphNodeView {
             classes: if key == path!("bridge") {
-                vec![slug("resource")]
+                vec![path!("resource")]
             } else {
                 vec![]
             },
@@ -494,7 +494,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             &asset,
         );
         entity.metrics = vec![asset_metric(
-            slug("credit"),
+            path!("credit"),
             "Credit",
             &Asset::Credit,
             bridge::credit(world, agent),
@@ -502,18 +502,23 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         if timed {
             entity.metrics.extend([
                 asset_metric(
-                    slug("deadline"),
+                    path!("deadline"),
                     "Deadline",
                     &Asset::Deadline,
                     value(Asset::Deadline),
                 ),
                 asset_metric(
-                    slug("ontime"),
+                    path!("ontime"),
                     "On-time trips",
                     &Asset::OnTime,
                     value(Asset::OnTime),
                 ),
-                asset_metric(slug("late"), "Late trips", &Asset::Late, value(Asset::Late)),
+                asset_metric(
+                    path!("late"),
+                    "Late trips",
+                    &Asset::Late,
+                    value(Asset::Late),
+                ),
             ]);
         }
         entity
@@ -522,7 +527,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         .with_entities(agents)
         .with_metrics([
             visual_metric(
-                slug("capacity"),
+                path!("capacity"),
                 "Bridge capacity",
                 if world
                     .balance(&AccountId::Bridge, &Asset::CapacityFree)
@@ -535,13 +540,13 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 None,
             ),
             visual_metric(
-                slug("priority-a"),
+                path!("priority-a"),
                 "A priority",
                 bridge::priority(world, AgentId::A),
                 None,
             ),
             visual_metric(
-                slug("priority-b"),
+                path!("priority-b"),
                 "B priority",
                 bridge::priority(world, AgentId::B),
                 None,
@@ -549,15 +554,15 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         ]);
     if timed {
         scene.metrics.extend([
-            asset_metric(slug("world-time"), "World time", &Asset::Now, clock),
+            asset_metric(path!("world-time"), "World time", &Asset::Now, clock),
             visual_metric(
-                slug("wave"),
+                path!("wave"),
                 "Traffic wave",
                 world.balance(&AccountId::Bridge, &Asset::Round).to_u64() + 1,
                 None,
             ),
             visual_metric(
-                slug("ontime"),
+                path!("ontime"),
                 "On-time trips",
                 [AgentId::A, AgentId::B]
                     .into_iter()
@@ -570,7 +575,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 None,
             ),
             visual_metric(
-                slug("late"),
+                path!("late"),
                 "Late trips",
                 [AgentId::A, AgentId::B]
                     .into_iter()
@@ -594,7 +599,7 @@ mod tests {
     #[test]
     fn exact_front_pairs_each_travelers_priority_with_their_credit() {
         let study = ReferenceService
-            .study(StudyRequest::new(slug("bridge")).with_instance(InstanceProfile::Micro))
+            .study(StudyRequest::new(path!("bridge")).with_instance(InstanceProfile::Micro))
             .unwrap();
         for document in study.documents {
             for point in &document.pareto_fronts[0].points {

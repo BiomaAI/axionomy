@@ -151,16 +151,20 @@ fn objectives(world: &World) -> Vec<ObjectiveView> {
         .iter()
         .map(|objective| {
             let (key, label, direction) = match objective.key() {
-                ObjectiveKey::Waste => ("waste", "Waste", ObjectiveDirectionView::Minimize),
-                ObjectiveKey::Time => ("time", "Process time", ObjectiveDirectionView::Minimize),
+                ObjectiveKey::Waste => (path!("waste"), "Waste", ObjectiveDirectionView::Minimize),
+                ObjectiveKey::Time => (
+                    path!("time"),
+                    "Process time",
+                    ObjectiveDirectionView::Minimize,
+                ),
                 ObjectiveKey::Revenue => (
-                    "revenue",
+                    path!("revenue"),
                     "Contract revenue",
                     ObjectiveDirectionView::Maximize,
                 ),
             };
             ObjectiveView {
-                key: slug(key),
+                key,
                 label: label.into(),
                 direction,
                 value: objective.value().to_string(),
@@ -245,9 +249,9 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         .map(|(index, (label, asset))| GraphNodeView {
             id: ViewId::new(path::write(&asset), label),
             classes: if matches!(asset, Asset::Chair) {
-                vec![slug("goal")]
+                vec![path!("goal")]
             } else {
-                vec![slug("resource")]
+                vec![path!("resource")]
             },
             x: Some((index as f64 % 3.0) * 220.0 + 80.0),
             y: Some((index / 3) as f64 * 150.0 + 70.0),
@@ -372,7 +376,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             &Asset::CustomerIdentity(*order),
         );
         entity.metrics = vec![asset_metric(
-            slug("escrow"),
+            path!("escrow"),
             "Customer funds",
             &Asset::Credit,
             world.balance(id, &Asset::Credit),
@@ -382,31 +386,31 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
     let metrics = if world.account(&AccountId::Customer(0)).is_some() {
         vec![
             asset_metric(
-                slug("completed"),
+                path!("completed"),
                 "Contracts delivered",
                 &Asset::Completed,
                 world.balance(&AccountId::Workshop, &Asset::Completed),
             ),
             asset_metric(
-                slug("revenue"),
+                path!("revenue"),
                 "Revenue",
                 &Asset::Credit,
                 world.balance(&AccountId::Workshop, &Asset::Credit),
             ),
             asset_metric(
-                slug("durability"),
+                path!("durability"),
                 "Tool durability",
                 &Asset::Durability,
                 world.balance(&AccountId::Workshop, &Asset::Durability),
             ),
             asset_metric(
-                slug("repairs"),
+                path!("repairs"),
                 "Repair kits remaining",
                 &Asset::RepairKit,
                 world.balance(&AccountId::Workshop, &Asset::RepairKit),
             ),
             visual_metric(
-                slug("upgrade"),
+                path!("upgrade"),
                 "Precision upgrade",
                 if world
                     .balance(&AccountId::Workshop, &Asset::Upgraded)
@@ -422,13 +426,13 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
     } else {
         vec![
             asset_metric(
-                slug("waste"),
+                path!("waste"),
                 "Waste",
                 &Asset::Waste,
                 workshop::waste(world),
             ),
             asset_metric(
-                slug("time"),
+                path!("time"),
                 "Process time",
                 &Asset::SpentTime,
                 workshop::spent_time(world),

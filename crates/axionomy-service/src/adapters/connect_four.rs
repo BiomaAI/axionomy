@@ -32,7 +32,7 @@ pub(super) fn build(
             .maximum_moves()
             .saturating_mul(state.iterations_per_move());
         progress.emit(
-            slug("mcts-game"),
+            path!("mcts-game"),
             completed as u64,
             total as u64,
             format!(
@@ -68,8 +68,8 @@ pub(super) fn build(
     let terminal = connect_four::terminal_values(&final_world)
         .ok_or_else(|| problem_error("connect-four", "game did not terminate"))?;
     let mut view = document(progress, DocumentSpec { problem: "connect-four", strategy: "mcts-game", title: "Connect Four · MCTS self-play", description: "Both players use tactical MCTS: immediate wins, forced blocks and double threats guide search. The economy declares the winner.", source_label: "Connect Four" }, &initial, &axionomy::Goal::new(), &trace, vec![
-        ObjectiveView { key: slug("red"), label: "Red terminal value".into(), direction: ObjectiveDirectionView::Maximize, value: format!("{:.1}", terminal[0]) },
-        ObjectiveView { key: slug("yellow"), label: "Yellow terminal value".into(), direction: ObjectiveDirectionView::Maximize, value: format!("{:.1}", terminal[1]) },
+        ObjectiveView { key: path!("red"), label: "Red terminal value".into(), direction: ObjectiveDirectionView::Maximize, value: format!("{:.1}", terminal[0]) },
+        ObjectiveView { key: path!("yellow"), label: "Yellow terminal value".into(), direction: ObjectiveDirectionView::Maximize, value: format!("{:.1}", terminal[1]) },
     ], scene).map_err(|error| problem_error("connect-four", error))?;
     view.telemetry.push(telemetry(
         "vector-valued MCTS",
@@ -133,8 +133,8 @@ pub(super) fn build(
                 problem: "connect-four", strategy, title,
                 description: "Red uses tactical MCTS. Yellow uses the named independent policy on the same empty board. One game is an inspectable matchup, not a win-rate estimate.", source_label: "Connect Four",
             }, &initial, &axionomy::Goal::new(), &trace, vec![
-                ObjectiveView { key: slug("red"), label: "Red terminal value".into(), direction: ObjectiveDirectionView::Maximize, value: format!("{:.1}", terminal[0]) },
-                ObjectiveView { key: slug("yellow"), label: "Yellow terminal value".into(), direction: ObjectiveDirectionView::Maximize, value: format!("{:.1}", terminal[1]) },
+                ObjectiveView { key: path!("red"), label: "Red terminal value".into(), direction: ObjectiveDirectionView::Maximize, value: format!("{:.1}", terminal[0]) },
+                ObjectiveView { key: path!("yellow"), label: "Yellow terminal value".into(), direction: ObjectiveDirectionView::Maximize, value: format!("{:.1}", terminal[1]) },
             ], scene).map_err(|error| problem_error("connect-four", error))?);
         }
     }
@@ -179,7 +179,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 y: u32::from(y),
                 label: player
                     .map_or_else(|| "Open slot".into(), |player| format!("{player:?} piece")),
-                classes: vec![slug("connect-slot")],
+                classes: vec![path!("connect-slot")],
                 account: Some(account_key::<connect_four::Ontology>(&account)),
             });
             if let Some(player) = player {
@@ -215,7 +215,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         .with_entities(pieces)
         .with_metrics([
             visual_metric(
-                slug("turn"),
+                path!("turn"),
                 "Next player",
                 evidence.player.map_or_else(
                     || {
@@ -230,25 +230,25 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 None,
             ),
             visual_metric(
-                slug("wins"),
+                path!("wins"),
                 "Winning columns",
                 columns(&evidence.winning_columns),
                 None,
             ),
             visual_metric(
-                slug("opponent-wins"),
+                path!("opponent-wins"),
                 "Opponent threats",
                 columns(&evidence.opponent_winning_columns),
                 None,
             ),
             visual_metric(
-                slug("forks"),
+                path!("forks"),
                 "Double-threat moves",
                 columns(&evidence.fork_columns),
                 None,
             ),
             visual_metric(
-                slug("safe"),
+                path!("safe"),
                 "Safe next columns",
                 columns(&evidence.safe_columns),
                 None,
