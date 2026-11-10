@@ -282,7 +282,7 @@ fn front_view(result: &marketplace::ParetoResult, selected: &ViewDocument) -> Pa
             .into_iter()
             .enumerate()
             .map(|(index, label)| ObjectiveAxisView {
-                key: slug(format!("utility-{index}")),
+                key: path!("utility").then(&index),
                 label: label.into(),
                 direction: ObjectiveDirectionView::Maximize,
             })
@@ -316,7 +316,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
     let mut nodes = Vec::new();
     for buyer in [BuyerId::A, BuyerId::B, BuyerId::C] {
         nodes.push(GraphNodeView {
-            id: ViewId::new(slug(format!("buyer/{buyer:?}")), format!("Buyer {buyer:?}")),
+            id: ViewId::new(path!("buyer").then(&buyer), format!("Buyer {buyer:?}")),
             classes: vec![slug("buyer")],
             x: Some(30.0),
             y: Some(60.0 + (buyer as u8 as f64) * 95.0),
@@ -324,10 +324,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
     }
     for seller in [SellerId::A, SellerId::B, SellerId::C] {
         nodes.push(GraphNodeView {
-            id: ViewId::new(
-                slug(format!("seller/{seller:?}")),
-                format!("Seller {seller:?}"),
-            ),
+            id: ViewId::new(path!("seller").then(&seller), format!("Seller {seller:?}")),
             classes: vec![slug("seller")],
             x: Some(760.0),
             y: Some(60.0 + (seller as u8 as f64) * 95.0),
@@ -348,7 +345,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
     for carrier in [CarrierId::A, CarrierId::B] {
         nodes.push(GraphNodeView {
             id: ViewId::new(
-                slug(format!("carrier/{carrier:?}")),
+                path!("carrier").then(&carrier),
                 format!("Carrier {carrier:?}"),
             ),
             classes: vec![slug("carrier")],
@@ -359,7 +356,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
     let orders = marketplace::orders(world);
     for (index, order) in orders.iter().enumerate() {
         nodes.push(GraphNodeView {
-            id: ViewId::new(slug(format!("order/{order:?}")), format!("Order {order:?}")),
+            id: ViewId::new(path!("order").then(order), format!("Order {order:?}")),
             classes: if !world
                 .balance(
                     &AccountId::Order(*order),
@@ -441,28 +438,26 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             vec![slug("uncertain")]
         };
         edges.push(GraphEdgeView {
-            id: slug(format!(
-                "candidate/{:?}/{:?}/{:?}/{:?}/in",
-                candidate.order(),
-                candidate.buyer(),
-                candidate.seller(),
-                candidate.carrier()
-            )),
-            source: slug(format!("buyer/{:?}", candidate.buyer())),
-            target: slug(format!("order/{:?}", candidate.order())),
+            id: path!("candidate")
+                .then(&candidate.order())
+                .then(&candidate.buyer())
+                .then(&candidate.seller())
+                .then(&candidate.carrier())
+                .join(&path!("in")),
+            source: path!("buyer").then(&candidate.buyer()),
+            target: path!("order").then(&candidate.order()),
             label: Some(format!("via {:?}", candidate.carrier())),
             classes: classes.clone(),
         });
         edges.push(GraphEdgeView {
-            id: slug(format!(
-                "candidate/{:?}/{:?}/{:?}/{:?}/out",
-                candidate.order(),
-                candidate.buyer(),
-                candidate.seller(),
-                candidate.carrier()
-            )),
-            source: slug(format!("order/{:?}", candidate.order())),
-            target: slug(format!("seller/{:?}", candidate.seller())),
+            id: path!("candidate")
+                .then(&candidate.order())
+                .then(&candidate.buyer())
+                .then(&candidate.seller())
+                .then(&candidate.carrier())
+                .join(&path!("out")),
+            source: path!("order").then(&candidate.order()),
+            target: path!("seller").then(&candidate.seller()),
             label: Some(if settled {
                 "atomic split".into()
             } else {
@@ -472,17 +467,17 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         });
         if settled {
             for (suffix, target, label) in [
-                ("platform", slug("platform"), "commission"),
-                ("tax", slug("tax"), "tax"),
+                (path!("platform"), slug("platform"), "commission"),
+                (path!("tax"), slug("tax"), "tax"),
                 (
-                    "carrier",
-                    slug(format!("carrier/{:?}", candidate.carrier())),
+                    path!("carrier"),
+                    path!("carrier").then(&candidate.carrier()),
                     "shipping fee",
                 ),
             ] {
                 edges.push(GraphEdgeView {
-                    id: slug(format!("settlement/{:?}/{suffix}", candidate.order())),
-                    source: slug(format!("order/{:?}", candidate.order())),
+                    id: path!("settlement").then(&candidate.order()).join(&suffix),
+                    source: path!("order").then(&candidate.order()),
                     target,
                     label: Some(label.into()),
                     classes: vec![slug("completed")],
@@ -499,14 +494,14 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             .is_zero();
         let mut entity = link_account::<marketplace::Ontology>(
             visual_entity(
-                slug(format!("order-token/{order:?}")),
+                path!("order-token").then(order),
                 format!("Order {order:?}"),
                 SceneGlyphView::Package,
                 SceneAnchorView::GraphNode {
                     node: if settled && !timed {
                         slug("platform")
                     } else {
-                        slug(format!("order/{order:?}"))
+                        path!("order").then(order)
                     },
                 },
                 SceneEntityRoleView::State,
@@ -567,11 +562,11 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         .map(|buyer| {
             link_account::<marketplace::Ontology>(
                 visual_entity(
-                    slug(format!("actor/buyer/{buyer:?}")),
+                    path!("actor/buyer").then(&buyer),
                     format!("Buyer {buyer:?}"),
                     SceneGlyphView::Person,
                     SceneAnchorView::GraphNode {
-                        node: slug(format!("buyer/{buyer:?}")),
+                        node: path!("buyer").then(&buyer),
                     },
                     SceneEntityRoleView::State,
                     SceneToneView::Neutral,
@@ -586,11 +581,11 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 .map(|seller| {
                     link_account::<marketplace::Ontology>(
                         visual_entity(
-                            slug(format!("actor/seller/{seller:?}")),
+                            path!("actor/seller").then(&seller),
                             format!("Seller {seller:?}"),
                             SceneGlyphView::Organization,
                             SceneAnchorView::GraphNode {
-                                node: slug(format!("seller/{seller:?}")),
+                                node: path!("seller").then(&seller),
                             },
                             SceneEntityRoleView::State,
                             SceneToneView::Neutral,
@@ -603,11 +598,11 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         .chain([CarrierId::A, CarrierId::B].into_iter().map(|carrier| {
             link_account::<marketplace::Ontology>(
                 visual_entity(
-                    slug(format!("actor/carrier/{carrier:?}")),
+                    path!("actor/carrier").then(&carrier),
                     format!("Carrier {carrier:?}"),
                     SceneGlyphView::Vehicle,
                     SceneAnchorView::GraphNode {
-                        node: slug(format!("carrier/{carrier:?}")),
+                        node: path!("carrier").then(&carrier),
                     },
                     SceneEntityRoleView::State,
                     SceneToneView::Neutral,

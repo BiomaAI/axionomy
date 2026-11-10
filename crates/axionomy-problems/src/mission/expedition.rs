@@ -1,6 +1,5 @@
 //! Independent teammates, private observations and timed cooperative extraction.
 use axionomy::path;
-use axionomy::path::slug;
 use axionomy::{
     Account, Apply, EconomicView, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant,
     Quantity, QuantityComparison as C, QuantityExpression as Q, Rate, basket,
@@ -1007,7 +1006,7 @@ pub fn initial(stress: bool, seed: u64) -> World {
                 ),
         );
         builder = builder.invariant(
-            LinearInvariant::new(slug(format!("clinical pulse {day}")))
+            LinearInvariant::new(path!("clinical-pulse").join(&path::write(&day)))
                 .weight(Asset::ClinicalDue(day), 1)
                 .weight(Asset::ClinicalSettled(day), 1),
         );
@@ -1039,7 +1038,7 @@ pub fn initial(stress: bool, seed: u64) -> World {
     }
     for agent in AGENTS {
         builder = builder.invariant(
-            LinearInvariant::new(slug(format!("{agent:?} one decision per tick")))
+            LinearInvariant::new(path!("one-decision-per-tick").join(&path::write(&agent)))
                 .weight(Asset::Permit(agent), 1)
                 .weight(Asset::UsedPermit(agent), 1),
         );

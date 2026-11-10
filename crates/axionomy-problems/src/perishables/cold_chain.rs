@@ -1,6 +1,5 @@
 //! A cold chain with physical storage, thermal history and competing fuel uses.
 use axionomy::path;
-use axionomy::path::slug;
 use axionomy::{
     Account, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Quantity,
     QuantityComparison as C, QuantityExpression as Q, Rate, Trace, basket,
@@ -163,7 +162,7 @@ fn aging(id: u8) -> Rate<Ontology> {
 fn ages_resolved(mut rate: Rate<Ontology>) -> Rate<Ontology> {
     for id in BATCHES {
         rate = rate.condition(
-            slug(format!("batch {id} aging settled")),
+            path!("batch-aging-settled").join(&path::write(&id)),
             q(Role::World, Asset::PendingAge(id)),
             C::Equal,
             Q::constant(0),
@@ -447,7 +446,7 @@ pub fn initial(stress: bool, seed: u64) -> World {
                 .preserve(Role::World, basket([(Asset::CoolingOn, 1)])),
         );
         builder = builder.invariant(
-            LinearInvariant::new(slug(format!("batch {id} identity")))
+            LinearInvariant::new(path!("batch-identity").join(&path::write(&id)))
                 .weight(Asset::BatchIdentity(id), 1),
         );
     }

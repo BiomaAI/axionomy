@@ -6,7 +6,6 @@
 //! the same object through a replay.
 
 use axionomy::path;
-use axionomy::path::slug;
 use axionomy::{
     Account, Basket, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Quantity,
     QuantityComparison as C, QuantityExpression as Q, Rate, Trace, basket,
@@ -570,12 +569,12 @@ fn build_board(rows: &[&str]) -> World {
             );
             builder = builder
                 .invariant(
-                    LinearInvariant::new(slug(format!("circuit {circuit} pressure")))
+                    LinearInvariant::new(path!("circuit-pressure").join(&path::write(&circuit)))
                         .weight(Asset::Pressed(circuit), 1)
                         .weight(Asset::Released(circuit), 1),
                 )
                 .invariant(
-                    LinearInvariant::new(slug(format!("circuit {circuit} latch")))
+                    LinearInvariant::new(path!("circuit-latch").join(&path::write(&circuit)))
                         .weight(Asset::LatchReady(circuit), 1)
                         .weight(Asset::Latched(circuit), 1),
                 );
@@ -617,7 +616,7 @@ fn build_board(rows: &[&str]) -> World {
         .weight(Asset::Empty, 1);
     for &crate_id in &crate_ids {
         builder = builder.invariant(
-            LinearInvariant::new(slug(format!("one crate {crate_id}")))
+            LinearInvariant::new(path!("one-crate").join(&path::write(&crate_id)))
                 .weight(Asset::Crate(crate_id), 1),
         );
         occupancy = occupancy.weight(Asset::Crate(crate_id), 1);

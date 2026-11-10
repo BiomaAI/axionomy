@@ -3,7 +3,11 @@ use crate::{
     ServiceError, ServiceProgress, StrategyDescriptor, Study, StudyControl, StudyKey,
     StudyObserver,
 };
-use axionomy::{Economy, Goal, Ontology, Quantity, Trace, paths};
+use axionomy::{
+    Economy, Goal, Ontology, Quantity, Trace, path,
+    path::{Path, Segments},
+    paths,
+};
 use axionomy_search::{GraphSearchProgress, rollout::RolloutResult};
 use axionomy_view::{
     DocumentPath, ExchangeFrame, ItemPath, LeaderboardView, MeasurePath, ObjectiveView,
@@ -16,6 +20,20 @@ use axionomy_view::{
 };
 use serde::{Serialize, de::DeserializeOwned};
 use std::{collections::BTreeSet, ops::ControlFlow};
+
+/// Keys written from identifiers' paths (D-044), so a scene, a metric or an
+/// objective names a value the way storage, MCP and every view do.
+pub(super) trait Keyed {
+    /// This path followed by `identifier`'s path: `route/direct-out` for
+    /// `route` and `Route::DirectOut`.
+    fn then(&self, identifier: &impl Segments) -> Self;
+}
+
+impl<K> Keyed for Path<K> {
+    fn then(&self, identifier: &impl Segments) -> Self {
+        self.join(&path::write(identifier))
+    }
+}
 
 pub(super) fn visual_entity(
     key: ItemPath,

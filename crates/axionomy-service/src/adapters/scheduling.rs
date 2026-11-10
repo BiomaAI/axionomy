@@ -219,7 +219,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
     let lanes = [Machine::One, Machine::Two, Machine::Three]
         .into_iter()
         .map(|machine| TimelineLaneView {
-            id: ViewId::new(slug(format!("machine/{machine:?}")), machine_name(machine)),
+            id: ViewId::new(path!("machine").then(&machine), machine_name(machine)),
             classes: Vec::new(),
         })
         .collect();
@@ -244,23 +244,21 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 })
                 .collect::<Vec<_>>();
             if let (Some(start), Some(end)) = (occupied.first(), occupied.last()) {
+                let job = if matches!(
+                    operation,
+                    Operation::OneA | Operation::OneB | Operation::OneC
+                ) {
+                    Job::One
+                } else {
+                    Job::Two
+                };
                 spans.push(TimelineSpanView {
-                    id: slug(format!("{machine:?}/{operation:?}")),
-                    lane: slug(format!("machine/{machine:?}")),
+                    id: path::write(&machine).then(&operation),
+                    lane: path!("machine").then(&machine),
                     start: u64::from(*start),
                     end: u64::from(*end + 1),
                     label: operation_name(operation),
-                    classes: vec![slug(format!(
-                        "job-{:?}",
-                        if matches!(
-                            operation,
-                            Operation::OneA | Operation::OneB | Operation::OneC
-                        ) {
-                            Job::One
-                        } else {
-                            Job::Two
-                        }
-                    ))],
+                    classes: vec![path!("job").then(&job)],
                 });
             }
         }
@@ -285,7 +283,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
     });
     let pending_entities = pending.clone().map(|operation| {
         visual_entity(
-            slug(format!("pending/{operation:?}")),
+            path!("pending").then(&operation),
             operation_name(operation),
             SceneGlyphView::Task,
             SceneAnchorView::Unanchored,
@@ -328,7 +326,7 @@ fn execution_scene(world: &World) -> Scene {
     let lanes = MACHINES
         .into_iter()
         .map(|machine| TimelineLaneView {
-            id: ViewId::new(slug(format!("machine/{machine:?}")), machine_name(machine)),
+            id: ViewId::new(path!("machine").then(&machine), machine_name(machine)),
             classes: if value(AccountId::Machine(machine), Asset::Broken) > 0 {
                 vec![slug("blocked")]
             } else {
@@ -391,8 +389,8 @@ fn execution_scene(world: &World) -> Scene {
             };
             let interrupted = value(AccountId::Success, Asset::Interrupted(operation)) > 0;
             spans.push(TimelineSpanView {
-                id: slug(format!("operation/{operation:?}")),
-                lane: slug(format!("machine/{machine:?}")),
+                id: path!("operation").then(&operation),
+                lane: path!("machine").then(&machine),
                 start,
                 end,
                 label: format!(
@@ -401,7 +399,7 @@ fn execution_scene(world: &World) -> Scene {
                     if interrupted { " · interrupted" } else { "" }
                 ),
                 classes: vec![
-                    slug(format!("job-{job:?}")),
+                    path!("job").then(&job),
                     if completed_at > 0 {
                         slug("completed")
                     } else {
@@ -412,13 +410,13 @@ fn execution_scene(world: &World) -> Scene {
         }
         entities.push(link_account::<scheduling::Ontology>(
             visual_entity(
-                slug(format!("operation/{operation:?}")),
+                path!("operation").then(&operation),
                 operation_name(operation),
                 SceneGlyphView::Task,
                 queued.or(running).or(paused).or(executed).map_or(
                     SceneAnchorView::Unanchored,
                     |machine| SceneAnchorView::Timeline {
-                        lane: slug(format!("machine/{machine:?}")),
+                        lane: path!("machine").then(&machine),
                         at: now,
                     },
                 ),

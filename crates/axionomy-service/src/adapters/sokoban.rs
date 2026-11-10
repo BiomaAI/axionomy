@@ -276,7 +276,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                     }
                 };
                 entities.push(visual_entity(
-                    slug(format!("mechanism/{name}/{circuit}")),
+                    path!("mechanism").then(&asset),
                     format!("{name} {}", circuit + 1),
                     glyph,
                     SceneAnchorView::GridCell {
@@ -316,7 +316,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             let trapped = dead && !on_goal;
             entities.push(link_balance::<sokoban::Ontology>(
                 visual_entity(
-                    slug(format!("crate/{crate_id}")),
+                    path!("crate").then(crate_id),
                     format!("Crate {}", crate_id + 1),
                     SceneGlyphView::Package,
                     SceneAnchorView::GridCell {

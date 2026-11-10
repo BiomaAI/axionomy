@@ -150,7 +150,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
     ]
     .into_iter()
     .map(|(location, label, x, y)| GraphNodeView {
-        id: ViewId::new(slug(format!("{location:?}")), label),
+        id: ViewId::new(path::write(&location), label),
         classes: vec![slug("location")],
         x: Some(x),
         y: Some(y),
@@ -159,9 +159,9 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
     let edges = ROADS
         .into_iter()
         .map(|(from, to)| GraphEdgeView {
-            id: slug(format!("road/{from:?}/{to:?}")),
-            source: slug(format!("{from:?}")),
-            target: slug(format!("{to:?}")),
+            id: path!("road").then(&from).then(&to),
+            source: path::write(&from),
+            target: path::write(&to),
             label: Some(
                 if fleet::main_road(from, to) {
                     "one vehicle at a time"
@@ -185,7 +185,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             .find(|(from, to)| val(own, Asset::Travelling(*from, *to)) > 0);
         let anchor = if let Some(at) = at {
             SceneAnchorView::GraphNode {
-                node: slug(format!("{at:?}")),
+                node: path::write(&at),
             }
         } else if let Some((from, to)) = travel {
             let (a, b) = ROADS
@@ -201,7 +201,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 0.0
             };
             SceneAnchorView::GraphEdge {
-                edge: slug(format!("road/{a:?}/{b:?}")),
+                edge: path!("road").then(&a).then(&b),
                 progress: Some(if a == from { progress } else { 1.0 - progress }),
             }
         } else {
@@ -226,7 +226,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         };
         let mut entity = link_account::<fleet::Ontology>(
             visual_entity(
-                slug(format!("van/{van:?}")),
+                path!("van").then(&van),
                 format!("{van:?} van"),
                 SceneGlyphView::Vehicle,
                 anchor,
@@ -259,11 +259,11 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             if val(own, Asset::Cargo(id)) > 0 {
                 let mut cargo = link_account::<fleet::Ontology>(
                     visual_entity(
-                        slug(format!("cargo/{id}")),
+                        path!("cargo").then(&id),
                         format!("Order {} cargo", id + 1),
                         SceneGlyphView::Package,
                         SceneAnchorView::Entity {
-                            entity: slug(format!("van/{van:?}")),
+                            entity: path!("van").then(&van),
                         },
                         SceneEntityRoleView::Attachment,
                         SceneToneView::Neutral,
@@ -308,9 +308,14 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         } else {
             "Cargo waiting at depot"
         };
+        let waiting_at = if staged {
+            Location::Hub
+        } else {
+            fleet::destination(id)
+        };
         let mut entity = link_account::<fleet::Ontology>(
             visual_entity(
-                slug(format!("order/{id}")),
+                path!("order").then(&id),
                 format!(
                     "Order {} · {}",
                     id + 1,
@@ -324,14 +329,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 ),
                 SceneGlyphView::Task,
                 SceneAnchorView::GraphNode {
-                    node: slug(format!(
-                        "{:?}",
-                        if staged {
-                            Location::Hub
-                        } else {
-                            fleet::destination(id)
-                        }
-                    )),
+                    node: path::write(&waiting_at),
                 },
                 SceneEntityRoleView::Attachment,
                 if delivered {
@@ -405,7 +403,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         if let Some(entity) = scene
             .entities
             .iter_mut()
-            .find(|entity| entity.id.key == slug(format!("{location:?}")))
+            .find(|entity| entity.id.key == path::write(&location))
         {
             if location == Location::Depot {
                 entity.status = Some("Shared paid services".into());

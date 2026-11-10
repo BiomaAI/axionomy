@@ -231,7 +231,7 @@ fn expansion_label(expansion: MazeExpansion) -> String {
 
 fn expansion_subject(expansion: MazeExpansion) -> ViewId {
     ViewId::new(
-        slug(format!("node/{:?}", expansion.node)),
+        path!("node").then(&expansion.node),
         expansion.node.studio_label(),
     )
 }
@@ -697,7 +697,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         (false, Node::Ruins) => (180.0, 1030.0),
         (false, Node::Chapel) => (600.0, 1030.0),
     };
-    let node_key = |node| slug(format!("node/{node:?}"));
+    let node_key = |node| path!("node").then(&node);
     let graph_nodes = nodes
         .iter()
         .copied()
@@ -731,7 +731,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 energy,
                 needs_open_door,
             } => Some(GraphEdgeView {
-                id: slug(format!("edge/{from:?}/{to:?}")),
+                id: path!("edge").then(from).then(to),
                 source: node_key(*from),
                 target: node_key(*to),
                 label: Some(if *needs_open_door {
@@ -1024,7 +1024,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
 fn route_id(rate: &RateId) -> Option<ItemPath> {
     match rate {
         RateId::Move { from, to, .. } | RateId::ProtectedMove { from, to, .. } => {
-            Some(slug(format!("edge/{from:?}/{to:?}")))
+            Some(path!("edge").then(from).then(to))
         }
         _ => None,
     }

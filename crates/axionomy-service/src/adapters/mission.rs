@@ -298,10 +298,7 @@ fn observation(world: &World, agent: AgentId) -> ObservationView {
         })
         .collect();
     ObservationView {
-        actor: ViewId::new(
-            slug(format!("mission/actor/{agent:?}")),
-            format!("{agent:?}"),
-        ),
+        actor: ViewId::new(path!("mission/actor").then(&agent), format!("{agent:?}")),
         label: format!("{agent:?}-visible economic state; Nature remains hidden"),
         visible_accounts: accounts,
         facts: key
@@ -388,10 +385,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                     .is_zero()
             });
             GraphNodeView {
-                id: ViewId::new(
-                    slug(format!("location/{location:?}")),
-                    format!("{location:?}"),
-                ),
+                id: ViewId::new(path!("location").then(&location), format!("{location:?}")),
                 classes: if occupied {
                     vec![slug("current")]
                 } else {
@@ -405,9 +399,9 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
     let edges = [Location::North, Location::South]
         .into_iter()
         .map(|location| GraphEdgeView {
-            id: slug(format!("mission/{location:?}")),
-            source: slug("location/Base"),
-            target: slug(format!("location/{location:?}")),
+            id: path!("mission").then(&location),
+            source: path!("location").then(&Location::Base),
+            target: path!("location").then(&location),
             label: Some("hidden truth + hazard".into()),
             classes: if [AgentId::Scout, AgentId::Medic].into_iter().any(|agent| {
                 !world
@@ -455,7 +449,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             });
         let mut entity = link_balance::<mission::Ontology>(
             visual_entity(
-                slug(format!("agent/{agent:?}")),
+                path!("agent").then(&agent),
                 format!("{agent:?}"),
                 if agent == AgentId::Scout {
                     SceneGlyphView::Sensor
@@ -463,7 +457,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                     SceneGlyphView::Agent
                 },
                 SceneAnchorView::GraphNode {
-                    node: slug(format!("location/{location:?}")),
+                    node: path!("location").then(&location),
                 },
                 SceneEntityRoleView::Occupant,
                 SceneToneView::Active,
@@ -482,7 +476,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             &Asset::At(location),
         );
         entity.metrics = vec![asset_metric(
-            slug(format!("energy-{agent:?}")),
+            path!("energy").then(&agent),
             "Energy",
             &Asset::Energy,
             world.balance(&AccountId::Agent(agent), &Asset::Energy),
@@ -496,7 +490,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 "Mission control",
                 SceneGlyphView::Task,
                 SceneAnchorView::GraphNode {
-                    node: slug("location/Base"),
+                    node: path!("location").then(&Location::Base),
                 },
                 SceneEntityRoleView::State,
                 SceneToneView::Neutral,

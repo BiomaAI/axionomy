@@ -140,10 +140,7 @@ fn objectives(world: &World) -> Vec<ObjectiveView> {
 fn observation(world: &World, agent: Agent) -> ObservationView {
     let key = expedition::agent_view(world, agent).observation_key();
     ObservationView {
-        actor: ViewId::new(
-            slug(format!("mission/actor/{agent:?}")),
-            format!("{agent:?}"),
-        ),
+        actor: ViewId::new(path!("mission/actor").then(&agent), format!("{agent:?}")),
         label: format!(
             "{agent:?}'s private observations at tick {}",
             expedition::now(world)
@@ -205,7 +202,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
     ]
     .into_iter()
     .map(|(location, x, y)| GraphNodeView {
-        id: ViewId::new(slug(format!("{location:?}")), format!("{location:?}")),
+        id: ViewId::new(path::write(&location), format!("{location:?}")),
         classes: vec![slug("location")],
         x: Some(x),
         y: Some(y),
@@ -214,9 +211,9 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
     let edges = ROADS
         .into_iter()
         .map(|(from, to)| GraphEdgeView {
-            id: slug(format!("road/{from:?}/{to:?}")),
-            source: slug(format!("{from:?}")),
-            target: slug(format!("{to:?}")),
+            id: path!("road").then(&from).then(&to),
+            source: path::write(&from),
+            target: path::write(&to),
             label: Some("1 tick + injury delay".into()),
             classes: vec![],
         })
@@ -250,14 +247,14 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         };
         let anchor = if let Some(at) = at {
             SceneAnchorView::GraphNode {
-                node: slug(format!("{at:?}")),
+                node: path::write(&at),
             }
         } else {
             SceneAnchorView::Unanchored
         };
         let mut entity = link_account::<expedition::Ontology>(
             visual_entity(
-                slug(format!("agent/{agent:?}")),
+                path!("agent").then(&agent),
                 format!("{agent:?}"),
                 if agent == Agent::Scout {
                     SceneGlyphView::Sensor
@@ -329,7 +326,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         };
         let anchor = node.map_or(SceneAnchorView::Unanchored, |location| {
             SceneAnchorView::GraphNode {
-                node: slug(format!("{location:?}")),
+                node: path::write(&location),
             }
         });
         let status = if complete {
@@ -347,7 +344,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         };
         let mut entity = link_account::<expedition::Ontology>(
             visual_entity(
-                slug(format!("objective/{id}")),
+                path!("objective").then(&id),
                 account.studio_label(),
                 if expedition::patient(id) {
                     SceneGlyphView::Person
@@ -448,7 +445,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         if let Some(entity) = scene
             .entities
             .iter_mut()
-            .find(|entity| entity.id.key == slug(format!("{location:?}")))
+            .find(|entity| entity.id.key == path::write(&location))
         {
             entity.status = Some(
                 if val(AccountId::World, Asset::WeatherBlocked(location)) > 0 {

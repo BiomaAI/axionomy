@@ -290,10 +290,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
     let nodes = locations
         .into_iter()
         .map(|(location, x, y)| GraphNodeView {
-            id: ViewId::new(
-                slug(format!("location/{location:?}")),
-                format!("{location:?}"),
-            ),
+            id: ViewId::new(path!("location").then(&location), format!("{location:?}")),
             classes: if focus == Some(location) {
                 vec![slug("current")]
             } else if location == Location::Customer {
@@ -313,9 +310,9 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 .balance(&AccountId::Vehicle, &Asset::Traveling(route))
                 .is_zero();
             GraphEdgeView {
-                id: slug(format!("route/{route:?}")),
-                source: slug(format!("location/{from:?}")),
-                target: slug(format!("location/{to:?}")),
+                id: path!("route").then(&route),
+                source: path!("location").then(&from),
+                target: path!("location").then(&to),
                 label: Some(
                     match route {
                         Route::DirectOut => "Direct, outbound",
@@ -340,11 +337,11 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
     });
     let vehicle_anchor = if let Some(location) = focus {
         SceneAnchorView::GraphNode {
-            node: slug(format!("location/{location:?}")),
+            node: path!("location").then(&location),
         }
     } else if let Some(route) = traveling {
         SceneAnchorView::GraphEdge {
-            edge: slug(format!("route/{route:?}")),
+            edge: path!("route").then(&route),
             progress: Some(0.5),
         }
     } else {
@@ -393,7 +390,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         {
             (
                 SceneAnchorView::GraphNode {
-                    node: slug("location/Customer"),
+                    node: path!("location").then(&Location::Customer),
                 },
                 SceneToneView::Success,
                 "delivered",
@@ -403,7 +400,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         } else {
             (
                 SceneAnchorView::GraphNode {
-                    node: slug("location/Depot"),
+                    node: path!("location").then(&Location::Depot),
                 },
                 SceneToneView::Neutral,
                 "waiting",
@@ -411,7 +408,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         };
         link_account::<logistics::Ontology>(
             visual_entity(
-                slug(format!("order/{order:?}")),
+                path!("order").then(&order),
                 format!("Order {order:?}"),
                 SceneGlyphView::Package,
                 anchor,
@@ -429,7 +426,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 "Fuel station",
                 SceneGlyphView::Fuel,
                 SceneAnchorView::GraphNode {
-                    node: slug("location/Depot"),
+                    node: path!("location").then(&Location::Depot),
                 },
                 SceneEntityRoleView::State,
                 SceneToneView::Neutral,
@@ -443,7 +440,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                 "Travel conditions",
                 SceneGlyphView::Weather,
                 SceneAnchorView::GraphNode {
-                    node: slug("location/Junction"),
+                    node: path!("location").then(&Location::Junction),
                 },
                 SceneEntityRoleView::Context,
                 SceneToneView::Uncertain,
@@ -465,7 +462,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             "Route network and travel risk",
             nodes,
             edges,
-            focus.map(|location| slug(format!("location/{location:?}"))),
+            focus.map(|location| path!("location").then(&location)),
         )
         .with_entities(
             std::iter::once(vehicle)

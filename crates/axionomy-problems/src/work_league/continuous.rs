@@ -3,7 +3,6 @@
 
 use super::*;
 use axionomy::path;
-use axionomy::path::slug;
 use axionomy::{QuantityComparison as C, QuantityExpression as Q};
 
 const FACILITIES: [Facility; 3] = [Facility::Workshop, Facility::Charger, Facility::Recycler];
@@ -160,8 +159,9 @@ pub(super) fn build(profile: Profile, lineup: [Policy; 4]) -> League {
             Facility::Recycler => {}
         }
         builder = builder.account(AccountId::Facility(facility), Account::from(assets));
-        let mut invariant = LinearInvariant::new(slug(format!("one {facility:?} service slot")))
-            .weight(Asset::Vacant(facility), 1);
+        let mut invariant =
+            LinearInvariant::new(path!("one-service-slot").join(&path::write(&facility)))
+                .weight(Asset::Vacant(facility), 1);
         for agent in AGENTS {
             invariant = invariant.weight(Asset::Occupied(facility, agent), 1);
         }
@@ -532,7 +532,7 @@ pub(super) fn build(profile: Profile, lineup: [Policy; 4]) -> League {
             builder = builder.rate(RateId::EndService { agent, facility }, end);
         }
         builder = builder.invariant(
-            LinearInvariant::new(slug(format!("{agent:?} decision permission")))
+            LinearInvariant::new(path!("decision-permission").join(&path::write(&agent)))
                 .weight(Asset::Permit(agent), 1)
                 .weight(Asset::Acted(agent), 1),
         );

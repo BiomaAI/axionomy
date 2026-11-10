@@ -221,29 +221,29 @@ fn front_view(result: &workshop::ParetoResult, selected: &ViewDocument) -> Paret
 
 fn scene(_: u64, world: &World) -> Option<Scene> {
     let mut assets = vec![
-        ("wood", "Wood", Asset::Wood),
-        ("labor", "Labor", Asset::Labor),
-        ("tool", "Tool", Asset::Tool),
-        ("chair", "Chair", Asset::Chair),
-        ("waste", "Waste", Asset::Waste),
+        ("Wood", Asset::Wood),
+        ("Labor", Asset::Labor),
+        ("Tool", Asset::Tool),
+        ("Chair", Asset::Chair),
+        ("Waste", Asset::Waste),
     ];
     if world.account(&AccountId::Customer(0)).is_some() {
         assets.extend([
-            ("frame", "Frames", Asset::Frame),
-            ("panel", "Panels", Asset::Panel),
-            ("table", "Tables", Asset::Table),
-            ("offcut", "Offcuts", Asset::Offcut),
-            ("durability", "Durability", Asset::Durability),
-            ("wear", "Wear", Asset::Wear),
-            ("credit", "Revenue", Asset::Credit),
+            ("Frames", Asset::Frame),
+            ("Panels", Asset::Panel),
+            ("Tables", Asset::Table),
+            ("Offcuts", Asset::Offcut),
+            ("Durability", Asset::Durability),
+            ("Wear", Asset::Wear),
+            ("Revenue", Asset::Credit),
         ]);
     }
     let nodes = assets
         .iter()
         .copied()
         .enumerate()
-        .map(|(index, (key, label, asset))| GraphNodeView {
-            id: ViewId::new(slug(key), label),
+        .map(|(index, (label, asset))| GraphNodeView {
+            id: ViewId::new(path::write(&asset), label),
             classes: if matches!(asset, Asset::Chair) {
                 vec![slug("goal")]
             } else {
@@ -255,47 +255,47 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         .collect();
     let routes = if world.account(&AccountId::Customer(0)).is_some() {
         vec![
-            ("wood", "frame", "cut"),
-            ("wood", "panel", "cut"),
-            ("wood", "offcut", "fast-cut residue"),
-            ("frame", "chair", "assemble"),
-            ("panel", "chair", "assemble"),
-            ("frame", "table", "assemble"),
-            ("panel", "table", "assemble"),
-            ("offcut", "wood", "recycle with loss"),
-            ("offcut", "waste", "recycling loss"),
-            ("durability", "wear", "production"),
-            ("wear", "durability", "repair"),
-            ("chair", "credit", "deliver"),
-            ("table", "credit", "deliver"),
+            (Asset::Wood, Asset::Frame, "cut"),
+            (Asset::Wood, Asset::Panel, "cut"),
+            (Asset::Wood, Asset::Offcut, "fast-cut residue"),
+            (Asset::Frame, Asset::Chair, "assemble"),
+            (Asset::Panel, Asset::Chair, "assemble"),
+            (Asset::Frame, Asset::Table, "assemble"),
+            (Asset::Panel, Asset::Table, "assemble"),
+            (Asset::Offcut, Asset::Wood, "recycle with loss"),
+            (Asset::Offcut, Asset::Waste, "recycling loss"),
+            (Asset::Durability, Asset::Wear, "production"),
+            (Asset::Wear, Asset::Durability, "repair"),
+            (Asset::Chair, Asset::Credit, "deliver"),
+            (Asset::Table, Asset::Credit, "deliver"),
         ]
     } else {
         vec![
-            ("wood", "chair", "basic recipe"),
-            ("wood", "chair", "batch recipe"),
-            ("wood", "waste", "by-product"),
-            ("tool", "chair", "preserved catalyst"),
+            (Asset::Wood, Asset::Chair, "basic recipe"),
+            (Asset::Wood, Asset::Chair, "batch recipe"),
+            (Asset::Wood, Asset::Waste, "by-product"),
+            (Asset::Tool, Asset::Chair, "preserved catalyst"),
         ]
     };
     let edges = routes
         .into_iter()
         .enumerate()
         .map(|(index, (from, to, label))| GraphEdgeView {
-            id: slug(format!("recipe/{index}")),
-            source: slug(from),
-            target: slug(to),
+            id: path!("recipe").then(&index),
+            source: path::write(&from),
+            target: path::write(&to),
             label: Some(label.into()),
             classes: vec![],
         })
         .collect();
-    let stocks = assets.into_iter().filter_map(|(key, label, asset)| {
+    let stocks = assets.into_iter().filter_map(|(label, asset)| {
         let quantity = world.balance(&AccountId::Workshop, &asset);
         if quantity.is_zero() {
             return None;
         }
         let mut entity = link_balance::<workshop::Ontology>(
             visual_entity(
-                slug(format!("stock/{key}")),
+                path!("stock").then(&asset),
                 label,
                 match asset {
                     Asset::Tool => SceneGlyphView::Tool,
@@ -303,7 +303,9 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                     Asset::Waste => SceneGlyphView::Material,
                     _ => SceneGlyphView::Material,
                 },
-                SceneAnchorView::GraphNode { node: slug(key) },
+                SceneAnchorView::GraphNode {
+                    node: path::write(&asset),
+                },
                 SceneEntityRoleView::State,
                 if matches!(asset, Asset::Chair) {
                     SceneToneView::Success
@@ -320,7 +322,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             &AccountId::Workshop,
             &asset,
         );
-        entity.metrics = vec![asset_metric(slug(key), label, &asset, quantity)];
+        entity.metrics = vec![asset_metric(path::write(&asset), label, &asset, quantity)];
         Some(entity)
     });
     let contracts = world.accounts().filter_map(|(id, _)| {
@@ -352,11 +354,11 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         };
         let mut entity = link_balance::<workshop::Ontology>(
             visual_entity(
-                slug(format!("contract/{order}")),
+                path!("contract").then(order),
                 format!("Contract {}", order + 1),
                 SceneGlyphView::Task,
                 SceneAnchorView::GraphNode {
-                    node: slug("credit"),
+                    node: path::write(&Asset::Credit),
                 },
                 SceneEntityRoleView::Attachment,
                 if state == "delivered and paid" {

@@ -128,6 +128,13 @@ impl<K> Path<K> {
         check(&child)?;
         Ok(Self::new(child.into()))
     }
+
+    /// This path followed by every segment of `path`: `node/key-room` for
+    /// `node` and `key-room`. With [`write()`] it keys a value under a name,
+    /// such as `node` and the identifier `Node::KeyRoom`.
+    pub fn join(&self, path: &Self) -> Self {
+        Self::new(format!("{}/{}", self.0, path.0).into())
+    }
 }
 
 impl OntologyPath {
@@ -381,6 +388,8 @@ mod tests {
         assert_eq!(loan.parent(), Some(loans.clone()));
         assert_eq!(loans.parent(), None);
         assert!(loans.child("4/2").is_err());
+        let wallet: AccountPath = "7/wallet".parse().unwrap();
+        assert_eq!(loans.join(&wallet).as_str(), "loans/7/wallet");
         assert_eq!(serde_json::to_string(&loan).unwrap(), "\"loans/42\"");
         assert!(serde_json::from_str::<AccountPath>("\"Loans\"").is_err());
     }

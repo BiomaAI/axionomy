@@ -183,7 +183,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         .filter(|(location, _, _)| present(*location))
         .map(|(location, x, y)| GraphNodeView {
             id: ViewId::new(
-                slug(format!("{location:?}")),
+                path::write(&location),
                 if location == Location::Base {
                     "Base hospital".into()
                 } else {
@@ -208,9 +208,9 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         .into_iter()
         .filter(|(a, b)| present(*a) && present(*b))
         .map(|(a, b)| GraphEdgeView {
-            id: slug(format!("road/{a:?}/{b:?}")),
-            source: slug(format!("{a:?}")),
-            target: slug(format!("{b:?}")),
+            id: path!("road").then(&a).then(&b),
+            source: path::write(&a),
+            target: path::write(&b),
             label: Some("2 ticks / 1 fuel · fast 1 / 2".into()),
             classes: vec![],
         })
@@ -225,7 +225,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             "Evacuation crew",
             SceneGlyphView::Vehicle,
             SceneAnchorView::GraphNode {
-                node: slug(format!("{at:?}")),
+                node: path::write(&at),
             },
             SceneEntityRoleView::Occupant,
             SceneToneView::Active,
@@ -295,11 +295,11 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         };
         let mut entity = link_account::<incident::Ontology>(
             visual_entity(
-                slug(format!("patient/{id}")),
+                path!("patient").then(&id),
                 format!("Patient {}", id + 1),
                 SceneGlyphView::Person,
                 SceneAnchorView::GraphNode {
-                    node: slug(format!("{node:?}")),
+                    node: path::write(&node),
                 },
                 SceneEntityRoleView::Attachment,
                 if saved {
@@ -372,7 +372,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         if let Some(entity) = scene
             .entities
             .iter_mut()
-            .find(|entity| entity.id.key == slug(format!("{location:?}")))
+            .find(|entity| entity.id.key == path::write(&location))
         {
             entity.status = Some(
                 if location == Location::Base {

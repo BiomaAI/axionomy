@@ -811,7 +811,7 @@ impl Scene {
             .filter(|cell| !cell.label.trim().is_empty() && cell.label != "·")
             .map(|cell| SceneEntityView {
                 id: ViewId::new(
-                    slug(format!("matrix/{}/{}", cell.row, cell.column)),
+                    axionomy::path!("matrix").join(&cell.row).join(&cell.column),
                     cell.label.clone(),
                 ),
                 glyph: SceneGlyphView::Constraint,

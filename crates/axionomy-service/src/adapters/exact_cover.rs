@@ -109,12 +109,12 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
     let rows = sets
         .iter()
         .copied()
-        .map(|set| ViewId::new(slug(format!("set/{set:?}")), subset(set)))
+        .map(|set| ViewId::new(path!("set").then(&set), subset(set)))
         .collect();
     let columns = elements
         .iter()
         .copied()
-        .map(|element| ViewId::new(slug(format!("element/{element:?}")), format!("{element:?}")))
+        .map(|element| ViewId::new(path!("element").then(&element), format!("{element:?}")))
         .collect();
     let cells = sets
         .iter()
@@ -135,8 +135,8 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
                                 .is_zero()
                         });
                     MatrixCellView {
-                        row: slug(format!("set/{set:?}")),
-                        column: slug(format!("element/{element:?}")),
+                        row: path!("set").then(&set),
+                        column: path!("element").then(&element),
                         label: "×".into(),
                         classes: if selected {
                             vec![slug("selected")]

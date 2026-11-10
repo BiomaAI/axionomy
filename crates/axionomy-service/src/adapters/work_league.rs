@@ -461,7 +461,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         .into_iter()
         .map(|(location, x, y)| GraphNodeView {
             id: ViewId::new(
-                slug(format!("league/location/{location:?}")),
+                path!("league/location").then(&location),
                 format!("{location:?}"),
             ),
             classes: if matches!(
@@ -487,9 +487,9 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         .into_iter()
         .enumerate()
         .map(|(index, (from, to))| GraphEdgeView {
-            id: slug(format!("league/route/{index}")),
-            source: slug(format!("league/location/{from:?}")),
-            target: slug(format!("league/location/{to:?}")),
+            id: path!("league/route").then(&index),
+            source: path!("league/location").then(&from),
+            target: path!("league/location").then(&to),
             label: Some("1 energy · 1 tick".into()),
             classes: if AGENTS.into_iter().any(|agent| {
                 world.account(&AccountId::Agent(agent)).is_some()
@@ -509,11 +509,11 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             let policy = work_league::policy(world, agent).unwrap_or(Policy::Sprinter);
             let mut entity = link_balance::<work_league::Ontology>(
                 visual_entity(
-                    slug(format!("league/agent/{agent:?}")),
+                    path!("league/agent").then(&agent),
                     format!("{agent:?}"),
                     SceneGlyphView::Robot,
                     SceneAnchorView::GraphNode {
-                        node: slug(format!("league/location/{location:?}")),
+                        node: path!("league/location").then(&location),
                     },
                     SceneEntityRoleView::Occupant,
                     if balance(world, agent, Asset::Damage) > 0 {
@@ -644,11 +644,11 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         };
         let mut entity = link_account::<work_league::Ontology>(
             visual_entity(
-                slug(format!("league/job/{}", job.0)),
+                path!("league/job").then(&job.0),
                 format!("Job {}", job.0),
                 SceneGlyphView::Task,
                 SceneAnchorView::GraphNode {
-                    node: slug(format!("league/location/{:?}", spec.location)),
+                    node: path!("league/location").then(&spec.location),
                 },
                 SceneEntityRoleView::Attachment,
                 tone,
@@ -699,11 +699,11 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             };
             let mut entity = link_account::<work_league::Ontology>(
                 visual_entity(
-                    slug(format!("league/facility/{facility:?}")),
+                    path!("league/facility").then(&facility),
                     format!("{facility:?} bay"),
                     SceneGlyphView::Task,
                     SceneAnchorView::GraphNode {
-                        node: slug(format!("league/location/{location:?}")),
+                        node: path!("league/location").then(&location),
                     },
                     SceneEntityRoleView::Attachment,
                     if occupant.is_some() {

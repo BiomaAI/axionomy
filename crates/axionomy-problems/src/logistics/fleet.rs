@@ -1,6 +1,5 @@
 //! Timed heterogeneous fleet with cargo, a shared road and finite services.
 use axionomy::path;
-use axionomy::path::slug;
 use axionomy::{
     Account, Apply, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Quantity,
     QuantityComparison as C, QuantityExpression as Q, Rate, Rounding, basket,
@@ -886,7 +885,7 @@ pub fn initial(stress: bool, seed: u64) -> World {
     }
     for van in VANS {
         builder = builder.invariant(
-            LinearInvariant::new(slug(format!("{van:?} dispatch permit")))
+            LinearInvariant::new(path!("dispatch-permit").join(&path::write(&van)))
                 .weight(Asset::Permit(van), 1)
                 .weight(Asset::UsedPermit(van), 1),
         );

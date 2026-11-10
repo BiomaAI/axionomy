@@ -133,38 +133,38 @@ fn objectives(world: &World) -> Vec<ObjectiveView> {
 }
 fn scene(_: u64, world: &World) -> Option<Scene> {
     let locations = [
-        ("warehouse", "Ambient warehouse", 120.0, 140.0),
-        ("fridge", "Finite cold storage", 460.0, 140.0),
-        ("processing", "Preserving line", 120.0, 340.0),
-        ("buyer", "Food deliveries", 770.0, 260.0),
-        ("power", "Grid and battery", 460.0, 340.0),
-        ("fuel", "Shared fuel reserve", 770.0, 70.0),
+        (path!("warehouse"), "Ambient warehouse", 120.0, 140.0),
+        (path!("fridge"), "Finite cold storage", 460.0, 140.0),
+        (path!("processing"), "Preserving line", 120.0, 340.0),
+        (path!("buyer"), "Food deliveries", 770.0, 260.0),
+        (path!("power"), "Grid and battery", 460.0, 340.0),
+        (path!("fuel"), "Shared fuel reserve", 770.0, 70.0),
     ];
     let nodes = locations
         .into_iter()
         .map(|(key, label, x, y)| GraphNodeView {
-            id: ViewId::new(slug(key), label),
+            id: ViewId::new(key, label),
             classes: vec![slug("resource")],
             x: Some(x),
             y: Some(y),
         })
         .collect();
     let routes = [
-        ("warehouse", "fridge", "space + labor"),
-        ("warehouse", "processing", "energy + labor"),
-        ("warehouse", "buyer", "up to 2 crates/day"),
-        ("fridge", "buyer", "delivery frees space"),
-        ("power", "fridge", "2 energy/day"),
-        ("power", "processing", "1 energy/crate"),
-        ("fuel", "power", "1 fuel → 3 energy"),
-        ("fuel", "buyer", "1 fuel/trip"),
+        (path!("warehouse"), path!("fridge"), "space + labor"),
+        (path!("warehouse"), path!("processing"), "energy + labor"),
+        (path!("warehouse"), path!("buyer"), "up to 2 crates/day"),
+        (path!("fridge"), path!("buyer"), "delivery frees space"),
+        (path!("power"), path!("fridge"), "2 energy/day"),
+        (path!("power"), path!("processing"), "1 energy/crate"),
+        (path!("fuel"), path!("power"), "1 fuel → 3 energy"),
+        (path!("fuel"), path!("buyer"), "1 fuel/trip"),
     ];
     let edges = routes
         .into_iter()
         .map(|(from, to, label)| GraphEdgeView {
-            id: slug(format!("cold/{from}/{to}")),
-            source: slug(from),
-            target: slug(to),
+            id: path!("cold").join(&from).join(&to),
+            source: from,
+            target: to,
             label: Some(label.into()),
             classes: vec![],
         })
@@ -185,7 +185,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         };
         let mut entity = link_account::<chain::Ontology>(
             visual_entity(
-                slug(format!("cohort/{id}")),
+                path!("cohort").then(&id),
                 format!("Cohort {}", id + 1),
                 SceneGlyphView::Package,
                 SceneAnchorView::GraphNode {
@@ -220,56 +220,62 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         ];
         entities.push(entity);
     }
-    for (node, key, label, asset, value) in [
+    for (node, entity, metric, label, asset, value) in [
         (
-            "fridge",
-            "space",
+            path!("fridge"),
+            path!("stock/space"),
+            path!("space"),
             "Free cold capacity",
             Asset::ColdSpace,
             chain::value(world, AccountId::World, Asset::ColdSpace),
         ),
         (
-            "power",
-            "energy",
+            path!("power"),
+            path!("stock/energy"),
+            path!("energy"),
             "Stored energy",
             Asset::Energy,
             chain::total(world, Asset::Energy),
         ),
         (
-            "fuel",
-            "fuel",
+            path!("fuel"),
+            path!("stock/fuel"),
+            path!("fuel"),
             "Fuel available",
             Asset::Fuel,
             chain::total(world, Asset::Fuel),
         ),
         (
-            "buyer",
-            "delivered",
+            path!("buyer"),
+            path!("stock/delivered"),
+            path!("delivered"),
             "Delivered",
             Asset::Delivered,
             chain::total(world, Asset::Delivered),
         ),
         (
-            "processing",
-            "labor",
+            path!("processing"),
+            path!("stock/labor"),
+            path!("labor"),
             "Labor available",
             Asset::Labor,
             chain::total(world, Asset::Labor),
         ),
     ] {
+        let buyer = node == path!("buyer");
         let mut entity = visual_entity(
-            slug(format!("stock/{key}")),
+            entity,
             label,
             SceneGlyphView::Material,
-            SceneAnchorView::GraphNode { node: slug(node) },
+            SceneAnchorView::GraphNode { node },
             SceneEntityRoleView::State,
             SceneToneView::Neutral,
             None,
         );
-        entity.metrics = vec![asset_metric(slug(key), label, &asset, value)];
+        entity.metrics = vec![asset_metric(metric, label, &asset, value)];
         entities.push(link_account::<chain::Ontology>(
             entity,
-            if node == "buyer" {
+            if buyer {
                 &AccountId::Buyer
             } else {
                 &AccountId::World

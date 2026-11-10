@@ -185,7 +185,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             if let Some(player) = player {
                 pieces.push(link_balance::<connect_four::Ontology>(
                     visual_entity(
-                        slug(format!("piece/{player:?}/{column}/{row}")),
+                        path!("piece").then(&player).then(&column).then(&row),
                         format!("{player:?}"),
                         SceneGlyphView::Token,
                         SceneAnchorView::GridCell {

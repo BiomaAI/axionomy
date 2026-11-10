@@ -7,7 +7,6 @@
 //! on timing, environment, identity, and effects.
 
 use axionomy::path;
-use axionomy::path::slug;
 use axionomy::{
     Account, ApplyError, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Quantity, Rate,
     Receipt, Trace, basket,
@@ -1129,7 +1128,7 @@ fn claim_invariant() -> LinearInvariant<Asset> {
 }
 
 fn cohort_condition_invariant(cohort: Cohort) -> LinearInvariant<Asset> {
-    let mut invariant = LinearInvariant::new(slug(format!("{cohort:?} cohort condition")))
+    let mut invariant = LinearInvariant::new(path!("cohort-condition").join(&path::write(&cohort)))
         .weight(Asset::Rotten(cohort), 1);
     for (candidate, exposure, _) in TIMED_CONDITIONS {
         if candidate == cohort {
@@ -1148,7 +1147,7 @@ fn clock_invariant() -> LinearInvariant<Asset> {
 }
 
 fn deadline_invariant(moment: Moment) -> LinearInvariant<Asset> {
-    LinearInvariant::new(slug(format!("{moment:?} deadline phase")))
+    LinearInvariant::new(path!("deadline-phase").join(&path::write(&moment)))
         .weight(Asset::Before(moment), 1)
         .weight(Asset::Reached(moment), 1)
 }

@@ -1,7 +1,6 @@
 //! A single workbench with competing contracts and persistent tooling costs.
 use super::*;
 use axionomy::path;
-use axionomy::path::slug;
 use axionomy::{QuantityComparison as C, QuantityExpression as Q};
 
 fn law(time: u64, labor: u64) -> Rate<Ontology> {
@@ -152,7 +151,7 @@ pub(super) fn build(stress: bool) -> World {
                     .distinct(Role::Shop, Role::Customer),
             )
             .invariant(
-                LinearInvariant::new(slug(format!("contract {order} lifecycle")))
+                LinearInvariant::new(path!("contract-lifecycle").join(&path::write(&order)))
                     .weight(Asset::Contract(order), 1)
                     .weight(Asset::Raw(order), 1)
                     .weight(Asset::Prepared(order), 1)

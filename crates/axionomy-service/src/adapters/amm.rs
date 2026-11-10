@@ -151,19 +151,6 @@ fn exact(value: impl ToString) -> ExactQuantity {
     ExactQuantity(value.to_string())
 }
 
-fn actor_key(actor: Actor) -> &'static str {
-    match actor {
-        Actor::Founder => "founder",
-        Actor::Generator => "generator",
-        Actor::Factory => "factory",
-        Actor::Household => "household",
-        Actor::Speculator => "speculator",
-        Actor::AdaptiveLp => "adaptive-lp",
-        Actor::Arbitrageur => "arbitrageur",
-        Actor::Whale => "whale",
-    }
-}
-
 fn actor_glyph(actor: Actor) -> SceneGlyphView {
     match actor {
         Actor::Founder | Actor::AdaptiveLp => SceneGlyphView::Organization,
@@ -256,10 +243,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         .map(|(actor, (x, y))| {
             let account = AccountId::Actor(actor);
             MarketActorView {
-                id: ViewId::new(
-                    slug(format!("amm/actor/{}", actor_key(actor))),
-                    actor.studio_label(),
-                ),
+                id: ViewId::new(path!("amm/actor").then(&actor), actor.studio_label()),
                 account: account_key::<amm::Ontology>(&account),
                 glyph: actor_glyph(actor),
                 tone: actor_tone(world, actor),

@@ -292,13 +292,13 @@ fn objectives(world: &World) -> Vec<ObjectiveView> {
         .flat_map(|agent| {
             [
                 ObjectiveView {
-                    key: slug(format!("priority-{agent:?}")),
+                    key: path!("priority").then(&agent),
                     label: format!("Agent {agent:?} priority"),
                     direction: ObjectiveDirectionView::Maximize,
                     value: bridge::priority(world, agent).to_string(),
                 },
                 ObjectiveView {
-                    key: slug(format!("credit-{agent:?}")),
+                    key: path!("credit").then(&agent),
                     label: format!("Agent {agent:?} credit"),
                     direction: ObjectiveDirectionView::Maximize,
                     value: bridge::credit(world, agent).to_string(),
@@ -309,7 +309,7 @@ fn objectives(world: &World) -> Vec<ObjectiveView> {
     if bridge::timed::enabled(world) {
         for agent in [AgentId::A, AgentId::B] {
             values.push(ObjectiveView {
-                key: slug(format!("ontime-{agent:?}")),
+                key: path!("ontime").then(&agent),
                 label: format!("Agent {agent:?} on-time trips"),
                 direction: ObjectiveDirectionView::Maximize,
                 value: world
@@ -340,7 +340,7 @@ fn front_view(result: &bridge::ParetoResult, selected: &ViewDocument) -> ParetoF
             .into_iter()
             .enumerate()
             .map(|(index, label)| ObjectiveAxisView {
-                key: slug(format!("axis-{index}")),
+                key: path!("axis").then(&index),
                 label: label.into(),
                 direction: ObjectiveDirectionView::Maximize,
             })
@@ -388,31 +388,31 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
     let timed = bridge::timed::enabled(world);
     let clock = bridge::timed::now(world);
     let mut places = vec![
-        ("west", "West bank", 70.0, 100.0),
-        ("bridge", "Capacity-one bridge", 320.0, 100.0),
-        ("east", "East bank", 570.0, 100.0),
+        (path!("west"), "West bank", 70.0, 100.0),
+        (path!("bridge"), "Capacity-one bridge", 320.0, 100.0),
+        (path!("east"), "East bank", 570.0, 100.0),
     ];
     if timed {
-        places.push(("detour", "Paid alternate route", 320.0, 300.0));
+        places.push((path!("detour"), "Paid alternate route", 320.0, 300.0));
     }
     let nodes = places
         .into_iter()
         .map(|(key, label, x, y)| GraphNodeView {
-            id: ViewId::new(slug(key), label),
-            classes: if key == "bridge" {
+            classes: if key == path!("bridge") {
                 vec![slug("resource")]
             } else {
                 vec![]
             },
+            id: ViewId::new(key, label),
             x: Some(x),
             y: Some(y),
         })
         .collect();
     let mut routes = vec![
-        ("west", "bridge", "reserve lane".to_string()),
+        (path!("west"), path!("bridge"), "reserve lane".to_string()),
         (
-            "bridge",
-            "east",
+            path!("bridge"),
+            path!("east"),
             if timed {
                 "A: 3 ticks · B: 2 ticks".into()
             } else {
@@ -422,16 +422,20 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
     ];
     if timed {
         routes.extend([
-            ("west", "detour", "1 credit".into()),
-            ("detour", "east", "3 ticks · independent capacity".into()),
+            (path!("west"), path!("detour"), "1 credit".into()),
+            (
+                path!("detour"),
+                path!("east"),
+                "3 ticks · independent capacity".into(),
+            ),
         ]);
     }
     let edges = routes
         .into_iter()
         .map(|(from, to, label)| GraphEdgeView {
-            id: slug(format!("route/{from}/{to}")),
-            source: slug(from),
-            target: slug(to),
+            id: path!("route").join(&from).join(&to),
+            source: from,
+            target: to,
             label: Some(label),
             classes: vec![],
         })
@@ -443,41 +447,41 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
         let detour = value(Asset::OnDetour) > 0;
         let (node, asset, status) = if crossing {
             (
-                "bridge",
+                path!("bridge"),
                 Asset::InTransit,
                 format!("crossing until {}", value(Asset::ReadyAt)),
             )
         } else if detour {
             (
-                "detour",
+                path!("detour"),
                 Asset::OnDetour,
                 format!("detouring until {}", value(Asset::ReadyAt)),
             )
         } else if east {
-            ("east", Asset::At(Side::East), "arrived".into())
+            (path!("east"), Asset::At(Side::East), "arrived".into())
         } else if timed && clock < value(Asset::Arrival) {
             (
-                "west",
+                path!("west"),
                 Asset::At(Side::West),
                 format!("arrives at {}", value(Asset::Arrival)),
             )
         } else if value(Asset::CrossingRight) > 0 {
             (
-                "west",
+                path!("west"),
                 Asset::At(Side::West),
                 format!("reserved through {}", value(Asset::LeaseUntil)),
             )
         } else if value(Asset::Submitted) > 0 {
-            ("west", Asset::At(Side::West), "bid in escrow".into())
+            (path!("west"), Asset::At(Side::West), "bid in escrow".into())
         } else {
-            ("west", Asset::At(Side::West), "waiting".into())
+            (path!("west"), Asset::At(Side::West), "waiting".into())
         };
         let mut entity = link_balance::<bridge::Ontology>(
             visual_entity(
-                slug(format!("traveler/{agent:?}")),
+                path!("traveler").then(&agent),
                 format!("Agent {agent:?}"),
                 SceneGlyphView::Agent,
-                SceneAnchorView::GraphNode { node: slug(node) },
+                SceneAnchorView::GraphNode { node },
                 SceneEntityRoleView::Occupant,
                 if east {
                     SceneToneView::Success

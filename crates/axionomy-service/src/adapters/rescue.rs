@@ -172,10 +172,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
     let nodes = locations
         .into_iter()
         .map(|(location, x, y)| GraphNodeView {
-            id: ViewId::new(
-                slug(format!("location/{location:?}")),
-                format!("{location:?}"),
-            ),
+            id: ViewId::new(path!("location").then(&location), format!("{location:?}")),
             classes: if focus == Some(location) {
                 vec![slug("current")]
             } else {
@@ -195,9 +192,9 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
     ]
     .into_iter()
     .map(|location| GraphEdgeView {
-        id: slug(format!("route/{location:?}")),
-        source: slug("location/Base"),
-        target: slug(format!("location/{location:?}")),
+        id: path!("route").then(&location),
+        source: path!("location").then(&Location::Base),
+        target: path!("location").then(&location),
         label: Some("hidden victim prior".into()),
         classes: if focus == Some(location) {
             vec![slug("current"), slug("uncertain")]
@@ -213,7 +210,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             "Responder",
             SceneGlyphView::Agent,
             SceneAnchorView::GraphNode {
-                node: slug(format!("location/{agent_location:?}")),
+                node: path!("location").then(&agent_location),
             },
             SceneEntityRoleView::Occupant,
             SceneToneView::Active,
@@ -254,11 +251,11 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
     .map(|location| {
         link_balance::<rescue::Ontology>(
             visual_entity(
-                slug(format!("belief/{location:?}")),
+                path!("belief").then(&location),
                 format!("Belief: {location:?}"),
                 SceneGlyphView::Information,
                 SceneAnchorView::GraphNode {
-                    node: slug(format!("location/{location:?}")),
+                    node: path!("location").then(&location),
                 },
                 SceneEntityRoleView::State,
                 SceneToneView::Uncertain,
@@ -274,7 +271,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             "Hidden victim state",
             SceneGlyphView::Information,
             SceneAnchorView::GraphNode {
-                node: slug("location/Base"),
+                node: path!("location").then(&Location::Base),
             },
             SceneEntityRoleView::Context,
             SceneToneView::Uncertain,
@@ -287,7 +284,7 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
             "What the agent can see (the truth is hidden)",
             nodes,
             edges,
-            focus.map(|location| slug(format!("location/{location:?}"))),
+            focus.map(|location| path!("location").then(&location)),
         )
         .with_entities(
             std::iter::once(agent)

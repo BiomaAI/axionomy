@@ -1,7 +1,6 @@
 //! Compact adversarial Connect Four with encoded gravity and terminal truth.
 
 use axionomy::path;
-use axionomy::path::slug;
 use axionomy::{
     Account, Basket, Economy, EconomyBuilder, Exchange, LinearInvariant, Quantity,
     QuantityComparison as C, QuantityExpression as Q, Rate, Trace, basket,
@@ -794,7 +793,7 @@ fn standard_move_rate(player: Player, column: u8, row: u8) -> Rate<Ontology> {
 fn no_standard_win(mut rate: Rate<Ontology>, player: Player) -> Rate<Ontology> {
     for segment in 0..winning_segments().len() {
         rate = rate.condition(
-            slug(format!("segment {segment} is not a win")),
+            path!("segment-is-not-a-win").join(&path::write(&segment)),
             Q::balance(Role::Game, Asset::SegmentPieces(player, segment as u8)),
             C::LessThanOrEqual,
             Q::constant(3),
