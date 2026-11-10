@@ -148,9 +148,18 @@ impl AxionomyMcp {
         let Some(template) = request.r#ref.as_resource_uri() else {
             return Ok(CompleteResult::default());
         };
+        let Some(listing) = crate::resources::templates()
+            .into_iter()
+            .find(|known| known.uri_template == template)
+        else {
+            return Err(McpError::invalid_params(
+                format!("`{template}` is not one of this server's resource templates"),
+                None,
+            ));
+        };
         // `prefix` filters account paths on the accounts listing and asset
         // paths on an account's balances.
-        let accounts_template = template.contains("/accounts{");
+        let accounts_template = listing.name == "accounts";
         let arguments = request
             .context
             .and_then(|context| context.arguments)

@@ -87,7 +87,13 @@ pub(crate) struct StudyRecord {
 struct StudiedDocument<'a> {
     study: &'a StudyKey,
     document: &'a DocumentPath,
-    root: String,
+    #[serde(serialize_with = "hex")]
+    root: axionomy_tree::Hash,
+}
+
+/// A root written as its hex digest, as every handle's operation writes it.
+fn hex<S: serde::Serializer>(root: &axionomy_tree::Hash, serializer: S) -> Result<S::Ok, S::Error> {
+    serializer.collect_str(&root.to_hex())
 }
 
 /// An economy as the server serves it.
@@ -633,7 +639,7 @@ fn trajectory_operations(key: &StudyKey, trajectory: &Trajectory) -> (Vec<u8>, O
         &StudiedDocument {
             study: key,
             document: &trajectory.document,
-            root: trajectory.initial.root().to_hex().to_string(),
+            root: trajectory.initial.root(),
         },
     );
     let exchanges = trajectory.exchanges();

@@ -136,7 +136,7 @@ async fn complete(
         .collect();
     let request = CompleteRequestParams::new(
         Reference::for_resource(
-            "axionomy://economy/{economy_id}/accounts/{account}/balances{?prefix,cursor}",
+            "axionomy://economy/{economy_id}/accounts/{+account}{?prefix,cursor}",
         ),
         ArgumentInfo::new(argument, value),
     )
