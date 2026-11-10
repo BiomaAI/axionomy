@@ -133,7 +133,6 @@ impl axionomy::Ontology for Ontology {
     type Role = Role;
 }
 pub type Action = Exchange<Ontology>;
-pub type Proposal = Trace<Ontology>;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Policy {
     ProtectCold,
@@ -700,7 +699,7 @@ pub fn candidates(world: &World) -> Vec<Action> {
     }))
 }
 
-fn record(world: &mut World, trace: &mut Proposal, rate: RateId, units: u64) -> bool {
+fn record(world: &mut World, trace: &mut Trace<Ontology>, rate: RateId, units: u64) -> bool {
     let exchange = action(rate, units);
     if units == 0 || !world.is_applicable(&exchange) {
         return false;
@@ -709,7 +708,7 @@ fn record(world: &mut World, trace: &mut Proposal, rate: RateId, units: u64) -> 
     trace.push(exchange);
     true
 }
-fn cool(world: &mut World, trace: &mut Proposal, backup: bool) {
+fn cool(world: &mut World, trace: &mut Trace<Ontology>, backup: bool) {
     let cold_fresh: u64 = BATCHES
         .into_iter()
         .filter(|id| place(world, *id) == Some(Place::Fridge))
@@ -726,7 +725,7 @@ fn cool(world: &mut World, trace: &mut Proposal, backup: bool) {
     }
     record(world, trace, RateId::Cool, 1);
 }
-fn process(world: &mut World, trace: &mut Proposal) {
+fn process(world: &mut World, trace: &mut Trace<Ontology>) {
     for id in BATCHES {
         if place(world, id) == Some(Place::Warehouse) {
             let amount = value(world, AccountId::Batch(id), Asset::Fresh)
@@ -736,7 +735,7 @@ fn process(world: &mut World, trace: &mut Proposal) {
         }
     }
 }
-pub fn run(initial: &World, policy: Policy) -> Proposal {
+pub fn run(initial: &World, policy: Policy) -> Trace<Ontology> {
     let mut world = initial.clone();
     let mut trace = Trace::new();
     let days = value(&world, AccountId::World, Asset::Days);

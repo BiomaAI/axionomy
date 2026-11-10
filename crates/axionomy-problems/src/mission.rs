@@ -809,7 +809,7 @@ pub fn update_beliefs(
         .filter_map(|belief| {
             let mut next = belief.clone();
             next.apply(public_action.clone()).ok()?;
-            if let Some(response) = required_nature_response(&next) {
+            if let Some(response) = nature_response(&next) {
                 next.apply(response).ok()?;
             }
             (scout_information(&next) == *live_observation).then_some(next)
@@ -818,7 +818,7 @@ pub fn update_beliefs(
 }
 
 /// Returns the unique immediately required Nature exchange in this fixture.
-pub fn required_nature_response(world: &World) -> Option<Action> {
+pub fn nature_response(world: &World) -> Option<Action> {
     candidates(world).into_iter().find(|exchange| {
         matches!(
             exchange.rate(),
@@ -918,7 +918,7 @@ pub fn run_planned_with_progress(
             .apply(decision.action().clone())
             .map_err(|error| format!("{error:?}"))?;
         trace.push(decision.action().clone());
-        if let Some(response) = required_nature_response(&actual) {
+        if let Some(response) = nature_response(&actual) {
             actual
                 .apply(response.clone())
                 .map_err(|error| format!("{error:?}"))?;
@@ -1508,7 +1508,7 @@ mod tests {
         actual
             .apply(first.action().clone())
             .expect("public scan intent applies");
-        let response = required_nature_response(&actual).expect("Nature resolves the scan");
+        let response = nature_response(&actual).expect("Nature resolves the scan");
         actual.apply(response).expect("encoded response applies");
 
         let observation = scout_information(&actual);
@@ -1566,7 +1566,7 @@ mod tests {
                 assert_eq!(step.decision.action(), exchange);
                 assert_eq!(step.prior_worlds, beliefs.len());
                 let mut observed = actual.clone();
-                if let Some(response) = required_nature_response(&observed) {
+                if let Some(response) = nature_response(&observed) {
                     observed.apply(response).unwrap();
                 }
                 beliefs = update_beliefs(&beliefs, exchange, &scout_information(&observed));

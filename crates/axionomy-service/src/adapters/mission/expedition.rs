@@ -30,10 +30,8 @@ pub(super) fn build(
             Policy::Rendezvous,
         ),
     ] {
-        let trace = expedition::run(&initial, policy);
-        let final_world = initial
-            .replayed(&trace)
-            .map_err(|error| problem_error("mission", error))?;
+        let (trace, final_world) =
+            simulate("mission", &initial, |world| expedition::run(world, policy))?;
         let mut view = document(
             DocumentSpec {
                 problem: "mission",

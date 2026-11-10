@@ -153,7 +153,6 @@ impl axionomy::Ontology for Ontology {
 }
 pub type Action = Exchange<Ontology>;
 pub type Solution = SearchSolution<Ontology>;
-pub type Proposal = Trace<Ontology>;
 pub type ParetoResult = ParetoSearchResult<Ontology, ObjectiveKey, u64>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -574,7 +573,7 @@ pub fn credit(world: &World, agent: AgentId) -> u64 {
         .to_u64()
 }
 
-pub fn first_come_proposal(first: AgentId) -> Option<Proposal> {
+pub fn first_come_proposal(first: AgentId) -> Option<Trace<Ontology>> {
     let second = other(first);
     validated_trace([
         RateId::ClaimFirst { agent: first },
@@ -585,7 +584,7 @@ pub fn first_come_proposal(first: AgentId) -> Option<Proposal> {
     ])
 }
 
-pub fn auction_proposal(bid_a: u8, bid_b: u8) -> Option<Proposal> {
+pub fn auction_proposal(bid_a: u8, bid_b: u8) -> Option<Trace<Ontology>> {
     let winner = if bid_a >= bid_b {
         AgentId::A
     } else {
@@ -618,30 +617,30 @@ pub fn auction_proposal(bid_a: u8, bid_b: u8) -> Option<Proposal> {
     ])
 }
 
-pub fn first_come_showcase(first: AgentId) -> Option<Proposal> {
+pub fn first_come_showcase(first: AgentId) -> Option<Trace<Ontology>> {
     timed::run(&initial_showcase(), timed::Policy::Priority(first))
 }
 
-pub fn first_come_stress(first: AgentId) -> Option<Proposal> {
+pub fn first_come_stress(first: AgentId) -> Option<Trace<Ontology>> {
     timed::run(&initial_stress(), timed::Policy::Priority(first))
 }
 
-pub fn auction_showcase() -> Option<Proposal> {
+pub fn auction_showcase() -> Option<Trace<Ontology>> {
     timed::run(&initial_showcase(), timed::Policy::Auction)
 }
 
-pub fn auction_stress() -> Option<Proposal> {
+pub fn auction_stress() -> Option<Trace<Ontology>> {
     timed::run(&initial_stress(), timed::Policy::Auction)
 }
 
-fn validated_trace<const N: usize>(rates: [RateId; N]) -> Option<Proposal> {
+fn validated_trace<const N: usize>(rates: [RateId; N]) -> Option<Trace<Ontology>> {
     validated_trace_from(initial(), rates)
 }
 
 fn validated_trace_from(
     mut world: World,
     rates: impl IntoIterator<Item = RateId>,
-) -> Option<Proposal> {
+) -> Option<Trace<Ontology>> {
     let mut trace = Trace::new();
     for rate in rates {
         let exchange = action(rate);

@@ -385,7 +385,7 @@ pub enum Policy {
     Adaptive,
 }
 
-pub fn run(initial: &World, policy: Policy) -> Option<Proposal> {
+pub fn run(initial: &World, policy: Policy) -> Option<Trace<Ontology>> {
     let mut world = initial.clone();
     let mut trace = Trace::new();
     for _ in 0..150 {

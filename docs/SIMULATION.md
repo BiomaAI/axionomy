@@ -1,7 +1,7 @@
 # Simulation: policies, runs and studies
 
-Status: planned, in the order the steps below give. Step 0, rollouts and
-Monte Carlo episodes recording where they run, is built.
+Status: planned, in the order the steps below give. Built: rollouts and
+Monte Carlo episodes recording where they run, and step 1.
 
 The economy owns commitments and their consequences. A policy reads what an
 actor may see and proposes exchanges. Whoever calls the rollout (a problem, a

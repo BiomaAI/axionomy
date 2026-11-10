@@ -3,7 +3,7 @@ use crate::{
     RunArtifact, RunControl, RunObserver, ServiceError, ServiceProgress, StrategyDescriptor,
 };
 use axionomy::{Economy, Goal, Ontology, Quantity, Trace};
-use axionomy_search::GraphSearchProgress;
+use axionomy_search::{GraphSearchProgress, rollout::RolloutResult};
 use axionomy_view::{
     DebugOntology, DocumentPath, ExchangeFrame, ItemPath, LeaderboardView, MeasurePath,
     ObjectiveView, PhasePath, PlaybackError, ProposalView, QuantityFormat, Scene, SceneAnchorView,
@@ -1453,6 +1453,28 @@ pub(super) fn artifact(
         documents,
         assessed_proposals: Vec::new(),
     })
+}
+
+/// Runs a simulation from a fork of `initial` and gives the trace it left and
+/// the state it ended in, or why it did not reach its goal.
+pub(super) fn simulate<O: Ontology>(
+    problem: &str,
+    initial: &Economy<O>,
+    run: impl FnOnce(&mut Economy<O>) -> RolloutResult<O>,
+) -> Result<(Trace<O>, Economy<O>), ServiceError> {
+    let mut world = initial.clone();
+    let result = run(&mut world);
+    if !result.termination().is_terminal() {
+        return Err(problem_error(
+            problem,
+            format!("did not reach its goal: {:?}", result.termination()),
+        ));
+    }
+    let trace = result
+        .trace()
+        .cloned()
+        .ok_or_else(|| problem_error(problem, "the rollout kept no trace"))?;
+    Ok((trace, world))
 }
 
 pub(super) fn problem_error(problem: &str, error: impl ToString) -> ServiceError {

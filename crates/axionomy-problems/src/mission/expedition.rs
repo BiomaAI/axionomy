@@ -2,9 +2,10 @@
 use axionomy::path;
 use axionomy::path::slug;
 use axionomy::{
-    Account, EconomicView, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Quantity,
-    QuantityComparison as C, QuantityExpression as Q, Rate, Trace, basket,
+    Account, Apply, EconomicView, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant,
+    Quantity, QuantityComparison as C, QuantityExpression as Q, Rate, basket,
 };
+use axionomy_search::rollout::{RolloutConfig, RolloutDecision, RolloutResult, run_to_goal};
 
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
@@ -226,7 +227,6 @@ impl axionomy::Ontology for Ontology {
     type Role = Role;
 }
 pub type Action = Exchange<Ontology>;
-pub type Proposal = Trace<Ontology>;
 pub type AgentView<'a> = EconomicView<'a, Ontology>;
 pub fn patient(id: u8) -> bool {
     id.is_multiple_of(2)
@@ -1189,7 +1189,7 @@ pub fn candidates(world: &World) -> Vec<Action> {
     rates.sort();
     world.applicable(rates.into_iter().map(action))
 }
-pub fn response(world: &World) -> Option<Action> {
+pub fn nature_response(world: &World) -> Option<Action> {
     let count = value(world, AccountId::World, Asset::Count) as u8;
     let mut rates = Vec::new();
     for location in LOCATIONS {
@@ -1428,40 +1428,47 @@ pub fn decision(view: &AgentView<'_>, agent: Agent, policy: Policy) -> Option<Ac
     });
     sites.into_iter().find_map(move_to)
 }
-pub fn run(source: &World, policy: Policy) -> Proposal {
-    let mut world = source.clone();
-    let mut trace = Trace::new();
-    for _ in 0..500 {
-        if world.matches(&goal()) {
-            return trace;
-        }
-        let exchange = response(&world)
-            .or_else(|| {
-                let close = action(RateId::Close);
-                world.is_applicable(&close).then_some(close)
-            })
-            .or_else(|| {
-                AGENTS
-                    .into_iter()
-                    .filter_map(|agent| decision(&agent_view(&world, agent), agent, policy))
-                    .find(|exchange| world.is_applicable(exchange))
-            })
-            .unwrap_or_else(|| action(RateId::Tick(now(&world) as u8)));
-        world.apply(exchange.clone()).unwrap_or_else(|error| {
-            panic!(
-                "{policy:?} at {}: {:?}: {error:?}",
-                now(&world),
-                exchange.rate()
-            )
-        });
-        trace.push(exchange);
-    }
-    panic!("finite expedition failed to terminate")
+/// The most steps an expedition takes before it is cut short.
+pub const HORIZON: usize = 500;
+
+/// Runs `policy` on `world` until the expedition ends: Nature responds first,
+/// then the expedition closes when it can, then the first agent whose private
+/// view gives an applicable decision acts, and otherwise the clock ticks.
+pub fn run(world: &mut impl Apply<Ontology>, policy: Policy) -> RolloutResult<Ontology> {
+    run_to_goal(world, &goal(), RolloutConfig::new(HORIZON), |world, _| {
+        RolloutDecision::Propose(
+            nature_response(world)
+                .or_else(|| {
+                    let close = action(RateId::Close);
+                    world.is_applicable(&close).then_some(close)
+                })
+                .or_else(|| {
+                    AGENTS
+                        .into_iter()
+                        .filter_map(|agent| decision(&agent_view(world, agent), agent, policy))
+                        .find(|exchange| world.is_applicable(exchange))
+                })
+                .unwrap_or_else(|| action(RateId::Tick(now(world) as u8))),
+        )
+    })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use axionomy::Trace;
+
+    /// The trace of a run of `policy` from `source`, which must end at the
+    /// goal.
+    fn trace_of(source: &World, policy: Policy) -> Trace<Ontology> {
+        let result = run(&mut source.clone(), policy);
+        assert!(
+            result.termination().is_terminal(),
+            "{policy:?}: {:?}",
+            result.termination()
+        );
+        result.trace().cloned().expect("runs keep their trace")
+    }
     #[test]
     fn expeditions_replay_independent_work_and_common_scenario_tradeoffs() {
         let mut outcomes = std::collections::BTreeSet::new();
@@ -1477,8 +1484,8 @@ mod tests {
                 ] {
                     let source = initial(stress, seed);
                     let before = source.state_key();
-                    let trace = run(&source, policy);
-                    assert_eq!(trace, run(&source, policy));
+                    let trace = trace_of(&source, policy);
+                    assert_eq!(trace, trace_of(&source, policy));
                     let mut replay = source.clone();
                     for exchange in trace.exchanges() {
                         replay.apply(exchange.clone()).unwrap();
@@ -1588,7 +1595,7 @@ mod tests {
     #[test]
     fn private_discovery_requires_a_real_briefing_before_joint_extraction() {
         let source = initial(false, 17);
-        let trace = run(&source, Policy::RadioCoordination);
+        let trace = trace_of(&source, Policy::RadioCoordination);
         let mut replay = source.clone();
         let mut discovered = false;
         let mut briefed = false;
@@ -1683,7 +1690,7 @@ mod tests {
         })));
         assert!(!world.is_applicable(&action(RateId::Survey(Location::North))));
         world.apply(action(RateId::Tick(0))).unwrap();
-        while let Some(exchange) = response(&world) {
+        while let Some(exchange) = nature_response(&world) {
             world.apply(exchange).unwrap();
         }
         assert_eq!(
@@ -1707,7 +1714,7 @@ mod tests {
         }
         assert!(!world.is_applicable(&action(RateId::Tick(5))));
         assert!(!world.is_applicable(&action(RateId::Survey(Location::North))));
-        while let Some(exchange) = response(&world) {
+        while let Some(exchange) = nature_response(&world) {
             world.apply(exchange).unwrap();
         }
         for tick in 5..8 {
@@ -1715,7 +1722,7 @@ mod tests {
         }
         assert!(!world.is_applicable(&action(RateId::Tick(8))));
         assert!(!world.is_applicable(&action(RateId::Survey(Location::North))));
-        while let Some(exchange) = response(&world) {
+        while let Some(exchange) = nature_response(&world) {
             world.apply(exchange).unwrap();
         }
         assert_eq!(value(&world, AccountId::Objective(0), Asset::Health), 2);

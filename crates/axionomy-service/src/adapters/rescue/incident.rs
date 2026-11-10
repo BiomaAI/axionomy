@@ -30,10 +30,8 @@ pub(super) fn build(
             Policy::StabilizeFirst,
         ),
     ] {
-        let trace = incident::run(&initial, policy);
-        let final_world = initial
-            .replayed(&trace)
-            .map_err(|error| problem_error("rescue", error))?;
+        let (trace, final_world) =
+            simulate("rescue", &initial, |world| incident::run(world, policy))?;
         let mut view = document(
             DocumentSpec {
                 problem: "rescue",

@@ -41,10 +41,8 @@ pub(super) fn build(
             ),
         );
         progress.ensure()?;
-        let trace = fleet::run(&initial, policy);
-        let final_world = initial
-            .replayed(&trace)
-            .map_err(|error| problem_error("logistics", error))?;
+        let (trace, final_world) =
+            simulate("logistics", &initial, |world| fleet::run(world, policy))?;
         let mut view = document(
             DocumentSpec {
                 problem: "logistics",

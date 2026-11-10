@@ -45,8 +45,8 @@ fn main() {
     observed_actual
         .apply(decision.action().clone())
         .expect("public scan intent applies");
-    let response = mission::required_nature_response(&observed_actual)
-        .expect("Nature has an encoded scan response");
+    let response =
+        mission::nature_response(&observed_actual).expect("Nature has an encoded scan response");
     observed_actual
         .apply(response)
         .expect("encoded Nature response applies");

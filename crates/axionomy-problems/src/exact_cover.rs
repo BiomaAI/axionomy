@@ -122,7 +122,6 @@ impl axionomy::Ontology for Ontology {
 }
 pub type Action = Exchange<Ontology>;
 pub type Solution = SearchSolution<Ontology>;
-pub type Proposal = Trace<Ontology>;
 
 const MICRO_SETS: [SetId; 4] = [SetId::Ab, SetId::Cd, SetId::Ac, SetId::Bd];
 const MICRO_ELEMENTS: [Element; 4] = [Element::A, Element::B, Element::C, Element::D];
@@ -256,7 +255,7 @@ pub fn solve_bfs(world: &World) -> Option<Solution> {
 ///
 /// It is deliberately only a proposer: the resulting trace still has to pass
 /// `Economy::replay`.
-pub fn algorithm_x(world: &World) -> Option<Proposal> {
+pub fn algorithm_x(world: &World) -> Option<Trace<Ontology>> {
     if world.matches(&goal()) {
         return Some(Trace::new());
     }

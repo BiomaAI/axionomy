@@ -1,9 +1,10 @@
 //! Repeated search, clinical decline and capacity-one evacuation.
 use axionomy::path;
 use axionomy::{
-    Account, EconomicView, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Quantity,
-    QuantityComparison as C, QuantityExpression as Q, Rate, Trace, basket,
+    Account, Apply, EconomicView, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant,
+    Quantity, QuantityComparison as C, QuantityExpression as Q, Rate, basket,
 };
+use axionomy_search::rollout::{RolloutConfig, RolloutDecision, RolloutResult, run_to_goal};
 
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
@@ -174,7 +175,6 @@ impl axionomy::Ontology for Ontology {
     type Role = Role;
 }
 pub type Action = Exchange<Ontology>;
-pub type Proposal = Trace<Ontology>;
 pub type ResponderView<'a> = EconomicView<'a, Ontology>;
 
 pub fn value(world: &World, account: AccountId, asset: Asset) -> u64 {
@@ -956,30 +956,41 @@ pub fn decision(view: &ResponderView<'_>, policy: Policy) -> Option<Action> {
     }
     Some(action(RateId::Wait))
 }
-pub fn run(initial: &World, policy: Policy) -> Proposal {
-    let mut world = initial.clone();
-    let mut trace = Trace::new();
-    for _ in 0..250 {
-        if world.matches(&goal()) {
-            return trace;
-        }
-        let exchange = nature_response(&world)
-            .or_else(|| {
-                decision(&responder_view(&world), policy)
-                    .filter(|proposal| world.is_applicable(proposal))
-            })
-            .unwrap_or_else(|| action(RateId::Wait));
-        world
-            .apply(exchange.clone())
-            .expect("policy/environment proposal remains feasible");
-        trace.push(exchange);
-    }
-    panic!("incident did not reach its finite terminal state")
+/// The most steps an incident takes before it is cut short.
+pub const HORIZON: usize = 250;
+
+/// Runs `policy` on `world` until the incident ends: Nature responds first,
+/// then the responder acts on what it can see if that applies, and otherwise
+/// it waits.
+pub fn run(world: &mut impl Apply<Ontology>, policy: Policy) -> RolloutResult<Ontology> {
+    run_to_goal(world, &goal(), RolloutConfig::new(HORIZON), |world, _| {
+        RolloutDecision::Propose(
+            nature_response(world)
+                .or_else(|| {
+                    decision(&responder_view(world), policy)
+                        .filter(|proposal| world.is_applicable(proposal))
+                })
+                .unwrap_or_else(|| action(RateId::Wait)),
+        )
+    })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use axionomy::Trace;
+
+    /// The trace of a run of `policy` from `source`, which must end at the
+    /// goal.
+    fn trace_of(source: &World, policy: Policy) -> Trace<Ontology> {
+        let result = run(&mut source.clone(), policy);
+        assert!(
+            result.termination().is_terminal(),
+            "{policy:?}: {:?}",
+            result.termination()
+        );
+        result.trace().cloned().expect("runs keep their trace")
+    }
     fn settle(world: &mut World) {
         while let Some(exchange) = nature_response(world) {
             world.apply(exchange).unwrap();
@@ -996,8 +1007,8 @@ mod tests {
                 for policy in [Policy::Triage, Policy::RapidNorth, Policy::StabilizeFirst] {
                     let source = initial(stress, seed);
                     let before = source.state_key();
-                    let trace = run(&source, policy);
-                    assert_eq!(trace.exchanges(), run(&source, policy).exchanges());
+                    let trace = trace_of(&source, policy);
+                    assert_eq!(trace.exchanges(), trace_of(&source, policy).exchanges());
                     let mut replay = source.clone();
                     for exchange in trace.exchanges() {
                         replay.apply(exchange.clone()).unwrap();
