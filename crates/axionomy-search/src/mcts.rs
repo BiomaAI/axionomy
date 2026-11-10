@@ -140,8 +140,8 @@ impl MctsProgress {
 }
 
 /// Random rollout action selection with deterministic seeded exploration.
-pub fn random_action<World, Action>(
-    _: &World,
+pub fn random_action<State, Action>(
+    _: &State,
     actions: &[Action],
     random: &mut SeededSampler,
 ) -> Option<Action>
@@ -158,7 +158,10 @@ where
 ///
 /// `terminal` and `cutoff` must project values from encoded state.
 /// `chance` must derive weighted Nature exchanges from encoded weights.
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "each closure has its own signature, so the compiler checks their order"
+)]
 pub fn search<O: Ontology, Candidates, Chance, Actor, Terminal, Cutoff, RolloutPolicy>(
     initial: &Economy<O>,
     config: MctsConfig,
@@ -223,7 +226,10 @@ where
     Cutoff: FnMut(&Economy<O>) -> Vec<f64>,
     RolloutPolicy: FnMut(&Economy<O>, &[Exchange<O>], &mut SeededSampler) -> Option<Exchange<O>>,
 {
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "each closure has its own signature, so the compiler checks their order"
+    )]
     pub fn new(
         initial: &Economy<O>,
         config: MctsConfig,
@@ -476,7 +482,10 @@ where
 ///
 /// Emitted proposals remain non-authoritative: this function retains only
 /// exchanges applicable to each simulated economy before traversing them.
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "each closure has its own signature, so the compiler checks their order"
+)]
 fn search_with_source<O: Ontology, Source, Chance, Actor, Terminal, Cutoff, RolloutPolicy>(
     initial: &Economy<O>,
     config: MctsConfig,
@@ -514,7 +523,10 @@ where
         .expect("the configured iteration budget completes the session"))
 }
 
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "each closure has its own signature, so the compiler checks their order"
+)]
 fn simulate<O: Ontology, Source, Chance, Terminal, Cutoff, RolloutPolicy>(
     initial: &Economy<O>,
     mut depth: usize,

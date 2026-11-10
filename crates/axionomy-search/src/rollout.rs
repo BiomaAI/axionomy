@@ -95,19 +95,19 @@ impl<O: Ontology> RolloutResult<O> {
     }
 }
 
-/// Executes a speculative trajectory on `world` using only core-validated
-/// exchanges, leaving `world` at its final state.
+/// Executes a speculative trajectory on `economy` using only core-validated
+/// exchanges, leaving `economy` at its final state.
 ///
 /// `is_terminal` must derive terminal truth from encoded economic state.
 /// `max_steps` is an algorithmic cutoff and is reported separately.
-pub fn run<O: Ontology, World, Controller, Terminal>(
-    world: &mut World,
+pub fn run<O: Ontology, A, Controller, Terminal>(
+    economy: &mut A,
     config: RolloutConfig,
     mut controller: Controller,
     is_terminal: Terminal,
 ) -> RolloutResult<O>
 where
-    World: Apply<O> + ?Sized,
+    A: Apply<O> + ?Sized,
     Controller: FnMut(&Economy<O>, usize) -> RolloutDecision<Exchange<O>>,
     Terminal: Fn(&Economy<O>) -> bool,
 {
@@ -119,19 +119,19 @@ where
     let mut receipts = Vec::new();
     let mut steps = 0;
 
-    if is_terminal(world.economy()) {
+    if is_terminal(economy.economy()) {
         return result(trace, receipts, RolloutTermination::Terminal, steps);
     }
 
     while steps < config.max_steps() {
-        let exchange = match controller(world.economy(), steps) {
+        let exchange = match controller(economy.economy(), steps) {
             RolloutDecision::Propose(exchange) => exchange,
             RolloutDecision::Stop(reason) => {
                 return result(trace, receipts, RolloutTermination::Stopped(reason), steps);
             }
         };
 
-        match world.apply(exchange.clone()) {
+        match economy.apply(exchange.clone()) {
             Ok(receipt) => {
                 steps += 1;
                 if let Some(trace) = &mut trace {
@@ -146,7 +146,7 @@ where
             }
         }
 
-        if is_terminal(world.economy()) {
+        if is_terminal(economy.economy()) {
             return result(trace, receipts, RolloutTermination::Terminal, steps);
         }
     }
@@ -154,34 +154,34 @@ where
     result(trace, receipts, RolloutTermination::HorizonReached, steps)
 }
 
-/// A rollout that ends when `world` matches `goal`.
-pub fn run_to_goal<O: Ontology, World, Controller>(
-    world: &mut World,
+/// A rollout that ends when `economy` matches `goal`.
+pub fn run_to_goal<O: Ontology, A, Controller>(
+    economy: &mut A,
     goal: &Goal<O>,
     config: RolloutConfig,
     controller: Controller,
 ) -> RolloutResult<O>
 where
-    World: Apply<O> + ?Sized,
+    A: Apply<O> + ?Sized,
     Controller: FnMut(&Economy<O>, usize) -> RolloutDecision<Exchange<O>>,
 {
-    run(world, config, controller, |economy| economy.matches(goal))
+    run(economy, config, controller, |state| state.matches(goal))
 }
 
 /// Where the rollouts of a repeated experiment go, one episode per sample of
 /// each policy: nowhere, as [`Unrecorded`] does, or somewhere that records
 /// them, such as a store keeping one run per episode in a group per policy.
 pub trait Episodes<O: Ontology, Policy, Outcome> {
-    /// What an episode's exchanges are applied to.
-    type World: Apply<O>;
+    /// The run an episode steps: an economy of its own, or a recorder.
+    type Run: Apply<O>;
 
     /// Starts sample `sample` of `policy` from `initial`.
-    fn begin(&mut self, policy: &Policy, sample: usize, initial: Economy<O>) -> Self::World;
+    fn begin(&mut self, policy: &Policy, sample: usize, initial: Economy<O>) -> Self::Run;
 
     /// Ends the episode with what it produced. A destination that writes
     /// somewhere reports its failures when it is finished, not here, so
     /// recording never changes what an experiment observes.
-    fn end(&mut self, policy: &Policy, sample: usize, world: Self::World, outcome: &Outcome);
+    fn end(&mut self, policy: &Policy, sample: usize, run: Self::Run, outcome: &Outcome);
 }
 
 /// Episodes nobody keeps: each steps its own fork of the economy, dropped
@@ -190,7 +190,7 @@ pub trait Episodes<O: Ontology, Policy, Outcome> {
 pub struct Unrecorded;
 
 impl<O: Ontology, Policy, Outcome> Episodes<O, Policy, Outcome> for Unrecorded {
-    type World = Economy<O>;
+    type Run = Economy<O>;
 
     fn begin(&mut self, _: &Policy, _: usize, initial: Economy<O>) -> Economy<O> {
         initial

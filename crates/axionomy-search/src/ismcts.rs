@@ -181,7 +181,10 @@ where
     RolloutPolicy:
         FnMut(&InformationState<Key>, &[Exchange<O>], &mut SeededSampler) -> Option<Exchange<O>>,
 {
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "each closure has its own signature, so the compiler checks their order"
+    )]
     pub fn new(
         initial: &Economy<O>,
         config: MctsConfig,
@@ -433,7 +436,10 @@ where
 /// Every emitted decision remains a concrete exchange. Proposals are assessed
 /// in each sampled economy, and the selected root exchange is revalidated
 /// against `initial` before it is returned.
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "each closure has its own signature, so the compiler checks their order"
+)]
 pub fn search<
     O: Ontology,
     Key,
@@ -486,7 +492,10 @@ where
         .expect("the configured iteration budget completes the session"))
 }
 
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "each closure has its own signature, so the compiler checks their order"
+)]
 fn simulate<O: Ontology, Key, Information, Source, Chance, Terminal, Cutoff, RolloutPolicy>(
     initial: &Economy<O>,
     mut depth: usize,
