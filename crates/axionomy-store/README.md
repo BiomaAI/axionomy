@@ -15,13 +15,17 @@ produces, so stored states are a cache of replay and replay verifies them.
 - **Runs** start from a stored state, or fork from a point of another run, and
   record each exchange with the digest of its receipt. Their checkpoint rule
   says which states are stored; any other state is the nearest stored one
-  plus replay.
+  plus replay. A `Recorder` implements `axionomy::Apply`, so a rollout,
+  simulation or policy steps it as it would an economy, and its caller
+  decides whether the steps are kept.
 - **One writer** commits many callers' batches per transaction. Each write
   states its durability: `Immediate` for callers that wait, `Eventual` for
   batches nobody waits on, durable within a second.
 - **Tags, metrics, groups and refs** organize runs, whatever produced them:
   search, simulation, evaluation, Monte Carlo, MPPI, agents or learning; none
   of them changes what an exchange does.
+  A `GroupRecorder` records a group's members as they end, such as one
+  Monte Carlo estimate's rollouts, and waits on disk once, when it finishes.
 - **Reading back** gives any state of a run, its steps as replay-buffer
   transitions between state roots, and the first step where a lasting
   condition holds, by bisecting the stored states.

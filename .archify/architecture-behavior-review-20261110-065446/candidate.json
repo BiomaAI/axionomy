@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Axionomy behaviors — architecture proposal",
+    "locale": "en",
+    "output": ".archify/architecture-behavior-review-20261110-065446/architecture.html",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "git@github.com:BiomaAI/axionomy.git",
+      "revision": "797e3e5d0ce4b57de1f0fc1d2202e5042c2bb492",
+      "link_mode": "local-only"
+    }
+  },
+  "components": [
+    {"id":"drivers","type":"frontend","label":"Local / MCP drivers","sublabel":"One bounded advance contract","tag":"PROPOSED EXTENSION","pos":[450,60],"size":[250,80],"sources":[{"path":"crates/axionomy-mcp/README.md","line":9,"end_line":28,"label":"Existing snapshot API"},{"path":"crates/axionomy-search/src/session.rs","line":7,"end_line":28,"label":"Existing bounded work contract"}]},
+    {"id":"scenario","type":"backend","label":"Scenario<O>","sublabel":"Ontology + behavior definitions","tag":"PROPOSED COMPOSITION","pos":[40,280],"size":[250,90],"sources":[{"path":"docs/ONTOLOGY.md","line":1,"end_line":19,"label":"Existing ontology vocabulary"},{"path":"crates/axionomy-problems/src/work_league.rs","line":284,"end_line":335,"label":"Existing scenario data to extract"}]},
+    {"id":"runtime","type":"backend","label":"Behavior runtime","sublabel":"Scorers / picker / action stages","tag":"PROPOSED LIBRARY","pos":[450,280],"size":[250,90],"sources":[{"path":"crates/axionomy-problems/src/work_league/continuous.rs","line":868,"end_line":1011,"label":"Existing policy to generalize"},{"path":"docs/CONTINUOUS_AGENT_SYSTEMS.md","line":76,"end_line":105,"label":"Decision boundary requirements"}]},
+    {"id":"search","type":"backend","label":"axionomy-search","sublabel":"Forks, planning, work budgets","tag":"EXISTING CAPABILITY","pos":[860,280],"size":[250,90],"sources":[{"path":"crates/axionomy-search/README.md","line":1,"end_line":40,"label":"Existing generic search"},{"path":"crates/axionomy-search/src/action_source.rs","line":1,"end_line":34,"label":"Proposal-only action source"}]},
+    {"id":"observation","type":"security","label":"Actor observation","sublabel":"Permitted view of economic state","tag":"EXISTING VIEW / NEW WIRING","pos":[40,510],"size":[250,90],"sources":[{"path":"crates/axionomy-search/src/ismcts.rs","line":1,"end_line":40,"label":"Existing information boundary"},{"path":"docs/CONTINUOUS_AGENT_SYSTEMS.md","line":76,"end_line":98,"label":"Actor-scoped decision protocol"}]},
+    {"id":"coordinator","type":"backend","label":"Commit coordinator","sublabel":"Validate group; check run revision","tag":"PROPOSED LIVE-RUN SERVICE","pos":[450,510],"size":[250,90],"sources":[{"path":"crates/axionomy-mcp/src/server.rs","line":432,"end_line":473,"label":"Existing isolated replay foundation"},{"path":"crates/axionomy-mcp/README.md","line":9,"end_line":28,"label":"Current API has immutable snapshots"}]},
+    {"id":"kernel","type":"security","label":"Axionomy kernel + Lean","sublabel":"Every intermediate step is valid","tag":"EXISTING / GROUP API PROPOSED","pos":[40,760],"size":[250,90],"sources":[{"path":"src/economy.rs","line":623,"end_line":680,"label":"Existing apply and replay semantics"},{"path":"verification/lean/Axionomy/Replay.lean","line":1,"end_line":43,"label":"Existing sequence proofs"}]},
+    {"id":"store","type":"database","label":"Durable run state","sublabel":"Receipts, checkpoint, outbox","tag":"EXISTING STORE / NEW RECORDS","pos":[450,760],"size":[250,90],"sources":[{"path":"crates/axionomy-mcp/src/store.rs","line":208,"end_line":255,"label":"Existing atomic snapshot publication"},{"path":"crates/axionomy-mcp/README.md","line":139,"end_line":169,"label":"Storage and task boundaries"}]},
+    {"id":"adapter","type":"messagebus","label":"External-work adapter","sublabel":"Dispatch committed requests only","tag":"PROPOSED","pos":[860,760],"size":[250,90],"sources":[{"path":"docs/CONTINUOUS_AGENT_SYSTEMS.md","line":76,"end_line":105,"label":"External event and proposal boundary"}]},
+    {"id":"executor","type":"external","label":"MuJoCo / LLM / human","sublabel":"Typed requests and observations","tag":"PROPOSED INTEGRATIONS","pos":[860,1030],"size":[250,90],"sources":[{"path":"docs/CONTINUOUS_AGENT_SYSTEMS.md","line":16,"end_line":20,"label":"External actor integration intent"}]},
+    {"id":"review","type":"frontend","label":"Replay / Studio / MCP reads","sublabel":"Economic history + decision evidence","tag":"EXISTING / BEHAVIOR VIEWS NEW","pos":[40,1030],"size":[300,90],"sources":[{"path":"crates/axionomy-mcp/README.md","line":70,"end_line":102,"label":"Existing paged resources"},{"path":"crates/axionomy-service/README.md","line":1,"end_line":32,"label":"Existing replay-derived artifacts"}]}
+  ],
+  "connections": [
+    {"id":"advance","from":"drivers","to":"runtime","label":"advance(budget)","variant":"emphasis"},
+    {"id":"definitions","from":"scenario","to":"runtime","label":"definitions"},
+    {"id":"plan","from":"runtime","to":"search","label":"plan on forks"},
+    {"id":"visible-state","from":"observation","to":"runtime","label":"observe","variant":"security"},
+    {"id":"propose","from":"runtime","to":"coordinator","label":"propose group","variant":"emphasis"},
+    {"id":"read-snapshot","from":"coordinator","to":"observation","label":"scope snapshot"},
+    {"id":"validate","from":"coordinator","to":"kernel","label":"prepare group","variant":"security"},
+    {"id":"publish","from":"coordinator","to":"store","label":"publish if valid","variant":"emphasis"},
+    {"id":"outbox","from":"store","to":"adapter","label":"committed work"},
+    {"id":"command","from":"adapter","to":"executor","label":"dispatch","variant":"dashed"},
+    {"id":"response","from":"executor","to":"adapter","label":"report result","variant":"dashed"},
+    {"id":"ingest","from":"adapter","to":"coordinator","label":"ingest proposal","variant":"dashed"},
+    {"id":"inspect","from":"store","to":"review","label":"read history"}
+  ],
+  "cards": [
+    {"dot":"cyan","title":"Review status","items":["This is a proposed architecture, not an implementation map.","EXISTING tags identify foundations; PROPOSED tags identify new work.","Sources on proposed nodes identify the code or contract being extended."]},
+    {"dot":"emerald","title":"Authority stays in the economy","items":["Claims, reservations, pending work and recovery obligations use assets and exchanges.","Scores and search frontiers remain decision evidence.","The kernel evaluates; the coordinator owns persistence and publication."]},
+    {"dot":"amber","title":"Three levels of execution","items":["Exchange: one domain law applied atomically.","Atomic group: ordered valid exchanges published all-or-nothing.","Behavior: multiple groups, observations and external work; recovery is explicit."]},
+    {"dot":"violet","title":"External effects and recovery","items":["No executor runs during speculative group validation.","Publication includes pending requests and the continuation checkpoint.","Compensation is a new valid exchange; retries must not duplicate outcomes."]},
+    {"dot":"rose","title":"Concurrency and time","items":["Current MCP economies are immutable branches; a live run head is proposed.","A live commit checks the expected revision and rejects stale proposals.","Work budgets advance computation; economic time advances through rates."]},
+    {"dot":"slate","title":"First extraction","items":["Preserve work_league policy ordering, seeded outcomes and economic traces.","Extract scorer composition, action progression and event scheduling.","Add an external-work adapter after the in-process contract is demonstrated."]}
+  ]
+}

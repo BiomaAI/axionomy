@@ -173,7 +173,10 @@ table holds the roots of stored states, by run and step, so the nearest stored
 state before any step is one range lookup.
 
 Anything that should leave no record is not a run: the nodes of a search tree
-and rollouts nobody keeps live and die in memory.
+and rollouts nobody keeps live and die in memory. Whether a rollout is kept is
+its caller's choice, not the rollout's: code that steps an economy takes
+`&mut impl axionomy::Apply`, which an economy implements by keeping nothing
+and a `Recorder` implements by recording every step.
 
 ## Durability rules
 
@@ -369,9 +372,13 @@ survive the members they summarize.
   and its runs are stored and read back unchanged.
 - **Producers of runs**: kept search branches and solutions, rollouts,
   simulations, sessions and episodes record as runs with checkpoint rules;
-  Monte Carlo and MPPI record groups. A problem's rollouts
-  already record this way through the store's own API, as
-  `axionomy-problems/tests/storage.rs` does for logistics.
+  Monte Carlo and MPPI record groups. Rollouts and Monte Carlo episodes
+  record where they run: `axionomy_search::rollout` steps any `Apply`, and a
+  problem's Monte Carlo estimates take an `Episodes` destination, either
+  `Unrecorded` or one that starts each episode as a `Recorder` of a
+  `GroupRecorder` and adds it with its metrics when it ends, as
+  `axionomy-problems/tests/storage.rs` does for logistics. Search sessions,
+  MPPI and RL follow.
 
 ## Phases
 
@@ -395,7 +402,9 @@ Each phase is a validated commit or series of commits.
    identifier is stored as its JSON, and a run is read back only as the
    ontology that recorded it); replay-buffer transitions by root, bisection
    and the time index it gives; every canonical problem recordable, with
-   rollouts recorded as runs in a Monte Carlo group (done); recording from
+   rollouts recorded as runs in a Monte Carlo group (done); rollouts and
+   Monte Carlo episodes recording where they run, through `Apply` and
+   `Episodes` (done); problem runs recorded as store runs; recording from
    inside search sessions, MPPI and RL; watch and actor views; Studio
    scrubbing from the store.
 5. **Many writers, one history:** stores written independently by any

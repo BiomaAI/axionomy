@@ -2,11 +2,11 @@
 
 use axionomy::path;
 use axionomy::{
-    Account, Basket, EconomicView, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant,
+    Account, Apply, Basket, EconomicView, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant,
     Quantity, Rate, Trace, basket,
 };
 use axionomy_search::rollout::{
-    RolloutConfig, RolloutDecision, RolloutStop, TraceRetention, run_to_goal,
+    Episodes, RolloutConfig, RolloutDecision, RolloutStop, TraceRetention, run_to_goal,
 };
 use axionomy_search::{
     monte_carlo::{
@@ -527,10 +527,11 @@ pub fn instantiate(world: &World, truth: Location, seed: u8) -> Option<Action> {
         .find(|exchange| exchange.rate() == &RateId::Instantiate { truth, seed })
 }
 
-pub fn run_policy(world: World, policy: Policy) -> Rollout {
+/// Runs a policy on `world`, which is left where the rollout ended.
+pub fn run_policy(world: &mut impl Apply<Ontology>, policy: Policy) -> Rollout {
     let goal = goal();
     let result = run_to_goal(
-        &world,
+        world,
         &goal,
         RolloutConfig::new(8).with_retention(TraceRetention::Trace),
         |state, _| match policy_action(state, policy) {
@@ -538,30 +539,27 @@ pub fn run_policy(world: World, policy: Policy) -> Rollout {
             None => RolloutDecision::Stop(RolloutStop::NoProposal),
         },
     );
-    let succeeded = result.world().matches(&goal);
+    let end = world.economy();
     Rollout {
-        spent_energy: result
-            .world()
-            .balance(&AccountId::Agent, &Asset::SpentEnergy)
-            .to_u64(),
+        spent_energy: end.balance(&AccountId::Agent, &Asset::SpentEnergy).to_u64(),
         trace: result
             .trace()
             .cloned()
             .expect("rescue rollouts retain their trace"),
-        succeeded,
-        used_sensor: !result
-            .world()
-            .balance(&AccountId::Agent, &Asset::UsedSensor)
-            .is_zero(),
+        succeeded: end.matches(&goal),
+        used_sensor: !end.balance(&AccountId::Agent, &Asset::UsedSensor).is_zero(),
     }
 }
 
-/// Runs a policy after one explicit Nature instantiation and returns a trace
-/// that begins at the unresolved model.
-pub fn run_sampled_policy(model: &World, sample: &Action, policy: Policy) -> Option<Rollout> {
-    let mut branch = model.clone();
-    branch.apply(sample.clone()).ok()?;
-    let rollout = run_policy(branch, policy);
+/// Runs a policy on `world`, an unresolved model, after one explicit Nature
+/// instantiation, and returns a trace that begins at the model.
+pub fn run_sampled_policy(
+    world: &mut impl Apply<Ontology>,
+    sample: &Action,
+    policy: Policy,
+) -> Option<Rollout> {
+    world.apply(sample.clone()).ok()?;
+    let rollout = run_policy(world, policy);
     let mut trace = Trace::new();
     trace.push(sample.clone());
     trace.extend(rollout.trace.into_exchanges());
@@ -573,8 +571,26 @@ pub fn run_sampled_policy(model: &World, sample: &Action, policy: Policy) -> Opt
     })
 }
 
+/// One episode of `policy` from the model through `sample`, stepped where
+/// `episodes` keeps it.
+fn episode(
+    model: &World,
+    sample: &Action,
+    policy: &Policy,
+    index: usize,
+    episodes: &mut impl Episodes<Ontology, Policy, Rollout>,
+) -> Option<Rollout> {
+    let mut world = episodes.begin(policy, index, model.clone());
+    let rollout = run_sampled_policy(&mut world, sample, *policy)?;
+    episodes.end(policy, index, world, &rollout);
+    Some(rollout)
+}
+
 /// Exhaustively evaluates every integer-weighted scenario encoded by Nature.
-pub fn evaluate_scenarios(model: &World) -> Option<PolicyComparison> {
+pub fn evaluate_scenarios(
+    model: &World,
+    episodes: &mut impl Episodes<Ontology, Policy, Rollout>,
+) -> Option<PolicyComparison> {
     let weighted_scenarios = encoded_scenarios(model);
     let total_weight = total_weight(&weighted_scenarios).ok()?;
     let samples = usize::try_from(total_weight).ok()?;
@@ -584,7 +600,7 @@ pub fn evaluate_scenarios(model: &World) -> Option<PolicyComparison> {
         |policy, sample_index| {
             let ticket = systematic_ticket(sample_index, total_weight);
             let sample = choose_by_ticket(&weighted_scenarios, ticket).map_err(|_| ())?;
-            run_sampled_policy(model, sample, *policy)
+            episode(model, sample, policy, sample_index, episodes)
                 .map(|rollout| rollout.succeeded())
                 .ok_or(())
         },
@@ -595,7 +611,12 @@ pub fn evaluate_scenarios(model: &World) -> Option<PolicyComparison> {
 }
 
 /// Estimates both policies from reproducible random draws over Nature's prior.
-pub fn monte_carlo(model: &World, samples: usize, seed: u64) -> Option<PolicyComparison> {
+pub fn monte_carlo(
+    model: &World,
+    samples: usize,
+    seed: u64,
+    episodes: &mut impl Episodes<Ontology, Policy, Rollout>,
+) -> Option<PolicyComparison> {
     let weighted_scenarios = encoded_scenarios(model);
     let estimates = evaluate(
         [Policy::ObserveThenFollow, Policy::NorthWithoutObserving],
@@ -606,7 +627,7 @@ pub fn monte_carlo(model: &World, samples: usize, seed: u64) -> Option<PolicyCom
                 .wrapping_mul(0x9e37_79b9_7f4a_7c15);
             let mut sampler = SeededSampler::new(seed.wrapping_add(offset));
             let sampled = sample(&weighted_scenarios, &mut sampler).map_err(|_| ())?;
-            run_sampled_policy(model, sampled, *policy)
+            episode(model, sampled, policy, sample_index, episodes)
                 .map(|rollout| rollout.succeeded())
                 .ok_or(())
         },
@@ -617,7 +638,12 @@ pub fn monte_carlo(model: &World, samples: usize, seed: u64) -> Option<PolicyCom
 }
 
 /// Estimates the success/resource tradeoff across sampled encoded scenarios.
-pub fn policy_front(model: &World, samples: usize, seed: u64) -> Option<PolicyFront> {
+pub fn policy_front(
+    model: &World,
+    samples: usize,
+    seed: u64,
+    episodes: &mut impl Episodes<Ontology, Policy, Rollout>,
+) -> Option<PolicyFront> {
     if samples == 0 {
         return None;
     }
@@ -631,7 +657,7 @@ pub fn policy_front(model: &World, samples: usize, seed: u64) -> Option<PolicyFr
                 .wrapping_mul(0x9e37_79b9_7f4a_7c15);
             let mut sampler = SeededSampler::new(seed.wrapping_add(offset));
             let sampled = sample(&weighted_scenarios, &mut sampler).map_err(|_| ())?;
-            let rollout = run_sampled_policy(model, sampled, *policy).ok_or(())?;
+            let rollout = episode(model, sampled, policy, sample_index, episodes).ok_or(())?;
             Ok::<_, ()>(vec![
                 f64::from(rollout.succeeded()),
                 f64::from(rollout.used_sensor()),
@@ -833,6 +859,7 @@ fn action(rate: RateId) -> Action {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use axionomy_search::rollout::Unrecorded;
 
     #[test]
     fn nature_is_hidden_but_its_observation_is_replayable() {
@@ -844,7 +871,7 @@ mod tests {
             Some(Quantity::new(2))
         );
 
-        let rollout = run_policy(world, Policy::ObserveThenFollow);
+        let rollout = run_policy(&mut world.clone(), Policy::ObserveThenFollow);
         assert!(rollout.succeeded());
         assert_eq!(rollout.spent_energy(), 2);
         assert_eq!(rollout.trace().exchanges()[0].rate(), &RateId::BeginObserve);
@@ -862,7 +889,8 @@ mod tests {
     #[test]
     fn exact_scenario_evaluation_prefers_the_encoded_prior() {
         let model = uniform_uncertain();
-        let estimate = evaluate_scenarios(&model).expect("prior has positive weight");
+        let estimate =
+            evaluate_scenarios(&model, &mut Unrecorded).expect("prior has positive weight");
         assert_eq!(estimate.observe_successes(), 6);
         assert_eq!(estimate.direct_successes(), 4);
         assert_eq!(estimate.chosen(), Policy::ObserveThenFollow);
@@ -871,12 +899,15 @@ mod tests {
     #[test]
     fn seeded_monte_carlo_is_reproducible() {
         let model = uniform_uncertain();
-        assert_eq!(monte_carlo(&model, 64, 19), monte_carlo(&model, 64, 19));
+        assert_eq!(
+            monte_carlo(&model, 64, 19, &mut Unrecorded),
+            monte_carlo(&model, 64, 19, &mut Unrecorded)
+        );
     }
 
     #[test]
     fn sampled_policy_front_keeps_success_sensor_tradeoff_approximate() {
-        let front = policy_front(&uniform_uncertain(), 64, 19).unwrap();
+        let front = policy_front(&uniform_uncertain(), 64, 19, &mut Unrecorded).unwrap();
         assert_eq!(front.completeness(), FrontierCompleteness::Approximate);
         assert_eq!(front.len(), 2);
         for entry in front.entries() {
@@ -932,7 +963,7 @@ mod tests {
     fn sampled_trace_replays_from_the_uncertain_model() {
         let model = uniform_uncertain();
         let sample = instantiate(&model, Location::South, 1).expect("scenario is encoded");
-        let rollout = run_sampled_policy(&model, &sample, Policy::ObserveThenFollow)
+        let rollout = run_sampled_policy(&mut model.clone(), &sample, Policy::ObserveThenFollow)
             .expect("scenario can be instantiated");
         assert!(rollout.succeeded());
 
@@ -949,6 +980,9 @@ mod tests {
         let stress = uniform_uncertain_stress();
         assert_eq!(encoded_scenarios(&showcase).len(), 32);
         assert_eq!(encoded_scenarios(&stress).len(), 72);
-        assert_eq!(monte_carlo(&stress, 96, 41), monte_carlo(&stress, 96, 41));
+        assert_eq!(
+            monte_carlo(&stress, 96, 41, &mut Unrecorded),
+            monte_carlo(&stress, 96, 41, &mut Unrecorded)
+        );
     }
 }

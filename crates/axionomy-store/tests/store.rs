@@ -1,5 +1,5 @@
 use axionomy::{
-    Quantity, Rate, basket,
+    Apply, Quantity, Rate, basket,
     path::Path,
     paths::{self, Paths},
 };
@@ -279,6 +279,56 @@ fn tags_metrics_groups_and_refs_organize_runs() {
         Some(Target::Run(ends[4].run))
     );
     assert_eq!(reader.refs("best/", 10).unwrap().len(), 1);
+}
+
+/// Code that steps an economy takes `&mut impl Apply`, so a recorder steps
+/// it as an economy would and keeps the steps.
+fn pay_round(world: &mut impl Apply<Paths>, agents: u64) {
+    for agent in 0..agents {
+        world
+            .apply(pay("bank", &format!("agents/{}", agent % 3), 1 + agent))
+            .unwrap();
+    }
+}
+
+#[test]
+fn a_group_recorder_adds_each_episode_as_it_ends() {
+    let store = Store::memory().unwrap();
+    let mut group = store.group(Group {
+        kind: path("monte-carlo"),
+        source: None,
+        tags: BTreeMap::new(),
+    });
+    let mut ends = Vec::new();
+    for sample in 0..4 {
+        let mut recorder = group.record::<Paths>(economy(3), Checkpoints::Ends);
+        pay_round(&mut recorder, 1 + sample);
+        let mut unrecorded = economy(3);
+        pay_round(&mut unrecorded, 1 + sample);
+        assert_eq!(recorder.economy().state_key(), unrecorded.state_key());
+        let metrics = BTreeMap::from([(path("steps"), (1 + sample) as f64)]);
+        ends.push(group.add(sample, Some(sample), recorder, metrics).unwrap());
+    }
+    let again = group.record::<Paths>(economy(3), Checkpoints::Ends);
+    let metrics = BTreeMap::from([(path("steps"), 100.0)]);
+    group.add(0, None, again, metrics).unwrap();
+    let nan = group.record::<Paths>(economy(3), Checkpoints::Ends);
+    assert!(matches!(
+        group.add(9, None, nan, BTreeMap::from([(path("steps"), f64::NAN)])),
+        Err(StoreError::NotFinite(_))
+    ));
+    let id = group.finish().unwrap();
+
+    let reader = store.read().unwrap();
+    let summary = reader.group(id).unwrap().unwrap().summaries[&path("steps")];
+    assert_eq!((summary.count, summary.mean), (4, 2.5));
+    let members = reader.members(id, 0, 10).unwrap();
+    assert_eq!(members.len(), 4);
+    for (end, (_, member)) in ends.iter().zip(&members) {
+        assert_eq!(member.run, Some(end.run));
+        assert!(reader.run(end.run).unwrap().unwrap().finished);
+        reader.verify::<Paths>(end.run).unwrap();
+    }
 }
 
 #[test]

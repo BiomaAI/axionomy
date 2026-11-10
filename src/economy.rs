@@ -676,7 +676,32 @@ impl<O: Ontology> Economy<O> {
         economy.replay(trace)?;
         Ok(economy)
     }
+}
 
+/// Where exchanges are applied: an economy itself, or something that keeps
+/// one and records what it applies, such as a store's recorder. Code that
+/// steps an economy (a rollout, a simulation, a policy) takes `&mut impl
+/// Apply<O>`, so its caller decides whether the steps are kept. Whatever
+/// implements it, the economy decides what every exchange does.
+pub trait Apply<O: Ontology> {
+    /// The state the next exchange applies to.
+    fn economy(&self) -> &Economy<O>;
+
+    /// Applies one exchange atomically; a failure changes nothing.
+    fn apply(&mut self, exchange: Exchange<O>) -> ApplyResult<O>;
+}
+
+impl<O: Ontology> Apply<O> for Economy<O> {
+    fn economy(&self) -> &Economy<O> {
+        self
+    }
+
+    fn apply(&mut self, exchange: Exchange<O>) -> ApplyResult<O> {
+        Economy::apply(self, exchange)
+    }
+}
+
+impl<O: Ontology> Economy<O> {
     pub(crate) fn validate_structure(
         &self,
         proposal: &Exchange<O>,

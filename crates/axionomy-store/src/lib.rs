@@ -12,7 +12,7 @@ mod writer;
 pub use ids::{GroupId, GroupKindPath, IdError, MetricPath, Point, RefPath, RunId, TagPath, kind};
 pub use ontology::{Id, Recordable};
 pub use read::{Reader, State, Transition};
-pub use recorder::Recorder;
+pub use recorder::{GroupRecorder, Recorder};
 pub use records::{Checkpoints, Group, GroupRecord, Member, Run, Step, Summary, Target};
 pub use state::StateError;
 pub use writer::{Pending, Transaction};
@@ -213,6 +213,12 @@ impl Store {
             .state::<O>(point)?
             .ok_or(StoreError::UnknownRun(point.run))?;
         Ok(Recorder::new(self.clone(), Some(point), state, checkpoints))
+    }
+
+    /// Starts recording a group of runs, such as one Monte Carlo estimate's
+    /// rollouts.
+    pub fn group(&self, group: Group) -> GroupRecorder {
+        GroupRecorder::new(self.clone(), group)
     }
 
     /// Copies everything `other` holds that this store lacks. Run and group

@@ -1,0 +1,404 @@
+{
+  "schemaVersion": 1,
+  "ok": false,
+  "command": "finalize",
+  "status": "fail",
+  "type": "architecture",
+  "quality": "showcase",
+  "startedAt": "2026-11-10T04:57:16.648Z",
+  "specification": {
+    "path": "/Users/rozgo/BiomaAI/axionomy/.archify/architecture-behavior-review-20261110-065446/candidate.json",
+    "sha256": "007ca7c1c1cb0bacdb709afa0d0706e2607f0e696804e5a1da681d712480e11b",
+    "bytes": 7671
+  },
+  "artifact": {
+    "path": "/Users/rozgo/BiomaAI/axionomy/.archify/architecture-behavior-review-20261110-065446/architecture.html",
+    "sha256": "43c9b591630bb60e0e65869b6c43652cb86a3e42b4ddd906b38a2320ab4275ef",
+    "bytes": 776612
+  },
+  "stages": {
+    "validate": {
+      "status": "pass",
+      "exitCode": 0,
+      "durationMs": null,
+      "execution": "embedded-in-deliver",
+      "command": [
+        "/opt/homebrew/Cellar/node/23.11.0/bin/node",
+        "/Users/rozgo/.agents/skills/archify/bin/archify.mjs",
+        "deliver",
+        "architecture",
+        "/Users/rozgo/BiomaAI/axionomy/.archify/architecture-behavior-review-20261110-065446/candidate.json",
+        "/Users/rozgo/BiomaAI/axionomy/.archify/architecture-behavior-review-20261110-065446/architecture.html",
+        "--quality",
+        "showcase",
+        "--repo-root",
+        "/Users/rozgo/BiomaAI/axionomy",
+        "--json"
+      ],
+      "receipt": {
+        "schemaVersion": 1,
+        "ok": true,
+        "command": "validate",
+        "specification": {
+          "sha256": "007ca7c1c1cb0bacdb709afa0d0706e2607f0e696804e5a1da681d712480e11b",
+          "bytes": 7671
+        },
+        "validation": {
+          "checksPassed": 9,
+          "checkCount": 9,
+          "compositionProfile": "showcase",
+          "compositionStatus": "pass",
+          "errors": 0,
+          "warnings": 0
+        }
+      }
+    },
+    "deliver": {
+      "status": "pass",
+      "exitCode": 0,
+      "durationMs": 322,
+      "command": [
+        "/opt/homebrew/Cellar/node/23.11.0/bin/node",
+        "/Users/rozgo/.agents/skills/archify/bin/archify.mjs",
+        "deliver",
+        "architecture",
+        "/Users/rozgo/BiomaAI/axionomy/.archify/architecture-behavior-review-20261110-065446/candidate.json",
+        "/Users/rozgo/BiomaAI/axionomy/.archify/architecture-behavior-review-20261110-065446/architecture.html",
+        "--quality",
+        "showcase",
+        "--repo-root",
+        "/Users/rozgo/BiomaAI/axionomy",
+        "--json"
+      ],
+      "receipt": {
+        "schemaVersion": 1,
+        "receiptId": "4344ccf2-387b-4e85-a54c-5670404b92b8",
+        "ok": true,
+        "command": "deliver",
+        "type": "architecture",
+        "input": "/Users/rozgo/BiomaAI/axionomy/.archify/architecture-behavior-review-20261110-065446/candidate.json",
+        "output": "/Users/rozgo/BiomaAI/axionomy/.archify/architecture-behavior-review-20261110-065446/architecture.html",
+        "specification": {
+          "sha256": "007ca7c1c1cb0bacdb709afa0d0706e2607f0e696804e5a1da681d712480e11b",
+          "bytes": 7671
+        },
+        "artifact": {
+          "sha256": "43c9b591630bb60e0e65869b6c43652cb86a3e42b4ddd906b38a2320ab4275ef",
+          "bytes": 776612
+        },
+        "validation": {
+          "checksPassed": 9,
+          "checkCount": 9,
+          "compositionProfile": "showcase",
+          "compositionStatus": "pass",
+          "errors": 0,
+          "warnings": 0
+        },
+        "evidence": {
+          "verified": true,
+          "repository": "git@github.com:BiomaAI/axionomy",
+          "revision": "797e3e5d0ce4b57de1f0fc1d2202e5042c2bb492",
+          "references": 20,
+          "linkMode": "local-only"
+        },
+        "update": {
+          "status": "unavailable",
+          "installedVersion": null,
+          "availableVersion": null,
+          "releaseNotes": null,
+          "checkedAt": null,
+          "source": null,
+          "noticeRequired": false,
+          "noticeText": null,
+          "reason": "disabled"
+        }
+      }
+    },
+    "check": {
+      "status": "pass",
+      "exitCode": 0,
+      "durationMs": 106,
+      "command": [
+        "/opt/homebrew/Cellar/node/23.11.0/bin/node",
+        "/Users/rozgo/.agents/skills/archify/bin/archify.mjs",
+        "check",
+        "/Users/rozgo/BiomaAI/axionomy/.archify/architecture-behavior-review-20261110-065446/architecture.html",
+        "--require-provenance"
+      ],
+      "receipt": {
+        "ok": true,
+        "file": "/Users/rozgo/BiomaAI/axionomy/.archify/architecture-behavior-review-20261110-065446/architecture.html",
+        "artifact": {
+          "sha256": "43c9b591630bb60e0e65869b6c43652cb86a3e42b4ddd906b38a2320ab4275ef",
+          "bytes": 776612
+        },
+        "checks": [
+          {
+            "name": "single_svg",
+            "ok": true,
+            "details": [
+              "found 1 <svg> block(s)"
+            ]
+          },
+          {
+            "name": "finite_svg",
+            "ok": true,
+            "details": []
+          },
+          {
+            "name": "orthogonal_arrows",
+            "ok": true,
+            "details": []
+          },
+          {
+            "name": "label_route_clearance",
+            "ok": true,
+            "details": []
+          },
+          {
+            "name": "relationship_crossings",
+            "ok": true,
+            "details": []
+          },
+          {
+            "name": "relationship_corridors",
+            "ok": true,
+            "details": []
+          },
+          {
+            "name": "container_border_runs",
+            "ok": true,
+            "details": []
+          },
+          {
+            "name": "route_rhythm",
+            "ok": true,
+            "details": []
+          },
+          {
+            "name": "legend_clearance",
+            "ok": true,
+            "details": []
+          }
+        ],
+        "composition": {
+          "schemaVersion": 1,
+          "profile": "showcase",
+          "status": "pass",
+          "summary": {
+            "errors": 0,
+            "warnings": 0
+          },
+          "metrics": {
+            "properCrossings": 0,
+            "resolvedCrossovers": 0,
+            "ambiguousCorridors": 0,
+            "arrowheadCollisions": 0,
+            "containerBorderRuns": 0,
+            "labelRouteClearanceIssues": 0,
+            "labelCanvasOverflowIssues": 0,
+            "minLabelRouteClearance": 8,
+            "desktopReadabilityIssues": 0,
+            "viewportHeightIssues": 0,
+            "minProjectedNodeTextPx": 6.469565217391304,
+            "maxBends": 4,
+            "routesOverSuggestedBends": 2,
+            "maxStretch": 1.184,
+            "routesOverSuggestedStretch": 0,
+            "minSegmentPx": 16,
+            "minInteriorSegmentPx": 16,
+            "shortSegmentCount": 0,
+            "shortEndpointSegmentCount": 0,
+            "shortInteriorSegmentCount": 0,
+            "microSegmentCount": 0
+          },
+          "suggestedLimits": {
+            "bendsPerRelationship": 2,
+            "stretch": 1.35,
+            "segmentPx": 16,
+            "microSegmentPx": 8
+          },
+          "routeReview": {
+            "crossings": [],
+            "detours": [
+              {
+                "relationship": {
+                  "id": "read-snapshot",
+                  "from": "coordinator",
+                  "to": "observation",
+                  "label": "scope snapshot",
+                  "collectionIndex": 5,
+                  "artifactIndex": 6
+                },
+                "bends": 4,
+                "stretch": 1.184
+              },
+              {
+                "relationship": {
+                  "id": "validate",
+                  "from": "coordinator",
+                  "to": "kernel",
+                  "label": "prepare group",
+                  "collectionIndex": 6,
+                  "artifactIndex": 7
+                },
+                "bends": 3,
+                "stretch": 1
+              }
+            ]
+          },
+          "leadingSpace": {
+            "measured": true,
+            "emptyTopPx": 60,
+            "emptyTopRatio": 0.051,
+            "occupiedTop": 60,
+            "viewBoxTop": 0,
+            "canvasHeight": 1188,
+            "typicalNodeHeight": 90,
+            "reviewSuggested": false
+          },
+          "desktopReadability": {
+            "budgetBasis": "legacy-930",
+            "readerContract": "declared-wide-v1",
+            "availableDiagramWidth": 930,
+            "actualBudgetPx": 930,
+            "limit": "legacy",
+            "requestedTargetPx": 7.5,
+            "requestedTargetMet": false,
+            "hardFloorPx": 6,
+            "hardFloorMet": true,
+            "minimumOwner": {
+              "kind": "edge",
+              "id": "advance",
+              "from": "drivers",
+              "to": "runtime"
+            },
+            "minimumSourceTextPx": 8,
+            "minimumProjectedTextPx": 6.469565217391304,
+            "semanticTextCount": 35
+          },
+          "issues": []
+        },
+        "provenance": "current",
+        "deliveryReceiptId": "4344ccf2-387b-4e85-a54c-5670404b92b8"
+      }
+    },
+    "browser-check": {
+      "status": "fail",
+      "exitCode": 1,
+      "durationMs": 3297,
+      "command": [
+        "/opt/homebrew/Cellar/node/23.11.0/bin/node",
+        "/Users/rozgo/.agents/skills/archify/bin/archify.mjs",
+        "browser-check",
+        "/Users/rozgo/BiomaAI/axionomy/.archify/architecture-behavior-review-20261110-065446/architecture.html",
+        "--json",
+        "--require-provenance"
+      ],
+      "execution": "in-process",
+      "receipt": {
+        "schemaVersion": 1,
+        "ok": false,
+        "command": "browser-check",
+        "evidenceKind": "automated-browser",
+        "status": "fail",
+        "visualReview": "not-requested",
+        "provenance": "current",
+        "deliveryReceiptId": "4344ccf2-387b-4e85-a54c-5670404b92b8",
+        "artifact": {
+          "path": "/Users/rozgo/BiomaAI/axionomy/.archify/architecture-behavior-review-20261110-065446/architecture.html",
+          "sha256": "43c9b591630bb60e0e65869b6c43652cb86a3e42b4ddd906b38a2320ab4275ef",
+          "bytes": 776612
+        },
+        "state": {
+          "detail": "read",
+          "motion": "still"
+        },
+        "chrome": {
+          "status": "available",
+          "executable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+        },
+        "diagnostics": [
+          {
+            "code": "viewer/browser-check-runtime",
+            "severity": "error",
+            "message": "browser-check could not complete its Chrome inspection.",
+            "subject": {
+              "artifact": "/Users/rozgo/BiomaAI/axionomy/.archify/architecture-behavior-review-20261110-065446/architecture.html"
+            },
+            "evidence": {
+              "reason": "Chrome DevTools read pipe failed: stream ended\nChrome process: still running.\nChrome transport: Node v23.11.0, libuv 1.51.0, darwin; pid=90325, exitCode=null, signalCode=null.\nChrome read pipe: readable=false, ended=true, destroyed=false, receivedBytes=0, messages=0, bufferedBytes=0.\nChrome write pipe: writable=true, ended=false, destroyed=false, completedWrites=1, writtenBytes=50, bufferedBytes=0."
+            },
+            "supportedFixes": [
+              "resolve the reported Chrome inspection error, then rerun browser-check"
+            ]
+          }
+        ],
+        "containment": {
+          "status": "fail",
+          "policy": "fit-or-reader-declared-readable-vertical-scroll",
+          "viewports": []
+        },
+        "themeStates": {
+          "status": "fail",
+          "viewports": []
+        },
+        "readability": {
+          "status": "fail",
+          "minimumProjectedNodeTextPx": 6,
+          "viewports": []
+        },
+        "viewerChrome": {
+          "status": "fail",
+          "viewports": []
+        },
+        "captures": {
+          "status": "not-requested",
+          "screenshots": [],
+          "contactSheet": null
+        },
+        "sidecars": {
+          "receipt": "architecture.browser-check.json",
+          "files": []
+        },
+        "error": "Chrome DevTools read pipe failed: stream ended\nChrome process: still running.\nChrome transport: Node v23.11.0, libuv 1.51.0, darwin; pid=90325, exitCode=null, signalCode=null.\nChrome read pipe: readable=false, ended=true, destroyed=false, receivedBytes=0, messages=0, bufferedBytes=0.\nChrome write pipe: writable=true, ended=false, destroyed=false, completedWrites=1, writtenBytes=50, bufferedBytes=0."
+      }
+    }
+  },
+  "diagnostics": [
+    {
+      "code": "viewer/browser-check-runtime",
+      "severity": "error",
+      "message": "browser-check could not complete its Chrome inspection.",
+      "subject": {
+        "artifact": "/Users/rozgo/BiomaAI/axionomy/.archify/architecture-behavior-review-20261110-065446/architecture.html"
+      },
+      "evidence": {
+        "reason": "Chrome DevTools read pipe failed: stream ended\nChrome process: still running.\nChrome transport: Node v23.11.0, libuv 1.51.0, darwin; pid=90325, exitCode=null, signalCode=null.\nChrome read pipe: readable=false, ended=true, destroyed=false, receivedBytes=0, messages=0, bufferedBytes=0.\nChrome write pipe: writable=true, ended=false, destroyed=false, completedWrites=1, writtenBytes=50, bufferedBytes=0."
+      },
+      "supportedFixes": [
+        "resolve the reported Chrome inspection error, then rerun browser-check"
+      ]
+    }
+  ],
+  "evidence": {
+    "receipt": "/Users/rozgo/BiomaAI/axionomy/.archify/architecture-behavior-review-20261110-065446/architecture.finalize.json",
+    "summaryReceipt": "/Users/rozgo/BiomaAI/axionomy/.archify/architecture-behavior-review-20261110-065446/architecture.finalize-summary.json",
+    "browserCheckReceipt": "/Users/rozgo/BiomaAI/axionomy/.archify/architecture-behavior-review-20261110-065446/architecture.browser-check.json"
+  },
+  "visualReview": "not-requested",
+  "failedStage": "browser-check",
+  "finishedAt": "2026-11-10T04:57:20.620Z",
+  "durationMs": 3972,
+  "update": {
+    "status": "unavailable",
+    "installedVersion": null,
+    "availableVersion": null,
+    "releaseNotes": null,
+    "checkedAt": null,
+    "source": null,
+    "noticeRequired": false,
+    "noticeText": null,
+    "reason": "cache-unavailable"
+  }
+}

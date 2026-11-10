@@ -11,7 +11,10 @@ ordinary exchanges validated by the `axionomy` kernel.
   core-validated successors; `best_first` preserves state-ranked compatibility.
 - `action_source` lazily emits concrete proposals without giving generators
   transition authority.
-- `rollout` executes bounded speculative exchange trajectories.
+- `rollout` executes bounded speculative exchange trajectories on anything
+  that implements `axionomy::Apply`: an economy, whose steps stay in memory,
+  or a recorder that keeps them. `Episodes` makes the same choice for the
+  rollouts of repeated experiments, with `Unrecorded` keeping none.
 - `sampling` selects among weighted, encoded Nature exchanges through `rand`,
   including reproducible ChaCha8 and caller-owned generators.
 - `monte_carlo` evaluates arbitrary experiments with Bernoulli, scalar, vector,
@@ -30,10 +33,10 @@ Algorithms may choose which valid proposal to explore and how to aggregate
 encoded outcomes. They do not define domain transitions, hidden truth,
 terminal state, or rewards.
 
-Every strategy is generic over the economy's exact quantity backend. Solver
-costs, visit counts, random streams, and statistical values keep their own
-derived numeric domains because they are disposable policy rather than
-authoritative balances.
+Every strategy is generic over any ontology: a problem's own account, asset,
+rate and role types. Solver costs, visit counts, random streams, and
+statistical values keep their own derived numeric domains because they are
+disposable policy rather than authoritative balances.
 
 ## Pareto fronts and completeness
 

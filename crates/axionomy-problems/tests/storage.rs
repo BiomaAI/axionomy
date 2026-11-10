@@ -6,7 +6,11 @@ use axionomy_problems::{
     amm, bridge, connect_four, exact_cover, lending, logistics, marketplace, maze, mission,
     perishables, rescue, scheduling, sokoban, work_league, workshop,
 };
-use axionomy_store::{Checkpoints, Point, Recordable, Store, state};
+use axionomy_search::rollout::{Episodes, Unrecorded};
+use axionomy_store::{
+    Checkpoints, Group, GroupId, GroupRecorder, Point, Recordable, Recorder, Store, state,
+};
+use std::{collections::BTreeMap, num::NonZeroU64};
 
 fn round_trip<O: Recordable>(worlds: impl IntoIterator<Item = Economy<O>>) {
     let store = Store::memory().unwrap();
@@ -128,82 +132,115 @@ fn every_problem_economy_is_stored_and_read_back_unchanged() {
     ]);
 }
 
-/// Monte Carlo rollouts of a canonical problem recorded as any sampler would
-/// record them: one run per rollout, a group holding them with their metrics,
-/// and the questions asked of them afterwards.
-#[test]
-fn rollouts_record_as_a_monte_carlo_group_with_a_time_index() {
-    use axionomy_store::{Durability, Group, Member};
-    use logistics::{AccountId, Asset, Policy};
-    use std::collections::BTreeMap;
+/// Where a store keeps a Monte Carlo estimate's episodes: one group per
+/// policy, one run per rollout, with the rollout's elapsed time as its metric.
+struct Recorded {
+    store: Store,
+    groups: BTreeMap<logistics::Policy, GroupRecorder>,
+    ends: Vec<(logistics::Policy, Point, logistics::MissionRollout)>,
+}
 
-    let store = Store::memory().unwrap();
-    let model = logistics::initial_micro();
-    let group = store.mint_group();
-    store
-        .transact(Durability::Immediate, move |txn| {
-            txn.create_group(
-                group,
-                Group {
+impl Episodes<logistics::Ontology, logistics::Policy, logistics::MissionRollout> for Recorded {
+    type World = Recorder<logistics::Ontology>;
+
+    fn begin(
+        &mut self,
+        policy: &logistics::Policy,
+        _: usize,
+        initial: Economy<logistics::Ontology>,
+    ) -> Self::World {
+        let store = &self.store;
+        self.groups
+            .entry(*policy)
+            .or_insert_with(|| {
+                store.group(Group {
                     kind: "monte-carlo".parse().unwrap(),
                     source: None,
-                    tags: BTreeMap::from([("policy".parse().unwrap(), "reliable".into())]),
-                },
-            )
-        })
-        .wait()
-        .unwrap();
-
-    let mut rollouts = Vec::new();
-    for seed in 0..12 {
-        let rollout = logistics::run_policy(&model, Policy::Reliable, seed);
-        let mut recorder = store.record::<logistics::Ontology>(
-            model.clone(),
-            Checkpoints::Every(std::num::NonZeroU64::new(4).unwrap()),
-        );
-        for exchange in rollout.trace().exchanges() {
-            recorder.apply(exchange.clone()).unwrap();
-        }
-        let elapsed = rollout.elapsed_time() as f64;
-        recorder
-            .metric("elapsed-time".parse().unwrap(), elapsed, false)
-            .unwrap();
-        let end = recorder.finish().unwrap();
-        let member = Member {
-            run: Some(end.run),
-            seed: Some(seed),
-            metrics: BTreeMap::from([("elapsed-time".parse().unwrap(), elapsed)]),
-        };
-        store
-            .transact(Durability::Eventual, move |txn| {
-                txn.add_member(group, seed, &member)
+                    tags: BTreeMap::from([("policy".parse().unwrap(), format!("{policy:?}"))]),
+                })
             })
-            .wait()
-            .unwrap();
-        rollouts.push((end, rollout));
+            .record(initial, Checkpoints::Every(NonZeroU64::new(4).unwrap()))
     }
 
-    let reader = store.read().unwrap();
-    let elapsed: Vec<f64> = rollouts
-        .iter()
-        .map(|(_, rollout)| rollout.elapsed_time() as f64)
+    fn end(
+        &mut self,
+        policy: &logistics::Policy,
+        sample: usize,
+        world: Self::World,
+        rollout: &logistics::MissionRollout,
+    ) {
+        let end = self.groups.get_mut(policy).unwrap().add(
+            sample as u64,
+            Some(sample as u64),
+            world,
+            BTreeMap::from([(
+                "elapsed-time".parse().unwrap(),
+                rollout.elapsed_time() as f64,
+            )]),
+        );
+        self.ends.push((*policy, end.unwrap(), rollout.clone()));
+    }
+}
+
+/// A canonical problem's Monte Carlo estimate records its rollouts where it
+/// runs them: recording changes nothing it observes, every rollout is a run
+/// that replays, each policy's group summarizes its samples, and a run's
+/// stored states answer the questions asked of it afterwards.
+#[test]
+fn monte_carlo_records_each_policy_as_a_group_of_runs() {
+    use logistics::{AccountId, Asset, Policy};
+
+    let model = logistics::initial_micro();
+    let mut recorded = Recorded {
+        store: Store::memory().unwrap(),
+        groups: BTreeMap::new(),
+        ends: Vec::new(),
+    };
+    let estimate = logistics::monte_carlo(&model, 12, &mut recorded).unwrap();
+    let unrecorded = logistics::monte_carlo(&model, 12, &mut Unrecorded).unwrap();
+    assert_eq!(format!("{estimate:?}"), format!("{unrecorded:?}"));
+
+    let Recorded {
+        store,
+        groups,
+        ends,
+    } = recorded;
+    let groups: BTreeMap<Policy, GroupId> = groups
+        .into_iter()
+        .map(|(policy, group)| (policy, group.finish().unwrap()))
         .collect();
-    let summary =
-        &reader.group(group).unwrap().unwrap().summaries[&"elapsed-time".parse().unwrap()];
-    assert_eq!(summary.count, 12);
-    assert!((summary.mean - elapsed.iter().sum::<f64>() / 12.0).abs() < 1e-9);
-    let mut sorted = elapsed.clone();
-    sorted.sort_by(f64::total_cmp);
-    assert_eq!(
-        reader
-            .quantile(group, &"elapsed-time".parse().unwrap(), 1.0)
-            .unwrap(),
-        sorted.last().copied()
-    );
+    assert_eq!(ends.len(), 24);
+
+    let reader = store.read().unwrap();
+    for (policy, group) in &groups {
+        let elapsed: Vec<f64> = ends
+            .iter()
+            .filter(|(of, _, _)| of == policy)
+            .map(|(_, _, rollout)| rollout.elapsed_time() as f64)
+            .collect();
+        let summary =
+            &reader.group(*group).unwrap().unwrap().summaries[&"elapsed-time".parse().unwrap()];
+        assert_eq!(summary.count, 12);
+        assert!((summary.mean - elapsed.iter().sum::<f64>() / 12.0).abs() < 1e-9);
+        let mut sorted = elapsed.clone();
+        sorted.sort_by(f64::total_cmp);
+        assert_eq!(
+            reader
+                .quantile(*group, &"elapsed-time".parse().unwrap(), 1.0)
+                .unwrap(),
+            sorted.last().copied()
+        );
+    }
+    for (_, end, rollout) in &ends {
+        reader.verify::<logistics::Ontology>(end.run).unwrap();
+        let stored = reader.state::<logistics::Ontology>(*end).unwrap().unwrap();
+        let replayed = model.replayed(rollout.trace()).unwrap();
+        assert_eq!(stored.economy.state_key(), replayed.state_key());
+    }
 
     // A time index: the vehicle's elapsed time only grows, so the first step
     // at which it reaches t is a bisection over the run's stored states.
-    let (end, rollout) = &rollouts[0];
+    let (_, end, rollout) = &ends[0];
     let clock = |economy: &Economy<logistics::Ontology>| {
         economy
             .balance(&AccountId::Vehicle, &Asset::ElapsedTime)

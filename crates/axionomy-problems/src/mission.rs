@@ -2,7 +2,7 @@
 
 use axionomy::path;
 use axionomy::{
-    Account, EconomicView, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant,
+    Account, Apply, EconomicView, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant,
     ObservationKey, Quantity, Rate, Trace, basket,
 };
 use axionomy_search::{
@@ -17,7 +17,7 @@ use axionomy_search::{
         MonteCarloStatus, PolicyEstimate, VectorStatistics, VectorSummary, evaluate,
     },
     pareto::{FrontierCompleteness, Objective, ObjectiveVector, ParetoFront},
-    rollout::{RolloutConfig, RolloutDecision, RolloutStop, TraceRetention, run_to_goal},
+    rollout::{Episodes, RolloutConfig, RolloutDecision, RolloutStop, TraceRetention, run_to_goal},
     sampling::{
         SeededSampler, TicketSource, WeightedExchange, choose_by_ticket, sample, systematic_ticket,
         total_weight,
@@ -839,13 +839,38 @@ pub fn instantiate(model: &World, sample_index: usize) -> Option<World> {
     Some(world)
 }
 
-pub fn run_policy(model: &World, policy: Policy, sample_index: usize) -> MissionRollout {
+/// Runs a policy on `world`, an unresolved model, in the scenario systematic
+/// sample `sample_index` selects; `world` is left where the rollout ended.
+pub fn run_policy(
+    world: &mut impl Apply<Ontology>,
+    policy: Policy,
+    sample_index: usize,
+) -> MissionRollout {
+    let scenario = systematic_scenario(world.economy(), sample_index);
+    run_policy_with_scenario(world, policy, scenario)
+}
+
+fn systematic_scenario(model: &World, sample_index: usize) -> Action {
     let scenarios = scenarios(model);
     let total = total_weight(&scenarios).expect("mission has encoded scenarios");
-    let scenario = choose_by_ticket(&scenarios, systematic_ticket(sample_index, total))
+    choose_by_ticket(&scenarios, systematic_ticket(sample_index, total))
         .expect("systematic ticket is in range")
-        .clone();
-    run_policy_with_scenario(model, policy, scenario)
+        .clone()
+}
+
+/// Sample `index` of `policy` from the model in `scenario`, stepped where
+/// `episodes` keeps it.
+fn episode(
+    model: &World,
+    policy: &Policy,
+    index: usize,
+    scenario: Action,
+    episodes: &mut impl Episodes<Ontology, Policy, MissionRollout>,
+) -> MissionRollout {
+    let mut world = episodes.begin(policy, index, model.clone());
+    let rollout = run_policy_with_scenario(&mut world, *policy, scenario);
+    episodes.end(policy, index, world, &rollout);
+    rollout
 }
 
 /// Replans after every public decision and encoded Nature response. Search
@@ -928,11 +953,15 @@ pub fn run_planned_with_progress(
     }))
 }
 
-fn run_policy_with_scenario(model: &World, policy: Policy, scenario: Action) -> MissionRollout {
+fn run_policy_with_scenario(
+    world: &mut impl Apply<Ontology>,
+    policy: Policy,
+    scenario: Action,
+) -> MissionRollout {
     let goal = goal();
     let mut scenario = Some(scenario);
     let result = run_to_goal(
-        model,
+        world,
         &goal,
         RolloutConfig::new(HORIZON).with_retention(TraceRetention::Trace),
         |world, _| {
@@ -950,32 +979,37 @@ fn run_policy_with_scenario(model: &World, policy: Policy, scenario: Action) -> 
             }
         },
     );
+    let end = world.economy();
     MissionRollout {
         trace: result
             .trace()
             .cloned()
             .expect("mission rollouts retain traces"),
-        succeeded: result.world().matches(&goal),
-        elapsed_time: result
-            .world()
+        succeeded: end.matches(&goal),
+        elapsed_time: end
             .balance(&AccountId::Mission, &Asset::ElapsedTime)
             .to_u64(),
-        used_medical_kit: !result
-            .world()
+        used_medical_kit: !end
             .balance(&AccountId::Agent(AgentId::Medic), &Asset::UsedMedicalKit)
             .is_zero(),
     }
 }
 
 /// Exhaustively compares policies across every integer-weighted scenario.
-pub fn evaluate_scenarios(model: &World) -> Option<PolicyComparison> {
+pub fn evaluate_scenarios(
+    model: &World,
+    episodes: &mut impl Episodes<Ontology, Policy, MissionRollout>,
+) -> Option<PolicyComparison> {
     let support = scenarios(model);
     let samples = usize::try_from(total_weight(&support).ok()?).ok()?;
     let estimates = evaluate(
         [Policy::ShareAndCoordinate, Policy::NorthTogether],
         MonteCarloConfig::new(samples),
         |policy, sample| {
-            Ok::<_, std::convert::Infallible>(run_policy(model, *policy, sample).succeeded())
+            let scenario = systematic_scenario(model, sample);
+            Ok::<_, std::convert::Infallible>(
+                episode(model, policy, sample, scenario, episodes).succeeded(),
+            )
         },
         BernoulliStatistics::new,
     )
@@ -984,7 +1018,12 @@ pub fn evaluate_scenarios(model: &World) -> Option<PolicyComparison> {
 }
 
 /// Estimates policies from reproducible random draws over the encoded prior.
-pub fn monte_carlo(model: &World, samples: usize, seed: u64) -> Option<PolicyComparison> {
+pub fn monte_carlo(
+    model: &World,
+    samples: usize,
+    seed: u64,
+    episodes: &mut impl Episodes<Ontology, Policy, MissionRollout>,
+) -> Option<PolicyComparison> {
     let support = scenarios(model);
     let estimates = evaluate(
         [Policy::ShareAndCoordinate, Policy::NorthTogether],
@@ -995,7 +1034,7 @@ pub fn monte_carlo(model: &World, samples: usize, seed: u64) -> Option<PolicyCom
                 .wrapping_mul(0x9e37_79b9_7f4a_7c15);
             let mut sampler = SeededSampler::new(seed.wrapping_add(offset));
             let scenario = sample(&support, &mut sampler).map_err(|_| ())?.clone();
-            Ok::<_, ()>(run_policy_with_scenario(model, *policy, scenario).succeeded())
+            Ok::<_, ()>(episode(model, policy, sample_index, scenario, episodes).succeeded())
         },
         BernoulliStatistics::new,
     )
@@ -1007,6 +1046,7 @@ pub fn monte_carlo_with_progress(
     model: &World,
     samples: usize,
     seed: u64,
+    episodes: &mut impl Episodes<Ontology, Policy, MissionRollout>,
     chunk_size: usize,
     mut observer: impl FnMut(MonteCarloProgress) -> ControlFlow<()>,
 ) -> Option<PolicyComparison> {
@@ -1020,7 +1060,7 @@ pub fn monte_carlo_with_progress(
                 .wrapping_mul(0x9e37_79b9_7f4a_7c15);
             let mut sampler = SeededSampler::new(seed.wrapping_add(offset));
             let scenario = sample(&support, &mut sampler).map_err(|_| ())?.clone();
-            Ok::<_, ()>(run_policy_with_scenario(model, *policy, scenario).succeeded())
+            Ok::<_, ()>(episode(model, policy, sample_index, scenario, episodes).succeeded())
         },
         BernoulliStatistics::new,
     );
@@ -1036,7 +1076,12 @@ pub fn monte_carlo_with_progress(
 }
 
 /// Estimates a non-dominated policy set from sampled hidden scenarios.
-pub fn policy_front(model: &World, samples: usize, seed: u64) -> Option<PolicyFront> {
+pub fn policy_front(
+    model: &World,
+    samples: usize,
+    seed: u64,
+    episodes: &mut impl Episodes<Ontology, Policy, MissionRollout>,
+) -> Option<PolicyFront> {
     if samples == 0 {
         return None;
     }
@@ -1050,7 +1095,7 @@ pub fn policy_front(model: &World, samples: usize, seed: u64) -> Option<PolicyFr
                 .wrapping_mul(0x9e37_79b9_7f4a_7c15);
             let mut sampler = SeededSampler::new(seed.wrapping_add(offset));
             let scenario = sample(&support, &mut sampler).map_err(|_| ())?.clone();
-            let rollout = run_policy_with_scenario(model, *policy, scenario);
+            let rollout = episode(model, policy, sample_index, scenario, episodes);
             Ok::<_, ()>(vec![
                 f64::from(rollout.succeeded()),
                 rollout.elapsed_time() as f64,
@@ -1068,6 +1113,7 @@ pub fn policy_front_with_progress(
     model: &World,
     samples: usize,
     seed: u64,
+    episodes: &mut impl Episodes<Ontology, Policy, MissionRollout>,
     chunk_size: usize,
     mut observer: impl FnMut(MonteCarloProgress) -> ControlFlow<()>,
 ) -> Option<PolicyFront> {
@@ -1084,7 +1130,7 @@ pub fn policy_front_with_progress(
                 .wrapping_mul(0x9e37_79b9_7f4a_7c15);
             let mut sampler = SeededSampler::new(seed.wrapping_add(offset));
             let scenario = sample(&support, &mut sampler).map_err(|_| ())?.clone();
-            let rollout = run_policy_with_scenario(model, *policy, scenario);
+            let rollout = episode(model, policy, sample_index, scenario, episodes);
             Ok::<_, ()>(vec![
                 f64::from(rollout.succeeded()),
                 rollout.elapsed_time() as f64,
@@ -1379,6 +1425,7 @@ fn action(rate: RateId) -> Action {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use axionomy_search::rollout::Unrecorded;
     use axionomy_search::{action_source::collect_actions, rl::replay_transitions};
 
     #[test]
@@ -1552,7 +1599,7 @@ mod tests {
     #[test]
     fn coordinated_sample_replays_with_intelligence_transfer() {
         let model = initial();
-        let rollout = run_policy(&model, Policy::ShareAndCoordinate, 3);
+        let rollout = run_policy(&mut model.clone(), Policy::ShareAndCoordinate, 3);
 
         assert!(
             rollout.succeeded(),
@@ -1601,7 +1648,8 @@ mod tests {
 
     #[test]
     fn exact_scenario_evaluation_prefers_observe_share_and_coordinate() {
-        let estimate = evaluate_scenarios(&initial()).expect("mission prior is encoded");
+        let estimate =
+            evaluate_scenarios(&initial(), &mut Unrecorded).expect("mission prior is encoded");
 
         assert_eq!(estimate.coordinated_successes(), 12);
         assert_eq!(estimate.direct_successes(), 8);
@@ -1611,12 +1659,15 @@ mod tests {
     #[test]
     fn seeded_monte_carlo_is_reproducible() {
         let model = initial();
-        assert_eq!(monte_carlo(&model, 64, 23), monte_carlo(&model, 64, 23));
+        assert_eq!(
+            monte_carlo(&model, 64, 23, &mut Unrecorded),
+            monte_carlo(&model, 64, 23, &mut Unrecorded)
+        );
     }
 
     #[test]
     fn sampled_policy_front_keeps_reliability_cost_tradeoff_approximate() {
-        let front = policy_front(&initial(), 64, 23).unwrap();
+        let front = policy_front(&initial(), 64, 23, &mut Unrecorded).unwrap();
         assert_eq!(front.completeness(), FrontierCompleteness::Approximate);
         assert_eq!(front.len(), 2);
         for entry in front.entries() {
@@ -1631,7 +1682,7 @@ mod tests {
     #[test]
     fn replayed_mission_produces_observation_and_outcome_transitions() {
         let model = initial();
-        let rollout = run_policy(&model, Policy::ShareAndCoordinate, 3);
+        let rollout = run_policy(&mut model.clone(), Policy::ShareAndCoordinate, 3);
         let transitions = replay_transitions(
             &model,
             rollout.trace(),

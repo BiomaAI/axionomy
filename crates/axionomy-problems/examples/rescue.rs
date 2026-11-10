@@ -1,6 +1,7 @@
 mod support;
 
 use axionomy_problems::rescue::{self, Location, Policy};
+use axionomy_search::rollout::Unrecorded;
 use tracing::{debug, info};
 
 fn main() {
@@ -15,7 +16,8 @@ fn main() {
         scenarios = 8,
         "uncertain economy ready"
     );
-    let estimate = rescue::evaluate_scenarios(&model).expect("prior has positive weight");
+    let estimate =
+        rescue::evaluate_scenarios(&model, &mut Unrecorded).expect("prior has positive weight");
     info!(
         samples = estimate.samples(),
         observe_then_follow_wins = estimate.observe_successes(),
@@ -23,7 +25,8 @@ fn main() {
         chosen = ?estimate.chosen(),
         "exact encoded-scenario comparison complete"
     );
-    let front = rescue::policy_front(&model, 64, 19).expect("policies can be sampled");
+    let front =
+        rescue::policy_front(&model, 64, 19, &mut Unrecorded).expect("policies can be sampled");
     info!(
         completeness = ?front.completeness(),
         retained_policies = front.len(),
@@ -42,7 +45,7 @@ fn main() {
         );
     }
     let sample = rescue::instantiate(&model, Location::South, 1).expect("scenario is encoded");
-    let rollout = rescue::run_sampled_policy(&model, &sample, estimate.chosen())
+    let rollout = rescue::run_sampled_policy(&mut model.clone(), &sample, estimate.chosen())
         .expect("scenario can be instantiated");
     let final_world = model
         .replayed(rollout.trace())

@@ -92,8 +92,9 @@ fn sequential_controller(world: &World, _: usize) -> RolloutDecision<Action> {
 fn rollout_reaches_encoded_goal_and_replays() {
     let initial = world();
     let before = initial.state_key();
+    let mut branch = initial.clone();
     let rollout = run_to_goal(
-        &initial,
+        &mut branch,
         &goal(),
         RolloutConfig::new(3).with_retention(TraceRetention::Full),
         sequential_controller,
@@ -104,14 +105,15 @@ fn rollout_reaches_encoded_goal_and_replays() {
     assert_eq!(rollout.receipts().len(), 3);
     let trace = rollout.trace().expect("full retention keeps a trace");
     let replayed = initial.replayed(trace).expect("rollout must replay");
-    assert_eq!(replayed.state_key(), rollout.world().state_key());
+    assert_eq!(replayed.state_key(), branch.state_key());
     assert_eq!(initial.state_key(), before);
 }
 
 #[test]
 fn horizon_is_not_terminal_success() {
+    let mut branch = world();
     let rollout = run_to_goal(
-        &world(),
+        &mut branch,
         &goal(),
         RolloutConfig::new(2),
         sequential_controller,
@@ -121,13 +123,14 @@ fn horizon_is_not_terminal_success() {
         rollout.termination(),
         RolloutTermination::HorizonReached
     ));
-    assert!(!rollout.world().matches(&goal()));
+    assert!(!branch.matches(&goal()));
 }
 
 #[test]
 fn rejected_proposal_preserves_the_last_valid_branch_state() {
     let initial = world();
-    let rollout = run_to_goal(&initial, &goal(), RolloutConfig::new(3), |_, _| {
+    let mut branch = initial.clone();
+    let rollout = run_to_goal(&mut branch, &goal(), RolloutConfig::new(3), |_, _| {
         RolloutDecision::Propose(action(RateId::Finish))
     });
 
@@ -136,13 +139,13 @@ fn rejected_proposal_preserves_the_last_valid_branch_state() {
         RolloutTermination::Rejected(_)
     ));
     assert_eq!(rollout.steps(), 0);
-    assert_eq!(rollout.world().state_key(), initial.state_key());
+    assert_eq!(branch.state_key(), initial.state_key());
 }
 
 #[test]
 fn trace_retention_can_be_disabled() {
     let rollout = run_to_goal(
-        &world(),
+        &mut world(),
         &goal(),
         RolloutConfig::new(3).with_retention(TraceRetention::None),
         sequential_controller,

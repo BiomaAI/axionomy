@@ -1,4 +1,5 @@
 use super::*;
+use axionomy_search::rollout::Unrecorded;
 mod fleet;
 use axionomy::{Exchange, Quantity};
 use axionomy_problems::logistics::{self, AccountId, Asset, Location, Policy, Route, World};
@@ -30,6 +31,7 @@ pub(super) fn build(
         &initial,
         samples,
         logistics::RiskCriterion::Mean,
+        &mut Unrecorded,
         samples.clamp(1, 8),
         |state| {
             progress.emit(
@@ -46,8 +48,12 @@ pub(super) fn build(
     );
     progress.ensure()?;
     let estimate = estimate.ok_or_else(|| problem_error("logistics", "Monte Carlo failed"))?;
-    let front =
-        logistics::policy_front_with_progress(&initial, samples, samples.clamp(1, 8), |state| {
+    let front = logistics::policy_front_with_progress(
+        &initial,
+        samples,
+        &mut Unrecorded,
+        samples.clamp(1, 8),
+        |state| {
             progress.emit(
                 slug("pareto-sampling"),
                 state.completed_samples() as u64,
@@ -58,12 +64,13 @@ pub(super) fn build(
                     state.total_samples()
                 ),
             )
-        });
+        },
+    );
     progress.ensure()?;
     let front = front.ok_or_else(|| problem_error("logistics", "policy front failed"))?;
     let mut documents = Vec::new();
     for (strategy, policy) in [("direct", Policy::Direct), ("reliable", Policy::Reliable)] {
-        let rollout = logistics::run_policy(&initial, policy, run.seed);
+        let rollout = logistics::run_policy(&mut initial.clone(), policy, run.seed);
         let mut view = document(
             DocumentSpec {
                 problem: "logistics",

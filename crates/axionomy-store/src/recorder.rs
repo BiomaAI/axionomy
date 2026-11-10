@@ -1,10 +1,11 @@
 //! Recording a run as it happens.
 
 use crate::{
-    Durability, MetricPath, Pending, Point, RunId, State, Store, StoreError, TagPath,
-    ontology::Recordable, records::Checkpoints,
+    Durability, GroupId, Member, MetricPath, Pending, Point, RunId, State, Store, StoreError,
+    TagPath, ontology::Recordable, records::Checkpoints,
 };
-use axionomy::{ApplyError, Exchange, Receipt};
+use axionomy::{Apply, ApplyError, ApplyResult, Economy, Exchange, Receipt};
+use std::collections::BTreeMap;
 
 /// Records a run step by step. Each step is a kernel `apply` and an update of
 /// the state's tree in memory; steps reach the writer in batches and never
@@ -48,6 +49,11 @@ enum Op<O: Recordable> {
     Finish {
         step: u64,
         state: Option<axionomy_tree::Tree>,
+    },
+    Member {
+        group: GroupId,
+        sample: u64,
+        member: Member,
     },
 }
 
@@ -161,12 +167,16 @@ impl<O: Recordable> Recorder<O> {
     /// Ends the run, storing its last state as its checkpoints require, and
     /// waits until everything is durable.
     pub fn finish(mut self) -> Result<Point, StoreError> {
+        self.push_finish();
+        self.commit()
+    }
+
+    fn push_finish(&mut self) {
         let stored = self.checkpoints.keeps(self.step);
         self.ops.push(Op::Finish {
             step: self.step,
             state: (!stored).then(|| self.state.tree.clone()),
         });
-        self.commit()
     }
 
     fn send(&mut self, durability: Durability) {
@@ -191,6 +201,14 @@ impl<O: Recordable> Recorder<O> {
                     Op::Finish { step, state } => {
                         txn.finish(Point { run, step }, state.as_ref())?
                     }
+                    // A group recorder creates its group before any member.
+                    Op::Member {
+                        group,
+                        sample,
+                        member,
+                    } => {
+                        txn.add_member(group, sample, &member)?;
+                    }
                 }
             }
             Ok(())
@@ -207,6 +225,114 @@ impl<O: Recordable> Recorder<O> {
             }
         });
         self.in_flight.push(pending);
+    }
+}
+
+impl<O: Recordable> Apply<O> for Recorder<O> {
+    fn economy(&self) -> &Economy<O> {
+        &self.state.economy
+    }
+
+    fn apply(&mut self, exchange: Exchange<O>) -> ApplyResult<O> {
+        Recorder::apply(self, exchange)
+    }
+}
+
+/// Records a group of runs produced together, such as the rollouts of one
+/// Monte Carlo estimate. Each member's run records as it happens and joins
+/// the group with its metrics when it ends; nothing waits on disk until
+/// [`finish`](Self::finish).
+pub struct GroupRecorder {
+    store: Store,
+    group: GroupId,
+    in_flight: Vec<Pending<()>>,
+    /// The first write that failed, reported by finish.
+    failed: Option<StoreError>,
+}
+
+impl GroupRecorder {
+    pub(crate) fn new(store: Store, group: crate::Group) -> Self {
+        let id = store.mint_group();
+        let created = store.transact(Durability::Eventual, move |txn| txn.create_group(id, group));
+        Self {
+            store,
+            group: id,
+            in_flight: vec![created],
+            failed: None,
+        }
+    }
+
+    pub fn id(&self) -> GroupId {
+        self.group
+    }
+
+    /// Starts a member's run from `economy`.
+    pub fn record<O: Recordable>(
+        &self,
+        economy: Economy<O>,
+        checkpoints: Checkpoints,
+    ) -> Recorder<O> {
+        self.store.record(economy, checkpoints)
+    }
+
+    /// Starts a member's run from the state at `point`.
+    pub fn fork<O: Recordable>(
+        &self,
+        point: Point,
+        checkpoints: Checkpoints,
+    ) -> Result<Recorder<O>, StoreError> {
+        self.store.fork(point, checkpoints)
+    }
+
+    /// Ends a member's run and adds it as sample `sample`, with the seed
+    /// that reproduces it and its metrics, without waiting. Returns where
+    /// the run ended. Metrics must be finite; a sample joins once, so adding
+    /// it again keeps the first, as [`Transaction::add_member`] does.
+    ///
+    /// [`Transaction::add_member`]: crate::Transaction::add_member
+    pub fn add<O: Recordable>(
+        &mut self,
+        sample: u64,
+        seed: Option<u64>,
+        mut recorder: Recorder<O>,
+        metrics: BTreeMap<MetricPath, f64>,
+    ) -> Result<Point, StoreError> {
+        if let Some((name, _)) = metrics.iter().find(|(_, value)| !value.is_finite()) {
+            return Err(StoreError::NotFinite(name.clone()));
+        }
+        recorder.push_finish();
+        recorder.ops.push(Op::Member {
+            group: self.group,
+            sample,
+            member: Member {
+                run: Some(recorder.run),
+                seed,
+                metrics,
+            },
+        });
+        recorder.send(Durability::Eventual);
+        let end = recorder.point();
+        self.in_flight.append(&mut recorder.in_flight);
+        if let Some(error) = recorder.failed.take() {
+            self.failed.get_or_insert(error);
+        }
+        Ok(end)
+    }
+
+    /// Waits until the group and every member added are durable, and
+    /// reports the first write that failed.
+    pub fn finish(self) -> Result<GroupId, StoreError> {
+        let mut failed = self.failed;
+        let durable = self.store.transact(Durability::Immediate, |_| Ok(()));
+        for pending in self.in_flight.into_iter().chain([durable]) {
+            if let Err(error) = pending.wait() {
+                failed.get_or_insert(error);
+            }
+        }
+        match failed {
+            Some(error) => Err(error),
+            None => Ok(self.group),
+        }
     }
 }
 

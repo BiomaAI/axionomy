@@ -1,4 +1,5 @@
 use super::*;
+use axionomy_search::rollout::Unrecorded;
 mod expedition;
 use axionomy::Exchange;
 use axionomy_problems::mission::{self, AccountId, AgentId, Asset, Location, Policy, World};
@@ -29,6 +30,7 @@ pub(super) fn build(
         &model,
         samples,
         run.seed,
+        &mut Unrecorded,
         samples.clamp(1, 8),
         |state| {
             progress.emit(
@@ -49,6 +51,7 @@ pub(super) fn build(
         &model,
         samples,
         run.seed,
+        &mut Unrecorded,
         samples.clamp(1, 8),
         |state| {
             progress.emit(
@@ -109,7 +112,7 @@ pub(super) fn build(
         let rollout = if policy == Policy::ShareAndCoordinate {
             planned.rollout.clone()
         } else {
-            mission::run_policy(&model, policy, sample_index)
+            mission::run_policy(&mut model.clone(), policy, sample_index)
         };
         let mut view = document(DocumentSpec { problem: "mission", strategy, title: if policy == Policy::ShareAndCoordinate { "Mission · observe, decide, replan" } else { "Mission · both go north" }, description: if policy == Policy::ShareAndCoordinate { "ISMCTS chooses every public action from the Scout’s observation. After each action and Nature response, compatible belief worlds are retained and the next decision is searched again. Compare the resulting costs with committing north without information." } else { "Both agents commit without looking or sharing. The replay keeps every failure and what it cost." }, source_label: "Hidden-information mission" }, &model, &mission::goal(), rollout.trace(), vec![
             ObjectiveView { key: slug("success"), label: "Succeeded".into(), direction: ObjectiveDirectionView::Maximize, value: u8::from(rollout.succeeded()).to_string() },

@@ -1,6 +1,7 @@
 mod support;
 
 use axionomy_problems::logistics::{self, OrderId, Policy, RateId, RiskCriterion};
+use axionomy_search::rollout::Unrecorded;
 use tracing::{debug, info};
 
 fn main() {
@@ -15,7 +16,8 @@ fn main() {
         orders = 4,
         "encoded economy ready"
     );
-    let estimate = logistics::monte_carlo(&model, 64).expect("policies can be evaluated");
+    let estimate =
+        logistics::monte_carlo(&model, 64, &mut Unrecorded).expect("policies can be evaluated");
     for policy in [Policy::Direct, Policy::Reliable] {
         let summary = estimate
             .estimate(policy)
@@ -30,14 +32,16 @@ fn main() {
             "Monte Carlo estimate"
         );
     }
-    let tail_choice = logistics::monte_carlo_with_risk(&model, 64, RiskCriterion::LowerDecile)
-        .expect("tail risk can be evaluated");
+    let tail_choice =
+        logistics::monte_carlo_with_risk(&model, 64, RiskCriterion::LowerDecile, &mut Unrecorded)
+            .expect("tail risk can be evaluated");
     info!(
         mean_choice = ?estimate.chosen(),
         lower_decile_choice = ?tail_choice.chosen(),
         "caller-selected risk criteria compared"
     );
-    let front = logistics::policy_front(&model, 64).expect("policies can be sampled");
+    let front =
+        logistics::policy_front(&model, 64, &mut Unrecorded).expect("policies can be sampled");
     info!(
         completeness = ?front.completeness(),
         retained_policies = front.len(),
@@ -71,7 +75,7 @@ fn main() {
         "MCTS planned a route from encoded chance"
     );
     let chosen = estimate.chosen();
-    let rollout = logistics::run_policy(&model, chosen, 7);
+    let rollout = logistics::run_policy(&mut model.clone(), chosen, 7);
     let replayed = model
         .replayed(rollout.trace())
         .expect("selected mission must replay");

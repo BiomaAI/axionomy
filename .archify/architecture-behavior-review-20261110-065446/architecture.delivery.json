@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "receiptId": "4344ccf2-387b-4e85-a54c-5670404b92b8",
+  "status": "current",
+  "command": "deliver",
+  "type": "architecture",
+  "input": "/Users/rozgo/BiomaAI/axionomy/.archify/architecture-behavior-review-20261110-065446/candidate.json",
+  "output": "/Users/rozgo/BiomaAI/axionomy/.archify/architecture-behavior-review-20261110-065446/architecture.html",
+  "specification": {
+    "sha256": "007ca7c1c1cb0bacdb709afa0d0706e2607f0e696804e5a1da681d712480e11b",
+    "bytes": 7671
+  },
+  "artifact": {
+    "sha256": "43c9b591630bb60e0e65869b6c43652cb86a3e42b4ddd906b38a2320ab4275ef",
+    "bytes": 776612
+  }
+}

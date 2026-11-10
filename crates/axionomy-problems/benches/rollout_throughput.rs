@@ -8,8 +8,11 @@ fn benchmark(c: &mut Criterion) {
 
     c.bench_function("logistics_reliable_policy_rollout", |bencher| {
         bencher.iter(|| {
-            let rollout =
-                logistics::run_policy(black_box(&model), Policy::Reliable, black_box(seed));
+            let rollout = logistics::run_policy(
+                black_box(&mut model.clone()),
+                Policy::Reliable,
+                black_box(seed),
+            );
             seed = seed.wrapping_add(1);
             assert!(rollout.completed());
             black_box(rollout.steps())

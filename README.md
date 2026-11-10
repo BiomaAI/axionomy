@@ -27,6 +27,13 @@ simulation, and learned policies without duplicating domain logic; exact forks
 enable counterfactual exploration, while replayable traces make decisions
 auditable, comparable, and independently verifiable.
 
+`axionomy-search` is generic over any ontology. Write a problem's accounts,
+assets, rates and roles as your own Rust types, and breadth-first search,
+Dijkstra, A*, exact Pareto fronts, rollouts, Monte Carlo, MCTS and
+information-set MCTS run on it unchanged. A rollout steps whatever it is
+given: an economy of its own, so its steps live and die in memory, or a
+recorder that keeps every step in the store.
+
 [![Axionomy Studio visualizing autonomous agents, jobs, facilities, and economic relationships in the Work League](assets/studio-gallery/work_league.webp)](https://biomaai.github.io/axionomy/?problem=work-league&instance=showcase&strategy=mixed-field&document=mixed-field&view=replay&step=0&leaderboard=contract-value&seed=17&budget=128)
 
 <p align="center"><sub>Autonomous Work League makes topology, agents, jobs, facilities, relationships, and economic state readable in one verified replay. <a href="https://biomaai.github.io/axionomy/?problem=work-league&instance=showcase&strategy=mixed-field&document=mixed-field&view=replay&step=0&leaderboard=contract-value&seed=17&budget=128">Open this view in the live Studio</a>.</sub></p>

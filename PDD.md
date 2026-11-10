@@ -1381,14 +1381,14 @@ examples, but they are not promised as reusable domain APIs.
 
 The current foundation is intentionally bounded:
 
-- Every economy uses one exact quantity backend, defaulting to `u64`. Numeric
+- Every quantity is one exact unsigned 256-bit count of atoms. Numeric
   representations are not selected independently per asset, and floating
   point is not accepted as authoritative balance storage.
 - Unit safety is opt-in through `UnitAsset<Id>` and `AssetSchema`; the generic
   kernel cannot infer physical semantics for an arbitrary user-defined asset
   type. Raw counts remain valid and explicitly mean atoms of their asset key.
 - Typed `uom` and Jiff adapters currently require the lowered atom count to fit
-  `u64`, even when the target economy uses a wider quantity backend.
+  `u64`, although kernel quantities are 256-bit.
 - Rates are concrete. There is no variable matching, unification, guard
   language, or parameterized rate schema.
 - Problem builders may generate many concrete rates to represent one logical
@@ -1632,9 +1632,11 @@ factor.
    historical data becomes a real requirement.
 4. Finish [storage, runs and replay](docs/STORAGE.md). The canonical tree,
    the redb store with runs, durability rules, tags, groups, metrics and refs,
-   MCP on the store, and storing any ontology whose identifiers serialize are
-   built; next, problems record runs from search, rollouts, Monte Carlo, MPPI
-   and RL, and Studio scrubs from stored roots. Extract generic holdings, dependency, and event indexes only after a
+   MCP on the store, storing any ontology whose identifiers serialize, and
+   rollouts and Monte Carlo episodes recording where they run (`Apply`,
+   `Episodes`, `GroupRecorder`) are built; next, problem runs record as store
+   runs, search sessions, MPPI and RL record, and Studio scrubs from stored
+   roots. Extract generic holdings, dependency, and event indexes only after a
    second domain confirms the perishables shapes.
 5. Extend invariants with carefully constrained local and inequality forms.
 6. Build an external OR adapter that compiles one closed schedule and replays
@@ -1810,7 +1812,7 @@ containers or arithmetic machinery.
 
 Search depth, heuristic rank, visit count, statistical confidence, and wall
 clock runtime are disposable algorithm state. They do not inherit the
-economy's quantity backend unless a model explicitly encodes a corresponding
+economy's exact quantities unless a model explicitly encodes a corresponding
 asset, shortfall, cost, or reward. This keeps solver policy from silently
 changing economic truth.
 

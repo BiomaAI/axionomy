@@ -2,8 +2,8 @@
 
 use axionomy::path;
 use axionomy::{
-    Account, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Quantity, Rate, Trace,
-    basket,
+    Account, Apply, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Quantity, Rate,
+    Trace, basket,
 };
 use axionomy_search::{
     action_source::eager_actions,
@@ -13,7 +13,7 @@ use axionomy_search::{
         ScalarStatistics, ScalarSummary, VectorStatistics, VectorSummary, evaluate,
     },
     pareto::{FrontierCompleteness, Objective, ObjectiveVector, ParetoFront},
-    rollout::{RolloutConfig, RolloutDecision, RolloutStop, TraceRetention, run_to_goal},
+    rollout::{Episodes, RolloutConfig, RolloutDecision, RolloutStop, TraceRetention, run_to_goal},
     sampling::{SeededSampler, TicketSource, WeightedExchange, sample},
     session::{Continue, WorkBudget},
     tree::{TreeSearchError, TreeStatus},
@@ -445,11 +445,16 @@ pub fn candidates(world: &World) -> Vec<Action> {
     world.applicable(rates.into_iter().map(action))
 }
 
-pub fn run_policy(model: &World, policy: Policy, exploration_seed: u64) -> MissionRollout {
+/// Runs a policy on `world`, which is left where the rollout ended.
+pub fn run_policy(
+    world: &mut impl Apply<Ontology>,
+    policy: Policy,
+    exploration_seed: u64,
+) -> MissionRollout {
     let mut sampler = SeededSampler::new(exploration_seed);
     let goal = goal();
     let result = run_to_goal(
-        model,
+        world,
         &goal,
         RolloutConfig::new(ROLLOUT_HORIZON).with_retention(TraceRetention::Trace),
         |world, _| match policy_action(world, policy, &mut sampler) {
@@ -457,39 +462,58 @@ pub fn run_policy(model: &World, policy: Policy, exploration_seed: u64) -> Missi
             None => RolloutDecision::Stop(RolloutStop::NoProposal),
         },
     );
+    let end = world.economy();
     MissionRollout {
         trace: result
             .trace()
             .cloned()
             .expect("mission rollouts retain traces"),
-        completed: result.world().matches(&goal),
-        delivered: delivered(result.world()),
-        elapsed_time: result
-            .world()
+        completed: end.matches(&goal),
+        delivered: delivered(end),
+        elapsed_time: end
             .balance(&AccountId::Vehicle, &Asset::ElapsedTime)
             .to_u64(),
         steps: result.steps(),
     }
 }
 
-pub fn monte_carlo(model: &World, samples: usize) -> Option<MonteCarloEstimate> {
-    monte_carlo_with_risk(model, samples, RiskCriterion::Mean)
+/// Sample `index` of `policy` from the model, stepped where `episodes` keeps
+/// it; the sample index is its exploration seed.
+fn episode(
+    model: &World,
+    policy: &Policy,
+    index: usize,
+    episodes: &mut impl Episodes<Ontology, Policy, MissionRollout>,
+) -> MissionRollout {
+    let mut world = episodes.begin(policy, index, model.clone());
+    let rollout = run_policy(
+        &mut world,
+        *policy,
+        u64::try_from(index).unwrap_or(u64::MAX),
+    );
+    episodes.end(policy, index, world, &rollout);
+    rollout
+}
+
+pub fn monte_carlo(
+    model: &World,
+    samples: usize,
+    episodes: &mut impl Episodes<Ontology, Policy, MissionRollout>,
+) -> Option<MonteCarloEstimate> {
+    monte_carlo_with_risk(model, samples, RiskCriterion::Mean, episodes)
 }
 
 pub fn monte_carlo_with_risk(
     model: &World,
     samples: usize,
     criterion: RiskCriterion,
+    episodes: &mut impl Episodes<Ontology, Policy, MissionRollout>,
 ) -> Option<MonteCarloEstimate> {
     let estimates = evaluate(
         [Policy::Direct, Policy::Reliable],
         MonteCarloConfig::new(samples),
         |policy, sample_index| {
-            let rollout = run_policy(
-                model,
-                *policy,
-                u64::try_from(sample_index).unwrap_or(u64::MAX),
-            );
+            let rollout = episode(model, policy, sample_index, episodes);
             Ok::<_, std::convert::Infallible>(mission_utility(&rollout))
         },
         ScalarStatistics::new,
@@ -502,6 +526,7 @@ pub fn monte_carlo_with_risk_progress(
     model: &World,
     samples: usize,
     criterion: RiskCriterion,
+    episodes: &mut impl Episodes<Ontology, Policy, MissionRollout>,
     chunk_size: usize,
     mut observer: impl FnMut(MonteCarloProgress) -> ControlFlow<()>,
 ) -> Option<MonteCarloEstimate> {
@@ -509,11 +534,7 @@ pub fn monte_carlo_with_risk_progress(
         [Policy::Direct, Policy::Reliable],
         MonteCarloConfig::new(samples),
         |policy: &Policy, sample_index| {
-            let rollout = run_policy(
-                model,
-                *policy,
-                u64::try_from(sample_index).unwrap_or(u64::MAX),
-            );
+            let rollout = episode(model, policy, sample_index, episodes);
             Ok::<_, std::convert::Infallible>(mission_utility(&rollout))
         },
         ScalarStatistics::new,
@@ -547,7 +568,11 @@ fn monte_carlo_estimate(
 
 /// Estimates a non-dominated policy set from sampled, core-validated rollouts.
 /// Statistical sampling means this front is intentionally never labeled exact.
-pub fn policy_front(model: &World, samples: usize) -> Option<PolicyFront> {
+pub fn policy_front(
+    model: &World,
+    samples: usize,
+    episodes: &mut impl Episodes<Ontology, Policy, MissionRollout>,
+) -> Option<PolicyFront> {
     if samples == 0 {
         return None;
     }
@@ -555,11 +580,7 @@ pub fn policy_front(model: &World, samples: usize) -> Option<PolicyFront> {
         [Policy::Direct, Policy::Reliable],
         MonteCarloConfig::new(samples),
         |policy, sample_index| {
-            let rollout = run_policy(
-                model,
-                *policy,
-                u64::try_from(sample_index).unwrap_or(u64::MAX),
-            );
+            let rollout = episode(model, policy, sample_index, episodes);
             Ok::<_, std::convert::Infallible>(vec![
                 f64::from(rollout.completed()),
                 rollout.delivered() as f64,
@@ -576,6 +597,7 @@ pub fn policy_front(model: &World, samples: usize) -> Option<PolicyFront> {
 pub fn policy_front_with_progress(
     model: &World,
     samples: usize,
+    episodes: &mut impl Episodes<Ontology, Policy, MissionRollout>,
     chunk_size: usize,
     mut observer: impl FnMut(MonteCarloProgress) -> ControlFlow<()>,
 ) -> Option<PolicyFront> {
@@ -586,11 +608,7 @@ pub fn policy_front_with_progress(
         [Policy::Direct, Policy::Reliable],
         MonteCarloConfig::new(samples),
         |policy: &Policy, sample_index| {
-            let rollout = run_policy(
-                model,
-                *policy,
-                u64::try_from(sample_index).unwrap_or(u64::MAX),
-            );
+            let rollout = episode(model, policy, sample_index, episodes);
             Ok::<_, std::convert::Infallible>(vec![
                 f64::from(rollout.completed()),
                 rollout.delivered() as f64,
@@ -1074,11 +1092,12 @@ fn mission_utility(rollout: &MissionRollout) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use axionomy_search::rollout::Unrecorded;
 
     #[test]
     fn long_horizon_rollout_replays_with_explicit_nature_outcomes() {
         let model = initial();
-        let rollout = run_policy(&model, Policy::Reliable, 7);
+        let rollout = run_policy(&mut model.clone(), Policy::Reliable, 7);
 
         assert!(rollout.completed());
         assert_eq!(rollout.delivered(), ORDERS.len());
@@ -1098,7 +1117,7 @@ mod tests {
 
     #[test]
     fn monte_carlo_prefers_reliable_routes_for_encoded_risk() {
-        let estimate = monte_carlo(&initial(), 64).expect("mission has policies");
+        let estimate = monte_carlo(&initial(), 64, &mut Unrecorded).expect("mission has policies");
         let direct = estimate.estimate(Policy::Direct).expect("direct estimate");
         let reliable = estimate
             .estimate(Policy::Reliable)
@@ -1108,14 +1127,16 @@ mod tests {
         assert!(reliable.mean() > direct.mean());
         assert_eq!(direct.samples(), 64);
 
-        let tail = monte_carlo_with_risk(&initial(), 64, RiskCriterion::LowerDecile)
-            .expect("mission has policies");
+        let tail =
+            monte_carlo_with_risk(&initial(), 64, RiskCriterion::LowerDecile, &mut Unrecorded)
+                .expect("mission has policies");
         assert_eq!(tail.chosen(), Policy::Reliable);
     }
 
     #[test]
     fn sampled_policy_front_is_explicitly_approximate_and_self_consistent() {
-        let front = policy_front(&initial(), 64).expect("policies have sampled outcomes");
+        let front =
+            policy_front(&initial(), 64, &mut Unrecorded).expect("policies have sampled outcomes");
         assert_eq!(front.completeness(), FrontierCompleteness::Approximate);
         assert!(!front.is_empty());
         for entry in front.entries() {

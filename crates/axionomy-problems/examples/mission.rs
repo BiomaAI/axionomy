@@ -1,6 +1,7 @@
 mod support;
 
 use axionomy_problems::mission;
+use axionomy_search::rollout::Unrecorded;
 use axionomy_search::{mcts::MctsConfig, rl::replay_transitions};
 use tracing::{debug, info};
 
@@ -65,7 +66,8 @@ fn main() {
         "caller conditioned beliefs and replanned after observation"
     );
 
-    let estimate = mission::evaluate_scenarios(&model).expect("mission policies can be evaluated");
+    let estimate = mission::evaluate_scenarios(&model, &mut Unrecorded)
+        .expect("mission policies can be evaluated");
     info!(
         samples = estimate.samples(),
         coordinated_wins = estimate.coordinated_successes(),
@@ -73,7 +75,8 @@ fn main() {
         chosen = ?estimate.chosen(),
         "exact encoded-scenario comparison complete"
     );
-    let front = mission::policy_front(&model, 64, 23).expect("policies can be sampled");
+    let front =
+        mission::policy_front(&model, 64, 23, &mut Unrecorded).expect("policies can be sampled");
     info!(
         completeness = ?front.completeness(),
         retained_policies = front.len(),

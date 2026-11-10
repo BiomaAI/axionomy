@@ -1,4 +1,5 @@
 use super::*;
+use axionomy_search::rollout::Unrecorded;
 mod incident;
 use axionomy_problems::rescue::{self, AccountId, Asset, Location, Policy, World};
 use axionomy_view::{
@@ -27,9 +28,9 @@ pub(super) fn build(
     } as usize;
     let sample = rescue::instantiate(&model, Location::South, 1)
         .ok_or_else(|| problem_error("rescue", "scenario could not be instantiated"))?;
-    let front = rescue::policy_front(&model, samples, run.seed)
+    let front = rescue::policy_front(&model, samples, run.seed, &mut Unrecorded)
         .ok_or_else(|| problem_error("rescue", "policy front failed"))?;
-    let comparison = rescue::monte_carlo(&model, samples, run.seed)
+    let comparison = rescue::monte_carlo(&model, samples, run.seed, &mut Unrecorded)
         .ok_or_else(|| problem_error("rescue", "Monte Carlo failed"))?;
     let policies = [
         ("observe-then-follow", Policy::ObserveThenFollow),
@@ -37,7 +38,7 @@ pub(super) fn build(
     ];
     let mut documents = Vec::new();
     for (strategy, policy) in policies {
-        let rollout = rescue::run_sampled_policy(&model, &sample, policy)
+        let rollout = rescue::run_sampled_policy(&mut model.clone(), &sample, policy)
             .ok_or_else(|| problem_error("rescue", "sampled rollout failed"))?;
         let mut view = document(
             DocumentSpec { problem: "rescue", strategy, title: if policy == Policy::ObserveThenFollow { "Rescue · sense, then move" } else { "Rescue · go north immediately" }, description: if policy == Policy::ObserveThenFollow { "The agent spends the sensor, receives a reading, and follows it." } else { "The agent commits north without looking. In this scenario the survivor is south, and the replay keeps the failure." }, source_label: "Uncertain rescue" },
