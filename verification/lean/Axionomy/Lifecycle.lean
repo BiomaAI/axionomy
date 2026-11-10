@@ -343,18 +343,6 @@ theorem applicable_closes_empty (model : Model AccountId A RateId Role) (proposa
     simp only at assessed prepared
     rw [assessed, prepared]
 
-/-- A failed replay stops at its first rejected exchange and keeps the state
-its accepted prefix reached. -/
-theorem replay_error_prefix (model after : Model AccountId A RateId Role) (actions : List (Proposal AccountId RateId Role))
-    (error : Failure AccountId A RateId Role)
-    (failed : Execution.run (apply cmpAccount cmpRole) model actions [] = some (.error error, after)) :
-    ∃ leading action trailing receipts,
-      actions = leading ++ action :: trailing ∧
-      Execution.run (apply cmpAccount cmpRole) model leading [] = some (.ok receipts, after) ∧
-      apply cmpAccount cmpRole after action = some (.error error, after) :=
-  Execution.atomic_error_prefix _ (fun state action error after rejected => rejection_atomic cmpAccount cmpRole state after action error rejected)
-    actions model after [] error failed
-
 theorem accepted_conserves {model after : Model AccountId A RateId Role}
     {actions : List (Proposal AccountId RateId Role)} {receipts : List (Receipt AccountId A RateId Role)}
     (history : Execution.Accepted (apply cmpAccount cmpRole) model actions receipts after) :

@@ -17,16 +17,6 @@ theorem rejection_atomic (model after : Model AccountId A RateId Role) (proposal
   | some analysis =>
     exact applyAnalysis_rejection_atomic model proposal analysis error after (by simpa [analyzed] using rejected)
 
-theorem replay_error_prefix (model after : Model AccountId A RateId Role) (actions : List (Proposal AccountId RateId Role))
-    (error : Failure AccountId A RateId Role)
-    (failed : Execution.run (apply cmpAccount cmpRole) model actions [] = some (.error error, after)) :
-    ∃ leading action trailing receipts,
-      actions = leading ++ action :: trailing ∧
-      Execution.run (apply cmpAccount cmpRole) model leading [] = some (.ok receipts, after) ∧
-      apply cmpAccount cmpRole after action = some (.error error, after) :=
-  Execution.atomic_error_prefix _ (fun state action error after rejected => rejection_atomic cmpAccount cmpRole state after action error rejected)
-    actions model after [] error failed
-
 theorem replay_receipt_order (laws : OrderedEffects.OrderLaws cmpAccount)
     (model after : Model AccountId A RateId Role) (actions : List (Proposal AccountId RateId Role))
     (receipts : List (Receipt AccountId A RateId Role))

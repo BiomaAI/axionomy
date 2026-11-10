@@ -176,10 +176,11 @@ def replayScenario (expression : Evaluation.Expr Nat Nat Nat → Json) (label : 
     (before : List (Nat × List (Nat × Nat))) (rule : Rule) (actions : List Proposal)
     (invariants : List (Transaction.Invariant Nat) := []) : Json :=
   let model : Model := ⟨before.map (fun (id, entries) => (id, Basket.canonical entries)), [(7, normalize rule)], invariants⟩
-  let expected := match Execution.run (Lifecycle.apply compare compare) model actions [] with
+  let expected := match Execution.replay (Lifecycle.apply compare compare) model actions with
     | none => tagged "panic"
     | some (result, after) => Json.mkObj [("after", accounts after.accounts),
-        ("error", match result with | .error error => failure error | .ok _ => Json.null),
+        ("error", match result with | .error (_, error) => failure error | .ok _ => Json.null),
+        ("index", match result with | .error (index, _) => toJson index | .ok _ => Json.null),
         ("receipts", match result with | .error _ => Json.null | .ok receipts => toJson (receipts.map receiptJson))]
   Json.mkObj [("base", scenario expression label before rule ⟨7, [], 1, []⟩ invariants),
     ("trace", toJson (actions.map proposalJson)), ("expected", expected)]

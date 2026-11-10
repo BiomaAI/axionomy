@@ -30,4 +30,5 @@ pub type Receipt = crate::Receipt<Paths>;
 pub type AccountDelta = crate::AccountDelta<Paths>;
 pub type Assessment = crate::ExchangeAssessment<Paths>;
 pub type ApplyError = crate::ApplyError<Paths>;
+pub type ReplayError = crate::ReplayError<Paths>;
 pub type Goal = crate::Goal<Paths>;

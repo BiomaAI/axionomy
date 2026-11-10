@@ -34,7 +34,7 @@ implementation itself is tested, not proved.
 | Exchanges | `Exchange`, `Effects`, `OrderedEffects`, `Transaction`, `TransactionAggregation`, `TransactionPreparation`, `TransactionSafety`, `TransactionReceipts`, `TransactionExecution`, `Validation`, `InvariantInput` | Validation precedes effects; every account is prepared before any commits; a failed exchange changes nothing; receipts describe the actual balance change |
 | Account lifecycle | `Lifecycle` | Opened accounts are new and closed accounts are left empty by the exchange's own effects; a rejected exchange changes nothing; every receipt conserves every invariant; the accounts afterwards are exactly those before plus the opened less the closed |
 | Conservation | `Conservation` | Declared linear invariants are preserved exactly by accepted exchanges |
-| History | `Execution`, `Replay`, `Observations`, `Inspection` | Ordered execution and replay compose deterministically; read-only queries cannot mutate |
+| History | `Execution`, `Replay`, `Observations`, `Inspection` | Ordered execution and replay compose deterministically; a replay applies its whole trace or none of it and names the action that failed; read-only queries cannot mutate |
 
 `Conformance.lean`, `TransactionConformance.lean`,
 `BasketCollectionConformance.lean` and `InvariantInputConformance.lean` only

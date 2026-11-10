@@ -481,12 +481,18 @@ fn complete_replays_match_lean() {
                     "case {index}: {case:?}"
                 );
                 assert_eq!(
-                    failure(&error),
+                    failure(&error.error),
                     case.expected["error"],
+                    "case {index}: {case:?}"
+                );
+                assert_eq!(
+                    json!(error.index),
+                    case.expected["index"],
                     "case {index}: {case:?}"
                 );
             }
         }
+        // A failed replay changes nothing: `after` is then the source.
         assert_eq!(
             snapshot(&branch),
             case.expected["after"],
@@ -505,11 +511,18 @@ fn complete_replays_match_lean() {
                     "case {index}: {case:?}"
                 );
             }
-            Err(error) => assert_eq!(
-                failure(&error),
-                case.expected["error"],
-                "case {index}: {case:?}"
-            ),
+            Err(error) => {
+                assert_eq!(
+                    failure(&error.error),
+                    case.expected["error"],
+                    "case {index}: {case:?}"
+                );
+                assert_eq!(
+                    json!(error.index),
+                    case.expected["index"],
+                    "case {index}: {case:?}"
+                );
+            }
         }
         assert_eq!(
             serde_json::to_value(&source).unwrap(),

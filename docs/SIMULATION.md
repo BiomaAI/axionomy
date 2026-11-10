@@ -1,7 +1,7 @@
 # Simulation: policies, runs and studies
 
 Status: planned, in the order the steps below give. Built: rollouts and
-Monte Carlo episodes recording where they run, step 1 and step 3.
+Monte Carlo episodes recording where they run, steps 1, 3 and 4.
 
 The economy owns commitments and their consequences. A policy reads what an
 actor may see and proposes exchanges. Whoever calls the rollout (a problem, a
@@ -25,7 +25,7 @@ as it can: each step reuses what exists.
 | Choosing | Plain Rust: `Option::or_else` for priorities, `Iterator::min_by_key` for ranking by an ordered key, ties broken by id |
 | Stepping, in memory or recorded | `rollout::run` over `&mut impl Apply`; `Episodes` for repeated experiments, with `Unrecorded` or a `GroupRecorder` |
 | Bounded computation | Search sessions: `advance(WorkBudget)`, interrupted and resumed |
-| Several exchanges, all or nothing | `Economy::replayed`, Lean's `Replay.run`, MCP's `axionomy_trace_replay` |
+| Several exchanges, all or nothing | `Economy::replay` and `replayed`, Lean's `Execution.replay`, MCP's `axionomy_trace_replay` |
 
 Ordered keys, not floating-point scores, rank choices: today's policies rank
 by tuples such as `(time + travel, urgency, u64::MAX - value)`, and a scalar
@@ -44,7 +44,7 @@ does not reuse it for its own machinery.
 | Exchange | One firing of a rate |
 | Proposal | One exchange offered for applying; never a trace |
 | Trace | Exchanges in order |
-| Replay | Applying a trace, all of it or none of it: `replayed` gives the economy after it, `replay` applies it in place (step 4 makes `replay` match) |
+| Replay | Applying a trace, all of it or none of it: `replayed` gives the economy after it, `replay` applies it in place |
 | Run | A trajectory: a trace from a state, kept in memory or recorded in the store |
 | Rollout | A run a policy drives, to a goal, a stop or a horizon |
 | Episode | One rollout of a repeated experiment, such as one Monte Carlo sample |
@@ -121,18 +121,19 @@ handle is read under `axionomy://study/{study_id}`; the CLI's command is
 
 ## Step 4: replay is all or nothing
 
-Today `replayed` keeps nothing when an exchange fails, but `replay` keeps the
-exchanges before the failure. The pair reads as one operation, in place and
-on a copy, and should be one. No caller depends on the kept prefix; only the
-specification and its tests state it.
+`replayed` kept nothing when an exchange failed, but `replay` kept the
+exchanges before the failure, so two names that read as one operation, in
+place and on a copy, meant different things. Both now apply a whole trace or
+none of it:
 
-- `replay` leaves the economy unchanged when any exchange fails, and the
-  error names the exchange that failed.
-- The Lean model states and proves it, replacing the prefix theorem, and the
-  conformance fixtures are regenerated from Lean.
-- `Apply` gains `replay`, so a recorder records a trace only when all of it
-  applies. This is the all-or-nothing commit of several exchanges, under the
-  name the kernel, the store and MCP already use.
+- A failed `replay` leaves the economy unchanged, and `ReplayError` names the
+  exchange that failed, counted from zero.
+- Lean's `Execution.replay` states it; `replay_rejection_atomic`,
+  `replay_success` and `replay_error_index` prove it, and the conformance
+  fixtures are regenerated from Lean.
+- Several exchanges committed together are a trace given to `replay`. `Apply`
+  gains `replay` when a recorder first needs to commit several exchanges at
+  once.
 
 A commitment that fits one rate stays one rate: a rate is already an atomic
 transition across accounts.

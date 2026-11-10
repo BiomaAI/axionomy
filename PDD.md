@@ -449,9 +449,9 @@ requirements, complete shortfalls, projected deltas, and non-balance issues
 without mutation. `is_applicable`, `applicable`, assessment, and application
 share one internal analysis path so their semantics cannot drift.
 
-`replay` mutates its target one exchange at a time. If a caller needs
-all-or-nothing validation of an entire trace relative to an existing economy,
-it uses `replayed`; the source remains unchanged.
+`replay` applies a whole trace or none of it: when an exchange fails, the
+economy is unchanged and the error names the failing exchange's position.
+`replayed` is the same on a copy, so its source never changes.
 
 ### 5.1 Construction, ordering, and serialization
 

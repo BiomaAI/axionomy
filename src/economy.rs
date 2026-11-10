@@ -103,7 +103,7 @@ type StructuralValidationResult<'a, O> = Result<&'a Rate<O>, Vec<ApplyError<O>>>
 
 pub type ApplyResult<O> = Result<Receipt<O>, ApplyError<O>>;
 
-pub type ReplayResult<O> = Result<Vec<Receipt<O>>, ApplyError<O>>;
+pub type ReplayResult<O> = Result<Vec<Receipt<O>>, ReplayError<O>>;
 
 pub type ModelBuildResult<O> = Result<Economy<O>, ModelBuildError<O>>;
 
@@ -659,22 +659,32 @@ impl<O: Ontology> Economy<O> {
         }
     }
 
-    /// Applies proposals in order and stops at the first error, retaining the
-    /// changes from earlier successful proposals. Returns ordered receipts only
-    /// when every proposal succeeds.
+    /// Applies a trace in order, all of it or none of it: returns the ordered
+    /// receipts when every exchange applies, and otherwise changes nothing
+    /// and names the exchange that failed.
     pub fn replay(&mut self, trace: &Trace<O>) -> ReplayResult<O> {
-        let mut receipts = Vec::new();
-        for proposal in trace.exchanges() {
-            receipts.push(self.apply(proposal.clone())?);
-        }
+        let (next, receipts) = self.clone().stepped(trace)?;
+        *self = next;
         Ok(receipts)
     }
 
-    /// Validates a complete trace on an isolated copy and returns its final state.
-    pub fn replayed(&self, trace: &Trace<O>) -> Result<Self, ApplyError<O>> {
-        let mut economy = self.clone();
-        economy.replay(trace)?;
-        Ok(economy)
+    /// The economy after a trace, if every exchange applies; `self` is
+    /// unchanged either way.
+    pub fn replayed(&self, trace: &Trace<O>) -> Result<Self, ReplayError<O>> {
+        self.clone().stepped(trace).map(|(economy, _)| economy)
+    }
+
+    fn stepped(mut self, trace: &Trace<O>) -> Result<(Self, Vec<Receipt<O>>), ReplayError<O>> {
+        let receipts = trace
+            .exchanges()
+            .iter()
+            .enumerate()
+            .map(|(index, exchange)| {
+                Economy::apply(&mut self, exchange.clone())
+                    .map_err(|error| ReplayError { index, error })
+            })
+            .collect::<Result<_, _>>()?;
+        Ok((self, receipts))
     }
 }
 
@@ -1201,6 +1211,21 @@ impl<O: Ontology> EconomicView<'_, O> {
     pub fn observation_key(&self) -> ObservationKey<O> {
         self.economy.observation_key_for(&self.visible)
     }
+}
+
+/// A trace that did not apply: the position of the exchange that failed,
+/// counted from zero, and why. A failed replay changes nothing.
+#[derive(Debug, Clone, Error, Serialize, JsonSchema)]
+#[serde(bound(
+    serialize = "O::Rate: Serialize, O::Role: Serialize, O::Account: Serialize, O::Asset: Serialize",
+))]
+#[schemars(
+    bound = "O::Rate: JsonSchema, O::Role: JsonSchema, O::Account: JsonSchema, O::Asset: JsonSchema"
+)]
+#[error("exchange {index}: {error}")]
+pub struct ReplayError<O: Ontology> {
+    pub index: usize,
+    pub error: ApplyError<O>,
 }
 
 #[derive(Debug, Clone, Error, Serialize, JsonSchema)]

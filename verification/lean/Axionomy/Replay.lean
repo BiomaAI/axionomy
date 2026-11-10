@@ -2,8 +2,8 @@ import Std
 
 /-! Trace composition for any deterministic transition function. The step
 invariant is an explicit premise, to be discharged by the exchange proof.
-This pure result models `replayed`; Rust's mutating `replay` keeps its accepted
-prefix on failure and must not be claimed to provide whole-trace rollback. -/
+This pure result models replay as Rust exposes it, `replay` and `replayed`
+alike: a whole trace applies or none of it does (`Execution.replay`). -/
 namespace Axionomy.Replay
 
 def run {State Action : Type} (step : State → Action → Option State) :
