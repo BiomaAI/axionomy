@@ -508,11 +508,11 @@ export function App() {
     {error && <div className="error-banner" role="alert">{error}</div>}
 
     {!loading && study && document && snapshot ? <QuantityFormats.Provider value={document.formats ?? {}}><main className={freshStudy === study ? "fresh-study" : undefined}>
-      <section className="alternative-bar"><div><span>Alternatives</span><strong>{study.documents.length} replayable results</strong></div><div role="tablist">{study.documents.map((candidate) => <button key={candidate.id} role="tab" aria-selected={candidate.id === document.id} onClick={() => selectDocument(candidate.id)}>{candidate.title.replace(`${study.problem.title} · `, "")}</button>)}</div></section>
+      <OutcomeTabs study={study} selected={document.id} onSelect={selectDocument} />
       <StrategyComparison study={study} selected={document.id} onSelect={selectDocument} />
-      <section className="document-heading"><div><span className="eyebrow">{study.instance.label} · {document.source.label} · {study.problem.key}/{document.id}{freshStudy === study ? " · just computed" : ""}</span><h1>{document.title}</h1><p>{document.description}</p><StudyKeyLine study={study} origin={studyOrigin} model={modelCounts} /></div><div className="objective-pills">{document.objectives.map((objective) => <div className="objective" key={objective.key}><span>{objective.label}</span><strong>{objective.value}</strong><small>{objective.direction}</small></div>)}</div></section>
+      <section className="document-heading"><div><span className="eyebrow">{study.problem.title} · {isStrategyDocument(study, document) ? documentName(study, document) : "Computed for comparison"}{freshStudy === study ? " · just computed" : ""}</span><h1>{document.title}</h1><p>{document.description}</p><StudyKeyLine study={study} origin={studyOrigin} model={modelCounts} /></div><div className="objective-pills">{document.objectives.map((objective) => <div className="objective" key={objective.key}><span>{objective.label}</span><strong>{objective.value}</strong><small>{objective.direction}</small></div>)}</div></section>
       {problem && <StudyMismatch problem={problem} study={study} origin={studyOrigin} requested={{ instance: instanceKey || problem.default_instance, strategy: strategyKey || problem.default_strategy, seed, budget }} canStudy={engine.canStudy} />}
-      <div className="view-tabs" role="tablist" aria-label="Studio evidence mode"><button type="button" role="tab" aria-selected={viewMode === "thinking"} onClick={() => selectView("thinking")}>Thinking <small>{active ? "live" : document.thinking.filter(isSearchObservation).length}</small></button><button type="button" role="tab" aria-selected={viewMode === "replay"} onClick={() => selectView("replay")}>Step-by-step replay <small>{document.frames.length}</small></button></div>
+      <div className="view-tabs" role="tablist" aria-label="Studio view"><button type="button" role="tab" aria-selected={viewMode === "thinking"} onClick={() => selectView("thinking")}>Thinking <small>{active ? "live" : document.thinking.filter(isSearchObservation).length}</small></button><button type="button" role="tab" aria-selected={viewMode === "replay"} onClick={() => selectView("replay")}>Step-by-step replay <small>{document.frames.length}</small></button></div>
       {viewMode === "thinking" ? <ThinkingWorkspace key={document.id} scene={document.initial.scene} observations={active ? events.flatMap((event) => event.kind === "thinking" ? [event.observation] : []) : document.thinking} active={active} /> : (() => {
         const surface = snapshot.scene?.surface;
         const sparseScene = surface?.kind === "graph" && surface.nodes.length <= 6;
@@ -550,7 +550,7 @@ export function App() {
       <section className={`evidence-grid${hasAnalysis ? "" : " no-analysis"}`}>
         <div className="panel transition-panel"><PanelHeading kicker="One step" title={frame?.exchange.rate.label ?? "Initial state"} /><Transition frame={frame} steps={document.frames.length} /></div>
         <div className="panel proposal-panel"><PanelHeading kicker="Rule checks" title="Moves that should be refused" aside={`${document.proposals.length} ${document.proposals.length === 1 ? "check" : "checks"}`} /><ProposalInspector proposals={document.proposals} /></div>
-        {hasAnalysis && <div className="panel analysis-panel"><PanelHeading kicker="Tradeoffs" title={document.pareto_fronts[0]?.title ?? "Search evidence"} /><Suspense fallback={<div className="empty-state">Loading analysis…</div>}><ParetoChart document={document} onSelect={selectPareto} /></Suspense><Telemetry document={document} /></div>}
+        {hasAnalysis && <div className="panel analysis-panel"><PanelHeading kicker="Tradeoffs" title={document.pareto_fronts[0]?.title ?? "Search telemetry"} /><Suspense fallback={<div className="empty-state">Loading analysis…</div>}><ParetoChart document={document} onSelect={selectPareto} /></Suspense><Telemetry document={document} /></div>}
       </section>
 
       <section className={`definition-grid${hasObservations ? "" : " no-observations"}`}>
@@ -593,9 +593,40 @@ function VerifiedStandings({ events, live }: { events: StudioEvent[]; live: bool
 type StudyOrigin = "saved" | "computed" | "file";
 type RequestedStudy = { instance: string; strategy: string; seed: number; budget: number };
 
-/** How a document is named wherever Studio lists the outcomes of a study. */
+/** A document a strategy produced, as opposed to one computed beside them. */
+function isStrategyDocument(study: Study, document: ViewDocument): boolean {
+  return study.problem.strategies.some((strategy) => strategy.key === document.id);
+}
+
+/**
+ * How an outcome is named wherever Studio lists a study's outcomes: by its
+ * strategy's label, as in the Strategy picker. An outcome no strategy names
+ * is named by its own title, without the problem's prefix.
+ */
 function documentName(study: Study, document: ViewDocument): string {
-  return document.title.replace(`${study.problem.title} · `, "");
+  const strategy = study.problem.strategies.find((candidate) => candidate.key === document.id);
+  if (strategy) return strategy.label;
+  const separator = document.title.indexOf(" · ");
+  if (separator < 0) return document.title;
+  const prefix = document.title.slice(0, separator);
+  const name = document.title.slice(separator + 3);
+  const capitalized = name.charAt(0).toUpperCase() + name.slice(1);
+  return prefix.endsWith(" Pareto") ? `Pareto: ${name}` : capitalized;
+}
+
+/** The study's outcomes: one per strategy, then any it computed for comparison. */
+function OutcomeTabs({ study, selected, onSelect }: { study: Study; selected: string; onSelect: (id: string) => void }) {
+  const strategies = study.documents.filter((candidate) => isStrategyDocument(study, candidate));
+  const others = study.documents.filter((candidate) => !isStrategyDocument(study, candidate));
+  const tab = (candidate: ViewDocument) => <button key={candidate.id} role="tab" aria-selected={candidate.id === selected} onClick={() => onSelect(candidate.id)}>{documentName(study, candidate)}</button>;
+  return <section className="alternative-bar">
+    <div><span>Outcomes</span><strong>{study.documents.length} replayable {study.documents.length === 1 ? "result" : "results"}</strong></div>
+    <div role="tablist" aria-label="Outcomes">
+      {strategies.map(tab)}
+      {others.length > 0 && <span className="outcome-group" title="The study computed these beside its strategies; none of them is a strategy you can pick.">Also computed for comparison</span>}
+      {others.map(tab)}
+    </div>
+  </section>;
 }
 
 function studyKeyWords(problem: ProblemDescriptor | Study["problem"], key: RequestedStudy): string {
@@ -844,19 +875,22 @@ function phaseLabel(phase: string): string {
 function StrategyComparison({ study, selected, onSelect }: { study: Study; selected: string; onSelect: (id: string) => void }) {
   return <details className="strategy-comparison" aria-label="Outcome comparison" open>
     <summary><span>Compare outcomes</span><strong>Every strategy and what it cost, side by side</strong><i aria-hidden="true">▸</i></summary>
-    <div className="comparison-scroll"><table><thead><tr><th>Outcome</th><th>Result</th><th>Initial → final state</th><th>Trace</th><th>Search evidence</th></tr></thead><tbody>{study.documents.map((candidate) => {
+    <div className="comparison-scroll"><table><thead><tr><th>Outcome</th><th>Result</th><th>Initial → final state</th><th>Trace</th><th>Algorithm and its work</th></tr></thead><tbody>{study.documents.map((candidate) => {
       const series = candidate.telemetry.find((entry) => entry.algorithm !== "Model size");
-      const work = series ? [...series.points].reverse().find((point) => ["generated", "expanded", "iteration", "sample"].includes(point.kind)) : undefined;
+      // The Trace column already counts the exchanges; this one counts the
+      // algorithm's own work, each number with the words its algorithm gave it.
+      const steps = String(candidate.frames.length);
+      const work = series?.points.filter((point) => !(point.value === steps && ["generated", "expanded", "transitions", "message"].includes(point.kind))) ?? [];
       const finalMetrics = (candidate.frames.at(-1)?.after.scene ?? candidate.initial.scene)?.metrics.slice(0, 3) ?? [];
       return <tr key={candidate.id} className={candidate.id === selected ? "selected" : undefined}>
-        <td><button type="button" onClick={() => onSelect(candidate.id)}>{candidate.title.replace(`${study.problem.title} · `, "")}</button></td>
+        <td><button type="button" onClick={() => onSelect(candidate.id)}>{documentName(study, candidate)}</button>{!isStrategyDocument(study, candidate) && <small className="outcome-note">for comparison</small>}</td>
         <td>{candidate.objectives.length > 0 ? candidate.objectives.map((objective) => `${objective.label}: ${objective.value}`).join(" · ") : "Feasibility outcome"}</td>
         <td>{finalMetrics.map((metric) => {
           const initial = candidate.initial.scene?.metrics.find((entry) => entry.key === metric.key);
           return <div key={metric.key}>{metric.label}: {initial && initial.value !== metric.value ? `${initial.value} → ` : ""}{metric.value}{metric.unit ? ` ${metric.unit}` : ""}</div>;
         })}</td>
         <td>{candidate.frames.length} {candidate.frames.length === 1 ? "step" : "steps"}</td>
-        <td>{series ? `${series.algorithm} · ${series.exact ? "exact" : "sampled"}${work ? ` · ${work.value} ${work.kind.replaceAll("_", " ")}` : ""}` : "Replay only"}</td>
+        <td>{series ? [series.algorithm, series.exact ? "exact" : "sampled", ...(work.length > 0 ? work.map((point) => `${point.value} ${point.label}`) : ["no search counters"])].join(" · ") : "No algorithm telemetry"}</td>
       </tr>;
     })}</tbody></table></div>
   </details>;
@@ -868,7 +902,7 @@ function LeaderboardDock({ document, snapshot, previous, position, selectedKey, 
   const previousBoard = previous?.leaderboards.find((leaderboard) => leaderboard.key === selected.key);
   const snapshots = [document.initial, ...document.frames.slice(0, position).map((frame) => frame.after)];
   return <section className="leaderboard-dock rail" aria-label="Replay-derived leaderboards">
-    <header><div><span>Live comparative outcomes</span><strong>Who is winning depends on what you value</strong></div><div className="leaderboard-step">Economic step <b>{snapshot.index}</b></div></header>
+    <header><div><span>Standings at this replay step</span><strong>Who is winning depends on what you value</strong></div><div className="leaderboard-step">Economic step <b>{snapshot.index}</b></div></header>
     <label className="leaderboard-selector"><span>Ranking dimension</span><select name="leaderboard" aria-label="Leaderboard ranking dimension" value={selected.key} onChange={(event) => onSelect(event.target.value)}>{snapshot.leaderboards.map((leaderboard) => <option key={leaderboard.key} value={leaderboard.key}>{leaderboard.label} · {leaderboard.direction}</option>)}</select></label>
     <div className="leaderboard-explanation"><strong>{selected.label}</strong><span>{selected.description}</span></div>
     <div className="leaderboard-entries">{selected.entries.map((entry) => {

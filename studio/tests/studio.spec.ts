@@ -205,8 +205,12 @@ test("renders the generic cockpit for every canonical problem without browser er
     "perishables", "work-league",
   ];
   for (const problem of problems) {
-    await page.getByRole("combobox", { name: "Problem", exact: true }).selectOption(problem);
-    await expect(page.locator(".document-heading .eyebrow")).toContainText(problem);
+    const picker = page.getByRole("combobox", { name: "Problem", exact: true });
+    await picker.selectOption(problem);
+    // The heading names the problem as the picker does, in words, not keys.
+    const title = (await picker.locator("option:checked").textContent())!;
+    await expect(page.locator(".document-heading .eyebrow")).toContainText(title);
+    await expect(page.locator(".document-heading .eyebrow")).not.toContainText("/");
     await expect(page.locator(".stage .world-panel")).toBeVisible();
     await expect(page.locator(".stage .accounts-panel")).toBeVisible();
     await expect(page.getByText("Rates, roles, goals & invariants")).toBeVisible();
@@ -738,6 +742,19 @@ test("shows fleet cargo staging, shared-road capacity and funded delivery outcom
   await expect(page.locator(".scene-metric").filter({ hasText: "Orders on time" })).toContainText("4");
   await expect(page.locator(".replay-proof")).toContainText("replay verified");
   await page.locator(".graph-scene").screenshot({ path: "/tmp/axionomy-depth-fleet.png", animations: "disabled" });
+});
+
+test("names each outcome as its strategy and sets apart those computed for comparison", async ({ page }) => {
+  for (const [problem, extra] of [["perishables", "Rebalance cold storage"], ["workshop", "Pareto: highest revenue"], ["mission", "Rendezvous before deployment"]]) {
+    await page.goto(`/?problem=${problem}&instance=showcase&view=replay&step=0&seed=17&budget=128`);
+    await expect(page.getByRole("tablist", { name: "Outcomes" })).toBeVisible();
+    const strategies = await page.getByRole("combobox", { name: "Strategy" }).locator("option").allTextContents();
+    await expect(page.getByRole("tablist", { name: "Outcomes" }).getByRole("tab")).toHaveText([...strategies, extra]);
+    await expect(page.locator(".outcome-group")).toHaveText("Also computed for comparison");
+  }
+  await page.goto("/?problem=lending&instance=showcase&view=replay&step=0&seed=17&budget=128");
+  await expect(page.getByRole("heading", { name: "Lending · least interest" })).toBeVisible();
+  await expect(page.locator(".document-heading .eyebrow")).toHaveText("Lending market · Least interest");
 });
 
 test("grows thinking cards around wrapped labels", async ({ page }) => {

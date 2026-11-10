@@ -107,6 +107,8 @@ button.danger { color: var(--debit); }
 .alternative-bar > div:first-child strong { display: block; margin-top: 4px; font-size: 12px; }
 .alternative-bar [role="tablist"], .proposal-tabs { display: flex; gap: 5px; flex-wrap: wrap; }
 .alternative-bar button, .proposal-tabs button { min-height: 30px; padding: 0 9px; color: var(--muted); font-size: 10px; }
+.outcome-group { align-self: center; margin-left: 10px; padding-left: 12px; border-left: 1px solid var(--line-strong); color: var(--muted); font: 10px var(--mono); letter-spacing: .06em; text-transform: uppercase; }
+.outcome-note { display: block; margin-top: 3px; color: var(--muted); font: 10px var(--mono); }
 button[aria-selected="true"] { color: var(--accent); border-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, var(--surface)); }
 
 /* Outcome comparison collapses once an outcome is chosen; opening it is a

@@ -188,7 +188,7 @@ Studio remain outer adapters.
 - Replay-derived accounts, assessments, receipts, rule inspection, and actor views.
 - Graph, grid, matrix, and timeline pictures with semantic icons, exact metrics, and replay-derived motion linked to accounts and receipts.
 - Strategy comparison, Pareto tradeoffs, rule checks, native SSE, and Web Worker Wasm.
-- Shareable deep links to any problem, strategy, evidence view, replay step, and leaderboard.
+- Shareable deep links to any problem, strategy, Thinking or replay view, replay step, and leaderboard.
 
 The core contains no application ontology or search algorithm. Problem assets
 and specialized solvers compile against the same public kernel API available

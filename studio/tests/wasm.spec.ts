@@ -37,6 +37,6 @@ test("browser Worker streams the same verified Work League frames", async ({ pag
   await expect(page.getByText("New study computed and loaded")).toBeVisible({ timeout: 60_000 });
   await page.getByRole("tab", { name: /Step-by-step replay/ }).click();
   await expect(page.getByText("Who is winning depends on what you value")).toBeVisible();
-  await expect(page.locator(".document-heading .eyebrow")).toContainText("Micro");
+  await expect(page.getByLabel("Study on screen")).toContainText("Micro");
   expect(Number(await page.getByRole("slider", { name: "Trace position" }).getAttribute("max"))).toBeLessThan(100);
 });

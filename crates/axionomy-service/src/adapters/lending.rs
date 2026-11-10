@@ -28,14 +28,14 @@ pub(super) fn build(
     for (strategy, title, description, solution, algorithm) in [
         (
             "least-interest",
-            "Bridge loan · least interest",
+            "Lending · least interest",
             "Dijkstra search charges each closed period's interest to the plan. It borrows the shortfall just before the bill is due, keeps the loan safe through the price drop, and repays from each installment as it arrives.",
             &cheapest,
             "Dijkstra search",
         ),
         (
             "fewest-steps",
-            "Bridge loan · fewest steps",
+            "Lending · fewest steps",
             "Breadth-first search counts exchanges, not interest. It borrows in the first period and repays once at the end, so the loan runs longest.",
             &fewest,
             "breadth-first search",
@@ -84,7 +84,7 @@ pub(super) fn build(
         DocumentSpec {
             problem: PROBLEM,
             strategy: "over-borrowed",
-            title: "Bridge loan · over-borrowed",
+            title: "Lending · over-borrowed",
             description: "The borrower posts all its collateral and borrows to the limit in the first period. Interest at high utilization or the price drop pushes the loan past its liquidation threshold, the clock refuses to close the period, and a keeper repays the loan and seizes collateral plus the bonus.",
             source_label: SOURCE,
         },
@@ -106,7 +106,7 @@ pub(super) fn build(
         DocumentSpec {
             problem: PROBLEM,
             strategy: "first-depositor-attack",
-            title: "Fresh market · first-depositor attack",
+            title: "Lending · first-depositor attack on a fresh market",
             description: "An attacker deposits one unit into a fresh market and donates heavily to inflate the share price before a victim deposits. Shares locked at genesis absorb the donation: the victim loses less than one share's worth to rounding, and the attacker cannot recover what it gave.",
             source_label: SOURCE,
         },

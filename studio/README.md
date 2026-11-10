@@ -48,9 +48,12 @@ until it is on screen.
 Each problem advertises Micro, Showcase, and Stress instances. Showcase is the
 default and is also the pre-built offline study; Micro and Stress are live
 engine choices. The comparison surface puts replayable outcomes, objective
-values, trace lengths, and algorithm evidence side by side, while uniform
-complexity telemetry exposes accounts, rates, transitions, rejection proofs,
-and alternatives across every domain.
+values, trace lengths, and each algorithm's own work (its counters, in the
+words it reports them) side by side, while uniform complexity telemetry exposes
+accounts, rates, transitions, rejection proofs, and alternatives across every
+domain. An outcome is named by its strategy's label, as in the Strategy picker;
+outcomes a study computes beside its strategies are listed apart as computed
+for comparison. The heading names the problem as the picker does.
 
 The Micro Mission's coordinated replay executes repeated ISMCTS decisions, conditions
 beliefs after each public action and required Nature response, and retains the
@@ -126,7 +129,7 @@ the scrubber moves. A compact ranking-dimension selector exposes every board
 without hiding choices in a horizontal scroller. Rank evidence links back to
 the participant account; it is never a second score store.
 
-Problem, instance, strategy, document, evidence view, replay step, selected
+Problem, instance, strategy, document, Thinking or replay view, replay step, selected
 leaderboard, seed, and budget are encoded in the query string. **Copy link**
 therefore shares the exact inspection state on the native server, browser Wasm,
 or GitHub Pages. Major selections participate in Back/Forward history, while

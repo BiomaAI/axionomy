@@ -173,7 +173,7 @@ test("a link to a study that was never saved says which study is on screen inste
 
 test("a link to a missing outcome or past the last step says what opened instead", async () => {
   const cleanup = renderAt("/?problem=maze&document=dijkstra&step=5");
-  expect(await screen.findByText("The linked outcome “dijkstra” is not in the saved Key-door maze study; opened Maze · least energy instead.")).toBeInTheDocument();
+  expect(await screen.findByText("The linked outcome “dijkstra” is not in the saved Key-door maze study; opened Least energy instead.")).toBeInTheDocument();
   expect(await screen.findByText("The link’s step 5 is past the end of this replay, which has 0 steps; Studio opened its final state.")).toBeInTheDocument();
   cleanup();
 });

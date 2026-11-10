@@ -163,10 +163,31 @@ export function Telemetry({ document }: { document: ViewDocument }) {
   if (document.telemetry.length === 0) return <div className="empty-state">No search telemetry was published.</div>;
   return <div className="telemetry-list">
     {document.telemetry.map((series) => <section key={series.algorithm}>
-      <h3>{series.algorithm}<span>{series.exact ? "exact" : "sampled"}</span></h3>
-      <div>{series.points.map((point) => <article key={`${point.sequence}:${point.kind}`}><strong>{point.value}</strong><span>{point.label}</span><small>{point.kind.replaceAll("_", " ")}</small></article>)}</div>
+      {/* Model size counts the encoding; only an algorithm's counts can be sampled. */}
+      <h3>{series.algorithm}{series.algorithm !== "Model size" && <span>{series.exact ? "exact counts" : "sampled estimates"}</span>}</h3>
+      <div>{series.points.map((point) => <article key={`${point.sequence}:${point.kind}`}><strong>{point.value}</strong><span>{point.label}</span><small>{telemetryKindWords(point.kind)}</small></article>)}</div>
     </section>)}
   </div>;
+}
+
+type TelemetryKind = ViewDocument["telemetry"][number]["points"][number]["kind"];
+
+/** What a telemetry number measures, in words. */
+function telemetryKindWords(kind: TelemetryKind): string {
+  const words: Record<TelemetryKind, string> = {
+    expanded: "Search work",
+    generated: "Search output",
+    iteration: "Search iterations",
+    sample: "Samples",
+    information_set: "Information sets",
+    accounts: "Model",
+    rates: "Model",
+    transitions: "Trace",
+    constraints: "Rule checks",
+    alternatives: "Compared",
+    message: "Result",
+  };
+  return words[kind];
 }
 
 export function ModelExplorer({ document }: { document: ViewDocument }) {
