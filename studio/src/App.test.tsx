@@ -2,7 +2,7 @@ import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { vi } from "vitest";
-import { App, DEFAULT_BUDGET, DEFAULT_SEED } from "./App";
+import { App, DEFAULT_BUDGET, DEFAULT_SEED, ThinkingWorkspace } from "./App";
 import { nativeEngine, type EngineEventListener } from "./engine";
 import type { Study } from "./api";
 import openapi from "../openapi.json";
@@ -176,4 +176,34 @@ test("a link with an unreadable number says so and uses the default", async () =
   expect(screen.getByText(`The link’s budget “0” is not a whole number of at least 1; Studio used budget ${DEFAULT_BUDGET}.`)).toBeInTheDocument();
   expect(screen.getByRole("spinbutton", { name: "Seed" })).toHaveValue(DEFAULT_SEED);
   cleanup();
+});
+
+type Observation = import("./api").SearchObservation;
+const observation = (sequence: number, phase: string, kind: Observation["kind"], label: string): Observation => ({
+  sequence, phase, algorithm: phase, kind, label, completed: sequence, total: 4, metrics: [],
+});
+
+test("saved thinking starts on the last search checkpoint, not on bookkeeping", () => {
+  render(<ThinkingWorkspace active={false} observations={[
+    observation(0, "prepare", "phase", "Preparing the Showcase instance of Key-door maze"),
+    observation(1, "a-star-frontier", "frontier", "Expanded Start"),
+    observation(2, "a-star-solution", "incumbent", "Solution accepted at Exit"),
+    observation(3, "documents", "document", "Recorded the replay “Maze · least energy”"),
+  ]} />);
+  expect(screen.getByText("2 search checkpoints")).toBeInTheDocument();
+  expect(screen.getByRole("slider", { name: "Thinking position" })).toHaveValue("2");
+  expect(screen.getByText("A* solution")).toBeInTheDocument();
+  expect(screen.getByRole("button", { current: "step" })).toHaveTextContent("Solution accepted at Exit");
+  expect(screen.getByText("Frontier · Solutions")).toBeInTheDocument();
+});
+
+test("a strategy that records no search says so instead of listing bookkeeping", () => {
+  render(<ThinkingWorkspace active={false} observations={[
+    observation(0, "prepare", "phase", "Preparing the Showcase instance of Exact cover"),
+    observation(1, "documents", "document", "Recorded the replay “Exact cover · Algorithm X”"),
+  ]} />);
+  expect(screen.getByText("This strategy records no search")).toBeInTheDocument();
+  expect(screen.getByText("0 search checkpoints")).toBeInTheDocument();
+  expect(screen.queryByText("Preparing the Showcase instance of Exact cover")).not.toBeInTheDocument();
+  expect(screen.queryByRole("slider", { name: "Thinking position" })).not.toBeInTheDocument();
 });

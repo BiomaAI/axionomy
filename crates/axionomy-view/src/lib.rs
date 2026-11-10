@@ -1381,7 +1381,8 @@ pub enum SearchObservationKindView {
     Candidate,
     Incumbent,
     Prune,
-    Artifact,
+    /// A replayable document the study has recorded; bookkeeping, not search.
+    Document,
 }
 
 /// A bounded, transport-neutral view of solver work. Search crates expose

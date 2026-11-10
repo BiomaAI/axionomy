@@ -138,8 +138,11 @@ Studio cannot open is reported, never replaced silently.
 transport only scrubs the selected study's already verified exchange trace.
 The separate Thinking view follows typed phase, rollout, tree, and frontier
 observations, and the completed study retains a bounded copy so a fast study
-has the same inspectable evidence as a slow live stream. Completion leaves a
-persistent receipt and marks the newly loaded study.
+has the same inspectable evidence as a slow live stream. A saved review starts
+on the last search checkpoint: preparing the study and recording its documents
+are bookkeeping around the search, and a strategy that records no search says
+so instead of listing that bookkeeping. Completion leaves a persistent receipt
+and marks the newly loaded study.
 
 The client chooses capabilities in order: a currently healthy native HTTP/SSE
 engine, the Rust/Wasm service in an isolated Web Worker, then committed static

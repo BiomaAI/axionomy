@@ -142,7 +142,7 @@ pub(super) fn build(
             offset as u64 + 1,
             configurations.len() as u64,
             format!(
-                "replayed {title}: {} atomic exchanges",
+                "Replayed {title}: {} atomic exchanges",
                 outcome.trace().exchanges().len()
             ),
         );

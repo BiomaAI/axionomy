@@ -156,6 +156,10 @@ h1 { font: 400 clamp(22px, 2.4vw, 32px)/1.1 var(--serif); letter-spacing: 0; mar
 .thinking-summary span, .thinking-summary strong { display: block; }
 .thinking-summary span { color: var(--muted); font: 8px var(--mono); text-transform: uppercase; }
 .thinking-summary strong { margin-top: 7px; font: 12px var(--mono); color: var(--brass); text-transform: capitalize; }
+.thinking-workspace:has(> .thinking-empty) { min-height: 0; }
+.thinking-empty { max-width: 640px; margin: 0 auto; padding: 56px 24px; text-align: center; }
+.thinking-empty strong { display: block; color: var(--text); font: 400 20px var(--serif); }
+.thinking-empty p { margin: 10px 0 0; color: var(--muted); font-size: 12px; line-height: 1.55; }
 .thinking-workspace > progress { display: block; width: calc(100% - 30px); height: 7px; margin: 14px 15px 0; accent-color: var(--accent); }
 .thinking-scrubber { display: grid; grid-template-columns: 170px minmax(0, 1fr); align-items: center; gap: 14px; padding: 10px 15px; border-bottom: 1px solid var(--line); }
 .thinking-scrubber label { display: flex; justify-content: space-between; gap: 10px; color: var(--muted); font: 8px var(--mono); text-transform: uppercase; }

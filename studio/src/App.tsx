@@ -492,7 +492,7 @@ export function App() {
       <StrategyComparison study={study} selected={document.id} onSelect={selectDocument} />
       <section className="document-heading"><div><span className="eyebrow">{study.instance.label} · {document.source.label} · {study.problem.key}/{document.id}{freshStudy === study ? " · just computed" : ""}</span><h1>{document.title}</h1><p>{document.description}</p><StudyKeyLine study={study} origin={studyOrigin} model={modelCounts} /></div><div className="objective-pills">{document.objectives.map((objective) => <div className="objective" key={objective.key}><span>{objective.label}</span><strong>{objective.value}</strong><small>{objective.direction}</small></div>)}</div></section>
       {problem && <StudyMismatch problem={problem} study={study} origin={studyOrigin} requested={{ instance: instanceKey || problem.default_instance, strategy: strategyKey || problem.default_strategy, seed, budget }} canStudy={engine.canStudy} />}
-      <div className="view-tabs" role="tablist" aria-label="Studio evidence mode"><button type="button" role="tab" aria-selected={viewMode === "thinking"} onClick={() => selectView("thinking")}>Thinking <small>{active ? "live" : document.thinking.length}</small></button><button type="button" role="tab" aria-selected={viewMode === "replay"} onClick={() => selectView("replay")}>Step-by-step replay <small>{document.frames.length}</small></button></div>
+      <div className="view-tabs" role="tablist" aria-label="Studio evidence mode"><button type="button" role="tab" aria-selected={viewMode === "thinking"} onClick={() => selectView("thinking")}>Thinking <small>{active ? "live" : document.thinking.filter(isSearchObservation).length}</small></button><button type="button" role="tab" aria-selected={viewMode === "replay"} onClick={() => selectView("replay")}>Step-by-step replay <small>{document.frames.length}</small></button></div>
       {viewMode === "thinking" ? <ThinkingWorkspace key={document.id} scene={document.initial.scene} observations={active ? events.flatMap((event) => event.kind === "thinking" ? [event.observation] : []) : document.thinking} active={active} /> : (() => {
         const surface = snapshot.scene?.surface;
         const sparseScene = surface?.kind === "graph" && surface.nodes.length <= 6;
@@ -628,19 +628,47 @@ function CompletionBanner({ notice, onDismiss }: { notice: CompletionNotice; onD
   </section>;
 }
 
+/**
+ * Search checkpoints are thinking; preparing the study and recording its
+ * documents are bookkeeping around it.
+ */
+export function isSearchObservation(observation: SearchObservation): boolean {
+  return observation.kind !== "phase" && observation.kind !== "document";
+}
+
+/** Where a saved review starts: the last thing the search considered. */
+function reviewCursor(observations: SearchObservation[]): number {
+  for (let index = observations.length - 1; index >= 0; index -= 1) {
+    if (isSearchObservation(observations[index])) return index;
+  }
+  return Math.max(0, observations.length - 1);
+}
+
 /** Thinking is what a policy does when it simulates before it chooses: the search's observations, live or saved with the study. */
-function ThinkingWorkspace({ scene, observations, active }: { scene?: Scene | null; observations: SearchObservation[]; active: boolean }) {
-  const [cursor, setCursor] = useState(Math.max(0, observations.length - 1));
+export function ThinkingWorkspace({ scene, observations, active }: { scene?: Scene | null; observations: SearchObservation[]; active: boolean }) {
+  const [cursor, setCursor] = useState(() => active ? Math.max(0, observations.length - 1) : reviewCursor(observations));
+  // Live, follow the newest checkpoint; saved, start on the last search one.
   useEffect(() => {
-    if (active || cursor >= observations.length) setCursor(Math.max(0, observations.length - 1));
-  }, [active, cursor, observations.length]);
+    setCursor(active ? Math.max(0, observations.length - 1) : reviewCursor(observations));
+  }, [active, observations]);
   const visibleObservations = observations.slice(0, Math.min(cursor + 1, observations.length));
   const latest = visibleObservations.at(-1);
-  const kinds = [...new Set(observations.map((observation) => observation.kind))];
+  const searches = observations.filter(isSearchObservation);
+  const kinds = [...new Set(searches.map((observation) => observation.kind))];
   const searchScene = useMemo(() => thinkingScene(scene, visibleObservations), [scene, visibleObservations]);
+  const header = <header><div><span className={active ? "spinner" : "thinking-complete"} aria-hidden="true">{active ? "" : "✓"}</span><div><strong>{active ? "Live thinking" : "Saved thinking"}</strong><small>{active ? "What the search considers as it works" : "Saved with the study, so you can review it later"}</small></div></div><span>{searches.length} search {searches.length === 1 ? "checkpoint" : "checkpoints"}</span></header>;
+  if (!active && searches.length === 0) {
+    return <section className="thinking-workspace retained" aria-label="Thinking">
+      {header}
+      <div className="thinking-empty" role="note">
+        <strong>This strategy records no search</strong>
+        <p>The study saved only its preparation and the documents it produced: there are no frontier, rollout or search-tree checkpoints to step through. The step-by-step replay shows every exchange this outcome chose, and Compare outcomes lists any search totals its algorithm reported.</p>
+      </div>
+    </section>;
+  }
   return <section className={`thinking-workspace ${active ? "live" : "retained"}`} aria-label="Thinking">
-    <header><div><span className={active ? "spinner" : "thinking-complete"} aria-hidden="true">{active ? "" : "✓"}</span><div><strong>{active ? "Live thinking" : "Saved thinking"}</strong><small>{active ? "What the search considers as it works" : "Saved with the study, so you can review it later"}</small></div></div><span>{observations.length} observations</span></header>
-    {latest && <div className="thinking-summary"><div><span>Current phase</span><strong>{phaseLabel(latest.phase)}</strong></div><div><span>Algorithm</span><strong>{algorithmLabel(latest.algorithm)}</strong></div><div><span>Progress</span><strong>{latest.total === 0 ? `${latest.completed} expanded` : `${latest.completed} / ${latest.total}`}</strong></div><div><span>Evidence</span><strong>{kinds.join(" · ").replaceAll("_", " ")}</strong></div></div>}
+    {header}
+    {latest && <div className="thinking-summary"><div><span>Current phase</span><strong>{phaseLabel(latest.phase)}</strong></div><div><span>Algorithm</span><strong>{algorithmLabel(latest.algorithm)}</strong></div><div><span>Progress</span><strong>{latest.total === 0 ? `${latest.completed} expanded` : `${latest.completed} / ${latest.total}`}</strong></div><div><span>Checkpoint kinds</span><strong>{kinds.length > 0 ? kinds.map(kindLabel).join(" · ") : "None yet"}</strong></div></div>}
     {latest && latest.total > 0 && <progress max={latest.total} value={Math.min(latest.completed, latest.total)} aria-label="Thinking progress" />}
     {observations.length > 1 && <div className="thinking-scrubber"><label><span>Exploration checkpoint</span><strong>{Math.min(cursor + 1, observations.length)} / {observations.length}</strong></label><input name="thinking-position" type="range" min="0" max={observations.length - 1} value={Math.min(cursor, observations.length - 1)} onChange={(event) => setCursor(Number(event.target.value))} aria-label="Thinking position" /></div>}
     <div className={`thinking-body ${searchScene ? "with-map" : "stream-only"}`}>
@@ -657,7 +685,9 @@ function algorithmLabel(algorithm: string): string {
     dijkstra: "Dijkstra",
     "exact-pareto-search": "Exact Pareto search",
   };
-  return labels[algorithm] ?? algorithm.replaceAll("-", " ");
+  // A phase such as `a-star-frontier` names its algorithm and what it reports.
+  const base = algorithm.replace(/-(frontier|solution)$/, "");
+  return labels[base] ?? base.replaceAll("-", " ");
 }
 
 function thinkingScene(scene: Scene | null | undefined, observations: SearchObservation[]): Scene | undefined {
@@ -705,9 +735,24 @@ function observationGlyph(kind: SearchObservation["kind"]): Parameters<typeof Sc
     case "candidate": return "token";
     case "incumbent": return "goal";
     case "prune": return "hazard";
-    case "artifact": return "package";
+    case "document": return "package";
     case "phase": return "clock";
   }
+}
+
+function kindLabel(kind: SearchObservation["kind"]): string {
+  const labels: Record<typeof kind, string> = {
+    phase: "Progress",
+    frontier: "Frontier",
+    rollout: "Rollouts",
+    tree: "Search tree",
+    belief: "Beliefs",
+    candidate: "Candidates",
+    incumbent: "Solutions",
+    prune: "Pruning",
+    document: "Documents",
+  };
+  return labels[kind];
 }
 
 function familyLabel(family: NonNullable<Study["problem"]>["family"]): string {
@@ -755,7 +800,10 @@ function capabilityLabel(capability: Study["problem"]["capabilities"][number]): 
 function phaseLabel(phase: string): string {
   const labels: Record<string, string> = {
     prepare: "Preparing",
-    artifact: "Building the result",
+    documents: "Recording documents",
+    "fleet-dispatch": "Fleet dispatch",
+    "center-opponent": "Game against the center-first opponent",
+    "search-opponent": "Game against the depth-five opponent",
     "monte-carlo": "Monte Carlo sampling",
     "pareto-sampling": "Sampling the frontier",
     mcts: "MCTS",

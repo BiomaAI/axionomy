@@ -978,11 +978,19 @@ pub(crate) fn study(
         .find(|(descriptor, _)| descriptor.key == key.problem)
         .ok_or_else(|| ServiceError::UnknownProblem(key.problem.clone()))?;
     let mut progress = ProgressSink::new(control, observer);
+    let instance = descriptor
+        .instances
+        .iter()
+        .find(|candidate| candidate.profile == key.instance)
+        .map_or_else(
+            || key.instance.to_string(),
+            |instance| instance.label.clone(),
+        );
     let _ = progress.emit(
         slug("prepare"),
         0,
         1,
-        format!("preparing {} · {}", key.problem, key.instance),
+        format!("Preparing the {instance} instance of {}", descriptor.title),
     );
     progress.ensure()?;
     let mut study = build(key, &descriptor, &mut progress)?;
@@ -996,10 +1004,10 @@ pub(crate) fn study(
     }
     for (offset, document) in study.documents.iter().enumerate() {
         let _ = progress.emit(
-            slug("artifact"),
+            slug("documents"),
             offset as u64 + 1,
             study.documents.len() as u64,
-            format!("derived {}", document.title),
+            format!("Recorded the replay “{}”", document.title),
         );
         progress.ensure()?;
     }
@@ -1238,8 +1246,8 @@ fn observation_kind(phase: &PhasePath) -> SearchObservationKindView {
         SearchObservationKindView::Rollout
     } else if phase.contains("mcts") || phase.contains("tree") {
         SearchObservationKindView::Tree
-    } else if phase == "artifact" {
-        SearchObservationKindView::Artifact
+    } else if phase == "documents" {
+        SearchObservationKindView::Document
     } else {
         SearchObservationKindView::Phase
     }

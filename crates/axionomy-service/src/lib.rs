@@ -1075,6 +1075,23 @@ mod tests {
             for rate in document.model.iter().flat_map(|model| &model.rates) {
                 name(&mut labels, "rate", &rate.rate);
             }
+            // Thinking is read as a sequence of sentences, bookkeeping included.
+            for observation in &document.thinking {
+                let label = observation.label.as_str();
+                assert!(
+                    !reads_as_code(label)
+                        && label
+                            .chars()
+                            .next()
+                            .is_some_and(|first| !first.is_lowercase()),
+                    "{problem}: thinking label `{label}` reads as code"
+                );
+                assert_eq!(
+                    observation.phase.as_str() == "documents",
+                    observation.kind == axionomy_view::SearchObservationKindView::Document,
+                    "{problem}: only recorded documents are document observations"
+                );
+            }
             for ((kind, label), keys) in &labels {
                 assert!(
                     !reads_as_code(label),

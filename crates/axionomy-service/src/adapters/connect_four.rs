@@ -36,7 +36,7 @@ pub(super) fn build(
             completed as u64,
             total as u64,
             format!(
-                "action {}/{} · {}/{} MCTS iterations · {} nodes",
+                "Move {}/{} · {}/{} MCTS iterations · {} nodes",
                 state.moves_completed() + 1,
                 state.maximum_moves(),
                 state.iterations_completed(),
@@ -93,16 +93,18 @@ pub(super) fn build(
     }
     let mut documents = vec![view];
     {
-        for (strategy, title, opponent) in [
+        for (strategy, title, opponent, named) in [
             (
                 "center-opponent",
                 "Connect Four · against a center-first opponent",
                 connect_four::Opponent::CenterFirst,
+                "Center-first opponent",
             ),
             (
                 "search-opponent",
                 "Connect Four · against a depth-five opponent",
                 connect_four::Opponent::AlphaBeta,
+                "Depth-five opponent",
             ),
         ] {
             let trace = connect_four::play_opponent_game_from_with_progress(
@@ -115,7 +117,7 @@ pub(super) fn build(
                         slug(strategy),
                         turn as u64,
                         85,
-                        format!("{opponent:?} comparison · action {turn}"),
+                        format!("{named} comparison · move {turn}"),
                     )
                 },
             );
