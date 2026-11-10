@@ -1,9 +1,4 @@
-//! Sokoban encoded entirely as accounts, assets, rates, and exchanges.
-//!
-//! The board is not solver-owned state. Each cell is an account whose terrain
-//! and occupant are assets, and a push is one atomic exchange across three cell
-//! accounts. Crates keep stable identities so viewers and callers can follow
-//! the same object through a replay.
+#![doc = include_str!("README.md")]
 
 use axionomy::path;
 use axionomy::{

@@ -80,7 +80,8 @@ many holders share one fate, their balances can remain stable claims while a
 single cohort or pool account carries the authoritative condition or epoch.
 
 See [PDD.md](PDD.md) for the product and technical contract,
-[PROBLEMS.md](PROBLEMS.md) for the conformance problems that drive the API,
+[PROBLEMS.md](PROBLEMS.md) for the index of conformance problems that drive
+the API, each explained in its own folder,
 [studio/VISUAL_LANGUAGE.md](studio/VISUAL_LANGUAGE.md) for the normative Studio
 visual grammar and canonical renderer references,
 [docs/AGENT_BENCHMARK.md](docs/AGENT_BENCHMARK.md) for the future single- and multi-agent
@@ -117,7 +118,7 @@ models into one-way workspace dependencies:
 | `axionomy` | Pure closed-state validation and exchange execution kernel |
 | `axionomy-derive` | `#[derive(Identifier)]`: identifier types written and ordered as their paths |
 | `axionomy-search` | Non-authoritative graph and Pareto search, rollout, Monte Carlo, perfect-information and information-set MCTS, and learning projections |
-| `axionomy-problems` | Canonical problem encodings, specialized proposers, and conformance tests; beside each model, its `Problem` and presentation, all in `registry()` |
+| `axionomy-problems` | Canonical problem encodings, specialized proposers, and conformance tests; beside each model, its README, `Problem` and presentation, all in `registry()` |
 | `axionomy-units` | Self-describing asset denominations, schema coherence, dimension-safe `uom` authoring, and fixed-precision decimal assets |
 | `axionomy-time` | Calendar-aware Jiff authoring over the same canonical timeline denominations |
 | `axionomy-tree` | Canonical persistent prolly trees: the content-addressed maps stored states are kept in |
@@ -595,23 +596,28 @@ contract, deployment limits, and integration details.
 
 ## Conformance problems
 
+Each problem explains itself in the README of its folder in
+`crates/axionomy-problems/src`: its specification, the results its tests
+require, and the pressure it puts on the API. [PROBLEMS.md](PROBLEMS.md)
+indexes them with the conformance matrix and instance profiles.
+
 | Problem | Encoded concepts | Compared strategies |
 | --- | --- | --- |
-| Key-door maze | 15-room cyclic topology, position, explicit key inventory, stateful gate, energy, time, heuristic, goal | Scrubbable BFS, Dijkstra, and A* frontiers; four-point exact energy/time Pareto front |
-| Sokoban | Walls, stable crate identities, cell occupancy, atomic pushes, goals, dead squares | Resumable BFS, admissible A*, and replayable deadlock evidence |
-| Exact cover | Universe, subsets, coverage, selection | BFS and Algorithm X |
-| Workshop | Recipes, catalysts, material, labor, waste, process time | BFS, waste minimization, exact waste/time Pareto front |
-| Job shop | Precedence, identified machine slots, makespan, per-job completion | Best-first, branch search, direct oracle, exact allocation Pareto front |
-| Rescue | Hidden truth, seed, observation, belief, chance, sensor use | Exact scenario evaluation, seeded Monte Carlo, approximate policy front |
-| Bridge | Capacity, bids, escrow, priority, joint resolution | BFS, first-come, auction, exact priority/credit Pareto front |
-| Living Market AMM | Closed energy/credit economy, exact constant-product swaps, fees, liquidity shares, real needs, obligations, information, actor price attribution | Market-day replay, no-whale and thin-liquidity counterfactuals, exact coalition Shapley attribution |
-| Lending market | Pooled vault shares, posted collateral, loan-to-value and liquidation limits, kinked utilization rate, borrow index, reserves, scheduled price drop | Least-interest Dijkstra and fewest-step BFS, scripted liquidation and first-depositor attack |
-| Marketplace | Buyers, sellers, carriers, tax, commission, competing orders, participant utility | Assessment matching, replayable clearing, exact allocation Pareto front |
-| Logistics | Orders, routes, fuel, time, weather, breakdown, repair | Long rollouts, risk-aware Monte Carlo, route MCTS, approximate policy front |
-| Connect Four | Identified cells, gravity, turns, line counts, wins, draw | Vector-valued MCTS with plain-board/minimax oracles |
-| Mission | Private views, caller-owned beliefs, causal shared intelligence, hazard, treatment | Repeated observation-scoped ISMCTS, scenario/MC evaluation, approximate policy front, RL trajectories |
-| Perishables | Fungible cohort claims, unique condition facts, deadlines, refrigeration, power loss, cooling energy | Receipt-maintained index, event agenda, exact storage Pareto front, independent oracle |
-| Work League | Autonomous workers, finite jobs, travel, shared facilities, resources, recycling, failures and repairs | Competing seeded policies; value, throughput, efficiency, waste, reliability, and Pareto standings after every step |
+| [Key-door maze](crates/axionomy-problems/src/maze/README.md) | 15-room cyclic topology, position, explicit key inventory, stateful gate, energy, time, heuristic, goal | Scrubbable BFS, Dijkstra, and A* frontiers; four-point exact energy/time Pareto front |
+| [Sokoban](crates/axionomy-problems/src/sokoban/README.md) | Walls, stable crate identities, cell occupancy, atomic pushes, goals, dead squares | Resumable BFS, admissible A*, and replayable deadlock evidence |
+| [Exact cover](crates/axionomy-problems/src/exact_cover/README.md) | Universe, subsets, coverage, selection | BFS and Algorithm X |
+| [Workshop](crates/axionomy-problems/src/workshop/README.md) | Recipes, catalysts, material, labor, waste, process time | BFS, waste minimization, exact waste/time Pareto front |
+| [Job shop](crates/axionomy-problems/src/scheduling/README.md) | Precedence, identified machine slots, makespan, per-job completion | Best-first, branch search, direct oracle, exact allocation Pareto front |
+| [Rescue](crates/axionomy-problems/src/rescue/README.md) | Hidden truth, seed, observation, belief, chance, sensor use | Exact scenario evaluation, seeded Monte Carlo, approximate policy front |
+| [Bridge](crates/axionomy-problems/src/bridge/README.md) | Capacity, bids, escrow, priority, joint resolution | BFS, first-come, auction, exact priority/credit Pareto front |
+| [Living Market AMM](crates/axionomy-problems/src/amm/README.md) | Closed energy/credit economy, exact constant-product swaps, fees, liquidity shares, real needs, obligations, information, actor price attribution | Market-day replay, no-whale and thin-liquidity counterfactuals, exact coalition Shapley attribution |
+| [Lending market](crates/axionomy-problems/src/lending/README.md) | Pooled vault shares, posted collateral, loan-to-value and liquidation limits, kinked utilization rate, borrow index, reserves, scheduled price drop | Least-interest Dijkstra and fewest-step BFS, scripted liquidation and first-depositor attack |
+| [Marketplace](crates/axionomy-problems/src/marketplace/README.md) | Buyers, sellers, carriers, tax, commission, competing orders, participant utility | Assessment matching, replayable clearing, exact allocation Pareto front |
+| [Logistics](crates/axionomy-problems/src/logistics/README.md) | Orders, routes, fuel, time, weather, breakdown, repair | Long rollouts, risk-aware Monte Carlo, route MCTS, approximate policy front |
+| [Connect Four](crates/axionomy-problems/src/connect_four/README.md) | Identified cells, gravity, turns, line counts, wins, draw | Vector-valued MCTS with plain-board/minimax oracles |
+| [Mission](crates/axionomy-problems/src/mission/README.md) | Private views, caller-owned beliefs, causal shared intelligence, hazard, treatment | Repeated observation-scoped ISMCTS, scenario/MC evaluation, approximate policy front, RL trajectories |
+| [Perishables](crates/axionomy-problems/src/perishables/README.md) | Fungible cohort claims, unique condition facts, deadlines, refrigeration, power loss, cooling energy | Receipt-maintained index, event agenda, exact storage Pareto front, independent oracle |
+| [Work League](crates/axionomy-problems/src/work_league/README.md) | Autonomous workers, finite jobs, travel, shared facilities, resources, recycling, failures and repairs | Competing seeded policies; value, throughput, efficiency, waste, reliability, and Pareto standings after every step |
 
 Every accepted result is an exchange trace replayed by the same core. The
 specialized algorithms are proposers, not alternate execution engines.

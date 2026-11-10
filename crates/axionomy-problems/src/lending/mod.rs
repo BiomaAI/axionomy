@@ -1,20 +1,4 @@
-//! Lending market: a collateralized bridge loan through a borrow index.
-//!
-//! Depositors hold vault shares in one pooled market. A borrower owes a bill
-//! before its revenue arrives, so it posts collateral and draws cash as scaled
-//! debt shares. A clock closes one period at a time: the interest rate follows
-//! utilization along a kinked curve, accrues by growing one borrow index
-//! instead of touching every account, and a reserve cut of each period's
-//! interest stays with the market. An oracle may lower the collateral price
-//! once, at a scheduled period. A period cannot close while the loan is past
-//! its liquidation threshold; a keeper may then repay it and seize collateral
-//! plus a bonus.
-//!
-//! Every division is an explicit full-width `MulDiv`. Amounts a participant
-//! pays round up and amounts a participant receives round down, so rounding
-//! dust accrues to the market and no round trip can create value. Shares
-//! locked at genesis keep the share price from being manipulated by a first
-//! depositor.
+#![doc = include_str!("README.md")]
 
 use axionomy::ConditionPath;
 use axionomy::path;

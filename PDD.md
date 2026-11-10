@@ -598,9 +598,10 @@ them.
   sampling, Monte Carlo, perfect-information MCTS, information-set MCTS, and
   learning projections.
 - `axionomy-problems` owns domain ontologies, problem constructors,
-  specialized proposers, conformance tests, and, beside each model, its
-  `Problem` (catalog entry, strategies, documents) and its presentation
-  (labels, units, scene, leaderboards). `registry()` registers them all.
+  specialized proposers, conformance tests, and, beside each model, the README
+  that specifies it, its `Problem` (catalog entry, strategies, documents) and
+  its presentation (labels, units, scene, leaderboards). `registry()`
+  registers them all.
 - `axionomy-units` owns optional dimension-safe physical authoring.
 - `axionomy-time` owns optional calendar-aware timeline authoring.
 - `axionomy-tree` owns the canonical persistent tree that stored states are
@@ -1266,9 +1267,12 @@ compatible set or sequence of those resolutions, but it cannot bypass them.
 
 ## 10. Executable conformance suite
 
-The project validates the thesis with deliberately different problems. Their
-formal specifications, capability matrix and Showcase pressure live in
-[PROBLEMS.md](PROBLEMS.md); the README summarizes what each one encodes.
+The project validates the thesis with deliberately different problems. Each
+problem's formal specification lives in the README of its folder in
+`crates/axionomy-problems/src`, beside its code; [PROBLEMS.md](PROBLEMS.md)
+indexes them with the capability matrix and instance profiles, and the README
+summarizes what each one encodes. What each instance holds and what each
+strategy does is written once, in the problem's catalog entry.
 
 These are not unrelated demos. Together they test:
 

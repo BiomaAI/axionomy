@@ -1,9 +1,4 @@
-//! The Living Market: endogenous price discovery in a closed economy.
-//!
-//! Energy has value because actors need it to satisfy production and household
-//! goals. Credit has value because it settles obligations and buys scarce
-//! access to that energy. No external price or oracle exists: the AMM reserve
-//! ratio is the economy's only public marginal price.
+#![doc = include_str!("README.md")]
 
 use axionomy::path;
 use axionomy::{

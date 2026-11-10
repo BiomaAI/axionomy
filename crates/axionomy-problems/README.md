@@ -28,6 +28,126 @@ model records each rollout as a run and a Monte Carlo estimate as a group of
 them
 (`tests/storage.rs`).
 
+## One folder per problem
+
+Each problem lives in one folder of `src`, named as its module (`maze`,
+`work_league`):
+
+- `README.md` explains the problem: its specification, the results its tests
+  require, and the pressure it puts on the API. It is also the module's
+  documentation.
+- `mod.rs` is the model, with the model's own submodules beside it
+  (`maze/dynamics.rs`).
+- `study.rs` is the problem's `axionomy_study::Problem`, such as `maze::Maze`:
+  its catalog entry, its strategies and the documents a study holds, each
+  derived by replay. The catalog entry is the only copy of what each instance
+  holds and what each strategy does.
+- `view.rs` is its presentation: labels, units, scene and leaderboards.
+
+Sub-ontologies such as `logistics/fleet` follow the same layout inside their
+problem's folder. A model uses neither its study nor its view, so it remains a
+pure domain encoding usable without Studio, and no viewer becomes part of a
+problem's semantics.
+
+`registry()` registers every problem, in catalog order, for the CLI, MCP and
+Studio. The suite's index, with its conformance matrix and instance profiles,
+is [`PROBLEMS.md`](https://github.com/BiomaAI/axionomy/blob/main/PROBLEMS.md).
+
+## Study your own problem
+
+A problem of your own is studied the same way. Implement
+`axionomy_study::Problem`: `descriptor` gives its catalog entry, and `study`
+gives the documents of the study a `StudyKey` names, built with the runtime's
+helpers (`document` replays a trace into a view document, and `proposal`,
+`telemetry`, `simulate` and `frontier_trace` add the evidence beside it). Its
+ontology's identifiers derive `axionomy::Identifier` and implement
+`axionomy_view::Label`, with `Format` for assets, so a document can name them.
+This one studies the Micro maze by breadth-first search alone:
+
+```rust
+use axionomy::path;
+use axionomy_problems::maze;
+use axionomy_study::{
+    Capability, DocumentSpec, InstanceDescriptor, InstanceProfile, Problem, ProblemDescriptor,
+    ProblemFamily, Registry, StrategyDescriptor, StudyError, StudyKey, StudyProgress,
+    StudyRequest, document, problem_error,
+};
+use axionomy_view::ViewDocument;
+
+struct FewestMoves(ProblemDescriptor);
+
+impl Problem for FewestMoves {
+    fn descriptor(&self) -> &ProblemDescriptor {
+        &self.0
+    }
+
+    fn study(
+        &self,
+        key: &StudyKey,
+        progress: &mut StudyProgress<'_>,
+    ) -> Result<Vec<ViewDocument>, StudyError> {
+        let initial = maze::initial();
+        let route = maze::solve_bfs(&initial)
+            .ok_or_else(|| problem_error(&key.problem, "no route reaches the exit"))?;
+        let spec = DocumentSpec {
+            problem: &key.problem,
+            document: path!("breadth-first"),
+            title: "Fewest moves",
+            description: "The route with the fewest exchanges.",
+            source_label: "Fewest moves",
+        };
+        // Replays the route through the core, with no scene.
+        let document = document(
+            progress,
+            spec,
+            &initial,
+            &maze::goal(),
+            route.trace(),
+            Vec::new(),
+            |_, _| None,
+        )
+        .map_err(|error| problem_error(&key.problem, error))?;
+        Ok(vec![document])
+    }
+}
+
+let mut registry = Registry::new();
+registry.register(FewestMoves(ProblemDescriptor {
+    key: path!("fewest-moves"),
+    title: "Fewest moves".into(),
+    summary: "Reach the maze's exit in as few exchanges as possible.".into(),
+    family: ProblemFamily::Pathfinding,
+    default_instance: InstanceProfile::Micro,
+    instances: vec![InstanceDescriptor {
+        profile: InstanceProfile::Micro,
+        label: "Micro".into(),
+        description: "The smallest key-door maze".into(),
+    }],
+    default_strategy: path!("breadth-first"),
+    strategies: vec![StrategyDescriptor {
+        key: path!("breadth-first"),
+        label: "Breadth-first".into(),
+        description: "Tries every route one exchange longer at a time.".into(),
+        algorithm: "breadth-first search".into(),
+    }],
+    capabilities: vec![Capability::DeterministicSearch],
+}))?;
+
+let study = registry.study(StudyRequest::new(path!("fewest-moves")))?;
+assert_eq!(study.selected().map(|document| document.frames.len()), Some(3));
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
+`Registry::register` refuses a key already registered, so a problem can join
+the canonical ones in `registry()` or stand in a registry of its own. Hand
+that registry to a front end: `axionomy_cli::execute` or `run_from` for the
+CLI, `AxionomyMcp::new` or `stateless_http_service` for the MCP server,
+`StudioState::new` for the Studio server, and `catalog_of` and `study_in` for
+Studio's browser Worker. The `axionomy`, `axionomy-mcp` and `axionomy-studio` binaries serve
+`registry()`; a binary of your own serves your registry with the same calls.
+
+## Examples
+
 Each model has a matching runnable example:
 
 ```console
@@ -48,19 +168,6 @@ cargo run -p axionomy-problems --example work_league
 cargo run -p axionomy-problems --example lending
 ```
 
-The lending fixture finances a bill through a collateralized loan. Interest
-follows pool utilization along a kinked curve and accrues in a fixed-point
-borrow index, a reserve cut stays with the market, and a period cannot close
-on a loan past its liquidation threshold. Every `MulDiv` rounds against the
-caller, so no deposit, borrow or repayment round trip can create value and
-rounding dust accrues to the market.
-
-The perishables fixture also demonstrates structural fungibility: thousands of
-equivalent claims aggregate into ordinary quantities, while unique cohort
-condition facts behave non-fungibly through unit supply and lifecycle
-invariants. A derived event agenda and holdings index accelerate decisions but
-never authorize state changes.
-
 Examples emit structured console events through `tracing`. `INFO` is the
 default and explains model construction, strategy choice, encoded outcomes,
 and replay verification. Set `RUST_LOG=debug` to include complete accepted
@@ -72,16 +179,6 @@ RUST_LOG=debug cargo run -p axionomy-problems --example maze
 
 Logging is initialized only by these example binaries. Problem modules,
 search, and kernel libraries never install a global subscriber.
-
-Each problem lives in one folder: its model in `mod.rs` and the model's own
-submodules (`maze/dynamics.rs`), its `Problem` in `study.rs` (the catalog
-entry, its strategies and the documents a study holds, each derived by
-replay), and its presentation in `view.rs` (labels, units, scene and
-leaderboards). Sub-ontologies such as `logistics/fleet` follow the same layout
-inside their problem's folder. `registry()` registers every problem, in
-catalog order, for the CLI, MCP and Studio. A model uses neither its study nor
-its view, so it remains a pure domain encoding usable without Studio, and no
-viewer becomes part of a problem's semantics.
 
 Performance probes are Cargo bench targets rather than examples:
 

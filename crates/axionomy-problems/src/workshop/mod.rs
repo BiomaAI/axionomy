@@ -1,4 +1,4 @@
-//! A stoichiometric workshop with conserved material and labor accounting.
+#![doc = include_str!("README.md")]
 
 use axionomy::path;
 use axionomy::{

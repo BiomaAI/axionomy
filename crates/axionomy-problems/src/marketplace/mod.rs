@@ -1,8 +1,4 @@
-//! Assessment-driven matching and atomic multi-party market settlement.
-//!
-//! Candidate enumeration and ranking are derived, disposable policy. The
-//! economy remains the authority for participant state, settlement terms,
-//! feasibility, effects, and completed orders.
+#![doc = include_str!("README.md")]
 
 use axionomy::path;
 use axionomy::{

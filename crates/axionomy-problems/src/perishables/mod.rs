@@ -1,10 +1,4 @@
-//! Cohort-indexed perishable inventory with explicit time and storage effects.
-//!
-//! Ten thousand physical units are represented as fungible claims over two
-//! cohorts. Each cohort has one unique condition fact, so spoilage changes a
-//! shared fact rather than rewriting every claim holder. A disposable event
-//! agenda proposes due exchanges, but the economy remains the only authority
-//! on timing, environment, identity, and effects.
+#![doc = include_str!("README.md")]
 
 use axionomy::path;
 use axionomy::{

@@ -15,8 +15,10 @@ A problem is a type implementing `Problem`: its catalog entry, a
 holds the problems a front end offers, each under its own key. The canonical
 problems live in `axionomy-problems`, whose `registry()` registers them all; an
 ontology of your own is studied in Studio, MCP and the CLI by registering its
-`Problem` beside them or instead of them. External interfaces take a
-`Registry`, call the same methods and are tested for semantic parity.
+`Problem` beside them or instead of them, as "Study your own problem" in
+[`axionomy-problems`](../axionomy-problems/README.md) shows. External
+interfaces take a `Registry`, call the same methods and are tested for
+semantic parity.
 
 Its deliberately small vocabulary is `Problem`, `Registry`,
 `ProblemDescriptor`, `StudyRequest`, `StudyControl`, `StudyProgress`,

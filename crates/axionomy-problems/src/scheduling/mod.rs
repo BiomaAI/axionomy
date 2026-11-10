@@ -1,4 +1,4 @@
-//! A two-job, two-machine scheduling problem with discrete capacity assets.
+#![doc = include_str!("README.md")]
 
 use axionomy::path;
 use axionomy::{

@@ -1,4 +1,4 @@
-//! A key-door maze where action count and encoded energy cost disagree.
+#![doc = include_str!("README.md")]
 
 use axionomy::path;
 use axionomy::{

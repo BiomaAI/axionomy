@@ -1,4 +1,4 @@
-//! Multi-agent negotiation for a capacity-one bridge.
+#![doc = include_str!("README.md")]
 
 use axionomy::path;
 use axionomy::{

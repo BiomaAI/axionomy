@@ -1,4 +1,4 @@
-//! Compact adversarial Connect Four with encoded gravity and terminal truth.
+#![doc = include_str!("README.md")]
 
 use axionomy::path;
 use axionomy::{

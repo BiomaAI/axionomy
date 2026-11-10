@@ -1,4 +1,4 @@
-//! A partially observed rescue decision with an explicitly encoded Nature.
+#![doc = include_str!("README.md")]
 
 use axionomy::path;
 use axionomy::{

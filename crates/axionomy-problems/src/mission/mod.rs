@@ -1,4 +1,4 @@
-//! Partially observed, stochastic two-agent reconnaissance mission.
+#![doc = include_str!("README.md")]
 
 use axionomy::path;
 use axionomy::{

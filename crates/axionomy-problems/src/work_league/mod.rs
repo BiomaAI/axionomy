@@ -1,9 +1,4 @@
-//! A competitive multi-agent work league encoded entirely as economic state.
-//!
-//! Agents contend for a finite pool of jobs. Every claim, movement, attempt,
-//! chance resolution, repair, recharge, and recycling operation is an atomic
-//! exchange. Policies only propose those exchanges; they cannot bypass the
-//! economy or manufacture a score.
+#![doc = include_str!("README.md")]
 
 use axionomy::path;
 use axionomy::{

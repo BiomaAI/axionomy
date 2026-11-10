@@ -1,4 +1,4 @@
-//! Exact cover solved both by generic graph search and an Algorithm X proposer.
+#![doc = include_str!("README.md")]
 
 use axionomy::path;
 use axionomy::{

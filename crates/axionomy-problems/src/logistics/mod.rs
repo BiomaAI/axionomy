@@ -1,4 +1,4 @@
-//! Long-horizon stochastic logistics over core-validated rollouts.
+#![doc = include_str!("README.md")]
 
 use axionomy::path;
 use axionomy::{
