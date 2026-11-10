@@ -7,10 +7,7 @@ use axionomy::{
 };
 use axionomy_search::{
     action_source::{ActionSource, lazy_actions},
-    ismcts::{
-        InformationState, IsmctsDecision, IsmctsProgress, IsmctsResult, IsmctsSession,
-        search as information_set_search,
-    },
+    ismcts::{InformationState, IsmctsDecision, IsmctsProgress, IsmctsResult, IsmctsSession},
     mcts::MctsConfig,
     monte_carlo::{
         BernoulliStatistics, MonteCarloConfig, MonteCarloProgress, MonteCarloSession,
@@ -698,29 +695,10 @@ pub fn decision_source() -> impl ActionSource<MissionInformation, Action> {
 /// discarded by observation identity, and the selected live exchange is
 /// revalidated against `actual`.
 pub fn plan(actual: &World, beliefs: &[World], config: MctsConfig) -> IsmctsResult<Ontology> {
-    let root = scout_information(actual);
-    let compatible = beliefs
-        .iter()
-        .filter(|world| scout_information(world) == root)
-        .cloned()
-        .collect::<Vec<_>>();
-    information_set_search(
-        actual,
-        config,
-        1,
-        scout_information,
-        move |_, random| {
-            (!compatible.is_empty()).then(|| {
-                let index = random.ticket(compatible.len() as u64) as usize;
-                compatible[index].clone()
-            })
-        },
-        decision_source(),
-        nature_outcomes,
-        |world| world.matches(&goal()).then_some(vec![1.0]),
-        |_| vec![0.0],
-        informed_rollout_action,
-    )
+    plan_with_progress(actual, beliefs, config, usize::MAX, |_| {
+        ControlFlow::Continue(())
+    })
+    .map(|decision| decision.expect("planning nobody interrupts decides"))
 }
 
 pub fn plan_with_progress(
@@ -1010,22 +988,9 @@ pub fn monte_carlo(
     seed: u64,
     episodes: &mut impl Episodes<Ontology, Policy, MissionRollout>,
 ) -> Option<PolicyComparison> {
-    let support = scenarios(model);
-    let estimates = evaluate(
-        [Policy::ShareAndCoordinate, Policy::NorthTogether],
-        MonteCarloConfig::new(samples),
-        |policy, sample_index| {
-            let offset = u64::try_from(sample_index)
-                .unwrap_or(u64::MAX)
-                .wrapping_mul(0x9e37_79b9_7f4a_7c15);
-            let mut sampler = SeededSampler::new(seed.wrapping_add(offset));
-            let scenario = sample(&support, &mut sampler).map_err(|_| ())?.clone();
-            Ok::<_, ()>(episode(model, policy, sample_index, scenario, episodes).succeeded())
-        },
-        BernoulliStatistics::new,
-    )
-    .ok()?;
-    comparison(estimates, samples)
+    monte_carlo_with_progress(model, samples, seed, episodes, usize::MAX, |_| {
+        ControlFlow::Continue(())
+    })
 }
 
 pub fn monte_carlo_with_progress(
@@ -1068,31 +1033,9 @@ pub fn policy_front(
     seed: u64,
     episodes: &mut impl Episodes<Ontology, Policy, MissionRollout>,
 ) -> Option<PolicyFront> {
-    if samples == 0 {
-        return None;
-    }
-    let support = scenarios(model);
-    let estimates = evaluate(
-        [Policy::ShareAndCoordinate, Policy::NorthTogether],
-        MonteCarloConfig::new(samples),
-        |policy, sample_index| {
-            let offset = u64::try_from(sample_index)
-                .unwrap_or(u64::MAX)
-                .wrapping_mul(0x9e37_79b9_7f4a_7c15);
-            let mut sampler = SeededSampler::new(seed.wrapping_add(offset));
-            let scenario = sample(&support, &mut sampler).map_err(|_| ())?.clone();
-            let rollout = episode(model, policy, sample_index, scenario, episodes);
-            Ok::<_, ()>(vec![
-                f64::from(rollout.succeeded()),
-                rollout.elapsed_time() as f64,
-                f64::from(rollout.used_medical_kit()),
-            ])
-        },
-        || VectorStatistics::new(3),
-    )
-    .ok()?;
-
-    policy_front_from(estimates)
+    policy_front_with_progress(model, samples, seed, episodes, usize::MAX, |_| {
+        ControlFlow::Continue(())
+    })
 }
 
 pub fn policy_front_with_progress(

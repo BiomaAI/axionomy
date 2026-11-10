@@ -7,10 +7,10 @@ use axionomy::{
 };
 use axionomy_search::{
     action_source::eager_actions,
-    mcts::{MctsConfig, MctsDecision, MctsProgress, MctsSession, search},
+    mcts::{MctsConfig, MctsDecision, MctsProgress, MctsSession},
     monte_carlo::{
         MonteCarloConfig, MonteCarloProgress, MonteCarloSession, MonteCarloStatus, PolicyEstimate,
-        ScalarStatistics, ScalarSummary, VectorStatistics, VectorSummary, evaluate,
+        ScalarStatistics, ScalarSummary, VectorStatistics, VectorSummary,
     },
     pareto::{FrontierCompleteness, Objective, ObjectiveVector, ParetoFront},
     rollout::{Episodes, RolloutConfig, RolloutDecision, RolloutStop, TraceRetention, run_to_goal},
@@ -493,17 +493,9 @@ pub fn monte_carlo_with_risk(
     criterion: RiskCriterion,
     episodes: &mut impl Episodes<Ontology, Policy, MissionRollout>,
 ) -> Option<MonteCarloEstimate> {
-    let estimates = evaluate(
-        [Policy::Direct, Policy::Reliable],
-        MonteCarloConfig::new(samples),
-        |policy, sample_index| {
-            let rollout = episode(model, policy, sample_index, episodes);
-            Ok::<_, std::convert::Infallible>(mission_utility(&rollout))
-        },
-        ScalarStatistics::new,
-    )
-    .ok()?;
-    monte_carlo_estimate(estimates, criterion)
+    monte_carlo_with_risk_progress(model, samples, criterion, episodes, usize::MAX, |_| {
+        ControlFlow::Continue(())
+    })
 }
 
 pub fn monte_carlo_with_risk_progress(
@@ -557,25 +549,9 @@ pub fn policy_front(
     samples: usize,
     episodes: &mut impl Episodes<Ontology, Policy, MissionRollout>,
 ) -> Option<PolicyFront> {
-    if samples == 0 {
-        return None;
-    }
-    let estimates = evaluate(
-        [Policy::Direct, Policy::Reliable],
-        MonteCarloConfig::new(samples),
-        |policy, sample_index| {
-            let rollout = episode(model, policy, sample_index, episodes);
-            Ok::<_, std::convert::Infallible>(vec![
-                f64::from(rollout.completed()),
-                rollout.delivered() as f64,
-                rollout.elapsed_time() as f64,
-            ])
-        },
-        || VectorStatistics::new(3),
-    )
-    .ok()?;
-
-    policy_front_from(estimates)
+    policy_front_with_progress(model, samples, episodes, usize::MAX, |_| {
+        ControlFlow::Continue(())
+    })
 }
 
 pub fn policy_front_with_progress(
@@ -643,25 +619,10 @@ pub fn plan_action(
     iterations: usize,
     seed: u64,
 ) -> Result<PlanningDecision, PlanningError> {
-    search(
-        world,
-        MctsConfig::new(iterations, ROLLOUT_HORIZON).with_seed(seed),
-        1,
-        planning_candidates,
-        planning_outcomes,
-        |_| 0,
-        |state| {
-            state
-                .matches(&goal())
-                .then(|| vec![planning_utility(state)])
-        },
-        |state| vec![planning_utility(state)],
-        |state, actions, random| {
-            policy_action(state, Policy::Reliable, random)
-                .filter(|preferred| actions.contains(preferred))
-                .or_else(|| actions.first().cloned())
-        },
-    )
+    plan_action_with_progress(world, iterations, seed, usize::MAX, |_| {
+        ControlFlow::Continue(())
+    })
+    .map(|decision| decision.expect("planning nobody interrupts decides"))
 }
 
 pub fn plan_action_with_progress(
