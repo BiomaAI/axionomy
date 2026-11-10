@@ -3,9 +3,11 @@
 This crate is the native reference backend for Axionomy Studio. It adapts the
 same `axionomy-service` used by CLI and MCP into one problem catalog,
 pausable/resumable/cancellable in-memory studies, replay-derived documents,
-paginated frames, Server-Sent Events, and an OpenAPI 3.1 contract. Each study
-gets a minted ID such as `study-7`; once published, the study, its documents
-and their frames are served under `/api/studies/{study_id}/study`. It
+paginated frames, Server-Sent Events, and an OpenAPI 3.1 contract, over the
+problems of the `Registry` its `StudioState` is given; `StudioState::default()`
+serves `axionomy_problems::registry()`. Each study gets a minted ID such as
+`study-7`; once published, the study, its documents and their frames are
+served under `/api/studies/{study_id}/study`. It
 intentionally has no database: a study in progress is operational UI state,
 while a published, portable `Study` can be exported to JSON whenever durable or
 static playback is wanted.

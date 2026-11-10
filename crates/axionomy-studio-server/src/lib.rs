@@ -193,7 +193,7 @@ impl StudioState {
 impl Default for StudioState {
     /// A Studio engine for every canonical problem.
     fn default() -> Self {
-        Self::new(axionomy_service::registry())
+        Self::new(axionomy_problems::registry())
     }
 }
 
@@ -821,7 +821,7 @@ mod tests {
             .await
             .unwrap();
         let http_study: Study = response_json(response).await;
-        let service_study = axionomy_service::registry().study(request).unwrap();
+        let service_study = axionomy_problems::registry().study(request).unwrap();
         assert_eq!(http_study, service_study);
     }
 

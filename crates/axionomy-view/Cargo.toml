@@ -11,6 +11,7 @@ rust-version.workspace = true
 
 [dependencies]
 axionomy.workspace = true
+axionomy-search.workspace = true
 schemars.workspace = true
 serde.workspace = true
 serde_json.workspace = true

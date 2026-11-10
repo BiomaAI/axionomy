@@ -1,13 +1,15 @@
 //! Problems, and the registry that studies them.
 
 use crate::{
-    ProblemDescriptor, ProblemPath, ServiceError, Study, StudyControl, StudyKey, StudyObserver,
-    StudyProgress, StudyRequest, Work,
-    adapters::{series, strategy_document},
+    ProblemDescriptor, ProblemPath, ServiceError, StrategyPath, Study, StudyControl, StudyKey,
+    StudyObserver, StudyProgress, StudyRequest, Work, documents::series,
 };
-use axionomy::path;
+use axionomy::{
+    path,
+    path::{Path, Segments},
+};
 use axionomy_view::{
-    SearchObservationKindView, TelemetryKindView, TelemetrySubjectView, ViewDocument,
+    DocumentPath, SearchObservationKindView, TelemetryKindView, TelemetrySubjectView, ViewDocument,
 };
 use std::{fmt, sync::Arc};
 use thiserror::Error;
@@ -316,4 +318,33 @@ fn assemble(
         documents,
         assessed_proposals: Vec::new(),
     })
+}
+
+/// The strategy a study asks for, read as the problem's own strategy type.
+pub fn strategy<S: Segments>(study: &StudyKey) -> Result<S, ServiceError> {
+    path::read(&study.strategy).map_err(|_| ServiceError::UnknownStrategy {
+        problem: study.problem.clone(),
+        strategy: study.strategy.clone(),
+    })
+}
+
+/// The document showing a strategy's outcome, which a study names by the
+/// strategy's own path.
+pub fn strategy_document(strategy: &StrategyPath) -> DocumentPath {
+    renamed(strategy)
+}
+
+/// The same path naming another kind of thing.
+pub(crate) fn renamed<K, J>(path: &Path<K>) -> Path<J> {
+    path.as_str()
+        .parse()
+        .unwrap_or_else(|_| unreachable!("`{path}` is a path of every kind"))
+}
+
+/// The error a study of `problem` fails with: why it could not be studied.
+pub fn problem_error(problem: &ProblemPath, error: impl ToString) -> ServiceError {
+    ServiceError::Problem {
+        problem: problem.clone(),
+        message: error.to_string(),
+    }
 }

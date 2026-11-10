@@ -710,7 +710,7 @@ async fn a_problem_study_returns_a_summary_and_pages_its_frames() {
     let served = server.study(&study_id).await.unwrap().unwrap();
     assert_eq!(
         *served,
-        axionomy_service::registry().study(request).unwrap()
+        axionomy_problems::registry().study(request).unwrap()
     );
     assert_eq!(summary["key"]["strategy"], "a-star");
     assert_eq!(summary["selected_document"], "a-star");
@@ -797,7 +797,7 @@ async fn a_studys_documents_are_economies_that_replay_its_trajectories() {
     let server = AxionomyMcp::default();
     let summary = study(&server, maze_study()).await;
     let mut reported = Trajectories::default();
-    axionomy_service::registry()
+    axionomy_problems::registry()
         .study_with(&maze_study(), &StudyControl::default(), &mut reported)
         .unwrap();
     let documents = summary["documents"].as_array().unwrap();
@@ -868,7 +868,8 @@ async fn a_study_keeps_its_key_and_handles_and_computes_its_views_again() {
             document: document.clone(),
         },
     ];
-    let restarted = AxionomyMcp::new(axionomy_service::registry(), server.archive.store()).unwrap();
+    let restarted =
+        AxionomyMcp::new(axionomy_problems::registry(), server.archive.store()).unwrap();
     assert!(restarted.archive.cached_study(&study_id).is_none());
     for target in &targets {
         assert_eq!(
@@ -886,7 +887,7 @@ async fn a_study_keeps_its_key_and_handles_and_computes_its_views_again() {
         .archive
         .replace_study_bytes(&study_id, serde_json::to_vec(&kept).unwrap())
         .await;
-    let stale = AxionomyMcp::new(axionomy_service::registry(), server.archive.store()).unwrap();
+    let stale = AxionomyMcp::new(axionomy_problems::registry(), server.archive.store()).unwrap();
     let error = stale
         .read(&Address::parse(&uri(targets[1].clone())).unwrap())
         .await
@@ -1302,7 +1303,7 @@ async fn a_store_on_disk_keeps_snapshots_and_handles_across_restarts() {
     let _ = std::fs::remove_file(&file);
     let (parent_id, applied) = {
         let server = AxionomyMcp::new(
-            axionomy_service::registry(),
+            axionomy_problems::registry(),
             axionomy_store::Store::open(&file).unwrap(),
         )
         .unwrap();
@@ -1311,7 +1312,7 @@ async fn a_store_on_disk_keeps_snapshots_and_handles_across_restarts() {
         (parent_id, applied)
     };
     let server = AxionomyMcp::new(
-        axionomy_service::registry(),
+        axionomy_problems::registry(),
         axionomy_store::Store::open(&file).unwrap(),
     )
     .unwrap();

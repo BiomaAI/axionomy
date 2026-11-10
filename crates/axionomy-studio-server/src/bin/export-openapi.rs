@@ -6,7 +6,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .nth(1)
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from("studio/openapi.json"));
-    let (_, openapi) = api(StudioState::new(axionomy_service::registry()));
+    let (_, openapi) = api(StudioState::new(axionomy_problems::registry()));
     let encoded = serde_json::to_string_pretty(&openapi)? + "\n";
     if let Some(parent) = output.parent() {
         fs::create_dir_all(parent)?;

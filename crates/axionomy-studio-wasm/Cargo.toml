@@ -12,6 +12,7 @@ rust-version.workspace = true
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
+axionomy-problems.workspace = true
 axionomy-service.workspace = true
 axionomy-view.workspace = true
 js-sys.workspace = true

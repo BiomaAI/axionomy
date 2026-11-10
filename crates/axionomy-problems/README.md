@@ -1,7 +1,8 @@
 # axionomy-problems
 
 Canonical closed-problem encodings for
-[Axionomy](https://github.com/BiomaAI/axionomy).
+[Axionomy](https://github.com/BiomaAI/axionomy), and how each is studied and
+shown.
 
 Problem models exercise Axionomy exclusively through its public API. They are
 reference encodings and conformance fixtures, not privileged engine semantics.
@@ -72,10 +73,15 @@ RUST_LOG=debug cargo run -p axionomy-problems --example maze
 Logging is initialized only by these example binaries. Problem modules,
 search, and kernel libraries never install a global subscriber.
 
-Replay-derived presentation adapters for every problem live uniformly
-in `axionomy-service`. Keeping them out of this crate prevents a singled-out
-viewer from becoming part of a problem's semantics: these modules remain pure
-domain encodings and strategy helpers usable without Studio.
+Each problem lives in one folder: its model in `mod.rs` and the model's own
+submodules (`maze/dynamics.rs`), its `Problem` in `study.rs` (the catalog
+entry, its strategies and the documents a study holds, each derived by
+replay), and its presentation in `view.rs` (labels, units, scene and
+leaderboards). Sub-ontologies such as `logistics/fleet` follow the same layout
+inside their problem's folder. `registry()` registers every problem, in
+catalog order, for the CLI, MCP and Studio. A model uses neither its study nor
+its view, so it remains a pure domain encoding usable without Studio, and no
+viewer becomes part of a problem's semantics.
 
 Performance probes are Cargo bench targets rather than examples:
 

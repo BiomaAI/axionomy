@@ -1,4 +1,5 @@
-use axionomy_service::{ProblemPath, StudyRequest, registry};
+use axionomy_problems::registry;
+use axionomy_service::{ProblemPath, StudyRequest};
 use std::{fs, path::PathBuf};
 
 /// Writes the default study of one problem, or of every problem and the

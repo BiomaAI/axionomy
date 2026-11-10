@@ -10,6 +10,7 @@ repository.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+axionomy-problems.workspace = true
 axionomy-service.workspace = true
 axionomy-view.workspace = true
 axum.workspace = true

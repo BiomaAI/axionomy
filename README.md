@@ -117,14 +117,14 @@ models into one-way workspace dependencies:
 | `axionomy` | Pure closed-state validation and exchange execution kernel |
 | `axionomy-derive` | `#[derive(Identifier)]`: identifier types written and ordered as their paths |
 | `axionomy-search` | Non-authoritative graph and Pareto search, rollout, Monte Carlo, perfect-information and information-set MCTS, and learning projections |
-| `axionomy-problems` | Canonical problem encodings, specialized proposers, and conformance tests |
+| `axionomy-problems` | Canonical problem encodings, specialized proposers, and conformance tests; beside each model, its `Problem` and presentation, all in `registry()` |
 | `axionomy-units` | Self-describing asset denominations, schema coherence, dimension-safe `uom` authoring, and fixed-precision decimal assets |
 | `axionomy-time` | Calendar-aware Jiff authoring over the same canonical timeline denominations |
 | `axionomy-tree` | Canonical persistent prolly trees: the content-addressed maps stored states are kept in |
 | `axionomy-store` | Runs, stored states, replay verification, tags, groups, metrics and refs, on redb |
 | `axionomy-mcp` | Strict stateless MCP 2026-07-28 reference server with stored, steppable, diffable economies, explorable studies, and interruptible search tasks |
-| `axionomy-view` | Runtime-neutral, replay-derived browser presentation contracts |
-| `axionomy-service` | Interface-neutral catalog, study control, progress, and replay-derived studies for every canonical problem |
+| `axionomy-view` | Runtime-neutral, replay-derived browser presentation contracts, and the labels, formats, scene helpers and Pareto front views problems present themselves with |
+| `axionomy-service` | Generic study runtime: the `Problem` trait and `Registry`, study requests and control, progress reporting, and replay-derived studies of any registered problem |
 | `axionomy-cli` | Human- and script-friendly access to the shared problem service |
 | `axionomy-studio-server` | Native OpenAPI/SSE reference backend and in-memory study orchestration for Axionomy Studio |
 | `axionomy-studio-wasm` | Single-threaded Web Worker adapter for running the same Rust service in a browser |
@@ -132,25 +132,24 @@ models into one-way workspace dependencies:
 ```text
 axionomy ─────────────→ axionomy-derive
 axionomy-search ──────→ axionomy
-axionomy-problems ────→ axionomy
-                    └─→ axionomy-search
 axionomy-units ───────→ axionomy
 axionomy-time ────────→ axionomy-units ──→ axionomy
 axionomy-tree          (no workspace dependencies)
 axionomy-store ───────→ axionomy-tree + axionomy
-axionomy-view ────────→ axionomy
-axionomy-service ─────→ axionomy-problems + axionomy-view
-axionomy-cli ─────────→ axionomy-service
-axionomy-mcp ─────────→ axionomy-service + axionomy-search + axionomy
-axionomy-studio-server → axionomy-service
-axionomy-studio-wasm ──→ axionomy-service
+axionomy-view ────────→ axionomy-search + axionomy
+axionomy-service ─────→ axionomy-view + axionomy-search
+axionomy-problems ────→ axionomy-service + axionomy-view + axionomy-search
+axionomy-cli ─────────→ axionomy-problems + axionomy-service
+axionomy-mcp ─────────→ axionomy-problems + axionomy-service + axionomy-search
+axionomy-studio-server → axionomy-problems + axionomy-service
+axionomy-studio-wasm ──→ axionomy-problems + axionomy-service
 ```
 
 The kernel does not depend on a solver, problem, unit, or time crate; its one
 workspace dependency is the derive for its identifiers. The packages are
 independently publishable: release `axionomy-derive` and then `axionomy`
-first; search and units may follow; time follows units; problems and view
-follow the reusable layers; the service follows those; CLI, MCP, HTTP, and
+first; search and units may follow; time follows units; view follows search;
+the service follows view; problems follow the service; CLI, MCP, HTTP, and
 Studio remain outer adapters.
 
 ## What is implemented

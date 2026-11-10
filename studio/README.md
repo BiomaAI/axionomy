@@ -233,7 +233,7 @@ The Playwright tests launch both servers, start a real study, follow its SSE
 stream, observe tactical search progress and pause/resume behavior,
 fetch and scrub its replay-verified study, verify structured rejection
 proofs, and inspect a structurally different static Exact Cover matrix. Rust
-adapter tests study every problem.
+tests in `axionomy-problems` study every problem.
 
 The Wasm suite launches Studio with native probes disabled, studies stochastic
 logistics in the Worker, verifies live and retained thinking,

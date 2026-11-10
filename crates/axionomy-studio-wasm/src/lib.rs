@@ -24,14 +24,14 @@ pub fn protocol() -> String {
 /// The catalog of every canonical problem, as JSON.
 #[wasm_bindgen]
 pub fn catalog() -> Result<String, JsValue> {
-    catalog_of(&axionomy_service::registry())
+    catalog_of(&axionomy_problems::registry())
 }
 
 /// Studies a request for a canonical problem, emitting its events as JSON,
 /// and gives the study as JSON.
 #[wasm_bindgen]
 pub fn study(request_json: &str, study_id: &str, emit: &Function) -> Result<String, JsValue> {
-    study_in(&axionomy_service::registry(), request_json, study_id, emit)
+    study_in(&axionomy_problems::registry(), request_json, study_id, emit)
 }
 
 /// The catalog of `registry`, as JSON.

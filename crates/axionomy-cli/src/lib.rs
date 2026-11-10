@@ -236,7 +236,7 @@ pub fn write_output(output: CliOutput) -> Result<Option<String>, CliError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axionomy_service::registry;
+    use axionomy_problems::registry;
 
     #[test]
     fn a_json_study_is_the_shared_service_study() {

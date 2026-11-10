@@ -288,11 +288,15 @@ with `-32602` (a resource not found, which rmcp reports as invalid params under
 `2026-07-28`) and must be studied again, while its economies remain. Recently
 used economies and studies stay in memory.
 
+`AxionomyMcp::new` takes the `Registry` of problems the server studies, and
+the store it keeps economies in; `axionomy_problems::registry()` holds every
+canonical problem.
+
 ```rust
 use axionomy_mcp::AxionomyMcp;
 use axionomy_store::Store;
 
-let server = AxionomyMcp::new(axionomy_service::registry(), Store::memory()?)?;
+let server = AxionomyMcp::new(axionomy_problems::registry(), Store::memory()?)?;
 # let _ = server;
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```

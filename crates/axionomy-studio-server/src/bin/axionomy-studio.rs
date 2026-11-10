@@ -17,7 +17,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .unwrap_or_else(|| PathBuf::from("studio/dist"));
     let frontend_index = frontend.join("index.html");
     let serves_frontend = frontend_index.is_file();
-    let (router, _) = api(StudioState::new(axionomy_service::registry()));
+    let (router, _) = api(StudioState::new(axionomy_problems::registry()));
     let router = with_studio_frontend(router, &frontend);
     let listener = tokio::net::TcpListener::bind(&bind).await?;
     let address = listener.local_addr()?;

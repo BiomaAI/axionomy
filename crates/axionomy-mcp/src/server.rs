@@ -643,7 +643,7 @@ impl Default for AxionomyMcp {
     /// provides no randomness for the handle secret.
     fn default() -> Self {
         Self::new(
-            axionomy_service::registry(),
+            axionomy_problems::registry(),
             Store::memory().expect("an in-memory store opens"),
         )
         .expect("an in-memory store keeps the server's tables")

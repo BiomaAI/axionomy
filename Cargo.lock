@@ -437,6 +437,7 @@ dependencies = [
 name = "axionomy-cli"
 version = "0.1.0"
 dependencies = [
+ "axionomy-problems",
  "axionomy-service",
  "clap",
  "serde_json",
@@ -457,6 +458,7 @@ name = "axionomy-mcp"
 version = "0.1.0"
 dependencies = [
  "axionomy",
+ "axionomy-problems",
  "axionomy-search",
  "axionomy-service",
  "axionomy-store",
@@ -485,7 +487,9 @@ version = "0.1.0"
 dependencies = [
  "axionomy",
  "axionomy-search",
+ "axionomy-service",
  "axionomy-store",
+ "axionomy-view",
  "criterion",
  "proptest",
  "serde",
@@ -515,7 +519,6 @@ name = "axionomy-service"
 version = "0.1.0"
 dependencies = [
  "axionomy",
- "axionomy-problems",
  "axionomy-search",
  "axionomy-view",
  "schemars 1.2.3",
@@ -543,6 +546,7 @@ dependencies = [
 name = "axionomy-studio-server"
 version = "0.1.0"
 dependencies = [
+ "axionomy-problems",
  "axionomy-service",
  "axionomy-view",
  "axum",
@@ -564,6 +568,7 @@ dependencies = [
 name = "axionomy-studio-wasm"
 version = "0.1.0"
 dependencies = [
+ "axionomy-problems",
  "axionomy-service",
  "axionomy-view",
  "js-sys",
@@ -614,6 +619,7 @@ name = "axionomy-view"
 version = "0.1.0"
 dependencies = [
  "axionomy",
+ "axionomy-search",
  "schemars 1.2.3",
  "serde",
  "serde_json",

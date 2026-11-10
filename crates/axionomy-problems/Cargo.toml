@@ -1,6 +1,6 @@
 [package]
 name = "axionomy-problems"
-description = "Canonical problem encodings and conformance models for Axionomy"
+description = "Canonical problem encodings and conformance models for Axionomy, with their studies and presentations"
 readme = "README.md"
 version.workspace = true
 authors.workspace = true
@@ -12,6 +12,8 @@ rust-version.workspace = true
 [dependencies]
 axionomy.workspace = true
 axionomy-search.workspace = true
+axionomy-service.workspace = true
+axionomy-view.workspace = true
 serde.workspace = true
 thiserror.workspace = true
 

@@ -1,6 +1,6 @@
 [package]
 name = "axionomy-service"
-description = "Interface-neutral application service and canonical problem adapters for Axionomy"
+description = "Interface-neutral study runtime for Axionomy: problems, registries, control, progress and replay-derived studies"
 readme = "README.md"
 version.workspace = true
 authors.workspace = true
@@ -11,7 +11,6 @@ rust-version.workspace = true
 
 [dependencies]
 axionomy.workspace = true
-axionomy-problems.workspace = true
 axionomy-search.workspace = true
 axionomy-view.workspace = true
 schemars.workspace = true

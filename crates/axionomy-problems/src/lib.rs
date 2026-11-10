@@ -16,8 +16,38 @@ pub mod sokoban;
 pub mod work_league;
 pub mod workshop;
 
+mod support;
+
 use axionomy::{ApplyError, Ontology, ReplayError};
 use axionomy_search::{sampling::SamplingError, tree::TreeSearchError};
+use axionomy_service::{DuplicateProblem, Registry};
+
+/// Every canonical problem, in catalog order: the registry Axionomy's
+/// front ends study by default.
+pub fn registry() -> Registry {
+    canonical().expect("the canonical problems have distinct keys")
+}
+
+fn canonical() -> Result<Registry, DuplicateProblem> {
+    let mut registry = Registry::new();
+    registry
+        .register(maze::Maze::default())?
+        .register(sokoban::Sokoban::default())?
+        .register(exact_cover::ExactCover::default())?
+        .register(workshop::Workshop::default())?
+        .register(scheduling::Scheduling::default())?
+        .register(rescue::Rescue::default())?
+        .register(bridge::Bridge::default())?
+        .register(amm::Amm::default())?
+        .register(lending::Lending::default())?
+        .register(marketplace::Marketplace::default())?
+        .register(logistics::Logistics::default())?
+        .register(connect_four::ConnectFour::default())?
+        .register(work_league::WorkLeague::default())?
+        .register(mission::Mission::default())?
+        .register(perishables::Perishables::default())?;
+    Ok(registry)
+}
 
 /// Why a planned run (Nature sampled, decisions planned, every exchange
 /// applied) could not be played to its end.

@@ -111,7 +111,7 @@ recorded study.
 Built for MCP, which needed nothing new in the store for it:
 
 - `StudyObserver::trajectory` reports each document's initial economy and
-  trace written as paths (D-044), from the shared helpers every adapter
+  trace written as paths (D-044), from the shared helpers every problem
   builds its documents with. Studio and the browser build ignore it, and
   their replays are byte for byte what they were.
 - MCP records each document as two economies with the code that records

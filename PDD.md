@@ -592,17 +592,16 @@ The repository makes authority boundaries visible as dependency boundaries:
 ```text
 axionomy ─────────────→ axionomy-derive
 axionomy-search ──────→ axionomy
-axionomy-problems ────→ axionomy
-                    └─→ axionomy-search
 axionomy-units ───────→ axionomy
 axionomy-time ────────→ axionomy-units ──→ axionomy
 axionomy-tree          (no workspace dependencies)
 axionomy-store ───────→ axionomy-tree + axionomy
-axionomy-view ────────→ axionomy
-axionomy-service ─────→ axionomy-problems + axionomy-view
-axionomy-cli ─────────→ axionomy-service
-axionomy-mcp ─────────→ axionomy-service + axionomy-search + axionomy
-axionomy-studio-server → axionomy-service
+axionomy-view ────────→ axionomy-search + axionomy
+axionomy-service ─────→ axionomy-view + axionomy-search
+axionomy-problems ────→ axionomy-service + axionomy-view + axionomy-search
+axionomy-cli ─────────→ axionomy-problems + axionomy-service
+axionomy-mcp ─────────→ axionomy-problems + axionomy-service + axionomy-search
+axionomy-studio-server → axionomy-problems + axionomy-service
 ```
 
 - `axionomy` owns universal state and transition semantics.
@@ -612,7 +611,9 @@ axionomy-studio-server → axionomy-service
   sampling, Monte Carlo, perfect-information MCTS, information-set MCTS, and
   learning projections.
 - `axionomy-problems` owns domain ontologies, problem constructors,
-  specialized proposers, and conformance tests.
+  specialized proposers, conformance tests, and, beside each model, its
+  `Problem` (catalog entry, strategies, documents) and its presentation
+  (labels, units, scene, leaderboards). `registry()` registers them all.
 - `axionomy-units` owns optional dimension-safe physical authoring.
 - `axionomy-time` owns optional calendar-aware timeline authoring.
 - `axionomy-tree` owns the canonical persistent tree that stored states are
@@ -623,10 +624,14 @@ axionomy-studio-server → axionomy-service
 - `axionomy-mcp` owns the strict stateless MCP reference boundary, handles
   over snapshots kept in an `axionomy-store` store, and process-local task
   orchestration.
-- `axionomy-view` owns runtime-neutral monomorphic presentation contracts and
-  replay-derived frames, without owning a domain ontology or runtime.
-- `axionomy-service` owns the interface-neutral problem catalog, reproducible
-  study requests, cooperative controls, progress, and complete studies.
+- `axionomy-view` owns runtime-neutral monomorphic presentation contracts,
+  replay-derived frames, and what a problem presents itself with (labels,
+  quantity formats, scene helpers, Pareto front views), without owning a
+  domain ontology or runtime.
+- `axionomy-service` owns the interface-neutral study runtime: the `Problem`
+  trait and the `Registry` of problems a front end offers, reproducible study
+  requests, cooperative controls, progress, and complete studies. It knows no
+  specific problem.
 - `axionomy-cli` owns human- and script-oriented command parsing and output.
 - `axionomy-studio-server` owns native HTTP, OpenAPI, SSE, in-memory study
   lifecycle, static export, and hosting for the browser application.
@@ -651,7 +656,8 @@ because Axionomy does not own an authoritative graph and its successors are
 generated implicitly from applicable exchanges. It remains a reasonable future
 adapter when a user needs explicit graph import, export, or analysis.
 
-The MCP adapter depends inward on the shared service, search, and kernel.
+The MCP adapter depends inward on the shared service, the problems it serves
+by default, search, and kernel.
 Neither reusable crate depends on rmcp, Tokio, Axum, Clap, a browser, or a
 database. This direction is essential: interface requirements may improve the
 generic progress, explanation, and interruption contracts, but they cannot
@@ -663,10 +669,13 @@ CLI, HTTP/Studio, and MCP use one interface-neutral service rather than
 reimplementing problem dispatch. Its public vocabulary is intentionally small:
 
 ```text
+Problem           = catalog entry + the documents a study of it holds
+Registry          = the problems a front end offers, each under its own key
 ProblemDescriptor = identity + family + instance profiles + strategies + capabilities
 StudyRequest      = problem + instance + strategy + deterministic seed + work budget
 StudyKey          = the request with its instance and strategy decided
 StudyControl      = cooperative pause + resume + cancel
+StudyProgress     = what a problem reports through, checking control at each report
 ServiceProgress   = ordered phase + completed/total work + message
 StudyObserver     = progress + solver observation + replay-verified frame
                     + each document's trajectory, written as paths
@@ -681,11 +690,14 @@ names avoid words a user's ontology is likely to own: work-league's workers
 claim jobs, so a study is never a job.
 
 The service contains no HTTP, async runtime, CLI parser, MCP types, database,
-or browser state. Every canonical problem has one adapter here that translates
-its user-defined ontology and solver evidence into `axionomy-view`; no problem
-gets a privileged viewer module. A synchronous caller may use `study`, while a
-runtime calls `study_with` and owns the thread, task, scheduling policy, and
-`StudyControl` lifetime.
+browser state, or specific problem. A problem implements `Problem`, and front
+ends study the problems of the `Registry` they are given. Every canonical
+problem's implementation lives in its folder of `axionomy-problems`, beside its
+model, and translates its user-defined ontology and solver evidence into
+`axionomy-view`; no problem gets a privileged viewer module, and a user's own
+ontology is studied in Studio, MCP and the CLI the same way. A synchronous
+caller may use `study`, while a runtime calls `study_with` and owns the thread,
+task, scheduling policy, and `StudyControl` lifetime.
 
 Different interfaces create useful pressure. CLI requires discoverability,
 stable machine-readable output, and useful defaults. HTTP requires resumable
@@ -800,12 +812,12 @@ receiving a misleading first-place zero.
 Stable keys and human labels are deliberately separate. Every key a view
 carries is a typed path: items such as `maze/account/agent` or `node/start`,
 measures, classes, documents, proposals, phases and algorithms each have their
-own kind, so one cannot stand where another is expected. Reference adapters
-implement typed labels for their account, asset, rate, and role enums while
-retaining the same Debug-derived keys used by studies and scene links.
-User-defined economies keep the generic Debug-label fallback unless their
-adapter supplies a presentation ontology. Labels stay outside the problem and
-kernel crates, wording never becomes semantic identity, and adapters do not
+own kind, so one cannot stand where another is expected. Each canonical
+problem's view module implements `Label` for its account, asset, rate, and
+role enums while retaining the same path-derived keys used by studies and
+scene links. User-defined economies keep the generic Debug-label fallback
+unless they implement `Label`. Labels stay out of the kernel and out of a
+problem's model, wording never becomes semantic identity, and views do not
 parse formatted Debug strings to recover domain meaning.
 
 There is one generated contract pipeline:
@@ -863,7 +875,8 @@ The React application uses one `EngineClient` boundary for native HTTP/SSE,
 the browser Worker, and static playback. The native connection badge is backed
 by a periodic health check; a catalog loaded before a server stopped cannot
 claim that the engine is still connected. The browser adapter runs
-`axionomy-service` compiled to Rust/Wasm inside a dedicated Worker, and static
+`axionomy-service` and the canonical problems compiled to Rust/Wasm inside a
+dedicated Worker, and static
 playback advertises that it cannot execute. Local playback position and play/pause state
 stay in a component reducer/state boundary rather than becoming server or
 economic state. React Flow renders graph pictures; Apache ECharts renders
