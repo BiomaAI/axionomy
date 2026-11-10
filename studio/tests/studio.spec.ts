@@ -739,3 +739,66 @@ test("shows fleet cargo staging, shared-road capacity and funded delivery outcom
   await expect(page.locator(".replay-proof")).toContainText("replay verified");
   await page.locator(".graph-scene").screenshot({ path: "/tmp/axionomy-depth-fleet.png", animations: "disabled" });
 });
+
+test("grows thinking cards around wrapped labels", async ({ page }) => {
+  await page.goto("/?problem=maze&instance=showcase&strategy=a-star&document=a-star&view=thinking&step=0&seed=17&budget=128");
+  await expect(page.locator(".thinking-observation-card").first()).toBeVisible();
+  const spill = await page.locator(".thinking-observation-card").evaluateAll((cards) => cards.filter((card) => {
+    const box = card.getBoundingClientRect();
+    return [...card.children].some((part) => part.getBoundingClientRect().bottom > box.bottom + 1);
+  }).length);
+  expect(spill, "no metric hides under the next card").toBe(0);
+});
+
+test("wraps the picture's metrics and legend instead of clipping them", async ({ page }) => {
+  for (const problem of ["maze", "perishables"]) {
+    await page.goto(`/?problem=${problem}&instance=showcase&view=replay&step=4&seed=17&budget=128`);
+    await expect(page.locator(".scene-chrome")).toBeVisible();
+    const clipped = await page.locator(".scene-chrome").evaluate((lane) => {
+      const edge = lane.getBoundingClientRect().right;
+      return [...lane.querySelectorAll(".scene-metric, li")].filter((item) => item.getBoundingClientRect().right > edge + 1).map((item) => item.textContent);
+    });
+    expect(clipped, `${problem} chrome`).toEqual([]);
+    const lane = await page.locator(".scene-chrome").boundingBox();
+    const nodes = await page.locator(".react-flow__node").evaluateAll((elements) => elements.map((element) => element.getBoundingClientRect().top));
+    expect(Math.min(...nodes), `${problem} picture starts below its chrome`).toBeGreaterThanOrEqual(lane!.y + lane!.height - 1);
+  }
+});
+
+test("lets the mouse wheel scroll the page over the picture", async ({ page }) => {
+  await page.goto("/?problem=maze&instance=showcase&view=replay&step=0&seed=17&budget=128");
+  await expect(page.locator(".graph-scene .react-flow__node").first()).toBeVisible();
+  await page.locator(".graph-scene").scrollIntoViewIfNeeded();
+  const viewport = () => page.locator(".graph-scene .react-flow__viewport").evaluate((element) => getComputedStyle(element).transform);
+  const before = { scroll: await page.evaluate(() => window.scrollY), transform: await viewport() };
+  const box = (await page.locator(".graph-scene").boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.wheel(0, 400);
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(before.scroll);
+  expect(await viewport()).toBe(before.transform);
+});
+
+test("says an outcome without exchanges has nothing to play", async ({ page }) => {
+  await page.goto("/?problem=exact-cover&instance=showcase&strategy=algorithm-x&document=unsatisfiable&view=replay&step=0&seed=17&budget=128");
+  await expect(page.getByRole("heading", { name: "Exact cover · no solution exists" })).toBeVisible();
+  await expect(page.locator(".ticker-panel")).toContainText("This outcome has no exchanges");
+  await expect(page.getByRole("button", { name: "Play" })).toBeDisabled();
+});
+
+test("keeps interface text at a readable size", async ({ page }) => {
+  for (const url of [
+    "/?problem=maze&instance=showcase&view=replay&step=8&seed=17&budget=128",
+    "/?problem=work-league&instance=showcase&strategy=mixed-field&view=replay&step=12&seed=17&budget=128",
+    "/?problem=amm&instance=showcase&view=replay&step=10&seed=17&budget=128",
+  ]) {
+    await page.goto(url);
+    await expect(page.locator(".stage .world-panel")).toBeVisible();
+    // Diagram labels inside the zoomable picture follow VISUAL_LANGUAGE.md's diagram scale.
+    const small = await page.evaluate(() => [...document.querySelectorAll<HTMLElement | SVGElement>("body *")]
+      .filter((element) => !element.closest(".react-flow__renderer, .grid-entity"))
+      .filter((element) => [...element.childNodes].some((node) => node.nodeType === Node.TEXT_NODE && node.textContent?.trim()))
+      .filter((element) => parseFloat(getComputedStyle(element).fontSize) < 10)
+      .map((element) => `${element.tagName.toLowerCase()}.${element.getAttribute("class") ?? ""}: ${element.textContent?.trim().slice(0, 30)}`));
+    expect(small, url).toEqual([]);
+  }
+});

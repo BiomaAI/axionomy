@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { vi } from "vitest";
 import { App, DEFAULT_BUDGET, DEFAULT_SEED, ThinkingWorkspace } from "./App";
 import { nativeEngine, type EngineEventListener } from "./engine";
-import type { Study } from "./api";
+import { fetchStaticStudy, type Study } from "./api";
 import openapi from "../openapi.json";
 
 vi.mock("echarts/core", () => ({
@@ -79,13 +79,14 @@ test("loads a full portable study and exposes the model workbench", async () => 
   expect(screen.getByRole("button", { name: "Go to final state" })).toBeInTheDocument();
 });
 
-test("a late saved preview cannot replace a newly computed result", async () => {
+test("a saved study still downloading disables Study and cannot replace a newer study", async () => {
   let finishPreview!: (study: Study) => void;
   const preview = new Promise<Study>((resolve) => { finishPreview = resolve; });
   let listener!: EngineEventListener;
   const result = { ...study, key: { ...study.key, seed: 18 }, documents: [{ ...study.documents[0], title: "New computed branch" }] } as Study;
+  const loaded = { ...study, documents: [{ ...study.documents[0], title: "Study from a file" }] } as Study;
   const health = vi.spyOn(nativeEngine, "health").mockResolvedValue(true);
-  const defaults = vi.spyOn(nativeEngine, "defaultStudy").mockReturnValue(preview);
+  const defaults = vi.mocked(fetchStaticStudy).mockReturnValueOnce(preview);
   const stored = vi.spyOn(nativeEngine, "study").mockResolvedValue(result);
   const start = vi.spyOn(nativeEngine, "start").mockImplementation(async (request, onEvent) => {
     listener = onEvent;
@@ -94,6 +95,13 @@ test("a late saved preview cannot replace a newly computed result", async () => 
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const view = render(<QueryClientProvider client={client}><App /></QueryClientProvider>);
   await waitFor(() => expect(defaults).toHaveBeenCalled());
+  expect(await screen.findByText("Loading the saved study for Key-door maze…")).toBeInTheDocument();
+  await waitFor(() => expect(screen.getByText("Engine connected")).toBeInTheDocument());
+  expect(screen.getByRole("button", { name: /^Study$/ })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Copy link" })).toBeDisabled();
+  await userEvent.upload(screen.getByLabelText("Load study"), new File([JSON.stringify(loaded)], "study.json", { type: "application/json" }));
+  expect(await screen.findByRole("heading", { name: "Study from a file" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: /^Study$/ })).toBeEnabled();
   await userEvent.click(screen.getByRole("button", { name: /^Study$/ }));
   await act(async () => {
     await listener({ kind: "study_completed", study_id: "study-1", sequence: 1, document: result.selected_document });
@@ -104,7 +112,7 @@ test("a late saved preview cannot replace a newly computed result", async () => 
   expect(screen.getByRole("heading", { name: "New computed branch" })).toBeInTheDocument();
   view.unmount();
   client.clear();
-  for (const spy of [health, defaults, stored, start]) spy.mockRestore();
+  for (const spy of [health, stored, start]) spy.mockRestore();
 });
 
 test("a link that omits options opens the problem's defaults without a warning", async () => {

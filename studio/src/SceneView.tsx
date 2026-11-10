@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type RefObject } from "react";
 import {
   Background,
   Controls,
@@ -17,18 +17,35 @@ import { SceneIcon } from "./SceneIcon";
 export type ReplayMotionMode = "step" | "seek";
 
 export function SceneView({ scene, previousScene, history = [], frame, motion = "step", onAccount }: { scene?: Scene | null; previousScene?: Scene | null; history?: Scene[]; frame?: ExchangeFrame; motion?: ReplayMotionMode; onAccount?: (account: string) => void }) {
+  // The chrome wraps rather than clipping, so the picture is laid out below
+  // however many rows it takes.
+  const chrome = useRef<HTMLDivElement>(null);
+  const [chromeHeight, setChromeHeight] = useState(0);
+  useLayoutEffect(() => {
+    const node = chrome.current;
+    if (!node) { setChromeHeight(0); return; }
+    const measure = () => setChromeHeight(Math.ceil(node.getBoundingClientRect().height));
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [scene !== null && scene !== undefined && hasChrome(scene)]);
   if (!scene) {
     return <div className="empty-state">No picture for this problem — the accounts below still show everything.</div>;
   }
-  return <div className="scene-composition">
-    <SceneChrome scene={scene} />
-    <SceneSurfaceView scene={scene} previousScene={previousScene} history={history} frame={frame} motion={motion} onAccount={onAccount} />
+  return <div className="scene-composition" style={{ "--scene-top": `${chromeHeight}px` } as CSSProperties}>
+    <SceneChrome scene={scene} lane={chrome} />
+    <SceneSurfaceView scene={scene} previousScene={previousScene} history={history} frame={frame} motion={motion} onAccount={onAccount} topInset={chromeHeight} />
   </div>;
 }
 
-function SceneSurfaceView({ scene, previousScene, history, frame, motion, onAccount }: { scene: Scene; previousScene?: Scene | null; history: Scene[]; frame?: ExchangeFrame; motion: ReplayMotionMode; onAccount?: (account: string) => void }) {
+function hasChrome(scene: Scene): boolean {
+  return scene.metrics.length > 0 || scene.legend.length > 0 || scene.annotations.length > 0;
+}
+
+function SceneSurfaceView({ scene, previousScene, history, frame, motion, onAccount, topInset }: { scene: Scene; previousScene?: Scene | null; history: Scene[]; frame?: ExchangeFrame; motion: ReplayMotionMode; onAccount?: (account: string) => void; topInset: number }) {
   switch (scene.surface.kind) {
-    case "graph": return <GraphScene scene={scene} previousScene={previousScene} frame={frame} motion={motion} surface={scene.surface} onAccount={onAccount} />;
+    case "graph": return <GraphScene scene={scene} previousScene={previousScene} frame={frame} motion={motion} surface={scene.surface} onAccount={onAccount} topInset={topInset} />;
     case "grid": return <GridScene scene={scene} previousScene={previousScene} frame={frame} motion={motion} surface={scene.surface} onAccount={onAccount} />;
     case "matrix": return <MatrixScene scene={scene} surface={scene.surface} onAccount={onAccount} />;
     case "timeline": return <TimelineScene scene={scene} surface={scene.surface} onAccount={onAccount} />;
@@ -169,16 +186,22 @@ function MarketBondingCurve({ surface }: { surface: MarketSurface }) {
   </svg>;
 }
 
-function SceneChrome({ scene }: { scene: Scene }) {
-  if (scene.metrics.length === 0 && scene.legend.length === 0 && scene.annotations.length === 0) return null;
-  return <div className="scene-chrome">
-    {scene.metrics.length > 0 && <div className="scene-metrics">{scene.metrics.map((metric) => <div key={metric.key} className="scene-metric"><span>{metric.label}</span><strong>{metric.value}{metric.unit ? ` ${metric.unit}` : ""}</strong>{metric.previous !== null && metric.previous !== undefined && metric.previous !== metric.value && <small>{metric.previous} → {metric.value}</small>}</div>)}</div>}
-    {scene.annotations.length > 0 && <div className="scene-annotations">{scene.annotations.map((annotation) => <span key={annotation.id} className={`tone-${annotation.tone}`}>{annotation.label}</span>)}</div>}
-    {scene.legend.length > 0 && <div className="scene-legend" aria-label="Scene legend">{scene.legend.slice(0, 8).map((entry, index) => <span key={`${entry.glyph}:${entry.tone}:${index}`} className={`tone-${entry.tone}`}><SceneIcon glyph={entry.glyph} size={15} />{entry.label}</span>)}</div>}
+function SceneChrome({ scene, lane }: { scene: Scene; lane: RefObject<HTMLDivElement | null> }) {
+  if (!hasChrome(scene)) return null;
+  return <div className="scene-chrome" ref={lane}>
+    {scene.metrics.length > 0 && <div className="scene-metrics">{scene.metrics.map((metric) => {
+      const changed = metric.previous !== null && metric.previous !== undefined && metric.previous !== metric.value;
+      // Every metric keeps a line for its change, so the lane's height, and
+      // the picture fitted below it, hold still from step to step.
+      return <div key={metric.key} className="scene-metric"><span>{metric.label}</span><strong>{metric.value}{metric.unit ? ` ${metric.unit}` : ""}</strong>{changed ? <small>{metric.previous} → {metric.value}</small> : <small className="unchanged" aria-hidden="true">{"\u00a0"}</small>}</div>;
+    })}</div>}
+    {scene.annotations.length > 0 && <ul className="scene-annotations" aria-label="Scene notes">{scene.annotations.map((annotation) => <li key={annotation.id} className={`tone-${annotation.tone}`}>{annotation.label}</li>)}</ul>}
+    {scene.legend.length > 0 && <ul className="scene-legend" aria-label="Scene legend">{scene.legend.slice(0, 8).map((entry, index) => <li key={`${entry.glyph}:${entry.tone}:${index}`} className={`tone-${entry.tone}`}><SceneIcon glyph={entry.glyph} size={15} />{entry.label}</li>)}</ul>}
   </div>;
 }
 
 type GraphSurface = Extract<SceneSurface, { kind: "graph" }>;
+type FitPadding = Record<"top" | "right" | "bottom" | "left", `${number}px`>;
 type EntityEffect = "consumed" | "produced" | "preserved" | "changed" | "none";
 type HandleSide = "top" | "right" | "bottom" | "left";
 type GraphHandle = { id: string; type: "source" | "target"; side: HandleSide; offset: number };
@@ -271,9 +294,13 @@ function AttachmentNode({ data }: NodeProps) {
 const nodeTypes = { structure: StructureNode, occupant: OccupantNode, attachments: AttachmentNode };
 const RELATION_SIDES: HandleSide[] = ["top", "right", "bottom", "left"];
 
-function GraphScene({ scene, previousScene, frame, motion, surface, onAccount }: { scene: Scene; previousScene?: Scene | null; frame?: ExchangeFrame; motion: ReplayMotionMode; surface: GraphSurface; onAccount?: (account: string) => void }) {
+function GraphScene({ scene, previousScene, frame, motion, surface, onAccount, topInset }: { scene: Scene; previousScene?: Scene | null; frame?: ExchangeFrame; motion: ReplayMotionMode; surface: GraphSurface; onAccount?: (account: string) => void; topInset: number }) {
   const host = useRef<HTMLDivElement>(null);
   const [flow, setFlow] = useState<ReactFlowInstance | null>(null);
+  // The picture fits below the chrome lane, whatever its height.
+  const padding: FitPadding = { top: `${topInset + 14}px`, right: "24px", bottom: "24px", left: "24px" };
+  const fitPadding = useRef(padding);
+  fitPadding.current = padding;
   // The stage sizes the canvas (viewport height, theater mode, breakpoints),
   // so the picture re-fits whenever its container changes size.
   useEffect(() => {
@@ -288,7 +315,7 @@ function GraphScene({ scene, previousScene, frame, motion, surface, onAccount }:
       lastWidth = box.width;
       lastHeight = box.height;
       cancelAnimationFrame(pending);
-      pending = requestAnimationFrame(() => { void flow.fitView({ padding: { top: "64px", right: "24px", bottom: "24px", left: "24px" } }); });
+      pending = requestAnimationFrame(() => { void flow.fitView({ padding: fitPadding.current }); });
     });
     observer.observe(host.current);
     return () => { observer.disconnect(); cancelAnimationFrame(pending); };
@@ -414,17 +441,18 @@ function GraphScene({ scene, previousScene, frame, motion, surface, onAccount }:
           const y = node.position.y * viewport.zoom + viewport.y;
           const width = (node.measured?.width ?? GRAPH_NODE_WIDTH) * viewport.zoom;
           const height = (node.measured?.height ?? GRAPH_NODE_HEIGHT) * viewport.zoom;
-          return x < 8 || y < 56 || x + width > box.width - 8 || y + height > box.height - 8;
+          return x < 8 || y < topInset + 6 || x + width > box.width - 8 || y + height > box.height - 8;
         });
-        if (clipped) void flow.fitView({ padding: { top: "64px", right: "24px", bottom: "24px", left: "24px" }, duration: motion === "step" ? 180 : 0 });
+        if (clipped) void flow.fitView({ padding: fitPadding.current, duration: motion === "step" ? 180 : 0 });
       });
     });
     return () => cancelAnimationFrame(pending);
-  }, [flow, layoutKey, motion]);
+  }, [flow, layoutKey, motion, topInset]);
   return <div className={`graph-scene motion-${motion}`} data-motion={motion} ref={host} aria-label={scene.title}>
-    <ReactFlow nodes={nodes} edges={[...edges, ...relationEdges]} nodeTypes={nodeTypes} fitView fitViewOptions={{ padding: { top: "64px", right: "24px", bottom: "24px", left: "24px" } }} minZoom={0.2} maxZoom={2} nodesConnectable={false} nodesDraggable={false} elementsSelectable onInit={setFlow} onNodeClick={(_, node) => { const account = (node.data as SceneNodeData).focusAccount; if (account) onAccount?.(account); }}>
+    {/* The wheel scrolls the page; the controls, a pinch, or Ctrl with the wheel zoom the picture. */}
+    <ReactFlow nodes={nodes} edges={[...edges, ...relationEdges]} nodeTypes={nodeTypes} fitView fitViewOptions={{ padding }} minZoom={0.2} maxZoom={2} zoomOnScroll={false} preventScrolling={false} nodesConnectable={false} nodesDraggable={false} elementsSelectable onInit={setFlow} onNodeClick={(_, node) => { const account = (node.data as SceneNodeData).focusAccount; if (account) onAccount?.(account); }}>
       <Background gap={22} size={1} />
-      <Controls showInteractive={false} fitViewOptions={{ padding: { top: "64px", right: "24px", bottom: "24px", left: "24px" } }} />
+      <Controls showInteractive={false} fitViewOptions={{ padding }} />
     </ReactFlow>
     {context.length > 0 && <aside className="scene-context" aria-label="Scenario context"><header>Scenario context</header>{context.map((entity) => <button type="button" key={entity.id.key} className={`tone-${entity.tone}`} title={[entity.status, ...entity.metrics.map((metric) => `${metric.label}: ${metric.value}${metric.unit ? ` ${metric.unit}` : ""}`)].filter(Boolean).join(" · ")} disabled={!entity.account} onClick={() => entity.account && onAccount?.(entity.account)}><SceneIcon glyph={entity.glyph} size={15} /><span><b>{entity.id.label}</b>{entity.status && <small>{entity.status}</small>}<small>{contextRelation(entity, surface)} · {entityDetail(entity)}</small></span></button>)}</aside>}
   </div>;

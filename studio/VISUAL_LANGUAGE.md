@@ -153,6 +153,13 @@ labels and 5.5px metadata at the canonical desktop scale. These values may
 evolve as a system, but a graph node must not inherit the surrounding 16px
 application typography.
 
+Interface text is never smaller than 10px. That floor covers every panel,
+rail, table, and notice, and the chrome that rides over the picture: scene
+metrics, notes, the legend, scenario context, and the market's step line,
+actors, pool, and charts. Only labels drawn inside a scaled diagram surface
+(graph nodes, attachments, edges, and grid entities) use the compact diagram
+scale above, because the viewer's zoom sets their size on screen.
+
 - Icons, titles, and metadata occupy separate layout regions.
 - Primary labels must remain readable at the normal fitted view.
 - Structure titles may wrap to two controlled lines.
@@ -195,6 +202,12 @@ hierarchy, grouping, and stable geometry—not by hiding important state.
 - Source-of-truth and current-step panels complement the picture rather than
   duplicate every label inside it.
 - Legends name the symbols currently needed to read the scene.
+- Scene metrics, notes, and the legend wrap onto further rows instead of
+  clipping at the picture's edge, and the picture is fitted below them.
+  Legend entries, notes, and capability lists are static labels; only
+  controls look like buttons.
+- The mouse wheel scrolls the page. The picture zooms with its controls, a
+  pinch, or Ctrl with the wheel.
 - Z-order remains consistent: edges, structures, attachments, occupants,
   moving occupants, then effect markers.
 - Empty space should clarify topology; it should not result from entities being

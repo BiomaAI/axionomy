@@ -39,7 +39,11 @@ ledger remain visible together on wide screens and stack without page overflow
 on narrow screens. Balances that never change in the selected trace may be
 folded for density, but remain explicitly labeled as unchanged assets and are
 always inspectable. The viewer does not reinterpret them as configuration or
-remove them from the source-of-truth ledger.
+remove them from the source-of-truth ledger. The mouse wheel scrolls the page
+over the picture; its +/− controls, a pinch, or Ctrl with the wheel zoom it. An
+outcome without exchanges says so and has nothing to play. While a saved study
+downloads, Studio shows how much has arrived and holds Study and Copy link
+until it is on screen.
 
 Each problem advertises Micro, Showcase, and Stress instances. Showcase is the
 default and is also the pre-built offline study; Micro and Stress are live

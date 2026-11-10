@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { IconChevronLeft, IconChevronRight, IconMaximize, IconPlayerPauseFilled, IconPlayerPlayFilled, IconPlayerSkipBack, IconPlayerSkipForward } from "@tabler/icons-react";
 import "@xyflow/react/dist/style.css";
 import logoDark from "../../assets/axionomy-logo-dark.png";
@@ -12,6 +12,7 @@ import {
   type SearchObservation,
   type StudioEvent,
   type Study,
+  type StudyDownload,
   type StudySummary,
   type ViewDocument,
   type ViewSnapshot,
@@ -141,6 +142,9 @@ export function App() {
     : "connected";
   const catalog = useQuery({
     queryKey: ["problems", engine.kind],
+    // Every engine serves the same Rust catalog; keeping it across an engine
+    // change keeps the open problem, and its saved study, in place.
+    placeholderData: keepPreviousData,
     retry: false,
     queryFn: () => engine.catalog(),
   });
@@ -180,6 +184,10 @@ export function App() {
   const eventSource = useRef<EngineStudySubscription | null>(null);
   const studyStartedAt = useRef<number | undefined>(undefined);
   const previewGeneration = useRef(0);
+  // The saved study being downloaded, and how much of it has arrived.
+  const [preview, setPreview] = useState<{ problem: string; download: StudyDownload }>();
+  const previewAbort = useRef<AbortController | undefined>(undefined);
+  const stopPreview = () => { previewGeneration.current += 1; previewAbort.current?.abort(); setPreview(undefined); };
 
   const problem = catalog.data?.find((candidate) => candidate.key === problemKey);
   const instance = problem?.instances.find((candidate) => candidate.profile === instanceKey);
@@ -258,8 +266,16 @@ export function App() {
     setFreshStudy(undefined);
     const generation = ++previewGeneration.current;
     let disposed = false;
-    engine.defaultStudy(problem.key).then((next) => {
-      if (disposed || generation !== previewGeneration.current) return;
+    const abort = new AbortController();
+    previewAbort.current = abort;
+    const current = () => !disposed && generation === previewGeneration.current;
+    setPreview({ problem: problem.title, download: { received: 0 } });
+    engine.defaultStudy(problem.key, {
+      signal: abort.signal,
+      onProgress: (download) => { if (current()) setPreview({ problem: problem.title, download }); },
+    }).then((next) => {
+      if (!current()) return;
+      setPreview(undefined);
       const requestedDocument = next.documents.find((candidate) => candidate.id === documentId)?.id
         ?? next.documents.find((candidate) => candidate.id === requestedStrategy)?.id
         ?? next.selected_document;
@@ -271,10 +287,12 @@ export function App() {
       setStudyOrigin("saved");
       setDocumentId(requestedDocument);
     }).catch((cause: unknown) => {
-      if (!disposed && generation === previewGeneration.current) setError(cause instanceof Error ? cause.message : String(cause));
+      if (!current()) return;
+      setPreview(undefined);
+      setError(cause instanceof Error ? cause.message : String(cause));
     });
-    return () => { disposed = true; };
-  }, [problem?.key, engine.kind]);
+    return () => { disposed = true; abort.abort(); };
+  }, [problem?.key]);
 
   useEffect(() => {
     if (!document || study?.problem.key !== problemKey) return;
@@ -348,7 +366,7 @@ export function App() {
       const target = event.target;
       const interactive = target instanceof Element
         && target.closest("input, select, textarea, button, a, summary, [contenteditable='true']");
-      if (viewMode !== "replay" || !document || interactive) return;
+      if (viewMode !== "replay" || !document || document.frames.length === 0 || interactive) return;
       if (event.key === "ArrowLeft") { setPlaying(false); setReplayMotion("step"); setPosition((current) => Math.max(0, current - 1)); }
       else if (event.key === "ArrowRight") { setPlaying(false); setReplayMotion("step"); setPosition((current) => Math.min(document.frames.length, current + 1)); }
       else if (event.key === "Home") { setPlaying(false); setReplayMotion("seek"); setPosition(0); }
@@ -367,7 +385,7 @@ export function App() {
   }, [document, viewMode]);
 
   const start = async () => {
-    previewGeneration.current += 1;
+    stopPreview();
     const submittedProblem = problem?.title ?? problemKey;
     const submittedInstance = problem?.instances.find((candidate) => candidate.profile === instanceKey)?.label ?? instanceKey;
     const submittedStrategy = problem?.strategies.find((candidate) => candidate.key === strategyKey)?.label ?? strategyKey;
@@ -402,7 +420,7 @@ export function App() {
 
   const loadFile = async (file?: File) => {
     if (!file) return;
-    previewGeneration.current += 1;
+    stopPreview();
     try {
       const next = JSON.parse(await file.text()) as Study;
       if (!Array.isArray(next.documents) || !next.selected_document) throw new Error("missing study documents");
@@ -415,6 +433,8 @@ export function App() {
     if (match) setDocumentId(match.id);
   };
   const active = launching || Boolean(ongoing);
+  // A link or Study during a download would name or replace a study not yet on screen.
+  const loading = preview !== undefined;
   const modelSize = document?.telemetry.find((entry) => entry.algorithm === "Model size");
   const modelCounts = modelSize?.points
     .filter((point) => point.kind === "accounts" || point.kind === "rates")
@@ -469,12 +489,12 @@ export function App() {
       <label className="field strategy-field"><span>Strategy</span><select name="strategy" value={strategyKey} onChange={(event) => selectStrategy(event.target.value)} disabled={active}>{problem?.strategies.map((strategy) => <option value={strategy.key} key={strategy.key}>{strategy.label}</option>)}</select></label>
       <label className="field numeric-field"><span>Seed</span><input name="seed" type="number" min="0" value={seed} disabled={active} onChange={(event) => setSeed(Number(event.target.value))} /></label>
       <label className="field numeric-field"><span>Budget</span><input name="budget" type="number" min="1" value={budget} disabled={active} onChange={(event) => setBudget(Math.max(1, Number(event.target.value)))} /></label>
-      <button className="primary" onClick={start} disabled={active || !engine.canStudy}>{launching ? "Starting…" : ongoing?.status === "paused" ? "Paused" : ongoing ? "Studying…" : "Study"}</button>
+      <button className="primary" onClick={start} disabled={active || loading || !engine.canStudy}>{launching ? "Starting…" : ongoing?.status === "paused" ? "Paused" : ongoing ? "Studying…" : "Study"}</button>
       {engine.canPause && ongoing?.status === "studying" && <button onClick={pause}>Pause</button>}
       {engine.canPause && ongoing?.status === "paused" && <button onClick={resume}>Resume</button>}
       {ongoing && <button className="danger" onClick={cancel}>Cancel</button>}
       <label className="file-button">Load study<input name="study" type="file" accept="application/json,.json" onChange={(event) => loadFile(event.target.files?.[0])} /></label>
-      <button type="button" className="share-link" onClick={copyLink}>{copied ? "Link copied ✓" : "Copy link"}</button>
+      <button type="button" className="share-link" onClick={copyLink} disabled={loading}>{copied ? "Link copied ✓" : "Copy link"}</button>
       <div className="study-message">{active ? "A newly computed study will replace the current view." : engine.canStudy ? "The CLI, HTTP API, MCP server, and Studio all study this same problem the same way." : "No engine running — you can still replay the saved studies."}</div>
     </section>
 
@@ -484,10 +504,10 @@ export function App() {
       {linkNotices.map((message) => <div className="link-notice" role="status" key={message}>{message}<button type="button" onClick={() => setLinkNotices((current) => current.filter((candidate) => candidate !== message))}>Dismiss</button></div>)}
     </div>}
 
-    {problem && <section className="problem-context"><div><span>{familyLabel(problem.family)}</span><div className="problem-copy"><p>{problem.summary}</p><small><strong>{instance?.label ?? study?.instance.label}</strong>{instance?.description ?? study?.instance.description}</small></div></div><div>{problem.capabilities.map((capability) => <span key={capability}>{capabilityLabel(capability)}</span>)}</div></section>}
+    {problem && <section className="problem-context"><div><span>{familyLabel(problem.family)}</span><div className="problem-copy"><p>{problem.summary}</p><small><strong>{instance?.label ?? study?.instance.label}</strong>{instance?.description ?? study?.instance.description}</small></div></div><ul className="capabilities" aria-label="What this problem exercises">{problem.capabilities.map((capability) => <li key={capability}>{capabilityLabel(capability)}</li>)}</ul></section>}
     {error && <div className="error-banner" role="alert">{error}</div>}
 
-    {study && document && snapshot ? <QuantityFormats.Provider value={document.formats ?? {}}><main className={freshStudy === study ? "fresh-study" : undefined}>
+    {!loading && study && document && snapshot ? <QuantityFormats.Provider value={document.formats ?? {}}><main className={freshStudy === study ? "fresh-study" : undefined}>
       <section className="alternative-bar"><div><span>Alternatives</span><strong>{study.documents.length} replayable results</strong></div><div role="tablist">{study.documents.map((candidate) => <button key={candidate.id} role="tab" aria-selected={candidate.id === document.id} onClick={() => selectDocument(candidate.id)}>{candidate.title.replace(`${study.problem.title} · `, "")}</button>)}</div></section>
       <StrategyComparison study={study} selected={document.id} onSelect={selectDocument} />
       <section className="document-heading"><div><span className="eyebrow">{study.instance.label} · {document.source.label} · {study.problem.key}/{document.id}{freshStudy === study ? " · just computed" : ""}</span><h1>{document.title}</h1><p>{document.description}</p><StudyKeyLine study={study} origin={studyOrigin} model={modelCounts} /></div><div className="objective-pills">{document.objectives.map((objective) => <div className="objective" key={objective.key}><span>{objective.label}</span><strong>{objective.value}</strong><small>{objective.direction}</small></div>)}</div></section>
@@ -518,7 +538,7 @@ export function App() {
         <div className="truth-rail">
           <div className="panel ticker-panel">
             <PanelHeading kicker="This step" title={position === 0 ? "Initial state" : frame?.cues[0]?.label ?? frame?.exchange.rate.label ?? "Exchange"} aside={`${position} / ${document.frames.length}`} />
-            <StepTicker frame={frame} onProof={showProof} />
+            <StepTicker frame={frame} steps={document.frames.length} onProof={showProof} />
           </div>
           <div className="panel accounts-panel">
             <PanelHeading kicker="Source of truth" title="Accounts & assets" aside={focusedAccount ? "linked from picture" : `${snapshot.accounts.length} accounts`} />
@@ -528,7 +548,7 @@ export function App() {
       </section>
 
       <section className={`evidence-grid${hasAnalysis ? "" : " no-analysis"}`}>
-        <div className="panel transition-panel"><PanelHeading kicker="One step" title={frame?.exchange.rate.label ?? "Initial state"} /><Transition frame={frame} /></div>
+        <div className="panel transition-panel"><PanelHeading kicker="One step" title={frame?.exchange.rate.label ?? "Initial state"} /><Transition frame={frame} steps={document.frames.length} /></div>
         <div className="panel proposal-panel"><PanelHeading kicker="Rule checks" title="Moves that should be refused" aside={`${document.proposals.length} ${document.proposals.length === 1 ? "check" : "checks"}`} /><ProposalInspector proposals={document.proposals} /></div>
         {hasAnalysis && <div className="panel analysis-panel"><PanelHeading kicker="Tradeoffs" title={document.pareto_fronts[0]?.title ?? "Search evidence"} /><Suspense fallback={<div className="empty-state">Loading analysis…</div>}><ParetoChart document={document} onSelect={selectPareto} /></Suspense><Telemetry document={document} /></div>}
       </section>
@@ -539,7 +559,7 @@ export function App() {
       </section>
       </>;
       })()}
-    </main></QuantityFormats.Provider> : <div className="loading">Loading saved problem result…</div>}
+    </main></QuantityFormats.Provider> : <StudyLoading problem={preview?.problem ?? problem?.title} download={preview?.download} />}
 
     <footer>The picture explains. The accounts, rules, and replay prove.</footer>
   </div>;
@@ -910,8 +930,26 @@ function formatDuration(milliseconds: number): string {
   return seconds < 10 ? `${seconds.toFixed(1)} s` : `${Math.round(seconds)} s`;
 }
 
+/** A saved study on its way: how much has arrived, and of how much when the response says. */
+function StudyLoading({ problem, download }: { problem?: string; download?: StudyDownload }) {
+  const total = download?.total;
+  const received = download?.received ?? 0;
+  const amount = total !== undefined ? `${megabytes(received)} of ${megabytes(total)}`
+    : received > 0 ? `${megabytes(received)} received${download?.compressed ? ` · ${megabytes(download.compressed)} compressed download` : ""}`
+    : "Waiting for the first bytes…";
+  return <div className="loading" role="status" aria-live="polite">
+    <strong>{problem ? `Loading the saved study for ${problem}…` : "Loading the problem catalog…"}</strong>
+    {download && (total !== undefined ? <progress max={total} value={Math.min(received, total)} aria-label="Saved study download" /> : <div className="indeterminate-progress" aria-label="Saved study download" />)}
+    {download && <span>{amount}</span>}
+  </div>;
+}
+
+function megabytes(bytes: number): string {
+  return `${(bytes / 1_000_000).toFixed(bytes < 10_000_000 ? 1 : 0)} MB`;
+}
+
 function PlaybackControls({ position, count, playing, delay, onDelay, onPosition, onPlaying, frame, onShare, shared }: { position: number; count: number; playing: boolean; delay: number; onDelay: (delay: number) => void; onPosition: (position: number, motion: ReplayMotionMode) => void; onPlaying: (playing: boolean) => void; frame?: ExchangeFrame; onShare?: () => void; shared?: boolean }) {
-  return <section className="playback"><div className="transport"><button type="button" aria-label="Go to initial state" disabled={position === 0} onClick={() => { onPlaying(false); onPosition(0, "seek"); }}><IconPlayerSkipBack size={19} stroke={2} aria-hidden="true" /></button><button type="button" aria-label="Previous exchange" disabled={position === 0} onClick={() => { onPlaying(false); onPosition(Math.max(0, position - 1), "step"); }}><IconChevronLeft size={20} stroke={2.1} aria-hidden="true" /></button><button type="button" className="play" aria-label={playing ? "Pause" : "Play"} onClick={() => onPlaying(!playing)}>{playing ? <IconPlayerPauseFilled size={18} aria-hidden="true" /> : <IconPlayerPlayFilled size={18} aria-hidden="true" />}</button><button type="button" aria-label="Next exchange" disabled={position === count} onClick={() => { onPlaying(false); onPosition(Math.min(count, position + 1), "step"); }}><IconChevronRight size={20} stroke={2.1} aria-hidden="true" /></button><button type="button" aria-label="Go to final state" disabled={position === count} onClick={() => { onPlaying(false); onPosition(count, "seek"); }}><IconPlayerSkipForward size={19} stroke={2} aria-hidden="true" /></button></div><div className="scrubber"><div className="scrubber-label"><span>{position === 0 ? "Initial state" : frame?.cues[0]?.label ?? frame?.exchange.rate.label}</span><strong>{position} / {count}</strong></div><input name="trace-position" aria-label="Trace position" type="range" min="0" max={count} value={position} onChange={(event) => onPosition(Number(event.target.value), "seek")} /></div><label className="playback-speed"><span>Speed</span><select name="playback-speed" aria-label="Playback speed" value={delay} onChange={(event) => onDelay(Number(event.target.value))}><option value={1600}>0.5×</option><option value={900}>0.75×</option><option value={650}>1×</option><option value={325}>2×</option><option value={160}>4×</option></select></label><div className="kbd-hint" aria-hidden="true"><b>Space</b> play · <b>←</b><b>→</b> step</div>{onShare && <button type="button" className="share-mini" onClick={onShare}>{shared ? "Link copied ✓" : "Copy link"}</button>}<div className="replay-proof"><span>✓</span> replay verified</div></section>;
+  return <section className="playback"><div className="transport"><button type="button" aria-label="Go to initial state" disabled={position === 0} onClick={() => { onPlaying(false); onPosition(0, "seek"); }}><IconPlayerSkipBack size={19} stroke={2} aria-hidden="true" /></button><button type="button" aria-label="Previous exchange" disabled={position === 0} onClick={() => { onPlaying(false); onPosition(Math.max(0, position - 1), "step"); }}><IconChevronLeft size={20} stroke={2.1} aria-hidden="true" /></button><button type="button" className="play" aria-label={playing ? "Pause" : "Play"} disabled={count === 0} onClick={() => onPlaying(!playing)}>{playing ? <IconPlayerPauseFilled size={18} aria-hidden="true" /> : <IconPlayerPlayFilled size={18} aria-hidden="true" />}</button><button type="button" aria-label="Next exchange" disabled={position === count} onClick={() => { onPlaying(false); onPosition(Math.min(count, position + 1), "step"); }}><IconChevronRight size={20} stroke={2.1} aria-hidden="true" /></button><button type="button" aria-label="Go to final state" disabled={position === count} onClick={() => { onPlaying(false); onPosition(count, "seek"); }}><IconPlayerSkipForward size={19} stroke={2} aria-hidden="true" /></button></div><div className="scrubber"><div className="scrubber-label"><span>{position === 0 ? "Initial state" : frame?.cues[0]?.label ?? frame?.exchange.rate.label}</span><strong>{position} / {count}</strong></div><input name="trace-position" aria-label="Trace position" type="range" min="0" max={count} value={position} onChange={(event) => onPosition(Number(event.target.value), "seek")} /></div><label className="playback-speed"><span>Speed</span><select name="playback-speed" aria-label="Playback speed" value={delay} onChange={(event) => onDelay(Number(event.target.value))}><option value={1600}>0.5×</option><option value={900}>0.75×</option><option value={650}>1×</option><option value={325}>2×</option><option value={160}>4×</option></select></label><div className="kbd-hint" aria-hidden="true"><b>Space</b> play · <b>←</b><b>→</b> step</div>{onShare && <button type="button" className="share-mini" onClick={onShare}>{shared ? "Link copied ✓" : "Copy link"}</button>}<div className="replay-proof"><span>✓</span> replay verified</div></section>;
 }
 
 function eventMessage(event: StudioEvent): string {

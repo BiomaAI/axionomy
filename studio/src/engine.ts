@@ -9,6 +9,7 @@ import {
   resumeStudy,
   type ProblemDescriptor,
   type Study,
+  type StudyFetchOptions,
   type StudyRequest,
   type StudySummary,
   type StudioEvent,
@@ -34,7 +35,8 @@ export interface EngineClient {
   readonly canStudy: boolean;
   readonly canPause: boolean;
   catalog(): Promise<ProblemDescriptor[]>;
-  defaultStudy(problem: string): Promise<Study>;
+  /** The saved study for a problem, reporting its download as it arrives. */
+  defaultStudy(problem: string, options?: StudyFetchOptions): Promise<Study>;
   health(): Promise<boolean>;
   start(request: StudyRequest, listener: EngineEventListener, onError: (message: string) => void): Promise<EngineStudySubscription>;
   /** The study once it is published. */

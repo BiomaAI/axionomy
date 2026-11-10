@@ -1,4 +1,4 @@
-import { fetchStaticStudy, type ProblemDescriptor, type Study, type StudyRequest, type StudySummary, type StudioEvent } from "./api";
+import { fetchStaticStudy, type ProblemDescriptor, type Study, type StudyFetchOptions, type StudyRequest, type StudySummary, type StudioEvent } from "./api";
 import type { EngineClient, EngineEventListener, EngineStudySubscription } from "./engine";
 
 type WorkerMessage =
@@ -48,7 +48,7 @@ class BrowserEngine implements EngineClient {
   }
 
   async catalog() { this.ensureSpawned(); return this.catalogValue ?? this.ready; }
-  defaultStudy(problem: string) { return fetchStaticStudy(problem); }
+  defaultStudy(problem: string, options?: StudyFetchOptions) { return fetchStaticStudy(problem, options); }
 
   async start(request: StudyRequest, listener: EngineEventListener, _onError: (message: string) => void): Promise<EngineStudySubscription> {
     this.ensureSpawned();

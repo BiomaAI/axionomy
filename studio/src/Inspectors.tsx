@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
+import { useContext, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import type { ExchangeFrame, ProposalView, ViewDocument, ViewSnapshot } from "./api";
-import { Amount, useQuantity } from "./Quantity";
+import { Amount, QuantityFormats, useQuantity } from "./Quantity";
 
 /** A name written as a path, such as `time-accounting`, read as words. */
 function words(path: string): string {
@@ -73,7 +73,8 @@ export function Accounts({ snapshot, previous, focus, changingBalanceKeys }: { s
   </div>;
 }
 
-export function StepTicker({ frame, onProof }: { frame?: ExchangeFrame; onProof?: () => void }) {
+export function StepTicker({ frame, steps, onProof }: { frame?: ExchangeFrame; steps: number; onProof?: () => void }) {
+  if (steps === 0) return <div className="empty-state">This outcome has no exchanges, so there is nothing to play: its initial state is the whole result.</div>;
   if (!frame) return <div className="empty-state">This is the initial state. Press play and every exchange narrates here as it applies.</div>;
   return <div className="step-ticker">
     <div className="ticker-feed" key={frame.index}>
@@ -89,7 +90,8 @@ export function StepTicker({ frame, onProof }: { frame?: ExchangeFrame; onProof?
   </div>;
 }
 
-export function Transition({ frame }: { frame?: ExchangeFrame }) {
+export function Transition({ frame, steps }: { frame?: ExchangeFrame; steps: number }) {
+  if (steps === 0) return <div className="empty-state">This outcome has no exchanges to inspect.</div>;
   if (!frame) return <div className="empty-state">Move the scrubber to see what a step checked, predicted, and actually changed.</div>;
   return <div className="transition">
     <div className="frame-cues" aria-label="Transition cues">
@@ -145,7 +147,16 @@ function Assessment({ assessment, expectedRejection = false }: { assessment: Exc
 
 function DeltaGroup({ label, kind, values }: { label: string; kind: string; values: QuantityValue[] }) {
   if (values.length === 0) return null;
-  return <div className={`delta-group ${kind}`}><span>{label}</span><div>{values.map((value) => <b key={value.asset.key}>{value.asset.label} <em>×<Amount asset={value.asset.key} atoms={value.quantity} /></em></b>)}</div></div>;
+  return <div className={`delta-group ${kind}`}><span>{label}</span><div>{values.map((value) => <BasketQuantity key={value.asset.key} value={value} />)}</div></div>;
+}
+
+/**
+ * An asset and how much of it. A bare count reads as a multiple ("Key ×1");
+ * a quantity with a unit already says what it counts ("Time left 1 ticks").
+ */
+function BasketQuantity({ value }: { value: QuantityValue }) {
+  const format = useContext(QuantityFormats)[value.asset.key];
+  return <b>{value.asset.label} <em>{format?.unit ? "" : "×"}<Amount asset={value.asset.key} atoms={value.quantity} /></em></b>;
 }
 
 export function Telemetry({ document }: { document: ViewDocument }) {
@@ -183,7 +194,7 @@ export function ModelExplorer({ document }: { document: ViewDocument }) {
     </section>
     <section className="model-rules">
       <h3>Goal</h3>
-      {model.goal.map((goal) => <div key={goal.account.key}><strong>{goal.account.label}</strong>{goal.required.map((required) => <span key={required.asset.key}>{required.asset.label} ×<Amount asset={required.asset.key} atoms={required.quantity} /></span>)}</div>)}
+      {model.goal.map((goal) => <div key={goal.account.key}><strong>{goal.account.label}</strong>{goal.required.map((required) => <BasketQuantity key={required.asset.key} value={required} />)}</div>)}
       <h3>Conservation laws</h3>
       {model.invariants.map((invariant) => <details key={invariant.name}><summary>{words(invariant.name)}</summary><p>{invariant.terms.map((term) => `${term.weight}·${term.asset.label}`).join(" + ")}</p></details>)}
     </section>
@@ -192,7 +203,7 @@ export function ModelExplorer({ document }: { document: ViewDocument }) {
 
 function RateBasket({ label, values }: { label: string; values: QuantityValue[] }) {
   if (values.length === 0) return null;
-  return <div className="rate-basket"><span>{label}</span>{values.map((value) => <b key={value.asset.key}>{value.asset.label} ×<Amount asset={value.asset.key} atoms={value.quantity} /></b>)}</div>;
+  return <div className="rate-basket"><span>{label}</span><div>{values.map((value) => <BasketQuantity key={value.asset.key} value={value} />)}</div></div>;
 }
 
 function ComputedRateAmount({ label, amount }: { label: string; amount: { role: { key: string; label: string }; asset: { key: string; label: string }; quantity: string } }) {

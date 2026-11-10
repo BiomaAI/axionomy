@@ -71,10 +71,41 @@ export async function fetchStudy(studyId: string): Promise<Study> {
   return data;
 }
 
-export async function fetchStaticStudy(problem: string): Promise<Study> {
-  const response = await fetch(staticUrl(`studies/${encodeURIComponent(problem)}.json`));
+/**
+ * How much of a saved study has arrived. `total` is known only when the
+ * response is not compressed; a compressed response may still state its
+ * `compressed` size, which counts different bytes than `received`.
+ */
+export type StudyDownload = { received: number; total?: number; compressed?: number };
+export type StudyFetchOptions = { signal?: AbortSignal; onProgress?: (download: StudyDownload) => void };
+
+export async function fetchStaticStudy(problem: string, options: StudyFetchOptions = {}): Promise<Study> {
+  const response = await fetch(staticUrl(`studies/${encodeURIComponent(problem)}.json`), { signal: options.signal });
   if (!response.ok) throw new Error(`static study for ${problem} could not be loaded`);
-  return (await response.json()) as Study;
+  const { onProgress } = options;
+  if (!onProgress || !response.body) return (await response.json()) as Study;
+  const length = Number(response.headers.get("content-length"));
+  const stated = Number.isSafeInteger(length) && length > 0 ? length : undefined;
+  const encoded = Boolean(response.headers.get("content-encoding"));
+  const sizes = encoded ? { compressed: stated } : { total: stated };
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let received = 0;
+  let reported = 0;
+  onProgress({ received, ...sizes });
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    received += value.byteLength;
+    // A few reports a second are enough to read; one per chunk would re-render thousands of times.
+    if (performance.now() - reported > 100) {
+      reported = performance.now();
+      onProgress({ received, ...sizes });
+    }
+  }
+  onProgress({ received, ...sizes });
+  return JSON.parse(await new Blob(chunks as BlobPart[]).text()) as Study;
 }
 
 function staticUrl(path: string): URL {
