@@ -4,9 +4,8 @@ use axionomy_problems::bridge::{
     self, AccountId, AgentId, Asset, ObjectiveKey, RateId, Role, Side, World,
 };
 use axionomy_view::{
-    FrontierCompletenessView, GraphEdgeView, GraphNodeView, ObjectiveAxisView,
-    ObjectiveDirectionView, ParetoFrontView, ParetoPointView, SceneAnchorView, SceneGlyphView,
-    SceneToneView, TelemetryKindView, ViewId,
+    GraphEdgeView, GraphNodeView, ObjectiveAxisView, ObjectiveDirectionView, ParetoFrontView,
+    SceneAnchorView, SceneGlyphView, SceneToneView, TelemetryKindView, ViewId,
 };
 
 pub(super) fn build(
@@ -196,61 +195,15 @@ pub(super) fn build(
         let front = if let Some(result) = &pareto {
             front_view(result, &documents[index])
         } else {
-            candidate_front_view(&documents, &documents[index])
+            evaluated_front(
+                &documents,
+                &documents[index],
+                "Every non-dominated evaluated mechanism outcome",
+            )
         };
         documents[index].pareto_fronts.push(front);
     }
     assemble(study, descriptor, documents)
-}
-
-fn candidate_front_view(documents: &[ViewDocument], selected: &ViewDocument) -> ParetoFrontView {
-    let rows = documents
-        .iter()
-        .map(|document| {
-            let values = document
-                .objectives
-                .iter()
-                .map(|objective| objective.value)
-                .collect::<Vec<_>>();
-            (document, values)
-        })
-        .collect::<Vec<_>>();
-    let non_dominated =
-        rows.iter().filter(|(_, candidate)| {
-            !rows.iter().any(|(_, other)| {
-                other.iter().zip(candidate).zip(&selected.objectives).all(
-                    |((left, right), axis)| match axis.direction {
-                        ObjectiveDirectionView::Maximize => left >= right,
-                        ObjectiveDirectionView::Minimize => left <= right,
-                    },
-                ) && other.iter().zip(candidate).zip(&selected.objectives).any(
-                    |((left, right), axis)| match axis.direction {
-                        ObjectiveDirectionView::Maximize => left > right,
-                        ObjectiveDirectionView::Minimize => left < right,
-                    },
-                )
-            })
-        });
-    ParetoFrontView {
-        title: "Every non-dominated evaluated mechanism outcome".into(),
-        completeness: FrontierCompletenessView::Approximate,
-        axes: selected
-            .objectives
-            .iter()
-            .map(|objective| ObjectiveAxisView {
-                key: objective.key.clone(),
-                label: objective.label.clone(),
-                direction: objective.direction,
-            })
-            .collect(),
-        points: non_dominated
-            .map(|(document, values)| ParetoPointView {
-                label: document.title.clone(),
-                selected: document.id == selected.id,
-                values: values.iter().map(|value| value.to_string()).collect(),
-            })
-            .collect(),
-    }
 }
 
 fn pareto_trace(
@@ -263,14 +216,7 @@ fn pareto_trace(
         .entries()
         .iter()
         .max_by_key(|entry| {
-            let value = |key| {
-                entry
-                    .objectives()
-                    .objectives()
-                    .iter()
-                    .find(|o| o.key() == &key)
-                    .map_or(0, |o| *o.value())
-            };
+            let value = |key| objective_value(entry, &key);
             let other = if favored == AgentId::A {
                 AgentId::B
             } else {
@@ -327,15 +273,15 @@ fn objectives(world: &World) -> Vec<ObjectiveView> {
 }
 
 fn front_view(result: &bridge::ParetoResult, selected: &ViewDocument) -> ParetoFrontView {
-    let selected = selected
-        .objectives
-        .iter()
-        .map(|o| o.value.to_string())
-        .collect::<Vec<_>>();
-    ParetoFrontView {
-        title: "Crossings vs. credit kept".into(),
-        completeness: FrontierCompletenessView::Exact,
-        axes: ["A priority", "A credit", "B priority", "B credit"]
+    let keys = [
+        ObjectiveKey::Priority(AgentId::A),
+        ObjectiveKey::Credit(AgentId::A),
+        ObjectiveKey::Priority(AgentId::B),
+        ObjectiveKey::Credit(AgentId::B),
+    ];
+    exact_front(
+        "Crossings vs. credit kept",
+        ["A priority", "A credit", "B priority", "B credit"]
             .into_iter()
             .enumerate()
             .map(|(index, label)| ObjectiveAxisView {
@@ -344,40 +290,19 @@ fn front_view(result: &bridge::ParetoResult, selected: &ViewDocument) -> ParetoF
                 direction: ObjectiveDirectionView::Maximize,
             })
             .collect(),
-        points: result
-            .front()
-            .entries()
-            .iter()
-            .map(|entry| {
-                let values = [
-                    ObjectiveKey::Priority(AgentId::A),
-                    ObjectiveKey::Credit(AgentId::A),
-                    ObjectiveKey::Priority(AgentId::B),
-                    ObjectiveKey::Credit(AgentId::B),
-                ]
-                .into_iter()
-                .map(|key| {
-                    entry
-                        .objectives()
-                        .objectives()
-                        .iter()
-                        .find(|objective| objective.key() == &key)
-                        .expect("bridge objective exists")
-                        .value()
-                        .to_string()
-                })
-                .collect::<Vec<_>>();
-                ParetoPointView {
-                    label: format!(
-                        "A {}/{} · B {}/{}",
-                        values[0], values[1], values[2], values[3]
-                    ),
-                    selected: values.iter().eq(selected.iter()),
-                    values,
-                }
-            })
-            .collect(),
-    }
+        selected,
+        result.front().entries().iter().map(|entry| {
+            keys.iter()
+                .map(|key| Quantity::from(objective_value(entry, key)))
+                .collect()
+        }),
+        |values| {
+            format!(
+                "A {}/{} · B {}/{}",
+                values[0], values[1], values[2], values[3]
+            )
+        },
+    )
 }
 
 fn scene(_: u64, world: &World) -> Option<Scene> {

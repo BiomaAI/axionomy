@@ -3,14 +3,12 @@ use axionomy::{Exchange, Quantity};
 use axionomy_problems::maze::{self, AccountId, Asset, Node, ObjectiveKey, RateId, Role, World};
 use axionomy_search::{
     AStarSession, BfsSession,
-    pareto::Objective,
     session::{Continue, WorkBudget},
 };
 use axionomy_view::{
-    ClassPath, FrontierCompletenessView, GraphEdgeView, GraphNodeView, ObjectiveAxisView,
-    ObjectiveDirectionView, ParetoFrontView, ParetoPointView, SceneAnchorView, SceneGlyphView,
-    SceneLegendView, ScenePathStatusView, SceneSurfaceView, SceneToneView, TelemetryKindView,
-    ViewId,
+    ClassPath, GraphEdgeView, GraphNodeView, ObjectiveAxisView, ObjectiveDirectionView,
+    ParetoFrontView, SceneAnchorView, SceneGlyphView, SceneLegendView, ScenePathStatusView,
+    SceneSurfaceView, SceneToneView, TelemetryKindView, ViewId,
 };
 
 /// The maze's strategies, as the catalog lists them.
@@ -130,8 +128,18 @@ pub(super) fn build(
         );
         progress.ensure()?;
     }
-    let energy_trace = frontier_trace(&pareto, true, problem)?;
-    let time_trace = frontier_trace(&pareto, false, problem)?;
+    let energy_trace = frontier_trace(
+        &pareto,
+        (ObjectiveKey::Energy, ObjectiveDirectionView::Minimize),
+        (ObjectiveKey::Time, ObjectiveDirectionView::Minimize),
+        problem,
+    )?;
+    let time_trace = frontier_trace(
+        &pareto,
+        (ObjectiveKey::Time, ObjectiveDirectionView::Minimize),
+        (ObjectiveKey::Energy, ObjectiveDirectionView::Minimize),
+        problem,
+    )?;
 
     let traces = [
         (
@@ -335,17 +343,7 @@ fn saved_graph_observation(
         completed: state.expanded() as u64,
         total: 0,
         subjects: vec![expansion_subject(expansion)],
-        metrics: vec![
-            visual_metric(path!("expanded"), "States expanded", state.expanded(), None),
-            visual_metric(
-                path!("generated"),
-                "States generated",
-                state.generated(),
-                None,
-            ),
-            visual_metric(path!("frontier"), "Frontier", state.frontier(), None),
-            visual_metric(path!("visited"), "States visited", state.visited(), None),
-        ],
+        metrics: graph_metrics(state),
     }
 }
 
@@ -402,23 +400,13 @@ fn solved_expansion(
     capture_expansion(&solved).ok_or_else(|| problem_error(problem, "solution lost its room"))
 }
 
-fn retain_observation(
-    observations: &mut Vec<SearchObservationView>,
-    observation: SearchObservationView,
-) {
-    if observations.len() == 256 {
-        observations.remove(0);
-    }
-    observations.push(observation);
-}
-
 fn saved_graph_observations(
     initial: &World,
     search: Search,
     problem: &ProblemPath,
 ) -> Result<Vec<SearchObservationView>, ServiceError> {
     let expanded = std::rc::Rc::new(std::cell::RefCell::new(None));
-    let mut observations = Vec::new();
+    let mut observations = VecDeque::new();
     let frontier = search.frontier();
     if search == Search::BreadthFirst {
         let capture = std::rc::Rc::clone(&expanded);
@@ -473,7 +461,7 @@ fn saved_graph_observations(
             "search produced no observable expansions",
         ));
     }
-    Ok(observations)
+    Ok(observations.into())
 }
 
 fn saved_pareto_observations(result: &maze::ParetoResult) -> Vec<SearchObservationView> {
@@ -611,35 +599,6 @@ fn observe_selected_search(
     Ok(())
 }
 
-fn frontier_trace(
-    result: &maze::ParetoResult,
-    energy_first: bool,
-    problem: &ProblemPath,
-) -> Result<axionomy::Trace<maze::Ontology>, ServiceError> {
-    result
-        .front()
-        .entries()
-        .iter()
-        .min_by_key(|entry| {
-            let energy = objective_value(entry.objectives().objectives(), ObjectiveKey::Energy);
-            let time = objective_value(entry.objectives().objectives(), ObjectiveKey::Time);
-            if energy_first {
-                (energy, time)
-            } else {
-                (time, energy)
-            }
-        })
-        .map(|entry| entry.payload().clone())
-        .ok_or_else(|| problem_error(problem, "empty Pareto frontier"))
-}
-
-fn objective_value(values: &[Objective<ObjectiveKey, u64>], key: ObjectiveKey) -> u64 {
-    values
-        .iter()
-        .find(|objective| objective.key() == &key)
-        .map_or(0, |objective| *objective.value())
-}
-
 fn objectives(world: &World) -> Vec<ObjectiveView> {
     vec![
         ObjectiveView::new(
@@ -658,15 +617,9 @@ fn objectives(world: &World) -> Vec<ObjectiveView> {
 }
 
 fn front_view(result: &maze::ParetoResult, selected: &ViewDocument) -> ParetoFrontView {
-    let selected = selected
-        .objectives
-        .iter()
-        .map(|objective| objective.value)
-        .collect::<Vec<_>>();
-    ParetoFrontView {
-        title: "Energy vs. time — every non-dominated route".into(),
-        completeness: FrontierCompletenessView::Exact,
-        axes: vec![
+    exact_front(
+        "Energy vs. time — every non-dominated route",
+        vec![
             ObjectiveAxisView {
                 key: path!("energy"),
                 label: "Energy spent".into(),
@@ -678,26 +631,10 @@ fn front_view(result: &maze::ParetoResult, selected: &ViewDocument) -> ParetoFro
                 direction: ObjectiveDirectionView::Minimize,
             },
         ],
-        points: result
-            .front()
-            .entries()
-            .iter()
-            .map(|entry| {
-                let exact = entry
-                    .objectives()
-                    .objectives()
-                    .iter()
-                    .map(|objective| Quantity::from(*objective.value()))
-                    .collect::<Vec<_>>();
-                let values = exact.iter().map(ToString::to_string).collect::<Vec<_>>();
-                ParetoPointView {
-                    label: format!("{} energy · {} time", values[0], values[1]),
-                    selected: exact == selected,
-                    values,
-                }
-            })
-            .collect(),
-    }
+        selected,
+        result.front().entries().iter().map(exact_values),
+        |values| format!("{} energy · {} time", values[0], values[1]),
+    )
 }
 
 fn scene(_: u64, world: &World) -> Option<Scene> {

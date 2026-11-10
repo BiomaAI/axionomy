@@ -2,7 +2,6 @@
 //! problem's own labels and formats live in its adapter.
 
 use axionomy_view::QuantityFormat;
-use std::fmt::Debug;
 
 pub(crate) trait StudioLabel {
     fn studio_label(&self) -> String;
@@ -22,30 +21,8 @@ macro_rules! counted {
     )+};
 }
 
-pub(super) fn words(value: &impl Debug) -> String {
-    let debug = format!("{value:?}");
-    let mut output = String::with_capacity(debug.len() + 4);
-    let mut previous_lowercase = false;
-    for character in debug.chars() {
-        if matches!(character, '(' | ')' | '{' | '}' | '[' | ']') {
-            output.push(' ');
-            previous_lowercase = false;
-        } else if character == ',' {
-            output.push_str(", ");
-            previous_lowercase = false;
-        } else if character == '_' {
-            output.push(' ');
-            previous_lowercase = false;
-        } else {
-            if character.is_ascii_uppercase() && previous_lowercase {
-                output.push(' ');
-            }
-            output.push(character);
-            previous_lowercase = character.is_ascii_lowercase() || character.is_ascii_digit();
-        }
-    }
-    output.split_whitespace().collect::<Vec<_>>().join(" ")
-}
+/// A value's `Debug` output as words, as every view labels it.
+pub(super) use axionomy_view::words;
 
 macro_rules! debug_labels {
     ($($type:path),+ $(,)?) => {$(

@@ -4,8 +4,8 @@ mod fleet;
 use axionomy::{Exchange, Quantity};
 use axionomy_problems::logistics::{self, AccountId, Asset, Location, Policy, Route, World};
 use axionomy_view::{
-    FrontierCompletenessView, GraphEdgeView, GraphNodeView, ObjectiveAxisView,
-    ObjectiveDirectionView, ParetoFrontView, ParetoPointView, TelemetryKindView, ViewId,
+    GraphEdgeView, GraphNodeView, ObjectiveAxisView, ObjectiveDirectionView, ParetoFrontView,
+    TelemetryKindView, ViewId,
 };
 
 pub(super) fn build(
@@ -241,10 +241,9 @@ fn objectives(rollout: &logistics::MissionRollout) -> Vec<ObjectiveView> {
     ]
 }
 fn policy_front(front: &logistics::PolicyFront, selected: Policy) -> ParetoFrontView {
-    ParetoFrontView {
-        title: "Completion vs. deliveries vs. time — sampled, not exact".into(),
-        completeness: FrontierCompletenessView::Approximate,
-        axes: vec![
+    sampled_policy_front(
+        "Completion vs. deliveries vs. time — sampled, not exact",
+        vec![
             ObjectiveAxisView {
                 key: path!("completion"),
                 label: "Completion".into(),
@@ -261,25 +260,10 @@ fn policy_front(front: &logistics::PolicyFront, selected: Policy) -> ParetoFront
                 direction: ObjectiveDirectionView::Minimize,
             },
         ],
-        points: front
-            .entries()
-            .iter()
-            .map(|entry| {
-                let policy = *entry.payload().policy();
-                let values = entry
-                    .objectives()
-                    .objectives()
-                    .iter()
-                    .map(|o| format!("{:.3}", o.value()))
-                    .collect();
-                ParetoPointView {
-                    label: format!("{policy:?}"),
-                    values,
-                    selected: policy == selected,
-                }
-            })
-            .collect(),
-    }
+        front,
+        |policy| format!("{policy:?}"),
+        |policy| policy == selected,
+    )
 }
 
 fn scene(_: u64, world: &World) -> Option<Scene> {

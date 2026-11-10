@@ -1,10 +1,8 @@
 use super::*;
 use axionomy_problems::workshop::{self, AccountId, Asset, ObjectiveKey, RateId, World};
-use axionomy_search::pareto::Objective;
 use axionomy_view::{
-    FrontierCompletenessView, GraphEdgeView, GraphNodeView, ObjectiveAxisView,
-    ObjectiveDirectionView, ParetoFrontView, ParetoPointView, SceneAnchorView, SceneGlyphView,
-    SceneToneView, TelemetryKindView, ViewId,
+    GraphEdgeView, GraphNodeView, ObjectiveDirectionView, ParetoFrontView, SceneAnchorView,
+    SceneGlyphView, SceneToneView, TelemetryKindView, ViewId,
 };
 
 pub(super) fn build(
@@ -23,8 +21,18 @@ pub(super) fn build(
         .ok_or_else(|| problem_error(&study.problem, "best-first found no plan"))?;
     let pareto =
         workshop::pareto_front(&initial).map_err(|error| problem_error(&study.problem, error))?;
-    let waste_trace = frontier_trace(&pareto, true, &study.problem)?;
-    let time_trace = frontier_trace(&pareto, false, &study.problem)?;
+    let waste_trace = frontier_trace(
+        &pareto,
+        (ObjectiveKey::Waste, ObjectiveDirectionView::Minimize),
+        (ObjectiveKey::Time, ObjectiveDirectionView::Minimize),
+        &study.problem,
+    )?;
+    let time_trace = frontier_trace(
+        &pareto,
+        (ObjectiveKey::Time, ObjectiveDirectionView::Minimize),
+        (ObjectiveKey::Waste, ObjectiveDirectionView::Minimize),
+        &study.problem,
+    )?;
     let mut traces = vec![
         (
             path!("breadth-first"),
@@ -64,9 +72,7 @@ pub(super) fn build(
             .front()
             .entries()
             .iter()
-            .max_by_key(|entry| {
-                objective_value(entry.objectives().objectives(), ObjectiveKey::Revenue)
-            })
+            .max_by_key(|entry| objective_value(entry, &ObjectiveKey::Revenue))
             .unwrap();
         traces.push((path!("pareto-revenue"), "Workshop Pareto · highest revenue",
             "The highest contract revenue on the exact frontier; tables require more material, labor and tooling than chairs.",
@@ -117,35 +123,6 @@ pub(super) fn build(
     assemble(study, descriptor, documents)
 }
 
-fn frontier_trace(
-    result: &workshop::ParetoResult,
-    waste_first: bool,
-    problem: &ProblemPath,
-) -> Result<axionomy::Trace<workshop::Ontology>, ServiceError> {
-    result
-        .front()
-        .entries()
-        .iter()
-        .min_by_key(|entry| {
-            let waste = objective_value(entry.objectives().objectives(), ObjectiveKey::Waste);
-            let time = objective_value(entry.objectives().objectives(), ObjectiveKey::Time);
-            if waste_first {
-                (waste, time)
-            } else {
-                (time, waste)
-            }
-        })
-        .map(|entry| entry.payload().clone())
-        .ok_or_else(|| problem_error(problem, "empty Pareto frontier"))
-}
-
-fn objective_value(values: &[Objective<ObjectiveKey, u64>], key: ObjectiveKey) -> u64 {
-    values
-        .iter()
-        .find(|objective| objective.key() == &key)
-        .map_or(0, |objective| *objective.value())
-}
-
 fn objectives(world: &World) -> Vec<ObjectiveView> {
     workshop::objectives(world)
         .objectives()
@@ -170,50 +147,16 @@ fn objectives(world: &World) -> Vec<ObjectiveView> {
 }
 
 fn front_view(result: &workshop::ParetoResult, selected: &ViewDocument) -> ParetoFrontView {
-    let axes = selected
-        .objectives
-        .iter()
-        .map(|objective| ObjectiveAxisView {
-            key: objective.key.clone(),
-            label: objective.label.clone(),
-            direction: objective.direction,
-        })
-        .collect();
-    let selected = selected
-        .objectives
-        .iter()
-        .map(|objective| objective.value.to_string())
-        .collect::<Vec<_>>();
-    ParetoFrontView {
-        title: "Production tradeoffs — every non-dominated plan".into(),
-        completeness: FrontierCompletenessView::Exact,
-        axes,
-        points: result
-            .front()
-            .entries()
-            .iter()
-            .map(|entry| {
-                let values = entry
-                    .objectives()
-                    .objectives()
-                    .iter()
-                    .map(|objective| objective.value().to_string())
-                    .collect::<Vec<_>>();
-                ParetoPointView {
-                    label: if values.len() == 3 {
-                        format!(
-                            "{} waste · {} time · {} credit",
-                            values[0], values[1], values[2]
-                        )
-                    } else {
-                        format!("{} waste · {} time", values[0], values[1])
-                    },
-                    selected: values.iter().eq(selected.iter()),
-                    values,
-                }
-            })
-            .collect(),
-    }
+    exact_front(
+        "Production tradeoffs — every non-dominated plan",
+        objective_axes(selected),
+        selected,
+        result.front().entries().iter().map(exact_values),
+        |values| match values {
+            [waste, time, credit] => format!("{waste} waste · {time} time · {credit} credit"),
+            _ => format!("{} waste · {} time", values[0], values[1]),
+        },
+    )
 }
 
 fn scene(_: u64, world: &World) -> Option<Scene> {

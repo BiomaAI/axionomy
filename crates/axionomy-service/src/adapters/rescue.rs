@@ -3,9 +3,8 @@ use axionomy_search::rollout::Unrecorded;
 mod incident;
 use axionomy_problems::rescue::{self, AccountId, Asset, Location, Policy, World};
 use axionomy_view::{
-    AccountView, AssetQuantityView, ExactQuantity, FrontierCompletenessView, GraphEdgeView,
-    GraphNodeView, ObjectiveAxisView, ObjectiveDirectionView, ObservationView, ParetoFrontView,
-    ParetoPointView, TelemetryKindView, ViewId,
+    AccountView, AssetQuantityView, ExactQuantity, GraphEdgeView, GraphNodeView, ObjectiveAxisView,
+    ObjectiveDirectionView, ObservationView, ParetoFrontView, TelemetryKindView, ViewId,
 };
 
 pub(super) fn build(
@@ -106,10 +105,9 @@ fn observation(world: &World) -> ObservationView {
 }
 
 fn policy_front(front: &rescue::PolicyFront, selected: Policy) -> ParetoFrontView {
-    ParetoFrontView {
-        title: "Success vs. sensor use vs. energy — sampled, not exact".into(),
-        completeness: FrontierCompletenessView::Approximate,
-        axes: vec![
+    sampled_policy_front(
+        "Success vs. sensor use vs. energy — sampled, not exact",
+        vec![
             ObjectiveAxisView {
                 key: path!("success"),
                 label: "Success probability".into(),
@@ -126,29 +124,16 @@ fn policy_front(front: &rescue::PolicyFront, selected: Policy) -> ParetoFrontVie
                 direction: ObjectiveDirectionView::Minimize,
             },
         ],
-        points: front
-            .entries()
-            .iter()
-            .map(|entry| {
-                let policy = *entry.payload().policy();
-                let values = entry
-                    .objectives()
-                    .objectives()
-                    .iter()
-                    .map(|o| format!("{:.3}", o.value()))
-                    .collect::<Vec<_>>();
-                ParetoPointView {
-                    label: match policy {
-                        Policy::ObserveThenFollow => "Sense, then move",
-                        Policy::NorthWithoutObserving => "Go north immediately",
-                    }
-                    .into(),
-                    values,
-                    selected: policy == selected,
-                }
-            })
-            .collect(),
-    }
+        front,
+        |policy| {
+            match policy {
+                Policy::ObserveThenFollow => "Sense, then move",
+                Policy::NorthWithoutObserving => "Go north immediately",
+            }
+            .into()
+        },
+        |policy| policy == selected,
+    )
 }
 
 fn scene(_: u64, world: &World) -> Option<Scene> {

@@ -3,8 +3,8 @@ use axionomy_problems::marketplace::{
     self, AccountId, BuyerId, CarrierId, ObjectiveKey, SellerId, World,
 };
 use axionomy_view::{
-    FrontierCompletenessView, GraphEdgeView, GraphNodeView, ObjectiveAxisView,
-    ObjectiveDirectionView, ParetoFrontView, ParetoPointView, TelemetryKindView, ViewId,
+    GraphEdgeView, GraphNodeView, ObjectiveAxisView, ObjectiveDirectionView, ParetoFrontView,
+    TelemetryKindView, ViewId,
 };
 
 pub(super) fn build(
@@ -129,7 +129,11 @@ pub(super) fn build(
     }
     if timed {
         for index in 0..documents.len() {
-            let front = evaluated_front(&documents, &documents[index]);
+            let front = evaluated_front(
+                &documents,
+                &documents[index],
+                "Non-dominated evaluated fulfillment plans",
+            );
             documents[index].pareto_fronts.push(front);
         }
     }
@@ -229,70 +233,10 @@ fn objectives(world: &World) -> Vec<ObjectiveView> {
     }
     values
 }
-fn evaluated_front(documents: &[ViewDocument], selected: &ViewDocument) -> ParetoFrontView {
-    let rows: Vec<_> = documents
-        .iter()
-        .map(|document| {
-            (
-                document,
-                document
-                    .objectives
-                    .iter()
-                    .map(|o| o.value)
-                    .collect::<Vec<_>>(),
-            )
-        })
-        .collect();
-    let dominates = |left: &[Quantity], right: &[Quantity]| {
-        left.iter()
-            .zip(right)
-            .zip(&selected.objectives)
-            .all(|((l, r), axis)| match axis.direction {
-                ObjectiveDirectionView::Maximize => l >= r,
-                ObjectiveDirectionView::Minimize => l <= r,
-            })
-            && left
-                .iter()
-                .zip(right)
-                .zip(&selected.objectives)
-                .any(|((l, r), axis)| match axis.direction {
-                    ObjectiveDirectionView::Maximize => l > r,
-                    ObjectiveDirectionView::Minimize => l < r,
-                })
-    };
-    ParetoFrontView {
-        title: "Non-dominated evaluated fulfillment plans".into(),
-        completeness: FrontierCompletenessView::Approximate,
-        axes: selected
-            .objectives
-            .iter()
-            .map(|o| ObjectiveAxisView {
-                key: o.key.clone(),
-                label: o.label.clone(),
-                direction: o.direction,
-            })
-            .collect(),
-        points: rows
-            .iter()
-            .filter(|(_, candidate)| !rows.iter().any(|(_, other)| dominates(other, candidate)))
-            .map(|(document, values)| ParetoPointView {
-                label: document.title.clone(),
-                selected: document.id == selected.id,
-                values: values.iter().map(ToString::to_string).collect(),
-            })
-            .collect(),
-    }
-}
 fn front_view(result: &marketplace::ParetoResult, selected: &ViewDocument) -> ParetoFrontView {
-    let selected = selected
-        .objectives
-        .iter()
-        .map(|o| o.value.to_string())
-        .collect::<Vec<_>>();
-    ParetoFrontView {
-        title: "Buyer gain vs. seller gain".into(),
-        completeness: FrontierCompletenessView::Exact,
-        axes: ["Buyer A", "Buyer B", "Seller A", "Seller B"]
+    exact_front(
+        "Buyer gain vs. seller gain",
+        ["Buyer A", "Buyer B", "Seller A", "Seller B"]
             .into_iter()
             .enumerate()
             .map(|(index, label)| ObjectiveAxisView {
@@ -301,25 +245,16 @@ fn front_view(result: &marketplace::ParetoResult, selected: &ViewDocument) -> Pa
                 direction: ObjectiveDirectionView::Maximize,
             })
             .collect(),
-        points: result
-            .front()
-            .entries()
-            .iter()
-            .map(|entry| {
-                let values = entry
-                    .objectives()
-                    .objectives()
-                    .iter()
-                    .map(|o| o.value().to_string())
-                    .collect::<Vec<_>>();
-                ParetoPointView {
-                    label: values.join(" / "),
-                    selected: values.iter().eq(selected.iter()),
-                    values,
-                }
-            })
-            .collect(),
-    }
+        selected,
+        result.front().entries().iter().map(exact_values),
+        |values| {
+            values
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join(" / ")
+        },
+    )
 }
 
 fn scene(_: u64, world: &World) -> Option<Scene> {

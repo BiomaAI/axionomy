@@ -1566,7 +1566,7 @@ impl<O: WrittenOntology> PathOntology<O> {
         let key = key
             .parse()
             .unwrap_or_else(|error| panic!("`{value:?}` is keyed `{key}`, not a path: {error}"));
-        ViewId::new(key, humanize_debug(&format!("{value:?}")))
+        ViewId::new(key, words(value))
     }
 }
 
@@ -1588,7 +1588,12 @@ impl<O: WrittenOntology> ViewOntology<O> for PathOntology<O> {
     }
 }
 
-fn humanize_debug(debug: &str) -> String {
+/// A value's `Debug` output as words people read, for a label: brackets and
+/// underscores become spaces and a capital after a lowercase letter starts a
+/// word, so `Edge(KeyRoom, Gate)` reads `Edge Key Room, Gate`. A label only;
+/// a key is the value's path.
+pub fn words(value: &impl Debug) -> String {
+    let debug = format!("{value:?}");
     let mut output = String::with_capacity(debug.len() + 4);
     let mut previous_lowercase = false;
     for character in debug.chars() {

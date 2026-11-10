@@ -551,15 +551,6 @@ fn causal_contribution_board(initial: &World) -> LeaderboardView {
     }
 }
 
-fn gcd(mut left: u128, mut right: u128) -> u128 {
-    while right != 0 {
-        let remainder = left % right;
-        left = right;
-        right = remainder;
-    }
-    left.max(1)
-}
-
 // How Studio names and writes this problem's values.
 
 /// Energy is counted in units and credit in credits, as the market scene

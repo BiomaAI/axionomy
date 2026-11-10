@@ -5,9 +5,8 @@ use axionomy::Exchange;
 use axionomy_problems::mission::{self, AccountId, AgentId, Asset, Location, Policy, World};
 use axionomy_search::mcts::MctsConfig;
 use axionomy_view::{
-    AccountView, AssetQuantityView, ExactQuantity, FrontierCompletenessView, GraphEdgeView,
-    GraphNodeView, ObjectiveAxisView, ObjectiveDirectionView, ObservationView, ParetoFrontView,
-    ParetoPointView, TelemetryKindView, ViewId,
+    AccountView, AssetQuantityView, ExactQuantity, GraphEdgeView, GraphNodeView, ObjectiveAxisView,
+    ObjectiveDirectionView, ObservationView, ParetoFrontView, TelemetryKindView, ViewId,
 };
 
 pub(super) fn build(
@@ -77,7 +76,6 @@ pub(super) fn build(
     let front = front.ok_or_else(|| problem_error(&study.problem, "policy front failed"))?;
     let baseline_observations = progress
         .observations()
-        .iter()
         .filter(|item| item.phase == monte_carlo.phase)
         .cloned()
         .collect::<Vec<_>>();
@@ -107,7 +105,6 @@ pub(super) fn build(
         planned.ok_or_else(|| problem_error(&study.problem, "planning was interrupted"))?;
     let planning_observations = progress
         .observations()
-        .iter()
         .filter(|item| item.phase == ismcts.phase)
         .cloned()
         .collect::<Vec<_>>();
@@ -331,12 +328,9 @@ fn observation(world: &World, agent: AgentId) -> ObservationView {
 }
 
 fn policy_front(front: &mission::PolicyFront, selected: Option<Policy>) -> ParetoFrontView {
-    ParetoFrontView {
-        title:
-            "Fixed-policy baselines · reliability, time, medical kit (planner not evaluated here)"
-                .into(),
-        completeness: FrontierCompletenessView::Approximate,
-        axes: vec![
+    sampled_policy_front(
+        "Fixed-policy baselines · reliability, time, medical kit (planner not evaluated here)",
+        vec![
             ObjectiveAxisView {
                 key: path!("success"),
                 label: "Success probability".into(),
@@ -353,29 +347,16 @@ fn policy_front(front: &mission::PolicyFront, selected: Option<Policy>) -> Paret
                 direction: ObjectiveDirectionView::Minimize,
             },
         ],
-        points: front
-            .entries()
-            .iter()
-            .map(|entry| {
-                let policy = *entry.payload().policy();
-                let values = entry
-                    .objectives()
-                    .objectives()
-                    .iter()
-                    .map(|o| format!("{:.3}", o.value()))
-                    .collect();
-                ParetoPointView {
-                    label: match policy {
-                        Policy::ShareAndCoordinate => "Share and coordinate",
-                        Policy::NorthTogether => "Both go north",
-                    }
-                    .into(),
-                    values,
-                    selected: Some(policy) == selected,
-                }
-            })
-            .collect(),
-    }
+        front,
+        |policy| {
+            match policy {
+                Policy::ShareAndCoordinate => "Share and coordinate",
+                Policy::NorthTogether => "Both go north",
+            }
+            .into()
+        },
+        |policy| Some(policy) == selected,
+    )
 }
 
 fn scene(_: u64, world: &World) -> Option<Scene> {

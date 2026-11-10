@@ -3,10 +3,9 @@ use axionomy::{Exchange, Quantity, Trace};
 use axionomy_problems::scheduling::{
     self, AccountId, Asset, Job, Machine, ObjectiveKey, Operation, World,
 };
-use axionomy_search::pareto::Objective;
 use axionomy_view::{
-    FrontierCompletenessView, ObjectiveAxisView, ObjectiveDirectionView, ParetoFrontView,
-    ParetoPointView, TelemetryKindView, TimelineLaneView, TimelineSpanView, ViewId,
+    ObjectiveAxisView, ObjectiveDirectionView, ParetoFrontView, TelemetryKindView,
+    TimelineLaneView, TimelineSpanView, ViewId,
 };
 
 pub(super) fn build(
@@ -26,8 +25,30 @@ pub(super) fn build(
         .ok_or_else(|| problem_error(&study.problem, "optimizer found no schedule"))?;
     let pareto =
         scheduling::pareto_front(&initial).map_err(|error| problem_error(&study.problem, error))?;
-    let one = frontier_trace(&pareto, true, &study.problem)?;
-    let two = frontier_trace(&pareto, false, &study.problem)?;
+    let one = frontier_trace(
+        &pareto,
+        (
+            ObjectiveKey::JobOneCompletion,
+            ObjectiveDirectionView::Minimize,
+        ),
+        (
+            ObjectiveKey::JobTwoCompletion,
+            ObjectiveDirectionView::Minimize,
+        ),
+        &study.problem,
+    )?;
+    let two = frontier_trace(
+        &pareto,
+        (
+            ObjectiveKey::JobTwoCompletion,
+            ObjectiveDirectionView::Minimize,
+        ),
+        (
+            ObjectiveKey::JobOneCompletion,
+            ObjectiveDirectionView::Minimize,
+        ),
+        &study.problem,
+    )?;
     let traces = [
         (
             path!("best-first"),
@@ -123,35 +144,6 @@ pub(super) fn build(
     assemble(study, descriptor, documents)
 }
 
-fn frontier_trace(
-    result: &scheduling::ParetoResult,
-    one_first: bool,
-    problem: &ProblemPath,
-) -> Result<Trace<scheduling::Ontology>, ServiceError> {
-    result
-        .front()
-        .entries()
-        .iter()
-        .min_by_key(|entry| {
-            let one = objective_value(
-                entry.objectives().objectives(),
-                ObjectiveKey::JobOneCompletion,
-            );
-            let two = objective_value(
-                entry.objectives().objectives(),
-                ObjectiveKey::JobTwoCompletion,
-            );
-            if one_first { (one, two) } else { (two, one) }
-        })
-        .map(|entry| entry.payload().clone())
-        .ok_or_else(|| problem_error(problem, "empty Pareto frontier"))
-}
-fn objective_value(values: &[Objective<ObjectiveKey, u64>], key: ObjectiveKey) -> u64 {
-    values
-        .iter()
-        .find(|value| value.key() == &key)
-        .map_or(0, |value| *value.value())
-}
 fn objectives(world: &World) -> Vec<ObjectiveView> {
     vec![
         ObjectiveView::new(
@@ -169,15 +161,9 @@ fn objectives(world: &World) -> Vec<ObjectiveView> {
     ]
 }
 fn front_view(result: &scheduling::ParetoResult, selected: &ViewDocument) -> ParetoFrontView {
-    let selected = selected
-        .objectives
-        .iter()
-        .map(|o| o.value.to_string())
-        .collect::<Vec<_>>();
-    ParetoFrontView {
-        title: "Job One finish vs. Job Two finish".into(),
-        completeness: FrontierCompletenessView::Exact,
-        axes: vec![
+    exact_front(
+        "Job One finish vs. Job Two finish",
+        vec![
             ObjectiveAxisView {
                 key: path!("job-one"),
                 label: "Job One".into(),
@@ -189,25 +175,10 @@ fn front_view(result: &scheduling::ParetoResult, selected: &ViewDocument) -> Par
                 direction: ObjectiveDirectionView::Minimize,
             },
         ],
-        points: result
-            .front()
-            .entries()
-            .iter()
-            .map(|entry| {
-                let values = entry
-                    .objectives()
-                    .objectives()
-                    .iter()
-                    .map(|o| o.value().to_string())
-                    .collect::<Vec<_>>();
-                ParetoPointView {
-                    label: format!("Job One {} · Job Two {}", values[0], values[1]),
-                    selected: values.iter().eq(selected.iter()),
-                    values,
-                }
-            })
-            .collect(),
-    }
+        selected,
+        result.front().entries().iter().map(exact_values),
+        |values| format!("Job One {} · Job Two {}", values[0], values[1]),
+    )
 }
 
 fn scene(_: u64, world: &World) -> Option<Scene> {

@@ -2,10 +2,9 @@ use super::*;
 use axionomy_problems::perishables::{
     self, AccountId, Asset, Cohort, Location, Moment, ObjectiveKey, World,
 };
-use axionomy_search::pareto::Objective;
 use axionomy_view::{
-    FrontierCompletenessView, ObjectiveAxisView, ObjectiveDirectionView, ParetoFrontView,
-    ParetoPointView, TelemetryKindView, TimelineLaneView, TimelineSpanView, ViewId,
+    ObjectiveAxisView, ObjectiveDirectionView, ParetoFrontView, TelemetryKindView,
+    TimelineLaneView, TimelineSpanView, ViewId,
 };
 
 mod cold_chain;
@@ -31,8 +30,30 @@ pub(super) fn build(
         .map_err(|error| problem_error(&study.problem, error))?;
     let front = perishables::storage_plan_front_with_transfer(&initial, transfer)
         .map_err(|error| problem_error(&study.problem, error))?;
-    let inventory_trace = frontier_trace(&front, true, &study.problem)?;
-    let energy_trace = frontier_trace(&front, false, &study.problem)?;
+    let inventory_trace = frontier_trace(
+        &front,
+        (
+            ObjectiveKey::UsableInventory,
+            ObjectiveDirectionView::Maximize,
+        ),
+        (
+            ObjectiveKey::CoolingEnergy,
+            ObjectiveDirectionView::Minimize,
+        ),
+        &study.problem,
+    )?;
+    let energy_trace = frontier_trace(
+        &front,
+        (
+            ObjectiveKey::CoolingEnergy,
+            ObjectiveDirectionView::Minimize,
+        ),
+        (
+            ObjectiveKey::UsableInventory,
+            ObjectiveDirectionView::Maximize,
+        ),
+        &study.problem,
+    )?;
     let mut outage_view = document(progress, DocumentSpec { problem: &study.problem, document: path!("outage"), title: "Perishables · power outage", description: "Ten thousand interchangeable units belong to two batches. Time and power act on the batch, so one change ages thousands of units at once.", source_label: "Perishable inventory" }, &initial, &perishables::goal(), outage.trace(), vec![
         ObjectiveView::new(path!("claims"), "Total claims", ObjectiveDirectionView::Maximize, outage.claim_index().total_claims()),
         ObjectiveView::new(path!("usable"), "Usable claims", ObjectiveDirectionView::Maximize, outage.claim_index().usable_total(outage.world())),
@@ -137,47 +158,10 @@ pub(super) fn build(
     assemble(study, descriptor, documents)
 }
 
-fn frontier_trace(
-    result: &perishables::ParetoResult,
-    inventory_first: bool,
-    problem: &ProblemPath,
-) -> Result<axionomy::Trace<perishables::Ontology>, ServiceError> {
-    result
-        .front()
-        .entries()
-        .iter()
-        .max_by_key(|entry| {
-            let usable = objective_value(
-                entry.objectives().objectives(),
-                ObjectiveKey::UsableInventory,
-            );
-            let energy =
-                objective_value(entry.objectives().objectives(), ObjectiveKey::CoolingEnergy);
-            if inventory_first {
-                (usable, u64::MAX - energy)
-            } else {
-                (u64::MAX - energy, usable)
-            }
-        })
-        .map(|entry| entry.payload().clone())
-        .ok_or_else(|| problem_error(problem, "empty Pareto frontier"))
-}
-fn objective_value(values: &[Objective<ObjectiveKey, u64>], key: ObjectiveKey) -> u64 {
-    values
-        .iter()
-        .find(|o| o.key() == &key)
-        .map_or(0, |o| *o.value())
-}
 fn front_view(result: &perishables::ParetoResult, selected: &ViewDocument) -> ParetoFrontView {
-    let selected = selected
-        .objectives
-        .iter()
-        .map(|o| o.value.to_string())
-        .collect::<Vec<_>>();
-    ParetoFrontView {
-        title: "Usable stock vs. cooling energy".into(),
-        completeness: FrontierCompletenessView::Exact,
-        axes: vec![
+    exact_front(
+        "Usable stock vs. cooling energy",
+        vec![
             ObjectiveAxisView {
                 key: path!("usable"),
                 label: "Usable inventory".into(),
@@ -189,25 +173,10 @@ fn front_view(result: &perishables::ParetoResult, selected: &ViewDocument) -> Pa
                 direction: ObjectiveDirectionView::Minimize,
             },
         ],
-        points: result
-            .front()
-            .entries()
-            .iter()
-            .map(|entry| {
-                let values = entry
-                    .objectives()
-                    .objectives()
-                    .iter()
-                    .map(|o| o.value().to_string())
-                    .collect::<Vec<_>>();
-                ParetoPointView {
-                    label: format!("{} usable · {} energy", values[0], values[1]),
-                    selected: values.iter().eq(selected.iter()),
-                    values,
-                }
-            })
-            .collect(),
-    }
+        selected,
+        result.front().entries().iter().map(exact_values),
+        |values| format!("{} usable · {} energy", values[0], values[1]),
+    )
 }
 
 fn scene(_: u64, world: &World) -> Option<Scene> {

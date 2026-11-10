@@ -441,15 +441,6 @@ fn ratios_equal(left: (u64, u64), right: (u64, u64)) -> bool {
     left.0 as u128 * right.1 as u128 == right.0 as u128 * left.1 as u128
 }
 
-fn gcd(mut left: u64, mut right: u64) -> u64 {
-    while right != 0 {
-        let remainder = left % right;
-        left = right;
-        right = remainder;
-    }
-    left.max(1)
-}
-
 fn scene(_: u64, world: &World) -> Option<Scene> {
     let continuous = world.account(&AccountId::World).is_some();
     let tick = work_league::clock(world);

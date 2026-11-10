@@ -20,7 +20,10 @@ use axionomy_view::{
     derive_model, derive_proposal,
 };
 use serde::{Serialize, de::DeserializeOwned};
-use std::{collections::BTreeSet, ops::ControlFlow};
+use std::{
+    collections::{BTreeSet, VecDeque},
+    ops::{ControlFlow, Rem},
+};
 
 /// Keys written from identifiers' paths (D-044), so a scene, a metric or an
 /// objective names a value the way storage, MCP and every view do.
@@ -91,70 +94,6 @@ pub(super) fn asset_metric<A: StudioFormat>(
     }
 }
 
-/// Compare replayed outcomes without claiming an exhaustive frontier.
-pub(super) fn evaluated_front(
-    documents: &[ViewDocument],
-    selected: &ViewDocument,
-    title: &str,
-) -> axionomy_view::ParetoFrontView {
-    use axionomy_view::{
-        FrontierCompletenessView, ObjectiveAxisView, ObjectiveDirectionView, ParetoFrontView,
-        ParetoPointView,
-    };
-    let rows: Vec<_> = documents
-        .iter()
-        .map(|document| {
-            (
-                document,
-                document
-                    .objectives
-                    .iter()
-                    .map(|objective| objective.value)
-                    .collect::<Vec<_>>(),
-            )
-        })
-        .collect();
-    let dominates = |left: &[Quantity], right: &[Quantity]| {
-        left.iter()
-            .zip(right)
-            .zip(&selected.objectives)
-            .all(|((l, r), axis)| match axis.direction {
-                ObjectiveDirectionView::Maximize => l >= r,
-                ObjectiveDirectionView::Minimize => l <= r,
-            })
-            && left
-                .iter()
-                .zip(right)
-                .zip(&selected.objectives)
-                .any(|((l, r), axis)| match axis.direction {
-                    ObjectiveDirectionView::Maximize => l > r,
-                    ObjectiveDirectionView::Minimize => l < r,
-                })
-    };
-    ParetoFrontView {
-        title: title.into(),
-        completeness: FrontierCompletenessView::Approximate,
-        axes: selected
-            .objectives
-            .iter()
-            .map(|o| ObjectiveAxisView {
-                key: o.key.clone(),
-                label: o.label.clone(),
-                direction: o.direction,
-            })
-            .collect(),
-        points: rows
-            .iter()
-            .filter(|(_, candidate)| !rows.iter().any(|(_, other)| dominates(other, candidate)))
-            .map(|(document, values)| ParetoPointView {
-                label: document.title.clone(),
-                selected: document.id == selected.id,
-                values: values.iter().map(ToString::to_string).collect(),
-            })
-            .collect(),
-    }
-}
-
 /// The key every view of `O` gives `account`, so a scene names the account
 /// a frame shows.
 pub(super) fn account_key<O: WrittenOntology>(account: &O::Account) -> ItemPath {
@@ -198,6 +137,7 @@ mod amm;
 mod bridge;
 mod connect_four;
 mod exact_cover;
+mod fronts;
 mod labels;
 mod lending;
 mod logistics;
@@ -211,6 +151,10 @@ mod sokoban;
 mod work_league;
 mod workshop;
 
+use fronts::{
+    evaluated_front, exact_front, exact_values, frontier_trace, objective_axes, objective_value,
+    sampled_policy_front,
+};
 use labels::{StudioFormat, StudioLabel, counted, debug_labels, words};
 
 type StudioScene<O> = fn(u64, &Economy<O>) -> Option<Scene>;
@@ -1053,7 +997,7 @@ pub(crate) fn study(
         .iter()
         .flat_map(|document| document.proposals.iter().cloned())
         .collect();
-    let thinking = progress.observations().to_vec();
+    let thinking = progress.observations().cloned().collect::<Vec<_>>();
     for document in &mut study.documents {
         // Problem adapters may retain richer, strategy-specific evidence. The
         // live stream is the transport fallback, not permission to relabel one
@@ -1116,8 +1060,57 @@ pub(super) struct ProgressSink<'a> {
     observer: &'a mut dyn StudyObserver,
     sequence: u64,
     error: Option<ServiceError>,
-    observations: Vec<SearchObservationView>,
+    observations: VecDeque<SearchObservationView>,
     framed_documents: BTreeSet<DocumentPath>,
+}
+
+/// How many observations a study keeps: the newest.
+const KEPT_OBSERVATIONS: usize = 256;
+
+/// Keeps `observation`, forgetting the oldest once `KEPT_OBSERVATIONS` are
+/// kept.
+pub(super) fn retain_observation(
+    observations: &mut VecDeque<SearchObservationView>,
+    observation: SearchObservationView,
+) {
+    if observations.len() == KEPT_OBSERVATIONS {
+        observations.pop_front();
+    }
+    observations.push_back(observation);
+}
+
+/// The counters of a graph search at a checkpoint.
+pub(super) fn graph_metrics(progress: GraphSearchProgress) -> Vec<SceneMetricView> {
+    vec![
+        visual_metric(
+            path!("expanded"),
+            "States expanded",
+            progress.expanded(),
+            None,
+        ),
+        visual_metric(
+            path!("generated"),
+            "States generated",
+            progress.generated(),
+            None,
+        ),
+        visual_metric(path!("frontier"), "Frontier", progress.frontier(), None),
+        visual_metric(path!("visited"), "States visited", progress.visited(), None),
+    ]
+}
+
+/// The greatest common divisor of two counts, at least 1, so a fraction
+/// reduced by it keeps a nonzero denominator.
+pub(super) fn gcd<T>(mut left: T, mut right: T) -> T
+where
+    T: Copy + Ord + Default + Rem<Output = T> + From<u8>,
+{
+    while right != T::default() {
+        let remainder = left % right;
+        left = right;
+        right = remainder;
+    }
+    left.max(T::from(1))
 }
 
 impl<'a> ProgressSink<'a> {
@@ -1127,7 +1120,7 @@ impl<'a> ProgressSink<'a> {
             observer,
             sequence: 0,
             error: None,
-            observations: Vec::new(),
+            observations: VecDeque::new(),
             framed_documents: BTreeSet::new(),
         }
     }
@@ -1139,47 +1132,16 @@ impl<'a> ProgressSink<'a> {
         total: u64,
         message: impl Into<String>,
     ) -> ControlFlow<()> {
-        if self.error.is_some() {
-            return ControlFlow::Break(());
-        }
-        if let Err(error) = self.control.checkpoint() {
-            self.error = Some(error);
-            return ControlFlow::Break(());
-        }
-        let message = message.into();
-        self.observer.progress(ServiceProgress {
-            sequence: self.sequence,
-            phase: work.phase.clone(),
-            completed,
-            total,
-            message: message.clone(),
-        });
-        let observation = SearchObservationView {
-            sequence: self.sequence,
-            phase: work.phase.clone(),
-            algorithm: work.algorithm.clone(),
-            kind: work.kind,
-            label: message,
-            completed,
-            total,
-            subjects: Vec::new(),
-            metrics: vec![
-                visual_metric(path!("completed"), "Work completed", completed, None),
-                visual_metric(
-                    path!("remaining"),
-                    "Work remaining",
-                    total.saturating_sub(completed),
-                    None,
-                ),
-            ],
-        };
-        self.observer.observation(observation.clone());
-        if self.observations.len() == 256 {
-            self.observations.remove(0);
-        }
-        self.observations.push(observation);
-        self.sequence += 1;
-        ControlFlow::Continue(())
+        let metrics = vec![
+            visual_metric(path!("completed"), "Work completed", completed, None),
+            visual_metric(
+                path!("remaining"),
+                "Work remaining",
+                total.saturating_sub(completed),
+                None,
+            ),
+        ];
+        self.report(work, completed, total, message.into(), Vec::new(), metrics)
     }
 
     /// Publish graph-search work without pretending that an implicit frontier
@@ -1202,6 +1164,29 @@ impl<'a> ProgressSink<'a> {
         message: impl Into<String>,
         subjects: impl IntoIterator<Item = ViewId>,
     ) -> ControlFlow<()> {
+        self.report(
+            work,
+            progress.expanded() as u64,
+            // Zero means the frontier has no honest fixed denominator. The UI
+            // renders an indeterminate bar and the exact counters below.
+            0,
+            message.into(),
+            subjects.into_iter().collect(),
+            graph_metrics(progress),
+        )
+    }
+
+    /// Reports progress and the observation it makes, unless the study is
+    /// stopping.
+    fn report(
+        &mut self,
+        work: &Work,
+        completed: u64,
+        total: u64,
+        message: String,
+        subjects: Vec<ViewId>,
+        metrics: Vec<SceneMetricView>,
+    ) -> ControlFlow<()> {
         if self.error.is_some() {
             return ControlFlow::Break(());
         }
@@ -1209,15 +1194,11 @@ impl<'a> ProgressSink<'a> {
             self.error = Some(error);
             return ControlFlow::Break(());
         }
-        let message = message.into();
-        let completed = progress.expanded() as u64;
         self.observer.progress(ServiceProgress {
             sequence: self.sequence,
             phase: work.phase.clone(),
             completed,
-            // Zero means the frontier has no honest fixed denominator. The UI
-            // renders an indeterminate bar and the exact counters below.
-            total: 0,
+            total,
             message: message.clone(),
         });
         let observation = SearchObservationView {
@@ -1227,30 +1208,12 @@ impl<'a> ProgressSink<'a> {
             kind: work.kind,
             label: message,
             completed,
-            total: 0,
-            subjects: subjects.into_iter().collect(),
-            metrics: vec![
-                visual_metric(
-                    path!("expanded"),
-                    "States expanded",
-                    progress.expanded(),
-                    None,
-                ),
-                visual_metric(
-                    path!("generated"),
-                    "States generated",
-                    progress.generated(),
-                    None,
-                ),
-                visual_metric(path!("frontier"), "Frontier", progress.frontier(), None),
-                visual_metric(path!("visited"), "States visited", progress.visited(), None),
-            ],
+            total,
+            subjects,
+            metrics,
         };
         self.observer.observation(observation.clone());
-        if self.observations.len() == 256 {
-            self.observations.remove(0);
-        }
-        self.observations.push(observation);
+        retain_observation(&mut self.observations, observation);
         self.sequence += 1;
         ControlFlow::Continue(())
     }
@@ -1262,8 +1225,9 @@ impl<'a> ProgressSink<'a> {
         }
     }
 
-    pub fn observations(&self) -> &[SearchObservationView] {
-        &self.observations
+    /// The observations kept so far, oldest first.
+    pub fn observations(&self) -> impl Iterator<Item = &SearchObservationView> {
+        self.observations.iter()
     }
 
     pub fn frame(&mut self, document: &DocumentPath, frame: &ExchangeFrame) {
