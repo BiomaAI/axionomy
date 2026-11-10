@@ -161,8 +161,9 @@ async def test_a_client_authors_applies_and_reads_back_through_links(url: str) -
         failed = await client.call_tool("axionomy_exchange_apply", {"economy_id": economy_id, "exchange": transfer(9)})
         assert failed.is_error
         assert failed.structured_content["error"] == "infeasible"
+        assert failed.structured_content["message"] == "the exchange is infeasible: `source` lacks 4 `token`; nothing was stored"
         assessment = await page(client, links(failed)[0])
-        assert assessment["status"] == "Infeasible"
+        assert assessment["status"] == "infeasible"
 
 
 async def test_a_client_steps_through_a_replay_and_diffs_its_states(url: str) -> None:
@@ -178,9 +179,17 @@ async def test_a_client_steps_through_a_replay_and_diffs_its_states(url: str) ->
             stepped = await client.call_tool("axionomy_trace_step", {"economy_id": replayed_id, "step": step})
             assert not stepped.is_error, stepped.structured_content
             steps.append(stepped.structured_content)
+            assert stepped.structured_content["step"] == step
+            # Step zero is the trace's source; the economy passed in is its last step.
+            assert stepped.structured_content["source_economy_id"] == parent_id
+            assert stepped.structured_content["traced_economy_id"] == replayed_id
         assert steps[3]["root"] == replayed.structured_content["root"]
         parent = await page(client, f"axionomy://economy/{parent_id}")
         assert steps[0]["root"] == parent["root"]
+
+        # A change line names the exchange that moved it by its index, from zero.
+        changes = await page(client, f"axionomy://economy/{replayed_id}/changes")
+        assert [line["exchange_index"] for line in changes["items"]] == [0, 0, 1, 1, 2, 2]
 
         diff = await page(client, f"axionomy://economy/{steps[0]['economy_id']}/diff/{steps[2]['economy_id']}")
         assert diff["items"] == [
@@ -189,25 +198,37 @@ async def test_a_client_steps_through_a_replay_and_diffs_its_states(url: str) ->
         ]
         beyond = await client.call_tool("axionomy_trace_step", {"economy_id": replayed_id, "step": 4})
         assert beyond.is_error and beyond.structured_content["error"] == "invalid_request"
+        assert beyond.structured_content["details"] == {"pointer": "/step"}
 
-        found = await client.call_tool(
-            "axionomy_trace_find",
-            {
-                "economy_id": replayed_id,
-                "account": "sink",
-                "asset": "token",
-                "comparison": "greater_than_or_equal",
-                "quantity": "3",
-            },
-        )
+        def condition(account: str, comparison: str, quantity: str) -> dict[str, Any]:
+            return {"economy_id": replayed_id, "account": account, "asset": "token", "comparison": comparison, "quantity": quantity}
+
+        found = await client.call_tool("axionomy_trace_find", condition("sink", "greater_than_or_equal", "3"))
         assert found.structured_content["step"] == 2
-        assert found.structured_content["state"]["root"] == steps[2]["root"]
+        assert found.structured_content["economy"]["root"] == steps[2]["root"]
         assert any(uri.endswith(steps[2]["economy_id"]) for uri in links(found))
-        never = await client.call_tool(
-            "axionomy_trace_find",
-            {"economy_id": replayed_id, "account": "sink", "asset": "token", "comparison": "equal", "quantity": "9"},
-        )
-        assert never.structured_content == {}
+
+
+async def test_trace_find_says_when_nothing_matches_and_refuses_unknown_accounts(url: str) -> None:
+    async with Client(url) as client:
+        parent_id = await create(client, ECONOMY)
+        replayed = await client.call_tool("axionomy_trace_replay", {"economy_id": parent_id, "exchanges": [transfer(1), transfer(2)]})
+        replayed_id = replayed.structured_content["economy_id"]
+
+        def condition(account: str) -> dict[str, Any]:
+            return {"economy_id": replayed_id, "account": account, "asset": "token", "comparison": "equal", "quantity": "9"}
+
+        never = await client.call_tool("axionomy_trace_find", condition("sink"))
+        assert not never.is_error
+        assert never.structured_content["step"] is None
+        assert "economy" not in never.structured_content
+        assert never.structured_content["message"].startswith("`sink`'s balance of `token` is equal to 9 at none of the 3 steps")
+
+        ghost = await client.call_tool("axionomy_trace_find", condition("ghost"))
+        assert ghost.is_error
+        assert ghost.structured_content["error"] == "not_found"
+        assert ghost.structured_content["details"] == {"pointer": "/account"}
+        assert "has an account `ghost`" in ghost.structured_content["message"]
 
 
 async def test_a_large_economy_is_built_in_chunks_and_read_in_pages(url: str) -> None:
@@ -345,9 +366,13 @@ async def test_outside_work_is_a_request_the_economy_holds(url: str) -> None:
         # The request lapses only once its deadline has passed.
         early = await apply(client, asked_id, "lapse")
         assert early.is_error and early.structured_content["error"] == "invalid"
-        assert early.structured_content["details"]["issues"] == [
-            {"RateConditionFailed": {"condition": "deadline-passed", "rate": "lapse"}}
-        ]
+        (issue,) = early.structured_content["details"]["issues"]
+        assert {key: issue[key] for key in ("kind", "rate", "condition")} == {
+            "kind": "rate_condition_failed",
+            "rate": "lapse",
+            "condition": "deadline-passed",
+        }
+        assert issue["message"].endswith(f"axionomy://economy/{asked_id}/rate-conditions/lapse")
         waited = await client.call_tool(
             "axionomy_trace_replay",
             {"economy_id": asked_id, "exchanges": [outside("tick")] * 3},
@@ -502,6 +527,34 @@ async def test_a_frames_exchange_is_tried_in_the_studys_economy(url: str) -> Non
             assert tried.structured_content["root"] == after["root"]
 
 
+async def test_malformed_arguments_are_structured_errors_naming_the_argument(url: str) -> None:
+    async with Client(url) as client:
+        economy_id = await create(client, ECONOMY)
+        missing_units = {"rate": "transfer", "bindings": {"giver": "source", "receiver": "sink"}}
+        for arguments, pointer in (
+            ({"economy_id": economy_id, "exchange": missing_units}, "/exchange/units"),
+            ({"economy_id": economy_id, "exchange": {**transfer(1), "rate": "Transfer"}}, "/exchange/rate"),
+            ({"economy_id": economy_id, "exchange": {**transfer(1), "units": "-1"}}, "/exchange/units"),
+            ({"economy_id": "eco-1", "exchange": transfer(1)}, "/economy_id"),
+        ):
+            refused = await client.call_tool("axionomy_exchange_apply", arguments)
+            assert refused.is_error
+            assert refused.structured_content["error"] == "invalid_request", refused.structured_content
+            assert refused.structured_content["details"] == {"pointer": pointer}
+            assert refused.structured_content["message"].startswith(f"argument `{pointer}` is invalid: ")
+
+        # A path that is a key is named by its JSON pointer, `/` escaped as `~1`.
+        refused = await client.call_tool("axionomy_economy_create", {"entries": {"accounts": {"agents/7/Wallet": {}}}})
+        assert refused.structured_content["details"] == {"pointer": "/entries/accounts/agents~17~1Wallet"}
+
+        # The schema states the bounds the server keeps.
+        tools = {tool.name: tool for tool in (await client.list_tools()).tools}
+        search = tools["axionomy_search"].input_schema["properties"]
+        assert search["max_expansions"]["minimum"] == 1
+        assert (search["chunk_size"]["minimum"], search["chunk_size"]["maximum"]) == (1, 10_000)
+        assert tools["axionomy_problem_study"].input_schema["properties"]["budget"]["minimum"] == 1
+
+
 async def test_bad_resources_are_invalid_params(url: str) -> None:
     async with Client(url) as client:
         economy_id = await create(client, ECONOMY)
@@ -509,10 +562,19 @@ async def test_bad_resources_are_invalid_params(url: str) -> None:
             "axionomy://economy/eco_missing",
             f"axionomy://economy/{economy_id}/accounts?cursor=1.00000000",
             f"axionomy://economy/{economy_id}/nothing",
+            f"axionomy://economy/{economy_id}/accounts/Bad_Path",
         ):
             with pytest.raises(MCPError) as raised:
                 await client.read_resource(uri)
             assert raised.value.code == -32602, uri
+        with pytest.raises(MCPError) as raised:
+            await client.read_resource(f"axionomy://economy/{economy_id}/accounts/Bad_Path")
+        assert "`Bad_Path` is not an account path" in raised.value.message
+
+        # What a resource names but the economy lacks is named in the error.
+        with pytest.raises(MCPError) as raised:
+            await client.read_resource(f"axionomy://economy/{economy_id}/accounts/ghost")
+        assert raised.value.message.startswith(f"economy `{economy_id}` has no account `ghost`")
 
 
 def test_requests_without_routing_headers_are_refused(base_url: str) -> None:

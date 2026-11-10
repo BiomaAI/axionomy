@@ -1,12 +1,13 @@
 use crate::{
     authoring::{self, AuthoringError},
-    handles::{AssessmentId, EconomyId},
+    handles::{AssessmentId, EconomyId, Handle},
+    issues,
     messages::{
         AssessResponse, EconomyCounts, EconomyCreateRequest, EconomyEntries, EconomyExtendRequest,
-        EconomyStored, ExchangeRequest, ExchangedResponse, FailureCode, LineKind,
+        EconomyStored, ExchangeRequest, ExchangedResponse, FailureCode, Issue, LineKind,
         ProblemCatalogRequest, ProblemCatalogResponse, QuantityLine, ReplayRequest, SearchOutcome,
         SearchRequest, SearchResponse, SearchSolved, StateRoot, StudySummary, ToolFailure,
-        TraceFindRequest, TraceFindResponse, TraceStepRequest,
+        TraceFindRequest, TraceFindResponse, TraceStepRequest, TraceStepResponse,
     },
     resources::{self, Address, IMMUTABLE_TTL_MS, LIST_TTL_MS, Target},
     store::{self, Archive, Assessed, Loaded, Origin, State, checkpoint},
@@ -17,7 +18,9 @@ use axionomy_search::{
     BfsSession, GraphSearchProgress,
     session::{Continue, SearchStatus, WorkBudget},
 };
-use axionomy_service::{ReferenceService, ServiceProgress, StudyControl, StudyRequest};
+use axionomy_service::{
+    ReferenceService, ServiceError, ServiceProgress, StudyControl, StudyRequest,
+};
 use axionomy_store::{Store, StoreError};
 use rmcp::{
     ErrorData as McpError, ServerHandler,
@@ -39,6 +42,7 @@ use rmcp::{
     tool, tool_handler, tool_router,
 };
 use serde::{Serialize, de::DeserializeOwned};
+use serde_path_to_error::Segment;
 use std::{borrow::Cow, sync::Arc};
 
 #[cfg(test)]
@@ -49,6 +53,8 @@ const TASK_POLL_INTERVAL_MS: u64 = 100;
 pub(crate) const MAX_EXCHANGES: usize = 1_000;
 /// Lines a tool result shows before pointing at their resource.
 const PREVIEW_LINES: usize = 10;
+/// The most state expansions a search runs between cancellation checks.
+const MAX_CHUNK_SIZE: usize = 10_000;
 const SEARCH: &str = "axionomy_search";
 const PROBLEM_STUDY: &str = "axionomy_problem_study";
 
@@ -72,8 +78,13 @@ initial_economy_id, where it starts, and final_economy_id, where its exchanges r
 a document shows step i + 1 of final_economy_id, and carries its exchange as that economy writes \
 it: axionomy_trace_step with step i on final_economy_id, then axionomy_exchange_apply with the \
 frame's exchange, reaches step i + 1. Step into the final economy, try another exchange from \
-there, and diff the result against the study's next step. Snapshots are kept in the server's \
-store, across restarts when it keeps one on disk.";
+there, and diff the result against the study's next step. Steps and exchanges are counted one \
+way everywhere: step N of a trace is the economy after its first N exchanges, step 0 the economy \
+they were applied to; positions of exchanges (exchange_index, a frame's view.index) count from \
+0, so the exchange at index i takes step i to step i + 1; messages count from 1 (\"exchange 2 \
+of 3\"). A failed call returns isError with {error, message, details}: error is a stable code, \
+and an invalid_request's details.pointer is the JSON pointer of the argument at fault. Snapshots \
+are kept in the server's store, across restarts when it keeps one on disk.";
 
 #[derive(Clone)]
 pub struct AxionomyMcp {
@@ -152,10 +163,10 @@ impl AxionomyMcp {
             .await?;
         let lines = assessment_lines(&stored.assessment).count();
         let response = AssessResponse {
+            issues: issues::of(&stored.assessment, &request.exchange, &request.economy_id),
             economy_id: request.economy_id,
             assessment_id: assessment_id.clone(),
-            status: stored.assessment.status(),
-            issues: stored.assessment.issues().to_vec(),
+            status: stored.assessment.status().into(),
             lines,
             preview: assessment_lines(&stored.assessment)
                 .take(PREVIEW_LINES)
@@ -194,8 +205,8 @@ impl AxionomyMcp {
         Parameters(request): Parameters<ReplayRequest>,
     ) -> Result<Linked<ExchangedResponse>, ToolError> {
         if request.exchanges.is_empty() {
-            return Err(ToolError::new(
-                FailureCode::InvalidRequest,
+            return Err(ToolError::argument(
+                "/exchanges",
                 "a replay needs at least one exchange",
             ));
         }
@@ -208,53 +219,33 @@ impl AxionomyMcp {
     #[tool(
         name = "axionomy_trace_step",
         title = "Step through a trace",
-        description = "Return the economy_id of the state after the first `step` of the exchanges that made an economy, applied to its parent: zero gives the parent's state, all of them the economy itself. Read it, or diff it against its neighbors, to see what each exchange did.",
-        output_schema = schema_for_output::<ExchangedResponse>(),
+        description = "Name the economy at step `step` of the trace that made an economy: the economy after the first `step` of its exchanges. Step zero is the trace's source, the economy they were applied to, which the result names `source_economy_id`; the last step is the economy passed in, which it names `traced_economy_id`. Read the stepped economy, or diff it against its neighbors, to see what each exchange did.",
+        output_schema = schema_for_output::<TraceStepResponse>(),
         annotations(destructive_hint = false, idempotent_hint = true, open_world_hint = false)
     )]
     async fn trace_step(
         &self,
         Parameters(request): Parameters<TraceStepRequest>,
-    ) -> Result<Linked<ExchangedResponse>, ToolError> {
+    ) -> Result<Linked<TraceStepResponse>, ToolError> {
         let loaded = self.economy(&request.economy_id).await?;
-        let (Origin::Exchanged { exchanges }, Some(parent)) =
-            (loaded.record.origin, loaded.record.parent.clone())
-        else {
-            return Err(ToolError::new(
-                FailureCode::InvalidRequest,
-                format!(
-                    "`{}` was authored, not made by exchanges; it has no steps",
-                    request.economy_id
-                ),
-            ));
-        };
+        let (source, exchanges) = traced(&request.economy_id, &loaded)?;
         if request.step > exchanges {
-            return Err(ToolError::new(
-                FailureCode::InvalidRequest,
+            return Err(ToolError::argument(
+                "/step",
                 format!(
-                    "step {} is past the {exchanges} exchanges that made `{}`",
+                    "step {} is past the last step of `{}`, which {exchanges} exchanges made",
                     request.step, request.economy_id
                 ),
             ));
         }
-        let stored = self
-            .archive
-            .step(&request.economy_id, &loaded, request.step)
+        self.stepped(request.economy_id, &loaded, source, request.step)
             .await
-            .map_err(ToolError::internal)?;
-        let stepped = self.economy(&stored.economy_id).await?;
-        Ok(exchanged_response(
-            parent,
-            stored.economy_id,
-            stored.deduplicated,
-            &stepped,
-        ))
     }
 
     #[tool(
         name = "axionomy_trace_find",
         title = "Find where a balance condition starts",
-        description = "Return the first step of the exchanges that made an economy, applied to its parent, after which an account's balance of an asset compares with a quantity as asked (`equal`, `greater_than_or_equal` or `less_than_or_equal`), with that state as axionomy_trace_step gives it. Step zero is the parent's state; no step means no state of the trace satisfies the condition.",
+        description = "Find the first step of the trace that made an economy at which an account's balance of an asset compares with a quantity as asked (`equal`, `greater_than_or_equal` or `less_than_or_equal`), and name that step's economy as axionomy_trace_step does. Step zero is the trace's source, the economy its exchanges were applied to. When no step satisfies the condition, `step` is null and `message` says so; an account no economy of the trace has is `not_found`.",
         output_schema = schema_for_output::<TraceFindResponse>(),
         annotations(destructive_hint = false, idempotent_hint = true, open_world_hint = false)
     )]
@@ -263,27 +254,39 @@ impl AxionomyMcp {
         Parameters(request): Parameters<TraceFindRequest>,
     ) -> Result<Linked<TraceFindResponse>, ToolError> {
         let loaded = self.economy(&request.economy_id).await?;
-        let (Origin::Exchanged { .. }, Some(parent)) =
-            (loaded.record.origin, loaded.record.parent.clone())
-        else {
-            return Err(ToolError::new(
-                FailureCode::InvalidRequest,
-                format!(
-                    "`{}` was authored, not made by exchanges; it has no steps",
-                    request.economy_id
-                ),
-            ));
+        let (source_id, _) = traced(&request.economy_id, &loaded)?;
+        let source = self.economy(&source_id).await?;
+        let opened = || {
+            loaded
+                .receipts
+                .iter()
+                .flat_map(|receipt| receipt.opened())
+                .any(|account| account == &request.account)
         };
+        if source.state.economy.account(&request.account).is_none() && !opened() {
+            return Err(ToolError::new(
+                FailureCode::NotFound,
+                format!(
+                    "no economy of the trace that made `{}` has an account `{}`; the accounts of its source are listed at {}",
+                    request.economy_id,
+                    request.account,
+                    Target::Accounts {
+                        economy_id: source_id,
+                        prefix: None,
+                    }
+                    .uri()
+                ),
+            )
+            .at("/account"));
+        }
         let holds = |balance: Quantity| match request.comparison {
             QuantityComparison::Equal => balance == request.quantity,
             QuantityComparison::GreaterThanOrEqual => balance >= request.quantity,
             QuantityComparison::LessThanOrEqual => balance <= request.quantity,
         };
         // The receipts say what each exchange moved, so the balance after
-        // every step follows from the parent's without rebuilding a state.
-        let mut balance = self
-            .economy(&parent)
-            .await?
+        // every step follows from the source's without rebuilding a state.
+        let mut balance = source
             .state
             .economy
             .balance(&request.account, &request.asset);
@@ -307,28 +310,35 @@ impl AxionomyMcp {
             found = holds(balance).then_some(index + 1);
         }
         let Some(step) = found else {
+            let comparison = match request.comparison {
+                QuantityComparison::Equal => "equal to",
+                QuantityComparison::GreaterThanOrEqual => "at least",
+                QuantityComparison::LessThanOrEqual => "at most",
+            };
             return Ok(Linked::new(
                 TraceFindResponse {
                     step: None,
-                    state: None,
+                    economy: None,
+                    message: Some(format!(
+                        "`{}`'s balance of `{}` is {comparison} {} at none of the {} steps of the trace that made `{}`",
+                        request.account,
+                        request.asset,
+                        request.quantity,
+                        loaded.receipts.len() + 1,
+                        request.economy_id
+                    )),
                 },
                 Vec::new(),
             ));
         };
-        let stored = self
-            .archive
-            .step(&request.economy_id, &loaded, step)
-            .await
-            .map_err(ToolError::internal)?;
-        let stepped = self.economy(&stored.economy_id).await?;
-        Ok(
-            exchanged_response(parent, stored.economy_id, stored.deduplicated, &stepped).map(
-                |state| TraceFindResponse {
-                    step: Some(step),
-                    state: Some(state),
-                },
-            ),
-        )
+        Ok(self
+            .stepped(request.economy_id, &loaded, source_id, step)
+            .await?
+            .map(|economy| TraceFindResponse {
+                step: Some(step),
+                economy: Some(economy),
+                message: None,
+            }))
     }
 
     #[tool(
@@ -385,14 +395,21 @@ impl AxionomyMcp {
             .economy(economy_id)
             .await
             .map_err(ToolError::internal)?
-            .ok_or_else(|| {
-                ToolError::new(
-                    FailureCode::NotFound,
-                    format!(
-                        "economy snapshot `{economy_id}` does not exist in this server's store; create it with axionomy_economy_create"
-                    ),
-                )
-            })
+            .ok_or_else(|| ToolError::new(FailureCode::NotFound, self.not_stored(economy_id)))
+    }
+
+    /// Why the store has no `handle`, and how to get what it named again.
+    pub(crate) fn not_stored<H: Handle>(&self, handle: &H) -> String {
+        let store = if self.archive.in_memory() {
+            "This server keeps its store in memory, so every handle it issued before it last restarted is gone"
+        } else {
+            "This server keeps its store on disk, where handles outlive restarts, so this one came from another store"
+        };
+        format!(
+            "{} `{handle}` is not in this server's store. {store}: {}, which issues a new handle.",
+            H::NAMES,
+            H::MADE_AGAIN
+        )
     }
 
     async fn author(
@@ -480,6 +497,31 @@ impl AxionomyMcp {
         .await
     }
 
+    /// Names step `step` of the trace that made `economy_id` from `source`.
+    async fn stepped(
+        &self,
+        economy_id: EconomyId,
+        loaded: &Loaded,
+        source: EconomyId,
+        step: usize,
+    ) -> Result<Linked<TraceStepResponse>, ToolError> {
+        let stored = self
+            .archive
+            .step(&economy_id, loaded, step)
+            .await
+            .map_err(ToolError::internal)?;
+        let stepped = self.economy(&stored.economy_id).await?;
+        Ok(
+            exchanged_response(source, stored.economy_id, stored.deduplicated, &stepped).map(
+                |economy| TraceStepResponse {
+                    traced_economy_id: economy_id,
+                    step,
+                    economy,
+                },
+            ),
+        )
+    }
+
     async fn keep_assessment(
         &self,
         economy_id: &EconomyId,
@@ -495,23 +537,19 @@ impl AxionomyMcp {
 
     async fn start_search(
         &self,
-        arguments: Option<JsonObject>,
+        arguments: Option<&JsonObject>,
     ) -> Result<CallToolResponse, ToolError> {
         let request: SearchRequest = arguments_of(arguments)?;
-        if request.max_expansions == 0 {
-            return Err(ToolError::new(
-                FailureCode::InvalidRequest,
-                "max_expansions must be greater than zero",
-            ));
-        }
-        if !(1..=10_000).contains(&request.chunk_size) {
-            return Err(ToolError::new(
-                FailureCode::InvalidRequest,
-                "chunk_size must be between 1 and 10000 so cancellation stays responsive",
+        if !(1..=MAX_CHUNK_SIZE).contains(&request.chunk_size) {
+            return Err(ToolError::argument(
+                "/chunk_size",
+                format!(
+                    "chunk_size must be from 1 to {MAX_CHUNK_SIZE}, so cancellation stays responsive"
+                ),
             ));
         }
         if request.candidates.len() > MAX_EXCHANGES {
-            return Err(too_many_exchanges(request.candidates.len()));
+            return Err(too_many_exchanges(request.candidates.len()).at("/candidates"));
         }
         let goal =
             request
@@ -524,7 +562,9 @@ impl AxionomyMcp {
                             .map(|(asset, quantity)| (asset.clone(), *quantity)),
                     )
                     .map_err(|error| {
-                        ToolError::new(FailureCode::InvalidRequest, error.to_string())
+                        let mut pointer = "/goal".to_owned();
+                        push_token(&mut pointer, account.as_str());
+                        ToolError::argument(&pointer, error.to_string())
                     })?;
                     Ok::<_, ToolError>(goal.require(account.clone(), basket))
                 })?;
@@ -538,18 +578,29 @@ impl AxionomyMcp {
 
     fn start_problem_study(
         &self,
-        arguments: Option<JsonObject>,
+        arguments: Option<&JsonObject>,
     ) -> Result<CallToolResponse, ToolError> {
         let request: StudyRequest = arguments_of(arguments)?;
         if request.budget == 0 {
-            return Err(ToolError::new(
-                FailureCode::InvalidRequest,
+            return Err(ToolError::argument(
+                "/budget",
                 "budget must be greater than zero",
             ));
         }
-        ReferenceService
-            .resolve(&request)
-            .map_err(|error| ToolError::new(FailureCode::InvalidRequest, error.to_string()))?;
+        ReferenceService.resolve(&request).map_err(|error| {
+            let refused = ToolError::new(
+                FailureCode::InvalidRequest,
+                format!(
+                    "{error}; axionomy_problem_catalog lists every problem with its instances and strategies"
+                ),
+            );
+            match error {
+                ServiceError::UnknownProblem(_) => refused.at("/problem"),
+                ServiceError::UnknownInstance { .. } => refused.at("/instance"),
+                ServiceError::UnknownStrategy { .. } => refused.at("/strategy"),
+                _ => refused,
+            }
+        })?;
         let archive = self.archive.clone();
         let task = self.tasks.spawn(self.task_options.clone(), move |context| {
             Box::pin(study_problem(context, archive, request))
@@ -578,18 +629,21 @@ impl ServerHandler for AxionomyMcp {
         request: CallToolRequestParams,
         context: RequestContext<RoleServer>,
     ) -> Result<CallToolResponse, McpError> {
+        if let Err(error) = check_arguments(&request.name, request.arguments.as_ref()) {
+            return error.into_call_tool_result();
+        }
         let tasks = context
             .client_capabilities()
             .is_some_and(|capabilities| capabilities.supports_tasks());
         if tasks && request.name == SEARCH {
             return self
-                .start_search(request.arguments)
+                .start_search(request.arguments.as_ref())
                 .await
                 .or_else(ToolError::into_call_tool_result);
         }
         if tasks && request.name == PROBLEM_STUDY {
             return self
-                .start_problem_study(request.arguments)
+                .start_problem_study(request.arguments.as_ref())
                 .or_else(ToolError::into_call_tool_result);
         }
         let context = ToolCallContext::new(self, request, context);
@@ -760,6 +814,16 @@ impl ToolError {
         Self::new(FailureCode::Internal, error.to_string())
     }
 
+    /// An `invalid_request` naming the argument at fault by its JSON pointer.
+    fn argument(pointer: &str, message: impl Into<String>) -> Self {
+        Self::new(FailureCode::InvalidRequest, message).at(pointer)
+    }
+
+    /// Names the argument at fault by its JSON pointer (RFC 6901).
+    fn at(self, pointer: &str) -> Self {
+        self.with_details(ArgumentDetails { pointer })
+    }
+
     fn with_details(mut self, details: impl Serialize) -> Self {
         self.failure.details = serde_json::to_value(details).ok();
         self
@@ -797,9 +861,88 @@ fn too_many_exchanges(count: usize) -> ToolError {
     )
 }
 
-fn arguments_of<T: DeserializeOwned>(arguments: Option<JsonObject>) -> Result<T, ToolError> {
-    serde_json::from_value(serde_json::Value::Object(arguments.unwrap_or_default()))
-        .map_err(|error| ToolError::new(FailureCode::InvalidRequest, error.to_string()))
+/// The details of an `invalid_request`: which argument is at fault.
+#[derive(Serialize)]
+struct ArgumentDetails<'a> {
+    /// The JSON pointer (RFC 6901) of the argument, within the call's
+    /// arguments.
+    pointer: &'a str,
+}
+
+/// Reads a tool's arguments, refusing malformed ones with the JSON pointer of
+/// the argument at fault.
+fn arguments_of<T: DeserializeOwned>(arguments: Option<&JsonObject>) -> Result<T, ToolError> {
+    let none = JsonObject::new();
+    serde_path_to_error::deserialize(arguments.unwrap_or(&none)).map_err(|error| {
+        let mut pointer = String::new();
+        for segment in error.path() {
+            let token = match segment {
+                Segment::Seq { index } => index.to_string(),
+                Segment::Map { key } => key.clone(),
+                Segment::Enum { variant } => variant.clone(),
+                Segment::Unknown => continue,
+            };
+            push_token(&mut pointer, &token);
+        }
+        let message = error.into_inner().to_string();
+        // Serde reports a missing field at the object that should have it,
+        // naming the field only in its message.
+        if let Some(field) = message
+            .strip_prefix("missing field `")
+            .and_then(|rest| rest.split('`').next())
+        {
+            push_token(&mut pointer, field);
+        }
+        let message = if pointer.is_empty() {
+            format!("the arguments are invalid: {message}")
+        } else {
+            format!("argument `{pointer}` is invalid: {message}")
+        };
+        ToolError::argument(&pointer, message)
+    })
+}
+
+/// Appends one reference token to a JSON pointer, escaped as RFC 6901 says.
+fn push_token(pointer: &mut String, token: &str) {
+    pointer.push('/');
+    pointer.push_str(&token.replace('~', "~0").replace('/', "~1"));
+}
+
+/// Reads a call's arguments as its tool will, so a malformed one is refused
+/// with a structured `invalid_request` naming the argument at fault, rather
+/// than with the tool router's text alone.
+fn check_arguments(tool: &str, arguments: Option<&JsonObject>) -> Result<(), ToolError> {
+    fn check<T: DeserializeOwned>(arguments: Option<&JsonObject>) -> Result<(), ToolError> {
+        arguments_of::<T>(arguments).map(drop)
+    }
+    match tool {
+        "axionomy_economy_create" => check::<EconomyCreateRequest>(arguments),
+        "axionomy_economy_extend" => check::<EconomyExtendRequest>(arguments),
+        "axionomy_exchange_assess" | "axionomy_exchange_apply" => {
+            check::<ExchangeRequest>(arguments)
+        }
+        "axionomy_trace_replay" => check::<ReplayRequest>(arguments),
+        "axionomy_trace_step" => check::<TraceStepRequest>(arguments),
+        "axionomy_trace_find" => check::<TraceFindRequest>(arguments),
+        SEARCH => check::<SearchRequest>(arguments),
+        "axionomy_problem_catalog" => check::<ProblemCatalogRequest>(arguments),
+        PROBLEM_STUDY => check::<StudyRequest>(arguments),
+        _ => Ok(()),
+    }
+}
+
+/// The source a traced economy's exchanges were applied to, and how many
+/// there were. An authored economy has no trace.
+fn traced(economy_id: &EconomyId, loaded: &Loaded) -> Result<(EconomyId, usize), ToolError> {
+    match (loaded.record.origin, &loaded.record.parent) {
+        (Origin::Exchanged { exchanges }, Some(source)) => Ok((source.clone(), exchanges)),
+        _ => Err(ToolError::argument(
+            "/economy_id",
+            format!(
+                "`{economy_id}` was authored, not made by exchanges, so it has no trace to step through; name an economy that axionomy_exchange_apply, axionomy_trace_replay, axionomy_search or a study made"
+            ),
+        )),
+    }
 }
 
 pub(crate) fn counts(economy: &paths::Economy) -> EconomyCounts {
@@ -901,8 +1044,10 @@ fn assessment_links(assessment_id: &AssessmentId, lines: usize) -> Vec<Resource>
     vec![assessment, lines_link]
 }
 
+/// Explains the failure of the exchange at `exchange_index` of a call that
+/// applies `exchanges`, assessed against the economy it met.
 fn failed_exchange(
-    step: usize,
+    exchange_index: usize,
     exchanges: usize,
     assessment_id: &AssessmentId,
     stored: &Assessed,
@@ -910,36 +1055,44 @@ fn failed_exchange(
     let which = if exchanges == 1 {
         "the exchange".to_owned()
     } else {
-        format!("exchange {step} of {exchanges}")
+        format!("exchange {} of {exchanges}", exchange_index + 1)
     };
     let lines = assessment_lines(&stored.assessment).count();
     let links = assessment_links(assessment_id, lines);
     let assessment = &stored.assessment;
     let error = match assessment.status() {
-        AssessmentStatus::Infeasible => ToolError::new(
-            FailureCode::Infeasible,
-            format!("{which} is infeasible: accounts lack {lines} quantities; nothing was stored"),
-        )
-        .with_details(FailureDetails {
-            step,
-            assessment_id,
-            issues: &[],
-            lines,
-            preview: assessment_lines(assessment).take(PREVIEW_LINES).collect(),
-        }),
+        AssessmentStatus::Infeasible => {
+            let missing: Vec<QuantityLine> = assessment_lines(assessment).collect();
+            ToolError::new(
+                FailureCode::Infeasible,
+                format!(
+                    "{which} is infeasible: {}; nothing was stored",
+                    issues::shortfalls(&missing)
+                ),
+            )
+            .with_details(FailureDetails {
+                exchange_index,
+                assessment_id,
+                issues: Vec::new(),
+                lines,
+                preview: missing.into_iter().take(PREVIEW_LINES).collect(),
+            })
+        }
         AssessmentStatus::Invalid => {
-            let reason = assessment
-                .issues()
-                .first()
-                .map_or_else(String::new, ToString::to_string);
+            let issues = issues::of(assessment, &stored.exchange, &stored.economy_id);
+            let reason = issues
+                .iter()
+                .map(|issue| issue.message.as_str())
+                .collect::<Vec<_>>()
+                .join("; ");
             ToolError::new(
                 FailureCode::Invalid,
                 format!("{which} is invalid: {reason}; nothing was stored"),
             )
             .with_details(FailureDetails {
-                step,
+                exchange_index,
                 assessment_id,
-                issues: assessment.issues(),
+                issues,
                 lines,
                 preview: Vec::new(),
             })
@@ -953,17 +1106,18 @@ fn failed_exchange(
 
 #[derive(Serialize)]
 struct FailureDetails<'a> {
-    step: usize,
+    /// The failing exchange's position in the call, from zero.
+    exchange_index: usize,
     assessment_id: &'a AssessmentId,
-    #[serde(skip_serializing_if = "<[_]>::is_empty")]
-    issues: &'a [paths::ApplyError],
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    issues: Vec<Issue>,
     lines: usize,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     preview: Vec<QuantityLine>,
 }
 
 pub(crate) fn delta_lines(
-    step: Option<usize>,
+    exchange_index: Option<usize>,
     deltas: &[paths::AccountDelta],
 ) -> impl Iterator<Item = QuantityLine> + '_ {
     deltas.iter().flat_map(move |delta| {
@@ -975,7 +1129,7 @@ pub(crate) fn delta_lines(
         .into_iter()
         .flat_map(move |(kind, basket)| {
             basket.iter().map(move |(asset, quantity)| QuantityLine {
-                step,
+                exchange_index,
                 account: delta.account().clone(),
                 asset: asset.clone(),
                 kind,
@@ -991,7 +1145,7 @@ pub(crate) fn receipt_lines(
     receipts
         .iter()
         .enumerate()
-        .flat_map(|(step, receipt)| delta_lines(Some(step), receipt.deltas()))
+        .flat_map(|(index, receipt)| delta_lines(Some(index), receipt.deltas()))
 }
 
 /// What explains an assessment: the projected changes of an applicable
@@ -1007,7 +1161,7 @@ pub(crate) fn assessment_lines(
             .missing()
             .iter()
             .map(|(asset, quantity)| QuantityLine {
-                step: None,
+                exchange_index: None,
                 account: shortfall.account().clone(),
                 asset: asset.clone(),
                 kind: LineKind::Missing,
@@ -1115,6 +1269,7 @@ async fn run_search(
         chunk_size,
         ..
     } = request;
+    let max_expansions = max_expansions.get();
     let mut session = BfsSession::new(&source.state.economy, goal, move |_| candidates.clone());
     let mut remaining = max_expansions;
 

@@ -6,7 +6,7 @@
 
 use axionomy::InvariantPath;
 
-use crate::handles::{AssessmentId, EconomyId, StudyId};
+use crate::handles::{AssessmentId, EconomyId, HandleError, StudyId};
 use axionomy::{AccountPath, AssetPath, RatePath, path::Path};
 use axionomy_view::DocumentPath;
 use rmcp::{
@@ -333,69 +333,68 @@ impl Address {
         let segments: Vec<&str> = segments.iter().map(String::as_str).collect();
         let target = match segments.as_slice() {
             ["economy", id] => Target::Economy {
-                economy_id: id.parse().map_err(|_| unknown())?,
+                economy_id: handle(uri, id)?,
             },
             ["economy", id, "accounts"] => Target::Accounts {
-                economy_id: id.parse().map_err(|_| unknown())?,
+                economy_id: handle(uri, id)?,
                 prefix: take("prefix"),
             },
             ["economy", id, "accounts", account @ ..] => Target::Balances {
-                economy_id: id.parse().map_err(|_| unknown())?,
-                account: joined(account).ok_or_else(unknown)?,
+                economy_id: handle(uri, id)?,
+                account: joined(uri, "an account", account)?,
                 prefix: take("prefix"),
             },
             ["economy", id, "rates"] => Target::Rates {
-                economy_id: id.parse().map_err(|_| unknown())?,
+                economy_id: handle(uri, id)?,
                 asset: take("asset")
-                    .map(|asset| asset.parse())
-                    .transpose()
-                    .map_err(|_| unknown())?,
+                    .map(|asset| joined(uri, "an asset", &[&asset]))
+                    .transpose()?,
             },
             ["economy", id, "rates", rate @ ..] => Target::Rate {
-                economy_id: id.parse().map_err(|_| unknown())?,
-                rate: joined(rate).ok_or_else(unknown)?,
+                economy_id: handle(uri, id)?,
+                rate: joined(uri, "a rate", rate)?,
             },
             ["economy", id, "rate-amounts", rate @ ..] => Target::RateAmounts {
-                economy_id: id.parse().map_err(|_| unknown())?,
-                rate: joined(rate).ok_or_else(unknown)?,
+                economy_id: handle(uri, id)?,
+                rate: joined(uri, "a rate", rate)?,
             },
             ["economy", id, "rate-conditions", rate @ ..] => Target::RateConditions {
-                economy_id: id.parse().map_err(|_| unknown())?,
-                rate: joined(rate).ok_or_else(unknown)?,
+                economy_id: handle(uri, id)?,
+                rate: joined(uri, "a rate", rate)?,
             },
             ["economy", id, "invariants"] => Target::Invariants {
-                economy_id: id.parse().map_err(|_| unknown())?,
+                economy_id: handle(uri, id)?,
             },
             ["economy", id, "invariants", invariant @ ..] => Target::InvariantWeights {
-                economy_id: id.parse().map_err(|_| unknown())?,
-                invariant: joined(invariant).ok_or_else(unknown)?,
+                economy_id: handle(uri, id)?,
+                invariant: joined(uri, "an invariant", invariant)?,
             },
             ["economy", id, "changes"] => Target::Changes {
-                economy_id: id.parse().map_err(|_| unknown())?,
+                economy_id: handle(uri, id)?,
             },
             ["economy", id, "exchanges"] => Target::Exchanges {
-                economy_id: id.parse().map_err(|_| unknown())?,
+                economy_id: handle(uri, id)?,
             },
             ["economy", id, "diff", other] => Target::Diff {
-                economy_id: id.parse().map_err(|_| unknown())?,
-                other_id: other.parse().map_err(|_| unknown())?,
+                economy_id: handle(uri, id)?,
+                other_id: handle(uri, other)?,
             },
             ["assessment", id] => Target::Assessment {
-                assessment_id: id.parse().map_err(|_| unknown())?,
+                assessment_id: handle(uri, id)?,
             },
             ["assessment", id, "lines"] => Target::AssessmentLines {
-                assessment_id: id.parse().map_err(|_| unknown())?,
+                assessment_id: handle(uri, id)?,
             },
             ["study", id] => Target::Study {
-                study_id: id.parse().map_err(|_| unknown())?,
+                study_id: handle(uri, id)?,
             },
             ["study", id, "documents", document] => Target::Document {
-                study_id: id.parse().map_err(|_| unknown())?,
-                document: document.parse().map_err(|_| unknown())?,
+                study_id: handle(uri, id)?,
+                document: joined(uri, "a document", &[document])?,
             },
             ["study", id, "documents", document, "frames"] => Target::Frames {
-                study_id: id.parse().map_err(|_| unknown())?,
-                document: document.parse().map_err(|_| unknown())?,
+                study_id: handle(uri, id)?,
+                document: joined(uri, "a document", &[document])?,
             },
             _ => return Err(unknown()),
         };
@@ -431,9 +430,20 @@ fn under<'a, K>(prefix: [&'a str; 3], path: &'a Path<K>) -> Vec<&'a str> {
     prefix.into_iter().chain(path.segments()).collect()
 }
 
-/// The path the remaining URI segments spell, if they spell one.
-fn joined<K>(segments: &[&str]) -> Option<Path<K>> {
-    segments.join("/").parse().ok()
+/// The handle a URI segment is, or why it is none.
+fn handle<T: FromStr<Err = HandleError>>(uri: &str, segment: &str) -> Result<T, McpError> {
+    segment.parse().map_err(|error| malformed(uri, error))
+}
+
+/// The path URI segments spell, or why they spell none.
+fn joined<K>(uri: &str, kind: &str, segments: &[&str]) -> Result<Path<K>, McpError> {
+    let path = segments.join("/");
+    path.parse()
+        .map_err(|error| malformed(uri, format!("`{path}` is not {kind} path: {error}")))
+}
+
+fn malformed(uri: &str, error: impl fmt::Display) -> McpError {
+    McpError::invalid_params(format!("resource URI `{uri}`: {error}"), None)
 }
 
 fn invalid_cursor(cursor: Cursor) -> McpError {

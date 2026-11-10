@@ -155,6 +155,11 @@ impl Archive {
         })
     }
 
+    /// Whether the store is in memory, so its handles end with the server.
+    pub fn in_memory(&self) -> bool {
+        self.store.in_memory()
+    }
+
     fn keyed(&self, parts: &[&[u8]]) -> blake3::Hash {
         let mut hasher = blake3::Hasher::new_keyed(&self.secret);
         for part in parts {

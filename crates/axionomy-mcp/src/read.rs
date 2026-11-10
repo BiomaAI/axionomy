@@ -4,19 +4,22 @@ use axionomy::{InvariantPath, ParameterPath};
 
 use crate::{
     handles::{AssessmentId, EconomyId, StudyId},
-    messages::{Direction, DocumentSummary, EconomyCounts, StateRoot, StudySummary},
+    issues,
+    messages::{
+        AssessmentStatus, Direction, DocumentSummary, EconomyCounts, Issue, StateRoot, StudySummary,
+    },
     resources::{Address, PAGE_FRAMES, PAGE_ROWS, Page, Target, page, span_page},
     server::{AxionomyMcp, assessment_lines, counts, receipt_lines},
     store::{Loaded, Origin, StudyRecord},
     studies,
 };
 use axionomy::{
-    AccountPath, AssessmentStatus, AssetPath, Quantity, RatePath, RolePath,
+    AccountPath, AssetPath, Quantity, RatePath, RolePath,
     paths::{self, Paths},
 };
 use axionomy_service::{Study, StudyControl};
 use axionomy_store::state;
-use axionomy_view::{DocumentPath, ExchangeFrame};
+use axionomy_view::{DocumentPath, ExchangeFrame, ViewDocument};
 use rmcp::{
     ErrorData as McpError,
     model::{CompleteRequestParams, CompleteResult, CompletionInfo},
@@ -27,26 +30,21 @@ use std::{ops::Range, sync::Arc};
 impl AxionomyMcp {
     /// The JSON content of one resource page.
     pub(crate) async fn read(&self, address: &Address) -> Result<String, McpError> {
-        let not_found = || {
-            McpError::resource_not_found(
-                "Resource not found",
-                Some(serde_json::json!({ "uri": address.target.uri() })),
-            )
-        };
+        let missing = |message: String| absent(address, message);
         match &address.target {
             Target::Assessment { assessment_id } => {
                 let stored = self
                     .assessment(assessment_id)
                     .await?
-                    .ok_or_else(not_found)?;
+                    .ok_or_else(|| missing(self.not_stored(assessment_id)))?;
                 let assessment = &stored.assessment;
                 json(&AssessmentView {
                     assessment_id,
                     economy_id: &stored.economy_id,
                     after_exchanges: stored.after_exchanges,
                     exchange: &stored.exchange,
-                    status: assessment.status(),
-                    issues: assessment.issues(),
+                    status: assessment.status().into(),
+                    issues: issues::of(assessment, &stored.exchange, &stored.economy_id),
                     lines: assessment_lines(assessment).count(),
                 })
             }
@@ -54,7 +52,7 @@ impl AxionomyMcp {
                 let stored = self
                     .assessment(assessment_id)
                     .await?
-                    .ok_or_else(not_found)?;
+                    .ok_or_else(|| missing(self.not_stored(assessment_id)))?;
                 json(&page(
                     address,
                     assessment_lines(&stored.assessment).enumerate(),
@@ -62,7 +60,9 @@ impl AxionomyMcp {
                 )?)
             }
             Target::Study { study_id } => {
-                let record = self.study_record(study_id)?.ok_or_else(not_found)?;
+                let record = self
+                    .study_record(study_id)?
+                    .ok_or_else(|| missing(self.not_stored(study_id)))?;
                 json(&StudySummary {
                     study_id: study_id.clone(),
                     key: record.key,
@@ -71,8 +71,8 @@ impl AxionomyMcp {
                 })
             }
             Target::Document { study_id, document } => {
-                let study = self.study(study_id).await?.ok_or_else(not_found)?;
-                let view = study.document(document).ok_or_else(not_found)?;
+                let study = self.studied(address, study_id).await?;
+                let view = study_document(address, study_id, &study, document)?;
                 let economies = self.document_economies(study_id, document)?;
                 let mut view = view.clone();
                 let frames = std::mem::take(&mut view.frames).len();
@@ -84,15 +84,12 @@ impl AxionomyMcp {
                 })
             }
             Target::Frames { study_id, document } => {
-                let study = self.study(study_id).await?.ok_or_else(not_found)?;
-                let view = study.document(document).ok_or_else(not_found)?;
+                let study = self.studied(address, study_id).await?;
+                let view = study_document(address, study_id, &study, document)?;
                 let economies = self.document_economies(study_id, document)?;
                 // The final economy's receipts are the document's trace, one
                 // exchange per frame, written as its economies write them.
-                let last = self
-                    .stored(&economies.final_economy_id)
-                    .await?
-                    .ok_or_else(not_found)?;
+                let last = self.loaded(address, &economies.final_economy_id).await?;
                 if last.receipts.len() != view.frames.len() {
                     return Err(internal(format!(
                         "document `{document}` shows {} frames, but its final economy was made by {} exchanges",
@@ -123,15 +120,15 @@ impl AxionomyMcp {
             | Target::InvariantWeights { economy_id, .. }
             | Target::Changes { economy_id }
             | Target::Exchanges { economy_id } => {
-                let loaded = self.stored(economy_id).await?.ok_or_else(not_found)?;
-                read_snapshot(address, economy_id, &loaded).ok_or_else(not_found)?
+                let loaded = self.loaded(address, economy_id).await?;
+                read_economy(address, economy_id, &loaded)
             }
             Target::Diff {
                 economy_id,
                 other_id,
             } => {
-                let before = self.stored(economy_id).await?.ok_or_else(not_found)?;
-                let after = self.stored(other_id).await?.ok_or_else(not_found)?;
+                let before = self.loaded(address, economy_id).await?;
+                let after = self.loaded(address, other_id).await?;
                 let changes = state::changes::<Paths>(&before.state.tree, &after.state.tree)
                     .map_err(internal)?
                     .into_iter()
@@ -164,20 +161,19 @@ impl AxionomyMcp {
                 McpError::invalid_params(format!("completing `{argument}` needs `{name}`"), None)
             })
         };
-        let not_found = || McpError::resource_not_found("Resource not found", None);
+        let not_found = |message: String| McpError::resource_not_found(message, None);
         let prefix = request.argument.value.as_str();
         let candidates: Vec<String> = match argument {
             "account" | "rate" | "invariant" | "asset" | "prefix" => {
+                let economy_id = needed("economy_id")?
+                    .parse::<EconomyId>()
+                    .map_err(|error| {
+                        McpError::invalid_params(format!("`economy_id`: {error}"), None)
+                    })?;
                 let loaded = self
-                    .stored(
-                        &needed("economy_id")?
-                            .parse::<EconomyId>()
-                            .map_err(|error| {
-                                McpError::invalid_params(format!("`economy_id`: {error}"), None)
-                            })?,
-                    )
+                    .stored(&economy_id)
                     .await?
-                    .ok_or_else(not_found)?;
+                    .ok_or_else(|| not_found(self.not_stored(&economy_id)))?;
                 let (economy, tree) = (&loaded.state.economy, &loaded.state.tree);
                 match argument {
                     "account" | "prefix" if argument == "account" || accounts_template => {
@@ -209,7 +205,9 @@ impl AxionomyMcp {
                                 None,
                             )
                         })?;
-                        economy.account(&account).ok_or_else(not_found)?;
+                        economy.account(&account).ok_or_else(|| {
+                            not_found(format!("economy `{economy_id}` has no account `{account}`"))
+                        })?;
                         let span = state::balances(tree, &account, prefix);
                         let total = span.end - span.start;
                         let shown = span.start..span.end.min(span.start + MAX_COMPLETIONS);
@@ -221,15 +219,17 @@ impl AxionomyMcp {
                     }
                 }
             }
-            "document" => self
-                .study_record(&needed("study_id")?.parse::<StudyId>().map_err(|error| {
+            "document" => {
+                let study_id = needed("study_id")?.parse::<StudyId>().map_err(|error| {
                     McpError::invalid_params(format!("`study_id`: {error}"), None)
-                })?)?
-                .ok_or_else(not_found)?
-                .documents
-                .iter()
-                .map(|document| document.id.to_string())
-                .collect(),
+                })?;
+                self.study_record(&study_id)?
+                    .ok_or_else(|| not_found(self.not_stored(&study_id)))?
+                    .documents
+                    .iter()
+                    .map(|document| document.id.to_string())
+                    .collect()
+            }
             _ => Vec::new(),
         };
         let matches: Vec<String> = candidates
@@ -245,6 +245,24 @@ impl AxionomyMcp {
 
     async fn stored(&self, economy_id: &EconomyId) -> Result<Option<Arc<Loaded>>, McpError> {
         self.archive.economy(economy_id).await.map_err(internal)
+    }
+
+    /// The economy a resource reads, or why it is not there.
+    async fn loaded(
+        &self,
+        address: &Address,
+        economy_id: &EconomyId,
+    ) -> Result<Arc<Loaded>, McpError> {
+        self.stored(economy_id)
+            .await?
+            .ok_or_else(|| absent(address, self.not_stored(economy_id)))
+    }
+
+    /// The study a resource reads, or why it is not there.
+    async fn studied(&self, address: &Address, study_id: &StudyId) -> Result<Arc<Study>, McpError> {
+        self.study(study_id)
+            .await?
+            .ok_or_else(|| absent(address, self.not_stored(study_id)))
     }
 
     async fn assessment(
@@ -324,6 +342,35 @@ fn internal(error: impl ToString) -> McpError {
     McpError::internal_error(error.to_string(), None)
 }
 
+/// The error for a resource that names something not there, saying what.
+fn absent(address: &Address, message: String) -> McpError {
+    McpError::resource_not_found(
+        message,
+        Some(serde_json::json!({ "uri": address.target.uri() })),
+    )
+}
+
+/// One document of a study, or why it is not there.
+fn study_document<'a>(
+    address: &Address,
+    study_id: &StudyId,
+    study: &'a Study,
+    document: &DocumentPath,
+) -> Result<&'a ViewDocument, McpError> {
+    study.document(document).ok_or_else(|| {
+        absent(
+            address,
+            format!(
+                "study `{study_id}` has no document `{document}`; its documents are listed at {}",
+                Target::Study {
+                    study_id: study_id.clone()
+                }
+                .uri()
+            ),
+        )
+    })
+}
+
 /// A page of rows read from positions of a state's tree.
 fn tree_page<T: Serialize>(
     address: &Address,
@@ -337,16 +384,38 @@ fn tree_page<T: Serialize>(
     json(&Page { items, next_cursor })
 }
 
-/// One snapshot resource, or `None` when it names an account, rate or
-/// invariant the snapshot does not have.
-fn read_snapshot(
+/// One resource of an economy, or why the account, rate or invariant it names
+/// is not there.
+fn read_economy(
     address: &Address,
     economy_id: &EconomyId,
     loaded: &Loaded,
-) -> Option<Result<String, McpError>> {
+) -> Result<String, McpError> {
     let (economy, tree) = (&loaded.state.economy, &loaded.state.tree);
     let receipts = &loaded.receipts[..];
-    let content = match &address.target {
+    let economy_id = economy_id.clone();
+    // "economy `…` has no rate `swap`; its rates are listed at …"
+    let lacks = |kind: &str, path: &dyn std::fmt::Display, listing: Target| {
+        absent(
+            address,
+            format!(
+                "economy `{economy_id}` has no {kind} `{path}`; its {kind}s are listed at {}",
+                listing.uri()
+            ),
+        )
+    };
+    let no_rate = |rate: &RatePath| {
+        lacks(
+            "rate",
+            rate,
+            Target::Rates {
+                economy_id: economy_id.clone(),
+                asset: None,
+            },
+        )
+    };
+    let economy_id = &economy_id;
+    match &address.target {
         Target::Economy { .. } => json(&EconomyView {
             economy_id,
             parent_id: loaded.record.parent.as_ref(),
@@ -369,7 +438,16 @@ fn read_snapshot(
         Target::Balances {
             account, prefix, ..
         } => {
-            economy.account(account)?;
+            economy.account(account).ok_or_else(|| {
+                lacks(
+                    "account",
+                    account,
+                    Target::Accounts {
+                        economy_id: economy_id.clone(),
+                        prefix: None,
+                    },
+                )
+            })?;
             tree_page(
                 address,
                 state::balances(tree, account, prefix.as_deref().unwrap_or_default()),
@@ -400,7 +478,7 @@ fn read_snapshot(
         )
         .and_then(|page| json(&page)),
         Target::Rate { rate: id, .. } => {
-            let rate = economy.rate(id)?;
+            let rate = economy.rate(id).ok_or_else(|| no_rate(id))?;
             json(&RateView {
                 economy_id,
                 rate: id,
@@ -416,12 +494,12 @@ fn read_snapshot(
                 conditions: rate.conditions().len(),
             })
         }
-        Target::RateAmounts { rate, .. } => {
-            let rate = economy.rate(rate)?;
+        Target::RateAmounts { rate: id, .. } => {
+            let rate = economy.rate(id).ok_or_else(|| no_rate(id))?;
             page(address, amounts(rate).enumerate(), PAGE_ROWS).and_then(|page| json(&page))
         }
-        Target::RateConditions { rate, .. } => {
-            let rate = economy.rate(rate)?;
+        Target::RateConditions { rate: id, .. } => {
+            let rate = economy.rate(id).ok_or_else(|| no_rate(id))?;
             page(address, rate.conditions().iter().enumerate(), PAGE_ROWS)
                 .and_then(|page| json(&page))
         }
@@ -440,10 +518,21 @@ fn read_snapshot(
             PAGE_ROWS,
         )
         .and_then(|page| json(&page)),
-        Target::InvariantWeights { invariant, .. } => {
+        Target::InvariantWeights {
+            invariant: path, ..
+        } => {
             let invariant = economy
                 .invariants()
-                .find(|candidate| candidate.name() == invariant)?;
+                .find(|candidate| candidate.name() == path)
+                .ok_or_else(|| {
+                    lacks(
+                        "invariant",
+                        path,
+                        Target::Invariants {
+                            economy_id: economy_id.clone(),
+                        },
+                    )
+                })?;
             page(
                 address,
                 invariant
@@ -470,9 +559,11 @@ fn read_snapshot(
         | Target::AssessmentLines { .. }
         | Target::Study { .. }
         | Target::Document { .. }
-        | Target::Frames { .. } => return None,
-    };
-    Some(content)
+        | Target::Frames { .. } => Err(internal(format!(
+            "`{}` is not one of an economy's own resources",
+            address.target.uri()
+        ))),
+    }
 }
 
 /// Whether one unit of `rate` moves or requires `asset`.
@@ -651,13 +742,14 @@ struct WeightRow<'a> {
 struct AssessmentView<'a> {
     assessment_id: &'a AssessmentId,
     economy_id: &'a EconomyId,
-    /// Exchanges of the failing replay applied before this one; zero for a
-    /// snapshot's own state.
+    /// How many exchanges of the failing call were applied to `economy_id`
+    /// before this one: the failure's `exchange_index`. Zero for an exchange
+    /// assessed against the economy itself.
     after_exchanges: usize,
     exchange: &'a paths::Exchange,
     status: AssessmentStatus,
-    #[serde(skip_serializing_if = "<[_]>::is_empty")]
-    issues: &'a [paths::ApplyError],
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    issues: Vec<Issue>,
     lines: usize,
 }
 

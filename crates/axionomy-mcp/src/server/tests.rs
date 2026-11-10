@@ -286,8 +286,8 @@ async fn apply_and_replay_share_handles_and_keep_their_source() {
     assert_eq!(
         changes["items"],
         json!([
-            { "step": 0, "account": "sink", "asset": "token", "kind": "produced", "quantity": "2" },
-            { "step": 0, "account": "source", "asset": "token", "kind": "consumed", "quantity": "2" }
+            { "exchange_index": 0, "account": "sink", "asset": "token", "kind": "produced", "quantity": "2" },
+            { "exchange_index": 0, "account": "source", "asset": "token", "kind": "consumed", "quantity": "2" }
         ])
     );
     let exchanges = read(
@@ -330,19 +330,22 @@ async fn failures_explain_themselves_and_store_nothing() {
     assert!(infeasible.is_error);
     assert_eq!(infeasible.value["error"], "infeasible");
     assert_eq!(
+        infeasible.value["message"],
+        "the exchange is infeasible: `source` lacks 1 `token`; nothing was stored"
+    );
+    assert_eq!(
         infeasible.value["details"]["preview"],
         json!([{ "account": "source", "asset": "token", "kind": "missing", "quantity": "1" }])
     );
     let assessment = read(&server, &infeasible.links[0]).await;
-    assert_eq!(assessment["status"], "Infeasible");
+    assert_eq!(assessment["status"], "infeasible");
 
+    // Messages count exchanges from one; indices count them from zero.
     let failed = replay(&server, &source_id, vec![transfer(2), transfer(4)]).await;
-    assert_eq!(failed.value["details"]["step"], 1);
-    assert!(
-        failed.value["message"]
-            .as_str()
-            .unwrap()
-            .contains("exchange 1 of 2")
+    assert_eq!(failed.value["details"]["exchange_index"], 1);
+    assert_eq!(
+        failed.value["message"],
+        "exchange 2 of 2 is infeasible: `source` lacks 1 `token`; nothing was stored"
     );
     let assessment = read(&server, &failed.links[0]).await;
     assert_eq!(assessment["after_exchanges"], 1);
@@ -355,24 +358,48 @@ async fn failures_explain_themselves_and_store_nothing() {
     .unwrap();
     let invalid = apply(&server, &source_id, unbound).await;
     assert_eq!(invalid.value["error"], "invalid");
+    let issue = &invalid.value["details"]["issues"][0];
+    assert_eq!(issue["kind"], "missing_account");
+    assert_eq!(issue["account"], "nobody");
     assert!(
-        !invalid.value["details"]["issues"]
-            .as_array()
+        issue["message"]
+            .as_str()
             .unwrap()
-            .is_empty()
+            .contains("has no account `nobody`")
     );
 
-    let assessed = outcome(
-        server
-            .exchange_assess(Parameters(ExchangeRequest {
-                economy_id: source_id,
-                exchange: transfer(2),
-            }))
-            .await,
-    );
-    assert_eq!(assessed.value["status"], "Applicable");
+    let assess = |exchange| {
+        server.exchange_assess(Parameters(ExchangeRequest {
+            economy_id: source_id.clone(),
+            exchange,
+        }))
+    };
+    let assessed = outcome(assess(transfer(2)).await);
+    assert_eq!(assessed.value["status"], "applicable");
     assert_eq!(assessed.value["lines"], 2);
     assert_eq!(assessed.value["preview"].as_array().unwrap().len(), 2);
+
+    // A rate the economy lacks points to the rates it has.
+    let unknown = outcome(
+        assess(
+            serde_json::from_value(json!({ "rate": "ghost", "bindings": {}, "units": "1" }))
+                .unwrap(),
+        )
+        .await,
+    );
+    assert_eq!(unknown.value["status"], "invalid");
+    assert_eq!(unknown.value["issues"][0]["kind"], "missing_rate");
+    assert_eq!(unknown.value["issues"][0]["rate"], "ghost");
+    let rates = uri(Target::Rates {
+        economy_id: source_id.clone(),
+        asset: None,
+    });
+    assert!(
+        unknown.value["issues"][0]["message"]
+            .as_str()
+            .unwrap()
+            .ends_with(&rates)
+    );
 }
 
 #[tokio::test]
@@ -496,16 +523,47 @@ async fn bad_cursors_and_unknown_resources_are_refused() {
             .is_err()
     );
     let account = Target::Balances {
-        economy_id,
+        economy_id: economy_id.clone(),
         account: "nobody".parse().unwrap(),
         prefix: None,
     }
     .uri();
+    let error = server
+        .read(&Address::parse(&account).unwrap())
+        .await
+        .unwrap_err();
     assert!(
-        server
-            .read(&Address::parse(&account).unwrap())
-            .await
-            .is_err()
+        error
+            .message
+            .starts_with(&format!("economy `{economy_id}` has no account `nobody`")),
+        "{}",
+        error.message
+    );
+    let rate = Target::Rate {
+        economy_id: economy_id.clone(),
+        rate: "ghost".parse().unwrap(),
+    };
+    let error = server
+        .read(&Address::parse(&rate.uri()).unwrap())
+        .await
+        .unwrap_err();
+    assert!(
+        error.message.contains("has no rate `ghost`"),
+        "{}",
+        error.message
+    );
+
+    // A malformed path says what is wrong with it.
+    let error = Address::parse(&format!(
+        "axionomy://economy/{economy_id}/accounts/Bad_Path"
+    ))
+    .unwrap_err();
+    assert!(
+        error
+            .message
+            .contains("`Bad_Path` is not an account path: `B`"),
+        "{}",
+        error.message
     );
 }
 
@@ -903,7 +961,11 @@ async fn exchanges_open_and_close_accounts_named_by_their_paths() {
     .await;
     assert_eq!(again.value["error"], "invalid");
     assert_eq!(
-        again.value["details"]["issues"][0]["AccountExists"]["account"],
+        again.value["details"]["issues"][0]["kind"],
+        "account_exists"
+    );
+    assert_eq!(
+        again.value["details"]["issues"][0]["account"],
         "agents/7/wallet"
     );
 
@@ -945,8 +1007,12 @@ async fn exchanges_open_and_close_accounts_named_by_their_paths() {
     let stuck = apply(&server, &rich, exchange("agents/retire", "agents/7/wallet")).await;
     assert_eq!(stuck.value["error"], "invalid");
     assert_eq!(
-        stuck.value["details"]["issues"][0]["ClosedNotEmpty"]["remaining"],
-        json!([["gem", "1"]])
+        stuck.value["details"]["issues"][0]["kind"],
+        "closed_not_empty"
+    );
+    assert_eq!(
+        stuck.value["details"]["issues"][0]["remaining"],
+        json!({ "gem": "1" })
     );
 }
 
@@ -978,8 +1044,11 @@ async fn stepping_through_a_trace_names_each_state_and_diffs_compare_them() {
     for index in 0..=3 {
         let stepped = step(&server, &replayed_id, index).await;
         assert!(!stepped.is_error, "{}", stepped.value);
+        assert_eq!(stepped.value["step"], index);
         assert_eq!(stepped.value["exchanges"], index);
+        // Step zero is the trace's source; the economy passed in is its last.
         assert_eq!(stepped.value["source_economy_id"], parent_id.as_str());
+        assert_eq!(stepped.value["traced_economy_id"], replayed_id.as_str());
         states.push(stepped);
     }
     // The ends of a trace are the states it connects.
@@ -1016,8 +1085,11 @@ async fn stepping_through_a_trace_names_each_state_and_diffs_compare_them() {
     .await;
     assert_eq!(same["items"], json!([]));
 
-    assert!(step(&server, &replayed_id, 4).await.is_error);
-    assert!(step(&server, &parent_id, 0).await.is_error);
+    let beyond = step(&server, &replayed_id, 4).await;
+    assert_eq!(beyond.value["error"], "invalid_request");
+    assert_eq!(beyond.value["details"]["pointer"], "/step");
+    let authored = step(&server, &parent_id, 0).await;
+    assert_eq!(authored.value["details"]["pointer"], "/economy_id");
 }
 
 async fn find(
@@ -1059,7 +1131,6 @@ async fn finding_a_balance_condition_names_the_first_state_it_holds_in() {
         ("sink", Equal, 4, Some(3)),
         ("source", LessThanOrEqual, 2, Some(2)),
         ("sink", GreaterThanOrEqual, 5, None),
-        ("nobody", Equal, 0, Some(0)),
     ] {
         let found = find(&server, &replayed_id, account, comparison, quantity).await;
         assert!(!found.is_error, "{}", found.value);
@@ -1070,12 +1141,153 @@ async fn finding_a_balance_condition_names_the_first_state_it_holds_in() {
                     "{account} {comparison:?} {quantity}"
                 );
                 let stepped = step(&server, &replayed_id, index).await;
-                assert_eq!(found.value["state"]["root"], stepped.value["root"]);
+                assert_eq!(found.value["economy"]["step"], index);
+                assert_eq!(
+                    found.value["economy"]["economy_id"],
+                    stepped.value["economy_id"]
+                );
             }
-            None => assert_eq!(found.value, json!({})),
+            None => {
+                assert_eq!(found.value["step"], Value::Null);
+                assert!(found.value.get("economy").is_none());
+                assert_eq!(
+                    found.value["message"],
+                    format!(
+                        "`sink`'s balance of `token` is at least 5 at none of the 4 steps of the trace that made `{replayed_id}`"
+                    )
+                );
+            }
         }
     }
+    // An account no economy of the trace has is not a balance of zero.
+    let nobody = find(&server, &replayed_id, "nobody", Equal, 0).await;
+    assert_eq!(nobody.value["error"], "not_found");
+    assert_eq!(nobody.value["details"]["pointer"], "/account");
     assert!(find(&server, &parent_id, "sink", Equal, 0).await.is_error);
+}
+
+#[tokio::test]
+async fn finding_counts_an_account_the_trace_opens() {
+    let server = AxionomyMcp::default();
+    let economy_id = id(&create(
+        &server,
+        json!({
+            "accounts": { "treasury": { "token": "3" } },
+            "rates": {
+                "spawn": {
+                    "consume": { "treasury": { "token": "1" } },
+                    "produce": { "agent": { "token": "1" } },
+                    "opens": ["agent"]
+                }
+            }
+        }),
+    )
+    .await);
+    let spawned = id(&apply(
+        &server,
+        &economy_id,
+        serde_json::from_value(json!({
+            "rate": "spawn",
+            "bindings": { "treasury": "treasury", "agent": "agent" },
+            "units": "1"
+        }))
+        .unwrap(),
+    )
+    .await);
+    let found = find(
+        &server,
+        &spawned,
+        "agent",
+        axionomy::QuantityComparison::Equal,
+        1,
+    )
+    .await;
+    assert_eq!(found.value["step"], 1, "{}", found.value);
+}
+
+#[test]
+fn malformed_arguments_name_the_argument_at_fault() {
+    let economy_id = missing();
+    let refused = |tool: &str, arguments: Value| {
+        let Value::Object(arguments) = arguments else {
+            panic!("arguments are an object")
+        };
+        let error = check_arguments(tool, Some(&arguments)).unwrap_err();
+        assert_eq!(error.failure.error, FailureCode::InvalidRequest);
+        let details = error.failure.details.unwrap();
+        (
+            details["pointer"].as_str().unwrap().to_owned(),
+            error.failure.message,
+        )
+    };
+    let exchange = |exchange: Value| json!({ "economy_id": economy_id, "exchange": exchange });
+    for (arguments, pointer) in [
+        (
+            exchange(json!({ "rate": "transfer", "bindings": {} })),
+            "/exchange/units",
+        ),
+        (
+            exchange(json!({ "rate": "Transfer", "bindings": {}, "units": "1" })),
+            "/exchange/rate",
+        ),
+        (
+            exchange(json!({ "rate": "transfer", "bindings": {}, "units": "-1" })),
+            "/exchange/units",
+        ),
+        (
+            exchange(
+                json!({ "rate": "transfer", "bindings": { "giver": "Source" }, "units": "1" }),
+            ),
+            "/exchange/bindings/giver",
+        ),
+        (
+            json!({ "economy_id": "eco-1", "exchange": { "rate": "t", "bindings": {}, "units": "1" } }),
+            "/economy_id",
+        ),
+    ] {
+        assert_eq!(refused("axionomy_exchange_apply", arguments).0, pointer);
+    }
+    let (pointer, message) = refused(
+        "axionomy_economy_create",
+        json!({ "entries": { "accounts": { "agents/7/Wallet": {} } } }),
+    );
+    assert_eq!(pointer, "/entries/accounts/agents~17~1Wallet");
+    assert!(message.starts_with("argument `/entries/accounts/agents~17~1Wallet` is invalid: `W`"));
+
+    // Every tool reads its arguments before it runs.
+    for tool in AxionomyMcp::default().tool_router.list_all() {
+        assert_eq!(
+            refused(&tool.name, json!({ "surplus": true })).0,
+            "/surplus",
+            "{}",
+            tool.name
+        );
+    }
+}
+
+#[tokio::test]
+async fn a_handle_the_store_lacks_says_how_to_make_it_again() {
+    let server = AxionomyMcp::default();
+    let missing = extend(&server, &missing(), json!({})).await;
+    assert_eq!(missing.value["error"], "not_found");
+    let message = missing.value["message"].as_str().unwrap();
+    assert!(message.contains("in memory"), "{message}");
+    assert!(message.contains("axionomy_problem_study"), "{message}");
+
+    let error = server
+        .read(
+            &Address::parse(&uri(Target::Economy {
+                economy_id: self::missing(),
+            }))
+            .unwrap(),
+        )
+        .await
+        .unwrap_err();
+    assert!(
+        error.message.starts_with("economy `eco-"),
+        "{}",
+        error.message
+    );
 }
 
 #[tokio::test]

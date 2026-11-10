@@ -106,6 +106,7 @@ struct Inner {
     database: Arc<Database>,
     prefix: u64,
     counter: AtomicU64,
+    in_memory: bool,
 }
 
 impl Store {
@@ -116,15 +117,24 @@ impl Store {
     /// When creating a store and the operating system provides no
     /// randomness for its identifier prefix.
     pub fn open(path: impl AsRef<Path>) -> Result<Self, StoreError> {
-        Self::with(Database::create(path)?)
+        Self::with(Database::create(path)?, false)
     }
 
     /// A store kept in memory: the same store, gone when dropped.
     pub fn memory() -> Result<Self, StoreError> {
-        Self::with(Database::builder().create_with_backend(InMemoryBackend::new())?)
+        Self::with(
+            Database::builder().create_with_backend(InMemoryBackend::new())?,
+            true,
+        )
     }
 
-    fn with(database: Database) -> Result<Self, StoreError> {
+    /// Whether the store is kept in memory, so everything in it is gone once
+    /// its last clone is dropped.
+    pub fn in_memory(&self) -> bool {
+        self.inner.in_memory
+    }
+
+    fn with(database: Database, in_memory: bool) -> Result<Self, StoreError> {
         let txn = database.begin_write()?;
         let prefix = {
             let mut meta = txn.open_table(META)?;
@@ -157,6 +167,7 @@ impl Store {
                 database,
                 prefix,
                 counter: AtomicU64::new(next),
+                in_memory,
             }),
         })
     }

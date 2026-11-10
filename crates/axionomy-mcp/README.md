@@ -116,8 +116,8 @@ rates, invariants and documents for template arguments, by prefix.
 | `axionomy_exchange_assess` | status, issues, line count and preview | read-only |
 | `axionomy_exchange_apply` | new `economy_id`, change count | additive, idempotent |
 | `axionomy_trace_replay` | new `economy_id`, change count | additive, idempotent |
-| `axionomy_trace_step` | `economy_id` of the state after some of the exchanges that made a snapshot | additive, idempotent |
-| `axionomy_trace_find` | The first step of those exchanges after which a balance is equal to, at least or at most a quantity, and that state | additive, idempotent |
+| `axionomy_trace_step` | `economy_id` of the economy at one step of the trace that made another | additive, idempotent |
+| `axionomy_trace_find` | The first step of that trace where a balance is equal to, at least or at most a quantity, and its economy; `null` if none | additive, idempotent |
 | `axionomy_search` | MCP task: outcome and the snapshot a solution reaches | additive, idempotent |
 | `axionomy_problem_catalog` | Built-in problems, instances and strategies | read-only |
 | `axionomy_problem_study` | MCP task: study summary | additive, idempotent |
@@ -125,11 +125,42 @@ rates, invariants and documents for template arguments, by prefix.
 Every tool declares input and output schemas and `openWorldHint: false`.
 Results link to the resources that page through what they summarize. Applying
 one exchange and replaying it alone are the same operation and return the same
-handle. A failure is a result with `isError` and a stable code:
-`invalid_request`, `not_found`, `conflict`, `too_large`, `infeasible`,
-`invalid`, `tasks_required` or `internal`. An infeasible or invalid exchange
-says which exchange failed, previews what accounts lack, and links to the
-stored assessment.
+handle.
+
+A failure is a result with `isError` and structured content
+`{error, message, details}`, whose `error` is a stable code: `invalid_request`,
+`not_found`, `conflict`, `too_large`, `infeasible`, `invalid`,
+`tasks_required` or `internal`. Arguments are read before anything runs, so a
+malformed path, quantity or handle, or a missing field, is an
+`invalid_request` whose `details.pointer` is the JSON pointer (RFC 6901) of the
+argument at fault, such as `/exchange/units` or
+`/entries/accounts/agents~17~1Wallet`. An infeasible or invalid exchange says
+which exchange failed (`details.exchange_index`), names what each account
+lacks or lists its `issues`, each with a snake_case `kind`, the paths
+involved and a `message` that points to the resource listing what it could
+name instead, and links to the stored assessment, whose `status` is
+`applicable`, `infeasible` or `invalid`. A handle the store does not hold is
+`not_found`, with a message saying how to make it again; a server whose store
+is in memory forgets every handle when it restarts.
+
+### Steps and exchange indices
+
+One convention holds everywhere:
+
+- Step `N` of a trace is the economy after its first `N` exchanges; step `0`
+  is the economy they were applied to. `axionomy_trace_step`,
+  `axionomy_trace_find` and a study frame's `step` count steps.
+- A position of an exchange counts from zero: the exchange at index `i` takes
+  step `i` to step `i + 1`. Change lines and failures name it
+  `exchange_index`; a frame's `view.index` is one too.
+- Messages count from one: "exchange 2 of 3 is infeasible" is the exchange at
+  index `1`.
+
+`axionomy_trace_step` returns the economy at that step with its `step`, the
+economy passed in as `traced_economy_id`, and the trace's source, step `0`, as
+`source_economy_id`. `axionomy_trace_find` returns the first step where a
+balance condition holds, or `{"step": null, "message": …}` when none does; an
+account no economy of the trace has is `not_found`.
 
 ## Studies
 

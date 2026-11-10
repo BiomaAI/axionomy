@@ -84,7 +84,7 @@ macro_rules! handle {
 }
 
 handle!(
-    /// A stored economy snapshot.
+    /// A stored economy.
     EconomyId,
     "eco-"
 );
@@ -98,6 +98,29 @@ handle!(
     StudyId,
     "stu-"
 );
+
+/// What a kind of handle names, and how a client makes it again.
+pub(crate) trait Handle: fmt::Display {
+    /// What the handle names, in words.
+    const NAMES: &'static str;
+    /// The calls that make what the handle names.
+    const MADE_AGAIN: &'static str;
+}
+
+impl Handle for EconomyId {
+    const NAMES: &'static str = "economy";
+    const MADE_AGAIN: &'static str = "make the economy again with the call that made it (axionomy_economy_create, axionomy_economy_extend, axionomy_exchange_apply, axionomy_trace_replay, axionomy_trace_step, axionomy_search or axionomy_problem_study)";
+}
+
+impl Handle for AssessmentId {
+    const NAMES: &'static str = "assessment";
+    const MADE_AGAIN: &'static str = "assess the exchange again with axionomy_exchange_assess";
+}
+
+impl Handle for StudyId {
+    const NAMES: &'static str = "study";
+    const MADE_AGAIN: &'static str = "study the problem again with axionomy_problem_study";
+}
 
 #[cfg(test)]
 mod tests {

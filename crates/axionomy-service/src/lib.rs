@@ -167,6 +167,7 @@ pub struct StudyRequest {
     #[serde(default = "default_seed")]
     pub seed: u64,
     #[serde(default = "default_budget")]
+    #[schemars(range(min = 1))]
     pub budget: u64,
 }
 
