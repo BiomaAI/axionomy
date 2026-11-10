@@ -7,11 +7,29 @@
 
 use axionomy::path;
 use axionomy::{
-    Account, Basket, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Quantity, Rate,
-    Trace, basket,
+    Account, ApplyError, Basket, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant,
+    Quantity, Rate, ReplayError, Trace, basket,
 };
 
 mod continuous;
+
+/// Why a league season could not be played to its end.
+#[derive(Debug, Clone, thiserror::Error)]
+pub enum LeagueError {
+    #[error("{0:?} has no policy")]
+    MissingPolicy(AgentId),
+    #[error("{0:?} has no location")]
+    NoLocation(AgentId),
+    #[error("{rate:?} was rejected: {error}")]
+    Rejected {
+        rate: RateId,
+        error: ApplyError<Ontology>,
+    },
+    #[error("the season does not replay: {0}")]
+    Replay(#[from] ReplayError<Ontology>),
+    #[error("the season's replay reached a different state")]
+    Diverged,
+}
 pub use continuous::{clock, decision, proposal};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, axionomy::Identifier)]
@@ -732,7 +750,7 @@ pub fn league(profile: Profile, lineup: [Policy; 4]) -> League {
     }
 }
 
-pub fn run(league: &League, seed: u64) -> Result<MatchOutcome, String> {
+pub fn run(league: &League, seed: u64) -> Result<MatchOutcome, LeagueError> {
     if league.initial.account(&AccountId::World).is_some() {
         return continuous::run(league, seed);
     }
@@ -743,8 +761,7 @@ pub fn run(league: &League, seed: u64) -> Result<MatchOutcome, String> {
 
     while !available.is_empty() {
         let agent = league.agents[turn % league.agents.len()];
-        let policy =
-            policy_of(&world, agent).ok_or_else(|| format!("missing policy for {agent:?}"))?;
+        let policy = policy_of(&world, agent).ok_or(LeagueError::MissingPolicy(agent))?;
         let job = choose_job(&available, policy);
         available.retain(|candidate| *candidate != job);
         let spec = job_spec(job);
@@ -970,8 +987,8 @@ fn move_to(
     trace: &mut Trace<Ontology>,
     agent: AgentId,
     to: Location,
-) -> Result<(), String> {
-    let from = location(world, agent).ok_or_else(|| format!("{agent:?} has no location"))?;
+) -> Result<(), LeagueError> {
+    let from = location(world, agent).ok_or(LeagueError::NoLocation(agent))?;
     if from != to {
         apply(world, trace, action(RateId::Move { agent, from, to }))?;
     }
@@ -1001,10 +1018,17 @@ fn action(rate: RateId) -> Action {
     exchange
 }
 
-fn apply(world: &mut World, trace: &mut Trace<Ontology>, exchange: Action) -> Result<(), String> {
+fn apply(
+    world: &mut World,
+    trace: &mut Trace<Ontology>,
+    exchange: Action,
+) -> Result<(), LeagueError> {
     world
         .apply(exchange.clone())
-        .map_err(|error| format!("{:?}: {error:?}", exchange.rate()))?;
+        .map_err(|error| LeagueError::Rejected {
+            rate: *exchange.rate(),
+            error,
+        })?;
     trace.push(exchange);
     Ok(())
 }

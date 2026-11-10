@@ -671,7 +671,7 @@ pub fn run_planned_with_progress(
     planning_seed: u64,
     chunk_size: usize,
     mut observer: impl FnMut(usize, MctsProgress) -> ControlFlow<()>,
-) -> Result<Option<PlannedLogistics>, String> {
+) -> Result<Option<PlannedLogistics>, crate::PlannedRunError<Ontology>> {
     let mut world = initial.clone();
     let mut trace = Trace::new();
     let mut decisions = Vec::new();
@@ -685,9 +685,7 @@ pub fn run_planned_with_progress(
         }
         let outcomes = planning_outcomes(&world);
         let action = if !outcomes.is_empty() {
-            sample(&outcomes, &mut nature)
-                .map_err(|error| format!("Nature sampling: {error:?}"))?
-                .clone()
+            sample(&outcomes, &mut nature)?.clone()
         } else {
             let actions = planning_candidates(&world);
             if actions.is_empty() {
@@ -703,8 +701,7 @@ pub fn run_planned_with_progress(
                     planning_seed.wrapping_add(index as u64),
                     chunk_size,
                     |state| observer(index, state),
-                )
-                .map_err(|error| format!("logistics planning: {error:?}"))?;
+                )?;
                 let Some(decision) = decision else {
                     return Ok(None);
                 };
@@ -716,16 +713,12 @@ pub fn run_planned_with_progress(
                 action
             }
         };
-        world
-            .apply(action.clone())
-            .map_err(|error| format!("logistics execution: {error:?}"))?;
+        world.apply(action.clone())?;
         trace.push(action);
     };
-    let replayed = initial
-        .replayed(&trace)
-        .map_err(|error| format!("logistics replay: {error:?}"))?;
+    let replayed = initial.replayed(&trace)?;
     if replayed.state_key() != world.state_key() {
-        return Err("logistics replay diverged".into());
+        return Err(crate::PlannedRunError::Diverged);
     }
     let rollout = MissionRollout {
         completed: world.matches(&goal()),

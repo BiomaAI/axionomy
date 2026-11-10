@@ -1035,7 +1035,7 @@ fn sampled_result(world: &World, seed: u64, id: JobId, mode: WorkMode) -> Outcom
     }
 }
 
-pub(super) fn run(league: &League, seed: u64) -> Result<MatchOutcome, String> {
+pub(super) fn run(league: &League, seed: u64) -> Result<MatchOutcome, LeagueError> {
     let mut world = league.initial.clone();
     let mut trace = Trace::new();
     loop {
@@ -1114,12 +1114,9 @@ pub(super) fn run(league: &League, seed: u64) -> Result<MatchOutcome, String> {
         }
         apply(&mut world, &mut trace, proposal(RateId::Tick))?;
     }
-    let replay = league
-        .initial
-        .replayed(&trace)
-        .map_err(|error| format!("league replay: {error:?}"))?;
+    let replay = league.initial.replayed(&trace)?;
     if replay.state_key() != world.state_key() {
-        return Err("league replay diverged".into());
+        return Err(LeagueError::Diverged);
     }
     Ok(MatchOutcome {
         trace,

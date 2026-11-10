@@ -846,16 +846,12 @@ pub fn run_planned_with_progress(
     config: MctsConfig,
     chunk_size: usize,
     mut observer: impl FnMut(usize, IsmctsProgress) -> ControlFlow<()>,
-) -> Result<Option<PlannedMission>, String> {
+) -> Result<Option<PlannedMission>, crate::PlannedRunError<Ontology>> {
     let support = scenarios(model);
-    let total = total_weight(&support).map_err(|error| format!("{error:?}"))?;
-    let scenario = choose_by_ticket(&support, systematic_ticket(sample_index, total))
-        .map_err(|error| format!("{error:?}"))?
-        .clone();
+    let total = total_weight(&support)?;
+    let scenario = choose_by_ticket(&support, systematic_ticket(sample_index, total))?.clone();
     let mut actual = model.clone();
-    actual
-        .apply(scenario.clone())
-        .map_err(|error| format!("{error:?}"))?;
+    actual.apply(scenario.clone())?;
     let mut trace = Trace::new();
     trace.push(scenario);
     let mut beliefs = initial_beliefs(model);
@@ -874,18 +870,14 @@ pub fn run_planned_with_progress(
             Ok(Some(decision)) => decision,
             Ok(None) => return Ok(None),
             Err(TreeSearchError::NoRootActions) => break,
-            Err(error) => return Err(format!("{error:?}")),
+            Err(error) => return Err(error.into()),
         };
         let trace_index = trace.exchanges().len();
         let prior_worlds = beliefs.len();
-        actual
-            .apply(decision.action().clone())
-            .map_err(|error| format!("{error:?}"))?;
+        actual.apply(decision.action().clone())?;
         trace.push(decision.action().clone());
         if let Some(response) = nature_response(&actual) {
-            actual
-                .apply(response.clone())
-                .map_err(|error| format!("{error:?}"))?;
+            actual.apply(response.clone())?;
             trace.push(response);
         }
         beliefs = update_beliefs(&beliefs, decision.action(), &scout_information(&actual));
@@ -896,11 +888,9 @@ pub fn run_planned_with_progress(
             posterior_worlds: beliefs.len(),
         });
     }
-    let replayed = model
-        .replayed(&trace)
-        .map_err(|error| format!("{error:?}"))?;
+    let replayed = model.replayed(&trace)?;
     if replayed.state_key() != actual.state_key() {
-        return Err("planned mission replay diverged".into());
+        return Err(crate::PlannedRunError::Diverged);
     }
     Ok(Some(PlannedMission {
         rollout: MissionRollout {
