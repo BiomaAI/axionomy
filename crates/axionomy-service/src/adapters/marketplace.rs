@@ -10,6 +10,7 @@ use axionomy_view::{
 pub(super) fn build(
     study: &StudyKey,
     descriptor: &ProblemDescriptor,
+    progress: &mut ProgressSink<'_>,
 ) -> Result<Study, ServiceError> {
     let profile = study.instance;
     let initial = match profile {
@@ -82,6 +83,7 @@ pub(super) fn build(
             .replayed(&trace)
             .map_err(|error| problem_error("marketplace", error))?;
         let mut view = document(
+            progress,
             DocumentSpec {
                 problem: "marketplace",
                 strategy,

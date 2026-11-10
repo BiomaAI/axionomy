@@ -8,6 +8,7 @@ mod read;
 mod resources;
 mod server;
 mod store;
+mod studies;
 
 pub use handles::{AssessmentId, EconomyId, HandleError};
 pub use http::{StatelessHttpService, stateless_http_config, stateless_http_service};

@@ -2,14 +2,15 @@ use crate::{
     authoring::{self, AuthoringError},
     handles::{AssessmentId, EconomyId},
     messages::{
-        AssessResponse, DocumentSummary, EconomyCounts, EconomyCreateRequest, EconomyEntries,
-        EconomyExtendRequest, EconomyStored, ExchangeRequest, ExchangedResponse, FailureCode,
-        LineKind, ProblemCatalogRequest, ProblemCatalogResponse, QuantityLine, ReplayRequest,
-        SearchOutcome, SearchRequest, SearchResponse, SearchSolved, StateRoot, StudySummary,
-        ToolFailure, TraceFindRequest, TraceFindResponse, TraceStepRequest,
+        AssessResponse, EconomyCounts, EconomyCreateRequest, EconomyEntries, EconomyExtendRequest,
+        EconomyStored, ExchangeRequest, ExchangedResponse, FailureCode, LineKind,
+        ProblemCatalogRequest, ProblemCatalogResponse, QuantityLine, ReplayRequest, SearchOutcome,
+        SearchRequest, SearchResponse, SearchSolved, StateRoot, StudySummary, ToolFailure,
+        TraceFindRequest, TraceFindResponse, TraceStepRequest,
     },
     resources::{self, Address, IMMUTABLE_TTL_MS, LIST_TTL_MS, Target},
-    store::{Archive, Assessed, Loaded, Origin, State, checkpoint},
+    store::{self, Archive, Assessed, Loaded, Origin, State, checkpoint},
+    studies,
 };
 use axionomy::{AssessmentStatus, Quantity, QuantityComparison, paths};
 use axionomy_search::{
@@ -65,8 +66,12 @@ that made a snapshot with axionomy_trace_step, and find the first state where a 
 condition holds with axionomy_trace_find. Read what a snapshot holds through axionomy:// \
 resources: tool results link to them, paths appear in their URIs as is (an account's balances are \
 .../accounts/agents/7/wallet), every list is paged with a cursor, and a page never changes. \
-Compare two snapshots with their diff resource; equal roots mean equal states. Snapshots are kept \
-in the server's store, across restarts when it keeps one on disk.";
+Compare two snapshots with their diff resource; equal roots mean equal states. \
+axionomy_problem_study studies a built-in problem, and each of its documents is two economies: \
+initial_economy_id, where it starts, and final_economy_id, where its exchanges reach. Step into \
+the final one with axionomy_trace_step, try another exchange from there, and diff the result \
+against the study's next step. Snapshots are kept in the server's store, across restarts when it \
+keeps one on disk.";
 
 #[derive(Clone)]
 pub struct AxionomyMcp {
@@ -360,7 +365,7 @@ impl AxionomyMcp {
     #[tool(
         name = "axionomy_problem_study",
         title = "Study a problem",
-        description = "Study one built-in problem as an MCP task and return a summary; the study's documents and replay frames are linked resources. Requires the MCP tasks extension.",
+        description = "Study one built-in problem as an MCP task and return a summary; the study's documents and replay frames are linked resources. Each document is also two stored economies, its initial state and the state its exchanges reach, which every economy tool reads, steps through and branches from. Requires the MCP tasks extension.",
         output_schema = schema_for_output::<StudySummary>(),
         annotations(destructive_hint = false, idempotent_hint = true, open_world_hint = false)
     )]
@@ -394,7 +399,7 @@ impl AxionomyMcp {
         entries: EconomyEntries,
     ) -> Result<Linked<EconomyStored>, ToolError> {
         let size = entries.len();
-        let operation = operation_bytes("entries", &entries)?;
+        let operation = store::operation("entries", &entries);
         let (parent_id, base) = parent.unzip();
         let economy =
             authoring::extend(base.as_deref().map(|loaded| &loaded.state.economy), entries)
@@ -410,7 +415,7 @@ impl AxionomyMcp {
         let counts = counts(&economy);
         let stored = self
             .archive
-            .author(parent_id.clone(), &operation, size, economy)
+            .author(parent_id.clone(), &operation, size, State::new(economy))
             .await
             .map_err(ToolError::internal)?;
         let root = self.economy(&stored.economy_id).await?.state.root();
@@ -795,15 +800,6 @@ fn arguments_of<T: DeserializeOwned>(arguments: Option<JsonObject>) -> Result<T,
         .map_err(|error| ToolError::new(FailureCode::InvalidRequest, error.to_string()))
 }
 
-/// The bytes a snapshot handle is derived from, tagged by kind so different
-/// operations never share them.
-fn operation_bytes(kind: &str, operation: &impl Serialize) -> Result<Vec<u8>, ToolError> {
-    let mut bytes = kind.as_bytes().to_vec();
-    bytes.push(0);
-    serde_json::to_writer(&mut bytes, operation).map_err(ToolError::internal)?;
-    Ok(bytes)
-}
-
 pub(crate) fn counts(economy: &paths::Economy) -> EconomyCounts {
     EconomyCounts {
         accounts: economy.accounts().count(),
@@ -824,7 +820,7 @@ async fn store_exchanged(
     steps: Vec<(paths::Receipt, Option<axionomy_tree::Tree>)>,
     state: State,
 ) -> Result<Linked<ExchangedResponse>, ToolError> {
-    let operation = operation_bytes("exchanges", &exchanges)?;
+    let operation = store::operation("exchanges", &exchanges);
     let stored = archive
         .exchanged(&source_economy_id, source, &operation, steps, state)
         .await
@@ -1031,19 +1027,17 @@ async fn study_problem(
     let worker_control = Arc::clone(&control);
     let (progress_tx, mut progress_rx) = tokio::sync::mpsc::unbounded_channel::<ServiceProgress>();
     let mut worker = tokio::task::spawn_blocking(move || {
-        let mut observer = move |progress| {
-            let _ = progress_tx.send(progress);
-        };
-        ReferenceService.study_with(&request, &worker_control, &mut observer)
+        studies::compute(&request, &worker_control, Some(progress_tx))
     });
 
-    let study = loop {
+    let mut reporting = true;
+    let (study, trajectories) = loop {
         tokio::select! {
-            progress = progress_rx.recv() => {
-                if let Some(progress) = progress {
-                    context.set_status_message(format!("{}: {} ({}/{})", progress.phase, progress.message, progress.completed, progress.total));
-                }
-            }
+            progress = progress_rx.recv(), if reporting => match progress {
+                Some(progress) => context.set_status_message(format!("{}: {} ({}/{})", progress.phase, progress.message, progress.completed, progress.total)),
+                // The worker has returned; its result is ready.
+                None => reporting = false,
+            },
             result = &mut worker => {
                 break result.map_err(task_error)?.map_err(task_error)?;
             }
@@ -1055,30 +1049,26 @@ async fn study_problem(
             }
         }
     };
-    let documents = study
-        .documents
-        .iter()
-        .map(|document| DocumentSummary {
-            id: document.id.clone(),
-            title: document.title.clone(),
-            frames: document.frames.len(),
-        })
-        .collect();
-    let key = study.key.clone();
-    let selected_document = study.selected_document.clone();
-    let study_id = archive.keep_study(study).await.map_err(task_error)?;
+    context.set_status_message(format!(
+        "recording {} documents as economies",
+        study.documents.len()
+    ));
+    let (study_id, record) = archive
+        .keep_study(study, trajectories)
+        .await
+        .map_err(task_error)?;
     let summary = StudySummary {
         study_id,
-        key,
-        selected_document,
-        documents,
+        key: record.key,
+        selected_document: record.selected_document,
+        documents: record.documents,
     };
     context.set_status_message(format!(
         "completed: {} documents, selected {}",
         summary.documents.len(),
         summary.selected_document
     ));
-    let links = vec![
+    let mut links = vec![
         Target::Study {
             study_id: summary.study_id.clone(),
         }
@@ -1089,6 +1079,21 @@ async fn study_problem(
         }
         .link("frames", "The selected document's replay frames, paged"),
     ];
+    if let Some(selected) = summary
+        .documents
+        .iter()
+        .find(|document| document.id == summary.selected_document)
+    {
+        links.push(
+            Target::Economy {
+                economy_id: selected.final_economy_id.clone(),
+            }
+            .link(
+                "economy",
+                "The state the selected document reaches; step into it with axionomy_trace_step",
+            ),
+        );
+    }
     Linked::new(summary, links)
         .into_result()
         .map_err(TaskExit::Error)

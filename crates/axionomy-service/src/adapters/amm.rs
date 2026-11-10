@@ -9,6 +9,7 @@ use std::collections::BTreeMap;
 pub(super) fn build(
     study: &StudyKey,
     descriptor: &ProblemDescriptor,
+    progress: &mut ProgressSink<'_>,
 ) -> Result<Study, ServiceError> {
     let initial = match study.instance {
         InstanceProfile::Micro => amm::initial(),
@@ -44,6 +45,7 @@ pub(super) fn build(
             .map_err(|error| problem_error("amm", format!("{error:?}")))?;
         let final_pool = amm::pool_state(&final_world);
         let mut view = document(
+            progress,
             DocumentSpec {
                 problem: "amm",
                 strategy,

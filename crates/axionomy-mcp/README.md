@@ -19,6 +19,9 @@ economy_id + exchange ─ exchange_apply ──> new economy_id
 economy_id + exchanges  trace_replay ────> new economy_id
 economy_id + step ───── trace_step ──────> economy_id of an intermediate state
 economy_id + goal ───── search (task) ───> economy_id the solution reaches
+problem + strategy ──── problem_study ───> study_id, and two economy_ids for
+                        (task)             each document: where it starts and
+                                           where its exchanges reach
 ```
 
 A source snapshot never changes. A failed operation stores nothing; the
@@ -90,7 +93,7 @@ Resources hold the data. Their URI templates (RFC 6570) are listed by
 | `…/exchanges{?cursor}` | Those exchanges; replaying them on the parent reproduces it |
 | `…/diff/{other_id}{?cursor}` | What differs from this snapshot to another: accounts opened and closed, balances with both quantities, rates and invariants |
 | `axionomy://assessment/{assessment_id}` and `…/lines{?cursor}` | An assessment and what explains it |
-| `axionomy://study/{study_id}`, `…/documents/{document}` and `…/frames{?cursor}` | A study of a problem: its key and documents, one document, or its frames |
+| `axionomy://study/{study_id}`, `…/documents/{document}` and `…/frames{?cursor}` | A study of a problem: its key and documents with their economies, one document, or its frames |
 
 A list page is `{"items": [...], "nextCursor": "..."}` and follows the MCP
 pagination rules: the server chooses the page size, the cursor is opaque, the
@@ -128,6 +131,38 @@ handle. A failure is a result with `isError` and a stable code:
 says which exchange failed, previews what accounts lack, and links to the
 stored assessment.
 
+## Studies
+
+`axionomy_problem_study` studies a built-in problem: one of its instances under
+each of its strategies, with a seed and a budget. Each strategy's outcome is a
+document, whose replay frames the study's resources show, and each document is
+also two ordinary economies, listed in the study's summary:
+
+- `initial_economy_id`: the state the document starts from, stored as an
+  authored economy.
+- `final_economy_id`: the state its exchanges reach, made by applying them to
+  the initial economy, one step per exchange; the initial economy itself when
+  the document has none.
+
+Everything a client does with an economy, it does with a study. The final
+economy's `exchanges` resource is the document's trace; `axionomy_trace_step`
+with step `N` names the state after its first `N` exchanges, the one frame
+`N − 1` shows; `axionomy_trace_find` finds where a balance condition starts. To
+try something else from step `N`, assess or apply another exchange to that
+state, or replay another trace from it, and compare the result with the
+study's own step `N + 1` through the `diff` resource:
+
+```text
+final_economy_id + N ─────── trace_step ──────> study's state after N exchanges
+that state + exchange ────── exchange_apply ──> your branch
+your branch + study's N + 1  …/diff/{other} ──> what your choice changed
+```
+
+Replaying a document's trace on its initial economy is the operation that made
+its final economy, so `axionomy_trace_replay` returns the same handle. A
+study's documents usually start from the same state under different handles;
+their equal roots say so.
+
 ## Handles and storage
 
 A snapshot handle, `EconomyId`, is written `eco-` and 64 hexadecimal digits: a
@@ -143,8 +178,8 @@ Study handles, `StudyId`, are written `stu-` and keyed by what the study was
 computed from, so the same problem, instance, strategy, seed and budget always
 get the same handle. A study takes the problem and strategy as kebab-case paths
 (`work-league`, `a-star`) and the instance as `micro`, `showcase` or `stress`;
-its summary carries the study handle, that key, the selected document and
-every document's frame count.
+its summary carries the study handle, that key, the selected document and, for
+every document, its frame count and its two economies.
 
 Every snapshot is a point of a run in the store. Authoring records a run that
 starts from the authored state; applying exchanges records a run forked from
@@ -153,8 +188,14 @@ and the last. A handle, its run, its steps and its states commit in one
 transaction, so a handle exists exactly when everything it names does. An
 intermediate state that `axionomy_trace_step` names is rebuilt from the
 nearest stored state by replay, with every receipt checked against the one
-recorded. Assessments are stored as their inputs and computed again when read;
-studies are stored whole. Recently used snapshots stay in memory.
+recorded. Assessments are stored as their inputs and computed again when read.
+A study is stored as its key and its documents' handles, never as its views:
+each document's initial state is a run of its own, and its exchanges a run
+forked from it. Its documents and frames are computed again from the key when
+they are not in memory, and served only if they replay the very trajectories
+the study recorded; a study recorded by another version of the server is
+refused with `-32002` and must be studied again, while its economies remain.
+Recently used snapshots and studies stay in memory.
 
 ```rust
 use axionomy_mcp::AxionomyMcp;
@@ -203,13 +244,15 @@ responses, and requires per-request protocol metadata and the `Mcp-Method` and
 ## Testing
 
 The Rust unit tests hold the economic behavior: authoring conflicts and limits,
-paging a 100,000-asset economy, failures, tasks, stepping and diffs, and a
-store on disk across restarts. `interop/` checks that a standard client reaches
-all of it: the official MCP Python SDK drives the server binary over
-Streamable HTTP through discovery, tools, resource links and pages,
-completion, stepping and diffs, task-backed search and cancellation, a
-problem study, error codes, the routing-header rule, and snapshots that outlive
-a restart. The SDK does not ship the tasks extension,
+paging a 100,000-asset economy, failures, tasks, stepping and diffs, a store
+on disk across restarts, a study's documents as economies that replay its
+trajectories, and studies computed again from their keys. `interop/` checks
+that a standard client reaches all of it: the official MCP Python SDK drives
+the server binary over Streamable HTTP through discovery, tools, resource links
+and pages, completion, stepping and diffs, task-backed search and
+cancellation, a problem study, stepping into a study and branching from it,
+error codes, the routing-header rule, and snapshots and studies that outlive a
+restart. The SDK does not ship the tasks extension,
 so the suite declares it, as SEP-2663 describes. Python is managed with uv:
 
 ```console

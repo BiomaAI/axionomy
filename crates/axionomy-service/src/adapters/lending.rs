@@ -11,6 +11,7 @@ const SOURCE: &str = "Lending market";
 pub(super) fn build(
     study: &StudyKey,
     descriptor: &ProblemDescriptor,
+    progress: &mut ProgressSink<'_>,
 ) -> Result<Study, ServiceError> {
     let config = match study.instance {
         InstanceProfile::Micro => Config::micro(),
@@ -41,6 +42,7 @@ pub(super) fn build(
         ),
     ] {
         let mut view = document(
+            progress,
             DocumentSpec {
                 problem: PROBLEM,
                 strategy,
@@ -78,6 +80,7 @@ pub(super) fn build(
     let (_, liquidation) = lending::over_borrowed(&config)
         .map_err(|error| problem_error(PROBLEM, format!("{error:?}")))?;
     let mut view = document(
+        progress,
         DocumentSpec {
             problem: PROBLEM,
             strategy: "over-borrowed",
@@ -99,6 +102,7 @@ pub(super) fn build(
     let (_, attack) = lending::first_depositor_attack(&config)
         .map_err(|error| problem_error(PROBLEM, format!("{error:?}")))?;
     let mut view = document(
+        progress,
         DocumentSpec {
             problem: PROBLEM,
             strategy: "first-depositor-attack",

@@ -1,7 +1,8 @@
 # Simulation: policies, runs and studies
 
 Status: planned, in the order the steps below give. Built: rollouts and
-Monte Carlo episodes recording where they run, steps 1, 3, 4 and 5.
+Monte Carlo episodes recording where they run, steps 1, 3, 4 and 5, and step
+2 for MCP.
 
 The economy owns commitments and their consequences. A policy reads what an
 actor may see and proposes exchanges. Whoever calls the rollout (a problem, a
@@ -91,7 +92,7 @@ exchange.
 Done when every Studio replay is byte for byte the same, the three loops are
 gone, and their horizons and rejections reach the service as errors.
 
-## Step 2: studies record their runs
+## Step 2: studies record their runs (built for MCP)
 
 A study records each document's trajectory as a store run and rebuilds its
 frames from the stored steps when they are read, instead of keeping the whole
@@ -108,6 +109,27 @@ from an initial state and a trace, so it records them the same way.
 
 Done when MCP's store holds no view JSON and the Studio server reopens a
 recorded study.
+
+Built for MCP, which needed nothing new in the store for it:
+
+- `StudyObserver::trajectory` reports each document's initial economy and
+  trace written as paths (D-044), from the shared helpers every adapter
+  builds its documents with. Studio and the browser build ignore it, and
+  their replays are byte for byte what they were.
+- MCP records each document as two economies with the code that records
+  every other: its initial state as a run of its own, like an authored
+  economy, and its trace as a run forked from it, one step per exchange, as
+  `axionomy_trace_replay` would. A study's summary lists both handles for
+  every document, so a client steps into any state of a study, tries another
+  exchange there, and diffs it against the study's next step.
+- MCP's store keeps a study's key and its documents' handles, not its views.
+  Rather than rebuilding frames from stored steps, a study missing from memory
+  is computed again from its key, which is deterministic, and its documents
+  are served only if they replay the trajectories the study recorded; a study
+  recorded by another version is refused and studied again. Work-league's
+  showcase study took a 135 MB store file as JSON and takes 8.4 MB as runs.
+
+The Studio server's store and reopening a recorded study remain.
 
 ## Step 3: studies are named studies (done)
 

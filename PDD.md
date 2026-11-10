@@ -668,6 +668,7 @@ StudyKey          = the request with its instance and strategy decided
 StudyControl      = cooperative pause + resume + cancel
 ServiceProgress   = ordered phase + completed/total work + message
 StudyObserver     = progress + solver observation + replay-verified frame
+                    + each document's trajectory, written as paths
 Study             = key + resolved instance + selected document + replayable alternatives
                     + assessed constraint probes
 ```

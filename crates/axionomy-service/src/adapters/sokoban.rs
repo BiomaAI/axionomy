@@ -29,6 +29,7 @@ pub(super) fn build(
         "breadth-first search"
     };
     let mut solved = document(
+        progress,
         DocumentSpec {
             problem: "sokoban",
             strategy,
@@ -86,6 +87,7 @@ pub(super) fn build(
             .replayed(&deadlock_trace)
             .map_err(|error| problem_error("sokoban", error))?;
         let mut deadlock = document(
+            progress,
             DocumentSpec {
                 problem: "sokoban",
                 strategy: "deadlock",

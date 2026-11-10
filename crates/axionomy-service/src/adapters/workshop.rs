@@ -10,6 +10,7 @@ use axionomy_view::{
 pub(super) fn build(
     study: &StudyKey,
     descriptor: &ProblemDescriptor,
+    progress: &mut ProgressSink<'_>,
 ) -> Result<Study, ServiceError> {
     let initial = match study.instance {
         InstanceProfile::Micro => workshop::initial(),
@@ -77,6 +78,7 @@ pub(super) fn build(
             .replayed(&trace)
             .map_err(|error| problem_error("workshop", error))?;
         let mut view = document(
+            progress,
             DocumentSpec {
                 problem: "workshop",
                 strategy,

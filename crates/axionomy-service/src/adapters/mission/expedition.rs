@@ -7,6 +7,7 @@ pub(super) fn build(
     study: &StudyKey,
     descriptor: &ProblemDescriptor,
     profile: InstanceProfile,
+    progress: &mut ProgressSink<'_>,
 ) -> Result<Study, ServiceError> {
     let initial = expedition::initial(matches!(profile, InstanceProfile::Stress), study.seed);
     let mut documents = Vec::new();
@@ -33,6 +34,7 @@ pub(super) fn build(
         let (trace, final_world) =
             simulate("mission", &initial, |world| expedition::run(world, policy))?;
         let mut view = document(
+            progress,
             DocumentSpec {
                 problem: "mission",
                 strategy,

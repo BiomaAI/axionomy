@@ -3,7 +3,7 @@ use crate::{
     ServiceError, ServiceProgress, StrategyDescriptor, Study, StudyControl, StudyKey,
     StudyObserver,
 };
-use axionomy::{Economy, Goal, Ontology, Quantity, Trace};
+use axionomy::{Economy, Goal, Ontology, Quantity, Trace, paths};
 use axionomy_search::{GraphSearchProgress, rollout::RolloutResult};
 use axionomy_view::{
     DebugOntology, DocumentPath, ExchangeFrame, ItemPath, LeaderboardView, MeasurePath,
@@ -14,6 +14,7 @@ use axionomy_view::{
     ViewOntology, ViewSource, WrittenOntology, derive_document, derive_document_with_frames,
     derive_model, derive_proposal, slug,
 };
+use serde::{Serialize, de::DeserializeOwned};
 use std::{collections::BTreeSet, ops::ControlFlow};
 
 pub(super) fn visual_entity(
@@ -365,7 +366,7 @@ fn problems() -> Vec<(ProblemDescriptor, Build)> {
         problem(
             ProblemCopy {
                 key: "exact-cover",
-                build: |study, descriptor, _| exact_cover::build(study, descriptor),
+                build: exact_cover::build,
                 title: "Exact cover",
                 summary: "Choose subsets that cover every element exactly once. A plain search and Algorithm X reach the same answer by different routes.",
                 instances: [
@@ -399,7 +400,7 @@ fn problems() -> Vec<(ProblemDescriptor, Build)> {
         problem(
             ProblemCopy {
                 key: "workshop",
-                build: |study, descriptor, _| workshop::build(study, descriptor),
+                build: workshop::build,
                 title: "Workshop",
                 summary: "Choose funded contracts, prepare components, manage tool wear and deliver products. Exact tradeoffs expose faster work, lower waste and higher revenue.",
                 instances: [
@@ -446,7 +447,7 @@ fn problems() -> Vec<(ProblemDescriptor, Build)> {
         problem(
             ProblemCopy {
                 key: "scheduling",
-                build: |study, descriptor, _| scheduling::build(study, descriptor),
+                build: scheduling::build,
                 title: "Job-shop scheduling",
                 summary: "Route arriving jobs through queues and actual execution. Alternative machines, setup changes, shared crews and a recoverable machine failure change which schedule finishes first.",
                 instances: [
@@ -493,7 +494,7 @@ fn problems() -> Vec<(ProblemDescriptor, Build)> {
         problem(
             ProblemCopy {
                 key: "rescue",
-                build: |study, descriptor, _| rescue::build(study, descriptor),
+                build: rescue::build,
                 title: "Uncertain rescue",
                 summary: "Search for several hidden casualties while their condition worsens. Trade treatment time, limited medicine, noisy hints and transport fuel against one evacuation seat.",
                 instances: [
@@ -528,7 +529,7 @@ fn problems() -> Vec<(ProblemDescriptor, Build)> {
         problem(
             ProblemCopy {
                 key: "bridge",
-                build: |study, descriptor, _| bridge::build(study, descriptor),
+                build: bridge::build,
                 title: "Bridge allocation",
                 summary: "Timed traffic competes for one occupied lane. Compare fixed priority, urgency-based bids and a paid concurrent detour against arrivals, deadlines and expiring reservations.",
                 instances: [
@@ -587,7 +588,7 @@ fn problems() -> Vec<(ProblemDescriptor, Build)> {
         problem(
             ProblemCopy {
                 key: "amm",
-                build: |study, descriptor, _| amm::build(study, descriptor),
+                build: amm::build,
                 title: "The Living Market",
                 summary: "Watch repeated production and trade reshape a closed economy. Daily needs and obligations, cloudy periods, limited storage, delayed capacity investment, and responsive liquidity interact through an exact constant-product AMM. Missed needs and defaults remain visible.",
                 instances: [
@@ -629,7 +630,7 @@ fn problems() -> Vec<(ProblemDescriptor, Build)> {
         problem(
             ProblemCopy {
                 key: "lending",
-                build: |study, descriptor, _| lending::build(study, descriptor),
+                build: lending::build,
                 title: "Lending market",
                 summary: "Finance a bill that falls due before revenue arrives. Collateral caps the loan, interest follows pool utilization along a kinked curve, a reserve cut stays with the market, and a scheduled price drop can push an over-borrowed loan into liquidation.",
                 instances: [
@@ -678,7 +679,7 @@ fn problems() -> Vec<(ProblemDescriptor, Build)> {
         problem(
             ProblemCopy {
                 key: "marketplace",
-                build: |study, descriptor, _| marketplace::build(study, descriptor),
+                build: marketplace::build,
                 title: "Multi-party marketplace",
                 summary: "Negotiate funded contracts, reserve scarce shipping capacity and fulfill deliveries over time. Route delays, price concessions, late rebates and refundable reservations couple buyer and seller outcomes.",
                 instances: [
@@ -876,7 +877,7 @@ fn problems() -> Vec<(ProblemDescriptor, Build)> {
         problem(
             ProblemCopy {
                 key: "perishables",
-                build: |study, descriptor, _| perishables::build(study, descriptor),
+                build: perishables::build,
                 title: "Perishable inventory",
                 summary: "Manage scarce refrigerated space, thermal history and daily food obligations. Cooling and processing compete for electricity; backup generation and deliveries compete for fuel.",
                 instances: [
@@ -1194,6 +1195,37 @@ impl<'a> ProgressSink<'a> {
     fn has_frames(&self, document: &DocumentPath) -> bool {
         self.framed_documents.contains(document)
     }
+
+    /// Reports the trajectory a document's frames replay, written as paths.
+    /// A typed economy and trace serialize as `paths` ones (D-044); one that
+    /// does not fails the study, at its next check.
+    fn trajectory<O: WrittenOntology>(
+        &mut self,
+        problem: &str,
+        document: &DocumentPath,
+        initial: &Economy<O>,
+        trace: &Trace<O>,
+    ) {
+        if self.error.is_some() {
+            return;
+        }
+        match written::<_, paths::Economy>(initial)
+            .and_then(|initial| Ok((initial, written::<_, paths::Trace>(trace)?)))
+        {
+            Ok((initial, trace)) => self.observer.trajectory(document, &initial, &trace),
+            Err(error) => {
+                self.error = Some(problem_error(
+                    problem,
+                    format!("document `{document}` is not written as paths: {error}"),
+                ));
+            }
+        }
+    }
+}
+
+/// `value` written down and read back as `T`.
+fn written<V: Serialize, T: DeserializeOwned>(value: &V) -> Result<T, serde_json::Error> {
+    serde_json::from_value(serde_json::to_value(value)?)
 }
 
 fn observation_kind(phase: &PhasePath) -> SearchObservationKindView {
@@ -1221,7 +1253,10 @@ pub(super) struct DocumentSpec<'a> {
     pub source_label: &'a str,
 }
 
+/// The document of a trace replayed from `initial`. Its trajectory is
+/// reported to the study's observer.
 pub(super) fn document<O: WrittenOntology>(
+    progress: &mut ProgressSink<'_>,
     spec: DocumentSpec<'_>,
     initial: &Economy<O>,
     goal: &Goal<O>,
@@ -1236,33 +1271,25 @@ where
     O::Role: StudioLabel,
 {
     let ontology = StudioOntology::<O>::new(Some(scene));
-    let mut document = derive_document(
-        ViewDocumentMetadata {
-            id: slug(spec.strategy),
-            title: spec.title.into(),
-            description: spec.description.into(),
-            source: ViewSource {
-                key: slug(spec.problem),
-                label: spec.source_label.into(),
-            },
-        },
-        initial,
-        trace,
-        &ontology,
-        objectives,
-    )?;
+    let mut document = derive_document(spec.metadata(), initial, trace, &ontology, objectives)?;
     document.model = Some(derive_model(initial, goal, &ontology));
+    progress.trajectory(spec.problem, &document.id, initial, trace);
     Ok(document)
 }
 
+/// The document of a trace replayed from `initial`, with leaderboards; its
+/// frames stream to the study's observer as they are derived when `streamed`.
+/// Its trajectory is reported to the observer.
+#[allow(clippy::too_many_arguments)]
 pub(super) fn document_with_leaderboards_observed<O: WrittenOntology>(
+    progress: &mut ProgressSink<'_>,
     spec: DocumentSpec<'_>,
     initial: &Economy<O>,
     goal: &Goal<O>,
     trace: &Trace<O>,
     objectives: Vec<ObjectiveView>,
     projections: StudioProjections<O>,
-    mut on_frame: impl FnMut(&ExchangeFrame),
+    streamed: bool,
 ) -> Result<ViewDocument, PlaybackError>
 where
     O::Account: StudioLabel,
@@ -1272,24 +1299,37 @@ where
 {
     let (scene, leaderboards) = projections;
     let ontology = StudioOntology::<O>::new(Some(scene)).with_leaderboards(leaderboards);
+    let metadata = spec.metadata();
+    let id = metadata.id.clone();
     let mut document = derive_document_with_frames(
-        ViewDocumentMetadata {
-            id: slug(spec.strategy),
-            title: spec.title.into(),
-            description: spec.description.into(),
-            source: ViewSource {
-                key: slug(spec.problem),
-                label: spec.source_label.into(),
-            },
-        },
+        metadata,
         initial,
         trace,
         &ontology,
         objectives,
-        &mut on_frame,
+        |frame: &ExchangeFrame| {
+            if streamed {
+                progress.frame(&id, frame);
+            }
+        },
     )?;
     document.model = Some(derive_model(initial, goal, &ontology));
+    progress.trajectory(spec.problem, &id, initial, trace);
     Ok(document)
+}
+
+impl DocumentSpec<'_> {
+    fn metadata(&self) -> ViewDocumentMetadata {
+        ViewDocumentMetadata {
+            id: slug(self.strategy),
+            title: self.title.into(),
+            description: self.description.into(),
+            source: ViewSource {
+                key: slug(self.problem),
+                label: self.source_label.into(),
+            },
+        }
+    }
 }
 
 pub(super) struct ProposalSpec<'a> {

@@ -12,6 +12,7 @@ use axionomy_view::{
 pub(super) fn build(
     study: &StudyKey,
     descriptor: &ProblemDescriptor,
+    progress: &mut ProgressSink<'_>,
 ) -> Result<Study, ServiceError> {
     let profile = study.instance;
     let initial = match profile {
@@ -67,6 +68,7 @@ pub(super) fn build(
             .replayed(&trace)
             .map_err(|error| problem_error("scheduling", error))?;
         let mut view = document(
+            progress,
             DocumentSpec {
                 problem: "scheduling",
                 strategy,
@@ -111,7 +113,7 @@ pub(super) fn build(
     } else {
         scheduling::impossible()
     };
-    let mut impossible_view = document(DocumentSpec { problem: "scheduling", strategy: "infeasible-horizon", title: "Scheduling · not enough time slots", description: "With only two slots the work cannot fit. That is an answer you can inspect, not an error the optimizer swallowed.", source_label: "Job-shop scheduling" }, &impossible, &scheduling::goal(), &Trace::new(), Vec::new(), scene).map_err(|error| problem_error("scheduling", error))?;
+    let mut impossible_view = document(progress, DocumentSpec { problem: "scheduling", strategy: "infeasible-horizon", title: "Scheduling · not enough time slots", description: "With only two slots the work cannot fit. That is an answer you can inspect, not an error the optimizer swallowed.", source_label: "Job-shop scheduling" }, &impossible, &scheduling::goal(), &Trace::new(), Vec::new(), scene).map_err(|error| problem_error("scheduling", error))?;
     impossible_view.telemetry.push(telemetry(
         "exhaustive feasibility",
         true,

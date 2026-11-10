@@ -62,8 +62,8 @@ pub(super) fn build(
             .iter()
             .map(|agent| balance(final_world, *agent, Asset::Waste))
             .sum::<u64>();
-        let document_id: DocumentPath = slug(strategy);
         let mut view = document_with_leaderboards_observed(
+            progress,
             DocumentSpec {
                 problem: "work-league",
                 strategy,
@@ -95,11 +95,7 @@ pub(super) fn build(
                 },
             ],
             (scene, leaderboards),
-            |frame| {
-                if strategy == selected {
-                    progress.frame(&document_id, frame);
-                }
-            },
+            strategy == selected,
         )
         .map_err(|error| problem_error("work-league", error))?;
         view.telemetry.push(telemetry(

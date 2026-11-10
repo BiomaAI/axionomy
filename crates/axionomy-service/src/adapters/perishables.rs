@@ -13,10 +13,11 @@ mod cold_chain;
 pub(super) fn build(
     study: &StudyKey,
     descriptor: &ProblemDescriptor,
+    progress: &mut ProgressSink<'_>,
 ) -> Result<Study, ServiceError> {
     let profile = study.instance;
     if !matches!(profile, InstanceProfile::Micro) {
-        return cold_chain::build(study, descriptor, profile);
+        return cold_chain::build(study, descriptor, profile, progress);
     }
     let (initial, transfer) = match profile {
         InstanceProfile::Micro => (perishables::initial_with_inventory(70, 30), 10),
@@ -32,7 +33,7 @@ pub(super) fn build(
         .map_err(|error| problem_error("perishables", error))?;
     let inventory_trace = frontier_trace(&front, true)?;
     let energy_trace = frontier_trace(&front, false)?;
-    let mut outage_view = document(DocumentSpec { problem: "perishables", strategy: "outage", title: "Perishables · power outage", description: "Ten thousand interchangeable units belong to two batches. Time and power act on the batch, so one change ages thousands of units at once.", source_label: "Perishable inventory" }, &initial, &perishables::goal(), outage.trace(), vec![
+    let mut outage_view = document(progress, DocumentSpec { problem: "perishables", strategy: "outage", title: "Perishables · power outage", description: "Ten thousand interchangeable units belong to two batches. Time and power act on the batch, so one change ages thousands of units at once.", source_label: "Perishable inventory" }, &initial, &perishables::goal(), outage.trace(), vec![
         ObjectiveView { key: slug("claims"), label: "Total claims".into(), direction: ObjectiveDirectionView::Maximize, value: outage.claim_index().total_claims().to_string() },
         ObjectiveView { key: slug("usable"), label: "Usable claims".into(), direction: ObjectiveDirectionView::Maximize, value: outage.claim_index().usable_total(outage.world()).to_string() },
     ], scene).map_err(|error| problem_error("perishables", error))?;
@@ -86,6 +87,7 @@ pub(super) fn build(
             .replayed(&trace)
             .map_err(|error| problem_error("perishables", error))?;
         let mut view = document(
+            progress,
             DocumentSpec {
                 problem: "perishables",
                 strategy,

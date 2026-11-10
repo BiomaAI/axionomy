@@ -8,6 +8,7 @@ pub(super) fn build(
     study: &StudyKey,
     descriptor: &ProblemDescriptor,
     profile: InstanceProfile,
+    progress: &mut ProgressSink<'_>,
 ) -> Result<Study, ServiceError> {
     let initial = chain::initial(matches!(profile, InstanceProfile::Stress), study.seed);
     let mut documents = Vec::new();
@@ -42,6 +43,7 @@ pub(super) fn build(
             .replayed(&trace)
             .map_err(|error| problem_error("perishables", error))?;
         let mut view = document(
+            progress,
             DocumentSpec {
                 problem: "perishables",
                 strategy,

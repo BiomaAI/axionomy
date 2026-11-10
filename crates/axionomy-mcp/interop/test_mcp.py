@@ -413,11 +413,64 @@ async def test_a_problem_study_pages_its_frames(url: str) -> None:
         selected = next(doc for doc in summary["documents"] if doc["id"] == summary["selected_document"])
         assert 0 < len(frames["items"]) <= selected["frames"]
 
+        # Every document is an economy from its initial state to the state
+        # its exchanges reach, one exchange per frame.
+        for document in summary["documents"]:
+            assert document["initial_economy_id"].startswith("eco-")
+            final = await page(client, f"axionomy://economy/{document['final_economy_id']}")
+            assert final["parent_id"] == document["initial_economy_id"]
+            assert final["origin"] == {"kind": "exchanged", "exchanges": document["frames"]}
+        assert f"axionomy://economy/{selected['final_economy_id']}" in links(result)
+        study = await page(client, f"axionomy://study/{summary['study_id']}")
+        assert study["documents"] == summary["documents"]
+
         refused = await client.call_tool(
             "axionomy_problem_study",
             {"problem": "maze", "strategy": "a_star"},
         )
         assert refused.is_error
+
+
+async def exchanges(client: Client, economy_id: str) -> list[dict[str, Any]]:
+    return (await page(client, f"axionomy://economy/{economy_id}/exchanges"))["items"]
+
+
+async def step(client: Client, economy_id: str, step: int) -> dict[str, Any]:
+    stepped = await client.call_tool("axionomy_trace_step", {"economy_id": economy_id, "step": step})
+    assert not stepped.is_error, stepped.structured_content
+    return stepped.structured_content
+
+
+async def test_a_client_steps_into_a_study_and_tries_another_exchange(url: str) -> None:
+    async with Client(url, extensions=[Tasks()]) as client:
+        result = await client.call_tool(
+            "axionomy_problem_study",
+            {"problem": "logistics", "instance": "micro", "strategy": "reliable"},
+        )
+        documents = {document["id"]: document for document in result.structured_content["documents"]}
+        studied = documents["reliable"]["final_economy_id"]
+        other = documents["direct"]["final_economy_id"]
+
+        # The two strategies agree until step N, where they choose differently.
+        taken, alternative = await exchanges(client, studied), await exchanges(client, other)
+        n = next(index for index, (left, right) in enumerate(zip(taken, alternative)) if left != right)
+        assert n > 0
+        state = await step(client, studied, n)
+        assert state["root"] == (await step(client, other, n))["root"]
+
+        # From the study's state at step N, take the other strategy's exchange
+        # instead of the study's, and compare with the study's own step N + 1.
+        tried = await client.call_tool("axionomy_exchange_apply", {"economy_id": state["economy_id"], "exchange": alternative[n]})
+        assert not tried.is_error, tried.structured_content
+        assert tried.structured_content["source_economy_id"] == state["economy_id"]
+        followed = await step(client, studied, n + 1)
+        diff = await page(client, f"axionomy://economy/{tried.structured_content['economy_id']}/diff/{followed['economy_id']}")
+        # The vehicle left on the direct road instead of the safe one.
+        assert (taken[n]["rate"], alternative[n]["rate"]) == ("depart/safe-out-first", "depart/direct-out")
+        assert diff["items"] == [
+            {"kind": "balance", "account": "vehicle", "asset": "traveling/direct-out", "before": "1", "after": "0"},
+            {"kind": "balance", "account": "vehicle", "asset": "traveling/safe-out-first", "before": "0", "after": "1"},
+        ]
 
 
 async def test_bad_resources_are_invalid_params(url: str) -> None:
@@ -445,10 +498,13 @@ def test_requests_without_routing_headers_are_refused(base_url: str) -> None:
 async def test_snapshots_on_disk_outlive_the_server(tmp_path) -> None:
     store = tmp_path / "snapshots.redb"
     with running(store) as base_url:
-        async with Client(f"{base_url}/mcp") as client:
+        async with Client(f"{base_url}/mcp", extensions=[Tasks()]) as client:
             economy_id = await create(client, ECONOMY)
             applied = await client.call_tool("axionomy_exchange_apply", {"economy_id": economy_id, "exchange": transfer(2)})
             applied_id = applied.structured_content["economy_id"]
+            studied = await client.call_tool("axionomy_problem_study", {"problem": "maze", "instance": "micro"})
+            frames_uri = next(uri for uri in links(studied) if uri.endswith("/frames"))
+            frames = await page(client, frames_uri)
     with running(store) as base_url:
         async with Client(f"{base_url}/mcp") as client:
             summary = await page(client, f"axionomy://economy/{applied_id}")
@@ -457,3 +513,9 @@ async def test_snapshots_on_disk_outlive_the_server(tmp_path) -> None:
             again = await client.call_tool("axionomy_exchange_apply", {"economy_id": economy_id, "exchange": transfer(2)})
             assert again.structured_content["economy_id"] == applied_id
             assert again.structured_content["deduplicated"] is True
+            # The store keeps a study's key and economies; its frames are
+            # computed again, the same as they were.
+            assert await page(client, frames_uri) == frames
+            for document in studied.structured_content["documents"]:
+                kept = await page(client, f"axionomy://economy/{document['final_economy_id']}")
+                assert kept["parent_id"] == document["initial_economy_id"]

@@ -44,6 +44,7 @@ pub(super) fn build(
         let (trace, final_world) =
             simulate("logistics", &initial, |world| fleet::run(world, policy))?;
         let mut view = document(
+            progress,
             DocumentSpec {
                 problem: "logistics",
                 strategy,

@@ -4,18 +4,18 @@ use axionomy::{InvariantPath, ParameterPath};
 
 use crate::{
     handles::{AssessmentId, EconomyId, StudyId},
-    messages::{Direction, DocumentSummary, EconomyCounts, StateRoot},
+    messages::{Direction, EconomyCounts, StateRoot, StudySummary},
     resources::{Address, PAGE_FRAMES, PAGE_ROWS, Page, Target, page, span_page},
     server::{AxionomyMcp, assessment_lines, counts, receipt_lines},
-    store::{Loaded, Origin},
+    store::{Loaded, Origin, StudyRecord},
+    studies,
 };
 use axionomy::{
     AccountPath, AssessmentStatus, AssetPath, Quantity, RatePath, RolePath,
     paths::{self, Paths},
 };
-use axionomy_service::{Study, StudyKey};
+use axionomy_service::{Study, StudyControl};
 use axionomy_store::state;
-use axionomy_view::DocumentPath;
 use rmcp::{
     ErrorData as McpError,
     model::{CompleteRequestParams, CompleteResult, CompletionInfo},
@@ -61,20 +61,12 @@ impl AxionomyMcp {
                 )?)
             }
             Target::Study { study_id } => {
-                let study = self.study(study_id).await?.ok_or_else(not_found)?;
-                json(&StudyView {
-                    study_id,
-                    key: &study.key,
-                    selected_document: &study.selected_document,
-                    documents: study
-                        .documents
-                        .iter()
-                        .map(|document| DocumentSummary {
-                            id: document.id.clone(),
-                            title: document.title.clone(),
-                            frames: document.frames.len(),
-                        })
-                        .collect(),
+                let record = self.study_record(study_id)?.ok_or_else(not_found)?;
+                json(&StudySummary {
+                    study_id: study_id.clone(),
+                    key: record.key,
+                    selected_document: record.selected_document,
+                    documents: record.documents,
                 })
             }
             Target::Document { study_id, document } => {
@@ -204,10 +196,9 @@ impl AxionomyMcp {
                 }
             }
             "document" => self
-                .study(&needed("study_id")?.parse::<StudyId>().map_err(|error| {
+                .study_record(&needed("study_id")?.parse::<StudyId>().map_err(|error| {
                     McpError::invalid_params(format!("`study_id`: {error}"), None)
-                })?)
-                .await?
+                })?)?
                 .ok_or_else(not_found)?
                 .documents
                 .iter()
@@ -240,8 +231,37 @@ impl AxionomyMcp {
             .map_err(internal)
     }
 
+    fn study_record(&self, study_id: &StudyId) -> Result<Option<StudyRecord>, McpError> {
+        self.archive.study_record(study_id).map_err(internal)
+    }
+
+    /// A study's views: from memory, or computed again from its key and
+    /// served only if they replay the very trajectories the study recorded.
     pub(crate) async fn study(&self, study_id: &StudyId) -> Result<Option<Arc<Study>>, McpError> {
-        self.archive.study(study_id).await.map_err(internal)
+        if let Some(study) = self.archive.cached_study(study_id) {
+            return Ok(Some(study));
+        }
+        let Some(record) = self.study_record(study_id)? else {
+            return Ok(None);
+        };
+        let request = studies::request(&record.key);
+        let (study, trajectories) = tokio::task::spawn_blocking(move || {
+            studies::compute(&request, &StudyControl::default(), None)
+        })
+        .await
+        .map_err(internal)?
+        .map_err(internal)?;
+        if !self.archive.recorded(&record, &trajectories) {
+            return Err(McpError::resource_not_found(
+                format!(
+                    "study `{study_id}` was recorded by another version of axionomy-mcp: computed again from its key, its documents no longer replay the trajectories it recorded. Its economies remain; study the problem again to read its documents"
+                ),
+                Some(
+                    serde_json::json!({ "uri": Target::Study { study_id: study_id.clone() }.uri() }),
+                ),
+            ));
+        }
+        Ok(Some(self.archive.cache_study(study_id.clone(), study)))
     }
 }
 
@@ -416,7 +436,7 @@ fn moves(rate: &paths::Rate, asset: &AssetPath) -> bool {
 
 /// What one unit of a rate consumes, produces and preserves: fixed amounts by
 /// direction and role, then computed ones.
-fn amounts(rate: &paths::Rate) -> impl Iterator<Item = AmountRow<'_>> {
+pub(crate) fn amounts(rate: &paths::Rate) -> impl Iterator<Item = AmountRow<'_>> {
     let fixed = [Direction::Consume, Direction::Produce, Direction::Preserve]
         .into_iter()
         .flat_map(move |direction| {
@@ -559,7 +579,7 @@ struct RateView<'a> {
 }
 
 #[derive(Serialize)]
-struct AmountRow<'a> {
+pub(crate) struct AmountRow<'a> {
     direction: Direction,
     role: &'a RolePath,
     asset: &'a AssetPath,
@@ -593,14 +613,6 @@ struct AssessmentView<'a> {
     #[serde(skip_serializing_if = "<[_]>::is_empty")]
     issues: &'a [paths::ApplyError],
     lines: usize,
-}
-
-#[derive(Serialize)]
-struct StudyView<'a> {
-    study_id: &'a StudyId,
-    key: &'a StudyKey,
-    selected_document: &'a DocumentPath,
-    documents: Vec<DocumentSummary>,
 }
 
 #[derive(Serialize)]

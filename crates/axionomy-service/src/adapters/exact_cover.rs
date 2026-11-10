@@ -6,6 +6,7 @@ use axionomy_view::{MatrixCellView, TelemetryKindView, ViewId};
 pub(super) fn build(
     study: &StudyKey,
     descriptor: &ProblemDescriptor,
+    progress: &mut ProgressSink<'_>,
 ) -> Result<Study, ServiceError> {
     let profile = study.instance;
     let initial = match profile {
@@ -37,6 +38,7 @@ pub(super) fn build(
         ),
     ] {
         let mut view = document(
+            progress,
             DocumentSpec {
                 problem: "exact-cover",
                 strategy,
@@ -83,7 +85,7 @@ pub(super) fn build(
         InstanceProfile::Showcase => exact_cover::unsatisfiable_showcase(),
         InstanceProfile::Stress => exact_cover::unsatisfiable_stress(),
     };
-    let mut unsat = document(DocumentSpec { problem: "exact-cover", strategy: "unsatisfiable", title: "Exact cover · no solution exists", description: "Same rules, different subsets: no combination covers every element exactly once. The impossibility is a result, not an error.", source_label: "Exact cover" }, &unsatisfiable, &exact_cover::goal(), &Trace::new(), Vec::new(), scene).map_err(|error| problem_error("exact-cover", error))?;
+    let mut unsat = document(progress, DocumentSpec { problem: "exact-cover", strategy: "unsatisfiable", title: "Exact cover · no solution exists", description: "Same rules, different subsets: no combination covers every element exactly once. The impossibility is a result, not an error.", source_label: "Exact cover" }, &unsatisfiable, &exact_cover::goal(), &Trace::new(), Vec::new(), scene).map_err(|error| problem_error("exact-cover", error))?;
     if exact_cover::algorithm_x(&unsatisfiable).is_some()
         || exact_cover::solve_bfs(&unsatisfiable).is_some()
     {

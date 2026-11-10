@@ -67,7 +67,7 @@ pub(super) fn build(
         .map_err(|error| problem_error("connect-four", error))?;
     let terminal = connect_four::terminal_values(&final_world)
         .ok_or_else(|| problem_error("connect-four", "game did not terminate"))?;
-    let mut view = document(DocumentSpec { problem: "connect-four", strategy: "mcts-game", title: "Connect Four · MCTS self-play", description: "Both players use tactical MCTS: immediate wins, forced blocks and double threats guide search. The economy declares the winner.", source_label: "Connect Four" }, &initial, &axionomy::Goal::new(), &trace, vec![
+    let mut view = document(progress, DocumentSpec { problem: "connect-four", strategy: "mcts-game", title: "Connect Four · MCTS self-play", description: "Both players use tactical MCTS: immediate wins, forced blocks and double threats guide search. The economy declares the winner.", source_label: "Connect Four" }, &initial, &axionomy::Goal::new(), &trace, vec![
         ObjectiveView { key: slug("red"), label: "Red terminal value".into(), direction: ObjectiveDirectionView::Maximize, value: format!("{:.1}", terminal[0]) },
         ObjectiveView { key: slug("yellow"), label: "Yellow terminal value".into(), direction: ObjectiveDirectionView::Maximize, value: format!("{:.1}", terminal[1]) },
     ], scene).map_err(|error| problem_error("connect-four", error))?;
@@ -127,7 +127,7 @@ pub(super) fn build(
                 .map_err(|error| problem_error("connect-four", error))?;
             let terminal = connect_four::terminal_values(&final_world)
                 .ok_or_else(|| problem_error("connect-four", "comparison did not terminate"))?;
-            documents.push(document(DocumentSpec {
+            documents.push(document(progress, DocumentSpec {
                 problem: "connect-four", strategy, title,
                 description: "Red uses tactical MCTS. Yellow uses the named independent policy on the same empty board. One game is an inspectable matchup, not a win-rate estimate.", source_label: "Connect Four",
             }, &initial, &axionomy::Goal::new(), &trace, vec![

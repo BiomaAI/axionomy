@@ -2,7 +2,9 @@
 //!
 //! A study is what the service computes for a request: a problem's instance
 //! under its strategies, with a seed and a budget. Each of its documents holds
-//! a run, one trajectory, and the evidence of how it was found.
+//! a run, one trajectory, and the evidence of how it was found. An observer
+//! sees each trajectory written as paths, so a study's runs can be recorded
+//! and explored like any economy.
 //!
 //! This layer owns application orchestration, not economic truth. Every trace
 //! in a study is derived by replay through the core; HTTP, CLI, MCP, and
@@ -258,6 +260,18 @@ pub trait StudyObserver {
     fn observation(&mut self, _observation: SearchObservationView) {}
 
     fn frame(&mut self, _document: &DocumentPath, _frame: ExchangeFrame) {}
+
+    /// A document's trajectory: the economy it starts from and the trace its
+    /// frames replay, written as paths (D-044), so an observer can record it
+    /// or explore it as an ordinary economy. Reported once per document,
+    /// after its frames are derived.
+    fn trajectory(
+        &mut self,
+        _document: &DocumentPath,
+        _initial: &axionomy::paths::Economy,
+        _trace: &axionomy::paths::Trace,
+    ) {
+    }
 }
 
 impl<F> StudyObserver for F
@@ -789,6 +803,78 @@ mod tests {
                 .all(|frame| !frame.after.leaderboards.is_empty())
         );
         assert_eq!(observer.frames.last(), selected.frames.last());
+    }
+
+    /// Each document of every study reports one trajectory, written as paths,
+    /// and it is the trajectory its frames show: replayed, it ends where the
+    /// document's last snapshot does.
+    #[test]
+    fn every_document_reports_the_trajectory_its_frames_replay() {
+        use axionomy::paths;
+
+        #[derive(Default)]
+        struct Trajectories(Vec<(DocumentPath, paths::Economy, paths::Trace)>);
+
+        impl StudyObserver for Trajectories {
+            fn progress(&mut self, _: ServiceProgress) {}
+
+            fn trajectory(
+                &mut self,
+                document: &DocumentPath,
+                initial: &paths::Economy,
+                trace: &paths::Trace,
+            ) {
+                self.0
+                    .push((document.clone(), initial.clone(), trace.clone()));
+            }
+        }
+
+        /// The path a view key `{ontology}/{kind}/{path}` writes.
+        fn written<K>(key: &axionomy_view::ItemPath, kind: &str) -> Path<K> {
+            let (_, path) = key.as_str().split_once(&format!("/{kind}/")).unwrap();
+            path.parse().unwrap()
+        }
+
+        for problem in ReferenceService.catalog() {
+            let mut request =
+                StudyRequest::new(problem.key.clone()).with_instance(InstanceProfile::Micro);
+            request.budget = 8;
+            let mut observed = Trajectories::default();
+            let study = ReferenceService
+                .study_with(&request, &StudyControl::default(), &mut observed)
+                .unwrap();
+            assert_eq!(
+                observed.0.iter().map(|(id, ..)| id).collect::<Vec<_>>(),
+                study
+                    .documents
+                    .iter()
+                    .map(|document| &document.id)
+                    .collect::<Vec<_>>(),
+                "{}",
+                problem.key
+            );
+            for ((id, initial, trace), document) in observed.0.iter().zip(&study.documents) {
+                assert_eq!(trace.exchanges().len(), document.frames.len(), "{id}");
+                let last = initial.replayed(trace).unwrap();
+                let shown = document
+                    .frames
+                    .last()
+                    .map_or(&document.initial, |frame| &frame.after);
+                assert_eq!(last.accounts().count(), shown.accounts.len(), "{id}");
+                for account in &shown.accounts {
+                    let account_path = written(&account.account.key, "account");
+                    for balance in &account.balances {
+                        assert_eq!(
+                            last.balance(&account_path, &written(&balance.asset.key, "asset"))
+                                .to_string(),
+                            balance.quantity.0,
+                            "{} {id} {account_path}",
+                            problem.key
+                        );
+                    }
+                }
+            }
+        }
     }
 
     #[test]

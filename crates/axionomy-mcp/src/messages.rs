@@ -334,7 +334,9 @@ pub struct ProblemCatalogResponse {
     pub problems: Vec<axionomy_service::ProblemDescriptor>,
 }
 
-/// A finished study of a problem. Its documents and their frames are resources.
+/// A finished study of a problem. Its documents and their frames are
+/// resources, and each document's trajectory is two economies: the state it
+/// starts from and the state its exchanges reach.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct StudySummary {
     pub study_id: StudyId,
@@ -346,11 +348,20 @@ pub struct StudySummary {
     pub documents: Vec<DocumentSummary>,
 }
 
+/// One document of a study: one strategy's trajectory.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct DocumentSummary {
     pub id: DocumentPath,
     pub title: String,
+    /// Frames, one per exchange of the trajectory.
     pub frames: usize,
+    /// The state the trajectory starts from, stored as an authored economy.
+    pub initial_economy_id: EconomyId,
+    /// The state the trajectory reaches: an economy made by applying its
+    /// exchanges to the initial one, so `axionomy_trace_step` names the state
+    /// after any number of them and its `exchanges` resource is the trace.
+    /// The initial economy itself when the trajectory has no exchanges.
+    pub final_economy_id: EconomyId,
 }
 
 /// A failed tool call: a stable code, a message, and what the caller needs to

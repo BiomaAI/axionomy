@@ -2,8 +2,8 @@
 
 Status: being built, in the order the phases at the end give. The kernel's
 forks are constant-time, the canonical tree and the store exist, and MCP keeps
-its snapshots in the store; Studio, search and every other producer of runs
-move onto it next.
+its snapshots and its studies' runs in the store; Studio, search and every
+other producer of runs move onto it next.
 
 Axionomy is an economic debugger and a simulation engine. Both need states
 that can be kept, revisited, compared and branched: time travel to any step,
@@ -362,7 +362,17 @@ survive the members they summarize.
   snapshots carry state roots, `axionomy_trace_step` names any state of the
   exchanges that made a snapshot, `axionomy_trace_find` names the first state
   where a balance condition holds, a `diff` resource compares two snapshots,
-  and accounts and balances page from the state tree. Run IDs, tags, refs and
+  and accounts and balances page from the state tree. Studies are runs too,
+  and no study is kept as JSON: the service reports each document's
+  trajectory written as paths (D-044), and MCP records its initial state as a
+  run of its own and its trace as a run forked from it, one step per exchange,
+  each under an `eco-` handle the study's summary lists. Every tool and
+  resource that takes an economy therefore steps through, diffs and branches
+  from a study's documents. The `mcp-studies` table keeps only a study's key
+  and its documents' handles; documents and frames are computed again from the
+  key when they are not in memory, and refused when they no longer replay the
+  runs the study recorded. Work-league's showcase study took a 135 MB store
+  file as JSON and takes 8.4 MB as runs. Run IDs, tags, refs and
   groups are store-wide names that would let one caller find another's
   snapshots, so MCP exposes only what a handle reaches until it has
   authentication; watch and actor views follow with phase 4.
@@ -404,7 +414,8 @@ Each phase is a validated commit or series of commits.
    and the time index it gives; every canonical problem recordable, with
    rollouts recorded as runs in a Monte Carlo group (done); rollouts and
    Monte Carlo episodes recording where they run, through `Apply` and
-   `Episodes` (done); studies recording their runs in the store; recording from
+   `Episodes` (done); studies recording their runs in the store (done for
+   MCP; the Studio server next); recording from
    inside search sessions, MPPI and RL; watch and actor views; Studio
    scrubbing from the store.
 5. **Many writers, one history:** stores written independently by any

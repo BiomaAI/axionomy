@@ -604,19 +604,49 @@ async fn a_search_observes_cancellation() {
     ));
 }
 
+fn maze_study() -> StudyRequest {
+    StudyRequest::new("maze".parse().unwrap())
+        .with_instance(InstanceProfile::Micro)
+        .with_strategy("a-star".parse().unwrap())
+}
+
+/// Studies a problem as `axionomy_problem_study` does, and gives its summary.
+async fn study(server: &AxionomyMcp, request: StudyRequest) -> Value {
+    let tasks = TaskManager::new();
+    let archive = server.archive.clone();
+    let task = tasks.spawn(TaskOptions::new(), move |context| {
+        Box::pin(study_problem(context, archive, request))
+    });
+    completed(terminal_task(&tasks, &task.task_id).await)
+}
+
+fn handle<T: std::str::FromStr<Err: std::fmt::Debug>>(value: &Value) -> T {
+    value.as_str().unwrap().parse().unwrap()
+}
+
+/// What the service reports of each document's trajectory, by document.
+#[derive(Default)]
+struct Trajectories(std::collections::BTreeMap<DocumentPath, (paths::Economy, paths::Trace)>);
+
+impl axionomy_service::StudyObserver for Trajectories {
+    fn progress(&mut self, _: ServiceProgress) {}
+
+    fn trajectory(
+        &mut self,
+        document: &DocumentPath,
+        initial: &paths::Economy,
+        trace: &paths::Trace,
+    ) {
+        self.0
+            .insert(document.clone(), (initial.clone(), trace.clone()));
+    }
+}
+
 #[tokio::test]
 async fn a_problem_study_returns_a_summary_and_pages_its_frames() {
     let server = AxionomyMcp::default();
-    let request = StudyRequest::new("maze".parse().unwrap())
-        .with_instance(InstanceProfile::Micro)
-        .with_strategy("a-star".parse().unwrap());
-    let tasks = TaskManager::new();
-    let archive = server.archive.clone();
-    let task_request = request.clone();
-    let task = tasks.spawn(TaskOptions::new(), move |context| {
-        Box::pin(study_problem(context, archive, task_request))
-    });
-    let summary = completed(terminal_task(&tasks, &task.task_id).await);
+    let request = maze_study();
+    let summary = study(&server, request.clone()).await;
     let study_id: StudyId = summary["study_id"].as_str().unwrap().parse().unwrap();
     let served = server.study(&study_id).await.unwrap().unwrap();
     assert_eq!(*served, ReferenceService.study(request).unwrap());
@@ -651,6 +681,117 @@ async fn a_problem_study_returns_a_summary_and_pages_its_frames() {
     let document = read(&server, &uri(Target::Document { study_id, document })).await;
     assert_eq!(document["frames"], frames);
     assert_eq!(document["document"]["frames"], json!([]));
+}
+
+#[tokio::test]
+async fn a_studys_documents_are_economies_that_replay_its_trajectories() {
+    let server = AxionomyMcp::default();
+    let summary = study(&server, maze_study()).await;
+    let mut reported = Trajectories::default();
+    ReferenceService
+        .study_with(&maze_study(), &StudyControl::default(), &mut reported)
+        .unwrap();
+    let documents = summary["documents"].as_array().unwrap();
+    assert_eq!(documents.len(), reported.0.len());
+    for document in documents {
+        let (initial, trace) = &reported.0[&handle::<DocumentPath>(&document["id"])];
+        let initial_id: EconomyId = handle(&document["initial_economy_id"]);
+        let final_id: EconomyId = handle(&document["final_economy_id"]);
+        assert_eq!(document["frames"], trace.exchanges().len());
+
+        let start = server.economy(&initial_id).await.unwrap();
+        assert_eq!(start.record.parent, None);
+        assert_eq!(start.state.root(), State::new(initial.clone()).root());
+
+        // The final economy is the trace applied to the initial one: its
+        // parent, its exchanges, and the state replaying them reaches.
+        let end = server.economy(&final_id).await.unwrap();
+        assert_eq!(end.record.parent.as_ref(), Some(&initial_id));
+        assert!(
+            end.receipts
+                .iter()
+                .map(paths::Receipt::exchange)
+                .eq(trace.exchanges())
+        );
+        let replayed = initial.replayed(trace).unwrap();
+        assert_eq!(end.state.root(), State::new(replayed).root());
+
+        // It is an ordinary economy: replaying the trace on the initial
+        // economy is the operation that made it, and every step is a state.
+        let again = replay(&server, &initial_id, trace.exchanges().to_vec()).await;
+        assert_eq!(id(&again), final_id);
+        assert_eq!(again.value["deduplicated"], true);
+        let halfway = trace.exchanges().len() / 2;
+        let stepped = step(&server, &final_id, halfway).await;
+        let prefix: paths::Trace = trace.exchanges()[..halfway].iter().cloned().collect();
+        let root = State::new(initial.replayed(&prefix).unwrap()).root();
+        assert_eq!(stepped.value["root"], root.to_hex().as_str());
+    }
+}
+
+#[tokio::test]
+async fn a_study_keeps_its_key_and_handles_and_computes_its_views_again() {
+    let server = AxionomyMcp::default();
+    let summary = study(&server, maze_study()).await;
+    let study_id: StudyId = handle(&summary["study_id"]);
+
+    // What is kept is the summary without the study's handle: no views.
+    let bytes = server.archive.study_bytes(&study_id).unwrap();
+    assert!(serde_json::from_slice::<axionomy_service::Study>(&bytes).is_err());
+    let mut kept: Value = serde_json::from_slice(&bytes).unwrap();
+    let mut expected = summary.clone();
+    expected.as_object_mut().unwrap().remove("study_id");
+    assert_eq!(kept, expected);
+
+    // A server with nothing in memory computes the study again from its key
+    // and serves the same documents and frames.
+    let document: DocumentPath = handle(&summary["selected_document"]);
+    let targets = [
+        Target::Study {
+            study_id: study_id.clone(),
+        },
+        Target::Document {
+            study_id: study_id.clone(),
+            document: document.clone(),
+        },
+        Target::Frames {
+            study_id: study_id.clone(),
+            document: document.clone(),
+        },
+    ];
+    let restarted = AxionomyMcp::new(server.archive.store()).unwrap();
+    assert!(restarted.archive.cached_study(&study_id).is_none());
+    for target in &targets {
+        assert_eq!(
+            read(&restarted, &uri(target.clone())).await,
+            read(&server, &uri(target.clone())).await
+        );
+    }
+
+    // Trajectories that differ from those recorded are refused: the study
+    // was recorded by another version.
+    let stepped = kept["documents"][0]["final_economy_id"].clone();
+    kept["documents"][0]["final_economy_id"] = kept["documents"][1]["final_economy_id"].clone();
+    kept["documents"][1]["final_economy_id"] = stepped;
+    server
+        .archive
+        .replace_study_bytes(&study_id, serde_json::to_vec(&kept).unwrap())
+        .await;
+    let stale = AxionomyMcp::new(server.archive.store()).unwrap();
+    let error = stale
+        .read(&Address::parse(&uri(targets[1].clone())).unwrap())
+        .await
+        .unwrap_err();
+    assert!(
+        error.message.contains("another version"),
+        "{}",
+        error.message
+    );
+    // Its key and handles are still read as they were kept.
+    assert_eq!(
+        read(&stale, &uri(targets[0].clone())).await["documents"],
+        kept["documents"]
+    );
 }
 
 #[tokio::test]

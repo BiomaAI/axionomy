@@ -72,6 +72,31 @@ impl RateEntries {
     }
 }
 
+/// How many entries authoring `economy` from nothing takes, counted as
+/// [`EconomyEntries::len`] counts a call's.
+pub(crate) fn entries(economy: &paths::Economy) -> usize {
+    let accounts: usize = economy
+        .accounts()
+        .map(|(_, account)| 1 + account.balances().len())
+        .sum();
+    let rates: usize = economy
+        .rate_ids()
+        .filter_map(|id| economy.rate(id))
+        .map(|rate| {
+            1 + crate::read::amounts(rate).count()
+                + rate.distinct_roles().count()
+                + rate.conditions().len()
+                + rate.opened_roles().count()
+                + rate.closed_roles().count()
+        })
+        .sum();
+    let invariants: usize = economy
+        .invariants()
+        .map(|invariant| 1 + invariant.weights().count())
+        .sum();
+    accounts + rates + invariants
+}
+
 /// The economy `base` becomes with `entries` added; `None` starts from an empty
 /// economy.
 pub(crate) fn extend(

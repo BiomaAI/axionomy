@@ -72,6 +72,7 @@ pub(super) fn build(
     for (strategy, policy) in [("direct", Policy::Direct), ("reliable", Policy::Reliable)] {
         let rollout = logistics::run_policy(&mut initial.clone(), policy, study.seed);
         let mut view = document(
+            progress,
             DocumentSpec {
                 problem: "logistics",
                 strategy,
@@ -164,6 +165,7 @@ pub(super) fn build(
         }
     );
     let mut mcts = document(
+        progress,
         DocumentSpec {
             problem: "logistics",
             strategy: "mcts",

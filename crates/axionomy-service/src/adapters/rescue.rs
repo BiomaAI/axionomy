@@ -11,10 +11,11 @@ use axionomy_view::{
 pub(super) fn build(
     study: &StudyKey,
     descriptor: &ProblemDescriptor,
+    progress: &mut ProgressSink<'_>,
 ) -> Result<Study, ServiceError> {
     let profile = study.instance;
     if !matches!(profile, InstanceProfile::Micro) {
-        return incident::build(study, descriptor, profile);
+        return incident::build(study, descriptor, profile, progress);
     }
     let model = match profile {
         InstanceProfile::Micro => rescue::uniform_uncertain(),
@@ -41,6 +42,7 @@ pub(super) fn build(
         let rollout = rescue::run_sampled_policy(&mut model.clone(), &sample, policy)
             .ok_or_else(|| problem_error("rescue", "sampled rollout failed"))?;
         let mut view = document(
+            progress,
             DocumentSpec { problem: "rescue", strategy, title: if policy == Policy::ObserveThenFollow { "Rescue · sense, then move" } else { "Rescue · go north immediately" }, description: if policy == Policy::ObserveThenFollow { "The agent spends the sensor, receives a reading, and follows it." } else { "The agent commits north without looking. In this scenario the survivor is south, and the replay keeps the failure." }, source_label: "Uncertain rescue" },
             &model, &rescue::goal(), rollout.trace(), vec![
                 ObjectiveView { key: slug("success"), label: "Succeeded".into(), direction: ObjectiveDirectionView::Maximize, value: u8::from(rollout.succeeded()).to_string() },

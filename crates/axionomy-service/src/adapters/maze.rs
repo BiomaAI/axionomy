@@ -95,6 +95,7 @@ pub(super) fn build(
             .replayed(&trace)
             .map_err(|error| problem_error("maze", error))?;
         let mut document = document(
+            progress,
             DocumentSpec {
                 problem: "maze",
                 strategy,
