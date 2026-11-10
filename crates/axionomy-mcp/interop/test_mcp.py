@@ -473,6 +473,35 @@ async def test_a_client_steps_into_a_study_and_tries_another_exchange(url: str) 
         ]
 
 
+async def test_a_frames_exchange_is_tried_in_the_studys_economy(url: str) -> None:
+    async with Client(url, extensions=[Tasks()]) as client:
+        result = await client.call_tool(
+            "axionomy_problem_study",
+            {"problem": "maze", "instance": "micro", "strategy": "a-star"},
+        )
+        summary = result.structured_content
+        selected = next(doc for doc in summary["documents"] if doc["id"] == summary["selected_document"])
+        final_id = selected["final_economy_id"]
+        document = await page(client, f"axionomy://study/{summary['study_id']}/documents/{selected['id']}")
+        assert document["final_economy_id"] == final_id
+        frames = (await page(client, f"axionomy://study/{summary['study_id']}/documents/{selected['id']}/frames"))["items"]
+        assert frames
+
+        # Frame i shows step i + 1 of the final economy, and its exchange is
+        # written as that economy writes it: applied to step i, it makes the
+        # economy of step i + 1.
+        for i, frame in enumerate(frames):
+            assert (frame["step"], frame["view"]["index"]) == (i + 1, i)
+            assert not frame["exchange"]["rate"].startswith("maze/")
+            before = await step(client, final_id, i)
+            tried = await client.call_tool("axionomy_exchange_apply", {"economy_id": before["economy_id"], "exchange": frame["exchange"]})
+            assert not tried.is_error, tried.structured_content
+            after = await step(client, final_id, i + 1)
+            diff = await page(client, f"axionomy://economy/{tried.structured_content['economy_id']}/diff/{after['economy_id']}")
+            assert diff["items"] == []
+            assert tried.structured_content["root"] == after["root"]
+
+
 async def test_bad_resources_are_invalid_params(url: str) -> None:
     async with Client(url) as client:
         economy_id = await create(client, ECONOMY)

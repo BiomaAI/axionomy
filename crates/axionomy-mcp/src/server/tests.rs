@@ -678,9 +678,56 @@ async fn a_problem_study_returns_a_summary_and_pages_its_frames() {
         first["items"].as_array().unwrap().len() as u64,
         frames.min(resources::PAGE_FRAMES as u64)
     );
-    let document = read(&server, &uri(Target::Document { study_id, document })).await;
-    assert_eq!(document["frames"], frames);
-    assert_eq!(document["document"]["frames"], json!([]));
+    let entry = summary["documents"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|entry| entry["id"] == document.as_str())
+        .unwrap();
+    let view = read(&server, &uri(Target::Document { study_id, document })).await;
+    assert_eq!(view["frames"], frames);
+    assert_eq!(view["document"]["frames"], json!([]));
+    assert_eq!(view["initial_economy_id"], entry["initial_economy_id"]);
+    assert_eq!(view["final_economy_id"], entry["final_economy_id"]);
+}
+
+#[tokio::test]
+async fn a_frames_exchange_applies_to_the_economy_of_the_step_before_it() {
+    let server = AxionomyMcp::default();
+    let summary = study(&server, maze_study()).await;
+    let study_id: StudyId = handle(&summary["study_id"]);
+    for entry in summary["documents"].as_array().unwrap() {
+        let final_id: EconomyId = handle(&entry["final_economy_id"]);
+        let trace = server.economy(&final_id).await.unwrap();
+        let frames = Target::Frames {
+            study_id: study_id.clone(),
+            document: handle(&entry["id"]),
+        };
+        let mut page_uri = frames.uri();
+        let mut index = 0;
+        loop {
+            let page = read(&server, &page_uri).await;
+            for frame in page["items"].as_array().unwrap() {
+                assert_eq!(frame["step"], index + 1);
+                assert_eq!(frame["view"]["index"], index);
+                let exchange: paths::Exchange =
+                    serde_json::from_value(frame["exchange"].clone()).unwrap();
+                assert_eq!(&exchange, trace.receipts[index].exchange());
+
+                // Frame i's exchange takes step i of the trace to step i + 1.
+                let before = id(&step(&server, &final_id, index).await);
+                let tried = apply(&server, &before, exchange).await;
+                let after = step(&server, &final_id, index + 1).await;
+                assert_eq!(tried.value["root"], after.value["root"]);
+                index += 1;
+            }
+            let Some(cursor) = page["nextCursor"].as_str() else {
+                break;
+            };
+            page_uri = frames.page_uri(cursor);
+        }
+        assert_eq!(entry["frames"], index);
+    }
 }
 
 #[tokio::test]

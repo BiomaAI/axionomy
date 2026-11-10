@@ -4,7 +4,7 @@ use axionomy::{InvariantPath, ParameterPath};
 
 use crate::{
     handles::{AssessmentId, EconomyId, StudyId},
-    messages::{Direction, EconomyCounts, StateRoot, StudySummary},
+    messages::{Direction, DocumentSummary, EconomyCounts, StateRoot, StudySummary},
     resources::{Address, PAGE_FRAMES, PAGE_ROWS, Page, Target, page, span_page},
     server::{AxionomyMcp, assessment_lines, counts, receipt_lines},
     store::{Loaded, Origin, StudyRecord},
@@ -16,6 +16,7 @@ use axionomy::{
 };
 use axionomy_service::{Study, StudyControl};
 use axionomy_store::state;
+use axionomy_view::{DocumentPath, ExchangeFrame};
 use rmcp::{
     ErrorData as McpError,
     model::{CompleteRequestParams, CompleteResult, CompletionInfo},
@@ -71,20 +72,45 @@ impl AxionomyMcp {
             }
             Target::Document { study_id, document } => {
                 let study = self.study(study_id).await?.ok_or_else(not_found)?;
-                let document = study.document(document).ok_or_else(not_found)?;
-                let frames = document.frames.len();
-                let mut document = document.clone();
-                document.frames = Vec::new();
-                json(&DocumentView { frames, document })
+                let view = study.document(document).ok_or_else(not_found)?;
+                let economies = self.document_economies(study_id, document)?;
+                let mut view = view.clone();
+                let frames = std::mem::take(&mut view.frames).len();
+                json(&DocumentView {
+                    initial_economy_id: &economies.initial_economy_id,
+                    final_economy_id: &economies.final_economy_id,
+                    frames,
+                    document: view,
+                })
             }
             Target::Frames { study_id, document } => {
                 let study = self.study(study_id).await?.ok_or_else(not_found)?;
-                let document = study.document(document).ok_or_else(not_found)?;
-                json(&page(
-                    address,
-                    document.frames.iter().enumerate(),
-                    PAGE_FRAMES,
-                )?)
+                let view = study.document(document).ok_or_else(not_found)?;
+                let economies = self.document_economies(study_id, document)?;
+                // The final economy's receipts are the document's trace, one
+                // exchange per frame, written as its economies write them.
+                let last = self
+                    .stored(&economies.final_economy_id)
+                    .await?
+                    .ok_or_else(not_found)?;
+                if last.receipts.len() != view.frames.len() {
+                    return Err(internal(format!(
+                        "document `{document}` shows {} frames, but its final economy was made by {} exchanges",
+                        view.frames.len(),
+                        last.receipts.len()
+                    )));
+                }
+                let frames = view.frames.iter().zip(&last.receipts).enumerate().map(
+                    |(index, (frame, receipt))| {
+                        let item = FrameItem {
+                            step: index + 1,
+                            exchange: receipt.exchange(),
+                            view: frame,
+                        };
+                        (index, item)
+                    },
+                );
+                json(&page(address, frames, PAGE_FRAMES)?)
             }
             Target::Economy { economy_id }
             | Target::Accounts { economy_id, .. }
@@ -233,6 +259,26 @@ impl AxionomyMcp {
 
     fn study_record(&self, study_id: &StudyId) -> Result<Option<StudyRecord>, McpError> {
         self.archive.study_record(study_id).map_err(internal)
+    }
+
+    /// The economies a study recorded for one of its documents.
+    fn document_economies(
+        &self,
+        study_id: &StudyId,
+        document: &DocumentPath,
+    ) -> Result<DocumentSummary, McpError> {
+        self.study_record(study_id)?
+            .and_then(|record| {
+                record
+                    .documents
+                    .into_iter()
+                    .find(|summary| &summary.id == document)
+            })
+            .ok_or_else(|| {
+                internal(format!(
+                    "study `{study_id}` serves document `{document}` but recorded no economies for it"
+                ))
+            })
     }
 
     /// A study's views: from memory, or computed again from its key and
@@ -615,9 +661,32 @@ struct AssessmentView<'a> {
     lines: usize,
 }
 
+/// A study document without its frames, and the economies it runs between.
 #[derive(Serialize)]
-struct DocumentView<T> {
+struct DocumentView<'a, T> {
+    /// The economy the document starts from.
+    initial_economy_id: &'a EconomyId,
+    /// The economy its exchanges reach: step N of its trace is the economy
+    /// after the first N, the one frame N − 1 shows.
+    final_economy_id: &'a EconomyId,
     /// Frames are paged through the document's `frames` resource.
     frames: usize,
     document: T,
+}
+
+/// One frame of a study document: its exchange as the document's economies
+/// take it, and the frame as Studio shows it.
+#[derive(Serialize)]
+struct FrameItem<'a> {
+    /// The step of the document's trace this frame shows: `axionomy_trace_step`
+    /// with this step on the document's `final_economy_id` names the economy
+    /// `view.after` shows. One more than `view.index`.
+    step: usize,
+    /// The frame's exchange in the economy's own paths, as
+    /// `axionomy_exchange_apply` takes it: applied to step `step − 1` of the
+    /// final economy's trace, it makes step `step`.
+    exchange: &'a paths::Exchange,
+    /// The frame as Studio shows it, keyed for display under the problem's
+    /// name; act with `exchange` and the economies' resources instead.
+    view: &'a ExchangeFrame,
 }

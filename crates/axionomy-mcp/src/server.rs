@@ -68,10 +68,12 @@ resources: tool results link to them, paths appear in their URIs as is (an accou
 .../accounts/agents/7/wallet), every list is paged with a cursor, and a page never changes. \
 Compare two snapshots with their diff resource; equal roots mean equal states. \
 axionomy_problem_study studies a built-in problem, and each of its documents is two economies: \
-initial_economy_id, where it starts, and final_economy_id, where its exchanges reach. Step into \
-the final one with axionomy_trace_step, try another exchange from there, and diff the result \
-against the study's next step. Snapshots are kept in the server's store, across restarts when it \
-keeps one on disk.";
+initial_economy_id, where it starts, and final_economy_id, where its exchanges reach. Frame i of \
+a document shows step i + 1 of final_economy_id, and carries its exchange as that economy writes \
+it: axionomy_trace_step with step i on final_economy_id, then axionomy_exchange_apply with the \
+frame's exchange, reaches step i + 1. Step into the final economy, try another exchange from \
+there, and diff the result against the study's next step. Snapshots are kept in the server's \
+store, across restarts when it keeps one on disk.";
 
 #[derive(Clone)]
 pub struct AxionomyMcp {

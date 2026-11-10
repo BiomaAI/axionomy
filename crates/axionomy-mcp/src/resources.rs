@@ -167,8 +167,8 @@ pub(crate) fn templates() -> Vec<ResourceTemplate> {
         ("axionomy://assessment/{assessment_id}", "assessment", "Assessment", "An exchange checked against a snapshot: its status, issues and how many lines explain it."),
         ("axionomy://assessment/{assessment_id}/lines{?cursor}", "assessment-lines", "Assessment lines", "What each account lacks for an infeasible exchange, or what an applicable one would move."),
         ("axionomy://study/{study_id}", "study", "Study", "A finished study of a problem: its key and documents."),
-        ("axionomy://study/{study_id}/documents/{document}", "document", "Study document", "One outcome's document without its frames: initial state, objectives and thinking."),
-        ("axionomy://study/{study_id}/documents/{document}/frames{?cursor}", "frames", "Study frames", "A document's replay frames in order."),
+        ("axionomy://study/{study_id}/documents/{document}", "document", "Study document", "One document of a study, a strategy's trajectory, without its frames: its initial_economy_id and final_economy_id, how many frames it has, and its view: initial balances, objectives and thinking, keyed for display."),
+        ("axionomy://study/{study_id}/documents/{document}/frames{?cursor}", "frames", "Study frames", "A document's frames in order, one per exchange of its trajectory. Frame i (its `step` is i + 1, its `view.index` is i) shows the economy axionomy_trace_step names at step i + 1 on the document's final_economy_id. Its `exchange` is written in that economy's own paths: apply it to step i with axionomy_exchange_apply and you get step i + 1. Its `view` is how Studio shows the frame, keyed for display."),
     ]
     .into_iter()
     .map(|(template, name, title, description)| {

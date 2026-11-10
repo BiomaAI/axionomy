@@ -147,10 +147,31 @@ also two ordinary economies, listed in the study's summary:
 Everything a client does with an economy, it does with a study. The final
 economy's `exchanges` resource is the document's trace; `axionomy_trace_step`
 with step `N` names the state after its first `N` exchanges, the one frame
-`N − 1` shows; `axionomy_trace_find` finds where a balance condition starts. To
-try something else from step `N`, assess or apply another exchange to that
-state, or replay another trace from it, and compare the result with the
-study's own step `N + 1` through the `diff` resource:
+`N − 1` shows; `axionomy_trace_find` finds where a balance condition starts.
+The document resource carries both economies' handles too.
+
+A frame is the exchange that makes its step and the view Studio draws of it:
+
+```json
+{
+  "step": 1,
+  "exchange": {
+    "rate": "move/start/key-room/2/false",
+    "bindings": { "actor": "agent", "environment": "world" },
+    "units": "1"
+  },
+  "view": { "index": 0, "exchange": { "rate": { "key": "maze/rate/move/start/key-room/2/false", "label": "…" }, "…": "…" }, "after": "…" }
+}
+```
+
+Its `exchange` is written in the economy's own paths, exactly as
+`axionomy_exchange_apply` takes it: applied to step `step − 1` of the final
+economy's trace, it makes step `step`. The `view` keys accounts, assets and
+rates for display, under the problem's name; act with `exchange` and the
+economies' resources instead. To try something else from step `N`, assess or
+apply another exchange to that state, or replay another trace from it, and
+compare the result with the study's own step `N + 1` through the `diff`
+resource:
 
 ```text
 final_economy_id + N ─────── trace_step ──────> study's state after N exchanges
