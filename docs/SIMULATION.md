@@ -43,25 +43,36 @@ is that overlaps stay few and no Axionomy term means two things.
 | --- | --- |
 | Economy (`World` in a problem) | The authoritative state; the only thing that changes |
 | Exchange | One firing of a rate |
+| Receipt | What the kernel returns for an exchange it accepted: what moved, opened and closed |
 | Proposal | One exchange offered for applying; never a trace |
 | Trace | Exchanges in order |
 | Replay | Applying a trace, all of it or none of it: `replayed` gives the economy after it, `replay` applies it in place |
 | Run | A trajectory: a trace from a state, kept in memory or recorded in the store |
+| Fork | An independent economy starting from a chosen state of a run (a clone, constant-time) |
+| Counterfactual | A forked run that examines an alternative to what the run did |
 | Rollout | A run a policy drives, to a goal, a stop or a horizon |
 | Episode | One rollout of a repeated experiment, such as one Monte Carlo sample |
 | Group | The runs produced together, such as one Monte Carlo estimate's episodes |
 | Policy | How an actor chooses; a problem's `Policy` enum names its policies |
 | Decision | One choice: a problem's `decision(view, actor, policy)` |
-| Thinking | What a policy does when it simulates before it chooses; a study keeps its search's observations as each document's `thinking` |
+| Thinking | What a policy does when it simulates before it chooses, on forks; a study keeps its search's observations as each document's `thinking` |
+| Learning | Updating a policy from experience; done outside Axionomy, by the Autonomy Harness ([CONTINUOUS_AGENT_SYSTEMS.md](CONTINUOUS_AGENT_SYSTEMS.md)) |
 | Nature response | What happens without anyone choosing: an outcome resolves, a vehicle arrives, a deadline expires; a problem's `nature_response(world)` |
 | Tick | The clock advancing |
 | Horizon | The most steps a rollout may take |
-| Study | One request to Studio, MCP or the CLI: a problem, an instance, strategies, a seed and a budget. A study produces runs and the evidence of how they were found |
+| Study | One request to investigate or compare outcomes, through Studio, MCP or the CLI: a problem, an instance, strategies, a seed and a budget. A study produces runs and the evidence of how they were found |
 | Path | An identifier's one written form, such as `edge/key-room/gate`, and its order. Typed identifiers derive `Identifier`, so they are written and ordered as their paths, and a typed run written down reads as a `paths` run that MCP can explore (D-044) |
 
 A study is not called a job, session, experiment or scenario because each
 already means something else here: work-league's workers claim jobs, search
 has sessions, Monte Carlo runs experiments, and Nature encodes scenarios.
+
+None of these names is a mode or a separate execution system. A game or a
+simulation is an application built from the same operations: it applies
+exchanges, forks, rolls out and records runs, and schedules that work in its
+own loop. `axionomy_study::Problem` is an entry in the catalog of problems
+one can study, not the way an application runs; a continuous application
+need not wrap its lifetime in a study.
 
 ## Step 1: simulations run through `rollout::run` (done)
 
