@@ -140,8 +140,8 @@ impl MctsProgress {
 }
 
 /// Random rollout action selection with deterministic seeded exploration.
-pub fn random_action<State, Action>(
-    _: &State,
+pub fn random_action<World, Action>(
+    _: &World,
     actions: &[Action],
     random: &mut SeededSampler,
 ) -> Option<Action>

@@ -155,14 +155,14 @@ struct Recorded {
 }
 
 impl Episodes<logistics::Ontology, logistics::Policy, logistics::MissionRollout> for Recorded {
-    type Run = Recorder<logistics::Ontology>;
+    type World = Recorder<logistics::Ontology>;
 
     fn begin(
         &mut self,
         policy: &logistics::Policy,
         _: usize,
         initial: Economy<logistics::Ontology>,
-    ) -> Self::Run {
+    ) -> Self::World {
         let store = &self.store;
         self.groups
             .entry(*policy)
@@ -180,13 +180,13 @@ impl Episodes<logistics::Ontology, logistics::Policy, logistics::MissionRollout>
         &mut self,
         policy: &logistics::Policy,
         sample: usize,
-        run: Self::Run,
+        world: Self::World,
         rollout: &logistics::MissionRollout,
     ) {
         let end = self.groups.get_mut(policy).unwrap().add(
             sample as u64,
             Some(sample as u64),
-            run,
+            world,
             BTreeMap::from([(
                 "elapsed-time".parse().unwrap(),
                 rollout.elapsed_time() as f64,
