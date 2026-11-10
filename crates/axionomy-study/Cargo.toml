@@ -1,5 +1,5 @@
 [package]
-name = "axionomy-service"
+name = "axionomy-study"
 description = "Interface-neutral study runtime for Axionomy: problems, registries, control, progress and replay-derived studies"
 readme = "README.md"
 version.workspace = true

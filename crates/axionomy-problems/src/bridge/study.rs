@@ -6,9 +6,9 @@ use crate::{
     support::{ProblemCopy, StrategyCopy, problem},
 };
 use axionomy::{Exchange, Quantity, path};
-use axionomy_service::{
+use axionomy_study::{
     Capability, DocumentSpec, InstanceProfile, Problem, ProblemDescriptor, ProblemFamily,
-    ProblemPath, ProposalSpec, ServiceError, StudyKey, StudyProgress, document, problem_error,
+    ProblemPath, ProposalSpec, StudyError, StudyKey, StudyProgress, document, problem_error,
     proposal, telemetry,
 };
 use axionomy_view::{
@@ -95,7 +95,7 @@ impl Problem for Bridge {
         &self,
         key: &StudyKey,
         progress: &mut StudyProgress<'_>,
-    ) -> Result<Vec<ViewDocument>, ServiceError> {
+    ) -> Result<Vec<ViewDocument>, StudyError> {
         build(key, progress)
     }
 }
@@ -103,7 +103,7 @@ impl Problem for Bridge {
 fn build(
     study: &StudyKey,
     progress: &mut StudyProgress<'_>,
-) -> Result<Vec<ViewDocument>, ServiceError> {
+) -> Result<Vec<ViewDocument>, StudyError> {
     let profile = study.instance;
     let initial = match profile {
         InstanceProfile::Micro => bridge::initial(),
@@ -301,7 +301,7 @@ fn pareto_trace(
     result: &bridge::ParetoResult,
     favored: AgentId,
     problem: &ProblemPath,
-) -> Result<axionomy::Trace<bridge::Ontology>, ServiceError> {
+) -> Result<axionomy::Trace<bridge::Ontology>, StudyError> {
     result
         .front()
         .entries()
@@ -400,7 +400,7 @@ fn front_view(result: &bridge::ParetoResult, selected: &ViewDocument) -> ParetoF
 mod tests {
     use super::*;
     use crate::registry;
-    use axionomy_service::StudyRequest;
+    use axionomy_study::StudyRequest;
     #[test]
     fn exact_front_pairs_each_travelers_priority_with_their_credit() {
         let study = registry()

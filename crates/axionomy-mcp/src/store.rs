@@ -19,8 +19,8 @@ use crate::{
 };
 use axionomy::paths;
 use axionomy::paths::Paths;
-use axionomy_service::{Study, StudyKey};
 use axionomy_store::{Checkpoints, Durability, Point, Reader, Store, StoreError};
+use axionomy_study::{Study, StudyKey};
 use axionomy_view::DocumentPath;
 
 /// An economy's state: MCP's economies are identified by paths.

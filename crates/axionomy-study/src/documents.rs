@@ -2,7 +2,7 @@
 //! through the core: the document helpers every problem uses, and the
 //! traces it can find by simulation or on a Pareto front.
 
-use crate::{ProblemPath, ServiceError, StudyProgress, problem::renamed, problem_error};
+use crate::{ProblemPath, StudyError, StudyProgress, problem::renamed, problem_error};
 use axionomy::{Economy, Goal, Ontology, Trace};
 use axionomy_search::{
     pareto::{ParetoEntry, ParetoSearchResult},
@@ -194,7 +194,7 @@ pub fn simulate<O: Ontology>(
     problem: &ProblemPath,
     initial: &Economy<O>,
     run: impl FnOnce(&mut Economy<O>) -> RolloutResult<O>,
-) -> Result<(Trace<O>, Economy<O>), ServiceError> {
+) -> Result<(Trace<O>, Economy<O>), StudyError> {
     let mut world = initial.clone();
     let result = run(&mut world);
     if !result.termination().is_terminal() {
@@ -217,7 +217,7 @@ pub fn frontier_trace<O: Ontology, K: Eq>(
     first: (K, ObjectiveDirectionView),
     second: (K, ObjectiveDirectionView),
     problem: &ProblemPath,
-) -> Result<Trace<O>, ServiceError> {
+) -> Result<Trace<O>, StudyError> {
     // Smaller ranks first: a maximized value counts down from the largest.
     let rank = |entry: &ParetoEntry<Trace<O>, K, u64>,
                 (key, direction): &(K, ObjectiveDirectionView)| {

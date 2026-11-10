@@ -20,7 +20,7 @@ mod support;
 
 use axionomy::{ApplyError, Ontology, ReplayError};
 use axionomy_search::{sampling::SamplingError, tree::TreeSearchError};
-use axionomy_service::{DuplicateProblem, Registry};
+use axionomy_study::{DuplicateProblem, Registry};
 
 /// Every canonical problem, in catalog order: the registry Axionomy's
 /// front ends study by default.

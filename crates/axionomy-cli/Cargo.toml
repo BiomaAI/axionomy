@@ -1,6 +1,6 @@
 [package]
 name = "axionomy-cli"
-description = "Command-line interface for Axionomy services and reference problems"
+description = "Command-line interface for Axionomy studies and reference problems"
 readme = "README.md"
 version.workspace = true
 authors.workspace = true
@@ -11,7 +11,7 @@ rust-version.workspace = true
 
 [dependencies]
 axionomy-problems.workspace = true
-axionomy-service.workspace = true
+axionomy-study.workspace = true
 clap.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true

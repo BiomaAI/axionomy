@@ -1,7 +1,7 @@
 //! Problems, and the registry that studies them.
 
 use crate::{
-    ProblemDescriptor, ProblemPath, ServiceError, StrategyPath, Study, StudyControl, StudyKey,
+    ProblemDescriptor, ProblemPath, StrategyPath, Study, StudyControl, StudyError, StudyKey,
     StudyObserver, StudyProgress, StudyRequest, Work, documents::series,
 };
 use axionomy::{
@@ -32,7 +32,7 @@ pub trait Problem: Send + Sync {
         &self,
         key: &StudyKey,
         progress: &mut StudyProgress<'_>,
-    ) -> Result<Vec<ViewDocument>, ServiceError>;
+    ) -> Result<Vec<ViewDocument>, StudyError>;
 }
 
 /// A problem registered under a key the registry already holds.
@@ -105,17 +105,17 @@ impl Registry {
 
     /// Decides a request's instance and strategy, checking the problem
     /// offers them.
-    pub fn resolve(&self, request: &StudyRequest) -> Result<StudyKey, ServiceError> {
+    pub fn resolve(&self, request: &StudyRequest) -> Result<StudyKey, StudyError> {
         let problem = self
             .problem(&request.problem)
-            .ok_or_else(|| ServiceError::UnknownProblem(request.problem.clone()))?;
+            .ok_or_else(|| StudyError::UnknownProblem(request.problem.clone()))?;
         let instance = request.instance.unwrap_or(problem.default_instance);
         if !problem
             .instances
             .iter()
             .any(|known| known.profile == instance)
         {
-            return Err(ServiceError::UnknownInstance {
+            return Err(StudyError::UnknownInstance {
                 problem: problem.key.clone(),
                 instance,
             });
@@ -125,7 +125,7 @@ impl Registry {
             .clone()
             .unwrap_or_else(|| problem.default_strategy.clone());
         if !problem.strategies.iter().any(|known| known.key == strategy) {
-            return Err(ServiceError::UnknownStrategy {
+            return Err(StudyError::UnknownStrategy {
                 problem: problem.key.clone(),
                 strategy,
             });
@@ -139,7 +139,7 @@ impl Registry {
         })
     }
 
-    pub fn study(&self, request: StudyRequest) -> Result<Study, ServiceError> {
+    pub fn study(&self, request: StudyRequest) -> Result<Study, StudyError> {
         self.study_with(&request, &StudyControl::default(), &mut |_| {})
     }
 
@@ -150,12 +150,12 @@ impl Registry {
         request: &StudyRequest,
         control: &StudyControl,
         observer: &mut dyn StudyObserver,
-    ) -> Result<Study, ServiceError> {
+    ) -> Result<Study, StudyError> {
         control.checkpoint()?;
         let key = self.resolve(request)?;
         let problem = self
             .find(&key.problem)
-            .ok_or_else(|| ServiceError::UnknownProblem(key.problem.clone()))?;
+            .ok_or_else(|| StudyError::UnknownProblem(key.problem.clone()))?;
         let descriptor = problem.descriptor();
         let mut progress = StudyProgress::new(key.problem.clone(), control, observer);
         let instance = descriptor
@@ -231,12 +231,12 @@ fn assemble(
     key: &StudyKey,
     descriptor: &ProblemDescriptor,
     mut documents: Vec<ViewDocument>,
-) -> Result<Study, ServiceError> {
+) -> Result<Study, StudyError> {
     let instance = descriptor
         .instances
         .iter()
         .find(|instance| instance.profile == key.instance)
-        .ok_or_else(|| ServiceError::UnknownInstance {
+        .ok_or_else(|| StudyError::UnknownInstance {
             problem: key.problem.clone(),
             instance: key.instance,
         })?
@@ -248,13 +248,13 @@ fn assemble(
             .chain(document.frames.iter().map(|frame| &frame.after))
         {
             if let Some(scene) = &snapshot.scene {
-                scene.validate().map_err(|error| ServiceError::Problem {
+                scene.validate().map_err(|error| StudyError::Problem {
                     problem: descriptor.key.clone(),
                     message: format!("invalid scene at snapshot {}: {error}", snapshot.index),
                 })?;
                 scene
                     .validate_evidence(&snapshot.accounts)
-                    .map_err(|error| ServiceError::Problem {
+                    .map_err(|error| StudyError::Problem {
                         problem: descriptor.key.clone(),
                         message: format!(
                             "invalid scene evidence at snapshot {}: {error}",
@@ -264,7 +264,7 @@ fn assemble(
             }
         }
         if document.frames.iter().any(|frame| frame.cues.is_empty()) {
-            return Err(ServiceError::Problem {
+            return Err(StudyError::Problem {
                 problem: descriptor.key.clone(),
                 message: "accepted transition omitted its explanatory frame cue".into(),
             });
@@ -305,7 +305,7 @@ fn assemble(
         .iter()
         .any(|document| document.id == selected_document)
     {
-        return Err(ServiceError::Problem {
+        return Err(StudyError::Problem {
             problem: descriptor.key.clone(),
             message: format!("strategy `{}` produced no document", key.strategy),
         });
@@ -321,8 +321,8 @@ fn assemble(
 }
 
 /// The strategy a study asks for, read as the problem's own strategy type.
-pub fn strategy<S: Segments>(study: &StudyKey) -> Result<S, ServiceError> {
-    path::read(&study.strategy).map_err(|_| ServiceError::UnknownStrategy {
+pub fn strategy<S: Segments>(study: &StudyKey) -> Result<S, StudyError> {
+    path::read(&study.strategy).map_err(|_| StudyError::UnknownStrategy {
         problem: study.problem.clone(),
         strategy: study.strategy.clone(),
     })
@@ -342,8 +342,8 @@ pub(crate) fn renamed<K, J>(path: &Path<K>) -> Path<J> {
 }
 
 /// The error a study of `problem` fails with: why it could not be studied.
-pub fn problem_error(problem: &ProblemPath, error: impl ToString) -> ServiceError {
-    ServiceError::Problem {
+pub fn problem_error(problem: &ProblemPath, error: impl ToString) -> StudyError {
+    StudyError::Problem {
         problem: problem.clone(),
         message: error.to_string(),
     }

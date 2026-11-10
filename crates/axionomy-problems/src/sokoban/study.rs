@@ -10,10 +10,10 @@ use axionomy_search::{
     AStarSession, BfsSession, GraphSearchProgress,
     session::{Continue, WorkBudget},
 };
-use axionomy_service::{
+use axionomy_study::{
     Capability, DocumentSpec, InstanceProfile, Problem, ProblemDescriptor, ProblemFamily,
-    ProblemPath, ProposalSpec, ServiceError, StudyKey, StudyProgress, Work, document,
-    problem_error, proposal, strategy, telemetry,
+    ProblemPath, ProposalSpec, StudyError, StudyKey, StudyProgress, Work, document, problem_error,
+    proposal, strategy, telemetry,
 };
 use axionomy_view::{SearchObservationKindView, TelemetryKindView, ViewDocument};
 
@@ -71,7 +71,7 @@ impl Problem for Sokoban {
         &self,
         key: &StudyKey,
         progress: &mut StudyProgress<'_>,
-    ) -> Result<Vec<ViewDocument>, ServiceError> {
+    ) -> Result<Vec<ViewDocument>, StudyError> {
         build(key, progress)
     }
 }
@@ -105,7 +105,7 @@ impl Strategy {
 fn build(
     study: &StudyKey,
     progress: &mut StudyProgress<'_>,
-) -> Result<Vec<ViewDocument>, ServiceError> {
+) -> Result<Vec<ViewDocument>, StudyError> {
     let profile = study.instance;
     let initial = match profile {
         InstanceProfile::Micro => sokoban::initial(),
@@ -214,7 +214,7 @@ fn search(
     chunk: usize,
     progress: &mut StudyProgress<'_>,
     problem: &ProblemPath,
-) -> Result<(Solution, GraphSearchProgress), ServiceError> {
+) -> Result<(Solution, GraphSearchProgress), StudyError> {
     let frontier = strategy.frontier();
     if strategy == Strategy::AStar {
         let mut session = AStarSession::new(

@@ -1,7 +1,7 @@
 # axionomy-studio-server
 
 This crate is the native reference backend for Axionomy Studio. It adapts the
-same `axionomy-service` used by CLI and MCP into one problem catalog,
+same `axionomy-study` runtime used by CLI and MCP into one problem catalog,
 pausable/resumable/cancellable in-memory studies, replay-derived documents,
 paginated frames, Server-Sent Events, and an OpenAPI 3.1 contract, over the
 problems of the `Registry` its `StudioState` is given; `StudioState::default()`

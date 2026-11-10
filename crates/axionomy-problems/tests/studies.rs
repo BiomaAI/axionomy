@@ -4,9 +4,8 @@
 
 use axionomy::{path, path::Path};
 use axionomy_problems::{lending, registry};
-use axionomy_service::{
-    InstanceProfile, ServiceError, ServiceProgress, Study, StudyControl, StudyObserver,
-    StudyRequest,
+use axionomy_study::{
+    InstanceProfile, Progress, Study, StudyControl, StudyError, StudyObserver, StudyRequest,
 };
 use axionomy_view::{DocumentPath, ExchangeFrame, SceneSurfaceView, ViewDocument, ViewOntology};
 use std::collections::HashSet;
@@ -18,7 +17,7 @@ struct FrameObserver {
 }
 
 impl StudyObserver for FrameObserver {
-    fn progress(&mut self, _: ServiceProgress) {}
+    fn progress(&mut self, _: Progress) {}
 
     fn frame(&mut self, document: &DocumentPath, frame: ExchangeFrame) {
         self.documents.push(document.clone());
@@ -211,7 +210,7 @@ fn every_document_reports_the_trajectory_its_frames_replay() {
     struct Trajectories(Vec<(DocumentPath, paths::Economy, paths::Trace)>);
 
     impl StudyObserver for Trajectories {
-        fn progress(&mut self, _: ServiceProgress) {}
+        fn progress(&mut self, _: Progress) {}
 
         fn trajectory(
             &mut self,
@@ -337,13 +336,13 @@ fn formerly_aliased_stress_models_are_structurally_distinct() {
 
 #[test]
 fn every_micro_problem_remains_a_fast_replayable_contract_fixture() {
-    let service = registry();
-    for problem in service.catalog() {
+    let registry = registry();
+    for problem in registry.catalog() {
         let mut request = StudyRequest::new(problem.key.clone())
             .with_instance(InstanceProfile::Micro)
             .with_strategy(problem.default_strategy.clone());
         request.budget = 8;
-        let study = service
+        let study = registry
             .study(request)
             .unwrap_or_else(|error| panic!("{} micro failed: {error}", problem.key));
         assert_eq!(study.instance.profile, InstanceProfile::Micro);
@@ -489,9 +488,9 @@ fn assert_readable_labels(problem: &str, study: &Study) {
 
 #[test]
 fn every_default_problem_studies_to_a_selected_replay() {
-    let service = registry();
-    for problem in service.catalog() {
-        let study = service
+    let registry = registry();
+    for problem in registry.catalog() {
+        let study = registry
             .study(
                 StudyRequest::new(problem.key.clone())
                     .with_strategy(problem.default_strategy.clone()),
@@ -709,7 +708,7 @@ fn logistics_reports_algorithm_progress_and_observes_cancellation_mid_study() {
             budget: 64,
         },
         &control,
-        &mut |progress: ServiceProgress| {
+        &mut |progress: Progress| {
             if progress.phase == path!("monte-carlo") && progress.completed >= 16 {
                 control.cancel();
             }
@@ -717,7 +716,7 @@ fn logistics_reports_algorithm_progress_and_observes_cancellation_mid_study() {
         },
     );
 
-    assert_eq!(result, Err(ServiceError::Cancelled));
+    assert_eq!(result, Err(StudyError::Cancelled));
     let monte_carlo = observed
         .iter()
         .filter(|progress| progress.phase == path!("monte-carlo"))
@@ -752,7 +751,7 @@ fn a_pause_mid_study_blocks_the_next_chunk_until_resume() {
             budget: 16,
         },
         &control,
-        &mut |progress: ServiceProgress| {
+        &mut |progress: Progress| {
             if !paused_once && progress.phase == path!("monte-carlo") {
                 paused_once = true;
                 control.pause();

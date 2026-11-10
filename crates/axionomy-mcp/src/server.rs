@@ -18,8 +18,8 @@ use axionomy_search::{
     BfsSession, GraphSearchProgress,
     session::{Continue, SearchStatus, WorkBudget},
 };
-use axionomy_service::{Registry, ServiceError, ServiceProgress, StudyControl, StudyRequest};
 use axionomy_store::{Store, StoreError};
+use axionomy_study::{Progress, Registry, StudyControl, StudyError, StudyRequest};
 use rmcp::{
     ErrorData as McpError, ServerHandler,
     handler::server::{
@@ -618,9 +618,9 @@ impl AxionomyMcp {
                 ),
             );
             match error {
-                ServiceError::UnknownProblem(_) => refused.at("/problem"),
-                ServiceError::UnknownInstance { .. } => refused.at("/instance"),
-                ServiceError::UnknownStrategy { .. } => refused.at("/strategy"),
+                StudyError::UnknownProblem(_) => refused.at("/problem"),
+                StudyError::UnknownInstance { .. } => refused.at("/instance"),
+                StudyError::UnknownStrategy { .. } => refused.at("/strategy"),
                 _ => refused,
             }
         })?;
@@ -1212,7 +1212,7 @@ async fn study_problem(
 ) -> Result<CallToolResult, TaskExit> {
     let control = Arc::new(StudyControl::default());
     let worker_control = Arc::clone(&control);
-    let (progress_tx, mut progress_rx) = tokio::sync::mpsc::unbounded_channel::<ServiceProgress>();
+    let (progress_tx, mut progress_rx) = tokio::sync::mpsc::unbounded_channel::<Progress>();
     let mut worker = tokio::task::spawn_blocking(move || {
         studies::compute(&registry, &request, &worker_control, Some(progress_tx))
     });

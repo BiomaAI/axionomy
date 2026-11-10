@@ -10,7 +10,7 @@ members = [
     "crates/axionomy-store",
     "crates/axionomy-mcp",
     "crates/axionomy-view",
-    "crates/axionomy-service",
+    "crates/axionomy-study",
     "crates/axionomy-cli",
     "crates/axionomy-studio-server",
     "crates/axionomy-studio-wasm",
@@ -34,7 +34,7 @@ axionomy-derive = { version = "0.1.0", path = "crates/axionomy-derive" }
 axionomy-problems = { version = "0.1.0", path = "crates/axionomy-problems" }
 axionomy-search = { version = "0.1.0", path = "crates/axionomy-search" }
 axionomy-tree = { version = "0.1.0", path = "crates/axionomy-tree" }
-axionomy-service = { version = "0.1.0", path = "crates/axionomy-service" }
+axionomy-study = { version = "0.1.0", path = "crates/axionomy-study" }
 axionomy-store = { version = "0.1.0", path = "crates/axionomy-store" }
 axionomy-units = { version = "0.1.0", path = "crates/axionomy-units" }
 axionomy-view = { version = "0.1.0", path = "crates/axionomy-view" }

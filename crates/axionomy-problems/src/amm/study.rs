@@ -8,9 +8,9 @@ use crate::{
     support::{ProblemCopy, StrategyCopy, problem},
 };
 use axionomy::path;
-use axionomy_service::{
+use axionomy_study::{
     Capability, DocumentSpec, InstanceProfile, Problem, ProblemDescriptor, ProblemFamily,
-    ProposalSpec, ServiceError, StudyKey, StudyProgress, document, problem_error, proposal,
+    ProposalSpec, StudyError, StudyKey, StudyProgress, document, problem_error, proposal,
     telemetry,
 };
 use axionomy_view::{ObjectiveDirectionView, ObjectiveView, TelemetryKindView, ViewDocument};
@@ -77,7 +77,7 @@ impl Problem for Amm {
         &self,
         key: &StudyKey,
         progress: &mut StudyProgress<'_>,
-    ) -> Result<Vec<ViewDocument>, ServiceError> {
+    ) -> Result<Vec<ViewDocument>, StudyError> {
         build(key, progress)
     }
 }
@@ -85,7 +85,7 @@ impl Problem for Amm {
 fn build(
     study: &StudyKey,
     progress: &mut StudyProgress<'_>,
-) -> Result<Vec<ViewDocument>, ServiceError> {
+) -> Result<Vec<ViewDocument>, StudyError> {
     let initial = match study.instance {
         InstanceProfile::Micro => amm::initial(),
         InstanceProfile::Showcase => amm::initial_showcase_with_seed(study.seed),

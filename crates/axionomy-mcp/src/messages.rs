@@ -10,7 +10,7 @@ use axionomy::{
     RatePath, RolePath, paths,
 };
 use axionomy_search::GraphSearchProgress;
-use axionomy_service::StudyKey;
+use axionomy_study::StudyKey;
 use axionomy_view::DocumentPath;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -443,7 +443,7 @@ pub struct ProblemCatalogRequest {}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct ProblemCatalogResponse {
-    pub problems: Vec<axionomy_service::ProblemDescriptor>,
+    pub problems: Vec<axionomy_study::ProblemDescriptor>,
 }
 
 /// A finished study of a problem. Its documents and their frames are

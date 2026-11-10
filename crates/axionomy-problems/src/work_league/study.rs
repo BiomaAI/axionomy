@@ -6,9 +6,9 @@ use crate::{
     work_league::{self, AccountId, AgentId, Asset, JobId, Profile, RateId, Role, World},
 };
 use axionomy::{Exchange, Quantity, path};
-use axionomy_service::{
+use axionomy_study::{
     Capability, DocumentSpec, InstanceProfile, Problem, ProblemDescriptor, ProblemFamily,
-    ProposalSpec, ServiceError, StudyKey, StudyProgress, Work, document_with_leaderboards_observed,
+    ProposalSpec, StudyError, StudyKey, StudyProgress, Work, document_with_leaderboards_observed,
     problem_error, proposal, strategy_document, telemetry,
 };
 use axionomy_view::{
@@ -79,7 +79,7 @@ impl Problem for WorkLeague {
         &self,
         key: &StudyKey,
         progress: &mut StudyProgress<'_>,
-    ) -> Result<Vec<ViewDocument>, ServiceError> {
+    ) -> Result<Vec<ViewDocument>, StudyError> {
         build(key, progress)
     }
 }
@@ -87,7 +87,7 @@ impl Problem for WorkLeague {
 fn build(
     study: &StudyKey,
     progress: &mut StudyProgress<'_>,
-) -> Result<Vec<ViewDocument>, ServiceError> {
+) -> Result<Vec<ViewDocument>, StudyError> {
     let profile = match study.instance {
         InstanceProfile::Micro => Profile::Micro,
         InstanceProfile::Showcase => Profile::Showcase,
@@ -238,7 +238,7 @@ pub(super) fn balance(world: &World, agent: AgentId, asset: Asset) -> u64 {
 mod tests {
     use super::*;
     use crate::registry;
-    use axionomy_service::StudyRequest;
+    use axionomy_study::StudyRequest;
 
     #[test]
     fn every_snapshot_has_multiple_rankings_and_they_change() {

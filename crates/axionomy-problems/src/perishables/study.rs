@@ -6,9 +6,9 @@ use crate::{
     support::{ProblemCopy, StrategyCopy, problem},
 };
 use axionomy::path;
-use axionomy_service::{
+use axionomy_study::{
     Capability, DocumentSpec, InstanceProfile, Problem, ProblemDescriptor, ProblemFamily,
-    ProposalSpec, ServiceError, StudyKey, StudyProgress, document, frontier_trace, problem_error,
+    ProposalSpec, StudyError, StudyKey, StudyProgress, document, frontier_trace, problem_error,
     proposal, telemetry,
 };
 use axionomy_view::{
@@ -77,7 +77,7 @@ impl Problem for Perishables {
         &self,
         key: &StudyKey,
         progress: &mut StudyProgress<'_>,
-    ) -> Result<Vec<ViewDocument>, ServiceError> {
+    ) -> Result<Vec<ViewDocument>, StudyError> {
         build(key, progress)
     }
 }
@@ -85,7 +85,7 @@ impl Problem for Perishables {
 fn build(
     study: &StudyKey,
     progress: &mut StudyProgress<'_>,
-) -> Result<Vec<ViewDocument>, ServiceError> {
+) -> Result<Vec<ViewDocument>, StudyError> {
     let profile = study.instance;
     if !matches!(profile, InstanceProfile::Micro) {
         return super::cold_chain::study::build(study, profile, progress);

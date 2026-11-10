@@ -5,8 +5,8 @@ use crate::mission::expedition::{
     self, AGENTS, AccountId, Agent, Asset, Location, Policy, RateId, World,
 };
 use axionomy::path;
-use axionomy_service::{
-    DocumentSpec, InstanceProfile, ProposalSpec, ServiceError, StudyKey, StudyProgress, document,
+use axionomy_study::{
+    DocumentSpec, InstanceProfile, ProposalSpec, StudyError, StudyKey, StudyProgress, document,
     problem_error, proposal, simulate, telemetry,
 };
 use axionomy_view::{
@@ -19,7 +19,7 @@ pub(crate) fn build(
     study: &StudyKey,
     profile: InstanceProfile,
     progress: &mut StudyProgress<'_>,
-) -> Result<Vec<ViewDocument>, ServiceError> {
+) -> Result<Vec<ViewDocument>, StudyError> {
     let initial = expedition::initial(matches!(profile, InstanceProfile::Stress), study.seed);
     let mut documents = Vec::new();
     for (strategy, title, description, policy) in [

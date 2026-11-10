@@ -6,9 +6,9 @@ use crate::{
     support::{ProblemCopy, StrategyCopy, problem},
 };
 use axionomy::path;
-use axionomy_service::{
+use axionomy_study::{
     Capability, DocumentSpec, InstanceProfile, Problem, ProblemDescriptor, ProblemFamily,
-    ProblemPath, ProposalSpec, ServiceError, StudyKey, StudyProgress, document, problem_error,
+    ProblemPath, ProposalSpec, StudyError, StudyKey, StudyProgress, document, problem_error,
     proposal, telemetry,
 };
 use axionomy_view::{
@@ -85,7 +85,7 @@ impl Problem for Lending {
         &self,
         key: &StudyKey,
         progress: &mut StudyProgress<'_>,
-    ) -> Result<Vec<ViewDocument>, ServiceError> {
+    ) -> Result<Vec<ViewDocument>, StudyError> {
         build(key, progress)
     }
 }
@@ -95,7 +95,7 @@ const SOURCE: &str = "Lending market";
 fn build(
     study: &StudyKey,
     progress: &mut StudyProgress<'_>,
-) -> Result<Vec<ViewDocument>, ServiceError> {
+) -> Result<Vec<ViewDocument>, StudyError> {
     let config = match study.instance {
         InstanceProfile::Micro => Config::micro(),
         InstanceProfile::Showcase => Config::showcase(),
@@ -223,7 +223,7 @@ fn objectives(
     initial: &World,
     trace: &LoanTrace,
     problem: &ProblemPath,
-) -> Result<Vec<ObjectiveView>, ServiceError> {
+) -> Result<Vec<ObjectiveView>, StudyError> {
     let interest = lending::interest_charged(initial, trace)
         .map_err(|error| problem_error(problem, format!("{error:?}")))?;
     let after = initial

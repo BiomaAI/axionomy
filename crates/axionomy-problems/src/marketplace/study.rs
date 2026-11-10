@@ -6,9 +6,9 @@ use crate::{
     support::{ProblemCopy, StrategyCopy, problem},
 };
 use axionomy::path;
-use axionomy_service::{
+use axionomy_study::{
     Capability, DocumentSpec, InstanceProfile, Problem, ProblemDescriptor, ProblemFamily,
-    ProblemPath, ProposalSpec, ServiceError, StudyKey, StudyProgress, document, problem_error,
+    ProblemPath, ProposalSpec, StudyError, StudyKey, StudyProgress, document, problem_error,
     proposal, telemetry,
 };
 use axionomy_view::{
@@ -77,7 +77,7 @@ impl Problem for Marketplace {
         &self,
         key: &StudyKey,
         progress: &mut StudyProgress<'_>,
-    ) -> Result<Vec<ViewDocument>, ServiceError> {
+    ) -> Result<Vec<ViewDocument>, StudyError> {
         build(key, progress)
     }
 }
@@ -85,7 +85,7 @@ impl Problem for Marketplace {
 fn build(
     study: &StudyKey,
     progress: &mut StudyProgress<'_>,
-) -> Result<Vec<ViewDocument>, ServiceError> {
+) -> Result<Vec<ViewDocument>, StudyError> {
     let profile = study.instance;
     let initial = match profile {
         InstanceProfile::Micro => marketplace::initial(),
@@ -218,7 +218,7 @@ fn pareto_trace(
     result: &marketplace::ParetoResult,
     buyers: bool,
     problem: &ProblemPath,
-) -> Result<axionomy::Trace<marketplace::Ontology>, ServiceError> {
+) -> Result<axionomy::Trace<marketplace::Ontology>, StudyError> {
     result
         .front()
         .entries()

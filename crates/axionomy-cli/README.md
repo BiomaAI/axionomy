@@ -1,7 +1,9 @@
 # axionomy-cli
 
-Human- and script-friendly access to the same interface-neutral service used by
-Axionomy Studio and its HTTP/MCP adapters.
+Human- and script-friendly access to the same interface-neutral study runtime
+used by Axionomy Studio and its HTTP/MCP adapters. `execute` and `run_from`
+study the problems of the `Registry` they are given; the `axionomy` binary
+uses `axionomy_problems::registry()`.
 
 ```console
 cargo run -p axionomy-cli -- catalog

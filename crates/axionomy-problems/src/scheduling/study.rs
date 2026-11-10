@@ -6,9 +6,9 @@ use crate::{
     support::{ProblemCopy, StrategyCopy, problem},
 };
 use axionomy::{Exchange, Quantity, Trace, path};
-use axionomy_service::{
+use axionomy_study::{
     Capability, DocumentSpec, InstanceProfile, Problem, ProblemDescriptor, ProblemFamily,
-    ProposalSpec, ServiceError, StudyKey, StudyProgress, document, frontier_trace, problem_error,
+    ProposalSpec, StudyError, StudyKey, StudyProgress, document, frontier_trace, problem_error,
     proposal, telemetry,
 };
 use axionomy_view::{
@@ -83,7 +83,7 @@ impl Problem for Scheduling {
         &self,
         key: &StudyKey,
         progress: &mut StudyProgress<'_>,
-    ) -> Result<Vec<ViewDocument>, ServiceError> {
+    ) -> Result<Vec<ViewDocument>, StudyError> {
         build(key, progress)
     }
 }
@@ -91,7 +91,7 @@ impl Problem for Scheduling {
 fn build(
     study: &StudyKey,
     progress: &mut StudyProgress<'_>,
-) -> Result<Vec<ViewDocument>, ServiceError> {
+) -> Result<Vec<ViewDocument>, StudyError> {
     let profile = study.instance;
     let initial = match profile {
         InstanceProfile::Micro => scheduling::initial(),

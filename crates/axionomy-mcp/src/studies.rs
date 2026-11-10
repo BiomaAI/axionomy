@@ -7,9 +7,8 @@
 
 use crate::store::{State, checkpoint};
 use axionomy::paths;
-use axionomy_service::{
-    Registry, ServiceError, ServiceProgress, Study, StudyControl, StudyKey, StudyObserver,
-    StudyRequest,
+use axionomy_study::{
+    Progress, Registry, Study, StudyControl, StudyError, StudyKey, StudyObserver, StudyRequest,
 };
 use axionomy_tree::Tree;
 use axionomy_view::DocumentPath;
@@ -18,9 +17,9 @@ use thiserror::Error;
 use tokio::sync::mpsc::UnboundedSender;
 
 #[derive(Debug, Error)]
-pub(crate) enum StudyError {
+pub(crate) enum ComputeError {
     #[error(transparent)]
-    Service(#[from] ServiceError),
+    Study(#[from] StudyError),
     #[error("document `{0}` reported no trajectory")]
     Untraced(DocumentPath),
     #[error(
@@ -54,12 +53,12 @@ impl Trajectory {
         document: DocumentPath,
         initial: paths::Economy,
         trace: paths::Trace,
-    ) -> Result<Self, StudyError> {
+    ) -> Result<Self, ComputeError> {
         let initial = State::new(initial);
         let mut last = initial.clone();
         let mut steps = Vec::with_capacity(trace.exchanges().len());
         for (index, exchange) in trace.into_exchanges().into_iter().enumerate() {
-            let receipt = last.apply(exchange).map_err(|error| StudyError::Replay {
+            let receipt = last.apply(exchange).map_err(|error| ComputeError::Replay {
                 document: document.clone(),
                 index,
                 error: Box::new(error),
@@ -88,12 +87,12 @@ impl Trajectory {
 /// What a study reports while it runs: its progress, for whoever watches it,
 /// and each document's trajectory.
 struct Observer {
-    progress: Option<UnboundedSender<ServiceProgress>>,
+    progress: Option<UnboundedSender<Progress>>,
     trajectories: BTreeMap<DocumentPath, (paths::Economy, paths::Trace)>,
 }
 
 impl StudyObserver for Observer {
-    fn progress(&mut self, progress: ServiceProgress) {
+    fn progress(&mut self, progress: Progress) {
         if let Some(sender) = &self.progress {
             let _ = sender.send(progress);
         }
@@ -117,8 +116,8 @@ pub(crate) fn compute(
     registry: &Registry,
     request: &StudyRequest,
     control: &StudyControl,
-    progress: Option<UnboundedSender<ServiceProgress>>,
-) -> Result<(Study, Vec<Trajectory>), StudyError> {
+    progress: Option<UnboundedSender<Progress>>,
+) -> Result<(Study, Vec<Trajectory>), ComputeError> {
     let mut observer = Observer {
         progress,
         trajectories: BTreeMap::new(),
@@ -131,9 +130,9 @@ pub(crate) fn compute(
             let (initial, trace) = observer
                 .trajectories
                 .remove(&document.id)
-                .ok_or_else(|| StudyError::Untraced(document.id.clone()))?;
+                .ok_or_else(|| ComputeError::Untraced(document.id.clone()))?;
             if trace.exchanges().len() != document.frames.len() {
-                return Err(StudyError::Mismatched {
+                return Err(ComputeError::Mismatched {
                     document: document.id.clone(),
                     frames: document.frames.len(),
                     exchanges: trace.exchanges().len(),

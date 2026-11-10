@@ -6,9 +6,9 @@ use crate::{
     support::{ProblemCopy, StrategyCopy, problem},
 };
 use axionomy::{Exchange, Quantity, Trace, path};
-use axionomy_service::{
+use axionomy_study::{
     Capability, DocumentSpec, InstanceProfile, Problem, ProblemDescriptor, ProblemFamily,
-    ProposalSpec, ServiceError, StudyKey, StudyProgress, document, problem_error, proposal,
+    ProposalSpec, StudyError, StudyKey, StudyProgress, document, problem_error, proposal,
     telemetry,
 };
 use axionomy_view::{TelemetryKindView, ViewDocument};
@@ -67,7 +67,7 @@ impl Problem for ExactCover {
         &self,
         key: &StudyKey,
         progress: &mut StudyProgress<'_>,
-    ) -> Result<Vec<ViewDocument>, ServiceError> {
+    ) -> Result<Vec<ViewDocument>, StudyError> {
         build(key, progress)
     }
 }
@@ -75,7 +75,7 @@ impl Problem for ExactCover {
 fn build(
     study: &StudyKey,
     progress: &mut StudyProgress<'_>,
-) -> Result<Vec<ViewDocument>, ServiceError> {
+) -> Result<Vec<ViewDocument>, StudyError> {
     let profile = study.instance;
     let initial = match profile {
         InstanceProfile::Micro => exact_cover::initial(),

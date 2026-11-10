@@ -7,9 +7,9 @@ use crate::{
 };
 use axionomy::{Exchange, path};
 use axionomy_search::{mcts::MctsConfig, rollout::Unrecorded};
-use axionomy_service::{
+use axionomy_study::{
     Capability, DocumentSpec, InstanceProfile, Problem, ProblemDescriptor, ProblemFamily,
-    ProposalSpec, ServiceError, StudyKey, StudyProgress, Work, document, problem_error, proposal,
+    ProposalSpec, StudyError, StudyKey, StudyProgress, Work, document, problem_error, proposal,
     proposal_at, telemetry,
 };
 use axionomy_view::{
@@ -76,7 +76,7 @@ impl Problem for Mission {
         &self,
         key: &StudyKey,
         progress: &mut StudyProgress<'_>,
-    ) -> Result<Vec<ViewDocument>, ServiceError> {
+    ) -> Result<Vec<ViewDocument>, StudyError> {
         build(key, progress)
     }
 }
@@ -84,7 +84,7 @@ impl Problem for Mission {
 fn build(
     study: &StudyKey,
     progress: &mut StudyProgress<'_>,
-) -> Result<Vec<ViewDocument>, ServiceError> {
+) -> Result<Vec<ViewDocument>, StudyError> {
     let profile = study.instance;
     if !matches!(profile, InstanceProfile::Micro) {
         return super::expedition::study::build(study, profile, progress);
@@ -431,7 +431,7 @@ fn policy_front(front: &mission::PolicyFront, selected: Option<Policy>) -> Paret
 mod tests {
     use crate::registry;
     use axionomy::{Quantity, path};
-    use axionomy_service::{InstanceProfile, StudyRequest};
+    use axionomy_study::{InstanceProfile, StudyRequest};
 
     #[test]
     fn mission_replays_actual_search_and_private_information_transfer() {

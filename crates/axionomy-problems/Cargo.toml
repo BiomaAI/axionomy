@@ -12,7 +12,7 @@ rust-version.workspace = true
 [dependencies]
 axionomy.workspace = true
 axionomy-search.workspace = true
-axionomy-service.workspace = true
+axionomy-study.workspace = true
 axionomy-view.workspace = true
 serde.workspace = true
 thiserror.workspace = true

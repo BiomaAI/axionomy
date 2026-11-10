@@ -2,7 +2,7 @@
 //! behind it, the frames of its documents and their trajectories, with the
 //! study's control checked at each report.
 
-use crate::{ProblemPath, ServiceError, ServiceProgress, StudyControl, StudyObserver};
+use crate::{ProblemPath, Progress, StudyControl, StudyError, StudyObserver};
 use axionomy::{Economy, Trace, path, paths};
 use axionomy_search::GraphSearchProgress;
 use axionomy_view::{
@@ -100,7 +100,7 @@ pub struct StudyProgress<'a> {
     control: &'a StudyControl,
     observer: &'a mut dyn StudyObserver,
     sequence: u64,
-    error: Option<ServiceError>,
+    error: Option<StudyError>,
     observations: VecDeque<SearchObservationView>,
     framed_documents: BTreeSet<DocumentPath>,
 }
@@ -192,7 +192,7 @@ impl<'a> StudyProgress<'a> {
             self.error = Some(error);
             return ControlFlow::Break(());
         }
-        self.observer.progress(ServiceProgress {
+        self.observer.progress(Progress {
             sequence: self.sequence,
             phase: work.phase.clone(),
             completed,
@@ -218,7 +218,7 @@ impl<'a> StudyProgress<'a> {
 
     /// Waits while the study is paused, then says whether it must stop: it
     /// was cancelled, or a report could not be made.
-    pub fn checkpoint(&mut self) -> Result<(), ServiceError> {
+    pub fn checkpoint(&mut self) -> Result<(), StudyError> {
         if self.error.is_none()
             && let Err(error) = self.control.checkpoint()
         {
@@ -264,7 +264,7 @@ impl<'a> StudyProgress<'a> {
         {
             Ok((initial, trace)) => self.observer.trajectory(document, &initial, &trace),
             Err(error) => {
-                self.error = Some(ServiceError::Problem {
+                self.error = Some(StudyError::Problem {
                     problem: self.problem.clone(),
                     message: format!("document `{document}` is not written as paths: {error}"),
                 });

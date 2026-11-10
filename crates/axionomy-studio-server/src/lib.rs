@@ -1,12 +1,12 @@
-//! Native HTTP adapter for the interface-neutral Axionomy service.
+//! Native HTTP adapter for the interface-neutral Axionomy study runtime.
 
 mod openapi;
 
 pub use openapi::OpenApiDocument;
 
-use axionomy_service::{
-    ProblemDescriptor, Registry, ServiceError, ServiceProgress, StudioEvent, StudioStudyId, Study,
-    StudyControl, StudyKey, StudyObserver, StudyRequest,
+use axionomy_study::{
+    ProblemDescriptor, Progress, Registry, StudioEvent, StudioStudyId, Study, StudyControl,
+    StudyError, StudyKey, StudyObserver, StudyRequest,
 };
 use axionomy_view::{DocumentPath, ExchangeFrame, SearchObservationView, ViewDocument};
 use axum::{
@@ -129,7 +129,7 @@ struct StudyRecord {
 }
 
 enum WorkerUpdate {
-    Progress(ServiceProgress),
+    Progress(Progress),
     Observation(SearchObservationView),
     Frame {
         document: DocumentPath,
@@ -142,7 +142,7 @@ struct ChannelObserver {
 }
 
 impl StudyObserver for ChannelObserver {
-    fn progress(&mut self, progress: ServiceProgress) {
+    fn progress(&mut self, progress: Progress) {
         let _ = self.updates.blocking_send(WorkerUpdate::Progress(progress));
     }
 
@@ -491,7 +491,7 @@ async fn execute_study(
 
     let result = match worker.await {
         Ok(result) => result,
-        Err(error) => Err(ServiceError::Problem {
+        Err(error) => Err(StudyError::Problem {
             problem: request.problem.clone(),
             message: format!("worker failed: {error}"),
         }),
@@ -501,8 +501,8 @@ async fn execute_study(
     }
     match result {
         Ok(study) => publish_study(&record, study_id, study).await,
-        Err(ServiceError::Cancelled) => finish_cancelled(&record, study_id).await,
-        Err(ServiceError::Paused) => {}
+        Err(StudyError::Cancelled) => finish_cancelled(&record, study_id).await,
+        Err(StudyError::Paused) => {}
         Err(error) => finish_failed(&record, study_id, error.to_string()).await,
     }
 }
@@ -779,7 +779,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn a_service_study_is_identical_over_http() {
+    async fn a_registry_study_is_identical_over_http() {
         let (app, _) = api(StudioState::default());
         let request =
             StudyRequest::new("maze".parse().unwrap()).with_strategy("a-star".parse().unwrap());
@@ -821,8 +821,8 @@ mod tests {
             .await
             .unwrap();
         let http_study: Study = response_json(response).await;
-        let service_study = axionomy_problems::registry().study(request).unwrap();
-        assert_eq!(http_study, service_study);
+        let registry_study = axionomy_problems::registry().study(request).unwrap();
+        assert_eq!(http_study, registry_study);
     }
 
     #[tokio::test]

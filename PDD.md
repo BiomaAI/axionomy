@@ -587,22 +587,9 @@ authority.
 
 ## 6. Workspace and package boundaries
 
-The repository makes authority boundaries visible as dependency boundaries:
-
-```text
-axionomy ─────────────→ axionomy-derive
-axionomy-search ──────→ axionomy
-axionomy-units ───────→ axionomy
-axionomy-time ────────→ axionomy-units ──→ axionomy
-axionomy-tree          (no workspace dependencies)
-axionomy-store ───────→ axionomy-tree + axionomy
-axionomy-view ────────→ axionomy-search + axionomy
-axionomy-service ─────→ axionomy-view + axionomy-search
-axionomy-problems ────→ axionomy-service + axionomy-view + axionomy-search
-axionomy-cli ─────────→ axionomy-problems + axionomy-service
-axionomy-mcp ─────────→ axionomy-problems + axionomy-service + axionomy-search
-axionomy-studio-server → axionomy-problems + axionomy-service
-```
+The repository makes authority boundaries visible as dependency boundaries;
+the dependency graph in [README.md](README.md#workspace) is the one record of
+them.
 
 - `axionomy` owns universal state and transition semantics.
 - `axionomy-derive` owns `#[derive(Identifier)]`, which writes an identifier
@@ -628,7 +615,7 @@ axionomy-studio-server → axionomy-problems + axionomy-service
   replay-derived frames, and what a problem presents itself with (labels,
   quantity formats, scene helpers, Pareto front views), without owning a
   domain ontology or runtime.
-- `axionomy-service` owns the interface-neutral study runtime: the `Problem`
+- `axionomy-study` owns the interface-neutral study runtime: the `Problem`
   trait and the `Registry` of problems a front end offers, reproducible study
   requests, cooperative controls, progress, and complete studies. It knows no
   specific problem.
@@ -656,7 +643,7 @@ because Axionomy does not own an authoritative graph and its successors are
 generated implicitly from applicable exchanges. It remains a reasonable future
 adapter when a user needs explicit graph import, export, or analysis.
 
-The MCP adapter depends inward on the shared service, the problems it serves
+The MCP adapter depends inward on the shared study runtime, the problems it serves
 by default, search, and kernel.
 Neither reusable crate depends on rmcp, Tokio, Axum, Clap, a browser, or a
 database. This direction is essential: interface requirements may improve the
@@ -665,7 +652,7 @@ make a protocol task, UI selection, or storage record part of economic truth.
 
 ### 6.1 Interfaces pressure one application boundary
 
-CLI, HTTP/Studio, and MCP use one interface-neutral service rather than
+CLI, HTTP/Studio, and MCP use one interface-neutral study runtime rather than
 reimplementing problem dispatch. Its public vocabulary is intentionally small:
 
 ```text
@@ -676,7 +663,7 @@ StudyRequest      = problem + instance + strategy + deterministic seed + work bu
 StudyKey          = the request with its instance and strategy decided
 StudyControl      = cooperative pause + resume + cancel
 StudyProgress     = what a problem reports through, checking control at each report
-ServiceProgress   = ordered phase + completed/total work + message
+Progress          = ordered phase + completed/total work + message
 StudyObserver     = progress + solver observation + replay-verified frame
                     + each document's trajectory, written as paths
 Study             = key + resolved instance + selected document + replayable alternatives
@@ -689,7 +676,7 @@ trajectory, a trace from a state; each document of a study holds one. Machinery
 names avoid words a user's ontology is likely to own: work-league's workers
 claim jobs, so a study is never a job.
 
-The service contains no HTTP, async runtime, CLI parser, MCP types, database,
+The study runtime contains no HTTP, async runtime, CLI parser, MCP types, database,
 browser state, or specific problem. A problem implements `Problem`, and front
 ends study the problems of the `Registry` they are given. Every canonical
 problem's implementation lives in its folder of `axionomy-problems`, beside its
@@ -704,7 +691,7 @@ stable machine-readable output, and useful defaults. HTTP requires resumable
 event streams, lifecycle control, pagination, and generated schemas. MCP
 requires explicit task semantics and cancellation. Studio requires
 alternatives, explanations, scrubbing, partial observations, and domain-aware
-projections. These demands may change the service and view contracts. They
+projections. These demands may change the study and view contracts. They
 move into the kernel only when they are transport-neutral parts of economic
 validation, assessment, application, or replay.
 
@@ -715,7 +702,7 @@ economic documents, assessments, receipts, objectives, and traces are not.
 
 ### 6.2 Instance profiles keep examples honest
 
-The reference service separates correctness scale from product-demonstration
+The reference problems separate correctness scale from product-demonstration
 scale with three explicit problem profiles:
 
 ```text
@@ -754,7 +741,7 @@ the problem, instance, strategy, seed and budget it was computed from. Micro con
 oracles even when exhaustive search over Showcase would be inappropriate, and
 an approximate or candidate-bounded Showcase frontier must be labeled as such.
 
-The conformance service enforces minimum Showcase pressure for every
+The conformance tests enforce minimum Showcase pressure for every
 problems. Every result also receives transport-neutral **Model size** evidence:
 accounts, rules, steps in the trace, rule-check probes, and alternatives. These
 measurements are explanatory, not objectives, and cannot affect validity.
@@ -842,7 +829,7 @@ The native server exposes the canonical catalog, starts studies, reports their
 state, pauses, resumes, or cancels them cooperatively, serves each published
 study, its documents, and paginated frames under the study's minted ID
 (`study-7`), and streams tagged `StudioEvent` values through Server-Sent Events.
-The service emits one monotonic event sequence across adapter phases.
+The study runtime emits one monotonic event sequence across a study's phases.
 `FrameAppended` carries the complete newly verified frame and its document
 identity, so native SSE and browser Wasm can show authoritative progress while
 the study is still being computed. The event is produced by replay derivation,
@@ -865,7 +852,7 @@ metrics without turning a queue, rollout tree, frontier, or belief cache into
 economic truth. An observation may also name stable Rust-owned scene subjects,
 allowing a generic viewer to emphasize the expanded room, candidate, agent, or
 other projected entity without learning the domain ontology in TypeScript.
-The service streams observations as `thinking` events through a bounded
+The study runtime streams observations as `thinking` events through a bounded
 observer channel and retains at most its configured history as every
 completed document's `thinking`. Live execution and a saved study therefore
 expose the same evidence surface; transport speed does not decide whether a
@@ -875,7 +862,7 @@ The React application uses one `EngineClient` boundary for native HTTP/SSE,
 the browser Worker, and static playback. The native connection badge is backed
 by a periodic health check; a catalog loaded before a server stopped cannot
 claim that the engine is still connected. The browser adapter runs
-`axionomy-service` and the canonical problems compiled to Rust/Wasm inside a
+`axionomy-study` and the canonical problems compiled to Rust/Wasm inside a
 dedicated Worker, and static
 playback advertises that it cannot execute. Local playback position and play/pause state
 stay in a component reducer/state boundary rather than becoming server or
@@ -962,7 +949,7 @@ operational study and transport failures.
 Portable studies prove offline playback for the full catalog. The native
 path proves generated OpenAPI calls, resumable SSE, pause/resume/cancel hooks,
 study and frame retrieval, and scrubbing. Browser tests prove that the same
-Rust service initializes, studies, streams observations, publishes
+Rust study runtime initializes, studies, streams observations, publishes
 studies, and cancels inside an isolated Worker. The Pages build uses a
 repository-relative Vite base, includes its Wasm binary and `.nojekyll`, and
 deploys from `main` without a server. Specialized projections are added
@@ -1463,7 +1450,7 @@ The current foundation is intentionally bounded:
   at phase and document-publication boundaries. A one-shot domain solver is not
   preempted in the middle of an indivisible call. Native studies support resumable
   pause. Browser cancellation is immediate because the Worker is disposable;
-  browser pause is intentionally not advertised until service sessions can be
+  browser pause is intentionally not advertised until study sessions can be
   suspended and resumed across Worker event-loop turns.
 - Full model projection currently materializes every concrete rate. Studio
   filters large rate books client-side. Standard 7×6 Connect Four now uses 226
@@ -1920,7 +1907,7 @@ may explain economic truth but cannot create it.
 
 ### D-033: Interfaces share commands and studies, not semantics by convention
 
-CLI, HTTP/Studio, and MCP adapt one runtime-neutral problem service. Catalogs,
+CLI, HTTP/Studio, and MCP adapt one interface-neutral study runtime. Catalogs,
 study requests, progress, control, and complete replay-derived studies are
 defined once and tested for cross-interface equality. What they compute is a
 study; "run" names only a trajectory, and machinery takes no word a user's
@@ -1937,10 +1924,11 @@ may introduce external semantic state. Complexity telemetry and per-problem
 Showcase thresholds prevent attractive visualizations from hiding trivial
 models or forced traces.
 
-### D-035: Browser execution reuses the Rust service
+### D-035: Browser execution reuses the Rust study runtime
 
 The browser does not maintain a TypeScript economy or a second set of problem
-solvers. `axionomy-studio-wasm` compiles the interface-neutral service to
+solvers. `axionomy-studio-wasm` compiles the interface-neutral study runtime and
+the canonical problems to
 `wasm32-unknown-unknown`; a dedicated Worker transports Rust-owned requests,
 observations, and studies. Native HTTP/SSE remains preferable when present,
 the Worker is the first-class GitHub Pages engine, and pre-built studies are
@@ -2136,7 +2124,7 @@ Axionomy succeeds when:
 - Remote callers can store, inspect, branch, search, cancel, poll, and replay
   without relying on hidden session state.
 - Browser users can load a portable document, follow a native live study, or
-  run the same Rust service in a Worker; they can inspect a study's thinking,
+  run the same Rust study runtime in a Worker; they can inspect a study's thinking,
   scrub every accepted exchange, and inspect exact balances and deltas without
   a parallel mutable world model or handwritten cross-language contract.
 - Every canonical problem can be discovered, studied, replayed, and

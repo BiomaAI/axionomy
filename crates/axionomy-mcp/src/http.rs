@@ -1,6 +1,6 @@
 use crate::AxionomyMcp;
-use axionomy_service::Registry;
 use axionomy_store::{Store, StoreError};
+use axionomy_study::Registry;
 use rmcp::transport::streamable_http_server::{
     StreamableHttpServerConfig, StreamableHttpService, session::never::NeverSessionManager,
 };

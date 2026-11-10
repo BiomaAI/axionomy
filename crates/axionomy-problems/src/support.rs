@@ -1,7 +1,7 @@
 //! What the problems' studies and views share: their catalog entries, and
 //! exact fractions.
 
-use axionomy_service::{
+use axionomy_study::{
     Capability, InstanceDescriptor, InstanceProfile, ProblemDescriptor, ProblemFamily, ProblemPath,
     StrategyDescriptor, StrategyPath,
 };

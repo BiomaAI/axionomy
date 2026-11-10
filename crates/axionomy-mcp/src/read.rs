@@ -17,8 +17,8 @@ use axionomy::{
     AccountPath, AssetPath, Quantity, RatePath, RolePath,
     paths::{self, Paths},
 };
-use axionomy_service::{Study, StudyControl};
 use axionomy_store::state;
+use axionomy_study::{Study, StudyControl};
 use axionomy_view::{DocumentPath, ExchangeFrame, ViewDocument};
 use rmcp::{
     ErrorData as McpError,

@@ -363,7 +363,7 @@ survive the members they summarize.
   exchanges that made a snapshot, `axionomy_trace_find` names the first state
   where a balance condition holds, a `diff` resource compares two snapshots,
   and accounts and balances page from the state tree. Studies are runs too,
-  and no study is kept as JSON: the service reports each document's
+  and no study is kept as JSON: the study runtime reports each document's
   trajectory written as paths (D-044), and MCP records its initial state as a
   run of its own and its trace as a run forked from it, one step per exchange,
   each under an `eco-` handle the study's summary lists. Every tool and

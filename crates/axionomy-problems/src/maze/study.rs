@@ -10,11 +10,10 @@ use axionomy_search::{
     AStarSession, BfsSession,
     session::{Continue, WorkBudget},
 };
-use axionomy_service::{
+use axionomy_study::{
     Capability, DocumentSpec, InstanceProfile, Problem, ProblemDescriptor, ProblemFamily,
-    ProblemPath, ProposalSpec, ServiceError, StudyKey, StudyProgress, Work, document,
-    frontier_trace, graph_metrics, problem_error, proposal, retain_observation, strategy,
-    telemetry,
+    ProblemPath, ProposalSpec, StudyError, StudyKey, StudyProgress, Work, document, frontier_trace,
+    graph_metrics, problem_error, proposal, retain_observation, strategy, telemetry,
 };
 use axionomy_view::{
     AlgorithmPath, Keyed, Label, ObjectiveAxisView, ObjectiveDirectionView, ObjectiveView,
@@ -96,7 +95,7 @@ impl Problem for Maze {
         &self,
         key: &StudyKey,
         progress: &mut StudyProgress<'_>,
-    ) -> Result<Vec<ViewDocument>, ServiceError> {
+    ) -> Result<Vec<ViewDocument>, StudyError> {
         build(key, progress)
     }
 }
@@ -187,7 +186,7 @@ fn pareto_frontier() -> Work {
 fn build(
     study: &StudyKey,
     progress: &mut StudyProgress<'_>,
-) -> Result<Vec<ViewDocument>, ServiceError> {
+) -> Result<Vec<ViewDocument>, StudyError> {
     let problem = &study.problem;
     let initial = match study.instance {
         InstanceProfile::Micro => maze::initial(),
@@ -479,7 +478,7 @@ fn solved_expansion(
     initial: &World,
     trace: &axionomy::Trace<maze::Ontology>,
     problem: &ProblemPath,
-) -> Result<MazeExpansion, ServiceError> {
+) -> Result<MazeExpansion, StudyError> {
     let solved = initial
         .replayed(trace)
         .map_err(|error| problem_error(problem, error))?;
@@ -490,7 +489,7 @@ fn saved_graph_observations(
     initial: &World,
     search: Search,
     problem: &ProblemPath,
-) -> Result<Vec<SearchObservationView>, ServiceError> {
+) -> Result<Vec<SearchObservationView>, StudyError> {
     let expanded = std::rc::Rc::new(std::cell::RefCell::new(None));
     let mut observations = VecDeque::new();
     let frontier = search.frontier();
@@ -600,7 +599,7 @@ fn emit_expansion(
     state: axionomy_search::GraphSearchProgress,
     expansion: MazeExpansion,
     progress: &mut StudyProgress<'_>,
-) -> Result<(), ServiceError> {
+) -> Result<(), StudyError> {
     let _ = progress.graph_with_subjects(
         work,
         state,
@@ -615,7 +614,7 @@ fn emit_solution(
     state: axionomy_search::GraphSearchProgress,
     expansion: MazeExpansion,
     progress: &mut StudyProgress<'_>,
-) -> Result<(), ServiceError> {
+) -> Result<(), StudyError> {
     let _ = progress.graph_with_subjects(
         work,
         state,
@@ -630,7 +629,7 @@ fn observe_selected_search(
     search: Search,
     progress: &mut StudyProgress<'_>,
     problem: &ProblemPath,
-) -> Result<(), ServiceError> {
+) -> Result<(), StudyError> {
     let expanded = std::rc::Rc::new(std::cell::RefCell::new(None));
     let frontier = search.frontier();
     if search == Search::BreadthFirst {

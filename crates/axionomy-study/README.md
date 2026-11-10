@@ -1,11 +1,11 @@
-# axionomy-service
+# axionomy-study
 
 The interface-neutral study runtime for Axionomy. It describes capabilities,
 accepts reproducible study requests, and returns replay-derived studies without
 depending on HTTP, CLI, MCP, async runtimes, databases, a browser, or any
 particular problem.
 
-A study is what the service computes for a request: a problem's instance under
+A study is what the runtime computes for a request: a problem's instance under
 its strategies, with a seed and a budget. Each document of a study holds a run,
 one trajectory replayed through the core, and the evidence of how it was found.
 "Run" means only that trajectory.
@@ -20,7 +20,7 @@ ontology of your own is studied in Studio, MCP and the CLI by registering its
 
 Its deliberately small vocabulary is `Problem`, `Registry`,
 `ProblemDescriptor`, `StudyRequest`, `StudyControl`, `StudyProgress`,
-`ServiceProgress`, `SearchObservationView`, `Study` and `StudioEvent`.
+`Progress`, `SearchObservationView`, `Study` and `StudioEvent`.
 Problems and strategies are paths (`work-league`, `a-star`), and an instance
 is named by its profile: `micro`, `showcase` or `stress`.
 `Registry::resolve` decides a request's instance and strategy and returns the
@@ -42,7 +42,7 @@ A problem reports through `StudyProgress`: progress and the thinking it makes,
 frames, and each document's trajectory, with `StudyControl` checked at every
 report and at `StudyProgress::checkpoint`. Problems with resumable algorithms
 advance Monte Carlo, MCTS, and ISMCTS in small deterministic work chunks, and
-`ServiceProgress` reports phase-local samples, iterations, nodes, and game
+`Progress` reports phase-local samples, iterations, nodes, and game
 moves through one ordered observer. One-shot problems retain the same contract
 and check control between their indivisible phases.
 

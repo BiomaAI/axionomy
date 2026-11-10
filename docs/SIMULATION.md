@@ -132,7 +132,7 @@ The Studio server's store and reopening a recorded study remain.
 ## Step 3: studies are named studies (done)
 
 Studio's and MCP's computation is named a study, in one commit with the Python
-interop suite. The service computes a `Study` from a `StudyRequest`, keyed by
+interop suite. The study runtime computes a `Study` from a `StudyRequest`, keyed by
 its `StudyKey` and controlled and observed through `StudyControl` and
 `StudyObserver`. The Studio server serves `/api/studies`, mints
 `StudioStudyId`s (`study-7`) and streams `study_started` … `study_failed`

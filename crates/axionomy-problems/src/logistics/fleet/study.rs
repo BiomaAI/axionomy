@@ -5,8 +5,8 @@ use crate::logistics::fleet::{
     self as fleet, AccountId, Asset, Location, Policy, RateId, VANS, Van, World,
 };
 use axionomy::path;
-use axionomy_service::{
-    DocumentSpec, InstanceProfile, ProposalSpec, ServiceError, StudyKey, StudyProgress, Work,
+use axionomy_study::{
+    DocumentSpec, InstanceProfile, ProposalSpec, StudyError, StudyKey, StudyProgress, Work,
     document, problem_error, proposal, simulate, telemetry,
 };
 use axionomy_view::{
@@ -18,7 +18,7 @@ pub(crate) fn build(
     study: &StudyKey,
     profile: InstanceProfile,
     progress: &mut StudyProgress<'_>,
-) -> Result<Vec<ViewDocument>, ServiceError> {
+) -> Result<Vec<ViewDocument>, StudyError> {
     let initial = fleet::initial(matches!(profile, InstanceProfile::Stress), study.seed);
     let dispatch = Work::new(
         path!("fleet-dispatch"),

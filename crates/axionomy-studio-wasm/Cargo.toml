@@ -13,7 +13,7 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 axionomy-problems.workspace = true
-axionomy-service.workspace = true
+axionomy-study.workspace = true
 axionomy-view.workspace = true
 js-sys.workspace = true
 serde_json.workspace = true

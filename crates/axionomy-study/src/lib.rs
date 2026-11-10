@@ -1,6 +1,6 @@
 //! Interface-neutral commands, progress, and studies for Axionomy.
 //!
-//! A study is what the service computes for a request: a problem's instance
+//! A study is what the runtime computes for a request: a problem's instance
 //! under its strategies, with a seed and a budget. Each of its documents holds
 //! a run, one trajectory, and the evidence of how it was found. An observer
 //! sees each trajectory written as paths, so a study's runs can be recorded
@@ -36,7 +36,7 @@ use std::{
 };
 use thiserror::Error;
 
-/// The kinds of identifiers the service defines.
+/// The kinds of identifiers the study runtime defines.
 pub mod kind {
     use axionomy::PathKind;
 
@@ -270,7 +270,7 @@ impl Study {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-pub struct ServiceProgress {
+pub struct Progress {
     pub sequence: u64,
     pub phase: PhasePath,
     pub completed: u64,
@@ -279,7 +279,7 @@ pub struct ServiceProgress {
 }
 
 pub trait StudyObserver {
-    fn progress(&mut self, progress: ServiceProgress);
+    fn progress(&mut self, progress: Progress);
 
     fn observation(&mut self, _observation: SearchObservationView) {}
 
@@ -300,9 +300,9 @@ pub trait StudyObserver {
 
 impl<F> StudyObserver for F
 where
-    F: FnMut(ServiceProgress),
+    F: FnMut(Progress),
 {
-    fn progress(&mut self, progress: ServiceProgress) {
+    fn progress(&mut self, progress: Progress) {
         self(progress);
     }
 }
@@ -502,15 +502,15 @@ impl StudyControl {
     /// Cooperatively waits at an application boundary until the caller resumes
     /// or cancels the study. Search algorithms with finer-grained sessions can
     /// call this between work-budget advances.
-    pub fn checkpoint(&self) -> Result<(), ServiceError> {
+    pub fn checkpoint(&self) -> Result<(), StudyError> {
         while self.is_paused() {
             if self.is_cancelled() {
-                return Err(ServiceError::Cancelled);
+                return Err(StudyError::Cancelled);
             }
             std::thread::sleep(std::time::Duration::from_millis(10));
         }
         if self.is_cancelled() {
-            Err(ServiceError::Cancelled)
+            Err(StudyError::Cancelled)
         } else {
             Ok(())
         }
@@ -518,7 +518,7 @@ impl StudyControl {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
-pub enum ServiceError {
+pub enum StudyError {
     #[error("unknown problem `{0}`")]
     UnknownProblem(ProblemPath),
     #[error("unknown strategy `{strategy}` for problem `{problem}`")]
@@ -635,7 +635,7 @@ mod tests {
             &self,
             key: &StudyKey,
             progress: &mut StudyProgress<'_>,
-        ) -> Result<Vec<ViewDocument>, ServiceError> {
+        ) -> Result<Vec<ViewDocument>, StudyError> {
             let work = Work::new(
                 path!("baking"),
                 path!("baking"),
@@ -728,17 +728,17 @@ mod tests {
         );
         assert_eq!(
             registry.resolve(&StudyRequest::new(path!("bread"))),
-            Err(ServiceError::UnknownProblem(path!("bread")))
+            Err(StudyError::UnknownProblem(path!("bread")))
         );
         assert!(matches!(
             registry.resolve(&StudyRequest::new(path!("baking")).with_strategy(path!("three"))),
-            Err(ServiceError::UnknownStrategy { .. })
+            Err(StudyError::UnknownStrategy { .. })
         ));
         assert!(matches!(
             registry.resolve(
                 &StudyRequest::new(path!("baking")).with_instance(InstanceProfile::Stress)
             ),
-            Err(ServiceError::UnknownInstance { .. })
+            Err(StudyError::UnknownInstance { .. })
         ));
     }
 
@@ -755,7 +755,7 @@ mod tests {
         }
 
         impl StudyObserver for Observed {
-            fn progress(&mut self, _: ServiceProgress) {}
+            fn progress(&mut self, _: Progress) {}
 
             fn frame(&mut self, document: &DocumentPath, _: ExchangeFrame) {
                 self.frames.push(document.clone());
@@ -814,7 +814,7 @@ mod tests {
     fn a_study_refuses_a_strategy_without_its_document() {
         assert!(matches!(
             bakery().study(baking(path!("none"), 1)),
-            Err(ServiceError::Problem { message, .. }) if message.contains("produced no document")
+            Err(StudyError::Problem { message, .. }) if message.contains("produced no document")
         ));
     }
 
@@ -839,7 +839,7 @@ mod tests {
         let result = bakery().study_with(
             &baking(path!("one"), 8),
             &control,
-            &mut |progress: ServiceProgress| {
+            &mut |progress: Progress| {
                 if progress.phase == path!("baking") {
                     if progress.completed == 3 {
                         control.cancel();
@@ -848,7 +848,7 @@ mod tests {
                 }
             },
         );
-        assert_eq!(result, Err(ServiceError::Cancelled));
+        assert_eq!(result, Err(StudyError::Cancelled));
         assert_eq!(batches, [1, 2, 3]);
     }
 
@@ -867,7 +867,7 @@ mod tests {
         let result = bakery().study_with(
             &baking(path!("one"), 4),
             &control,
-            &mut |progress: ServiceProgress| {
+            &mut |progress: Progress| {
                 if !paused_once && progress.phase == path!("baking") {
                     paused_once = true;
                     control.pause();

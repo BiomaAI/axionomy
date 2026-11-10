@@ -11,7 +11,7 @@ rust-version.workspace = true
 
 [dependencies]
 axionomy-problems.workspace = true
-axionomy-service.workspace = true
+axionomy-study.workspace = true
 axionomy-view.workspace = true
 axum.workspace = true
 futures-util.workspace = true

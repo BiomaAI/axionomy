@@ -438,7 +438,7 @@ name = "axionomy-cli"
 version = "0.1.0"
 dependencies = [
  "axionomy-problems",
- "axionomy-service",
+ "axionomy-study",
  "clap",
  "serde_json",
  "thiserror",
@@ -460,8 +460,8 @@ dependencies = [
  "axionomy",
  "axionomy-problems",
  "axionomy-search",
- "axionomy-service",
  "axionomy-store",
+ "axionomy-study",
  "axionomy-tree",
  "axionomy-view",
  "axum",
@@ -487,8 +487,8 @@ version = "0.1.0"
 dependencies = [
  "axionomy",
  "axionomy-search",
- "axionomy-service",
  "axionomy-store",
+ "axionomy-study",
  "axionomy-view",
  "criterion",
  "proptest",
@@ -515,19 +515,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "axionomy-service"
-version = "0.1.0"
-dependencies = [
- "axionomy",
- "axionomy-search",
- "axionomy-view",
- "schemars 1.2.3",
- "serde",
- "serde_json",
- "thiserror",
-]
-
-[[package]]
 name = "axionomy-store"
 version = "0.1.0"
 dependencies = [
@@ -547,7 +534,7 @@ name = "axionomy-studio-server"
 version = "0.1.0"
 dependencies = [
  "axionomy-problems",
- "axionomy-service",
+ "axionomy-study",
  "axionomy-view",
  "axum",
  "futures-util",
@@ -569,11 +556,24 @@ name = "axionomy-studio-wasm"
 version = "0.1.0"
 dependencies = [
  "axionomy-problems",
- "axionomy-service",
+ "axionomy-study",
  "axionomy-view",
  "js-sys",
  "serde_json",
  "wasm-bindgen",
+]
+
+[[package]]
+name = "axionomy-study"
+version = "0.1.0"
+dependencies = [
+ "axionomy",
+ "axionomy-search",
+ "axionomy-view",
+ "schemars 1.2.3",
+ "serde",
+ "serde_json",
+ "thiserror",
 ]
 
 [[package]]

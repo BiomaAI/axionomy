@@ -6,9 +6,9 @@ use crate::{
     support::{ProblemCopy, StrategyCopy, problem},
 };
 use axionomy::{Exchange, Quantity, path};
-use axionomy_service::{
+use axionomy_study::{
     Capability, DocumentSpec, InstanceProfile, Problem, ProblemDescriptor, ProblemFamily,
-    ProposalSpec, ServiceError, StudyKey, StudyProgress, Work, document, problem_error, proposal,
+    ProposalSpec, StudyError, StudyKey, StudyProgress, Work, document, problem_error, proposal,
     telemetry,
 };
 use axionomy_view::{
@@ -72,7 +72,7 @@ impl Problem for ConnectFour {
         &self,
         key: &StudyKey,
         progress: &mut StudyProgress<'_>,
-    ) -> Result<Vec<ViewDocument>, ServiceError> {
+    ) -> Result<Vec<ViewDocument>, StudyError> {
         build(key, progress)
     }
 }
@@ -80,7 +80,7 @@ impl Problem for ConnectFour {
 fn build(
     study: &StudyKey,
     progress: &mut StudyProgress<'_>,
-) -> Result<Vec<ViewDocument>, ServiceError> {
+) -> Result<Vec<ViewDocument>, StudyError> {
     let profile = study.instance;
     let standard = !matches!(profile, InstanceProfile::Micro);
     let initial = if standard {

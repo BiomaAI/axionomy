@@ -7,9 +7,9 @@ use crate::{
 };
 use axionomy::{Exchange, Quantity, path};
 use axionomy_search::rollout::Unrecorded;
-use axionomy_service::{
+use axionomy_study::{
     Capability, DocumentSpec, InstanceProfile, Problem, ProblemDescriptor, ProblemFamily,
-    ProposalSpec, ServiceError, StudyKey, StudyProgress, Work, document, problem_error, proposal,
+    ProposalSpec, StudyError, StudyKey, StudyProgress, Work, document, problem_error, proposal,
     telemetry,
 };
 use axionomy_view::{
@@ -78,7 +78,7 @@ impl Problem for Logistics {
         &self,
         key: &StudyKey,
         progress: &mut StudyProgress<'_>,
-    ) -> Result<Vec<ViewDocument>, ServiceError> {
+    ) -> Result<Vec<ViewDocument>, StudyError> {
         build(key, progress)
     }
 }
@@ -86,7 +86,7 @@ impl Problem for Logistics {
 fn build(
     study: &StudyKey,
     progress: &mut StudyProgress<'_>,
-) -> Result<Vec<ViewDocument>, ServiceError> {
+) -> Result<Vec<ViewDocument>, StudyError> {
     let profile = study.instance;
     if !matches!(profile, InstanceProfile::Micro) {
         return super::fleet::study::build(study, profile, progress);

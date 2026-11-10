@@ -1,6 +1,6 @@
 use super::*;
 use crate::{handles::StudyId, resources::Address};
-use axionomy_service::InstanceProfile;
+use axionomy_study::InstanceProfile;
 use axionomy_view::DocumentPath;
 use rmcp::model::{
     ArgumentInfo, CompletionContext, CompletionInfo, Reference, TaskPayload, TaskStatus,
@@ -687,8 +687,8 @@ fn handle<T: std::str::FromStr<Err: std::fmt::Debug>>(value: &Value) -> T {
 #[derive(Default)]
 struct Trajectories(std::collections::BTreeMap<DocumentPath, (paths::Economy, paths::Trace)>);
 
-impl axionomy_service::StudyObserver for Trajectories {
-    fn progress(&mut self, _: ServiceProgress) {}
+impl axionomy_study::StudyObserver for Trajectories {
+    fn progress(&mut self, _: Progress) {}
 
     fn trajectory(
         &mut self,
@@ -846,7 +846,7 @@ async fn a_study_keeps_its_key_and_handles_and_computes_its_views_again() {
 
     // What is kept is the summary without the study's handle: no views.
     let bytes = server.archive.study_bytes(&study_id).unwrap();
-    assert!(serde_json::from_slice::<axionomy_service::Study>(&bytes).is_err());
+    assert!(serde_json::from_slice::<axionomy_study::Study>(&bytes).is_err());
     let mut kept: Value = serde_json::from_slice(&bytes).unwrap();
     let mut expected = summary.clone();
     expected.as_object_mut().unwrap().remove("study_id");

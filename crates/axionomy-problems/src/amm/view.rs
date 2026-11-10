@@ -5,7 +5,7 @@ use crate::{
     support::gcd,
 };
 use axionomy::path;
-use axionomy_service::{ProblemPath, ServiceError, problem_error};
+use axionomy_study::{ProblemPath, StudyError, problem_error};
 use axionomy_view::{
     ExactQuantity, Format, Keyed, Label, LeaderboardEntryView, LeaderboardView, MarketActorView,
     MarketPoolView, ObjectiveDirectionView, QuantityFormat, Scene, SceneAnchorView,
@@ -280,7 +280,7 @@ pub(super) fn attach_contribution_leaderboards(
     trace: &axionomy::Trace<amm::Ontology>,
     document: &mut ViewDocument,
     problem: &ProblemPath,
-) -> Result<(), ServiceError> {
+) -> Result<(), StudyError> {
     let mut world = initial.clone();
     let mut contributions = BTreeMap::<Actor, i128>::new();
     document.initial.leaderboards = vec![contribution_board(&contributions)];

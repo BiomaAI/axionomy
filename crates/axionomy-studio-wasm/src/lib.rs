@@ -8,9 +8,8 @@
 //! [`study_in`] serve any [`Registry`], for a Worker built over other
 //! problems.
 
-use axionomy_service::{
-    Registry, ServiceProgress, StudioEvent, StudioStudyId, StudyControl, StudyObserver,
-    StudyRequest,
+use axionomy_study::{
+    Progress, Registry, StudioEvent, StudioStudyId, StudyControl, StudyObserver, StudyRequest,
 };
 use axionomy_view::{DocumentPath, ExchangeFrame, SearchObservationView};
 use js_sys::Function;
@@ -89,7 +88,7 @@ impl WorkerObserver<'_> {
 }
 
 impl StudyObserver for WorkerObserver<'_> {
-    fn progress(&mut self, progress: ServiceProgress) {
+    fn progress(&mut self, progress: Progress) {
         let sequence = self.sequence();
         let _ = self.event(StudioEvent::Progress {
             study_id: self.study_id,

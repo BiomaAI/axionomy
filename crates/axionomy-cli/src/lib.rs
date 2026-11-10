@@ -1,5 +1,5 @@
-use axionomy_service::{
-    InstanceProfile, ProblemPath, Registry, ServiceError, StrategyPath, Study, StudyRequest,
+use axionomy_study::{
+    InstanceProfile, ProblemPath, Registry, StrategyPath, Study, StudyError, StudyRequest,
 };
 use clap::{Parser, Subcommand, ValueEnum};
 use std::path::PathBuf;
@@ -58,7 +58,7 @@ enum OutputFormat {
 #[derive(Debug, Error)]
 pub enum CliError {
     #[error(transparent)]
-    Service(#[from] ServiceError),
+    Study(#[from] StudyError),
     #[error("could not encode JSON: {0}")]
     Json(#[from] serde_json::Error),
     #[error("could not write `{path}`: {source}")]
@@ -101,7 +101,7 @@ pub fn execute(registry: &Registry, cli: Cli) -> Result<CliOutput, CliError> {
         Command::Describe { problem, json } => {
             let descriptor = registry
                 .problem(&problem)
-                .ok_or_else(|| ServiceError::UnknownProblem(problem.clone()))?;
+                .ok_or_else(|| StudyError::UnknownProblem(problem.clone()))?;
             let text = if json {
                 serde_json::to_string_pretty(&descriptor)?
             } else {
@@ -198,7 +198,7 @@ where
 fn summary(study: &Study) -> String {
     let selected = study
         .selected()
-        .expect("service studies always name an included document");
+        .expect("studies always name an included document");
     let objectives = if selected.objectives.is_empty() {
         "none".into()
     } else {
@@ -239,7 +239,7 @@ mod tests {
     use axionomy_problems::registry;
 
     #[test]
-    fn a_json_study_is_the_shared_service_study() {
+    fn a_json_study_is_the_registry_study() {
         let output = run_from(
             &registry(),
             [
@@ -254,12 +254,12 @@ mod tests {
         )
         .unwrap();
         let cli_study: Study = serde_json::from_str(&output.text).unwrap();
-        let service_study = registry()
+        let registry_study = registry()
             .study(
                 StudyRequest::new("maze".parse().unwrap()).with_strategy("a-star".parse().unwrap()),
             )
             .unwrap();
-        assert_eq!(cli_study, service_study);
+        assert_eq!(cli_study, registry_study);
     }
 
     #[test]
