@@ -1499,15 +1499,15 @@ impl<O> WrittenOntology for O where
 ///
 /// When an identifier is written as neither a path nor a whole number, which
 /// no identifier deriving [`axionomy::Identifier`] is.
-pub struct DebugOntology<O>(PhantomData<fn() -> O>);
+pub struct PathOntology<O>(PhantomData<fn() -> O>);
 
-impl<O: Ontology> Default for DebugOntology<O> {
+impl<O: Ontology> Default for PathOntology<O> {
     fn default() -> Self {
         Self(PhantomData)
     }
 }
 
-impl<O: WrittenOntology> DebugOntology<O> {
+impl<O: WrittenOntology> PathOntology<O> {
     fn id<T: Debug + Serialize>(&self, category: &str, value: &T) -> ViewId {
         let written = match serde_json::to_value(value) {
             Ok(Value::String(path)) => path,
@@ -1522,7 +1522,7 @@ impl<O: WrittenOntology> DebugOntology<O> {
     }
 }
 
-impl<O: WrittenOntology> ViewOntology<O> for DebugOntology<O> {
+impl<O: WrittenOntology> ViewOntology<O> for PathOntology<O> {
     fn account(&self, id: &O::Account) -> ViewId {
         self.id("account", id)
     }
@@ -2400,7 +2400,7 @@ mod tests {
             type Role = Number;
         }
 
-        let written = DebugOntology::<Written>::default();
+        let written = PathOntology::<Written>::default();
         let edge = written.asset(&Thing::Edge(Room::KeyRoom, Room::Gate));
         assert_eq!(edge.key.as_str(), "written/asset/edge/key-room/gate");
         assert_eq!(edge.label, "Edge Key Room, Gate");
@@ -2409,14 +2409,14 @@ mod tests {
             "written/role/crate/some/7"
         );
         assert_eq!(
-            DebugOntology::<axionomy::paths::Paths>::default()
+            PathOntology::<axionomy::paths::Paths>::default()
                 .account(&"loans/42".parse().unwrap())
                 .key
                 .as_str(),
             "paths/account/loans/42"
         );
         assert_eq!(
-            DebugOntology::<Numbered>::default()
+            PathOntology::<Numbered>::default()
                 .rate(&Number(10))
                 .key
                 .as_str(),

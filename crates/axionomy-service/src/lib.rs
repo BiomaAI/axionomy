@@ -997,7 +997,7 @@ mod tests {
             .expect("lending is studied");
         let document = study.selected().expect("a selected document");
         let key = |asset| {
-            axionomy_view::DebugOntology::<lending::Ontology>::default()
+            axionomy_view::PathOntology::<lending::Ontology>::default()
                 .asset(&asset)
                 .key
         };

@@ -6,8 +6,8 @@ use crate::{
 use axionomy::{Economy, Goal, Ontology, Quantity, Trace, paths};
 use axionomy_search::{GraphSearchProgress, rollout::RolloutResult};
 use axionomy_view::{
-    DebugOntology, DocumentPath, ExchangeFrame, ItemPath, LeaderboardView, MeasurePath,
-    ObjectiveView, PhasePath, PlaybackError, ProposalView, QuantityFormat, Scene, SceneAnchorView,
+    DocumentPath, ExchangeFrame, ItemPath, LeaderboardView, MeasurePath, ObjectiveView,
+    PathOntology, PhasePath, PlaybackError, ProposalView, QuantityFormat, Scene, SceneAnchorView,
     SceneEntityRoleView, SceneEntityView, SceneEvidenceRefView, SceneGlyphView, SceneMetricView,
     SceneToneView, SearchObservationKindView, SearchObservationView, SearchTelemetryView,
     TelemetryKindView, TelemetryPointView, ViewDocument, ViewDocumentMetadata, ViewId,
@@ -139,12 +139,12 @@ pub(super) fn evaluated_integer_front(
 /// The key every view of `O` gives `account`, so a scene names the account
 /// a frame shows.
 pub(super) fn account_key<O: WrittenOntology>(account: &O::Account) -> ItemPath {
-    DebugOntology::<O>::default().account(account).key
+    PathOntology::<O>::default().account(account).key
 }
 
 /// The key every view of `O` gives `asset`.
 pub(super) fn asset_key<O: WrittenOntology>(asset: &O::Asset) -> ItemPath {
-    DebugOntology::<O>::default().asset(asset).key
+    PathOntology::<O>::default().asset(asset).key
 }
 
 /// Shows `entity` as `account`, citing the account as its evidence.
@@ -198,11 +198,11 @@ type StudioScene<O> = fn(u64, &Economy<O>) -> Option<Scene>;
 type StudioLeaderboards<O> = fn(u64, &Economy<O>) -> Vec<LeaderboardView>;
 type StudioProjections<O> = (StudioScene<O>, StudioLeaderboards<O>);
 
-/// Studio's view of an ontology: keys from [`DebugOntology`], under the
+/// Studio's view of an ontology: keys from [`PathOntology`], under the
 /// ontology's name; labels from [`StudioLabel`]; and the problem's scene and
 /// leaderboards.
 struct StudioOntology<O: Ontology> {
-    fallback: DebugOntology<O>,
+    fallback: PathOntology<O>,
     scene: Option<StudioScene<O>>,
     leaderboards: Option<StudioLeaderboards<O>>,
 }
@@ -210,7 +210,7 @@ struct StudioOntology<O: Ontology> {
 impl<O: Ontology> StudioOntology<O> {
     fn new(scene: Option<StudioScene<O>>) -> Self {
         Self {
-            fallback: DebugOntology::default(),
+            fallback: PathOntology::default(),
             scene,
             leaderboards: None,
         }

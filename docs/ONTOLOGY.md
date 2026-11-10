@@ -305,7 +305,7 @@ and consults nothing outside the economy.
 | Kernel | `Economy<O>`, `Exchange<O>`, `Trace<O>`, …: the four kinds, kept distinct |
 | Search | Generic over `O`: graph search, MCTS, ISMCTS, Pareto search and rollouts all read and propose through the kernel |
 | Storage (`axionomy-store`) | Any ontology whose identifiers serialize (`Recordable`). A run records `O::NAME`, is read back only as that ontology, and every identifier is stored as its JSON: for a derived identifier, its path. |
-| Views (`axionomy-view`) | `ViewOntology<O>`: how views show `O`, meaning keys, labels, scenes and leaderboards. `DebugOntology<O>` keys each value by its written path under the ontology's name, for example `bakery/account/customer/0`, and labels it from its `Debug` output. |
+| Views (`axionomy-view`) | `ViewOntology<O>`: how views show `O`, meaning keys, labels, scenes and leaderboards. `PathOntology<O>` keys each value by its written path under the ontology's name, for example `bakery/account/customer/0`, and labels it from its `Debug` output. |
 | Units and time | `axionomy-units` and `axionomy-time` author typed quantities and lower them into atoms of an ontology's assets |
 | MCP and remote clients | The `paths` ontology, where every identifier is data |
 
