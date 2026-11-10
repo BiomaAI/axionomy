@@ -63,7 +63,7 @@ constructed as approximate.
 ## Bounded, caller-controlled execution
 
 Long-running algorithms expose runtime-neutral sessions instead of owning an
-async runtime, thread, logger, or transport. `BfsSession`,
+async runtime, thread, logger, or transport. `BfsSession`, `AStarSession`,
 `ParetoSearchSession`, `MonteCarloSession`, `MctsSession`, and `IsmctsSession`
 advance by an explicit `WorkBudget` measured in deterministic algorithm units:
 expanded states, samples, or tree iterations. Each call returns an

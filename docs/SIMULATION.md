@@ -63,34 +63,32 @@ does not reuse it for its own machinery.
 store's writer runs jobs. "Session" belongs to search, "experiment" to Monte
 Carlo, and "scenario" to Nature's encoded scenarios.
 
-## Step 1: simulations run through `rollout::run`
+## Step 1: simulations run through `rollout::run` (done)
 
-Five simulations hand-write their loop. Three share one shape, one proposal
+Five simulations hand-wrote their loop. Three shared one shape, one proposal
 per step taken from a priority order:
 
 ```rust
-// the shape of logistics::fleet, mission::expedition and rescue::incident
-let exchange = nature_response(&world)
-    .or_else(|| close_if_applicable(&world))
-    .or_else(|| actors.find_map(|actor| decision(&view(&world, actor), actor, policy)))
-    .unwrap_or_else(|| tick(&world));
+// logistics::fleet, mission::expedition and rescue::incident, as controllers
+let exchange = nature_response(world)
+    .or_else(|| close_if_applicable(world))
+    .or_else(|| actors.find_map(|actor| decision(&view(world, actor), actor, policy)))
+    .unwrap_or_else(|| tick(world));
 ```
 
-That body is a rollout controller, and the goal is its terminal condition.
-These three move onto `rollout::run`, which already applies, stops at the
-goal and reports a horizon or a rejection as a result instead of a panic.
-`work_league`'s continuous season (due events, then every worker once in a
-rotation, then the tick) and `cold_chain`'s day plan step `&mut impl Apply`
-so they can be recorded, and keep their own loops until a second problem
-shares their shape.
+That body is now a rollout controller, and the goal its terminal condition:
+`fleet::run`, `expedition::run` and `incident::run` take
+`&mut impl Apply` and return the rollout's result, so a horizon or a
+rejection reaches the service as an error instead of a panic, and every
+Studio replay stayed byte for byte the same. `work_league`'s continuous
+season (due events, then every worker once in a rotation, then the tick) and
+`cold_chain`'s day plan keep their own loops until a second problem shares
+their shape.
 
-Names become consistent on the way: `response` and
-`required_nature_response` become `nature_response`, and the six
-`type Proposal = Trace<Ontology>` aliases go, since a proposal is one
+Names became consistent on the way: `response` and
+`required_nature_response` are `nature_response`, and the six
+`type Proposal = Trace<Ontology>` aliases are gone, since a proposal is one
 exchange.
-
-Done when every Studio replay is byte for byte the same, the three loops are
-gone, and their horizons and rejections reach the service as errors.
 
 ## Step 2: studies record their runs (built for MCP)
 

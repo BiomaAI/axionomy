@@ -436,8 +436,9 @@ mutable account reference. Semantic mutation occurs only through `apply` or
 
 Search and simulation use:
 
-- `fork` to create an isolated branch.
-- `simulate` to apply one exchange on a branch.
+- `clone`, constant-time, to create an isolated branch.
+- `apply` on a branch to step it, or `rollout::run` over `&mut impl Apply` to
+  step it to a goal, in memory or recorded.
 - `replayed` to validate a full trace without touching its source.
 - `state_key` for a canonicalized logical-state key.
 - `assess` to explain one proposal and preview feasible deltas.
@@ -761,7 +762,7 @@ the projection must make the display less convenient without changing which
 exchanges are valid, what they do, or whether a trace reaches its goal.
 
 The browser boundary is deliberately monomorphic. Arbitrary user types such
-as `Economy<MyAccount, MyAsset, MyRate, MyRole>` cannot be known statically by
+as `Economy<MyOntology>` cannot be known statically by
 a TypeScript build, so the Rust adapter lowers them into:
 
 ```text
@@ -773,7 +774,8 @@ Scene         = terrain/topology surface + stable role-bearing semantic entities
                 + typed economic evidence links
                 + paths + annotations + metrics
 Leaderboard   = direction + ordered participants + exact score + rank evidence
-ExchangeFrame = before + assessment + exchange + receipt + after + cues
+ExchangeFrame = assessment + exchange + receipt + after + cues
+               (the state before is the previous frame's after)
 ViewDocument  = metadata + model + initial snapshot + replay frames
                 + proposals + objectives + Pareto fronts + telemetry
                 + actor-relative observations + thinking
@@ -1651,10 +1653,10 @@ factor.
    the redb store with runs, durability rules, tags, groups, metrics and refs,
    MCP on the store, storing any ontology whose identifiers serialize, and
    rollouts and Monte Carlo episodes recording where they run (`Apply`,
-   `Episodes`, `GroupRecorder`) are built; next, studies record their runs in
-   the store, search sessions, MPPI and RL record, and Studio scrubs from stored
-   roots, in the order [simulation, runs and studies](docs/SIMULATION.md)
-   gives. Extract generic holdings, dependency, and event indexes only after a
+   `Episodes`, `GroupRecorder`), and MCP recording each study document as an
+   economy are built; next, search sessions, MPPI and RL record, and the Studio
+   server keeps studies and scrubs from stored roots, as
+   [simulation, runs and studies](docs/SIMULATION.md) describes. Extract generic holdings, dependency, and event indexes only after a
    second domain confirms the perishables shapes.
 5. Extend invariants with carefully constrained local and inequality forms.
 6. Build an external OR adapter that compiles one closed schedule and replays
@@ -1733,7 +1735,7 @@ encoded rather than supplied by opaque callbacks.
 
 ### D-009: Bounded structured expressiveness precedes universality claims
 
-Thirteen executable problems provide stronger product evidence than a vacuous
+Fifteen executable problems provide stronger product evidence than a vacuous
 one-token-per-world construction. Turing completeness is not a current goal.
 
 ### D-010: Conformance problems stay in-tree
@@ -2023,6 +2025,7 @@ conditions and an economy's invariants (`money-accounting`) are
 treats a name as text it only compares, so paths are a subset it already
 covers, and its fixtures name things with paths. `path!("minimum-output")`
 checks a literal name when compiling.
+
 ### D-042: The ontology is the kernel's type parameter
 
 A problem's vocabulary is one type. An `Ontology` names its account, asset,
@@ -2044,6 +2047,7 @@ ontology `O`, its keys, labels, scenes and leaderboards; it is of an ontology,
 not one. The kernel's semantics are unchanged, so the Lean specification and
 its fixtures are too. [Ontologies](docs/ONTOLOGY.md) is the guide to building
 one.
+
 ### D-043: Quantities are read in their asset's format
 
 The kernel counts atoms, and a reader must never have to know an asset's
