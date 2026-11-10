@@ -27,6 +27,12 @@ pub(super) fn build(
         InstanceProfile::Showcase => study.budget.max(2),
         InstanceProfile::Stress => study.budget.max(256),
     } as usize;
+    let (monte_carlo, pareto_sampling) = (Work::monte_carlo(), Work::pareto_sampling());
+    let mcts = Work::new(
+        path!("mcts"),
+        path!("mcts"),
+        SearchObservationKindView::Tree,
+    );
     let estimate = logistics::monte_carlo_with_risk_progress(
         &initial,
         samples,
@@ -35,7 +41,7 @@ pub(super) fn build(
         samples.clamp(1, 8),
         |state| {
             progress.emit(
-                path!("monte-carlo"),
+                &monte_carlo,
                 state.completed_samples() as u64,
                 state.total_samples() as u64,
                 format!(
@@ -47,7 +53,7 @@ pub(super) fn build(
         },
     );
     progress.ensure()?;
-    let estimate = estimate.ok_or_else(|| problem_error("logistics", "Monte Carlo failed"))?;
+    let estimate = estimate.ok_or_else(|| problem_error(&study.problem, "Monte Carlo failed"))?;
     let front = logistics::policy_front_with_progress(
         &initial,
         samples,
@@ -55,7 +61,7 @@ pub(super) fn build(
         samples.clamp(1, 8),
         |state| {
             progress.emit(
-                path!("pareto-sampling"),
+                &pareto_sampling,
                 state.completed_samples() as u64,
                 state.total_samples() as u64,
                 format!(
@@ -67,15 +73,18 @@ pub(super) fn build(
         },
     );
     progress.ensure()?;
-    let front = front.ok_or_else(|| problem_error("logistics", "policy front failed"))?;
+    let front = front.ok_or_else(|| problem_error(&study.problem, "policy front failed"))?;
     let mut documents = Vec::new();
-    for (strategy, policy) in [("direct", Policy::Direct), ("reliable", Policy::Reliable)] {
+    for (strategy, policy) in [
+        (path!("direct"), Policy::Direct),
+        (path!("reliable"), Policy::Reliable),
+    ] {
         let rollout = logistics::run_policy(&mut initial.clone(), policy, study.seed);
         let mut view = document(
             progress,
             DocumentSpec {
-                problem: "logistics",
-                strategy,
+                problem: &study.problem,
+                document: strategy,
                 title: if policy == Policy::Direct {
                     "Logistics · direct route"
                 } else {
@@ -94,11 +103,11 @@ pub(super) fn build(
             objectives(&rollout),
             scene,
         )
-        .map_err(|error| problem_error("logistics", error))?;
+        .map_err(|error| problem_error(&study.problem, error))?;
         view.pareto_fronts.push(policy_front(&front, policy));
         let stats = estimate
             .estimate(policy)
-            .ok_or_else(|| problem_error("logistics", "missing policy estimate"))?;
+            .ok_or_else(|| problem_error(&study.problem, "missing policy estimate"))?;
         view.telemetry.push(telemetry(
             "Monte Carlo rollouts",
             false,
@@ -119,7 +128,7 @@ pub(super) fn build(
             let malformed = Exchange::new(*load.rate(), Quantity::new(1));
             view.proposals.push(proposal(
                 ProposalSpec {
-                    id: "load-without-roles",
+                    id: path!("load-without-roles"),
                     label: "Load without vehicle/order",
                     description: "The rule exists, but no vehicle and no order were named.",
                 },
@@ -138,7 +147,7 @@ pub(super) fn build(
         samples.clamp(1, 8),
         |decision, state| {
             progress.emit(
-                path!("mcts"),
+                &mcts,
                 state.iterations() as u64,
                 state.target_iterations() as u64,
                 format!(
@@ -152,10 +161,10 @@ pub(super) fn build(
             )
         },
     )
-    .map_err(|error| problem_error("logistics", error))?;
+    .map_err(|error| problem_error(&study.problem, error))?;
     progress.ensure()?;
     let planned =
-        planned.ok_or_else(|| problem_error("logistics", "MCTS planning was interrupted"))?;
+        planned.ok_or_else(|| problem_error(&study.problem, "MCTS planning was interrupted"))?;
     let description = format!(
         "Replan after deliveries and disruptions, execute every selected action, and retain the final outcome: {}. Search randomness is separate from realized weather. The sampled frontier compares the two fixed-policy baselines, not this planner.",
         match planned.stop {
@@ -167,8 +176,8 @@ pub(super) fn build(
     let mut mcts = document(
         progress,
         DocumentSpec {
-            problem: "logistics",
-            strategy: "mcts",
+            problem: &study.problem,
+            document: path!("mcts"),
             title: "Logistics · adaptive delivery",
             description: &description,
             source_label: "Stochastic logistics",
@@ -179,7 +188,7 @@ pub(super) fn build(
         objectives(&planned.rollout),
         scene,
     )
-    .map_err(|error| problem_error("logistics", error))?;
+    .map_err(|error| problem_error(&study.problem, error))?;
     mcts.telemetry.push(telemetry(
         "Repeated Monte Carlo tree search",
         false,
@@ -211,24 +220,24 @@ pub(super) fn build(
 
 fn objectives(rollout: &logistics::MissionRollout) -> Vec<ObjectiveView> {
     vec![
-        ObjectiveView {
-            key: path!("completed"),
-            label: "Completed".into(),
-            direction: ObjectiveDirectionView::Maximize,
-            value: u8::from(rollout.completed()).to_string(),
-        },
-        ObjectiveView {
-            key: path!("delivered"),
-            label: "Orders delivered".into(),
-            direction: ObjectiveDirectionView::Maximize,
-            value: rollout.delivered().to_string(),
-        },
-        ObjectiveView {
-            key: path!("time"),
-            label: "Elapsed time".into(),
-            direction: ObjectiveDirectionView::Minimize,
-            value: rollout.elapsed_time().to_string(),
-        },
+        ObjectiveView::new(
+            path!("completed"),
+            "Completed",
+            ObjectiveDirectionView::Maximize,
+            u64::from(rollout.completed()),
+        ),
+        ObjectiveView::new(
+            path!("delivered"),
+            "Orders delivered",
+            ObjectiveDirectionView::Maximize,
+            rollout.delivered() as u64,
+        ),
+        ObjectiveView::new(
+            path!("time"),
+            "Elapsed time",
+            ObjectiveDirectionView::Minimize,
+            rollout.elapsed_time(),
+        ),
     ]
 }
 fn policy_front(front: &logistics::PolicyFront, selected: Policy) -> ParetoFrontView {

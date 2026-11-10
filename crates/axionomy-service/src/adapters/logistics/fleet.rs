@@ -10,29 +10,34 @@ pub(super) fn build(
     progress: &mut ProgressSink<'_>,
 ) -> Result<Study, ServiceError> {
     let initial = fleet::initial(matches!(profile, InstanceProfile::Stress), study.seed);
+    let dispatch = Work::new(
+        path!("fleet-dispatch"),
+        path!("fleet-dispatch"),
+        SearchObservationKindView::Phase,
+    );
     let mut documents = Vec::new();
     for (strategy, title, description, policy) in [
         (
-            "direct",
+            path!("direct"),
             "Logistics · fastest-route fleet",
             "Dispatch two different vans through the shortest available road paths. Express links save hops but consume extra fuel and can cause breakdowns; the fleet responds with shared towing and repair.",
             Policy::Fastest,
         ),
         (
-            "reliable",
+            path!("reliable"),
             "Logistics · reliable-route fleet",
             "Avoid the risky express link, respect the single occupied trunk road, and revisit delivery, refueling and maintenance choices as orders arrive. Heavy freight and cold cargo require different vehicle capacity.",
             Policy::Reliable,
         ),
         (
-            "mcts",
+            path!("mcts"),
             "Logistics · adaptive delivery",
             "Use responsive fleet dispatch and hub relays: pack spare cold-van capacity, stage compatible freight in the finite hub, and let the other van collect it. Every shipment, service and payment is a core exchange. This larger-profile policy is not MCTS; the Micro fixture retains receding-horizon MCTS.",
             Policy::Relay,
         ),
     ] {
         let _ = progress.emit(
-            path!("fleet-dispatch"),
+            &dispatch,
             documents.len() as u64,
             3,
             format!(
@@ -42,12 +47,12 @@ pub(super) fn build(
         );
         progress.ensure()?;
         let (trace, final_world) =
-            simulate("logistics", &initial, |world| fleet::run(world, policy))?;
+            simulate(&study.problem, &initial, |world| fleet::run(world, policy))?;
         let mut view = document(
             progress,
             DocumentSpec {
-                problem: "logistics",
-                strategy,
+                problem: &study.problem,
+                document: strategy,
                 title,
                 description,
                 source_label: "Heterogeneous delivery fleet",
@@ -58,7 +63,7 @@ pub(super) fn build(
             objectives(&final_world),
             scene,
         )
-        .map_err(|error| problem_error("logistics", error))?;
+        .map_err(|error| problem_error(&study.problem, error))?;
         view.telemetry.push(telemetry(
             "responsive fleet dispatch with public route planning",
             true,
@@ -68,18 +73,18 @@ pub(super) fn build(
                 "verified fleet decisions and realized route tickets".into(),
             )],
         ));
-        view.proposals.push(proposal(ProposalSpec { id: "wrong-vehicle", label: "Put refrigerated cargo in the freight van", description: "The freight van has more payload space but no refrigerated slot. Cargo compatibility is enforced by the exchange, alongside arrival and physical location." }, &initial, &fleet::action(RateId::Load { van: Van::Freight, order: 0, at: Location::Depot })));
+        view.proposals.push(proposal(ProposalSpec { id: path!("wrong-vehicle"), label: "Put refrigerated cargo in the freight van", description: "The freight van has more payload space but no refrigerated slot. Cargo compatibility is enforced by the exchange, alongside arrival and physical location." }, &initial, &fleet::action(RateId::Load { van: Van::Freight, order: 0, at: Location::Depot })));
         documents.push(view);
     }
     let _ = progress.emit(
-        path!("fleet-dispatch"),
+        &dispatch,
         3,
         3,
         "Three fleet policies completed and replay verified",
     );
     progress.ensure()?;
     for index in 0..documents.len() {
-        let front = evaluated_integer_front(
+        let front = evaluated_front(
             &documents,
             &documents[index],
             "Fleet policies on the same orders and vehicle-route tickets",
@@ -131,12 +136,7 @@ fn objectives(world: &World) -> Vec<ObjectiveView> {
         ),
     ]
     .into_iter()
-    .map(|(key, label, value, direction)| ObjectiveView {
-        key,
-        label: label.into(),
-        value: value.to_string(),
-        direction,
-    })
+    .map(|(key, label, value, direction)| ObjectiveView::new(key, label, direction, value))
     .collect()
 }
 fn scene(_: u64, world: &World) -> Option<Scene> {

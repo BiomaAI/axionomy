@@ -28,22 +28,22 @@ pub(super) fn build(
     let pareto = (!timed)
         .then(|| marketplace::pareto_front(&initial))
         .transpose()
-        .map_err(|error| problem_error("marketplace", error))?;
+        .map_err(|error| problem_error(&study.problem, error))?;
     let buyer_trace = if let Some(front) = &pareto {
-        pareto_trace(front, true)?
+        pareto_trace(front, true, &study.problem)?
     } else {
         marketplace::fulfillment::plan(&initial, marketplace::fulfillment::Preference::Buyers)
-            .ok_or_else(|| problem_error("marketplace", "buyer fulfillment search exhausted"))?
+            .ok_or_else(|| problem_error(&study.problem, "buyer fulfillment search exhausted"))?
     };
     let seller_trace = if let Some(front) = &pareto {
-        pareto_trace(front, false)?
+        pareto_trace(front, false, &study.problem)?
     } else {
         marketplace::fulfillment::plan(&initial, marketplace::fulfillment::Preference::Sellers)
-            .ok_or_else(|| problem_error("marketplace", "seller fulfillment search exhausted"))?
+            .ok_or_else(|| problem_error(&study.problem, "seller fulfillment search exhausted"))?
     };
     let traces = [
         (
-            "market-clearing",
+            path!("market-clearing"),
             "Marketplace · compatible clearing",
             "Micro settles directly. Larger markets reserve funds and goods, dispatch through occupied carriers, then settle on delivery. Delays can trigger buyer rebates.",
             clearing.trace().clone(),
@@ -54,7 +54,7 @@ pub(super) fn build(
             },
         ),
         (
-            "pareto-buyers",
+            path!("pareto-buyers"),
             "Marketplace Pareto · buyer utility",
             "Choose price concessions and delivery allocations for buyer benefit. Larger markets use a bounded beam of 24 states and compare evaluated plans.",
             buyer_trace,
@@ -65,7 +65,7 @@ pub(super) fn build(
             },
         ),
         (
-            "pareto-sellers",
+            path!("pareto-sellers"),
             "Marketplace Pareto · seller utility",
             "Choose contract prices and delivery allocations for seller benefit under the same arrivals, routes and available funds.",
             seller_trace,
@@ -81,12 +81,12 @@ pub(super) fn build(
     for (strategy, title, description, trace, algorithm) in traces {
         let final_world = initial
             .replayed(&trace)
-            .map_err(|error| problem_error("marketplace", error))?;
+            .map_err(|error| problem_error(&study.problem, error))?;
         let mut view = document(
             progress,
             DocumentSpec {
-                problem: "marketplace",
-                strategy,
+                problem: &study.problem,
+                document: strategy,
                 title,
                 description,
                 source_label: "Multi-party marketplace",
@@ -97,7 +97,7 @@ pub(super) fn build(
             objectives(&final_world),
             scene,
         )
-        .map_err(|error| problem_error("marketplace", error))?;
+        .map_err(|error| problem_error(&study.problem, error))?;
         if let Some(front) = &pareto {
             view.pareto_fronts.push(front_view(front, &view));
         }
@@ -123,7 +123,7 @@ pub(super) fn build(
             .take(3)
             .enumerate()
         {
-            view.proposals.push(proposal(ProposalSpec { id: &format!("near-match-{index}"), label: &format!("Near match {}", index + 1), description: "A complete set of participants that almost settles; the rejection names the exact account and amount that came up short." }, &initial, assessed_match.exchange()));
+            view.proposals.push(proposal(ProposalSpec { id: path!("near-match").then(&index), label: &format!("Near match {}", index + 1), description: "A complete set of participants that almost settles; the rejection names the exact account and amount that came up short." }, &initial, assessed_match.exchange()));
         }
         documents.push(view);
     }
@@ -139,6 +139,7 @@ pub(super) fn build(
 fn pareto_trace(
     result: &marketplace::ParetoResult,
     buyers: bool,
+    problem: &ProblemPath,
 ) -> Result<axionomy::Trace<marketplace::Ontology>, ServiceError> {
     result
         .front()
@@ -159,7 +160,7 @@ fn pareto_trace(
                 .sum::<u64>()
         })
         .map(|entry| entry.payload().clone())
-        .ok_or_else(|| problem_error("marketplace", "empty Pareto frontier"))
+        .ok_or_else(|| problem_error(problem, "empty Pareto frontier"))
 }
 fn objectives(world: &World) -> Vec<ObjectiveView> {
     let mut values: Vec<_> = [
@@ -177,11 +178,13 @@ fn objectives(world: &World) -> Vec<ObjectiveView> {
         ),
     ]
     .into_iter()
-    .map(|(key, label, account)| ObjectiveView {
-        key,
-        label: format!("{label} utility"),
-        direction: ObjectiveDirectionView::Maximize,
-        value: marketplace::utility(world, account).to_string(),
+    .map(|(key, label, account)| {
+        ObjectiveView::new(
+            key,
+            format!("{label} utility"),
+            ObjectiveDirectionView::Maximize,
+            marketplace::utility(world, account),
+        )
     })
     .collect();
     if marketplace::fulfillment::enabled(world) {
@@ -197,33 +200,32 @@ fn objectives(world: &World) -> Vec<ObjectiveView> {
                 AccountId::Seller(SellerId::C),
             ),
         ] {
-            values.push(ObjectiveView {
+            values.push(ObjectiveView::new(
                 key,
-                label: label.into(),
-                direction: ObjectiveDirectionView::Maximize,
-                value: marketplace::utility(world, account).to_string(),
-            });
+                label,
+                ObjectiveDirectionView::Maximize,
+                marketplace::utility(world, account),
+            ));
         }
-        values.push(ObjectiveView {
-            key: path!("ontime"),
-            label: "On-time deliveries".into(),
-            direction: ObjectiveDirectionView::Maximize,
-            value: marketplace::orders(world)
+        values.push(ObjectiveView::new(
+            path!("ontime"),
+            "On-time deliveries",
+            ObjectiveDirectionView::Maximize,
+            marketplace::orders(world)
                 .into_iter()
                 .map(|order| {
                     world
                         .balance(&AccountId::Order(order), &marketplace::Asset::OnTime)
                         .to_u64()
                 })
-                .sum::<u64>()
-                .to_string(),
-        });
-        values.push(ObjectiveView {
-            key: path!("elapsed"),
-            label: "Elapsed time".into(),
-            direction: ObjectiveDirectionView::Minimize,
-            value: marketplace::fulfillment::now(world).to_string(),
-        });
+                .sum::<u64>(),
+        ));
+        values.push(ObjectiveView::new(
+            path!("elapsed"),
+            "Elapsed time",
+            ObjectiveDirectionView::Minimize,
+            marketplace::fulfillment::now(world),
+        ));
     }
     values
 }
@@ -236,12 +238,12 @@ fn evaluated_front(documents: &[ViewDocument], selected: &ViewDocument) -> Paret
                 document
                     .objectives
                     .iter()
-                    .map(|o| o.value.parse::<u64>().unwrap())
+                    .map(|o| o.value)
                     .collect::<Vec<_>>(),
             )
         })
         .collect();
-    let dominates = |left: &[u64], right: &[u64]| {
+    let dominates = |left: &[Quantity], right: &[Quantity]| {
         left.iter()
             .zip(right)
             .zip(&selected.objectives)
@@ -285,7 +287,7 @@ fn front_view(result: &marketplace::ParetoResult, selected: &ViewDocument) -> Pa
     let selected = selected
         .objectives
         .iter()
-        .map(|o| o.value.as_str())
+        .map(|o| o.value.to_string())
         .collect::<Vec<_>>();
     ParetoFrontView {
         title: "Buyer gain vs. seller gain".into(),
@@ -312,10 +314,7 @@ fn front_view(result: &marketplace::ParetoResult, selected: &ViewDocument) -> Pa
                     .collect::<Vec<_>>();
                 ParetoPointView {
                     label: values.join(" / "),
-                    selected: values
-                        .iter()
-                        .map(String::as_str)
-                        .eq(selected.iter().copied()),
+                    selected: values.iter().eq(selected.iter()),
                     values,
                 }
             })

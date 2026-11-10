@@ -15,13 +15,13 @@ pub(super) fn build(
         InstanceProfile::Stress => exact_cover::initial_stress(),
     };
     let bfs = exact_cover::solve_bfs(&initial)
-        .ok_or_else(|| problem_error("exact-cover", "BFS found no cover"))?;
+        .ok_or_else(|| problem_error(&study.problem, "BFS found no cover"))?;
     let algorithm_x = exact_cover::algorithm_x(&initial)
-        .ok_or_else(|| problem_error("exact-cover", "Algorithm X found no cover"))?;
+        .ok_or_else(|| problem_error(&study.problem, "Algorithm X found no cover"))?;
     let mut documents = Vec::new();
     for (strategy, title, description, trace, algorithm, expanded) in [
         (
-            "breadth-first",
+            path!("breadth-first"),
             "Exact cover · plain search",
             "Breadth-first search finds a cover with the fewest selections. Larger sets can beat a cover made from pairs.",
             bfs.trace().clone(),
@@ -29,7 +29,7 @@ pub(super) fn build(
             Some(bfs.expanded() as u64),
         ),
         (
-            "algorithm-x",
+            path!("algorithm-x"),
             "Exact cover · Algorithm X",
             "Algorithm X branches on the most constrained uncovered element. It can select a different complete cover than shortest-path search.",
             algorithm_x,
@@ -40,8 +40,8 @@ pub(super) fn build(
         let mut view = document(
             progress,
             DocumentSpec {
-                problem: "exact-cover",
-                strategy,
+                problem: &study.problem,
+                document: strategy,
                 title,
                 description,
                 source_label: "Exact cover",
@@ -52,7 +52,7 @@ pub(super) fn build(
             Vec::new(),
             scene,
         )
-        .map_err(|error| problem_error("exact-cover", error))?;
+        .map_err(|error| problem_error(&study.problem, error))?;
         let mut points = vec![(
             TelemetryKindView::Generated,
             trace.exchanges().len() as u64,
@@ -77,7 +77,7 @@ pub(super) fn build(
             Quantity::new(1),
         )
         .bind(Role::Problem, AccountId::Problem);
-        view.proposals.push(proposal(ProposalSpec { id: "wrong-progress", label: "Select AB at progress 2", description: "This proposal claims two elements are already covered, but the initial state has zero covered elements." }, &initial, &overlapping));
+        view.proposals.push(proposal(ProposalSpec { id: path!("wrong-progress"), label: "Select AB at progress 2", description: "This proposal claims two elements are already covered, but the initial state has zero covered elements." }, &initial, &overlapping));
         documents.push(view);
     }
     let unsatisfiable = match profile {
@@ -85,12 +85,12 @@ pub(super) fn build(
         InstanceProfile::Showcase => exact_cover::unsatisfiable_showcase(),
         InstanceProfile::Stress => exact_cover::unsatisfiable_stress(),
     };
-    let mut unsat = document(progress, DocumentSpec { problem: "exact-cover", strategy: "unsatisfiable", title: "Exact cover · no solution exists", description: "Same rules, different subsets: no combination covers every element exactly once. The impossibility is a result, not an error.", source_label: "Exact cover" }, &unsatisfiable, &exact_cover::goal(), &Trace::new(), Vec::new(), scene).map_err(|error| problem_error("exact-cover", error))?;
+    let mut unsat = document(progress, DocumentSpec { problem: &study.problem, document: path!("unsatisfiable"), title: "Exact cover · no solution exists", description: "Same rules, different subsets: no combination covers every element exactly once. The impossibility is a result, not an error.", source_label: "Exact cover" }, &unsatisfiable, &exact_cover::goal(), &Trace::new(), Vec::new(), scene).map_err(|error| problem_error(&study.problem, error))?;
     if exact_cover::algorithm_x(&unsatisfiable).is_some()
         || exact_cover::solve_bfs(&unsatisfiable).is_some()
     {
         return Err(problem_error(
-            "exact-cover",
+            &study.problem,
             "supposed unsatisfiable instance has a cover",
         ));
     }

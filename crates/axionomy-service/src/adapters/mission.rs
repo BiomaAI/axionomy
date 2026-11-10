@@ -26,6 +26,12 @@ pub(super) fn build(
         InstanceProfile::Showcase => study.budget.max(2),
         InstanceProfile::Stress => study.budget.max(256),
     } as usize;
+    let (monte_carlo, pareto_sampling) = (Work::monte_carlo(), Work::pareto_sampling());
+    let ismcts = Work::new(
+        path!("ismcts"),
+        path!("ismcts"),
+        SearchObservationKindView::Tree,
+    );
     let comparison = mission::monte_carlo_with_progress(
         &model,
         samples,
@@ -34,7 +40,7 @@ pub(super) fn build(
         samples.clamp(1, 8),
         |state| {
             progress.emit(
-                path!("monte-carlo"),
+                &monte_carlo,
                 state.completed_samples() as u64,
                 state.total_samples() as u64,
                 format!(
@@ -46,7 +52,8 @@ pub(super) fn build(
         },
     );
     progress.ensure()?;
-    let comparison = comparison.ok_or_else(|| problem_error("mission", "Monte Carlo failed"))?;
+    let comparison =
+        comparison.ok_or_else(|| problem_error(&study.problem, "Monte Carlo failed"))?;
     let front = mission::policy_front_with_progress(
         &model,
         samples,
@@ -55,7 +62,7 @@ pub(super) fn build(
         samples.clamp(1, 8),
         |state| {
             progress.emit(
-                path!("pareto-sampling"),
+                &pareto_sampling,
                 state.completed_samples() as u64,
                 state.total_samples() as u64,
                 format!(
@@ -67,11 +74,11 @@ pub(super) fn build(
         },
     );
     progress.ensure()?;
-    let front = front.ok_or_else(|| problem_error("mission", "policy front failed"))?;
+    let front = front.ok_or_else(|| problem_error(&study.problem, "policy front failed"))?;
     let baseline_observations = progress
         .observations()
         .iter()
-        .filter(|item| item.phase.as_str() == "monte-carlo")
+        .filter(|item| item.phase == monte_carlo.phase)
         .cloned()
         .collect::<Vec<_>>();
     let planned = mission::run_planned_with_progress(
@@ -81,7 +88,7 @@ pub(super) fn build(
         samples.clamp(1, 8),
         |decision, state| {
             progress.emit(
-                path!("ismcts"),
+                &ismcts,
                 state.iterations() as u64,
                 state.target_iterations() as u64,
                 format!(
@@ -94,18 +101,19 @@ pub(super) fn build(
             )
         },
     )
-    .map_err(|error| problem_error("mission", error))?;
+    .map_err(|error| problem_error(&study.problem, error))?;
     progress.ensure()?;
-    let planned = planned.ok_or_else(|| problem_error("mission", "planning was interrupted"))?;
+    let planned =
+        planned.ok_or_else(|| problem_error(&study.problem, "planning was interrupted"))?;
     let planning_observations = progress
         .observations()
         .iter()
-        .filter(|item| item.phase.as_str() == "ismcts")
+        .filter(|item| item.phase == ismcts.phase)
         .cloned()
         .collect::<Vec<_>>();
     let policies = [
-        ("coordinated", Policy::ShareAndCoordinate),
-        ("direct-north", Policy::NorthTogether),
+        (path!("coordinated"), Policy::ShareAndCoordinate),
+        (path!("direct-north"), Policy::NorthTogether),
     ];
     let mut documents = Vec::new();
     for (strategy, policy) in policies {
@@ -114,11 +122,11 @@ pub(super) fn build(
         } else {
             mission::run_policy(&mut model.clone(), policy, sample_index)
         };
-        let mut view = document(progress, DocumentSpec { problem: "mission", strategy, title: if policy == Policy::ShareAndCoordinate { "Mission · observe, decide, replan" } else { "Mission · both go north" }, description: if policy == Policy::ShareAndCoordinate { "ISMCTS chooses every public action from the Scout’s observation. After each action and Nature response, compatible belief worlds are retained and the next decision is searched again. Compare the resulting costs with committing north without information." } else { "Both agents commit without looking or sharing. The replay keeps every failure and what it cost." }, source_label: "Hidden-information mission" }, &model, &mission::goal(), rollout.trace(), vec![
-            ObjectiveView { key: path!("success"), label: "Succeeded".into(), direction: ObjectiveDirectionView::Maximize, value: u8::from(rollout.succeeded()).to_string() },
-            ObjectiveView { key: path!("time"), label: "Elapsed time".into(), direction: ObjectiveDirectionView::Minimize, value: rollout.elapsed_time().to_string() },
-            ObjectiveView { key: path!("medical"), label: "Medical kit used".into(), direction: ObjectiveDirectionView::Minimize, value: u8::from(rollout.used_medical_kit()).to_string() },
-        ], scene).map_err(|error| problem_error("mission", error))?;
+        let mut view = document(progress, DocumentSpec { problem: &study.problem, document: strategy, title: if policy == Policy::ShareAndCoordinate { "Mission · observe, decide, replan" } else { "Mission · both go north" }, description: if policy == Policy::ShareAndCoordinate { "ISMCTS chooses every public action from the Scout’s observation. After each action and Nature response, compatible belief worlds are retained and the next decision is searched again. Compare the resulting costs with committing north without information." } else { "Both agents commit without looking or sharing. The replay keeps every failure and what it cost." }, source_label: "Hidden-information mission" }, &model, &mission::goal(), rollout.trace(), vec![
+            ObjectiveView::new(path!("success"), "Succeeded", ObjectiveDirectionView::Maximize, u64::from(rollout.succeeded())),
+            ObjectiveView::new(path!("time"), "Elapsed time", ObjectiveDirectionView::Minimize, rollout.elapsed_time()),
+            ObjectiveView::new(path!("medical"), "Medical kit used", ObjectiveDirectionView::Minimize, u64::from(rollout.used_medical_kit())),
+        ], scene).map_err(|error| problem_error(&study.problem, error))?;
         view.pareto_fronts.push(policy_front(
             &front,
             (policy == Policy::NorthTogether).then_some(policy),
@@ -182,7 +190,7 @@ pub(super) fn build(
         for (index, frame) in view.frames.iter_mut().enumerate() {
             replay
                 .apply(rollout.trace().exchanges()[index].clone())
-                .map_err(|error| problem_error("mission", format!("{error:?}")))?;
+                .map_err(|error| problem_error(&study.problem, format!("{error:?}")))?;
             frame.observations = vec![
                 observation(&replay, AgentId::Scout),
                 observation(&replay, AgentId::Medic),
@@ -207,7 +215,7 @@ pub(super) fn build(
                 .bind(mission::Role::Medic, AccountId::Agent(AgentId::Medic))
                 .bind(mission::Role::Mission, AccountId::Mission);
                 view.proposals.push(proposal_at(ProposalSpec {
-                    id: "move-before-sharing",
+                    id: path!("move-before-sharing"),
                     label: "Move together before sharing the sighting",
                     description: "The Scout has seen a location, but the Medic has no intelligence yet. Assessing this move at the post-scan snapshot exposes the missing shared information; sharing is a causal prerequisite for coordinated movement.",
                 }, index as u64 + 1, &replay, &premature));
@@ -269,7 +277,7 @@ pub(super) fn build(
         }
         if let Some(candidate) = mission::candidates(&model).first() {
             let malformed = Exchange::new(*candidate.rate(), candidate.units());
-            view.proposals.push(proposal(ProposalSpec { id: "action-without-actors", label: "Mission action without roles", description: "Every mission action names an actor, Nature, the mission, and the goal. Leaving them out is rejected with the specific role missing." }, &model, &malformed));
+            view.proposals.push(proposal(ProposalSpec { id: path!("action-without-actors"), label: "Mission action without roles", description: "Every mission action names an actor, Nature, the mission, and the goal. Leaving them out is rejected with the specific role missing." }, &model, &malformed));
         }
         documents.push(view);
     }
@@ -680,7 +688,7 @@ impl StudioLabel for mission::Role {
 #[cfg(test)]
 mod tests {
     use crate::{InstanceProfile, ReferenceService, StudyRequest};
-    use axionomy::path;
+    use axionomy::{Quantity, path};
 
     #[test]
     fn mission_replays_actual_search_and_private_information_transfer() {
@@ -689,20 +697,20 @@ mod tests {
         let study = ReferenceService.study(request).unwrap();
         let planned = &study.documents[0];
         let direct = &study.documents[1];
-        assert_eq!(planned.objectives[0].value, "1");
-        assert_eq!(direct.objectives[0].value, "0");
+        assert_eq!(planned.objectives[0].value, Quantity::new(1));
+        assert_eq!(direct.objectives[0].value, Quantity::ZERO);
         assert_eq!(planned.frames[0].after, direct.frames[0].after);
         assert!(
             planned
                 .thinking
                 .iter()
-                .all(|item| item.phase.as_str() == "ismcts")
+                .all(|item| item.phase == path!("ismcts"))
         );
         assert!(
             direct
                 .thinking
                 .iter()
-                .all(|item| item.phase.as_str() == "monte-carlo")
+                .all(|item| item.phase == path!("monte-carlo"))
         );
         let scan = planned
             .frames
@@ -722,7 +730,7 @@ mod tests {
             scene
                 .metrics
                 .iter()
-                .find(|metric| metric.key.as_str() == "shared-intel")
+                .find(|metric| metric.key == path!("shared-intel"))
                 .unwrap()
                 .value,
             "1"
@@ -731,8 +739,8 @@ mod tests {
             scene
                 .entities
                 .iter()
-                .filter(|entity| entity.id.key.as_str() == "system/nature"
-                    || entity.id.key.as_str() == "system/success")
+                .filter(|entity| entity.id.key == path!("system/nature")
+                    || entity.id.key == path!("system/success"))
                 .all(|entity| matches!(entity.anchor, axionomy_view::SceneAnchorView::Unanchored))
         );
         for frame in &planned.frames {

@@ -444,9 +444,10 @@ async fn execute_study(
                     .emit(StudioEvent::Progress {
                         study_id,
                         sequence: record.sequence(),
+                        phase: progress.phase,
                         completed: progress.completed,
                         total: Some(progress.total),
-                        message: format!("{}: {}", progress.phase, progress.message),
+                        message: progress.message,
                     })
                     .await;
             }

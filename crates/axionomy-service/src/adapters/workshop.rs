@@ -18,16 +18,16 @@ pub(super) fn build(
         InstanceProfile::Stress => workshop::initial_stress(),
     };
     let bfs = workshop::solve_bfs(&initial)
-        .ok_or_else(|| problem_error("workshop", "BFS found no plan"))?;
+        .ok_or_else(|| problem_error(&study.problem, "BFS found no plan"))?;
     let best = workshop::minimize_waste(&initial)
-        .ok_or_else(|| problem_error("workshop", "best-first found no plan"))?;
+        .ok_or_else(|| problem_error(&study.problem, "best-first found no plan"))?;
     let pareto =
-        workshop::pareto_front(&initial).map_err(|error| problem_error("workshop", error))?;
-    let waste_trace = frontier_trace(&pareto, true)?;
-    let time_trace = frontier_trace(&pareto, false)?;
+        workshop::pareto_front(&initial).map_err(|error| problem_error(&study.problem, error))?;
+    let waste_trace = frontier_trace(&pareto, true, &study.problem)?;
+    let time_trace = frontier_trace(&pareto, false, &study.problem)?;
     let mut traces = vec![
         (
-            "breadth-first",
+            path!("breadth-first"),
             "Workshop · fewest steps",
             "Breadth-first search minimises the number of steps, ignoring how much material is wasted.",
             bfs.trace().clone(),
@@ -35,7 +35,7 @@ pub(super) fn build(
             bfs.expanded() as u64,
         ),
         (
-            "minimum-waste",
+            path!("minimum-waste"),
             "Workshop · least waste",
             "Best-first search minimizes irreversible scrap; unused offcuts become scrap when the shift closes.",
             best.trace().clone(),
@@ -43,7 +43,7 @@ pub(super) fn build(
             best.expanded() as u64,
         ),
         (
-            "pareto-waste",
+            path!("pareto-waste"),
             "Workshop Pareto · least waste",
             "A least-waste plan on the frontier of scrap, time and earned revenue.",
             waste_trace,
@@ -51,7 +51,7 @@ pub(super) fn build(
             pareto.progress().expanded() as u64,
         ),
         (
-            "pareto-time",
+            path!("pareto-time"),
             "Workshop Pareto · least time",
             "A fastest plan on the frontier, including setup, component production, repair and delivery.",
             time_trace,
@@ -68,7 +68,7 @@ pub(super) fn build(
                 objective_value(entry.objectives().objectives(), ObjectiveKey::Revenue)
             })
             .unwrap();
-        traces.push(("pareto-revenue", "Workshop Pareto · highest revenue",
+        traces.push((path!("pareto-revenue"), "Workshop Pareto · highest revenue",
             "The highest contract revenue on the exact frontier; tables require more material, labor and tooling than chairs.",
             entry.payload().clone(), "exact Pareto search", pareto.progress().expanded() as u64));
     }
@@ -76,12 +76,12 @@ pub(super) fn build(
     for (strategy, title, description, trace, algorithm, expanded) in traces {
         let final_world = initial
             .replayed(&trace)
-            .map_err(|error| problem_error("workshop", error))?;
+            .map_err(|error| problem_error(&study.problem, error))?;
         let mut view = document(
             progress,
             DocumentSpec {
-                problem: "workshop",
-                strategy,
+                problem: &study.problem,
+                document: strategy,
                 title,
                 description,
                 source_label: "Stoichiometric workshop",
@@ -92,7 +92,7 @@ pub(super) fn build(
             objectives(&final_world),
             scene,
         )
-        .map_err(|error| problem_error("workshop", error))?;
+        .map_err(|error| problem_error(&study.problem, error))?;
         view.pareto_fronts.push(front_view(&pareto, &view));
         view.telemetry.push(telemetry(
             algorithm,
@@ -111,7 +111,7 @@ pub(super) fn build(
             ],
         ));
         let counterfeit = workshop::action(RateId::CounterfeitChair);
-        view.proposals.push(proposal(ProposalSpec { id: "counterfeit", label: "Counterfeit chair", description: "This rule would create material out of nothing, and the conservation law rejects it." }, &initial, &counterfeit));
+        view.proposals.push(proposal(ProposalSpec { id: path!("counterfeit"), label: "Counterfeit chair", description: "This rule would create material out of nothing, and the conservation law rejects it." }, &initial, &counterfeit));
         documents.push(view);
     }
     assemble(study, descriptor, documents)
@@ -120,6 +120,7 @@ pub(super) fn build(
 fn frontier_trace(
     result: &workshop::ParetoResult,
     waste_first: bool,
+    problem: &ProblemPath,
 ) -> Result<axionomy::Trace<workshop::Ontology>, ServiceError> {
     result
         .front()
@@ -135,7 +136,7 @@ fn frontier_trace(
             }
         })
         .map(|entry| entry.payload().clone())
-        .ok_or_else(|| problem_error("workshop", "empty Pareto frontier"))
+        .ok_or_else(|| problem_error(problem, "empty Pareto frontier"))
 }
 
 fn objective_value(values: &[Objective<ObjectiveKey, u64>], key: ObjectiveKey) -> u64 {
@@ -163,12 +164,7 @@ fn objectives(world: &World) -> Vec<ObjectiveView> {
                     ObjectiveDirectionView::Maximize,
                 ),
             };
-            ObjectiveView {
-                key,
-                label: label.into(),
-                direction,
-                value: objective.value().to_string(),
-            }
+            ObjectiveView::new(key, label, direction, *objective.value())
         })
         .collect()
 }
@@ -186,7 +182,7 @@ fn front_view(result: &workshop::ParetoResult, selected: &ViewDocument) -> Paret
     let selected = selected
         .objectives
         .iter()
-        .map(|objective| objective.value.as_str())
+        .map(|objective| objective.value.to_string())
         .collect::<Vec<_>>();
     ParetoFrontView {
         title: "Production tradeoffs — every non-dominated plan".into(),
@@ -212,10 +208,7 @@ fn front_view(result: &workshop::ParetoResult, selected: &ViewDocument) -> Paret
                     } else {
                         format!("{} waste · {} time", values[0], values[1])
                     },
-                    selected: values
-                        .iter()
-                        .map(String::as_str)
-                        .eq(selected.iter().copied()),
+                    selected: values.iter().eq(selected.iter()),
                     values,
                 }
             })

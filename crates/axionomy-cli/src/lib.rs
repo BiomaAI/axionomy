@@ -204,7 +204,7 @@ fn summary(study: &Study) -> String {
         selected
             .objectives
             .iter()
-            .map(|objective| format!("{}={}", objective.label, objective.value))
+            .map(|objective| format!("{}={}", objective.label, objective.written()))
             .collect::<Vec<_>>()
             .join(", ")
     };

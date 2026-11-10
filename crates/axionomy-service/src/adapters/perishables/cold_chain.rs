@@ -14,25 +14,25 @@ pub(super) fn build(
     let mut documents = Vec::new();
     for (strategy, title, description, policy) in [
         (
-            "outage",
+            path!("outage"),
             "Perishables · protect the cold chain",
             "Power finite cold storage first, deliver urgent fresh stock, process the remainder and use backup fuel when electricity runs short. Transport draws from the same fuel reserve.",
             Policy::ProtectCold,
         ),
         (
-            "pareto-inventory",
+            path!("pareto-inventory"),
             "Perishables · process before cooling",
             "Preserve ambient stock before powering refrigeration. Processing consumes electricity and labor, then the policy revisits shipment and storage choices each day.",
             Policy::ProcessFirst,
         ),
         (
-            "pareto-energy",
+            path!("pareto-energy"),
             "Perishables · conserve transport fuel",
             "Ship on alternating days and process what the energy budget permits. Fewer trips save fuel but can leave food obligations unmet.",
             Policy::ConserveFuel,
         ),
         (
-            "storage-buffer",
+            path!("storage-buffer"),
             "Perishables · rebalance cold storage",
             "Ship refrigerated stock to free capacity, split a warm cohort to fit that space, and move it into cooling while preserving its prior heat exposure.",
             Policy::RebalanceCold,
@@ -41,12 +41,12 @@ pub(super) fn build(
         let trace = chain::run(&initial, policy);
         let final_world = initial
             .replayed(&trace)
-            .map_err(|error| problem_error("perishables", error))?;
+            .map_err(|error| problem_error(&study.problem, error))?;
         let mut view = document(
             progress,
             DocumentSpec {
-                problem: "perishables",
-                strategy,
+                problem: &study.problem,
+                document: strategy,
                 title,
                 description,
                 source_label: "Cold-chain operations",
@@ -57,7 +57,7 @@ pub(super) fn build(
             objectives(&final_world),
             scene,
         )
-        .map_err(|error| problem_error("perishables", error))?;
+        .map_err(|error| problem_error(&study.problem, error))?;
         view.telemetry.push(telemetry(
             "daily resource-responsive policy",
             true,
@@ -67,11 +67,11 @@ pub(super) fn build(
                 "verified physical and temporal exchanges".into(),
             )],
         ));
-        view.proposals.push(proposal(ProposalSpec { id: "overfilled-cold-store", label: "Move the entire ambient cohort into full cold storage", description: "The refrigerated space is occupied. Goods cannot move until enough physical capacity is released." }, &initial, &chain::action(RateId::Move { batch: 0, from: Place::Warehouse, to: Place::Fridge }, 1)));
+        view.proposals.push(proposal(ProposalSpec { id: path!("overfilled-cold-store"), label: "Move the entire ambient cohort into full cold storage", description: "The refrigerated space is occupied. Goods cannot move until enough physical capacity is released." }, &initial, &chain::action(RateId::Move { batch: 0, from: Place::Warehouse, to: Place::Fridge }, 1)));
         documents.push(view);
     }
     for index in 0..documents.len() {
-        let front = evaluated_integer_front(
+        let front = evaluated_front(
             &documents,
             &documents[index],
             "Non-dominated policies on the same outage schedule",
@@ -123,12 +123,7 @@ fn objectives(world: &World) -> Vec<ObjectiveView> {
         ),
     ]
     .into_iter()
-    .map(|(key, label, value, direction)| ObjectiveView {
-        key,
-        label: label.into(),
-        value: value.to_string(),
-        direction,
-    })
+    .map(|(key, label, value, direction)| ObjectiveView::new(key, label, direction, value))
     .collect()
 }
 fn scene(_: u64, world: &World) -> Option<Scene> {

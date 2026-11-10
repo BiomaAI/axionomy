@@ -13,31 +13,32 @@ pub(super) fn build(
     let mut documents = Vec::new();
     for (strategy, title, description, policy) in [
         (
-            "observe-then-follow",
+            path!("observe-then-follow"),
             "Rescue · responsive triage",
             "Spend limited sensor charges on fallible hints, search sectors, prioritize observed casualties, and choose treatment or rapid evacuation against continuing deterioration.",
             Policy::Triage,
         ),
         (
-            "direct-north",
+            path!("direct-north"),
             "Rescue · rapid sector sweep",
             "Begin north without a scan, search successive sectors, and use fast transport. Each rescued patient occupies the only evacuation seat until hospital arrival.",
             Policy::RapidNorth,
         ),
         (
-            "stabilize-first",
+            path!("stabilize-first"),
             "Rescue · stabilize before transport",
             "Treat discovered patients before loading when a kit remains. Restored vitality and delayed deterioration cost time that other casualties may not have.",
             Policy::StabilizeFirst,
         ),
     ] {
-        let (trace, final_world) =
-            simulate("rescue", &initial, |world| incident::run(world, policy))?;
+        let (trace, final_world) = simulate(&study.problem, &initial, |world| {
+            incident::run(world, policy)
+        })?;
         let mut view = document(
             progress,
             DocumentSpec {
-                problem: "rescue",
-                strategy,
+                problem: &study.problem,
+                document: strategy,
                 title,
                 description,
                 source_label: "Multi-patient incident",
@@ -48,13 +49,13 @@ pub(super) fn build(
             objectives(&final_world),
             scene,
         )
-        .map_err(|error| problem_error("rescue", error))?;
+        .map_err(|error| problem_error(&study.problem, error))?;
         view.observations.push(observation(&initial));
         let mut observed = initial.clone();
         for (frame, exchange) in view.frames.iter_mut().zip(trace.exchanges()) {
             observed
                 .apply(exchange.clone())
-                .map_err(|error| problem_error("rescue", error))?;
+                .map_err(|error| problem_error(&study.problem, error))?;
             frame.observations = vec![observation(&observed)];
         }
         view.telemetry.push(telemetry(
@@ -66,11 +67,11 @@ pub(super) fn build(
                 "verified decisions and environmental responses".into(),
             )],
         ));
-        view.proposals.push(proposal(ProposalSpec { id: "undiscovered-patient", label: "Load a patient before finding them", description: "A location hint is insufficient. Physical discovery, co-location, current clinical observations, energy, and an empty evacuation seat are required." }, &initial, &incident::action(RateId::Load { patient: 0, location: Location::North })));
+        view.proposals.push(proposal(ProposalSpec { id: path!("undiscovered-patient"), label: "Load a patient before finding them", description: "A location hint is insufficient. Physical discovery, co-location, current clinical observations, energy, and an empty evacuation seat are required." }, &initial, &incident::action(RateId::Load { patient: 0, location: Location::North })));
         documents.push(view);
     }
     for index in 0..documents.len() {
-        let front = evaluated_integer_front(
+        let front = evaluated_front(
             &documents,
             &documents[index],
             "Incident outcomes on the same hidden scenario",
@@ -125,11 +126,13 @@ fn objectives(world: &World) -> Vec<ObjectiveView> {
         ),
     ]
     .into_iter()
-    .map(|(key, label, account, asset, direction)| ObjectiveView {
-        key,
-        label: label.into(),
-        value: incident::value(world, account, asset).to_string(),
-        direction,
+    .map(|(key, label, account, asset, direction)| {
+        ObjectiveView::new(
+            key,
+            label,
+            direction,
+            incident::value(world, account, asset),
+        )
     })
     .collect()
 }

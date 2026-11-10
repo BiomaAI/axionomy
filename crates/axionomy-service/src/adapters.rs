@@ -1,6 +1,6 @@
 use crate::{
-    Capability, InstanceDescriptor, InstanceProfile, ProblemDescriptor, ProblemFamily,
-    ServiceError, ServiceProgress, StrategyDescriptor, Study, StudyControl, StudyKey,
+    Capability, InstanceDescriptor, InstanceProfile, ProblemDescriptor, ProblemFamily, ProblemPath,
+    ServiceError, ServiceProgress, StrategyDescriptor, StrategyPath, Study, StudyControl, StudyKey,
     StudyObserver,
 };
 use axionomy::{
@@ -10,13 +10,14 @@ use axionomy::{
 };
 use axionomy_search::{GraphSearchProgress, rollout::RolloutResult};
 use axionomy_view::{
-    DocumentPath, ExchangeFrame, ItemPath, LeaderboardView, MeasurePath, ObjectiveView,
-    PathOntology, PhasePath, PlaybackError, ProposalView, QuantityFormat, Scene, SceneAnchorView,
-    SceneEntityRoleView, SceneEntityView, SceneEvidenceRefView, SceneGlyphView, SceneMetricView,
-    SceneToneView, SearchObservationKindView, SearchObservationView, SearchTelemetryView,
-    TelemetryKindView, TelemetryPointView, ViewDocument, ViewDocumentMetadata, ViewId,
+    AlgorithmPath, DocumentPath, ExchangeFrame, ItemPath, LeaderboardView, MeasurePath,
+    ObjectiveView, PathOntology, PhasePath, PlaybackError, ProposalPath, ProposalView,
+    QuantityFormat, Scene, SceneAnchorView, SceneEntityRoleView, SceneEntityView,
+    SceneEvidenceRefView, SceneGlyphView, SceneMetricView, SceneToneView,
+    SearchObservationKindView, SearchObservationView, SearchTelemetryView, TelemetryKindView,
+    TelemetryPointView, TelemetrySubjectView, ViewDocument, ViewDocumentMetadata, ViewId,
     ViewOntology, ViewSource, WrittenOntology, derive_document, derive_document_with_frames,
-    derive_model, derive_proposal, slug,
+    derive_model, derive_proposal,
 };
 use serde::{Serialize, de::DeserializeOwned};
 use std::{collections::BTreeSet, ops::ControlFlow};
@@ -90,8 +91,8 @@ pub(super) fn asset_metric<A: StudioFormat>(
     }
 }
 
-/// Compare replayed integer outcomes without claiming an exhaustive frontier.
-pub(super) fn evaluated_integer_front(
+/// Compare replayed outcomes without claiming an exhaustive frontier.
+pub(super) fn evaluated_front(
     documents: &[ViewDocument],
     selected: &ViewDocument,
     title: &str,
@@ -108,12 +109,12 @@ pub(super) fn evaluated_integer_front(
                 document
                     .objectives
                     .iter()
-                    .map(|o| o.value.parse::<u128>().expect("integer outcome"))
+                    .map(|objective| objective.value)
                     .collect::<Vec<_>>(),
             )
         })
         .collect();
-    let dominates = |left: &[u128], right: &[u128]| {
+    let dominates = |left: &[Quantity], right: &[Quantity]| {
         left.iter()
             .zip(right)
             .zip(&selected.objectives)
@@ -296,7 +297,7 @@ fn problems() -> Vec<(ProblemDescriptor, Build)> {
     vec![
         problem(
             ProblemCopy {
-                key: "maze",
+                key: path!("maze"),
                 build: maze::build,
                 title: "Key-door maze",
                 summary: "Reach the exit under limited energy and time. The key-and-gate route saves energy, direct routes save time, and the exact frontier preserves four tradeoffs that one score would hide.",
@@ -307,38 +308,38 @@ fn problems() -> Vec<(ProblemDescriptor, Build)> {
                 ],
             },
             ProblemFamily::Pathfinding,
-            "a-star",
+            path!("a-star"),
             &[
-                (
-                    "breadth-first",
-                    "Fewest moves",
-                    "Breadth-first search: the shortest sequence, whatever it costs.",
-                    "breadth-first search",
-                ),
-                (
-                    "dijkstra",
-                    "Least energy · uninformed",
-                    "Dijkstra proves the lowest-energy route without a heuristic.",
-                    "Dijkstra",
-                ),
-                (
-                    "a-star",
-                    "Least energy",
-                    "A*, guided by an admissible distance estimate stored in the economy itself.",
-                    "A*",
-                ),
-                (
-                    "pareto-energy",
-                    "Pareto: least energy",
-                    "The lowest-energy point on the exact Pareto frontier, where no route is better on both energy and time.",
-                    "exact Pareto search",
-                ),
-                (
-                    "pareto-time",
-                    "Pareto: least time",
-                    "The fastest point on that exact frontier.",
-                    "exact Pareto search",
-                ),
+                StrategyCopy {
+                    key: path!("breadth-first"),
+                    label: "Fewest moves",
+                    description: "Breadth-first search: the shortest sequence, whatever it costs.",
+                    algorithm: "breadth-first search",
+                },
+                StrategyCopy {
+                    key: path!("dijkstra"),
+                    label: "Least energy · uninformed",
+                    description: "Dijkstra proves the lowest-energy route without a heuristic.",
+                    algorithm: "Dijkstra",
+                },
+                StrategyCopy {
+                    key: path!("a-star"),
+                    label: "Least energy",
+                    description: "A*, guided by an admissible distance estimate stored in the economy itself.",
+                    algorithm: "A*",
+                },
+                StrategyCopy {
+                    key: path!("pareto-energy"),
+                    label: "Pareto: least energy",
+                    description: "The lowest-energy point on the exact Pareto frontier, where no route is better on both energy and time.",
+                    algorithm: "exact Pareto search",
+                },
+                StrategyCopy {
+                    key: path!("pareto-time"),
+                    label: "Pareto: least time",
+                    description: "The fastest point on that exact frontier.",
+                    algorithm: "exact Pareto search",
+                },
             ],
             &[
                 Capability::DeterministicSearch,
@@ -349,7 +350,7 @@ fn problems() -> Vec<(ProblemDescriptor, Build)> {
         ),
         problem(
             ProblemCopy {
-                key: "sokoban",
+                key: path!("sokoban"),
                 build: sokoban::build,
                 title: "Sokoban",
                 summary: "Push crates onto their goal squares. Every push rewrites three cells at once, and some positions can never be recovered.",
@@ -360,20 +361,20 @@ fn problems() -> Vec<(ProblemDescriptor, Build)> {
                 ],
             },
             ProblemFamily::Pathfinding,
-            "a-star",
+            path!("a-star"),
             &[
-                (
-                    "a-star",
-                    "Goal-directed A*",
-                    "A* prioritises states using an admissible crate-to-goal distance bound.",
-                    "A*",
-                ),
-                (
-                    "breadth-first",
-                    "Fewest exchanges",
-                    "Breadth-first search explores every shorter replay before accepting a solution.",
-                    "breadth-first search",
-                ),
+                StrategyCopy {
+                    key: path!("a-star"),
+                    label: "Goal-directed A*",
+                    description: "A* prioritises states using an admissible crate-to-goal distance bound.",
+                    algorithm: "A*",
+                },
+                StrategyCopy {
+                    key: path!("breadth-first"),
+                    label: "Fewest exchanges",
+                    description: "Breadth-first search explores every shorter replay before accepting a solution.",
+                    algorithm: "breadth-first search",
+                },
             ],
             &[
                 Capability::DeterministicSearch,
@@ -383,7 +384,7 @@ fn problems() -> Vec<(ProblemDescriptor, Build)> {
         ),
         problem(
             ProblemCopy {
-                key: "exact-cover",
+                key: path!("exact-cover"),
                 build: exact_cover::build,
                 title: "Exact cover",
                 summary: "Choose subsets that cover every element exactly once. A plain search and Algorithm X reach the same answer by different routes.",
@@ -394,20 +395,20 @@ fn problems() -> Vec<(ProblemDescriptor, Build)> {
                 ],
             },
             ProblemFamily::Constraint,
-            "algorithm-x",
+            path!("algorithm-x"),
             &[
-                (
-                    "breadth-first",
-                    "Plain search",
-                    "Breadth-first search with no knowledge of cover structure; it just tries selections.",
-                    "breadth-first search",
-                ),
-                (
-                    "algorithm-x",
-                    "Algorithm X",
-                    "Knuth's Algorithm X chooses the moves; the economy still validates every one.",
-                    "Algorithm X",
-                ),
+                StrategyCopy {
+                    key: path!("breadth-first"),
+                    label: "Plain search",
+                    description: "Breadth-first search with no knowledge of cover structure; it just tries selections.",
+                    algorithm: "breadth-first search",
+                },
+                StrategyCopy {
+                    key: path!("algorithm-x"),
+                    label: "Algorithm X",
+                    description: "Knuth's Algorithm X chooses the moves; the economy still validates every one.",
+                    algorithm: "Algorithm X",
+                },
             ],
             &[
                 Capability::DeterministicSearch,
@@ -417,7 +418,7 @@ fn problems() -> Vec<(ProblemDescriptor, Build)> {
         ),
         problem(
             ProblemCopy {
-                key: "workshop",
+                key: path!("workshop"),
                 build: workshop::build,
                 title: "Workshop",
                 summary: "Choose funded contracts, prepare components, manage tool wear and deliver products. Exact tradeoffs expose faster work, lower waste and higher revenue.",
@@ -428,32 +429,32 @@ fn problems() -> Vec<(ProblemDescriptor, Build)> {
                 ],
             },
             ProblemFamily::Production,
-            "minimum-waste",
+            path!("minimum-waste"),
             &[
-                (
-                    "breadth-first",
-                    "Fewest steps",
-                    "Breadth-first search: the fewest recipe firings, whatever they waste.",
-                    "breadth-first search",
-                ),
-                (
-                    "minimum-waste",
-                    "Least waste",
-                    "Best-first search guided by scrap accumulated in the workshop account.",
-                    "best-first search",
-                ),
-                (
-                    "pareto-waste",
-                    "Pareto: least waste",
-                    "The lowest-scrap point on the exact Pareto frontier.",
-                    "exact Pareto search",
-                ),
-                (
-                    "pareto-time",
-                    "Pareto: least time",
-                    "The fastest point on that exact frontier.",
-                    "exact Pareto search",
-                ),
+                StrategyCopy {
+                    key: path!("breadth-first"),
+                    label: "Fewest steps",
+                    description: "Breadth-first search: the fewest recipe firings, whatever they waste.",
+                    algorithm: "breadth-first search",
+                },
+                StrategyCopy {
+                    key: path!("minimum-waste"),
+                    label: "Least waste",
+                    description: "Best-first search guided by scrap accumulated in the workshop account.",
+                    algorithm: "best-first search",
+                },
+                StrategyCopy {
+                    key: path!("pareto-waste"),
+                    label: "Pareto: least waste",
+                    description: "The lowest-scrap point on the exact Pareto frontier.",
+                    algorithm: "exact Pareto search",
+                },
+                StrategyCopy {
+                    key: path!("pareto-time"),
+                    label: "Pareto: least time",
+                    description: "The fastest point on that exact frontier.",
+                    algorithm: "exact Pareto search",
+                },
             ],
             &[
                 Capability::DeterministicSearch,
@@ -464,7 +465,7 @@ fn problems() -> Vec<(ProblemDescriptor, Build)> {
         ),
         problem(
             ProblemCopy {
-                key: "scheduling",
+                key: path!("scheduling"),
                 build: scheduling::build,
                 title: "Job-shop scheduling",
                 summary: "Route arriving jobs through queues and actual execution. Alternative machines, setup changes, shared crews and a recoverable machine failure change which schedule finishes first.",
@@ -475,32 +476,32 @@ fn problems() -> Vec<(ProblemDescriptor, Build)> {
                 ],
             },
             ProblemFamily::Scheduling,
-            "bounded-optimizer",
+            path!("bounded-optimizer"),
             &[
-                (
-                    "best-first",
-                    "Shortest makespan",
-                    "Best-first search on the finish time recorded in the schedule.",
-                    "best-first search",
-                ),
-                (
-                    "bounded-optimizer",
-                    "Branch optimizer",
-                    "Depth-first branch-and-bound abandons schedules it can already prove are worse.",
-                    "branch-and-bound",
-                ),
-                (
-                    "pareto-job-one",
-                    "Pareto: Job One first",
-                    "The frontier schedule that finishes Job One earliest.",
-                    "exact Pareto search",
-                ),
-                (
-                    "pareto-job-two",
-                    "Pareto: Job Two first",
-                    "The frontier schedule that finishes Job Two earliest.",
-                    "exact Pareto search",
-                ),
+                StrategyCopy {
+                    key: path!("best-first"),
+                    label: "Shortest makespan",
+                    description: "Best-first search on the finish time recorded in the schedule.",
+                    algorithm: "best-first search",
+                },
+                StrategyCopy {
+                    key: path!("bounded-optimizer"),
+                    label: "Branch optimizer",
+                    description: "Depth-first branch-and-bound abandons schedules it can already prove are worse.",
+                    algorithm: "branch-and-bound",
+                },
+                StrategyCopy {
+                    key: path!("pareto-job-one"),
+                    label: "Pareto: Job One first",
+                    description: "The frontier schedule that finishes Job One earliest.",
+                    algorithm: "exact Pareto search",
+                },
+                StrategyCopy {
+                    key: path!("pareto-job-two"),
+                    label: "Pareto: Job Two first",
+                    description: "The frontier schedule that finishes Job Two earliest.",
+                    algorithm: "exact Pareto search",
+                },
             ],
             &[
                 Capability::WeightedSearch,
@@ -511,7 +512,7 @@ fn problems() -> Vec<(ProblemDescriptor, Build)> {
         ),
         problem(
             ProblemCopy {
-                key: "rescue",
+                key: path!("rescue"),
                 build: rescue::build,
                 title: "Uncertain rescue",
                 summary: "Search for several hidden casualties while their condition worsens. Trade treatment time, limited medicine, noisy hints and transport fuel against one evacuation seat.",
@@ -522,20 +523,20 @@ fn problems() -> Vec<(ProblemDescriptor, Build)> {
                 ],
             },
             ProblemFamily::PartialObservation,
-            "observe-then-follow",
+            path!("observe-then-follow"),
             &[
-                (
-                    "observe-then-follow",
-                    "Observe and triage",
-                    "Micro evaluates the single search gamble; larger incidents repeatedly scan, search, triage, stabilize and evacuate from public observations.",
-                    "Responsive triage; Micro Monte Carlo",
-                ),
-                (
-                    "direct-north",
-                    "Rapid sector sweep",
-                    "Start north without sensing, then revisit search and evacuation decisions as the incident evolves.",
-                    "Responsive rapid sweep; Micro Monte Carlo",
-                ),
+                StrategyCopy {
+                    key: path!("observe-then-follow"),
+                    label: "Observe and triage",
+                    description: "Micro evaluates the single search gamble; larger incidents repeatedly scan, search, triage, stabilize and evacuate from public observations.",
+                    algorithm: "Responsive triage; Micro Monte Carlo",
+                },
+                StrategyCopy {
+                    key: path!("direct-north"),
+                    label: "Rapid sector sweep",
+                    description: "Start north without sensing, then revisit search and evacuation decisions as the incident evolves.",
+                    algorithm: "Responsive rapid sweep; Micro Monte Carlo",
+                },
             ],
             &[
                 Capability::PartialObservation,
@@ -546,7 +547,7 @@ fn problems() -> Vec<(ProblemDescriptor, Build)> {
         ),
         problem(
             ProblemCopy {
-                key: "bridge",
+                key: path!("bridge"),
                 build: bridge::build,
                 title: "Bridge allocation",
                 summary: "Timed traffic competes for one occupied lane. Compare fixed priority, urgency-based bids and a paid concurrent detour against arrivals, deadlines and expiring reservations.",
@@ -557,44 +558,44 @@ fn problems() -> Vec<(ProblemDescriptor, Build)> {
                 ],
             },
             ProblemFamily::Allocation,
-            "auction",
+            path!("auction"),
             &[
-                (
-                    "breadth-first",
-                    "Plain search",
-                    "Breadth-first routing search with immediate ready completions; timed search excludes bidding and deliberate lease expiry.",
-                    "breadth-first search",
-                ),
-                (
-                    "first-come-a",
-                    "First come: A",
-                    "Wait for Agent A, give A first priority, then serve B.",
-                    "first-come allocation",
-                ),
-                (
-                    "first-come-b",
-                    "First come: B",
-                    "Wait for Agent B, give B first priority, then serve A.",
-                    "first-come allocation",
-                ),
-                (
-                    "auction",
-                    "Auction",
-                    "Bids, winner, escrow, refunds, and crossing rights settle through indivisible changes.",
-                    "auction mechanism",
-                ),
-                (
-                    "pareto-a",
-                    "Pareto: favors A",
-                    "Micro: exact frontier. Timed traffic: A's preference among the evaluated routing and auction policies.",
-                    "exact Pareto search",
-                ),
-                (
-                    "pareto-b",
-                    "Pareto: favors B",
-                    "Micro: exact frontier. Timed traffic: B's preference among the evaluated routing and auction policies.",
-                    "exact Pareto search",
-                ),
+                StrategyCopy {
+                    key: path!("breadth-first"),
+                    label: "Plain search",
+                    description: "Breadth-first routing search with immediate ready completions; timed search excludes bidding and deliberate lease expiry.",
+                    algorithm: "breadth-first search",
+                },
+                StrategyCopy {
+                    key: path!("first-come-a"),
+                    label: "First come: A",
+                    description: "Wait for Agent A, give A first priority, then serve B.",
+                    algorithm: "first-come allocation",
+                },
+                StrategyCopy {
+                    key: path!("first-come-b"),
+                    label: "First come: B",
+                    description: "Wait for Agent B, give B first priority, then serve A.",
+                    algorithm: "first-come allocation",
+                },
+                StrategyCopy {
+                    key: path!("auction"),
+                    label: "Auction",
+                    description: "Bids, winner, escrow, refunds, and crossing rights settle through indivisible changes.",
+                    algorithm: "auction mechanism",
+                },
+                StrategyCopy {
+                    key: path!("pareto-a"),
+                    label: "Pareto: favors A",
+                    description: "Micro: exact frontier. Timed traffic: A's preference among the evaluated routing and auction policies.",
+                    algorithm: "exact Pareto search",
+                },
+                StrategyCopy {
+                    key: path!("pareto-b"),
+                    label: "Pareto: favors B",
+                    description: "Micro: exact frontier. Timed traffic: B's preference among the evaluated routing and auction policies.",
+                    algorithm: "exact Pareto search",
+                },
             ],
             &[
                 Capability::DeterministicSearch,
@@ -605,7 +606,7 @@ fn problems() -> Vec<(ProblemDescriptor, Build)> {
         ),
         problem(
             ProblemCopy {
-                key: "amm",
+                key: path!("amm"),
                 build: amm::build,
                 title: "The Living Market",
                 summary: "Watch repeated production and trade reshape a closed economy. Daily needs and obligations, cloudy periods, limited storage, delayed capacity investment, and responsive liquidity interact through an exact constant-product AMM. Missed needs and defaults remain visible.",
@@ -616,26 +617,26 @@ fn problems() -> Vec<(ProblemDescriptor, Build)> {
                 ],
             },
             ProblemFamily::Market,
-            "market-day",
+            path!("market-day"),
             &[
-                (
-                    "market-day",
-                    "Responsive market",
-                    "Actors revisit production, trade, investment, and liquidity decisions throughout the market season.",
-                    "verified autonomous market replay",
-                ),
-                (
-                    "no-whale",
-                    "Counterfactual: no whale",
-                    "Replay the same economy without its largest buyer and inspect the causal price difference.",
-                    "counterfactual replay",
-                ),
-                (
-                    "thin-liquidity",
-                    "Counterfactual: thin liquidity",
-                    "Withdraw half the founding liquidity and inspect how the same actors adapt to different depth and prices.",
-                    "counterfactual replay",
-                ),
+                StrategyCopy {
+                    key: path!("market-day"),
+                    label: "Responsive market",
+                    description: "Actors revisit production, trade, investment, and liquidity decisions throughout the market season.",
+                    algorithm: "verified autonomous market replay",
+                },
+                StrategyCopy {
+                    key: path!("no-whale"),
+                    label: "Counterfactual: no whale",
+                    description: "Replay the same economy without its largest buyer and inspect the causal price difference.",
+                    algorithm: "counterfactual replay",
+                },
+                StrategyCopy {
+                    key: path!("thin-liquidity"),
+                    label: "Counterfactual: thin liquidity",
+                    description: "Withdraw half the founding liquidity and inspect how the same actors adapt to different depth and prices.",
+                    algorithm: "counterfactual replay",
+                },
             ],
             &[
                 Capability::AtomicSettlement,
@@ -647,7 +648,7 @@ fn problems() -> Vec<(ProblemDescriptor, Build)> {
         ),
         problem(
             ProblemCopy {
-                key: "lending",
+                key: path!("lending"),
                 build: lending::build,
                 title: "Lending market",
                 summary: "Finance a bill that falls due before revenue arrives. Collateral caps the loan, interest follows pool utilization along a kinked curve, a reserve cut stays with the market, and a scheduled price drop can push an over-borrowed loan into liquidation.",
@@ -658,32 +659,32 @@ fn problems() -> Vec<(ProblemDescriptor, Build)> {
                 ],
             },
             ProblemFamily::Market,
-            "least-interest",
+            path!("least-interest"),
             &[
-                (
-                    "least-interest",
-                    "Least interest",
-                    "Dijkstra search charging each closed period's interest to the plan.",
-                    "Dijkstra search",
-                ),
-                (
-                    "fewest-steps",
-                    "Fewest steps",
-                    "Breadth-first search: the fewest exchanges, whatever the loan costs.",
-                    "breadth-first search",
-                ),
-                (
-                    "over-borrowed",
-                    "Over-borrowed",
-                    "Borrow to the limit at once and watch interest and the price drop end in liquidation.",
-                    "scripted scenario",
-                ),
-                (
-                    "first-depositor-attack",
-                    "First-depositor attack",
-                    "Try to inflate a fresh market's share price against a later depositor.",
-                    "scripted scenario",
-                ),
+                StrategyCopy {
+                    key: path!("least-interest"),
+                    label: "Least interest",
+                    description: "Dijkstra search charging each closed period's interest to the plan.",
+                    algorithm: "Dijkstra search",
+                },
+                StrategyCopy {
+                    key: path!("fewest-steps"),
+                    label: "Fewest steps",
+                    description: "Breadth-first search: the fewest exchanges, whatever the loan costs.",
+                    algorithm: "breadth-first search",
+                },
+                StrategyCopy {
+                    key: path!("over-borrowed"),
+                    label: "Over-borrowed",
+                    description: "Borrow to the limit at once and watch interest and the price drop end in liquidation.",
+                    algorithm: "scripted scenario",
+                },
+                StrategyCopy {
+                    key: path!("first-depositor-attack"),
+                    label: "First-depositor attack",
+                    description: "Try to inflate a fresh market's share price against a later depositor.",
+                    algorithm: "scripted scenario",
+                },
             ],
             &[
                 Capability::DeterministicSearch,
@@ -696,7 +697,7 @@ fn problems() -> Vec<(ProblemDescriptor, Build)> {
         ),
         problem(
             ProblemCopy {
-                key: "marketplace",
+                key: path!("marketplace"),
                 build: marketplace::build,
                 title: "Multi-party marketplace",
                 summary: "Negotiate funded contracts, reserve scarce shipping capacity and fulfill deliveries over time. Route delays, price concessions, late rebates and refundable reservations couple buyer and seller outcomes.",
@@ -707,26 +708,26 @@ fn problems() -> Vec<(ProblemDescriptor, Build)> {
                 ],
             },
             ProblemFamily::Market,
-            "market-clearing",
+            path!("market-clearing"),
             &[
-                (
-                    "market-clearing",
-                    "Clear the market",
-                    "Pick orders that can all settle together without overdrawing any account.",
-                    "market clearing",
-                ),
-                (
-                    "pareto-buyers",
-                    "Pareto: favors buyers",
-                    "Micro: exact clearing frontier. Larger markets: bounded fulfillment search favoring buyer benefit.",
-                    "exact Pareto clearing",
-                ),
-                (
-                    "pareto-sellers",
-                    "Pareto: favors sellers",
-                    "Micro: exact clearing frontier. Larger markets: bounded fulfillment search favoring seller benefit.",
-                    "exact Pareto clearing",
-                ),
+                StrategyCopy {
+                    key: path!("market-clearing"),
+                    label: "Clear the market",
+                    description: "Pick orders that can all settle together without overdrawing any account.",
+                    algorithm: "market clearing",
+                },
+                StrategyCopy {
+                    key: path!("pareto-buyers"),
+                    label: "Pareto: favors buyers",
+                    description: "Micro: exact clearing frontier. Larger markets: bounded fulfillment search favoring buyer benefit.",
+                    algorithm: "exact Pareto clearing",
+                },
+                StrategyCopy {
+                    key: path!("pareto-sellers"),
+                    label: "Pareto: favors sellers",
+                    description: "Micro: exact clearing frontier. Larger markets: bounded fulfillment search favoring seller benefit.",
+                    algorithm: "exact Pareto clearing",
+                },
             ],
             &[
                 Capability::AtomicSettlement,
@@ -737,7 +738,7 @@ fn problems() -> Vec<(ProblemDescriptor, Build)> {
         ),
         problem(
             ProblemCopy {
-                key: "logistics",
+                key: path!("logistics"),
                 build: logistics::build,
                 title: "Stochastic logistics",
                 summary: "Coordinate refrigerated and heavy-freight vans across three customers. Arriving orders, delivery windows, a shared trunk road, finite fuel, occupied service bays and hub handoffs interact with route disruptions.",
@@ -748,26 +749,26 @@ fn problems() -> Vec<(ProblemDescriptor, Build)> {
                 ],
             },
             ProblemFamily::StochasticPlanning,
-            "reliable",
+            path!("reliable"),
             &[
-                (
-                    "direct",
-                    "Fastest routes",
-                    "Use express routes and respond to realized breakdowns; Micro retains sampled single-vehicle evaluation.",
-                    "Responsive fleet dispatch; Micro Monte Carlo",
-                ),
-                (
-                    "reliable",
-                    "Reliable routes",
-                    "Avoid the express link and coordinate deliveries around shared road and service capacity.",
-                    "Responsive fleet dispatch; Micro Monte Carlo",
-                ),
-                (
-                    "mcts",
-                    "Relay fleet / Micro MCTS",
-                    "Larger fleets bundle compatible cargo and hand it off through the hub; Micro retains full receding-horizon Monte Carlo tree search.",
-                    "Responsive hub relay; Micro Monte Carlo tree search",
-                ),
+                StrategyCopy {
+                    key: path!("direct"),
+                    label: "Fastest routes",
+                    description: "Use express routes and respond to realized breakdowns; Micro retains sampled single-vehicle evaluation.",
+                    algorithm: "Responsive fleet dispatch; Micro Monte Carlo",
+                },
+                StrategyCopy {
+                    key: path!("reliable"),
+                    label: "Reliable routes",
+                    description: "Avoid the express link and coordinate deliveries around shared road and service capacity.",
+                    algorithm: "Responsive fleet dispatch; Micro Monte Carlo",
+                },
+                StrategyCopy {
+                    key: path!("mcts"),
+                    label: "Relay fleet / Micro MCTS",
+                    description: "Larger fleets bundle compatible cargo and hand it off through the hub; Micro retains full receding-horizon Monte Carlo tree search.",
+                    algorithm: "Responsive hub relay; Micro Monte Carlo tree search",
+                },
             ],
             &[
                 Capability::Chance,
@@ -778,7 +779,7 @@ fn problems() -> Vec<(ProblemDescriptor, Build)> {
         ),
         problem(
             ProblemCopy {
-                key: "connect-four",
+                key: path!("connect-four"),
                 build: connect_four::build,
                 title: "Connect Four",
                 summary: "Tactical Connect Four with forced blocks, double threats, positional search, and distinct opponents; gravity and terminal outcomes are core rules.",
@@ -789,32 +790,32 @@ fn problems() -> Vec<(ProblemDescriptor, Build)> {
                 ],
             },
             ProblemFamily::AdversarialGame,
-            "mcts-game",
+            path!("mcts-game"),
             &[
-                (
-                    "mcts-game",
-                    "Tactical MCTS self-play",
-                    "Both players recognize wins, forced blocks and double threats before exploring positional continuations.",
-                    "tactical Monte Carlo tree search",
-                ),
-                (
-                    "center-opponent",
-                    "Center-first opponent",
-                    "Red uses tactical MCTS against a center-first Yellow baseline on the standard board.",
-                    "tactical MCTS versus positional baseline",
-                ),
-                (
-                    "search-opponent",
-                    "Depth-five opponent",
-                    "Red uses tactical MCTS against depth-five alpha-beta Yellow on the standard board.",
-                    "tactical MCTS versus alpha-beta",
-                ),
+                StrategyCopy {
+                    key: path!("mcts-game"),
+                    label: "Tactical MCTS self-play",
+                    description: "Both players recognize wins, forced blocks and double threats before exploring positional continuations.",
+                    algorithm: "tactical Monte Carlo tree search",
+                },
+                StrategyCopy {
+                    key: path!("center-opponent"),
+                    label: "Center-first opponent",
+                    description: "Red uses tactical MCTS against a center-first Yellow baseline on the standard board.",
+                    algorithm: "tactical MCTS versus positional baseline",
+                },
+                StrategyCopy {
+                    key: path!("search-opponent"),
+                    label: "Depth-five opponent",
+                    description: "Red uses tactical MCTS against depth-five alpha-beta Yellow on the standard board.",
+                    algorithm: "tactical MCTS versus alpha-beta",
+                },
             ],
             &[Capability::Mcts, Capability::MultiAccountExchange],
         ),
         problem(
             ProblemCopy {
-                key: "work-league",
+                key: path!("work-league"),
                 build: work_league::build,
                 title: "Autonomous Work League",
                 summary: "Four workers share one clock: jobs overlap, repair and charging bays fill, claims expire, and deadlines can be missed. Earned credit funds recovery; recycling restores material; a worker can pay to take over another's contract. Outcomes compare the same job-attempt disruptions across policy fields.",
@@ -825,26 +826,26 @@ fn problems() -> Vec<(ProblemDescriptor, Build)> {
                 ],
             },
             ProblemFamily::MultiAgentCompetition,
-            "mixed-field",
+            path!("mixed-field"),
             &[
-                (
-                    "mixed-field",
-                    "Mixed policy field",
-                    "A sprinter, steward, value hunter, and resilient worker reveal genuine cross-objective tradeoffs.",
-                    "deterministic policy league with seeded chance",
-                ),
-                (
-                    "throughput-field",
-                    "Throughput field",
-                    "Most workers prioritize short jobs and fast execution; one still chases contract value.",
-                    "throughput-biased policy league with seeded chance",
-                ),
-                (
-                    "sustainable-field",
-                    "Sustainable field",
-                    "Most workers minimize material loss and recycle, while one specializes in reliability.",
-                    "resource-biased policy league with seeded chance",
-                ),
+                StrategyCopy {
+                    key: path!("mixed-field"),
+                    label: "Mixed policy field",
+                    description: "A sprinter, steward, value hunter, and resilient worker reveal genuine cross-objective tradeoffs.",
+                    algorithm: "deterministic policy league with seeded chance",
+                },
+                StrategyCopy {
+                    key: path!("throughput-field"),
+                    label: "Throughput field",
+                    description: "Most workers prioritize short jobs and fast execution; one still chases contract value.",
+                    algorithm: "throughput-biased policy league with seeded chance",
+                },
+                StrategyCopy {
+                    key: path!("sustainable-field"),
+                    label: "Sustainable field",
+                    description: "Most workers minimize material loss and recycle, while one specializes in reliability.",
+                    algorithm: "resource-biased policy league with seeded chance",
+                },
             ],
             &[
                 Capability::MultiAccountExchange,
@@ -857,7 +858,7 @@ fn problems() -> Vec<(ProblemDescriptor, Build)> {
         ),
         problem(
             ProblemCopy {
-                key: "mission",
+                key: path!("mission"),
                 build: mission::build,
                 title: "Hidden-information mission",
                 summary: "Coordinate independent Scout and Medic timelines. Share private discoveries, recover archives, stabilize casualties and rendezvous for extraction as hazards close sectors and resources run short.",
@@ -868,20 +869,20 @@ fn problems() -> Vec<(ProblemDescriptor, Build)> {
                 ],
             },
             ProblemFamily::PartialObservation,
-            "coordinated",
+            path!("coordinated"),
             &[
-                (
-                    "coordinated",
-                    "Coordinate independent agents",
-                    "Larger missions use separate observation-responsive policies with radio briefing; Micro retains belief-conditioned ISMCTS.",
-                    "Private-view policies; Micro information-set MCTS",
-                ),
-                (
-                    "direct-north",
-                    "Search north first",
-                    "Larger missions begin north, then coordinate through local briefings. Micro retains the blind joint-movement baseline.",
-                    "North-first local coordination; Micro Monte Carlo",
-                ),
+                StrategyCopy {
+                    key: path!("coordinated"),
+                    label: "Coordinate independent agents",
+                    description: "Larger missions use separate observation-responsive policies with radio briefing; Micro retains belief-conditioned ISMCTS.",
+                    algorithm: "Private-view policies; Micro information-set MCTS",
+                },
+                StrategyCopy {
+                    key: path!("direct-north"),
+                    label: "Search north first",
+                    description: "Larger missions begin north, then coordinate through local briefings. Micro retains the blind joint-movement baseline.",
+                    algorithm: "North-first local coordination; Micro Monte Carlo",
+                },
             ],
             &[
                 Capability::InformationSetSearch,
@@ -894,7 +895,7 @@ fn problems() -> Vec<(ProblemDescriptor, Build)> {
         ),
         problem(
             ProblemCopy {
-                key: "perishables",
+                key: path!("perishables"),
                 build: perishables::build,
                 title: "Perishable inventory",
                 summary: "Manage scarce refrigerated space, thermal history and daily food obligations. Cooling and processing compete for electricity; backup generation and deliveries compete for fuel.",
@@ -905,26 +906,26 @@ fn problems() -> Vec<(ProblemDescriptor, Build)> {
                 ],
             },
             ProblemFamily::TemporalSimulation,
-            "outage",
+            path!("outage"),
             &[
-                (
-                    "outage",
-                    "Power outage",
-                    "Prioritize refrigeration, then revisit shipment, processing and backup decisions each day.",
-                    "indexed temporal effects",
-                ),
-                (
-                    "pareto-inventory",
-                    "Pareto: save stock",
-                    "Micro: exact storage frontier. Larger cold chains: a processing-first policy on the same outage schedule.",
-                    "exact Pareto search",
-                ),
-                (
-                    "pareto-energy",
-                    "Pareto: save energy",
-                    "Micro: minimum-energy storage frontier. Larger cold chains: alternate-day shipping to conserve fuel, with missed demand kept visible.",
-                    "exact Pareto search",
-                ),
+                StrategyCopy {
+                    key: path!("outage"),
+                    label: "Power outage",
+                    description: "Prioritize refrigeration, then revisit shipment, processing and backup decisions each day.",
+                    algorithm: "indexed temporal effects",
+                },
+                StrategyCopy {
+                    key: path!("pareto-inventory"),
+                    label: "Pareto: save stock",
+                    description: "Micro: exact storage frontier. Larger cold chains: a processing-first policy on the same outage schedule.",
+                    algorithm: "exact Pareto search",
+                },
+                StrategyCopy {
+                    key: path!("pareto-energy"),
+                    label: "Pareto: save energy",
+                    description: "Micro: minimum-energy storage frontier. Larger cold chains: alternate-day shipping to conserve fuel, with missed demand kept visible.",
+                    algorithm: "exact Pareto search",
+                },
             ],
             &[
                 Capability::TemporalEffects,
@@ -937,22 +938,31 @@ fn problems() -> Vec<(ProblemDescriptor, Build)> {
 }
 
 struct ProblemCopy<'a> {
-    key: &'a str,
+    key: ProblemPath,
     build: Build,
     title: &'a str,
     summary: &'a str,
     instances: [&'a str; 3],
 }
 
+/// A strategy as the catalog lists it.
+struct StrategyCopy<'a> {
+    key: StrategyPath,
+    label: &'a str,
+    description: &'a str,
+    /// The algorithm in words.
+    algorithm: &'a str,
+}
+
 fn problem(
     copy: ProblemCopy<'_>,
     family: ProblemFamily,
-    default_strategy: &str,
-    strategies: &[(&str, &str, &str, &str)],
+    default_strategy: StrategyPath,
+    strategies: &[StrategyCopy<'_>],
     capabilities: &[Capability],
 ) -> (ProblemDescriptor, Build) {
     let descriptor = ProblemDescriptor {
-        key: slug(copy.key),
+        key: copy.key,
         title: copy.title.into(),
         summary: copy.summary.into(),
         family,
@@ -971,14 +981,14 @@ fn problem(
             description: description.into(),
         })
         .collect(),
-        default_strategy: slug(default_strategy),
+        default_strategy,
         strategies: strategies
             .iter()
-            .map(|(key, label, description, algorithm)| StrategyDescriptor {
-                key: slug(key),
-                label: (*label).into(),
-                description: (*description).into(),
-                algorithm: (*algorithm).into(),
+            .map(|strategy| StrategyDescriptor {
+                key: strategy.key.clone(),
+                label: strategy.label.into(),
+                description: strategy.description.into(),
+                algorithm: strategy.algorithm.into(),
             })
             .collect(),
         capabilities: capabilities.to_vec(),
@@ -1005,7 +1015,11 @@ pub(crate) fn study(
             |instance| instance.label.clone(),
         );
     let _ = progress.emit(
-        path!("prepare"),
+        &Work::new(
+            path!("prepare"),
+            path!("prepare"),
+            SearchObservationKindView::Phase,
+        ),
         0,
         1,
         format!("Preparing the {instance} instance of {}", descriptor.title),
@@ -1020,9 +1034,14 @@ pub(crate) fn study(
             progress.frame(&document.id, frame);
         }
     }
+    let documents = Work::new(
+        path!("documents"),
+        path!("documents"),
+        SearchObservationKindView::Document,
+    );
     for (offset, document) in study.documents.iter().enumerate() {
         let _ = progress.emit(
-            path!("documents"),
+            &documents,
             offset as u64 + 1,
             study.documents.len() as u64,
             format!("Recorded the replay “{}”", document.title),
@@ -1051,6 +1070,47 @@ pub(crate) fn study(
     Ok(study)
 }
 
+/// What progress is reported about: a phase of work, the algorithm doing it
+/// and the kind of checkpoint its observations are.
+#[derive(Debug, Clone)]
+pub(super) struct Work {
+    pub phase: PhasePath,
+    pub algorithm: AlgorithmPath,
+    pub kind: SearchObservationKindView,
+}
+
+impl Work {
+    pub fn new(
+        phase: PhasePath,
+        algorithm: AlgorithmPath,
+        kind: SearchObservationKindView,
+    ) -> Self {
+        Self {
+            phase,
+            algorithm,
+            kind,
+        }
+    }
+
+    /// Policies evaluated by sampled rollouts.
+    pub fn monte_carlo() -> Self {
+        Self::new(
+            path!("monte-carlo"),
+            path!("monte-carlo"),
+            SearchObservationKindView::Rollout,
+        )
+    }
+
+    /// A policy frontier estimated from sampled rollouts.
+    pub fn pareto_sampling() -> Self {
+        Self::new(
+            path!("pareto-sampling"),
+            path!("pareto-sampling"),
+            SearchObservationKindView::Frontier,
+        )
+    }
+}
+
 pub(super) struct ProgressSink<'a> {
     control: &'a StudyControl,
     observer: &'a mut dyn StudyObserver,
@@ -1074,7 +1134,7 @@ impl<'a> ProgressSink<'a> {
 
     pub fn emit(
         &mut self,
-        phase: PhasePath,
+        work: &Work,
         completed: u64,
         total: u64,
         message: impl Into<String>,
@@ -1089,21 +1149,16 @@ impl<'a> ProgressSink<'a> {
         let message = message.into();
         self.observer.progress(ServiceProgress {
             sequence: self.sequence,
-            phase: phase.clone(),
+            phase: work.phase.clone(),
             completed,
             total,
             message: message.clone(),
         });
         let observation = SearchObservationView {
             sequence: self.sequence,
-            algorithm: slug(
-                phase
-                    .as_str()
-                    .trim_end_matches("-frontier")
-                    .trim_end_matches("-solution"),
-            ),
-            kind: observation_kind(&phase),
-            phase,
+            phase: work.phase.clone(),
+            algorithm: work.algorithm.clone(),
+            kind: work.kind,
             label: message,
             completed,
             total,
@@ -1131,18 +1186,18 @@ impl<'a> ProgressSink<'a> {
     /// has a knowable completion percentage.
     pub fn graph(
         &mut self,
-        phase: PhasePath,
+        work: &Work,
         progress: GraphSearchProgress,
         message: impl Into<String>,
     ) -> ControlFlow<()> {
-        self.graph_with_subjects(phase, progress, message, std::iter::empty())
+        self.graph_with_subjects(work, progress, message, std::iter::empty())
     }
 
     /// Publish exact graph-search counters together with the Rust-owned scene
     /// subjects expanded during this checkpoint.
     pub fn graph_with_subjects(
         &mut self,
-        phase: PhasePath,
+        work: &Work,
         progress: GraphSearchProgress,
         message: impl Into<String>,
         subjects: impl IntoIterator<Item = ViewId>,
@@ -1158,7 +1213,7 @@ impl<'a> ProgressSink<'a> {
         let completed = progress.expanded() as u64;
         self.observer.progress(ServiceProgress {
             sequence: self.sequence,
-            phase: phase.clone(),
+            phase: work.phase.clone(),
             completed,
             // Zero means the frontier has no honest fixed denominator. The UI
             // renders an indeterminate bar and the exact counters below.
@@ -1167,9 +1222,9 @@ impl<'a> ProgressSink<'a> {
         });
         let observation = SearchObservationView {
             sequence: self.sequence,
-            algorithm: slug(phase.as_str()),
-            kind: observation_kind(&phase),
-            phase,
+            phase: work.phase.clone(),
+            algorithm: work.algorithm.clone(),
+            kind: work.kind,
             label: message,
             completed,
             total: 0,
@@ -1227,7 +1282,7 @@ impl<'a> ProgressSink<'a> {
     /// does not fails the study, at its next check.
     fn trajectory<O: WrittenOntology>(
         &mut self,
-        problem: &str,
+        problem: &ProblemPath,
         document: &DocumentPath,
         initial: &Economy<O>,
         trace: &Trace<O>,
@@ -1254,26 +1309,33 @@ fn written<V: Serialize, T: DeserializeOwned>(value: &V) -> Result<T, serde_json
     serde_json::from_value(serde_json::to_value(value)?)
 }
 
-fn observation_kind(phase: &PhasePath) -> SearchObservationKindView {
-    let phase = phase.as_str();
-    if phase.contains("solution") || phase.contains("incumbent") {
-        SearchObservationKindView::Incumbent
-    } else if phase.contains("pareto") || phase.contains("frontier") {
-        SearchObservationKindView::Frontier
-    } else if phase.contains("monte") || phase.contains("rollout") {
-        SearchObservationKindView::Rollout
-    } else if phase.contains("mcts") || phase.contains("tree") {
-        SearchObservationKindView::Tree
-    } else if phase == "documents" {
-        SearchObservationKindView::Document
-    } else {
-        SearchObservationKindView::Phase
-    }
+/// The strategy a study asks for, read as an adapter's own strategy type.
+pub(super) fn strategy<S: Segments>(study: &StudyKey) -> Result<S, ServiceError> {
+    path::read(&study.strategy).map_err(|_| ServiceError::UnknownStrategy {
+        problem: study.problem.clone(),
+        strategy: study.strategy.clone(),
+    })
+}
+
+/// The document showing a strategy's outcome, which a study names by the
+/// strategy's own path.
+pub(super) fn strategy_document(strategy: &StrategyPath) -> DocumentPath {
+    renamed(strategy)
+}
+
+/// The same path naming another kind of thing.
+fn renamed<K, J>(path: &Path<K>) -> Path<J> {
+    path.as_str()
+        .parse()
+        .unwrap_or_else(|_| unreachable!("`{path}` is a path of every kind"))
 }
 
 pub(super) struct DocumentSpec<'a> {
-    pub problem: &'a str,
-    pub strategy: &'a str,
+    /// The problem studied, the study's own.
+    pub problem: &'a ProblemPath,
+    /// The strategy whose outcome the document shows, or another outcome the
+    /// study keeps beside them, such as `deadlock`.
+    pub document: DocumentPath,
     pub title: &'a str,
     pub description: &'a str,
     pub source_label: &'a str,
@@ -1347,11 +1409,11 @@ where
 impl DocumentSpec<'_> {
     fn metadata(&self) -> ViewDocumentMetadata {
         ViewDocumentMetadata {
-            id: slug(self.strategy),
+            id: self.document.clone(),
             title: self.title.into(),
             description: self.description.into(),
             source: ViewSource {
-                key: slug(self.problem),
+                key: renamed(self.problem),
                 label: self.source_label.into(),
             },
         }
@@ -1359,7 +1421,7 @@ impl DocumentSpec<'_> {
 }
 
 pub(super) struct ProposalSpec<'a> {
-    pub id: &'a str,
+    pub id: ProposalPath,
     pub label: &'a str,
     pub description: &'a str,
 }
@@ -1396,7 +1458,7 @@ where
 {
     let ontology = StudioOntology::<O>::new(None);
     derive_proposal(
-        slug(spec.id),
+        spec.id,
         spec.label,
         spec.description,
         snapshot_index,
@@ -1406,13 +1468,24 @@ where
     )
 }
 
+/// The work of the algorithm `title` names, counted.
 pub(super) fn telemetry(
-    algorithm: impl Into<String>,
+    title: impl Into<String>,
+    exact: bool,
+    values: impl IntoIterator<Item = (TelemetryKindView, u64, String)>,
+) -> SearchTelemetryView {
+    series(TelemetrySubjectView::Algorithm, title, exact, values)
+}
+
+fn series(
+    subject: TelemetrySubjectView,
+    title: impl Into<String>,
     exact: bool,
     values: impl IntoIterator<Item = (TelemetryKindView, u64, String)>,
 ) -> SearchTelemetryView {
     SearchTelemetryView {
-        algorithm: algorithm.into(),
+        subject,
+        title: title.into(),
         exact,
         points: values
             .into_iter()
@@ -1441,7 +1514,7 @@ pub(super) fn assemble(
             instance: study.instance,
         })?
         .clone();
-    let selected_document: DocumentPath = slug(study.strategy.as_str());
+    let selected_document = strategy_document(&study.strategy);
     let alternatives = documents.len() as u64;
     for document in &mut documents {
         for snapshot in std::iter::once(&document.initial)
@@ -1476,7 +1549,8 @@ pub(super) fn assemble(
             .map_or(0, |model| model.rates.len() as u64);
         let transitions = document.frames.len() as u64;
         let constraints = document.proposals.len() as u64;
-        document.telemetry.push(telemetry(
+        document.telemetry.push(series(
+            TelemetrySubjectView::Model,
             "Model size",
             true,
             [
@@ -1522,7 +1596,7 @@ pub(super) fn assemble(
 /// Runs a simulation from a fork of `initial` and gives the trace it left and
 /// the state it ended in, or why it did not reach its goal.
 pub(super) fn simulate<O: Ontology>(
-    problem: &str,
+    problem: &ProblemPath,
     initial: &Economy<O>,
     run: impl FnOnce(&mut Economy<O>) -> RolloutResult<O>,
 ) -> Result<(Trace<O>, Economy<O>), ServiceError> {
@@ -1541,9 +1615,9 @@ pub(super) fn simulate<O: Ontology>(
     Ok((trace, world))
 }
 
-pub(super) fn problem_error(problem: &str, error: impl ToString) -> ServiceError {
+pub(super) fn problem_error(problem: &ProblemPath, error: impl ToString) -> ServiceError {
     ServiceError::Problem {
-        problem: slug(problem),
+        problem: problem.clone(),
         message: error.to_string(),
     }
 }

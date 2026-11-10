@@ -32,7 +32,7 @@ import {
   Transition,
   useSnapshot,
 } from "./Inspectors";
-import { QuantityFormats } from "./Quantity";
+import { formatQuantity, QuantityFormats } from "./Quantity";
 
 const ParetoChart = lazy(() => import("./ParetoChart"));
 type StudioViewMode = "thinking" | "replay";
@@ -435,7 +435,7 @@ export function App() {
   const active = launching || Boolean(ongoing);
   // A link or Study during a download would name or replace a study not yet on screen.
   const loading = preview !== undefined;
-  const modelSize = document?.telemetry.find((entry) => entry.algorithm === "Model size");
+  const modelSize = document?.telemetry.find((entry) => entry.subject === "model");
   const modelCounts = modelSize?.points
     .filter((point) => point.kind === "accounts" || point.kind === "rates")
     .map((point) => `${point.value} ${point.label}`)
@@ -510,7 +510,7 @@ export function App() {
     {!loading && study && document && snapshot ? <QuantityFormats.Provider value={document.formats ?? {}}><main className={freshStudy === study ? "fresh-study" : undefined}>
       <OutcomeTabs study={study} selected={document.id} onSelect={selectDocument} />
       <StrategyComparison study={study} selected={document.id} onSelect={selectDocument} />
-      <section className="document-heading"><div><span className="eyebrow">{study.problem.title} · {isStrategyDocument(study, document) ? documentName(study, document) : "Computed for comparison"}{freshStudy === study ? " · just computed" : ""}</span><h1>{document.title}</h1><p>{document.description}</p><StudyKeyLine study={study} origin={studyOrigin} model={modelCounts} /></div><div className="objective-pills">{document.objectives.map((objective) => <div className="objective" key={objective.key}><span>{objective.label}</span><strong>{objective.value}</strong><small>{objective.direction}</small></div>)}</div></section>
+      <section className="document-heading"><div><span className="eyebrow">{study.problem.title} · {isStrategyDocument(study, document) ? documentName(study, document) : "Computed for comparison"}{freshStudy === study ? " · just computed" : ""}</span><h1>{document.title}</h1><p>{document.description}</p><StudyKeyLine study={study} origin={studyOrigin} model={modelCounts} /></div><div className="objective-pills">{document.objectives.map((objective) => <div className="objective" key={objective.key}><span>{objective.label}</span><strong>{formatQuantity(objective.value, objective.format ?? undefined)}</strong><small>{objective.direction}</small></div>)}</div></section>
       {problem && <StudyMismatch problem={problem} study={study} origin={studyOrigin} requested={{ instance: instanceKey || problem.default_instance, strategy: strategyKey || problem.default_strategy, seed, budget }} canStudy={engine.canStudy} />}
       <div className="view-tabs" role="tablist" aria-label="Studio view"><button type="button" role="tab" aria-selected={viewMode === "thinking"} onClick={() => selectView("thinking")}>Thinking <small>{active ? "live" : document.thinking.filter(isSearchObservation).length}</small></button><button type="button" role="tab" aria-selected={viewMode === "replay"} onClick={() => selectView("replay")}>Step-by-step replay <small>{document.frames.length}</small></button></div>
       {viewMode === "thinking" ? <ThinkingWorkspace key={document.id} scene={document.initial.scene} observations={active ? events.flatMap((event) => event.kind === "thinking" ? [event.observation] : []) : document.thinking} active={active} /> : (() => {
@@ -736,9 +736,7 @@ function algorithmLabel(algorithm: string): string {
     dijkstra: "Dijkstra",
     "exact-pareto-search": "Exact Pareto search",
   };
-  // A phase such as `a-star-frontier` names its algorithm and what it reports.
-  const base = algorithm.replace(/-(frontier|solution)$/, "");
-  return labels[base] ?? base.replaceAll("-", " ");
+  return labels[algorithm] ?? algorithm.replaceAll("-", " ");
 }
 
 function thinkingScene(scene: Scene | null | undefined, observations: SearchObservation[]): Scene | undefined {
@@ -876,7 +874,7 @@ function StrategyComparison({ study, selected, onSelect }: { study: Study; selec
   return <details className="strategy-comparison" aria-label="Outcome comparison" open>
     <summary><span>Compare outcomes</span><strong>Every strategy and what it cost, side by side</strong><i aria-hidden="true">▸</i></summary>
     <div className="comparison-scroll"><table><thead><tr><th>Outcome</th><th>Result</th><th>Initial → final state</th><th>Trace</th><th>Algorithm and its work</th></tr></thead><tbody>{study.documents.map((candidate) => {
-      const series = candidate.telemetry.find((entry) => entry.algorithm !== "Model size");
+      const series = candidate.telemetry.find((entry) => entry.subject === "algorithm");
       // The Trace column already counts the exchanges; this one counts the
       // algorithm's own work, each number with the words its algorithm gave it.
       const steps = String(candidate.frames.length);
@@ -884,13 +882,13 @@ function StrategyComparison({ study, selected, onSelect }: { study: Study; selec
       const finalMetrics = (candidate.frames.at(-1)?.after.scene ?? candidate.initial.scene)?.metrics.slice(0, 3) ?? [];
       return <tr key={candidate.id} className={candidate.id === selected ? "selected" : undefined}>
         <td><button type="button" onClick={() => onSelect(candidate.id)}>{documentName(study, candidate)}</button>{!isStrategyDocument(study, candidate) && <small className="outcome-note">for comparison</small>}</td>
-        <td>{candidate.objectives.length > 0 ? candidate.objectives.map((objective) => `${objective.label}: ${objective.value}`).join(" · ") : "Feasibility outcome"}</td>
+        <td>{candidate.objectives.length > 0 ? candidate.objectives.map((objective) => `${objective.label}: ${formatQuantity(objective.value, objective.format ?? undefined)}`).join(" · ") : "Feasibility outcome"}</td>
         <td>{finalMetrics.map((metric) => {
           const initial = candidate.initial.scene?.metrics.find((entry) => entry.key === metric.key);
           return <div key={metric.key}>{metric.label}: {initial && initial.value !== metric.value ? `${initial.value} → ` : ""}{metric.value}{metric.unit ? ` ${metric.unit}` : ""}</div>;
         })}</td>
         <td>{candidate.frames.length} {candidate.frames.length === 1 ? "step" : "steps"}</td>
-        <td>{series ? [series.algorithm, series.exact ? "exact" : "sampled", ...(work.length > 0 ? work.map((point) => `${point.value} ${point.label}`) : ["no search counters"])].join(" · ") : "No algorithm telemetry"}</td>
+        <td>{series ? [series.title, series.exact ? "exact" : "sampled", ...(work.length > 0 ? work.map((point) => `${point.value} ${point.label}`) : ["no search counters"])].join(" · ") : "No algorithm telemetry"}</td>
       </tr>;
     })}</tbody></table></div>
   </details>;
@@ -989,7 +987,7 @@ function PlaybackControls({ position, count, playing, delay, onDelay, onPosition
 function eventMessage(event: StudioEvent): string {
   switch (event.kind) {
     case "study_started": return `Started ${event.problem} · ${event.strategy}`;
-    case "progress": return event.message;
+    case "progress": return `${phaseLabel(event.phase)}: ${event.message}`;
     case "thinking": return event.observation.label;
     case "frame_appended": return `Published replay frame ${event.frame_index + 1}`;
     case "study_published": return `Published ${event.documents} alternatives`;

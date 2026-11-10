@@ -22,30 +22,31 @@ pub(super) fn build(
     };
     let configurations = [
         (
-            "mixed-field",
+            path!("mixed-field"),
             work_league::mixed_lineup(),
             "Mixed policy field",
             "A sprinter, steward, value hunter, and resilient worker compete in the same finite job market.",
         ),
         (
-            "throughput-field",
+            path!("throughput-field"),
             work_league::throughput_lineup(),
             "Throughput field",
             "A speed-biased field shows what is gained—and wasted—when most workers optimize for short completion times.",
         ),
         (
-            "sustainable-field",
+            path!("sustainable-field"),
             work_league::sustainable_lineup(),
             "Sustainable field",
             "A resource-conscious field recycles aggressively and exposes the opportunity cost of minimizing residual waste.",
         ),
     ];
-    let selected = study.strategy.as_str().to_owned();
+    let selected = strategy_document(&study.strategy);
+    let count = configurations.len() as u64;
     let mut documents = Vec::new();
     for (offset, (strategy, lineup, title, description)) in configurations.into_iter().enumerate() {
         let league = work_league::league(profile, lineup);
         let outcome = work_league::run(&league, study.seed)
-            .map_err(|error| problem_error("work-league", error))?;
+            .map_err(|error| problem_error(&study.problem, error))?;
         let final_world = outcome.final_world();
         let total_value = league
             .agents()
@@ -62,11 +63,12 @@ pub(super) fn build(
             .iter()
             .map(|agent| balance(final_world, *agent, Asset::Waste))
             .sum::<u64>();
+        let streamed = strategy == selected;
         let mut view = document_with_leaderboards_observed(
             progress,
             DocumentSpec {
-                problem: "work-league",
-                strategy,
+                problem: &study.problem,
+                document: strategy,
                 title: &format!("Work League · {title}"),
                 description,
                 source_label: "Competitive multi-agent work allocation",
@@ -75,29 +77,29 @@ pub(super) fn build(
             league.goal(),
             outcome.trace(),
             vec![
-                ObjectiveView {
-                    key: path!("value"),
-                    label: "Contract value".into(),
-                    direction: ObjectiveDirectionView::Maximize,
-                    value: total_value.to_string(),
-                },
-                ObjectiveView {
-                    key: path!("completed"),
-                    label: "Jobs completed".into(),
-                    direction: ObjectiveDirectionView::Maximize,
-                    value: completed.to_string(),
-                },
-                ObjectiveView {
-                    key: path!("waste"),
-                    label: "Residual waste".into(),
-                    direction: ObjectiveDirectionView::Minimize,
-                    value: waste.to_string(),
-                },
+                ObjectiveView::new(
+                    path!("value"),
+                    "Contract value",
+                    ObjectiveDirectionView::Maximize,
+                    total_value,
+                ),
+                ObjectiveView::new(
+                    path!("completed"),
+                    "Jobs completed",
+                    ObjectiveDirectionView::Maximize,
+                    completed,
+                ),
+                ObjectiveView::new(
+                    path!("waste"),
+                    "Residual waste",
+                    ObjectiveDirectionView::Minimize,
+                    waste,
+                ),
             ],
             (scene, leaderboards),
-            strategy == selected,
+            streamed,
         )
-        .map_err(|error| problem_error("work-league", error))?;
+        .map_err(|error| problem_error(&study.problem, error))?;
         view.telemetry.push(telemetry(
             "Seeded multi-agent policy match",
             true,
@@ -129,7 +131,7 @@ pub(super) fn build(
         .bind(Role::Agent, AccountId::Agent(AgentId::Bolt))
         .bind(Role::Job, AccountId::Job(JobId(1)));
         view.proposals.push(proposal(ProposalSpec {
-                id: "claim-with-wrong-worker",
+                id: path!("claim-with-wrong-worker"),
                 label: "Atlas claim rebound to Bolt",
                 description: "The rate names Atlas, but the proposed role binding points at Bolt. Identity assets must reject the mismatch.",
             },
@@ -138,9 +140,13 @@ pub(super) fn build(
         ));
         documents.push(view);
         let _ = progress.emit(
-            path!("multi-agent-match"),
+            &Work::new(
+                path!("multi-agent-match"),
+                path!("multi-agent-match"),
+                SearchObservationKindView::Phase,
+            ),
             offset as u64 + 1,
-            configurations.len() as u64,
+            count,
             format!(
                 "Replayed {title}: {} atomic exchanges",
                 outcome.trace().exchanges().len()
@@ -177,7 +183,7 @@ fn leaderboards(_: u64, world: &World) -> Vec<LeaderboardView> {
         .collect::<Vec<_>>();
     vec![
         ranking(
-            "contract-value",
+            path!("contract-value"),
             "Contract value",
             "Total value earned from completed jobs.",
             ObjectiveDirectionView::Maximize,
@@ -185,7 +191,7 @@ fn leaderboards(_: u64, world: &World) -> Vec<LeaderboardView> {
             rows.iter().map(|row| row.scalar(row.value, true)).collect(),
         ),
         ranking(
-            "throughput",
+            path!("throughput"),
             "Fastest throughput",
             "Completed jobs per elapsed tick; agents without a completion are not yet eligible.",
             ObjectiveDirectionView::Maximize,
@@ -195,7 +201,7 @@ fn leaderboards(_: u64, world: &World) -> Vec<LeaderboardView> {
                 .collect(),
         ),
         ranking(
-            "resource-efficiency",
+            path!("resource-efficiency"),
             "Resource efficiency",
             "Contract value per unit of energy and material spent.",
             ObjectiveDirectionView::Maximize,
@@ -205,7 +211,7 @@ fn leaderboards(_: u64, world: &World) -> Vec<LeaderboardView> {
                 .collect(),
         ),
         ranking(
-            "least-waste",
+            path!("least-waste"),
             "Least residual waste",
             "Waste still held after recycling; only agents that completed work are ranked.",
             ObjectiveDirectionView::Minimize,
@@ -215,7 +221,7 @@ fn leaderboards(_: u64, world: &World) -> Vec<LeaderboardView> {
                 .collect(),
         ),
         ranking(
-            "reliability",
+            path!("reliability"),
             "Reliability",
             "Successful jobs per attempt, retaining failures rather than hiding them.",
             ObjectiveDirectionView::Maximize,
@@ -325,7 +331,7 @@ impl AgentMetrics {
 }
 
 fn ranking(
-    key: &str,
+    key: MeasurePath,
     label: &str,
     description: &str,
     direction: ObjectiveDirectionView,
@@ -382,7 +388,7 @@ fn ranking(
         })
         .collect();
     LeaderboardView {
-        key: slug(key),
+        key,
         label: label.into(),
         description: description.into(),
         direction,
@@ -422,7 +428,7 @@ fn pareto_ranking(rows: &[AgentMetrics]) -> LeaderboardView {
         })
         .collect();
     ranking(
-        "pareto-standing",
+        path!("pareto-standing"),
         "Pareto standing",
         "Non-dominated agents are not worse on value, completions, residual waste, and elapsed time all at once.",
         ObjectiveDirectionView::Maximize,
@@ -832,7 +838,7 @@ mod tests {
                     .after
                     .leaderboards
                     .iter()
-                    .find(|board| board.key.as_str() == "contract-value")?
+                    .find(|board| board.key == path!("contract-value"))?
                     .entries
                     .first()
                     .map(|entry| entry.participant.key.as_str())

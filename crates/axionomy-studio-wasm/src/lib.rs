@@ -71,9 +71,10 @@ impl StudyObserver for WorkerObserver<'_> {
         let _ = self.event(StudioEvent::Progress {
             study_id: self.study_id,
             sequence,
+            phase: progress.phase,
             completed: progress.completed,
             total: Some(progress.total),
-            message: format!("{}: {}", progress.phase, progress.message),
+            message: progress.message,
         });
     }
 

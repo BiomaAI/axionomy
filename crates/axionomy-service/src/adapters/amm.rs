@@ -18,19 +18,19 @@ pub(super) fn build(
     };
     let scenarios = [
         (
-            "market-day",
+            path!("market-day"),
             Scenario::MarketDay,
             "Living Market · endogenous price discovery",
             "Actors repeatedly reconsider trades as production, inventory, daily needs and obligations change. Capacity investment takes two days; scarce storage and cloudy days change the cost of waiting. No external price exists.",
         ),
         (
-            "no-whale",
+            path!("no-whale"),
             Scenario::NoWhale,
             "Living Market · without the demand whale",
             "The same closed economy replays without its largest buyer, exposing that actor's causal effect on the discovered exchange value.",
         ),
         (
-            "thin-liquidity",
+            path!("thin-liquidity"),
             Scenario::ThinLiquidity,
             "Living Market · thin-liquidity reality",
             "Half the founding liquidity exits at the opening. Actors respond to the changed prices and depth across the same production conditions and daily obligations.",
@@ -42,13 +42,13 @@ pub(super) fn build(
         let trace = amm::trace(&initial, scenario);
         let final_world = initial
             .replayed(&trace)
-            .map_err(|error| problem_error("amm", format!("{error:?}")))?;
+            .map_err(|error| problem_error(&study.problem, format!("{error:?}")))?;
         let final_pool = amm::pool_state(&final_world);
         let mut view = document(
             progress,
             DocumentSpec {
-                problem: "amm",
-                strategy,
+                problem: &study.problem,
+                document: strategy,
                 title,
                 description,
                 source_label: "Closed endogenous market",
@@ -57,41 +57,41 @@ pub(super) fn build(
             &amm::market_goal(&initial),
             &trace,
             vec![
-                ObjectiveView {
-                    key: path!("needs"),
-                    label: "Needs satisfied".into(),
-                    direction: ObjectiveDirectionView::Maximize,
-                    value: satisfied_needs(&final_world).to_string(),
-                },
-                ObjectiveView {
-                    key: path!("utility"),
-                    label: "Realized utility".into(),
-                    direction: ObjectiveDirectionView::Maximize,
-                    value: total_utility(&final_world).to_string(),
-                },
-                ObjectiveView {
-                    key: path!("depth"),
-                    label: "Energy liquidity".into(),
-                    direction: ObjectiveDirectionView::Maximize,
-                    value: final_pool.energy.to_string(),
-                },
-                ObjectiveView {
-                    key: path!("unmet"),
-                    label: "Unmet daily needs".into(),
-                    direction: ObjectiveDirectionView::Minimize,
-                    value: unmet_needs(&final_world).to_string(),
-                },
-                ObjectiveView {
-                    key: path!("defaults"),
-                    label: "Missed obligations".into(),
-                    direction: ObjectiveDirectionView::Minimize,
-                    value: defaults(&final_world).to_string(),
-                },
+                ObjectiveView::new(
+                    path!("needs"),
+                    "Needs satisfied",
+                    ObjectiveDirectionView::Maximize,
+                    satisfied_needs(&final_world),
+                ),
+                ObjectiveView::new(
+                    path!("utility"),
+                    "Realized utility",
+                    ObjectiveDirectionView::Maximize,
+                    total_utility(&final_world),
+                ),
+                ObjectiveView::new(
+                    path!("depth"),
+                    "Energy liquidity",
+                    ObjectiveDirectionView::Maximize,
+                    final_pool.energy,
+                ),
+                ObjectiveView::new(
+                    path!("unmet"),
+                    "Unmet daily needs",
+                    ObjectiveDirectionView::Minimize,
+                    unmet_needs(&final_world),
+                ),
+                ObjectiveView::new(
+                    path!("defaults"),
+                    "Missed obligations",
+                    ObjectiveDirectionView::Minimize,
+                    defaults(&final_world),
+                ),
             ],
             scene,
         )
-        .map_err(|error| problem_error("amm", error))?;
-        attach_contribution_leaderboards(&initial, &trace, &mut view)?;
+        .map_err(|error| problem_error(&study.problem, error))?;
+        attach_contribution_leaderboards(&initial, &trace, &mut view, &study.problem)?;
         if matches!(scenario, Scenario::MarketDay)
             && let Some(final_frame) = view.frames.last_mut()
         {
@@ -125,7 +125,7 @@ pub(super) fn build(
         let quote = amm::quote_output(&initial, Asset::Credit, 10_000).unwrap_or_default();
         let guarded = amm::buy_energy(Actor::Factory, 10_000, quote.saturating_add(1));
         view.proposals.push(proposal(ProposalSpec {
-                id: "impossible-minimum-output",
+                id: path!("impossible-minimum-output"),
                 label: "Demand more than the curve returns",
                 description: "The trader supplies enough credit, but its minimum-output protection correctly refuses the AMM quote.",
             },
@@ -134,7 +134,7 @@ pub(super) fn build(
         ));
         let wrong_ratio = amm::add_liquidity(Actor::AdaptiveLp, 1_000, 9_000, 1);
         view.proposals.push(proposal(ProposalSpec {
-                id: "price-moving-liquidity",
+                id: path!("price-moving-liquidity"),
                 label: "Deposit liquidity at the wrong ratio",
                 description: "Liquidity may deepen the discovered market price, but this rule refuses to rewrite that price by depositing an inconsistent reserve ratio.",
             },
@@ -434,6 +434,7 @@ fn attach_contribution_leaderboards(
     initial: &World,
     trace: &axionomy::Trace<amm::Ontology>,
     document: &mut ViewDocument,
+    problem: &ProblemPath,
 ) -> Result<(), ServiceError> {
     let mut world = initial.clone();
     let mut contributions = BTreeMap::<Actor, i128>::new();
@@ -442,7 +443,7 @@ fn attach_contribution_leaderboards(
         let before = i128::from(amm::pool_state(&world).price_milli);
         world
             .apply(exchange.clone())
-            .map_err(|error| problem_error("amm", format!("{error:?}")))?;
+            .map_err(|error| problem_error(problem, format!("{error:?}")))?;
         let after = i128::from(amm::pool_state(&world).price_milli);
         if let Some(actor) = amm::price_actor(exchange) {
             *contributions.entry(actor).or_default() += after - before;

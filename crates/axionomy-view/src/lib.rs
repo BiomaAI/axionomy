@@ -10,7 +10,6 @@ use axionomy::{
     Quantity, QuantityComparison, QuantityExpression, Receipt, Rounding, Trace, path, path::Path,
 };
 
-pub use axionomy::path::slug;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -1268,12 +1267,48 @@ pub struct ExchangeFrame {
     pub observations: Vec<ObservationView>,
 }
 
+/// An outcome's exact value on one objective.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct ObjectiveView {
     pub key: MeasurePath,
     pub label: String,
     pub direction: ObjectiveDirectionView,
-    pub value: String,
+    pub value: Quantity,
+    /// How people read the value; a count when omitted.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub format: Option<QuantityFormat>,
+}
+
+impl ObjectiveView {
+    /// The objective `key` with a count as its value.
+    pub fn new(
+        key: MeasurePath,
+        label: impl Into<String>,
+        direction: ObjectiveDirectionView,
+        value: impl Into<Quantity>,
+    ) -> Self {
+        Self {
+            key,
+            label: label.into(),
+            direction,
+            value: value.into(),
+            format: None,
+        }
+    }
+
+    /// Reads the value in `format` instead of as a count.
+    pub fn with_format(mut self, format: QuantityFormat) -> Self {
+        self.format = Some(format);
+        self
+    }
+
+    /// The value as people read it.
+    pub fn written(&self) -> String {
+        self.format
+            .as_ref()
+            .unwrap_or(&QuantityFormat::COUNT)
+            .write(self.value)
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -1350,9 +1385,21 @@ pub struct TelemetryPointView {
     pub label: String,
 }
 
+/// What a telemetry series counts.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum TelemetrySubjectView {
+    /// The economy a document replays: its accounts, rules and steps.
+    Model,
+    /// The work of the algorithm that found the document's outcome.
+    Algorithm,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct SearchTelemetryView {
-    pub algorithm: String,
+    pub subject: TelemetrySubjectView,
+    /// The series in words, such as `Model size` or `breadth-first search`.
+    pub title: String,
     pub exact: bool,
     #[serde(default)]
     pub points: Vec<TelemetryPointView>,

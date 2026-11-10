@@ -13,31 +13,32 @@ pub(super) fn build(
     let mut documents = Vec::new();
     for (strategy, title, description, policy) in [
         (
-            "coordinated",
+            path!("coordinated"),
             "Mission · independent agents, shared plan",
             "Scout discovers sites and spends scarce radio charges to brief Medic. Independent travel overlaps; extraction requires both teammates, current stabilization and a free evacuation seat.",
             Policy::RadioCoordination,
         ),
         (
-            "direct-north",
+            path!("direct-north"),
             "Mission · north-first sector search",
             "Scout starts north without sensing. Intelligence travels through in-person briefings, and each teammate responds to the same changing hazards and clinical deadlines.",
             Policy::NorthFirst,
         ),
         (
-            "rendezvous",
+            path!("rendezvous"),
             "Mission · rendezvous before deployment",
             "Save radio charges by meeting at base to share confirmed discoveries. The extra journeys compete with archive recovery and timely casualty evacuation.",
             Policy::Rendezvous,
         ),
     ] {
-        let (trace, final_world) =
-            simulate("mission", &initial, |world| expedition::run(world, policy))?;
+        let (trace, final_world) = simulate(&study.problem, &initial, |world| {
+            expedition::run(world, policy)
+        })?;
         let mut view = document(
             progress,
             DocumentSpec {
-                problem: "mission",
-                strategy,
+                problem: &study.problem,
+                document: strategy,
                 title,
                 description,
                 source_label: "Cooperative expedition",
@@ -48,7 +49,7 @@ pub(super) fn build(
             objectives(&final_world),
             scene,
         )
-        .map_err(|error| problem_error("mission", error))?;
+        .map_err(|error| problem_error(&study.problem, error))?;
         view.observations = AGENTS
             .into_iter()
             .map(|agent| observation(&initial, agent))
@@ -57,7 +58,7 @@ pub(super) fn build(
         for (frame, exchange) in view.frames.iter_mut().zip(trace.exchanges()) {
             observed
                 .apply(exchange.clone())
-                .map_err(|error| problem_error("mission", error))?;
+                .map_err(|error| problem_error(&study.problem, error))?;
             frame.observations = AGENTS
                 .into_iter()
                 .map(|agent| observation(&observed, agent))
@@ -72,11 +73,11 @@ pub(super) fn build(
                 "verified timed work, communication and environmental events".into(),
             )],
         ));
-        view.proposals.push(proposal(ProposalSpec { id: "extract-without-intelligence", label: "Extract a casualty before discovery or briefing", description: "Both agents need the confirmed site, physical co-location, free work capacity, energy, and a stabilized patient. An unverified sensor hint cannot satisfy these conditions." }, &initial, &expedition::action(RateId::Extract { objective: 0, location: Location::North })));
+        view.proposals.push(proposal(ProposalSpec { id: path!("extract-without-intelligence"), label: "Extract a casualty before discovery or briefing", description: "Both agents need the confirmed site, physical co-location, free work capacity, energy, and a stabilized patient. An unverified sensor hint cannot satisfy these conditions." }, &initial, &expedition::action(RateId::Extract { objective: 0, location: Location::North })));
         documents.push(view);
     }
     for index in 0..documents.len() {
-        let front = evaluated_integer_front(
+        let front = evaluated_front(
             &documents,
             &documents[index],
             "Team outcomes on the same hidden sites and hazards",
@@ -129,12 +130,7 @@ fn objectives(world: &World) -> Vec<ObjectiveView> {
         ),
     ]
     .into_iter()
-    .map(|(key, label, value, direction)| ObjectiveView {
-        key,
-        label: label.into(),
-        value: value.to_string(),
-        direction,
-    })
+    .map(|(key, label, value, direction)| ObjectiveView::new(key, label, direction, value))
     .collect()
 }
 fn observation(world: &World, agent: Agent) -> ObservationView {

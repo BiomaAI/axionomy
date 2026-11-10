@@ -28,15 +28,15 @@ pub(super) fn build(
         ),
     };
     let outage = perishables::run_outage_scenario(&initial, transfer)
-        .map_err(|error| problem_error("perishables", error))?;
+        .map_err(|error| problem_error(&study.problem, error))?;
     let front = perishables::storage_plan_front_with_transfer(&initial, transfer)
-        .map_err(|error| problem_error("perishables", error))?;
-    let inventory_trace = frontier_trace(&front, true)?;
-    let energy_trace = frontier_trace(&front, false)?;
-    let mut outage_view = document(progress, DocumentSpec { problem: "perishables", strategy: "outage", title: "Perishables · power outage", description: "Ten thousand interchangeable units belong to two batches. Time and power act on the batch, so one change ages thousands of units at once.", source_label: "Perishable inventory" }, &initial, &perishables::goal(), outage.trace(), vec![
-        ObjectiveView { key: path!("claims"), label: "Total claims".into(), direction: ObjectiveDirectionView::Maximize, value: outage.claim_index().total_claims().to_string() },
-        ObjectiveView { key: path!("usable"), label: "Usable claims".into(), direction: ObjectiveDirectionView::Maximize, value: outage.claim_index().usable_total(outage.world()).to_string() },
-    ], scene).map_err(|error| problem_error("perishables", error))?;
+        .map_err(|error| problem_error(&study.problem, error))?;
+    let inventory_trace = frontier_trace(&front, true, &study.problem)?;
+    let energy_trace = frontier_trace(&front, false, &study.problem)?;
+    let mut outage_view = document(progress, DocumentSpec { problem: &study.problem, document: path!("outage"), title: "Perishables · power outage", description: "Ten thousand interchangeable units belong to two batches. Time and power act on the batch, so one change ages thousands of units at once.", source_label: "Perishable inventory" }, &initial, &perishables::goal(), outage.trace(), vec![
+        ObjectiveView::new(path!("claims"), "Total claims", ObjectiveDirectionView::Maximize, outage.claim_index().total_claims()),
+        ObjectiveView::new(path!("usable"), "Usable claims", ObjectiveDirectionView::Maximize, outage.claim_index().usable_total(outage.world())),
+    ], scene).map_err(|error| problem_error(&study.problem, error))?;
     outage_view.telemetry.push(telemetry(
         "indexed temporal effect agenda",
         true,
@@ -66,18 +66,18 @@ pub(super) fn build(
             ),
         ],
     ));
-    outage_view.proposals.push(proposal(ProposalSpec { id: "oversized-transfer", label: "Move 8,000 claims to fridge", description: "The warehouse holds only 7,000 units. The check reports the exact shortfall and moves nothing." }, &initial, &perishables::move_to_fridge(8_000)));
+    outage_view.proposals.push(proposal(ProposalSpec { id: path!("oversized-transfer"), label: "Move 8,000 claims to fridge", description: "The warehouse holds only 7,000 units. The check reports the exact shortfall and moves nothing." }, &initial, &perishables::move_to_fridge(8_000)));
 
     let mut documents = vec![outage_view];
     for (strategy, title, description, trace) in [
         (
-            "pareto-inventory",
+            path!("pareto-inventory"),
             "Perishables Pareto · save stock",
             "The storage plan that keeps the most usable stock.",
             inventory_trace,
         ),
         (
-            "pareto-energy",
+            path!("pareto-energy"),
             "Perishables Pareto · save cooling energy",
             "The storage plan that spends the least cooling energy.",
             energy_trace,
@@ -85,12 +85,12 @@ pub(super) fn build(
     ] {
         let final_world = initial
             .replayed(&trace)
-            .map_err(|error| problem_error("perishables", error))?;
+            .map_err(|error| problem_error(&study.problem, error))?;
         let mut view = document(
             progress,
             DocumentSpec {
-                problem: "perishables",
-                strategy,
+                problem: &study.problem,
+                document: strategy,
                 title,
                 description,
                 source_label: "Perishable inventory",
@@ -99,22 +99,22 @@ pub(super) fn build(
             &perishables::storage_plan_goal(),
             &trace,
             vec![
-                ObjectiveView {
-                    key: path!("usable"),
-                    label: "Usable inventory".into(),
-                    direction: ObjectiveDirectionView::Maximize,
-                    value: perishables::usable_inventory(&final_world).to_string(),
-                },
-                ObjectiveView {
-                    key: path!("energy"),
-                    label: "Cooling energy".into(),
-                    direction: ObjectiveDirectionView::Minimize,
-                    value: perishables::spent_cooling_energy(&final_world).to_string(),
-                },
+                ObjectiveView::new(
+                    path!("usable"),
+                    "Usable inventory",
+                    ObjectiveDirectionView::Maximize,
+                    perishables::usable_inventory(&final_world),
+                ),
+                ObjectiveView::new(
+                    path!("energy"),
+                    "Cooling energy",
+                    ObjectiveDirectionView::Minimize,
+                    perishables::spent_cooling_energy(&final_world),
+                ),
             ],
             scene,
         )
-        .map_err(|error| problem_error("perishables", error))?;
+        .map_err(|error| problem_error(&study.problem, error))?;
         view.pareto_fronts.push(front_view(&front, &view));
         view.telemetry.push(telemetry(
             "exact bounded Pareto storage search",
@@ -140,6 +140,7 @@ pub(super) fn build(
 fn frontier_trace(
     result: &perishables::ParetoResult,
     inventory_first: bool,
+    problem: &ProblemPath,
 ) -> Result<axionomy::Trace<perishables::Ontology>, ServiceError> {
     result
         .front()
@@ -159,7 +160,7 @@ fn frontier_trace(
             }
         })
         .map(|entry| entry.payload().clone())
-        .ok_or_else(|| problem_error("perishables", "empty Pareto frontier"))
+        .ok_or_else(|| problem_error(problem, "empty Pareto frontier"))
 }
 fn objective_value(values: &[Objective<ObjectiveKey, u64>], key: ObjectiveKey) -> u64 {
     values
@@ -171,7 +172,7 @@ fn front_view(result: &perishables::ParetoResult, selected: &ViewDocument) -> Pa
     let selected = selected
         .objectives
         .iter()
-        .map(|o| o.value.as_str())
+        .map(|o| o.value.to_string())
         .collect::<Vec<_>>();
     ParetoFrontView {
         title: "Usable stock vs. cooling energy".into(),
@@ -201,10 +202,7 @@ fn front_view(result: &perishables::ParetoResult, selected: &ViewDocument) -> Pa
                     .collect::<Vec<_>>();
                 ParetoPointView {
                     label: format!("{} usable · {} energy", values[0], values[1]),
-                    selected: values
-                        .iter()
-                        .map(String::as_str)
-                        .eq(selected.iter().copied()),
+                    selected: values.iter().eq(selected.iter()),
                     values,
                 }
             })

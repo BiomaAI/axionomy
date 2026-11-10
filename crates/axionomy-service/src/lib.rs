@@ -377,6 +377,8 @@ pub enum StudioEvent {
     Progress {
         study_id: StudioStudyId,
         sequence: u64,
+        /// The phase of work the progress is in, such as `monte-carlo`.
+        phase: PhasePath,
         completed: u64,
         #[serde(skip_serializing_if = "Option::is_none")]
         total: Option<u64>,
@@ -663,6 +665,7 @@ mod tests {
         let event = StudioEvent::Progress {
             study_id: StudioStudyId::new(1),
             sequence: 2,
+            phase: path!("documents"),
             completed: 3,
             total: Some(5),
             message: "replaying".into(),
@@ -1088,7 +1091,7 @@ mod tests {
                     "{problem}: thinking label `{label}` reads as code"
                 );
                 assert_eq!(
-                    observation.phase.as_str() == "documents",
+                    observation.phase == path!("documents"),
                     observation.kind == axionomy_view::SearchObservationKindView::Document,
                     "{problem}: only recorded documents are document observations"
                 );
@@ -1185,7 +1188,7 @@ mod tests {
                 document
                     .telemetry
                     .iter()
-                    .any(|series| series.algorithm == "Model size")
+                    .any(|series| series.subject == axionomy_view::TelemetrySubjectView::Model)
             }));
             assert!(study.documents.iter().all(|document| {
                 document.initial.scene.is_some()
@@ -1256,7 +1259,7 @@ mod tests {
                     .iter()
                     .all(|document| !document.thinking.is_empty())
             );
-            if problem.key.as_str() == "connect-four" {
+            if problem.key == path!("connect-four") {
                 assert!(maximum_rates < 300, "compact standard board regressed");
             }
         }
@@ -1276,7 +1279,7 @@ mod tests {
                     .iter()
                     .map(move |proposal| (document, proposal))
             })
-            .find(|(_, proposal)| proposal.id.as_str() == "move-before-sharing")
+            .find(|(_, proposal)| proposal.id == path!("move-before-sharing"))
             .expect("mission proposes moving before sharing");
         // Assessed after the scan resolved: the snapshot its frame left.
         let index = usize::try_from(proposal.snapshot_index).unwrap();
@@ -1330,7 +1333,7 @@ mod tests {
             },
             &control,
             &mut |progress: ServiceProgress| {
-                if progress.phase.as_str() == "monte-carlo" && progress.completed >= 16 {
+                if progress.phase == path!("monte-carlo") && progress.completed >= 16 {
                     control.cancel();
                 }
                 observed.push(progress);
@@ -1340,7 +1343,7 @@ mod tests {
         assert_eq!(result, Err(ServiceError::Cancelled));
         let monte_carlo = observed
             .iter()
-            .filter(|progress| progress.phase.as_str() == "monte-carlo")
+            .filter(|progress| progress.phase == path!("monte-carlo"))
             .collect::<Vec<_>>();
         assert!(monte_carlo.len() >= 2);
         assert!(
@@ -1373,7 +1376,7 @@ mod tests {
             },
             &control,
             &mut |progress: ServiceProgress| {
-                if !paused_once && progress.phase.as_str() == "monte-carlo" {
+                if !paused_once && progress.phase == path!("monte-carlo") {
                     paused_once = true;
                     control.pause();
                     paused_tx.send(()).unwrap();

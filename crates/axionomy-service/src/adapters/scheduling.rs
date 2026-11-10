@@ -21,16 +21,16 @@ pub(super) fn build(
         InstanceProfile::Stress => scheduling::initial_stress(),
     };
     let best = scheduling::solve_best_first(&initial)
-        .ok_or_else(|| problem_error("scheduling", "best-first found no schedule"))?;
+        .ok_or_else(|| problem_error(&study.problem, "best-first found no schedule"))?;
     let bounded = scheduling::branch_optimize(&initial)
-        .ok_or_else(|| problem_error("scheduling", "optimizer found no schedule"))?;
+        .ok_or_else(|| problem_error(&study.problem, "optimizer found no schedule"))?;
     let pareto =
-        scheduling::pareto_front(&initial).map_err(|error| problem_error("scheduling", error))?;
-    let one = frontier_trace(&pareto, true)?;
-    let two = frontier_trace(&pareto, false)?;
+        scheduling::pareto_front(&initial).map_err(|error| problem_error(&study.problem, error))?;
+    let one = frontier_trace(&pareto, true, &study.problem)?;
+    let two = frontier_trace(&pareto, false, &study.problem)?;
     let traces = [
         (
-            "best-first",
+            path!("best-first"),
             "Scheduling · shortest makespan",
             "A generic search for the earliest overall finish time.",
             best.trace().clone(),
@@ -38,7 +38,7 @@ pub(super) fn build(
             Some(best.expanded() as u64),
         ),
         (
-            "bounded-optimizer",
+            path!("bounded-optimizer"),
             "Scheduling · branch optimizer",
             "Branch-and-bound proposes a schedule; the economy replays every step before accepting it.",
             bounded.trace().clone(),
@@ -46,7 +46,7 @@ pub(super) fn build(
             None,
         ),
         (
-            "pareto-job-one",
+            path!("pareto-job-one"),
             "Scheduling Pareto · Job One first",
             "The frontier schedule that gets Job One done soonest — at Job Two's expense.",
             one,
@@ -54,7 +54,7 @@ pub(super) fn build(
             Some(pareto.progress().expanded() as u64),
         ),
         (
-            "pareto-job-two",
+            path!("pareto-job-two"),
             "Scheduling Pareto · Job Two first",
             "The frontier schedule that gets Job Two done soonest — at Job One's expense.",
             two,
@@ -66,12 +66,12 @@ pub(super) fn build(
     for (strategy, title, description, trace, algorithm, expanded) in traces {
         let final_world = initial
             .replayed(&trace)
-            .map_err(|error| problem_error("scheduling", error))?;
+            .map_err(|error| problem_error(&study.problem, error))?;
         let mut view = document(
             progress,
             DocumentSpec {
-                problem: "scheduling",
-                strategy,
+                problem: &study.problem,
+                document: strategy,
                 title,
                 description,
                 source_label: "Job-shop scheduling",
@@ -82,7 +82,7 @@ pub(super) fn build(
             objectives(&final_world),
             scene,
         )
-        .map_err(|error| problem_error("scheduling", error))?;
+        .map_err(|error| problem_error(&study.problem, error))?;
         view.pareto_fronts.push(front_view(&pareto, &view));
         view.telemetry.push(telemetry(
             algorithm,
@@ -104,7 +104,7 @@ pub(super) fn build(
         ));
         if let Some(candidate) = scheduling::candidates(&initial).first() {
             let malformed = Exchange::new(*candidate.rate(), Quantity::new(1));
-            view.proposals.push(proposal(ProposalSpec { id: "unbound-operation", label: "Schedule without slots", description: "The operation exists, but no job, slot, or schedule was named for it." }, &initial, &malformed));
+            view.proposals.push(proposal(ProposalSpec { id: path!("unbound-operation"), label: "Schedule without slots", description: "The operation exists, but no job, slot, or schedule was named for it." }, &initial, &malformed));
         }
         documents.push(view);
     }
@@ -113,7 +113,7 @@ pub(super) fn build(
     } else {
         scheduling::impossible()
     };
-    let mut impossible_view = document(progress, DocumentSpec { problem: "scheduling", strategy: "infeasible-horizon", title: "Scheduling · not enough time slots", description: "With only two slots the work cannot fit. That is an answer you can inspect, not an error the optimizer swallowed.", source_label: "Job-shop scheduling" }, &impossible, &scheduling::goal(), &Trace::new(), Vec::new(), scene).map_err(|error| problem_error("scheduling", error))?;
+    let mut impossible_view = document(progress, DocumentSpec { problem: &study.problem, document: path!("infeasible-horizon"), title: "Scheduling · not enough time slots", description: "With only two slots the work cannot fit. That is an answer you can inspect, not an error the optimizer swallowed.", source_label: "Job-shop scheduling" }, &impossible, &scheduling::goal(), &Trace::new(), Vec::new(), scene).map_err(|error| problem_error(&study.problem, error))?;
     impossible_view.telemetry.push(telemetry(
         "exhaustive feasibility",
         true,
@@ -126,6 +126,7 @@ pub(super) fn build(
 fn frontier_trace(
     result: &scheduling::ParetoResult,
     one_first: bool,
+    problem: &ProblemPath,
 ) -> Result<Trace<scheduling::Ontology>, ServiceError> {
     result
         .front()
@@ -143,7 +144,7 @@ fn frontier_trace(
             if one_first { (one, two) } else { (two, one) }
         })
         .map(|entry| entry.payload().clone())
-        .ok_or_else(|| problem_error("scheduling", "empty Pareto frontier"))
+        .ok_or_else(|| problem_error(problem, "empty Pareto frontier"))
 }
 fn objective_value(values: &[Objective<ObjectiveKey, u64>], key: ObjectiveKey) -> u64 {
     values
@@ -153,25 +154,25 @@ fn objective_value(values: &[Objective<ObjectiveKey, u64>], key: ObjectiveKey) -
 }
 fn objectives(world: &World) -> Vec<ObjectiveView> {
     vec![
-        ObjectiveView {
-            key: path!("job-one"),
-            label: "Job One completion".into(),
-            direction: ObjectiveDirectionView::Minimize,
-            value: scheduling::completion_time(world, Job::One).to_string(),
-        },
-        ObjectiveView {
-            key: path!("job-two"),
-            label: "Job Two completion".into(),
-            direction: ObjectiveDirectionView::Minimize,
-            value: scheduling::completion_time(world, Job::Two).to_string(),
-        },
+        ObjectiveView::new(
+            path!("job-one"),
+            "Job One completion",
+            ObjectiveDirectionView::Minimize,
+            scheduling::completion_time(world, Job::One),
+        ),
+        ObjectiveView::new(
+            path!("job-two"),
+            "Job Two completion",
+            ObjectiveDirectionView::Minimize,
+            scheduling::completion_time(world, Job::Two),
+        ),
     ]
 }
 fn front_view(result: &scheduling::ParetoResult, selected: &ViewDocument) -> ParetoFrontView {
     let selected = selected
         .objectives
         .iter()
-        .map(|o| o.value.as_str())
+        .map(|o| o.value.to_string())
         .collect::<Vec<_>>();
     ParetoFrontView {
         title: "Job One finish vs. Job Two finish".into(),
@@ -201,10 +202,7 @@ fn front_view(result: &scheduling::ParetoResult, selected: &ViewDocument) -> Par
                     .collect::<Vec<_>>();
                 ParetoPointView {
                     label: format!("Job One {} · Job Two {}", values[0], values[1]),
-                    selected: values
-                        .iter()
-                        .map(String::as_str)
-                        .eq(selected.iter().copied()),
+                    selected: values.iter().eq(selected.iter()),
                     values,
                 }
             })

@@ -32,7 +32,11 @@ pub(super) fn build(
             .maximum_moves()
             .saturating_mul(state.iterations_per_move());
         progress.emit(
-            path!("mcts-game"),
+            &Work::new(
+                path!("mcts-game"),
+                path!("mcts-game"),
+                SearchObservationKindView::Tree,
+            ),
             completed as u64,
             total as u64,
             format!(
@@ -61,16 +65,13 @@ pub(super) fn build(
         )
     };
     progress.ensure()?;
-    let trace = trace.ok_or_else(|| problem_error("connect-four", "MCTS game was interrupted"))?;
+    let trace = trace.ok_or_else(|| problem_error(&study.problem, "MCTS game was interrupted"))?;
     let final_world = initial
         .replayed(&trace)
-        .map_err(|error| problem_error("connect-four", error))?;
+        .map_err(|error| problem_error(&study.problem, error))?;
     let terminal = connect_four::terminal_values(&final_world)
-        .ok_or_else(|| problem_error("connect-four", "game did not terminate"))?;
-    let mut view = document(progress, DocumentSpec { problem: "connect-four", strategy: "mcts-game", title: "Connect Four · MCTS self-play", description: "Both players use tactical MCTS: immediate wins, forced blocks and double threats guide search. The economy declares the winner.", source_label: "Connect Four" }, &initial, &axionomy::Goal::new(), &trace, vec![
-        ObjectiveView { key: path!("red"), label: "Red terminal value".into(), direction: ObjectiveDirectionView::Maximize, value: format!("{:.1}", terminal[0]) },
-        ObjectiveView { key: path!("yellow"), label: "Yellow terminal value".into(), direction: ObjectiveDirectionView::Maximize, value: format!("{:.1}", terminal[1]) },
-    ], scene).map_err(|error| problem_error("connect-four", error))?;
+        .ok_or_else(|| problem_error(&study.problem, "game did not terminate"))?;
+    let mut view = document(progress, DocumentSpec { problem: &study.problem, document: path!("mcts-game"), title: "Connect Four · MCTS self-play", description: "Both players use tactical MCTS: immediate wins, forced blocks and double threats guide search. The economy declares the winner.", source_label: "Connect Four" }, &initial, &axionomy::Goal::new(), &trace, terminal_objectives(&terminal), scene).map_err(|error| problem_error(&study.problem, error))?;
     view.telemetry.push(telemetry(
         "vector-valued MCTS",
         false,
@@ -89,19 +90,29 @@ pub(super) fn build(
     ));
     if let Some(first) = trace.exchanges().first() {
         let malformed = Exchange::new(*first.rate(), first.units());
-        view.proposals.push(proposal(ProposalSpec { id: "move-without-board", label: "Move without board bindings", description: "A drop must name the game, column, landing cell, and result. Without them, gravity has nothing to act on." }, &initial, &malformed));
+        view.proposals.push(proposal(ProposalSpec { id: path!("move-without-board"), label: "Move without board bindings", description: "A drop must name the game, column, landing cell, and result. Without them, gravity has nothing to act on." }, &initial, &malformed));
     }
     let mut documents = vec![view];
     {
-        for (strategy, title, opponent, named) in [
+        for (strategy, phase, title, opponent, named) in [
             (
-                "center-opponent",
+                path!("center-opponent"),
+                Work::new(
+                    path!("center-opponent"),
+                    path!("center-opponent"),
+                    SearchObservationKindView::Phase,
+                ),
                 "Connect Four · against a center-first opponent",
                 connect_four::Opponent::CenterFirst,
                 "Center-first opponent",
             ),
             (
-                "search-opponent",
+                path!("search-opponent"),
+                Work::new(
+                    path!("search-opponent"),
+                    path!("search-opponent"),
+                    SearchObservationKindView::Phase,
+                ),
                 "Connect Four · against a depth-five opponent",
                 connect_four::Opponent::AlphaBeta,
                 "Depth-five opponent",
@@ -114,7 +125,7 @@ pub(super) fn build(
                 opponent,
                 |turn| {
                     progress.emit(
-                        slug(strategy),
+                        &phase,
                         turn as u64,
                         85,
                         format!("{named} comparison · move {turn}"),
@@ -123,22 +134,42 @@ pub(super) fn build(
             );
             progress.ensure()?;
             let trace = trace
-                .ok_or_else(|| problem_error("connect-four", "opponent comparison interrupted"))?;
+                .ok_or_else(|| problem_error(&study.problem, "opponent comparison interrupted"))?;
             let final_world = initial
                 .replayed(&trace)
-                .map_err(|error| problem_error("connect-four", error))?;
+                .map_err(|error| problem_error(&study.problem, error))?;
             let terminal = connect_four::terminal_values(&final_world)
-                .ok_or_else(|| problem_error("connect-four", "comparison did not terminate"))?;
+                .ok_or_else(|| problem_error(&study.problem, "comparison did not terminate"))?;
             documents.push(document(progress, DocumentSpec {
-                problem: "connect-four", strategy, title,
+                problem: &study.problem, document: strategy, title,
                 description: "Red uses tactical MCTS. Yellow uses the named independent policy on the same empty board. One game is an inspectable matchup, not a win-rate estimate.", source_label: "Connect Four",
-            }, &initial, &axionomy::Goal::new(), &trace, vec![
-                ObjectiveView { key: path!("red"), label: "Red terminal value".into(), direction: ObjectiveDirectionView::Maximize, value: format!("{:.1}", terminal[0]) },
-                ObjectiveView { key: path!("yellow"), label: "Yellow terminal value".into(), direction: ObjectiveDirectionView::Maximize, value: format!("{:.1}", terminal[1]) },
-            ], scene).map_err(|error| problem_error("connect-four", error))?);
+            }, &initial, &axionomy::Goal::new(), &trace, terminal_objectives(&terminal), scene).map_err(|error| problem_error(&study.problem, error))?);
         }
     }
     assemble(study, descriptor, documents)
+}
+
+/// Each player's terminal value, exact: a win is `1.0`, a draw `0.5` and a
+/// loss `0.0`, counted in tenths.
+fn terminal_objectives(terminal: &[f64]) -> Vec<ObjectiveView> {
+    let tenths = |value: f64| Quantity::new((value * 10.0).round() as u64);
+    let format = QuantityFormat::decimal(1).digits(1);
+    vec![
+        ObjectiveView::new(
+            path!("red"),
+            "Red terminal value",
+            ObjectiveDirectionView::Maximize,
+            tenths(terminal[0]),
+        )
+        .with_format(format.clone()),
+        ObjectiveView::new(
+            path!("yellow"),
+            "Yellow terminal value",
+            ObjectiveDirectionView::Maximize,
+            tenths(terminal[1]),
+        )
+        .with_format(format),
+    ]
 }
 
 fn scene(_: u64, world: &World) -> Option<Scene> {

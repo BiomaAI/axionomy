@@ -1,11 +1,10 @@
 use super::*;
 use axionomy_problems::lending::{self, AccountId, Asset, Config, LoanTrace, WAD, World, balance};
 use axionomy_view::{
-    GraphEdgeView, GraphNodeView, ObjectiveDirectionView, ObjectiveView, SceneAnchorView,
-    SceneEntityRoleView, SceneGlyphView, SceneToneView, TelemetryKindView, ViewId,
+    ClassPath, GraphEdgeView, GraphNodeView, ObjectiveDirectionView, ObjectiveView,
+    SceneAnchorView, SceneEntityRoleView, SceneGlyphView, SceneToneView, TelemetryKindView, ViewId,
 };
 
-const PROBLEM: &str = "lending";
 const SOURCE: &str = "Lending market";
 
 pub(super) fn build(
@@ -18,23 +17,24 @@ pub(super) fn build(
         InstanceProfile::Showcase => Config::showcase(),
         InstanceProfile::Stress => Config::stress(),
     };
+    let problem = &study.problem;
     let initial = lending::world(&config);
     let goal = lending::goal(&config);
     let cheapest = lending::least_interest(&config)
-        .ok_or_else(|| problem_error(PROBLEM, "no plan repays the loan"))?;
+        .ok_or_else(|| problem_error(problem, "no plan repays the loan"))?;
     let fewest = lending::fewest_steps(&config)
-        .ok_or_else(|| problem_error(PROBLEM, "no plan repays the loan"))?;
+        .ok_or_else(|| problem_error(problem, "no plan repays the loan"))?;
     let mut documents = Vec::new();
     for (strategy, title, description, solution, algorithm) in [
         (
-            "least-interest",
+            path!("least-interest"),
             "Lending · least interest",
             "Dijkstra search charges each closed period's interest to the plan. It borrows the shortfall just before the bill is due, keeps the loan safe through the price drop, and repays from each installment as it arrives.",
             &cheapest,
             "Dijkstra search",
         ),
         (
-            "fewest-steps",
+            path!("fewest-steps"),
             "Lending · fewest steps",
             "Breadth-first search counts exchanges, not interest. It borrows in the first period and repays once at the end, so the loan runs longest.",
             &fewest,
@@ -44,8 +44,8 @@ pub(super) fn build(
         let mut view = document(
             progress,
             DocumentSpec {
-                problem: PROBLEM,
-                strategy,
+                problem,
+                document: strategy,
                 title,
                 description,
                 source_label: SOURCE,
@@ -53,10 +53,10 @@ pub(super) fn build(
             &initial,
             &goal,
             solution.trace(),
-            objectives(&initial, solution.trace())?,
+            objectives(&initial, solution.trace(), problem)?,
             scene,
         )
-        .map_err(|error| problem_error(PROBLEM, format!("{error:?}")))?;
+        .map_err(|error| problem_error(problem, format!("{error:?}")))?;
         view.telemetry.push(telemetry(
             algorithm,
             true,
@@ -78,12 +78,12 @@ pub(super) fn build(
     }
 
     let (_, liquidation) = lending::over_borrowed(&config)
-        .map_err(|error| problem_error(PROBLEM, format!("{error:?}")))?;
+        .map_err(|error| problem_error(problem, format!("{error:?}")))?;
     let mut view = document(
         progress,
         DocumentSpec {
-            problem: PROBLEM,
-            strategy: "over-borrowed",
+            problem,
+            document: path!("over-borrowed"),
             title: "Lending · over-borrowed",
             description: "The borrower posts all its collateral and borrows to the limit in the first period. Interest at high utilization or the price drop pushes the loan past its liquidation threshold, the clock refuses to close the period, and a keeper repays the loan and seizes collateral plus the bonus.",
             source_label: SOURCE,
@@ -91,21 +91,21 @@ pub(super) fn build(
         &initial,
         &goal,
         &liquidation,
-        objectives(&initial, &liquidation)?,
+        objectives(&initial, &liquidation, problem)?,
         scene,
     )
-    .map_err(|error| problem_error(PROBLEM, format!("{error:?}")))?;
+    .map_err(|error| problem_error(problem, format!("{error:?}")))?;
     view.telemetry.push(scripted(&liquidation));
     documents.push(view);
 
     let genesis = lending::genesis(&config);
     let (_, attack) = lending::first_depositor_attack(&config)
-        .map_err(|error| problem_error(PROBLEM, format!("{error:?}")))?;
+        .map_err(|error| problem_error(problem, format!("{error:?}")))?;
     let mut view = document(
         progress,
         DocumentSpec {
-            problem: PROBLEM,
-            strategy: "first-depositor-attack",
+            problem,
+            document: path!("first-depositor-attack"),
             title: "Lending · first-depositor attack on a fresh market",
             description: "An attacker deposits one unit into a fresh market and donates heavily to inflate the share price before a victim deposits. Shares locked at genesis absorb the donation: the victim loses less than one share's worth to rounding, and the attacker cannot recover what it gave.",
             source_label: SOURCE,
@@ -116,7 +116,7 @@ pub(super) fn build(
         Vec::new(),
         scene,
     )
-    .map_err(|error| problem_error(PROBLEM, format!("{error:?}")))?;
+    .map_err(|error| problem_error(problem, format!("{error:?}")))?;
     view.telemetry.push(scripted(&attack));
     documents.push(view);
 
@@ -135,52 +135,56 @@ fn scripted(trace: &LoanTrace) -> SearchTelemetryView {
     )
 }
 
-fn objectives(initial: &World, trace: &LoanTrace) -> Result<Vec<ObjectiveView>, ServiceError> {
+fn objectives(
+    initial: &World,
+    trace: &LoanTrace,
+    problem: &ProblemPath,
+) -> Result<Vec<ObjectiveView>, ServiceError> {
     let interest = lending::interest_charged(initial, trace)
-        .map_err(|error| problem_error(PROBLEM, format!("{error:?}")))?;
+        .map_err(|error| problem_error(problem, format!("{error:?}")))?;
     let after = initial
         .replayed(trace)
-        .map_err(|error| problem_error(PROBLEM, format!("{error:?}")))?;
+        .map_err(|error| problem_error(problem, format!("{error:?}")))?;
     let collateral = balance(&after, AccountId::Borrower, Asset::Collateral)
         + balance(&after, AccountId::Borrower, Asset::PostedCollateral);
     Ok(vec![
-        ObjectiveView {
-            key: path!("interest"),
-            label: "Interest charged".into(),
-            direction: ObjectiveDirectionView::Minimize,
-            value: interest.to_string(),
-        },
-        ObjectiveView {
-            key: path!("collateral"),
-            label: "Collateral kept".into(),
-            direction: ObjectiveDirectionView::Maximize,
-            value: collateral.to_string(),
-        },
-        ObjectiveView {
-            key: path!("cash"),
-            label: "Borrower cash at the end".into(),
-            direction: ObjectiveDirectionView::Maximize,
-            value: balance(&after, AccountId::Borrower, Asset::Cash).to_string(),
-        },
+        ObjectiveView::new(
+            path!("interest"),
+            "Interest charged",
+            ObjectiveDirectionView::Minimize,
+            interest,
+        ),
+        ObjectiveView::new(
+            path!("collateral"),
+            "Collateral kept",
+            ObjectiveDirectionView::Maximize,
+            collateral,
+        ),
+        ObjectiveView::new(
+            path!("cash"),
+            "Borrower cash at the end",
+            ObjectiveDirectionView::Maximize,
+            balance(&after, AccountId::Borrower, Asset::Cash),
+        ),
     ])
 }
 
 fn refusals(initial: &World) -> Vec<ProposalView> {
     [
         (
-            "unsecured-borrow",
+            path!("unsecured-borrow"),
             "Borrow before posting collateral",
             "The loan-to-value rule values posted collateral, and nothing is posted yet.",
             lending::borrow(1_000),
         ),
         (
-            "early-revenue",
+            path!("early-revenue"),
             "Collect the first installment now",
             "The customer's installment is not due until its period has come.",
             lending::collect_revenue(0),
         ),
         (
-            "safe-liquidation",
+            path!("safe-liquidation"),
             "Liquidate a loan that is not past its threshold",
             "A keeper may only liquidate debt above the liquidation threshold of the posted collateral.",
             lending::liquidate(),
@@ -221,20 +225,26 @@ fn percent(value: u128) -> String {
     format!("{}.{:02}", hundredths / 100, hundredths % 100)
 }
 
-fn node(key: &str, label: &str, classes: &[&str], x: f64, y: f64) -> GraphNodeView {
+fn node(key: ItemPath, label: &str, classes: Vec<ClassPath>, x: f64, y: f64) -> GraphNodeView {
     GraphNodeView {
-        id: ViewId::new(slug(key), label),
-        classes: classes.iter().map(slug).collect(),
+        id: ViewId::new(key, label),
+        classes,
         x: Some(x),
         y: Some(y),
     }
 }
 
-fn edge(id: &str, source: &str, target: &str, label: &str, active: bool) -> GraphEdgeView {
+fn edge(
+    id: ItemPath,
+    source: ItemPath,
+    target: ItemPath,
+    label: &str,
+    active: bool,
+) -> GraphEdgeView {
     GraphEdgeView {
-        id: slug(id),
-        source: slug(source),
-        target: slug(target),
+        id,
+        source,
+        target,
         label: Some(label.into()),
         classes: if active {
             vec![path!("active")]
@@ -261,50 +271,106 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
     let bill_paid = borrower(Asset::BillPaid) > 0;
     let pending_installments = world.balance(&AccountId::Customer, &Asset::Cash).to_u64();
     let seized = balance(world, AccountId::Keeper, Asset::Collateral);
-    let borrower_classes: &[&str] = if unsafe_loan {
-        &["danger"]
+    let borrower_classes = if unsafe_loan {
+        vec![path!("danger")]
     } else if open_loan {
-        &["active"]
+        vec![path!("active")]
     } else {
-        &[]
+        Vec::new()
     };
-    let supplier_classes: &[&str] = if bill_paid { &["success"] } else { &["goal"] };
-    let keeper_classes: &[&str] = if seized > 0 { &["warning"] } else { &[] };
+    let supplier_classes = vec![if bill_paid {
+        path!("success")
+    } else {
+        path!("goal")
+    }];
+    let keeper_classes = if seized > 0 {
+        vec![path!("warning")]
+    } else {
+        Vec::new()
+    };
 
     let mut nodes = vec![
-        node("oracle", "Price oracle", &["information"], 380.0, 0.0),
-        node("market", "Lending market", &["active"], 380.0, 200.0),
-        node("borrower", "Borrower", borrower_classes, 720.0, 200.0),
-        node("supplier", "Supplier", supplier_classes, 1_060.0, 80.0),
-        node("customer", "Customer", &[], 1_060.0, 320.0),
-        node("keeper", "Keeper", keeper_classes, 380.0, 400.0),
+        node(
+            path!("oracle"),
+            "Price oracle",
+            vec![path!("information")],
+            380.0,
+            0.0,
+        ),
+        node(
+            path!("market"),
+            "Lending market",
+            vec![path!("active")],
+            380.0,
+            200.0,
+        ),
+        node(
+            path!("borrower"),
+            "Borrower",
+            borrower_classes,
+            720.0,
+            200.0,
+        ),
+        node(
+            path!("supplier"),
+            "Supplier",
+            supplier_classes,
+            1_060.0,
+            80.0,
+        ),
+        node(path!("customer"), "Customer", Vec::new(), 1_060.0, 320.0),
+        node(path!("keeper"), "Keeper", keeper_classes, 380.0, 400.0),
     ];
     let mut edges = vec![
-        edge("loan", "market", "borrower", "loan", open_loan),
-        edge("bill", "borrower", "supplier", "bill", bill_paid),
         edge(
-            "revenue",
-            "customer",
-            "borrower",
+            path!("loan"),
+            path!("market"),
+            path!("borrower"),
+            "loan",
+            open_loan,
+        ),
+        edge(
+            path!("bill"),
+            path!("borrower"),
+            path!("supplier"),
+            "bill",
+            bill_paid,
+        ),
+        edge(
+            path!("revenue"),
+            path!("customer"),
+            path!("borrower"),
             "installments",
             pending_installments == 0,
         ),
-        edge("price", "oracle", "market", "collateral price", false),
-        edge("liquidation", "keeper", "market", "liquidation", seized > 0),
+        edge(
+            path!("price"),
+            path!("oracle"),
+            path!("market"),
+            "collateral price",
+            false,
+        ),
+        edge(
+            path!("liquidation"),
+            path!("keeper"),
+            path!("market"),
+            "liquidation",
+            seized > 0,
+        ),
     ];
     for (row, depositor) in depositors.iter().enumerate() {
-        let key = format!("depositor-{depositor}");
+        let key = path!("depositor").then(depositor);
         nodes.push(node(
-            &key,
+            key.clone(),
             &format!("Depositor {}", depositor + 1),
-            &["person"],
+            vec![path!("person")],
             0.0,
             row as f64 * 130.0 + 40.0,
         ));
         edges.push(edge(
-            &format!("vault-{depositor}"),
-            &key,
-            "market",
+            path!("vault").then(depositor),
+            key,
+            path!("market"),
             "vault shares",
             balance(world, AccountId::Depositor(*depositor), Asset::Share) > 0,
         ));

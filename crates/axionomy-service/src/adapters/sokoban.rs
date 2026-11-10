@@ -9,6 +9,32 @@ use axionomy_view::{
     TelemetryKindView,
 };
 
+/// Sokoban's strategies, as the catalog lists them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, axionomy::Identifier)]
+enum Strategy {
+    AStar,
+    BreadthFirst,
+}
+
+impl Strategy {
+    /// The algorithm in words, as its telemetry is titled.
+    fn title(self) -> &'static str {
+        match self {
+            Self::AStar => "A* with crate-to-goal lower bound",
+            Self::BreadthFirst => "breadth-first search",
+        }
+    }
+
+    /// The search expanding its frontier.
+    fn frontier(self) -> Work {
+        let (phase, algorithm) = match self {
+            Self::AStar => (path!("a-star-frontier"), path!("a-star")),
+            Self::BreadthFirst => (path!("breadth-first-frontier"), path!("breadth-first")),
+        };
+        Work::new(phase, algorithm, SearchObservationKindView::Frontier)
+    }
+}
+
 pub(super) fn build(
     study: &StudyKey,
     descriptor: &ProblemDescriptor,
@@ -20,19 +46,14 @@ pub(super) fn build(
         InstanceProfile::Showcase => sokoban::initial_showcase(),
         InstanceProfile::Stress => sokoban::initial_stress(),
     };
-    let strategy = study.strategy.as_str();
+    let strategy: Strategy = strategy(study)?;
     let chunk = usize::try_from(study.budget.clamp(8, 256)).unwrap_or(64);
-    let (solution, search) = search(&initial, strategy, chunk, progress)?;
-    let strategy_label = if strategy == "a-star" {
-        "A* with crate-to-goal lower bound"
-    } else {
-        "breadth-first search"
-    };
+    let (solution, search) = search(&initial, strategy, chunk, progress, &study.problem)?;
     let mut solved = document(
         progress,
         DocumentSpec {
-            problem: "sokoban",
-            strategy,
+            problem: &study.problem,
+            document: path::write(&strategy),
             title: "Sokoban · warehouse solved",
             description: "Crates hold pressure plates to open doors. Cross into the next chamber, latch the door, recover the staged crate, and reach the far exit after completing every goal. Each move and mechanism is an atomic economic exchange.",
             source_label: "Sokoban",
@@ -43,9 +64,9 @@ pub(super) fn build(
         Vec::new(),
         scene,
     )
-    .map_err(|error| problem_error("sokoban", error))?;
+    .map_err(|error| problem_error(&study.problem, error))?;
     solved.telemetry.push(telemetry(
-        strategy_label,
+        strategy.title(),
         true,
         [
             (
@@ -72,7 +93,7 @@ pub(super) fn build(
     }) {
         let missing_crate = sokoban::exchange(&initial, *rate);
         solved.proposals.push(proposal(ProposalSpec {
-                id: "push-without-crate",
+                id: path!("push-without-crate"),
                 label: "Push an empty floor tile",
                 description: "The geometry names three real floor cells, but the middle account does not own the requested crate identity.",
             },
@@ -85,12 +106,12 @@ pub(super) fn build(
     if let Some(deadlock_trace) = sokoban::losing_trace(&initial) {
         let deadlocked = initial
             .replayed(&deadlock_trace)
-            .map_err(|error| problem_error("sokoban", error))?;
+            .map_err(|error| problem_error(&study.problem, error))?;
         let mut deadlock = document(
             progress,
             DocumentSpec {
-                problem: "sokoban",
-                strategy: "deadlock",
+                problem: &study.problem,
+                document: path!("deadlock"),
                 title: "Sokoban · legal plan, losing outcome",
                 description: "Starting from the same warehouse, replay a sequence that is valid under every rule yet strands a stable crate in a square from which no goal is reachable. Valid is not the same as wise.",
                 source_label: "Sokoban",
@@ -101,7 +122,7 @@ pub(super) fn build(
             Vec::new(),
             scene,
         )
-        .map_err(|error| problem_error("sokoban", error))?;
+        .map_err(|error| problem_error(&study.problem, error))?;
         let trapped = sokoban::crate_cells(&deadlocked)
             .into_iter()
             .filter(|(_, cell)| sokoban::is_dead_square(&deadlocked, *cell))
@@ -123,11 +144,13 @@ pub(super) fn build(
 
 fn search(
     initial: &World,
-    strategy: &str,
+    strategy: Strategy,
     chunk: usize,
     progress: &mut ProgressSink<'_>,
+    problem: &ProblemPath,
 ) -> Result<(Solution, GraphSearchProgress), ServiceError> {
-    if strategy == "a-star" {
+    let frontier = strategy.frontier();
+    if strategy == Strategy::AStar {
         let mut session = AStarSession::new(
             initial,
             sokoban::goal(),
@@ -140,7 +163,7 @@ fn search(
             session.advance(WorkBudget::new(chunk), &mut observer);
             let state = session.progress();
             let _ = progress.graph(
-                path!("a-star-frontier"),
+                &frontier,
                 state,
                 format!(
                     "{} expanded · {} frontier · {} distinct states",
@@ -154,7 +177,7 @@ fn search(
         let state = session.progress();
         let solution = session
             .into_solution()
-            .ok_or_else(|| problem_error("sokoban", "puzzle has no solution"))?;
+            .ok_or_else(|| problem_error(problem, "puzzle has no solution"))?;
         Ok((solution, state))
     } else {
         let mut session = BfsSession::new(initial, sokoban::goal(), sokoban::search_candidates);
@@ -163,7 +186,7 @@ fn search(
             session.advance(WorkBudget::new(chunk), &mut observer);
             let state = session.progress();
             let _ = progress.graph(
-                path!("breadth-first-frontier"),
+                &frontier,
                 state,
                 format!(
                     "{} expanded · {} frontier · {} distinct states",
@@ -177,7 +200,7 @@ fn search(
         let state = session.progress();
         let solution = session
             .into_solution()
-            .ok_or_else(|| problem_error("sokoban", "puzzle has no solution"))?;
+            .ok_or_else(|| problem_error(problem, "puzzle has no solution"))?;
         Ok((solution, state))
     }
 }
@@ -467,6 +490,28 @@ impl StudioLabel for sokoban::Role {
             Self::To => "Destination cell".into(),
             Self::Puzzle => "Puzzle".into(),
             Self::Goal(crate_id) => format!("Goal for crate {}", crate_id + 1),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A strategy the catalog offers is one this adapter reads, so a study
+    /// of it never fails as unknown.
+    #[test]
+    fn every_catalog_strategy_is_read() {
+        let problem = catalog()
+            .into_iter()
+            .find(|problem| problem.key == path!("sokoban"))
+            .expect("the catalog lists Sokoban");
+        for strategy in &problem.strategies {
+            assert!(
+                path::read::<_, Strategy>(&strategy.key).is_ok(),
+                "{}",
+                strategy.key
+            );
         }
     }
 }

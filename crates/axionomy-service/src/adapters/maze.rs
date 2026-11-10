@@ -7,33 +7,119 @@ use axionomy_search::{
     session::{Continue, WorkBudget},
 };
 use axionomy_view::{
-    FrontierCompletenessView, GraphEdgeView, GraphNodeView, ObjectiveAxisView,
+    ClassPath, FrontierCompletenessView, GraphEdgeView, GraphNodeView, ObjectiveAxisView,
     ObjectiveDirectionView, ParetoFrontView, ParetoPointView, SceneAnchorView, SceneGlyphView,
     SceneLegendView, ScenePathStatusView, SceneSurfaceView, SceneToneView, TelemetryKindView,
     ViewId,
 };
+
+/// The maze's strategies, as the catalog lists them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, axionomy::Identifier)]
+enum Strategy {
+    BreadthFirst,
+    Dijkstra,
+    AStar,
+    ParetoEnergy,
+    ParetoTime,
+}
+
+impl Strategy {
+    /// The graph search that finds this strategy's route; none for a point
+    /// on the exact Pareto frontier.
+    fn search(self) -> Option<Search> {
+        match self {
+            Self::BreadthFirst => Some(Search::BreadthFirst),
+            Self::Dijkstra => Some(Search::Dijkstra),
+            Self::AStar => Some(Search::AStar),
+            Self::ParetoEnergy | Self::ParetoTime => None,
+        }
+    }
+}
+
+/// A graph search over the maze's rooms.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Search {
+    BreadthFirst,
+    Dijkstra,
+    AStar,
+}
+
+impl Search {
+    fn algorithm(self) -> AlgorithmPath {
+        match self {
+            Self::BreadthFirst => path!("breadth-first"),
+            Self::Dijkstra => path!("dijkstra"),
+            Self::AStar => path!("a-star"),
+        }
+    }
+
+    /// The search expanding its frontier.
+    fn frontier(self) -> Work {
+        let phase = match self {
+            Self::BreadthFirst => path!("breadth-first-frontier"),
+            Self::Dijkstra => path!("dijkstra-frontier"),
+            Self::AStar => path!("a-star-frontier"),
+        };
+        Work::new(phase, self.algorithm(), SearchObservationKindView::Frontier)
+    }
+
+    /// The search accepting its solution.
+    fn solution(self) -> Work {
+        let phase = match self {
+            Self::BreadthFirst => path!("breadth-first-solution"),
+            Self::Dijkstra => path!("dijkstra-solution"),
+            Self::AStar => path!("a-star-solution"),
+        };
+        Work::new(
+            phase,
+            self.algorithm(),
+            SearchObservationKindView::Incumbent,
+        )
+    }
+
+    /// The estimate of a best-first search: none for Dijkstra, the encoded
+    /// distance for A*.
+    fn heuristic(self) -> fn(&World) -> u64 {
+        match self {
+            Self::AStar => maze::heuristic,
+            Self::BreadthFirst | Self::Dijkstra => zero_heuristic,
+        }
+    }
+}
+
+/// The exact Pareto search exhausting its frontier.
+fn pareto_frontier() -> Work {
+    Work::new(
+        path!("pareto-frontier"),
+        path!("exact-pareto-search"),
+        SearchObservationKindView::Frontier,
+    )
+}
 
 pub(super) fn build(
     study: &StudyKey,
     descriptor: &ProblemDescriptor,
     progress: &mut ProgressSink<'_>,
 ) -> Result<Study, ServiceError> {
+    let problem = &study.problem;
     let initial = match study.instance {
         InstanceProfile::Micro => maze::initial(),
         InstanceProfile::Showcase => maze::initial_showcase(),
         InstanceProfile::Stress => maze::initial_stress(),
     };
-    let selected = study.strategy.as_str();
-    observe_selected_search(&initial, selected, progress)?;
-    let bfs = maze::solve_bfs(&initial).ok_or_else(|| problem_error("maze", "no BFS route"))?;
-    let dijkstra =
-        maze::solve_dijkstra(&initial).ok_or_else(|| problem_error("maze", "no Dijkstra route"))?;
-    let astar = maze::solve_astar(&initial).ok_or_else(|| problem_error("maze", "no A* route"))?;
-    let pareto = maze::pareto_front(&initial).map_err(|error| problem_error("maze", error))?;
-    if selected.starts_with("pareto-") {
+    let selected: Strategy = strategy(study)?;
+    if let Some(search) = selected.search() {
+        observe_selected_search(&initial, search, progress, problem)?;
+    }
+    let bfs = maze::solve_bfs(&initial).ok_or_else(|| problem_error(problem, "no BFS route"))?;
+    let dijkstra = maze::solve_dijkstra(&initial)
+        .ok_or_else(|| problem_error(problem, "no Dijkstra route"))?;
+    let astar = maze::solve_astar(&initial).ok_or_else(|| problem_error(problem, "no A* route"))?;
+    let pareto = maze::pareto_front(&initial).map_err(|error| problem_error(problem, error))?;
+    if selected.search().is_none() {
         let state = pareto.progress();
         let _ = progress.emit(
-            path!("pareto-frontier"),
+            &pareto_frontier(),
             state.expanded() as u64,
             state.expanded() as u64,
             format!(
@@ -44,12 +130,12 @@ pub(super) fn build(
         );
         progress.ensure()?;
     }
-    let energy_trace = frontier_trace(&pareto, true)?;
-    let time_trace = frontier_trace(&pareto, false)?;
+    let energy_trace = frontier_trace(&pareto, true, problem)?;
+    let time_trace = frontier_trace(&pareto, false, problem)?;
 
     let traces = [
         (
-            "breadth-first",
+            Strategy::BreadthFirst,
             "Maze · fewest moves",
             "Breadth-first search minimizes exchange count. In larger mazes, untreated injuries can make a short sequence take longer than a prepared route.",
             bfs.trace().clone(),
@@ -57,7 +143,7 @@ pub(super) fn build(
             bfs.expanded(),
         ),
         (
-            "dijkstra",
+            Strategy::Dijkstra,
             "Maze · least energy without guidance",
             "Dijkstra proves the cheapest key-and-gate route while exploring without a heuristic.",
             dijkstra.trace().clone(),
@@ -65,7 +151,7 @@ pub(super) fn build(
             dijkstra.expanded(),
         ),
         (
-            "a-star",
+            Strategy::AStar,
             "Maze · least energy",
             "A* uses the encoded distance estimate to find the efficient key-and-gate route with less search.",
             astar.trace().clone(),
@@ -73,7 +159,7 @@ pub(super) fn build(
             astar.expanded(),
         ),
         (
-            "pareto-energy",
+            Strategy::ParetoEnergy,
             "Maze Pareto · least energy",
             "The cheapest route on the frontier; every step was replayed to confirm it.",
             energy_trace,
@@ -81,7 +167,7 @@ pub(super) fn build(
             pareto.progress().expanded(),
         ),
         (
-            "pareto-time",
+            Strategy::ParetoTime,
             "Maze Pareto · least time",
             "The fastest route on the frontier; every step was replayed to confirm it.",
             time_trace,
@@ -93,12 +179,12 @@ pub(super) fn build(
     for (strategy, title, description, trace, algorithm, expanded) in traces {
         let final_world = initial
             .replayed(&trace)
-            .map_err(|error| problem_error("maze", error))?;
+            .map_err(|error| problem_error(problem, error))?;
         let mut document = document(
             progress,
             DocumentSpec {
-                problem: "maze",
-                strategy,
+                problem,
+                document: path::write(&strategy),
                 title,
                 description,
                 source_label: "Key-door maze",
@@ -109,7 +195,7 @@ pub(super) fn build(
             objectives(&final_world),
             scene,
         )
-        .map_err(|error| problem_error("maze", error))?;
+        .map_err(|error| problem_error(problem, error))?;
         decorate_route_evidence(&mut document, &trace);
         document.pareto_fronts.push(front_view(&pareto, &document));
         document.telemetry.push(telemetry(
@@ -128,10 +214,9 @@ pub(super) fn build(
                 ),
             ],
         ));
-        document.thinking = if strategy.starts_with("pareto-") {
-            saved_pareto_observations(&pareto)
-        } else {
-            saved_graph_observations(&initial, strategy)?
+        document.thinking = match strategy.search() {
+            Some(search) => saved_graph_observations(&initial, search, problem)?,
+            None => saved_pareto_observations(&pareto),
         };
         let locked_rate = initial
             .rate_ids()
@@ -145,7 +230,7 @@ pub(super) fn build(
                 )
             })
             .copied()
-            .ok_or_else(|| problem_error("maze", "missing locked passage"))?;
+            .ok_or_else(|| problem_error(problem, "missing locked passage"))?;
         let locked = Exchange::new(locked_rate, Quantity::new(1))
             .bind(Role::Actor, AccountId::Agent)
             .bind(Role::Environment, AccountId::World);
@@ -154,7 +239,7 @@ pub(super) fn build(
         document.proposals = vec![
             proposal(
                 ProposalSpec {
-                    id: "locked-door",
+                    id: path!("locked-door"),
                     label: "Cross locked door",
                     description: "Well-formed, but the Explorer is not at the gate and the gate is still locked.",
                 },
@@ -163,7 +248,7 @@ pub(super) fn build(
             ),
             proposal(
                 ProposalSpec {
-                    id: "missing-environment",
+                    id: path!("missing-environment"),
                     label: "Take key without World",
                     description: "Deliberately missing the World role, so there is nothing to take the key from.",
                 },
@@ -237,15 +322,15 @@ fn expansion_subject(expansion: MazeExpansion) -> ViewId {
 }
 
 fn saved_graph_observation(
-    phase: &str,
+    work: &Work,
     state: axionomy_search::GraphSearchProgress,
     expansion: MazeExpansion,
 ) -> SearchObservationView {
     SearchObservationView {
         sequence: state.expanded() as u64,
-        phase: slug(phase),
-        algorithm: slug(phase.trim_end_matches("-frontier")),
-        kind: SearchObservationKindView::Frontier,
+        phase: work.phase.clone(),
+        algorithm: work.algorithm.clone(),
+        kind: work.kind,
         label: expansion_label(expansion),
         completed: state.expanded() as u64,
         total: 0,
@@ -274,15 +359,15 @@ fn solution_label(expansion: MazeExpansion) -> String {
 }
 
 fn saved_solution_observation(
-    phase: &str,
+    work: &Work,
     state: axionomy_search::GraphSearchProgress,
     expansion: MazeExpansion,
 ) -> SearchObservationView {
     SearchObservationView {
         sequence: state.expanded() as u64 + 1,
-        phase: slug(phase),
-        algorithm: slug(phase.trim_end_matches("-solution")),
-        kind: SearchObservationKindView::Incumbent,
+        phase: work.phase.clone(),
+        algorithm: work.algorithm.clone(),
+        kind: work.kind,
         label: solution_label(expansion),
         completed: state.expanded() as u64,
         total: state.expanded() as u64,
@@ -309,11 +394,12 @@ fn saved_solution_observation(
 fn solved_expansion(
     initial: &World,
     trace: &axionomy::Trace<maze::Ontology>,
+    problem: &ProblemPath,
 ) -> Result<MazeExpansion, ServiceError> {
     let solved = initial
         .replayed(trace)
-        .map_err(|error| problem_error("maze", error))?;
-    capture_expansion(&solved).ok_or_else(|| problem_error("maze", "solution lost its room"))
+        .map_err(|error| problem_error(problem, error))?;
+    capture_expansion(&solved).ok_or_else(|| problem_error(problem, "solution lost its room"))
 }
 
 fn retain_observation(
@@ -328,11 +414,13 @@ fn retain_observation(
 
 fn saved_graph_observations(
     initial: &World,
-    strategy: &str,
+    search: Search,
+    problem: &ProblemPath,
 ) -> Result<Vec<SearchObservationView>, ServiceError> {
     let expanded = std::rc::Rc::new(std::cell::RefCell::new(None));
     let mut observations = Vec::new();
-    if strategy == "breadth-first" {
+    let frontier = search.frontier();
+    if search == Search::BreadthFirst {
         let capture = std::rc::Rc::clone(&expanded);
         let mut session = BfsSession::new(initial, maze::goal(), move |world| {
             *capture.borrow_mut() = capture_expansion(world);
@@ -342,27 +430,18 @@ fn saved_graph_observations(
         while !session.status().is_terminal() {
             session.advance(WorkBudget::new(1), &mut observer);
             if let Some(expansion) = expanded.borrow_mut().take() {
-                let observation = saved_graph_observation(
-                    "breadth-first-frontier",
-                    session.progress(),
-                    expansion,
-                );
+                let observation = saved_graph_observation(&frontier, session.progress(), expansion);
                 retain_observation(&mut observations, observation);
             }
         }
         if let Some(solution) = session.solution() {
-            let expansion = solved_expansion(initial, solution.trace())?;
+            let expansion = solved_expansion(initial, solution.trace(), problem)?;
             let observation =
-                saved_solution_observation("breadth-first-solution", session.progress(), expansion);
+                saved_solution_observation(&search.solution(), session.progress(), expansion);
             retain_observation(&mut observations, observation);
         }
     } else {
         let capture = std::rc::Rc::clone(&expanded);
-        let (phase, heuristic): (&str, fn(&World) -> u64) = if strategy == "dijkstra" {
-            ("dijkstra-frontier", zero_heuristic)
-        } else {
-            ("a-star-frontier", maze::heuristic)
-        };
         let mut session = AStarSession::new(
             initial,
             maze::goal(),
@@ -371,33 +450,26 @@ fn saved_graph_observations(
                 maze::candidates(world)
             },
             maze::move_energy,
-            heuristic,
+            search.heuristic(),
         );
         let mut observer = Continue;
         while !session.status().is_terminal() {
             session.advance(WorkBudget::new(1), &mut observer);
             if let Some(expansion) = expanded.borrow_mut().take() {
-                let observation = saved_graph_observation(phase, session.progress(), expansion);
+                let observation = saved_graph_observation(&frontier, session.progress(), expansion);
                 retain_observation(&mut observations, observation);
             }
         }
         if let Some(solution) = session.solution() {
-            let expansion = solved_expansion(initial, solution.trace())?;
-            let observation = saved_solution_observation(
-                if strategy == "dijkstra" {
-                    "dijkstra-solution"
-                } else {
-                    "a-star-solution"
-                },
-                session.progress(),
-                expansion,
-            );
+            let expansion = solved_expansion(initial, solution.trace(), problem)?;
+            let observation =
+                saved_solution_observation(&search.solution(), session.progress(), expansion);
             retain_observation(&mut observations, observation);
         }
     }
     if observations.is_empty() {
         return Err(problem_error(
-            "maze",
+            problem,
             "search produced no observable expansions",
         ));
     }
@@ -406,11 +478,12 @@ fn saved_graph_observations(
 
 fn saved_pareto_observations(result: &maze::ParetoResult) -> Vec<SearchObservationView> {
     let progress = result.progress();
+    let work = pareto_frontier();
     vec![SearchObservationView {
         sequence: 0,
-        phase: path!("pareto-frontier"),
-        algorithm: path!("exact-pareto-search"),
-        kind: SearchObservationKindView::Frontier,
+        phase: work.phase,
+        algorithm: work.algorithm,
+        kind: work.kind,
         label: format!(
             "Exact frontier exhausted · {} terminal routes · {} non-dominated tradeoffs",
             progress.terminal_outcomes(),
@@ -418,7 +491,7 @@ fn saved_pareto_observations(result: &maze::ParetoResult) -> Vec<SearchObservati
         ),
         completed: progress.expanded() as u64,
         total: progress.expanded() as u64,
-        subjects: vec![ViewId::new(path!("node/exit"), "Exit")],
+        subjects: vec![ViewId::new(path!("node").then(&Node::Exit), "Exit")],
         metrics: vec![
             visual_metric(
                 path!("expanded"),
@@ -449,13 +522,13 @@ fn saved_pareto_observations(result: &maze::ParetoResult) -> Vec<SearchObservati
 }
 
 fn emit_expansion(
-    phase: &str,
+    work: &Work,
     state: axionomy_search::GraphSearchProgress,
     expansion: MazeExpansion,
     progress: &mut ProgressSink<'_>,
 ) -> Result<(), ServiceError> {
     let _ = progress.graph_with_subjects(
-        slug(phase),
+        work,
         state,
         expansion_label(expansion),
         [expansion_subject(expansion)],
@@ -464,13 +537,13 @@ fn emit_expansion(
 }
 
 fn emit_solution(
-    phase: &str,
+    work: &Work,
     state: axionomy_search::GraphSearchProgress,
     expansion: MazeExpansion,
     progress: &mut ProgressSink<'_>,
 ) -> Result<(), ServiceError> {
     let _ = progress.graph_with_subjects(
-        slug(phase),
+        work,
         state,
         solution_label(expansion),
         [expansion_subject(expansion)],
@@ -480,14 +553,13 @@ fn emit_solution(
 
 fn observe_selected_search(
     initial: &World,
-    strategy: &str,
+    search: Search,
     progress: &mut ProgressSink<'_>,
+    problem: &ProblemPath,
 ) -> Result<(), ServiceError> {
-    if strategy.starts_with("pareto-") {
-        return Ok(());
-    }
     let expanded = std::rc::Rc::new(std::cell::RefCell::new(None));
-    if strategy == "breadth-first" {
+    let frontier = search.frontier();
+    if search == Search::BreadthFirst {
         let capture = std::rc::Rc::clone(&expanded);
         let mut session = BfsSession::new(initial, maze::goal(), move |world| {
             *capture.borrow_mut() = capture_expansion(world);
@@ -497,29 +569,19 @@ fn observe_selected_search(
         while !session.status().is_terminal() {
             session.advance(WorkBudget::new(1), &mut observer);
             if let Some(expansion) = expanded.borrow_mut().take() {
-                emit_expansion(
-                    "breadth-first-frontier",
-                    session.progress(),
-                    expansion,
-                    progress,
-                )?;
+                emit_expansion(&frontier, session.progress(), expansion, progress)?;
             }
         }
         if let Some(solution) = session.solution() {
             emit_solution(
-                "breadth-first-solution",
+                &search.solution(),
                 session.progress(),
-                solved_expansion(initial, solution.trace())?,
+                solved_expansion(initial, solution.trace(), problem)?,
                 progress,
             )?;
         }
     } else {
         let capture = std::rc::Rc::clone(&expanded);
-        let heuristic = if strategy == "dijkstra" {
-            zero_heuristic
-        } else {
-            maze::heuristic
-        };
         let mut session = AStarSession::new(
             initial,
             maze::goal(),
@@ -528,33 +590,20 @@ fn observe_selected_search(
                 maze::candidates(world)
             },
             maze::move_energy,
-            heuristic,
+            search.heuristic(),
         );
         let mut observer = Continue;
         while !session.status().is_terminal() {
             session.advance(WorkBudget::new(1), &mut observer);
             if let Some(expansion) = expanded.borrow_mut().take() {
-                emit_expansion(
-                    if strategy == "dijkstra" {
-                        "dijkstra-frontier"
-                    } else {
-                        "a-star-frontier"
-                    },
-                    session.progress(),
-                    expansion,
-                    progress,
-                )?;
+                emit_expansion(&frontier, session.progress(), expansion, progress)?;
             }
         }
         if let Some(solution) = session.solution() {
             emit_solution(
-                if strategy == "dijkstra" {
-                    "dijkstra-solution"
-                } else {
-                    "a-star-solution"
-                },
+                &search.solution(),
                 session.progress(),
-                solved_expansion(initial, solution.trace())?,
+                solved_expansion(initial, solution.trace(), problem)?,
                 progress,
             )?;
         }
@@ -565,6 +614,7 @@ fn observe_selected_search(
 fn frontier_trace(
     result: &maze::ParetoResult,
     energy_first: bool,
+    problem: &ProblemPath,
 ) -> Result<axionomy::Trace<maze::Ontology>, ServiceError> {
     result
         .front()
@@ -580,7 +630,7 @@ fn frontier_trace(
             }
         })
         .map(|entry| entry.payload().clone())
-        .ok_or_else(|| problem_error("maze", "empty Pareto frontier"))
+        .ok_or_else(|| problem_error(problem, "empty Pareto frontier"))
 }
 
 fn objective_value(values: &[Objective<ObjectiveKey, u64>], key: ObjectiveKey) -> u64 {
@@ -592,18 +642,18 @@ fn objective_value(values: &[Objective<ObjectiveKey, u64>], key: ObjectiveKey) -
 
 fn objectives(world: &World) -> Vec<ObjectiveView> {
     vec![
-        ObjectiveView {
-            key: path!("energy"),
-            label: "Energy spent".into(),
-            direction: ObjectiveDirectionView::Minimize,
-            value: maze::spent_energy(world).to_string(),
-        },
-        ObjectiveView {
-            key: path!("time"),
-            label: "Time spent".into(),
-            direction: ObjectiveDirectionView::Minimize,
-            value: maze::spent_time(world).to_string(),
-        },
+        ObjectiveView::new(
+            path!("energy"),
+            "Energy spent",
+            ObjectiveDirectionView::Minimize,
+            maze::spent_energy(world),
+        ),
+        ObjectiveView::new(
+            path!("time"),
+            "Time spent",
+            ObjectiveDirectionView::Minimize,
+            maze::spent_time(world),
+        ),
     ]
 }
 
@@ -611,7 +661,7 @@ fn front_view(result: &maze::ParetoResult, selected: &ViewDocument) -> ParetoFro
     let selected = selected
         .objectives
         .iter()
-        .map(|objective| objective.value.as_str())
+        .map(|objective| objective.value)
         .collect::<Vec<_>>();
     ParetoFrontView {
         title: "Energy vs. time — every non-dominated route".into(),
@@ -633,18 +683,16 @@ fn front_view(result: &maze::ParetoResult, selected: &ViewDocument) -> ParetoFro
             .entries()
             .iter()
             .map(|entry| {
-                let values = entry
+                let exact = entry
                     .objectives()
                     .objectives()
                     .iter()
-                    .map(|objective| objective.value().to_string())
+                    .map(|objective| Quantity::from(*objective.value()))
                     .collect::<Vec<_>>();
+                let values = exact.iter().map(ToString::to_string).collect::<Vec<_>>();
                 ParetoPointView {
                     label: format!("{} energy · {} time", values[0], values[1]),
-                    selected: values
-                        .iter()
-                        .map(String::as_str)
-                        .eq(selected.iter().copied()),
+                    selected: exact == selected,
                     values,
                 }
             })
@@ -1089,18 +1137,16 @@ fn decorate_scene_paths(
         });
     }
     if let SceneSurfaceView::Graph { edges, .. } = &mut scene.surface {
+        let route: [ClassPath; 3] = [path!("current"), path!("traversed"), path!("candidate")];
+        let [current_class, traversed_class, candidate_class] = &route;
         for edge in edges {
-            edge.classes.retain(|class| {
-                class.as_str() != "current"
-                    && class.as_str() != "traversed"
-                    && class.as_str() != "candidate"
-            });
+            edge.classes.retain(|class| !route.contains(class));
             if current == Some(&edge.id) {
-                edge.classes.push(path!("current"));
+                edge.classes.push(current_class.clone());
             } else if traversed.contains(&edge.id) {
-                edge.classes.push(path!("traversed"));
+                edge.classes.push(traversed_class.clone());
             } else if planned.contains(&edge.id) {
-                edge.classes.push(path!("candidate"));
+                edge.classes.push(candidate_class.clone());
             }
         }
     }
@@ -1224,3 +1270,25 @@ impl StudioLabel for maze::RateId {
 }
 
 debug_labels!(maze::Role);
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A strategy the catalog offers is one this adapter reads, so a study
+    /// of it never fails as unknown.
+    #[test]
+    fn every_catalog_strategy_is_read() {
+        let problem = catalog()
+            .into_iter()
+            .find(|problem| problem.key == path!("maze"))
+            .expect("the catalog lists the maze");
+        for strategy in &problem.strategies {
+            assert!(
+                path::read::<_, Strategy>(&strategy.key).is_ok(),
+                "{}",
+                strategy.key
+            );
+        }
+    }
+}

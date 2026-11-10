@@ -162,9 +162,9 @@ function BasketQuantity({ value }: { value: QuantityValue }) {
 export function Telemetry({ document }: { document: ViewDocument }) {
   if (document.telemetry.length === 0) return <div className="empty-state">No search telemetry was published.</div>;
   return <div className="telemetry-list">
-    {document.telemetry.map((series) => <section key={series.algorithm}>
+    {document.telemetry.map((series) => <section key={`${series.subject}:${series.title}`}>
       {/* Model size counts the encoding; only an algorithm's counts can be sampled. */}
-      <h3>{series.algorithm}{series.algorithm !== "Model size" && <span>{series.exact ? "exact counts" : "sampled estimates"}</span>}</h3>
+      <h3>{series.title}{series.subject === "algorithm" && <span>{series.exact ? "exact counts" : "sampled estimates"}</span>}</h3>
       <div>{series.points.map((point) => <article key={`${point.sequence}:${point.kind}`}><strong>{point.value}</strong><span>{point.label}</span><small>{telemetryKindWords(point.kind)}</small></article>)}</div>
     </section>)}
   </div>;

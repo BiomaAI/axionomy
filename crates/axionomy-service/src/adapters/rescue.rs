@@ -28,28 +28,28 @@ pub(super) fn build(
         study.budget.max(2)
     } as usize;
     let sample = rescue::instantiate(&model, Location::South, 1)
-        .ok_or_else(|| problem_error("rescue", "scenario could not be instantiated"))?;
+        .ok_or_else(|| problem_error(&study.problem, "scenario could not be instantiated"))?;
     let front = rescue::policy_front(&model, samples, study.seed, &mut Unrecorded)
-        .ok_or_else(|| problem_error("rescue", "policy front failed"))?;
+        .ok_or_else(|| problem_error(&study.problem, "policy front failed"))?;
     let comparison = rescue::monte_carlo(&model, samples, study.seed, &mut Unrecorded)
-        .ok_or_else(|| problem_error("rescue", "Monte Carlo failed"))?;
+        .ok_or_else(|| problem_error(&study.problem, "Monte Carlo failed"))?;
     let policies = [
-        ("observe-then-follow", Policy::ObserveThenFollow),
-        ("direct-north", Policy::NorthWithoutObserving),
+        (path!("observe-then-follow"), Policy::ObserveThenFollow),
+        (path!("direct-north"), Policy::NorthWithoutObserving),
     ];
     let mut documents = Vec::new();
     for (strategy, policy) in policies {
         let rollout = rescue::run_sampled_policy(&mut model.clone(), &sample, policy)
-            .ok_or_else(|| problem_error("rescue", "sampled rollout failed"))?;
+            .ok_or_else(|| problem_error(&study.problem, "sampled rollout failed"))?;
         let mut view = document(
             progress,
-            DocumentSpec { problem: "rescue", strategy, title: if policy == Policy::ObserveThenFollow { "Rescue · sense, then move" } else { "Rescue · go north immediately" }, description: if policy == Policy::ObserveThenFollow { "The agent spends the sensor, receives a reading, and follows it." } else { "The agent commits north without looking. In this scenario the survivor is south, and the replay keeps the failure." }, source_label: "Uncertain rescue" },
+            DocumentSpec { problem: &study.problem, document: strategy, title: if policy == Policy::ObserveThenFollow { "Rescue · sense, then move" } else { "Rescue · go north immediately" }, description: if policy == Policy::ObserveThenFollow { "The agent spends the sensor, receives a reading, and follows it." } else { "The agent commits north without looking. In this scenario the survivor is south, and the replay keeps the failure." }, source_label: "Uncertain rescue" },
             &model, &rescue::goal(), rollout.trace(), vec![
-                ObjectiveView { key: path!("success"), label: "Succeeded".into(), direction: ObjectiveDirectionView::Maximize, value: u8::from(rollout.succeeded()).to_string() },
-                ObjectiveView { key: path!("sensor"), label: "Sensor used".into(), direction: ObjectiveDirectionView::Minimize, value: u8::from(rollout.used_sensor()).to_string() },
-                ObjectiveView { key: path!("energy"), label: "Energy spent".into(), direction: ObjectiveDirectionView::Minimize, value: rollout.spent_energy().to_string() },
+                ObjectiveView::new(path!("success"), "Succeeded", ObjectiveDirectionView::Maximize, u64::from(rollout.succeeded())),
+                ObjectiveView::new(path!("sensor"), "Sensor used", ObjectiveDirectionView::Minimize, u64::from(rollout.used_sensor())),
+                ObjectiveView::new(path!("energy"), "Energy spent", ObjectiveDirectionView::Minimize, rollout.spent_energy()),
             ], scene,
-        ).map_err(|error| problem_error("rescue", error))?;
+        ).map_err(|error| problem_error(&study.problem, error))?;
         view.pareto_fronts.push(policy_front(&front, policy));
         view.telemetry.push(telemetry(
             "Monte Carlo policy evaluation",
@@ -69,7 +69,7 @@ pub(super) fn build(
         ));
         view.observations.push(observation(&model));
         if let Some(candidate) = rescue::candidates(&model).first() {
-            view.proposals.push(proposal(ProposalSpec { id: "unresolved-action", label: "Act before Nature resolves", description: "Acting before Nature has decided what is true shows exactly which facts are still missing." }, &model, candidate));
+            view.proposals.push(proposal(ProposalSpec { id: path!("unresolved-action"), label: "Act before Nature resolves", description: "Acting before Nature has decided what is true shows exactly which facts are still missing." }, &model, candidate));
         }
         documents.push(view);
     }

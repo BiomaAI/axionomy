@@ -21,29 +21,29 @@ pub(super) fn build(
         InstanceProfile::Stress => bridge::initial_stress(),
     };
     let bfs = bridge::solve(&initial)
-        .ok_or_else(|| problem_error("bridge", "BFS found no allocation"))?;
+        .ok_or_else(|| problem_error(&study.problem, "BFS found no allocation"))?;
     let first_a = match profile {
         InstanceProfile::Micro => bridge::first_come_proposal(AgentId::A),
         InstanceProfile::Showcase => bridge::first_come_showcase(AgentId::A),
         InstanceProfile::Stress => bridge::first_come_stress(AgentId::A),
     }
-    .ok_or_else(|| problem_error("bridge", "first-come A failed"))?;
+    .ok_or_else(|| problem_error(&study.problem, "first-come A failed"))?;
     let first_b = match profile {
         InstanceProfile::Micro => bridge::first_come_proposal(AgentId::B),
         InstanceProfile::Showcase => bridge::first_come_showcase(AgentId::B),
         InstanceProfile::Stress => bridge::first_come_stress(AgentId::B),
     }
-    .ok_or_else(|| problem_error("bridge", "first-come B failed"))?;
+    .ok_or_else(|| problem_error(&study.problem, "first-come B failed"))?;
     let auction = match profile {
         InstanceProfile::Micro => bridge::auction_proposal(2, 1),
         InstanceProfile::Showcase => bridge::auction_showcase(),
         InstanceProfile::Stress => bridge::auction_stress(),
     }
-    .ok_or_else(|| problem_error("bridge", "auction failed"))?;
+    .ok_or_else(|| problem_error(&study.problem, "auction failed"))?;
     let pareto = matches!(profile, InstanceProfile::Micro)
         .then(|| bridge::pareto_front(&initial))
         .transpose()
-        .map_err(|error| problem_error("bridge", error))?;
+        .map_err(|error| problem_error(&study.problem, error))?;
     let adaptive = bridge::timed::enabled(&initial).then(|| {
         bridge::timed::run(&initial, bridge::timed::Policy::Adaptive)
             .expect("adaptive traffic completes")
@@ -66,12 +66,12 @@ pub(super) fn build(
             .clone()
     };
     let pareto_a = if let Some(result) = &pareto {
-        pareto_trace(result, AgentId::A)?
+        pareto_trace(result, AgentId::A, &study.problem)?
     } else {
         preferred(AgentId::A)
     };
     let pareto_b = if let Some(result) = &pareto {
-        pareto_trace(result, AgentId::B)?
+        pareto_trace(result, AgentId::B, &study.problem)?
     } else {
         preferred(AgentId::B)
     };
@@ -80,7 +80,7 @@ pub(super) fn build(
         .map(|result| result.progress().expanded() as u64);
     let mut traces = vec![
         (
-            "breadth-first",
+            path!("breadth-first"),
             "Bridge · plain search",
             "Breadth-first search over routing choices; timed traffic resolves ready completions immediately and excludes auctions and deliberate reservation expiry.",
             bfs.trace().clone(),
@@ -88,7 +88,7 @@ pub(super) fn build(
             Some(bfs.expanded() as u64),
         ),
         (
-            "first-come-a",
+            path!("first-come-a"),
             "Bridge · Agent A first",
             "Fixed priority waits for Agent A, then gives the other traveler the lane. Arrival times and deadlines remain identical across policies.",
             first_a,
@@ -96,7 +96,7 @@ pub(super) fn build(
             None,
         ),
         (
-            "first-come-b",
+            path!("first-come-b"),
             "Bridge · Agent B first",
             "Fixed priority waits for Agent B, then gives the other traveler the lane. The wait can waste capacity and make later arrivals late.",
             first_b,
@@ -104,7 +104,7 @@ pub(super) fn build(
             None,
         ),
         (
-            "auction",
+            path!("auction"),
             "Bridge · auction",
             "In timed traffic, bids respond to deadline slack and retained funds. Both travelers must arrive before settlement; the winner occupies the lane for the crossing duration.",
             auction,
@@ -112,7 +112,7 @@ pub(super) fn build(
             None,
         ),
         (
-            "pareto-a",
+            path!("pareto-a"),
             if pareto.is_some() {
                 "Bridge Pareto · Agent A"
             } else {
@@ -128,7 +128,7 @@ pub(super) fn build(
             pareto_expanded,
         ),
         (
-            "pareto-b",
+            path!("pareto-b"),
             if pareto.is_some() {
                 "Bridge Pareto · Agent B"
             } else {
@@ -145,18 +145,18 @@ pub(super) fn build(
         ),
     ];
     if let Some(trace) = adaptive {
-        traces.push(("adaptive", "Bridge · responsive routing", "Prioritize urgent arrivals and pay for a concurrent detour when bridge congestion would miss a deadline the alternate route can meet.", trace, "deadline-responsive routing", None));
+        traces.push((path!("adaptive"), "Bridge · responsive routing", "Prioritize urgent arrivals and pay for a concurrent detour when bridge congestion would miss a deadline the alternate route can meet.", trace, "deadline-responsive routing", None));
     }
     let mut documents = Vec::new();
     for (strategy, title, description, trace, algorithm, expanded) in traces {
         let final_world = initial
             .replayed(&trace)
-            .map_err(|error| problem_error("bridge", error))?;
+            .map_err(|error| problem_error(&study.problem, error))?;
         let mut view = document(
             progress,
             DocumentSpec {
-                problem: "bridge",
-                strategy,
+                problem: &study.problem,
+                document: strategy,
                 title,
                 description,
                 source_label: "Bridge allocation",
@@ -167,7 +167,7 @@ pub(super) fn build(
             objectives(&final_world),
             scene,
         )
-        .map_err(|error| problem_error("bridge", error))?;
+        .map_err(|error| problem_error(&study.problem, error))?;
         view.telemetry.push(telemetry(
             algorithm,
             true,
@@ -189,7 +189,7 @@ pub(super) fn build(
         )
         .bind(Role::Traveler, AccountId::Agent(AgentId::B))
         .bind(Role::Bridge, AccountId::Bridge);
-        view.proposals.push(proposal(ProposalSpec { id: "impersonated-bid", label: "Agent B submits Agent A bid", description: "Agent B tries to bid as Agent A. The rejection names the identity B does not hold." }, &initial, &wrong_identity));
+        view.proposals.push(proposal(ProposalSpec { id: path!("impersonated-bid"), label: "Agent B submits Agent A bid", description: "Agent B tries to bid as Agent A. The rejection names the identity B does not hold." }, &initial, &wrong_identity));
         documents.push(view);
     }
     for index in 0..documents.len() {
@@ -210,7 +210,7 @@ fn candidate_front_view(documents: &[ViewDocument], selected: &ViewDocument) -> 
             let values = document
                 .objectives
                 .iter()
-                .map(|objective| objective.value.parse::<u64>().unwrap_or(0))
+                .map(|objective| objective.value)
                 .collect::<Vec<_>>();
             (document, values)
         })
@@ -256,6 +256,7 @@ fn candidate_front_view(documents: &[ViewDocument], selected: &ViewDocument) -> 
 fn pareto_trace(
     result: &bridge::ParetoResult,
     favored: AgentId,
+    problem: &ProblemPath,
 ) -> Result<axionomy::Trace<bridge::Ontology>, ServiceError> {
     result
         .front()
@@ -283,7 +284,7 @@ fn pareto_trace(
             )
         })
         .map(|entry| entry.payload().clone())
-        .ok_or_else(|| problem_error("bridge", "empty Pareto frontier"))
+        .ok_or_else(|| problem_error(problem, "empty Pareto frontier"))
 }
 
 fn objectives(world: &World) -> Vec<ObjectiveView> {
@@ -291,38 +292,36 @@ fn objectives(world: &World) -> Vec<ObjectiveView> {
         .into_iter()
         .flat_map(|agent| {
             [
-                ObjectiveView {
-                    key: path!("priority").then(&agent),
-                    label: format!("Agent {agent:?} priority"),
-                    direction: ObjectiveDirectionView::Maximize,
-                    value: bridge::priority(world, agent).to_string(),
-                },
-                ObjectiveView {
-                    key: path!("credit").then(&agent),
-                    label: format!("Agent {agent:?} credit"),
-                    direction: ObjectiveDirectionView::Maximize,
-                    value: bridge::credit(world, agent).to_string(),
-                },
+                ObjectiveView::new(
+                    path!("priority").then(&agent),
+                    format!("Agent {agent:?} priority"),
+                    ObjectiveDirectionView::Maximize,
+                    bridge::priority(world, agent),
+                ),
+                ObjectiveView::new(
+                    path!("credit").then(&agent),
+                    format!("Agent {agent:?} credit"),
+                    ObjectiveDirectionView::Maximize,
+                    bridge::credit(world, agent),
+                ),
             ]
         })
         .collect();
     if bridge::timed::enabled(world) {
         for agent in [AgentId::A, AgentId::B] {
-            values.push(ObjectiveView {
-                key: path!("ontime").then(&agent),
-                label: format!("Agent {agent:?} on-time trips"),
-                direction: ObjectiveDirectionView::Maximize,
-                value: world
-                    .balance(&AccountId::Agent(agent), &Asset::OnTime)
-                    .to_string(),
-            });
+            values.push(ObjectiveView::new(
+                path!("ontime").then(&agent),
+                format!("Agent {agent:?} on-time trips"),
+                ObjectiveDirectionView::Maximize,
+                world.balance(&AccountId::Agent(agent), &Asset::OnTime),
+            ));
         }
-        values.push(ObjectiveView {
-            key: path!("elapsed"),
-            label: "Elapsed time".into(),
-            direction: ObjectiveDirectionView::Minimize,
-            value: bridge::timed::now(world).to_string(),
-        });
+        values.push(ObjectiveView::new(
+            path!("elapsed"),
+            "Elapsed time",
+            ObjectiveDirectionView::Minimize,
+            bridge::timed::now(world),
+        ));
     }
     values
 }
@@ -331,7 +330,7 @@ fn front_view(result: &bridge::ParetoResult, selected: &ViewDocument) -> ParetoF
     let selected = selected
         .objectives
         .iter()
-        .map(|o| o.value.as_str())
+        .map(|o| o.value.to_string())
         .collect::<Vec<_>>();
     ParetoFrontView {
         title: "Crossings vs. credit kept".into(),
@@ -373,10 +372,7 @@ fn front_view(result: &bridge::ParetoResult, selected: &ViewDocument) -> ParetoF
                         "A {}/{} · B {}/{}",
                         values[0], values[1], values[2], values[3]
                     ),
-                    selected: values
-                        .iter()
-                        .map(String::as_str)
-                        .eq(selected.iter().copied()),
+                    selected: values.iter().eq(selected.iter()),
                     values,
                 }
             })
@@ -616,7 +612,7 @@ mod tests {
                         document
                             .objectives
                             .iter()
-                            .map(|o| o.value.clone())
+                            .map(|o| o.value.to_string())
                             .collect::<Vec<_>>()
                     );
                 }
