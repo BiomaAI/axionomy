@@ -9,14 +9,79 @@ use axionomy_view::{
 
 mod cold_chain;
 
+/// Perishable inventory: its catalog entry and how its studies are computed.
+pub(crate) struct Perishables {
+    descriptor: ProblemDescriptor,
+}
+
+impl Default for Perishables {
+    fn default() -> Self {
+        Self {
+            descriptor: problem(
+                ProblemCopy {
+                    key: path!("perishables"),
+                    title: "Perishable inventory",
+                    summary: "Manage scarce refrigerated space, thermal history and daily food obligations. Cooling and processing compete for electricity; backup generation and deliveries compete for fuel.",
+                    instances: [
+                        "One hundred units split between two batches",
+                        "Ten crates across six possible cohorts, six days, finite cold storage and a two-day outage",
+                        "Twelve crates, tighter cold storage, less fuel, eight days and a three-day outage",
+                    ],
+                },
+                ProblemFamily::TemporalSimulation,
+                path!("outage"),
+                &[
+                    StrategyCopy {
+                        key: path!("outage"),
+                        label: "Power outage",
+                        description: "Prioritize refrigeration, then revisit shipment, processing and backup decisions each day.",
+                        algorithm: "indexed temporal effects",
+                    },
+                    StrategyCopy {
+                        key: path!("pareto-inventory"),
+                        label: "Pareto: save stock",
+                        description: "Micro: exact storage frontier. Larger cold chains: a processing-first policy on the same outage schedule.",
+                        algorithm: "exact Pareto search",
+                    },
+                    StrategyCopy {
+                        key: path!("pareto-energy"),
+                        label: "Pareto: save energy",
+                        description: "Micro: minimum-energy storage frontier. Larger cold chains: alternate-day shipping to conserve fuel, with missed demand kept visible.",
+                        algorithm: "exact Pareto search",
+                    },
+                ],
+                &[
+                    Capability::TemporalEffects,
+                    Capability::FungibleCohorts,
+                    Capability::NonFungibleFacts,
+                    Capability::ExactPareto,
+                ],
+            ),
+        }
+    }
+}
+
+impl Problem for Perishables {
+    fn descriptor(&self) -> &ProblemDescriptor {
+        &self.descriptor
+    }
+
+    fn study(
+        &self,
+        key: &StudyKey,
+        progress: &mut StudyProgress<'_>,
+    ) -> Result<Vec<ViewDocument>, ServiceError> {
+        build(key, progress)
+    }
+}
+
 pub(super) fn build(
     study: &StudyKey,
-    descriptor: &ProblemDescriptor,
-    progress: &mut ProgressSink<'_>,
-) -> Result<Study, ServiceError> {
+    progress: &mut StudyProgress<'_>,
+) -> Result<Vec<ViewDocument>, ServiceError> {
     let profile = study.instance;
     if !matches!(profile, InstanceProfile::Micro) {
-        return cold_chain::build(study, descriptor, profile, progress);
+        return cold_chain::build(study, profile, progress);
     }
     let (initial, transfer) = match profile {
         InstanceProfile::Micro => (perishables::initial_with_inventory(70, 30), 10),
@@ -155,7 +220,7 @@ pub(super) fn build(
         ));
         documents.push(view);
     }
-    assemble(study, descriptor, documents)
+    Ok(documents)
 }
 
 fn front_view(result: &perishables::ParetoResult, selected: &ViewDocument) -> ParetoFrontView {

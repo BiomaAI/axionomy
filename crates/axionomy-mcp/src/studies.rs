@@ -8,7 +8,7 @@
 use crate::store::{State, checkpoint};
 use axionomy::paths;
 use axionomy_service::{
-    ReferenceService, ServiceError, ServiceProgress, Study, StudyControl, StudyKey, StudyObserver,
+    Registry, ServiceError, ServiceProgress, Study, StudyControl, StudyKey, StudyObserver,
     StudyRequest,
 };
 use axionomy_tree::Tree;
@@ -110,9 +110,11 @@ impl StudyObserver for Observer {
     }
 }
 
-/// Computes a study and its documents' trajectories, in the order of its
-/// documents, sending progress to `progress` while it runs.
+/// Computes a study of a problem in `registry` and its documents'
+/// trajectories, in the order of its documents, sending progress to
+/// `progress` while it runs.
 pub(crate) fn compute(
+    registry: &Registry,
     request: &StudyRequest,
     control: &StudyControl,
     progress: Option<UnboundedSender<ServiceProgress>>,
@@ -121,7 +123,7 @@ pub(crate) fn compute(
         progress,
         trajectories: BTreeMap::new(),
     };
-    let study = ReferenceService.study_with(request, control, &mut observer)?;
+    let study = registry.study_with(request, control, &mut observer)?;
     let trajectories = study
         .documents
         .iter()

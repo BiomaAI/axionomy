@@ -7,11 +7,76 @@ use axionomy_view::{
     TelemetryKindView, ViewId,
 };
 
+/// Multi-party marketplace: its catalog entry and how its studies are computed.
+pub(crate) struct Marketplace {
+    descriptor: ProblemDescriptor,
+}
+
+impl Default for Marketplace {
+    fn default() -> Self {
+        Self {
+            descriptor: problem(
+                ProblemCopy {
+                    key: path!("marketplace"),
+                    title: "Multi-party marketplace",
+                    summary: "Negotiate funded contracts, reserve scarce shipping capacity and fulfill deliveries over time. Route delays, price concessions, late rebates and refundable reservations couple buyer and seller outcomes.",
+                    instances: [
+                        "Two orders across three buyers, three sellers, and one active carrier",
+                        "Four arriving orders with escrow, two occupied carriers, delivery deadlines and price concessions",
+                        "Six arriving orders with scarce stock, persistent budgets, route delays and reusable carrier capacity",
+                    ],
+                },
+                ProblemFamily::Market,
+                path!("market-clearing"),
+                &[
+                    StrategyCopy {
+                        key: path!("market-clearing"),
+                        label: "Clear the market",
+                        description: "Pick orders that can all settle together without overdrawing any account.",
+                        algorithm: "market clearing",
+                    },
+                    StrategyCopy {
+                        key: path!("pareto-buyers"),
+                        label: "Pareto: favors buyers",
+                        description: "Micro: exact clearing frontier. Larger markets: bounded fulfillment search favoring buyer benefit.",
+                        algorithm: "exact Pareto clearing",
+                    },
+                    StrategyCopy {
+                        key: path!("pareto-sellers"),
+                        label: "Pareto: favors sellers",
+                        description: "Micro: exact clearing frontier. Larger markets: bounded fulfillment search favoring seller benefit.",
+                        algorithm: "exact Pareto clearing",
+                    },
+                ],
+                &[
+                    Capability::AtomicSettlement,
+                    Capability::MultiAccountExchange,
+                    Capability::FeasibilityAssessment,
+                    Capability::ExactPareto,
+                ],
+            ),
+        }
+    }
+}
+
+impl Problem for Marketplace {
+    fn descriptor(&self) -> &ProblemDescriptor {
+        &self.descriptor
+    }
+
+    fn study(
+        &self,
+        key: &StudyKey,
+        progress: &mut StudyProgress<'_>,
+    ) -> Result<Vec<ViewDocument>, ServiceError> {
+        build(key, progress)
+    }
+}
+
 pub(super) fn build(
     study: &StudyKey,
-    descriptor: &ProblemDescriptor,
-    progress: &mut ProgressSink<'_>,
-) -> Result<Study, ServiceError> {
+    progress: &mut StudyProgress<'_>,
+) -> Result<Vec<ViewDocument>, ServiceError> {
     let profile = study.instance;
     let initial = match profile {
         InstanceProfile::Micro => marketplace::initial(),
@@ -137,7 +202,7 @@ pub(super) fn build(
             documents[index].pareto_fronts.push(front);
         }
     }
-    assemble(study, descriptor, documents)
+    Ok(documents)
 }
 
 fn pareto_trace(

@@ -8,14 +8,79 @@ use axionomy_view::{
     TelemetryKindView, ViewId,
 };
 
+/// Stochastic logistics: its catalog entry and how its studies are computed.
+pub(crate) struct Logistics {
+    descriptor: ProblemDescriptor,
+}
+
+impl Default for Logistics {
+    fn default() -> Self {
+        Self {
+            descriptor: problem(
+                ProblemCopy {
+                    key: path!("logistics"),
+                    title: "Stochastic logistics",
+                    summary: "Coordinate refrigerated and heavy-freight vans across three customers. Arriving orders, delivery windows, a shared trunk road, finite fuel, occupied service bays and hub handoffs interact with route disruptions.",
+                    instances: [
+                        "Two deliveries with a compact route and a small sample budget",
+                        "Two vans, four heterogeneous orders, three customers, one trunk-road slot, two-unit relay hub and finite services",
+                        "Six arriving orders, more route delays, a longer horizon, finite fuel and three repair parts",
+                    ],
+                },
+                ProblemFamily::StochasticPlanning,
+                path!("reliable"),
+                &[
+                    StrategyCopy {
+                        key: path!("direct"),
+                        label: "Fastest routes",
+                        description: "Use express routes and respond to realized breakdowns; Micro retains sampled single-vehicle evaluation.",
+                        algorithm: "Responsive fleet dispatch; Micro Monte Carlo",
+                    },
+                    StrategyCopy {
+                        key: path!("reliable"),
+                        label: "Reliable routes",
+                        description: "Avoid the express link and coordinate deliveries around shared road and service capacity.",
+                        algorithm: "Responsive fleet dispatch; Micro Monte Carlo",
+                    },
+                    StrategyCopy {
+                        key: path!("mcts"),
+                        label: "Relay fleet / Micro MCTS",
+                        description: "Larger fleets bundle compatible cargo and hand it off through the hub; Micro retains full receding-horizon Monte Carlo tree search.",
+                        algorithm: "Responsive hub relay; Micro Monte Carlo tree search",
+                    },
+                ],
+                &[
+                    Capability::Chance,
+                    Capability::MonteCarlo,
+                    Capability::Mcts,
+                    Capability::ApproximatePareto,
+                ],
+            ),
+        }
+    }
+}
+
+impl Problem for Logistics {
+    fn descriptor(&self) -> &ProblemDescriptor {
+        &self.descriptor
+    }
+
+    fn study(
+        &self,
+        key: &StudyKey,
+        progress: &mut StudyProgress<'_>,
+    ) -> Result<Vec<ViewDocument>, ServiceError> {
+        build(key, progress)
+    }
+}
+
 pub(super) fn build(
     study: &StudyKey,
-    descriptor: &ProblemDescriptor,
-    progress: &mut ProgressSink<'_>,
-) -> Result<Study, ServiceError> {
+    progress: &mut StudyProgress<'_>,
+) -> Result<Vec<ViewDocument>, ServiceError> {
     let profile = study.instance;
     if !matches!(profile, InstanceProfile::Micro) {
-        return fleet::build(study, descriptor, profile, progress);
+        return fleet::build(study, profile, progress);
     }
     let initial = if matches!(study.instance, InstanceProfile::Micro) {
         logistics::initial_micro()
@@ -52,7 +117,7 @@ pub(super) fn build(
             )
         },
     );
-    progress.ensure()?;
+    progress.checkpoint()?;
     let estimate = estimate.ok_or_else(|| problem_error(&study.problem, "Monte Carlo failed"))?;
     let front = logistics::policy_front_with_progress(
         &initial,
@@ -72,7 +137,7 @@ pub(super) fn build(
             )
         },
     );
-    progress.ensure()?;
+    progress.checkpoint()?;
     let front = front.ok_or_else(|| problem_error(&study.problem, "policy front failed"))?;
     let mut documents = Vec::new();
     for (strategy, policy) in [
@@ -162,7 +227,7 @@ pub(super) fn build(
         },
     )
     .map_err(|error| problem_error(&study.problem, error))?;
-    progress.ensure()?;
+    progress.checkpoint()?;
     let planned =
         planned.ok_or_else(|| problem_error(&study.problem, "MCTS planning was interrupted"))?;
     let description = format!(
@@ -215,7 +280,7 @@ pub(super) fn build(
         ],
     ));
     documents.push(mcts);
-    assemble(study, descriptor, documents)
+    Ok(documents)
 }
 
 fn objectives(rollout: &logistics::MissionRollout) -> Vec<ObjectiveView> {

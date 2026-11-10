@@ -5,13 +5,86 @@ use axionomy_view::{
     SceneAnchorView, SceneEntityRoleView, SceneGlyphView, SceneToneView, TelemetryKindView, ViewId,
 };
 
+/// Lending market: its catalog entry and how its studies are computed.
+pub(crate) struct Lending {
+    descriptor: ProblemDescriptor,
+}
+
+impl Default for Lending {
+    fn default() -> Self {
+        Self {
+            descriptor: problem(
+                ProblemCopy {
+                    key: path!("lending"),
+                    title: "Lending market",
+                    summary: "Finance a bill that falls due before revenue arrives. Collateral caps the loan, interest follows pool utilization along a kinked curve, a reserve cut stays with the market, and a scheduled price drop can push an over-borrowed loan into liquidation.",
+                    instances: [
+                        "One pooled market and a two-period gap between the bill and revenue, with a price drop while the loan is open",
+                        "A thin pool near its kink, a bill due early, revenue in two installments and a 40% price drop while the loan is open",
+                        "The Showcase loan at four times the scale over twelve periods, with revenue in three installments",
+                    ],
+                },
+                ProblemFamily::Market,
+                path!("least-interest"),
+                &[
+                    StrategyCopy {
+                        key: path!("least-interest"),
+                        label: "Least interest",
+                        description: "Dijkstra search charging each closed period's interest to the plan.",
+                        algorithm: "Dijkstra search",
+                    },
+                    StrategyCopy {
+                        key: path!("fewest-steps"),
+                        label: "Fewest steps",
+                        description: "Breadth-first search: the fewest exchanges, whatever the loan costs.",
+                        algorithm: "breadth-first search",
+                    },
+                    StrategyCopy {
+                        key: path!("over-borrowed"),
+                        label: "Over-borrowed",
+                        description: "Borrow to the limit at once and watch interest and the price drop end in liquidation.",
+                        algorithm: "scripted scenario",
+                    },
+                    StrategyCopy {
+                        key: path!("first-depositor-attack"),
+                        label: "First-depositor attack",
+                        description: "Try to inflate a fresh market's share price against a later depositor.",
+                        algorithm: "scripted scenario",
+                    },
+                ],
+                &[
+                    Capability::DeterministicSearch,
+                    Capability::WeightedSearch,
+                    Capability::AtomicSettlement,
+                    Capability::MultiAccountExchange,
+                    Capability::FeasibilityAssessment,
+                    Capability::TemporalEffects,
+                ],
+            ),
+        }
+    }
+}
+
+impl Problem for Lending {
+    fn descriptor(&self) -> &ProblemDescriptor {
+        &self.descriptor
+    }
+
+    fn study(
+        &self,
+        key: &StudyKey,
+        progress: &mut StudyProgress<'_>,
+    ) -> Result<Vec<ViewDocument>, ServiceError> {
+        build(key, progress)
+    }
+}
+
 const SOURCE: &str = "Lending market";
 
 pub(super) fn build(
     study: &StudyKey,
-    descriptor: &ProblemDescriptor,
-    progress: &mut ProgressSink<'_>,
-) -> Result<Study, ServiceError> {
+    progress: &mut StudyProgress<'_>,
+) -> Result<Vec<ViewDocument>, ServiceError> {
     let config = match study.instance {
         InstanceProfile::Micro => Config::micro(),
         InstanceProfile::Showcase => Config::showcase(),
@@ -120,7 +193,7 @@ pub(super) fn build(
     view.telemetry.push(scripted(&attack));
     documents.push(view);
 
-    assemble(study, descriptor, documents)
+    Ok(documents)
 }
 
 fn scripted(trace: &LoanTrace) -> SearchTelemetryView {

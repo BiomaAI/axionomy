@@ -292,7 +292,7 @@ used economies and studies stay in memory.
 use axionomy_mcp::AxionomyMcp;
 use axionomy_store::Store;
 
-let server = AxionomyMcp::new(Store::memory()?)?;
+let server = AxionomyMcp::new(axionomy_service::registry(), Store::memory()?)?;
 # let _ = server;
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```

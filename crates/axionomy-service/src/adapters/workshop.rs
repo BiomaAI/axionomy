@@ -5,11 +5,82 @@ use axionomy_view::{
     SceneGlyphView, SceneToneView, TelemetryKindView, ViewId,
 };
 
+/// Workshop: its catalog entry and how its studies are computed.
+pub(crate) struct Workshop {
+    descriptor: ProblemDescriptor,
+}
+
+impl Default for Workshop {
+    fn default() -> Self {
+        Self {
+            descriptor: problem(
+                ProblemCopy {
+                    key: path!("workshop"),
+                    title: "Workshop",
+                    summary: "Choose funded contracts, prepare components, manage tool wear and deliver products. Exact tradeoffs expose faster work, lower waste and higher revenue.",
+                    instances: [
+                        "Two chairs made from raw stock",
+                        "Choose two of three chair/table contracts with components, tool wear, repair, upgrades and salvage",
+                        "Choose at least three of five contracts under shared wood, time, labor and repair constraints",
+                    ],
+                },
+                ProblemFamily::Production,
+                path!("minimum-waste"),
+                &[
+                    StrategyCopy {
+                        key: path!("breadth-first"),
+                        label: "Fewest steps",
+                        description: "Breadth-first search: the fewest recipe firings, whatever they waste.",
+                        algorithm: "breadth-first search",
+                    },
+                    StrategyCopy {
+                        key: path!("minimum-waste"),
+                        label: "Least waste",
+                        description: "Best-first search guided by scrap accumulated in the workshop account.",
+                        algorithm: "best-first search",
+                    },
+                    StrategyCopy {
+                        key: path!("pareto-waste"),
+                        label: "Pareto: least waste",
+                        description: "The lowest-scrap point on the exact Pareto frontier.",
+                        algorithm: "exact Pareto search",
+                    },
+                    StrategyCopy {
+                        key: path!("pareto-time"),
+                        label: "Pareto: least time",
+                        description: "The fastest point on that exact frontier.",
+                        algorithm: "exact Pareto search",
+                    },
+                ],
+                &[
+                    Capability::DeterministicSearch,
+                    Capability::WeightedSearch,
+                    Capability::ExactPareto,
+                    Capability::FeasibilityAssessment,
+                ],
+            ),
+        }
+    }
+}
+
+impl Problem for Workshop {
+    fn descriptor(&self) -> &ProblemDescriptor {
+        &self.descriptor
+    }
+
+    fn study(
+        &self,
+        key: &StudyKey,
+        progress: &mut StudyProgress<'_>,
+    ) -> Result<Vec<ViewDocument>, ServiceError> {
+        build(key, progress)
+    }
+}
+
 pub(super) fn build(
     study: &StudyKey,
-    descriptor: &ProblemDescriptor,
-    progress: &mut ProgressSink<'_>,
-) -> Result<Study, ServiceError> {
+    progress: &mut StudyProgress<'_>,
+) -> Result<Vec<ViewDocument>, ServiceError> {
     let initial = match study.instance {
         InstanceProfile::Micro => workshop::initial(),
         InstanceProfile::Showcase => workshop::initial_showcase(),
@@ -120,7 +191,7 @@ pub(super) fn build(
         view.proposals.push(proposal(ProposalSpec { id: path!("counterfeit"), label: "Counterfeit chair", description: "This rule would create material out of nothing, and the conservation law rejects it." }, &initial, &counterfeit));
         documents.push(view);
     }
-    assemble(study, descriptor, documents)
+    Ok(documents)
 }
 
 fn objectives(world: &World) -> Vec<ObjectiveView> {

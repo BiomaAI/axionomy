@@ -9,14 +9,75 @@ use axionomy_view::{
     ObjectiveDirectionView, ObservationView, ParetoFrontView, TelemetryKindView, ViewId,
 };
 
+/// Hidden-information mission: its catalog entry and how its studies are computed.
+pub(crate) struct Mission {
+    descriptor: ProblemDescriptor,
+}
+
+impl Default for Mission {
+    fn default() -> Self {
+        Self {
+            descriptor: problem(
+                ProblemCopy {
+                    key: path!("mission"),
+                    title: "Hidden-information mission",
+                    summary: "Coordinate independent Scout and Medic timelines. Share private discoveries, recover archives, stabilize casualties and rendezvous for extraction as hazards close sectors and resources run short.",
+                    instances: [
+                        "Sixteen hidden scenarios with a small per-decision search budget",
+                        "A hidden archive and casualty, independent travel, timed recovery, radio or local briefing, sector hazards and clinical decline",
+                        "A second casualty, one radio charge, lower energy, finite resupply and one evacuation seat",
+                    ],
+                },
+                ProblemFamily::PartialObservation,
+                path!("coordinated"),
+                &[
+                    StrategyCopy {
+                        key: path!("coordinated"),
+                        label: "Coordinate independent agents",
+                        description: "Larger missions use separate observation-responsive policies with radio briefing; Micro retains belief-conditioned ISMCTS.",
+                        algorithm: "Private-view policies; Micro information-set MCTS",
+                    },
+                    StrategyCopy {
+                        key: path!("direct-north"),
+                        label: "Search north first",
+                        description: "Larger missions begin north, then coordinate through local briefings. Micro retains the blind joint-movement baseline.",
+                        algorithm: "North-first local coordination; Micro Monte Carlo",
+                    },
+                ],
+                &[
+                    Capability::InformationSetSearch,
+                    Capability::PartialObservation,
+                    Capability::Chance,
+                    Capability::MonteCarlo,
+                    Capability::ApproximatePareto,
+                    Capability::RlProjection,
+                ],
+            ),
+        }
+    }
+}
+
+impl Problem for Mission {
+    fn descriptor(&self) -> &ProblemDescriptor {
+        &self.descriptor
+    }
+
+    fn study(
+        &self,
+        key: &StudyKey,
+        progress: &mut StudyProgress<'_>,
+    ) -> Result<Vec<ViewDocument>, ServiceError> {
+        build(key, progress)
+    }
+}
+
 pub(super) fn build(
     study: &StudyKey,
-    descriptor: &ProblemDescriptor,
-    progress: &mut ProgressSink<'_>,
-) -> Result<Study, ServiceError> {
+    progress: &mut StudyProgress<'_>,
+) -> Result<Vec<ViewDocument>, ServiceError> {
     let profile = study.instance;
     if !matches!(profile, InstanceProfile::Micro) {
-        return expedition::build(study, descriptor, profile, progress);
+        return expedition::build(study, profile, progress);
     }
     let model = mission::initial();
     let sample_index = (study.seed as usize) % 16;
@@ -50,7 +111,7 @@ pub(super) fn build(
             )
         },
     );
-    progress.ensure()?;
+    progress.checkpoint()?;
     let comparison =
         comparison.ok_or_else(|| problem_error(&study.problem, "Monte Carlo failed"))?;
     let front = mission::policy_front_with_progress(
@@ -72,7 +133,7 @@ pub(super) fn build(
             )
         },
     );
-    progress.ensure()?;
+    progress.checkpoint()?;
     let front = front.ok_or_else(|| problem_error(&study.problem, "policy front failed"))?;
     let baseline_observations = progress
         .observations()
@@ -100,7 +161,7 @@ pub(super) fn build(
         },
     )
     .map_err(|error| problem_error(&study.problem, error))?;
-    progress.ensure()?;
+    progress.checkpoint()?;
     let planned =
         planned.ok_or_else(|| problem_error(&study.problem, "planning was interrupted"))?;
     let planning_observations = progress
@@ -278,7 +339,7 @@ pub(super) fn build(
         }
         documents.push(view);
     }
-    assemble(study, descriptor, documents)
+    Ok(documents)
 }
 
 fn observation(world: &World, agent: AgentId) -> ObservationView {
@@ -668,14 +729,14 @@ impl StudioLabel for mission::Role {
 
 #[cfg(test)]
 mod tests {
-    use crate::{InstanceProfile, ReferenceService, StudyRequest};
+    use crate::{InstanceProfile, StudyRequest, registry};
     use axionomy::{Quantity, path};
 
     #[test]
     fn mission_replays_actual_search_and_private_information_transfer() {
         let mut request = StudyRequest::new(path!("mission")).with_instance(InstanceProfile::Micro);
         request.seed = 11;
-        let study = ReferenceService.study(request).unwrap();
+        let study = registry().study(request).unwrap();
         let planned = &study.documents[0];
         let direct = &study.documents[1];
         assert_eq!(planned.objectives[0].value, Quantity::new(1));

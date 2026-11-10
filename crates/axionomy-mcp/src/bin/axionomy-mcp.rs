@@ -29,7 +29,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
         None => Store::memory()?,
     };
     let cancellation = CancellationToken::new();
-    let service = stateless_http_service(store, cancellation.clone())?;
+    let service =
+        stateless_http_service(axionomy_service::registry(), store, cancellation.clone())?;
     let app = Router::new()
         .route("/health", get(|| async { "ok" }))
         .nest_service("/mcp", service);

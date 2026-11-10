@@ -5,8 +5,8 @@ mod openapi;
 pub use openapi::OpenApiDocument;
 
 use axionomy_service::{
-    ProblemDescriptor, ReferenceService, ServiceError, ServiceProgress, StudioEvent, StudioStudyId,
-    Study, StudyControl, StudyKey, StudyObserver, StudyRequest,
+    ProblemDescriptor, Registry, ServiceError, ServiceProgress, StudioEvent, StudioStudyId, Study,
+    StudyControl, StudyKey, StudyObserver, StudyRequest,
 };
 use axionomy_view::{DocumentPath, ExchangeFrame, SearchObservationView, ViewDocument};
 use axum::{
@@ -174,16 +174,26 @@ impl StudyRecord {
 
 #[derive(Debug, Clone)]
 pub struct StudioState {
+    registry: Arc<Registry>,
     studies: Arc<RwLock<HashMap<StudioStudyId, Arc<StudyRecord>>>>,
     next_study: Arc<AtomicU64>,
 }
 
-impl Default for StudioState {
-    fn default() -> Self {
+impl StudioState {
+    /// A Studio engine for the problems of `registry`, with no studies yet.
+    pub fn new(registry: Registry) -> Self {
         Self {
+            registry: Arc::new(registry),
             studies: Arc::new(RwLock::new(HashMap::new())),
             next_study: Arc::new(AtomicU64::new(1)),
         }
+    }
+}
+
+impl Default for StudioState {
+    /// A Studio engine for every canonical problem.
+    fn default() -> Self {
+        Self::new(axionomy_service::registry())
     }
 }
 
@@ -219,10 +229,6 @@ impl IntoResponse for ApiError {
         )
             .into_response()
     }
-}
-
-pub fn problem_catalog() -> Vec<ProblemDescriptor> {
-    ReferenceService.catalog()
 }
 
 /// Every route, declared once with its handler and contract.
@@ -340,9 +346,9 @@ pub fn with_studio_frontend(router: Router, directory: impl Into<PathBuf>) -> Ro
     }
 }
 
-async fn list_problems() -> Json<ProblemList> {
+async fn list_problems(State(state): State<StudioState>) -> Json<ProblemList> {
     Json(ProblemList {
-        problems: problem_catalog(),
+        problems: state.registry.catalog(),
     })
 }
 
@@ -357,7 +363,7 @@ async fn create_study(
     State(state): State<StudioState>,
     Json(request): Json<StudyRequest>,
 ) -> Result<Json<StudySummary>, ApiError> {
-    let key = validate_request(&request)?;
+    let key = validate_request(&state.registry, &request)?;
     let study_id = StudioStudyId::new(state.next_study.fetch_add(1, Ordering::Relaxed));
     let (events, _) = broadcast::channel(256);
     let summary = StudySummary {
@@ -385,17 +391,24 @@ async fn create_study(
         .write()
         .await
         .insert(study_id, Arc::clone(&record));
-    tokio::spawn(execute_study(record, study_id, request, key, 1));
+    tokio::spawn(execute_study(
+        Arc::clone(&state.registry),
+        record,
+        study_id,
+        request,
+        key,
+        1,
+    ));
     Ok(Json(summary))
 }
 
 /// Decides the request's instance and strategy, refusing what the problem
 /// does not offer.
-fn validate_request(request: &StudyRequest) -> Result<StudyKey, ApiError> {
+fn validate_request(registry: &Registry, request: &StudyRequest) -> Result<StudyKey, ApiError> {
     if request.budget == 0 {
         return Err(ApiError::bad_request("budget must be greater than zero"));
     }
-    ReferenceService
+    registry
         .resolve(request)
         .map_err(|error| ApiError::bad_request(error.to_string()))
 }
@@ -403,6 +416,7 @@ fn validate_request(request: &StudyRequest) -> Result<StudyKey, ApiError> {
 /// Studies the request on a worker thread, relaying its progress, until the
 /// study finishes or a cancellation moves it past `generation`.
 async fn execute_study(
+    registry: Arc<Registry>,
     record: Arc<StudyRecord>,
     study_id: StudioStudyId,
     request: StudyRequest,
@@ -425,7 +439,7 @@ async fn execute_study(
         let mut observer = ChannelObserver {
             updates: updates_tx,
         };
-        ReferenceService.study_with(&worker_request, &worker_control, &mut observer)
+        registry.study_with(&worker_request, &worker_control, &mut observer)
     });
 
     while let Some(update) = updates_rx.recv().await {
@@ -807,7 +821,7 @@ mod tests {
             .await
             .unwrap();
         let http_study: Study = response_json(response).await;
-        let service_study = ReferenceService.study(request).unwrap();
+        let service_study = axionomy_service::registry().study(request).unwrap();
         assert_eq!(http_study, service_study);
     }
 

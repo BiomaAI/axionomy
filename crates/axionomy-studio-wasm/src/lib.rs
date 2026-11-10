@@ -1,11 +1,15 @@
-//! Browser Worker adapter over the same interface-neutral reference service.
+//! Browser Worker adapter over the same interface-neutral study runtime.
 //!
 //! This crate does not introduce a JavaScript world model. Requests, solver
 //! observations, replay validation, and studies all cross the boundary as
 //! Rust-owned contracts. The JavaScript Worker only schedules and transports.
+//!
+//! The Worker's exports study every canonical problem. [`catalog_of`] and
+//! [`study_in`] serve any [`Registry`], for a Worker built over other
+//! problems.
 
 use axionomy_service::{
-    ReferenceService, ServiceProgress, StudioEvent, StudioStudyId, StudyControl, StudyObserver,
+    Registry, ServiceProgress, StudioEvent, StudioStudyId, StudyControl, StudyObserver,
     StudyRequest,
 };
 use axionomy_view::{DocumentPath, ExchangeFrame, SearchObservationView};
@@ -17,16 +21,35 @@ pub fn protocol() -> String {
     "axionomy-studio-worker/1".into()
 }
 
+/// The catalog of every canonical problem, as JSON.
 #[wasm_bindgen]
 pub fn catalog() -> Result<String, JsValue> {
-    serde_json::to_string(&ReferenceService.catalog()).map_err(js_error)
+    catalog_of(&axionomy_service::registry())
 }
 
+/// Studies a request for a canonical problem, emitting its events as JSON,
+/// and gives the study as JSON.
 #[wasm_bindgen]
 pub fn study(request_json: &str, study_id: &str, emit: &Function) -> Result<String, JsValue> {
+    study_in(&axionomy_service::registry(), request_json, study_id, emit)
+}
+
+/// The catalog of `registry`, as JSON.
+pub fn catalog_of(registry: &Registry) -> Result<String, JsValue> {
+    serde_json::to_string(&registry.catalog()).map_err(js_error)
+}
+
+/// Studies a request for a problem of `registry`, emitting its events as
+/// JSON, and gives the study as JSON.
+pub fn study_in(
+    registry: &Registry,
+    request_json: &str,
+    study_id: &str,
+    emit: &Function,
+) -> Result<String, JsValue> {
     let request: StudyRequest = serde_json::from_str(request_json).map_err(js_error)?;
     let study_id: StudioStudyId = study_id.parse().map_err(js_error)?;
-    let key = ReferenceService.resolve(&request).map_err(js_error)?;
+    let key = registry.resolve(&request).map_err(js_error)?;
     let mut observer = WorkerObserver {
         emit,
         study_id,
@@ -38,7 +61,7 @@ pub fn study(request_json: &str, study_id: &str, emit: &Function) -> Result<Stri
         problem: key.problem,
         strategy: key.strategy,
     })?;
-    let study = ReferenceService
+    let study = registry
         .study_with(&request, &StudyControl::default(), &mut observer)
         .map_err(js_error)?;
     serde_json::to_string(&study).map_err(js_error)

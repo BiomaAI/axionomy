@@ -7,14 +7,73 @@ use axionomy_view::{
     ObjectiveDirectionView, ObservationView, ParetoFrontView, TelemetryKindView, ViewId,
 };
 
+/// Uncertain rescue: its catalog entry and how its studies are computed.
+pub(crate) struct Rescue {
+    descriptor: ProblemDescriptor,
+}
+
+impl Default for Rescue {
+    fn default() -> Self {
+        Self {
+            descriptor: problem(
+                ProblemCopy {
+                    key: path!("rescue"),
+                    title: "Uncertain rescue",
+                    summary: "Search for several hidden casualties while their condition worsens. Trade treatment time, limited medicine, noisy hints and transport fuel against one evacuation seat.",
+                    instances: [
+                        "Two possible sites and eight hidden location/sensor outcomes",
+                        "Three casualties across four sites, continuing deterioration, two sensor charges, stabilization and finite resupply",
+                        "Four casualties across five sites, tighter fuel and crew energy, one evacuation seat and varied deadlines",
+                    ],
+                },
+                ProblemFamily::PartialObservation,
+                path!("observe-then-follow"),
+                &[
+                    StrategyCopy {
+                        key: path!("observe-then-follow"),
+                        label: "Observe and triage",
+                        description: "Micro evaluates the single search gamble; larger incidents repeatedly scan, search, triage, stabilize and evacuate from public observations.",
+                        algorithm: "Responsive triage; Micro Monte Carlo",
+                    },
+                    StrategyCopy {
+                        key: path!("direct-north"),
+                        label: "Rapid sector sweep",
+                        description: "Start north without sensing, then revisit search and evacuation decisions as the incident evolves.",
+                        algorithm: "Responsive rapid sweep; Micro Monte Carlo",
+                    },
+                ],
+                &[
+                    Capability::PartialObservation,
+                    Capability::Chance,
+                    Capability::MonteCarlo,
+                    Capability::ApproximatePareto,
+                ],
+            ),
+        }
+    }
+}
+
+impl Problem for Rescue {
+    fn descriptor(&self) -> &ProblemDescriptor {
+        &self.descriptor
+    }
+
+    fn study(
+        &self,
+        key: &StudyKey,
+        progress: &mut StudyProgress<'_>,
+    ) -> Result<Vec<ViewDocument>, ServiceError> {
+        build(key, progress)
+    }
+}
+
 pub(super) fn build(
     study: &StudyKey,
-    descriptor: &ProblemDescriptor,
-    progress: &mut ProgressSink<'_>,
-) -> Result<Study, ServiceError> {
+    progress: &mut StudyProgress<'_>,
+) -> Result<Vec<ViewDocument>, ServiceError> {
     let profile = study.instance;
     if !matches!(profile, InstanceProfile::Micro) {
-        return incident::build(study, descriptor, profile, progress);
+        return incident::build(study, profile, progress);
     }
     let model = match profile {
         InstanceProfile::Micro => rescue::uniform_uncertain(),
@@ -72,7 +131,7 @@ pub(super) fn build(
         }
         documents.push(view);
     }
-    assemble(study, descriptor, documents)
+    Ok(documents)
 }
 
 fn observation(world: &World) -> ObservationView {

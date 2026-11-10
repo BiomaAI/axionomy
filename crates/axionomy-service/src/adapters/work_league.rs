@@ -10,11 +10,78 @@ use axionomy_view::{
 };
 use std::cmp::Ordering;
 
+/// Autonomous Work League: its catalog entry and how its studies are computed.
+pub(crate) struct WorkLeague {
+    descriptor: ProblemDescriptor,
+}
+
+impl Default for WorkLeague {
+    fn default() -> Self {
+        Self {
+            descriptor: problem(
+                ProblemCopy {
+                    key: path!("work-league"),
+                    title: "Autonomous Work League",
+                    summary: "Four workers share one clock: jobs overlap, repair and charging bays fill, claims expire, and deadlines can be missed. Earned credit funds recovery; recycling restores material; a worker can pay to take over another's contract. Outcomes compare the same job-attempt disruptions across policy fields.",
+                    instances: [
+                        "Two agents contest four jobs in a short but complete match",
+                        "Four policies contest 12 arriving contracts with deadlines, dependencies, occupied facilities, and paid handoffs",
+                        "24 contracts over six arrival waves with shared finite supplies and equipment wear",
+                    ],
+                },
+                ProblemFamily::MultiAgentCompetition,
+                path!("mixed-field"),
+                &[
+                    StrategyCopy {
+                        key: path!("mixed-field"),
+                        label: "Mixed policy field",
+                        description: "A sprinter, steward, value hunter, and resilient worker reveal genuine cross-objective tradeoffs.",
+                        algorithm: "deterministic policy league with seeded chance",
+                    },
+                    StrategyCopy {
+                        key: path!("throughput-field"),
+                        label: "Throughput field",
+                        description: "Most workers prioritize short jobs and fast execution; one still chases contract value.",
+                        algorithm: "throughput-biased policy league with seeded chance",
+                    },
+                    StrategyCopy {
+                        key: path!("sustainable-field"),
+                        label: "Sustainable field",
+                        description: "Most workers minimize material loss and recycle, while one specializes in reliability.",
+                        algorithm: "resource-biased policy league with seeded chance",
+                    },
+                ],
+                &[
+                    Capability::MultiAccountExchange,
+                    Capability::AtomicSettlement,
+                    Capability::Chance,
+                    Capability::ReplayDerivedLeaderboards,
+                    Capability::ApproximatePareto,
+                    Capability::RlProjection,
+                ],
+            ),
+        }
+    }
+}
+
+impl Problem for WorkLeague {
+    fn descriptor(&self) -> &ProblemDescriptor {
+        &self.descriptor
+    }
+
+    fn study(
+        &self,
+        key: &StudyKey,
+        progress: &mut StudyProgress<'_>,
+    ) -> Result<Vec<ViewDocument>, ServiceError> {
+        build(key, progress)
+    }
+}
+
 pub(super) fn build(
     study: &StudyKey,
-    descriptor: &ProblemDescriptor,
-    progress: &mut ProgressSink<'_>,
-) -> Result<Study, ServiceError> {
+    progress: &mut StudyProgress<'_>,
+) -> Result<Vec<ViewDocument>, ServiceError> {
     let profile = match study.instance {
         InstanceProfile::Micro => Profile::Micro,
         InstanceProfile::Showcase => Profile::Showcase,
@@ -152,9 +219,9 @@ pub(super) fn build(
                 outcome.trace().exchanges().len()
             ),
         );
-        progress.ensure()?;
+        progress.checkpoint()?;
     }
-    assemble(study, descriptor, documents)
+    Ok(documents)
 }
 
 fn balance(world: &World, agent: AgentId, asset: Asset) -> u64 {
@@ -797,21 +864,14 @@ fn balance_job(world: &World, job: work_league::JobId, asset: Asset) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{ReferenceService, StudyRequest};
+    use crate::StudyRequest;
 
     #[test]
     fn every_snapshot_has_multiple_rankings_and_they_change() {
         let request = StudyRequest::new(path!("work-league"))
             .with_instance(InstanceProfile::Showcase)
             .with_strategy(path!("mixed-field"));
-        let key = ReferenceService.resolve(&request).unwrap();
-        let descriptor = ReferenceService.problem(&key.problem).unwrap();
-        let study = build(
-            &key,
-            &descriptor,
-            &mut ProgressSink::new(&StudyControl::default(), &mut |_| {}),
-        )
-        .unwrap();
+        let study = registry().study(request).unwrap();
         let document = study.selected().unwrap();
         assert_eq!(document.initial.leaderboards.len(), 6);
         assert!(document.frames.len() >= 50);

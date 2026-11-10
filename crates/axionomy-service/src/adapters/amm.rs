@@ -6,11 +6,77 @@ use axionomy_view::{
 };
 use std::collections::BTreeMap;
 
+/// The Living Market: its catalog entry and how its studies are computed.
+pub(crate) struct Amm {
+    descriptor: ProblemDescriptor,
+}
+
+impl Default for Amm {
+    fn default() -> Self {
+        Self {
+            descriptor: problem(
+                ProblemCopy {
+                    key: path!("amm"),
+                    title: "The Living Market",
+                    summary: "Watch repeated production and trade reshape a closed economy. Daily needs and obligations, cloudy periods, limited storage, delayed capacity investment, and responsive liquidity interact through an exact constant-product AMM. Missed needs and defaults remain visible.",
+                    instances: [
+                        "A compact closed market that exposes every reserve calculation and refusal",
+                        "Eight market days with recurring needs, finite credit, production investment, and responsive trading",
+                        "Twelve market days at four times the production scale with the same seeded sunlight across counterfactuals",
+                    ],
+                },
+                ProblemFamily::Market,
+                path!("market-day"),
+                &[
+                    StrategyCopy {
+                        key: path!("market-day"),
+                        label: "Responsive market",
+                        description: "Actors revisit production, trade, investment, and liquidity decisions throughout the market season.",
+                        algorithm: "verified autonomous market replay",
+                    },
+                    StrategyCopy {
+                        key: path!("no-whale"),
+                        label: "Counterfactual: no whale",
+                        description: "Replay the same economy without its largest buyer and inspect the causal price difference.",
+                        algorithm: "counterfactual replay",
+                    },
+                    StrategyCopy {
+                        key: path!("thin-liquidity"),
+                        label: "Counterfactual: thin liquidity",
+                        description: "Withdraw half the founding liquidity and inspect how the same actors adapt to different depth and prices.",
+                        algorithm: "counterfactual replay",
+                    },
+                ],
+                &[
+                    Capability::AtomicSettlement,
+                    Capability::MultiAccountExchange,
+                    Capability::FeasibilityAssessment,
+                    Capability::ReplayDerivedLeaderboards,
+                    Capability::NonFungibleFacts,
+                ],
+            ),
+        }
+    }
+}
+
+impl Problem for Amm {
+    fn descriptor(&self) -> &ProblemDescriptor {
+        &self.descriptor
+    }
+
+    fn study(
+        &self,
+        key: &StudyKey,
+        progress: &mut StudyProgress<'_>,
+    ) -> Result<Vec<ViewDocument>, ServiceError> {
+        build(key, progress)
+    }
+}
+
 pub(super) fn build(
     study: &StudyKey,
-    descriptor: &ProblemDescriptor,
-    progress: &mut ProgressSink<'_>,
-) -> Result<Study, ServiceError> {
+    progress: &mut StudyProgress<'_>,
+) -> Result<Vec<ViewDocument>, ServiceError> {
     let initial = match study.instance {
         InstanceProfile::Micro => amm::initial(),
         InstanceProfile::Showcase => amm::initial_showcase_with_seed(study.seed),
@@ -144,7 +210,7 @@ pub(super) fn build(
         documents.push(view);
     }
 
-    assemble(study, descriptor, documents)
+    Ok(documents)
 }
 
 fn exact(value: impl ToString) -> ExactQuantity {

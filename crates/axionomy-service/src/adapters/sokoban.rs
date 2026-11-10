@@ -9,6 +9,65 @@ use axionomy_view::{
     TelemetryKindView,
 };
 
+/// Sokoban: its catalog entry and how its studies are computed.
+pub(crate) struct Sokoban {
+    descriptor: ProblemDescriptor,
+}
+
+impl Default for Sokoban {
+    fn default() -> Self {
+        Self {
+            descriptor: problem(
+                ProblemCopy {
+                    key: path!("sokoban"),
+                    title: "Sokoban",
+                    summary: "Push crates onto their goal squares. Every push rewrites three cells at once, and some positions can never be recovered.",
+                    instances: [
+                        "A bounded one-crate teaching puzzle",
+                        "Two crates, a pressure plate, a gated chamber, and a remote latch",
+                        "Three crates and two coupled door circuits across three chambers",
+                    ],
+                },
+                ProblemFamily::Pathfinding,
+                path!("a-star"),
+                &[
+                    StrategyCopy {
+                        key: path!("a-star"),
+                        label: "Goal-directed A*",
+                        description: "A* prioritises states using an admissible crate-to-goal distance bound.",
+                        algorithm: "A*",
+                    },
+                    StrategyCopy {
+                        key: path!("breadth-first"),
+                        label: "Fewest exchanges",
+                        description: "Breadth-first search explores every shorter replay before accepting a solution.",
+                        algorithm: "breadth-first search",
+                    },
+                ],
+                &[
+                    Capability::DeterministicSearch,
+                    Capability::MultiAccountExchange,
+                    Capability::FeasibilityAssessment,
+                ],
+            ),
+        }
+    }
+}
+
+impl Problem for Sokoban {
+    fn descriptor(&self) -> &ProblemDescriptor {
+        &self.descriptor
+    }
+
+    fn study(
+        &self,
+        key: &StudyKey,
+        progress: &mut StudyProgress<'_>,
+    ) -> Result<Vec<ViewDocument>, ServiceError> {
+        build(key, progress)
+    }
+}
+
 /// Sokoban's strategies, as the catalog lists them.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, axionomy::Identifier)]
 enum Strategy {
@@ -37,9 +96,8 @@ impl Strategy {
 
 pub(super) fn build(
     study: &StudyKey,
-    descriptor: &ProblemDescriptor,
-    progress: &mut ProgressSink<'_>,
-) -> Result<Study, ServiceError> {
+    progress: &mut StudyProgress<'_>,
+) -> Result<Vec<ViewDocument>, ServiceError> {
     let profile = study.instance;
     let initial = match profile {
         InstanceProfile::Micro => sokoban::initial(),
@@ -139,14 +197,14 @@ pub(super) fn build(
         documents.push(deadlock);
     }
 
-    assemble(study, descriptor, documents)
+    Ok(documents)
 }
 
 fn search(
     initial: &World,
     strategy: Strategy,
     chunk: usize,
-    progress: &mut ProgressSink<'_>,
+    progress: &mut StudyProgress<'_>,
     problem: &ProblemPath,
 ) -> Result<(Solution, GraphSearchProgress), ServiceError> {
     let frontier = strategy.frontier();
@@ -172,7 +230,7 @@ fn search(
                     state.visited()
                 ),
             );
-            progress.ensure()?;
+            progress.checkpoint()?;
         }
         let state = session.progress();
         let solution = session
@@ -195,7 +253,7 @@ fn search(
                     state.visited()
                 ),
             );
-            progress.ensure()?;
+            progress.checkpoint()?;
         }
         let state = session.progress();
         let solution = session
@@ -502,11 +560,8 @@ mod tests {
     /// of it never fails as unknown.
     #[test]
     fn every_catalog_strategy_is_read() {
-        let problem = catalog()
-            .into_iter()
-            .find(|problem| problem.key == path!("sokoban"))
-            .expect("the catalog lists Sokoban");
-        for strategy in &problem.strategies {
+        let problem = Sokoban::default();
+        for strategy in &problem.descriptor().strategies {
             assert!(
                 path::read::<_, Strategy>(&strategy.key).is_ok(),
                 "{}",

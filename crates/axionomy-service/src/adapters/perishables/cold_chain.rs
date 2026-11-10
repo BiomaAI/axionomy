@@ -6,10 +6,9 @@ use axionomy_view::{GraphEdgeView, GraphNodeView};
 
 pub(super) fn build(
     study: &StudyKey,
-    descriptor: &ProblemDescriptor,
     profile: InstanceProfile,
-    progress: &mut ProgressSink<'_>,
-) -> Result<Study, ServiceError> {
+    progress: &mut StudyProgress<'_>,
+) -> Result<Vec<ViewDocument>, ServiceError> {
     let initial = chain::initial(matches!(profile, InstanceProfile::Stress), study.seed);
     let mut documents = Vec::new();
     for (strategy, title, description, policy) in [
@@ -78,7 +77,7 @@ pub(super) fn build(
         );
         documents[index].pareto_fronts.push(front);
     }
-    assemble(study, descriptor, documents)
+    Ok(documents)
 }
 fn objectives(world: &World) -> Vec<ObjectiveView> {
     let usable = chain::total(world, Asset::Fresh)

@@ -18,9 +18,7 @@ use axionomy_search::{
     BfsSession, GraphSearchProgress,
     session::{Continue, SearchStatus, WorkBudget},
 };
-use axionomy_service::{
-    ReferenceService, ServiceError, ServiceProgress, StudyControl, StudyRequest,
-};
+use axionomy_service::{Registry, ServiceError, ServiceProgress, StudyControl, StudyRequest};
 use axionomy_store::{Store, StoreError};
 use rmcp::{
     ErrorData as McpError, ServerHandler,
@@ -111,6 +109,7 @@ server's store: across restarts when it is on disk, until the server stops when 
 #[derive(Clone)]
 pub struct AxionomyMcp {
     pub(crate) archive: Archive,
+    pub(crate) registry: Arc<Registry>,
     tasks: TaskManager,
     task_options: TaskOptions,
     tool_router: ToolRouter<Self>,
@@ -118,11 +117,13 @@ pub struct AxionomyMcp {
 
 #[tool_router]
 impl AxionomyMcp {
-    /// A server that keeps its economies in `store`. A store on disk keeps
-    /// them, and the secret their handles are keyed with, across restarts.
-    pub fn new(store: Store) -> Result<Self, StoreError> {
+    /// A server that studies the problems of `registry` and keeps its
+    /// economies in `store`. A store on disk keeps them, and the secret their
+    /// handles are keyed with, across restarts.
+    pub fn new(registry: Registry, store: Store) -> Result<Self, StoreError> {
         Ok(Self {
             archive: Archive::open(store)?,
+            registry: Arc::new(registry),
             tasks: TaskManager::new(),
             task_options: TaskOptions::new()
                 .with_poll_interval_ms(TASK_POLL_INTERVAL_MS)
@@ -390,7 +391,7 @@ impl AxionomyMcp {
     ) -> Result<Linked<ProblemCatalogResponse>, ToolError> {
         Ok(Linked::new(
             ProblemCatalogResponse {
-                problems: ReferenceService.catalog(),
+                problems: self.registry.catalog(),
             },
             Vec::new(),
         ))
@@ -609,7 +610,7 @@ impl AxionomyMcp {
                 "budget must be greater than zero",
             ));
         }
-        ReferenceService.resolve(&request).map_err(|error| {
+        self.registry.resolve(&request).map_err(|error| {
             let refused = ToolError::new(
                 FailureCode::InvalidRequest,
                 format!(
@@ -624,23 +625,28 @@ impl AxionomyMcp {
             }
         })?;
         let archive = self.archive.clone();
+        let registry = Arc::clone(&self.registry);
         let task = self.tasks.spawn(self.task_options.clone(), move |context| {
-            Box::pin(study_problem(context, archive, request))
+            Box::pin(study_problem(context, archive, registry, request))
         });
         Ok(CreateTaskResult::new(task).into())
     }
 }
 
 impl Default for AxionomyMcp {
-    /// A server that keeps its economies in memory, until it stops.
+    /// A server that studies every canonical problem and keeps its economies
+    /// in memory, until it stops.
     ///
     /// # Panics
     ///
     /// If an in-memory store cannot be created, or the operating system
     /// provides no randomness for the handle secret.
     fn default() -> Self {
-        Self::new(Store::memory().expect("an in-memory store opens"))
-            .expect("an in-memory store keeps the server's tables")
+        Self::new(
+            axionomy_service::registry(),
+            Store::memory().expect("an in-memory store opens"),
+        )
+        .expect("an in-memory store keeps the server's tables")
     }
 }
 
@@ -1201,13 +1207,14 @@ fn task_error(error: impl ToString) -> TaskExit {
 async fn study_problem(
     context: TaskContext,
     archive: Archive,
+    registry: Arc<Registry>,
     request: StudyRequest,
 ) -> Result<CallToolResult, TaskExit> {
     let control = Arc::new(StudyControl::default());
     let worker_control = Arc::clone(&control);
     let (progress_tx, mut progress_rx) = tokio::sync::mpsc::unbounded_channel::<ServiceProgress>();
     let mut worker = tokio::task::spawn_blocking(move || {
-        studies::compute(&request, &worker_control, Some(progress_tx))
+        studies::compute(&registry, &request, &worker_control, Some(progress_tx))
     });
 
     let mut reporting = true;

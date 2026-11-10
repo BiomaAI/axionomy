@@ -1,4 +1,4 @@
-use axionomy_service::{ProblemPath, ReferenceService, StudyRequest};
+use axionomy_service::{ProblemPath, StudyRequest, registry};
 use std::{fs, path::PathBuf};
 
 /// Writes the default study of one problem, or of every problem and the
@@ -13,27 +13,28 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .next()
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from("studio/public/studies"));
-    let service = ReferenceService;
+    let registry = registry();
     let all = problem == "all";
     let problems = if all {
-        service.catalog()
+        registry.catalog()
     } else {
         let key: ProblemPath = problem.parse()?;
         vec![
-            service
+            registry
                 .problem(&key)
-                .ok_or_else(|| format!("unknown problem `{key}`"))?,
+                .ok_or_else(|| format!("unknown problem `{key}`"))?
+                .clone(),
         ]
     };
     fs::create_dir_all(&output)?;
     if all {
         let catalog_path = output.join("catalog.json");
-        fs::write(&catalog_path, serde_json::to_vec(&service.catalog())?)?;
+        fs::write(&catalog_path, serde_json::to_vec(&registry.catalog())?)?;
         println!("wrote {}", catalog_path.display());
     }
     for descriptor in problems {
         let path = output.join(format!("{}.json", descriptor.key));
-        let study = service.study(StudyRequest::new(descriptor.key))?;
+        let study = registry.study(StudyRequest::new(descriptor.key))?;
         fs::write(&path, serde_json::to_vec(&study)?)?;
         println!("wrote {}", path.display());
     }

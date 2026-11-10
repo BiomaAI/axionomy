@@ -11,11 +11,16 @@
 //! Studio are adapters over the same commands and results.
 
 mod adapters;
+mod problem;
+mod progress;
 
+pub use adapters::registry;
 use axionomy::path::Path;
 use axionomy_view::{
     DocumentPath, ExchangeFrame, PhasePath, ProposalView, SearchObservationView, ViewDocument,
 };
+pub use problem::{DuplicateProblem, Problem, Registry};
+pub use progress::{StudyProgress, Work, graph_metrics, retain_observation};
 use schemars::{JsonSchema, Schema, SchemaGenerator, json_schema};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::{
@@ -532,71 +537,6 @@ pub enum ServiceError {
     },
 }
 
-#[derive(Debug, Clone, Copy, Default)]
-pub struct ReferenceService;
-
-impl ReferenceService {
-    pub fn catalog(&self) -> Vec<ProblemDescriptor> {
-        adapters::catalog()
-    }
-
-    pub fn problem(&self, key: &ProblemPath) -> Option<ProblemDescriptor> {
-        self.catalog()
-            .into_iter()
-            .find(|problem| &problem.key == key)
-    }
-
-    /// Decides a request's instance and strategy, checking the problem
-    /// offers them.
-    pub fn resolve(&self, request: &StudyRequest) -> Result<StudyKey, ServiceError> {
-        let problem = self
-            .problem(&request.problem)
-            .ok_or_else(|| ServiceError::UnknownProblem(request.problem.clone()))?;
-        let instance = request.instance.unwrap_or(problem.default_instance);
-        if !problem
-            .instances
-            .iter()
-            .any(|known| known.profile == instance)
-        {
-            return Err(ServiceError::UnknownInstance {
-                problem: problem.key,
-                instance,
-            });
-        }
-        let strategy = request
-            .strategy
-            .clone()
-            .unwrap_or_else(|| problem.default_strategy.clone());
-        if !problem.strategies.iter().any(|known| known.key == strategy) {
-            return Err(ServiceError::UnknownStrategy {
-                problem: problem.key,
-                strategy,
-            });
-        }
-        Ok(StudyKey {
-            problem: problem.key,
-            instance,
-            strategy,
-            seed: request.seed,
-            budget: request.budget,
-        })
-    }
-
-    pub fn study(&self, request: StudyRequest) -> Result<Study, ServiceError> {
-        self.study_with(&request, &StudyControl::default(), &mut |_| {})
-    }
-
-    pub fn study_with(
-        &self,
-        request: &StudyRequest,
-        control: &StudyControl,
-        observer: &mut dyn StudyObserver,
-    ) -> Result<Study, ServiceError> {
-        control.checkpoint()?;
-        adapters::study(&self.resolve(request)?, control, observer)
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -691,7 +631,7 @@ mod tests {
 
     #[test]
     fn catalog_covers_every_canonical_problem() {
-        let catalog = ReferenceService.catalog();
+        let catalog = registry().catalog();
         assert_eq!(catalog.len(), 15);
         assert!(catalog.iter().all(|problem| !problem.strategies.is_empty()));
         assert!(catalog.iter().all(|problem| {
@@ -727,7 +667,7 @@ mod tests {
     fn maze_retains_strategy_specific_search_and_route_evidence() {
         use axionomy_view::{AssessmentStatusView, ScenePathStatusView, SearchObservationKindView};
 
-        let study = ReferenceService
+        let study = registry()
             .study(
                 StudyRequest::new(path!("maze"))
                     .with_instance(InstanceProfile::Showcase)
@@ -803,7 +743,7 @@ mod tests {
             .with_instance(InstanceProfile::Micro)
             .with_strategy(path!("mixed-field"));
         let mut observer = FrameObserver::default();
-        let study = ReferenceService
+        let study = registry()
             .study_with(&request, &StudyControl::default(), &mut observer)
             .unwrap();
         let selected = study.selected().unwrap();
@@ -853,12 +793,12 @@ mod tests {
             path.parse().unwrap()
         }
 
-        for problem in ReferenceService.catalog() {
+        for problem in registry().catalog() {
             let mut request =
                 StudyRequest::new(problem.key.clone()).with_instance(InstanceProfile::Micro);
             request.budget = 8;
             let mut observed = Trajectories::default();
-            let study = ReferenceService
+            let study = registry()
                 .study_with(&request, &StudyControl::default(), &mut observed)
                 .unwrap();
             assert_eq!(
@@ -960,7 +900,7 @@ mod tests {
 
     #[test]
     fn every_micro_problem_remains_a_fast_replayable_contract_fixture() {
-        let service = ReferenceService;
+        let service = registry();
         for problem in service.catalog() {
             let mut request = StudyRequest::new(problem.key.clone())
                 .with_instance(InstanceProfile::Micro)
@@ -1010,7 +950,7 @@ mod tests {
 
     #[test]
     fn scaled_assets_are_read_in_their_units() {
-        let study = ReferenceService
+        let study = registry()
             .study(StudyRequest::new(path!("lending")))
             .expect("lending is studied");
         let document = study.selected().expect("a selected document");
@@ -1112,7 +1052,7 @@ mod tests {
 
     #[test]
     fn every_default_problem_studies_to_a_selected_replay() {
-        let service = ReferenceService;
+        let service = registry();
         for problem in service.catalog() {
             let study = service
                 .study(
@@ -1267,7 +1207,7 @@ mod tests {
 
     #[test]
     fn a_proposal_names_the_snapshot_it_was_assessed_against() {
-        let study = ReferenceService
+        let study = registry()
             .study(StudyRequest::new(path!("mission")).with_instance(InstanceProfile::Micro))
             .unwrap();
         let (document, proposal) = study
@@ -1307,7 +1247,7 @@ mod tests {
         control.pause();
         let worker_control = std::sync::Arc::clone(&control);
         let worker = std::thread::spawn(move || {
-            ReferenceService.study_with(
+            registry().study_with(
                 &StudyRequest::new(path!("maze")).with_strategy(path!("a-star")),
                 &worker_control,
                 &mut |_| {},
@@ -1323,7 +1263,7 @@ mod tests {
     fn logistics_reports_algorithm_progress_and_observes_cancellation_mid_study() {
         let control = StudyControl::default();
         let mut observed = Vec::new();
-        let result = ReferenceService.study_with(
+        let result = registry().study_with(
             &StudyRequest {
                 problem: path!("logistics"),
                 instance: Some(InstanceProfile::Micro),
@@ -1366,7 +1306,7 @@ mod tests {
             resume_control.resume();
         });
         let mut paused_once = false;
-        let result = ReferenceService.study_with(
+        let result = registry().study_with(
             &StudyRequest {
                 problem: path!("logistics"),
                 instance: Some(InstanceProfile::Micro),

@@ -6,11 +6,71 @@ use axionomy_view::{
     SceneToneView, TelemetryKindView,
 };
 
+/// Connect Four: its catalog entry and how its studies are computed.
+pub(crate) struct ConnectFour {
+    descriptor: ProblemDescriptor,
+}
+
+impl Default for ConnectFour {
+    fn default() -> Self {
+        Self {
+            descriptor: problem(
+                ProblemCopy {
+                    key: path!("connect-four"),
+                    title: "Connect Four",
+                    summary: "Tactical Connect Four with forced blocks, double threats, positional search, and distinct opponents; gravity and terminal outcomes are core rules.",
+                    instances: [
+                        "A compact board with a short game and few rollouts",
+                        "The full 7×6 board, all 69 lines, tactical self-play and two distinct opponents",
+                        "The full board with four times the MCTS work per move",
+                    ],
+                },
+                ProblemFamily::AdversarialGame,
+                path!("mcts-game"),
+                &[
+                    StrategyCopy {
+                        key: path!("mcts-game"),
+                        label: "Tactical MCTS self-play",
+                        description: "Both players recognize wins, forced blocks and double threats before exploring positional continuations.",
+                        algorithm: "tactical Monte Carlo tree search",
+                    },
+                    StrategyCopy {
+                        key: path!("center-opponent"),
+                        label: "Center-first opponent",
+                        description: "Red uses tactical MCTS against a center-first Yellow baseline on the standard board.",
+                        algorithm: "tactical MCTS versus positional baseline",
+                    },
+                    StrategyCopy {
+                        key: path!("search-opponent"),
+                        label: "Depth-five opponent",
+                        description: "Red uses tactical MCTS against depth-five alpha-beta Yellow on the standard board.",
+                        algorithm: "tactical MCTS versus alpha-beta",
+                    },
+                ],
+                &[Capability::Mcts, Capability::MultiAccountExchange],
+            ),
+        }
+    }
+}
+
+impl Problem for ConnectFour {
+    fn descriptor(&self) -> &ProblemDescriptor {
+        &self.descriptor
+    }
+
+    fn study(
+        &self,
+        key: &StudyKey,
+        progress: &mut StudyProgress<'_>,
+    ) -> Result<Vec<ViewDocument>, ServiceError> {
+        build(key, progress)
+    }
+}
+
 pub(super) fn build(
     study: &StudyKey,
-    descriptor: &ProblemDescriptor,
-    progress: &mut ProgressSink<'_>,
-) -> Result<Study, ServiceError> {
+    progress: &mut StudyProgress<'_>,
+) -> Result<Vec<ViewDocument>, ServiceError> {
     let profile = study.instance;
     let standard = !matches!(profile, InstanceProfile::Micro);
     let initial = if standard {
@@ -64,7 +124,7 @@ pub(super) fn build(
             &mut observe,
         )
     };
-    progress.ensure()?;
+    progress.checkpoint()?;
     let trace = trace.ok_or_else(|| problem_error(&study.problem, "MCTS game was interrupted"))?;
     let final_world = initial
         .replayed(&trace)
@@ -132,7 +192,7 @@ pub(super) fn build(
                     )
                 },
             );
-            progress.ensure()?;
+            progress.checkpoint()?;
             let trace = trace
                 .ok_or_else(|| problem_error(&study.problem, "opponent comparison interrupted"))?;
             let final_world = initial
@@ -146,7 +206,7 @@ pub(super) fn build(
             }, &initial, &axionomy::Goal::new(), &trace, terminal_objectives(&terminal), scene).map_err(|error| problem_error(&study.problem, error))?);
         }
     }
-    assemble(study, descriptor, documents)
+    Ok(documents)
 }
 
 /// Each player's terminal value, exact: a win is `1.0`, a draw `0.5` and a

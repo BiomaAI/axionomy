@@ -3,11 +3,69 @@ use axionomy::{Exchange, Quantity, Trace};
 use axionomy_problems::exact_cover::{self, AccountId, Asset, RateId, Role, SetId, World};
 use axionomy_view::{MatrixCellView, TelemetryKindView, ViewId};
 
+/// Exact cover: its catalog entry and how its studies are computed.
+pub(crate) struct ExactCover {
+    descriptor: ProblemDescriptor,
+}
+
+impl Default for ExactCover {
+    fn default() -> Self {
+        Self {
+            descriptor: problem(
+                ProblemCopy {
+                    key: path!("exact-cover"),
+                    title: "Exact cover",
+                    summary: "Choose subsets that cover every element exactly once. A plain search and Algorithm X reach the same answer by different routes.",
+                    instances: [
+                        "Four elements and four competing subsets",
+                        "Eight coupled elements, fourteen irregular subsets, legal dead ends and covers of different sizes",
+                        "Twelve globally coupled elements and twenty-five pairs, triples and quadruples",
+                    ],
+                },
+                ProblemFamily::Constraint,
+                path!("algorithm-x"),
+                &[
+                    StrategyCopy {
+                        key: path!("breadth-first"),
+                        label: "Plain search",
+                        description: "Breadth-first search with no knowledge of cover structure; it just tries selections.",
+                        algorithm: "breadth-first search",
+                    },
+                    StrategyCopy {
+                        key: path!("algorithm-x"),
+                        label: "Algorithm X",
+                        description: "Knuth's Algorithm X chooses the moves; the economy still validates every one.",
+                        algorithm: "Algorithm X",
+                    },
+                ],
+                &[
+                    Capability::DeterministicSearch,
+                    Capability::SpecializedAlgorithm,
+                    Capability::FeasibilityAssessment,
+                ],
+            ),
+        }
+    }
+}
+
+impl Problem for ExactCover {
+    fn descriptor(&self) -> &ProblemDescriptor {
+        &self.descriptor
+    }
+
+    fn study(
+        &self,
+        key: &StudyKey,
+        progress: &mut StudyProgress<'_>,
+    ) -> Result<Vec<ViewDocument>, ServiceError> {
+        build(key, progress)
+    }
+}
+
 pub(super) fn build(
     study: &StudyKey,
-    descriptor: &ProblemDescriptor,
-    progress: &mut ProgressSink<'_>,
-) -> Result<Study, ServiceError> {
+    progress: &mut StudyProgress<'_>,
+) -> Result<Vec<ViewDocument>, ServiceError> {
     let profile = study.instance;
     let initial = match profile {
         InstanceProfile::Micro => exact_cover::initial(),
@@ -100,7 +158,7 @@ pub(super) fn build(
         [(TelemetryKindView::Message, 0, "no exact cover".into())],
     ));
     documents.push(unsat);
-    assemble(study, descriptor, documents)
+    Ok(documents)
 }
 
 fn scene(_: u64, world: &World) -> Option<Scene> {

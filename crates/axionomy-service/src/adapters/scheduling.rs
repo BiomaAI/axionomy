@@ -8,11 +8,82 @@ use axionomy_view::{
     TimelineLaneView, TimelineSpanView, ViewId,
 };
 
+/// Job-shop scheduling: its catalog entry and how its studies are computed.
+pub(crate) struct Scheduling {
+    descriptor: ProblemDescriptor,
+}
+
+impl Default for Scheduling {
+    fn default() -> Self {
+        Self {
+            descriptor: problem(
+                ProblemCopy {
+                    key: path!("scheduling"),
+                    title: "Job-shop scheduling",
+                    summary: "Route arriving jobs through queues and actual execution. Alternative machines, setup changes, shared crews and a recoverable machine failure change which schedule finishes first.",
+                    instances: [
+                        "Two jobs on the smallest horizon that still forces a machine conflict",
+                        "Six operations, three alternative machines, two crews and a recoverable disruption at tick three",
+                        "One shared crew, later job arrival and a longer repair create a different execution bottleneck",
+                    ],
+                },
+                ProblemFamily::Scheduling,
+                path!("bounded-optimizer"),
+                &[
+                    StrategyCopy {
+                        key: path!("best-first"),
+                        label: "Shortest makespan",
+                        description: "Best-first search on the finish time recorded in the schedule.",
+                        algorithm: "best-first search",
+                    },
+                    StrategyCopy {
+                        key: path!("bounded-optimizer"),
+                        label: "Branch optimizer",
+                        description: "Depth-first branch-and-bound abandons schedules it can already prove are worse.",
+                        algorithm: "branch-and-bound",
+                    },
+                    StrategyCopy {
+                        key: path!("pareto-job-one"),
+                        label: "Pareto: Job One first",
+                        description: "The frontier schedule that finishes Job One earliest.",
+                        algorithm: "exact Pareto search",
+                    },
+                    StrategyCopy {
+                        key: path!("pareto-job-two"),
+                        label: "Pareto: Job Two first",
+                        description: "The frontier schedule that finishes Job Two earliest.",
+                        algorithm: "exact Pareto search",
+                    },
+                ],
+                &[
+                    Capability::WeightedSearch,
+                    Capability::BranchOptimization,
+                    Capability::ExactPareto,
+                    Capability::FeasibilityAssessment,
+                ],
+            ),
+        }
+    }
+}
+
+impl Problem for Scheduling {
+    fn descriptor(&self) -> &ProblemDescriptor {
+        &self.descriptor
+    }
+
+    fn study(
+        &self,
+        key: &StudyKey,
+        progress: &mut StudyProgress<'_>,
+    ) -> Result<Vec<ViewDocument>, ServiceError> {
+        build(key, progress)
+    }
+}
+
 pub(super) fn build(
     study: &StudyKey,
-    descriptor: &ProblemDescriptor,
-    progress: &mut ProgressSink<'_>,
-) -> Result<Study, ServiceError> {
+    progress: &mut StudyProgress<'_>,
+) -> Result<Vec<ViewDocument>, ServiceError> {
     let profile = study.instance;
     let initial = match profile {
         InstanceProfile::Micro => scheduling::initial(),
@@ -141,7 +212,7 @@ pub(super) fn build(
         [(TelemetryKindView::Message, 0, "no complete schedule".into())],
     ));
     documents.push(impossible_view);
-    assemble(study, descriptor, documents)
+    Ok(documents)
 }
 
 fn objectives(world: &World) -> Vec<ObjectiveView> {

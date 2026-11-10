@@ -1,5 +1,5 @@
 use axionomy_service::{
-    InstanceProfile, ProblemPath, ReferenceService, ServiceError, StrategyPath, Study, StudyRequest,
+    InstanceProfile, ProblemPath, Registry, ServiceError, StrategyPath, Study, StudyRequest,
 };
 use clap::{Parser, Subcommand, ValueEnum};
 use std::path::PathBuf;
@@ -73,11 +73,11 @@ pub struct CliOutput {
     pub output: Option<PathBuf>,
 }
 
-pub fn execute(cli: Cli) -> Result<CliOutput, CliError> {
-    let service = ReferenceService;
+/// Runs `cli` over the problems of `registry`.
+pub fn execute(registry: &Registry, cli: Cli) -> Result<CliOutput, CliError> {
     match cli.command {
         Command::Catalog { json } => {
-            let catalog = service.catalog();
+            let catalog = registry.catalog();
             let text = if json {
                 serde_json::to_string_pretty(&catalog)?
             } else {
@@ -99,7 +99,7 @@ pub fn execute(cli: Cli) -> Result<CliOutput, CliError> {
             Ok(CliOutput { text, output: None })
         }
         Command::Describe { problem, json } => {
-            let descriptor = service
+            let descriptor = registry
                 .problem(&problem)
                 .ok_or_else(|| ServiceError::UnknownProblem(problem.clone()))?;
             let text = if json {
@@ -172,7 +172,7 @@ pub fn execute(cli: Cli) -> Result<CliOutput, CliError> {
             request.strategy = strategy;
             request.seed = seed;
             request.budget = budget;
-            let study = service.study(request)?;
+            let study = registry.study(request)?;
             let text = match format {
                 OutputFormat::Json => serde_json::to_string_pretty(&study)?,
                 OutputFormat::Summary => summary(&study),
@@ -182,13 +182,14 @@ pub fn execute(cli: Cli) -> Result<CliOutput, CliError> {
     }
 }
 
-pub fn run_from<I, T>(arguments: I) -> Result<CliOutput, clap::Error>
+/// Parses `arguments` and runs them over the problems of `registry`.
+pub fn run_from<I, T>(registry: &Registry, arguments: I) -> Result<CliOutput, clap::Error>
 where
     I: IntoIterator<Item = T>,
     T: Into<std::ffi::OsString> + Clone,
 {
     Cli::try_parse_from(arguments)
-        .map(execute)
+        .map(|cli| execute(registry, cli))
         .and_then(|result| {
             result.map_err(|error| clap::Error::raw(clap::error::ErrorKind::Io, error.to_string()))
         })
@@ -235,21 +236,25 @@ pub fn write_output(output: CliOutput) -> Result<Option<String>, CliError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use axionomy_service::registry;
 
     #[test]
     fn a_json_study_is_the_shared_service_study() {
-        let output = run_from([
-            "axionomy",
-            "study",
-            "maze",
-            "--strategy",
-            "a-star",
-            "--format",
-            "json",
-        ])
+        let output = run_from(
+            &registry(),
+            [
+                "axionomy",
+                "study",
+                "maze",
+                "--strategy",
+                "a-star",
+                "--format",
+                "json",
+            ],
+        )
         .unwrap();
         let cli_study: Study = serde_json::from_str(&output.text).unwrap();
-        let service_study = ReferenceService
+        let service_study = registry()
             .study(
                 StudyRequest::new("maze".parse().unwrap()).with_strategy("a-star".parse().unwrap()),
             )
@@ -259,7 +264,7 @@ mod tests {
 
     #[test]
     fn catalog_is_human_readable_by_default() {
-        let output = run_from(["axionomy", "catalog"]).unwrap();
+        let output = run_from(&registry(), ["axionomy", "catalog"]).unwrap();
         assert!(output.text.contains("maze"));
         assert!(output.text.contains("perishables"));
         assert!(output.text.contains("work-league"));
@@ -271,9 +276,21 @@ mod tests {
             ["axionomy", "study", "work_league"],
             ["axionomy", "study", "Maze"],
         ] {
-            assert!(run_from(arguments).is_err());
+            assert!(run_from(&registry(), arguments).is_err());
         }
-        assert!(run_from(["axionomy", "study", "maze", "--instance", "huge"]).is_err());
-        assert!(run_from(["axionomy", "study", "maze", "--strategy", "a_star"]).is_err());
+        assert!(
+            run_from(
+                &registry(),
+                ["axionomy", "study", "maze", "--instance", "huge"]
+            )
+            .is_err()
+        );
+        assert!(
+            run_from(
+                &registry(),
+                ["axionomy", "study", "maze", "--strategy", "a_star"]
+            )
+            .is_err()
+        );
     }
 }

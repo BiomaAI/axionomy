@@ -11,6 +11,84 @@ use axionomy_view::{
     SceneSurfaceView, SceneToneView, TelemetryKindView, ViewId,
 };
 
+/// Key-door maze: its catalog entry and how its studies are computed.
+pub(crate) struct Maze {
+    descriptor: ProblemDescriptor,
+}
+
+impl Default for Maze {
+    fn default() -> Self {
+        Self {
+            descriptor: problem(
+                ProblemCopy {
+                    key: path!("maze"),
+                    title: "Key-door maze",
+                    summary: "Reach the exit under limited energy and time. The key-and-gate route saves energy, direct routes save time, and the exact frontier preserves four tradeoffs that one score would hide.",
+                    instances: [
+                        "The smallest maze with a key, a locked gate, and a real route choice",
+                        "15 rooms and 25 passages with shared power, protection, persistent injury delays and recovery",
+                        "24 rooms and 42 passages with more hazards and a second recovery route",
+                    ],
+                },
+                ProblemFamily::Pathfinding,
+                path!("a-star"),
+                &[
+                    StrategyCopy {
+                        key: path!("breadth-first"),
+                        label: "Fewest moves",
+                        description: "Breadth-first search: the shortest sequence, whatever it costs.",
+                        algorithm: "breadth-first search",
+                    },
+                    StrategyCopy {
+                        key: path!("dijkstra"),
+                        label: "Least energy · uninformed",
+                        description: "Dijkstra proves the lowest-energy route without a heuristic.",
+                        algorithm: "Dijkstra",
+                    },
+                    StrategyCopy {
+                        key: path!("a-star"),
+                        label: "Least energy",
+                        description: "A*, guided by an admissible distance estimate stored in the economy itself.",
+                        algorithm: "A*",
+                    },
+                    StrategyCopy {
+                        key: path!("pareto-energy"),
+                        label: "Pareto: least energy",
+                        description: "The lowest-energy point on the exact Pareto frontier, where no route is better on both energy and time.",
+                        algorithm: "exact Pareto search",
+                    },
+                    StrategyCopy {
+                        key: path!("pareto-time"),
+                        label: "Pareto: least time",
+                        description: "The fastest point on that exact frontier.",
+                        algorithm: "exact Pareto search",
+                    },
+                ],
+                &[
+                    Capability::DeterministicSearch,
+                    Capability::WeightedSearch,
+                    Capability::ExactPareto,
+                    Capability::FeasibilityAssessment,
+                ],
+            ),
+        }
+    }
+}
+
+impl Problem for Maze {
+    fn descriptor(&self) -> &ProblemDescriptor {
+        &self.descriptor
+    }
+
+    fn study(
+        &self,
+        key: &StudyKey,
+        progress: &mut StudyProgress<'_>,
+    ) -> Result<Vec<ViewDocument>, ServiceError> {
+        build(key, progress)
+    }
+}
+
 /// The maze's strategies, as the catalog lists them.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, axionomy::Identifier)]
 enum Strategy {
@@ -96,9 +174,8 @@ fn pareto_frontier() -> Work {
 
 pub(super) fn build(
     study: &StudyKey,
-    descriptor: &ProblemDescriptor,
-    progress: &mut ProgressSink<'_>,
-) -> Result<Study, ServiceError> {
+    progress: &mut StudyProgress<'_>,
+) -> Result<Vec<ViewDocument>, ServiceError> {
     let problem = &study.problem;
     let initial = match study.instance {
         InstanceProfile::Micro => maze::initial(),
@@ -126,7 +203,7 @@ pub(super) fn build(
                 pareto.front().len()
             ),
         );
-        progress.ensure()?;
+        progress.checkpoint()?;
     }
     let energy_trace = frontier_trace(
         &pareto,
@@ -266,7 +343,7 @@ pub(super) fn build(
         ];
         documents.push(document);
     }
-    assemble(study, descriptor, documents)
+    Ok(documents)
 }
 
 #[derive(Clone, Copy)]
@@ -513,7 +590,7 @@ fn emit_expansion(
     work: &Work,
     state: axionomy_search::GraphSearchProgress,
     expansion: MazeExpansion,
-    progress: &mut ProgressSink<'_>,
+    progress: &mut StudyProgress<'_>,
 ) -> Result<(), ServiceError> {
     let _ = progress.graph_with_subjects(
         work,
@@ -521,14 +598,14 @@ fn emit_expansion(
         expansion_label(expansion),
         [expansion_subject(expansion)],
     );
-    progress.ensure()
+    progress.checkpoint()
 }
 
 fn emit_solution(
     work: &Work,
     state: axionomy_search::GraphSearchProgress,
     expansion: MazeExpansion,
-    progress: &mut ProgressSink<'_>,
+    progress: &mut StudyProgress<'_>,
 ) -> Result<(), ServiceError> {
     let _ = progress.graph_with_subjects(
         work,
@@ -536,13 +613,13 @@ fn emit_solution(
         solution_label(expansion),
         [expansion_subject(expansion)],
     );
-    progress.ensure()
+    progress.checkpoint()
 }
 
 fn observe_selected_search(
     initial: &World,
     search: Search,
-    progress: &mut ProgressSink<'_>,
+    progress: &mut StudyProgress<'_>,
     problem: &ProblemPath,
 ) -> Result<(), ServiceError> {
     let expanded = std::rc::Rc::new(std::cell::RefCell::new(None));
@@ -1216,11 +1293,8 @@ mod tests {
     /// of it never fails as unknown.
     #[test]
     fn every_catalog_strategy_is_read() {
-        let problem = catalog()
-            .into_iter()
-            .find(|problem| problem.key == path!("maze"))
-            .expect("the catalog lists the maze");
-        for strategy in &problem.strategies {
+        let problem = Maze::default();
+        for strategy in &problem.descriptor().strategies {
             assert!(
                 path::read::<_, Strategy>(&strategy.key).is_ok(),
                 "{}",

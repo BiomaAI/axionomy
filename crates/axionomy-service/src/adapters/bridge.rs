@@ -8,11 +8,94 @@ use axionomy_view::{
     SceneAnchorView, SceneGlyphView, SceneToneView, TelemetryKindView, ViewId,
 };
 
+/// Bridge allocation: its catalog entry and how its studies are computed.
+pub(crate) struct Bridge {
+    descriptor: ProblemDescriptor,
+}
+
+impl Default for Bridge {
+    fn default() -> Self {
+        Self {
+            descriptor: problem(
+                ProblemCopy {
+                    key: path!("bridge"),
+                    title: "Bridge allocation",
+                    summary: "Timed traffic competes for one occupied lane. Compare fixed priority, urgency-based bids and a paid concurrent detour against arrivals, deadlines and expiring reservations.",
+                    instances: [
+                        "One crossing round for two agents and one lane",
+                        "Two traffic waves with staggered arrivals, 2–3 tick crossings, deadlines and a paid detour",
+                        "Three traffic waves with persistent credit and changing deadline pressure",
+                    ],
+                },
+                ProblemFamily::Allocation,
+                path!("auction"),
+                &[
+                    StrategyCopy {
+                        key: path!("breadth-first"),
+                        label: "Plain search",
+                        description: "Breadth-first routing search with immediate ready completions; timed search excludes bidding and deliberate lease expiry.",
+                        algorithm: "breadth-first search",
+                    },
+                    StrategyCopy {
+                        key: path!("first-come-a"),
+                        label: "First come: A",
+                        description: "Wait for Agent A, give A first priority, then serve B.",
+                        algorithm: "first-come allocation",
+                    },
+                    StrategyCopy {
+                        key: path!("first-come-b"),
+                        label: "First come: B",
+                        description: "Wait for Agent B, give B first priority, then serve A.",
+                        algorithm: "first-come allocation",
+                    },
+                    StrategyCopy {
+                        key: path!("auction"),
+                        label: "Auction",
+                        description: "Bids, winner, escrow, refunds, and crossing rights settle through indivisible changes.",
+                        algorithm: "auction mechanism",
+                    },
+                    StrategyCopy {
+                        key: path!("pareto-a"),
+                        label: "Pareto: favors A",
+                        description: "Micro: exact frontier. Timed traffic: A's preference among the evaluated routing and auction policies.",
+                        algorithm: "exact Pareto search",
+                    },
+                    StrategyCopy {
+                        key: path!("pareto-b"),
+                        label: "Pareto: favors B",
+                        description: "Micro: exact frontier. Timed traffic: B's preference among the evaluated routing and auction policies.",
+                        algorithm: "exact Pareto search",
+                    },
+                ],
+                &[
+                    Capability::DeterministicSearch,
+                    Capability::AtomicSettlement,
+                    Capability::ExactPareto,
+                    Capability::MultiAccountExchange,
+                ],
+            ),
+        }
+    }
+}
+
+impl Problem for Bridge {
+    fn descriptor(&self) -> &ProblemDescriptor {
+        &self.descriptor
+    }
+
+    fn study(
+        &self,
+        key: &StudyKey,
+        progress: &mut StudyProgress<'_>,
+    ) -> Result<Vec<ViewDocument>, ServiceError> {
+        build(key, progress)
+    }
+}
+
 pub(super) fn build(
     study: &StudyKey,
-    descriptor: &ProblemDescriptor,
-    progress: &mut ProgressSink<'_>,
-) -> Result<Study, ServiceError> {
+    progress: &mut StudyProgress<'_>,
+) -> Result<Vec<ViewDocument>, ServiceError> {
     let profile = study.instance;
     let initial = match profile {
         InstanceProfile::Micro => bridge::initial(),
@@ -203,7 +286,7 @@ pub(super) fn build(
         };
         documents[index].pareto_fronts.push(front);
     }
-    assemble(study, descriptor, documents)
+    Ok(documents)
 }
 
 fn pareto_trace(
@@ -516,10 +599,10 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{ReferenceService, StudyRequest};
+    use crate::StudyRequest;
     #[test]
     fn exact_front_pairs_each_travelers_priority_with_their_credit() {
-        let study = ReferenceService
+        let study = registry()
             .study(StudyRequest::new(path!("bridge")).with_instance(InstanceProfile::Micro))
             .unwrap();
         for document in study.documents {

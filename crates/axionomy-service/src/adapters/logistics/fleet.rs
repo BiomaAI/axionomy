@@ -5,10 +5,9 @@ use axionomy_problems::logistics::fleet::{
 
 pub(super) fn build(
     study: &StudyKey,
-    descriptor: &ProblemDescriptor,
     profile: InstanceProfile,
-    progress: &mut ProgressSink<'_>,
-) -> Result<Study, ServiceError> {
+    progress: &mut StudyProgress<'_>,
+) -> Result<Vec<ViewDocument>, ServiceError> {
     let initial = fleet::initial(matches!(profile, InstanceProfile::Stress), study.seed);
     let dispatch = Work::new(
         path!("fleet-dispatch"),
@@ -45,7 +44,7 @@ pub(super) fn build(
                 documents.len() + 1
             ),
         );
-        progress.ensure()?;
+        progress.checkpoint()?;
         let (trace, final_world) =
             simulate(&study.problem, &initial, |world| fleet::run(world, policy))?;
         let mut view = document(
@@ -82,7 +81,7 @@ pub(super) fn build(
         3,
         "Three fleet policies completed and replay verified",
     );
-    progress.ensure()?;
+    progress.checkpoint()?;
     for index in 0..documents.len() {
         let front = evaluated_front(
             &documents,
@@ -91,7 +90,7 @@ pub(super) fn build(
         );
         documents[index].pareto_fronts.push(front);
     }
-    assemble(study, descriptor, documents)
+    Ok(documents)
 }
 fn objectives(world: &World) -> Vec<ObjectiveView> {
     let val = |account, asset| fleet::value(world, account, asset);

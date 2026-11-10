@@ -697,7 +697,7 @@ move into the kernel only when they are transport-neutral parts of economic
 validation, assessment, application, or replay.
 
 Semantic parity is executable: CLI JSON, HTTP studies, and the studies MCP
-serves as resources are compared with the complete `ReferenceService` study,
+serves as resources are compared with the complete study of the same `Registry`,
 not merely a shared identifier. Transport events and study records are allowed to differ;
 economic documents, assessments, receipts, objectives, and traces are not.
 
