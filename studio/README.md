@@ -127,7 +127,12 @@ leaderboard, seed, and budget are encoded in the query string. **Copy link**
 therefore shares the exact inspection state on the native server, browser Wasm,
 or GitHub Pages. Major selections participate in Back/Forward history, while
 autoplay and scrubbing replace the current history entry. A link never starts
-compute automatically.
+compute automatically. A parameter a link omits means the service's default
+(seed 17, budget 128). The heading names the key of the study on screen; when
+the controls ask for a study that is not loaded (another instance, seed or
+budget, or an outcome the study lacks), a notice says what was asked for, what
+is shown instead, and how to compute it. A link's outcome, step, or number that
+Studio cannot open is reported, never replaced silently.
 
 `Study` asks the selected engine for a new reproducible study; the playback
 transport only scrubs the selected study's already verified exchange trace.

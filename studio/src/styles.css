@@ -127,6 +127,15 @@ details.strategy-comparison { margin-top: 12px; border: 1px solid var(--line); b
 .document-heading { display: flex; align-items: end; justify-content: space-between; gap: 30px; padding: 16px 0 14px; }
 h1 { font: 400 clamp(22px, 2.4vw, 32px)/1.1 var(--serif); letter-spacing: 0; margin: 6px 0 8px; }
 .document-heading p { color: var(--muted); max-width: 790px; margin: 0; font-size: 12px; }
+/* The key of the study on screen: what the replay below was computed from. */
+.study-key { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 10px 0 0; }
+.study-key > div { display: flex; align-items: baseline; gap: 6px; }
+.study-key dt { color: var(--muted); font: 10px var(--mono); letter-spacing: .06em; text-transform: uppercase; }
+.study-key dd { margin: 0; color: var(--text); font: 11px var(--mono); font-variant-numeric: tabular-nums; }
+.study-key > div:first-child dd { color: var(--brass); }
+.study-mismatch { display: grid; gap: 4px; margin: 0 0 12px; padding: 10px 13px; border: 1px solid color-mix(in srgb, var(--hold) 55%, var(--line)); border-left-width: 3px; background: color-mix(in srgb, var(--hold) 8%, var(--surface)); }
+.study-mismatch strong { color: var(--hold); font-size: 12px; }
+.study-mismatch span { color: var(--text); font-size: 12px; line-height: 1.45; }
 .objective-pills { display: flex; flex-wrap: wrap; justify-content: end; gap: 7px; }
 .objective { min-width: 112px; padding: 8px 11px; background: var(--surface); border: 1px solid var(--line); }
 .objective span, .objective small { color: var(--muted); display: block; font: 9px var(--mono); text-transform: uppercase; }

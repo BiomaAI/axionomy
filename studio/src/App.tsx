@@ -7,6 +7,7 @@ import logoLight from "../../assets/axionomy-logo-light.png";
 import {
   type ExchangeFrame,
   type LeaderboardView,
+  type ProblemDescriptor,
   type Scene,
   type SearchObservation,
   type StudioEvent,
@@ -46,13 +47,27 @@ type StudioUrlState = {
   budget?: number;
 };
 
-function readUrlState(): StudioUrlState {
+/** The service's `StudyRequest` defaults; a link that omits them asks for these. */
+export const DEFAULT_SEED = 17;
+export const DEFAULT_BUDGET = 128;
+
+/** A parameter the link wrote but Studio could not read, quoted as written. */
+type UnreadParameter = { key: "seed" | "budget" | "step" | "view"; written: string };
+
+function readUrlState(): StudioUrlState & { unread: UnreadParameter[] } {
   const query = new URLSearchParams(window.location.search);
-  const number = (key: string, minimum = 0) => {
-    const value = Number(query.get(key));
-    return Number.isSafeInteger(value) && value >= minimum ? value : undefined;
+  const unread: UnreadParameter[] = [];
+  // An absent parameter means "the default"; only a written one can be wrong.
+  const number = (key: "seed" | "budget" | "step", minimum = 0) => {
+    const written = query.get(key);
+    if (written === null || written.trim() === "") return undefined;
+    const value = Number(written);
+    if (/^\d+$/.test(written.trim()) && Number.isSafeInteger(value) && value >= minimum) return value;
+    unread.push({ key, written });
+    return undefined;
   };
   const view = query.get("view");
+  if (view !== null && view !== "thinking" && view !== "replay") unread.push({ key: "view", written: view });
   return {
     problem: query.get("problem") ?? undefined,
     instance: query.get("instance") ?? undefined,
@@ -63,7 +78,17 @@ function readUrlState(): StudioUrlState {
     leaderboard: query.get("leaderboard") ?? undefined,
     seed: number("seed"),
     budget: number("budget", 1),
+    unread,
   };
+}
+
+function unreadNotice({ key, written }: UnreadParameter): string {
+  switch (key) {
+    case "seed": return `The link’s seed “${written}” is not a whole number; Studio used seed ${DEFAULT_SEED}.`;
+    case "budget": return `The link’s budget “${written}” is not a whole number of at least 1; Studio used budget ${DEFAULT_BUDGET}.`;
+    case "step": return `The link’s step “${written}” is not a whole number; Studio opened the initial state.`;
+    case "view": return `The link’s view “${written}” is not Thinking or Replay; Studio opened the replay.`;
+  }
 }
 
 function writeUrl(state: Required<Pick<StudioUrlState, "problem" | "instance" | "strategy" | "view" | "step" | "seed" | "budget">> & Pick<StudioUrlState, "document" | "leaderboard">, mode: "push" | "replace") {
@@ -124,9 +149,12 @@ export function App() {
   // the catalog loads. The empty key resolves to it without a warning.
   const [instanceKey, setInstanceKey] = useState(initialUrl.instance ?? "");
   const [strategyKey, setStrategyKey] = useState(initialUrl.strategy ?? "");
-  const [seed, setSeed] = useState(initialUrl.seed ?? 17);
-  const [budget, setBudget] = useState(initialUrl.budget ?? 128);
+  const [seed, setSeed] = useState(initialUrl.seed ?? DEFAULT_SEED);
+  const [budget, setBudget] = useState(initialUrl.budget ?? DEFAULT_BUDGET);
   const [study, setStudy] = useState<Study>();
+  // Where the study on screen came from: the saved one for its problem, one
+  // computed in this session, or a file the visitor loaded.
+  const [studyOrigin, setStudyOrigin] = useState<StudyOrigin>("saved");
   const [documentId, setDocumentId] = useState<string | undefined>(initialUrl.document);
   const [position, setPosition] = useState(initialUrl.step ?? 0);
   const [replayMotion, setReplayMotion] = useState<ReplayMotionMode>("seek");
@@ -142,7 +170,12 @@ export function App() {
   const [elapsedMs, setElapsedMs] = useState(0);
   const [completion, setCompletion] = useState<CompletionNotice>();
   const [freshStudy, setFreshStudy] = useState<Study>();
-  const [linkNotice, setLinkNotice] = useState<string>();
+  // Each notice says what a link asked for that Studio could not open, and
+  // what it opened instead. Nothing a link names is replaced silently.
+  const [linkNotices, setLinkNotices] = useState<string[]>(() => initialUrl.unread.map(unreadNotice));
+  const notice = (message: string) => setLinkNotices((current) => current.includes(message) ? current : [...current, message]);
+  // A step a link names is checked once its replay has loaded.
+  const linkedStep = useRef(initialUrl.step);
   const [copied, setCopied] = useState(false);
   const eventSource = useRef<EngineStudySubscription | null>(null);
   const studyStartedAt = useRef<number | undefined>(undefined);
@@ -203,7 +236,7 @@ export function App() {
     if (!catalog.data || problem) return;
     const fallback = catalog.data.find((candidate) => candidate.key === "maze") ?? catalog.data[0];
     if (!fallback) return;
-    setLinkNotice(`The linked problem “${problemKey}” does not exist; opened ${fallback.title} instead.`);
+    notice(`The linked problem “${problemKey}” does not exist; opened ${fallback.title} instead.`);
     setProblemKey(fallback.key);
     setInstanceKey(fallback.default_instance);
     setStrategyKey(fallback.default_strategy);
@@ -217,7 +250,7 @@ export function App() {
     const invalidInstance = instanceKey !== "" && requestedInstance !== instanceKey;
     const invalidStrategy = strategyKey !== "" && requestedStrategy !== strategyKey;
     if (invalidInstance || invalidStrategy) {
-      setLinkNotice(`Some linked options were not valid for ${problem.title}; Studio selected its defaults.`);
+      notice(`Some linked options were not valid for ${problem.title}; Studio selected its defaults.`);
     }
     setInstanceKey(requestedInstance);
     setStrategyKey(requestedStrategy);
@@ -230,7 +263,12 @@ export function App() {
       const requestedDocument = next.documents.find((candidate) => candidate.id === documentId)?.id
         ?? next.documents.find((candidate) => candidate.id === requestedStrategy)?.id
         ?? next.selected_document;
+      if (documentId && requestedDocument !== documentId) {
+        const opened = next.documents.find((candidate) => candidate.id === requestedDocument);
+        notice(`The linked outcome “${documentId}” is not in the saved ${problem.title} study; opened ${opened ? documentName(next, opened) : "its default outcome"} instead.`);
+      }
       setStudy(next);
+      setStudyOrigin("saved");
       setDocumentId(requestedDocument);
     }).catch((cause: unknown) => {
       if (!disposed && generation === previewGeneration.current) setError(cause instanceof Error ? cause.message : String(cause));
@@ -239,16 +277,23 @@ export function App() {
   }, [problem?.key, engine.kind]);
 
   useEffect(() => {
-    if (!document) return;
-    setPosition((current) => Math.min(current, document.frames.length));
+    if (!document || study?.problem.key !== problemKey) return;
+    const steps = document.frames.length;
+    const linked = linkedStep.current;
+    linkedStep.current = undefined;
+    if (linked !== undefined && linked > steps) {
+      notice(`The link’s step ${linked} is past the end of this replay, which has ${steps} ${steps === 1 ? "step" : "steps"}; Studio opened its final state.`);
+    }
+    setPosition((current) => Math.min(current, steps));
     setPlaying(false);
     setFocusedAccount(undefined);
-  }, [document?.id]);
+  }, [document?.id, study?.problem.key]);
 
   useEffect(() => {
     if (!study || study.problem.key !== problemKey || !documentId) return;
     if (!study.documents.some((candidate) => candidate.id === documentId)) {
-      setLinkNotice(`The linked outcome “${documentId}” does not exist in ${study.problem.title}; opened the default outcome instead.`);
+      const opened = study.documents.find((candidate) => candidate.id === study.selected_document);
+      notice(`The linked outcome “${documentId}” is not in this ${study.problem.title} study; opened ${opened ? documentName(study, opened) : "its default outcome"} instead.`);
       setDocumentId(study.selected_document);
     }
   }, [study, documentId, problemKey]);
@@ -278,8 +323,10 @@ export function App() {
       setDocumentId(linked.document);
       if (linked.view) setViewMode(linked.view);
       setLeaderboardKey(linked.leaderboard);
-      if (linked.seed !== undefined) setSeed(linked.seed);
-      if (linked.budget !== undefined) setBudget(linked.budget);
+      setSeed(linked.seed ?? DEFAULT_SEED);
+      setBudget(linked.budget ?? DEFAULT_BUDGET);
+      for (const unread of linked.unread) notice(unreadNotice(unread));
+      linkedStep.current = linked.step;
       setReplayMotion("seek");
       setPosition(linked.step ?? 0);
     };
@@ -336,7 +383,7 @@ export function App() {
           const next = await engine.study(event.study_id);
           const durationMs = studyStartedAt.current === undefined ? 0 : performance.now() - studyStartedAt.current;
           previewGeneration.current += 1;
-          setStudy(next); setDocumentId(event.document); setFreshStudy(next);
+          setStudy(next); setStudyOrigin("computed"); setDocumentId(event.document); setFreshStudy(next);
           setCompletion({ studyId: event.study_id, problem: submittedProblem, instance: submittedInstance, strategy: submittedStrategy, seed, budget, durationMs, documents: next.documents.length });
           setElapsedMs(durationMs); setOngoing(undefined);
         } else if (event.kind === "study_cancelled" || event.kind === "study_failed") {
@@ -359,7 +406,7 @@ export function App() {
     try {
       const next = JSON.parse(await file.text()) as Study;
       if (!Array.isArray(next.documents) || !next.selected_document) throw new Error("missing study documents");
-      setStudy(next); setProblemKey(next.problem.key); setInstanceKey(next.instance.profile); setStrategyKey(next.key.strategy); setDocumentId(next.selected_document); setFreshStudy(undefined); setError(undefined);
+      setStudy(next); setStudyOrigin("file"); setProblemKey(next.problem.key); setInstanceKey(next.instance.profile); setStrategyKey(next.key.strategy); setSeed(next.key.seed); setBudget(next.key.budget); setDocumentId(next.selected_document); setFreshStudy(undefined); setError(undefined);
     } catch (cause) { setError(cause instanceof Error ? cause.message : "the selected file is not a study"); }
   };
 
@@ -384,7 +431,7 @@ export function App() {
     setStrategyKey(next.default_strategy);
     setDocumentId(undefined);
     setLeaderboardKey(undefined);
-    setLinkNotice(undefined);
+    setLinkNotices([]);
   };
   const selectInstance = (key: string) => {
     writeUrl(urlState({ instance: key, step: 0 }), "push");
@@ -431,19 +478,20 @@ export function App() {
       <div className="study-message">{active ? "A newly computed study will replace the current view." : engine.canStudy ? "The CLI, HTTP API, MCP server, and Studio all study this same problem the same way." : "No engine running — you can still replay the saved studies."}</div>
     </section>
 
-    {(active || completion || linkNotice) && <div className="status-layer">
+    {(active || completion || linkNotices.length > 0) && <div className="status-layer">
       {active && <StudyActivity launching={launching} ongoing={ongoing} events={events} elapsedMs={elapsedMs} />}
       {completion && <><CompletionBanner notice={completion} onDismiss={() => setCompletion(undefined)} /><VerifiedStandings events={events} live={false} /></>}
-      {linkNotice && <div className="link-notice" role="status">{linkNotice}<button type="button" onClick={() => setLinkNotice(undefined)}>Dismiss</button></div>}
+      {linkNotices.map((message) => <div className="link-notice" role="status" key={message}>{message}<button type="button" onClick={() => setLinkNotices((current) => current.filter((candidate) => candidate !== message))}>Dismiss</button></div>)}
     </div>}
 
-    {problem && <section className="problem-context"><div><span>{familyLabel(problem.family)}</span><div className="problem-copy"><p>{problem.summary}</p><small><strong>{instance?.label ?? study?.instance.label}</strong>{instance?.description ?? study?.instance.description}{modelCounts && <em>{modelCounts}</em>}</small></div></div><div>{problem.capabilities.map((capability) => <span key={capability}>{capabilityLabel(capability)}</span>)}</div></section>}
+    {problem && <section className="problem-context"><div><span>{familyLabel(problem.family)}</span><div className="problem-copy"><p>{problem.summary}</p><small><strong>{instance?.label ?? study?.instance.label}</strong>{instance?.description ?? study?.instance.description}</small></div></div><div>{problem.capabilities.map((capability) => <span key={capability}>{capabilityLabel(capability)}</span>)}</div></section>}
     {error && <div className="error-banner" role="alert">{error}</div>}
 
     {study && document && snapshot ? <QuantityFormats.Provider value={document.formats ?? {}}><main className={freshStudy === study ? "fresh-study" : undefined}>
       <section className="alternative-bar"><div><span>Alternatives</span><strong>{study.documents.length} replayable results</strong></div><div role="tablist">{study.documents.map((candidate) => <button key={candidate.id} role="tab" aria-selected={candidate.id === document.id} onClick={() => selectDocument(candidate.id)}>{candidate.title.replace(`${study.problem.title} · `, "")}</button>)}</div></section>
       <StrategyComparison study={study} selected={document.id} onSelect={selectDocument} />
-      <section className="document-heading"><div><span className="eyebrow">{study.instance.label} · {document.source.label} · {study.problem.key}/{document.id}{freshStudy === study ? " · just computed" : ""}</span><h1>{document.title}</h1><p>{document.description}</p></div><div className="objective-pills">{document.objectives.map((objective) => <div className="objective" key={objective.key}><span>{objective.label}</span><strong>{objective.value}</strong><small>{objective.direction}</small></div>)}</div></section>
+      <section className="document-heading"><div><span className="eyebrow">{study.instance.label} · {document.source.label} · {study.problem.key}/{document.id}{freshStudy === study ? " · just computed" : ""}</span><h1>{document.title}</h1><p>{document.description}</p><StudyKeyLine study={study} origin={studyOrigin} model={modelCounts} /></div><div className="objective-pills">{document.objectives.map((objective) => <div className="objective" key={objective.key}><span>{objective.label}</span><strong>{objective.value}</strong><small>{objective.direction}</small></div>)}</div></section>
+      {problem && <StudyMismatch problem={problem} study={study} origin={studyOrigin} requested={{ instance: instanceKey || problem.default_instance, strategy: strategyKey || problem.default_strategy, seed, budget }} canStudy={engine.canStudy} />}
       <div className="view-tabs" role="tablist" aria-label="Studio evidence mode"><button type="button" role="tab" aria-selected={viewMode === "thinking"} onClick={() => selectView("thinking")}>Thinking <small>{active ? "live" : document.thinking.length}</small></button><button type="button" role="tab" aria-selected={viewMode === "replay"} onClick={() => selectView("replay")}>Step-by-step replay <small>{document.frames.length}</small></button></div>
       {viewMode === "thinking" ? <ThinkingWorkspace key={document.id} scene={document.initial.scene} observations={active ? events.flatMap((event) => event.kind === "thinking" ? [event.observation] : []) : document.thinking} active={active} /> : (() => {
         const surface = snapshot.scene?.surface;
@@ -520,6 +568,56 @@ function VerifiedStandings({ events, live }: { events: StudioEvent[]; live: bool
   const board = last?.frame.after.leaderboards[0];
   if (!last || !board) return null;
   return <div className="live-standings"><span>{live ? "Live" : "Last"} verified frame {last.frame_index + 1} · {board.label}</span>{board.entries.slice(0, 4).map((entry) => <strong key={entry.participant.key}>{entry.rank ? `#${entry.rank}` : "—"} {entry.participant.label} <b>{entry.value}</b></strong>)}</div>;
+}
+
+type StudyOrigin = "saved" | "computed" | "file";
+type RequestedStudy = { instance: string; strategy: string; seed: number; budget: number };
+
+/** How a document is named wherever Studio lists the outcomes of a study. */
+function documentName(study: Study, document: ViewDocument): string {
+  return document.title.replace(`${study.problem.title} · `, "");
+}
+
+function studyKeyWords(problem: ProblemDescriptor | Study["problem"], key: RequestedStudy): string {
+  const instance = problem.instances.find((candidate) => candidate.profile === key.instance)?.label ?? key.instance;
+  const strategy = problem.strategies.find((candidate) => candidate.key === key.strategy)?.label ?? key.strategy;
+  return `${instance} · ${strategy} · seed ${key.seed} · budget ${key.budget}`;
+}
+
+function originWords(origin: StudyOrigin): string {
+  return origin === "saved" ? "Saved study" : origin === "computed" ? "Computed study" : "Study from file";
+}
+
+/** The key of the study on screen, which the controls above may not match. */
+function StudyKeyLine({ study, origin, model }: { study: Study; origin: StudyOrigin; model?: string }) {
+  const strategy = study.problem.strategies.find((candidate) => candidate.key === study.key.strategy)?.label ?? study.key.strategy;
+  return <dl className="study-key" aria-label="Study on screen">
+    <div><dt>On screen</dt><dd>{originWords(origin)}</dd></div>
+    <div><dt>Instance</dt><dd>{study.instance.label}</dd></div>
+    <div><dt>Computed for</dt><dd>{strategy}</dd></div>
+    <div><dt>Seed</dt><dd>{study.key.seed}</dd></div>
+    <div><dt>Budget</dt><dd>{study.key.budget}</dd></div>
+    {model && <div><dt>Model</dt><dd>{model}</dd></div>}
+  </dl>;
+}
+
+/**
+ * The controls ask for a study; the screen shows one. When they differ, say
+ * which was asked for, which is shown, and how to get the other.
+ */
+function StudyMismatch({ problem, study, origin, requested, canStudy }: { problem: ProblemDescriptor; study: Study; origin: StudyOrigin; requested: RequestedStudy; canStudy: boolean }) {
+  if (study.problem.key !== problem.key) return null;
+  const differs = requested.instance !== study.key.instance
+    || requested.seed !== study.key.seed
+    || requested.budget !== study.key.budget
+    || !study.documents.some((candidate) => candidate.id === requested.strategy);
+  if (!differs) return null;
+  const shown = studyKeyWords(study.problem, { instance: study.key.instance, strategy: study.key.strategy, seed: study.key.seed, budget: study.key.budget });
+  const missing = origin === "saved" ? "There is no saved study for it" : "It is not the study on screen";
+  return <div className="study-mismatch" role="status">
+    <strong>The controls ask for a study that is not loaded</strong>
+    <span>You asked for {problem.title} · {studyKeyWords(problem, requested)}. {missing}, so this is the {originWords(origin).toLowerCase()} {shown}. {canStudy ? "Press Study to compute the one you asked for." : "Start an engine to compute the one you asked for."}</span>
+  </div>;
 }
 
 function CompletionBanner({ notice, onDismiss }: { notice: CompletionNotice; onDismiss: () => void }) {

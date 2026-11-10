@@ -43,7 +43,7 @@ test("reads scaled quantities in their units and keeps the exact atoms", async (
 });
 
 test("turns saved Maze search evidence into a truthful, scrubbable expansion map", async ({ page }) => {
-  await page.goto("/?problem=maze&instance=showcase&strategy=a-star&document=a-star&view=thinking&step=0&seed=0&budget=128");
+  await page.goto("/?problem=maze&instance=showcase&strategy=a-star&document=a-star&view=thinking&step=0&seed=17&budget=128");
   await expect(page.locator(".thinking-map")).toBeVisible();
   await expect(page.locator(".thinking-summary")).toContainText("A* solution");
   await expect(page.locator(".react-flow__node.search-explored")).not.toHaveCount(0);
@@ -57,7 +57,7 @@ test("turns saved Maze search evidence into a truthful, scrubbable expansion map
   await expect(page.locator('.react-flow__node[data-id="node/start"]')).toHaveClass(/search-current/);
   await expect(page.locator(".thinking-map > header")).toContainText("Expanded Start");
 
-  await page.goto("/?problem=maze&instance=showcase&strategy=dijkstra&document=dijkstra&view=thinking&step=0&seed=0&budget=128");
+  await page.goto("/?problem=maze&instance=showcase&strategy=dijkstra&document=dijkstra&view=thinking&step=0&seed=17&budget=128");
   await expect(page.locator(".thinking-summary")).toContainText("Dijkstra solution");
   await expect(page.locator(".thinking-observation-card").first()).toContainText("Expanded Start");
 
@@ -65,7 +65,7 @@ test("turns saved Maze search evidence into a truthful, scrubbable expansion map
     ["breadth-first", "breadth-first", "Breadth-first search"],
     ["pareto-energy", "pareto-energy", "Exact Pareto search"],
   ]) {
-    await page.goto(`/?problem=maze&instance=showcase&strategy=${strategy}&document=${encodeURIComponent(document)}&view=thinking&step=0&seed=0&budget=128`);
+    await page.goto(`/?problem=maze&instance=showcase&strategy=${strategy}&document=${encodeURIComponent(document)}&view=thinking&step=0&seed=17&budget=128`);
     await expect(page.locator(".thinking-summary")).toContainText(algorithm);
     await expect(page.locator('.react-flow__node[data-id="node/exit"]')).toHaveClass(/search-current/);
   }
@@ -81,7 +81,7 @@ test("keeps every Maze replay frame aligned and tells the key-and-gate story", a
   const openStep = metricStep("gate-state", "open");
   expect(keyStep).toBeGreaterThan(0);
   expect(openStep).toBeGreaterThan(keyStep);
-  await page.goto("/?problem=maze&instance=showcase&strategy=a-star&document=a-star&view=replay&step=0&seed=0&budget=128");
+  await page.goto("/?problem=maze&instance=showcase&strategy=a-star&document=a-star&view=replay&step=0&seed=17&budget=128");
   const scrubber = page.getByRole("slider", { name: "Trace position" });
   const frameCount = Number(await scrubber.getAttribute("max"));
   expect(frameCount).toBeGreaterThanOrEqual(10);
@@ -108,7 +108,7 @@ test("keeps every frame of every Maze result geometrically sound", async ({ page
   test.setTimeout(60_000);
   const results = ["breadth-first", "dijkstra", "a-star", "pareto-energy", "pareto-time"];
   for (const result of results) {
-    await page.goto(`/?problem=maze&instance=showcase&strategy=${result}&document=${result}&view=replay&step=0&seed=0&budget=128`);
+    await page.goto(`/?problem=maze&instance=showcase&strategy=${result}&document=${result}&view=replay&step=0&seed=17&budget=128`);
     const scrubber = page.getByRole("slider", { name: "Trace position" });
     const frames = Number(await scrubber.getAttribute("max"));
     for (let step = 0; step <= frames; step += 1) {
@@ -267,7 +267,7 @@ test("keeps the replay cockpit within a narrow viewport", async ({ page }) => {
 });
 
 test("animates Logistics travel without reflowing the replay layout", async ({ page }) => {
-  await page.goto("/?problem=logistics&instance=showcase&strategy=reliable&document=reliable&view=replay&step=8&seed=0&budget=128");
+  await page.goto("/?problem=logistics&instance=showcase&strategy=reliable&document=reliable&view=replay&step=8&seed=17&budget=128");
   const vehicle = page.locator('.react-flow__node[data-id="entity:van/cold"]');
   const depot = page.locator('.react-flow__node[data-id="depot"]');
   const stage = page.locator(".stage");
@@ -328,7 +328,7 @@ test("animates Logistics travel without reflowing the replay layout", async ({ p
 
 test("keeps every Sokoban replay entity centered on its authoritative cell", async ({ page }) => {
   test.setTimeout(60_000);
-  await page.goto("/?problem=sokoban&instance=showcase&strategy=a-star&document=a-star&view=replay&step=0&seed=0&budget=128");
+  await page.goto("/?problem=sokoban&instance=showcase&strategy=a-star&document=a-star&view=replay&step=0&seed=17&budget=128");
 
   const frameCount = Number(await page.getByRole("slider", { name: "Trace position" }).getAttribute("max"));
   for (let step = 0; step <= frameCount; step += 1) {
@@ -367,7 +367,7 @@ test("keeps every Sokoban replay entity centered on its authoritative cell", asy
 });
 
 test("gives graph semantics depth, distinct shapes, and direction-aware ports", async ({ page }) => {
-  await page.goto("/?problem=logistics&instance=showcase&strategy=reliable&document=reliable&view=replay&step=2&seed=0&budget=128");
+  await page.goto("/?problem=logistics&instance=showcase&strategy=reliable&document=reliable&view=replay&step=2&seed=17&budget=128");
   const depot = page.locator('.react-flow__node[data-id="depot"]');
   const vehicle = page.locator('.react-flow__node[data-id="entity:van/cold"]');
   await expect(depot).toBeVisible();

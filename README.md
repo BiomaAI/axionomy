@@ -336,7 +336,7 @@ full-resolution view; follow its title to open the exact live replay.
   <tr>
     <td colspan="2">
       <a href="assets/studio-gallery/maze.webp"><img src="assets/studio-gallery/maze.webp" alt="Axionomy Studio replaying the Vault District maze as the Explorer opens its gate"></a><br>
-      <strong><a href="https://biomaai.github.io/axionomy/?problem=maze&amp;instance=showcase&amp;strategy=a-star&amp;document=a-star&amp;view=replay&amp;step=8&amp;seed=0&amp;budget=128">Key-door Maze · Vault District</a></strong><br>
+      <strong><a href="https://biomaai.github.io/axionomy/?problem=maze&amp;instance=showcase&amp;strategy=a-star&amp;document=a-star&amp;view=replay&amp;step=8&amp;seed=17&amp;budget=128">Key-door Maze · Vault District</a></strong><br>
       The default onboarding graph: 15 rooms, cyclic alternatives, an explicit key transfer, a stateful gate, planned and traversed route evidence, and a replay-verified A* result.
     </td>
   </tr>
@@ -348,7 +348,7 @@ full-resolution view; follow its title to open the exact live replay.
     </td>
     <td width="50%">
       <a href="assets/studio-gallery/logistics.webp"><img src="assets/studio-gallery/logistics.webp" alt="Axionomy Studio replaying a stochastic logistics route"></a><br>
-      <strong><a href="https://biomaai.github.io/axionomy/?problem=logistics&amp;instance=showcase&amp;strategy=reliable&amp;document=reliable&amp;view=replay&amp;step=27&amp;seed=0&amp;budget=128">Stochastic logistics</a></strong><br>
+      <strong><a href="https://biomaai.github.io/axionomy/?problem=logistics&amp;instance=showcase&amp;strategy=reliable&amp;document=reliable&amp;view=replay&amp;step=27&amp;seed=17&amp;budget=128">Stochastic logistics</a></strong><br>
       Monte Carlo policy comparison, MCTS evidence, random travel events, and a replayed route through four deliveries.
     </td>
   </tr>
