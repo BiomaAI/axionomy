@@ -1636,7 +1636,8 @@ factor.
    rollouts and Monte Carlo episodes recording where they run (`Apply`,
    `Episodes`, `GroupRecorder`) are built; next, problem runs record as store
    runs, search sessions, MPPI and RL record, and Studio scrubs from stored
-   roots. Extract generic holdings, dependency, and event indexes only after a
+   roots, in the order [simulation, runs and studies](docs/SIMULATION.md)
+   gives. Extract generic holdings, dependency, and event indexes only after a
    second domain confirms the perishables shapes.
 5. Extend invariants with carefully constrained local and inequality forms.
 6. Build an external OR adapter that compiles one closed schedule and replays

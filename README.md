@@ -87,7 +87,9 @@ visual grammar and canonical renderer references,
 evaluation and rating design, and
 [docs/CONTINUOUS_AGENT_SYSTEMS.md](docs/CONTINUOUS_AGENT_SYSTEMS.md) for the boundary
 between the Work Utility System and the Autonomy Harness that owns agents,
-learning, deployment, and assurance.
+learning, deployment, and assurance, and
+[docs/SIMULATION.md](docs/SIMULATION.md) for how simulations, runs and studies
+build on the kernel without new machinery.
 
 The kernel's semantics are specified in Lean: exact checked arithmetic,
 rounded mul-div, baskets and accounts, rate evaluation against one snapshot,
