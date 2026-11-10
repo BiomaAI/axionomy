@@ -161,7 +161,7 @@ pub struct IsmctsSession<
     terminal: Terminal,
     cutoff: Cutoff,
     rollout_policy: RolloutPolicy,
-    nodes: Vec<Node<Key, Exchange<O>>>,
+    nodes: Vec<Node<Exchange<O>>>,
     transpositions: HashMap<InformationState<Key>, usize>,
     random: SeededSampler,
     iterations: usize,
@@ -216,7 +216,7 @@ where
             terminal,
             cutoff,
             rollout_policy,
-            nodes: vec![Node::new(root.clone(), players)],
+            nodes: vec![Node::new(players)],
             transpositions: HashMap::from([(root, 0)]),
             random: SeededSampler::new(config.seed()),
             iterations: 0,
@@ -566,7 +566,7 @@ fn unique_actions<Action: PartialEq>(actions: Vec<Action>) -> Vec<Action> {
 
 fn node_for<Key, Action>(
     information: InformationState<Key>,
-    nodes: &mut Vec<Node<Key, Action>>,
+    nodes: &mut Vec<Node<Action>>,
     transpositions: &mut HashMap<InformationState<Key>, usize>,
     players: usize,
 ) -> usize
@@ -577,13 +577,13 @@ where
         *index
     } else {
         let index = nodes.len();
-        nodes.push(Node::new(information.clone(), players));
+        nodes.push(Node::new(players));
         transpositions.insert(information, index);
         index
     }
 }
 
-fn register_available<Key, Action>(node: &mut Node<Key, Action>, actions: Vec<Action>) -> Vec<usize>
+fn register_available<Action>(node: &mut Node<Action>, actions: Vec<Action>) -> Vec<usize>
 where
     Action: Clone + PartialEq,
 {
@@ -603,8 +603,8 @@ where
     available
 }
 
-fn select_uct<Key, Action>(
-    node: &Node<Key, Action>,
+fn select_uct<Action>(
+    node: &Node<Action>,
     available: &[usize],
     player: usize,
     exploration: f64,
@@ -632,18 +632,15 @@ fn uct<Action>(edge: &Edge<Action>, player: usize, exploration: f64) -> f64 {
     )
 }
 
-struct Node<Key, Action> {
-    #[allow(dead_code)]
-    information: InformationState<Key>,
+struct Node<Action> {
     edges: Vec<Edge<Action>>,
     visits: u64,
     value_dimensions: usize,
 }
 
-impl<Key, Action> Node<Key, Action> {
-    fn new(information: InformationState<Key>, players: usize) -> Self {
+impl<Action> Node<Action> {
+    fn new(players: usize) -> Self {
         Self {
-            information,
             edges: Vec::new(),
             visits: 0,
             value_dimensions: players,

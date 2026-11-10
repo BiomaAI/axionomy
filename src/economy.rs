@@ -456,7 +456,7 @@ where
     }
 
     fn json_schema(generator: &mut SchemaGenerator) -> Schema {
-        #[allow(dead_code)]
+        #[expect(dead_code, reason = "describes the JSON shape; never built")]
         #[derive(JsonSchema)]
         #[schemars(
             bound = "O::Account: JsonSchema, O::Asset: JsonSchema, O::Rate: JsonSchema, O::Role: JsonSchema"
