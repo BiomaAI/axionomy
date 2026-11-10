@@ -181,7 +181,7 @@ adapters.
 
 ### Studio
 
-- Live search progress plus saved solver observations for fast and slow studies.
+- Thinking: search progress, live and saved with the study, for fast and slow studies.
 - Replay-derived accounts, assessments, receipts, rule inspection, and actor views.
 - Graph, grid, matrix, and timeline pictures with semantic icons, exact metrics, and replay-derived motion linked to accounts and receipts.
 - Strategy comparison, Pareto tradeoffs, rule checks, native SSE, and Web Worker Wasm.
@@ -217,10 +217,10 @@ Axionomy Studio is a universal economic debugger and trace player, not a
 second simulator. It scrubs a trace by replaying accepted exchanges through
 the Rust core, then shows the resulting accounts, assets, assessments,
 receipt deltas, objectives, semantic transition cues, and an optional read-only
-picture. Its separate Solve view follows bounded solver observations
-live and retains them in the study, so even a sub-second study remains
-inspectable. The Maze exposes a scrubbable BFS, Dijkstra, or A* expansion map
-before its verified replay, while Sokoban and Connect Four grids, Exact Cover
+picture. Its separate Thinking view shows what the search simulated before it
+chose: it follows bounded search observations live and retains them in the
+study, so even a sub-second study remains inspectable. The Maze exposes a
+scrubbable BFS, Dijkstra, or A* expansion map before its verified replay, while Sokoban and Connect Four grids, Exact Cover
 matrix, scheduling and perishables timelines, market and logistics networks,
 stochastic telemetry,
 Pareto alternatives, rejected proposals, and actor-relative observations are

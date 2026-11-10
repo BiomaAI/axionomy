@@ -51,6 +51,7 @@ does not reuse it for its own machinery.
 | Group | The runs produced together, such as one Monte Carlo estimate's episodes |
 | Policy | How an actor chooses; a problem's `Policy` enum names its policies |
 | Decision | One choice: a problem's `decision(view, actor, policy)` |
+| Thinking | What a policy does when it simulates before it chooses; a study keeps its search's observations as each document's `thinking` |
 | Nature response | What happens without anyone choosing: an outcome resolves, a vehicle arrives, a deadline expires; a problem's `nature_response(world)` |
 | Tick | The clock advancing |
 | Horizon | The most steps a rollout may take |

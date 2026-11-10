@@ -79,7 +79,7 @@ impl StudyObserver for WorkerObserver<'_> {
 
     fn observation(&mut self, observation: SearchObservationView) {
         let sequence = self.sequence();
-        let _ = self.event(StudioEvent::SearchObservation {
+        let _ = self.event(StudioEvent::Thinking {
             study_id: self.study_id,
             sequence,
             observation,

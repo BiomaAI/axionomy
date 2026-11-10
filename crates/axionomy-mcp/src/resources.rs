@@ -167,7 +167,7 @@ pub(crate) fn templates() -> Vec<ResourceTemplate> {
         ("axionomy://assessment/{assessment_id}", "assessment", "Assessment", "An exchange checked against a snapshot: its status, issues and how many lines explain it."),
         ("axionomy://assessment/{assessment_id}/lines{?cursor}", "assessment-lines", "Assessment lines", "What each account lacks for an infeasible exchange, or what an applicable one would move."),
         ("axionomy://study/{study_id}", "study", "Study", "A finished study of a problem: its key and documents."),
-        ("axionomy://study/{study_id}/documents/{document}", "document", "Study document", "One outcome's document without its frames: initial state, objectives and solver evidence."),
+        ("axionomy://study/{study_id}/documents/{document}", "document", "Study document", "One outcome's document without its frames: initial state, objectives and thinking."),
         ("axionomy://study/{study_id}/documents/{document}/frames{?cursor}", "frames", "Study frames", "A document's replay frames in order."),
     ]
     .into_iter()

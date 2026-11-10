@@ -127,7 +127,7 @@ pub(super) fn build(
                 ),
             ],
         ));
-        document.solve_observations = if strategy.starts_with("pareto-") {
+        document.thinking = if strategy.starts_with("pareto-") {
             saved_pareto_observations(&pareto)
         } else {
             saved_graph_observations(&initial, strategy)?

@@ -6,9 +6,9 @@ test("studies a problem in a Rust Worker and loads the verified study", async ({
   await page.getByRole("combobox", { name: "Problem", exact: true }).selectOption("logistics");
   await page.getByLabel("Budget").fill("8");
   await page.getByRole("button", { name: "Study", exact: true }).click();
-  await expect(page.getByText("Live solver observations")).toBeVisible();
+  await expect(page.getByText("Live thinking")).toBeVisible();
   await expect(page.getByText("New study computed and loaded")).toBeVisible({ timeout: 60_000 });
-  await expect(page.getByText("Saved solver observations")).toBeVisible();
+  await expect(page.getByText("Saved thinking")).toBeVisible();
   await page.getByRole("tab", { name: /Step-by-step replay/ }).click();
   await expect(page.getByText("Cold van", { exact: true }).first()).toBeVisible();
   await expect(page.locator(".graph-scene")).toBeVisible();
@@ -29,7 +29,7 @@ test("cancels a browser study by terminating its isolated Worker", async ({ page
 });
 
 test("browser Worker streams the same verified Work League frames", async ({ page }) => {
-  await page.goto("/?problem=work-league&instance=micro&strategy=mixed-field&view=solve&step=0&seed=17&budget=32");
+  await page.goto("/?problem=work-league&instance=micro&strategy=mixed-field&view=thinking&step=0&seed=17&budget=32");
   await expect(page.getByText("Running in your browser", { exact: true })).toBeVisible({ timeout: 30_000 });
   await expect(page.getByRole("heading", { name: "Work League · Mixed policy field" })).toBeVisible();
   await page.getByRole("button", { name: "Study", exact: true }).click();

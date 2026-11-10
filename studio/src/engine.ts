@@ -44,7 +44,7 @@ export interface EngineClient {
   cancel(studyId: string): Promise<StudySummary>;
 }
 
-const eventKinds: StudioEvent["kind"][] = ["study_started", "progress", "search_observation", "frame_appended", "study_published", "study_paused", "study_resumed", "study_completed", "study_cancelled", "study_failed"];
+const eventKinds: StudioEvent["kind"][] = ["study_started", "progress", "thinking", "frame_appended", "study_published", "study_paused", "study_resumed", "study_completed", "study_cancelled", "study_failed"];
 
 export const nativeEngine: EngineClient = {
   kind: "native",

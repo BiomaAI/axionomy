@@ -452,7 +452,7 @@ async fn execute_study(
             }
             WorkerUpdate::Observation(observation) => {
                 record
-                    .emit(StudioEvent::SearchObservation {
+                    .emit(StudioEvent::Thinking {
                         study_id,
                         sequence: record.sequence(),
                         observation,
@@ -732,7 +732,7 @@ async fn study_events(
         let kind = match &event {
             StudioEvent::StudyStarted { .. } => "study_started",
             StudioEvent::Progress { .. } => "progress",
-            StudioEvent::SearchObservation { .. } => "search_observation",
+            StudioEvent::Thinking { .. } => "thinking",
             StudioEvent::FrameAppended { .. } => "frame_appended",
             StudioEvent::StudyPublished { .. } => "study_published",
             StudioEvent::StudyPaused { .. } => "study_paused",

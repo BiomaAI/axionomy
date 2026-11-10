@@ -43,30 +43,30 @@ test("reads scaled quantities in their units and keeps the exact atoms", async (
 });
 
 test("turns saved Maze search evidence into a truthful, scrubbable expansion map", async ({ page }) => {
-  await page.goto("/?problem=maze&instance=showcase&strategy=a-star&document=a-star&view=solve&step=0&seed=0&budget=128");
-  await expect(page.locator(".solve-map")).toBeVisible();
-  await expect(page.locator(".solve-summary")).toContainText("A* solution");
+  await page.goto("/?problem=maze&instance=showcase&strategy=a-star&document=a-star&view=thinking&step=0&seed=0&budget=128");
+  await expect(page.locator(".thinking-map")).toBeVisible();
+  await expect(page.locator(".thinking-summary")).toContainText("A* solution");
   await expect(page.locator(".react-flow__node.search-explored")).not.toHaveCount(0);
   await expect(page.locator(".react-flow__node.search-current")).toHaveCount(1);
-  await expect(page.locator(".solve-map")).not.toContainText("Planned next");
-  await expect(page.locator(".solve-map")).not.toContainText("Traversed route");
-  await expect(page.locator(".solve-map")).not.toContainText("Current move");
+  await expect(page.locator(".thinking-map")).not.toContainText("Planned next");
+  await expect(page.locator(".thinking-map")).not.toContainText("Traversed route");
+  await expect(page.locator(".thinking-map")).not.toContainText("Current move");
 
-  const scrubber = page.getByRole("slider", { name: "Solver observation position" });
+  const scrubber = page.getByRole("slider", { name: "Thinking position" });
   await scrubber.fill("0");
   await expect(page.locator('.react-flow__node[data-id="node/start"]')).toHaveClass(/search-current/);
-  await expect(page.locator(".solve-map > header")).toContainText("Expanded Start");
+  await expect(page.locator(".thinking-map > header")).toContainText("Expanded Start");
 
-  await page.goto("/?problem=maze&instance=showcase&strategy=dijkstra&document=dijkstra&view=solve&step=0&seed=0&budget=128");
-  await expect(page.locator(".solve-summary")).toContainText("Dijkstra solution");
-  await expect(page.locator(".solve-observation-card").first()).toContainText("Expanded Start");
+  await page.goto("/?problem=maze&instance=showcase&strategy=dijkstra&document=dijkstra&view=thinking&step=0&seed=0&budget=128");
+  await expect(page.locator(".thinking-summary")).toContainText("Dijkstra solution");
+  await expect(page.locator(".thinking-observation-card").first()).toContainText("Expanded Start");
 
   for (const [strategy, document, algorithm] of [
     ["breadth-first", "breadth-first", "Breadth-first search"],
     ["pareto-energy", "pareto-energy", "Exact Pareto search"],
   ]) {
-    await page.goto(`/?problem=maze&instance=showcase&strategy=${strategy}&document=${encodeURIComponent(document)}&view=solve&step=0&seed=0&budget=128`);
-    await expect(page.locator(".solve-summary")).toContainText(algorithm);
+    await page.goto(`/?problem=maze&instance=showcase&strategy=${strategy}&document=${encodeURIComponent(document)}&view=thinking&step=0&seed=0&budget=128`);
+    await expect(page.locator(".thinking-summary")).toContainText(algorithm);
     await expect(page.locator('.react-flow__node[data-id="node/exit"]')).toHaveClass(/search-current/);
   }
 });
@@ -237,7 +237,7 @@ test("keeps replay shortcuts scoped to the cockpit and preserves economic wordin
 
   await page.keyboard.press("ArrowRight");
   await expect(page.locator(".leaderboard-step")).toContainText("13");
-  await page.getByRole("tab", { name: /How it was solved/ }).click();
+  await page.getByRole("tab", { name: /Thinking/ }).click();
   await page.keyboard.press("ArrowRight");
   await expect(page).toHaveURL(/step=13/);
 
@@ -560,7 +560,7 @@ test("browser history restores a prior problem deep link", async ({ page }) => {
 });
 
 test("streams replay-verified Work League standings before publishing the study", async ({ page }) => {
-  await page.goto("/?problem=work-league&instance=micro&strategy=mixed-field&view=solve&step=0&seed=17&budget=32");
+  await page.goto("/?problem=work-league&instance=micro&strategy=mixed-field&view=thinking&step=0&seed=17&budget=32");
   await expect(page.getByRole("heading", { name: "Work League · Mixed policy field" })).toBeVisible();
   await page.getByRole("button", { name: "Study", exact: true }).click();
   await expect(page.locator(".live-standings")).toContainText(/(?:Live|Last) verified frame/, { timeout: 15_000 });

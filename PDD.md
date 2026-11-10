@@ -772,7 +772,7 @@ Leaderboard   = direction + ordered participants + exact score + rank evidence
 ExchangeFrame = before + assessment + exchange + receipt + after + cues
 ViewDocument  = metadata + model + initial snapshot + replay frames
                 + proposals + objectives + Pareto fronts + telemetry
-                + actor-relative observations + retained solver observations
+                + actor-relative observations + thinking
 ```
 
 `ViewId` does not replace the ontology value and its optional JSON is not an
@@ -847,10 +847,11 @@ metrics without turning a queue, rollout tree, frontier, or belief cache into
 economic truth. An observation may also name stable Rust-owned scene subjects,
 allowing a generic viewer to emphasize the expanded room, candidate, agent, or
 other projected entity without learning the domain ontology in TypeScript.
-The service sends observations through a bounded observer
-channel and retains at most its configured history in every completed
-document. Live execution and a saved study therefore expose the same
-evidence surface; transport speed does not decide whether a study is explainable.
+The service streams observations as `thinking` events through a bounded
+observer channel and retains at most its configured history as every
+completed document's `thinking`. Live execution and a saved study therefore
+expose the same evidence surface; transport speed does not decide whether a
+study is explainable.
 
 The React application uses one `EngineClient` boundary for native HTTP/SSE,
 the browser Worker, and static playback. The native connection badge is backed
@@ -890,9 +891,11 @@ language. That intentional animation is distinct from incidental layout motion;
 canvas, panel, and control geometry must remain stable while their economic
 contents change.
 
-Solve evidence and trace playback are deliberately distinct controls. `Study`
-computes a new study; the transport controls only replay its accepted
-exchanges. The Solve surface exposes live or retained phase, rollout, tree,
+Thinking and trace playback are deliberately distinct controls. Thinking is
+what a policy does when it simulates before it chooses; a document's
+`thinking` is the bounded search observations of how its outcome was found.
+`Study` computes a new study; the transport controls only replay its accepted
+exchanges. The Thinking surface exposes live or retained phase, rollout, tree,
 frontier, incumbent, and document-derivation observations. When observations identify
 scene subjects, Studio derives a scrubbable exploration map from the same
 Rust-owned initial scene; accumulated subjects show explored structures and
@@ -905,7 +908,7 @@ identity and visibly marks the replacement study, so even a sub-second study
 has an inspectable result.
 
 Every meaningful Studio selection is encoded in a static-host-compatible query
-URL: problem, instance, strategy, document, solve/replay view, replay step,
+URL: problem, instance, strategy, document, thinking/replay view, replay step,
 leaderboard, seed, and budget. Major selections create browser history;
 scrubbing replaces the current entry; `popstate` restores the corresponding
 study and frame. Invalid identities visibly fall back to a catalog default,
@@ -2068,7 +2071,7 @@ Axionomy succeeds when:
 - Remote callers can store, inspect, branch, search, cancel, poll, and replay
   without relying on hidden session state.
 - Browser users can load a portable document, follow a native live study, or
-  run the same Rust service in a Worker; they can inspect retained solver evidence,
+  run the same Rust service in a Worker; they can inspect a study's thinking,
   scrub every accepted exchange, and inspect exact balances and deltas without
   a parallel mutable world model or handwritten cross-language contract.
 - Every canonical problem can be discovered, studied, replayed, and

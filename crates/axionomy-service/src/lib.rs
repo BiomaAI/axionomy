@@ -354,7 +354,9 @@ pub enum StudioEvent {
         total: Option<u64>,
         message: String,
     },
-    SearchObservation {
+    /// One step of the thinking behind a study: what its search considered
+    /// before choosing.
+    Thinking {
         study_id: StudioStudyId,
         sequence: u64,
         observation: SearchObservationView,
@@ -403,7 +405,7 @@ impl StudioEvent {
         match self {
             Self::StudyStarted { sequence, .. }
             | Self::Progress { sequence, .. }
-            | Self::SearchObservation { sequence, .. }
+            | Self::Thinking { sequence, .. }
             | Self::FrameAppended { sequence, .. }
             | Self::StudyPublished { sequence, .. }
             | Self::StudyPaused { sequence, .. }
@@ -418,7 +420,7 @@ impl StudioEvent {
         match self {
             Self::StudyStarted { study_id, .. }
             | Self::Progress { study_id, .. }
-            | Self::SearchObservation { study_id, .. }
+            | Self::Thinking { study_id, .. }
             | Self::FrameAppended { study_id, .. }
             | Self::StudyPublished { study_id, .. }
             | Self::StudyPaused { study_id, .. }
@@ -708,18 +710,18 @@ mod tests {
             let document = study.document(&slug(document)).unwrap();
             assert!(
                 document
-                    .solve_observations
+                    .thinking
                     .iter()
                     .all(|observation| observation.algorithm.as_str() == algorithm)
             );
-            let accepted = document.solve_observations.last().unwrap();
+            let accepted = document.thinking.last().unwrap();
             assert_eq!(accepted.kind, SearchObservationKindView::Incumbent);
             assert!(accepted.label.starts_with("Solution accepted at Exit"));
             assert_eq!(accepted.subjects[0].key.as_str(), "node/exit");
         }
         for document in ["pareto-energy", "pareto-time"] {
             let document = study.document(&slug(document)).unwrap();
-            let observation = document.solve_observations.last().unwrap();
+            let observation = document.thinking.last().unwrap();
             assert_eq!(observation.algorithm.as_str(), "exact-pareto-search");
             assert_eq!(observation.kind, SearchObservationKindView::Frontier);
             assert!(observation.label.contains("4 non-dominated tradeoffs"));
@@ -1134,7 +1136,7 @@ mod tests {
                 study
                     .documents
                     .iter()
-                    .all(|document| !document.solve_observations.is_empty())
+                    .all(|document| !document.thinking.is_empty())
             );
             if problem.key.as_str() == "connect-four" {
                 assert!(maximum_rates < 300, "compact standard board regressed");

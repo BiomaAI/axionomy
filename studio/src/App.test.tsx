@@ -50,7 +50,7 @@ const study = {
     proposals: [],
     telemetry: [],
     observations: [],
-    solve_observations: [],
+    thinking: [],
   }],
 };
 

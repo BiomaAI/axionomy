@@ -123,7 +123,7 @@ pub(super) fn build(
             &front,
             (policy == Policy::NorthTogether).then_some(policy),
         ));
-        view.solve_observations = if policy == Policy::ShareAndCoordinate {
+        view.thinking = if policy == Policy::ShareAndCoordinate {
             planning_observations.clone()
         } else {
             baseline_observations.clone()
@@ -700,13 +700,13 @@ mod tests {
         assert_eq!(planned.frames[0].after, direct.frames[0].after);
         assert!(
             planned
-                .solve_observations
+                .thinking
                 .iter()
                 .all(|item| item.phase.as_str() == "ismcts")
         );
         assert!(
             direct
-                .solve_observations
+                .thinking
                 .iter()
                 .all(|item| item.phase.as_str() == "monte-carlo")
         );

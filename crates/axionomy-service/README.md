@@ -25,10 +25,11 @@ decision evidence, and assessed proposals. Pause, resume, and
 cancel are cooperative runtime signals; they cannot mutate an economy or
 authorize an exchange.
 
-Progress, solver observations, and verified replay frames share one observer boundary. Observations are
-streamed at work checkpoints and a bounded history is retained in each view
-document, giving live HTTP and Worker clients the same evidence as offline
-consumers of a saved study.
+Progress, solver observations, and verified replay frames share one observer
+boundary. Observations are streamed at work checkpoints as `thinking` events,
+and a bounded history is retained as each view document's `thinking`, giving
+live HTTP and Worker clients the same evidence as offline consumers of a saved
+study. Thinking is what a policy does when it simulates before it chooses.
 
 Adapters with resumable algorithms advance Monte Carlo, MCTS, and ISMCTS in
 small deterministic work chunks. `ServiceProgress` reports phase-local samples,

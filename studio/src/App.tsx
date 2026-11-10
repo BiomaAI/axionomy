@@ -33,7 +33,7 @@ import {
 import { QuantityFormats } from "./Quantity";
 
 const ParetoChart = lazy(() => import("./ParetoChart"));
-type StudioViewMode = "solve" | "replay";
+type StudioViewMode = "thinking" | "replay";
 type StudioUrlState = {
   problem?: string;
   instance?: string;
@@ -58,7 +58,7 @@ function readUrlState(): StudioUrlState {
     instance: query.get("instance") ?? undefined,
     strategy: query.get("strategy") ?? undefined,
     document: query.get("document") ?? undefined,
-    view: view === "solve" || view === "replay" ? view : undefined,
+    view: view === "thinking" || view === "replay" ? view : undefined,
     step: number("step"),
     leaderboard: query.get("leaderboard") ?? undefined,
     seed: number("seed"),
@@ -325,7 +325,7 @@ export function App() {
     const submittedInstance = problem?.instances.find((candidate) => candidate.profile === instanceKey)?.label ?? instanceKey;
     const submittedStrategy = problem?.strategies.find((candidate) => candidate.key === strategyKey)?.label ?? strategyKey;
     setError(undefined); setEvents([]); setCompletion(undefined); eventSource.current?.close();
-    setViewMode("solve");
+    setViewMode("thinking");
     studyStartedAt.current = performance.now(); setElapsedMs(0); setLaunching(true);
     try {
       const profile = problem?.instances.find((candidate) => candidate.profile === instanceKey)?.profile;
@@ -444,8 +444,8 @@ export function App() {
       <section className="alternative-bar"><div><span>Alternatives</span><strong>{study.documents.length} replayable results</strong></div><div role="tablist">{study.documents.map((candidate) => <button key={candidate.id} role="tab" aria-selected={candidate.id === document.id} onClick={() => selectDocument(candidate.id)}>{candidate.title.replace(`${study.problem.title} · `, "")}</button>)}</div></section>
       <StrategyComparison study={study} selected={document.id} onSelect={selectDocument} />
       <section className="document-heading"><div><span className="eyebrow">{study.instance.label} · {document.source.label} · {study.problem.key}/{document.id}{freshStudy === study ? " · just computed" : ""}</span><h1>{document.title}</h1><p>{document.description}</p></div><div className="objective-pills">{document.objectives.map((objective) => <div className="objective" key={objective.key}><span>{objective.label}</span><strong>{objective.value}</strong><small>{objective.direction}</small></div>)}</div></section>
-      <div className="view-tabs" role="tablist" aria-label="Studio evidence mode"><button type="button" role="tab" aria-selected={viewMode === "solve"} onClick={() => selectView("solve")}>How it was solved <small>{active ? "live" : document.solve_observations.length}</small></button><button type="button" role="tab" aria-selected={viewMode === "replay"} onClick={() => selectView("replay")}>Step-by-step replay <small>{document.frames.length}</small></button></div>
-      {viewMode === "solve" ? <SolveWorkspace key={document.id} scene={document.initial.scene} observations={active ? events.flatMap((event) => event.kind === "search_observation" ? [event.observation] : []) : document.solve_observations} active={active} /> : (() => {
+      <div className="view-tabs" role="tablist" aria-label="Studio evidence mode"><button type="button" role="tab" aria-selected={viewMode === "thinking"} onClick={() => selectView("thinking")}>Thinking <small>{active ? "live" : document.thinking.length}</small></button><button type="button" role="tab" aria-selected={viewMode === "replay"} onClick={() => selectView("replay")}>Step-by-step replay <small>{document.frames.length}</small></button></div>
+      {viewMode === "thinking" ? <ThinkingWorkspace key={document.id} scene={document.initial.scene} observations={active ? events.flatMap((event) => event.kind === "thinking" ? [event.observation] : []) : document.thinking} active={active} /> : (() => {
         const surface = snapshot.scene?.surface;
         const sparseScene = surface?.kind === "graph" && surface.nodes.length <= 6;
         const hasBoards = snapshot.leaderboards.length > 0;
@@ -530,7 +530,8 @@ function CompletionBanner({ notice, onDismiss }: { notice: CompletionNotice; onD
   </section>;
 }
 
-function SolveWorkspace({ scene, observations, active }: { scene?: Scene | null; observations: SearchObservation[]; active: boolean }) {
+/** Thinking is what a policy does when it simulates before it chooses: the search's observations, live or saved with the study. */
+function ThinkingWorkspace({ scene, observations, active }: { scene?: Scene | null; observations: SearchObservation[]; active: boolean }) {
   const [cursor, setCursor] = useState(Math.max(0, observations.length - 1));
   useEffect(() => {
     if (active || cursor >= observations.length) setCursor(Math.max(0, observations.length - 1));
@@ -538,15 +539,15 @@ function SolveWorkspace({ scene, observations, active }: { scene?: Scene | null;
   const visibleObservations = observations.slice(0, Math.min(cursor + 1, observations.length));
   const latest = visibleObservations.at(-1);
   const kinds = [...new Set(observations.map((observation) => observation.kind))];
-  const solverScene = useMemo(() => solverEvidenceScene(scene, visibleObservations), [scene, visibleObservations]);
-  return <section className={`solve-workspace ${active ? "live" : "retained"}`} aria-label="Solver evidence">
-    <header><div><span className={active ? "spinner" : "solve-complete"} aria-hidden="true">{active ? "" : "✓"}</span><div><strong>{active ? "Live solver observations" : "Saved solver observations"}</strong><small>{active ? "Progress reported by the search as it runs" : "Saved with the result, so you can review it later"}</small></div></div><span>{observations.length} observations</span></header>
-    {latest && <div className="solve-summary"><div><span>Current phase</span><strong>{phaseLabel(latest.phase)}</strong></div><div><span>Algorithm</span><strong>{algorithmLabel(latest.algorithm)}</strong></div><div><span>Progress</span><strong>{latest.total === 0 ? `${latest.completed} expanded` : `${latest.completed} / ${latest.total}`}</strong></div><div><span>Evidence</span><strong>{kinds.join(" · ").replaceAll("_", " ")}</strong></div></div>}
-    {latest && latest.total > 0 && <progress max={latest.total} value={Math.min(latest.completed, latest.total)} aria-label="Solver observation progress" />}
-    {observations.length > 1 && <div className="solve-scrubber"><label><span>Exploration checkpoint</span><strong>{Math.min(cursor + 1, observations.length)} / {observations.length}</strong></label><input name="solver-position" type="range" min="0" max={observations.length - 1} value={Math.min(cursor, observations.length - 1)} onChange={(event) => setCursor(Number(event.target.value))} aria-label="Solver observation position" /></div>}
-    <div className={`solve-body ${solverScene ? "with-map" : "stream-only"}`}>
-      {solverScene && <section className="solve-map" aria-label="Search expansion map"><header><span>Search through encoded economic states</span><strong>{latest?.label ?? "Waiting for an expansion"}</strong></header><SceneView scene={solverScene} motion="seek" /></section>}
-      <div className="solve-stream">{observations.length === 0 ? <div className="empty-state">Waiting for the first solver checkpoint…</div> : observations.map((observation, index) => <button type="button" key={`${observation.sequence}:${observation.phase}`} onClick={() => setCursor(index)} aria-current={index === cursor ? "step" : undefined} className={`solve-observation-card observation-${observation.kind}`}><div className="solve-observation-icon"><SceneIcon glyph={observationGlyph(observation.kind)} size={20} /></div><div><strong>{observation.label}</strong><span>{phaseLabel(observation.phase)} · {observation.total === 0 ? `${observation.completed} expanded` : `${observation.completed} / ${observation.total}`}</span></div><div>{observation.metrics.map((metric) => <span key={metric.key}><small>{metric.label}</small><b>{metric.value}</b></span>)}</div></button>)}</div>
+  const searchScene = useMemo(() => thinkingScene(scene, visibleObservations), [scene, visibleObservations]);
+  return <section className={`thinking-workspace ${active ? "live" : "retained"}`} aria-label="Thinking">
+    <header><div><span className={active ? "spinner" : "thinking-complete"} aria-hidden="true">{active ? "" : "✓"}</span><div><strong>{active ? "Live thinking" : "Saved thinking"}</strong><small>{active ? "What the search considers as it works" : "Saved with the study, so you can review it later"}</small></div></div><span>{observations.length} observations</span></header>
+    {latest && <div className="thinking-summary"><div><span>Current phase</span><strong>{phaseLabel(latest.phase)}</strong></div><div><span>Algorithm</span><strong>{algorithmLabel(latest.algorithm)}</strong></div><div><span>Progress</span><strong>{latest.total === 0 ? `${latest.completed} expanded` : `${latest.completed} / ${latest.total}`}</strong></div><div><span>Evidence</span><strong>{kinds.join(" · ").replaceAll("_", " ")}</strong></div></div>}
+    {latest && latest.total > 0 && <progress max={latest.total} value={Math.min(latest.completed, latest.total)} aria-label="Thinking progress" />}
+    {observations.length > 1 && <div className="thinking-scrubber"><label><span>Exploration checkpoint</span><strong>{Math.min(cursor + 1, observations.length)} / {observations.length}</strong></label><input name="thinking-position" type="range" min="0" max={observations.length - 1} value={Math.min(cursor, observations.length - 1)} onChange={(event) => setCursor(Number(event.target.value))} aria-label="Thinking position" /></div>}
+    <div className={`thinking-body ${searchScene ? "with-map" : "stream-only"}`}>
+      {searchScene && <section className="thinking-map" aria-label="Search expansion map"><header><span>Search through encoded economic states</span><strong>{latest?.label ?? "Waiting for an expansion"}</strong></header><SceneView scene={searchScene} motion="seek" /></section>}
+      <div className="thinking-stream">{observations.length === 0 ? <div className="empty-state">Waiting for the search's first checkpoint…</div> : observations.map((observation, index) => <button type="button" key={`${observation.sequence}:${observation.phase}`} onClick={() => setCursor(index)} aria-current={index === cursor ? "step" : undefined} className={`thinking-observation-card observation-${observation.kind}`}><div className="thinking-observation-icon"><SceneIcon glyph={observationGlyph(observation.kind)} size={20} /></div><div><strong>{observation.label}</strong><span>{phaseLabel(observation.phase)} · {observation.total === 0 ? `${observation.completed} expanded` : `${observation.completed} / ${observation.total}`}</span></div><div>{observation.metrics.map((metric) => <span key={metric.key}><small>{metric.label}</small><b>{metric.value}</b></span>)}</div></button>)}</div>
     </div>
   </section>;
 }
@@ -561,7 +562,7 @@ function algorithmLabel(algorithm: string): string {
   return labels[algorithm] ?? algorithm.replaceAll("-", " ");
 }
 
-function solverEvidenceScene(scene: Scene | null | undefined, observations: SearchObservation[]): Scene | undefined {
+function thinkingScene(scene: Scene | null | undefined, observations: SearchObservation[]): Scene | undefined {
   if (!scene || scene.surface.kind !== "graph") return undefined;
   const withSubjects = observations.filter((observation) => (observation.subjects?.length ?? 0) > 0);
   if (withSubjects.length === 0) return undefined;
@@ -570,7 +571,7 @@ function solverEvidenceScene(scene: Scene | null | undefined, observations: Sear
   const entities = scene.entities.filter((entity) => entity.role !== "occupant" && !(entity.anchor.kind === "entity"));
   return {
     ...scene,
-    title: "Solver expansion over the encoded maze",
+    title: "Search expansion over the encoded maze",
     metrics: [],
     annotations: [],
     legend: scene.legend.filter((entry) => !["Planned next", "Traversed route", "Current move"].includes(entry.label)),
@@ -771,7 +772,7 @@ function eventMessage(event: StudioEvent): string {
   switch (event.kind) {
     case "study_started": return `Started ${event.problem} · ${event.strategy}`;
     case "progress": return event.message;
-    case "search_observation": return event.observation.label;
+    case "thinking": return event.observation.label;
     case "frame_appended": return `Published replay frame ${event.frame_index + 1}`;
     case "study_published": return `Published ${event.documents} alternatives`;
     case "study_paused": return "The study is waiting for resume.";

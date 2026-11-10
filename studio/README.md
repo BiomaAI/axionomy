@@ -28,7 +28,7 @@ the same object between anchors, emphasize receipt-derived effects, and settle
 it onto goals. Studio always uses the full replay choreography so movement and
 state changes remain visually explicit.
 
-**How it was solved** retains search progress, **Step-by-step replay** scrubs
+**Thinking** retains search progress, **Step-by-step replay** scrubs
 accepted exchanges, and **Tradeoffs** compares non-dominated outcomes. Tabler
 icons come from a constrained semantic glyph registry rather than arbitrary SVG
 inside studies.
@@ -131,7 +131,7 @@ compute automatically.
 
 `Study` asks the selected engine for a new reproducible study; the playback
 transport only scrubs the selected study's already verified exchange trace.
-The separate Solve view follows typed phase, rollout, tree, and frontier
+The separate Thinking view follows typed phase, rollout, tree, and frontier
 observations, and the completed study retains a bounded copy so a fast study
 has the same inspectable evidence as a slow live stream. Completion leaves a
 persistent receipt and marks the newly loaded study.
@@ -221,6 +221,6 @@ proofs, and inspect a structurally different static Exact Cover matrix. Rust
 adapter tests study every problem.
 
 The Wasm suite launches Studio with native probes disabled, studies stochastic
-logistics in the Worker, verifies live and retained solver evidence,
+logistics in the Worker, verifies live and retained thinking,
 loads the replay-derived study, and proves responsive cancellation by
 terminating and recreating the isolated Worker.

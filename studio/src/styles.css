@@ -135,44 +135,44 @@ h1 { font: 400 clamp(22px, 2.4vw, 32px)/1.1 var(--serif); letter-spacing: 0; mar
 .view-tabs { display: flex; align-items: end; gap: 5px; margin-bottom: 10px; border-bottom: 1px solid var(--line); }
 .view-tabs button { min-width: 145px; border-radius: 0; border-bottom: 0; }
 .view-tabs button small { margin-left: 7px; color: var(--brass); font: 8px var(--mono); text-transform: uppercase; }
-.solve-workspace { min-height: 540px; margin-bottom: 14px; border: 1px solid var(--line); background: var(--surface); }
-.solve-workspace > header { display: flex; align-items: center; justify-content: space-between; gap: 18px; min-height: 70px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
-.solve-workspace > header > div { display: flex; align-items: center; gap: 11px; }
-.solve-workspace > header strong, .solve-workspace > header small { display: block; }
-.solve-workspace > header small, .solve-workspace > header > span { margin-top: 3px; color: var(--muted); font: 8px var(--mono); text-transform: uppercase; }
-.solve-complete { width: 23px; height: 23px; display: grid; place-items: center; border: 1px solid var(--credit); color: var(--credit); }
-.solve-summary { display: grid; grid-template-columns: repeat(4, 1fr); border-bottom: 1px solid var(--line); }
-.solve-summary > div { min-height: 70px; padding: 13px 15px; border-right: 1px solid var(--line); }
-.solve-summary > div:last-child { border-right: 0; }
-.solve-summary span, .solve-summary strong { display: block; }
-.solve-summary span { color: var(--muted); font: 8px var(--mono); text-transform: uppercase; }
-.solve-summary strong { margin-top: 7px; font: 12px var(--mono); color: var(--brass); text-transform: capitalize; }
-.solve-workspace > progress { display: block; width: calc(100% - 30px); height: 7px; margin: 14px 15px 0; accent-color: var(--accent); }
-.solve-scrubber { display: grid; grid-template-columns: 170px minmax(0, 1fr); align-items: center; gap: 14px; padding: 10px 15px; border-bottom: 1px solid var(--line); }
-.solve-scrubber label { display: flex; justify-content: space-between; gap: 10px; color: var(--muted); font: 8px var(--mono); text-transform: uppercase; }
-.solve-scrubber strong { color: var(--brass); font-weight: 500; }
-.solve-body.with-map { display: grid; grid-template-columns: minmax(0, 1.8fr) minmax(390px, .8fr); min-height: 680px; }
-.solve-map { min-width: 0; display: grid; grid-template-rows: auto minmax(610px, 1fr); border-right: 1px solid var(--line); }
-.solve-map > header { min-height: 47px; padding: 8px 12px; border-bottom: 1px solid var(--line); }
-.solve-map > header span, .solve-map > header strong { display: block; }
-.solve-map > header span { color: var(--muted); font: 7px var(--mono); letter-spacing: .07em; text-transform: uppercase; }
-.solve-map > header strong { margin-top: 4px; overflow: hidden; color: var(--text); font: 9px var(--mono); text-overflow: ellipsis; white-space: nowrap; }
-.solve-map > .scene-composition { min-height: 610px; }
-.solve-stream { max-height: 680px; overflow: auto; scrollbar-gutter: stable; padding: 12px; display: grid; align-content: start; gap: 6px; }
-.solve-body.stream-only .solve-stream { max-height: 410px; padding: 14px 15px; }
-.solve-observation-card { width: 100%; display: grid; grid-template-columns: auto minmax(180px, 1fr) auto; align-items: center; gap: 10px; min-height: 54px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 0; background: var(--surface-2); color: var(--text); text-align: left; }
-.solve-observation-card[aria-current="step"] { border-color: color-mix(in srgb, var(--accent) 58%, var(--line)); background: color-mix(in srgb, var(--accent) 5%, var(--surface-2)); }
-.solve-observation-icon { width: 32px; height: 32px; display: grid; place-items: center; color: var(--steel); background: color-mix(in srgb, var(--steel) 9%, transparent); }
-.solve-observation-card > div:nth-child(2) strong, .solve-observation-card > div:nth-child(2) span { display: block; }
-.solve-observation-card > div:nth-child(2) strong { font-size: 9px; }
-.solve-observation-card > div:nth-child(2) span { margin-top: 3px; color: var(--muted); font: 7px var(--mono); text-transform: uppercase; }
-.solve-observation-card > div:last-child { display: flex; gap: 10px; }
-.solve-observation-card > div:last-child span { min-width: 58px; }
-.solve-observation-card > div:last-child small, .solve-observation-card > div:last-child b { display: block; text-align: right; }
-.solve-observation-card > div:last-child small { color: var(--muted); font: 6px var(--mono); text-transform: uppercase; }
-.solve-observation-card > div:last-child b { margin-top: 2px; color: var(--brass); font: 9px var(--mono); }
-.solve-body.with-map .solve-observation-card { grid-template-columns: auto minmax(0, 1fr); }
-.solve-body.with-map .solve-observation-card > div:last-child { grid-column: 2; justify-content: flex-end; }
+.thinking-workspace { min-height: 540px; margin-bottom: 14px; border: 1px solid var(--line); background: var(--surface); }
+.thinking-workspace > header { display: flex; align-items: center; justify-content: space-between; gap: 18px; min-height: 70px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+.thinking-workspace > header > div { display: flex; align-items: center; gap: 11px; }
+.thinking-workspace > header strong, .thinking-workspace > header small { display: block; }
+.thinking-workspace > header small, .thinking-workspace > header > span { margin-top: 3px; color: var(--muted); font: 8px var(--mono); text-transform: uppercase; }
+.thinking-complete { width: 23px; height: 23px; display: grid; place-items: center; border: 1px solid var(--credit); color: var(--credit); }
+.thinking-summary { display: grid; grid-template-columns: repeat(4, 1fr); border-bottom: 1px solid var(--line); }
+.thinking-summary > div { min-height: 70px; padding: 13px 15px; border-right: 1px solid var(--line); }
+.thinking-summary > div:last-child { border-right: 0; }
+.thinking-summary span, .thinking-summary strong { display: block; }
+.thinking-summary span { color: var(--muted); font: 8px var(--mono); text-transform: uppercase; }
+.thinking-summary strong { margin-top: 7px; font: 12px var(--mono); color: var(--brass); text-transform: capitalize; }
+.thinking-workspace > progress { display: block; width: calc(100% - 30px); height: 7px; margin: 14px 15px 0; accent-color: var(--accent); }
+.thinking-scrubber { display: grid; grid-template-columns: 170px minmax(0, 1fr); align-items: center; gap: 14px; padding: 10px 15px; border-bottom: 1px solid var(--line); }
+.thinking-scrubber label { display: flex; justify-content: space-between; gap: 10px; color: var(--muted); font: 8px var(--mono); text-transform: uppercase; }
+.thinking-scrubber strong { color: var(--brass); font-weight: 500; }
+.thinking-body.with-map { display: grid; grid-template-columns: minmax(0, 1.8fr) minmax(390px, .8fr); min-height: 680px; }
+.thinking-map { min-width: 0; display: grid; grid-template-rows: auto minmax(610px, 1fr); border-right: 1px solid var(--line); }
+.thinking-map > header { min-height: 47px; padding: 8px 12px; border-bottom: 1px solid var(--line); }
+.thinking-map > header span, .thinking-map > header strong { display: block; }
+.thinking-map > header span { color: var(--muted); font: 7px var(--mono); letter-spacing: .07em; text-transform: uppercase; }
+.thinking-map > header strong { margin-top: 4px; overflow: hidden; color: var(--text); font: 9px var(--mono); text-overflow: ellipsis; white-space: nowrap; }
+.thinking-map > .scene-composition { min-height: 610px; }
+.thinking-stream { max-height: 680px; overflow: auto; scrollbar-gutter: stable; padding: 12px; display: grid; align-content: start; gap: 6px; }
+.thinking-body.stream-only .thinking-stream { max-height: 410px; padding: 14px 15px; }
+.thinking-observation-card { width: 100%; display: grid; grid-template-columns: auto minmax(180px, 1fr) auto; align-items: center; gap: 10px; min-height: 54px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 0; background: var(--surface-2); color: var(--text); text-align: left; }
+.thinking-observation-card[aria-current="step"] { border-color: color-mix(in srgb, var(--accent) 58%, var(--line)); background: color-mix(in srgb, var(--accent) 5%, var(--surface-2)); }
+.thinking-observation-icon { width: 32px; height: 32px; display: grid; place-items: center; color: var(--steel); background: color-mix(in srgb, var(--steel) 9%, transparent); }
+.thinking-observation-card > div:nth-child(2) strong, .thinking-observation-card > div:nth-child(2) span { display: block; }
+.thinking-observation-card > div:nth-child(2) strong { font-size: 9px; }
+.thinking-observation-card > div:nth-child(2) span { margin-top: 3px; color: var(--muted); font: 7px var(--mono); text-transform: uppercase; }
+.thinking-observation-card > div:last-child { display: flex; gap: 10px; }
+.thinking-observation-card > div:last-child span { min-width: 58px; }
+.thinking-observation-card > div:last-child small, .thinking-observation-card > div:last-child b { display: block; text-align: right; }
+.thinking-observation-card > div:last-child small { color: var(--muted); font: 6px var(--mono); text-transform: uppercase; }
+.thinking-observation-card > div:last-child b { margin-top: 2px; color: var(--brass); font: 9px var(--mono); }
+.thinking-body.with-map .thinking-observation-card { grid-template-columns: auto minmax(0, 1fr); }
+.thinking-body.with-map .thinking-observation-card > div:last-child { grid-column: 2; justify-content: flex-end; }
 
 /* The transport stays reachable for the whole replay (sticky). */
 .playback { position: sticky; top: 0; z-index: 70; display: grid; grid-template-columns: auto minmax(180px, 1fr) repeat(4, auto); align-items: center; gap: 12px; background: var(--surface); border: 1px solid var(--line); padding: 11px 14px; margin-bottom: 14px; box-shadow: 0 8px 20px #0006; }
@@ -656,11 +656,11 @@ footer { padding: 25px 0 36px; color: var(--muted); text-align: center; font: 8p
   .rate-browser { border-right: 0; border-bottom: 1px solid var(--line); }
   .playback { grid-template-columns: auto 1fr; }
   .replay-proof { display: none; }
-  .solve-summary { grid-template-columns: repeat(2, 1fr); }
-  .solve-body.with-map { grid-template-columns: 1fr; }
-  .solve-map { border-right: 0; border-bottom: 1px solid var(--line); }
-  .solve-observation-card { grid-template-columns: auto 1fr; }
-  .solve-observation-card > div:last-child { grid-column: 2; }
+  .thinking-summary { grid-template-columns: repeat(2, 1fr); }
+  .thinking-body.with-map { grid-template-columns: 1fr; }
+  .thinking-map { border-right: 0; border-bottom: 1px solid var(--line); }
+  .thinking-observation-card { grid-template-columns: auto 1fr; }
+  .thinking-observation-card > div:last-child { grid-column: 2; }
   .status-layer { right: 10px; bottom: 10px; }
 }
 

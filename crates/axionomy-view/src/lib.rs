@@ -1430,10 +1430,11 @@ pub struct ViewDocument {
     pub telemetry: Vec<SearchTelemetryView>,
     #[serde(default)]
     pub observations: Vec<ObservationView>,
-    /// Bounded solver history retained so a fast native study or a static Pages
-    /// study is as inspectable as a live stream.
+    /// Thinking: the search observations of how this outcome was chosen,
+    /// bounded and retained so a fast native study or a static Pages study is
+    /// as inspectable as a live stream.
     #[serde(default)]
-    pub solve_observations: Vec<SearchObservationView>,
+    pub thinking: Vec<SearchObservationView>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -1622,7 +1623,7 @@ where
         proposals: Vec::new(),
         telemetry: Vec::new(),
         observations: Vec::new(),
-        solve_observations: Vec::new(),
+        thinking: Vec::new(),
     })
 }
 

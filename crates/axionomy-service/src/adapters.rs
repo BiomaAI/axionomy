@@ -1007,13 +1007,13 @@ pub(crate) fn study(
         .iter()
         .flat_map(|document| document.proposals.iter().cloned())
         .collect();
-    let solve_observations = progress.observations().to_vec();
+    let thinking = progress.observations().to_vec();
     for document in &mut study.documents {
         // Problem adapters may retain richer, strategy-specific evidence. The
         // live stream is the transport fallback, not permission to relabel one
         // algorithm's observations as every alternative in the study.
-        if document.solve_observations.is_empty() {
-            document.solve_observations = solve_observations.clone();
+        if document.thinking.is_empty() {
+            document.thinking = thinking.clone();
         }
         for frame in &mut document.frames {
             if frame.observations.is_empty() {
