@@ -63,7 +63,7 @@ pub enum StoreError {
     OtherOntology {
         run: RunId,
         recorded: OntologyPath,
-        read: &'static str,
+        read: OntologyPath,
     },
     #[error("metric {0} is not a finite number")]
     NotFinite(MetricPath),

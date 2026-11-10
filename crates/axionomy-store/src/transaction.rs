@@ -39,7 +39,7 @@ impl Transaction<'_> {
                 return Err(StoreError::OtherOntology {
                     run: from.run,
                     recorded: source.ontology,
-                    read: O::NAME,
+                    read: OntologyPath::of::<O>(),
                 });
             }
         }

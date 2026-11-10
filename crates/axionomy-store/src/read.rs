@@ -10,7 +10,7 @@ use crate::{
     state,
     transaction::{decode, receipt_digest},
 };
-use axionomy::{ApplyError, Economy, Exchange, Receipt};
+use axionomy::{ApplyError, Economy, Exchange, OntologyPath, Receipt};
 use axionomy_tree::{Hash, Tree};
 use redb::{ReadTransaction, ReadableTableMetadata};
 use std::collections::BTreeMap;
@@ -149,11 +149,12 @@ impl Reader {
         let Some(record) = self.run(run)? else {
             return Ok(None);
         };
-        if record.ontology.as_str() != O::NAME {
+        let read = OntologyPath::of::<O>();
+        if record.ontology != read {
             return Err(StoreError::OtherOntology {
                 run,
                 recorded: record.ontology,
-                read: O::NAME,
+                read,
             });
         }
         Ok(Some(record))

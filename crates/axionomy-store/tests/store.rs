@@ -546,7 +546,8 @@ fn typed_economies_are_recorded_and_read_back_only_as_their_ontology() {
     );
     assert!(matches!(
         reader.state::<Paths>(end),
-        Err(StoreError::OtherOntology { run, read: "paths", .. }) if run == end.run
+        Err(StoreError::OtherOntology { run, read, .. })
+            if run == end.run && read == axionomy::OntologyPath::of::<Paths>()
     ));
     assert!(matches!(
         store.fork::<Paths>(end, Checkpoints::Ends),
