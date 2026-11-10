@@ -1,7 +1,7 @@
 //! Tool inputs and outputs. Accounts, assets, rates and roles are identified by
 //! paths such as `loans/42`; quantities are decimal strings up to 2²⁵⁶ − 1.
 //! Every map is keyed by ID and every collection may be omitted when empty.
-//! Maps are ordered by ID, so the same entries produce the same snapshot handle
+//! Maps are ordered by ID, so the same entries produce the same economy handle
 //! however a client orders its JSON keys.
 
 use crate::handles::{AssessmentId, EconomyId, StudyId};
@@ -117,22 +117,22 @@ pub struct EconomyExtendRequest {
     pub entries: EconomyEntries,
 }
 
-/// A stored snapshot and what it contains.
+/// A stored economy and what it contains.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct EconomyStored {
     pub economy_id: EconomyId,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub parent_id: Option<EconomyId>,
     /// The same operation on the same parent was stored before; this is that
-    /// snapshot.
+    /// economy.
     pub deduplicated: bool,
-    /// The state's content hash: snapshots with equal roots hold equal
-    /// states, however they were made.
+    /// The economy's content hash: economies with equal roots have equal
+    /// contents, however they were made.
     pub root: StateRoot,
     pub counts: EconomyCounts,
 }
 
-/// A state's content hash, as 64 hexadecimal digits.
+/// An economy's content hash, as 64 hexadecimal digits.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct StateRoot(pub axionomy_tree::Hash);
 
@@ -158,7 +158,7 @@ impl JsonSchema for StateRoot {
 
     fn json_schema(_: &mut schemars::SchemaGenerator) -> schemars::Schema {
         schemars::json_schema!({
-            "description": "A state's content hash: 64 lowercase hexadecimal digits.",
+            "description": "An economy's content hash: 64 lowercase hexadecimal digits. Economies with equal roots have equal accounts, balances, rates and invariants, however they were made.",
             "type": "string",
             "pattern": "^[0-9a-f]{64}$"
         })
@@ -339,7 +339,7 @@ pub struct ReplayRequest {
     pub exchanges: Vec<paths::Exchange>,
 }
 
-/// A balance condition to find in the states of a trace.
+/// A balance condition to find among the steps of a trace.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct TraceFindRequest {
@@ -384,8 +384,9 @@ pub struct TraceStepResponse {
 pub struct TraceStepRequest {
     /// An economy made by applying exchanges.
     pub economy_id: EconomyId,
-    /// How many of the exchanges that made it to apply to its parent: zero
-    /// for the parent's state, all of them for the economy itself.
+    /// The step: how many of the exchanges that made the economy to apply to
+    /// the economy they were applied to. Zero names that source, all of them
+    /// the economy itself.
     pub step: usize,
 }
 
@@ -428,7 +429,7 @@ pub struct SearchResponse {
     pub solution: Option<SearchSolved>,
 }
 
-/// The snapshot a solution reaches; its `exchanges` resource is the trace.
+/// The economy a solution reaches; its `exchanges` resource is the trace.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct SearchSolved {
     pub economy_id: EconomyId,
@@ -446,31 +447,33 @@ pub struct ProblemCatalogResponse {
 }
 
 /// A finished study of a problem. Its documents and their frames are
-/// resources, and each document's trajectory is two economies: the state it
-/// starts from and the state its exchanges reach.
+/// resources, and each document's trajectory is two economies: the economy it
+/// starts from and the economy its exchanges reach.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct StudySummary {
     pub study_id: StudyId,
     /// What the study was computed from: the problem, instance, strategy, seed
     /// and budget.
     pub key: StudyKey,
-    /// The document of the requested strategy.
+    /// The document of the requested strategy's run.
     pub selected_document: DocumentPath,
     pub documents: Vec<DocumentSummary>,
 }
 
-/// One document of a study: one strategy's trajectory.
+/// One document of a study: one outcome, such as a strategy's run, as a
+/// trajectory.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct DocumentSummary {
     pub id: DocumentPath,
     pub title: String,
     /// Frames, one per exchange of the trajectory.
     pub frames: usize,
-    /// The state the trajectory starts from, stored as an authored economy.
+    /// The economy the trajectory starts from, stored as an authored economy.
     pub initial_economy_id: EconomyId,
-    /// The state the trajectory reaches: an economy made by applying its
-    /// exchanges to the initial one, so `axionomy_trace_step` names the state
-    /// after any number of them and its `exchanges` resource is the trace.
+    /// The economy the trajectory reaches, made by applying its exchanges to
+    /// the initial one: `axionomy_trace_step` with step N names the economy
+    /// after N of them, the one frame N − 1 shows, and its `exchanges`
+    /// resource is the trace.
     /// The initial economy itself when the trajectory has no exchanges.
     pub final_economy_id: EconomyId,
 }

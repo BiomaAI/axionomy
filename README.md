@@ -122,7 +122,7 @@ models into one-way workspace dependencies:
 | `axionomy-time` | Calendar-aware Jiff authoring over the same canonical timeline denominations |
 | `axionomy-tree` | Canonical persistent prolly trees: the content-addressed maps stored states are kept in |
 | `axionomy-store` | Runs, stored states, replay verification, tags, groups, metrics and refs, on redb |
-| `axionomy-mcp` | Strict stateless MCP 2026-07-28 reference server with stored, steppable, diffable snapshots and interruptible search tasks |
+| `axionomy-mcp` | Strict stateless MCP 2026-07-28 reference server with stored, steppable, diffable economies, explorable studies, and interruptible search tasks |
 | `axionomy-view` | Runtime-neutral, replay-derived browser presentation contracts |
 | `axionomy-service` | Interface-neutral catalog, study control, progress, and replay-derived studies for every canonical problem |
 | `axionomy-cli` | Human- and script-friendly access to the shared problem service |
@@ -179,7 +179,7 @@ Studio remain outer adapters.
 - One service contract shared by CLI, HTTP/SSE, MCP, Studio, and browser Wasm.
 - Discoverable reference problems, each with explicit Micro, Showcase, and Stress instances.
 - Snapshot leaderboards whose exact ranks, tradeoffs, and evidence update during replay.
-- A strict stateless MCP 2026-07-28 server whose snapshots persist in a store, with state roots, trace stepping and diffs.
+- A strict stateless MCP 2026-07-28 server whose economies persist in a store, with content roots, trace stepping, diffs, and studies a client can step into and branch from.
 - Rust-owned OpenAPI, generated TypeScript, portable studies, and cross-interface tests.
 
 ### Studio
@@ -541,7 +541,7 @@ order for readable, repeatable output. Deserialization passes through the same
 canonical construction rules: zero balances are removed and duplicate
 identifiers are rejected. This ordinary serialization is intentionally not
 claimed as a versioned compatibility protocol. The MCP reference server hashes
-the exact current serialized bytes to identify immutable snapshots inside its
+the exact current serialized bytes to identify immutable economies inside its
 store; that deployment handle is not a promise that future schema versions
 will produce the same ID.
 
@@ -549,22 +549,35 @@ will produce the same ID.
 
 `axionomy-mcp` demonstrates how a remote, interruptible Axionomy integration
 can remain faithful to the closed model. It keeps no hidden “current economy.”
-`axionomy_economy_create` returns an immutable `economy_id`; assessment names
-that snapshot, while apply and replay return a new ID and leave the source
-available. `axionomy_search` accepts an explicit candidate exchange universe
-and returns an MCP task handle whose progress, terminal result, and cooperative
-cancellation are observable for the lifetime configured by the running server.
+`axionomy_economy_create` returns the handle of an immutable economy,
+`economy_id`; assessment reads that economy, while apply and replay store a new
+one under a new handle and leave the source available. `axionomy_search`
+accepts an explicit candidate exchange universe and returns an MCP task handle
+whose progress, terminal result, and cooperative cancellation are observable
+for the lifetime configured by the running server.
 
-Snapshots live in an `axionomy-store` store: in memory by default, or in the
-file `AXIONOMY_MCP_STORE` names, which keeps snapshots and their handles across
-restarts. Each snapshot is a point of a recorded run, so the intermediate
-states of a replay can be named with `axionomy_trace_step`, the first state
-where a balance condition holds found with `axionomy_trace_find`, any two
-snapshots diffed, and every result carries its state's content root.
+Economies live in an `axionomy-store` store: in memory by default, or in the
+file `AXIONOMY_MCP_STORE` names, which keeps economies and their handles across
+restarts. Each economy is a point of a recorded run, so every step of a replay
+can be named with `axionomy_trace_step`, the first step where a balance
+condition holds found with `axionomy_trace_find`, any two economies diffed,
+and every result carries its economy's content root. Step `N` of a trace is
+the economy after its first `N` exchanges, positions of exchanges count from
+zero (`exchange_index`), and failures are structured: a stable code, a message
+that names what to fix, and for a malformed argument its JSON pointer.
+
+Studies are explorable. `axionomy_problem_study` studies a built-in problem as
+an MCP task, and each of its documents (the requested strategy's run beside
+the problem's other outcomes) is two ordinary economies: `initial_economy_id`,
+where it starts, and `final_economy_id`, where its exchanges reach. Each frame
+carries its exchange in the economy's own paths, so a client can step into the
+final economy at any step, apply the frame's exchange or another one, and diff
+its branch against the study's next step. The server's instructions walk a
+first-time client from `axionomy_problem_catalog` through that loop.
 
 The server accepts only MCP `2026-07-28`, disables legacy sessions, and
 requires the revision's request metadata and standard HTTP routing headers.
-Task state, queues, progress counters, and snapshot handles are operational
+Task state, queues, progress counters, and economy handles are operational
 records—not a parallel world model. Search still reaches successors only by
 applying concrete exchanges through the kernel, and its completed result is a
 replayable trace.

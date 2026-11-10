@@ -18,7 +18,7 @@ pub fn stateless_http_config(cancellation_token: CancellationToken) -> Streamabl
         .with_cancellation_token(cancellation_token)
 }
 
-/// The server over stateless HTTP, keeping its snapshots in `store`.
+/// The server over stateless HTTP, keeping its economies in `store`.
 pub fn stateless_http_service(
     store: Store,
     cancellation_token: CancellationToken,

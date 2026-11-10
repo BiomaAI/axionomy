@@ -139,7 +139,7 @@ impl AxionomyMcp {
         }
     }
 
-    /// Suggests values for a template argument from what the named snapshot
+    /// Suggests values for a template argument from what the named economy
     /// or study holds, by prefix.
     pub(crate) async fn completion(
         &self,
@@ -647,7 +647,7 @@ struct BalanceRow {
     quantity: Quantity,
 }
 
-/// One difference between two snapshots.
+/// One difference between two economies.
 #[derive(Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 enum DiffRow {

@@ -121,6 +121,10 @@ async def test_the_server_describes_itself_to_a_standard_client(url: str) -> Non
         assert client.protocol_version == "2026-07-28"
         assert client.server_info is not None and client.server_info.name == "axionomy-mcp"
         assert client.instructions and "axionomy_economy_create" in client.instructions
+        # A first-time client learns where to start, what an exchange looks
+        # like, and which tools need the tasks extension.
+        for words in ("Start here", "axionomy_problem_catalog", "axionomy_search", "io.modelcontextprotocol/tasks", '"bindings"'):
+            assert words in client.instructions, words
         capabilities = client.server_capabilities
         assert capabilities.tools and capabilities.resources and capabilities.completions is not None
 

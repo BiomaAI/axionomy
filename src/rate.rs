@@ -29,7 +29,10 @@ use thiserror::Error;
     serialize = "O::Role: Serialize, O::Asset: Serialize",
     deserialize = "O::Role: Deserialize<'de>, O::Asset: Deserialize<'de>",
 ))]
-#[schemars(bound = "O::Role: JsonSchema, O::Asset: JsonSchema")]
+#[schemars(
+    bound = "O::Role: JsonSchema, O::Asset: JsonSchema",
+    description = "An exact quantity computed from the economy before the exchange, as an object whose `kind` is `constant` (a `value`), `units` (the exchange's units), `parameter` (one of the exchange's parameters, by `name`), `balance` (a `role`'s balance of an `asset`), `add`, `subtract`, `multiply`, `minimum` or `maximum` (of a `left` and a `right` expression), or `mul_div`: `left` × `right` ÷ `denominator` from a full-width product, the only division, with an inexact quotient rounded as its `rounding` says, `floor` or `ceil`. Round what a participant pays up and what it receives down, so rounding dust stays with the counterparty."
+)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum QuantityExpression<O: Ontology> {
     Constant {

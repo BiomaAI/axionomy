@@ -19,6 +19,8 @@ use thiserror::Error;
 pub trait PathKind {
     /// The JSON Schema title of paths of this kind, such as `AccountPath`.
     const SCHEMA: &'static str;
+    /// A path of this kind the JSON Schema shows as an example.
+    const EXAMPLE: &'static str = "loans/42";
 }
 
 /// The kinds of identifiers in an economy.
@@ -330,7 +332,10 @@ impl<K: PathKind> JsonSchema for Path<K> {
 
     fn json_schema(_: &mut SchemaGenerator) -> Schema {
         json_schema!({
-            "description": "Lowercase segments of a–z, 0–9 and `-`, separated by `/`, such as `loans/42`; each segment starts and ends with a letter or digit.",
+            "description": format!(
+                "Lowercase segments of a–z, 0–9 and `-`, separated by `/`, such as `{}`; each segment starts and ends with a letter or digit.",
+                K::EXAMPLE
+            ),
             "type": "string",
             "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?(/[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$"
         })

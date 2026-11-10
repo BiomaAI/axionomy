@@ -23,7 +23,7 @@ use axionomy_service::{Study, StudyKey};
 use axionomy_store::{Checkpoints, Durability, Point, Reader, Store, StoreError};
 use axionomy_view::DocumentPath;
 
-/// A snapshot's state: MCP's economies are identified by paths.
+/// An economy's state: MCP's economies are identified by paths.
 pub(crate) type State = axionomy_store::State<Paths>;
 use redb::{ReadableTable, TableDefinition};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};

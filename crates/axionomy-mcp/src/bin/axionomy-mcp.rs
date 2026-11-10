@@ -19,11 +19,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let bind = env::var("AXIONOMY_MCP_BIND")
         .unwrap_or_else(|_| "127.0.0.1:8000".to_owned())
         .parse::<SocketAddr>()?;
-    // A store file keeps snapshots across restarts; without one they last
+    // A store file keeps economies across restarts; without one they last
     // until the server stops.
     let store = match env::var_os("AXIONOMY_MCP_STORE") {
         Some(path) => {
-            info!(store = %path.to_string_lossy(), "keeping snapshots on disk");
+            info!(store = %path.to_string_lossy(), "keeping economies on disk");
             Store::open(path)?
         }
         None => Store::memory()?,

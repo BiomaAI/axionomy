@@ -1,7 +1,7 @@
 //! Resource addresses. Everything an economy, assessment or study holds is read
 //! as an `axionomy://` resource, and every list is read one page at a time with
 //! the MCP pagination conventions: an opaque `cursor` chosen by the server,
-//! returned as `nextCursor` while more items remain. The named snapshots never
+//! returned as `nextCursor` while more items remain. The named economies never
 //! change, so a page's content never goes stale.
 
 use axionomy::InvariantPath;
@@ -24,7 +24,7 @@ pub(crate) const SCHEME: &str = "axionomy://";
 pub(crate) const PAGE_ROWS: usize = 500;
 /// Frames per page; one frame carries a whole rendered scene.
 pub(crate) const PAGE_FRAMES: usize = 10;
-/// How long a page stays fresh: its snapshot never changes, so a day is only a
+/// How long a page stays fresh: its economy never changes, so a day is only a
 /// bound on how long a client keeps it.
 pub(crate) const IMMUTABLE_TTL_MS: u64 = 86_400_000;
 /// How long the tool and template lists stay fresh within one server version.
@@ -152,22 +152,22 @@ impl Serialize for Cursor {
 /// One URI template per kind of resource, in RFC 6570 syntax.
 pub(crate) fn templates() -> Vec<ResourceTemplate> {
     [
-        ("axionomy://economy/{economy_id}", "economy", "Economy snapshot", "How the snapshot was made, its state root, and how many accounts, assets, rates and invariants it has."),
+        ("axionomy://economy/{economy_id}", "economy", "Economy", "How the economy was made (authored, or by how many exchanges from its parent), its root, and how many accounts, assets, rates and invariants it has."),
         ("axionomy://economy/{economy_id}/accounts{?prefix,cursor}", "accounts", "Accounts", "Accounts in path order, each with how many assets it holds, optionally only paths that start with `prefix`, such as `agents/7/`."),
         ("axionomy://economy/{economy_id}/accounts/{+account}{?prefix,cursor}", "balances", "Account balances", "An account's nonzero balances in asset path order, optionally only assets whose path starts with `prefix`. The account path appears as is, as in `accounts/agents/7/wallet`."),
-        ("axionomy://economy/{economy_id}/rates{?asset,cursor}", "rates", "Rates", "Rates with their roles, optionally only rates that move `asset`."),
+        ("axionomy://economy/{economy_id}/rates{?asset,cursor}", "rates", "Rates", "Rates with the roles an exchange of each binds, optionally only rates that move `asset`: the exchanges an economy can take."),
         ("axionomy://economy/{economy_id}/rates/{+rate}", "rate", "Rate", "A rate's roles, distinct role pairs, parameters and how many amounts and conditions it has."),
         ("axionomy://economy/{economy_id}/rate-amounts/{+rate}{?cursor}", "rate-amounts", "Rate amounts", "What one unit of the rate consumes, produces and preserves, by role: fixed quantities, then computed ones."),
         ("axionomy://economy/{economy_id}/rate-conditions/{+rate}{?cursor}", "rate-conditions", "Rate conditions", "Comparisons every exchange of the rate must satisfy."),
         ("axionomy://economy/{economy_id}/invariants{?cursor}", "invariants", "Invariants", "Linear conservation laws, each with how many assets it weights."),
         ("axionomy://economy/{economy_id}/invariants/{+invariant}{?cursor}", "invariant-weights", "Invariant weights", "The integer weight of each asset in one conservation law."),
-        ("axionomy://economy/{economy_id}/changes{?cursor}", "changes", "Changes", "The quantities moved by the exchanges that made this snapshot from its parent."),
-        ("axionomy://economy/{economy_id}/exchanges{?cursor}", "exchanges", "Exchanges", "The exchanges that made this snapshot from its parent, in order; replaying them on the parent reproduces it."),
-        ("axionomy://economy/{economy_id}/diff/{other_id}{?cursor}", "diff", "Diff", "What differs from this snapshot to another, in path order: accounts opened and closed, balances with both quantities, rates added, removed or redefined, and whether the invariants differ. Equal snapshots have no rows."),
-        ("axionomy://assessment/{assessment_id}", "assessment", "Assessment", "An exchange checked against a snapshot: its status, issues and how many lines explain it."),
+        ("axionomy://economy/{economy_id}/changes{?cursor}", "changes", "Changes", "The quantities moved by the exchanges that made this economy from its parent, each with its `exchange_index`, from zero."),
+        ("axionomy://economy/{economy_id}/exchanges{?cursor}", "exchanges", "Exchanges", "The exchanges that made this economy from its parent, in order; replaying them on the parent reproduces it."),
+        ("axionomy://economy/{economy_id}/diff/{other_id}{?cursor}", "diff", "Diff", "What differs from this economy to another, in path order: accounts opened and closed, balances with both quantities, rates added, removed or redefined, and whether the invariants differ. Economies with equal contents have no rows."),
+        ("axionomy://assessment/{assessment_id}", "assessment", "Assessment", "An exchange checked against an economy: its status (`applicable`, `infeasible` or `invalid`), its issues, and how many lines explain it."),
         ("axionomy://assessment/{assessment_id}/lines{?cursor}", "assessment-lines", "Assessment lines", "What each account lacks for an infeasible exchange, or what an applicable one would move."),
-        ("axionomy://study/{study_id}", "study", "Study", "A finished study of a problem: its key and documents."),
-        ("axionomy://study/{study_id}/documents/{document}", "document", "Study document", "One document of a study, a strategy's trajectory, without its frames: its initial_economy_id and final_economy_id, how many frames it has, and its view: initial balances, objectives and thinking, keyed for display."),
+        ("axionomy://study/{study_id}", "study", "Study", "A finished study of a problem: its key, its selected document, and each document with its frame count and its two economies, initial_economy_id and final_economy_id, which every economy tool reads, steps through and branches from."),
+        ("axionomy://study/{study_id}/documents/{document}", "document", "Study document", "One document of a study, an outcome such as a strategy's run, without its frames: its initial_economy_id and final_economy_id, how many frames it has, and its view: initial balances, objectives and thinking, keyed for display."),
         ("axionomy://study/{study_id}/documents/{document}/frames{?cursor}", "frames", "Study frames", "A document's frames in order, one per exchange of its trajectory. Frame i (its `step` is i + 1, its `view.index` is i) shows the economy axionomy_trace_step names at step i + 1 on the document's final_economy_id. Its `exchange` is written in that economy's own paths: apply it to step i with axionomy_exchange_apply and you get step i + 1. Its `view` is how Studio shows the frame, keyed for display."),
     ]
     .into_iter()

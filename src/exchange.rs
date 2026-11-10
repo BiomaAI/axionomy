@@ -18,11 +18,22 @@ use std::collections::BTreeMap;
     serialize = "O::Rate: Serialize, O::Role: Serialize, O::Account: Serialize",
     deserialize = "O::Rate: Deserialize<'de>, O::Role: Deserialize<'de>, O::Account: Deserialize<'de>",
 ))]
-#[schemars(bound = "O::Rate: JsonSchema, O::Role: JsonSchema, O::Account: JsonSchema")]
+#[schemars(
+    bound = "O::Rate: JsonSchema, O::Role: JsonSchema, O::Account: JsonSchema",
+    description = "An exchange: some units of a rate, applied atomically between the accounts bound to its roles, such as {\"rate\": \"transfer\", \"bindings\": {\"giver\": \"source\", \"receiver\": \"sink\"}, \"units\": \"2\"}."
+)]
 pub struct Exchange<O: Ontology> {
+    /// The rate to apply.
     rate: O::Rate,
+    /// The account each role of the rate binds, by role; every role the rate
+    /// lists needs one. A role the rate opens binds the account the exchange
+    /// creates, which must not exist yet; a role it closes binds an account
+    /// the exchange leaves empty.
     bindings: BTreeMap<O::Role, O::Account>,
+    /// How many times the rate's amounts apply; greater than zero.
     units: Quantity,
+    /// The values of the parameters the rate's computed amounts and
+    /// conditions read, by name.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     parameters: BTreeMap<ParameterPath, Quantity>,
 }

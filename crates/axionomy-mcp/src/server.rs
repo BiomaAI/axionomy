@@ -58,33 +58,55 @@ const MAX_CHUNK_SIZE: usize = 10_000;
 const SEARCH: &str = "axionomy_search";
 const PROBLEM_STUDY: &str = "axionomy_problem_study";
 
-const INSTRUCTIONS: &str = "Axionomy is an exact economic kernel: every state change is an exchange, \
-a rate applied between the accounts bound to its roles. Accounts, assets, rates and roles are \
-identified by paths: lowercase segments of a-z, 0-9 and '-', separated by '/', such as \
-'loans/42' or 'agents/7/wallet'. Create an economy with axionomy_economy_create and grow it with \
-axionomy_economy_extend, at most 10,000 entries per call. A rate may open accounts, for spawned \
-actors, new positions or new firms: the exchange names the new account's path, which must not \
-exist. A rate may also close accounts, once its own effects have left them empty, and a closed \
-path may be opened again. Every call that changes something returns a new economy_id and leaves \
-the old snapshot as it was. Check an exchange with axionomy_exchange_assess, then apply it with \
-axionomy_exchange_apply or apply several with axionomy_trace_replay; step through the exchanges \
-that made a snapshot with axionomy_trace_step, and find the first state where a balance \
-condition holds with axionomy_trace_find. Read what a snapshot holds through axionomy:// \
-resources: tool results link to them, paths appear in their URIs as is (an account's balances are \
-.../accounts/agents/7/wallet), every list is paged with a cursor, and a page never changes. \
-Compare two snapshots with their diff resource; equal roots mean equal states. \
-axionomy_problem_study studies a built-in problem, and each of its documents is two economies: \
-initial_economy_id, where it starts, and final_economy_id, where its exchanges reach. Frame i of \
-a document shows step i + 1 of final_economy_id, and carries its exchange as that economy writes \
-it: axionomy_trace_step with step i on final_economy_id, then axionomy_exchange_apply with the \
-frame's exchange, reaches step i + 1. Step into the final economy, try another exchange from \
-there, and diff the result against the study's next step. Steps and exchanges are counted one \
-way everywhere: step N of a trace is the economy after its first N exchanges, step 0 the economy \
-they were applied to; positions of exchanges (exchange_index, a frame's view.index) count from \
-0, so the exchange at index i takes step i to step i + 1; messages count from 1 (\"exchange 2 \
-of 3\"). A failed call returns isError with {error, message, details}: error is a stable code, \
-and an invalid_request's details.pointer is the JSON pointer of the argument at fault. Snapshots \
-are kept in the server's store, across restarts when it keeps one on disk.";
+const INSTRUCTIONS: &str = "Axionomy is an exact economic kernel. An economy holds accounts with \
+balances, rates and conservation invariants, and every change is an exchange: some units of a \
+rate, applied atomically between the accounts bound to its roles. Accounts, assets, rates, roles \
+and invariants are named by paths: lowercase segments of a-z, 0-9 and '-', separated by '/', such \
+as 'agents/7/wallet'. Quantities are decimal strings. A handle, economy_id, names an economy that \
+never changes: every call that changes something stores a new economy and returns its handle, so \
+older handles are branches to return to.
+
+Start here:
+1. axionomy_problem_catalog lists the built-in problems with their instance and strategy keys.
+2. axionomy_problem_study studies one and returns its documents, the requested strategy's run \
+and the problem's other outcomes, each with initial_economy_id and final_economy_id.
+3. axionomy_trace_step with a step on final_economy_id names the economy at that step of the \
+study.
+4. Read that economy's rates (axionomy://economy/{economy_id}/rates) for candidate exchanges, and \
+its accounts (.../accounts).
+5. axionomy_exchange_assess says whether an exchange would apply, and why not; \
+axionomy_exchange_apply applies it and returns your economy.
+6. The diff resource (axionomy://economy/{economy_id}/diff/{other_id}) compares your economy \
+with the study's next step.
+
+An exchange looks like {\"rate\": \"transfer\", \"bindings\": {\"giver\": \"source\", \
+\"receiver\": \"sink\"}, \"units\": \"2\"}. Bind an account to every role of the rate. A role the \
+rate opens binds the path of the account the exchange creates, which must not exist yet; a role \
+it closes binds an account its effects leave empty.
+
+Steps: step N of a trace is the economy after its first N exchanges, and step 0 the economy they \
+were applied to. Positions of exchanges count from 0 (exchange_index, a frame's view.index): the \
+exchange at index i takes step i to step i + 1. Messages count from 1 (\"exchange 2 of 3\"). \
+Frame i of a study document shows step i + 1 of its final_economy_id, and its exchange is written \
+as that economy writes it: applied to step i with axionomy_exchange_apply, it makes step i + 1.
+
+Build economies of your own with axionomy_economy_create and axionomy_economy_extend, at most \
+10,000 entries per call; apply a sequence of exchanges with axionomy_trace_replay; find the first \
+step where a balance condition holds with axionomy_trace_find; and search for exchanges that \
+reach goal balances with axionomy_search. Read what an economy holds through axionomy:// \
+resources: tool results link to them, paths appear in their URIs as is \
+(.../accounts/agents/7/wallet), every list is paged with a cursor, and a page never changes. \
+Economies with equal roots have equal contents, however they were made.
+
+axionomy_problem_study and axionomy_search run as MCP tasks: declare the \
+io.modelcontextprotocol/tasks extension and poll tasks/get for the result. Without it they fail \
+with tasks_required; every other tool works without it, so a client can still build, step \
+through and branch economies of its own.
+
+A failed call returns isError with {error, message, details}: error is a stable code, an \
+invalid_request's details.pointer is the JSON pointer of the argument at fault, and an invalid \
+exchange lists its issues, each with a message saying what to fix. Handles last as long as the \
+server's store: across restarts when it is on disk, until the server stops when it is in memory.";
 
 #[derive(Clone)]
 pub struct AxionomyMcp {
@@ -96,7 +118,7 @@ pub struct AxionomyMcp {
 
 #[tool_router]
 impl AxionomyMcp {
-    /// A server that keeps its snapshots in `store`. A store on disk keeps
+    /// A server that keeps its economies in `store`. A store on disk keeps
     /// them, and the secret their handles are keyed with, across restarts.
     pub fn new(store: Store) -> Result<Self, StoreError> {
         Ok(Self {
@@ -118,7 +140,7 @@ impl AxionomyMcp {
     #[tool(
         name = "axionomy_economy_create",
         title = "Create an economy",
-        description = "Store a new economy with up to 10,000 entries: accounts with their balances, rates, and conservation invariants, each keyed by its path, such as `loans/42`. Grow it past that with axionomy_economy_extend. Returns an economy_id and the state's root; repeating the same call returns the same economy_id.",
+        description = "Store a new economy with up to 10,000 entries: accounts with their balances, rates, and conservation invariants, each keyed by its path, such as `agents/7/wallet`. Grow it past that with axionomy_economy_extend. Returns the economy's economy_id and root, its content hash; repeating the same call returns the same economy_id.",
         output_schema = schema_for_output::<EconomyStored>(),
         annotations(destructive_hint = false, idempotent_hint = true, open_world_hint = false)
     )]
@@ -132,7 +154,7 @@ impl AxionomyMcp {
     #[tool(
         name = "axionomy_economy_extend",
         title = "Extend an economy",
-        description = "Add up to 10,000 entries to an economy and store the result as a new economy_id; the source snapshot is unchanged. New paths add accounts, rates or invariants; existing ones gain balances, amounts or weights, but nothing already present is replaced.",
+        description = "Add up to 10,000 entries to an economy and store the result as a new economy; the economy it extends is unchanged. New paths add accounts, rates or invariants; existing ones gain balances, amounts or weights, but nothing already present is replaced.",
         output_schema = schema_for_output::<EconomyStored>(),
         annotations(destructive_hint = false, idempotent_hint = true, open_world_hint = false)
     )]
@@ -148,7 +170,7 @@ impl AxionomyMcp {
     #[tool(
         name = "axionomy_exchange_assess",
         title = "Assess an exchange",
-        description = "Explain whether an exchange would apply to a snapshot without changing it: applicable with the quantities it would move, infeasible with what each account lacks, or invalid with why. Lists longer than the preview are paged through the linked assessment resource.",
+        description = "Explain whether an exchange would apply to an economy, without changing it: applicable with the quantities it would move, infeasible with what each account lacks, or invalid with why. Lists longer than the preview are paged through the linked assessment resource. Rates and the roles to bind are listed by the economy's `rates` resource.",
         output_schema = schema_for_output::<AssessResponse>(),
         annotations(read_only_hint = true, open_world_hint = false)
     )]
@@ -181,7 +203,7 @@ impl AxionomyMcp {
     #[tool(
         name = "axionomy_exchange_apply",
         title = "Apply an exchange",
-        description = "Apply one exchange atomically and store the result as a new economy_id; the source snapshot is unchanged. A failure stores nothing and explains itself like axionomy_exchange_assess.",
+        description = "Apply one exchange atomically and store the economy it makes under a new economy_id; the economy it was applied to is unchanged. A failure stores nothing and explains itself like axionomy_exchange_assess.",
         output_schema = schema_for_output::<ExchangedResponse>(),
         annotations(destructive_hint = false, idempotent_hint = true, open_world_hint = false)
     )]
@@ -196,7 +218,7 @@ impl AxionomyMcp {
     #[tool(
         name = "axionomy_trace_replay",
         title = "Replay exchanges",
-        description = "Apply up to 1,000 exchanges in order and store only the final state as a new economy_id. The first failure stops the replay, stores nothing, and names the failing exchange. Chain calls to replay longer traces.",
+        description = "Apply up to 1,000 exchanges in order and store the economy they make under a new economy_id, with every step of the trace reachable through axionomy_trace_step. The first failure stops the replay, stores nothing, and names the failing exchange: \"exchange 2 of 3\" in words, `details.exchange_index` 1. Chain calls to replay longer traces.",
         output_schema = schema_for_output::<ExchangedResponse>(),
         annotations(destructive_hint = false, idempotent_hint = true, open_world_hint = false)
     )]
@@ -344,7 +366,7 @@ impl AxionomyMcp {
     #[tool(
         name = "axionomy_search",
         title = "Search for a trace",
-        description = "Start a cancellable breadth-first search, as an MCP task, for exchanges from up to 1,000 candidates that bring the named accounts to their goal balances. A solution is stored as the snapshot it reaches; its exchanges resource is the trace. Requires the MCP tasks extension.",
+        description = "Start a cancellable breadth-first search, as an MCP task, for exchanges from up to 1,000 candidates that bring the named accounts to their goal balances. A solution is stored as the economy it reaches; its `exchanges` resource is the trace. Runs only as an MCP task: a client that does not declare the io.modelcontextprotocol/tasks extension gets `tasks_required`.",
         output_schema = schema_for_output::<SearchResponse>(),
         annotations(destructive_hint = false, idempotent_hint = true, open_world_hint = false)
     )]
@@ -358,7 +380,7 @@ impl AxionomyMcp {
     #[tool(
         name = "axionomy_problem_catalog",
         title = "List problems",
-        description = "List the built-in Axionomy problems with their instances, strategies and capabilities.",
+        description = "List the built-in Axionomy problems: each problem's `key`, its instances (`micro`, `showcase`, `stress`) and its strategies' keys, which axionomy_problem_study takes, with their defaults and capabilities.",
         output_schema = schema_for_output::<ProblemCatalogResponse>(),
         annotations(read_only_hint = true, open_world_hint = false)
     )]
@@ -377,7 +399,7 @@ impl AxionomyMcp {
     #[tool(
         name = "axionomy_problem_study",
         title = "Study a problem",
-        description = "Study one built-in problem as an MCP task and return a summary; the study's documents and replay frames are linked resources. Each document is also two stored economies, its initial state and the state its exchanges reach, which every economy tool reads, steps through and branches from. Requires the MCP tasks extension.",
+        description = "Study one built-in problem and return a summary of its documents: the run of the requested `strategy`, which is the `selected_document`, beside the problem's other outcomes, usually the runs of its other strategies and cases such as a deadlock. Take the `problem`, `instance` and `strategy` keys from axionomy_problem_catalog. Each document is two stored economies: initial_economy_id, where its trajectory starts, and final_economy_id, where its exchanges reach. Step into the final one with axionomy_trace_step and branch from any step; frame i's exchange applies to step i. The study's documents and frames are linked resources. Runs only as an MCP task: a client that does not declare the io.modelcontextprotocol/tasks extension gets `tasks_required`.",
         output_schema = schema_for_output::<StudySummary>(),
         annotations(destructive_hint = false, idempotent_hint = true, open_world_hint = false)
     )]
@@ -441,7 +463,7 @@ impl AxionomyMcp {
         let link = Target::Economy {
             economy_id: stored.economy_id.clone(),
         }
-        .link("economy", "The stored snapshot");
+        .link("economy", "The stored economy");
         Ok(Linked::new(
             EconomyStored {
                 economy_id: stored.economy_id,
@@ -454,7 +476,7 @@ impl AxionomyMcp {
         ))
     }
 
-    /// Applies `exchanges` in order to a snapshot and stores the final state.
+    /// Applies `exchanges` in order to an economy and stores the economy they make.
     async fn exchange(
         &self,
         source_economy_id: EconomyId,
@@ -610,7 +632,7 @@ impl AxionomyMcp {
 }
 
 impl Default for AxionomyMcp {
-    /// A server that keeps its snapshots in memory, until it stops.
+    /// A server that keeps its economies in memory, until it stops.
     ///
     /// # Panics
     ///
@@ -850,7 +872,9 @@ impl IntoCallToolResult for ToolError {
 fn tasks_required(tool: &str) -> ToolError {
     ToolError::new(
         FailureCode::TasksRequired,
-        format!("{tool} runs as an MCP task; declare the io.modelcontextprotocol/tasks extension"),
+        format!(
+            "{tool} runs only as an MCP task: declare the io.modelcontextprotocol/tasks extension and poll tasks/get for its result. Every other tool works without it."
+        ),
     )
 }
 
@@ -1020,7 +1044,7 @@ fn exchanged_links(economy_id: &EconomyId) -> Vec<Resource> {
         Target::Economy {
             economy_id: economy_id.clone(),
         }
-        .link("economy", "The stored snapshot"),
+        .link("economy", "The stored economy"),
         Target::Changes {
             economy_id: economy_id.clone(),
         }
@@ -1228,12 +1252,12 @@ async fn study_problem(
         Target::Study {
             study_id: summary.study_id.clone(),
         }
-        .link("study", "The study's key and documents"),
+        .link("study", "The study's key and documents, each with its two economies"),
         Target::Frames {
             study_id: summary.study_id.clone(),
             document: summary.selected_document.clone(),
         }
-        .link("frames", "The selected document's replay frames, paged"),
+        .link("frames", "The selected document's frames, paged; frame i's exchange applies to step i of its final economy"),
     ];
     if let Some(selected) = summary
         .documents
@@ -1246,7 +1270,7 @@ async fn study_problem(
             }
             .link(
                 "economy",
-                "The state the selected document reaches; step into it with axionomy_trace_step",
+                "The economy the selected document reaches; step into it with axionomy_trace_step",
             ),
         );
     }

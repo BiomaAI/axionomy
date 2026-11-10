@@ -37,9 +37,11 @@ pub mod kind {
 
     impl PathKind for Problem {
         const SCHEMA: &'static str = "ProblemPath";
+        const EXAMPLE: &'static str = "maze";
     }
     impl PathKind for Strategy {
         const SCHEMA: &'static str = "StrategyPath";
+        const EXAMPLE: &'static str = "a-star";
     }
 }
 
@@ -159,13 +161,24 @@ pub struct ProblemDescriptor {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct StudyRequest {
+    /// The problem to study: a key the catalog lists, such as `maze`.
     pub problem: ProblemPath,
+    /// The size of the problem to study; the problem's default instance when
+    /// omitted.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub instance: Option<InstanceProfile>,
+    /// The strategy whose run the study selects as its document; the
+    /// problem's default strategy when omitted. The study holds the problem's
+    /// other outcomes beside it, usually its other strategies' runs and
+    /// cases such as a deadlock.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub strategy: Option<StrategyPath>,
+    /// Seeds every random choice of the problem and its strategies, so the
+    /// same request always gives the same study.
     #[serde(default = "default_seed")]
     pub seed: u64,
+    /// How much work each strategy may spend, at least 1: each problem scales
+    /// it to its instance as a search, sampling or planning budget.
     #[serde(default = "default_budget")]
     #[schemars(range(min = 1))]
     pub budget: u64,
