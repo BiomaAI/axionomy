@@ -34,10 +34,10 @@ utility is the special case of a one-element key.
 
 ## Names
 
-Each term means one thing. Where a word is already a domain word inside a
-problem (work-league's jobs and contracts, logistics' and marketplace's
-orders, amm's obligations, marketplace's and bridge's settlement), Axionomy
-does not reuse it for its own machinery.
+Each term means one thing. Axionomy's machinery prefers words a user's
+ontology is unlikely to need, but an occasional overlap with a domain word is
+fine (problems call their state a world; search has sessions); what matters
+is that overlaps stay few and no Axionomy term means two things.
 
 | Term | Means |
 | --- | --- |
@@ -59,9 +59,9 @@ does not reuse it for its own machinery.
 | Study | One request to Studio, MCP or the CLI: a problem, an instance, strategies, a seed and a budget. A study produces runs and the evidence of how they were found |
 | Path | An identifier's one written form, such as `edge/key-room/gate`, and its order. Typed identifiers derive `Identifier`, so they are written and ordered as their paths, and a typed run written down reads as a `paths` run that MCP can explore (D-044) |
 
-"Job" is not used for studies: work-league's workers claim jobs, and the
-store's writer runs jobs. "Session" belongs to search, "experiment" to Monte
-Carlo, and "scenario" to Nature's encoded scenarios.
+A study is not called a job, session, experiment or scenario because each
+already means something else here: work-league's workers claim jobs, search
+has sessions, Monte Carlo runs experiments, and Nature encodes scenarios.
 
 ## Step 1: simulations run through `rollout::run` (done)
 
