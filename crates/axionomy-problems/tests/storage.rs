@@ -1,5 +1,6 @@
 //! Every canonical problem's economies can be stored and read back as they
-//! were: each identifier type has one JSON encoding, which the store checks.
+//! were: each identifier type has one JSON encoding, its path, which the store
+//! checks, and which reads as the `paths` ontology too.
 
 use axionomy::Economy;
 use axionomy_problems::{
@@ -12,9 +13,22 @@ use axionomy_store::{
 };
 use std::{collections::BTreeMap, num::NonZeroU64};
 
+/// Stores each economy and reads it back, and reads its JSON as a `Paths`
+/// economy: written down, a typed economy is a `Paths` economy with the same
+/// canonical tree.
 fn round_trip<O: Recordable>(worlds: impl IntoIterator<Item = Economy<O>>) {
     let store = Store::memory().unwrap();
     for world in worlds {
+        let untyped: axionomy::paths::Economy =
+            serde_json::from_value(serde_json::to_value(&world).unwrap())
+                .unwrap_or_else(|error| panic!("{}: {error}", O::NAME));
+        assert_eq!(
+            state::tree::<axionomy::paths::Paths>(&untyped).hash(),
+            state::tree::<O>(&world).hash(),
+            "{}",
+            O::NAME
+        );
+
         let end = store
             .record::<O>(world.clone(), Checkpoints::Ends)
             .finish()
@@ -270,4 +284,88 @@ fn monte_carlo_records_each_policy_as_a_group_of_runs() {
             .unwrap()
             .map(|state| state.root())
     );
+}
+
+/// A typed economy written down is a `Paths` economy: its identifiers are
+/// written as their paths, so the same JSON reads as either, both readings
+/// have the same canonical tree, and replaying the same trace read either way
+/// reaches the same canonical state.
+#[test]
+fn a_typed_economy_written_down_is_a_paths_economy() {
+    use axionomy::paths::{self, Paths};
+
+    // The written form: a variant's kebab-case name, then its fields.
+    assert_eq!(serde_json::json!(maze::AccountId::Agent), "agent");
+    assert_eq!(
+        serde_json::json!(maze::Asset::Edge(maze::Node::KeyRoom, maze::Node::Gate)),
+        "edge/key-room/gate"
+    );
+    assert_eq!(
+        serde_json::json!(maze::RateId::Move {
+            from: maze::Node::Start,
+            to: maze::Node::Atrium,
+            energy: 3,
+            needs_open_door: false,
+        }),
+        "move/start/atrium/3/false"
+    );
+    assert_eq!(
+        serde_json::json!(work_league::RateId::Expire {
+            job: work_league::JobId(3),
+            agent: None,
+            mode: Some(work_league::WorkMode::Safe),
+        }),
+        "expire/3/none/some/safe"
+    );
+
+    fn untyped<O: Recordable>(
+        label: &str,
+        world: &Economy<O>,
+        trace: &axionomy::Trace<O>,
+        end: &Economy<O>,
+    ) {
+        let read: paths::Economy =
+            serde_json::from_value(serde_json::to_value(world).unwrap()).unwrap();
+        assert_eq!(
+            state::tree::<Paths>(&read).hash(),
+            state::tree::<O>(world).hash(),
+            "{label}: initial"
+        );
+        let trace: paths::Trace =
+            serde_json::from_value(serde_json::to_value(trace).unwrap()).unwrap();
+        let read_end = read.replayed(&trace).unwrap();
+        assert_eq!(
+            state::tree::<Paths>(&read_end).hash(),
+            state::tree::<O>(end).hash(),
+            "{label}: end"
+        );
+    }
+
+    for world in [
+        maze::initial(),
+        maze::initial_showcase(),
+        maze::initial_stress(),
+    ] {
+        let solution = maze::solve_astar(&world).unwrap();
+        untyped(
+            "maze",
+            &world,
+            solution.trace(),
+            &world.replayed(solution.trace()).unwrap(),
+        );
+    }
+    for profile in [
+        work_league::Profile::Micro,
+        work_league::Profile::Showcase,
+        work_league::Profile::Stress,
+    ] {
+        let league = work_league::league(profile, work_league::mixed_lineup());
+        let outcome = work_league::run(&league, 17).unwrap();
+        untyped(
+            &format!("work-league {profile:?}"),
+            league.initial(),
+            outcome.trace(),
+            outcome.final_world(),
+        );
+    }
 }

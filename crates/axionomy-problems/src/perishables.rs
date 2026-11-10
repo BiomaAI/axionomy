@@ -22,34 +22,26 @@ pub const DEFAULT_WAREHOUSE_CLAIMS: u64 = 7_000;
 pub const DEFAULT_FRIDGE_CLAIMS: u64 = 3_000;
 pub const DEFAULT_TRANSFER: u64 = 1_000;
 
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, axionomy::Identifier)]
 pub enum Location {
     Warehouse,
     Fridge,
 }
 
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, axionomy::Identifier)]
 pub enum Cohort {
     Ambient,
     Refrigerated,
 }
 
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, axionomy::Identifier)]
 pub enum Exposure {
     Ambient,
     Cold,
     WarmedAfterOutage,
 }
 
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, axionomy::Identifier)]
 pub enum Moment {
     Harvest,
     AmbientExpiry,
@@ -57,18 +49,27 @@ pub enum Moment {
     ColdExpiry,
 }
 
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
-)]
+impl Moment {
+    /// Where this moment falls in time, harvest first. A moment's identifier
+    /// order is its path's, which says nothing about when it comes.
+    const fn chronology(self) -> u8 {
+        match self {
+            Self::Harvest => 0,
+            Self::AmbientExpiry => 1,
+            Self::WarmedExpiry => 2,
+            Self::ColdExpiry => 3,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, axionomy::Identifier)]
 pub enum AccountId {
     World,
     Storage(Location),
     Cohort(Cohort),
 }
 
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, axionomy::Identifier)]
 pub enum Asset {
     WorldIdentity,
     LocationIdentity(Location),
@@ -92,9 +93,7 @@ pub enum Asset {
     PlanSolved,
 }
 
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, axionomy::Identifier)]
 pub enum Role {
     World,
     Holder,
@@ -106,9 +105,7 @@ pub enum Role {
     DestinationCohort,
 }
 
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, axionomy::Identifier)]
 pub enum RateId {
     MoveToFridge,
     Advance { from: Moment, to: Moment },
@@ -561,9 +558,11 @@ impl PartialOrd for AgendaEntry {
 
 impl Ord for AgendaEntry {
     fn cmp(&self, other: &Self) -> Ordering {
+        // A max-heap: the earliest moment, then the earliest scheduled, first.
         other
             .at
-            .cmp(&self.at)
+            .chronology()
+            .cmp(&self.at.chronology())
             .then_with(|| other.sequence.cmp(&self.sequence))
     }
 }
@@ -629,7 +628,11 @@ impl EffectAgenda {
 
     fn pop_due(&mut self, now: Moment) -> Vec<Action> {
         let mut due = Vec::new();
-        while self.pending.peek().is_some_and(|entry| entry.at <= now) {
+        while self
+            .pending
+            .peek()
+            .is_some_and(|entry| entry.at.chronology() <= now.chronology())
+        {
             due.push(
                 self.pending
                     .pop()

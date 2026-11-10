@@ -74,7 +74,7 @@ describe("Living Market scene", () => {
         },
         actors: [{
           id: { key: "amm/actor/factory", label: "Factory" },
-          account: "amm/account/actor-factory",
+          account: "amm/account/actor/factory",
           glyph: "machine",
           tone: "neutral",
           x: 15,
@@ -95,7 +95,7 @@ describe("Living Market scene", () => {
     render(React.createElement(SceneView, { scene, history: [scene], onAccount }));
     expect(screen.getByRole("button", { name: /AMM pool.*10.000.*10,000.*100,000/ })).toBeInTheDocument();
     screen.getByRole("button", { name: /Factory: 0 energy, 40000 credit/ }).click();
-    expect(onAccount).toHaveBeenCalledWith("amm/account/actor-factory");
+    expect(onAccount).toHaveBeenCalledWith("amm/account/actor/factory");
     expect(screen.getByRole("img", { name: /Discovered price history/ })).toBeInTheDocument();
   });
 });

@@ -232,8 +232,9 @@ A push atomically rewrites three accounts while preserving crate identity:
 ```
 
 The Showcase warehouse has boundary walls, an internal obstruction, two crates,
-two goals, and legal moves that do not advance the objective. Completion binds
-every stable crate to a distinct goal in one final exchange. A second trace
+two goals, and legal moves that do not advance the objective. Completion is
+one `Finish` law: its final exchange binds every stable crate's goal role to
+the distinct goal cell that crate rests on. A second trace
 starts from that same economy and replays a short sequence ending in a legal
 push into a non-goal corner, making the difference between validity and
 decision quality directly inspectable.

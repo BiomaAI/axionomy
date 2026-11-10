@@ -48,7 +48,9 @@ pub trait Ontology: Copy + Debug + Ord + Hash + Send + Sync + 'static {
   `Economy<O>` and `Exchange<O>`, can derive theirs.
 - **`Identifier`** is what the kernel needs of an identifier type: `Clone`,
   `Eq`, `Ord`, `Hash` and `Debug`. Ordering makes everything the kernel derives
-  deterministic: state keys, receipts, roots and view keys.
+  deterministic: state keys, receipts, roots and view keys. Derive it with
+  `#[derive(Identifier)]`, which also writes the type as its path and orders it
+  as that path ([below](#identifiers-are-written-as-paths)).
 - **`NAME` is a path** of lowercase kebab-case segments. It is checked when
   compiling: wherever the ontology is used, `OntologyPath::of::<O>()` refuses to
   compile a name that is not a path. Storage records the name with every run,
@@ -70,7 +72,9 @@ orders, the world itself, and Nature. Ask what a balance belongs to. Flour
 belongs to the baker, the baking slot to the oven, and coins to a customer.
 
 ```rust
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+use axionomy::Identifier;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Identifier)]
 enum Holder {
     Baker,
     Oven,
@@ -79,10 +83,11 @@ enum Holder {
 ```
 
 Variants with data, such as `Customer(u8)`, give a family of accounts one
-variant. Exchanges can open and close accounts, so a family can grow and
-shrink at runtime: an order is placed, a position is opened, a firm enters
-the market. The exchange names each new account. The kernel never invents
-identifiers in your ontology (D-039).
+variant, written `customer/0`, `customer/1` and so on. Exchanges can open and
+close accounts, so a family can grow and shrink at runtime: an order is
+placed, a position is opened, a firm enters the market. The exchange names
+each new account. The kernel never invents identifiers in your ontology
+(D-039).
 
 ### 2. Assets: what is held
 
@@ -90,7 +95,7 @@ An asset is anything with a quantity. Quantities are exact non-negative 256-bit
 integers, with no floats and nothing that rounds silently.
 
 ```rust
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Identifier)]
 enum Good {
     /// Grams of flour.
     Flour,
@@ -137,7 +142,7 @@ A rate is a law over roles. Per unit of the exchange, each role's account
 the preserved basket, which is read once and never used up (D-006).
 
 ```rust
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Identifier)]
 enum Law {
     Knead,
     Bake,
@@ -166,12 +171,14 @@ Rates can also:
 every customer; each exchange binds `Buyer` to whichever customer is buying.
 Put data in a rate's identifier only when the law itself differs. For example,
 `Move { from, to }` consumes `At(from)` and produces `At(to)`, so every pair of
-rooms needs its own law.
+rooms needs its own law. Sokoban's `Finish` is the other side: whichever goal
+cells the crates rest on, finishing is one law, and each exchange binds every
+crate's `Goal` role to the cell that crate is on.
 
 ### 4. Roles: the parts of a law
 
 ```rust
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Identifier)]
 enum Part {
     Baker,
     Oven,
@@ -297,13 +304,42 @@ and consults nothing outside the economy.
 | --- | --- |
 | Kernel | `Economy<O>`, `Exchange<O>`, `Trace<O>`, …: the four kinds, kept distinct |
 | Search | Generic over `O`: graph search, MCTS, ISMCTS, Pareto search and rollouts all read and propose through the kernel |
-| Storage (`axionomy-store`) | Any ontology whose identifiers serialize (`Recordable`). A run records `O::NAME`, is read back only as that ontology, and every identifier is stored as its JSON. |
-| Views (`axionomy-view`) | `ViewOntology<O>`: how views show `O`, meaning keys, labels, scenes and leaderboards. `DebugOntology<O>` derives keys from `Debug` output under the ontology's name, for example `bakery/account/customer-0`. |
+| Storage (`axionomy-store`) | Any ontology whose identifiers serialize (`Recordable`). A run records `O::NAME`, is read back only as that ontology, and every identifier is stored as its JSON: for a derived identifier, its path. |
+| Views (`axionomy-view`) | `ViewOntology<O>`: how views show `O`, meaning keys, labels, scenes and leaderboards. `DebugOntology<O>` keys each value by its written path under the ontology's name, for example `bakery/account/customer/0`, and labels it from its `Debug` output. |
 | Units and time | `axionomy-units` and `axionomy-time` author typed quantities and lower them into atoms of an ontology's assets |
 | MCP and remote clients | The `paths` ontology, where every identifier is data |
 
-For storage, derive `serde::Serialize` and `serde::Deserialize` on the four
-types as well. That is all a store needs to record the ontology's runs.
+`#[derive(Identifier)]` writes `Serialize` and `Deserialize` too, so the four
+types need nothing more for a store to record the ontology's runs.
+
+### Identifiers are written as paths
+
+`#[derive(Identifier)]` gives an identifier type one written form, its path,
+and one order, the order of that path (D-044):
+
+- A variant is its kebab-case name followed by its fields in order, and a
+  struct is its fields in order: `Customer(0)` is `customer/0`,
+  `Move { from: Start, to: Exit }` is `move/start/exit`, and `JobId(3)` is `3`.
+- A field is another identifier, an unsigned integer, a `bool` (`true` or
+  `false`) or an `Option` of one, written `none` or `some` followed by the
+  value. Anything else, such as a signed integer, text, a float or a
+  collection, has no written form and does not compile; say it another way,
+  usually as bindings or as more identifiers.
+- The order is the path's natural order: segment by segment, numbers by value
+  (`customer/2` before `customer/10`) and before words, and a path before the
+  longer paths it starts. Variants sort by name, not by where they are
+  declared.
+
+Derive `Debug`, `Clone`, `PartialEq`, `Eq` and `Hash` (and `Copy` when it
+fits) as usual, but not `PartialOrd`, `Ord`, `Serialize` or `Deserialize`: the
+derive writes them. Since an identifier's order is its path's, never rely on it
+for a domain order. If moments come in time order, give them a chronology and
+sort by it.
+
+A typed identifier and its path sort alike, so every map the kernel keeps is in
+the same order either way: a typed economy written down is a
+[`paths`](#identifiers-as-data) economy byte for byte, and tools that speak only
+paths, such as MCP, can read and explore it.
 
 ### Identifiers as data
 
@@ -314,18 +350,22 @@ storage, or by a problem defined without Rust types of its own. The four kinds
 still stay distinct, so an `AssetPath` never stands where an `AccountPath` is
 expected. Choose `Paths` when the vocabulary arrives at runtime. Choose your
 own types when it is part of your program, so that the compiler checks every
-law you write.
+law you write. Derived identifiers are written as paths, so an economy of your
+own types, written down, also reads as a `Paths` economy.
 
 ## Checklist
 
 - [ ] Four types: account, asset, rate and role, each deriving `Debug`,
-      `Clone`, `PartialEq`, `Eq`, `PartialOrd`, `Ord` and `Hash` (`Copy` when
-      it fits), plus serde to store runs.
-- [ ] A marker, `enum MyOntology {}`, deriving the same traits plus `Copy`,
-      with a path `NAME` that is unique among your ontologies.
+      `Clone`, `PartialEq`, `Eq`, `Hash` (`Copy` when it fits) and
+      `Identifier`, whose fields are identifiers, unsigned integers, `bool` or
+      `Option`.
+- [ ] A marker, `enum MyOntology {}`, deriving `Debug`, `Clone`, `Copy`,
+      `PartialEq`, `Eq`, `PartialOrd`, `Ord` and `Hash`, with a path `NAME`
+      that is unique among your ontologies.
 - [ ] Every fact a law reads is an asset; nothing a law needs lives outside
       the economy.
 - [ ] Rates are laws over roles; who takes part is bound by each exchange.
+- [ ] Nothing relies on an identifier's order for a domain order.
 - [ ] Roles that must be a particular account preserve that account's
       identity asset.
 - [ ] Conserved quantities are declared as invariants.

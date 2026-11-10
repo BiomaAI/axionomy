@@ -11,8 +11,8 @@ use axionomy_view::{
     SceneEntityRoleView, SceneEntityView, SceneEvidenceRefView, SceneGlyphView, SceneMetricView,
     SceneToneView, SearchObservationKindView, SearchObservationView, SearchTelemetryView,
     TelemetryKindView, TelemetryPointView, ViewDocument, ViewDocumentMetadata, ViewId,
-    ViewOntology, ViewSource, derive_document, derive_document_with_frames, derive_model,
-    derive_proposal, slug,
+    ViewOntology, ViewSource, WrittenOntology, derive_document, derive_document_with_frames,
+    derive_model, derive_proposal, slug,
 };
 use std::{collections::BTreeSet, ops::ControlFlow};
 
@@ -137,17 +137,17 @@ pub(super) fn evaluated_integer_front(
 
 /// The key every view of `O` gives `account`, so a scene names the account
 /// a frame shows.
-pub(super) fn account_key<O: Ontology>(account: &O::Account) -> ItemPath {
+pub(super) fn account_key<O: WrittenOntology>(account: &O::Account) -> ItemPath {
     DebugOntology::<O>::default().account(account).key
 }
 
 /// The key every view of `O` gives `asset`.
-pub(super) fn asset_key<O: Ontology>(asset: &O::Asset) -> ItemPath {
+pub(super) fn asset_key<O: WrittenOntology>(asset: &O::Asset) -> ItemPath {
     DebugOntology::<O>::default().asset(asset).key
 }
 
 /// Shows `entity` as `account`, citing the account as its evidence.
-pub(super) fn link_account<O: Ontology>(
+pub(super) fn link_account<O: WrittenOntology>(
     mut entity: SceneEntityView,
     account: &O::Account,
 ) -> SceneEntityView {
@@ -160,7 +160,7 @@ pub(super) fn link_account<O: Ontology>(
 }
 
 /// Shows `entity` as `account`, citing its balance of `asset` as evidence.
-pub(super) fn link_balance<O: Ontology>(
+pub(super) fn link_balance<O: WrittenOntology>(
     mut entity: SceneEntityView,
     account: &O::Account,
     asset: &O::Asset,
@@ -226,7 +226,7 @@ impl<O: Ontology> StudioOntology<O> {
     }
 }
 
-impl<O: Ontology> ViewOntology<O> for StudioOntology<O>
+impl<O: WrittenOntology> ViewOntology<O> for StudioOntology<O>
 where
     O::Account: StudioLabel,
     O::Asset: StudioLabel + StudioFormat,
@@ -1221,7 +1221,7 @@ pub(super) struct DocumentSpec<'a> {
     pub source_label: &'a str,
 }
 
-pub(super) fn document<O: Ontology>(
+pub(super) fn document<O: WrittenOntology>(
     spec: DocumentSpec<'_>,
     initial: &Economy<O>,
     goal: &Goal<O>,
@@ -1255,7 +1255,7 @@ where
     Ok(document)
 }
 
-pub(super) fn document_with_leaderboards_observed<O: Ontology>(
+pub(super) fn document_with_leaderboards_observed<O: WrittenOntology>(
     spec: DocumentSpec<'_>,
     initial: &Economy<O>,
     goal: &Goal<O>,
@@ -1299,7 +1299,7 @@ pub(super) struct ProposalSpec<'a> {
 }
 
 /// A proposal assessed against the document's initial state.
-pub(super) fn proposal<O: Ontology>(
+pub(super) fn proposal<O: WrittenOntology>(
     spec: ProposalSpec<'_>,
     economy: &Economy<O>,
     exchange: &axionomy::Exchange<O>,
@@ -1316,7 +1316,7 @@ where
 /// A proposal assessed against `economy`, the document's snapshot
 /// `snapshot_index`: zero is the initial state, and frame `i` leaves
 /// snapshot `i + 1`.
-pub(super) fn proposal_at<O: Ontology>(
+pub(super) fn proposal_at<O: WrittenOntology>(
     spec: ProposalSpec<'_>,
     snapshot_index: u64,
     economy: &Economy<O>,

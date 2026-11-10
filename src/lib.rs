@@ -1,5 +1,8 @@
 #![doc = include_str!("../README.md")]
 
+// `#[derive(Identifier)]` names the kernel `::axionomy`, here as anywhere.
+extern crate self as axionomy;
+
 pub mod account;
 mod accounts;
 pub mod amount;
@@ -13,6 +16,8 @@ pub mod rate;
 
 pub use account::{Account, AccountError};
 pub use amount::AssetAmount;
+/// Derives an identifier written as its path: see [`path::Segments`].
+pub use axionomy_derive::Identifier;
 pub use basket::{Basket, BasketError};
 pub use economy::{
     AccountAssessment, AccountShortfall, Apply, ApplyError, ApplyResult, AssessmentStatus,
@@ -25,6 +30,8 @@ pub use path::{
     AccountPath, AssetPath, ConditionPath, InvariantPath, OntologyPath, ParameterPath, PathError,
     PathKind, RatePath, RolePath,
 };
+#[doc(hidden)]
+pub use serde as __serde;
 
 /// A path written as a literal and checked when compiling; its kind is
 /// inferred where it is used.
@@ -62,6 +69,9 @@ use std::{fmt::Debug, hash::Hash};
 
 /// What the kernel needs of an identifier type: values it can clone, compare,
 /// order, hash and show. Every account, asset, rate and role type is one.
+///
+/// `#[derive(Identifier)]` makes a type one that is also written as its path
+/// and ordered as that path: see [`path::Segments`].
 pub trait Identifier: Clone + Eq + Ord + Hash + Debug {}
 
 impl<T: Clone + Eq + Ord + Hash + Debug> Identifier for T {}
@@ -78,21 +88,23 @@ impl<T: Clone + Eq + Ord + Hash + Debug> Identifier for T {}
 ///
 /// An ontology is a marker type, usually an empty enum, and is never a value.
 /// It derives the standard traits so that the kernel's types can derive
-/// theirs:
+/// theirs. Its identifiers derive [`Identifier`](macro@Identifier), which
+/// writes each as its path (`Good::Bread` is `bread`) and orders it as that
+/// path, so an economy written down reads as a [`paths`] economy:
 ///
 /// ```
-/// use axionomy::{Account, EconomyBuilder, Exchange, Ontology, Quantity, Rate, basket};
+/// use axionomy::{Account, EconomyBuilder, Exchange, Identifier, Ontology, Quantity, Rate, basket};
 ///
 /// #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 /// enum Bakery {}
 ///
-/// #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+/// #[derive(Debug, Clone, PartialEq, Eq, Hash, Identifier)]
 /// enum Holder { Baker }
-/// #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+/// #[derive(Debug, Clone, PartialEq, Eq, Hash, Identifier)]
 /// enum Good { Flour, Bread }
-/// #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+/// #[derive(Debug, Clone, PartialEq, Eq, Hash, Identifier)]
 /// enum Law { Bake }
-/// #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+/// #[derive(Debug, Clone, PartialEq, Eq, Hash, Identifier)]
 /// enum Part { Oven }
 ///
 /// impl Ontology for Bakery {
@@ -116,6 +128,7 @@ impl<T: Clone + Eq + Ord + Hash + Debug> Identifier for T {}
 /// let bake = Exchange::new(Law::Bake, Quantity::new(2)).bind(Part::Oven, Holder::Baker);
 /// economy.apply(bake).unwrap();
 /// assert_eq!(economy.balance(&Holder::Baker, &Good::Bread), Quantity::new(2));
+/// assert_eq!(serde_json::to_string(&Good::Bread).unwrap(), r#""bread""#);
 /// ```
 ///
 /// The name is a path, checked when the ontology is used: storage records it

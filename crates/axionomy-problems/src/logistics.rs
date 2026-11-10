@@ -25,9 +25,7 @@ const REFUEL_AMOUNT: u64 = 4;
 const REPAIR_TIME: u64 = 2;
 const ROLLOUT_HORIZON: usize = 120;
 
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, axionomy::Identifier)]
 pub enum OrderId {
     A,
     B,
@@ -37,18 +35,14 @@ pub enum OrderId {
 
 pub const ORDERS: [OrderId; 4] = [OrderId::A, OrderId::B, OrderId::C, OrderId::D];
 
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, axionomy::Identifier)]
 pub enum Location {
     Depot,
     Junction,
     Customer,
 }
 
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, axionomy::Identifier)]
 pub enum Route {
     DirectOut,
     DirectBack,
@@ -67,9 +61,7 @@ pub const ROUTES: [Route; 6] = [
     Route::SafeBackSecond,
 ];
 
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, axionomy::Identifier)]
 pub enum TravelOutcome {
     Clear,
     Delayed,
@@ -82,9 +74,7 @@ pub const OUTCOMES: [TravelOutcome; 3] = [
     TravelOutcome::Breakdown,
 ];
 
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, axionomy::Identifier)]
 pub enum AccountId {
     Vehicle,
     Order(OrderId),
@@ -92,9 +82,7 @@ pub enum AccountId {
     FuelStation,
 }
 
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, axionomy::Identifier)]
 pub enum Asset {
     At(Location),
     Traveling(Route),
@@ -115,9 +103,7 @@ pub enum Asset {
     Outcome(Route, TravelOutcome),
 }
 
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, axionomy::Identifier)]
 pub enum Role {
     Vehicle,
     Order,
@@ -125,9 +111,7 @@ pub enum Role {
     FuelStation,
 }
 
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, axionomy::Identifier)]
 pub enum RateId {
     Load(OrderId),
     Depart(Route),

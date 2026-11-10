@@ -255,9 +255,40 @@ impl<K> PartialOrd for Path<K> {
     }
 }
 
+/// Natural order: segment by segment, numbers by value (`job/2` before
+/// `job/10`) and before words, and a path before the longer paths it starts.
+/// An identifier's `#[derive(Identifier)]` order is this order of its path.
 impl<K> Ord for Path<K> {
     fn cmp(&self, other: &Self) -> Ordering {
-        self.0.cmp(&other.0)
+        let mut left = self.0.split('/');
+        let mut right = other.0.split('/');
+        loop {
+            match (left.next(), right.next()) {
+                // Equal values written differently, such as `07` and `7`,
+                // still differ as paths.
+                (None, None) => return self.0.cmp(&other.0),
+                (None, Some(_)) => return Ordering::Less,
+                (Some(_), None) => return Ordering::Greater,
+                (Some(left), Some(right)) => match natural_segment(left, right) {
+                    Ordering::Equal => {}
+                    order => return order,
+                },
+            }
+        }
+    }
+}
+
+fn natural_segment(left: &str, right: &str) -> Ordering {
+    let number = |segment: &str| segment.bytes().all(|byte| byte.is_ascii_digit());
+    match (number(left), number(right)) {
+        (true, true) => {
+            let left = left.trim_start_matches('0');
+            let right = right.trim_start_matches('0');
+            left.len().cmp(&right.len()).then_with(|| left.cmp(right))
+        }
+        (true, false) => Ordering::Less,
+        (false, true) => Ordering::Greater,
+        (false, false) => left.cmp(right),
     }
 }
 
@@ -348,4 +379,136 @@ mod tests {
         assert_eq!(serde_json::to_string(&loan).unwrap(), "\"loans/42\"");
         assert!(serde_json::from_str::<AccountPath>("\"Loans\"").is_err());
     }
+}
+
+/// A value written as path segments: what an identifier's path is made of.
+/// `#[derive(Identifier)]` writes enums and structs (a variant's kebab-case
+/// name, then its fields in order; a struct's fields in order) and orders them
+/// as their paths order; unsigned integers, `bool` and `Option` are written
+/// here, so their order is their paths' order too.
+pub trait Segments: Sized {
+    /// Appends this value's segments.
+    fn write_segments(&self, segments: &mut Vec<String>);
+
+    /// Reads this value from the segments that follow.
+    fn read_segments(segments: &mut SegmentReader<'_>) -> Result<Self, IdentifierError>;
+}
+
+/// The segments of a path still to be read.
+pub struct SegmentReader<'a>(std::str::Split<'a, char>);
+
+impl<'a> SegmentReader<'a> {
+    /// Reads the next segment.
+    pub fn segment(&mut self) -> Result<&'a str, IdentifierError> {
+        self.0.next().ok_or(IdentifierError::Short)
+    }
+}
+
+/// A path that does not name a value of the identifier type it was read as.
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
+pub enum IdentifierError {
+    #[error("the path ends before the identifier does")]
+    Short,
+    #[error("`{0}` is not part of this identifier")]
+    Unexpected(String),
+}
+
+/// An identifier's path: its segments joined with `/`.
+pub fn write<K, T: Segments>(value: &T) -> Path<K> {
+    let path = written(value);
+    debug_assert!(is_path(&path), "`{path}` is not a path");
+    Path::new(path.into())
+}
+
+/// The identifier a path names; every segment must be read.
+pub fn read<K, T: Segments>(path: &Path<K>) -> Result<T, IdentifierError> {
+    read_text(path.as_str())
+}
+
+fn written<T: Segments>(value: &T) -> String {
+    let mut segments = Vec::new();
+    value.write_segments(&mut segments);
+    segments.join("/")
+}
+
+fn read_text<T: Segments>(text: &str) -> Result<T, IdentifierError> {
+    let mut segments = SegmentReader(text.split('/'));
+    let value = T::read_segments(&mut segments)?;
+    match segments.0.next() {
+        None => Ok(value),
+        Some(rest) => Err(IdentifierError::Unexpected(rest.to_owned())),
+    }
+}
+
+macro_rules! unsigned_segments {
+    ($($integer:ty),*) => {$(
+        impl Segments for $integer {
+            fn write_segments(&self, segments: &mut Vec<String>) {
+                segments.push(self.to_string());
+            }
+
+            fn read_segments(segments: &mut SegmentReader<'_>) -> Result<Self, IdentifierError> {
+                let segment = segments.segment()?;
+                segment
+                    .parse()
+                    .map_err(|_| IdentifierError::Unexpected(segment.to_owned()))
+            }
+        }
+    )*};
+}
+
+unsigned_segments!(u8, u16, u32, u64, usize);
+
+impl Segments for bool {
+    fn write_segments(&self, segments: &mut Vec<String>) {
+        segments.push(if *self { "true" } else { "false" }.to_owned());
+    }
+
+    fn read_segments(segments: &mut SegmentReader<'_>) -> Result<Self, IdentifierError> {
+        match segments.segment()? {
+            "true" => Ok(true),
+            "false" => Ok(false),
+            other => Err(IdentifierError::Unexpected(other.to_owned())),
+        }
+    }
+}
+
+/// `none`, or `some` and the value's own segments, so `None` comes first as
+/// it does in `Option`'s order.
+impl<T: Segments> Segments for Option<T> {
+    fn write_segments(&self, segments: &mut Vec<String>) {
+        match self {
+            None => segments.push("none".to_owned()),
+            Some(value) => {
+                segments.push("some".to_owned());
+                value.write_segments(segments);
+            }
+        }
+    }
+
+    fn read_segments(segments: &mut SegmentReader<'_>) -> Result<Self, IdentifierError> {
+        match segments.segment()? {
+            "none" => Ok(None),
+            "some" => T::read_segments(segments).map(Some),
+            other => Err(IdentifierError::Unexpected(other.to_owned())),
+        }
+    }
+}
+
+/// An identifier written as its path, as `#[derive(Identifier)]` serializes it.
+#[doc(hidden)]
+pub fn serialize_identifier<T: Segments, S: Serializer>(
+    value: &T,
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
+    serializer.serialize_str(&written(value))
+}
+
+/// An identifier read from its path, as `#[derive(Identifier)]` deserializes it.
+#[doc(hidden)]
+pub fn deserialize_identifier<'de, T: Segments, D: Deserializer<'de>>(
+    deserializer: D,
+) -> Result<T, D::Error> {
+    let text = Cow::<str>::deserialize(deserializer)?;
+    read_text(&text).map_err(serde::de::Error::custom)
 }

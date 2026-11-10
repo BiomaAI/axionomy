@@ -115,6 +115,7 @@ models into one-way workspace dependencies:
 | Crate | Responsibility |
 | --- | --- |
 | `axionomy` | Pure closed-state validation and exchange execution kernel |
+| `axionomy-derive` | `#[derive(Identifier)]`: identifier types written and ordered as their paths |
 | `axionomy-search` | Non-authoritative graph and Pareto search, rollout, Monte Carlo, perfect-information and information-set MCTS, and learning projections |
 | `axionomy-problems` | Canonical problem encodings, specialized proposers, and conformance tests |
 | `axionomy-units` | Self-describing asset denominations, schema coherence, dimension-safe `uom` authoring, and fixed-precision decimal assets |
@@ -129,6 +130,7 @@ models into one-way workspace dependencies:
 | `axionomy-studio-wasm` | Single-threaded Web Worker adapter for running the same Rust service in a browser |
 
 ```text
+axionomy ─────────────→ axionomy-derive
 axionomy-search ──────→ axionomy
 axionomy-problems ────→ axionomy
                     └─→ axionomy-search
@@ -144,11 +146,12 @@ axionomy-studio-server → axionomy-service
 axionomy-studio-wasm ──→ axionomy-service
 ```
 
-The kernel does not depend on a solver, problem, unit, or time crate. The
-packages are independently publishable: release `axionomy` first; search and
-units may follow; time follows units; problems and view follow the reusable
-layers; the service follows those; CLI, MCP, HTTP, and Studio remain outer
-adapters.
+The kernel does not depend on a solver, problem, unit, or time crate; its one
+workspace dependency is the derive for its identifiers. The packages are
+independently publishable: release `axionomy-derive` and then `axionomy`
+first; search and units may follow; time follows units; problems and view
+follow the reusable layers; the service follows those; CLI, MCP, HTTP, and
+Studio remain outer adapters.
 
 ## What is implemented
 
@@ -698,7 +701,8 @@ cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo fmt --all -- --check
 RUSTDOCFLAGS="-D warnings" cargo doc --workspace --all-features --no-deps
 cargo bench --workspace --no-run
-cargo package -p axionomy
+cargo package -p axionomy-derive
+cargo package -p axionomy --list
 cargo package -p axionomy-search --list
 cargo package -p axionomy-units --list
 cargo package -p axionomy-time --list
@@ -708,8 +712,9 @@ cargo package -p axionomy-problems --list
 cargo package -p axionomy-mcp --list
 ```
 
-Until `axionomy` is available from a registry, Cargo cannot perform an
-ordinary registry-resolution dry run for the dependent packages. CI can
-verify their package archives using local `[patch.crates-io]` overrides; their
+Until `axionomy-derive` and `axionomy` are available from a registry, Cargo
+cannot perform an ordinary registry-resolution dry run for the dependent
+packages. CI can verify their package archives using local
+`[patch.crates-io]` overrides; their
 source manifests retain both path and version requirements for normal
 workspace development and future ordered publication.

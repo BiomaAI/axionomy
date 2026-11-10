@@ -6,17 +6,13 @@ use axionomy::{
     QuantityComparison as C, QuantityExpression as Q, Rate, Rounding, basket,
 };
 use axionomy_search::rollout::{RolloutConfig, RolloutDecision, RolloutResult, run_to_goal};
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, axionomy::Identifier)]
 pub enum Van {
     Cold,
     Freight,
 }
 pub const VANS: [Van; 2] = [Van::Cold, Van::Freight];
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, axionomy::Identifier)]
 pub enum Location {
     Depot,
     Hub,
@@ -39,17 +35,13 @@ pub const ROADS: [(Location, Location); 6] = [
     (Location::South, Location::East),
     (Location::Depot, Location::North),
 ];
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, axionomy::Identifier)]
 pub enum Outcome {
     Clear,
     Delayed,
     Breakdown,
 }
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, axionomy::Identifier)]
 pub enum AccountId {
     World,
     Station,
@@ -57,9 +49,7 @@ pub enum AccountId {
     Vehicle(Van),
     Order(u8),
 }
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, axionomy::Identifier)]
 pub enum Asset {
     WorldIdentity,
     StationIdentity,
@@ -126,9 +116,7 @@ pub enum Asset {
     StagedCount,
     DamageCount,
 }
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, axionomy::Identifier)]
 pub enum Role {
     World,
     Vehicle,
@@ -137,9 +125,7 @@ pub enum Role {
     Station,
     Nature,
 }
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, axionomy::Identifier)]
 pub enum RateId {
     Release(u8),
     Load {

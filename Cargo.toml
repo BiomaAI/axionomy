@@ -1,6 +1,7 @@
 [workspace]
 members = [
     ".",
+    "crates/axionomy-derive",
     "crates/axionomy-search",
     "crates/axionomy-problems",
     "crates/axionomy-units",
@@ -29,6 +30,7 @@ rust-version = "1.99"
 # by the member that owns the feature, never here.
 [workspace.dependencies]
 axionomy = { version = "0.1.0", path = "." }
+axionomy-derive = { version = "0.1.0", path = "crates/axionomy-derive" }
 axionomy-problems = { version = "0.1.0", path = "crates/axionomy-problems" }
 axionomy-search = { version = "0.1.0", path = "crates/axionomy-search" }
 axionomy-tree = { version = "0.1.0", path = "crates/axionomy-tree" }
@@ -50,7 +52,9 @@ js-sys = "0.3.107"
 num-rational = { version = "0.4.2", features = ["serde"] }
 num-traits = "0.2.19"
 pathfinding = "4.16.0"
+proc-macro2 = "1.0.107"
 proptest = "1.12.0"
+quote = "1.0.47"
 rand = { version = "0.10.3", default-features = false, features = ["std"] }
 rand_chacha = "0.10.0"
 redb = "4.5.0"
@@ -65,6 +69,7 @@ schemars = "1.2.3"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 statrs = { version = "0.19.1", default-features = false, features = ["std"] }
+syn = "2.0.119"
 thiserror = "2.0.21"
 tokio = "1.54.1"
 tokio-stream = { version = "0.1.19", features = ["sync"] }
@@ -94,6 +99,7 @@ repository.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+axionomy-derive.workspace = true
 indexmap.workspace = true
 ruint.workspace = true
 schemars.workspace = true

@@ -420,6 +420,7 @@ checksum = "f2032f911046de80f0a198e0901378627c33f59ea0ac00e363d481118bd70a53"
 name = "axionomy"
 version = "0.1.0"
 dependencies = [
+ "axionomy-derive",
  "criterion",
  "indexmap 2.14.2",
  "proptest",
@@ -440,6 +441,15 @@ dependencies = [
  "clap",
  "serde_json",
  "thiserror",
+]
+
+[[package]]
+name = "axionomy-derive"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
 ]
 
 [[package]]
@@ -478,6 +488,7 @@ dependencies = [
  "criterion",
  "proptest",
  "serde",
+ "serde_json",
  "tracing",
  "tracing-subscriber",
 ]

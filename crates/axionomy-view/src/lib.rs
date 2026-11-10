@@ -7,8 +7,7 @@
 use axionomy::{
     AccountAssessment, AccountDelta, ApplyError, Basket, ConditionPath, Economy, Exchange,
     ExchangeAssessment, Goal, InvariantPath, Ontology, OntologyPath, ParameterPath, PathKind,
-    Quantity, QuantityComparison, QuantityExpression, Receipt, Rounding, Trace,
-    path::{Path, slug_segment},
+    Quantity, QuantityComparison, QuantityExpression, Receipt, Rounding, Trace, path::Path,
 };
 
 pub use axionomy::path::slug;
@@ -1477,10 +1476,29 @@ pub trait ViewOntology<O: Ontology> {
     }
 }
 
-/// Shows an ontology's values by their `Debug` output, keyed under the
-/// ontology's name: the account `Agent` of the ontology `maze` is keyed
-/// `maze/account/agent` and labeled `Agent`. The engine keeps the exact typed
-/// values; only their presentation is derived.
+/// An ontology whose identifiers serialize, as an identifier deriving
+/// [`axionomy::Identifier`] or a path does: to its written path.
+pub trait WrittenOntology:
+    Ontology<Account: Serialize, Asset: Serialize, Rate: Serialize, Role: Serialize>
+{
+}
+
+impl<O> WrittenOntology for O where
+    O: Ontology<Account: Serialize, Asset: Serialize, Rate: Serialize, Role: Serialize>
+{
+}
+
+/// Shows an ontology's values keyed by their written paths under the
+/// ontology's name, and labeled by their `Debug` output: the asset
+/// `Edge(KeyRoom, Gate)` of the ontology `maze` is keyed
+/// `maze/asset/edge/key-room/gate` and labeled `Edge Key Room, Gate`. A key is
+/// therefore the identifier as storage and the `paths` ontology write it. The
+/// engine keeps the exact typed values; only their presentation is derived.
+///
+/// # Panics
+///
+/// When an identifier is written as neither a path nor a whole number, which
+/// no identifier deriving [`axionomy::Identifier`] is.
 pub struct DebugOntology<O>(PhantomData<fn() -> O>);
 
 impl<O: Ontology> Default for DebugOntology<O> {
@@ -1489,20 +1507,22 @@ impl<O: Ontology> Default for DebugOntology<O> {
     }
 }
 
-impl<O: Ontology> DebugOntology<O> {
-    fn id<T: Debug>(&self, category: &str, value: &T) -> ViewId {
-        let debug = format!("{value:?}");
-        // A value whose `Debug` output has no letter or digit, such as `()`,
-        // still needs a segment.
-        let value = slug_segment(&debug).unwrap_or_else(|| "value".into());
-        ViewId::new(
-            slug(format!("{}/{category}/{value}", OntologyPath::of::<O>())),
-            humanize_debug(&debug),
-        )
+impl<O: WrittenOntology> DebugOntology<O> {
+    fn id<T: Debug + Serialize>(&self, category: &str, value: &T) -> ViewId {
+        let written = match serde_json::to_value(value) {
+            Ok(Value::String(path)) => path,
+            Ok(Value::Number(number)) => number.to_string(),
+            written => panic!("`{value:?}` is written as {written:?}, not as a path"),
+        };
+        let key = format!("{}/{category}/{written}", OntologyPath::of::<O>());
+        let key = key
+            .parse()
+            .unwrap_or_else(|error| panic!("`{value:?}` is keyed `{key}`, not a path: {error}"));
+        ViewId::new(key, humanize_debug(&format!("{value:?}")))
     }
 }
 
-impl<O: Ontology> ViewOntology<O> for DebugOntology<O> {
+impl<O: WrittenOntology> ViewOntology<O> for DebugOntology<O> {
     fn account(&self, id: &O::Account) -> ViewId {
         self.id("account", id)
     }
@@ -2336,6 +2356,72 @@ mod tests {
         );
         // More digits than the scale pad with zeros; they never invent precision.
         assert_eq!(write(&QuantityFormat::COUNT.digits(2), 7), "7.00");
+    }
+
+    /// A key is the identifier's written path under its ontology and kind,
+    /// whether the identifier is derived, a path, or written as a number.
+    #[test]
+    fn debug_ontology_keys_values_by_their_written_paths() {
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, axionomy::Identifier)]
+        enum Room {
+            KeyRoom,
+            Gate,
+        }
+
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, axionomy::Identifier)]
+        enum Thing {
+            Edge(Room, Room),
+            Crate(Option<u8>),
+        }
+
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+        enum Written {}
+
+        impl Ontology for Written {
+            const NAME: &'static str = "written";
+            type Account = Thing;
+            type Asset = Thing;
+            type Rate = Thing;
+            type Role = Thing;
+        }
+
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
+        #[serde(transparent)]
+        struct Number(u64);
+
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+        enum Numbered {}
+
+        impl Ontology for Numbered {
+            const NAME: &'static str = "numbered";
+            type Account = Number;
+            type Asset = Number;
+            type Rate = Number;
+            type Role = Number;
+        }
+
+        let written = DebugOntology::<Written>::default();
+        let edge = written.asset(&Thing::Edge(Room::KeyRoom, Room::Gate));
+        assert_eq!(edge.key.as_str(), "written/asset/edge/key-room/gate");
+        assert_eq!(edge.label, "Edge Key Room, Gate");
+        assert_eq!(
+            written.role(&Thing::Crate(Some(7))).key.as_str(),
+            "written/role/crate/some/7"
+        );
+        assert_eq!(
+            DebugOntology::<axionomy::paths::Paths>::default()
+                .account(&"loans/42".parse().unwrap())
+                .key
+                .as_str(),
+            "paths/account/loans/42"
+        );
+        assert_eq!(
+            DebugOntology::<Numbered>::default()
+                .rate(&Number(10))
+                .key
+                .as_str(),
+            "numbered/rate/10"
+        );
     }
 
     #[test]

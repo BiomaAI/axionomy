@@ -69,7 +69,7 @@ pub(super) fn build(
         matches!(rate, RateId::Push { crate_at, crate_id, .. }
             if initial.balance(&AccountId::Cell(*crate_at), &Asset::Crate(*crate_id)).is_zero())
     }) {
-        let missing_crate = sokoban::exchange(rate.clone());
+        let missing_crate = sokoban::exchange(&initial, *rate);
         solved.proposals.push(proposal(ProposalSpec {
                 id: "push-without-crate",
                 label: "Push an empty floor tile",
@@ -451,17 +451,8 @@ impl StudioLabel for sokoban::RateId {
                 "Push crate {} from cell {crate_at} to cell {to}, standing at cell {behind}",
                 crate_id + 1
             ),
-            Self::Finish { assignment } => {
-                let placed = assignment
-                    .iter()
-                    .map(|(crate_id, goal)| format!("crate {} on cell {goal}", crate_id + 1))
-                    .collect::<Vec<_>>();
-                match placed.split_last() {
-                    Some((last, [])) => format!("Finish with {last}"),
-                    Some((last, rest)) => format!("Finish with {} and {last}", rest.join(", ")),
-                    None => "Finish".into(),
-                }
-            }
+            // Where each crate rests is the exchange's binding of its goal role.
+            Self::Finish => "Finish".into(),
         }
     }
 }

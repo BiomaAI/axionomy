@@ -13,17 +13,13 @@ use axionomy::{
 };
 use axionomy_search::{SearchSolution, astar, bfs};
 
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, axionomy::Identifier)]
 pub enum AccountId {
     Cell(u8),
     Success,
 }
 
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, axionomy::Identifier)]
 pub enum Asset {
     CellIdentity(u8),
     BoardWidth(u8),
@@ -49,9 +45,7 @@ pub enum Asset {
     Solved,
 }
 
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, axionomy::Identifier)]
 pub enum Role {
     From,
     Middle,
@@ -60,9 +54,7 @@ pub enum Role {
     Goal(u8),
 }
 
-#[derive(
-    Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, axionomy::Identifier)]
 pub enum RateId {
     Latch {
         circuit: u8,
@@ -78,9 +70,9 @@ pub enum RateId {
         to: u8,
         crate_id: u8,
     },
-    Finish {
-        assignment: Vec<(u8, u8)>,
-    },
+    /// Every crate rests on a goal cell. One law for every placement: an
+    /// exchange binds each crate's goal role to the cell the crate is on.
+    Finish,
 }
 
 pub type World = Economy<Ontology>;
@@ -156,10 +148,13 @@ pub fn candidates(world: &World) -> Vec<Action> {
             .balance(&AccountId::Cell(adjacent), &Asset::Empty)
             .is_zero()
         {
-            proposals.push(exchange(RateId::Move {
-                from: player,
-                to: adjacent,
-            }));
+            proposals.push(exchange(
+                world,
+                RateId::Move {
+                    from: player,
+                    to: adjacent,
+                },
+            ));
             continue;
         }
         let Some((crate_id, _)) = crates.iter().find(|(_, cell)| *cell == adjacent) else {
@@ -176,12 +171,15 @@ pub fn candidates(world: &World) -> Vec<Action> {
         }
         let to = cell(width, to_x as u8, to_y as u8);
         if !world.balance(&AccountId::Cell(to), &Asset::Empty).is_zero() {
-            proposals.push(exchange(RateId::Push {
-                behind: player,
-                crate_at: adjacent,
-                to,
-                crate_id: *crate_id,
-            }));
+            proposals.push(exchange(
+                world,
+                RateId::Push {
+                    behind: player,
+                    crate_at: adjacent,
+                    to,
+                    crate_id: *crate_id,
+                },
+            ));
         }
     }
     if !crates.is_empty()
@@ -191,17 +189,20 @@ pub fn candidates(world: &World) -> Vec<Action> {
                 .is_zero()
         })
     {
-        proposals.push(exchange(RateId::Finish { assignment: crates }));
+        proposals.push(exchange(world, RateId::Finish));
     }
     for circuit in 0..2 {
         if !world
             .balance(&AccountId::Cell(player), &Asset::Panel(circuit))
             .is_zero()
         {
-            proposals.push(exchange(RateId::Latch {
-                circuit,
-                at: player,
-            }));
+            proposals.push(exchange(
+                world,
+                RateId::Latch {
+                    circuit,
+                    at: player,
+                },
+            ));
         }
     }
     world.applicable(proposals)
@@ -580,32 +581,29 @@ fn build_board(rows: &[&str]) -> World {
                 );
         }
     }
-    for assignment in assignments(&crate_ids, &goal_cells) {
-        let mut finish = Rate::new()
-            .consume(Role::Puzzle, basket([(Asset::Active, 1)]))
-            .produce(Role::Puzzle, basket([(Asset::Solved, 1)]));
-        if has_exit {
-            finish = finish.preserve(Role::Puzzle, basket([(Asset::AtExit, 1)]));
-        }
-        for (crate_id, goal_cell) in &assignment {
-            finish = finish
-                .preserve(
-                    Role::Goal(*crate_id),
-                    basket([
-                        (Asset::CellIdentity(*goal_cell), 1),
-                        (Asset::Crate(*crate_id), 1),
-                        (Asset::GoalCell, 1),
-                    ]),
-                )
-                .distinct(Role::Goal(*crate_id), Role::Puzzle);
-        }
-        for left in 0..crate_ids.len() {
-            for right in left + 1..crate_ids.len() {
-                finish = finish.distinct(Role::Goal(crate_ids[left]), Role::Goal(crate_ids[right]));
-            }
-        }
-        builder = builder.rate(RateId::Finish { assignment }, finish);
+    // Each crate's goal role must hold that crate on a goal cell. A crate is
+    // in one cell, so the binding names where it rests and the law needs no
+    // placement of its own.
+    let mut finish = Rate::new()
+        .consume(Role::Puzzle, basket([(Asset::Active, 1)]))
+        .produce(Role::Puzzle, basket([(Asset::Solved, 1)]));
+    if has_exit {
+        finish = finish.preserve(Role::Puzzle, basket([(Asset::AtExit, 1)]));
     }
+    for &crate_id in &crate_ids {
+        finish = finish
+            .preserve(
+                Role::Goal(crate_id),
+                basket([(Asset::Crate(crate_id), 1), (Asset::GoalCell, 1)]),
+            )
+            .distinct(Role::Goal(crate_id), Role::Puzzle);
+    }
+    for left in 0..crate_ids.len() {
+        for right in left + 1..crate_ids.len() {
+            finish = finish.distinct(Role::Goal(crate_ids[left]), Role::Goal(crate_ids[right]));
+        }
+    }
+    builder = builder.rate(RateId::Finish, finish);
 
     if has_exit {
         builder = builder.invariant(
@@ -634,31 +632,6 @@ fn build_board(rows: &[&str]) -> World {
         )
         .build()
         .expect("sokoban model is valid")
-}
-
-fn assignments(crate_ids: &[u8], goals: &[u8]) -> Vec<Vec<(u8, u8)>> {
-    fn visit(
-        crate_ids: &[u8],
-        remaining: &mut Vec<u8>,
-        current: &mut Vec<(u8, u8)>,
-        output: &mut Vec<Vec<(u8, u8)>>,
-    ) {
-        if current.len() == crate_ids.len() {
-            output.push(current.clone());
-            return;
-        }
-        let crate_id = crate_ids[current.len()];
-        for index in 0..remaining.len() {
-            let goal = remaining.remove(index);
-            current.push((crate_id, goal));
-            visit(crate_ids, remaining, current, output);
-            current.pop();
-            remaining.insert(index, goal);
-        }
-    }
-    let mut output = Vec::new();
-    visit(crate_ids, &mut goals.to_vec(), &mut Vec::new(), &mut output);
-    output
 }
 
 fn crate_ids(world: &World) -> Vec<u8> {
@@ -767,7 +740,10 @@ pub fn dimensions(world: &World) -> (u8, u8) {
     (width, height)
 }
 
-pub fn exchange(rate: RateId) -> Action {
+/// The exchange applying `rate` to `world`'s board: a latch, move or push
+/// binds the cells its rate names, and finishing binds each crate's goal role
+/// to the cell the crate is on.
+pub fn exchange(world: &World, rate: RateId) -> Action {
     match rate {
         RateId::Latch { circuit, at } => {
             Exchange::new(RateId::Latch { circuit, at }, Quantity::new(1))
@@ -796,19 +772,10 @@ pub fn exchange(rate: RateId) -> Action {
         .bind(Role::From, AccountId::Cell(behind))
         .bind(Role::Middle, AccountId::Cell(crate_at))
         .bind(Role::To, AccountId::Cell(to)),
-        RateId::Finish { assignment } => {
-            let mut exchange = Exchange::new(
-                RateId::Finish {
-                    assignment: assignment.clone(),
-                },
-                Quantity::new(1),
-            )
-            .bind(Role::Puzzle, AccountId::Success);
-            for (crate_id, cell) in assignment {
-                exchange = exchange.bind(Role::Goal(crate_id), AccountId::Cell(cell));
-            }
-            exchange
-        }
+        RateId::Finish => crate_cells(world).into_iter().fold(
+            Exchange::new(RateId::Finish, Quantity::new(1)).bind(Role::Puzzle, AccountId::Success),
+            |exchange, (crate_id, cell)| exchange.bind(Role::Goal(crate_id), AccountId::Cell(cell)),
+        ),
     }
 }
 
@@ -873,14 +840,61 @@ mod tests {
     }
 
     #[test]
+    fn finishing_is_one_law_bound_to_where_each_crate_rests() {
+        let world = initial_showcase();
+        assert_eq!(
+            world
+                .rate_ids()
+                .filter(|rate| **rate == RateId::Finish)
+                .count(),
+            1
+        );
+        let solution = solve_astar(&world).expect("showcase must be solvable");
+        let (finish, moves) = solution
+            .trace()
+            .exchanges()
+            .split_last()
+            .expect("a solution finishes");
+        assert_eq!(finish.rate(), &RateId::Finish);
+        let mut before = world;
+        for exchange in moves {
+            before.apply(exchange.clone()).unwrap();
+        }
+        assert_eq!(finish, &exchange(&before, RateId::Finish));
+        assert!(before.is_applicable(finish));
+
+        // Each goal role must be bound to the cell holding its own crate.
+        let placements = crate_cells(&before);
+        let [(first, first_cell), (second, second_cell)] = placements[..] else {
+            panic!("the showcase has two crates");
+        };
+        let bound = |pairs: [(u8, u8); 2]| {
+            pairs.into_iter().fold(
+                Exchange::new(RateId::Finish, Quantity::new(1))
+                    .bind(Role::Puzzle, AccountId::Success),
+                |exchange, (crate_id, cell)| {
+                    exchange.bind(Role::Goal(crate_id), AccountId::Cell(cell))
+                },
+            )
+        };
+        assert!(before.is_applicable(&bound([(first, first_cell), (second, second_cell)])));
+        assert!(!before.is_applicable(&bound([(first, second_cell), (second, first_cell)])));
+        let player = player_cell(&before).unwrap();
+        assert!(!before.is_applicable(&bound([(first, player), (second, second_cell)])));
+    }
+
+    #[test]
     fn pressure_needs_a_crate_and_latching_preserves_access_after_retrieval() {
         let mut world = initial_showcase();
         let walk = |world: &mut World, to| {
             world
-                .apply(exchange(RateId::Move {
-                    from: player_cell(world).unwrap(),
-                    to,
-                }))
+                .apply(exchange(
+                    world,
+                    RateId::Move {
+                        from: player_cell(world).unwrap(),
+                        to,
+                    },
+                ))
                 .unwrap();
         };
         walk(&mut world, 39);
@@ -888,7 +902,7 @@ mod tests {
         let before = world.state_key();
         assert!(
             world
-                .apply(exchange(RateId::Move { from: 30, to: 31 }))
+                .apply(exchange(&world, RateId::Move { from: 30, to: 31 }))
                 .is_err()
         );
         assert_eq!(world.state_key(), before);
@@ -904,12 +918,15 @@ mod tests {
         walk(&mut world, 39);
         walk(&mut world, 38);
         world
-            .apply(exchange(RateId::Push {
-                behind: 38,
-                crate_at: 29,
-                to: 20,
-                crate_id: 0,
-            }))
+            .apply(exchange(
+                &world,
+                RateId::Push {
+                    behind: 38,
+                    crate_at: 29,
+                    to: 20,
+                    crate_id: 0,
+                },
+            ))
             .unwrap();
         assert_eq!(
             world
@@ -921,18 +938,21 @@ mod tests {
             walk(&mut world, to);
         }
         world
-            .apply(exchange(RateId::Latch { circuit: 0, at: 42 }))
+            .apply(exchange(&world, RateId::Latch { circuit: 0, at: 42 }))
             .unwrap();
         for to in [41, 32, 31, 30, 29] {
             walk(&mut world, to);
         }
         world
-            .apply(exchange(RateId::Push {
-                behind: 29,
-                crate_at: 20,
-                to: 11,
-                crate_id: 0,
-            }))
+            .apply(exchange(
+                &world,
+                RateId::Push {
+                    behind: 29,
+                    crate_at: 20,
+                    to: 11,
+                    crate_id: 0,
+                },
+            ))
             .unwrap();
         assert!(
             world

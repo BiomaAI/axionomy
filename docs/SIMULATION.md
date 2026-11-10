@@ -56,6 +56,7 @@ does not reuse it for its own machinery.
 | Tick | The clock advancing |
 | Horizon | The most steps a rollout may take |
 | Study | One request to Studio, MCP or the CLI: a problem, an instance, strategies, a seed and a budget. A study produces runs and the evidence of how they were found |
+| Path | An identifier's one written form, such as `edge/key-room/gate`, and its order. Typed identifiers derive `Identifier`, so they are written and ordered as their paths, and a typed run written down reads as a `paths` run that MCP can explore (D-044) |
 
 "Job" is not used for studies: work-league's workers claim jobs, and the
 store's writer runs jobs. "Session" belongs to search, "experiment" to Monte

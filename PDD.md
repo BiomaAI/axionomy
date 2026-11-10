@@ -589,6 +589,7 @@ authority.
 The repository makes authority boundaries visible as dependency boundaries:
 
 ```text
+axionomy ─────────────→ axionomy-derive
 axionomy-search ──────→ axionomy
 axionomy-problems ────→ axionomy
                     └─→ axionomy-search
@@ -604,6 +605,8 @@ axionomy-studio-server → axionomy-service
 ```
 
 - `axionomy` owns universal state and transition semantics.
+- `axionomy-derive` owns `#[derive(Identifier)]`, which writes an identifier
+  type as its path and orders it as that path (D-044), and nothing else.
 - `axionomy-search` owns disposable action generation, search, rollout,
   sampling, Monte Carlo, perfect-information MCTS, information-set MCTS, and
   learning projections.
@@ -2034,7 +2037,7 @@ usually an empty enum, never a value.
 The name is checked when compiling (`OntologyPath::of::<O>()`), and everything
 outside the kernel uses it: a stored run records it and is read back only as
 that ontology, and view keys sit under it (`maze/account/agent`,
-`logistics/fleet/account/vehicle-cold`), so a value never shares a key with a
+`logistics/fleet/account/vehicle/cold`), so a value never shares a key with a
 value of another ontology. A view's `ViewOntology<O>` is how views show
 ontology `O`, its keys, labels, scenes and leaderboards; it is of an ontology,
 not one. The kernel's semantics are unchanged, so the Lean specification and
@@ -2051,7 +2054,51 @@ studies barely grow. A format writes the exact value, trimming zeros and
 never rounding, and Studio keeps the atom count beside every formatted value.
 Formats are presentation: they are not part of an asset's identity (D-025),
 so changing how flour is shown can never merge or split two assets. Typed
-authoring reads atoms back with `decode`, the inverse of `encode`.
+Authoring reads atoms back with `decode`, the inverse of `encode`.
+
+### D-044: Identifiers are written and ordered as paths
+
+Every identifier has one written form, its path, and one order, the natural
+order of that path. `#[derive(Identifier)]` (`axionomy-derive`, re-exported as
+`axionomy::Identifier`) writes an enum variant as its kebab-case name followed
+by its fields in order, and a struct as its fields in order:
+`Edge(KeyRoom, Gate)` is `edge/key-room/gate` and `JobId(3)` is `3`. A field is
+another identifier, an unsigned integer, a `bool` (`true` or `false`) or an
+`Option` of one, written `none` or `some` followed by the value, so that
+`None` comes first as it does in `Option`'s order. The derive serializes and
+deserializes the identifier as that path, so JSON, the store, Studio keys and
+MCP spell it one way.
+
+The derive's `Ord` is the path's natural order, which is also `Path`'s:
+segment by segment, numbers by value and before words (`job/2` before
+`job/10`), and a path before the longer paths it starts. Variants therefore
+sort by name, not by where they are declared. Because a typed identifier and
+its path sort alike, every map the kernel keeps in identifier order is in path
+order too: a typed economy written down is a `paths` economy byte for byte,
+with the same canonical stored tree before and after replay. That is what lets
+MCP, which speaks only paths, read and explore the runs of a typed study.
+
+What this costs is stated rather than hidden:
+
+- Ordering is no longer declaration order, so search tie-breaks and a seeded
+  sample's order follow the natural order, and replays chosen by a tie-break
+  can change. Code that needs a domain order says so explicitly instead of
+  borrowing an identifier's: perishables' agenda orders moments by their
+  chronology, not by their names.
+- A value with no written form (a signed integer, text, a float, a
+  collection) is not an identifier field. A model that wants one says it
+  another way. Sokoban had one `Finish` rate for each way of placing its
+  crates on goal cells, named by the placement; it now has one `Finish` law
+  whose `Goal(crate)` roles preserve the crate on a goal cell, and the
+  exchange's bindings say where each crate rests. A rate is a law and roles
+  say who.
+
+Views key a value as `{ontology}/{kind}/{written path}`, such as
+`maze/asset/edge/key-room/gate` and `work-league/rate/expire/3/none/some/safe`,
+and an identifier written as a number, such as the conformance fixtures'
+numeric identifiers, is keyed by its decimal. Labels are still read from
+`Debug`. The kernel's semantics are unchanged, so the Lean specification and
+its fixtures are too.
 
 ## 16. Success criteria
 
