@@ -44,6 +44,30 @@ pub trait TicketSource {
     fn ticket(&mut self, total_weight: u64) -> u64;
 }
 
+/// The golden-ratio increment SplitMix64 steps its state by.
+const GOLDEN_GAMMA: u64 = 0x9e37_79b9_7f4a_7c15;
+
+/// Value `index` of the SplitMix64 sequence that starts at `seed`:
+/// deterministic and the same on every platform. Problems draw tickets keyed
+/// by what they sample (a day, a job's attempt, a road), so the same key gets
+/// the same ticket whatever else happened: common random numbers.
+pub const fn splitmix(seed: u64, index: u64) -> u64 {
+    let mut value = seed.wrapping_add(GOLDEN_GAMMA.wrapping_mul(index));
+    value = (value ^ (value >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+    value = (value ^ (value >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+    value ^ (value >> 31)
+}
+
+/// The seed of sample `index` of a repeated experiment seeded `seed`, well
+/// apart from its neighbours' seeds.
+pub fn sample_seed(seed: u64, index: usize) -> u64 {
+    seed.wrapping_add(
+        u64::try_from(index)
+            .unwrap_or(u64::MAX)
+            .wrapping_mul(GOLDEN_GAMMA),
+    )
+}
+
 /// ChaCha8-backed deterministic generator for reproducible solver exploration.
 #[derive(Debug, Clone)]
 pub struct SeededSampler {

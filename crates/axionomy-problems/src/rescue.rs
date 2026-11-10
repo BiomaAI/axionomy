@@ -15,7 +15,8 @@ use axionomy_search::{
     },
     pareto::{FrontierCompleteness, Objective, ObjectiveVector, ParetoFront},
     sampling::{
-        SeededSampler, WeightedExchange, choose_by_ticket, sample, systematic_ticket, total_weight,
+        SeededSampler, WeightedExchange, choose_by_ticket, sample, sample_seed, systematic_ticket,
+        total_weight,
     },
 };
 
@@ -612,10 +613,7 @@ pub fn monte_carlo(
         [Policy::ObserveThenFollow, Policy::NorthWithoutObserving],
         MonteCarloConfig::new(samples),
         |policy, sample_index| {
-            let offset = u64::try_from(sample_index)
-                .unwrap_or(u64::MAX)
-                .wrapping_mul(0x9e37_79b9_7f4a_7c15);
-            let mut sampler = SeededSampler::new(seed.wrapping_add(offset));
+            let mut sampler = SeededSampler::new(sample_seed(seed, sample_index));
             let sampled = sample(&weighted_scenarios, &mut sampler).map_err(|_| ())?;
             episode(model, sampled, policy, sample_index, episodes)
                 .map(|rollout| rollout.succeeded())
@@ -642,10 +640,7 @@ pub fn policy_front(
         [Policy::ObserveThenFollow, Policy::NorthWithoutObserving],
         MonteCarloConfig::new(samples),
         |policy, sample_index| {
-            let offset = u64::try_from(sample_index)
-                .unwrap_or(u64::MAX)
-                .wrapping_mul(0x9e37_79b9_7f4a_7c15);
-            let mut sampler = SeededSampler::new(seed.wrapping_add(offset));
+            let mut sampler = SeededSampler::new(sample_seed(seed, sample_index));
             let sampled = sample(&weighted_scenarios, &mut sampler).map_err(|_| ())?;
             let rollout = episode(model, sampled, policy, sample_index, episodes).ok_or(())?;
             Ok::<_, ()>(vec![

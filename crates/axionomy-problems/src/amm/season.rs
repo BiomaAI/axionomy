@@ -36,10 +36,7 @@ fn world_law() -> Rate<Ontology> {
         )
 }
 fn weather(seed: u64, day: u8) -> u64 {
-    let mut ticket = seed.wrapping_add(u64::from(day).wrapping_mul(0x9e37_79b9_7f4a_7c15));
-    ticket = (ticket ^ (ticket >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
-    ticket = (ticket ^ (ticket >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
-    if (ticket ^ (ticket >> 31)) % 3 == 0 {
+    if axionomy_search::sampling::splitmix(seed, u64::from(day)).is_multiple_of(3) {
         40
     } else {
         100

@@ -955,12 +955,9 @@ fn sampled_outcome(
     // SplitMix64 gives deterministic, platform-independent tickets without
     // making an RNG part of authoritative state. Nature's weight assets remain
     // the inspectable distribution the caller samples from.
-    let mut value =
+    let key =
         seed ^ (u64::from(job.0) << 17) ^ ((agent as u64) << 9) ^ ((mode as u64) << 5) ^ attempt;
-    value = value.wrapping_add(0x9e37_79b9_7f4a_7c15);
-    value = (value ^ (value >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
-    value = (value ^ (value >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
-    let ticket = (value ^ (value >> 31)) % 10;
+    let ticket = axionomy_search::sampling::splitmix(key, 1) % 10;
     if ticket < failure_weight(risk, mode) {
         Outcome::Failure
     } else {

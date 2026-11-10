@@ -320,12 +320,10 @@ fn take_capacity(rate: Rate<Ontology>, id: u8, role: Role) -> Rate<Ontology> {
     }
 }
 fn random_ticket(seed: u64, van: Van, attempt: u8, from: Location, to: Location) -> u64 {
-    let mut n = seed.wrapping_add(0x9e3779b97f4a7c15u64.wrapping_mul(
+    axionomy_search::sampling::splitmix(
+        seed,
         1 + van as u64 * 389 + u64::from(attempt) * 37 + from as u64 * 7 + to as u64,
-    ));
-    n = (n ^ (n >> 30)).wrapping_mul(0xbf58476d1ce4e5b9);
-    n = (n ^ (n >> 27)).wrapping_mul(0x94d049bb133111eb);
-    n ^ (n >> 31)
+    )
 }
 pub fn initial(stress: bool, seed: u64) -> World {
     let count: u8 = if stress { 6 } else { 4 };

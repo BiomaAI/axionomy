@@ -16,8 +16,8 @@ use axionomy_search::{
     pareto::{FrontierCompleteness, Objective, ObjectiveVector, ParetoFront},
     rollout::{Episodes, RolloutConfig, RolloutDecision, RolloutStop, TraceRetention, run_to_goal},
     sampling::{
-        SeededSampler, TicketSource, WeightedExchange, choose_by_ticket, sample, systematic_ticket,
-        total_weight,
+        SeededSampler, TicketSource, WeightedExchange, choose_by_ticket, sample, sample_seed,
+        systematic_ticket, total_weight,
     },
     session::{Continue, WorkBudget},
     tree::{TreeSearchError, TreeStatus},
@@ -1006,10 +1006,7 @@ pub fn monte_carlo_with_progress(
         [Policy::ShareAndCoordinate, Policy::NorthTogether],
         MonteCarloConfig::new(samples),
         |policy: &Policy, sample_index| {
-            let offset = u64::try_from(sample_index)
-                .unwrap_or(u64::MAX)
-                .wrapping_mul(0x9e37_79b9_7f4a_7c15);
-            let mut sampler = SeededSampler::new(seed.wrapping_add(offset));
+            let mut sampler = SeededSampler::new(sample_seed(seed, sample_index));
             let scenario = sample(&support, &mut sampler).map_err(|_| ())?.clone();
             Ok::<_, ()>(episode(model, policy, sample_index, scenario, episodes).succeeded())
         },
@@ -1054,10 +1051,7 @@ pub fn policy_front_with_progress(
         [Policy::ShareAndCoordinate, Policy::NorthTogether],
         MonteCarloConfig::new(samples),
         |policy: &Policy, sample_index| {
-            let offset = u64::try_from(sample_index)
-                .unwrap_or(u64::MAX)
-                .wrapping_mul(0x9e37_79b9_7f4a_7c15);
-            let mut sampler = SeededSampler::new(seed.wrapping_add(offset));
+            let mut sampler = SeededSampler::new(sample_seed(seed, sample_index));
             let scenario = sample(&support, &mut sampler).map_err(|_| ())?.clone();
             let rollout = episode(model, policy, sample_index, scenario, episodes);
             Ok::<_, ()>(vec![
