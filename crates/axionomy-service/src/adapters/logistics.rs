@@ -9,23 +9,23 @@ use axionomy_view::{
 };
 
 pub(super) fn build(
-    run: &ArtifactKey,
+    study: &StudyKey,
     descriptor: &ProblemDescriptor,
     progress: &mut ProgressSink<'_>,
-) -> Result<RunArtifact, ServiceError> {
-    let profile = run.instance;
+) -> Result<Study, ServiceError> {
+    let profile = study.instance;
     if !matches!(profile, InstanceProfile::Micro) {
-        return fleet::build(run, descriptor, profile, progress);
+        return fleet::build(study, descriptor, profile, progress);
     }
-    let initial = if matches!(run.instance, InstanceProfile::Micro) {
+    let initial = if matches!(study.instance, InstanceProfile::Micro) {
         logistics::initial_micro()
     } else {
         logistics::initial()
     };
-    let samples = match run.instance {
-        InstanceProfile::Micro => run.budget.clamp(2, 16),
-        InstanceProfile::Showcase => run.budget.max(2),
-        InstanceProfile::Stress => run.budget.max(256),
+    let samples = match study.instance {
+        InstanceProfile::Micro => study.budget.clamp(2, 16),
+        InstanceProfile::Showcase => study.budget.max(2),
+        InstanceProfile::Stress => study.budget.max(256),
     } as usize;
     let estimate = logistics::monte_carlo_with_risk_progress(
         &initial,
@@ -70,7 +70,7 @@ pub(super) fn build(
     let front = front.ok_or_else(|| problem_error("logistics", "policy front failed"))?;
     let mut documents = Vec::new();
     for (strategy, policy) in [("direct", Policy::Direct), ("reliable", Policy::Reliable)] {
-        let rollout = logistics::run_policy(&mut initial.clone(), policy, run.seed);
+        let rollout = logistics::run_policy(&mut initial.clone(), policy, study.seed);
         let mut view = document(
             DocumentSpec {
                 problem: "logistics",
@@ -132,8 +132,8 @@ pub(super) fn build(
     let planned = logistics::run_planned_with_progress(
         &initial,
         samples,
-        run.seed,
-        run.seed ^ 0x4c4f_4749_5354_4943,
+        study.seed,
+        study.seed ^ 0x4c4f_4749_5354_4943,
         samples.clamp(1, 8),
         |decision, state| {
             progress.emit(
@@ -204,7 +204,7 @@ pub(super) fn build(
         ],
     ));
     documents.push(mcts);
-    artifact(run, descriptor, documents)
+    assemble(study, descriptor, documents)
 }
 
 fn objectives(rollout: &logistics::MissionRollout) -> Vec<ObjectiveView> {

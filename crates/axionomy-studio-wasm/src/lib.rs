@@ -1,12 +1,12 @@
 //! Browser Worker adapter over the same interface-neutral reference service.
 //!
 //! This crate does not introduce a JavaScript world model. Requests, solver
-//! observations, replay validation, and artifacts all cross the boundary as
+//! observations, replay validation, and studies all cross the boundary as
 //! Rust-owned contracts. The JavaScript Worker only schedules and transports.
 
 use axionomy_service::{
-    ReferenceService, RunControl, RunObserver, RunRequest, ServiceProgress, StudioEvent,
-    StudioRunId,
+    ReferenceService, ServiceProgress, StudioEvent, StudioStudyId, StudyControl, StudyObserver,
+    StudyRequest,
 };
 use axionomy_view::{DocumentPath, ExchangeFrame, SearchObservationView};
 use js_sys::Function;
@@ -23,30 +23,30 @@ pub fn catalog() -> Result<String, JsValue> {
 }
 
 #[wasm_bindgen]
-pub fn run(request_json: &str, run_id: &str, emit: &Function) -> Result<String, JsValue> {
-    let request: RunRequest = serde_json::from_str(request_json).map_err(js_error)?;
-    let run_id: StudioRunId = run_id.parse().map_err(js_error)?;
+pub fn study(request_json: &str, study_id: &str, emit: &Function) -> Result<String, JsValue> {
+    let request: StudyRequest = serde_json::from_str(request_json).map_err(js_error)?;
+    let study_id: StudioStudyId = study_id.parse().map_err(js_error)?;
     let key = ReferenceService.resolve(&request).map_err(js_error)?;
     let mut observer = WorkerObserver {
         emit,
-        run_id,
+        study_id,
         next_sequence: 1,
     };
-    observer.event(StudioEvent::RunStarted {
-        run_id,
+    observer.event(StudioEvent::StudyStarted {
+        study_id,
         sequence: 0,
         problem: key.problem,
         strategy: key.strategy,
     })?;
-    let artifact = ReferenceService
-        .run_with(&request, &RunControl::default(), &mut observer)
+    let study = ReferenceService
+        .study_with(&request, &StudyControl::default(), &mut observer)
         .map_err(js_error)?;
-    serde_json::to_string(&artifact).map_err(js_error)
+    serde_json::to_string(&study).map_err(js_error)
 }
 
 struct WorkerObserver<'a> {
     emit: &'a Function,
-    run_id: StudioRunId,
+    study_id: StudioStudyId,
     next_sequence: u64,
 }
 
@@ -65,11 +65,11 @@ impl WorkerObserver<'_> {
     }
 }
 
-impl RunObserver for WorkerObserver<'_> {
+impl StudyObserver for WorkerObserver<'_> {
     fn progress(&mut self, progress: ServiceProgress) {
         let sequence = self.sequence();
         let _ = self.event(StudioEvent::Progress {
-            run_id: self.run_id,
+            study_id: self.study_id,
             sequence,
             completed: progress.completed,
             total: Some(progress.total),
@@ -80,7 +80,7 @@ impl RunObserver for WorkerObserver<'_> {
     fn observation(&mut self, observation: SearchObservationView) {
         let sequence = self.sequence();
         let _ = self.event(StudioEvent::SearchObservation {
-            run_id: self.run_id,
+            study_id: self.study_id,
             sequence,
             observation,
         });
@@ -89,7 +89,7 @@ impl RunObserver for WorkerObserver<'_> {
     fn frame(&mut self, document: &DocumentPath, frame: ExchangeFrame) {
         let sequence = self.sequence();
         let _ = self.event(StudioEvent::FrameAppended {
-            run_id: self.run_id,
+            study_id: self.study_id,
             sequence,
             document: document.clone(),
             frame_index: frame.index,

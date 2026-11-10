@@ -11,12 +11,12 @@ use axionomy_view::{
 mod cold_chain;
 
 pub(super) fn build(
-    run: &ArtifactKey,
+    study: &StudyKey,
     descriptor: &ProblemDescriptor,
-) -> Result<RunArtifact, ServiceError> {
-    let profile = run.instance;
+) -> Result<Study, ServiceError> {
+    let profile = study.instance;
     if !matches!(profile, InstanceProfile::Micro) {
-        return cold_chain::build(run, descriptor, profile);
+        return cold_chain::build(study, descriptor, profile);
     }
     let (initial, transfer) = match profile {
         InstanceProfile::Micro => (perishables::initial_with_inventory(70, 30), 10),
@@ -132,7 +132,7 @@ pub(super) fn build(
         ));
         documents.push(view);
     }
-    artifact(run, descriptor, documents)
+    assemble(study, descriptor, documents)
 }
 
 fn frontier_trace(

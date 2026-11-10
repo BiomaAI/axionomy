@@ -8,10 +8,10 @@ use axionomy_view::{
 };
 
 pub(super) fn build(
-    run: &ArtifactKey,
+    study: &StudyKey,
     descriptor: &ProblemDescriptor,
-) -> Result<RunArtifact, ServiceError> {
-    let initial = match run.instance {
+) -> Result<Study, ServiceError> {
+    let initial = match study.instance {
         InstanceProfile::Micro => workshop::initial(),
         InstanceProfile::Showcase => workshop::initial_showcase(),
         InstanceProfile::Stress => workshop::initial_stress(),
@@ -112,7 +112,7 @@ pub(super) fn build(
         view.proposals.push(proposal(ProposalSpec { id: "counterfeit", label: "Counterfeit chair", description: "This rule would create material out of nothing, and the conservation law rejects it." }, &initial, &counterfeit));
         documents.push(view);
     }
-    artifact(run, descriptor, documents)
+    assemble(study, descriptor, documents)
 }
 
 fn frontier_trace(

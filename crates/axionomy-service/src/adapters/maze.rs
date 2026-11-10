@@ -14,16 +14,16 @@ use axionomy_view::{
 };
 
 pub(super) fn build(
-    run: &ArtifactKey,
+    study: &StudyKey,
     descriptor: &ProblemDescriptor,
     progress: &mut ProgressSink<'_>,
-) -> Result<RunArtifact, ServiceError> {
-    let initial = match run.instance {
+) -> Result<Study, ServiceError> {
+    let initial = match study.instance {
         InstanceProfile::Micro => maze::initial(),
         InstanceProfile::Showcase => maze::initial_showcase(),
         InstanceProfile::Stress => maze::initial_stress(),
     };
-    let selected = run.strategy.as_str();
+    let selected = study.strategy.as_str();
     observe_selected_search(&initial, selected, progress)?;
     let bfs = maze::solve_bfs(&initial).ok_or_else(|| problem_error("maze", "no BFS route"))?;
     let dijkstra =
@@ -172,7 +172,7 @@ pub(super) fn build(
         ];
         documents.push(document);
     }
-    artifact(run, descriptor, documents)
+    assemble(study, descriptor, documents)
 }
 
 #[derive(Clone, Copy)]

@@ -7,16 +7,16 @@ import logoLight from "../../assets/axionomy-logo-light.png";
 import {
   type ExchangeFrame,
   type LeaderboardView,
-  type RunArtifact,
-  type RunSummary,
   type Scene,
   type SearchObservation,
   type StudioEvent,
+  type Study,
+  type StudySummary,
   type ViewDocument,
   type ViewSnapshot,
 } from "./api";
 import { browserEngine } from "./browserEngine";
-import { connectionLabel, nativeEngine, staticEngine, type EngineConnectivity, type EngineRunSubscription } from "./engine";
+import { connectionLabel, nativeEngine, staticEngine, type EngineConnectivity, type EngineStudySubscription } from "./engine";
 import { SceneIcon } from "./SceneIcon";
 import { SceneView, type ReplayMotionMode } from "./SceneView";
 import {
@@ -81,7 +81,7 @@ function writeUrl(state: Required<Pick<StudioUrlState, "problem" | "instance" | 
 }
 
 type CompletionNotice = {
-  runId: string;
+  studyId: string;
   problem: string;
   instance: string;
   strategy: string;
@@ -126,7 +126,7 @@ export function App() {
   const [strategyKey, setStrategyKey] = useState(initialUrl.strategy ?? "");
   const [seed, setSeed] = useState(initialUrl.seed ?? 17);
   const [budget, setBudget] = useState(initialUrl.budget ?? 128);
-  const [artifact, setArtifact] = useState<RunArtifact>();
+  const [study, setStudy] = useState<Study>();
   const [documentId, setDocumentId] = useState<string | undefined>(initialUrl.document);
   const [position, setPosition] = useState(initialUrl.step ?? 0);
   const [replayMotion, setReplayMotion] = useState<ReplayMotionMode>("seek");
@@ -135,22 +135,22 @@ export function App() {
   const [viewMode, setViewMode] = useState<StudioViewMode>(initialUrl.view ?? "replay");
   const [leaderboardKey, setLeaderboardKey] = useState<string | undefined>(initialUrl.leaderboard);
   const [focusedAccount, setFocusedAccount] = useState<string>();
-  const [run, setRun] = useState<RunSummary>();
+  const [ongoing, setOngoing] = useState<StudySummary>();
   const [launching, setLaunching] = useState(false);
   const [events, setEvents] = useState<StudioEvent[]>([]);
   const [error, setError] = useState<string>();
   const [elapsedMs, setElapsedMs] = useState(0);
   const [completion, setCompletion] = useState<CompletionNotice>();
-  const [freshArtifact, setFreshArtifact] = useState<RunArtifact>();
+  const [freshStudy, setFreshStudy] = useState<Study>();
   const [linkNotice, setLinkNotice] = useState<string>();
   const [copied, setCopied] = useState(false);
-  const eventSource = useRef<EngineRunSubscription | null>(null);
-  const runStartedAt = useRef<number | undefined>(undefined);
+  const eventSource = useRef<EngineStudySubscription | null>(null);
+  const studyStartedAt = useRef<number | undefined>(undefined);
   const previewGeneration = useRef(0);
 
   const problem = catalog.data?.find((candidate) => candidate.key === problemKey);
   const instance = problem?.instances.find((candidate) => candidate.profile === instanceKey);
-  const document = artifact?.documents.find((candidate) => candidate.id === documentId) ?? artifact?.documents.find((candidate) => candidate.id === artifact.selected_document) ?? artifact?.documents[0];
+  const document = study?.documents.find((candidate) => candidate.id === documentId) ?? study?.documents.find((candidate) => candidate.id === study.selected_document) ?? study?.documents[0];
   const snapshot = useSnapshot(document, position);
   const previous = useSnapshot(document, Math.max(0, position - 1));
   const frame = position > 0 ? document?.frames[position - 1] : undefined;
@@ -192,12 +192,12 @@ export function App() {
   useEffect(() => () => eventSource.current?.close(), []);
 
   useEffect(() => {
-    if (!launching && !run) return;
-    const update = () => setElapsedMs(runStartedAt.current === undefined ? 0 : performance.now() - runStartedAt.current);
+    if (!launching && !ongoing) return;
+    const update = () => setElapsedMs(studyStartedAt.current === undefined ? 0 : performance.now() - studyStartedAt.current);
     update();
     const timer = window.setInterval(update, 100);
     return () => window.clearInterval(timer);
-  }, [launching, run]);
+  }, [launching, ongoing]);
 
   useEffect(() => {
     if (!catalog.data || problem) return;
@@ -222,15 +222,15 @@ export function App() {
     setInstanceKey(requestedInstance);
     setStrategyKey(requestedStrategy);
     setError(undefined);
-    setFreshArtifact(undefined);
+    setFreshStudy(undefined);
     const generation = ++previewGeneration.current;
     let disposed = false;
-    engine.defaultArtifact(problem.key).then((next) => {
+    engine.defaultStudy(problem.key).then((next) => {
       if (disposed || generation !== previewGeneration.current) return;
       const requestedDocument = next.documents.find((candidate) => candidate.id === documentId)?.id
         ?? next.documents.find((candidate) => candidate.id === requestedStrategy)?.id
         ?? next.selected_document;
-      setArtifact(next);
+      setStudy(next);
       setDocumentId(requestedDocument);
     }).catch((cause: unknown) => {
       if (!disposed && generation === previewGeneration.current) setError(cause instanceof Error ? cause.message : String(cause));
@@ -246,12 +246,12 @@ export function App() {
   }, [document?.id]);
 
   useEffect(() => {
-    if (!artifact || artifact.problem.key !== problemKey || !documentId) return;
-    if (!artifact.documents.some((candidate) => candidate.id === documentId)) {
-      setLinkNotice(`The linked outcome “${documentId}” does not exist in ${artifact.problem.title}; opened the default outcome instead.`);
-      setDocumentId(artifact.selected_document);
+    if (!study || study.problem.key !== problemKey || !documentId) return;
+    if (!study.documents.some((candidate) => candidate.id === documentId)) {
+      setLinkNotice(`The linked outcome “${documentId}” does not exist in ${study.problem.title}; opened the default outcome instead.`);
+      setDocumentId(study.selected_document);
     }
-  }, [artifact, documentId, problemKey]);
+  }, [study, documentId, problemKey]);
 
   useEffect(() => {
     if (!snapshot) return;
@@ -326,48 +326,48 @@ export function App() {
     const submittedStrategy = problem?.strategies.find((candidate) => candidate.key === strategyKey)?.label ?? strategyKey;
     setError(undefined); setEvents([]); setCompletion(undefined); eventSource.current?.close();
     setViewMode("solve");
-    runStartedAt.current = performance.now(); setElapsedMs(0); setLaunching(true);
+    studyStartedAt.current = performance.now(); setElapsedMs(0); setLaunching(true);
     try {
       const profile = problem?.instances.find((candidate) => candidate.profile === instanceKey)?.profile;
       const subscription = await engine.start({ problem: problemKey, instance: profile, strategy: strategyKey, seed, budget }, async (event) => {
         setEvents((current) => current.some((known) => known.sequence === event.sequence) ? current : [...current, event]);
-        if (event.kind === "run_completed") {
+        if (event.kind === "study_completed") {
           eventSource.current?.close();
-          const next = await engine.artifact(event.run_id);
-          const durationMs = runStartedAt.current === undefined ? 0 : performance.now() - runStartedAt.current;
+          const next = await engine.study(event.study_id);
+          const durationMs = studyStartedAt.current === undefined ? 0 : performance.now() - studyStartedAt.current;
           previewGeneration.current += 1;
-          setArtifact(next); setDocumentId(event.document); setFreshArtifact(next);
-          setCompletion({ runId: event.run_id, problem: submittedProblem, instance: submittedInstance, strategy: submittedStrategy, seed, budget, durationMs, documents: next.documents.length });
-          setElapsedMs(durationMs); setRun(undefined);
-        } else if (event.kind === "run_cancelled" || event.kind === "run_failed") {
-          eventSource.current?.close(); setRun(undefined);
-          if (event.kind === "run_failed") setError(event.message);
+          setStudy(next); setDocumentId(event.document); setFreshStudy(next);
+          setCompletion({ studyId: event.study_id, problem: submittedProblem, instance: submittedInstance, strategy: submittedStrategy, seed, budget, durationMs, documents: next.documents.length });
+          setElapsedMs(durationMs); setOngoing(undefined);
+        } else if (event.kind === "study_cancelled" || event.kind === "study_failed") {
+          eventSource.current?.close(); setOngoing(undefined);
+          if (event.kind === "study_failed") setError(event.message);
         }
       }, setError);
       eventSource.current = subscription;
-      setRun(subscription.summary); setLaunching(false);
-    } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); setRun(undefined); setLaunching(false); }
+      setOngoing(subscription.summary); setLaunching(false);
+    } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); setOngoing(undefined); setLaunching(false); }
   };
 
-  const pause = async () => { if (run) setRun(await engine.pause(run.id)); };
-  const resume = async () => { if (run) setRun(await engine.resume(run.id)); };
-  const cancel = async () => { if (run) await engine.cancel(run.id); };
+  const pause = async () => { if (ongoing) setOngoing(await engine.pause(ongoing.id)); };
+  const resume = async () => { if (ongoing) setOngoing(await engine.resume(ongoing.id)); };
+  const cancel = async () => { if (ongoing) await engine.cancel(ongoing.id); };
 
   const loadFile = async (file?: File) => {
     if (!file) return;
     previewGeneration.current += 1;
     try {
-      const next = JSON.parse(await file.text()) as RunArtifact;
-      if (!Array.isArray(next.documents) || !next.selected_document) throw new Error("missing artifact documents");
-      setArtifact(next); setProblemKey(next.problem.key); setInstanceKey(next.instance.profile); setStrategyKey(next.key.strategy); setDocumentId(next.selected_document); setFreshArtifact(undefined); setError(undefined);
-    } catch (cause) { setError(cause instanceof Error ? cause.message : "the selected file is not a RunArtifact"); }
+      const next = JSON.parse(await file.text()) as Study;
+      if (!Array.isArray(next.documents) || !next.selected_document) throw new Error("missing study documents");
+      setStudy(next); setProblemKey(next.problem.key); setInstanceKey(next.instance.profile); setStrategyKey(next.key.strategy); setDocumentId(next.selected_document); setFreshStudy(undefined); setError(undefined);
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "the selected file is not a study"); }
   };
 
   const selectPareto = (values: string[]) => {
-    const match = artifact?.documents.find((candidate) => candidate.objectives.slice(0, values.length).every((objective, index) => objective.value === values[index]));
+    const match = study?.documents.find((candidate) => candidate.objectives.slice(0, values.length).every((objective, index) => objective.value === values[index]));
     if (match) setDocumentId(match.id);
   };
-  const active = launching || Boolean(run);
+  const active = launching || Boolean(ongoing);
   const modelSize = document?.telemetry.find((entry) => entry.algorithm === "Model size");
   const modelCounts = modelSize?.points
     .filter((point) => point.kind === "accounts" || point.kind === "rates")
@@ -391,7 +391,7 @@ export function App() {
     setInstanceKey(key); setPosition(0); setCompletion(undefined);
   };
   const selectStrategy = (key: string) => {
-    const match = artifact?.documents.find((candidate) => candidate.id === key);
+    const match = study?.documents.find((candidate) => candidate.id === key);
     writeUrl(urlState({ strategy: key, document: match?.id, step: 0 }), "push");
     setStrategyKey(key); setPosition(0); if (match) setDocumentId(match.id);
   };
@@ -413,7 +413,7 @@ export function App() {
   return <div className="app-shell">
     <header className="topbar">
       <div className="brand"><picture><source media="(prefers-color-scheme: light)" srcSet={logoLight} /><img src={logoDark} alt="Axionomy" /></picture><div><div className="brand-name">Studio</div><div className="brand-subtitle">Economic reasoning workbench</div></div></div>
-      <div className="connection" title={engine.kind === "native" ? "Verified by a live health check" : engine.kind === "browser" ? "Rust/WASM engine isolated in a Web Worker" : "No executable engine is available"}><span className={`status-dot ${engine.canRun ? "online" : "static"}`} />{connectionLabel(engine.kind, connectivity)}</div>
+      <div className="connection" title={engine.kind === "native" ? "Verified by a live health check" : engine.kind === "browser" ? "Rust/WASM engine isolated in a Web Worker" : "No executable engine is available"}><span className={`status-dot ${engine.canStudy ? "online" : "static"}`} />{connectionLabel(engine.kind, connectivity)}</div>
     </header>
 
     <section className="command-bar" aria-label="Problem controls">
@@ -422,28 +422,28 @@ export function App() {
       <label className="field strategy-field"><span>Strategy</span><select name="strategy" value={strategyKey} onChange={(event) => selectStrategy(event.target.value)} disabled={active}>{problem?.strategies.map((strategy) => <option value={strategy.key} key={strategy.key}>{strategy.label}</option>)}</select></label>
       <label className="field numeric-field"><span>Seed</span><input name="seed" type="number" min="0" value={seed} disabled={active} onChange={(event) => setSeed(Number(event.target.value))} /></label>
       <label className="field numeric-field"><span>Budget</span><input name="budget" type="number" min="1" value={budget} disabled={active} onChange={(event) => setBudget(Math.max(1, Number(event.target.value)))} /></label>
-      <button className="primary" onClick={start} disabled={active || !engine.canRun}>{launching ? "Starting…" : run?.status === "paused" ? "Paused" : run ? "Running…" : "Run"}</button>
-      {engine.canPause && run?.status === "running" && <button onClick={pause}>Pause</button>}
-      {engine.canPause && run?.status === "paused" && <button onClick={resume}>Resume</button>}
-      {run && <button className="danger" onClick={cancel}>Cancel</button>}
-      <label className="file-button">Load artifact<input name="artifact" type="file" accept="application/json,.json" onChange={(event) => loadFile(event.target.files?.[0])} /></label>
+      <button className="primary" onClick={start} disabled={active || !engine.canStudy}>{launching ? "Starting…" : ongoing?.status === "paused" ? "Paused" : ongoing ? "Studying…" : "Study"}</button>
+      {engine.canPause && ongoing?.status === "studying" && <button onClick={pause}>Pause</button>}
+      {engine.canPause && ongoing?.status === "paused" && <button onClick={resume}>Resume</button>}
+      {ongoing && <button className="danger" onClick={cancel}>Cancel</button>}
+      <label className="file-button">Load study<input name="study" type="file" accept="application/json,.json" onChange={(event) => loadFile(event.target.files?.[0])} /></label>
       <button type="button" className="share-link" onClick={copyLink}>{copied ? "Link copied ✓" : "Copy link"}</button>
-      <div className="run-message">{active ? "A newly computed result will replace the current view." : engine.canRun ? "The CLI, HTTP API, MCP server, and Studio all run this same problem the same way." : "No engine running — you can still replay the saved results."}</div>
+      <div className="study-message">{active ? "A newly computed study will replace the current view." : engine.canStudy ? "The CLI, HTTP API, MCP server, and Studio all study this same problem the same way." : "No engine running — you can still replay the saved studies."}</div>
     </section>
 
     {(active || completion || linkNotice) && <div className="status-layer">
-      {active && <RunActivity launching={launching} run={run} events={events} elapsedMs={elapsedMs} />}
+      {active && <StudyActivity launching={launching} ongoing={ongoing} events={events} elapsedMs={elapsedMs} />}
       {completion && <><CompletionBanner notice={completion} onDismiss={() => setCompletion(undefined)} /><VerifiedStandings events={events} live={false} /></>}
       {linkNotice && <div className="link-notice" role="status">{linkNotice}<button type="button" onClick={() => setLinkNotice(undefined)}>Dismiss</button></div>}
     </div>}
 
-    {problem && <section className="problem-context"><div><span>{familyLabel(problem.family)}</span><div className="problem-copy"><p>{problem.summary}</p><small><strong>{instance?.label ?? artifact?.instance.label}</strong>{instance?.description ?? artifact?.instance.description}{modelCounts && <em>{modelCounts}</em>}</small></div></div><div>{problem.capabilities.map((capability) => <span key={capability}>{capabilityLabel(capability)}</span>)}</div></section>}
+    {problem && <section className="problem-context"><div><span>{familyLabel(problem.family)}</span><div className="problem-copy"><p>{problem.summary}</p><small><strong>{instance?.label ?? study?.instance.label}</strong>{instance?.description ?? study?.instance.description}{modelCounts && <em>{modelCounts}</em>}</small></div></div><div>{problem.capabilities.map((capability) => <span key={capability}>{capabilityLabel(capability)}</span>)}</div></section>}
     {error && <div className="error-banner" role="alert">{error}</div>}
 
-    {artifact && document && snapshot ? <QuantityFormats.Provider value={document.formats ?? {}}><main className={freshArtifact === artifact ? "fresh-artifact" : undefined}>
-      <section className="alternative-bar"><div><span>Alternatives</span><strong>{artifact.documents.length} replayable results</strong></div><div role="tablist">{artifact.documents.map((candidate) => <button key={candidate.id} role="tab" aria-selected={candidate.id === document.id} onClick={() => selectDocument(candidate.id)}>{candidate.title.replace(`${artifact.problem.title} · `, "")}</button>)}</div></section>
-      <StrategyComparison artifact={artifact} selected={document.id} onSelect={selectDocument} />
-      <section className="document-heading"><div><span className="eyebrow">{artifact.instance.label} · {document.source.label} · {artifact.problem.key}/{document.id}{freshArtifact === artifact ? " · just computed" : ""}</span><h1>{document.title}</h1><p>{document.description}</p></div><div className="objective-pills">{document.objectives.map((objective) => <div className="objective" key={objective.key}><span>{objective.label}</span><strong>{objective.value}</strong><small>{objective.direction}</small></div>)}</div></section>
+    {study && document && snapshot ? <QuantityFormats.Provider value={document.formats ?? {}}><main className={freshStudy === study ? "fresh-study" : undefined}>
+      <section className="alternative-bar"><div><span>Alternatives</span><strong>{study.documents.length} replayable results</strong></div><div role="tablist">{study.documents.map((candidate) => <button key={candidate.id} role="tab" aria-selected={candidate.id === document.id} onClick={() => selectDocument(candidate.id)}>{candidate.title.replace(`${study.problem.title} · `, "")}</button>)}</div></section>
+      <StrategyComparison study={study} selected={document.id} onSelect={selectDocument} />
+      <section className="document-heading"><div><span className="eyebrow">{study.instance.label} · {document.source.label} · {study.problem.key}/{document.id}{freshStudy === study ? " · just computed" : ""}</span><h1>{document.title}</h1><p>{document.description}</p></div><div className="objective-pills">{document.objectives.map((objective) => <div className="objective" key={objective.key}><span>{objective.label}</span><strong>{objective.value}</strong><small>{objective.direction}</small></div>)}</div></section>
       <div className="view-tabs" role="tablist" aria-label="Studio evidence mode"><button type="button" role="tab" aria-selected={viewMode === "solve"} onClick={() => selectView("solve")}>How it was solved <small>{active ? "live" : document.solve_observations.length}</small></button><button type="button" role="tab" aria-selected={viewMode === "replay"} onClick={() => selectView("replay")}>Step-by-step replay <small>{document.frames.length}</small></button></div>
       {viewMode === "solve" ? <SolveWorkspace key={document.id} scene={document.initial.scene} observations={active ? events.flatMap((event) => event.kind === "search_observation" ? [event.observation] : []) : document.solve_observations} active={active} /> : (() => {
         const surface = snapshot.scene?.surface;
@@ -497,20 +497,20 @@ export function App() {
   </div>;
 }
 
-function RunActivity({ launching, run, events, elapsedMs }: { launching: boolean; run?: RunSummary; events: StudioEvent[]; elapsedMs: number }) {
+function StudyActivity({ launching, ongoing, events, elapsedMs }: { launching: boolean; ongoing?: StudySummary; events: StudioEvent[]; elapsedMs: number }) {
   const latest = events.at(-1);
   const progress = [...events].reverse().find((event): event is Extract<StudioEvent, { kind: "progress" }> => event.kind === "progress");
-  const completed = progress?.completed ?? run?.completed ?? 0;
-  const total = progress?.total ?? run?.total ?? undefined;
-  const status = launching ? "Starting engine run" : run?.status === "paused" ? "Run paused" : "Running computation";
-  const message = latest ? eventMessage(latest) : "Submitting reproducible run request…";
-  return <section className={`run-activity ${run?.status === "paused" ? "paused" : ""}`} role="status" aria-live="polite">
-    <div className="run-activity-heading"><span className="spinner" aria-hidden="true" /><div><strong>{status}</strong><span>{message}</span></div></div>
-    <div className="run-activity-progress">
-      {total !== undefined && total > 0 ? <progress max={total} value={Math.min(completed, total)} aria-label="Run phase progress" /> : <div className="indeterminate-progress" />}
+  const completed = progress?.completed ?? ongoing?.completed ?? 0;
+  const total = progress?.total ?? ongoing?.total ?? undefined;
+  const status = launching ? "Starting study" : ongoing?.status === "paused" ? "Study paused" : "Study in progress";
+  const message = latest ? eventMessage(latest) : "Submitting reproducible study request…";
+  return <section className={`study-activity ${ongoing?.status === "paused" ? "paused" : ""}`} role="status" aria-live="polite">
+    <div className="study-activity-heading"><span className="spinner" aria-hidden="true" /><div><strong>{status}</strong><span>{message}</span></div></div>
+    <div className="study-activity-progress">
+      {total !== undefined && total > 0 ? <progress max={total} value={Math.min(completed, total)} aria-label="Study phase progress" /> : <div className="indeterminate-progress" />}
       <span>{total === 0 ? `${completed} states expanded` : total !== undefined ? `${completed} / ${total}` : "waiting for first checkpoint"}</span>
     </div>
-    <div className="run-activity-meta"><span>{formatDuration(elapsedMs)} elapsed</span>{run && <><span>{run.request.instance ?? "default"} instance</span><span>seed {run.request.seed}</span><span>budget {run.request.budget}</span><code>{run.id}</code></>}</div>
+    <div className="study-activity-meta"><span>{formatDuration(elapsedMs)} elapsed</span>{ongoing && <><span>{ongoing.request.instance ?? "default"} instance</span><span>seed {ongoing.request.seed}</span><span>budget {ongoing.request.budget}</span><code>{ongoing.id}</code></>}</div>
     <VerifiedStandings events={events} live />
   </section>;
 }
@@ -525,7 +525,7 @@ function VerifiedStandings({ events, live }: { events: StudioEvent[]; live: bool
 function CompletionBanner({ notice, onDismiss }: { notice: CompletionNotice; onDismiss: () => void }) {
   return <section className="completion-banner" role="status">
     <div className="completion-mark" aria-hidden="true">✓</div>
-    <div><strong>New artifact computed and loaded</strong><span>{notice.problem} · {notice.instance} · {notice.strategy} · seed {notice.seed} · budget {notice.budget}</span><small>{notice.documents} replayable {notice.documents === 1 ? "outcome" : "outcomes"} · completed in {formatDuration(notice.durationMs)} · <code>{notice.runId}</code></small></div>
+    <div><strong>New study computed and loaded</strong><span>{notice.problem} · {notice.instance} · {notice.strategy} · seed {notice.seed} · budget {notice.budget}</span><small>{notice.documents} replayable {notice.documents === 1 ? "outcome" : "outcomes"} · completed in {formatDuration(notice.durationMs)} · <code>{notice.studyId}</code></small></div>
     <button type="button" onClick={onDismiss}>Dismiss</button>
   </section>;
 }
@@ -611,7 +611,7 @@ function observationGlyph(kind: SearchObservation["kind"]): Parameters<typeof Sc
   }
 }
 
-function familyLabel(family: NonNullable<RunArtifact["problem"]>["family"]): string {
+function familyLabel(family: NonNullable<Study["problem"]>["family"]): string {
   const labels: Record<typeof family, string> = {
     pathfinding: "Pathfinding",
     constraint: "Constraint satisfaction",
@@ -628,7 +628,7 @@ function familyLabel(family: NonNullable<RunArtifact["problem"]>["family"]): str
   return labels[family];
 }
 
-function capabilityLabel(capability: RunArtifact["problem"]["capabilities"][number]): string {
+function capabilityLabel(capability: Study["problem"]["capabilities"][number]): string {
   const labels: Record<typeof capability, string> = {
     deterministic_search: "Deterministic search",
     weighted_search: "Cost-guided search",
@@ -674,15 +674,15 @@ function phaseLabel(phase: string): string {
   return labels[phase] ?? phase.replaceAll("-", " ");
 }
 
-function StrategyComparison({ artifact, selected, onSelect }: { artifact: RunArtifact; selected: string; onSelect: (id: string) => void }) {
+function StrategyComparison({ study, selected, onSelect }: { study: Study; selected: string; onSelect: (id: string) => void }) {
   return <details className="strategy-comparison" aria-label="Outcome comparison" open>
     <summary><span>Compare outcomes</span><strong>Every strategy and what it cost, side by side</strong><i aria-hidden="true">▸</i></summary>
-    <div className="comparison-scroll"><table><thead><tr><th>Outcome</th><th>Result</th><th>Initial → final state</th><th>Trace</th><th>Search evidence</th></tr></thead><tbody>{artifact.documents.map((candidate) => {
+    <div className="comparison-scroll"><table><thead><tr><th>Outcome</th><th>Result</th><th>Initial → final state</th><th>Trace</th><th>Search evidence</th></tr></thead><tbody>{study.documents.map((candidate) => {
       const series = candidate.telemetry.find((entry) => entry.algorithm !== "Model size");
       const work = series ? [...series.points].reverse().find((point) => ["generated", "expanded", "iteration", "sample"].includes(point.kind)) : undefined;
       const finalMetrics = (candidate.frames.at(-1)?.after.scene ?? candidate.initial.scene)?.metrics.slice(0, 3) ?? [];
       return <tr key={candidate.id} className={candidate.id === selected ? "selected" : undefined}>
-        <td><button type="button" onClick={() => onSelect(candidate.id)}>{candidate.title.replace(`${artifact.problem.title} · `, "")}</button></td>
+        <td><button type="button" onClick={() => onSelect(candidate.id)}>{candidate.title.replace(`${study.problem.title} · `, "")}</button></td>
         <td>{candidate.objectives.length > 0 ? candidate.objectives.map((objective) => `${objective.label}: ${objective.value}`).join(" · ") : "Feasibility outcome"}</td>
         <td>{finalMetrics.map((metric) => {
           const initial = candidate.initial.scene?.metrics.find((entry) => entry.key === metric.key);
@@ -769,16 +769,16 @@ function PlaybackControls({ position, count, playing, delay, onDelay, onPosition
 
 function eventMessage(event: StudioEvent): string {
   switch (event.kind) {
-    case "run_started": return `Started ${event.problem} · ${event.strategy}`;
+    case "study_started": return `Started ${event.problem} · ${event.strategy}`;
     case "progress": return event.message;
     case "search_observation": return event.observation.label;
     case "frame_appended": return `Published replay frame ${event.frame_index + 1}`;
-    case "artifact_published": return `Published ${event.documents} alternatives`;
-    case "run_paused": return "Computation is waiting for resume.";
-    case "run_resumed": return "Computation resumed from its last checkpoint.";
-    case "run_completed": return "Artifact completed and replay verified";
-    case "run_cancelled": return "Run cancelled by caller";
-    case "run_failed": return event.message;
+    case "study_published": return `Published ${event.documents} alternatives`;
+    case "study_paused": return "The study is waiting for resume.";
+    case "study_resumed": return "The study resumed from its last checkpoint.";
+    case "study_completed": return "Study completed and replay verified";
+    case "study_cancelled": return "Study cancelled by caller";
+    case "study_failed": return event.message;
   }
 }
 

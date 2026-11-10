@@ -4,9 +4,9 @@ import type { paths, components } from "./generated/api";
 export const api = createClient<paths>({ baseUrl: window.location.origin });
 
 export type ProblemDescriptor = components["schemas"]["ProblemDescriptor"];
-export type RunArtifact = components["schemas"]["RunArtifact"];
-export type RunRequest = components["schemas"]["RunRequest"];
-export type RunSummary = components["schemas"]["RunSummary"];
+export type Study = components["schemas"]["Study"];
+export type StudyRequest = components["schemas"]["StudyRequest"];
+export type StudySummary = components["schemas"]["StudySummary"];
 export type StudioEvent = components["schemas"]["StudioEvent"];
 export type ViewDocument = components["schemas"]["ViewDocument"];
 export type ViewSnapshot = components["schemas"]["ViewSnapshot"];
@@ -28,53 +28,53 @@ export async function fetchProblems(): Promise<ProblemDescriptor[]> {
 }
 
 export async function fetchStaticProblems(): Promise<ProblemDescriptor[]> {
-  const response = await fetch(staticUrl("artifacts/catalog.json"), { cache: "no-store" });
+  const response = await fetch(staticUrl("studies/catalog.json"), { cache: "no-store" });
   if (!response.ok) throw new Error("static problem catalog was unavailable");
   return (await response.json()) as ProblemDescriptor[];
 }
 
-export async function createRun(request: RunRequest): Promise<RunSummary> {
-  const { data, error } = await api.POST("/api/runs", { body: request });
+export async function createStudy(request: StudyRequest): Promise<StudySummary> {
+  const { data, error } = await api.POST("/api/studies", { body: request });
   if (error || !data) throw new Error(readError(error));
   return data;
 }
 
-export async function cancelRun(runId: string): Promise<RunSummary> {
-  const { data, error } = await api.DELETE("/api/runs/{run_id}", {
-    params: { path: { run_id: runId } },
+export async function cancelStudy(studyId: string): Promise<StudySummary> {
+  const { data, error } = await api.DELETE("/api/studies/{study_id}", {
+    params: { path: { study_id: studyId } },
   });
   if (error || !data) throw new Error(readError(error));
   return data;
 }
 
-export async function pauseRun(runId: string): Promise<RunSummary> {
-  const { data, error } = await api.POST("/api/runs/{run_id}/pause", {
-    params: { path: { run_id: runId } },
+export async function pauseStudy(studyId: string): Promise<StudySummary> {
+  const { data, error } = await api.POST("/api/studies/{study_id}/pause", {
+    params: { path: { study_id: studyId } },
   });
   if (error || !data) throw new Error(readError(error));
   return data;
 }
 
-export async function resumeRun(runId: string): Promise<RunSummary> {
-  const { data, error } = await api.POST("/api/runs/{run_id}/resume", {
-    params: { path: { run_id: runId } },
+export async function resumeStudy(studyId: string): Promise<StudySummary> {
+  const { data, error } = await api.POST("/api/studies/{study_id}/resume", {
+    params: { path: { study_id: studyId } },
   });
   if (error || !data) throw new Error(readError(error));
   return data;
 }
 
-export async function fetchArtifact(runId: string): Promise<RunArtifact> {
-  const { data, error } = await api.GET("/api/runs/{run_id}/artifact", {
-    params: { path: { run_id: runId } },
+export async function fetchStudy(studyId: string): Promise<Study> {
+  const { data, error } = await api.GET("/api/studies/{study_id}/study", {
+    params: { path: { study_id: studyId } },
   });
   if (error || !data) throw new Error(readError(error));
   return data;
 }
 
-export async function fetchStaticArtifact(problem: string): Promise<RunArtifact> {
-  const response = await fetch(staticUrl(`artifacts/${encodeURIComponent(problem)}.json`));
-  if (!response.ok) throw new Error(`static artifact for ${problem} could not be loaded`);
-  return (await response.json()) as RunArtifact;
+export async function fetchStaticStudy(problem: string): Promise<Study> {
+  const response = await fetch(staticUrl(`studies/${encodeURIComponent(problem)}.json`));
+  if (!response.ok) throw new Error(`static study for ${problem} could not be loaded`);
+  return (await response.json()) as Study;
 }
 
 function staticUrl(path: string): URL {

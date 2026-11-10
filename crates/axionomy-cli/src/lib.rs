@@ -1,6 +1,5 @@
 use axionomy_service::{
-    InstanceProfile, ProblemPath, ReferenceService, RunArtifact, RunRequest, ServiceError,
-    StrategyPath,
+    InstanceProfile, ProblemPath, ReferenceService, ServiceError, StrategyPath, Study, StudyRequest,
 };
 use clap::{Parser, Subcommand, ValueEnum};
 use std::path::PathBuf;
@@ -10,7 +9,7 @@ use thiserror::Error;
 #[command(
     name = "axionomy",
     version,
-    about = "Inspect and run closed economic problem models"
+    about = "Inspect and study closed economic problem models"
 )]
 pub struct Cli {
     #[command(subcommand)]
@@ -30,8 +29,8 @@ enum Command {
         #[arg(long)]
         json: bool,
     },
-    /// Run a problem and emit a summary or portable artifact JSON.
-    Run {
+    /// Study a problem and emit a summary or the portable study as JSON.
+    Study {
         problem: ProblemPath,
         /// Select the micro, showcase or stress instance.
         #[arg(long)]
@@ -159,7 +158,7 @@ pub fn execute(cli: Cli) -> Result<CliOutput, CliError> {
             };
             Ok(CliOutput { text, output: None })
         }
-        Command::Run {
+        Command::Study {
             problem,
             instance,
             strategy,
@@ -168,15 +167,15 @@ pub fn execute(cli: Cli) -> Result<CliOutput, CliError> {
             format,
             output,
         } => {
-            let mut request = RunRequest::new(problem);
+            let mut request = StudyRequest::new(problem);
             request.instance = instance;
             request.strategy = strategy;
             request.seed = seed;
             request.budget = budget;
-            let artifact = service.run(request)?;
+            let study = service.study(request)?;
             let text = match format {
-                OutputFormat::Json => serde_json::to_string_pretty(&artifact)?,
-                OutputFormat::Summary => summary(&artifact),
+                OutputFormat::Json => serde_json::to_string_pretty(&study)?,
+                OutputFormat::Summary => summary(&study),
             };
             Ok(CliOutput { text, output })
         }
@@ -195,10 +194,10 @@ where
         })
 }
 
-fn summary(artifact: &RunArtifact) -> String {
-    let selected = artifact
+fn summary(study: &Study) -> String {
+    let selected = study
         .selected()
-        .expect("service artifacts always name an included document");
+        .expect("service studies always name an included document");
     let objectives = if selected.objectives.is_empty() {
         "none".into()
     } else {
@@ -210,16 +209,16 @@ fn summary(artifact: &RunArtifact) -> String {
             .join(", ")
     };
     format!(
-        "{}\n{}\nartifact: {}\ninstance: {}\nselected: {}\nalternatives: {}\nexchanges: {}\nobjectives: {}\nassessed proposals: {}",
+        "{}\n{}\nstudy: {}\ninstance: {}\nselected: {}\nalternatives: {}\nexchanges: {}\nobjectives: {}\nassessed proposals: {}",
         selected.title,
         selected.description,
-        artifact.key,
-        artifact.instance.profile,
+        study.key,
+        study.instance.profile,
         selected.id,
-        artifact.documents.len().saturating_sub(1),
+        study.documents.len().saturating_sub(1),
         selected.frames.len(),
         objectives,
-        artifact.assessed_proposals.len(),
+        study.assessed_proposals.len(),
     )
 }
 
@@ -238,10 +237,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn json_run_is_the_shared_service_artifact() {
+    fn a_json_study_is_the_shared_service_study() {
         let output = run_from([
             "axionomy",
-            "run",
+            "study",
             "maze",
             "--strategy",
             "a-star",
@@ -249,11 +248,13 @@ mod tests {
             "json",
         ])
         .unwrap();
-        let cli_artifact: RunArtifact = serde_json::from_str(&output.text).unwrap();
-        let service_artifact = ReferenceService
-            .run(RunRequest::new("maze".parse().unwrap()).with_strategy("a-star".parse().unwrap()))
+        let cli_study: Study = serde_json::from_str(&output.text).unwrap();
+        let service_study = ReferenceService
+            .study(
+                StudyRequest::new("maze".parse().unwrap()).with_strategy("a-star".parse().unwrap()),
+            )
             .unwrap();
-        assert_eq!(cli_artifact, service_artifact);
+        assert_eq!(cli_study, service_study);
     }
 
     #[test]
@@ -267,12 +268,12 @@ mod tests {
     #[test]
     fn identifiers_are_checked_where_they_are_read() {
         for arguments in [
-            ["axionomy", "run", "work_league"],
-            ["axionomy", "run", "Maze"],
+            ["axionomy", "study", "work_league"],
+            ["axionomy", "study", "Maze"],
         ] {
             assert!(run_from(arguments).is_err());
         }
-        assert!(run_from(["axionomy", "run", "maze", "--instance", "huge"]).is_err());
-        assert!(run_from(["axionomy", "run", "maze", "--strategy", "a_star"]).is_err());
+        assert!(run_from(["axionomy", "study", "maze", "--instance", "huge"]).is_err());
+        assert!(run_from(["axionomy", "study", "maze", "--strategy", "a_star"]).is_err());
     }
 }

@@ -9,10 +9,10 @@ const PROBLEM: &str = "lending";
 const SOURCE: &str = "Lending market";
 
 pub(super) fn build(
-    run: &ArtifactKey,
+    study: &StudyKey,
     descriptor: &ProblemDescriptor,
-) -> Result<RunArtifact, ServiceError> {
-    let config = match run.instance {
+) -> Result<Study, ServiceError> {
+    let config = match study.instance {
         InstanceProfile::Micro => Config::micro(),
         InstanceProfile::Showcase => Config::showcase(),
         InstanceProfile::Stress => Config::stress(),
@@ -116,7 +116,7 @@ pub(super) fn build(
     view.telemetry.push(scripted(&attack));
     documents.push(view);
 
-    artifact(run, descriptor, documents)
+    assemble(study, descriptor, documents)
 }
 
 fn scripted(trace: &LoanTrace) -> SearchTelemetryView {

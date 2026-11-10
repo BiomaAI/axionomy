@@ -8,10 +8,10 @@ use axionomy_view::{
 };
 
 pub(super) fn build(
-    run: &ArtifactKey,
+    study: &StudyKey,
     descriptor: &ProblemDescriptor,
-) -> Result<RunArtifact, ServiceError> {
-    let profile = run.instance;
+) -> Result<Study, ServiceError> {
+    let profile = study.instance;
     let initial = match profile {
         InstanceProfile::Micro => marketplace::initial(),
         InstanceProfile::Showcase => marketplace::initial_showcase(),
@@ -131,7 +131,7 @@ pub(super) fn build(
             documents[index].pareto_fronts.push(front);
         }
     }
-    artifact(run, descriptor, documents)
+    assemble(study, descriptor, documents)
 }
 
 fn pareto_trace(

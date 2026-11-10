@@ -15,8 +15,8 @@ pub use messages::{
     Amounts, AssessResponse, ComputedEntry, Direction, DocumentSummary, EconomyCounts,
     EconomyCreateRequest, EconomyEntries, EconomyExtendRequest, EconomyStored, ExchangeRequest,
     ExchangedResponse, FailureCode, LineKind, ProblemCatalogRequest, ProblemCatalogResponse,
-    QuantityLine, RateEntries, ReplayRequest, RunSummary, SearchOutcome, SearchRequest,
-    SearchResponse, SearchSolved, StateRoot, ToolFailure, TraceFindRequest, TraceFindResponse,
+    QuantityLine, RateEntries, ReplayRequest, SearchOutcome, SearchRequest, SearchResponse,
+    SearchSolved, StateRoot, StudySummary, ToolFailure, TraceFindRequest, TraceFindResponse,
     TraceStepRequest,
 };
 pub use server::AxionomyMcp;

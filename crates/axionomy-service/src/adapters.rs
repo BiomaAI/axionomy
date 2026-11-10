@@ -1,6 +1,7 @@
 use crate::{
-    ArtifactKey, Capability, InstanceDescriptor, InstanceProfile, ProblemDescriptor, ProblemFamily,
-    RunArtifact, RunControl, RunObserver, ServiceError, ServiceProgress, StrategyDescriptor,
+    Capability, InstanceDescriptor, InstanceProfile, ProblemDescriptor, ProblemFamily,
+    ServiceError, ServiceProgress, StrategyDescriptor, Study, StudyControl, StudyKey,
+    StudyObserver,
 };
 use axionomy::{Economy, Goal, Ontology, Quantity, Trace};
 use axionomy_search::{GraphSearchProgress, rollout::RolloutResult};
@@ -262,11 +263,8 @@ where
     }
 }
 
-type Build = fn(
-    &ArtifactKey,
-    &ProblemDescriptor,
-    &mut ProgressSink<'_>,
-) -> Result<RunArtifact, ServiceError>;
+type Build =
+    fn(&StudyKey, &ProblemDescriptor, &mut ProgressSink<'_>) -> Result<Study, ServiceError>;
 
 pub(crate) fn catalog() -> Vec<ProblemDescriptor> {
     problems()
@@ -367,7 +365,7 @@ fn problems() -> Vec<(ProblemDescriptor, Build)> {
         problem(
             ProblemCopy {
                 key: "exact-cover",
-                build: |run, descriptor, _| exact_cover::build(run, descriptor),
+                build: |study, descriptor, _| exact_cover::build(study, descriptor),
                 title: "Exact cover",
                 summary: "Choose subsets that cover every element exactly once. A plain search and Algorithm X reach the same answer by different routes.",
                 instances: [
@@ -401,7 +399,7 @@ fn problems() -> Vec<(ProblemDescriptor, Build)> {
         problem(
             ProblemCopy {
                 key: "workshop",
-                build: |run, descriptor, _| workshop::build(run, descriptor),
+                build: |study, descriptor, _| workshop::build(study, descriptor),
                 title: "Workshop",
                 summary: "Choose funded contracts, prepare components, manage tool wear and deliver products. Exact tradeoffs expose faster work, lower waste and higher revenue.",
                 instances: [
@@ -448,7 +446,7 @@ fn problems() -> Vec<(ProblemDescriptor, Build)> {
         problem(
             ProblemCopy {
                 key: "scheduling",
-                build: |run, descriptor, _| scheduling::build(run, descriptor),
+                build: |study, descriptor, _| scheduling::build(study, descriptor),
                 title: "Job-shop scheduling",
                 summary: "Route arriving jobs through queues and actual execution. Alternative machines, setup changes, shared crews and a recoverable machine failure change which schedule finishes first.",
                 instances: [
@@ -495,7 +493,7 @@ fn problems() -> Vec<(ProblemDescriptor, Build)> {
         problem(
             ProblemCopy {
                 key: "rescue",
-                build: |run, descriptor, _| rescue::build(run, descriptor),
+                build: |study, descriptor, _| rescue::build(study, descriptor),
                 title: "Uncertain rescue",
                 summary: "Search for several hidden casualties while their condition worsens. Trade treatment time, limited medicine, noisy hints and transport fuel against one evacuation seat.",
                 instances: [
@@ -530,7 +528,7 @@ fn problems() -> Vec<(ProblemDescriptor, Build)> {
         problem(
             ProblemCopy {
                 key: "bridge",
-                build: |run, descriptor, _| bridge::build(run, descriptor),
+                build: |study, descriptor, _| bridge::build(study, descriptor),
                 title: "Bridge allocation",
                 summary: "Timed traffic competes for one occupied lane. Compare fixed priority, urgency-based bids and a paid concurrent detour against arrivals, deadlines and expiring reservations.",
                 instances: [
@@ -589,7 +587,7 @@ fn problems() -> Vec<(ProblemDescriptor, Build)> {
         problem(
             ProblemCopy {
                 key: "amm",
-                build: |run, descriptor, _| amm::build(run, descriptor),
+                build: |study, descriptor, _| amm::build(study, descriptor),
                 title: "The Living Market",
                 summary: "Watch repeated production and trade reshape a closed economy. Daily needs and obligations, cloudy periods, limited storage, delayed capacity investment, and responsive liquidity interact through an exact constant-product AMM. Missed needs and defaults remain visible.",
                 instances: [
@@ -631,7 +629,7 @@ fn problems() -> Vec<(ProblemDescriptor, Build)> {
         problem(
             ProblemCopy {
                 key: "lending",
-                build: |run, descriptor, _| lending::build(run, descriptor),
+                build: |study, descriptor, _| lending::build(study, descriptor),
                 title: "Lending market",
                 summary: "Finance a bill that falls due before revenue arrives. Collateral caps the loan, interest follows pool utilization along a kinked curve, a reserve cut stays with the market, and a scheduled price drop can push an over-borrowed loan into liquidation.",
                 instances: [
@@ -680,7 +678,7 @@ fn problems() -> Vec<(ProblemDescriptor, Build)> {
         problem(
             ProblemCopy {
                 key: "marketplace",
-                build: |run, descriptor, _| marketplace::build(run, descriptor),
+                build: |study, descriptor, _| marketplace::build(study, descriptor),
                 title: "Multi-party marketplace",
                 summary: "Negotiate funded contracts, reserve scarce shipping capacity and fulfill deliveries over time. Route delays, price concessions, late rebates and refundable reservations couple buyer and seller outcomes.",
                 instances: [
@@ -878,7 +876,7 @@ fn problems() -> Vec<(ProblemDescriptor, Build)> {
         problem(
             ProblemCopy {
                 key: "perishables",
-                build: |run, descriptor, _| perishables::build(run, descriptor),
+                build: |study, descriptor, _| perishables::build(study, descriptor),
                 title: "Perishable inventory",
                 summary: "Manage scarce refrigerated space, thermal history and daily food obligations. Cooling and processing compete for electricity; backup generation and deliveries compete for fuel.",
                 instances: [
@@ -969,51 +967,51 @@ fn problem(
     (descriptor, copy.build)
 }
 
-pub(crate) fn run(
-    run: &ArtifactKey,
-    control: &RunControl,
-    observer: &mut dyn RunObserver,
-) -> Result<RunArtifact, ServiceError> {
+pub(crate) fn study(
+    key: &StudyKey,
+    control: &StudyControl,
+    observer: &mut dyn StudyObserver,
+) -> Result<Study, ServiceError> {
     let (descriptor, build) = problems()
         .into_iter()
-        .find(|(descriptor, _)| descriptor.key == run.problem)
-        .ok_or_else(|| ServiceError::UnknownProblem(run.problem.clone()))?;
+        .find(|(descriptor, _)| descriptor.key == key.problem)
+        .ok_or_else(|| ServiceError::UnknownProblem(key.problem.clone()))?;
     let mut progress = ProgressSink::new(control, observer);
     let _ = progress.emit(
         slug("prepare"),
         0,
         1,
-        format!("preparing {} · {}", run.problem, run.instance),
+        format!("preparing {} · {}", key.problem, key.instance),
     );
     progress.ensure()?;
-    let mut artifact = build(run, &descriptor, &mut progress)?;
+    let mut study = build(key, &descriptor, &mut progress)?;
     progress.ensure()?;
-    if let Some(document) = artifact.selected()
+    if let Some(document) = study.selected()
         && !progress.has_frames(&document.id)
     {
         for frame in &document.frames {
             progress.frame(&document.id, frame);
         }
     }
-    for (offset, document) in artifact.documents.iter().enumerate() {
+    for (offset, document) in study.documents.iter().enumerate() {
         let _ = progress.emit(
             slug("artifact"),
             offset as u64 + 1,
-            artifact.documents.len() as u64,
+            study.documents.len() as u64,
             format!("derived {}", document.title),
         );
         progress.ensure()?;
     }
-    artifact.assessed_proposals = artifact
+    study.assessed_proposals = study
         .documents
         .iter()
         .flat_map(|document| document.proposals.iter().cloned())
         .collect();
     let solve_observations = progress.observations().to_vec();
-    for document in &mut artifact.documents {
+    for document in &mut study.documents {
         // Problem adapters may retain richer, strategy-specific evidence. The
         // live stream is the transport fallback, not permission to relabel one
-        // algorithm's observations as every alternative in the artifact.
+        // algorithm's observations as every alternative in the study.
         if document.solve_observations.is_empty() {
             document.solve_observations = solve_observations.clone();
         }
@@ -1023,12 +1021,12 @@ pub(crate) fn run(
             }
         }
     }
-    Ok(artifact)
+    Ok(study)
 }
 
 pub(super) struct ProgressSink<'a> {
-    control: &'a RunControl,
-    observer: &'a mut dyn RunObserver,
+    control: &'a StudyControl,
+    observer: &'a mut dyn StudyObserver,
     sequence: u64,
     error: Option<ServiceError>,
     observations: Vec<SearchObservationView>,
@@ -1036,7 +1034,7 @@ pub(super) struct ProgressSink<'a> {
 }
 
 impl<'a> ProgressSink<'a> {
-    fn new(control: &'a RunControl, observer: &'a mut dyn RunObserver) -> Self {
+    fn new(control: &'a StudyControl, observer: &'a mut dyn StudyObserver) -> Self {
         Self {
             control,
             observer,
@@ -1363,21 +1361,21 @@ pub(super) fn telemetry(
     }
 }
 
-pub(super) fn artifact(
-    run: &ArtifactKey,
+pub(super) fn assemble(
+    study: &StudyKey,
     descriptor: &ProblemDescriptor,
     mut documents: Vec<ViewDocument>,
-) -> Result<RunArtifact, ServiceError> {
+) -> Result<Study, ServiceError> {
     let instance = descriptor
         .instances
         .iter()
-        .find(|instance| instance.profile == run.instance)
+        .find(|instance| instance.profile == study.instance)
         .ok_or_else(|| ServiceError::UnknownInstance {
-            problem: run.problem.clone(),
-            instance: run.instance,
+            problem: study.problem.clone(),
+            instance: study.instance,
         })?
         .clone();
-    let selected_document: DocumentPath = slug(run.strategy.as_str());
+    let selected_document: DocumentPath = slug(study.strategy.as_str());
     let alternatives = documents.len() as u64;
     for document in &mut documents {
         for snapshot in std::iter::once(&document.initial)
@@ -1442,11 +1440,11 @@ pub(super) fn artifact(
     {
         return Err(ServiceError::Problem {
             problem: descriptor.key.clone(),
-            message: format!("strategy `{}` produced no document", run.strategy),
+            message: format!("strategy `{}` produced no document", study.strategy),
         });
     }
-    Ok(RunArtifact {
-        key: run.clone(),
+    Ok(Study {
+        key: study.clone(),
         problem: descriptor.clone(),
         instance,
         selected_document,

@@ -15,7 +15,7 @@
     "test:ui": "vitest run",
     "test:e2e": "playwright test",
     "test:e2e:wasm": "playwright test --config playwright.wasm.config.ts",
-    "generate": "cargo run -q --release -p axionomy-studio-server --bin export-openapi -- openapi.json && openapi-typescript openapi.json -o src/generated/api.d.ts && cargo run -q --release -p axionomy-studio-server --bin export-view -- all public/artifacts"
+    "generate": "cargo run -q --release -p axionomy-studio-server --bin export-openapi -- openapi.json && openapi-typescript openapi.json -o src/generated/api.d.ts && cargo run -q --release -p axionomy-studio-server --bin export-studies -- all public/studies"
   },
   "dependencies": {
     "@tabler/icons-react": "3.46.0",

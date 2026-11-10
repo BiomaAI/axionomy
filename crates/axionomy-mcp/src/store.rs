@@ -1,5 +1,5 @@
 //! What the server keeps, in an [`axionomy_store::Store`]: economies by
-//! handle, assessments and run artifacts.
+//! handle, assessments and studies.
 //!
 //! Every economy is a point of a run. Authoring records a run that starts
 //! from the authored state; applying exchanges records a run that forks from
@@ -9,10 +9,10 @@
 //! with a secret the store keeps, so they stay valid across restarts of a
 //! server that keeps its store on disk, and stay infeasible to guess.
 
-use crate::handles::{ArtifactId, AssessmentId, EconomyId};
+use crate::handles::{AssessmentId, EconomyId, StudyId};
 use axionomy::paths;
 use axionomy::paths::Paths;
-use axionomy_service::RunArtifact;
+use axionomy_service::Study;
 use axionomy_store::{Checkpoints, Durability, Point, Reader, Store, StoreError};
 
 /// A snapshot's state: MCP's economies are identified by paths.
@@ -28,14 +28,14 @@ use std::{
 
 const ECONOMIES: TableDefinition<&str, &[u8]> = TableDefinition::new("mcp-economies");
 const ASSESSMENTS: TableDefinition<&str, &[u8]> = TableDefinition::new("mcp-assessments");
-const ARTIFACTS: TableDefinition<&str, &[u8]> = TableDefinition::new("mcp-artifacts");
+const STUDIES: TableDefinition<&str, &[u8]> = TableDefinition::new("mcp-studies");
 const SECRETS: TableDefinition<&str, &[u8; 32]> = TableDefinition::new("mcp-secrets");
 const HANDLE_SECRET: &str = "handles";
 
 /// States a call's run stores besides its last: replaying to any step of a
 /// long replay starts at most this many exchanges back.
 const CHECKPOINT_EVERY: NonZeroU64 = NonZeroU64::new(64).expect("nonzero");
-/// Loaded economies, assessments and artifacts kept in memory.
+/// Loaded economies, assessments and studies kept in memory.
 const CACHED: usize = 32;
 
 /// How a stored economy was made from its parent.
@@ -80,7 +80,7 @@ pub(crate) struct Assessed {
     pub assessment: paths::Assessment,
 }
 
-/// The server's economies, assessments and artifacts on its store, with the
+/// The server's economies, assessments and studies on its store, with the
 /// most recently used ones in memory.
 #[derive(Clone)]
 pub(crate) struct Archive {
@@ -88,7 +88,7 @@ pub(crate) struct Archive {
     secret: Arc<[u8; 32]>,
     economies: Cache<EconomyId, Loaded>,
     assessments: Cache<AssessmentId, Assessed>,
-    artifacts: Cache<ArtifactId, RunArtifact>,
+    studies: Cache<StudyId, Study>,
 }
 
 /// Whether a stored economy was stored by this call or an earlier one.
@@ -108,7 +108,7 @@ impl Archive {
                 let txn = txn.redb();
                 txn.open_table(ECONOMIES)?;
                 txn.open_table(ASSESSMENTS)?;
-                txn.open_table(ARTIFACTS)?;
+                txn.open_table(STUDIES)?;
                 let mut secrets = txn.open_table(SECRETS)?;
                 let kept = secrets.get(HANDLE_SECRET)?.map(|secret| *secret.value());
                 Ok(match kept {
@@ -125,7 +125,7 @@ impl Archive {
             secret: Arc::new(secret),
             economies: Cache::default(),
             assessments: Cache::default(),
-            artifacts: Cache::default(),
+            studies: Cache::default(),
         })
     }
 
@@ -420,40 +420,36 @@ impl Archive {
         ))
     }
 
-    /// Keeps a run's artifact under a handle minted from its key, so the same
-    /// run always has the same handle.
-    pub async fn keep_artifact(&self, artifact: RunArtifact) -> Result<ArtifactId, StoreError> {
-        let key = serde_json::to_vec(&artifact.key).expect("artifact keys serialize");
-        let id = ArtifactId::from_digest(&self.keyed(&[b"artifact", &key]));
-        let bytes = serde_json::to_vec(&artifact).expect("artifacts serialize");
+    /// Keeps a study under a handle minted from its key, so the same study
+    /// always has the same handle.
+    pub async fn keep_study(&self, study: Study) -> Result<StudyId, StoreError> {
+        let key = serde_json::to_vec(&study.key).expect("study keys serialize");
+        let id = StudyId::from_digest(&self.keyed(&[b"study", &key]));
+        let bytes = serde_json::to_vec(&study).expect("studies serialize");
         let stored = id.clone();
         self.store
             .transact(Durability::Eventual, move |txn| {
                 txn.redb()
-                    .open_table(ARTIFACTS)?
+                    .open_table(STUDIES)?
                     .insert(stored.as_str(), bytes.as_slice())?;
                 Ok(())
             })
             .await?;
-        self.artifacts.insert(id.clone(), artifact);
+        self.studies.insert(id.clone(), study);
         Ok(id)
     }
 
-    pub async fn artifact(
-        &self,
-        artifact_id: &ArtifactId,
-    ) -> Result<Option<Arc<RunArtifact>>, StoreError> {
-        if let Some(artifact) = self.artifacts.get(artifact_id) {
-            return Ok(Some(artifact));
+    pub async fn study(&self, study_id: &StudyId) -> Result<Option<Arc<Study>>, StoreError> {
+        if let Some(study) = self.studies.get(study_id) {
+            return Ok(Some(study));
         }
         let store = self.store.clone();
-        let key = artifact_id.as_str().to_owned();
-        let artifact = tokio::task::spawn_blocking(move || {
-            get::<RunArtifact>(&store.read()?, ARTIFACTS, &key)
-        })
-        .await
-        .map_err(|_| StoreError::Closed)??;
-        Ok(artifact.map(|artifact| self.artifacts.insert(artifact_id.clone(), artifact)))
+        let key = study_id.as_str().to_owned();
+        let study =
+            tokio::task::spawn_blocking(move || get::<Study>(&store.read()?, STUDIES, &key))
+                .await
+                .map_err(|_| StoreError::Closed)??;
+        Ok(study.map(|study| self.studies.insert(study_id.clone(), study)))
     }
 }
 

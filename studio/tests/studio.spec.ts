@@ -18,12 +18,12 @@ async function mazeGeometry(page: Page) {
   });
 }
 
-test("runs a search, receives events, and scrubs its replay", async ({ page }) => {
+test("studies a problem, receives events, and scrubs its replay", async ({ page }) => {
   test.setTimeout(60_000);
   await page.goto("/");
   await expect(page.getByRole("heading", { name: /Maze · least energy/ })).toBeVisible();
-  await page.getByRole("button", { name: "Run", exact: true }).click();
-  await expect(page.getByText("New artifact computed and loaded")).toBeVisible({ timeout: 30_000 });
+  await page.getByRole("button", { name: "Study", exact: true }).click();
+  await expect(page.getByText("New study computed and loaded")).toBeVisible({ timeout: 30_000 });
   await page.getByRole("tab", { name: /Step-by-step replay/ }).click();
   await page.getByRole("button", { name: "Next exchange" }).click();
   await expect(page.locator(".assessment-applicable")).toContainText("applicable");
@@ -73,8 +73,8 @@ test("turns saved Maze search evidence into a truthful, scrubbable expansion map
 
 test("keeps every Maze replay frame aligned and tells the key-and-gate story", async ({ page }) => {
   test.setTimeout(45_000);
-  const artifact = await (await page.request.get("/artifacts/maze.json")).json();
-  const frames = artifact.documents.find((document: { id: string }) => document.id === "a-star").frames;
+  const study = await (await page.request.get("/studies/maze.json")).json();
+  const frames = study.documents.find((document: { id: string }) => document.id === "a-star").frames;
   const metricStep = (key: string, value: string) => frames.findIndex((frame: { after: { scene: { metrics: Array<{ key: string; value: string }> } } }) =>
     frame.after.scene.metrics.some((metric) => metric.key === key && metric.value === value)) + 1;
   const keyStep = metricStep("key-state", "carried");
@@ -128,13 +128,13 @@ test("shows incremental tactical search and responsive pause control", async ({ 
   await page.getByRole("combobox", { name: "Instance (size)", exact: true }).selectOption("micro");
   await page.getByLabel("Seed").fill("42");
   await page.getByLabel("Budget").fill("32");
-  await page.getByRole("button", { name: "Run", exact: true }).click();
-  await expect(page.getByRole("button", { name: "Running…" })).toBeDisabled();
-  await expect(page.locator(".run-activity")).toContainText(/MCTS iterations/);
+  await page.getByRole("button", { name: "Study", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Studying…" })).toBeDisabled();
+  await expect(page.locator(".study-activity")).toContainText(/MCTS iterations/);
   await page.getByRole("button", { name: "Pause" }).click();
-  await expect(page.getByText("Run paused", { exact: true })).toBeVisible();
+  await expect(page.getByText("Study paused", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Resume" }).click();
-  await expect(page.getByText("New artifact computed and loaded")).toBeVisible({ timeout: 50_000 });
+  await expect(page.getByText("New study computed and loaded")).toBeVisible({ timeout: 50_000 });
   await expect(page.getByText(/Connect Four · Micro · Tactical MCTS self-play · seed 42 · budget 32/)).toBeVisible();
   await page.getByRole("tab", { name: /Step-by-step replay/ }).click();
   await expect(page.locator(".grid-scene")).toBeVisible();
@@ -150,8 +150,8 @@ test("loads a distinct static problem and its specialized renderer", async ({ pa
 });
 
 test("shows endogenous AMM price discovery, exact curve evidence, and causal attribution", async ({ page }) => {
-  const artifact = await (await page.request.get("/artifacts/amm.json")).json();
-  const steps = artifact.documents.find((document: { id: string }) => document.id === "market-day").frames.length;
+  const study = await (await page.request.get("/studies/amm.json")).json();
+  const steps = study.documents.find((document: { id: string }) => document.id === "market-day").frames.length;
   await page.goto(`/?problem=amm&instance=showcase&strategy=market-day&document=market-day&view=replay&step=${steps}&leaderboard=causal-price-contribution&seed=17&budget=128`);
   await expect(page.getByRole("heading", { name: "Living Market · endogenous price discovery" })).toBeVisible();
   await expect(page.locator(".market-scene")).toBeVisible();
@@ -170,8 +170,8 @@ test("shows endogenous AMM price discovery, exact curve evidence, and causal att
 });
 
 test("shows overlapping Work League activity, service occupancy, and missed deadlines", async ({ page }) => {
-  const artifact = await (await page.request.get("/artifacts/work-league.json")).json();
-  const document = artifact.documents.find((candidate: { id: string }) => candidate.id === "mixed-field");
+  const study = await (await page.request.get("/studies/work-league.json")).json();
+  const document = study.documents.find((candidate: { id: string }) => candidate.id === "mixed-field");
   const busyStep = document.frames.findIndex((frame: { after: { scene: { metrics: Array<{ key: string; value: string }> } } }) =>
     frame.after.scene.metrics.some((metric) => metric.key === "activities" && Number(metric.value) >= 2)) + 1;
   expect(busyStep).toBeGreaterThan(0);
@@ -185,8 +185,8 @@ test("shows overlapping Work League activity, service occupancy, and missed dead
 });
 
 test("shows an executed adaptive Logistics journey instead of a two-step prefix", async ({ page }) => {
-  const artifact = await (await page.request.get("/artifacts/logistics.json")).json();
-  const document = artifact.documents.find((candidate: { id: string }) => candidate.id === "mcts");
+  const study = await (await page.request.get("/studies/logistics.json")).json();
+  const document = study.documents.find((candidate: { id: string }) => candidate.id === "mcts");
   expect(document.frames.length).toBeGreaterThan(2);
   expect(document.objectives.some((objective: { key: string; value: string }) => objective.key === "delivered" && Number(objective.value) > 0)).toBe(true);
   await page.goto(`/?problem=logistics&instance=showcase&strategy=mcts&document=mcts&view=replay&step=${document.frames.length}`);
@@ -466,13 +466,13 @@ test("keeps active graph structures legible across every problem and replay fram
   let auditedNodes = 0;
 
   for (const problem of problems) {
-    const response = await page.request.get(`/artifacts/${problem}.json`);
-    expect(response.ok(), `${problem} artifact must be available`).toBe(true);
-    const artifact = await response.json() as {
+    const response = await page.request.get(`/studies/${problem}.json`);
+    expect(response.ok(), `${problem} study must be available`).toBe(true);
+    const study = await response.json() as {
       documents: Array<{ id: string; frames: unknown[]; initial: { scene: { surface: { kind: string } } } }>;
     };
 
-    for (const document of artifact.documents.filter((candidate) => candidate.initial.scene.surface.kind === "graph")) {
+    for (const document of study.documents.filter((candidate) => candidate.initial.scene.surface.kind === "graph")) {
       const strategy = document.id.slice(document.id.indexOf(":") + 1);
       await page.goto(`/?problem=${problem}&instance=showcase&strategy=${strategy}&document=${encodeURIComponent(document.id)}&view=replay&step=0&seed=17&budget=128`);
       await expect(page.locator(".graph-scene")).toBeVisible();
@@ -559,19 +559,19 @@ test("browser history restores a prior problem deep link", async ({ page }) => {
   await expect(page.locator(".leaderboard-step")).toContainText("7");
 });
 
-test("streams replay-verified Work League standings before publishing the artifact", async ({ page }) => {
+test("streams replay-verified Work League standings before publishing the study", async ({ page }) => {
   await page.goto("/?problem=work-league&instance=micro&strategy=mixed-field&view=solve&step=0&seed=17&budget=32");
   await expect(page.getByRole("heading", { name: "Work League · Mixed policy field" })).toBeVisible();
-  await page.getByRole("button", { name: "Run", exact: true }).click();
+  await page.getByRole("button", { name: "Study", exact: true }).click();
   await expect(page.locator(".live-standings")).toContainText(/(?:Live|Last) verified frame/, { timeout: 15_000 });
   await expect(page.locator(".live-standings")).toContainText("Contract value");
-  await expect(page.getByText("New artifact computed and loaded")).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByText("New study computed and loaded")).toBeVisible({ timeout: 30_000 });
 });
 
 
 test("exposes coupled warehouse mechanisms and the far-side exit", async ({ page }) => {
-  const artifact = await (await page.request.get("/artifacts/sokoban.json")).json();
-  const document = artifact.documents.find((candidate: { id: string }) => candidate.id === "a-star");
+  const study = await (await page.request.get("/studies/sokoban.json")).json();
+  const document = study.documents.find((candidate: { id: string }) => candidate.id === "a-star");
   const held = document.frames.findIndex((frame: { after: { scene: { metrics: Array<{ key: string; value: string }> } } }) =>
     frame.after.scene.metrics.some((metric) => metric.key === "held-plates" && metric.value === "1")) + 1;
   expect(held).toBeGreaterThan(0);
@@ -612,8 +612,8 @@ test("shows workshop contract choices and three production objectives", async ({
 });
 
 test("shows simultaneous bridge traffic and deadline outcomes", async ({ page }) => {
-  const artifact = await (await page.request.get("/artifacts/bridge.json")).json();
-  const document = artifact.documents.find((candidate: { id: string }) => candidate.id === "adaptive");
+  const study = await (await page.request.get("/studies/bridge.json")).json();
+  const document = study.documents.find((candidate: { id: string }) => candidate.id === "adaptive");
   const overlap = document.frames.findIndex((frame: { after: { scene: { entities: Array<{ status?: string }> } } }) =>
     frame.after.scene.entities.some((entity) => entity.status?.startsWith("crossing until")) && frame.after.scene.entities.some((entity) => entity.status?.startsWith("detouring until"))) + 1;
   expect(overlap).toBeGreaterThan(0);
@@ -628,8 +628,8 @@ test("shows simultaneous bridge traffic and deadline outcomes", async ({ page })
 });
 
 test("shows funded marketplace contracts before delivery settlement", async ({ page }) => {
-  const artifact = await (await page.request.get("/artifacts/marketplace.json")).json();
-  const document = artifact.documents.find((candidate: { id: string }) => candidate.id === "market-clearing");
+  const study = await (await page.request.get("/studies/marketplace.json")).json();
+  const document = study.documents.find((candidate: { id: string }) => candidate.id === "market-clearing");
   const inTransit = document.frames.findIndex((frame: { after: { scene: { metrics: Array<{ key: string; value: string }> } } }) =>
     frame.after.scene.metrics.some((metric) => metric.key === "in-transit" && Number(metric.value) > 0)) + 1;
   expect(inTransit).toBeGreaterThan(0);
@@ -643,8 +643,8 @@ test("shows funded marketplace contracts before delivery settlement", async ({ p
 });
 
 test("shows executed scheduling time and real crew occupancy", async ({ page }) => {
-  const artifact = await (await page.request.get("/artifacts/scheduling.json")).json();
-  const document = artifact.documents.find((candidate: { id: string }) => candidate.id === "bounded-optimizer");
+  const study = await (await page.request.get("/studies/scheduling.json")).json();
+  const document = study.documents.find((candidate: { id: string }) => candidate.id === "bounded-optimizer");
   const occupied = document.frames.findIndex((frame: { after: { scene: { metrics: Array<{ key: string; value: string }> } } }) =>
     frame.after.scene.metrics.some((metric) => metric.key === "busy-labor" && Number(metric.value) > 0)) + 1;
   expect(occupied).toBeGreaterThan(0);
@@ -659,8 +659,8 @@ test("shows executed scheduling time and real crew occupancy", async ({ page }) 
 });
 
 test("shows split cold-chain cohorts, inherited exposure and shared fuel", async ({ page }) => {
-  const artifact = await (await page.request.get("/artifacts/perishables.json")).json();
-  const document = artifact.documents.find((candidate: { id: string }) => candidate.id === "storage-buffer");
+  const study = await (await page.request.get("/studies/perishables.json")).json();
+  const document = study.documents.find((candidate: { id: string }) => candidate.id === "storage-buffer");
   const split = document.frames.findIndex((frame: { exchange: { rate: { key: string } } }) => frame.exchange.rate.key.includes("split")) + 1;
   expect(split).toBeGreaterThan(0);
   await page.goto(`/?problem=perishables&instance=showcase&strategy=outage&document=storage-buffer&view=replay&step=${split}`);
@@ -686,8 +686,8 @@ test("shows split cold-chain cohorts, inherited exposure and shared fuel", async
 });
 
 test("reveals rescued patients only after physical discovery and records hospital outcomes", async ({ page }) => {
-  const artifact = await (await page.request.get("/artifacts/rescue.json")).json();
-  const document = artifact.documents.find((candidate: { id: string }) => candidate.id === "stabilize-first");
+  const study = await (await page.request.get("/studies/rescue.json")).json();
+  const document = study.documents.find((candidate: { id: string }) => candidate.id === "stabilize-first");
   await page.goto("/?problem=rescue&instance=showcase&strategy=observe-then-follow&document=stabilize-first&view=replay&step=0");
   await expect(page.getByRole("heading", { name: "Rescue · stabilize before transport" })).toBeVisible();
   await expect(page.locator(".attachment-group").filter({ hasText: "Patient" })).toHaveCount(0);
@@ -705,8 +705,8 @@ test("reveals rescued patients only after physical discovery and records hospita
 });
 
 test("shows independent mission travel, private briefings and cooperative extraction", async ({ page }) => {
-  const artifact = await (await page.request.get("/artifacts/mission.json")).json();
-  const document = artifact.documents.find((candidate: { id: string }) => candidate.id === "coordinated");
+  const study = await (await page.request.get("/studies/mission.json")).json();
+  const document = study.documents.find((candidate: { id: string }) => candidate.id === "coordinated");
   const discovery = document.frames.findIndex((frame: { exchange: { rate: { label: string } } }) => frame.exchange.rate.label.startsWith("Scout discovers Casualty"));
   const briefing = document.frames.findIndex((frame: { exchange: { rate: { label: string } } }) => frame.exchange.rate.label.startsWith("Brief Medic on Casualty"));
   expect(briefing).toBeGreaterThan(discovery);
@@ -726,8 +726,8 @@ test("shows independent mission travel, private briefings and cooperative extrac
 });
 
 test("shows fleet cargo staging, shared-road capacity and funded delivery outcomes", async ({ page }) => {
-  const artifact = await (await page.request.get("/artifacts/logistics.json")).json();
-  const document = artifact.documents.find((candidate: { id: string }) => candidate.id === "mcts");
+  const study = await (await page.request.get("/studies/logistics.json")).json();
+  const document = study.documents.find((candidate: { id: string }) => candidate.id === "mcts");
   const staged = document.frames.findIndex((frame: { exchange: { rate: { label: string } } }) => frame.exchange.rate.label.includes("stages Order")) + 1;
   expect(staged).toBeGreaterThan(0);
   await page.goto(`/?problem=logistics&instance=showcase&strategy=mcts&document=mcts&view=replay&step=${staged}`);

@@ -66,13 +66,13 @@ these three as the deeper demonstration of why the architecture matters.
 6. End with evidence a visitor can inspect: a receipt, an invariant, a private
    observation, a counterfactual trace, or a non-dominated alternative.
 
-For the **Micro Mission**, run **seed 11, budget 128**: the planner follows the South sighting,
+For the **Micro Mission**, study **seed 11, budget 128**: the planner follows the South sighting,
 shares it, responds to injury, and succeeds while the direct North baseline
-fails in the same instantiated scenario. Then run **seed 17**: the misleading
+fails in the same instantiated scenario. Then study **seed 17**: the misleading
 sighting sends the planner South while the objective is North. Valid execution
 does not guarantee a successful decision under uncertainty. The separate
 sampled frontier evaluates the two fixed-policy baselines; it does not estimate
-the new planner's success probability. Links select controls; press **Run** to
+the new planner's success probability. Links select controls; press **Study** to
 compute a different seed.
 
 The Living Market now evaluates a multi-day economy. Closing prices depend on

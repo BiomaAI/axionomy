@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { vi } from "vitest";
 import { App } from "./App";
 import { nativeEngine, type EngineEventListener } from "./engine";
-import type { RunArtifact } from "./api";
+import type { Study } from "./api";
 
 vi.mock("echarts/core", () => ({
   use: vi.fn(),
@@ -31,7 +31,7 @@ const lending = {
   strategies: [{ key: "least-interest", label: "Least interest", description: "Dijkstra", algorithm: "dijkstra" }],
 };
 
-const artifact = {
+const study = {
   key: { problem: "maze", instance: "showcase", strategy: "a-star", seed: 17, budget: 128 },
   problem,
   instance: problem.instances[0],
@@ -60,11 +60,11 @@ vi.mock("./api", async (importOriginal) => {
     ...original,
     fetchProblems: vi.fn(async () => [problem, lending]),
     fetchStaticProblems: vi.fn(async () => [problem, lending]),
-    fetchStaticArtifact: vi.fn(async () => artifact),
+    fetchStaticStudy: vi.fn(async () => study),
   };
 });
 
-test("loads a full portable artifact and exposes the model workbench", async () => {
+test("loads a full portable study and exposes the model workbench", async () => {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(<QueryClientProvider client={client}><App /></QueryClientProvider>);
   expect(await screen.findByRole("heading", { name: "Maze · least energy" })).toBeInTheDocument();
@@ -76,27 +76,27 @@ test("loads a full portable artifact and exposes the model workbench", async () 
 });
 
 test("a late saved preview cannot replace a newly computed result", async () => {
-  let finishPreview!: (artifact: RunArtifact) => void;
-  const preview = new Promise<RunArtifact>((resolve) => { finishPreview = resolve; });
+  let finishPreview!: (study: Study) => void;
+  const preview = new Promise<Study>((resolve) => { finishPreview = resolve; });
   let listener!: EngineEventListener;
-  const result = { ...artifact, key: { ...artifact.key, seed: 18 }, documents: [{ ...artifact.documents[0], title: "New computed branch" }] } as RunArtifact;
+  const result = { ...study, key: { ...study.key, seed: 18 }, documents: [{ ...study.documents[0], title: "New computed branch" }] } as Study;
   const health = vi.spyOn(nativeEngine, "health").mockResolvedValue(true);
-  const defaults = vi.spyOn(nativeEngine, "defaultArtifact").mockReturnValue(preview);
-  const stored = vi.spyOn(nativeEngine, "artifact").mockResolvedValue(result);
+  const defaults = vi.spyOn(nativeEngine, "defaultStudy").mockReturnValue(preview);
+  const stored = vi.spyOn(nativeEngine, "study").mockResolvedValue(result);
   const start = vi.spyOn(nativeEngine, "start").mockImplementation(async (request, onEvent) => {
     listener = onEvent;
-    return { summary: { id: "run-1", request, status: "running", completed: 0 }, close() {} };
+    return { summary: { id: "study-1", request, status: "studying", completed: 0 }, close() {} };
   });
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const view = render(<QueryClientProvider client={client}><App /></QueryClientProvider>);
   await waitFor(() => expect(defaults).toHaveBeenCalled());
-  await userEvent.click(screen.getByRole("button", { name: /^Run$/ }));
+  await userEvent.click(screen.getByRole("button", { name: /^Study$/ }));
   await act(async () => {
-    await listener({ kind: "run_completed", run_id: "run-1", sequence: 1, document: result.selected_document });
+    await listener({ kind: "study_completed", study_id: "study-1", sequence: 1, document: result.selected_document });
   });
-  expect(stored).toHaveBeenCalledWith("run-1");
+  expect(stored).toHaveBeenCalledWith("study-1");
   expect(await screen.findByRole("heading", { name: "New computed branch" })).toBeInTheDocument();
-  await act(async () => { finishPreview(artifact as RunArtifact); await preview; });
+  await act(async () => { finishPreview(study as Study); await preview; });
   expect(screen.getByRole("heading", { name: "New computed branch" })).toBeInTheDocument();
   view.unmount();
   client.clear();

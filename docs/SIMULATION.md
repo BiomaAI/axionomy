@@ -1,7 +1,7 @@
 # Simulation: policies, runs and studies
 
 Status: planned, in the order the steps below give. Built: rollouts and
-Monte Carlo episodes recording where they run, and step 1.
+Monte Carlo episodes recording where they run, step 1 and step 3.
 
 The economy owns commitments and their consequences. A policy reads what an
 actor may see and proposes exchanges. Whoever calls the rollout (a problem, a
@@ -54,7 +54,7 @@ does not reuse it for its own machinery.
 | Nature response | What happens without anyone choosing: an outcome resolves, a vehicle arrives, a deadline expires; a problem's `nature_response(world)` |
 | Tick | The clock advancing |
 | Horizon | The most steps a rollout may take |
-| Study | One request to Studio or MCP: a problem, an instance, strategies, a seed and a budget. A study produces runs and the evidence of how they were found |
+| Study | One request to Studio, MCP or the CLI: a problem, an instance, strategies, a seed and a budget. A study produces runs and the evidence of how they were found |
 
 "Job" is not used for studies: work-league's workers claim jobs, and the
 store's writer runs jobs. "Session" belongs to search, "experiment" to Monte
@@ -96,7 +96,7 @@ frames from the stored steps when they are read, instead of keeping the whole
 view as JSON. What is not a trajectory (Pareto fronts, telemetry, Monte Carlo
 estimates, search observations) is small and stays with the study.
 
-- MCP keeps runs in its store instead of artifact JSON.
+- MCP keeps runs in its store instead of whole studies as JSON.
 - The Studio server opens a store (in memory unless a file is given, as MCP
   does), so a study can be reopened and scrubbed from stored roots.
 - GitHub Pages keeps its pre-built replays: it has no server.
@@ -107,14 +107,16 @@ from an initial state and a trace, so it records them the same way.
 Done when MCP's store holds no view JSON and the Studio server reopens a
 recorded study.
 
-## Step 3: studies are named studies
+## Step 3: studies are named studies (done)
 
-Studio's and MCP's computation is renamed together, in one commit, with the
-Python interop suite: `/api/runs` becomes `/api/studies`, `StudioRunId`
-(`run-7`) becomes `StudyId` (`study-7`), `RunRequest`, `RunSummary`,
-`RunControl` and `RunObserver` become `Study…`, `RunArtifact` becomes the
-study's record, and `axionomy_problem_run` becomes `axionomy_problem_study`.
-After it, "run" means a trajectory everywhere.
+Studio's and MCP's computation is named a study, in one commit with the Python
+interop suite. The service computes a `Study` from a `StudyRequest`, keyed by
+its `StudyKey` and controlled and observed through `StudyControl` and
+`StudyObserver`. The Studio server serves `/api/studies`, mints
+`StudioStudyId`s (`study-7`) and streams `study_started` … `study_failed`
+events; MCP's `axionomy_problem_study` returns a `StudySummary` whose `stu-`
+handle is read under `axionomy://study/{study_id}`; the CLI's command is
+`axionomy study`. "Run" means a trajectory everywhere.
 
 ## Step 4: replay is all or nothing
 

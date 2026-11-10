@@ -330,22 +330,23 @@ async def test_a_task_can_be_cancelled(url: str) -> None:
     assert tasks.status in {"cancelled", "completed"}
 
 
-async def test_a_problem_run_pages_its_frames(url: str) -> None:
+async def test_a_problem_study_pages_its_frames(url: str) -> None:
     async with Client(url, extensions=[Tasks()]) as client:
         result = await client.call_tool(
-            "axionomy_problem_run",
+            "axionomy_problem_study",
             {"problem": "maze", "instance": "micro", "strategy": "a-star"},
         )
         summary = result.structured_content
-        assert summary["artifact_id"].startswith("art-")
+        assert summary["study_id"].startswith("stu-")
         assert summary["key"] == {"problem": "maze", "instance": "micro", "strategy": "a-star", "seed": 17, "budget": 128}
+        assert f"axionomy://study/{summary['study_id']}" in links(result)
         frames_uri = next(uri for uri in links(result) if uri.endswith("/frames"))
         frames = await page(client, frames_uri)
         selected = next(doc for doc in summary["documents"] if doc["id"] == summary["selected_document"])
         assert 0 < len(frames["items"]) <= selected["frames"]
 
         refused = await client.call_tool(
-            "axionomy_problem_run",
+            "axionomy_problem_study",
             {"problem": "maze", "strategy": "a_star"},
         )
         assert refused.is_error

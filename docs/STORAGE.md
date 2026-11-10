@@ -366,8 +366,8 @@ survive the members they summarize.
   groups are store-wide names that would let one caller find another's
   snapshots, so MCP exposes only what a handle reaches until it has
   authentication; watch and actor views follow with phase 4.
-- **Studio server**: runs and artifacts move into the store, and scrubbing
-  renders frames from stored roots instead of loading whole artifacts.
+- **Studio server**: studies record their runs in the store, and scrubbing
+  renders frames from stored roots instead of loading whole studies.
 - **Problems** (done): every canonical problem's `World` has an `Ontology`,
   and its runs are stored and read back unchanged.
 - **Producers of runs**: kept search branches and solutions, rollouts,
@@ -385,7 +385,7 @@ survive the members they summarize.
 Each phase is a validated commit or series of commits.
 
 0. **Constant-time forks** (done): the kernel's persistent account index, with
-   every Studio artifact unchanged byte for byte and the fork benchmark in
+   every Studio replay unchanged byte for byte and the fork benchmark in
    `benches/economy.rs`.
 1. **`axionomy-tree`** (done), with tests for what makes it correct: the same keys give
    the same root in any insertion order, an incrementally updated tree has the
@@ -404,7 +404,7 @@ Each phase is a validated commit or series of commits.
    and the time index it gives; every canonical problem recordable, with
    rollouts recorded as runs in a Monte Carlo group (done); rollouts and
    Monte Carlo episodes recording where they run, through `Apply` and
-   `Episodes` (done); problem runs recorded as store runs; recording from
+   `Episodes` (done); studies recording their runs in the store; recording from
    inside search sessions, MPPI and RL; watch and actor views; Studio
    scrubbing from the store.
 5. **Many writers, one history:** stores written independently by any

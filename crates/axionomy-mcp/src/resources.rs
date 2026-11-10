@@ -1,4 +1,4 @@
-//! Resource addresses. Everything an economy, assessment or run holds is read
+//! Resource addresses. Everything an economy, assessment or study holds is read
 //! as an `axionomy://` resource, and every list is read one page at a time with
 //! the MCP pagination conventions: an opaque `cursor` chosen by the server,
 //! returned as `nextCursor` while more items remain. The named snapshots never
@@ -6,7 +6,7 @@
 
 use axionomy::InvariantPath;
 
-use crate::handles::{ArtifactId, AssessmentId, EconomyId};
+use crate::handles::{AssessmentId, EconomyId, StudyId};
 use axionomy::{AccountPath, AssetPath, RatePath, path::Path};
 use axionomy_view::DocumentPath;
 use rmcp::{
@@ -85,15 +85,15 @@ pub(crate) enum Target {
     AssessmentLines {
         assessment_id: AssessmentId,
     },
-    Artifact {
-        artifact_id: ArtifactId,
+    Study {
+        study_id: StudyId,
     },
     Document {
-        artifact_id: ArtifactId,
+        study_id: StudyId,
         document: DocumentPath,
     },
     Frames {
-        artifact_id: ArtifactId,
+        study_id: StudyId,
         document: DocumentPath,
     },
 }
@@ -166,9 +166,9 @@ pub(crate) fn templates() -> Vec<ResourceTemplate> {
         ("axionomy://economy/{economy_id}/diff/{other_id}{?cursor}", "diff", "Diff", "What differs from this snapshot to another, in path order: accounts opened and closed, balances with both quantities, rates added, removed or redefined, and whether the invariants differ. Equal snapshots have no rows."),
         ("axionomy://assessment/{assessment_id}", "assessment", "Assessment", "An exchange checked against a snapshot: its status, issues and how many lines explain it."),
         ("axionomy://assessment/{assessment_id}/lines{?cursor}", "assessment-lines", "Assessment lines", "What each account lacks for an infeasible exchange, or what an applicable one would move."),
-        ("axionomy://artifact/{artifact_id}", "artifact", "Run artifact", "A finished problem run: its request and documents."),
-        ("axionomy://artifact/{artifact_id}/documents/{document}", "document", "Run document", "One outcome's document without its frames: initial state, objectives and solver evidence."),
-        ("axionomy://artifact/{artifact_id}/documents/{document}/frames{?cursor}", "frames", "Run frames", "A document's replay frames in order."),
+        ("axionomy://study/{study_id}", "study", "Study", "A finished study of a problem: its key and documents."),
+        ("axionomy://study/{study_id}/documents/{document}", "document", "Study document", "One outcome's document without its frames: initial state, objectives and solver evidence."),
+        ("axionomy://study/{study_id}/documents/{document}/frames{?cursor}", "frames", "Study frames", "A document's replay frames in order."),
     ]
     .into_iter()
     .map(|(template, name, title, description)| {
@@ -252,26 +252,15 @@ impl Target {
             Self::AssessmentLines { assessment_id } => {
                 (vec!["assessment", assessment_id.as_str(), "lines"], vec![])
             }
-            Self::Artifact { artifact_id } => (vec!["artifact", artifact_id.as_str()], vec![]),
-            Self::Document {
-                artifact_id,
-                document,
-            } => (
-                vec![
-                    "artifact",
-                    artifact_id.as_str(),
-                    "documents",
-                    document.as_str(),
-                ],
+            Self::Study { study_id } => (vec!["study", study_id.as_str()], vec![]),
+            Self::Document { study_id, document } => (
+                vec!["study", study_id.as_str(), "documents", document.as_str()],
                 vec![],
             ),
-            Self::Frames {
-                artifact_id,
-                document,
-            } => (
+            Self::Frames { study_id, document } => (
                 vec![
-                    "artifact",
-                    artifact_id.as_str(),
+                    "study",
+                    study_id.as_str(),
                     "documents",
                     document.as_str(),
                     "frames",
@@ -306,7 +295,7 @@ impl Target {
             Self::Economy { .. }
                 | Self::Rate { .. }
                 | Self::Assessment { .. }
-                | Self::Artifact { .. }
+                | Self::Study { .. }
                 | Self::Document { .. }
         )
     }
@@ -397,15 +386,15 @@ impl Address {
             ["assessment", id, "lines"] => Target::AssessmentLines {
                 assessment_id: id.parse().map_err(|_| unknown())?,
             },
-            ["artifact", id] => Target::Artifact {
-                artifact_id: id.parse().map_err(|_| unknown())?,
+            ["study", id] => Target::Study {
+                study_id: id.parse().map_err(|_| unknown())?,
             },
-            ["artifact", id, "documents", document] => Target::Document {
-                artifact_id: id.parse().map_err(|_| unknown())?,
+            ["study", id, "documents", document] => Target::Document {
+                study_id: id.parse().map_err(|_| unknown())?,
                 document: document.parse().map_err(|_| unknown())?,
             },
-            ["artifact", id, "documents", document, "frames"] => Target::Frames {
-                artifact_id: id.parse().map_err(|_| unknown())?,
+            ["study", id, "documents", document, "frames"] => Target::Frames {
+                study_id: id.parse().map_err(|_| unknown())?,
                 document: document.parse().map_err(|_| unknown())?,
             },
             _ => return Err(unknown()),
@@ -599,7 +588,7 @@ mod tests {
                 invariant: "supply/cash".parse().unwrap(),
             },
             Target::Frames {
-                artifact_id: format!("art-{}", "0".repeat(64)).parse().unwrap(),
+                study_id: format!("stu-{}", "0".repeat(64)).parse().unwrap(),
                 document: "outcomes/a-star".parse().unwrap(),
             },
         ];

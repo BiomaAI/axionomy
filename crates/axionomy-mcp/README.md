@@ -90,7 +90,7 @@ Resources hold the data. Their URI templates (RFC 6570) are listed by
 | `…/exchanges{?cursor}` | Those exchanges; replaying them on the parent reproduces it |
 | `…/diff/{other_id}{?cursor}` | What differs from this snapshot to another: accounts opened and closed, balances with both quantities, rates and invariants |
 | `axionomy://assessment/{assessment_id}` and `…/lines{?cursor}` | An assessment and what explains it |
-| `axionomy://artifact/{artifact_id}`, `…/documents/{document}` and `…/frames{?cursor}` | A problem run: its key and documents, one document, or its frames |
+| `axionomy://study/{study_id}`, `…/documents/{document}` and `…/frames{?cursor}` | A study of a problem: its key and documents, one document, or its frames |
 
 A list page is `{"items": [...], "nextCursor": "..."}` and follows the MCP
 pagination rules: the server chooses the page size, the cursor is opaque, the
@@ -117,7 +117,7 @@ rates, invariants and documents for template arguments, by prefix.
 | `axionomy_trace_find` | The first step of those exchanges after which a balance is equal to, at least or at most a quantity, and that state | additive, idempotent |
 | `axionomy_search` | MCP task: outcome and the snapshot a solution reaches | additive, idempotent |
 | `axionomy_problem_catalog` | Built-in problems, instances and strategies | read-only |
-| `axionomy_problem_run` | MCP task: run summary | additive, idempotent |
+| `axionomy_problem_study` | MCP task: study summary | additive, idempotent |
 
 Every tool declares input and output schemas and `openWorldHint: false`.
 Results link to the resources that page through what they summarize. Applying
@@ -139,12 +139,12 @@ server can derive a handle from an economy's content. Two different histories
 that reach the same balances get different handles, so a handle also names how
 its state was reached; their equal `root`s say they reached the same state.
 Assessment handles, `AssessmentId`, are written `asm-` and keyed the same way.
-Artifact handles, `ArtifactId`, are written `art-` and keyed by what the
-artifact was computed from, so the same problem, instance, strategy, seed and
-budget always get the same handle. A problem run takes the problem and strategy
-as kebab-case paths (`work-league`, `a-star`) and the instance as `micro`,
-`showcase` or `stress`; its summary carries the artifact handle, that key, the
-selected document and every document's frame count.
+Study handles, `StudyId`, are written `stu-` and keyed by what the study was
+computed from, so the same problem, instance, strategy, seed and budget always
+get the same handle. A study takes the problem and strategy as kebab-case paths
+(`work-league`, `a-star`) and the instance as `micro`, `showcase` or `stress`;
+its summary carries the study handle, that key, the selected document and
+every document's frame count.
 
 Every snapshot is a point of a run in the store. Authoring records a run that
 starts from the authored state; applying exchanges records a run forked from
@@ -154,7 +154,7 @@ transaction, so a handle exists exactly when everything it names does. An
 intermediate state that `axionomy_trace_step` names is rebuilt from the
 nearest stored state by replay, with every receipt checked against the one
 recorded. Assessments are stored as their inputs and computed again when read;
-problem-run artifacts are stored whole. Recently used snapshots stay in memory.
+studies are stored whole. Recently used snapshots stay in memory.
 
 ```rust
 use axionomy_mcp::AxionomyMcp;
@@ -171,7 +171,7 @@ stops.
 
 ## Tasks
 
-`axionomy_search` and `axionomy_problem_run` return a task handle when the
+`axionomy_search` and `axionomy_problem_study` return a task handle when the
 caller declares the `io.modelcontextprotocol/tasks` extension, and a
 `tasks_required` error otherwise. `rmcp::TaskManager` registers the task
 before returning its handle. `tasks/get` reports progress and the terminal
@@ -208,7 +208,7 @@ store on disk across restarts. `interop/` checks that a standard client reaches
 all of it: the official MCP Python SDK drives the server binary over
 Streamable HTTP through discovery, tools, resource links and pages,
 completion, stepping and diffs, task-backed search and cancellation, a
-problem run, error codes, the routing-header rule, and snapshots that outlive
+problem study, error codes, the routing-header rule, and snapshots that outlive
 a restart. The SDK does not ship the tasks extension,
 so the suite declares it, as SEP-2663 describes. Python is managed with uv:
 
@@ -220,7 +220,7 @@ cd crates/axionomy-mcp/interop && uv run --locked pytest
 ## Deployment boundary
 
 This crate is a local reference implementation, not a production control
-plane. Snapshots, assessments and artifacts persist in its store; tasks live in
+plane. Snapshots, assessments and studies persist in its store; tasks live in
 the process. It has no authentication, tenant isolation, quotas, retention
 limits, persisted search checkpoints or distributed workers. Public
 deployments must also configure allowed hosts and origins rather than

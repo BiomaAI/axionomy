@@ -36,7 +36,7 @@ pub mod kind {
     pub enum Measure {}
     /// A semantic class a renderer may style, such as `location` or `current`.
     pub enum Class {}
-    /// One document of an artifact, such as one strategy's outcome.
+    /// One document of a study, such as one strategy's outcome.
     pub enum Document {}
     /// A proposal assessed against a snapshot.
     pub enum Proposal {}
@@ -74,7 +74,7 @@ pub type ItemPath = Path<kind::Item>;
 pub type MeasurePath = Path<kind::Measure>;
 /// A semantic class, such as `location` or `search-explored`.
 pub type ClassPath = Path<kind::Class>;
-/// A document of an artifact, such as `a-star` or `deadlock`.
+/// A document of a study, such as `a-star` or `deadlock`.
 pub type DocumentPath = Path<kind::Document>;
 /// A proposal, such as `locked-door`.
 pub type ProposalPath = Path<kind::Proposal>;
@@ -1387,7 +1387,7 @@ pub enum SearchObservationKindView {
 
 /// A bounded, transport-neutral view of solver work. Search crates expose
 /// typed session state; the service maps it into this presentation contract so
-/// HTTP, WASM, saved artifacts, and Studio use identical evidence.
+/// HTTP, WASM, saved studies, and Studio use identical evidence.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct SearchObservationView {
     pub sequence: u64,
@@ -1430,8 +1430,8 @@ pub struct ViewDocument {
     pub telemetry: Vec<SearchTelemetryView>,
     #[serde(default)]
     pub observations: Vec<ObservationView>,
-    /// Bounded solver history retained so a fast native run or a static Pages
-    /// artifact is as inspectable as a live stream.
+    /// Bounded solver history retained so a fast native study or a static Pages
+    /// study is as inspectable as a live stream.
     #[serde(default)]
     pub solve_observations: Vec<SearchObservationView>,
 }

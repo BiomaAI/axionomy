@@ -5,7 +5,7 @@ use crate::{
         AssessResponse, DocumentSummary, EconomyCounts, EconomyCreateRequest, EconomyEntries,
         EconomyExtendRequest, EconomyStored, ExchangeRequest, ExchangedResponse, FailureCode,
         LineKind, ProblemCatalogRequest, ProblemCatalogResponse, QuantityLine, ReplayRequest,
-        RunSummary, SearchOutcome, SearchRequest, SearchResponse, SearchSolved, StateRoot,
+        SearchOutcome, SearchRequest, SearchResponse, SearchSolved, StateRoot, StudySummary,
         ToolFailure, TraceFindRequest, TraceFindResponse, TraceStepRequest,
     },
     resources::{self, Address, IMMUTABLE_TTL_MS, LIST_TTL_MS, Target},
@@ -16,7 +16,7 @@ use axionomy_search::{
     BfsSession, GraphSearchProgress,
     session::{Continue, SearchStatus, WorkBudget},
 };
-use axionomy_service::{ReferenceService, RunControl, RunRequest, ServiceProgress};
+use axionomy_service::{ReferenceService, ServiceProgress, StudyControl, StudyRequest};
 use axionomy_store::{Store, StoreError};
 use rmcp::{
     ErrorData as McpError, ServerHandler,
@@ -49,7 +49,7 @@ pub(crate) const MAX_EXCHANGES: usize = 1_000;
 /// Lines a tool result shows before pointing at their resource.
 const PREVIEW_LINES: usize = 10;
 const SEARCH: &str = "axionomy_search";
-const PROBLEM_RUN: &str = "axionomy_problem_run";
+const PROBLEM_STUDY: &str = "axionomy_problem_study";
 
 const INSTRUCTIONS: &str = "Axionomy is an exact economic kernel: every state change is an exchange, \
 a rate applied between the accounts bound to its roles. Accounts, assets, rates and roles are \
@@ -358,17 +358,17 @@ impl AxionomyMcp {
     }
 
     #[tool(
-        name = "axionomy_problem_run",
-        title = "Run a problem",
-        description = "Run one built-in problem as an MCP task and return a summary; the run's documents and replay frames are linked resources. Requires the MCP tasks extension.",
-        output_schema = schema_for_output::<RunSummary>(),
+        name = "axionomy_problem_study",
+        title = "Study a problem",
+        description = "Study one built-in problem as an MCP task and return a summary; the study's documents and replay frames are linked resources. Requires the MCP tasks extension.",
+        output_schema = schema_for_output::<StudySummary>(),
         annotations(destructive_hint = false, idempotent_hint = true, open_world_hint = false)
     )]
-    async fn problem_run_requires_tasks(
+    async fn problem_study_requires_tasks(
         &self,
-        Parameters(_request): Parameters<RunRequest>,
-    ) -> Result<Linked<RunSummary>, ToolError> {
-        Err(tasks_required(PROBLEM_RUN))
+        Parameters(_request): Parameters<StudyRequest>,
+    ) -> Result<Linked<StudySummary>, ToolError> {
+        Err(tasks_required(PROBLEM_STUDY))
     }
 }
 
@@ -529,11 +529,11 @@ impl AxionomyMcp {
         Ok(CreateTaskResult::new(task).into())
     }
 
-    fn start_problem_run(
+    fn start_problem_study(
         &self,
         arguments: Option<JsonObject>,
     ) -> Result<CallToolResponse, ToolError> {
-        let request: RunRequest = arguments_of(arguments)?;
+        let request: StudyRequest = arguments_of(arguments)?;
         if request.budget == 0 {
             return Err(ToolError::new(
                 FailureCode::InvalidRequest,
@@ -545,7 +545,7 @@ impl AxionomyMcp {
             .map_err(|error| ToolError::new(FailureCode::InvalidRequest, error.to_string()))?;
         let archive = self.archive.clone();
         let task = self.tasks.spawn(self.task_options.clone(), move |context| {
-            Box::pin(run_problem(context, archive, request))
+            Box::pin(study_problem(context, archive, request))
         });
         Ok(CreateTaskResult::new(task).into())
     }
@@ -580,9 +580,9 @@ impl ServerHandler for AxionomyMcp {
                 .await
                 .or_else(ToolError::into_call_tool_result);
         }
-        if tasks && request.name == PROBLEM_RUN {
+        if tasks && request.name == PROBLEM_STUDY {
             return self
-                .start_problem_run(request.arguments)
+                .start_problem_study(request.arguments)
                 .or_else(ToolError::into_call_tool_result);
         }
         let context = ToolCallContext::new(self, request, context);
@@ -1022,22 +1022,22 @@ fn task_error(error: impl ToString) -> TaskExit {
     TaskExit::Error(McpError::internal_error(error.to_string(), None))
 }
 
-async fn run_problem(
+async fn study_problem(
     context: TaskContext,
     archive: Archive,
-    request: RunRequest,
+    request: StudyRequest,
 ) -> Result<CallToolResult, TaskExit> {
-    let control = Arc::new(RunControl::default());
+    let control = Arc::new(StudyControl::default());
     let worker_control = Arc::clone(&control);
     let (progress_tx, mut progress_rx) = tokio::sync::mpsc::unbounded_channel::<ServiceProgress>();
     let mut worker = tokio::task::spawn_blocking(move || {
         let mut observer = move |progress| {
             let _ = progress_tx.send(progress);
         };
-        ReferenceService.run_with(&request, &worker_control, &mut observer)
+        ReferenceService.study_with(&request, &worker_control, &mut observer)
     });
 
-    let artifact = loop {
+    let study = loop {
         tokio::select! {
             progress = progress_rx.recv() => {
                 if let Some(progress) = progress {
@@ -1055,7 +1055,7 @@ async fn run_problem(
             }
         }
     };
-    let documents = artifact
+    let documents = study
         .documents
         .iter()
         .map(|document| DocumentSummary {
@@ -1064,11 +1064,11 @@ async fn run_problem(
             frames: document.frames.len(),
         })
         .collect();
-    let key = artifact.key.clone();
-    let selected_document = artifact.selected_document.clone();
-    let artifact_id = archive.keep_artifact(artifact).await.map_err(task_error)?;
-    let summary = RunSummary {
-        artifact_id,
+    let key = study.key.clone();
+    let selected_document = study.selected_document.clone();
+    let study_id = archive.keep_study(study).await.map_err(task_error)?;
+    let summary = StudySummary {
+        study_id,
         key,
         selected_document,
         documents,
@@ -1079,12 +1079,12 @@ async fn run_problem(
         summary.selected_document
     ));
     let links = vec![
-        Target::Artifact {
-            artifact_id: summary.artifact_id.clone(),
+        Target::Study {
+            study_id: summary.study_id.clone(),
         }
-        .link("artifact", "The run's key and documents"),
+        .link("study", "The study's key and documents"),
         Target::Frames {
-            artifact_id: summary.artifact_id.clone(),
+            study_id: summary.study_id.clone(),
             document: summary.selected_document.clone(),
         }
         .link("frames", "The selected document's replay frames, paged"),

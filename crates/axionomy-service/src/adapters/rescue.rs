@@ -9,12 +9,12 @@ use axionomy_view::{
 };
 
 pub(super) fn build(
-    run: &ArtifactKey,
+    study: &StudyKey,
     descriptor: &ProblemDescriptor,
-) -> Result<RunArtifact, ServiceError> {
-    let profile = run.instance;
+) -> Result<Study, ServiceError> {
+    let profile = study.instance;
     if !matches!(profile, InstanceProfile::Micro) {
-        return incident::build(run, descriptor, profile);
+        return incident::build(study, descriptor, profile);
     }
     let model = match profile {
         InstanceProfile::Micro => rescue::uniform_uncertain(),
@@ -22,15 +22,15 @@ pub(super) fn build(
         InstanceProfile::Stress => rescue::uniform_uncertain_stress(),
     };
     let samples = if matches!(profile, InstanceProfile::Stress) {
-        run.budget.max(256)
+        study.budget.max(256)
     } else {
-        run.budget.max(2)
+        study.budget.max(2)
     } as usize;
     let sample = rescue::instantiate(&model, Location::South, 1)
         .ok_or_else(|| problem_error("rescue", "scenario could not be instantiated"))?;
-    let front = rescue::policy_front(&model, samples, run.seed, &mut Unrecorded)
+    let front = rescue::policy_front(&model, samples, study.seed, &mut Unrecorded)
         .ok_or_else(|| problem_error("rescue", "policy front failed"))?;
-    let comparison = rescue::monte_carlo(&model, samples, run.seed, &mut Unrecorded)
+    let comparison = rescue::monte_carlo(&model, samples, study.seed, &mut Unrecorded)
         .ok_or_else(|| problem_error("rescue", "Monte Carlo failed"))?;
     let policies = [
         ("observe-then-follow", Policy::ObserveThenFollow),
@@ -71,7 +71,7 @@ pub(super) fn build(
         }
         documents.push(view);
     }
-    artifact(run, descriptor, documents)
+    assemble(study, descriptor, documents)
 }
 
 fn observation(world: &World) -> ObservationView {

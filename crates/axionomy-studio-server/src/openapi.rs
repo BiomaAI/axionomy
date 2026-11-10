@@ -307,7 +307,7 @@ pub(crate) fn document<S>(endpoints: &[Endpoint<S>]) -> OpenApiDocument {
         openapi: "3.1.0",
         info: Info {
             title: "Axionomy Service API",
-            description: "Interface-neutral problem commands, replay artifacts, lifecycle control, and Studio data.",
+            description: "Interface-neutral problem studies, their replays, lifecycle control, and Studio data.",
             version: env!("CARGO_PKG_VERSION"),
         },
         paths,

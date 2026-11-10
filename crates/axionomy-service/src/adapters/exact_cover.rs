@@ -4,10 +4,10 @@ use axionomy_problems::exact_cover::{self, AccountId, Asset, RateId, Role, SetId
 use axionomy_view::{MatrixCellView, TelemetryKindView, ViewId};
 
 pub(super) fn build(
-    run: &ArtifactKey,
+    study: &StudyKey,
     descriptor: &ProblemDescriptor,
-) -> Result<RunArtifact, ServiceError> {
-    let profile = run.instance;
+) -> Result<Study, ServiceError> {
+    let profile = study.instance;
     let initial = match profile {
         InstanceProfile::Micro => exact_cover::initial(),
         InstanceProfile::Showcase => exact_cover::initial_showcase(),
@@ -98,7 +98,7 @@ pub(super) fn build(
         [(TelemetryKindView::Message, 0, "no exact cover".into())],
     ));
     documents.push(unsat);
-    artifact(run, descriptor, documents)
+    assemble(study, descriptor, documents)
 }
 
 fn scene(_: u64, world: &World) -> Option<Scene> {

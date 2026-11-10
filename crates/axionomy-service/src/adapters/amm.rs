@@ -7,13 +7,13 @@ use axionomy_view::{
 use std::collections::BTreeMap;
 
 pub(super) fn build(
-    run: &ArtifactKey,
+    study: &StudyKey,
     descriptor: &ProblemDescriptor,
-) -> Result<RunArtifact, ServiceError> {
-    let initial = match run.instance {
+) -> Result<Study, ServiceError> {
+    let initial = match study.instance {
         InstanceProfile::Micro => amm::initial(),
-        InstanceProfile::Showcase => amm::initial_showcase_with_seed(run.seed),
-        InstanceProfile::Stress => amm::initial_stress_with_seed(run.seed),
+        InstanceProfile::Showcase => amm::initial_showcase_with_seed(study.seed),
+        InstanceProfile::Stress => amm::initial_stress_with_seed(study.seed),
     };
     let scenarios = [
         (
@@ -142,7 +142,7 @@ pub(super) fn build(
         documents.push(view);
     }
 
-    artifact(run, descriptor, documents)
+    assemble(study, descriptor, documents)
 }
 
 fn exact(value: impl ToString) -> ExactQuantity {

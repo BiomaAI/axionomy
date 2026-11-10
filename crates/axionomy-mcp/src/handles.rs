@@ -94,9 +94,9 @@ handle!(
     "asm-"
 );
 handle!(
-    /// A stored problem run artifact.
-    ArtifactId,
-    "art-"
+    /// A stored study of a problem.
+    StudyId,
+    "stu-"
 );
 
 #[cfg(test)]

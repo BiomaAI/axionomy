@@ -10,10 +10,10 @@ use axionomy_view::{
 };
 
 pub(super) fn build(
-    run: &ArtifactKey,
+    study: &StudyKey,
     descriptor: &ProblemDescriptor,
-) -> Result<RunArtifact, ServiceError> {
-    let profile = run.instance;
+) -> Result<Study, ServiceError> {
+    let profile = study.instance;
     let initial = match profile {
         InstanceProfile::Micro => scheduling::initial(),
         InstanceProfile::Showcase => scheduling::initial_showcase(),
@@ -118,7 +118,7 @@ pub(super) fn build(
         [(TelemetryKindView::Message, 0, "no complete schedule".into())],
     ));
     documents.push(impossible_view);
-    artifact(run, descriptor, documents)
+    assemble(study, descriptor, documents)
 }
 
 fn frontier_trace(

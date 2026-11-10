@@ -3,7 +3,7 @@
 use axionomy::{InvariantPath, ParameterPath};
 
 use crate::{
-    handles::{ArtifactId, AssessmentId, EconomyId},
+    handles::{AssessmentId, EconomyId, StudyId},
     messages::{Direction, DocumentSummary, EconomyCounts, StateRoot},
     resources::{Address, PAGE_FRAMES, PAGE_ROWS, Page, Target, page, span_page},
     server::{AxionomyMcp, assessment_lines, counts, receipt_lines},
@@ -13,7 +13,7 @@ use axionomy::{
     AccountPath, AssessmentStatus, AssetPath, Quantity, RatePath, RolePath,
     paths::{self, Paths},
 };
-use axionomy_service::{ArtifactKey, RunArtifact};
+use axionomy_service::{Study, StudyKey};
 use axionomy_store::state;
 use axionomy_view::DocumentPath;
 use rmcp::{
@@ -60,13 +60,13 @@ impl AxionomyMcp {
                     PAGE_ROWS,
                 )?)
             }
-            Target::Artifact { artifact_id } => {
-                let artifact = self.artifact(artifact_id).await?.ok_or_else(not_found)?;
-                json(&ArtifactView {
-                    artifact_id,
-                    key: &artifact.key,
-                    selected_document: &artifact.selected_document,
-                    documents: artifact
+            Target::Study { study_id } => {
+                let study = self.study(study_id).await?.ok_or_else(not_found)?;
+                json(&StudyView {
+                    study_id,
+                    key: &study.key,
+                    selected_document: &study.selected_document,
+                    documents: study
                         .documents
                         .iter()
                         .map(|document| DocumentSummary {
@@ -77,23 +77,17 @@ impl AxionomyMcp {
                         .collect(),
                 })
             }
-            Target::Document {
-                artifact_id,
-                document,
-            } => {
-                let artifact = self.artifact(artifact_id).await?.ok_or_else(not_found)?;
-                let document = artifact.document(document).ok_or_else(not_found)?;
+            Target::Document { study_id, document } => {
+                let study = self.study(study_id).await?.ok_or_else(not_found)?;
+                let document = study.document(document).ok_or_else(not_found)?;
                 let frames = document.frames.len();
                 let mut document = document.clone();
                 document.frames = Vec::new();
                 json(&DocumentView { frames, document })
             }
-            Target::Frames {
-                artifact_id,
-                document,
-            } => {
-                let artifact = self.artifact(artifact_id).await?.ok_or_else(not_found)?;
-                let document = artifact.document(document).ok_or_else(not_found)?;
+            Target::Frames { study_id, document } => {
+                let study = self.study(study_id).await?.ok_or_else(not_found)?;
+                let document = study.document(document).ok_or_else(not_found)?;
                 json(&page(
                     address,
                     document.frames.iter().enumerate(),
@@ -131,7 +125,7 @@ impl AxionomyMcp {
     }
 
     /// Suggests values for a template argument from what the named snapshot
-    /// or run holds, by prefix.
+    /// or study holds, by prefix.
     pub(crate) async fn completion(
         &self,
         request: CompleteRequestParams,
@@ -154,74 +148,73 @@ impl AxionomyMcp {
         };
         let not_found = || McpError::resource_not_found("Resource not found", None);
         let prefix = request.argument.value.as_str();
-        let candidates: Vec<String> =
-            match argument {
-                "account" | "rate" | "invariant" | "asset" | "prefix" => {
-                    let loaded =
-                        self.stored(&needed("economy_id")?.parse::<EconomyId>().map_err(
-                            |error| {
+        let candidates: Vec<String> = match argument {
+            "account" | "rate" | "invariant" | "asset" | "prefix" => {
+                let loaded = self
+                    .stored(
+                        &needed("economy_id")?
+                            .parse::<EconomyId>()
+                            .map_err(|error| {
                                 McpError::invalid_params(format!("`economy_id`: {error}"), None)
-                            },
-                        )?)
-                        .await?
-                        .ok_or_else(not_found)?;
-                    let (economy, tree) = (&loaded.state.economy, &loaded.state.tree);
-                    match argument {
-                        "account" | "prefix" if argument == "account" || accounts_template => {
-                            // Accounts are read by prefix from the state's tree,
-                            // however many there are.
-                            let span = state::accounts(tree, prefix);
-                            let total = span.end - span.start;
-                            let shown = span.start..span.end.min(span.start + MAX_COMPLETIONS);
-                            let values = state::account_rows(tree, shown)
-                                .map(|row| row.map(|(_, account, _)| account.to_string()))
-                                .collect::<Result<Vec<_>, _>>()
-                                .map_err(internal)?;
-                            return completed(values, total);
-                        }
-                        "rate" => economy.rate_ids().map(ToString::to_string).collect(),
-                        "invariant" => economy
-                            .invariants()
-                            .map(|invariant| invariant.name().to_string())
-                            .collect(),
-                        "asset" => economy
-                            .asset_keys()
-                            .into_iter()
-                            .map(ToString::to_string)
-                            .collect(),
-                        _ => {
-                            let account: AccountPath =
-                                needed("account")?.parse().map_err(|error| {
-                                    McpError::invalid_params(
-                                        format!("`account` is not a path: {error}"),
-                                        None,
-                                    )
-                                })?;
-                            economy.account(&account).ok_or_else(not_found)?;
-                            let span = state::balances(tree, &account, prefix);
-                            let total = span.end - span.start;
-                            let shown = span.start..span.end.min(span.start + MAX_COMPLETIONS);
-                            let values = state::balance_rows(tree, &account, shown)
-                                .map(|row| row.map(|(_, asset, _)| asset.to_string()))
-                                .collect::<Result<Vec<_>, _>>()
-                                .map_err(internal)?;
-                            return completed(values, total);
-                        }
+                            })?,
+                    )
+                    .await?
+                    .ok_or_else(not_found)?;
+                let (economy, tree) = (&loaded.state.economy, &loaded.state.tree);
+                match argument {
+                    "account" | "prefix" if argument == "account" || accounts_template => {
+                        // Accounts are read by prefix from the state's tree,
+                        // however many there are.
+                        let span = state::accounts(tree, prefix);
+                        let total = span.end - span.start;
+                        let shown = span.start..span.end.min(span.start + MAX_COMPLETIONS);
+                        let values = state::account_rows(tree, shown)
+                            .map(|row| row.map(|(_, account, _)| account.to_string()))
+                            .collect::<Result<Vec<_>, _>>()
+                            .map_err(internal)?;
+                        return completed(values, total);
+                    }
+                    "rate" => economy.rate_ids().map(ToString::to_string).collect(),
+                    "invariant" => economy
+                        .invariants()
+                        .map(|invariant| invariant.name().to_string())
+                        .collect(),
+                    "asset" => economy
+                        .asset_keys()
+                        .into_iter()
+                        .map(ToString::to_string)
+                        .collect(),
+                    _ => {
+                        let account: AccountPath = needed("account")?.parse().map_err(|error| {
+                            McpError::invalid_params(
+                                format!("`account` is not a path: {error}"),
+                                None,
+                            )
+                        })?;
+                        economy.account(&account).ok_or_else(not_found)?;
+                        let span = state::balances(tree, &account, prefix);
+                        let total = span.end - span.start;
+                        let shown = span.start..span.end.min(span.start + MAX_COMPLETIONS);
+                        let values = state::balance_rows(tree, &account, shown)
+                            .map(|row| row.map(|(_, asset, _)| asset.to_string()))
+                            .collect::<Result<Vec<_>, _>>()
+                            .map_err(internal)?;
+                        return completed(values, total);
                     }
                 }
-                "document" => {
-                    self.artifact(&needed("artifact_id")?.parse::<ArtifactId>().map_err(
-                        |error| McpError::invalid_params(format!("`artifact_id`: {error}"), None),
-                    )?)
-                    .await?
-                    .ok_or_else(not_found)?
-                    .documents
-                    .iter()
-                    .map(|document| document.id.to_string())
-                    .collect()
-                }
-                _ => Vec::new(),
-            };
+            }
+            "document" => self
+                .study(&needed("study_id")?.parse::<StudyId>().map_err(|error| {
+                    McpError::invalid_params(format!("`study_id`: {error}"), None)
+                })?)
+                .await?
+                .ok_or_else(not_found)?
+                .documents
+                .iter()
+                .map(|document| document.id.to_string())
+                .collect(),
+            _ => Vec::new(),
+        };
         let matches: Vec<String> = candidates
             .into_iter()
             .filter(|candidate| candidate.starts_with(prefix))
@@ -247,11 +240,8 @@ impl AxionomyMcp {
             .map_err(internal)
     }
 
-    pub(crate) async fn artifact(
-        &self,
-        artifact_id: &ArtifactId,
-    ) -> Result<Option<Arc<RunArtifact>>, McpError> {
-        self.archive.artifact(artifact_id).await.map_err(internal)
+    pub(crate) async fn study(&self, study_id: &StudyId) -> Result<Option<Arc<Study>>, McpError> {
+        self.archive.study(study_id).await.map_err(internal)
     }
 }
 
@@ -412,7 +402,7 @@ fn read_snapshot(
         Target::Diff { .. }
         | Target::Assessment { .. }
         | Target::AssessmentLines { .. }
-        | Target::Artifact { .. }
+        | Target::Study { .. }
         | Target::Document { .. }
         | Target::Frames { .. } => return None,
     };
@@ -606,9 +596,9 @@ struct AssessmentView<'a> {
 }
 
 #[derive(Serialize)]
-struct ArtifactView<'a> {
-    artifact_id: &'a ArtifactId,
-    key: &'a ArtifactKey,
+struct StudyView<'a> {
+    study_id: &'a StudyId,
+    key: &'a StudyKey,
     selected_document: &'a DocumentPath,
     documents: Vec<DocumentSummary>,
 }

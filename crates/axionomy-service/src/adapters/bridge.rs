@@ -10,10 +10,10 @@ use axionomy_view::{
 };
 
 pub(super) fn build(
-    run: &ArtifactKey,
+    study: &StudyKey,
     descriptor: &ProblemDescriptor,
-) -> Result<RunArtifact, ServiceError> {
-    let profile = run.instance;
+) -> Result<Study, ServiceError> {
+    let profile = study.instance;
     let initial = match profile {
         InstanceProfile::Micro => bridge::initial(),
         InstanceProfile::Showcase => bridge::initial_showcase(),
@@ -198,7 +198,7 @@ pub(super) fn build(
         };
         documents[index].pareto_fronts.push(front);
     }
-    artifact(run, descriptor, documents)
+    assemble(study, descriptor, documents)
 }
 
 fn candidate_front_view(documents: &[ViewDocument], selected: &ViewDocument) -> ParetoFrontView {
@@ -584,13 +584,13 @@ fn scene(_: u64, world: &World) -> Option<Scene> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{ReferenceService, RunRequest};
+    use crate::{ReferenceService, StudyRequest};
     #[test]
     fn exact_front_pairs_each_travelers_priority_with_their_credit() {
-        let artifact = ReferenceService
-            .run(RunRequest::new(slug("bridge")).with_instance(InstanceProfile::Micro))
+        let study = ReferenceService
+            .study(StudyRequest::new(slug("bridge")).with_instance(InstanceProfile::Micro))
             .unwrap();
-        for document in artifact.documents {
+        for document in study.documents {
             for point in &document.pareto_fronts[0].points {
                 let values: Vec<u64> = point
                     .values

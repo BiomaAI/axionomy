@@ -1,7 +1,11 @@
-//! Interface-neutral commands, progress, and artifacts for Axionomy.
+//! Interface-neutral commands, progress, and studies for Axionomy.
+//!
+//! A study is what the service computes for a request: a problem's instance
+//! under its strategies, with a seed and a budget. Each of its documents holds
+//! a run, one trajectory, and the evidence of how it was found.
 //!
 //! This layer owns application orchestration, not economic truth. Every trace
-//! in an artifact is derived by replay through the core; HTTP, CLI, MCP, and
+//! in a study is derived by replay through the core; HTTP, CLI, MCP, and
 //! Studio are adapters over the same commands and results.
 
 mod adapters;
@@ -148,11 +152,11 @@ pub struct ProblemDescriptor {
     pub capabilities: Vec<Capability>,
 }
 
-/// A request to run a problem. The instance and strategy default to the
+/// A request to study a problem. The instance and strategy default to the
 /// problem's own.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
-pub struct RunRequest {
+pub struct StudyRequest {
     pub problem: ProblemPath,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub instance: Option<InstanceProfile>,
@@ -172,7 +176,7 @@ const fn default_budget() -> u64 {
     128
 }
 
-impl RunRequest {
+impl StudyRequest {
     pub fn new(problem: ProblemPath) -> Self {
         Self {
             problem,
@@ -194,10 +198,10 @@ impl RunRequest {
     }
 }
 
-/// What an artifact was computed from: a request with its instance and
-/// strategy decided. The same key always gives the same artifact.
+/// What a study was computed from: a request with its instance and strategy
+/// decided. The same key always gives the same study.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
-pub struct ArtifactKey {
+pub struct StudyKey {
     pub problem: ProblemPath,
     pub instance: InstanceProfile,
     pub strategy: StrategyPath,
@@ -205,7 +209,7 @@ pub struct ArtifactKey {
     pub budget: u64,
 }
 
-impl fmt::Display for ArtifactKey {
+impl fmt::Display for StudyKey {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             formatter,
@@ -215,9 +219,11 @@ impl fmt::Display for ArtifactKey {
     }
 }
 
+/// A finished study: the replay-derived documents of its alternatives, the
+/// one its strategy selects, and the proposals assessed along the way.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
-pub struct RunArtifact {
-    pub key: ArtifactKey,
+pub struct Study {
+    pub key: StudyKey,
     pub problem: ProblemDescriptor,
     pub instance: InstanceDescriptor,
     /// The document of the requested strategy.
@@ -227,7 +233,7 @@ pub struct RunArtifact {
     pub assessed_proposals: Vec<ProposalView>,
 }
 
-impl RunArtifact {
+impl Study {
     pub fn selected(&self) -> Option<&ViewDocument> {
         self.document(&self.selected_document)
     }
@@ -246,7 +252,7 @@ pub struct ServiceProgress {
     pub message: String,
 }
 
-pub trait RunObserver {
+pub trait StudyObserver {
     fn progress(&mut self, progress: ServiceProgress);
 
     fn observation(&mut self, _observation: SearchObservationView) {}
@@ -254,7 +260,7 @@ pub trait RunObserver {
     fn frame(&mut self, _document: &DocumentPath, _frame: ExchangeFrame) {}
 }
 
-impl<F> RunObserver for F
+impl<F> StudyObserver for F
 where
     F: FnMut(ServiceProgress),
 {
@@ -263,33 +269,33 @@ where
     }
 }
 
-/// A Studio run, written `run-` and a number. Each Studio engine numbers its
-/// own runs.
+/// Names a study a Studio engine started, written `study-` and a number. Each
+/// Studio engine numbers its own studies.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct StudioRunId(u64);
+pub struct StudioStudyId(u64);
 
-impl StudioRunId {
+impl StudioStudyId {
     pub const fn new(number: u64) -> Self {
         Self(number)
     }
 }
 
-impl fmt::Display for StudioRunId {
+impl fmt::Display for StudioStudyId {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(formatter, "run-{}", self.0)
+        write!(formatter, "study-{}", self.0)
     }
 }
 
-/// Text that is not a Studio run ID.
+/// Text that is not a Studio study ID.
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
-#[error("`{0}` is not a Studio run ID such as `run-7`")]
-pub struct StudioRunIdError(String);
+#[error("`{0}` is not a Studio study ID such as `study-7`")]
+pub struct StudioStudyIdError(String);
 
-impl FromStr for StudioRunId {
-    type Err = StudioRunIdError;
+impl FromStr for StudioStudyId {
+    type Err = StudioStudyIdError;
 
     fn from_str(text: &str) -> Result<Self, Self::Err> {
-        text.strip_prefix("run-")
+        text.strip_prefix("study-")
             .filter(|digits| {
                 !digits.is_empty()
                     && digits.bytes().all(|byte| byte.is_ascii_digit())
@@ -297,17 +303,17 @@ impl FromStr for StudioRunId {
             })
             .and_then(|digits| digits.parse().ok())
             .map(Self)
-            .ok_or_else(|| StudioRunIdError(text.to_owned()))
+            .ok_or_else(|| StudioStudyIdError(text.to_owned()))
     }
 }
 
-impl Serialize for StudioRunId {
+impl Serialize for StudioStudyId {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         serializer.collect_str(self)
     }
 }
 
-impl<'de> Deserialize<'de> for StudioRunId {
+impl<'de> Deserialize<'de> for StudioStudyId {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         Cow::<str>::deserialize(deserializer)?
             .parse()
@@ -315,33 +321,33 @@ impl<'de> Deserialize<'de> for StudioRunId {
     }
 }
 
-impl JsonSchema for StudioRunId {
+impl JsonSchema for StudioStudyId {
     fn schema_name() -> Cow<'static, str> {
-        "StudioRunId".into()
+        "StudioStudyId".into()
     }
 
     fn json_schema(_: &mut SchemaGenerator) -> Schema {
         json_schema!({
-            "description": "A Studio run: `run-` and a number, such as `run-7`.",
+            "description": "A Studio study ID: `study-` and a number, such as `study-7`.",
             "type": "string",
-            "pattern": "^run-(0|[1-9][0-9]*)$"
+            "pattern": "^study-(0|[1-9][0-9]*)$"
         })
     }
 }
 
-/// Lifecycle events emitted by a Studio run. `sequence` orders transport
+/// Lifecycle events emitted by a Studio study. `sequence` orders transport
 /// events; it is not economic time and has no effect on replay.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum StudioEvent {
-    RunStarted {
-        run_id: StudioRunId,
+    StudyStarted {
+        study_id: StudioStudyId,
         sequence: u64,
         problem: ProblemPath,
         strategy: StrategyPath,
     },
     Progress {
-        run_id: StudioRunId,
+        study_id: StudioStudyId,
         sequence: u64,
         completed: u64,
         #[serde(skip_serializing_if = "Option::is_none")]
@@ -349,44 +355,44 @@ pub enum StudioEvent {
         message: String,
     },
     SearchObservation {
-        run_id: StudioRunId,
+        study_id: StudioStudyId,
         sequence: u64,
         observation: SearchObservationView,
     },
     FrameAppended {
-        run_id: StudioRunId,
+        study_id: StudioStudyId,
         sequence: u64,
         document: DocumentPath,
         frame_index: u64,
         frame: Box<ExchangeFrame>,
     },
-    /// The run's artifact can be fetched.
-    ArtifactPublished {
-        run_id: StudioRunId,
+    /// The study can be fetched.
+    StudyPublished {
+        study_id: StudioStudyId,
         sequence: u64,
-        key: ArtifactKey,
+        key: StudyKey,
         documents: u64,
     },
-    RunPaused {
-        run_id: StudioRunId,
+    StudyPaused {
+        study_id: StudioStudyId,
         sequence: u64,
     },
-    RunResumed {
-        run_id: StudioRunId,
+    StudyResumed {
+        study_id: StudioStudyId,
         sequence: u64,
     },
-    RunCompleted {
-        run_id: StudioRunId,
+    StudyCompleted {
+        study_id: StudioStudyId,
         sequence: u64,
-        /// The artifact's selected document.
+        /// The study's selected document.
         document: DocumentPath,
     },
-    RunCancelled {
-        run_id: StudioRunId,
+    StudyCancelled {
+        study_id: StudioStudyId,
         sequence: u64,
     },
-    RunFailed {
-        run_id: StudioRunId,
+    StudyFailed {
+        study_id: StudioStudyId,
         sequence: u64,
         message: String,
     },
@@ -395,42 +401,42 @@ pub enum StudioEvent {
 impl StudioEvent {
     pub const fn sequence(&self) -> u64 {
         match self {
-            Self::RunStarted { sequence, .. }
+            Self::StudyStarted { sequence, .. }
             | Self::Progress { sequence, .. }
             | Self::SearchObservation { sequence, .. }
             | Self::FrameAppended { sequence, .. }
-            | Self::ArtifactPublished { sequence, .. }
-            | Self::RunPaused { sequence, .. }
-            | Self::RunResumed { sequence, .. }
-            | Self::RunCompleted { sequence, .. }
-            | Self::RunCancelled { sequence, .. }
-            | Self::RunFailed { sequence, .. } => *sequence,
+            | Self::StudyPublished { sequence, .. }
+            | Self::StudyPaused { sequence, .. }
+            | Self::StudyResumed { sequence, .. }
+            | Self::StudyCompleted { sequence, .. }
+            | Self::StudyCancelled { sequence, .. }
+            | Self::StudyFailed { sequence, .. } => *sequence,
         }
     }
 
-    pub const fn run_id(&self) -> StudioRunId {
+    pub const fn study_id(&self) -> StudioStudyId {
         match self {
-            Self::RunStarted { run_id, .. }
-            | Self::Progress { run_id, .. }
-            | Self::SearchObservation { run_id, .. }
-            | Self::FrameAppended { run_id, .. }
-            | Self::ArtifactPublished { run_id, .. }
-            | Self::RunPaused { run_id, .. }
-            | Self::RunResumed { run_id, .. }
-            | Self::RunCompleted { run_id, .. }
-            | Self::RunCancelled { run_id, .. }
-            | Self::RunFailed { run_id, .. } => *run_id,
+            Self::StudyStarted { study_id, .. }
+            | Self::Progress { study_id, .. }
+            | Self::SearchObservation { study_id, .. }
+            | Self::FrameAppended { study_id, .. }
+            | Self::StudyPublished { study_id, .. }
+            | Self::StudyPaused { study_id, .. }
+            | Self::StudyResumed { study_id, .. }
+            | Self::StudyCompleted { study_id, .. }
+            | Self::StudyCancelled { study_id, .. }
+            | Self::StudyFailed { study_id, .. } => *study_id,
         }
     }
 }
 
 #[derive(Debug, Default)]
-pub struct RunControl {
+pub struct StudyControl {
     cancelled: AtomicBool,
     paused: AtomicBool,
 }
 
-impl RunControl {
+impl StudyControl {
     pub fn cancel(&self) {
         self.cancelled.store(true, Ordering::Release);
     }
@@ -452,7 +458,7 @@ impl RunControl {
     }
 
     /// Cooperatively waits at an application boundary until the caller resumes
-    /// or cancels the run. Search algorithms with finer-grained sessions can
+    /// or cancels the study. Search algorithms with finer-grained sessions can
     /// call this between work-budget advances.
     pub fn checkpoint(&self) -> Result<(), ServiceError> {
         while self.is_paused() {
@@ -483,11 +489,11 @@ pub enum ServiceError {
         problem: ProblemPath,
         instance: InstanceProfile,
     },
-    #[error("run was cancelled")]
+    #[error("study was cancelled")]
     Cancelled,
-    #[error("run is paused")]
+    #[error("study is paused")]
     Paused,
-    #[error("problem `{problem}` could not produce an artifact: {message}")]
+    #[error("problem `{problem}` could not be studied: {message}")]
     Problem {
         problem: ProblemPath,
         message: String,
@@ -510,7 +516,7 @@ impl ReferenceService {
 
     /// Decides a request's instance and strategy, checking the problem
     /// offers them.
-    pub fn resolve(&self, request: &RunRequest) -> Result<ArtifactKey, ServiceError> {
+    pub fn resolve(&self, request: &StudyRequest) -> Result<StudyKey, ServiceError> {
         let problem = self
             .problem(&request.problem)
             .ok_or_else(|| ServiceError::UnknownProblem(request.problem.clone()))?;
@@ -535,7 +541,7 @@ impl ReferenceService {
                 strategy,
             });
         }
-        Ok(ArtifactKey {
+        Ok(StudyKey {
             problem: problem.key,
             instance,
             strategy,
@@ -544,18 +550,18 @@ impl ReferenceService {
         })
     }
 
-    pub fn run(&self, request: RunRequest) -> Result<RunArtifact, ServiceError> {
-        self.run_with(&request, &RunControl::default(), &mut |_| {})
+    pub fn study(&self, request: StudyRequest) -> Result<Study, ServiceError> {
+        self.study_with(&request, &StudyControl::default(), &mut |_| {})
     }
 
-    pub fn run_with(
+    pub fn study_with(
         &self,
-        request: &RunRequest,
-        control: &RunControl,
-        observer: &mut dyn RunObserver,
-    ) -> Result<RunArtifact, ServiceError> {
+        request: &StudyRequest,
+        control: &StudyControl,
+        observer: &mut dyn StudyObserver,
+    ) -> Result<Study, ServiceError> {
         control.checkpoint()?;
-        adapters::run(&self.resolve(request)?, control, observer)
+        adapters::study(&self.resolve(request)?, control, observer)
     }
 }
 
@@ -572,7 +578,7 @@ mod tests {
         frames: Vec<ExchangeFrame>,
     }
 
-    impl RunObserver for FrameObserver {
+    impl StudyObserver for FrameObserver {
         fn progress(&mut self, _: ServiceProgress) {}
 
         fn frame(&mut self, document: &DocumentPath, frame: ExchangeFrame) {
@@ -622,9 +628,9 @@ mod tests {
     }
 
     #[test]
-    fn studio_events_are_discriminated_unions_of_minted_runs() {
+    fn studio_events_are_discriminated_unions_of_minted_studies() {
         let event = StudioEvent::Progress {
-            run_id: StudioRunId::new(1),
+            study_id: StudioStudyId::new(1),
             sequence: 2,
             completed: 3,
             total: Some(5),
@@ -632,12 +638,20 @@ mod tests {
         };
         let value = serde_json::to_value(&event).unwrap();
         assert_eq!(value["kind"], "progress");
-        assert_eq!(value["run_id"], "run-1");
+        assert_eq!(value["study_id"], "study-1");
         let decoded: StudioEvent = serde_json::from_value(value).unwrap();
         assert_eq!(decoded, event);
-        assert_eq!(decoded.run_id(), StudioRunId::new(1));
-        for forged in ["run-", "run-01", "run--1", "Run-1", "run-1x", "browser-1"] {
-            assert!(forged.parse::<StudioRunId>().is_err(), "{forged}");
+        assert_eq!(decoded.study_id(), StudioStudyId::new(1));
+        for forged in [
+            "study-",
+            "study-01",
+            "study--1",
+            "Study-1",
+            "study-1x",
+            "run-1",
+            "browser-1",
+        ] {
+            assert!(forged.parse::<StudioStudyId>().is_err(), "{forged}");
         }
     }
 
@@ -679,9 +693,9 @@ mod tests {
     fn maze_retains_strategy_specific_search_and_route_evidence() {
         use axionomy_view::{AssessmentStatusView, ScenePathStatusView, SearchObservationKindView};
 
-        let artifact = ReferenceService
-            .run(
-                RunRequest::new(slug("maze"))
+        let study = ReferenceService
+            .study(
+                StudyRequest::new(slug("maze"))
                     .with_instance(InstanceProfile::Showcase)
                     .with_strategy(slug("a-star")),
             )
@@ -691,7 +705,7 @@ mod tests {
             ("dijkstra", "dijkstra"),
             ("a-star", "a-star"),
         ] {
-            let document = artifact.document(&slug(document)).unwrap();
+            let document = study.document(&slug(document)).unwrap();
             assert!(
                 document
                     .solve_observations
@@ -704,14 +718,14 @@ mod tests {
             assert_eq!(accepted.subjects[0].key.as_str(), "node/exit");
         }
         for document in ["pareto-energy", "pareto-time"] {
-            let document = artifact.document(&slug(document)).unwrap();
+            let document = study.document(&slug(document)).unwrap();
             let observation = document.solve_observations.last().unwrap();
             assert_eq!(observation.algorithm.as_str(), "exact-pareto-search");
             assert_eq!(observation.kind, SearchObservationKindView::Frontier);
             assert!(observation.label.contains("4 non-dominated tradeoffs"));
         }
 
-        let selected = artifact.selected().unwrap();
+        let selected = study.selected().unwrap();
         assert!(
             selected
                 .initial
@@ -751,14 +765,14 @@ mod tests {
 
     #[test]
     fn selected_replay_frames_stream_with_the_same_snapshot_contract() {
-        let request = RunRequest::new(slug("work-league"))
+        let request = StudyRequest::new(slug("work-league"))
             .with_instance(InstanceProfile::Micro)
             .with_strategy(slug("mixed-field"));
         let mut observer = FrameObserver::default();
-        let artifact = ReferenceService
-            .run_with(&request, &RunControl::default(), &mut observer)
+        let study = ReferenceService
+            .study_with(&request, &StudyControl::default(), &mut observer)
             .unwrap();
-        let selected = artifact.selected().unwrap();
+        let selected = study.selected().unwrap();
         assert_eq!(observer.frames.len(), selected.frames.len());
         assert!(
             observer
@@ -842,15 +856,15 @@ mod tests {
     fn every_micro_problem_remains_a_fast_replayable_contract_fixture() {
         let service = ReferenceService;
         for problem in service.catalog() {
-            let mut request = RunRequest::new(problem.key.clone())
+            let mut request = StudyRequest::new(problem.key.clone())
                 .with_instance(InstanceProfile::Micro)
                 .with_strategy(problem.default_strategy.clone());
             request.budget = 8;
-            let artifact = service
-                .run(request)
+            let study = service
+                .study(request)
                 .unwrap_or_else(|error| panic!("{} micro failed: {error}", problem.key));
-            assert_eq!(artifact.instance.profile, InstanceProfile::Micro);
-            let selected = artifact.selected().expect("selected document");
+            assert_eq!(study.instance.profile, InstanceProfile::Micro);
+            let selected = study.selected().expect("selected document");
             assert!(selected.frames.iter().all(|frame| {
                 !frame.exchange.rate.label.contains('{')
                     && !frame.exchange.rate.label.contains("encoded")
@@ -890,10 +904,10 @@ mod tests {
 
     #[test]
     fn scaled_assets_are_read_in_their_units() {
-        let artifact = ReferenceService
-            .run(RunRequest::new(slug("lending")))
-            .expect("lending runs");
-        let document = artifact.selected().expect("a selected document");
+        let study = ReferenceService
+            .study(StudyRequest::new(slug("lending")))
+            .expect("lending is studied");
+        let document = study.selected().expect("a selected document");
         let key = |asset| {
             axionomy_view::DebugOntology::<lending::Ontology>::default()
                 .asset(&asset)
@@ -921,7 +935,7 @@ mod tests {
 
     /// Studio labels read as words, not code, and each names one thing: no two
     /// different accounts, assets, rates or roles of a document share a label.
-    fn assert_readable_labels(problem: &str, artifact: &RunArtifact) {
+    fn assert_readable_labels(problem: &str, study: &Study) {
         use axionomy_view::{ItemPath, ViewId};
         use std::collections::{BTreeMap, BTreeSet};
         type Labels<'a> = BTreeMap<(&'static str, &'a str), BTreeSet<&'a ItemPath>>;
@@ -939,7 +953,7 @@ mod tests {
                     .windows(2)
                     .any(|pair| pair[0].is_ascii_lowercase() && pair[1].is_ascii_uppercase())
         };
-        for document in &artifact.documents {
+        for document in &study.documents {
             let mut labels = Labels::new();
             let snapshots = std::iter::once(&document.initial)
                 .chain(document.frames.iter().map(|frame| &frame.after));
@@ -974,40 +988,40 @@ mod tests {
     }
 
     #[test]
-    fn every_default_problem_builds_a_selected_replay_artifact() {
+    fn every_default_problem_studies_to_a_selected_replay() {
         let service = ReferenceService;
         for problem in service.catalog() {
-            let artifact = service
-                .run(
-                    RunRequest::new(problem.key.clone())
+            let study = service
+                .study(
+                    StudyRequest::new(problem.key.clone())
                         .with_strategy(problem.default_strategy.clone()),
                 )
                 .unwrap_or_else(|error| panic!("{} failed: {error}", problem.key));
-            assert!(artifact.selected().is_some(), "{}", problem.key);
-            assert!(!artifact.documents.is_empty(), "{}", problem.key);
-            assert_eq!(artifact.instance.profile, InstanceProfile::Showcase);
+            assert!(study.selected().is_some(), "{}", problem.key);
+            assert!(!study.documents.is_empty(), "{}", problem.key);
+            assert_eq!(study.instance.profile, InstanceProfile::Showcase);
             assert!(
-                artifact
+                study
                     .documents
                     .iter()
                     .all(|document| document.model.is_some()),
                 "{}",
                 problem.key
             );
-            assert_readable_labels(problem.key.as_str(), &artifact);
-            let maximum_frames = artifact
+            assert_readable_labels(problem.key.as_str(), &study);
+            let maximum_frames = study
                 .documents
                 .iter()
                 .map(|document| document.frames.len())
                 .max()
                 .unwrap_or(0);
-            let maximum_accounts = artifact
+            let maximum_accounts = study
                 .documents
                 .iter()
                 .map(|document| document.initial.accounts.len())
                 .max()
                 .unwrap_or(0);
-            let maximum_rates = artifact
+            let maximum_rates = study
                 .documents
                 .iter()
                 .filter_map(|document| document.model.as_ref())
@@ -1047,13 +1061,13 @@ mod tests {
                 "{} rate surface regressed",
                 problem.key
             );
-            assert!(artifact.documents.iter().all(|document| {
+            assert!(study.documents.iter().all(|document| {
                 document
                     .telemetry
                     .iter()
                     .any(|series| series.algorithm == "Model size")
             }));
-            assert!(artifact.documents.iter().all(|document| {
+            assert!(study.documents.iter().all(|document| {
                 document.initial.scene.is_some()
                     && document
                         .frames
@@ -1064,13 +1078,13 @@ mod tests {
                         .filter_map(|snapshot| snapshot.scene.as_ref())
                         .all(|scene| !scene.metrics.is_empty())
             }));
-            assert!(artifact.documents.iter().all(|document| {
+            assert!(study.documents.iter().all(|document| {
                 std::iter::once(&document.initial)
                     .chain(document.frames.iter().map(|frame| &frame.after))
                     .filter_map(|snapshot| snapshot.scene.as_ref())
                     .any(|scene| !scene.entities.is_empty())
             }));
-            for document in &artifact.documents {
+            for document in &study.documents {
                 let model = document.model.as_ref().expect("model definition");
                 assert_unique(
                     problem.key.as_str(),
@@ -1117,7 +1131,7 @@ mod tests {
                 }
             }
             assert!(
-                artifact
+                study
                     .documents
                     .iter()
                     .all(|document| !document.solve_observations.is_empty())
@@ -1130,10 +1144,10 @@ mod tests {
 
     #[test]
     fn a_proposal_names_the_snapshot_it_was_assessed_against() {
-        let artifact = ReferenceService
-            .run(RunRequest::new(slug("mission")).with_instance(InstanceProfile::Micro))
+        let study = ReferenceService
+            .study(StudyRequest::new(slug("mission")).with_instance(InstanceProfile::Micro))
             .unwrap();
-        let (document, proposal) = artifact
+        let (document, proposal) = study
             .documents
             .iter()
             .flat_map(|document| {
@@ -1165,13 +1179,13 @@ mod tests {
     }
 
     #[test]
-    fn paused_run_waits_and_resumes_without_restarting_its_command() {
-        let control = std::sync::Arc::new(RunControl::default());
+    fn a_paused_study_waits_and_resumes_without_restarting_its_command() {
+        let control = std::sync::Arc::new(StudyControl::default());
         control.pause();
         let worker_control = std::sync::Arc::clone(&control);
         let worker = std::thread::spawn(move || {
-            ReferenceService.run_with(
-                &RunRequest::new(slug("maze")).with_strategy(slug("a-star")),
+            ReferenceService.study_with(
+                &StudyRequest::new(slug("maze")).with_strategy(slug("a-star")),
                 &worker_control,
                 &mut |_| {},
             )
@@ -1183,11 +1197,11 @@ mod tests {
     }
 
     #[test]
-    fn logistics_reports_algorithm_progress_and_observes_mid_run_cancellation() {
-        let control = RunControl::default();
+    fn logistics_reports_algorithm_progress_and_observes_cancellation_mid_study() {
+        let control = StudyControl::default();
         let mut observed = Vec::new();
-        let result = ReferenceService.run_with(
-            &RunRequest {
+        let result = ReferenceService.study_with(
+            &StudyRequest {
                 problem: slug("logistics"),
                 instance: Some(InstanceProfile::Micro),
                 strategy: Some(slug("reliable")),
@@ -1218,8 +1232,8 @@ mod tests {
     }
 
     #[test]
-    fn a_mid_run_pause_blocks_the_next_chunk_until_resume() {
-        let control = std::sync::Arc::new(RunControl::default());
+    fn a_pause_mid_study_blocks_the_next_chunk_until_resume() {
+        let control = std::sync::Arc::new(StudyControl::default());
         let resume_control = std::sync::Arc::clone(&control);
         let (paused_tx, paused_rx) = std::sync::mpsc::sync_channel(1);
         let resumer = std::thread::spawn(move || {
@@ -1229,8 +1243,8 @@ mod tests {
             resume_control.resume();
         });
         let mut paused_once = false;
-        let result = ReferenceService.run_with(
-            &RunRequest {
+        let result = ReferenceService.study_with(
+            &StudyRequest {
                 problem: slug("logistics"),
                 instance: Some(InstanceProfile::Micro),
                 strategy: Some(slug("reliable")),

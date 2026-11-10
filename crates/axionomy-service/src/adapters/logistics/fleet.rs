@@ -4,12 +4,12 @@ use axionomy_problems::logistics::fleet::{
 };
 
 pub(super) fn build(
-    run: &ArtifactKey,
+    study: &StudyKey,
     descriptor: &ProblemDescriptor,
     profile: InstanceProfile,
     progress: &mut ProgressSink<'_>,
-) -> Result<RunArtifact, ServiceError> {
-    let initial = fleet::initial(matches!(profile, InstanceProfile::Stress), run.seed);
+) -> Result<Study, ServiceError> {
+    let initial = fleet::initial(matches!(profile, InstanceProfile::Stress), study.seed);
     let mut documents = Vec::new();
     for (strategy, title, description, policy) in [
         (
@@ -85,7 +85,7 @@ pub(super) fn build(
         );
         documents[index].pareto_fronts.push(front);
     }
-    artifact(run, descriptor, documents)
+    assemble(study, descriptor, documents)
 }
 fn objectives(world: &World) -> Vec<ObjectiveView> {
     let val = |account, asset| fleet::value(world, account, asset);

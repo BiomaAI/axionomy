@@ -11,25 +11,25 @@ use axionomy_view::{
 };
 
 pub(super) fn build(
-    run: &ArtifactKey,
+    study: &StudyKey,
     descriptor: &ProblemDescriptor,
     progress: &mut ProgressSink<'_>,
-) -> Result<RunArtifact, ServiceError> {
-    let profile = run.instance;
+) -> Result<Study, ServiceError> {
+    let profile = study.instance;
     if !matches!(profile, InstanceProfile::Micro) {
-        return expedition::build(run, descriptor, profile);
+        return expedition::build(study, descriptor, profile);
     }
     let model = mission::initial();
-    let sample_index = (run.seed as usize) % 16;
+    let sample_index = (study.seed as usize) % 16;
     let samples = match profile {
-        InstanceProfile::Micro => run.budget.clamp(2, 16),
-        InstanceProfile::Showcase => run.budget.max(2),
-        InstanceProfile::Stress => run.budget.max(256),
+        InstanceProfile::Micro => study.budget.clamp(2, 16),
+        InstanceProfile::Showcase => study.budget.max(2),
+        InstanceProfile::Stress => study.budget.max(256),
     } as usize;
     let comparison = mission::monte_carlo_with_progress(
         &model,
         samples,
-        run.seed,
+        study.seed,
         &mut Unrecorded,
         samples.clamp(1, 8),
         |state| {
@@ -50,7 +50,7 @@ pub(super) fn build(
     let front = mission::policy_front_with_progress(
         &model,
         samples,
-        run.seed,
+        study.seed,
         &mut Unrecorded,
         samples.clamp(1, 8),
         |state| {
@@ -77,7 +77,7 @@ pub(super) fn build(
     let planned = mission::run_planned_with_progress(
         &model,
         sample_index,
-        MctsConfig::new(samples, 12).with_seed(run.seed),
+        MctsConfig::new(samples, 12).with_seed(study.seed),
         samples.clamp(1, 8),
         |decision, state| {
             progress.emit(
@@ -273,7 +273,7 @@ pub(super) fn build(
         }
         documents.push(view);
     }
-    artifact(run, descriptor, documents)
+    assemble(study, descriptor, documents)
 }
 
 fn observation(world: &World, agent: AgentId) -> ObservationView {
@@ -685,16 +685,16 @@ impl StudioLabel for mission::Role {
 
 #[cfg(test)]
 mod tests {
-    use crate::{InstanceProfile, ReferenceService, RunRequest};
+    use crate::{InstanceProfile, ReferenceService, StudyRequest};
     use axionomy_view::slug;
 
     #[test]
     fn mission_replays_actual_search_and_private_information_transfer() {
-        let mut request = RunRequest::new(slug("mission")).with_instance(InstanceProfile::Micro);
+        let mut request = StudyRequest::new(slug("mission")).with_instance(InstanceProfile::Micro);
         request.seed = 11;
-        let artifact = ReferenceService.run(request).unwrap();
-        let planned = &artifact.documents[0];
-        let direct = &artifact.documents[1];
+        let study = ReferenceService.study(request).unwrap();
+        let planned = &study.documents[0];
+        let direct = &study.documents[1];
         assert_eq!(planned.objectives[0].value, "1");
         assert_eq!(direct.objectives[0].value, "0");
         assert_eq!(planned.frames[0].after, direct.frames[0].after);

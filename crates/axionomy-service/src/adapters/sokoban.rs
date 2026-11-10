@@ -10,18 +10,18 @@ use axionomy_view::{
 };
 
 pub(super) fn build(
-    run: &ArtifactKey,
+    study: &StudyKey,
     descriptor: &ProblemDescriptor,
     progress: &mut ProgressSink<'_>,
-) -> Result<RunArtifact, ServiceError> {
-    let profile = run.instance;
+) -> Result<Study, ServiceError> {
+    let profile = study.instance;
     let initial = match profile {
         InstanceProfile::Micro => sokoban::initial(),
         InstanceProfile::Showcase => sokoban::initial_showcase(),
         InstanceProfile::Stress => sokoban::initial_stress(),
     };
-    let strategy = run.strategy.as_str();
-    let chunk = usize::try_from(run.budget.clamp(8, 256)).unwrap_or(64);
+    let strategy = study.strategy.as_str();
+    let chunk = usize::try_from(study.budget.clamp(8, 256)).unwrap_or(64);
     let (solution, search) = search(&initial, strategy, chunk, progress)?;
     let strategy_label = if strategy == "a-star" {
         "A* with crate-to-goal lower bound"
@@ -116,7 +116,7 @@ pub(super) fn build(
         documents.push(deadlock);
     }
 
-    artifact(run, descriptor, documents)
+    assemble(study, descriptor, documents)
 }
 
 fn search(

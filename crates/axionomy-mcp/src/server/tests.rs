@@ -1,5 +1,5 @@
 use super::*;
-use crate::{handles::ArtifactId, resources::Address};
+use crate::{handles::StudyId, resources::Address};
 use axionomy_service::InstanceProfile;
 use axionomy_view::DocumentPath;
 use rmcp::model::{
@@ -605,21 +605,21 @@ async fn a_search_observes_cancellation() {
 }
 
 #[tokio::test]
-async fn a_problem_run_returns_a_summary_and_pages_its_frames() {
+async fn a_problem_study_returns_a_summary_and_pages_its_frames() {
     let server = AxionomyMcp::default();
-    let request = RunRequest::new("maze".parse().unwrap())
+    let request = StudyRequest::new("maze".parse().unwrap())
         .with_instance(InstanceProfile::Micro)
         .with_strategy("a-star".parse().unwrap());
     let tasks = TaskManager::new();
     let archive = server.archive.clone();
     let task_request = request.clone();
     let task = tasks.spawn(TaskOptions::new(), move |context| {
-        Box::pin(run_problem(context, archive, task_request))
+        Box::pin(study_problem(context, archive, task_request))
     });
     let summary = completed(terminal_task(&tasks, &task.task_id).await);
-    let artifact_id: ArtifactId = summary["artifact_id"].as_str().unwrap().parse().unwrap();
-    let served = server.artifact(&artifact_id).await.unwrap().unwrap();
-    assert_eq!(*served, ReferenceService.run(request).unwrap());
+    let study_id: StudyId = summary["study_id"].as_str().unwrap().parse().unwrap();
+    let served = server.study(&study_id).await.unwrap().unwrap();
+    assert_eq!(*served, ReferenceService.study(request).unwrap());
     assert_eq!(summary["key"]["strategy"], "a-star");
     assert_eq!(summary["selected_document"], "a-star");
     let document: DocumentPath = summary["selected_document"]
@@ -639,7 +639,7 @@ async fn a_problem_run_returns_a_summary_and_pages_its_frames() {
     let first = read(
         &server,
         &uri(Target::Frames {
-            artifact_id: artifact_id.clone(),
+            study_id: study_id.clone(),
             document: document.clone(),
         }),
     )
@@ -648,14 +648,7 @@ async fn a_problem_run_returns_a_summary_and_pages_its_frames() {
         first["items"].as_array().unwrap().len() as u64,
         frames.min(resources::PAGE_FRAMES as u64)
     );
-    let document = read(
-        &server,
-        &uri(Target::Document {
-            artifact_id,
-            document,
-        }),
-    )
-    .await;
+    let document = read(&server, &uri(Target::Document { study_id, document })).await;
     assert_eq!(document["frames"], frames);
     assert_eq!(document["document"]["frames"], json!([]));
 }

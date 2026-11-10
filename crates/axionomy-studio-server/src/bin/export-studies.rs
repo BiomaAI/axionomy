@@ -1,7 +1,7 @@
-use axionomy_service::{ProblemPath, ReferenceService, RunRequest};
+use axionomy_service::{ProblemPath, ReferenceService, StudyRequest};
 use std::{fs, path::PathBuf};
 
-/// Writes the default artifact of one problem, or of every problem and the
+/// Writes the default study of one problem, or of every problem and the
 /// catalog when the problem is `all`, as `<problem>.json`.
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut arguments = std::env::args_os().skip(1);
@@ -12,7 +12,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let output = arguments
         .next()
         .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("studio/public/artifacts"));
+        .unwrap_or_else(|| PathBuf::from("studio/public/studies"));
     let service = ReferenceService;
     let all = problem == "all";
     let problems = if all {
@@ -33,8 +33,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     for descriptor in problems {
         let path = output.join(format!("{}.json", descriptor.key));
-        let artifact = service.run(RunRequest::new(descriptor.key))?;
-        fs::write(&path, serde_json::to_vec(&artifact)?)?;
+        let study = service.study(StudyRequest::new(descriptor.key))?;
+        fs::write(&path, serde_json::to_vec(&study)?)?;
         println!("wrote {}", path.display());
     }
     Ok(())

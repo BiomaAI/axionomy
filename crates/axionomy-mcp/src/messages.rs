@@ -6,10 +6,10 @@
 
 use axionomy::InvariantPath;
 
-use crate::handles::{ArtifactId, AssessmentId, EconomyId};
+use crate::handles::{AssessmentId, EconomyId, StudyId};
 use axionomy::{AccountPath, AssessmentStatus, AssetPath, Quantity, RatePath, RolePath, paths};
 use axionomy_search::GraphSearchProgress;
-use axionomy_service::ArtifactKey;
+use axionomy_service::StudyKey;
 use axionomy_view::DocumentPath;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -334,13 +334,13 @@ pub struct ProblemCatalogResponse {
     pub problems: Vec<axionomy_service::ProblemDescriptor>,
 }
 
-/// A finished problem run. Its documents and their frames are resources.
+/// A finished study of a problem. Its documents and their frames are resources.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-pub struct RunSummary {
-    pub artifact_id: ArtifactId,
-    /// What the artifact was computed from: the problem, instance, strategy,
-    /// seed and budget.
-    pub key: ArtifactKey,
+pub struct StudySummary {
+    pub study_id: StudyId,
+    /// What the study was computed from: the problem, instance, strategy, seed
+    /// and budget.
+    pub key: StudyKey,
     /// The document of the requested strategy.
     pub selected_document: DocumentPath,
     pub documents: Vec<DocumentSummary>,

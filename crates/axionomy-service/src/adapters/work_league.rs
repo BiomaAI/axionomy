@@ -11,11 +11,11 @@ use axionomy_view::{
 use std::cmp::Ordering;
 
 pub(super) fn build(
-    run: &ArtifactKey,
+    study: &StudyKey,
     descriptor: &ProblemDescriptor,
     progress: &mut ProgressSink<'_>,
-) -> Result<RunArtifact, ServiceError> {
-    let profile = match run.instance {
+) -> Result<Study, ServiceError> {
+    let profile = match study.instance {
         InstanceProfile::Micro => Profile::Micro,
         InstanceProfile::Showcase => Profile::Showcase,
         InstanceProfile::Stress => Profile::Stress,
@@ -40,11 +40,11 @@ pub(super) fn build(
             "A resource-conscious field recycles aggressively and exposes the opportunity cost of minimizing residual waste.",
         ),
     ];
-    let selected = run.strategy.as_str().to_owned();
+    let selected = study.strategy.as_str().to_owned();
     let mut documents = Vec::new();
     for (offset, (strategy, lineup, title, description)) in configurations.into_iter().enumerate() {
         let league = work_league::league(profile, lineup);
-        let outcome = work_league::run(&league, run.seed)
+        let outcome = work_league::run(&league, study.seed)
             .map_err(|error| problem_error("work-league", error))?;
         let final_world = outcome.final_world();
         let total_value = league
@@ -152,7 +152,7 @@ pub(super) fn build(
         );
         progress.ensure()?;
     }
-    artifact(run, descriptor, documents)
+    assemble(study, descriptor, documents)
 }
 
 fn balance(world: &World, agent: AgentId, asset: Asset) -> u64 {
@@ -799,22 +799,22 @@ fn balance_job(world: &World, job: work_league::JobId, asset: Asset) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{ReferenceService, RunRequest};
+    use crate::{ReferenceService, StudyRequest};
 
     #[test]
     fn every_snapshot_has_multiple_rankings_and_they_change() {
-        let request = RunRequest::new(slug("work-league"))
+        let request = StudyRequest::new(slug("work-league"))
             .with_instance(InstanceProfile::Showcase)
             .with_strategy(slug("mixed-field"));
-        let run = ReferenceService.resolve(&request).unwrap();
-        let descriptor = ReferenceService.problem(&run.problem).unwrap();
-        let artifact = build(
-            &run,
+        let key = ReferenceService.resolve(&request).unwrap();
+        let descriptor = ReferenceService.problem(&key.problem).unwrap();
+        let study = build(
+            &key,
             &descriptor,
-            &mut ProgressSink::new(&RunControl::default(), &mut |_| {}),
+            &mut ProgressSink::new(&StudyControl::default(), &mut |_| {}),
         )
         .unwrap();
-        let document = artifact.selected().unwrap();
+        let document = study.selected().unwrap();
         assert_eq!(document.initial.leaderboards.len(), 6);
         assert!(document.frames.len() >= 50);
         assert!(

@@ -101,7 +101,7 @@ tested against it. See [verification/README.md](verification/README.md).
 
 The reference problems expose explicit **Micro**, **Showcase**, and
 **Stress** instances. Micro keeps exact fixtures and independent oracles fast;
-Showcase is the default that Studio and the generated artifacts use. Stress
+Showcase is the default that Studio and its pre-built studies use. Stress
 raises a domain-relevant dimension—sampling, topology, board size, horizon,
 uncertainty, coupled participants, or inventory. This keeps examples honest
 without turning arbitrary size into a product claim, and it lets CLI, HTTP,
@@ -123,9 +123,9 @@ models into one-way workspace dependencies:
 | `axionomy-store` | Runs, stored states, replay verification, tags, groups, metrics and refs, on redb |
 | `axionomy-mcp` | Strict stateless MCP 2026-07-28 reference server with stored, steppable, diffable snapshots and interruptible search tasks |
 | `axionomy-view` | Runtime-neutral, replay-derived browser presentation contracts |
-| `axionomy-service` | Interface-neutral catalog, run control, progress, and replay-derived artifacts for every canonical problem |
+| `axionomy-service` | Interface-neutral catalog, study control, progress, and replay-derived studies for every canonical problem |
 | `axionomy-cli` | Human- and script-friendly access to the shared problem service |
-| `axionomy-studio-server` | Native OpenAPI/SSE reference backend and in-memory run orchestration for Axionomy Studio |
+| `axionomy-studio-server` | Native OpenAPI/SSE reference backend and in-memory study orchestration for Axionomy Studio |
 | `axionomy-studio-wasm` | Single-threaded Web Worker adapter for running the same Rust service in a browser |
 
 ```text
@@ -177,11 +177,11 @@ adapters.
 - Discoverable reference problems, each with explicit Micro, Showcase, and Stress instances.
 - Snapshot leaderboards whose exact ranks, tradeoffs, and evidence update during replay.
 - A strict stateless MCP 2026-07-28 server whose snapshots persist in a store, with state roots, trace stepping and diffs.
-- Rust-owned OpenAPI, generated TypeScript, portable artifacts, and cross-interface tests.
+- Rust-owned OpenAPI, generated TypeScript, portable studies, and cross-interface tests.
 
 ### Studio
 
-- Live search progress plus saved solver observations for fast and slow runs.
+- Live search progress plus saved solver observations for fast and slow studies.
 - Replay-derived accounts, assessments, receipts, rule inspection, and actor views.
 - Graph, grid, matrix, and timeline pictures with semantic icons, exact metrics, and replay-derived motion linked to accounts and receipts.
 - Strategy comparison, Pareto tradeoffs, rule checks, native SSE, and Web Worker Wasm.
@@ -218,7 +218,7 @@ second simulator. It scrubs a trace by replaying accepted exchanges through
 the Rust core, then shows the resulting accounts, assets, assessments,
 receipt deltas, objectives, semantic transition cues, and an optional read-only
 picture. Its separate Solve view follows bounded solver observations
-live and retains them in the artifact, so even a sub-second run remains
+live and retains them in the study, so even a sub-second study remains
 inspectable. The Maze exposes a scrubbable BFS, Dijkstra, or A* expansion map
 before its verified replay, while Sokoban and Connect Four grids, Exact Cover
 matrix, scheduling and perishables timelines, market and logistics networks,
@@ -237,7 +237,7 @@ without suppressing it.
 Deliberately invalid or infeasible proposals appear under **Moves that should
 be refused**, with structured role, account, asset, and rate diagnostics. They
 demonstrate that the rules are active and are kept visually separate
-from genuine run or transport failures.
+from genuine study or transport failures.
 
 ### Reading Studio
 
@@ -248,10 +248,10 @@ from genuine run or transport failures.
 
 Studio, the CLI, the HTTP API, and MCP deliberately call the same
 interface-neutral service. Their different usability demands pressure one
-shared catalog, request, progress, control, and artifact API. A capability is
+shared catalog, request, progress, control, and study API. A capability is
 promoted toward the core only when it is independent of transport and
 presentation and belongs to economic validation or replay; interface-specific
-state stays outside. Cross-interface tests compare complete artifacts so the
+state stays outside. Cross-interface tests compare complete studies so the
 four surfaces cannot quietly acquire different semantics.
 
 ```console
@@ -263,14 +263,14 @@ pnpm dev
 
 Open `http://127.0.0.1:5173`. The native server is optional: when it is healthy,
 Studio uses HTTP/SSE and exposes pause, resume, and cancellation; otherwise it
-loads the same Rust service as WebAssembly in an isolated Worker and keeps Run
-  enabled for every problem. Worker cancellation is immediate by
+loads the same Rust service as WebAssembly in an isolated Worker and keeps
+Study enabled for every problem. Worker cancellation is immediate by
 terminating that disposable worker. If WebAssembly cannot initialize, the
-committed Showcase artifacts still provide read-only playback. The status badge
+pre-built Showcase studies still provide read-only playback. The status badge
 is backed by a current health/initialization check rather than by a catalog that
 may have been cached earlier.
 
-The repository deploys the browser engine and static artifacts to
+The repository deploys the browser engine and pre-built studies to
 `https://biomaai.github.io/axionomy/` from `main` through the Pages workflow.
 GitHub Pages requires no application server and no cross-origin isolation: the
 engine is intentionally single-threaded inside a Worker. See
@@ -281,14 +281,14 @@ The same service is available without a browser:
 ```console
 cargo run -p axionomy-cli -- catalog
 cargo run -p axionomy-cli -- describe logistics
-cargo run -p axionomy-cli -- run logistics --instance showcase --strategy reliable
+cargo run -p axionomy-cli -- study logistics --instance showcase --strategy reliable
 ```
 
 ## Three questions the examples can answer
 
 **What changes when an agent learns something?** In the
 [Mission](https://biomaai.github.io/axionomy/?problem=mission&strategy=coordinated&seed=11&budget=128),
-press **Run**, then follow the private sighting, belief update, explicit sharing,
+press **Study**, then follow the private sighting, belief update, explicit sharing,
 and subsequent decisions. Each public action in the coordinated replay is
 chosen by ISMCTS. Compare it with the direct North commitment in the same
 scenario. Try seed 17 afterward: a misleading sighting shows why valid actions
@@ -562,15 +562,17 @@ snapshots diffed, and every result carries its state's content root.
 The server accepts only MCP `2026-07-28`, disables legacy sessions, and
 requires the revision's request metadata and standard HTTP routing headers.
 Task state, queues, progress counters, and snapshot handles are operational
-artifacts—not a parallel world model. Search still reaches successors only by
+records—not a parallel world model. Search still reaches successors only by
 applying concrete exchanges through the kernel, and its completed result is a
 replayable trace.
 
 ```console
 cargo run -p axionomy-mcp --bin axionomy-mcp
 
-# Full stateless HTTP lifecycle, including task polling:
-cargo test -p axionomy-mcp --test http
+# The full stateless HTTP lifecycle, task polling included, through the
+# official MCP Python SDK:
+cargo build -p axionomy-mcp --bin axionomy-mcp
+cd crates/axionomy-mcp/interop && uv run --locked pytest
 ```
 
 See [crates/axionomy-mcp/README.md](crates/axionomy-mcp/README.md) for the tool

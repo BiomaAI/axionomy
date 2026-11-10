@@ -622,9 +622,9 @@ axionomy-studio-server → axionomy-service
 - `axionomy-view` owns runtime-neutral monomorphic presentation contracts and
   replay-derived frames, without owning a domain ontology or runtime.
 - `axionomy-service` owns the interface-neutral problem catalog, reproducible
-  run requests, cooperative controls, progress, and complete artifacts.
+  study requests, cooperative controls, progress, and complete studies.
 - `axionomy-cli` owns human- and script-oriented command parsing and output.
-- `axionomy-studio-server` owns native HTTP, OpenAPI, SSE, in-memory run
+- `axionomy-studio-server` owns native HTTP, OpenAPI, SSE, in-memory study
   lifecycle, static export, and hosting for the browser application.
 
 The kernel must never depend on a solver or problem crate. Moving BFS and A*
@@ -660,20 +660,27 @@ reimplementing problem dispatch. Its public vocabulary is intentionally small:
 
 ```text
 ProblemDescriptor = identity + family + instance profiles + strategies + capabilities
-RunRequest         = problem + instance + strategy + deterministic seed + work budget
-RunControl         = cooperative pause + resume + cancel
-ServiceProgress    = ordered phase + completed/total work + message
-RunObserver        = progress + solver observation + replay-verified frame
-RunArtifact        = request + resolved instance + selected document + replayable alternatives
-                     + assessed constraint probes
+StudyRequest      = problem + instance + strategy + deterministic seed + work budget
+StudyKey          = the request with its instance and strategy decided
+StudyControl      = cooperative pause + resume + cancel
+ServiceProgress   = ordered phase + completed/total work + message
+StudyObserver     = progress + solver observation + replay-verified frame
+Study             = key + resolved instance + selected document + replayable alternatives
+                    + assessed constraint probes
 ```
+
+A study is what Studio, MCP and the CLI compute: one request, a problem's
+instance under its strategies with a seed and a budget. "Run" means only a
+trajectory, a trace from a state; each document of a study holds one. Machinery
+names avoid words a user's ontology is likely to own: work-league's workers
+claim jobs, so a study is never a job.
 
 The service contains no HTTP, async runtime, CLI parser, MCP types, database,
 or browser state. Every canonical problem has one adapter here that translates
 its user-defined ontology and solver evidence into `axionomy-view`; no problem
-gets a privileged viewer module. A synchronous caller may use `run`, while a
-runtime calls `run_with` and owns the thread, task, scheduling policy, and
-`RunControl` lifetime.
+gets a privileged viewer module. A synchronous caller may use `study`, while a
+runtime calls `study_with` and owns the thread, task, scheduling policy, and
+`StudyControl` lifetime.
 
 Different interfaces create useful pressure. CLI requires discoverability,
 stable machine-readable output, and useful defaults. HTTP requires resumable
@@ -684,9 +691,9 @@ projections. These demands may change the service and view contracts. They
 move into the kernel only when they are transport-neutral parts of economic
 validation, assessment, application, or replay.
 
-Semantic parity is executable: CLI JSON, HTTP artifacts, and the artifacts
-MCP runs serve as resources are compared with the complete `ReferenceService`
-artifact, not merely a shared identifier. Transport events and run records are allowed to differ;
+Semantic parity is executable: CLI JSON, HTTP studies, and the studies MCP
+serves as resources are compared with the complete `ReferenceService` study,
+not merely a shared identifier. Transport events and study records are allowed to differ;
 economic documents, assessments, receipts, objectives, and traces are not.
 
 ### 6.2 Instance profiles keep examples honest
@@ -696,7 +703,7 @@ scale with three explicit problem profiles:
 
 ```text
 Micro     = compact exact fixture, independent oracle, fast integration proof
-Showcase  = decision-dense default for Studio and portable artifacts
+Showcase  = decision-dense default for Studio and portable studies
 Stress    = larger domain-relevant workload for scale and interruption checks
 ```
 
@@ -725,7 +732,7 @@ target, inventory, or sampling pressure.
 Profiles remain closed problem definitions. Their accounts, assets, rates,
 invariants, goals, and initial quantities are ordinary model data; an
 instance is named by its profile (`micro`, `showcase` or `stress`), which is
-interface identity, not semantic authority. Every artifact records its key:
+interface identity, not semantic authority. Every study records its key:
 the problem, instance, strategy, seed and budget it was computed from. Micro continues to support exact
 oracles even when exhaustive search over Showcase would be inappropriate, and
 an approximate or candidate-bounded Showcase frontier must be labeled as such.
@@ -789,7 +796,7 @@ carries is a typed path: items such as `maze/account/agent` or `node/start`,
 measures, classes, documents, proposals, phases and algorithms each have their
 own kind, so one cannot stand where another is expected. Reference adapters
 implement typed labels for their account, asset, rate, and role enums while
-retaining the same Debug-derived keys used by artifacts and scene links.
+retaining the same Debug-derived keys used by studies and scene links.
 User-defined economies keep the generic Debug-label fallback unless their
 adapter supplies a presentation ontology. Labels stay outside the problem and
 kernel crates, wording never becomes semantic identity, and adapters do not
@@ -805,20 +812,23 @@ Rust DTOs
                  └─ typed openapi-fetch client
 ```
 
-Generated OpenAPI and TypeScript declarations are committed for review and
-regenerated in CI. They are never edited manually. This repository pins the
+`pnpm generate` produces the OpenAPI document, its TypeScript declarations and
+Studio's pre-built studies from the Rust source; `pnpm dev`, `pnpm test` and
+`pnpm build` run it first, so CI regenerates them on every build. They are
+gitignored, never committed and never edited manually, so they cannot go
+stale. This repository pins the
 Schemars-1-native Aide line because duplicating the entire DTO graph for an old
 schema-trait release would create two contract systems.
 
-The native server exposes the canonical catalog, starts runs, reports state,
-pauses, resumes, or cancels computation cooperatively, serves each run's
-artifact, documents, and paginated frames under the run's minted ID (`run-7`),
-and streams tagged `StudioEvent` values through Server-Sent Events.
+The native server exposes the canonical catalog, starts studies, reports their
+state, pauses, resumes, or cancels them cooperatively, serves each published
+study, its documents, and paginated frames under the study's minted ID
+(`study-7`), and streams tagged `StudioEvent` values through Server-Sent Events.
 The service emits one monotonic event sequence across adapter phases.
 `FrameAppended` carries the complete newly verified frame and its document
 identity, so native SSE and browser Wasm can show authoritative progress while
-the artifact is still being built. The event is produced by replay derivation,
-not by a timer or an invented animation, and completed artifacts retain the
+the study is still being computed. The event is produced by replay derivation,
+not by a timer or an invented animation, and published studies retain the
 same frames for later inspection.
 Logistics, Connect Four, and Mission advance their resumable Monte Carlo,
 MCTS, and ISMCTS sessions in bounded work chunks, publishing phase-local
@@ -826,10 +836,10 @@ samples, iterations, nodes, and moves while observing pause or cancellation at
 each chunk boundary. Adapters whose domain algorithms are still indivisible
 observe control between their larger phases.
 Event sequence numbers order transport observations only; they are not encoded
-time. Run records and documents are process-local reference state, just like a
+time. Study records and documents are process-local reference state, just like a
 search queue. They do not survive restart and cannot authorize an exchange.
-Applications that need persistence may store portable `RunArtifact` JSON or
-build their own outer run service without changing the core.
+Applications that need persistence may store portable `Study` JSON or build
+their own outer study service without changing the core.
 
 `SearchObservationView` is the presentation lowering of disposable solver
 state. It records phase, algorithm, evidence kind, bounded progress, and exact
@@ -839,8 +849,8 @@ allowing a generic viewer to emphasize the expanded room, candidate, agent, or
 other projected entity without learning the domain ontology in TypeScript.
 The service sends observations through a bounded observer
 channel and retains at most its configured history in every completed
-document. Live execution and a saved artifact therefore expose the same
-evidence surface; transport speed does not decide whether a run is explainable.
+document. Live execution and a saved study therefore expose the same
+evidence surface; transport speed does not decide whether a study is explainable.
 
 The React application uses one `EngineClient` boundary for native HTTP/SSE,
 the browser Worker, and static playback. The native connection badge is backed
@@ -880,26 +890,26 @@ language. That intentional animation is distinct from incidental layout motion;
 canvas, panel, and control geometry must remain stable while their economic
 contents change.
 
-Solve evidence and trace playback are deliberately distinct controls. `Run`
-creates a new artifact; the transport controls only replay its accepted
+Solve evidence and trace playback are deliberately distinct controls. `Study`
+computes a new study; the transport controls only replay its accepted
 exchanges. The Solve surface exposes live or retained phase, rollout, tree,
-frontier, incumbent, and artifact observations. When observations identify
+frontier, incumbent, and document-derivation observations. When observations identify
 scene subjects, Studio derives a scrubbable exploration map from the same
 Rust-owned initial scene; accumulated subjects show explored structures and
 the selected checkpoint shows the current expansion. It never fabricates an
-edge between consecutive expansions. An active run immediately exposes a
+edge between consecutive expansions. An active study immediately exposes a
 spinner, phase message, elapsed time, deterministic request parameters, and
 the latest bounded-work counter.
 Completion leaves a dismissible receipt containing duration and request
-identity and visibly marks the replacement artifact, so even a sub-second run
+identity and visibly marks the replacement study, so even a sub-second study
 has an inspectable result.
 
 Every meaningful Studio selection is encoded in a static-host-compatible query
 URL: problem, instance, strategy, document, solve/replay view, replay step,
 leaderboard, seed, and budget. Major selections create browser history;
 scrubbing replaces the current entry; `popstate` restores the corresponding
-artifact and frame. Invalid identities visibly fall back to a catalog default,
-and shared links never auto-run computation. The same URL therefore works
+study and frame. Invalid identities visibly fall back to a catalog default,
+and shared links never start a study. The same URL therefore works
 against the native server, the browser Wasm engine, and GitHub Pages.
 
 The implemented Studio exposes the complete Showcase
@@ -907,7 +917,7 @@ surface: pathfinding and networks use graphs; Sokoban and Connect Four use
 grids; Exact Cover uses a constraint matrix; scheduling and perishables use
 timelines; markets expose multi-party settlement and rejected shortfalls;
 stochastic and partially observed domains expose telemetry, sampled policy
-evidence, and actor-relative views. Every artifact includes replayable strategy
+evidence, and actor-relative views. Every study includes replayable strategy
 alternatives where the domain supplies them. The universal model explorer
 exposes rates, roles, goals, and invariants even when a specialized
 scene is absent. The shared scene vocabulary renders stable semantic entities,
@@ -918,20 +928,20 @@ Rescue, and Work League all expose replay-changing linked entities through one
 generic motion system. A transition remains visible through its receipt-
 derived cue even when before/after geometry is identical. An instance selector
 makes Micro and Stress available to either executable engine, while static
-fallback deliberately serves the committed Showcase artifacts.
+fallback deliberately serves the pre-built Showcase studies.
 
 Assessed proposals in conformance documents are rule checks. Some are
 deliberately malformed or infeasible, and their rejection proves that the
 roles, balances, and invariants are active. The view contract preserves a
 structured issue kind plus involved role, account, asset, or rate identities;
 Studio labels these as moves that should be refused and keeps them separate from
-operational run and transport failures.
+operational study and transport failures.
 
-Portable artifacts prove offline playback for the full catalog. The native
+Portable studies prove offline playback for the full catalog. The native
 path proves generated OpenAPI calls, resumable SSE, pause/resume/cancel hooks,
-artifact and frame retrieval, and scrubbing. Browser tests prove that the same
-Rust service initializes, runs, streams observations, publishes
-artifacts, and cancels inside an isolated Worker. The Pages build uses a
+study and frame retrieval, and scrubbing. Browser tests prove that the same
+Rust service initializes, studies, streams observations, publishes
+studies, and cancels inside an isolated Worker. The Pages build uses a
 repository-relative Vite base, includes its Wasm binary and `.nojekyll`, and
 deploys from `main` without a server. Specialized projections are added
 only when they materially improve comprehension; the authoritative account,
@@ -1111,8 +1121,8 @@ No request or result grows with the economy. A call adds at most 10,000
 authored entries or replays at most 1,000 exchanges, so an economy of any size
 is built by chaining `axionomy_economy_extend` calls, each of which stores a
 valid snapshot. A tool result carries handles, counts, at most ten preview
-lines, and `resource_link`s. Everything an economy, assessment or problem run
-holds is an `axionomy://` resource under RFC 6570 URI templates. `resources/read`
+lines, and `resource_link`s. Everything an economy, assessment or study holds
+is an `axionomy://` resource under RFC 6570 URI templates. `resources/read`
 is not paginated by the protocol, so each page of a list is its own resource:
 the page carries `nextCursor` under MCP's pagination rules and the next page is
 the same URI with that cursor. Snapshots never change, so pages are cached
@@ -1362,7 +1372,7 @@ examples, but they are not promised as reusable domain APIs.
   states of a trace can be named, and snapshots can be diffed.
 - No MCP request or result grows with the economy: economies are authored in
   bounded chunks, results carry handles, counts and `resource_link`s, and
-  everything a snapshot, assessment or run holds is read as paged, immutable,
+  everything a snapshot, assessment or study holds is read as paged, immutable,
   cacheable `axionomy://` resources with completion for their arguments. A
   100,000-asset economy is exercised end to end.
 - MCP search tasks are registered before their handles are returned and expose
@@ -1426,10 +1436,10 @@ The current foundation is intentionally bounded:
   engine targets. GitHub Pages cannot supply cross-origin isolation headers, so
   the reference browser engine deliberately avoids Wasm threads and
   `SharedArrayBuffer`; scale comes from a dedicated Worker, not parallelism.
-- Studio run control is cooperative. Resumable Monte Carlo, MCTS, and ISMCTS
+- Studio study control is cooperative. Resumable Monte Carlo, MCTS, and ISMCTS
   adapters check pause/cancel between bounded work chunks; other adapters check
   at phase and document-publication boundaries. A one-shot domain solver is not
-  preempted in the middle of an indivisible call. Native runs support resumable
+  preempted in the middle of an indivisible call. Native studies support resumable
   pause. Browser cancellation is immediate because the Worker is disposable;
   browser pause is intentionally not advertised until service sessions can be
   suspended and resumed across Worker event-loop turns.
@@ -1439,7 +1449,7 @@ The current foundation is intentionally bounded:
   than the former 1,282-rate 4×4 counter cross-product—but pagination or a
   generic parameterized-rate view still awaits measured pressure from other
   domains.
-- The MCP reference binary keeps snapshots, assessments and run artifacts in
+- The MCP reference binary keeps snapshots, assessments and studies in
   its store, durable with `AXIONOMY_MCP_STORE`; task lifecycle stays in the
   process, and distributed task recovery remains outside the reference scope.
 - The MCP reference server has no authentication, tenant isolation,
@@ -1634,8 +1644,8 @@ factor.
    the redb store with runs, durability rules, tags, groups, metrics and refs,
    MCP on the store, storing any ontology whose identifiers serialize, and
    rollouts and Monte Carlo episodes recording where they run (`Apply`,
-   `Episodes`, `GroupRecorder`) are built; next, problem runs record as store
-   runs, search sessions, MPPI and RL record, and Studio scrubs from stored
+   `Episodes`, `GroupRecorder`) are built; next, studies record their runs in
+   the store, search sessions, MPPI and RL record, and Studio scrubs from stored
    roots, in the order [simulation, runs and studies](docs/SIMULATION.md)
    gives. Extract generic holdings, dependency, and event indexes only after a
    second domain confirms the perishables shapes.
@@ -1657,7 +1667,7 @@ factor.
 13. Add persisted search checkpoints, worker leases, task notifications, and
     tenant-aware authorization only when the MCP reference boundary is moved
     into a real multi-process deployment.
-14. Measure full-artifact transfer and rendering across the Studio
+14. Measure full-study transfer and rendering across the Studio
     adapters; add paged model projection, incremental Pareto/Monte Carlo
     publication, or compact rate schemas only where measured pressure warrants
     them.
@@ -1886,11 +1896,13 @@ monomorphic wire contract, exact quantities serialize as text, and generated
 OpenAPI/TypeScript prevents a second manually maintained type system. A viewer
 may explain economic truth but cannot create it.
 
-### D-033: Interfaces share commands and artifacts, not semantics by convention
+### D-033: Interfaces share commands and studies, not semantics by convention
 
 CLI, HTTP/Studio, and MCP adapt one runtime-neutral problem service. Catalogs,
-strategy requests, progress, control, and complete replay-derived artifacts
-are defined once and tested for cross-interface equality. Interface pressure
+study requests, progress, control, and complete replay-derived studies are
+defined once and tested for cross-interface equality. What they compute is a
+study; "run" names only a trajectory, and machinery takes no word a user's
+ontology is likely to own. Interface pressure
 may improve this shared boundary and reveal missing kernel explanations, but
 transport lifecycle and presentation state never become economic authority.
 
@@ -1898,7 +1910,7 @@ transport lifecycle and presentation state never become economic authority.
 
 Micro keeps exhaustive laws and independent oracles cheap. Showcase is the
 decision-dense interface default. Stress scales a domain-relevant dimension.
-All three are ordinary closed economies with explicit artifact identity; none
+All three are ordinary closed economies with explicit study identity; none
 may introduce external semantic state. Complexity telemetry and per-problem
 Showcase thresholds prevent attractive visualizations from hiding trivial
 models or forced traces.
@@ -1908,8 +1920,8 @@ models or forced traces.
 The browser does not maintain a TypeScript economy or a second set of problem
 solvers. `axionomy-studio-wasm` compiles the interface-neutral service to
 `wasm32-unknown-unknown`; a dedicated Worker transports Rust-owned requests,
-observations, and artifacts. Native HTTP/SSE remains preferable when present,
-the Worker is the first-class GitHub Pages engine, and committed artifacts are
+observations, and studies. Native HTTP/SSE remains preferable when present,
+the Worker is the first-class GitHub Pages engine, and pre-built studies are
 the final read-only fallback. Connection labels report verified current
 capability rather than inferring liveness from cached data.
 
@@ -1920,7 +1932,7 @@ anchors, typed
 account/balance evidence links, paths, annotations, exact metrics, and a
 constrained glyph vocabulary. Tabler is a replaceable browser rendering
 dependency. Frame cues are derived from the exchange and receipt, and scene
-anchors plus evidence references are validated before an artifact is
+anchors plus evidence references are validated before a study is
 published. A generic renderer composes deterministic adjacent-step motion and
 receipt effects without knowing the problem domain. Entity roles distinguish
 structure, occupants, attachments, owned state, and global context so a viewer
@@ -1989,14 +2001,14 @@ read into its own type: accounts and assets, problems and strategies
 (`work-league`, `a-star`), documents, view items (`maze/account/agent`),
 measures, classes, phases and algorithms, and store tags, metrics, refs and
 group kinds. What a server mints has its own handle type instead: economy,
-assessment and artifact handles in MCP, run and group IDs in the store, and
-Studio run IDs (`run-7`). JSON field names and closed vocabularies, such as
+assessment and study handles in MCP, run and group IDs in the store, and
+Studio study IDs (`study-7`). JSON field names and closed vocabularies, such as
 capabilities, families, glyphs, tones and event kinds, stay snake_case like
 the schema they belong to, and an instance is named by its profile. Text that
 people read stays text.
 
 One spelling per identifier means a link, a CLI argument, an MCP call and a
-stored artifact name the same thing the same way, and a misspelling is
+stored study name the same thing the same way, and a misspelling is
 refused where it is read instead of failing to match later. The kernel's own
 names are paths too: an exchange's parameters (`minimum-output`), a rate's
 conditions and an economy's invariants (`money-accounting`) are
@@ -2032,7 +2044,7 @@ scale to read it: lending's WAD-scaled terms printed as 19-digit integers
 were unreadable. A view gives each asset a `QuantityFormat`, `atoms ÷
 10^scale` with at least some digits and a unit, and each document carries the
 formats of its assets that are not plain counts, once per document so
-artifacts barely grow. A format writes the exact value, trimming zeros and
+studies barely grow. A format writes the exact value, trimming zeros and
 never rounding, and Studio keeps the atom count beside every formatted value.
 Formats are presentation: they are not part of an asset's identity (D-025),
 so changing how flour is shown can never merge or split two assets. Typed
@@ -2055,15 +2067,15 @@ Axionomy succeeds when:
 - Invalid proposals cannot bypass core constraints.
 - Remote callers can store, inspect, branch, search, cancel, poll, and replay
   without relying on hidden session state.
-- Browser users can load a portable document, follow a native live run, or run
-  the same Rust service in a Worker; they can inspect retained solver evidence,
+- Browser users can load a portable document, follow a native live study, or
+  run the same Rust service in a Worker; they can inspect retained solver evidence,
   scrub every accepted exchange, and inspect exact balances and deltas without
   a parallel mutable world model or handwritten cross-language contract.
-- Every canonical problem is discoverable, runnable, replayable, and
-  meaningfully inspectable through Studio and static Showcase artifacts, with
+- Every canonical problem can be discovered, studied, replayed, and
+  meaningfully inspected through Studio and static Showcase studies, with
   explicit Micro and Stress selection on live interfaces.
-- CLI, HTTP, MCP, and the browser Worker serve the same semantic problem
-  artifacts for the same request, while retaining interface-appropriate
+- CLI, HTTP, MCP, and the browser Worker serve the same semantic studies for
+  the same request, while retaining interface-appropriate
   operational behavior.
 - Infeasible proposals expose every account-and-asset shortfall without
   mutation.

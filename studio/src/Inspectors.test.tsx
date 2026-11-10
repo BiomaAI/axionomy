@@ -1,10 +1,10 @@
 import { render, screen, within } from "@testing-library/react";
-import type { RunArtifact } from "./api";
-import mission from "../public/artifacts/mission.json";
+import type { Study } from "./api";
+import mission from "../public/studies/mission.json";
 import { Observations } from "./Inspectors";
 
 test("scrubbing changes private observations and transfers intelligence only after sharing", () => {
-  const document = (mission as RunArtifact).documents[0];
+  const document = (mission as Study).documents[0];
   const scan = document.frames.find((frame) => frame.exchange.rate.label.startsWith("Scout discovers Casualty"))!;
   const share = document.frames.find((frame) => frame.exchange.rate.label.startsWith("Brief Medic on Casualty"))!;
   const { rerender } = render(<Observations document={document} frame={scan} />);

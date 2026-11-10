@@ -1,24 +1,24 @@
 import {
-  cancelRun,
-  createRun,
-  fetchArtifact,
+  cancelStudy,
+  createStudy,
+  fetchStudy,
   fetchProblems,
-  fetchStaticArtifact,
+  fetchStaticStudy,
   fetchStaticProblems,
-  pauseRun,
-  resumeRun,
+  pauseStudy,
+  resumeStudy,
   type ProblemDescriptor,
-  type RunArtifact,
-  type RunRequest,
-  type RunSummary,
+  type Study,
+  type StudyRequest,
+  type StudySummary,
   type StudioEvent,
 } from "./api";
 
 export type EngineKind = "native" | "browser" | "static";
 export type EngineConnectivity = "checking" | "connected" | "disconnected" | "static";
 
-export type EngineRunSubscription = {
-  summary: RunSummary;
+export type EngineStudySubscription = {
+  summary: StudySummary;
   close(): void;
 };
 
@@ -27,31 +27,31 @@ export type EngineEventListener = (event: StudioEvent) => void | Promise<void>;
 /**
  * The Studio depends on this capability boundary instead of HTTP directly.
  * Native HTTP/SSE and the browser Worker engine produce the same Rust-owned
- * requests, events, and artifacts; static playback intentionally cannot run.
+ * requests, events, and studies; static playback intentionally cannot study.
  */
 export interface EngineClient {
   readonly kind: EngineKind;
-  readonly canRun: boolean;
+  readonly canStudy: boolean;
   readonly canPause: boolean;
   catalog(): Promise<ProblemDescriptor[]>;
-  defaultArtifact(problem: string): Promise<RunArtifact>;
+  defaultStudy(problem: string): Promise<Study>;
   health(): Promise<boolean>;
-  start(request: RunRequest, listener: EngineEventListener, onError: (message: string) => void): Promise<EngineRunSubscription>;
-  /** The artifact a run published. */
-  artifact(runId: string): Promise<RunArtifact>;
-  pause(runId: string): Promise<RunSummary>;
-  resume(runId: string): Promise<RunSummary>;
-  cancel(runId: string): Promise<RunSummary>;
+  start(request: StudyRequest, listener: EngineEventListener, onError: (message: string) => void): Promise<EngineStudySubscription>;
+  /** The study once it is published. */
+  study(studyId: string): Promise<Study>;
+  pause(studyId: string): Promise<StudySummary>;
+  resume(studyId: string): Promise<StudySummary>;
+  cancel(studyId: string): Promise<StudySummary>;
 }
 
-const eventKinds: StudioEvent["kind"][] = ["run_started", "progress", "search_observation", "frame_appended", "artifact_published", "run_paused", "run_resumed", "run_completed", "run_cancelled", "run_failed"];
+const eventKinds: StudioEvent["kind"][] = ["study_started", "progress", "search_observation", "frame_appended", "study_published", "study_paused", "study_resumed", "study_completed", "study_cancelled", "study_failed"];
 
 export const nativeEngine: EngineClient = {
   kind: "native",
-  canRun: true,
+  canStudy: true,
   canPause: true,
   catalog: fetchProblems,
-  defaultArtifact: fetchStaticArtifact,
+  defaultStudy: fetchStaticStudy,
   async health() {
     try {
       const response = await fetch(new URL("api/health", window.location.href), {
@@ -66,8 +66,8 @@ export const nativeEngine: EngineClient = {
     }
   },
   async start(request, listener, onError) {
-    const summary = await createRun(request);
-    const source = new EventSource(new URL(`api/runs/${encodeURIComponent(summary.id)}/events`, window.location.href));
+    const summary = await createStudy(request);
+    const source = new EventSource(new URL(`api/studies/${encodeURIComponent(summary.id)}/events`, window.location.href));
     for (const kind of eventKinds) source.addEventListener(kind, (message) => {
       const event = JSON.parse((message as MessageEvent<string>).data) as StudioEvent;
       void listener(event);
@@ -77,25 +77,25 @@ export const nativeEngine: EngineClient = {
     };
     return { summary, close: () => source.close() };
   },
-  artifact: fetchArtifact,
-  pause: pauseRun,
-  resume: resumeRun,
-  cancel: cancelRun,
+  study: fetchStudy,
+  pause: pauseStudy,
+  resume: resumeStudy,
+  cancel: cancelStudy,
 };
 
 function unsupported(): never {
-  throw new Error("Saved results can be replayed but not re-run. Start an engine to compute new ones.");
+  throw new Error("Saved studies can be replayed but not recomputed. Start an engine to compute new ones.");
 }
 
 export const staticEngine: EngineClient = {
   kind: "static",
-  canRun: false,
+  canStudy: false,
   canPause: false,
   catalog: fetchStaticProblems,
-  defaultArtifact: fetchStaticArtifact,
+  defaultStudy: fetchStaticStudy,
   async health() { return true; },
   async start() { return unsupported(); },
-  async artifact() { return unsupported(); },
+  async study() { return unsupported(); },
   async pause() { return unsupported(); },
   async resume() { return unsupported(); },
   async cancel() { return unsupported(); },

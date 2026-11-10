@@ -7,11 +7,11 @@ use axionomy_view::{
 };
 
 pub(super) fn build(
-    run: &ArtifactKey,
+    study: &StudyKey,
     descriptor: &ProblemDescriptor,
     progress: &mut ProgressSink<'_>,
-) -> Result<RunArtifact, ServiceError> {
-    let profile = run.instance;
+) -> Result<Study, ServiceError> {
+    let profile = study.instance;
     let standard = !matches!(profile, InstanceProfile::Micro);
     let initial = if standard {
         connect_four::initial_standard()
@@ -19,9 +19,9 @@ pub(super) fn build(
         connect_four::initial()
     };
     let iterations = match profile {
-        InstanceProfile::Micro => run.budget.clamp(8, 64),
-        InstanceProfile::Showcase => (run.budget / 8).clamp(8, 32),
-        InstanceProfile::Stress => (run.budget / 4).clamp(32, 128),
+        InstanceProfile::Micro => study.budget.clamp(8, 64),
+        InstanceProfile::Showcase => (study.budget / 8).clamp(8, 32),
+        InstanceProfile::Stress => (study.budget / 4).clamp(32, 128),
     } as usize;
     let mut observe = |state: connect_four::GameProgress| {
         let completed = state
@@ -48,14 +48,14 @@ pub(super) fn build(
     let trace = if standard {
         connect_four::play_standard_game_with_progress(
             iterations,
-            run.seed,
+            study.seed,
             iterations.clamp(1, 8),
             &mut observe,
         )
     } else {
         connect_four::play_game_with_progress(
             iterations,
-            run.seed,
+            study.seed,
             iterations.clamp(1, 8),
             &mut observe,
         )
@@ -108,7 +108,7 @@ pub(super) fn build(
             let trace = connect_four::play_opponent_game_from_with_progress(
                 initial.clone(),
                 iterations,
-                run.seed,
+                study.seed,
                 opponent,
                 |turn| {
                     progress.emit(
@@ -136,7 +136,7 @@ pub(super) fn build(
             ], scene).map_err(|error| problem_error("connect-four", error))?);
         }
     }
-    artifact(run, descriptor, documents)
+    assemble(study, descriptor, documents)
 }
 
 fn scene(_: u64, world: &World) -> Option<Scene> {

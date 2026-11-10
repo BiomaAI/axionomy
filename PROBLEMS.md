@@ -103,10 +103,10 @@ Every service-visible problem exposes the same explicit profile contract:
 These are problem instances, not alternate semantics. A profile may change
 initial accounts, the closed rate book, and encoded goals, but it never moves
 truth into the service or viewer. Instance identity is carried in
-`RunRequest` and `RunArtifact`, so a result cannot be compared or replayed as
+`StudyRequest` and `Study`, so a result cannot be compared or replayed as
 though it came from a different workload.
 
-The committed Showcase artifacts currently apply this pressure. This table is
+The pre-built Showcase studies currently apply this pressure. This table is
 also the source for the per-problem Showcase descriptions in the service
 catalog, so those two public explanations must change together:
 
@@ -988,7 +988,7 @@ replayed snapshot.
 - Every snapshot carries all six leaderboards, and at least two different
   agents lead the final set of objectives.
 - Native SSE and browser Wasm publish each derived frame with the same
-  leaderboard state retained by the completed portable artifact.
+  leaderboard state retained by the completed portable study.
 
 ### API pressure
 

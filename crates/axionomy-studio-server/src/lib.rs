@@ -5,8 +5,8 @@ mod openapi;
 pub use openapi::OpenApiDocument;
 
 use axionomy_service::{
-    ArtifactKey, ProblemDescriptor, ReferenceService, RunArtifact, RunControl, RunObserver,
-    RunRequest, ServiceError, ServiceProgress, StudioEvent, StudioRunId,
+    ProblemDescriptor, ReferenceService, ServiceError, ServiceProgress, StudioEvent, StudioStudyId,
+    Study, StudyControl, StudyKey, StudyObserver, StudyRequest,
 };
 use axionomy_view::{DocumentPath, ExchangeFrame, SearchObservationView, ViewDocument};
 use axum::{
@@ -53,8 +53,8 @@ pub struct HealthResponse {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
-pub enum RunStatus {
-    Running,
+pub enum StudyStatus {
+    Studying,
     Paused,
     Completed,
     Cancelled,
@@ -62,16 +62,16 @@ pub enum RunStatus {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
-pub struct RunSummary {
-    pub id: StudioRunId,
-    pub request: RunRequest,
-    pub status: RunStatus,
+pub struct StudySummary {
+    pub id: StudioStudyId,
+    pub request: StudyRequest,
+    pub status: StudyStatus,
     pub completed: u64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub total: Option<u64>,
-    /// What the run's artifact was computed from, once it is published.
+    /// What the study was computed from, once it is published.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub key: Option<ArtifactKey>,
+    pub key: Option<StudyKey>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub selected_document: Option<DocumentPath>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -82,7 +82,7 @@ pub struct RunSummary {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct FramePage {
-    pub run_id: StudioRunId,
+    pub study_id: StudioStudyId,
     pub document: DocumentPath,
     pub from: u64,
     pub total: u64,
@@ -98,13 +98,13 @@ pub struct FrameQuery {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, JsonSchema)]
-pub struct RunPath {
-    pub run_id: StudioRunId,
+pub struct StudyPath {
+    pub study_id: StudioStudyId,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, JsonSchema)]
-pub struct RunDocumentPath {
-    pub run_id: StudioRunId,
+pub struct StudyDocumentPath {
+    pub study_id: StudioStudyId,
     pub document: DocumentPath,
 }
 
@@ -118,12 +118,12 @@ pub struct ErrorResponse {
 }
 
 #[derive(Debug)]
-struct RunRecord {
-    summary: RwLock<RunSummary>,
-    artifact: RwLock<Option<Arc<RunArtifact>>>,
+struct StudyRecord {
+    summary: RwLock<StudySummary>,
+    published: RwLock<Option<Arc<Study>>>,
     history: RwLock<Vec<StudioEvent>>,
     events: broadcast::Sender<StudioEvent>,
-    control: Arc<RunControl>,
+    control: Arc<StudyControl>,
     generation: AtomicU64,
     next_sequence: AtomicU64,
 }
@@ -141,7 +141,7 @@ struct ChannelObserver {
     updates: mpsc::Sender<WorkerUpdate>,
 }
 
-impl RunObserver for ChannelObserver {
+impl StudyObserver for ChannelObserver {
     fn progress(&mut self, progress: ServiceProgress) {
         let _ = self.updates.blocking_send(WorkerUpdate::Progress(progress));
     }
@@ -160,7 +160,7 @@ impl RunObserver for ChannelObserver {
     }
 }
 
-impl RunRecord {
+impl StudyRecord {
     fn sequence(&self) -> u64 {
         self.next_sequence.fetch_add(1, Ordering::Relaxed)
     }
@@ -174,15 +174,15 @@ impl RunRecord {
 
 #[derive(Debug, Clone)]
 pub struct StudioState {
-    runs: Arc<RwLock<HashMap<StudioRunId, Arc<RunRecord>>>>,
-    next_run: Arc<AtomicU64>,
+    studies: Arc<RwLock<HashMap<StudioStudyId, Arc<StudyRecord>>>>,
+    next_study: Arc<AtomicU64>,
 }
 
 impl Default for StudioState {
     fn default() -> Self {
         Self {
-            runs: Arc::new(RwLock::new(HashMap::new())),
-            next_run: Arc::new(AtomicU64::new(1)),
+            studies: Arc::new(RwLock::new(HashMap::new())),
+            next_study: Arc::new(AtomicU64::new(1)),
         }
     }
 }
@@ -238,70 +238,70 @@ fn endpoints() -> Vec<Endpoint<StudioState>> {
             "List problems, strategies, and capabilities",
             "problems",
         ),
-        Endpoint::new::<RunSummary>("post", "/api/runs", post(create_run))
+        Endpoint::new::<StudySummary>("post", "/api/studies", post(create_study))
             .describe(
-                "createRun",
-                "Start a reproducible, cooperatively controlled run",
-                "runs",
+                "createStudy",
+                "Start a reproducible, cooperatively controlled study",
+                "studies",
             )
-            .json_body::<RunRequest>()
+            .json_body::<StudyRequest>()
             .fallible(),
-        Endpoint::new::<RunSummary>("get", "/api/runs/{run_id}", get(get_run))
-            .describe("getRun", "Inspect run state", "runs")
-            .path_parameters::<RunPath>()
+        Endpoint::new::<StudySummary>("get", "/api/studies/{study_id}", get(get_study))
+            .describe("getStudy", "Inspect a study's state", "studies")
+            .path_parameters::<StudyPath>()
             .fallible(),
-        Endpoint::new::<RunSummary>("delete", "/api/runs/{run_id}", delete(cancel_run))
-            .describe("cancelRun", "Cancel a run", "runs")
-            .path_parameters::<RunPath>()
+        Endpoint::new::<StudySummary>("delete", "/api/studies/{study_id}", delete(cancel_study))
+            .describe("cancelStudy", "Cancel a study", "studies")
+            .path_parameters::<StudyPath>()
             .fallible(),
-        Endpoint::new::<RunSummary>("post", "/api/runs/{run_id}/pause", post(pause_run))
-            .describe("pauseRun", "Pause a run", "runs")
-            .path_parameters::<RunPath>()
+        Endpoint::new::<StudySummary>("post", "/api/studies/{study_id}/pause", post(pause_study))
+            .describe("pauseStudy", "Pause a study", "studies")
+            .path_parameters::<StudyPath>()
             .fallible(),
-        Endpoint::new::<RunSummary>("post", "/api/runs/{run_id}/resume", post(resume_run))
-            .describe("resumeRun", "Resume a paused run", "runs")
-            .path_parameters::<RunPath>()
+        Endpoint::new::<StudySummary>("post", "/api/studies/{study_id}/resume", post(resume_study))
+            .describe("resumeStudy", "Resume a paused study", "studies")
+            .path_parameters::<StudyPath>()
             .fallible(),
-        Endpoint::new::<StudioEvent>("get", "/api/runs/{run_id}/events", get(run_events))
+        Endpoint::new::<StudioEvent>("get", "/api/studies/{study_id}/events", get(study_events))
             .describe(
-                "streamRunEvents",
+                "streamStudyEvents",
                 "Follow resumable ordered lifecycle events over SSE",
-                "runs",
+                "studies",
             )
-            .path_parameters::<RunPath>()
+            .path_parameters::<StudyPath>()
             .event_stream::<StudioEvent>()
             .fallible(),
-        Endpoint::new::<RunArtifact>("get", "/api/runs/{run_id}/artifact", get(get_artifact))
+        Endpoint::new::<Study>("get", "/api/studies/{study_id}/study", get(get_published))
             .describe(
-                "getRunArtifact",
-                "Load the complete portable artifact a run published",
-                "artifacts",
+                "getPublishedStudy",
+                "Load the complete portable study once it is published",
+                "studies",
             )
-            .path_parameters::<RunPath>()
+            .path_parameters::<StudyPath>()
             .fallible(),
         Endpoint::new::<ViewDocument>(
             "get",
-            "/api/runs/{run_id}/artifact/documents/{document}",
+            "/api/studies/{study_id}/study/documents/{document}",
             get(get_document),
         )
         .describe(
             "getViewDocument",
             "Load one replay-derived alternative",
-            "artifacts",
+            "studies",
         )
-        .path_parameters::<RunDocumentPath>()
+        .path_parameters::<StudyDocumentPath>()
         .fallible(),
         Endpoint::new::<FramePage>(
             "get",
-            "/api/runs/{run_id}/artifact/documents/{document}/frames",
+            "/api/studies/{study_id}/study/documents/{document}/frames",
             get(get_frames),
         )
         .describe(
             "getTraceFrames",
             "Page through replay-derived exchange frames",
-            "artifacts",
+            "studies",
         )
-        .path_parameters::<RunDocumentPath>()
+        .path_parameters::<StudyDocumentPath>()
         .query::<FrameQuery>()
         .fallible(),
     ]
@@ -353,41 +353,45 @@ async fn health() -> Json<HealthResponse> {
     })
 }
 
-async fn create_run(
+async fn create_study(
     State(state): State<StudioState>,
-    Json(request): Json<RunRequest>,
-) -> Result<Json<RunSummary>, ApiError> {
+    Json(request): Json<StudyRequest>,
+) -> Result<Json<StudySummary>, ApiError> {
     let key = validate_request(&request)?;
-    let run_id = StudioRunId::new(state.next_run.fetch_add(1, Ordering::Relaxed));
+    let study_id = StudioStudyId::new(state.next_study.fetch_add(1, Ordering::Relaxed));
     let (events, _) = broadcast::channel(256);
-    let summary = RunSummary {
-        id: run_id,
+    let summary = StudySummary {
+        id: study_id,
         request: request.clone(),
-        status: RunStatus::Running,
+        status: StudyStatus::Studying,
         completed: 0,
         total: None,
         key: None,
         selected_document: None,
-        message: Some("run queued".into()),
+        message: Some("study queued".into()),
         last_event: None,
     };
-    let record = Arc::new(RunRecord {
+    let record = Arc::new(StudyRecord {
         summary: RwLock::new(summary.clone()),
-        artifact: RwLock::new(None),
+        published: RwLock::new(None),
         history: RwLock::new(Vec::new()),
         events,
-        control: Arc::new(RunControl::default()),
+        control: Arc::new(StudyControl::default()),
         generation: AtomicU64::new(1),
         next_sequence: AtomicU64::new(0),
     });
-    state.runs.write().await.insert(run_id, Arc::clone(&record));
-    tokio::spawn(execute_run(record, run_id, request, key, 1));
+    state
+        .studies
+        .write()
+        .await
+        .insert(study_id, Arc::clone(&record));
+    tokio::spawn(execute_study(record, study_id, request, key, 1));
     Ok(Json(summary))
 }
 
 /// Decides the request's instance and strategy, refusing what the problem
 /// does not offer.
-fn validate_request(request: &RunRequest) -> Result<ArtifactKey, ApiError> {
+fn validate_request(request: &StudyRequest) -> Result<StudyKey, ApiError> {
     if request.budget == 0 {
         return Err(ApiError::bad_request("budget must be greater than zero"));
     }
@@ -396,18 +400,18 @@ fn validate_request(request: &RunRequest) -> Result<ArtifactKey, ApiError> {
         .map_err(|error| ApiError::bad_request(error.to_string()))
 }
 
-/// Runs the request on a worker thread, relaying its progress, until the run
-/// finishes or a cancellation moves it past `generation`.
-async fn execute_run(
-    record: Arc<RunRecord>,
-    run_id: StudioRunId,
-    request: RunRequest,
-    key: ArtifactKey,
+/// Studies the request on a worker thread, relaying its progress, until the
+/// study finishes or a cancellation moves it past `generation`.
+async fn execute_study(
+    record: Arc<StudyRecord>,
+    study_id: StudioStudyId,
+    request: StudyRequest,
+    key: StudyKey,
     generation: u64,
 ) {
     record
-        .emit(StudioEvent::RunStarted {
-            run_id,
+        .emit(StudioEvent::StudyStarted {
+            study_id,
             sequence: record.sequence(),
             problem: key.problem,
             strategy: key.strategy,
@@ -421,7 +425,7 @@ async fn execute_run(
         let mut observer = ChannelObserver {
             updates: updates_tx,
         };
-        ReferenceService.run_with(&worker_request, &worker_control, &mut observer)
+        ReferenceService.study_with(&worker_request, &worker_control, &mut observer)
     });
 
     while let Some(update) = updates_rx.recv().await {
@@ -438,7 +442,7 @@ async fn execute_run(
                 }
                 record
                     .emit(StudioEvent::Progress {
-                        run_id,
+                        study_id,
                         sequence: record.sequence(),
                         completed: progress.completed,
                         total: Some(progress.total),
@@ -449,7 +453,7 @@ async fn execute_run(
             WorkerUpdate::Observation(observation) => {
                 record
                     .emit(StudioEvent::SearchObservation {
-                        run_id,
+                        study_id,
                         sequence: record.sequence(),
                         observation,
                     })
@@ -459,7 +463,7 @@ async fn execute_run(
                 let frame_index = frame.index;
                 record
                     .emit(StudioEvent::FrameAppended {
-                        run_id,
+                        study_id,
                         sequence: record.sequence(),
                         document,
                         frame_index,
@@ -481,26 +485,26 @@ async fn execute_run(
         return;
     }
     match result {
-        Ok(artifact) => publish_artifact(&record, run_id, artifact).await,
-        Err(ServiceError::Cancelled) => finish_cancelled(&record, run_id).await,
+        Ok(study) => publish_study(&record, study_id, study).await,
+        Err(ServiceError::Cancelled) => finish_cancelled(&record, study_id).await,
         Err(ServiceError::Paused) => {}
-        Err(error) => finish_failed(&record, run_id, error.to_string()).await,
+        Err(error) => finish_failed(&record, study_id, error.to_string()).await,
     }
 }
 
-async fn publish_artifact(record: &RunRecord, run_id: StudioRunId, artifact: RunArtifact) {
-    let key = artifact.key.clone();
-    let document = artifact.selected_document.clone();
-    let documents = artifact.documents.len() as u64;
-    let total = artifact
+async fn publish_study(record: &StudyRecord, study_id: StudioStudyId, study: Study) {
+    let key = study.key.clone();
+    let document = study.selected_document.clone();
+    let documents = study.documents.len() as u64;
+    let total = study
         .documents
         .iter()
         .map(|document| document.frames.len() as u64)
         .sum();
-    *record.artifact.write().await = Some(Arc::new(artifact));
+    *record.published.write().await = Some(Arc::new(study));
     record
-        .emit(StudioEvent::ArtifactPublished {
-            run_id,
+        .emit(StudioEvent::StudyPublished {
+            study_id,
             sequence: record.sequence(),
             key: key.clone(),
             documents,
@@ -508,114 +512,116 @@ async fn publish_artifact(record: &RunRecord, run_id: StudioRunId, artifact: Run
         .await;
     {
         let mut summary = record.summary.write().await;
-        summary.status = RunStatus::Completed;
+        summary.status = StudyStatus::Completed;
         summary.completed = total;
         summary.total = Some(total);
         summary.key = Some(key);
         summary.selected_document = Some(document.clone());
-        summary.message = Some("all replay artifacts verified".into());
+        summary.message = Some("every replay verified".into());
     }
     record
-        .emit(StudioEvent::RunCompleted {
-            run_id,
+        .emit(StudioEvent::StudyCompleted {
+            study_id,
             sequence: record.sequence(),
             document,
         })
         .await;
 }
 
-async fn finish_cancelled(record: &RunRecord, run_id: StudioRunId) {
+async fn finish_cancelled(record: &StudyRecord, study_id: StudioStudyId) {
     {
         let mut summary = record.summary.write().await;
-        summary.status = RunStatus::Cancelled;
+        summary.status = StudyStatus::Cancelled;
         summary.message = Some("cancelled by caller".into());
     }
     record
-        .emit(StudioEvent::RunCancelled {
-            run_id,
+        .emit(StudioEvent::StudyCancelled {
+            study_id,
             sequence: record.sequence(),
         })
         .await;
 }
 
-async fn finish_failed(record: &RunRecord, run_id: StudioRunId, message: String) {
+async fn finish_failed(record: &StudyRecord, study_id: StudioStudyId, message: String) {
     {
         let mut summary = record.summary.write().await;
-        summary.status = RunStatus::Failed;
+        summary.status = StudyStatus::Failed;
         summary.message = Some(message.clone());
     }
     record
-        .emit(StudioEvent::RunFailed {
-            run_id,
+        .emit(StudioEvent::StudyFailed {
+            study_id,
             sequence: record.sequence(),
             message,
         })
         .await;
 }
 
-async fn get_run(
+async fn get_study(
     State(state): State<StudioState>,
-    Path(path): Path<RunPath>,
-) -> Result<Json<RunSummary>, ApiError> {
-    let record = find_run(&state, path.run_id).await?;
+    Path(path): Path<StudyPath>,
+) -> Result<Json<StudySummary>, ApiError> {
+    let record = find_study(&state, path.study_id).await?;
     let summary = record.summary.read().await.clone();
     Ok(Json(summary))
 }
 
-async fn cancel_run(
+async fn cancel_study(
     State(state): State<StudioState>,
-    Path(path): Path<RunPath>,
-) -> Result<Json<RunSummary>, ApiError> {
-    let record = find_run(&state, path.run_id).await?;
+    Path(path): Path<StudyPath>,
+) -> Result<Json<StudySummary>, ApiError> {
+    let record = find_study(&state, path.study_id).await?;
     record.generation.fetch_add(1, Ordering::AcqRel);
     record.control.cancel();
-    finish_cancelled(&record, path.run_id).await;
+    finish_cancelled(&record, path.study_id).await;
     Ok(Json(record.summary.read().await.clone()))
 }
 
-async fn pause_run(
+async fn pause_study(
     State(state): State<StudioState>,
-    Path(path): Path<RunPath>,
-) -> Result<Json<RunSummary>, ApiError> {
-    let record = find_run(&state, path.run_id).await?;
+    Path(path): Path<StudyPath>,
+) -> Result<Json<StudySummary>, ApiError> {
+    let record = find_study(&state, path.study_id).await?;
     {
         let summary = record.summary.read().await;
-        if summary.status != RunStatus::Running {
-            return Err(ApiError::bad_request("only a running run can be paused"));
+        if summary.status != StudyStatus::Studying {
+            return Err(ApiError::bad_request(
+                "only a study in progress can be paused",
+            ));
         }
     }
     record.control.pause();
     {
         let mut summary = record.summary.write().await;
-        summary.status = RunStatus::Paused;
+        summary.status = StudyStatus::Paused;
         summary.message = Some("paused by caller".into());
     }
     record
-        .emit(StudioEvent::RunPaused {
-            run_id: path.run_id,
+        .emit(StudioEvent::StudyPaused {
+            study_id: path.study_id,
             sequence: record.sequence(),
         })
         .await;
     Ok(Json(record.summary.read().await.clone()))
 }
 
-async fn resume_run(
+async fn resume_study(
     State(state): State<StudioState>,
-    Path(path): Path<RunPath>,
-) -> Result<Json<RunSummary>, ApiError> {
-    let record = find_run(&state, path.run_id).await?;
+    Path(path): Path<StudyPath>,
+) -> Result<Json<StudySummary>, ApiError> {
+    let record = find_study(&state, path.study_id).await?;
     {
         let mut summary = record.summary.write().await;
-        if summary.status != RunStatus::Paused {
-            return Err(ApiError::bad_request("only a paused run can be resumed"));
+        if summary.status != StudyStatus::Paused {
+            return Err(ApiError::bad_request("only a paused study can be resumed"));
         }
-        summary.status = RunStatus::Running;
+        summary.status = StudyStatus::Studying;
         summary.message = Some("resumed by caller".into());
     }
     record.control.resume();
     record
-        .emit(StudioEvent::RunResumed {
-            run_id: path.run_id,
+        .emit(StudioEvent::StudyResumed {
+            study_id: path.study_id,
             sequence: record.sequence(),
         })
         .await;
@@ -623,62 +629,67 @@ async fn resume_run(
     Ok(Json(record.summary.read().await.clone()))
 }
 
-async fn find_run(state: &StudioState, run_id: StudioRunId) -> Result<Arc<RunRecord>, ApiError> {
+async fn find_study(
+    state: &StudioState,
+    study_id: StudioStudyId,
+) -> Result<Arc<StudyRecord>, ApiError> {
     state
-        .runs
+        .studies
         .read()
         .await
-        .get(&run_id)
+        .get(&study_id)
         .cloned()
-        .ok_or_else(|| ApiError::not_found(format!("run `{run_id}` was not found")))
+        .ok_or_else(|| ApiError::not_found(format!("study `{study_id}` was not found")))
 }
 
-async fn find_artifact(
+async fn find_published(
     state: &StudioState,
-    run_id: StudioRunId,
-) -> Result<Arc<RunArtifact>, ApiError> {
-    find_run(state, run_id)
+    study_id: StudioStudyId,
+) -> Result<Arc<Study>, ApiError> {
+    find_study(state, study_id)
         .await?
-        .artifact
+        .published
         .read()
         .await
         .clone()
-        .ok_or_else(|| ApiError::not_found(format!("run `{run_id}` has not published an artifact")))
+        .ok_or_else(|| ApiError::not_found(format!("study `{study_id}` has not been published")))
 }
 
 async fn find_document(
     state: &StudioState,
-    path: &RunDocumentPath,
-) -> Result<(Arc<RunArtifact>, usize), ApiError> {
-    let artifact = find_artifact(state, path.run_id).await?;
-    let index = artifact
+    path: &StudyDocumentPath,
+) -> Result<(Arc<Study>, usize), ApiError> {
+    let study = find_published(state, path.study_id).await?;
+    let index = study
         .documents
         .iter()
         .position(|document| document.id == path.document)
         .ok_or_else(|| {
             ApiError::not_found(format!("document `{}` was not found", path.document))
         })?;
-    Ok((artifact, index))
+    Ok((study, index))
 }
 
-async fn get_artifact(
+async fn get_published(
     State(state): State<StudioState>,
-    Path(path): Path<RunPath>,
-) -> Result<Json<RunArtifact>, ApiError> {
-    Ok(Json((*find_artifact(&state, path.run_id).await?).clone()))
+    Path(path): Path<StudyPath>,
+) -> Result<Json<Study>, ApiError> {
+    Ok(Json(
+        (*find_published(&state, path.study_id).await?).clone(),
+    ))
 }
 
 async fn get_document(
     State(state): State<StudioState>,
-    Path(path): Path<RunDocumentPath>,
+    Path(path): Path<StudyDocumentPath>,
 ) -> Result<Json<ViewDocument>, ApiError> {
-    let (artifact, index) = find_document(&state, &path).await?;
-    Ok(Json(artifact.documents[index].clone()))
+    let (study, index) = find_document(&state, &path).await?;
+    Ok(Json(study.documents[index].clone()))
 }
 
 async fn get_frames(
     State(state): State<StudioState>,
-    Path(path): Path<RunDocumentPath>,
+    Path(path): Path<StudyDocumentPath>,
     Query(query): Query<FrameQuery>,
 ) -> Result<Json<FramePage>, ApiError> {
     if query.limit == 0 || query.limit > 1_000 {
@@ -686,13 +697,13 @@ async fn get_frames(
             "frame limit must be between 1 and 1000",
         ));
     }
-    let (artifact, index) = find_document(&state, &path).await?;
-    let frames = &artifact.documents[index].frames;
+    let (study, index) = find_document(&state, &path).await?;
+    let frames = &study.documents[index].frames;
     let total = frames.len() as u64;
     let from = query.from.min(total);
     let end = from.saturating_add(query.limit).min(total);
     Ok(Json(FramePage {
-        run_id: path.run_id,
+        study_id: path.study_id,
         document: path.document,
         from,
         total,
@@ -700,14 +711,14 @@ async fn get_frames(
     }))
 }
 
-async fn run_events(
+async fn study_events(
     State(state): State<StudioState>,
-    Path(path): Path<RunPath>,
+    Path(path): Path<StudyPath>,
 ) -> Result<
     Sse<impl futures_util::Stream<Item = Result<Event, Infallible>> + Send + 'static>,
     ApiError,
 > {
-    let record = find_run(&state, path.run_id).await?;
+    let record = find_study(&state, path.study_id).await?;
     let receiver = record.events.subscribe();
     let history = record.history.read().await.clone();
     let last_history_sequence = history.last().map(StudioEvent::sequence);
@@ -719,16 +730,16 @@ async fn run_events(
     });
     let stream = tokio_stream::iter(history).chain(live).map(|event| {
         let kind = match &event {
-            StudioEvent::RunStarted { .. } => "run_started",
+            StudioEvent::StudyStarted { .. } => "study_started",
             StudioEvent::Progress { .. } => "progress",
             StudioEvent::SearchObservation { .. } => "search_observation",
             StudioEvent::FrameAppended { .. } => "frame_appended",
-            StudioEvent::ArtifactPublished { .. } => "artifact_published",
-            StudioEvent::RunPaused { .. } => "run_paused",
-            StudioEvent::RunResumed { .. } => "run_resumed",
-            StudioEvent::RunCompleted { .. } => "run_completed",
-            StudioEvent::RunCancelled { .. } => "run_cancelled",
-            StudioEvent::RunFailed { .. } => "run_failed",
+            StudioEvent::StudyPublished { .. } => "study_published",
+            StudioEvent::StudyPaused { .. } => "study_paused",
+            StudioEvent::StudyResumed { .. } => "study_resumed",
+            StudioEvent::StudyCompleted { .. } => "study_completed",
+            StudioEvent::StudyCancelled { .. } => "study_cancelled",
+            StudioEvent::StudyFailed { .. } => "study_failed",
         };
         Ok(Event::default()
             .event(kind)
@@ -753,14 +764,14 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn service_artifact_is_identical_over_http() {
+    async fn a_service_study_is_identical_over_http() {
         let (app, _) = api(StudioState::default());
         let request =
-            RunRequest::new("maze".parse().unwrap()).with_strategy("a-star".parse().unwrap());
+            StudyRequest::new("maze".parse().unwrap()).with_strategy("a-star".parse().unwrap());
         let create = app
             .clone()
             .oneshot(
-                Request::post("/api/runs")
+                Request::post("/api/studies")
                     .header("content-type", "application/json")
                     .body(Body::from(serde_json::to_vec(&request).unwrap()))
                     .unwrap(),
@@ -768,35 +779,35 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(create.status(), StatusCode::OK);
-        let created: RunSummary = response_json(create).await;
+        let created: StudySummary = response_json(create).await;
         let completed = loop {
             let response = app
                 .clone()
                 .oneshot(
-                    Request::get(format!("/api/runs/{}", created.id))
+                    Request::get(format!("/api/studies/{}", created.id))
                         .body(Body::empty())
                         .unwrap(),
                 )
                 .await
                 .unwrap();
-            let summary: RunSummary = response_json(response).await;
-            if summary.status != RunStatus::Running {
+            let summary: StudySummary = response_json(response).await;
+            if summary.status != StudyStatus::Studying {
                 break summary;
             }
             tokio::task::yield_now().await;
         };
-        assert_eq!(completed.status, RunStatus::Completed);
+        assert_eq!(completed.status, StudyStatus::Completed);
         let response = app
             .oneshot(
-                Request::get(format!("/api/runs/{}/artifact", created.id))
+                Request::get(format!("/api/studies/{}/study", created.id))
                     .body(Body::empty())
                     .unwrap(),
             )
             .await
             .unwrap();
-        let http_artifact: RunArtifact = response_json(response).await;
-        let service_artifact = ReferenceService.run(request).unwrap();
-        assert_eq!(http_artifact, service_artifact);
+        let http_study: Study = response_json(response).await;
+        let service_study = ReferenceService.study(request).unwrap();
+        assert_eq!(http_study, service_study);
     }
 
     #[tokio::test]
@@ -817,19 +828,19 @@ mod tests {
         let paths = value["paths"].as_object().unwrap();
         for path in [
             "/api/problems",
-            "/api/runs",
-            "/api/runs/{run_id}",
-            "/api/runs/{run_id}/pause",
-            "/api/runs/{run_id}/resume",
-            "/api/runs/{run_id}/events",
-            "/api/runs/{run_id}/artifact",
-            "/api/runs/{run_id}/artifact/documents/{document}",
-            "/api/runs/{run_id}/artifact/documents/{document}/frames",
+            "/api/studies",
+            "/api/studies/{study_id}",
+            "/api/studies/{study_id}/pause",
+            "/api/studies/{study_id}/resume",
+            "/api/studies/{study_id}/events",
+            "/api/studies/{study_id}/study",
+            "/api/studies/{study_id}/study/documents/{document}",
+            "/api/studies/{study_id}/study/documents/{document}/frames",
         ] {
             assert!(paths.contains_key(path), "missing {path}");
         }
         let schemas = value["components"]["schemas"].as_object().unwrap();
         assert!(schemas.contains_key("StudioEvent"));
-        assert!(schemas.contains_key("RunArtifact"));
+        assert!(schemas.contains_key("Study"));
     }
 }
