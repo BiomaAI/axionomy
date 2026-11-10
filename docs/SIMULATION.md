@@ -1,7 +1,7 @@
 # Simulation: policies, runs and studies
 
 Status: planned, in the order the steps below give. Built: rollouts and
-Monte Carlo episodes recording where they run, steps 1, 3 and 4.
+Monte Carlo episodes recording where they run, steps 1, 3, 4 and 5.
 
 The economy owns commitments and their consequences. A policy reads what an
 actor may see and proposes exchanges. Whoever calls the rollout (a problem, a
@@ -152,9 +152,11 @@ orchestrated:
 - A crash between asking and doing loses nothing: the request is in the
   state, and recording made the state durable.
 
-One problem shows the pattern with a stand-in for the outside party, driven
-through the existing MCP tools. Whether MCP needs anything new is decided
-after that example, not before.
+`test_outside_work_is_a_request_the_economy_holds` in
+`crates/axionomy-mcp/interop/test_mcp.py` shows the pattern with a stand-in
+for the outside party, through MCP's existing tools: a duplicate report and a
+report after the lapse are refused, and the lapse cannot fire before its
+deadline. MCP needed nothing new for it.
 
 ## Not planned
 

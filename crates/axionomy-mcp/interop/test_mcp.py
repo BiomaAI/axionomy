@@ -294,6 +294,74 @@ async def test_exchanges_open_and_close_accounts(url: str) -> None:
         assert [item["account"] for item in accounts["items"]] == ["treasury"]
 
 
+# Work done outside the economy (a robot, a model, a person) is modelled, not
+# orchestrated: asking produces a `requested` token, the outside party's result
+# is an exchange that consumes it, and a deadline is a condition on a clock.
+OUTSIDE_WORK = {
+    "accounts": {"agent": {"budget": "1"}, "clock": {}},
+    "rates": {
+        "request": {"consume": {"asker": {"budget": "1"}}, "produce": {"asker": {"requested": "1"}}},
+        "report": {"consume": {"asker": {"requested": "1"}}, "produce": {"asker": {"report": "1"}}},
+        "tick": {"produce": {"clock": {"tick": "1"}}},
+        "lapse": {
+            "consume": {"asker": {"requested": "1"}},
+            "produce": {"asker": {"lapsed": "1"}},
+            "preserve": {"clock": {"tick": "1"}},
+            "conditions": [
+                {
+                    "name": "deadline-passed",
+                    "left": {"kind": "balance", "role": "clock", "asset": "tick"},
+                    "comparison": "greater_than_or_equal",
+                    "right": {"kind": "constant", "value": "3"},
+                }
+            ],
+        },
+    },
+}
+
+
+def outside(rate: str) -> dict[str, Any]:
+    bindings = {"tick": {"clock": "clock"}, "lapse": {"asker": "agent", "clock": "clock"}}
+    return {"rate": rate, "bindings": bindings.get(rate, {"asker": "agent"}), "units": "1"}
+
+
+async def apply(client: Client, economy_id: str, rate: str) -> CallToolResult:
+    return await client.call_tool("axionomy_exchange_apply", {"economy_id": economy_id, "exchange": outside(rate)})
+
+
+async def test_outside_work_is_a_request_the_economy_holds(url: str) -> None:
+    async with Client(url) as client:
+        asked = await apply(client, await create(client, OUTSIDE_WORK), "request")
+        assert not asked.is_error, asked.structured_content
+        asked_id = asked.structured_content["economy_id"]
+
+        # The outside party reports once; a duplicate report has nothing left
+        # to consume, so the kernel refuses it.
+        reported = await apply(client, asked_id, "report")
+        assert not reported.is_error, reported.structured_content
+        duplicate = await apply(client, reported.structured_content["economy_id"], "report")
+        assert duplicate.is_error and duplicate.structured_content["error"] == "infeasible"
+
+        # The request lapses only once its deadline has passed.
+        early = await apply(client, asked_id, "lapse")
+        assert early.is_error and early.structured_content["error"] == "invalid"
+        assert early.structured_content["details"]["issues"] == [
+            {"RateConditionFailed": {"condition": "deadline-passed", "rate": "lapse"}}
+        ]
+        waited = await client.call_tool(
+            "axionomy_trace_replay",
+            {"economy_id": asked_id, "exchanges": [outside("tick")] * 3},
+        )
+        assert not waited.is_error, waited.structured_content
+        lapsed = await apply(client, waited.structured_content["economy_id"], "lapse")
+        assert not lapsed.is_error, lapsed.structured_content
+
+        # A report that arrives after the lapse is refused: the outcome stays
+        # unknown, and nothing is recorded twice.
+        late = await apply(client, lapsed.structured_content["economy_id"], "report")
+        assert late.is_error and late.structured_content["error"] == "infeasible"
+
+
 async def test_a_search_runs_as_a_task_and_its_solution_is_a_snapshot(url: str) -> None:
     async with Client(url) as plain:
         economy_id = await create(plain, ECONOMY)
