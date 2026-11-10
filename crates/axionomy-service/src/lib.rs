@@ -1129,6 +1129,42 @@ mod tests {
     }
 
     #[test]
+    fn a_proposal_names_the_snapshot_it_was_assessed_against() {
+        let artifact = ReferenceService
+            .run(RunRequest::new(slug("mission")).with_instance(InstanceProfile::Micro))
+            .unwrap();
+        let (document, proposal) = artifact
+            .documents
+            .iter()
+            .flat_map(|document| {
+                document
+                    .proposals
+                    .iter()
+                    .map(move |proposal| (document, proposal))
+            })
+            .find(|(_, proposal)| proposal.id.as_str() == "move-before-sharing")
+            .expect("mission proposes moving before sharing");
+        // Assessed after the scan resolved: the snapshot its frame left.
+        let index = usize::try_from(proposal.snapshot_index).unwrap();
+        assert!(index > 0);
+        let scanned = &document.frames[index - 1];
+        assert!(
+            scanned
+                .exchange
+                .rate
+                .key
+                .as_str()
+                .starts_with("mission/rate/resolve"),
+            "{}",
+            scanned.exchange.rate.key
+        );
+        assert_ne!(
+            proposal.assessment.status,
+            axionomy_view::AssessmentStatusView::Applicable
+        );
+    }
+
+    #[test]
     fn paused_run_waits_and_resumes_without_restarting_its_command() {
         let control = std::sync::Arc::new(RunControl::default());
         control.pause();

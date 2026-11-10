@@ -1300,8 +1300,27 @@ pub(super) struct ProposalSpec<'a> {
     pub description: &'a str,
 }
 
+/// A proposal assessed against the document's initial state.
 pub(super) fn proposal<O: Ontology>(
     spec: ProposalSpec<'_>,
+    economy: &Economy<O>,
+    exchange: &axionomy::Exchange<O>,
+) -> ProposalView
+where
+    O::Account: StudioLabel,
+    O::Asset: StudioLabel + StudioFormat,
+    O::Rate: StudioLabel,
+    O::Role: StudioLabel,
+{
+    proposal_at(spec, 0, economy, exchange)
+}
+
+/// A proposal assessed against `economy`, the document's snapshot
+/// `snapshot_index`: zero is the initial state, and frame `i` leaves
+/// snapshot `i + 1`.
+pub(super) fn proposal_at<O: Ontology>(
+    spec: ProposalSpec<'_>,
+    snapshot_index: u64,
     economy: &Economy<O>,
     exchange: &axionomy::Exchange<O>,
 ) -> ProposalView
@@ -1316,7 +1335,7 @@ where
         slug(spec.id),
         spec.label,
         spec.description,
-        0,
+        snapshot_index,
         economy,
         exchange,
         &ontology,

@@ -206,11 +206,11 @@ pub(super) fn build(
                 .bind(mission::Role::Scout, AccountId::Agent(AgentId::Scout))
                 .bind(mission::Role::Medic, AccountId::Agent(AgentId::Medic))
                 .bind(mission::Role::Mission, AccountId::Mission);
-                view.proposals.push(proposal(ProposalSpec {
+                view.proposals.push(proposal_at(ProposalSpec {
                     id: "move-before-sharing",
                     label: "Move together before sharing the sighting",
                     description: "The Scout has seen a location, but the Medic has no intelligence yet. Assessing this move at the post-scan snapshot exposes the missing shared information; sharing is a causal prerequisite for coordinated movement.",
-                }, &replay, &premature));
+                }, index as u64 + 1, &replay, &premature));
             }
             if policy == Policy::ShareAndCoordinate {
                 if let Some(step) = planned
