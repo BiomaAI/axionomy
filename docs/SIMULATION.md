@@ -393,7 +393,10 @@ that recorded it.
 ### Step 10: live refs
 
 The store's refs gain compare-and-set, and the store indexes each run's
-branches; the engine gains `refer`, `advance` and `watch`.
+branches; the engine gains `refer`, `advance` and `watch`. Every transport
+offers them: MCP mints a handle for a ref as it does for a point, so a client
+reaches only the refs it was given, and follows one by pulling
+`frames(after)`, since its HTTP transport is stateless.
 
 Done when moving a ref from a point it is no longer on is refused with the
 point it is on, points made while thinking are never delivered,
@@ -445,13 +448,6 @@ A problem's own policy proposes a move from the selected point,
 connect-four's MCTS first, and the branch its move makes shows its
 thinking.
 
-### Open question
-
-Which transport the Autonomy Harness uses. Step 12 drives the server over
-HTTP. If the harness speaks MCP, refs join MCP in step 10: MCP mints a handle
-for a ref as it does for a point, and follows it by pulling `frames(after)`,
-since its HTTP transport is stateless.
-
 ## Not planned
 
 Each of these waits for a problem or a client that needs it:
@@ -463,8 +459,6 @@ Each of these waits for a problem or a client that needs it:
 - Durable workflow, retry or compensation machinery.
 - MCP operations for behaviors.
 - MuJoCo or language-model executors; those belong to the Autonomy Harness.
-- MCP exposing refs, unless the Autonomy Harness speaks MCP (the open
-  question above).
 - A runner or scheduler framework: step 12's loop is the first application
   loop, and one is extracted when a second application shares it.
 - Bridges to robots or other executors, which belong to the Autonomy
