@@ -27,6 +27,9 @@ The Work Utility System owns:
 - Atomic transition validation and application.
 - Feasibility assessment and structured shortfalls.
 - Deterministic snapshots, forks, receipts, and replay.
+- Refs: a named label on the point a game or simulation is actually at,
+  moved only by compare-and-set, with delivery of every step it is moved
+  over.
 - Actor-scoped observations derived from authoritative state.
 - Generic, non-authoritative search and simulation over forks.
 
@@ -64,9 +67,9 @@ another must not require rewriting the environment's mechanics.
  ┌──────────────────────────────────────────────────────────┐
  │                   WORK UTILITY SYSTEM                    │
  │                                                          │
- │ actor view → assess → fork/search/simulate → apply       │
- │                                             │            │
- │ accounts + assets + rates + exchanges ──────┘            │
+ │ actor view → assess → think (apply at points) → apply    │
+ │                                                 │        │
+ │ accounts + assets + rates + exchanges ──────────┘        │
  │                                                          │
  │ output: receipts, shortfalls, objectives, traces         │
  └──────────────────────────────────────────────────────────┘
@@ -88,9 +91,18 @@ It needs a repeated decision protocol:
 2. The Autonomy Harness requests the observation permitted for an actor.
 3. One or more agents or policies propose exchanges.
 4. The Work Utility System assesses each proposal.
-5. The Autonomy Harness may search or simulate from a fork before choosing.
-6. The selected applicable exchange is applied atomically.
-7. A receipt and replay step are returned to the Autonomy Harness.
+5. The Autonomy Harness may think before choosing: apply candidate exchanges
+   at the point the live ref is on and play them out, without moving the
+   ref. Applying never changes the point it starts from, so thinking needs
+   no separate fork.
+6. The chosen exchange is applied at that point, and the live ref is moved
+   from that point to the new one by compare-and-set. If another proposer
+   moved it first, the move is refused with the point the ref is on now, and
+   the decision starts again from step 2.
+7. Each step the live ref is moved over, an exchange and its receipt, is
+   delivered with the point it led to, to whoever follows the ref: the
+   Autonomy Harness, learners, displays, executors. A step that was only
+   tried out is never delivered, so it cannot reach an executor.
 8. The Autonomy Harness observes the new state and begins the next decision.
 
 This is compatible with receding-horizon or model-predictive control: plan
@@ -119,6 +131,8 @@ but it should not perform learning. For each decision it can return:
 - Search observations and counterfactual outcomes.
 - The accepted exchange and resulting receipt.
 - A replay-verifiable trajectory.
+- Each step of a live ref as it is delivered, with its point, so learners
+  receive transitions as they happen rather than by replaying traces later.
 
 The Autonomy Harness may transform this evidence into trajectories, replay
 buffers, preference data, supervised examples, or reinforcement-learning
@@ -327,26 +341,36 @@ Utility System needs operations equivalent to:
 
 ```text
 describe_model()                         → mechanics and identifiers
-snapshot()                               → authoritative state reference
-actor_view(snapshot, actor)              → permitted observation
-assess(snapshot, proposed_exchange)      → applicability or explanation
-fork(snapshot)                           → isolated counterfactual state
-apply(fork_or_live, exchange)            → receipt or rejection
-replay(source_snapshot, trace)           → verified terminal state
-objectives(snapshot, objective_schema)   → ordered outcome vector
+actor_view(point, actor)                 → permitted observation
+assess(point, proposed_exchange)         → applicability or explanation
+apply(point, exchanges)                  → a new point, or the failing exchange and why
+refer(ref, point)                        → a ref on the point a game or simulation is at
+advance(ref, expected_point, point)      → moved, or the point the ref is on now
+follow(ref, after_point)                 → each step the ref was moved over, with its point
+objectives(point, objective_schema)      → ordered outcome vector
 ```
+
+A point is one saved state of the economy: the economy after a given step of
+a recorded run. Applying exchanges at a point, all of them or none, gives a
+new point and leaves every existing one unchanged, so there is no separate
+fork or replay: trying out an exchange, a counterfactual, a branch and the
+step that counts are the same operation. What makes a step count is moving a
+ref to it.
 
 Optional generic search accepts Autonomy Harness-supplied action sources,
 objective projections, work budgets, and progress observers:
 
 ```text
-search(snapshot, action_source, objective, budget, observer)
+search(point, action_source, objective, budget, observer)
     → proposals + replayable evidence
 ```
 
 This contract should work synchronously in process and asynchronously through
 CLI, HTTP, task, or tool protocols. Transport changes must not change
-transition meaning.
+transition meaning. Axionomy plans to implement it once, in `axionomy-engine`,
+with MCP, the Studio server, the CLI and Studio's browser Worker as its
+transports ([SIMULATION.md](SIMULATION.md#interactive-execution)); today MCP
+implements points, apply and assessment, and refs are planned.
 
 ## Non-goals for the Work Utility System
 

@@ -688,6 +688,12 @@ ontology is studied in Studio, MCP and the CLI the same way. A synchronous
 caller may use `study`, while a runtime calls `study_with` and owns the thread,
 task, scheduling policy, and `StudyControl` lifetime.
 
+Studies are the only shared layer today. Operations on recorded economies
+(author, assess, apply, step, find, diff, paged reads, search) are implemented
+inside `axionomy-mcp`, so the Studio server, the CLI and the browser have none
+of them. `axionomy-engine` is planned to hold them, with the registry and the
+store, for every front end (D-045).
+
 Different interfaces create useful pressure. CLI requires discoverability,
 stable machine-readable output, and useful defaults. HTTP requires resumable
 event streams, lifecycle control, pagination, and generated schemas. MCP
@@ -901,7 +907,8 @@ canvas, panel, and control geometry must remain stable while their economic
 contents change.
 
 Thinking and trace playback are deliberately distinct controls. Thinking is
-what a policy does when it simulates before it chooses; a document's
+trying exchanges at a point and playing them out before choosing, with the
+same apply as the step finally chosen; a document's
 `thinking` is the bounded search observations of how its outcome was found.
 `Study` computes a new study; the transport controls only replay its accepted
 exchanges. The Thinking surface exposes live or retained phase, rollout, tree,
@@ -1117,6 +1124,12 @@ Reward shaping may weight encoded progress and shortfall facts. If a fact
 changes terminal truth, payment, resource accounting, or transition validity,
 it must be represented in the economy rather than supplied only by the
 adapter.
+
+Today an external learner gets transitions by replaying a trace
+(`rl::replay_transitions`). Planned (D-046): each step a ref is moved over is
+delivered as a frame with the point it led to, the problem's objectives there
+and whether its goal holds, which is what `RlTransition` carries, so a learner
+receives transitions as they happen.
 
 ### 7.6 Stateless remote execution
 
@@ -1666,29 +1679,34 @@ factor.
    server keeps studies and scrubs from stored roots, as
    [simulation, runs and studies](docs/SIMULATION.md) describes. Extract generic holdings, dependency, and event indexes only after a
    second domain confirms the perishables shapes.
-5. Extend invariants with carefully constrained local and inequality forms.
-6. Build an external OR adapter that compiles one closed schedule and replays
+5. Build [interactive execution](docs/SIMULATION.md#interactive-execution):
+   `axionomy-engine` for every front end (D-045), live refs with
+   compare-and-set and delivery (D-046), `view` and `actions` hooks on
+   `Problem`, the store in the browser (D-047), and Studio controls that act
+   on a selected point and ref.
+6. Extend invariants with carefully constrained local and inequality forms.
+7. Build an external OR adapter that compiles one closed schedule and replays
    the returned assignment.
-7. Extend encoded Nature schemas and distribution updates beyond finite
+8. Extend encoded Nature schemas and distribution updates beyond finite
    weighted supports.
-8. Extend the exact-cover, scheduling, and Connect Four reference-oracle tests
+9. Extend the exact-cover, scheduling, and Connect Four reference-oracle tests
    into broader bounded model checking where failures justify the cost.
-9. Decide whether dynamic rate availability is represented by rate assets,
-   capability assets, or immutable schemas plus explicit enabling state.
-10. Add PUCT priors, progressive widening, and deterministic parallel workers
+10. Decide whether dynamic rate availability is represented by rate assets,
+    capability assets, or immutable schemas plus explicit enabling state.
+11. Add PUCT priors, progressive widening, and deterministic parallel workers
     when learned priors, measured branching, or throughput justify them.
-11. Add capability-scoped proposal visibility and richer multi-agent belief
+12. Add capability-scoped proposal visibility and richer multi-agent belief
     and communication protocols.
-12. Integrate external learned policies through the implemented RL
+13. Integrate external learned policies through the implemented RL
     projections without granting mutation authority.
-13. Add persisted search checkpoints, worker leases, task notifications, and
+14. Add persisted search checkpoints, worker leases, task notifications, and
     tenant-aware authorization only when the MCP reference boundary is moved
     into a real multi-process deployment.
-14. Measure full-study transfer and rendering across the Studio
+15. Measure full-study transfer and rendering across the Studio
     adapters; add paged model projection, incremental Pareto/Monte Carlo
     publication, or compact rate schemas only where measured pressure warrants
     them.
-15. Build the [agent benchmark and rating layer](docs/AGENT_BENCHMARK.md) across
+16. Build the [agent benchmark and rating layer](docs/AGENT_BENCHMARK.md) across
     single-agent, cooperative, competitive, and mixed-motive designs. Use it to
     pressure generated instances, long-horizon policies, coordination, work
     accounting, robustness, and replay-derived scoring.
@@ -1922,6 +1940,8 @@ study; "run" names only a trajectory, and machinery takes no word a user's
 ontology is likely to own. Interface pressure
 may improve this shared boundary and reveal missing kernel explanations, but
 transport lifecycle and presentation state never become economic authority.
+Operations on economies and runs are not shared yet: they live in MCP until
+`axionomy-engine` (D-045).
 
 ### D-034: Correctness fixtures and product workloads are distinct instances
 
@@ -1941,7 +1961,8 @@ the canonical problems to
 observations, and studies. Native HTTP/SSE remains preferable when present,
 the Worker is the first-class GitHub Pages engine, and pre-built studies are
 the final read-only fallback. Connection labels report verified current
-capability rather than inferring liveness from cached data.
+capability rather than inferring liveness from cached data. The engine, store
+included, is planned to run in the same Worker (D-047).
 
 ### D-036: Visual richness is typed explanation, not extra truth
 
@@ -1998,19 +2019,20 @@ part of the state, including in state keys.
 
 Stored states are canonical trees (`axionomy-tree`) in one redb database
 (`axionomy-store`), with redb as the only storage engine and no storage trait
-of Axionomy's own. A tree holds an economy's logical state, accounts in key
-order rather than creation order, so equal states have equal roots whatever
-their history, and stores written apart merge by union. Every identifier is
-stored as its JSON, so a problem's own Rust types and paths are stored alike;
-an `Ontology` names a problem's identifier types, and a run is read back only
-as the ontology that recorded it. A run records each
-exchange with its receipt digest and stores states by an explicit checkpoint
-rule; any other state is the nearest stored one plus replay, and replay checks
-every receipt, so storage can never make a state the kernel did not. Writes
-state their durability, and one writer commits many callers' batches per
-transaction. Tags, metrics, groups and refs organize runs without changing what
-an exchange does. MCP keeps its snapshots as points of runs in a store, and
-exposes only what a handle reaches.
+of Axionomy's own; where data lives is a redb backend: a file, memory, or, as
+planned for the browser, the origin private file system (D-047). A tree holds
+an economy's logical state, accounts in key order rather than creation order,
+so equal states have equal roots whatever their history, and stores written
+apart merge by union. Every identifier is stored as its JSON, so a problem's
+own Rust types and paths are stored alike; an `Ontology` names a problem's
+identifier types, and a run is read back only as the ontology that recorded
+it. A run records each exchange with its receipt digest and stores states by
+an explicit checkpoint rule; any other state is the nearest stored one plus
+replay, and replay checks every receipt, so storage can never make a state the
+kernel did not. Writes state their durability, and one writer commits many
+callers' batches per transaction. Tags, metrics, groups and refs organize runs
+without changing what an exchange does. MCP keeps its snapshots as points of
+runs in a store, and exposes only what a handle reaches.
 
 ### D-041: Identifiers are paths; vocabularies are snake_case
 
@@ -2115,6 +2137,53 @@ and an identifier written as a number, such as the conformance fixtures'
 numeric identifiers, is keyed by its decimal. Labels are still read from
 `Debug`. The kernel's semantics are unchanged, so the Lean specification and
 its fixtures are too.
+
+### D-045: One engine serves every front end
+
+Planned ([SIMULATION.md](docs/SIMULATION.md#interactive-execution), step 7).
+`axionomy-engine` holds the operations on studies, economies and runs, over a
+`Registry` and a `Store`: author and extend, assess, apply, step, find, diff,
+paged reads, search, studies recorded as runs, and refs. It is synchronous,
+has no async runtime or protocol types, and builds natively and for
+`wasm32-unknown-unknown`. MCP, the Studio server, the CLI and Studio's browser
+Worker are its transports; MCP keeps its protocol and its table from handles
+to points. A transport never implements an operation the engine has.
+
+### D-046: Every step is an apply at a point; a ref says which steps count
+
+Planned ([SIMULATION.md](docs/SIMULATION.md#interactive-execution), step 10).
+A point is one saved state of the economy: the economy after a given step of
+a recorded run, named by the run and the step. Every point has one history,
+the exchanges that led to it. `apply(point, exchanges)` applies all of them or
+none and gives a new point, leaving every existing point unchanged, so trying
+out an exchange, a counterfactual, a branch and the step that counts are one
+operation, and the boundary has no separate fork or replay.
+
+A ref is a named label on a point, like a Git branch name on a commit. An
+application keeps a ref on the point its game or simulation is actually at,
+and moving the ref forward is what makes a step count. A ref moves only by
+`advance(ref, expected, to)`, which is refused, with the point the ref is on,
+when it is no longer on `expected`: of two proposers moving from the same
+point, the second looks again. Only the steps a ref is moved over are
+delivered, each an exchange and its receipt with the point it led to, pushed
+by `watch` or pulled by `frames(after)`; a step that was only tried out is
+never delivered, so it cannot reach an executor that follows the ref. The
+engine does not know who proposes: a person in Studio, an AI agent, a policy
+or a loop applying Nature responses are alike.
+
+### D-047: The store runs in the browser on redb
+
+Planned ([SIMULATION.md](docs/SIMULATION.md#interactive-execution), step 8).
+redb is pure Rust and `axionomy-store` compiles for `wasm32-unknown-unknown`;
+what cannot run there is the store's writer thread and its timer. Without
+threads the writer runs each job inline on the caller, and every durable
+commit flushes. Persistence uses a redb `StorageBackend` over the origin
+private file system's `FileSystemSyncAccessHandle`, whose synchronous reads
+and writes at an offset, truncate, flush and size are the backend's
+operations; it exists only in dedicated Workers, where Studio's engine runs.
+IndexedDB is asynchronous and localStorage is unavailable to Workers, so
+neither can back redb's synchronous interface. The handle is exclusive: a
+second tab opens a store in memory and says so.
 
 ## 16. Success criteria
 

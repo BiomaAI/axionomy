@@ -6,6 +6,13 @@ read everything they hold, without putting HTTP, Tokio or task lifecycle into
 the core engine. Economies are kept in an `axionomy-store` store, in memory or
 on disk.
 
+Planned: the operations on economies and runs this crate implements (storing
+economies as points of runs, authoring, apply, assessment, step, find, diff,
+paged reads, search, studies recorded as runs) move into `axionomy-engine`,
+shared with the Studio server, the CLI and Studio's browser Worker; this server
+keeps its protocol and its table from handles to points
+([plan](../../docs/SIMULATION.md#interactive-execution), D-045).
+
 ## Semantic contract
 
 The server has no current economy. Every operation names an economy by its

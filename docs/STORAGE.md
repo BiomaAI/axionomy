@@ -3,7 +3,8 @@
 Status: being built, in the order the phases at the end give. The kernel's
 forks are constant-time, the canonical tree and the store exist, and MCP keeps
 its snapshots and its studies' runs in the store; Studio, search and every
-other producer of runs move onto it next.
+other producer of runs move onto it next, Studio through `axionomy-engine` and
+in the browser as well ([SIMULATION.md](SIMULATION.md#interactive-execution)).
 
 Axionomy is an economic debugger and a simulation engine. Both need states
 that can be kept, revisited, compared and branched: time travel to any step,
@@ -230,7 +231,11 @@ weakening the economy's closure.
 - **Refs** are mutable names for a run, step or group, like Git refs:
   `baseline`, `best/ppo`, `regressions/overdraft-17`. Ref names, metric names,
   tag keys and group kinds are paths (`axionomy_store::{RefPath, MetricPath,
-  TagPath, GroupKindPath}`); run and group IDs are minted types.
+  TagPath, GroupKindPath}`); run and group IDs are minted types. Planned
+  (D-046): an application keeps a ref on the point its game or simulation is
+  actually at. Refs gain compare-and-set, so several proposers move one
+  without overwriting each other, and readers follow it, receiving each step
+  it is moved over.
 
 Patterns these support:
 
@@ -255,14 +260,18 @@ Patterns these support:
 
 redb is the transaction layer for everything physical, and the only storage
 engine: there is no storage trait of our own. Where data lives is chosen with
-redb's backend, `FileBackend` or `InMemoryBackend`. One write transaction
-publishes an operation's nodes, its run and step records and any handle
-together, so a state or handle exists if and only if its transaction committed.
+redb's backend, `FileBackend` or `InMemoryBackend`, and in the browser, as
+planned (D-047), a backend over the origin private file system's
+`FileSystemSyncAccessHandle`. One write transaction publishes an operation's
+nodes, its run and step records and any handle together, so a state or handle
+exists if and only if its transaction committed.
 
-- **One writer, group commit.** Each store has one writer thread. Runs and MCP
-  calls send batches over a bounded channel, which applies backpressure instead
-  of growing memory, and the writer commits many batches per transaction.
-  Nothing holds a write transaction while the kernel computes.
+- **One writer, group commit.** Each store has one writer thread (where
+  threads exist; in a browser Worker the writer is planned to run each job
+  inline on the caller, D-047). Runs and MCP calls send batches over a bounded
+  channel, which applies backpressure instead of growing memory, and the
+  writer commits many batches per transaction. Nothing holds a write
+  transaction while the kernel computes.
 - **Idempotent writes.** Nodes are inserted by hash, so retries and duplicates
   are harmless, and the initial state of ten thousand runs is stored once.
 - **Merge later.** Any writer, a thread, a process, a machine or a server,
@@ -271,8 +280,9 @@ together, so a state or handle exists if and only if its transaction committed.
   and a 64-bit counter), which cannot conflict. Refs are the one mutable
   name: when both stores name something different, the merging store keeps
   its own and reports the name.
-- **Tests and the browser** use `InMemoryBackend`: the same code, with storage
-  in memory.
+- **Tests** use `InMemoryBackend`: the same code, with storage in memory. The
+  browser does not use the store yet; it is planned to, in memory or on the
+  origin private file system (D-047).
 
 ## Reading
 
@@ -376,8 +386,10 @@ survive the members they summarize.
   groups are store-wide names that would let one caller find another's
   snapshots, so MCP exposes only what a handle reaches until it has
   authentication; watch and actor views follow with phase 4.
-- **Studio server**: studies record their runs in the store, and scrubbing
-  renders frames from stored roots instead of loading whole studies.
+- **Studio server and browser**: through `axionomy-engine` (D-045), studies
+  record their runs in the store, and scrubbing renders frames from stored
+  roots instead of loading whole studies; in the browser the store runs in
+  Studio's Worker (D-047).
 - **Problems** (done): every canonical problem's `World` has an `Ontology`,
   and its runs are stored and read back unchanged.
 - **Producers of runs**: kept search branches and solutions, rollouts,
@@ -412,10 +424,12 @@ Each phase is a validated commit or series of commits.
    identifier is stored as its JSON, and a run is read back only as the
    ontology that recorded it); replay-buffer transitions by root, bisection
    and the time index it gives; every canonical problem recordable, with
-   rollouts recorded as runs in a Monte Carlo group (done); rollouts and
-   Monte Carlo episodes recording where they run, through `Apply` and
-   `Episodes` (done); studies recording their runs in the store (done for
-   MCP; the Studio server next); recording from
+   rollouts recorded as runs in a Monte Carlo group (done); rollouts and Monte
+   Carlo episodes recording where they run, through `Apply` and `Episodes`
+   (done); studies recording their runs in the store (done for MCP; the Studio
+   server and the browser through `axionomy-engine` next, with refs that
+   proposers advance by compare-and-set and readers follow, as
+   [SIMULATION.md](SIMULATION.md#interactive-execution) plans); recording from
    inside search sessions, MPPI and RL; watch and actor views; Studio
    scrubbing from the store.
 5. **Many writers, one history:** stores written independently by any

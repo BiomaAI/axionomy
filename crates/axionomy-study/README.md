@@ -41,7 +41,8 @@ Progress, solver observations, and verified replay frames share one observer
 boundary. Observations are streamed at work checkpoints as `thinking` events,
 and a bounded history is retained as each view document's `thinking`, giving
 live HTTP and Worker clients the same evidence as offline consumers of a saved
-study. Thinking is what a policy does when it simulates before it chooses.
+study. Thinking is trying exchanges at a point and playing them out before
+choosing, with the same apply as the step finally chosen.
 
 A problem reports through `StudyProgress`: progress and the thinking it makes,
 frames, and each document's trajectory, with `StudyControl` checked at every

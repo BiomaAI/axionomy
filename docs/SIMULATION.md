@@ -2,8 +2,9 @@
 
 Status: planned, in the order the steps below give. Built: rollouts and
 Monte Carlo episodes recording where they run, steps 1, 3, 4 and 5, and step
-2 for MCP. Planned: [interactive execution](#interactive-execution), steps 6
-to 13, which also gives the Studio server the store step 2 left.
+2 for MCP. [Interactive execution](#interactive-execution): step 6 is done;
+steps 7 to 13 are planned and also give the Studio server the store step 2
+left.
 
 The economy owns commitments and their consequences. A policy reads what an
 actor may see and proposes exchanges. Whoever calls the rollout (a problem, a
@@ -49,7 +50,7 @@ is that overlaps stay few and no Axionomy term means two things.
 | Trace | Exchanges in order |
 | Replay | Applying a trace, all of it or none of it: `replayed` gives the economy after it, `replay` applies it in place |
 | Run | A trajectory: a trace from a state, kept in memory or recorded in the store |
-| Point | A state a run reached: its run and step. Every point has one history: its run's steps back to where the run forked, then the history of that point |
+| Point | One saved state of the economy: the economy after a given step of a recorded run, named by the run and the step. Every point has one history, the exchanges that led to it |
 | Fork | An independent economy starting from a chosen state of a run (a clone, constant-time) |
 | Counterfactual | A forked run that examines an alternative to what the run did |
 | Rollout | A run a policy drives, to a goal, a stop or a horizon |
@@ -57,8 +58,8 @@ is that overlaps stay few and no Axionomy term means two things.
 | Group | The runs produced together, such as one Monte Carlo estimate's episodes |
 | Policy | How an actor chooses; a problem's `Policy` enum names its policies |
 | Decision | One choice: a problem's `decision(view, actor, policy)` |
-| Thinking | Playing out other histories from a point before choosing, with the same `apply` as acting; a study keeps its search's observations as each document's `thinking` |
-| Ref | A name for a point that moves. The point an application is living is a ref it advances by compare-and-set; only the steps a ref passes through are delivered |
+| Thinking | Trying exchanges at a point and playing them out before choosing, with the same `apply` as the step finally chosen; a study keeps its search's observations as each document's `thinking` |
+| Ref | A named label on a point, like a Git branch name on a commit. An application keeps a ref on the point its game or simulation is actually at, and moving the ref forward is what makes a step count; only the steps a ref is moved over are delivered |
 | Learning | Updating a policy from experience; done outside Axionomy, by the Autonomy Harness ([CONTINUOUS_AGENT_SYSTEMS.md](CONTINUOUS_AGENT_SYSTEMS.md)) |
 | Nature response | What happens without anyone choosing: an outcome resolves, a vehicle arrives, a deadline expires; a problem's `nature_response(world)` |
 | Tick | The clock advancing |
@@ -198,27 +199,72 @@ deadline. MCP needed nothing new for it.
 
 ## Interactive execution
 
-The aim, from an outside review: one application where a person acts, a
-policy thinks, an outside learner updates that policy, and Studio inspects
-both the live state and past ones, natively and entirely in the browser,
-through the same operations.
+### Why
+
+Today the operations on recorded economies (author, assess, apply, step,
+find, diff, page through accounts and balances, search) are implemented
+inside the MCP server. The Studio server, the CLI and the browser have none
+of them, so Studio computes and replays studies but cannot apply an exchange.
+A learner gets transitions only after a run ends, by replaying its trace
+(`rl::replay_transitions`). And when an application applies exchanges both to
+take its next step and to try out alternatives, nothing records which of them
+actually happened.
+
+### How it works, in connect-four
+
+A game is a run: the empty board, then one exchange per move. Each board
+along the way is a point, such as the board after move 7.
+
+- To make a move, a player applies its exchange to the board. That gives a
+  new board; the board it started from is unchanged.
+- The application keeps a ref, `live`, on the board the game is actually at.
+  Moving `live` to the new board is what makes the move count.
+- If two players both move from board 7, the first to move `live` wins. The
+  second is refused and told the game is now at board 8, so it looks again
+  and chooses again.
+- A player thinks by applying moves to board 7 and playing them out without
+  moving `live`. Those boards are saved like any others, but nothing that
+  follows `live` sees them.
+- Whatever follows `live` (Studio, a learner, a robot or other executor)
+  receives each move `live` is moved over, with the board it led to. A move
+  that was only tried out is never delivered, so it cannot reach an executor.
+- A player is any proposer: a person in Studio, an AI agent over MCP or
+  HTTP, a policy in the same process, a loop applying Nature responses. The
+  engine does not know which.
+
+Any economy works the same way, with an economy for the board and an
+exchange for the move.
+
+### What this builds
+
+1. `axionomy-engine`: one synchronous library with the operations above,
+   over a `Registry` and a `Store`, called by MCP, the Studio server, the CLI
+   and Studio's browser Worker. MCP keeps only its protocol and its table
+   from handles to points.
+2. Refs that can be moved safely and followed. The store has refs already
+   (`Transaction::set_ref`); they gain compare-and-set, so
+   `advance(ref, expected, to)` moves a ref only while it is still on
+   `expected`. `watch` pushes, and `frames(after)` pulls, each step a ref is
+   moved over.
+3. Two `Problem` hooks, `view` and `actions`, so any point of any recorded
+   run is drawn as frames and offers the exchanges the problem's policies
+   would consider, not only a study's documents.
+4. The store in a browser Worker: its writer runs without a thread, and a
+   redb backend over the origin private file system (OPFS) keeps it across
+   page reloads.
+
+Studio's controls then act on a selected point and ref.
 
 ### Rules
 
-- One apply: `apply(point, exchanges)` gives a new point and never changes
-  the point it started from. Acting, thinking, branching and trying a
-  counterfactual are all this one operation.
-- Every point has one history, so a trajectory is the history of a point.
-- Live is a ref, not a kind of run. A ref names the point an application is
-  living, and the application advances it by compare-and-set: an advance is
-  refused, with the ref's current point, when someone advanced it first, so a
-  participant who acted on an old state looks again.
-- Thinking applies like anyone else and never advances the ref. Only the steps
-  a ref passes through are delivered, each with its point, so an imagined
-  move cannot reach an executor that follows the ref.
-
-What tells a live run from a thought one is who proposes its exchanges and
-whether anything delivers them, never the operations.
+- `apply(point, exchanges)` applies all the exchanges or none and gives a new
+  point; the point it started from never changes. Making a move, trying one
+  out, branching and a counterfactual are all this one operation.
+- Every point has one history: the exchanges that led to it.
+- A ref moves only by `advance(ref, expected, to)`, which is refused, with
+  the point the ref is on, when the ref is no longer on `expected`.
+- Only the steps a ref is moved over are delivered, each with the point it
+  led to.
 
 ### Layers
 
@@ -269,12 +315,15 @@ impl Engine {
 }
 ```
 
-A `Frame` is a step's point, its `ExchangeFrame`, the problem's objectives at
-that point and whether its goal holds, so one frame is a whole learning
-transition, what `RlTransition` carries. `watch` pushes frames; `frames(after)`
-pulls them from the last point a consumer handled, so delivery resumes after a
-disconnect and works over a stateless transport. `Switched` reports a ref
-moved to a point that does not descend from the one before.
+A `Frame` is one step as delivered: the point it led to, its
+`ExchangeFrame` (the exchange, its assessment, its receipt and the economy
+after it), the problem's objectives there and whether its goal holds. That is
+one learning transition, what `RlTransition` carries. `watch` pushes frames;
+`frames(after)` pulls them from the last point a reader handled, so delivery
+resumes after a disconnect and works over a stateless transport. `Switched`
+reports that a ref was moved to a point whose history does not contain the
+point it was on, such as Studio's Continue from here moving `live` to a
+branch; an executor stops there, since it cannot undo what it did.
 
 Moving out of MCP: economies as points and studies recorded as runs
 (`store.rs`), authoring (`authoring.rs`), studies as economies
@@ -282,12 +331,16 @@ Moving out of MCP: economies as points and studies recorded as runs
 `server.rs`. MCP keeps its tools, resources, schemas, messages, issues,
 completion and HTTP, and its table from handles to points.
 
-### Step 6: the other documents' words
+### Step 6: the other documents (done)
 
-`docs/CONTINUOUS_AGENT_SYSTEMS.md`'s integration contract: `fork(snapshot)`
-and `apply(fork_or_live, exchange)` become `apply(point, exchanges)`, with
-`advance(ref, expected, point)` and `follow(ref, after)`. PDD's Studio
-section and the crate READMEs name the engine layer.
+`docs/CONTINUOUS_AGENT_SYSTEMS.md`'s decision loop and integration contract
+use points and refs: `fork(snapshot)` and `apply(fork_or_live, exchange)`
+became `apply(point, exchanges)`, with `refer`, `advance` and `follow`. The
+PDD defines Thinking this way, says which layer is shared today, and records
+D-045 (one engine), D-046 (apply at points, refs) and D-047 (the store in the
+browser). `docs/STORAGE.md` and the READMEs of the root, MCP, the store, the
+Studio server, the browser Worker, the CLI, the study runtime and Studio say
+what is planned for them.
 
 ### Step 7: `axionomy-engine`
 
@@ -342,9 +395,10 @@ that recorded it.
 The store's refs gain compare-and-set, and the store indexes each run's
 branches; the engine gains `refer`, `advance` and `watch`.
 
-Done when an advance from an old point is refused with the current one,
-points made while thinking are never delivered, `frames(after)` resumes where
-a consumer stopped, and a ref moved to a branch is reported as `Switched`.
+Done when moving a ref from a point it is no longer on is refused with the
+point it is on, points made while thinking are never delivered,
+`frames(after)` resumes where a reader stopped, and a ref moved to a branch is
+reported as `Switched`.
 
 ### Step 11: Studio works on points and refs
 
@@ -357,35 +411,39 @@ Studio selects a point, and its controls target it:
 | --- | --- |
 | Scrub, play | Reads a history; changes nothing |
 | Follow | Shows a ref's steps as they are delivered; scrubbing back does not stop it |
-| Act | Applies a candidate or a written exchange, assessed first. At a ref's point it advances the ref; anywhere else it makes a branch |
-| Continue from here | Advances a ref to the selected point |
+| Act | Applies a candidate or a written exchange, assessed first. On the point a ref is on, it also moves the ref; anywhere else it makes a branch |
+| Continue from here | Moves a ref to the selected point |
 | Compare | Two histories side by side |
 
 Done when Studio's end-to-end tests pass on the native and the browser
 engine.
 
-### Step 12: one application, a person, a thinking policy, an outside learner
+### Step 12: acceptance: two players, one ref, a learner
 
 A Python test (uv, httpx) drives the native server on connect-four, standing
-in for the application and the Autonomy Harness:
+in for an application and the Autonomy Harness:
 
-- The application refers `live` to the empty board of a connect-four study.
-- A person, stood in for by the test (step 11's end-to-end test does it
-  through Studio), applies a move and advances `live`.
-- A policy thinks: from `live`'s point it plays out each candidate with its
-  value table, then applies its choice there and advances `live` from the
-  point it saw, looking again when refused.
-- A learner follows `live` through `frames(after)` and updates the policy's
-  value table between its decisions.
+- The test puts `live` on the empty board, the first point of a
+  connect-four study's recorded run.
+- Player A plays one colour: it applies a move to the board `live` is on and
+  moves `live` to the result. Step 11's end-to-end test does the same
+  through Studio's Act.
+- Player B plays the other: it applies each of its moves to the board `live`
+  is on and plays the game out with its value table, without moving `live`;
+  then it applies its chosen move and moves `live` from the board it looked
+  at, looking again if refused.
+- A learner follows `live` with `frames(after)` and updates B's value table
+  between B's moves.
 
-Done when every delivered frame names its point, no point made while thinking
-is delivered, an advance from an old point is refused, and `live`'s history
-verifies.
+Done when every delivered move names the board it led to, no board B tried
+out is delivered, moving `live` from a board it is no longer on is refused,
+and `live`'s history verifies.
 
 ### Step 13: thinking in Studio (separable)
 
-A problem's own policy proposes from the selected point, connect-four's MCTS
-first, and the branch it makes shows its thinking.
+A problem's own policy proposes a move from the selected point,
+connect-four's MCTS first, and the branch its move makes shows its
+thinking.
 
 ### Open question
 

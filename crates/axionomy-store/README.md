@@ -2,10 +2,11 @@
 
 `axionomy-store` keeps what Axionomy runs produce: states, the exchanges
 between them, and the tags, groups, metrics and refs that organize them, in
-one [redb](https://crates.io/crates/redb) database, on disk or in memory. It
-stores economies of any `axionomy::Ontology` whose identifiers serialize: a
-problem's own Rust types, or paths (`axionomy::paths::Paths`). A run records
-its ontology's name and is read back only as that ontology.
+one [redb](https://crates.io/crates/redb) database, on disk or in memory, and
+as planned (D-047) in a browser Worker, in memory or on the origin private
+file system. It stores economies of any `axionomy::Ontology` whose identifiers
+serialize: a problem's own Rust types, or paths (`axionomy::paths::Paths`). A
+run records its ontology's name and is read back only as that ontology.
 
 The kernel decides; the store remembers. A state is what replaying a trace
 produces, so stored states are a cache of replay and replay verifies them.
@@ -23,7 +24,10 @@ produces, so stored states are a cache of replay and replay verifies them.
   batches nobody waits on, durable within a second.
 - **Tags, metrics, groups and refs** organize runs, whatever produced them:
   search, simulation, evaluation, Monte Carlo, MPPI, agents or learning; none
-  of them changes what an exchange does.
+  of them changes what an exchange does. Planned (D-046): an application
+  keeps a ref on the point its game or simulation is actually at; refs gain
+  compare-and-set, so several proposers move one without overwriting each
+  other, and readers follow it step by step.
   A `GroupRecorder` records a group's members as they end, such as one
   Monte Carlo estimate's rollouts, and waits on disk once, when it finishes.
 - **Reading back** gives any state of a run, its steps as replay-buffer

@@ -163,11 +163,20 @@ first. Completion leaves a persistent receipt
 and marks the newly loaded study.
 
 The client chooses capabilities in order: a currently healthy native HTTP/SSE
-engine, the Rust/Wasm service in an isolated Web Worker, then committed static
+engine, the Rust/Wasm service in an isolated Web Worker, then pre-built static
 Showcase playback. The badge reflects current health or Worker initialization;
 it does not infer connection from a catalog loaded earlier. Native studies expose
 pause, resume, and cancel. Browser cancellation terminates the disposable
 Worker immediately; resumable browser pause is not advertised.
+
+Planned: Studio selects a point, the economy after a given step of a recorded
+run, and its controls act on it: scrub and play read a history and change
+nothing; Follow shows a ref's steps as they are delivered; Act applies a
+candidate or a written exchange, assessed first, and on the point a ref is on
+also moves the ref, while anywhere else it makes a branch; Continue from here
+moves a ref to the selected point; Compare shows two histories. The
+native and browser engines both offer them; static playback stays read-only
+([plan](../docs/SIMULATION.md#interactive-execution)).
 
 The constraint-probe panel contains deliberately invalid or infeasible
 proposals. Their expected rejection is evidence that the model's constraints

@@ -176,7 +176,7 @@ HTTP, and Studio remain outer adapters.
 
 ### Interfaces
 
-- One service contract shared by CLI, HTTP/SSE, MCP, Studio, and browser Wasm.
+- One study runtime shared by CLI, HTTP/SSE, MCP, Studio, and browser Wasm; operations on economies and runs (author, apply, step, find, diff) are MCP's today, and `axionomy-engine` is planned to give them to every interface, in the browser too ([plan](docs/SIMULATION.md#interactive-execution)).
 - Discoverable reference problems, each with explicit Micro, Showcase, and Stress instances.
 - Snapshot leaderboards whose exact ranks, tradeoffs, and evidence update during replay.
 - A strict stateless MCP 2026-07-28 server whose economies persist in a store, with content roots, trace stepping, diffs, and studies a client can step into and branch from.

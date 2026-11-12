@@ -8,9 +8,13 @@ problems of the `Registry` its `StudioState` is given; `StudioState::default()`
 serves `axionomy_problems::registry()`. Each study gets a minted ID such as
 `study-7`; once published, the study, its documents and their frames are
 served under `/api/studies/{study_id}/study`. It
-intentionally has no database: a study in progress is operational UI state,
-while a published, portable `Study` can be exported to JSON whenever durable or
-static playback is wanted.
+has no database yet: a study in progress is operational UI state, while a
+published, portable `Study` can be exported to JSON whenever durable or static
+playback is wanted. Planned: the server holds an `axionomy-engine` over a store
+(in memory, or a file when one is given), records each study's documents as
+runs, and serves points and refs: frames, candidate exchanges, assess and
+apply at a point, and refs to create, advance and follow
+([plan](../../docs/SIMULATION.md#interactive-execution), D-045, D-046).
 
 Run the API and optional built Studio frontend:
 
