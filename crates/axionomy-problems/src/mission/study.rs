@@ -3,17 +3,16 @@
 use super::view::scene;
 use crate::{
     mission::{self, AccountId, AgentId, Asset, Location, Policy, World},
-    support::{ProblemCopy, StrategyCopy, problem},
+    support::{Capability, Family, ProblemCopy, Size, StrategyCopy, problem, size},
 };
 use axionomy::{Exchange, path};
 use axionomy_search::{mcts::MctsConfig, rollout::Unrecorded};
 use axionomy_study::{
-    Capability, DocumentSpec, InstanceProfile, Problem, ProblemDescriptor, ProblemFamily,
-    ProposalSpec, StudyError, StudyKey, StudyProgress, Work, document, problem_error, proposal,
-    proposal_at, telemetry,
+    DocumentSpec, Problem, ProblemDescriptor, ProposalSpec, StudyError, StudyKey, StudyProgress,
+    Work, document, problem_error, proposal, proposal_at, telemetry,
 };
 use axionomy_view::{
-    AccountView, AssetQuantityView, ExactQuantity, Keyed, Label, ObjectiveAxisView,
+    AccountView, AssetQuantityView, ExactQuantity, Keyed, Label, Labeled, ObjectiveAxisView,
     ObjectiveDirectionView, ObjectiveView, ObservationView, ParetoFrontView,
     SearchObservationKindView, TelemetryKindView, ViewDocument, ViewId, account_key, asset_key,
     sampled_policy_front,
@@ -38,7 +37,7 @@ impl Default for Mission {
                         "A second casualty, one radio charge, lower energy, finite resupply and one evacuation seat",
                     ],
                 },
-                ProblemFamily::PartialObservation,
+                Family::PartialObservation,
                 path!("coordinated"),
                 &[
                     StrategyCopy {
@@ -85,21 +84,21 @@ fn build(
     study: &StudyKey,
     progress: &mut StudyProgress<'_>,
 ) -> Result<Vec<ViewDocument>, StudyError> {
-    let profile = study.instance;
-    if !matches!(profile, InstanceProfile::Micro) {
+    let profile = size(study)?;
+    if !matches!(profile, Size::Micro) {
         return super::expedition::study::build(study, profile, progress);
     }
     let model = mission::initial();
     let sample_index = (study.seed as usize) % 16;
     let samples = match profile {
-        InstanceProfile::Micro => study.budget.clamp(2, 16),
-        InstanceProfile::Showcase => study.budget.max(2),
-        InstanceProfile::Stress => study.budget.max(256),
+        Size::Micro => study.budget.clamp(2, 16),
+        Size::Showcase => study.budget.max(2),
+        Size::Stress => study.budget.max(256),
     } as usize;
     let (monte_carlo, pareto_sampling) = (Work::monte_carlo(), Work::pareto_sampling());
     let ismcts = Work::new(
-        path!("ismcts"),
-        path!("ismcts"),
+        Labeled::new(path!("ismcts"), "ISMCTS"),
+        Labeled::new(path!("ismcts"), "ISMCTS"),
         SearchObservationKindView::Tree,
     );
     let comparison = mission::monte_carlo_with_progress(
@@ -431,11 +430,11 @@ fn policy_front(front: &mission::PolicyFront, selected: Option<Policy>) -> Paret
 mod tests {
     use crate::registry;
     use axionomy::{Quantity, path};
-    use axionomy_study::{InstanceProfile, StudyRequest};
+    use axionomy_study::StudyRequest;
 
     #[test]
     fn mission_replays_actual_search_and_private_information_transfer() {
-        let mut request = StudyRequest::new(path!("mission")).with_instance(InstanceProfile::Micro);
+        let mut request = StudyRequest::new(path!("mission")).with_instance(path!("micro"));
         request.seed = 11;
         let study = registry().study(request).unwrap();
         let planned = &study.documents[0];
@@ -447,13 +446,13 @@ mod tests {
             planned
                 .thinking
                 .iter()
-                .all(|item| item.phase == path!("ismcts"))
+                .all(|item| item.phase.key == path!("ismcts"))
         );
         assert!(
             direct
                 .thinking
                 .iter()
-                .all(|item| item.phase == path!("monte-carlo"))
+                .all(|item| item.phase.key == path!("monte-carlo"))
         );
         let scan = planned
             .frames

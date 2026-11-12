@@ -460,6 +460,40 @@ async def test_a_problem_study_pages_its_frames(url: str) -> None:
         assert refused.is_error
 
 
+async def test_the_catalog_carries_each_problems_own_words(url: str) -> None:
+    async with Client(url, extensions=[Tasks()]) as client:
+        listed = await client.call_tool("axionomy_problem_catalog", {})
+        assert not listed.is_error, listed.structured_content
+        problems = {problem["key"]: problem for problem in listed.structured_content["problems"]}
+        maze = problems["maze"]
+        # A problem declares its family, capabilities and instances: each a
+        # key to send back and a label to show people.
+        assert maze["family"] == {"key": "pathfinding", "label": "Pathfinding"}
+        assert {"key": "exact-pareto", "label": "Exact Pareto frontier"} in maze["capabilities"]
+        assert [instance["key"] for instance in maze["instances"]] == ["micro", "showcase", "stress"]
+        assert [instance["label"] for instance in maze["instances"]] == ["Micro", "Showcase", "Stress"]
+        assert maze["default_instance"] == "showcase"
+
+        # The study takes the instance as a path, not a closed list of sizes.
+        tools = {tool.name: tool for tool in (await client.list_tools()).tools}
+        schema = tools["axionomy_problem_study"].input_schema
+
+        def resolved(node: dict[str, Any]) -> dict[str, Any]:
+            while "$ref" in node:
+                node = schema["$defs"][node["$ref"].rsplit("/", 1)[-1]]
+            return node
+
+        instance = schema["properties"]["instance"]
+        written = [resolved(option) for option in instance.get("anyOf", [instance]) if option.get("type") != "null"]
+        assert written and all(option["type"] == "string" and "pattern" in option and "enum" not in option for option in written)
+
+        # An instance the problem does not declare is refused where it is read.
+        refused = await client.call_tool("axionomy_problem_study", {"problem": "maze", "instance": "huge"})
+        assert refused.is_error
+        assert refused.structured_content["details"] == {"pointer": "/instance"}
+        assert "has no instance `huge`" in refused.structured_content["message"]
+
+
 async def exchanges(client: Client, economy_id: str) -> list[dict[str, Any]]:
     return (await page(client, f"axionomy://economy/{economy_id}/exchanges"))["items"]
 

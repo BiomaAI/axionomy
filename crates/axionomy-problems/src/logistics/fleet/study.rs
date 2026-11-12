@@ -4,25 +4,26 @@ use super::view::scene;
 use crate::logistics::fleet::{
     self as fleet, AccountId, Asset, Location, Policy, RateId, VANS, Van, World,
 };
+use crate::support::Size;
 use axionomy::path;
 use axionomy_study::{
-    DocumentSpec, InstanceProfile, ProposalSpec, StudyError, StudyKey, StudyProgress, Work,
-    document, problem_error, proposal, simulate, telemetry,
+    DocumentSpec, ProposalSpec, StudyError, StudyKey, StudyProgress, Work, document, problem_error,
+    proposal, simulate, telemetry,
 };
 use axionomy_view::{
-    ObjectiveDirectionView, ObjectiveView, SearchObservationKindView, TelemetryKindView,
+    Labeled, ObjectiveDirectionView, ObjectiveView, SearchObservationKindView, TelemetryKindView,
     ViewDocument, evaluated_front,
 };
 
 pub(crate) fn build(
     study: &StudyKey,
-    profile: InstanceProfile,
+    profile: Size,
     progress: &mut StudyProgress<'_>,
 ) -> Result<Vec<ViewDocument>, StudyError> {
-    let initial = fleet::initial(matches!(profile, InstanceProfile::Stress), study.seed);
+    let initial = fleet::initial(matches!(profile, Size::Stress), study.seed);
     let dispatch = Work::new(
-        path!("fleet-dispatch"),
-        path!("fleet-dispatch"),
+        Labeled::new(path!("fleet-dispatch"), "Fleet dispatch"),
+        Labeled::new(path!("fleet-dispatch"), "Fleet dispatch"),
         SearchObservationKindView::Phase,
     );
     let mut documents = Vec::new();

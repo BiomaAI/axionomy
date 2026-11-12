@@ -23,8 +23,11 @@ semantic parity.
 Its deliberately small vocabulary is `Problem`, `Registry`,
 `ProblemDescriptor`, `StudyRequest`, `StudyControl`, `StudyProgress`,
 `Progress`, `SearchObservationView`, `Study` and `StudioEvent`.
-Problems and strategies are paths (`work-league`, `a-star`), and an instance
-is named by its profile: `micro`, `showcase` or `stress`.
+Problems, strategies and instances are paths (`work-league`, `a-star`,
+`showcase`). A problem's catalog entry declares its own instances, family and
+capabilities, each a path with a label, so front ends show what it declares and
+keep no table of their own; the solver work it reports labels its phases and
+algorithms the same way.
 `Registry::resolve` decides a request's instance and strategy and returns the
 `StudyKey` the study records: the same key always gives the same study.
 `Registry::study` computes it: the problem computes the documents, and the

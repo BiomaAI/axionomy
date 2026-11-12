@@ -18,7 +18,7 @@ pub use fronts::{
     evaluated_front, exact_front, exact_values, objective_axes, objective_value,
     sampled_policy_front,
 };
-pub use label::{Format, Label, LabeledOntology, LeaderboardsFn, SceneFn};
+pub use label::{Format, Label, Labeled, LabeledOntology, LeaderboardsFn, SceneFn};
 pub use present::{
     Keyed, account_key, asset_key, asset_metric, link_account, link_balance, visual_entity,
     visual_metric,
@@ -94,6 +94,10 @@ pub type ProposalPath = Path<kind::Proposal>;
 pub type PhasePath = Path<kind::Phase>;
 /// An algorithm, such as `a-star` or `exact-pareto-search`.
 pub type AlgorithmPath = Path<kind::Algorithm>;
+/// A phase of solver work and how it reads, such as `A* frontier`.
+pub type LabeledPhase = Labeled<kind::Phase>;
+/// An algorithm and how it reads, such as `A*`.
+pub type LabeledAlgorithm = Labeled<kind::Algorithm>;
 
 /// How people read quantities of one asset. The kernel counts atoms; a format
 /// shows `atoms ÷ 10^scale` with a unit, so a balance of 1,250 cent atoms
@@ -1452,8 +1456,10 @@ pub enum SearchObservationKindView {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct SearchObservationView {
     pub sequence: u64,
-    pub phase: PhasePath,
-    pub algorithm: AlgorithmPath,
+    /// The phase of work observed, such as `a-star-frontier`, and how it reads.
+    pub phase: LabeledPhase,
+    /// The algorithm doing the work, such as `a-star`, and how it reads.
+    pub algorithm: LabeledAlgorithm,
     pub kind: SearchObservationKindView,
     pub label: String,
     pub completed: u64,

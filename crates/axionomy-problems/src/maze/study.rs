@@ -3,7 +3,7 @@
 use super::view::{decorate_route_evidence, scene};
 use crate::{
     maze::{self, AccountId, Asset, Node, ObjectiveKey, RateId, Role, World},
-    support::{ProblemCopy, StrategyCopy, problem},
+    support::{Capability, Family, ProblemCopy, Size, StrategyCopy, problem, size},
 };
 use axionomy::{Exchange, Quantity, path};
 use axionomy_search::{
@@ -11,14 +11,14 @@ use axionomy_search::{
     session::{Continue, WorkBudget},
 };
 use axionomy_study::{
-    Capability, DocumentSpec, InstanceProfile, Problem, ProblemDescriptor, ProblemFamily,
-    ProblemPath, ProposalSpec, StudyError, StudyKey, StudyProgress, Work, document, frontier_trace,
-    graph_metrics, problem_error, proposal, retain_observation, strategy, telemetry,
+    DocumentSpec, Problem, ProblemDescriptor, ProblemPath, ProposalSpec, StudyError, StudyKey,
+    StudyProgress, Work, document, frontier_trace, graph_metrics, problem_error, proposal,
+    retain_observation, strategy, telemetry,
 };
 use axionomy_view::{
-    AlgorithmPath, Keyed, Label, ObjectiveAxisView, ObjectiveDirectionView, ObjectiveView,
-    ParetoFrontView, SearchObservationKindView, SearchObservationView, TelemetryKindView,
-    ViewDocument, ViewId, exact_front, exact_values, visual_metric,
+    Keyed, Label, Labeled, LabeledAlgorithm, ObjectiveAxisView, ObjectiveDirectionView,
+    ObjectiveView, ParetoFrontView, SearchObservationKindView, SearchObservationView,
+    TelemetryKindView, ViewDocument, ViewId, exact_front, exact_values, visual_metric,
 };
 use std::collections::VecDeque;
 
@@ -41,7 +41,7 @@ impl Default for Maze {
                         "24 rooms and 42 passages with more hazards and a second recovery route",
                     ],
                 },
-                ProblemFamily::Pathfinding,
+                Family::Pathfinding,
                 path!("a-star"),
                 &[
                     StrategyCopy {
@@ -132,20 +132,22 @@ enum Search {
 }
 
 impl Search {
-    fn algorithm(self) -> AlgorithmPath {
+    fn algorithm(self) -> LabeledAlgorithm {
         match self {
-            Self::BreadthFirst => path!("breadth-first"),
-            Self::Dijkstra => path!("dijkstra"),
-            Self::AStar => path!("a-star"),
+            Self::BreadthFirst => Labeled::new(path!("breadth-first"), "Breadth-first search"),
+            Self::Dijkstra => Labeled::new(path!("dijkstra"), "Dijkstra"),
+            Self::AStar => Labeled::new(path!("a-star"), "A*"),
         }
     }
 
     /// The search expanding its frontier.
     fn frontier(self) -> Work {
         let phase = match self {
-            Self::BreadthFirst => path!("breadth-first-frontier"),
-            Self::Dijkstra => path!("dijkstra-frontier"),
-            Self::AStar => path!("a-star-frontier"),
+            Self::BreadthFirst => {
+                Labeled::new(path!("breadth-first-frontier"), "Breadth-first frontier")
+            }
+            Self::Dijkstra => Labeled::new(path!("dijkstra-frontier"), "Dijkstra frontier"),
+            Self::AStar => Labeled::new(path!("a-star-frontier"), "A* frontier"),
         };
         Work::new(phase, self.algorithm(), SearchObservationKindView::Frontier)
     }
@@ -153,9 +155,11 @@ impl Search {
     /// The search accepting its solution.
     fn solution(self) -> Work {
         let phase = match self {
-            Self::BreadthFirst => path!("breadth-first-solution"),
-            Self::Dijkstra => path!("dijkstra-solution"),
-            Self::AStar => path!("a-star-solution"),
+            Self::BreadthFirst => {
+                Labeled::new(path!("breadth-first-solution"), "Breadth-first solution")
+            }
+            Self::Dijkstra => Labeled::new(path!("dijkstra-solution"), "Dijkstra solution"),
+            Self::AStar => Labeled::new(path!("a-star-solution"), "A* solution"),
         };
         Work::new(
             phase,
@@ -177,8 +181,8 @@ impl Search {
 /// The exact Pareto search exhausting its frontier.
 fn pareto_frontier() -> Work {
     Work::new(
-        path!("pareto-frontier"),
-        path!("exact-pareto-search"),
+        Labeled::new(path!("pareto-frontier"), "Exact Pareto frontier"),
+        Labeled::new(path!("exact-pareto-search"), "Exact Pareto search"),
         SearchObservationKindView::Frontier,
     )
 }
@@ -188,10 +192,10 @@ fn build(
     progress: &mut StudyProgress<'_>,
 ) -> Result<Vec<ViewDocument>, StudyError> {
     let problem = &study.problem;
-    let initial = match study.instance {
-        InstanceProfile::Micro => maze::initial(),
-        InstanceProfile::Showcase => maze::initial_showcase(),
-        InstanceProfile::Stress => maze::initial_stress(),
+    let initial = match size(study)? {
+        Size::Micro => maze::initial(),
+        Size::Showcase => maze::initial_showcase(),
+        Size::Stress => maze::initial_stress(),
     };
     let selected: Strategy = strategy(study)?;
     if let Some(search) = selected.search() {

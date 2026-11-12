@@ -2,17 +2,17 @@
 
 use super::view::{leaderboards, scene};
 use crate::{
-    support::{ProblemCopy, StrategyCopy, problem},
+    support::{Capability, Family, ProblemCopy, Size, StrategyCopy, problem, size},
     work_league::{self, AccountId, AgentId, Asset, JobId, Profile, RateId, Role, World},
 };
 use axionomy::{Exchange, Quantity, path};
 use axionomy_study::{
-    Capability, DocumentSpec, InstanceProfile, Problem, ProblemDescriptor, ProblemFamily,
-    ProposalSpec, StudyError, StudyKey, StudyProgress, Work, document_with_leaderboards_observed,
-    problem_error, proposal, strategy_document, telemetry,
+    DocumentSpec, Problem, ProblemDescriptor, ProposalSpec, StudyError, StudyKey, StudyProgress,
+    Work, document_with_leaderboards_observed, problem_error, proposal, strategy_document,
+    telemetry,
 };
 use axionomy_view::{
-    ObjectiveDirectionView, ObjectiveView, SearchObservationKindView, TelemetryKindView,
+    Labeled, ObjectiveDirectionView, ObjectiveView, SearchObservationKindView, TelemetryKindView,
     ViewDocument,
 };
 
@@ -35,7 +35,7 @@ impl Default for WorkLeague {
                         "24 contracts over six arrival waves with shared finite supplies and equipment wear",
                     ],
                 },
-                ProblemFamily::MultiAgentCompetition,
+                Family::MultiAgentCompetition,
                 path!("mixed-field"),
                 &[
                     StrategyCopy {
@@ -88,10 +88,10 @@ fn build(
     study: &StudyKey,
     progress: &mut StudyProgress<'_>,
 ) -> Result<Vec<ViewDocument>, StudyError> {
-    let profile = match study.instance {
-        InstanceProfile::Micro => Profile::Micro,
-        InstanceProfile::Showcase => Profile::Showcase,
-        InstanceProfile::Stress => Profile::Stress,
+    let profile = match size(study)? {
+        Size::Micro => Profile::Micro,
+        Size::Showcase => Profile::Showcase,
+        Size::Stress => Profile::Stress,
     };
     let configurations = [
         (
@@ -214,8 +214,8 @@ fn build(
         documents.push(view);
         let _ = progress.emit(
             &Work::new(
-                path!("multi-agent-match"),
-                path!("multi-agent-match"),
+                Labeled::new(path!("multi-agent-match"), "Multi-agent match"),
+                Labeled::new(path!("multi-agent-match"), "Multi-agent match"),
                 SearchObservationKindView::Phase,
             ),
             offset as u64 + 1,
@@ -243,7 +243,7 @@ mod tests {
     #[test]
     fn every_snapshot_has_multiple_rankings_and_they_change() {
         let request = StudyRequest::new(path!("work-league"))
-            .with_instance(InstanceProfile::Showcase)
+            .with_instance(path!("showcase"))
             .with_strategy(path!("mixed-field"));
         let study = registry().study(request).unwrap();
         let document = study.selected().unwrap();

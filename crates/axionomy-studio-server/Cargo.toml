@@ -26,5 +26,6 @@ tracing.workspace = true
 tracing-subscriber.workspace = true
 
 [dev-dependencies]
+axionomy.workspace = true
 http-body-util.workspace = true
 tower.workspace = true

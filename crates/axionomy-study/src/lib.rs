@@ -16,14 +16,15 @@ mod progress;
 
 use axionomy::path::Path;
 use axionomy_view::{
-    DocumentPath, ExchangeFrame, PhasePath, ProposalView, SearchObservationView, ViewDocument,
+    DocumentPath, ExchangeFrame, Labeled, LabeledPhase, ProposalView, SearchObservationView,
+    ViewDocument,
 };
 pub use documents::{
     DocumentSpec, ProposalSpec, document, document_with_leaderboards_observed, frontier_trace,
     proposal, proposal_at, simulate, telemetry,
 };
 pub use problem::{
-    DuplicateProblem, Problem, Registry, problem_error, strategy, strategy_document,
+    DuplicateProblem, Problem, Registry, instance, problem_error, strategy, strategy_document,
 };
 pub use progress::{StudyProgress, Work, graph_metrics, retain_observation};
 use schemars::{JsonSchema, Schema, SchemaGenerator, json_schema};
@@ -44,6 +45,12 @@ pub mod kind {
     pub enum Problem {}
     /// A strategy for solving a problem.
     pub enum Strategy {}
+    /// An instance of a problem: one economy of it, usually at one size.
+    pub enum Instance {}
+    /// A family of problems, such as `pathfinding`.
+    pub enum Family {}
+    /// Something a problem exercises, such as `exact-pareto`.
+    pub enum Capability {}
 
     impl PathKind for Problem {
         const SCHEMA: &'static str = "ProblemPath";
@@ -53,52 +60,38 @@ pub mod kind {
         const SCHEMA: &'static str = "StrategyPath";
         const EXAMPLE: &'static str = "a-star";
     }
+    impl PathKind for Instance {
+        const SCHEMA: &'static str = "InstancePath";
+        const EXAMPLE: &'static str = "showcase";
+    }
+    impl PathKind for Family {
+        const SCHEMA: &'static str = "FamilyPath";
+        const EXAMPLE: &'static str = "pathfinding";
+    }
+    impl PathKind for Capability {
+        const SCHEMA: &'static str = "CapabilityPath";
+        const EXAMPLE: &'static str = "exact-pareto";
+    }
 }
 
 /// A problem, such as `maze` or `work-league`.
 pub type ProblemPath = Path<kind::Problem>;
 /// A strategy, such as `a-star` or `pareto-energy`.
 pub type StrategyPath = Path<kind::Strategy>;
+/// An instance of a problem, such as `micro` or `showcase`: each problem
+/// declares its own.
+pub type InstancePath = Path<kind::Instance>;
+/// A family of problems, such as `pathfinding`.
+pub type FamilyPath = Path<kind::Family>;
+/// Something a problem exercises, such as `atomic-settlement`.
+pub type CapabilityPath = Path<kind::Capability>;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum ProblemFamily {
-    Pathfinding,
-    Constraint,
-    Production,
-    Scheduling,
-    Allocation,
-    Market,
-    StochasticPlanning,
-    AdversarialGame,
-    PartialObservation,
-    TemporalSimulation,
-    MultiAgentCompetition,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum Capability {
-    DeterministicSearch,
-    WeightedSearch,
-    SpecializedAlgorithm,
-    ExactPareto,
-    ApproximatePareto,
-    FeasibilityAssessment,
-    MultiAccountExchange,
-    AtomicSettlement,
-    BranchOptimization,
-    MonteCarlo,
-    Mcts,
-    InformationSetSearch,
-    PartialObservation,
-    Chance,
-    TemporalEffects,
-    FungibleCohorts,
-    NonFungibleFacts,
-    RlProjection,
-    ReplayDerivedLeaderboards,
-}
+/// The family a problem declares it belongs to, such as `pathfinding`
+/// (`Pathfinding`).
+pub type ProblemFamily = Labeled<kind::Family>;
+/// Something a problem declares it exercises, such as `exact-pareto`
+/// (`Exact Pareto frontier`).
+pub type Capability = Labeled<kind::Capability>;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct StrategyDescriptor {
@@ -109,58 +102,27 @@ pub struct StrategyDescriptor {
     pub algorithm: String,
 }
 
-/// How large an instance of a problem is. Every problem has one instance of
-/// each size.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum InstanceProfile {
-    Micro,
-    Showcase,
-    Stress,
-}
-
-impl InstanceProfile {
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::Micro => "micro",
-            Self::Showcase => "showcase",
-            Self::Stress => "stress",
-        }
-    }
-}
-
-impl fmt::Display for InstanceProfile {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str(self.as_str())
-    }
-}
-
-impl FromStr for InstanceProfile {
-    type Err = String;
-
-    fn from_str(text: &str) -> Result<Self, Self::Err> {
-        [Self::Micro, Self::Showcase, Self::Stress]
-            .into_iter()
-            .find(|profile| profile.as_str() == text)
-            .ok_or_else(|| format!("`{text}` is not micro, showcase or stress"))
-    }
-}
-
+/// One instance a problem offers: one economy of it, usually at one size.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct InstanceDescriptor {
-    pub profile: InstanceProfile,
+    pub key: InstancePath,
     pub label: String,
     pub description: String,
 }
 
+/// A problem as the catalog lists it. Everything a front end shows about a
+/// problem is here, labeled by the problem itself: its family, what it
+/// exercises, its instances and its strategies.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct ProblemDescriptor {
     pub key: ProblemPath,
     pub title: String,
     pub summary: String,
     pub family: ProblemFamily,
-    pub default_instance: InstanceProfile,
+    /// The instance a request that names none studies: one of `instances`.
+    pub default_instance: InstancePath,
     pub instances: Vec<InstanceDescriptor>,
+    /// The strategy a request that names none selects: one of `strategies`.
     pub default_strategy: StrategyPath,
     pub strategies: Vec<StrategyDescriptor>,
     pub capabilities: Vec<Capability>,
@@ -173,10 +135,10 @@ pub struct ProblemDescriptor {
 pub struct StudyRequest {
     /// The problem to study: a key the catalog lists, such as `maze`.
     pub problem: ProblemPath,
-    /// The size of the problem to study; the problem's default instance when
-    /// omitted.
+    /// The instance of the problem to study: a key its catalog entry lists,
+    /// such as `micro`; the problem's default instance when omitted.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub instance: Option<InstanceProfile>,
+    pub instance: Option<InstancePath>,
     /// The strategy whose run the study selects as its document; the
     /// problem's default strategy when omitted. The study holds the problem's
     /// other outcomes beside it, usually its other strategies' runs and
@@ -218,7 +180,7 @@ impl StudyRequest {
         self
     }
 
-    pub fn with_instance(mut self, instance: InstanceProfile) -> Self {
+    pub fn with_instance(mut self, instance: InstancePath) -> Self {
         self.instance = Some(instance);
         self
     }
@@ -229,7 +191,7 @@ impl StudyRequest {
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
 pub struct StudyKey {
     pub problem: ProblemPath,
-    pub instance: InstanceProfile,
+    pub instance: InstancePath,
     pub strategy: StrategyPath,
     pub seed: u64,
     pub budget: u64,
@@ -272,7 +234,7 @@ impl Study {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct Progress {
     pub sequence: u64,
-    pub phase: PhasePath,
+    pub phase: LabeledPhase,
     pub completed: u64,
     pub total: u64,
     pub message: String,
@@ -387,8 +349,9 @@ pub enum StudioEvent {
     Progress {
         study_id: StudioStudyId,
         sequence: u64,
-        /// The phase of work the progress is in, such as `monte-carlo`.
-        phase: PhasePath,
+        /// The phase of work the progress is in, such as `monte-carlo`, and
+        /// how it reads.
+        phase: LabeledPhase,
         completed: u64,
         #[serde(skip_serializing_if = "Option::is_none")]
         total: Option<u64>,
@@ -526,10 +489,10 @@ pub enum StudyError {
         problem: ProblemPath,
         strategy: StrategyPath,
     },
-    #[error("problem `{problem}` has no {instance} instance")]
+    #[error("problem `{problem}` has no instance `{instance}`")]
     UnknownInstance {
         problem: ProblemPath,
-        instance: InstanceProfile,
+        instance: InstancePath,
     },
     #[error("study was cancelled")]
     Cancelled,
@@ -603,11 +566,11 @@ mod tests {
                     key: path!("baking"),
                     title: "Baking".into(),
                     summary: "Bake bread from flour.".into(),
-                    family: ProblemFamily::Production,
-                    default_instance: InstanceProfile::Micro,
+                    family: ProblemFamily::new(path!("home-cooking"), "Home cooking"),
+                    default_instance: path!("one-tray"),
                     instances: vec![InstanceDescriptor {
-                        profile: InstanceProfile::Micro,
-                        label: "Micro".into(),
+                        key: path!("one-tray"),
+                        label: "One tray".into(),
                         description: "Two units of flour".into(),
                     }],
                     default_strategy: path!("one"),
@@ -637,8 +600,8 @@ mod tests {
             progress: &mut StudyProgress<'_>,
         ) -> Result<Vec<ViewDocument>, StudyError> {
             let work = Work::new(
-                path!("baking"),
-                path!("baking"),
+                Labeled::new(path!("baking"), "Baking"),
+                Labeled::new(path!("baking"), "Batch baking"),
                 SearchObservationKindView::Rollout,
             );
             for batch in 1..=key.budget {
@@ -724,7 +687,7 @@ mod tests {
             .unwrap();
         assert_eq!(
             (key.instance, key.strategy),
-            (InstanceProfile::Micro, path!("one"))
+            (path!("one-tray"), path!("one"))
         );
         assert_eq!(
             registry.resolve(&StudyRequest::new(path!("bread"))),
@@ -735,9 +698,7 @@ mod tests {
             Err(StudyError::UnknownStrategy { .. })
         ));
         assert!(matches!(
-            registry.resolve(
-                &StudyRequest::new(path!("baking")).with_instance(InstanceProfile::Stress)
-            ),
+            registry.resolve(&StudyRequest::new(path!("baking")).with_instance(path!("stress"))),
             Err(StudyError::UnknownInstance { .. })
         ));
     }
@@ -840,7 +801,7 @@ mod tests {
             &baking(path!("one"), 8),
             &control,
             &mut |progress: Progress| {
-                if progress.phase == path!("baking") {
+                if progress.phase.key == path!("baking") {
                     if progress.completed == 3 {
                         control.cancel();
                     }
@@ -868,7 +829,7 @@ mod tests {
             &baking(path!("one"), 4),
             &control,
             &mut |progress: Progress| {
-                if !paused_once && progress.phase == path!("baking") {
+                if !paused_once && progress.phase.key == path!("baking") {
                     paused_once = true;
                     control.pause();
                     paused_tx.send(()).unwrap();
@@ -885,7 +846,7 @@ mod tests {
         let event = StudioEvent::Progress {
             study_id: StudioStudyId::new(1),
             sequence: 2,
-            phase: path!("documents"),
+            phase: Labeled::new(path!("documents"), "Recording documents"),
             completed: 3,
             total: Some(5),
             message: "replaying".into(),

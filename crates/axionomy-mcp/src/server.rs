@@ -65,7 +65,7 @@ never changes: every call that changes something stores a new economy and return
 older handles are branches to return to.
 
 Start here:
-1. axionomy_problem_catalog lists the built-in problems with their instance and strategy keys.
+1. axionomy_problem_catalog lists the problems this server studies with their instance and strategy keys.
 2. axionomy_problem_study studies one and returns its documents, the requested strategy's run \
 and the problem's other outcomes, each with initial_economy_id and final_economy_id.
 3. axionomy_trace_step with a step on final_economy_id names the economy at that step of the \
@@ -381,7 +381,7 @@ impl AxionomyMcp {
     #[tool(
         name = "axionomy_problem_catalog",
         title = "List problems",
-        description = "List the built-in Axionomy problems: each problem's `key`, its instances (`micro`, `showcase`, `stress`) and its strategies' keys, which axionomy_problem_study takes, with their defaults and capabilities.",
+        description = "List the problems this server studies: each problem's `key`, the `key`s of its instances and strategies, which axionomy_problem_study takes, and its defaults. Each problem declares its own instances, family and capabilities as a `key` with a `label` to show people.",
         output_schema = schema_for_output::<ProblemCatalogResponse>(),
         annotations(read_only_hint = true, open_world_hint = false)
     )]
@@ -400,7 +400,7 @@ impl AxionomyMcp {
     #[tool(
         name = "axionomy_problem_study",
         title = "Study a problem",
-        description = "Study one built-in problem and return a summary of its documents: the run of the requested `strategy`, which is the `selected_document`, beside the problem's other outcomes, usually the runs of its other strategies and cases such as a deadlock. Take the `problem`, `instance` and `strategy` keys from axionomy_problem_catalog. Each document is two stored economies: initial_economy_id, where its trajectory starts, and final_economy_id, where its exchanges reach. Step into the final one with axionomy_trace_step and branch from any step; frame i's exchange applies to step i. The study's documents and frames are linked resources. Runs only as an MCP task: a client that does not declare the io.modelcontextprotocol/tasks extension gets `tasks_required`.",
+        description = "Study one problem from axionomy_problem_catalog and return a summary of its documents: the run of the requested `strategy`, which is the `selected_document`, beside the problem's other outcomes, usually the runs of its other strategies and cases such as a deadlock. Take the `problem`, `instance` and `strategy` keys from axionomy_problem_catalog; the instance is one of the problem's own, its default when omitted. Each document is two stored economies: initial_economy_id, where its trajectory starts, and final_economy_id, where its exchanges reach. Step into the final one with axionomy_trace_step and branch from any step; frame i's exchange applies to step i. The study's documents and frames are linked resources. Runs only as an MCP task: a client that does not declare the io.modelcontextprotocol/tasks extension gets `tasks_required`.",
         output_schema = schema_for_output::<StudySummary>(),
         annotations(destructive_hint = false, idempotent_hint = true, open_world_hint = false)
     )]
@@ -1221,7 +1221,7 @@ async fn study_problem(
     let (study, trajectories) = loop {
         tokio::select! {
             progress = progress_rx.recv(), if reporting => match progress {
-                Some(progress) => context.set_status_message(format!("{}: {} ({}/{})", progress.phase, progress.message, progress.completed, progress.total)),
+                Some(progress) => context.set_status_message(format!("{}: {} ({}/{})", progress.phase.label, progress.message, progress.completed, progress.total)),
                 // The worker has returned; its result is ready.
                 None => reporting = false,
             },

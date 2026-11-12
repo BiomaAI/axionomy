@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { vi } from "vitest";
 import { App, DEFAULT_BUDGET, DEFAULT_SEED, ThinkingWorkspace } from "./App";
 import { nativeEngine, type EngineEventListener } from "./engine";
-import { fetchStaticStudy, type Study } from "./api";
+import { fetchProblems, fetchStaticProblems, fetchStaticStudy, type ProblemDescriptor, type Study } from "./api";
 import openapi from "../openapi.json";
 
 vi.mock("echarts/core", () => ({
@@ -16,15 +16,15 @@ const problem = {
   key: "maze",
   title: "Key-door maze",
   summary: "A fixture problem",
-  family: "pathfinding",
+  family: { key: "pathfinding", label: "Pathfinding" },
   default_instance: "showcase",
   instances: [
-    { profile: "micro", label: "Micro", description: "The smallest workload" },
-    { profile: "showcase", label: "Showcase", description: "A default interactive workload" },
+    { key: "micro", label: "Micro", description: "The smallest workload" },
+    { key: "showcase", label: "Showcase", description: "A default interactive workload" },
   ],
   default_strategy: "a-star",
   strategies: [{ key: "a-star", label: "Least energy", description: "A*", algorithm: "a*" }],
-  capabilities: ["weighted_search"],
+  capabilities: [{ key: "weighted-search", label: "Cost-guided search" }],
 };
 
 const lending = {
@@ -187,31 +187,84 @@ test("a link with an unreadable number says so and uses the default", async () =
 });
 
 type Observation = import("./api").SearchObservation;
-const observation = (sequence: number, phase: string, kind: Observation["kind"], label: string): Observation => ({
-  sequence, phase, algorithm: phase, kind, label, completed: sequence, total: 4, metrics: [],
+type Labeled = [key: string, label: string];
+const labeled = ([key, label]: Labeled) => ({ key, label });
+const observation = (sequence: number, phase: Labeled, kind: Observation["kind"], label: string, algorithm: Labeled = phase): Observation => ({
+  sequence, phase: labeled(phase), algorithm: labeled(algorithm), kind, label, completed: sequence, total: 4, metrics: [],
 });
+const preparing: Labeled = ["prepare", "Preparing"];
+const recording: Labeled = ["documents", "Recording documents"];
 
 test("saved thinking starts on the last search checkpoint, not on bookkeeping", () => {
   render(<ThinkingWorkspace active={false} observations={[
-    observation(0, "prepare", "phase", "Preparing the Showcase instance of Key-door maze"),
-    observation(1, "a-star-frontier", "frontier", "Expanded Start"),
-    observation(2, "a-star-solution", "incumbent", "Solution accepted at Exit"),
-    observation(3, "documents", "document", "Recorded the replay “Maze · least energy”"),
+    observation(0, preparing, "phase", "Preparing the Showcase instance of Key-door maze"),
+    observation(1, ["a-star-frontier", "A* frontier"], "frontier", "Expanded Start", ["a-star", "A*"]),
+    observation(2, ["a-star-solution", "A* solution"], "incumbent", "Solution accepted at Exit", ["a-star", "A*"]),
+    observation(3, recording, "document", "Recorded the replay “Maze · least energy”"),
   ]} />);
   expect(screen.getByText("2 search checkpoints")).toBeInTheDocument();
   expect(screen.getByRole("slider", { name: "Thinking position" })).toHaveValue("2");
   expect(screen.getByText("A* solution")).toBeInTheDocument();
+  expect(screen.getByText("A*")).toBeInTheDocument();
   expect(screen.getByRole("button", { current: "step" })).toHaveTextContent("Solution accepted at Exit");
   expect(screen.getByText("Frontier · Solutions")).toBeInTheDocument();
 });
 
 test("a strategy that records no search says so instead of listing bookkeeping", () => {
   render(<ThinkingWorkspace active={false} observations={[
-    observation(0, "prepare", "phase", "Preparing the Showcase instance of Exact cover"),
-    observation(1, "documents", "document", "Recorded the replay “Exact cover · Algorithm X”"),
+    observation(0, preparing, "phase", "Preparing the Showcase instance of Exact cover"),
+    observation(1, recording, "document", "Recorded the replay “Exact cover · Algorithm X”"),
   ]} />);
   expect(screen.getByText("This strategy records no search")).toBeInTheDocument();
   expect(screen.getByText("0 search checkpoints")).toBeInTheDocument();
   expect(screen.queryByText("Preparing the Showcase instance of Exact cover")).not.toBeInTheDocument();
   expect(screen.queryByRole("slider", { name: "Thinking position" })).not.toBeInTheDocument();
+});
+
+/**
+ * A problem registered outside the canonical suite, with a family, capability,
+ * instance and phase of its own: Studio has never heard of any of them, and
+ * shows each in the words the catalog and study give it.
+ */
+test("a problem Studio has never heard of reads in its own words", async () => {
+  const bakery = {
+    key: "bakery",
+    title: "Corner bakery",
+    summary: "Turn flour into bread before the shop opens.",
+    family: { key: "home-baking", label: "Home baking" },
+    default_instance: "one-tray",
+    instances: [{ key: "one-tray", label: "One tray", description: "Three units of flour and one oven" }],
+    default_strategy: "whole-tray",
+    strategies: [{ key: "whole-tray", label: "Bake the whole tray", description: "Bake a loaf from every unit of flour.", algorithm: "batch baking" }],
+    capabilities: [{ key: "proofing", label: "Proofing dough" }],
+  };
+  const baked = {
+    key: { problem: "bakery", instance: "one-tray", strategy: "whole-tray", seed: 17, budget: 128 },
+    problem: bakery,
+    instance: bakery.instances[0],
+    selected_document: "whole-tray",
+    assessed_proposals: [],
+    documents: [{
+      ...study.documents[0],
+      id: "whole-tray",
+      title: "Bakery · the whole tray",
+      source: { key: "bakery", label: "Corner bakery" },
+      thinking: [observation(1, ["kneading", "Kneading the dough"], "rollout", "Kneaded loaf 1", ["by-hand", "Kneading by hand"])],
+    }],
+  } as Study;
+  const catalog = [vi.mocked(fetchStaticProblems), vi.mocked(fetchProblems)].map((fetch) => fetch.mockResolvedValue([bakery, problem] as ProblemDescriptor[]));
+  const saved = vi.mocked(fetchStaticStudy).mockImplementation(async (key) => key === "bakery" ? baked : study as Study);
+  const cleanup = renderAt("/?problem=bakery");
+  expect(await screen.findByRole("heading", { name: "Bakery · the whole tray" })).toBeInTheDocument();
+  expect(screen.getByText("Home baking")).toBeInTheDocument();
+  expect(screen.getByRole("list", { name: "What this problem exercises" })).toHaveTextContent("Proofing dough");
+  expect(screen.getByRole("combobox", { name: "Instance (size)" })).toHaveValue("one-tray");
+  expect(screen.getByRole("option", { name: "One tray" })).toBeInTheDocument();
+  await waitFor(() => expect(window.location.search).toContain("instance=one-tray"));
+  await userEvent.click(screen.getByRole("tab", { name: /Thinking/ }));
+  expect(screen.getAllByText("Kneading the dough").length).toBeGreaterThan(0);
+  expect(screen.getByText("Kneading by hand")).toBeInTheDocument();
+  cleanup();
+  for (const fetch of catalog) fetch.mockResolvedValue([problem, lending] as ProblemDescriptor[]);
+  saved.mockImplementation(async () => study as Study);
 });

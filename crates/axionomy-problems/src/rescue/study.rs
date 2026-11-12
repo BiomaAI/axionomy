@@ -3,14 +3,13 @@
 use super::view::scene;
 use crate::{
     rescue::{self, Location, Policy, World},
-    support::{ProblemCopy, StrategyCopy, problem},
+    support::{Capability, Family, ProblemCopy, Size, StrategyCopy, problem, size},
 };
 use axionomy::path;
 use axionomy_search::rollout::Unrecorded;
 use axionomy_study::{
-    Capability, DocumentSpec, InstanceProfile, Problem, ProblemDescriptor, ProblemFamily,
-    ProposalSpec, StudyError, StudyKey, StudyProgress, document, problem_error, proposal,
-    telemetry,
+    DocumentSpec, Problem, ProblemDescriptor, ProposalSpec, StudyError, StudyKey, StudyProgress,
+    document, problem_error, proposal, telemetry,
 };
 use axionomy_view::{
     AccountView, AssetQuantityView, ExactQuantity, Label, ObjectiveAxisView,
@@ -37,7 +36,7 @@ impl Default for Rescue {
                         "Four casualties across five sites, tighter fuel and crew energy, one evacuation seat and varied deadlines",
                     ],
                 },
-                ProblemFamily::PartialObservation,
+                Family::PartialObservation,
                 path!("observe-then-follow"),
                 &[
                     StrategyCopy {
@@ -82,16 +81,16 @@ fn build(
     study: &StudyKey,
     progress: &mut StudyProgress<'_>,
 ) -> Result<Vec<ViewDocument>, StudyError> {
-    let profile = study.instance;
-    if !matches!(profile, InstanceProfile::Micro) {
+    let profile = size(study)?;
+    if !matches!(profile, Size::Micro) {
         return super::incident::study::build(study, profile, progress);
     }
     let model = match profile {
-        InstanceProfile::Micro => rescue::uniform_uncertain(),
-        InstanceProfile::Showcase => rescue::uniform_uncertain_showcase(),
-        InstanceProfile::Stress => rescue::uniform_uncertain_stress(),
+        Size::Micro => rescue::uniform_uncertain(),
+        Size::Showcase => rescue::uniform_uncertain_showcase(),
+        Size::Stress => rescue::uniform_uncertain_stress(),
     };
-    let samples = if matches!(profile, InstanceProfile::Stress) {
+    let samples = if matches!(profile, Size::Stress) {
         study.budget.max(256)
     } else {
         study.budget.max(2)

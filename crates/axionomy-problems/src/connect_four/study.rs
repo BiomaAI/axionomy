@@ -3,16 +3,15 @@
 use super::view::scene;
 use crate::{
     connect_four,
-    support::{ProblemCopy, StrategyCopy, problem},
+    support::{Capability, Family, ProblemCopy, Size, StrategyCopy, problem, size},
 };
 use axionomy::{Exchange, Quantity, path};
 use axionomy_study::{
-    Capability, DocumentSpec, InstanceProfile, Problem, ProblemDescriptor, ProblemFamily,
-    ProposalSpec, StudyError, StudyKey, StudyProgress, Work, document, problem_error, proposal,
-    telemetry,
+    DocumentSpec, Problem, ProblemDescriptor, ProposalSpec, StudyError, StudyKey, StudyProgress,
+    Work, document, problem_error, proposal, telemetry,
 };
 use axionomy_view::{
-    ObjectiveDirectionView, ObjectiveView, QuantityFormat, SearchObservationKindView,
+    Labeled, ObjectiveDirectionView, ObjectiveView, QuantityFormat, SearchObservationKindView,
     TelemetryKindView, ViewDocument,
 };
 
@@ -35,7 +34,7 @@ impl Default for ConnectFour {
                         "The full board with four times the MCTS work per move",
                     ],
                 },
-                ProblemFamily::AdversarialGame,
+                Family::AdversarialGame,
                 path!("mcts-game"),
                 &[
                     StrategyCopy {
@@ -81,17 +80,17 @@ fn build(
     study: &StudyKey,
     progress: &mut StudyProgress<'_>,
 ) -> Result<Vec<ViewDocument>, StudyError> {
-    let profile = study.instance;
-    let standard = !matches!(profile, InstanceProfile::Micro);
+    let profile = size(study)?;
+    let standard = !matches!(profile, Size::Micro);
     let initial = if standard {
         connect_four::initial_standard()
     } else {
         connect_four::initial()
     };
     let iterations = match profile {
-        InstanceProfile::Micro => study.budget.clamp(8, 64),
-        InstanceProfile::Showcase => (study.budget / 8).clamp(8, 32),
-        InstanceProfile::Stress => (study.budget / 4).clamp(32, 128),
+        Size::Micro => study.budget.clamp(8, 64),
+        Size::Showcase => (study.budget / 8).clamp(8, 32),
+        Size::Stress => (study.budget / 4).clamp(32, 128),
     } as usize;
     let mut observe = |state: connect_four::GameProgress| {
         let completed = state
@@ -103,8 +102,8 @@ fn build(
             .saturating_mul(state.iterations_per_move());
         progress.emit(
             &Work::new(
-                path!("mcts-game"),
-                path!("mcts-game"),
+                Labeled::new(path!("mcts-game"), "MCTS"),
+                Labeled::new(path!("mcts-game"), "MCTS self-play"),
                 SearchObservationKindView::Tree,
             ),
             completed as u64,
@@ -168,8 +167,11 @@ fn build(
             (
                 path!("center-opponent"),
                 Work::new(
-                    path!("center-opponent"),
-                    path!("center-opponent"),
+                    Labeled::new(
+                        path!("center-opponent"),
+                        "Game against the center-first opponent",
+                    ),
+                    Labeled::new(path!("center-opponent"), "Center-first opponent"),
                     SearchObservationKindView::Phase,
                 ),
                 "Connect Four · against a center-first opponent",
@@ -179,8 +181,11 @@ fn build(
             (
                 path!("search-opponent"),
                 Work::new(
-                    path!("search-opponent"),
-                    path!("search-opponent"),
+                    Labeled::new(
+                        path!("search-opponent"),
+                        "Game against the depth-five opponent",
+                    ),
+                    Labeled::new(path!("search-opponent"), "Depth-five search opponent"),
                     SearchObservationKindView::Phase,
                 ),
                 "Connect Four · against a depth-five opponent",

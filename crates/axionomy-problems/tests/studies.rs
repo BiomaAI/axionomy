@@ -4,9 +4,7 @@
 
 use axionomy::{path, path::Path};
 use axionomy_problems::{lending, registry};
-use axionomy_study::{
-    InstanceProfile, Progress, Study, StudyControl, StudyError, StudyObserver, StudyRequest,
-};
+use axionomy_study::{Progress, Study, StudyControl, StudyError, StudyObserver, StudyRequest};
 use axionomy_view::{DocumentPath, ExchangeFrame, SceneSurfaceView, ViewDocument, ViewOntology};
 use std::collections::HashSet;
 
@@ -70,17 +68,14 @@ fn catalog_covers_every_canonical_problem() {
     let catalog = registry().catalog();
     assert_eq!(catalog.len(), 15);
     assert!(catalog.iter().all(|problem| !problem.strategies.is_empty()));
+    // The canonical problems keep the instance keys links already name.
     assert!(catalog.iter().all(|problem| {
-        problem.default_instance == InstanceProfile::Showcase
+        problem.default_instance == path!("showcase")
             && problem
                 .instances
                 .iter()
-                .map(|instance| instance.profile)
-                .eq([
-                    InstanceProfile::Micro,
-                    InstanceProfile::Showcase,
-                    InstanceProfile::Stress,
-                ])
+                .map(|instance| instance.key.as_str())
+                .eq(["micro", "showcase", "stress"])
     }));
     assert!(catalog.iter().all(|problem| {
         problem
@@ -99,6 +94,33 @@ fn catalog_covers_every_canonical_problem() {
     }));
 }
 
+/// Front ends show the words a problem declares, so a family or capability
+/// two problems share reads the same in both, and none is left unlabeled.
+#[test]
+fn shared_catalog_words_read_the_same_everywhere() {
+    use std::collections::BTreeMap;
+
+    let catalog = registry().catalog();
+    let mut words = BTreeMap::new();
+    for problem in &catalog {
+        assert!(!problem.capabilities.is_empty(), "{}", problem.key);
+        let family = (
+            format!("family {}", problem.family.key),
+            &problem.family.label,
+        );
+        let capabilities = problem
+            .capabilities
+            .iter()
+            .map(|capability| (format!("capability {}", capability.key), &capability.label));
+        for (key, label) in std::iter::once(family).chain(capabilities) {
+            assert!(!label.is_empty(), "{key} has no words");
+            let declared = words.entry(key.clone()).or_insert_with(|| label.clone());
+            assert_eq!(declared, label, "{key} reads two ways");
+        }
+    }
+    assert!(words.keys().any(|key| key.starts_with("family")));
+}
+
 #[test]
 fn maze_retains_strategy_specific_search_and_route_evidence() {
     use axionomy_view::{AssessmentStatusView, ScenePathStatusView, SearchObservationKindView};
@@ -106,7 +128,7 @@ fn maze_retains_strategy_specific_search_and_route_evidence() {
     let study = registry()
         .study(
             StudyRequest::new(path!("maze"))
-                .with_instance(InstanceProfile::Showcase)
+                .with_instance(path!("showcase"))
                 .with_strategy(path!("a-star")),
         )
         .unwrap();
@@ -120,7 +142,7 @@ fn maze_retains_strategy_specific_search_and_route_evidence() {
             document
                 .thinking
                 .iter()
-                .all(|observation| observation.algorithm == algorithm)
+                .all(|observation| observation.algorithm.key == algorithm)
         );
         let accepted = document.thinking.last().unwrap();
         assert_eq!(accepted.kind, SearchObservationKindView::Incumbent);
@@ -130,7 +152,7 @@ fn maze_retains_strategy_specific_search_and_route_evidence() {
     for document in [path!("pareto-energy"), path!("pareto-time")] {
         let document = study.document(&document).unwrap();
         let observation = document.thinking.last().unwrap();
-        assert_eq!(observation.algorithm.as_str(), "exact-pareto-search");
+        assert_eq!(observation.algorithm.key.as_str(), "exact-pareto-search");
         assert_eq!(observation.kind, SearchObservationKindView::Frontier);
         assert!(observation.label.contains("4 non-dominated tradeoffs"));
     }
@@ -176,7 +198,7 @@ fn maze_retains_strategy_specific_search_and_route_evidence() {
 #[test]
 fn selected_replay_frames_stream_with_the_same_snapshot_contract() {
     let request = StudyRequest::new(path!("work-league"))
-        .with_instance(InstanceProfile::Micro)
+        .with_instance(path!("micro"))
         .with_strategy(path!("mixed-field"));
     let mut observer = FrameObserver::default();
     let study = registry()
@@ -230,8 +252,7 @@ fn every_document_reports_the_trajectory_its_frames_replay() {
     }
 
     for problem in registry().catalog() {
-        let mut request =
-            StudyRequest::new(problem.key.clone()).with_instance(InstanceProfile::Micro);
+        let mut request = StudyRequest::new(problem.key.clone()).with_instance(path!("micro"));
         request.budget = 8;
         let mut observed = Trajectories::default();
         let study = registry()
@@ -339,13 +360,13 @@ fn every_micro_problem_remains_a_fast_replayable_contract_fixture() {
     let registry = registry();
     for problem in registry.catalog() {
         let mut request = StudyRequest::new(problem.key.clone())
-            .with_instance(InstanceProfile::Micro)
+            .with_instance(path!("micro"))
             .with_strategy(problem.default_strategy.clone());
         request.budget = 8;
         let study = registry
             .study(request)
             .unwrap_or_else(|error| panic!("{} micro failed: {error}", problem.key));
-        assert_eq!(study.instance.profile, InstanceProfile::Micro);
+        assert_eq!(study.instance.key, path!("micro"));
         let selected = study.selected().expect("selected document");
         assert!(selected.frames.iter().all(|frame| {
             !frame.exchange.rate.label.contains('{')
@@ -467,7 +488,7 @@ fn assert_readable_labels(problem: &str, study: &Study) {
                 "{problem}: thinking label `{label}` reads as code"
             );
             assert_eq!(
-                observation.phase == path!("documents"),
+                observation.phase.key == path!("documents"),
                 observation.kind == axionomy_view::SearchObservationKindView::Document,
                 "{problem}: only recorded documents are document observations"
             );
@@ -498,7 +519,7 @@ fn every_default_problem_studies_to_a_selected_replay() {
             .unwrap_or_else(|error| panic!("{} failed: {error}", problem.key));
         assert!(study.selected().is_some(), "{}", problem.key);
         assert!(!study.documents.is_empty(), "{}", problem.key);
-        assert_eq!(study.instance.profile, InstanceProfile::Showcase);
+        assert_eq!(study.instance.key, path!("showcase"));
         assert!(
             study
                 .documents
@@ -644,7 +665,7 @@ fn every_default_problem_studies_to_a_selected_replay() {
 #[test]
 fn a_proposal_names_the_snapshot_it_was_assessed_against() {
     let study = registry()
-        .study(StudyRequest::new(path!("mission")).with_instance(InstanceProfile::Micro))
+        .study(StudyRequest::new(path!("mission")).with_instance(path!("micro")))
         .unwrap();
     let (document, proposal) = study
         .documents
@@ -702,14 +723,14 @@ fn logistics_reports_algorithm_progress_and_observes_cancellation_mid_study() {
     let result = registry().study_with(
         &StudyRequest {
             problem: path!("logistics"),
-            instance: Some(InstanceProfile::Micro),
+            instance: Some(path!("micro")),
             strategy: Some(path!("reliable")),
             seed: 42,
             budget: 64,
         },
         &control,
         &mut |progress: Progress| {
-            if progress.phase == path!("monte-carlo") && progress.completed >= 16 {
+            if progress.phase.key == path!("monte-carlo") && progress.completed >= 16 {
                 control.cancel();
             }
             observed.push(progress);
@@ -719,7 +740,7 @@ fn logistics_reports_algorithm_progress_and_observes_cancellation_mid_study() {
     assert_eq!(result, Err(StudyError::Cancelled));
     let monte_carlo = observed
         .iter()
-        .filter(|progress| progress.phase == path!("monte-carlo"))
+        .filter(|progress| progress.phase.key == path!("monte-carlo"))
         .collect::<Vec<_>>();
     assert!(monte_carlo.len() >= 2);
     assert!(
@@ -745,14 +766,14 @@ fn a_pause_mid_study_blocks_the_next_chunk_until_resume() {
     let result = registry().study_with(
         &StudyRequest {
             problem: path!("logistics"),
-            instance: Some(InstanceProfile::Micro),
+            instance: Some(path!("micro")),
             strategy: Some(path!("reliable")),
             seed: 42,
             budget: 16,
         },
         &control,
         &mut |progress: Progress| {
-            if !paused_once && progress.phase == path!("monte-carlo") {
+            if !paused_once && progress.phase.key == path!("monte-carlo") {
                 paused_once = true;
                 control.pause();
                 paused_tx.send(()).unwrap();

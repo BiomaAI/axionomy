@@ -3,13 +3,12 @@
 use super::view::scene;
 use crate::{
     bridge::{self, AccountId, AgentId, Asset, ObjectiveKey, RateId, Role, World},
-    support::{ProblemCopy, StrategyCopy, problem},
+    support::{Capability, Family, ProblemCopy, Size, StrategyCopy, problem, size},
 };
 use axionomy::{Exchange, Quantity, path};
 use axionomy_study::{
-    Capability, DocumentSpec, InstanceProfile, Problem, ProblemDescriptor, ProblemFamily,
-    ProblemPath, ProposalSpec, StudyError, StudyKey, StudyProgress, document, problem_error,
-    proposal, telemetry,
+    DocumentSpec, Problem, ProblemDescriptor, ProblemPath, ProposalSpec, StudyError, StudyKey,
+    StudyProgress, document, problem_error, proposal, telemetry,
 };
 use axionomy_view::{
     Keyed, ObjectiveAxisView, ObjectiveDirectionView, ObjectiveView, ParetoFrontView,
@@ -35,7 +34,7 @@ impl Default for Bridge {
                         "Three traffic waves with persistent credit and changing deadline pressure",
                     ],
                 },
-                ProblemFamily::Allocation,
+                Family::Allocation,
                 path!("auction"),
                 &[
                     StrategyCopy {
@@ -104,33 +103,33 @@ fn build(
     study: &StudyKey,
     progress: &mut StudyProgress<'_>,
 ) -> Result<Vec<ViewDocument>, StudyError> {
-    let profile = study.instance;
+    let profile = size(study)?;
     let initial = match profile {
-        InstanceProfile::Micro => bridge::initial(),
-        InstanceProfile::Showcase => bridge::initial_showcase(),
-        InstanceProfile::Stress => bridge::initial_stress(),
+        Size::Micro => bridge::initial(),
+        Size::Showcase => bridge::initial_showcase(),
+        Size::Stress => bridge::initial_stress(),
     };
     let bfs = bridge::solve(&initial)
         .ok_or_else(|| problem_error(&study.problem, "BFS found no allocation"))?;
     let first_a = match profile {
-        InstanceProfile::Micro => bridge::first_come_proposal(AgentId::A),
-        InstanceProfile::Showcase => bridge::first_come_showcase(AgentId::A),
-        InstanceProfile::Stress => bridge::first_come_stress(AgentId::A),
+        Size::Micro => bridge::first_come_proposal(AgentId::A),
+        Size::Showcase => bridge::first_come_showcase(AgentId::A),
+        Size::Stress => bridge::first_come_stress(AgentId::A),
     }
     .ok_or_else(|| problem_error(&study.problem, "first-come A failed"))?;
     let first_b = match profile {
-        InstanceProfile::Micro => bridge::first_come_proposal(AgentId::B),
-        InstanceProfile::Showcase => bridge::first_come_showcase(AgentId::B),
-        InstanceProfile::Stress => bridge::first_come_stress(AgentId::B),
+        Size::Micro => bridge::first_come_proposal(AgentId::B),
+        Size::Showcase => bridge::first_come_showcase(AgentId::B),
+        Size::Stress => bridge::first_come_stress(AgentId::B),
     }
     .ok_or_else(|| problem_error(&study.problem, "first-come B failed"))?;
     let auction = match profile {
-        InstanceProfile::Micro => bridge::auction_proposal(2, 1),
-        InstanceProfile::Showcase => bridge::auction_showcase(),
-        InstanceProfile::Stress => bridge::auction_stress(),
+        Size::Micro => bridge::auction_proposal(2, 1),
+        Size::Showcase => bridge::auction_showcase(),
+        Size::Stress => bridge::auction_stress(),
     }
     .ok_or_else(|| problem_error(&study.problem, "auction failed"))?;
-    let pareto = matches!(profile, InstanceProfile::Micro)
+    let pareto = matches!(profile, Size::Micro)
         .then(|| bridge::pareto_front(&initial))
         .transpose()
         .map_err(|error| problem_error(&study.problem, error))?;
@@ -404,7 +403,7 @@ mod tests {
     #[test]
     fn exact_front_pairs_each_travelers_priority_with_their_credit() {
         let study = registry()
-            .study(StudyRequest::new(path!("bridge")).with_instance(InstanceProfile::Micro))
+            .study(StudyRequest::new(path!("bridge")).with_instance(path!("micro")))
             .unwrap();
         for document in study.documents {
             for point in &document.pareto_fronts[0].points {

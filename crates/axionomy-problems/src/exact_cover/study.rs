@@ -3,13 +3,12 @@
 use super::view::scene;
 use crate::{
     exact_cover::{self, AccountId, RateId, Role, SetId},
-    support::{ProblemCopy, StrategyCopy, problem},
+    support::{Capability, Family, ProblemCopy, Size, StrategyCopy, problem, size},
 };
 use axionomy::{Exchange, Quantity, Trace, path};
 use axionomy_study::{
-    Capability, DocumentSpec, InstanceProfile, Problem, ProblemDescriptor, ProblemFamily,
-    ProposalSpec, StudyError, StudyKey, StudyProgress, document, problem_error, proposal,
-    telemetry,
+    DocumentSpec, Problem, ProblemDescriptor, ProposalSpec, StudyError, StudyKey, StudyProgress,
+    document, problem_error, proposal, telemetry,
 };
 use axionomy_view::{TelemetryKindView, ViewDocument};
 
@@ -32,7 +31,7 @@ impl Default for ExactCover {
                         "Twelve globally coupled elements and twenty-five pairs, triples and quadruples",
                     ],
                 },
-                ProblemFamily::Constraint,
+                Family::Constraint,
                 path!("algorithm-x"),
                 &[
                     StrategyCopy {
@@ -76,11 +75,11 @@ fn build(
     study: &StudyKey,
     progress: &mut StudyProgress<'_>,
 ) -> Result<Vec<ViewDocument>, StudyError> {
-    let profile = study.instance;
+    let profile = size(study)?;
     let initial = match profile {
-        InstanceProfile::Micro => exact_cover::initial(),
-        InstanceProfile::Showcase => exact_cover::initial_showcase(),
-        InstanceProfile::Stress => exact_cover::initial_stress(),
+        Size::Micro => exact_cover::initial(),
+        Size::Showcase => exact_cover::initial_showcase(),
+        Size::Stress => exact_cover::initial_stress(),
     };
     let bfs = exact_cover::solve_bfs(&initial)
         .ok_or_else(|| problem_error(&study.problem, "BFS found no cover"))?;
@@ -149,9 +148,9 @@ fn build(
         documents.push(view);
     }
     let unsatisfiable = match profile {
-        InstanceProfile::Micro => exact_cover::unsatisfiable(),
-        InstanceProfile::Showcase => exact_cover::unsatisfiable_showcase(),
-        InstanceProfile::Stress => exact_cover::unsatisfiable_stress(),
+        Size::Micro => exact_cover::unsatisfiable(),
+        Size::Showcase => exact_cover::unsatisfiable_showcase(),
+        Size::Stress => exact_cover::unsatisfiable_stress(),
     };
     let mut unsat = document(progress, DocumentSpec { problem: &study.problem, document: path!("unsatisfiable"), title: "Exact cover · no solution exists", description: "Same rules, different subsets: no combination covers every element exactly once. The impossibility is a result, not an error.", source_label: "Exact cover" }, &unsatisfiable, &exact_cover::goal(), &Trace::new(), Vec::new(), scene).map_err(|error| problem_error(&study.problem, error))?;
     if exact_cover::algorithm_x(&unsatisfiable).is_some()

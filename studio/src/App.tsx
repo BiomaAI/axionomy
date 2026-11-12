@@ -190,7 +190,7 @@ export function App() {
   const stopPreview = () => { previewGeneration.current += 1; previewAbort.current?.abort(); setPreview(undefined); };
 
   const problem = catalog.data?.find((candidate) => candidate.key === problemKey);
-  const instance = problem?.instances.find((candidate) => candidate.profile === instanceKey);
+  const instance = problem?.instances.find((candidate) => candidate.key === instanceKey);
   const document = study?.documents.find((candidate) => candidate.id === documentId) ?? study?.documents.find((candidate) => candidate.id === study.selected_document) ?? study?.documents[0];
   const snapshot = useSnapshot(document, position);
   const previous = useSnapshot(document, Math.max(0, position - 1));
@@ -253,7 +253,7 @@ export function App() {
 
   useEffect(() => {
     if (!problem) return;
-    const requestedInstance = problem.instances.some((candidate) => candidate.profile === instanceKey) ? instanceKey : problem.default_instance;
+    const requestedInstance = problem.instances.some((candidate) => candidate.key === instanceKey) ? instanceKey : problem.default_instance;
     const requestedStrategy = problem.strategies.some((candidate) => candidate.key === strategyKey) ? strategyKey : problem.default_strategy;
     const invalidInstance = instanceKey !== "" && requestedInstance !== instanceKey;
     const invalidStrategy = strategyKey !== "" && requestedStrategy !== strategyKey;
@@ -328,7 +328,7 @@ export function App() {
   }, [snapshot?.index, document?.id]);
 
   useEffect(() => {
-    if (!problem || !problem.instances.some((candidate) => candidate.profile === instanceKey) || !problem.strategies.some((candidate) => candidate.key === strategyKey)) return;
+    if (!problem || !problem.instances.some((candidate) => candidate.key === instanceKey) || !problem.strategies.some((candidate) => candidate.key === strategyKey)) return;
     writeUrl(urlState(), "replace");
   }, [problemKey, instanceKey, strategyKey, documentId, viewMode, position, leaderboardKey, seed, budget]);
 
@@ -387,14 +387,14 @@ export function App() {
   const start = async () => {
     stopPreview();
     const submittedProblem = problem?.title ?? problemKey;
-    const submittedInstance = problem?.instances.find((candidate) => candidate.profile === instanceKey)?.label ?? instanceKey;
+    const submittedInstance = problem?.instances.find((candidate) => candidate.key === instanceKey)?.label ?? instanceKey;
     const submittedStrategy = problem?.strategies.find((candidate) => candidate.key === strategyKey)?.label ?? strategyKey;
     setError(undefined); setEvents([]); setCompletion(undefined); eventSource.current?.close();
     setViewMode("thinking");
     studyStartedAt.current = performance.now(); setElapsedMs(0); setLaunching(true);
     try {
-      const profile = problem?.instances.find((candidate) => candidate.profile === instanceKey)?.profile;
-      const subscription = await engine.start({ problem: problemKey, instance: profile, strategy: strategyKey, seed, budget }, async (event) => {
+      const declared = problem?.instances.find((candidate) => candidate.key === instanceKey)?.key;
+      const subscription = await engine.start({ problem: problemKey, instance: declared, strategy: strategyKey, seed, budget }, async (event) => {
         setEvents((current) => current.some((known) => known.sequence === event.sequence) ? current : [...current, event]);
         if (event.kind === "study_completed") {
           eventSource.current?.close();
@@ -424,7 +424,7 @@ export function App() {
     try {
       const next = JSON.parse(await file.text()) as Study;
       if (!Array.isArray(next.documents) || !next.selected_document) throw new Error("missing study documents");
-      setStudy(next); setStudyOrigin("file"); setProblemKey(next.problem.key); setInstanceKey(next.instance.profile); setStrategyKey(next.key.strategy); setSeed(next.key.seed); setBudget(next.key.budget); setDocumentId(next.selected_document); setFreshStudy(undefined); setError(undefined);
+      setStudy(next); setStudyOrigin("file"); setProblemKey(next.problem.key); setInstanceKey(next.key.instance); setStrategyKey(next.key.strategy); setSeed(next.key.seed); setBudget(next.key.budget); setDocumentId(next.selected_document); setFreshStudy(undefined); setError(undefined);
     } catch (cause) { setError(cause instanceof Error ? cause.message : "the selected file is not a study"); }
   };
 
@@ -485,7 +485,7 @@ export function App() {
 
     <section className="command-bar" aria-label="Problem controls">
       <label className="field problem-field"><span>Problem</span><select name="problem" value={problemKey} onChange={(event) => selectProblem(event.target.value)} disabled={active}>{catalog.data?.map((candidate) => <option value={candidate.key} key={candidate.key}>{candidate.title}</option>)}</select></label>
-      <label className="field instance-field"><span>Instance (size)</span><select name="instance" value={instanceKey} onChange={(event) => selectInstance(event.target.value)} disabled={active}>{problem?.instances.map((candidate) => <option value={candidate.profile} key={candidate.profile}>{candidate.label}</option>)}</select></label>
+      <label className="field instance-field"><span>Instance (size)</span><select name="instance" value={instanceKey} onChange={(event) => selectInstance(event.target.value)} disabled={active}>{problem?.instances.map((candidate) => <option value={candidate.key} key={candidate.key}>{candidate.label}</option>)}</select></label>
       <label className="field strategy-field"><span>Strategy</span><select name="strategy" value={strategyKey} onChange={(event) => selectStrategy(event.target.value)} disabled={active}>{problem?.strategies.map((strategy) => <option value={strategy.key} key={strategy.key}>{strategy.label}</option>)}</select></label>
       <label className="field numeric-field"><span>Seed</span><input name="seed" type="number" min="0" value={seed} disabled={active} onChange={(event) => setSeed(Number(event.target.value))} /></label>
       <label className="field numeric-field"><span>Budget</span><input name="budget" type="number" min="1" value={budget} disabled={active} onChange={(event) => setBudget(Math.max(1, Number(event.target.value)))} /></label>
@@ -499,12 +499,12 @@ export function App() {
     </section>
 
     {(active || completion || linkNotices.length > 0) && <div className="status-layer">
-      {active && <StudyActivity launching={launching} ongoing={ongoing} events={events} elapsedMs={elapsedMs} />}
+      {active && <StudyActivity launching={launching} ongoing={ongoing} events={events} elapsedMs={elapsedMs} instance={problem?.instances.find((candidate) => candidate.key === ongoing?.request.instance)?.label} />}
       {completion && <><CompletionBanner notice={completion} onDismiss={() => setCompletion(undefined)} /><VerifiedStandings events={events} live={false} /></>}
       {linkNotices.map((message) => <div className="link-notice" role="status" key={message}>{message}<button type="button" onClick={() => setLinkNotices((current) => current.filter((candidate) => candidate !== message))}>Dismiss</button></div>)}
     </div>}
 
-    {problem && <section className="problem-context"><div><span>{familyLabel(problem.family)}</span><div className="problem-copy"><p>{problem.summary}</p><small><strong>{instance?.label ?? study?.instance.label}</strong>{instance?.description ?? study?.instance.description}</small></div></div><ul className="capabilities" aria-label="What this problem exercises">{problem.capabilities.map((capability) => <li key={capability}>{capabilityLabel(capability)}</li>)}</ul></section>}
+    {problem && <section className="problem-context"><div><span>{problem.family.label}</span><div className="problem-copy"><p>{problem.summary}</p><small><strong>{instance?.label ?? study?.instance.label}</strong>{instance?.description ?? study?.instance.description}</small></div></div><ul className="capabilities" aria-label="What this problem exercises">{problem.capabilities.map((capability) => <li key={capability.key}>{capability.label}</li>)}</ul></section>}
     {error && <div className="error-banner" role="alert">{error}</div>}
 
     {!loading && study && document && snapshot ? <QuantityFormats.Provider value={document.formats ?? {}}><main className={freshStudy === study ? "fresh-study" : undefined}>
@@ -565,7 +565,7 @@ export function App() {
   </div>;
 }
 
-function StudyActivity({ launching, ongoing, events, elapsedMs }: { launching: boolean; ongoing?: StudySummary; events: StudioEvent[]; elapsedMs: number }) {
+function StudyActivity({ launching, ongoing, events, elapsedMs, instance }: { launching: boolean; ongoing?: StudySummary; events: StudioEvent[]; elapsedMs: number; instance?: string }) {
   const latest = events.at(-1);
   const progress = [...events].reverse().find((event): event is Extract<StudioEvent, { kind: "progress" }> => event.kind === "progress");
   const completed = progress?.completed ?? ongoing?.completed ?? 0;
@@ -578,7 +578,7 @@ function StudyActivity({ launching, ongoing, events, elapsedMs }: { launching: b
       {total !== undefined && total > 0 ? <progress max={total} value={Math.min(completed, total)} aria-label="Study phase progress" /> : <div className="indeterminate-progress" />}
       <span>{total === 0 ? `${completed} states expanded` : total !== undefined ? `${completed} / ${total}` : "waiting for first checkpoint"}</span>
     </div>
-    <div className="study-activity-meta"><span>{formatDuration(elapsedMs)} elapsed</span>{ongoing && <><span>{ongoing.request.instance ?? "default"} instance</span><span>seed {ongoing.request.seed}</span><span>budget {ongoing.request.budget}</span><code>{ongoing.id}</code></>}</div>
+    <div className="study-activity-meta"><span>{formatDuration(elapsedMs)} elapsed</span>{ongoing && <><span>{instance ?? ongoing.request.instance ?? "default"} instance</span><span>seed {ongoing.request.seed}</span><span>budget {ongoing.request.budget}</span><code>{ongoing.id}</code></>}</div>
     <VerifiedStandings events={events} live />
   </section>;
 }
@@ -630,7 +630,7 @@ function OutcomeTabs({ study, selected, onSelect }: { study: Study; selected: st
 }
 
 function studyKeyWords(problem: ProblemDescriptor | Study["problem"], key: RequestedStudy): string {
-  const instance = problem.instances.find((candidate) => candidate.profile === key.instance)?.label ?? key.instance;
+  const instance = problem.instances.find((candidate) => candidate.key === key.instance)?.label ?? key.instance;
   const strategy = problem.strategies.find((candidate) => candidate.key === key.strategy)?.label ?? key.strategy;
   return `${instance} · ${strategy} · seed ${key.seed} · budget ${key.budget}`;
 }
@@ -719,24 +719,14 @@ export function ThinkingWorkspace({ scene, observations, active }: { scene?: Sce
   }
   return <section className={`thinking-workspace ${active ? "live" : "retained"}`} aria-label="Thinking">
     {header}
-    {latest && <div className="thinking-summary"><div><span>Current phase</span><strong>{phaseLabel(latest.phase)}</strong></div><div><span>Algorithm</span><strong>{algorithmLabel(latest.algorithm)}</strong></div><div><span>Progress</span><strong>{latest.total === 0 ? `${latest.completed} expanded` : `${latest.completed} / ${latest.total}`}</strong></div><div><span>Checkpoint kinds</span><strong>{kinds.length > 0 ? kinds.map(kindLabel).join(" · ") : "None yet"}</strong></div></div>}
+    {latest && <div className="thinking-summary"><div><span>Current phase</span><strong>{latest.phase.label}</strong></div><div><span>Algorithm</span><strong>{latest.algorithm.label}</strong></div><div><span>Progress</span><strong>{latest.total === 0 ? `${latest.completed} expanded` : `${latest.completed} / ${latest.total}`}</strong></div><div><span>Checkpoint kinds</span><strong>{kinds.length > 0 ? kinds.map(kindLabel).join(" · ") : "None yet"}</strong></div></div>}
     {latest && latest.total > 0 && <progress max={latest.total} value={Math.min(latest.completed, latest.total)} aria-label="Thinking progress" />}
     {observations.length > 1 && <div className="thinking-scrubber"><label><span>Exploration checkpoint</span><strong>{Math.min(cursor + 1, observations.length)} / {observations.length}</strong></label><input name="thinking-position" type="range" min="0" max={observations.length - 1} value={Math.min(cursor, observations.length - 1)} onChange={(event) => setCursor(Number(event.target.value))} aria-label="Thinking position" /></div>}
     <div className={`thinking-body ${searchScene ? "with-map" : "stream-only"}`}>
       {searchScene && <section className="thinking-map" aria-label="Search expansion map"><header><span>Search through encoded economic states</span><strong>{latest?.label ?? "Waiting for an expansion"}</strong></header><SceneView scene={searchScene} motion="seek" /></section>}
-      <div className="thinking-stream">{observations.length === 0 ? <div className="empty-state">Waiting for the search's first checkpoint…</div> : observations.map((observation, index) => <button type="button" key={`${observation.sequence}:${observation.phase}`} onClick={() => setCursor(index)} aria-current={index === cursor ? "step" : undefined} className={`thinking-observation-card observation-${observation.kind}`}><div className="thinking-observation-icon"><SceneIcon glyph={observationGlyph(observation.kind)} size={20} /></div><div><strong>{observation.label}</strong><span>{phaseLabel(observation.phase)} · {observation.total === 0 ? `${observation.completed} expanded` : `${observation.completed} / ${observation.total}`}</span></div><div>{observation.metrics.map((metric) => <span key={metric.key}><small>{metric.label}</small><b>{metric.value}</b></span>)}</div></button>)}</div>
+      <div className="thinking-stream">{observations.length === 0 ? <div className="empty-state">Waiting for the search's first checkpoint…</div> : observations.map((observation, index) => <button type="button" key={`${observation.sequence}:${observation.phase.key}`} onClick={() => setCursor(index)} aria-current={index === cursor ? "step" : undefined} className={`thinking-observation-card observation-${observation.kind}`}><div className="thinking-observation-icon"><SceneIcon glyph={observationGlyph(observation.kind)} size={20} /></div><div><strong>{observation.label}</strong><span>{observation.phase.label} · {observation.total === 0 ? `${observation.completed} expanded` : `${observation.completed} / ${observation.total}`}</span></div><div>{observation.metrics.map((metric) => <span key={metric.key}><small>{metric.label}</small><b>{metric.value}</b></span>)}</div></button>)}</div>
     </div>
   </section>;
-}
-
-function algorithmLabel(algorithm: string): string {
-  const labels: Record<string, string> = {
-    "a-star": "A*",
-    "breadth-first": "Breadth-first search",
-    dijkstra: "Dijkstra",
-    "exact-pareto-search": "Exact Pareto search",
-  };
-  return labels[algorithm] ?? algorithm.replaceAll("-", " ");
 }
 
 function thinkingScene(scene: Scene | null | undefined, observations: SearchObservation[]): Scene | undefined {
@@ -802,72 +792,6 @@ function kindLabel(kind: SearchObservation["kind"]): string {
     document: "Documents",
   };
   return labels[kind];
-}
-
-function familyLabel(family: NonNullable<Study["problem"]>["family"]): string {
-  const labels: Record<typeof family, string> = {
-    pathfinding: "Pathfinding",
-    constraint: "Constraint satisfaction",
-    production: "Production",
-    scheduling: "Scheduling",
-    allocation: "Allocation",
-    market: "Market clearing",
-    stochastic_planning: "Planning under uncertainty",
-    adversarial_game: "Adversarial game",
-    partial_observation: "Hidden information",
-    temporal_simulation: "Time and decay",
-    multi_agent_competition: "Multi-agent competition",
-  };
-  return labels[family];
-}
-
-function capabilityLabel(capability: Study["problem"]["capabilities"][number]): string {
-  const labels: Record<typeof capability, string> = {
-    deterministic_search: "Deterministic search",
-    weighted_search: "Cost-guided search",
-    specialized_algorithm: "Specialised algorithm",
-    exact_pareto: "Exact Pareto frontier",
-    approximate_pareto: "Sampled Pareto frontier",
-    feasibility_assessment: "Explains why something is impossible",
-    multi_account_exchange: "Multi-account atomic changes",
-    atomic_settlement: "Atomic settlement",
-    branch_optimization: "Branch and bound",
-    monte_carlo: "Monte Carlo",
-    mcts: "MCTS",
-    information_set_search: "Information-set search (ISMCTS)",
-    partial_observation: "Partial observation",
-    chance: "Random events",
-    temporal_effects: "Time-triggered effects",
-    fungible_cohorts: "Interchangeable batches",
-    non_fungible_facts: "Unique facts",
-    rl_projection: "Reinforcement-learning training data",
-    replay_derived_leaderboards: "Replay-derived leaderboards",
-  };
-  return labels[capability];
-}
-
-function phaseLabel(phase: string): string {
-  const labels: Record<string, string> = {
-    prepare: "Preparing",
-    documents: "Recording documents",
-    "fleet-dispatch": "Fleet dispatch",
-    "center-opponent": "Game against the center-first opponent",
-    "search-opponent": "Game against the depth-five opponent",
-    "monte-carlo": "Monte Carlo sampling",
-    "pareto-sampling": "Sampling the frontier",
-    mcts: "MCTS",
-    "mcts-game": "MCTS",
-    ismcts: "ISMCTS",
-    "multi-agent-match": "Multi-agent match",
-    "breadth-first-frontier": "Breadth-first frontier",
-    "dijkstra-frontier": "Dijkstra frontier",
-    "a-star-frontier": "A* frontier",
-    "pareto-frontier": "Exact Pareto frontier",
-    "breadth-first-solution": "Breadth-first solution",
-    "dijkstra-solution": "Dijkstra solution",
-    "a-star-solution": "A* solution",
-  };
-  return labels[phase] ?? phase.replaceAll("-", " ");
 }
 
 function StrategyComparison({ study, selected, onSelect }: { study: Study; selected: string; onSelect: (id: string) => void }) {
@@ -987,7 +911,7 @@ function PlaybackControls({ position, count, playing, delay, onDelay, onPosition
 function eventMessage(event: StudioEvent): string {
   switch (event.kind) {
     case "study_started": return `Started ${event.problem} · ${event.strategy}`;
-    case "progress": return `${phaseLabel(event.phase)}: ${event.message}`;
+    case "progress": return `${event.phase.label}: ${event.message}`;
     case "thinking": return event.observation.label;
     case "frame_appended": return `Published replay frame ${event.frame_index + 1}`;
     case "study_published": return `Published ${event.documents} alternatives`;

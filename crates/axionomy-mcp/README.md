@@ -39,8 +39,9 @@ as a resource, one page at a time.
 
 The server's instructions walk a first-time client through a study:
 
-1. `axionomy_problem_catalog` lists the built-in problems, with the keys of
-   their instances and strategies.
+1. `axionomy_problem_catalog` lists the problems the server studies, with
+   the keys of their instances and strategies and the labels each problem
+   gives its family, capabilities, instances and strategies.
 2. `axionomy_problem_study` studies one and returns its documents, each with
    `initial_economy_id` and `final_economy_id`.
 3. `axionomy_trace_step` with a step on `final_economy_id` names the economy
@@ -201,7 +202,7 @@ account no economy of the trace has is `not_found`.
 
 ## Studies
 
-`axionomy_problem_study` studies one instance of a built-in problem with a
+`axionomy_problem_study` studies one instance of a listed problem with a
 seed and a budget. Its documents are the problem's outcomes: the run of the
 requested strategy, which is the `selected_document`, beside the others,
 usually the runs of its other strategies and cases such as a deadlock. Each
@@ -266,8 +267,8 @@ its economy was reached; their equal `root`s say they reached equal contents.
 Assessment handles, `AssessmentId`, are written `asm-` and keyed the same way.
 Study handles, `StudyId`, are written `stu-` and keyed by what the study was
 computed from, so the same problem, instance, strategy, seed and budget always
-get the same handle. A study takes the problem and strategy as kebab-case paths
-(`work-league`, `a-star`) and the instance as `micro`, `showcase` or `stress`;
+get the same handle. A study takes the problem, instance and strategy as kebab-case paths
+(`work-league`, `micro`, `a-star`), the instance one its problem declares;
 its summary carries the study handle, that key, the selected document and, for
 every document, its frame count and its two economies.
 

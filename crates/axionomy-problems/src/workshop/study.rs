@@ -2,14 +2,13 @@
 
 use super::view::scene;
 use crate::{
-    support::{ProblemCopy, StrategyCopy, problem},
+    support::{Capability, Family, ProblemCopy, Size, StrategyCopy, problem, size},
     workshop::{self, AccountId, ObjectiveKey, RateId, World},
 };
 use axionomy::path;
 use axionomy_study::{
-    Capability, DocumentSpec, InstanceProfile, Problem, ProblemDescriptor, ProblemFamily,
-    ProposalSpec, StudyError, StudyKey, StudyProgress, document, frontier_trace, problem_error,
-    proposal, telemetry,
+    DocumentSpec, Problem, ProblemDescriptor, ProposalSpec, StudyError, StudyKey, StudyProgress,
+    document, frontier_trace, problem_error, proposal, telemetry,
 };
 use axionomy_view::{
     ObjectiveDirectionView, ObjectiveView, ParetoFrontView, TelemetryKindView, ViewDocument,
@@ -35,7 +34,7 @@ impl Default for Workshop {
                         "Choose at least three of five contracts under shared wood, time, labor and repair constraints",
                     ],
                 },
-                ProblemFamily::Production,
+                Family::Production,
                 path!("minimum-waste"),
                 &[
                     StrategyCopy {
@@ -92,10 +91,10 @@ fn build(
     study: &StudyKey,
     progress: &mut StudyProgress<'_>,
 ) -> Result<Vec<ViewDocument>, StudyError> {
-    let initial = match study.instance {
-        InstanceProfile::Micro => workshop::initial(),
-        InstanceProfile::Showcase => workshop::initial_showcase(),
-        InstanceProfile::Stress => workshop::initial_stress(),
+    let initial = match size(study)? {
+        Size::Micro => workshop::initial(),
+        Size::Showcase => workshop::initial_showcase(),
+        Size::Stress => workshop::initial_stress(),
     };
     let bfs = workshop::solve_bfs(&initial)
         .ok_or_else(|| problem_error(&study.problem, "BFS found no plan"))?;

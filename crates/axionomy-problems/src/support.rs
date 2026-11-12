@@ -1,9 +1,10 @@
-//! What the problems' studies and views share: their catalog entries, and
-//! exact fractions.
+//! What the problems' studies and views share: their catalog entries, the
+//! words those entries are written in, and exact fractions.
 
+use axionomy::{Identifier, path};
 use axionomy_study::{
-    Capability, InstanceDescriptor, InstanceProfile, ProblemDescriptor, ProblemFamily, ProblemPath,
-    StrategyDescriptor, StrategyPath,
+    InstanceDescriptor, ProblemDescriptor, ProblemPath, StrategyDescriptor, StrategyPath,
+    StudyError, StudyKey,
 };
 use std::ops::Rem;
 
@@ -13,6 +14,7 @@ pub(crate) struct ProblemCopy<'a> {
     pub key: ProblemPath,
     pub title: &'a str,
     pub summary: &'a str,
+    /// What its Micro, Showcase and Stress instances are, in that order.
     pub instances: [&'a str; 3],
 }
 
@@ -25,11 +27,127 @@ pub(crate) struct StrategyCopy<'a> {
     pub algorithm: &'a str,
 }
 
+/// The sizes every canonical problem comes in, each one of its instances:
+/// `micro`, `showcase` and `stress`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Identifier)]
+pub(crate) enum Size {
+    /// The smallest economy that still shows the problem, small enough for
+    /// exact oracles.
+    Micro,
+    /// The economy Studio opens and saves: the default.
+    Showcase,
+    /// A larger economy, scenario set or work budget.
+    Stress,
+}
+
+impl Size {
+    const ALL: [Self; 3] = [Self::Micro, Self::Showcase, Self::Stress];
+
+    fn label(self) -> &'static str {
+        match self {
+            Self::Micro => "Micro",
+            Self::Showcase => "Showcase",
+            Self::Stress => "Stress",
+        }
+    }
+}
+
+/// The size of the instance a study of a canonical problem asks for.
+pub(crate) fn size(study: &StudyKey) -> Result<Size, StudyError> {
+    axionomy_study::instance(study)
+}
+
+/// The families the canonical problems belong to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Identifier)]
+pub(crate) enum Family {
+    Pathfinding,
+    Constraint,
+    Production,
+    Scheduling,
+    Allocation,
+    Market,
+    StochasticPlanning,
+    AdversarialGame,
+    PartialObservation,
+    TemporalSimulation,
+    MultiAgentCompetition,
+}
+
+impl From<Family> for axionomy_study::ProblemFamily {
+    fn from(family: Family) -> Self {
+        let label = match family {
+            Family::Pathfinding => "Pathfinding",
+            Family::Constraint => "Constraint satisfaction",
+            Family::Production => "Production",
+            Family::Scheduling => "Scheduling",
+            Family::Allocation => "Allocation",
+            Family::Market => "Market clearing",
+            Family::StochasticPlanning => "Planning under uncertainty",
+            Family::AdversarialGame => "Adversarial game",
+            Family::PartialObservation => "Hidden information",
+            Family::TemporalSimulation => "Time and decay",
+            Family::MultiAgentCompetition => "Multi-agent competition",
+        };
+        Self::new(path::write(&family), label)
+    }
+}
+
+/// What the canonical problems exercise.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Identifier)]
+pub(crate) enum Capability {
+    DeterministicSearch,
+    WeightedSearch,
+    SpecializedAlgorithm,
+    ExactPareto,
+    ApproximatePareto,
+    FeasibilityAssessment,
+    MultiAccountExchange,
+    AtomicSettlement,
+    BranchOptimization,
+    MonteCarlo,
+    Mcts,
+    InformationSetSearch,
+    PartialObservation,
+    Chance,
+    TemporalEffects,
+    FungibleCohorts,
+    NonFungibleFacts,
+    RlProjection,
+    ReplayDerivedLeaderboards,
+}
+
+impl From<Capability> for axionomy_study::Capability {
+    fn from(capability: Capability) -> Self {
+        let label = match capability {
+            Capability::DeterministicSearch => "Deterministic search",
+            Capability::WeightedSearch => "Cost-guided search",
+            Capability::SpecializedAlgorithm => "Specialised algorithm",
+            Capability::ExactPareto => "Exact Pareto frontier",
+            Capability::ApproximatePareto => "Sampled Pareto frontier",
+            Capability::FeasibilityAssessment => "Explains why something is impossible",
+            Capability::MultiAccountExchange => "Multi-account atomic changes",
+            Capability::AtomicSettlement => "Atomic settlement",
+            Capability::BranchOptimization => "Branch and bound",
+            Capability::MonteCarlo => "Monte Carlo",
+            Capability::Mcts => "MCTS",
+            Capability::InformationSetSearch => "Information-set search (ISMCTS)",
+            Capability::PartialObservation => "Partial observation",
+            Capability::Chance => "Random events",
+            Capability::TemporalEffects => "Time-triggered effects",
+            Capability::FungibleCohorts => "Interchangeable batches",
+            Capability::NonFungibleFacts => "Unique facts",
+            Capability::RlProjection => "Reinforcement-learning training data",
+            Capability::ReplayDerivedLeaderboards => "Replay-derived leaderboards",
+        };
+        Self::new(path::write(&capability), label)
+    }
+}
+
 /// A problem's catalog entry: its Micro, Showcase and Stress instances, the
-/// Showcase by default, and its strategies.
+/// Showcase by default, its family, its strategies and what it exercises.
 pub(crate) fn problem(
     copy: ProblemCopy<'_>,
-    family: ProblemFamily,
+    family: Family,
     default_strategy: StrategyPath,
     strategies: &[StrategyCopy<'_>],
     capabilities: &[Capability],
@@ -38,22 +156,17 @@ pub(crate) fn problem(
         key: copy.key,
         title: copy.title.into(),
         summary: copy.summary.into(),
-        family,
-        default_instance: InstanceProfile::Showcase,
-        instances: [
-            InstanceProfile::Micro,
-            InstanceProfile::Showcase,
-            InstanceProfile::Stress,
-        ]
-        .into_iter()
-        .zip(["Micro", "Showcase", "Stress"])
-        .zip(copy.instances)
-        .map(|((profile, label), description)| InstanceDescriptor {
-            profile,
-            label: label.into(),
-            description: description.into(),
-        })
-        .collect(),
+        family: family.into(),
+        default_instance: path::write(&Size::Showcase),
+        instances: Size::ALL
+            .into_iter()
+            .zip(copy.instances)
+            .map(|(size, description)| InstanceDescriptor {
+                key: path::write(&size),
+                label: size.label().into(),
+                description: description.into(),
+            })
+            .collect(),
         default_strategy,
         strategies: strategies
             .iter()
@@ -64,7 +177,10 @@ pub(crate) fn problem(
                 algorithm: strategy.algorithm.into(),
             })
             .collect(),
-        capabilities: capabilities.to_vec(),
+        capabilities: capabilities
+            .iter()
+            .map(|&capability| capability.into())
+            .collect(),
     }
 }
 

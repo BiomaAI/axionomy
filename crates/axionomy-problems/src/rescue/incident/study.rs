@@ -2,10 +2,11 @@
 
 use super::view::scene;
 use crate::rescue::incident::{self, AccountId, Asset, Location, Policy, RateId, World};
+use crate::support::Size;
 use axionomy::path;
 use axionomy_study::{
-    DocumentSpec, InstanceProfile, ProposalSpec, StudyError, StudyKey, StudyProgress, document,
-    problem_error, proposal, simulate, telemetry,
+    DocumentSpec, ProposalSpec, StudyError, StudyKey, StudyProgress, document, problem_error,
+    proposal, simulate, telemetry,
 };
 use axionomy_view::{
     AccountView, AssetQuantityView, ExactQuantity, Label, ObjectiveDirectionView, ObjectiveView,
@@ -15,10 +16,10 @@ use axionomy_view::{
 
 pub(crate) fn build(
     study: &StudyKey,
-    profile: InstanceProfile,
+    profile: Size,
     progress: &mut StudyProgress<'_>,
 ) -> Result<Vec<ViewDocument>, StudyError> {
-    let initial = incident::initial(matches!(profile, InstanceProfile::Stress), study.seed);
+    let initial = incident::initial(matches!(profile, Size::Stress), study.seed);
     let mut documents = Vec::new();
     for (strategy, title, description, policy) in [
         (

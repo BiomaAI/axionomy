@@ -1,5 +1,5 @@
 use axionomy_study::{
-    InstanceProfile, ProblemPath, Registry, StrategyPath, Study, StudyError, StudyRequest,
+    InstancePath, ProblemPath, Registry, StrategyPath, Study, StudyError, StudyRequest,
 };
 use clap::{Parser, Subcommand, ValueEnum};
 use std::path::PathBuf;
@@ -23,7 +23,8 @@ enum Command {
         #[arg(long)]
         json: bool,
     },
-    /// Explain one problem's strategies and capabilities.
+    /// Explain one problem: its family, capabilities, instances and
+    /// strategies.
     Describe {
         problem: ProblemPath,
         #[arg(long)]
@@ -32,9 +33,10 @@ enum Command {
     /// Study a problem and emit a summary or the portable study as JSON.
     Study {
         problem: ProblemPath,
-        /// Select the micro, showcase or stress instance.
+        /// Select one of the problem's instances, such as `micro`; `describe`
+        /// lists them. The problem's default instance when omitted.
         #[arg(long)]
-        instance: Option<InstanceProfile>,
+        instance: Option<InstancePath>,
         #[arg(long)]
         strategy: Option<StrategyPath>,
         #[arg(long, default_value_t = 17)]
@@ -129,9 +131,9 @@ pub fn execute(registry: &Registry, cli: Cli) -> Result<CliOutput, CliError> {
                     .map(|instance| {
                         format!(
                             "  {:<20} {}{}\n    {}",
-                            instance.profile,
+                            instance.key.as_str(),
                             instance.label,
-                            if instance.profile == descriptor.default_instance {
+                            if instance.key == descriptor.default_instance {
                                 " (default)"
                             } else {
                                 ""
@@ -142,14 +144,15 @@ pub fn execute(registry: &Registry, cli: Cli) -> Result<CliOutput, CliError> {
                     .collect::<Vec<_>>()
                     .join("\n");
                 format!(
-                    "{} [{}]\n{}\n\nCapabilities: {}\n\nInstances:\n{}\n\nStrategies:\n{}",
+                    "{} [{}]\n{}\n\nFamily: {}\nCapabilities: {}\n\nInstances:\n{}\n\nStrategies:\n{}",
                     descriptor.title,
                     descriptor.key,
                     descriptor.summary,
+                    descriptor.family.label,
                     descriptor
                         .capabilities
                         .iter()
-                        .map(|capability| format!("{capability:?}"))
+                        .map(|capability| capability.label.as_str())
                         .collect::<Vec<_>>()
                         .join(", "),
                     instances,
@@ -214,7 +217,7 @@ fn summary(study: &Study) -> String {
         selected.title,
         selected.description,
         study.key,
-        study.instance.profile,
+        study.instance.key,
         selected.id,
         study.documents.len().saturating_sub(1),
         selected.frames.len(),
@@ -278,19 +281,30 @@ mod tests {
         ] {
             assert!(run_from(&registry(), arguments).is_err());
         }
+        for arguments in [
+            // An instance the problem does not declare, and one that is not a path.
+            ["axionomy", "study", "maze", "--instance", "huge"],
+            ["axionomy", "study", "maze", "--instance", "Micro"],
+            ["axionomy", "study", "maze", "--strategy", "a_star"],
+        ] {
+            assert!(run_from(&registry(), arguments).is_err());
+        }
+    }
+
+    #[test]
+    fn an_instance_is_one_its_problem_declares() {
+        let output = run_from(
+            &registry(),
+            ["axionomy", "study", "maze", "--instance", "micro"],
+        )
+        .unwrap();
+        assert!(output.text.contains("instance: micro"));
+        let described = run_from(&registry(), ["axionomy", "describe", "maze"]).unwrap();
+        assert!(described.text.contains("Family: Pathfinding"));
         assert!(
-            run_from(
-                &registry(),
-                ["axionomy", "study", "maze", "--instance", "huge"]
-            )
-            .is_err()
-        );
-        assert!(
-            run_from(
-                &registry(),
-                ["axionomy", "study", "maze", "--strategy", "a_star"]
-            )
-            .is_err()
+            described
+                .text
+                .contains("showcase             Showcase (default)")
         );
     }
 }

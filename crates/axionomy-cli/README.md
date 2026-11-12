@@ -12,8 +12,11 @@ cargo run -p axionomy-cli -- study logistics --instance showcase --strategy reli
 cargo run -p axionomy-cli -- study marketplace --instance micro --format json > marketplace.json
 ```
 
-Every problem advertises Micro, Showcase, and Stress instances. Omitting
-`--instance` selects Showcase, and the study records its key: the problem,
-instance, strategy, seed and budget it was computed from. Problems and
-strategies are written in kebab-case (`work-league`, `a-star`), and the CLI
-refuses any other spelling when it reads them.
+Every problem declares its instances, and `describe` lists them with its
+family and capabilities in the words the problem gives them; the canonical
+problems declare `micro`, `showcase` and `stress`. Omitting `--instance`
+selects the problem's default, Showcase for the canonical ones, and the study
+records its key: the problem, instance, strategy, seed and budget it was
+computed from. Problems, instances and strategies are written in kebab-case
+(`work-league`, `showcase`, `a-star`), and the CLI refuses any other spelling
+when it reads them.

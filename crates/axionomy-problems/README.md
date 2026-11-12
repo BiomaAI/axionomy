@@ -62,15 +62,18 @@ helpers (`document` replays a trace into a view document, and `proposal`,
 `telemetry`, `simulate` and `frontier_trace` add the evidence beside it). Its
 ontology's identifiers derive `axionomy::Identifier` and implement
 `axionomy_view::Label`, with `Format` for assets, so a document can name them.
-This one studies the Micro maze by breadth-first search alone:
+A catalog entry declares its own family, what it exercises and its instances,
+each a path with the words people read for it; Studio, MCP and the CLI show
+those words and know nothing else about the problem. This one studies the
+smallest maze by breadth-first search alone:
 
 ```rust
 use axionomy::path;
 use axionomy_problems::maze;
 use axionomy_study::{
-    Capability, DocumentSpec, InstanceDescriptor, InstanceProfile, Problem, ProblemDescriptor,
-    ProblemFamily, Registry, StrategyDescriptor, StudyError, StudyKey, StudyProgress,
-    StudyRequest, document, problem_error,
+    Capability, DocumentSpec, InstanceDescriptor, Problem, ProblemDescriptor, ProblemFamily,
+    Registry, StrategyDescriptor, StudyError, StudyKey, StudyProgress, StudyRequest, document,
+    problem_error,
 };
 use axionomy_view::ViewDocument;
 
@@ -116,11 +119,11 @@ registry.register(FewestMoves(ProblemDescriptor {
     key: path!("fewest-moves"),
     title: "Fewest moves".into(),
     summary: "Reach the maze's exit in as few exchanges as possible.".into(),
-    family: ProblemFamily::Pathfinding,
-    default_instance: InstanceProfile::Micro,
+    family: ProblemFamily::new(path!("pathfinding"), "Pathfinding"),
+    default_instance: path!("smallest"),
     instances: vec![InstanceDescriptor {
-        profile: InstanceProfile::Micro,
-        label: "Micro".into(),
+        key: path!("smallest"),
+        label: "Smallest".into(),
         description: "The smallest key-door maze".into(),
     }],
     default_strategy: path!("breadth-first"),
@@ -130,10 +133,11 @@ registry.register(FewestMoves(ProblemDescriptor {
         description: "Tries every route one exchange longer at a time.".into(),
         algorithm: "breadth-first search".into(),
     }],
-    capabilities: vec![Capability::DeterministicSearch],
+    capabilities: vec![Capability::new(path!("fewest-exchanges"), "Fewest exchanges")],
 }))?;
 
 let study = registry.study(StudyRequest::new(path!("fewest-moves")))?;
+assert_eq!(study.key.instance, path!("smallest"));
 assert_eq!(study.selected().map(|document| document.frames.len()), Some(3));
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```

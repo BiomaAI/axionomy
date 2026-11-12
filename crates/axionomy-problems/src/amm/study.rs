@@ -5,13 +5,12 @@ use super::view::{
 };
 use crate::{
     amm::{self, ACTORS, AccountId, Actor, Asset, Scenario, World},
-    support::{ProblemCopy, StrategyCopy, problem},
+    support::{Capability, Family, ProblemCopy, Size, StrategyCopy, problem, size},
 };
 use axionomy::path;
 use axionomy_study::{
-    Capability, DocumentSpec, InstanceProfile, Problem, ProblemDescriptor, ProblemFamily,
-    ProposalSpec, StudyError, StudyKey, StudyProgress, document, problem_error, proposal,
-    telemetry,
+    DocumentSpec, Problem, ProblemDescriptor, ProposalSpec, StudyError, StudyKey, StudyProgress,
+    document, problem_error, proposal, telemetry,
 };
 use axionomy_view::{ObjectiveDirectionView, ObjectiveView, TelemetryKindView, ViewDocument};
 
@@ -34,7 +33,7 @@ impl Default for Amm {
                         "Twelve market days at four times the production scale with the same seeded sunlight across counterfactuals",
                     ],
                 },
-                ProblemFamily::Market,
+                Family::Market,
                 path!("market-day"),
                 &[
                     StrategyCopy {
@@ -86,10 +85,10 @@ fn build(
     study: &StudyKey,
     progress: &mut StudyProgress<'_>,
 ) -> Result<Vec<ViewDocument>, StudyError> {
-    let initial = match study.instance {
-        InstanceProfile::Micro => amm::initial(),
-        InstanceProfile::Showcase => amm::initial_showcase_with_seed(study.seed),
-        InstanceProfile::Stress => amm::initial_stress_with_seed(study.seed),
+    let initial = match size(study)? {
+        Size::Micro => amm::initial(),
+        Size::Showcase => amm::initial_showcase_with_seed(study.seed),
+        Size::Stress => amm::initial_stress_with_seed(study.seed),
     };
     let scenarios = [
         (

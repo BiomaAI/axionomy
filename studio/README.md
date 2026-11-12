@@ -45,9 +45,12 @@ outcome without exchanges says so and has nothing to play. While a saved study
 downloads, Studio shows how much has arrived and holds Study and Copy link
 until it is on screen.
 
-Each problem advertises Micro, Showcase, and Stress instances. Showcase is the
-default and is also the pre-built offline study; Micro and Stress are live
-engine choices. The comparison surface puts replayable outcomes, objective
+Each problem declares its instances, family and capabilities, each a key with
+a label, and Studio shows the labels it receives; the phases and algorithms of
+thinking read the same way. The canonical problems declare Micro, Showcase, and
+Stress instances (`?instance=micro`). A problem's default instance, Showcase
+for the canonical ones, is also the pre-built offline study; the others are
+live engine choices. The comparison surface puts replayable outcomes, objective
 values, trace lengths, and each algorithm's own work (its counters, in the
 words it reports them) side by side, while uniform complexity telemetry exposes
 accounts, rates, transitions, rejection proofs, and alternatives across every

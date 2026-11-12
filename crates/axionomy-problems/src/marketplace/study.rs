@@ -3,13 +3,12 @@
 use super::view::scene;
 use crate::{
     marketplace::{self, AccountId, BuyerId, ObjectiveKey, SellerId, World},
-    support::{ProblemCopy, StrategyCopy, problem},
+    support::{Capability, Family, ProblemCopy, Size, StrategyCopy, problem, size},
 };
 use axionomy::path;
 use axionomy_study::{
-    Capability, DocumentSpec, InstanceProfile, Problem, ProblemDescriptor, ProblemFamily,
-    ProblemPath, ProposalSpec, StudyError, StudyKey, StudyProgress, document, problem_error,
-    proposal, telemetry,
+    DocumentSpec, Problem, ProblemDescriptor, ProblemPath, ProposalSpec, StudyError, StudyKey,
+    StudyProgress, document, problem_error, proposal, telemetry,
 };
 use axionomy_view::{
     Keyed, ObjectiveAxisView, ObjectiveDirectionView, ObjectiveView, ParetoFrontView,
@@ -35,7 +34,7 @@ impl Default for Marketplace {
                         "Six arriving orders with scarce stock, persistent budgets, route delays and reusable carrier capacity",
                     ],
                 },
-                ProblemFamily::Market,
+                Family::Market,
                 path!("market-clearing"),
                 &[
                     StrategyCopy {
@@ -86,16 +85,16 @@ fn build(
     study: &StudyKey,
     progress: &mut StudyProgress<'_>,
 ) -> Result<Vec<ViewDocument>, StudyError> {
-    let profile = study.instance;
+    let profile = size(study)?;
     let initial = match profile {
-        InstanceProfile::Micro => marketplace::initial(),
-        InstanceProfile::Showcase => marketplace::initial_showcase(),
-        InstanceProfile::Stress => marketplace::initial_stress(),
+        Size::Micro => marketplace::initial(),
+        Size::Showcase => marketplace::initial_showcase(),
+        Size::Stress => marketplace::initial_stress(),
     };
     let goal = match profile {
-        InstanceProfile::Micro => marketplace::goal(),
-        InstanceProfile::Showcase => marketplace::goal_showcase(),
-        InstanceProfile::Stress => marketplace::goal_stress(),
+        Size::Micro => marketplace::goal(),
+        Size::Showcase => marketplace::goal_showcase(),
+        Size::Stress => marketplace::goal_stress(),
     };
     let clearing = marketplace::clear_market(&initial);
     let timed = marketplace::fulfillment::enabled(&initial);

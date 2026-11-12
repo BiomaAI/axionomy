@@ -3,13 +3,12 @@
 use super::view::scene;
 use crate::{
     perishables::{self, ObjectiveKey},
-    support::{ProblemCopy, StrategyCopy, problem},
+    support::{Capability, Family, ProblemCopy, Size, StrategyCopy, problem, size},
 };
 use axionomy::path;
 use axionomy_study::{
-    Capability, DocumentSpec, InstanceProfile, Problem, ProblemDescriptor, ProblemFamily,
-    ProposalSpec, StudyError, StudyKey, StudyProgress, document, frontier_trace, problem_error,
-    proposal, telemetry,
+    DocumentSpec, Problem, ProblemDescriptor, ProposalSpec, StudyError, StudyKey, StudyProgress,
+    document, frontier_trace, problem_error, proposal, telemetry,
 };
 use axionomy_view::{
     ObjectiveAxisView, ObjectiveDirectionView, ObjectiveView, ParetoFrontView, TelemetryKindView,
@@ -35,7 +34,7 @@ impl Default for Perishables {
                         "Twelve crates, tighter cold storage, less fuel, eight days and a three-day outage",
                     ],
                 },
-                ProblemFamily::TemporalSimulation,
+                Family::TemporalSimulation,
                 path!("outage"),
                 &[
                     StrategyCopy {
@@ -86,14 +85,14 @@ fn build(
     study: &StudyKey,
     progress: &mut StudyProgress<'_>,
 ) -> Result<Vec<ViewDocument>, StudyError> {
-    let profile = study.instance;
-    if !matches!(profile, InstanceProfile::Micro) {
+    let profile = size(study)?;
+    if !matches!(profile, Size::Micro) {
         return super::cold_chain::study::build(study, profile, progress);
     }
     let (initial, transfer) = match profile {
-        InstanceProfile::Micro => (perishables::initial_with_inventory(70, 30), 10),
-        InstanceProfile::Showcase => (perishables::initial(), perishables::DEFAULT_TRANSFER),
-        InstanceProfile::Stress => (
+        Size::Micro => (perishables::initial_with_inventory(70, 30), 10),
+        Size::Showcase => (perishables::initial(), perishables::DEFAULT_TRANSFER),
+        Size::Stress => (
             perishables::initial_with_inventory(700_000, 300_000),
             100_000,
         ),

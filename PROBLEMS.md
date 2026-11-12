@@ -115,7 +115,8 @@ cargo bench -p axionomy-problems --bench rollout_throughput
 
 ## Instance profiles and anti-toy pressure
 
-Every service-visible problem exposes the same explicit profile contract:
+Every canonical problem declares the same three instances, under the keys
+links, the CLI's `--instance` and MCP's `instance` take:
 
 - **Micro** preserves the compact exact fixtures and independent oracles used
   by unit tests and quick integration checks.
@@ -132,8 +133,11 @@ truth into the service or viewer. Instance identity is carried in
 though it came from a different workload.
 
 What each instance holds and what each strategy does is written once, in the
-problem's catalog entry in its `study.rs`. Studio shows it, and
-`cargo run -p axionomy-cli -- describe <problem>` prints it.
+problem's catalog entry in its `study.rs`, with its family and what it
+exercises: each a path with the words people read for it, from the suite's
+shared vocabulary in `support.rs`. Studio shows those words, and
+`cargo run -p axionomy-cli -- describe <problem>` prints them. A problem of
+your own declares its own instances, family and capabilities the same way.
 
 **Model size** telemetry records accounts, rules, trace steps, rule-check
 probes, and compared alternatives for every result. The study tests

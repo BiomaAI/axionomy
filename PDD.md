@@ -659,7 +659,8 @@ reimplementing problem dispatch. Its public vocabulary is intentionally small:
 ```text
 Problem           = catalog entry + the documents a study of it holds
 Registry          = the problems a front end offers, each under its own key
-ProblemDescriptor = identity + family + instance profiles + strategies + capabilities
+ProblemDescriptor = identity + family + instances + strategies + capabilities,
+                    each a path with the label the problem declares for it
 StudyRequest      = problem + instance + strategy + deterministic seed + work budget
 StudyKey          = the request with its instance and strategy decided
 StudyControl      = cooperative pause + resume + cancel
@@ -735,9 +736,10 @@ to 72 hidden scenarios; the other seven profiles retain their board, horizon,
 target, inventory, or sampling pressure.
 
 Profiles remain closed problem definitions. Their accounts, assets, rates,
-invariants, goals, and initial quantities are ordinary model data; an
-instance is named by its profile (`micro`, `showcase` or `stress`), which is
-interface identity, not semantic authority. Every study records its key:
+invariants, goals, and initial quantities are ordinary model data. Each problem
+declares its instances as paths with labels; the reference problems declare
+these three as `micro`, `showcase` and `stress`, which is interface identity,
+not semantic authority, and a problem of another registry declares its own. Every study records its key:
 the problem, instance, strategy, seed and budget it was computed from. Micro continues to support exact
 oracles even when exhaustive search over Showcase would be inappropriate, and
 an approximate or candidate-bounded Showcase frontier must be labeled as such.
@@ -2012,14 +2014,16 @@ exposes only what a handle reaches.
 
 Everything a caller names is written as a path of kebab-case segments and
 read into its own type: accounts and assets, problems and strategies
-(`work-league`, `a-star`), documents, view items (`maze/account/agent`),
-measures, classes, phases and algorithms, and store tags, metrics, refs and
-group kinds. What a server mints has its own handle type instead: economy,
+(`work-league`, `a-star`), instances (`showcase`), families and
+capabilities, documents, view items (`maze/account/agent`), measures, classes,
+phases and algorithms, and store tags, metrics, refs and group kinds. What a server mints has its own handle type instead: economy,
 assessment and study handles in MCP, run and group IDs in the store, and
 Studio study IDs (`study-7`). JSON field names and closed vocabularies, such as
-capabilities, families, glyphs, tones and event kinds, stay snake_case like
-the schema they belong to, and an instance is named by its profile. Text that
-people read stays text.
+glyphs, tones and event kinds, stay snake_case like the schema they belong to.
+Whatever a problem declares for people to read beside a path, a family, a
+capability, an instance, a phase or an algorithm, travels with the path as its
+label, so no front end keeps a table of its own. Text that people read stays
+text.
 
 One spelling per identifier means a link, a CLI argument, an MCP call and a
 stored study name the same thing the same way, and a misspelling is

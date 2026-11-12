@@ -3,13 +3,12 @@
 use super::view::scene;
 use crate::{
     scheduling::{self, Job, ObjectiveKey, World},
-    support::{ProblemCopy, StrategyCopy, problem},
+    support::{Capability, Family, ProblemCopy, Size, StrategyCopy, problem, size},
 };
 use axionomy::{Exchange, Quantity, Trace, path};
 use axionomy_study::{
-    Capability, DocumentSpec, InstanceProfile, Problem, ProblemDescriptor, ProblemFamily,
-    ProposalSpec, StudyError, StudyKey, StudyProgress, document, frontier_trace, problem_error,
-    proposal, telemetry,
+    DocumentSpec, Problem, ProblemDescriptor, ProposalSpec, StudyError, StudyKey, StudyProgress,
+    document, frontier_trace, problem_error, proposal, telemetry,
 };
 use axionomy_view::{
     ObjectiveAxisView, ObjectiveDirectionView, ObjectiveView, ParetoFrontView, TelemetryKindView,
@@ -35,7 +34,7 @@ impl Default for Scheduling {
                         "One shared crew, later job arrival and a longer repair create a different execution bottleneck",
                     ],
                 },
-                ProblemFamily::Scheduling,
+                Family::Scheduling,
                 path!("bounded-optimizer"),
                 &[
                     StrategyCopy {
@@ -92,11 +91,11 @@ fn build(
     study: &StudyKey,
     progress: &mut StudyProgress<'_>,
 ) -> Result<Vec<ViewDocument>, StudyError> {
-    let profile = study.instance;
+    let profile = size(study)?;
     let initial = match profile {
-        InstanceProfile::Micro => scheduling::initial(),
-        InstanceProfile::Showcase => scheduling::initial_showcase(),
-        InstanceProfile::Stress => scheduling::initial_stress(),
+        Size::Micro => scheduling::initial(),
+        Size::Showcase => scheduling::initial_showcase(),
+        Size::Stress => scheduling::initial_stress(),
     };
     let best = scheduling::solve_best_first(&initial)
         .ok_or_else(|| problem_error(&study.problem, "best-first found no schedule"))?;
@@ -208,7 +207,7 @@ fn build(
         }
         documents.push(view);
     }
-    let impossible = if matches!(profile, InstanceProfile::Showcase | InstanceProfile::Stress) {
+    let impossible = if matches!(profile, Size::Showcase | Size::Stress) {
         scheduling::impossible_showcase()
     } else {
         scheduling::impossible()

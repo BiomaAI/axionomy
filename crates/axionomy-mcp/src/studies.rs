@@ -148,7 +148,7 @@ pub(crate) fn compute(
 pub(crate) fn request(key: &StudyKey) -> StudyRequest {
     StudyRequest {
         problem: key.problem.clone(),
-        instance: Some(key.instance),
+        instance: Some(key.instance.clone()),
         strategy: Some(key.strategy.clone()),
         seed: key.seed,
         budget: key.budget,

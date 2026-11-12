@@ -3,7 +3,7 @@
 use super::view::scene;
 use crate::{
     sokoban::{self, AccountId, Asset, RateId, Solution, World},
-    support::{ProblemCopy, StrategyCopy, problem},
+    support::{Capability, Family, ProblemCopy, Size, StrategyCopy, problem, size},
 };
 use axionomy::path;
 use axionomy_search::{
@@ -11,11 +11,10 @@ use axionomy_search::{
     session::{Continue, WorkBudget},
 };
 use axionomy_study::{
-    Capability, DocumentSpec, InstanceProfile, Problem, ProblemDescriptor, ProblemFamily,
-    ProblemPath, ProposalSpec, StudyError, StudyKey, StudyProgress, Work, document, problem_error,
-    proposal, strategy, telemetry,
+    DocumentSpec, Problem, ProblemDescriptor, ProblemPath, ProposalSpec, StudyError, StudyKey,
+    StudyProgress, Work, document, problem_error, proposal, strategy, telemetry,
 };
-use axionomy_view::{SearchObservationKindView, TelemetryKindView, ViewDocument};
+use axionomy_view::{Labeled, SearchObservationKindView, TelemetryKindView, ViewDocument};
 
 /// Sokoban: its catalog entry and how its studies are computed.
 pub struct Sokoban {
@@ -36,7 +35,7 @@ impl Default for Sokoban {
                         "Three crates and two coupled door circuits across three chambers",
                     ],
                 },
-                ProblemFamily::Pathfinding,
+                Family::Pathfinding,
                 path!("a-star"),
                 &[
                     StrategyCopy {
@@ -95,8 +94,14 @@ impl Strategy {
     /// The search expanding its frontier.
     fn frontier(self) -> Work {
         let (phase, algorithm) = match self {
-            Self::AStar => (path!("a-star-frontier"), path!("a-star")),
-            Self::BreadthFirst => (path!("breadth-first-frontier"), path!("breadth-first")),
+            Self::AStar => (
+                Labeled::new(path!("a-star-frontier"), "A* frontier"),
+                Labeled::new(path!("a-star"), "A*"),
+            ),
+            Self::BreadthFirst => (
+                Labeled::new(path!("breadth-first-frontier"), "Breadth-first frontier"),
+                Labeled::new(path!("breadth-first"), "Breadth-first search"),
+            ),
         };
         Work::new(phase, algorithm, SearchObservationKindView::Frontier)
     }
@@ -106,11 +111,11 @@ fn build(
     study: &StudyKey,
     progress: &mut StudyProgress<'_>,
 ) -> Result<Vec<ViewDocument>, StudyError> {
-    let profile = study.instance;
+    let profile = size(study)?;
     let initial = match profile {
-        InstanceProfile::Micro => sokoban::initial(),
-        InstanceProfile::Showcase => sokoban::initial_showcase(),
-        InstanceProfile::Stress => sokoban::initial_stress(),
+        Size::Micro => sokoban::initial(),
+        Size::Showcase => sokoban::initial_showcase(),
+        Size::Stress => sokoban::initial_stress(),
     };
     let strategy: Strategy = strategy(study)?;
     let chunk = usize::try_from(study.budget.clamp(8, 256)).unwrap_or(64);

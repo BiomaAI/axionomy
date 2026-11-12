@@ -3,13 +3,12 @@
 use super::view::scene;
 use crate::{
     lending::{self, AccountId, Asset, Config, LoanTrace, World, balance},
-    support::{ProblemCopy, StrategyCopy, problem},
+    support::{Capability, Family, ProblemCopy, Size, StrategyCopy, problem, size},
 };
 use axionomy::path;
 use axionomy_study::{
-    Capability, DocumentSpec, InstanceProfile, Problem, ProblemDescriptor, ProblemFamily,
-    ProblemPath, ProposalSpec, StudyError, StudyKey, StudyProgress, document, problem_error,
-    proposal, telemetry,
+    DocumentSpec, Problem, ProblemDescriptor, ProblemPath, ProposalSpec, StudyError, StudyKey,
+    StudyProgress, document, problem_error, proposal, telemetry,
 };
 use axionomy_view::{
     ObjectiveDirectionView, ObjectiveView, ProposalView, SearchTelemetryView, TelemetryKindView,
@@ -35,7 +34,7 @@ impl Default for Lending {
                         "The Showcase loan at four times the scale over twelve periods, with revenue in three installments",
                     ],
                 },
-                ProblemFamily::Market,
+                Family::Market,
                 path!("least-interest"),
                 &[
                     StrategyCopy {
@@ -96,10 +95,10 @@ fn build(
     study: &StudyKey,
     progress: &mut StudyProgress<'_>,
 ) -> Result<Vec<ViewDocument>, StudyError> {
-    let config = match study.instance {
-        InstanceProfile::Micro => Config::micro(),
-        InstanceProfile::Showcase => Config::showcase(),
-        InstanceProfile::Stress => Config::stress(),
+    let config = match size(study)? {
+        Size::Micro => Config::micro(),
+        Size::Showcase => Config::showcase(),
+        Size::Stress => Config::stress(),
     };
     let problem = &study.problem;
     let initial = lending::world(&config);

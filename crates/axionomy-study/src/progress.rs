@@ -6,7 +6,7 @@ use crate::{ProblemPath, Progress, StudyControl, StudyError, StudyObserver};
 use axionomy::{Economy, Trace, path, paths};
 use axionomy_search::GraphSearchProgress;
 use axionomy_view::{
-    AlgorithmPath, DocumentPath, ExchangeFrame, PhasePath, SceneMetricView,
+    DocumentPath, ExchangeFrame, Labeled, LabeledAlgorithm, LabeledPhase, SceneMetricView,
     SearchObservationKindView, SearchObservationView, ViewId, WrittenOntology,
 };
 use serde::{Serialize, de::DeserializeOwned};
@@ -16,18 +16,20 @@ use std::{
 };
 
 /// What progress is reported about: a phase of work, the algorithm doing it
-/// and the kind of checkpoint its observations are.
+/// and the kind of checkpoint its observations are. The problem doing the
+/// work labels its phase and algorithm, so every front end reads them in the
+/// problem's words.
 #[derive(Debug, Clone)]
 pub struct Work {
-    pub phase: PhasePath,
-    pub algorithm: AlgorithmPath,
+    pub phase: LabeledPhase,
+    pub algorithm: LabeledAlgorithm,
     pub kind: SearchObservationKindView,
 }
 
 impl Work {
     pub fn new(
-        phase: PhasePath,
-        algorithm: AlgorithmPath,
+        phase: LabeledPhase,
+        algorithm: LabeledAlgorithm,
         kind: SearchObservationKindView,
     ) -> Self {
         Self {
@@ -40,8 +42,8 @@ impl Work {
     /// Policies evaluated by sampled rollouts.
     pub fn monte_carlo() -> Self {
         Self::new(
-            path!("monte-carlo"),
-            path!("monte-carlo"),
+            Labeled::new(path!("monte-carlo"), "Monte Carlo sampling"),
+            Labeled::new(path!("monte-carlo"), "Monte Carlo"),
             SearchObservationKindView::Rollout,
         )
     }
@@ -49,8 +51,8 @@ impl Work {
     /// A policy frontier estimated from sampled rollouts.
     pub fn pareto_sampling() -> Self {
         Self::new(
-            path!("pareto-sampling"),
-            path!("pareto-sampling"),
+            Labeled::new(path!("pareto-sampling"), "Sampling the frontier"),
+            Labeled::new(path!("pareto-sampling"), "Pareto sampling"),
             SearchObservationKindView::Frontier,
         )
     }

@@ -9,7 +9,8 @@ use axionomy::{
     path::{Path, Segments},
 };
 use axionomy_view::{
-    DocumentPath, SearchObservationKindView, TelemetryKindView, TelemetrySubjectView, ViewDocument,
+    DocumentPath, Labeled, SearchObservationKindView, TelemetryKindView, TelemetrySubjectView,
+    ViewDocument,
 };
 use std::{fmt, sync::Arc};
 use thiserror::Error;
@@ -20,7 +21,8 @@ use thiserror::Error;
 /// A problem computes a study's documents; the registry resolves the request
 /// the study answers, checks the documents and assembles them into the study.
 pub trait Problem: Send + Sync {
-    /// The problem's catalog entry: its key, instances and strategies.
+    /// The problem's catalog entry: its key, its family and what it
+    /// exercises, its instances and its strategies, each labeled for people.
     fn descriptor(&self) -> &ProblemDescriptor;
 
     /// The documents of the study `key` names: one for each alternative the
@@ -109,12 +111,11 @@ impl Registry {
         let problem = self
             .problem(&request.problem)
             .ok_or_else(|| StudyError::UnknownProblem(request.problem.clone()))?;
-        let instance = request.instance.unwrap_or(problem.default_instance);
-        if !problem
-            .instances
-            .iter()
-            .any(|known| known.profile == instance)
-        {
+        let instance = request
+            .instance
+            .clone()
+            .unwrap_or_else(|| problem.default_instance.clone());
+        if !problem.instances.iter().any(|known| known.key == instance) {
             return Err(StudyError::UnknownInstance {
                 problem: problem.key.clone(),
                 instance,
@@ -161,15 +162,15 @@ impl Registry {
         let instance = descriptor
             .instances
             .iter()
-            .find(|candidate| candidate.profile == key.instance)
+            .find(|candidate| candidate.key == key.instance)
             .map_or_else(
                 || key.instance.to_string(),
                 |instance| instance.label.clone(),
             );
         let _ = progress.emit(
             &Work::new(
-                path!("prepare"),
-                path!("prepare"),
+                Labeled::new(path!("prepare"), "Preparing"),
+                Labeled::new(path!("prepare"), "Study preparation"),
                 SearchObservationKindView::Phase,
             ),
             0,
@@ -188,8 +189,8 @@ impl Registry {
             }
         }
         let documents = Work::new(
-            path!("documents"),
-            path!("documents"),
+            Labeled::new(path!("documents"), "Recording documents"),
+            Labeled::new(path!("documents"), "Replay recording"),
             SearchObservationKindView::Document,
         );
         for (offset, document) in study.documents.iter().enumerate() {
@@ -235,10 +236,10 @@ fn assemble(
     let instance = descriptor
         .instances
         .iter()
-        .find(|instance| instance.profile == key.instance)
+        .find(|instance| instance.key == key.instance)
         .ok_or_else(|| StudyError::UnknownInstance {
             problem: key.problem.clone(),
-            instance: key.instance,
+            instance: key.instance.clone(),
         })?
         .clone();
     let selected_document = strategy_document(&key.strategy);
@@ -317,6 +318,14 @@ fn assemble(
         selected_document,
         documents,
         assessed_proposals: Vec::new(),
+    })
+}
+
+/// The instance a study asks for, read as the problem's own instance type.
+pub fn instance<S: Segments>(study: &StudyKey) -> Result<S, StudyError> {
+    path::read(&study.instance).map_err(|_| StudyError::UnknownInstance {
+        problem: study.problem.clone(),
+        instance: study.instance.clone(),
     })
 }
 

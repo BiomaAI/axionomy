@@ -533,6 +533,7 @@ dependencies = [
 name = "axionomy-studio-server"
 version = "0.1.0"
 dependencies = [
+ "axionomy",
  "axionomy-problems",
  "axionomy-study",
  "axionomy-view",

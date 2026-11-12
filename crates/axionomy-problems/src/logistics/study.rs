@@ -3,17 +3,16 @@
 use super::view::scene;
 use crate::{
     logistics::{self, Policy},
-    support::{ProblemCopy, StrategyCopy, problem},
+    support::{Capability, Family, ProblemCopy, Size, StrategyCopy, problem, size},
 };
 use axionomy::{Exchange, Quantity, path};
 use axionomy_search::rollout::Unrecorded;
 use axionomy_study::{
-    Capability, DocumentSpec, InstanceProfile, Problem, ProblemDescriptor, ProblemFamily,
-    ProposalSpec, StudyError, StudyKey, StudyProgress, Work, document, problem_error, proposal,
-    telemetry,
+    DocumentSpec, Problem, ProblemDescriptor, ProposalSpec, StudyError, StudyKey, StudyProgress,
+    Work, document, problem_error, proposal, telemetry,
 };
 use axionomy_view::{
-    ObjectiveAxisView, ObjectiveDirectionView, ObjectiveView, ParetoFrontView,
+    Labeled, ObjectiveAxisView, ObjectiveDirectionView, ObjectiveView, ParetoFrontView,
     SearchObservationKindView, TelemetryKindView, ViewDocument, sampled_policy_front,
 };
 
@@ -36,7 +35,7 @@ impl Default for Logistics {
                         "Six arriving orders, more route delays, a longer horizon, finite fuel and three repair parts",
                     ],
                 },
-                ProblemFamily::StochasticPlanning,
+                Family::StochasticPlanning,
                 path!("reliable"),
                 &[
                     StrategyCopy {
@@ -87,24 +86,24 @@ fn build(
     study: &StudyKey,
     progress: &mut StudyProgress<'_>,
 ) -> Result<Vec<ViewDocument>, StudyError> {
-    let profile = study.instance;
-    if !matches!(profile, InstanceProfile::Micro) {
+    let profile = size(study)?;
+    if !matches!(profile, Size::Micro) {
         return super::fleet::study::build(study, profile, progress);
     }
-    let initial = if matches!(study.instance, InstanceProfile::Micro) {
+    let initial = if matches!(size(study)?, Size::Micro) {
         logistics::initial_micro()
     } else {
         logistics::initial()
     };
-    let samples = match study.instance {
-        InstanceProfile::Micro => study.budget.clamp(2, 16),
-        InstanceProfile::Showcase => study.budget.max(2),
-        InstanceProfile::Stress => study.budget.max(256),
+    let samples = match size(study)? {
+        Size::Micro => study.budget.clamp(2, 16),
+        Size::Showcase => study.budget.max(2),
+        Size::Stress => study.budget.max(256),
     } as usize;
     let (monte_carlo, pareto_sampling) = (Work::monte_carlo(), Work::pareto_sampling());
     let mcts = Work::new(
-        path!("mcts"),
-        path!("mcts"),
+        Labeled::new(path!("mcts"), "MCTS"),
+        Labeled::new(path!("mcts"), "MCTS"),
         SearchObservationKindView::Tree,
     );
     let estimate = logistics::monte_carlo_with_risk_progress(

@@ -1,6 +1,6 @@
 use super::*;
 use crate::{handles::StudyId, resources::Address};
-use axionomy_study::InstanceProfile;
+
 use axionomy_view::DocumentPath;
 use rmcp::model::{
     ArgumentInfo, CompletionContext, CompletionInfo, Reference, TaskPayload, TaskStatus,
@@ -664,7 +664,7 @@ async fn a_search_observes_cancellation() {
 
 fn maze_study() -> StudyRequest {
     StudyRequest::new("maze".parse().unwrap())
-        .with_instance(InstanceProfile::Micro)
+        .with_instance("micro".parse().unwrap())
         .with_strategy("a-star".parse().unwrap())
 }
 
