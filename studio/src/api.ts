@@ -16,6 +16,7 @@ export type SceneGlyph = components["schemas"]["SceneGlyphView"];
 export type SceneTone = components["schemas"]["SceneToneView"];
 export type SceneEntity = components["schemas"]["SceneEntityView"];
 export type SceneSurface = components["schemas"]["SceneSurfaceView"];
+export type ScenePathStatus = components["schemas"]["ScenePathStatusView"];
 export type ProposalView = components["schemas"]["ProposalView"];
 export type SearchObservation = components["schemas"]["SearchObservationView"];
 export type LeaderboardView = components["schemas"]["LeaderboardView"];

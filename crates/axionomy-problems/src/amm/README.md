@@ -66,7 +66,8 @@ entitlements while the remaining actors respond to changed market conditions.
   the only semantic primitives.
 - Causal attribution through isolated replay forks rather than external
   analytics state.
-- A dedicated market surface that remains a projection of Rust-owned truth.
+- A picture on Studio's neutral reserves surface, every caption written by
+  the problem, that remains a projection of Rust-owned truth.
 
 ## In this folder
 

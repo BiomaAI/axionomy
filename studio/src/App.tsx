@@ -9,6 +9,7 @@ import {
   type LeaderboardView,
   type ProblemDescriptor,
   type Scene,
+  type ScenePathStatus,
   type SearchObservation,
   type StudioEvent,
   type Study,
@@ -148,7 +149,8 @@ export function App() {
     retry: false,
     queryFn: () => engine.catalog(),
   });
-  const [problemKey, setProblemKey] = useState(initialUrl.problem ?? "maze");
+  // A link that names no problem opens the catalog's first, once it loads.
+  const [problemKey, setProblemKey] = useState(initialUrl.problem ?? "");
   // An omitted option means the problem's default, which is only known once
   // the catalog loads. The empty key resolves to it without a warning.
   const [instanceKey, setInstanceKey] = useState(initialUrl.instance ?? "");
@@ -242,9 +244,9 @@ export function App() {
 
   useEffect(() => {
     if (!catalog.data || problem) return;
-    const fallback = catalog.data.find((candidate) => candidate.key === "maze") ?? catalog.data[0];
+    const fallback = catalog.data[0];
     if (!fallback) return;
-    notice(`The linked problem “${problemKey}” does not exist; opened ${fallback.title} instead.`);
+    if (problemKey !== "") notice(`The linked problem “${problemKey}” does not exist; opened ${fallback.title} instead.`);
     setProblemKey(fallback.key);
     setInstanceKey(fallback.default_instance);
     setStrategyKey(fallback.default_strategy);
@@ -729,6 +731,15 @@ export function ThinkingWorkspace({ scene, observations, active }: { scene?: Sce
   </section>;
 }
 
+/** The path statuses a search map draws: it redraws every path as one or the other. */
+const SEARCH_MAP_PATHS = new Set<ScenePathStatus>(["available", "blocked"]);
+
+/**
+ * Any graph scene with expansion subjects becomes a map of the search: the
+ * scene's structure under its own title, each node the search reached marked
+ * explored and the latest one current. Occupants, route progress and the
+ * legend entries explaining it are the replay's, so the map leaves them out.
+ */
 function thinkingScene(scene: Scene | null | undefined, observations: SearchObservation[]): Scene | undefined {
   if (!scene || scene.surface.kind !== "graph") return undefined;
   const withSubjects = observations.filter((observation) => (observation.subjects?.length ?? 0) > 0);
@@ -738,10 +749,9 @@ function thinkingScene(scene: Scene | null | undefined, observations: SearchObse
   const entities = scene.entities.filter((entity) => entity.role !== "occupant" && !(entity.anchor.kind === "entity"));
   return {
     ...scene,
-    title: "Search expansion over the encoded maze",
     metrics: [],
     annotations: [],
-    legend: scene.legend.filter((entry) => !["Planned next", "Traversed route", "Current move"].includes(entry.label)),
+    legend: scene.legend.filter((entry) => !entry.path || SEARCH_MAP_PATHS.has(entry.path)),
     entities,
     paths: scene.paths.map((path) => ({
       ...path,

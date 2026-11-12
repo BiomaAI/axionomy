@@ -14,7 +14,7 @@ and honest about what the engine actually proved.
 | Surface | Canonical problem | What it establishes |
 | --- | --- | --- |
 | Graph | **Autonomous Work League** | Topology, mobile agents, attached work queues, shared facilities, relationship lines, dense replay state, and live comparative outcomes |
-| Market | **The Living Market** | Central pool dominance, exact reserves, endogenous price history, constant-product curve position, actor flows, liquidity depth, and causal attribution |
+| Reserves | **The Living Market** | Central pool dominance, exact reserves, ratio history, constant-product curve position, participant flows, liquidity depth, and causal attribution |
 | Onboarding graph | **Key-door Maze** | Immediate comprehension, competing routes, solver expansion playback, inventory transfer, a stateful gate, planned/traversed route evidence, and rejected-move explanation |
 | Grid | **Sokoban** | Stable terrain, independently animated occupants, cell anchoring, goals, and exact replay motion |
 | Timeline | **Job-shop scheduling** | Resource lanes, bounded spans, ordering, duration, and temporal progress |
@@ -30,30 +30,39 @@ visitor should be able to read its objective from the title, distinguish the
 planned route from alternatives, watch the Explorer acquire and consume the
 key, see the gate change from locked to open, compare solver work, and connect
 each animation to account and receipt evidence without prior Axionomy
-knowledge. Because it is the default Studio problem, regressions in any replay
-frame are release-blocking even when another graph scene still looks correct.
+knowledge. Because it is first in the catalog, Studio opens it by default, so
+regressions in any replay frame are release-blocking even when another graph
+scene still looks correct.
 
 The other canonical problems are equally normative for their surface types.
 Graph conventions must not be forced onto a grid, matrix, or timeline when the
 surface itself communicates the problem more clearly.
 
-## Market grammar
+## Reserves grammar
 
-The Living Market is the canonical market surface. A market scene explains how
-replay-verified exchanges change one public reserve ratio; it never imports an
-oracle price or recomputes an authoritative quote in TypeScript.
+The reserves surface draws a pool of two reserves one account holds, the ratio
+between them, and the participants who exchange against it; The Living Market is
+its canonical problem. It belongs to no problem: the problem writes every
+caption (the pool's caption, its reserves' labels and symbols, the ratio's name
+and unit, the curve's name), and Studio draws only the shape. A reserves scene
+explains how replay-verified exchanges change one public reserve ratio; it
+never imports an oracle price or recomputes an authoritative quote in
+TypeScript.
 
 - The pool is the dominant central object and links directly to its economic
   account.
-- Reserve quantities, liquidity supply, fee terms, product, and price are exact
-  Rust-owned projection fields.
+- Reserve quantities, the ratio (exact atoms with the format that writes them),
+  and a constant-product curve's product are exact Rust-owned projection
+  fields.
 - Participants surround the pool and link to their authoritative accounts.
-- The selected exchange emphasizes only the bound trader or liquidity provider
-  and derives its direction and deltas from the receipt.
-- Price history is assembled from the sequence of replay-derived market
-  snapshots. It is not stored as independent market state.
-- The bonding curve uses the snapshot's exact reserve product and marks the
-  current reserve point. It explains sensitivity but cannot authorize a swap.
+- The selected exchange emphasizes the participants whose accounts its receipt
+  changed, names the step with its cue, and derives the reserves' changes from
+  adjacent snapshots.
+- Ratio history is assembled from the sequence of replay-derived snapshots. It
+  is not stored as independent state.
+- A constant-product curve uses the snapshot's exact reserve product and marks
+  the current reserve point. It explains sensitivity but cannot authorize a
+  swap.
 - Proportional liquidity changes depth without visually implying a price move.
 - Direct attribution is accumulated from adjacent reserve-price changes;
   counterfactual attribution must state whether it is exact or sampled.
@@ -155,8 +164,8 @@ application typography.
 
 Interface text is never smaller than 10px. That floor covers every panel,
 rail, table, and notice, and the chrome that rides over the picture: scene
-metrics, notes, the legend, scenario context, and the market's step line,
-actors, pool, and charts. Only labels drawn inside a scaled diagram surface
+metrics, notes, the legend, scenario context, and the reserves surface's step
+line, participants, pool, and charts. Only labels drawn inside a scaled diagram surface
 (graph nodes, attachments, edges, and grid entities) use the compact diagram
 scale above, because the viewer's zoom sets their size on screen.
 

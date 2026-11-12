@@ -7,10 +7,11 @@ use crate::{
 use axionomy::path;
 use axionomy_study::{ProblemPath, StudyError, problem_error};
 use axionomy_view::{
-    ExactQuantity, Format, Keyed, Label, LeaderboardEntryView, LeaderboardView, MarketActorView,
-    MarketPoolView, ObjectiveDirectionView, QuantityFormat, Scene, SceneAnchorView,
-    SceneEntityRoleView, SceneEntityView, SceneEvidenceRefView, SceneGlyphView, SceneSurfaceView,
-    SceneToneView, ViewDocument, ViewId, account_key, asset_key, asset_metric, visual_metric,
+    ExactQuantity, Format, Keyed, Label, LeaderboardEntryView, LeaderboardView,
+    ObjectiveDirectionView, QuantityFormat, ReserveCurveView, ReserveParticipantView,
+    ReservePoolView, ReserveRatioView, ReserveView, Scene, SceneAnchorView, SceneEntityRoleView,
+    SceneEntityView, SceneEvidenceRefView, SceneGlyphView, SceneSurfaceView, SceneToneView,
+    ViewDocument, ViewId, account_key, asset_key, asset_metric, visual_metric,
 };
 use std::collections::BTreeMap;
 
@@ -109,17 +110,15 @@ pub(super) fn scene(_: u64, world: &World) -> Option<Scene> {
         .zip(positions)
         .map(|(actor, (x, y))| {
             let account = AccountId::Actor(actor);
-            MarketActorView {
+            ReserveParticipantView {
                 id: ViewId::new(path!("amm/actor").then(&actor), actor.label()),
                 account: account_key::<amm::Ontology>(&account),
                 glyph: actor_glyph(actor),
                 tone: actor_tone(world, actor),
                 x,
                 y,
-                energy: exact(world.balance(&account, &Asset::Energy)),
-                credit: exact(world.balance(&account, &Asset::Credit)),
-                liquidity: exact(world.balance(&account, &Asset::LpShare)),
-                utility: exact(world.balance(&account, &Asset::Utility)),
+                base: exact(world.balance(&account, &Asset::Energy)),
+                quote: exact(world.balance(&account, &Asset::Credit)),
                 status: actor_status(world, actor),
             }
         })
@@ -159,21 +158,36 @@ pub(super) fn scene(_: u64, world: &World) -> Option<Scene> {
         .collect();
     let mut scene = Scene {
         title: "The Living Market".into(),
-        surface: SceneSurfaceView::Market {
-            pool: Box::new(MarketPoolView {
+        // The pool of energy and credit the actors trade against: its
+        // reserve ratio is the market's only public price, and its reserves
+        // stay on the constant-product curve.
+        surface: SceneSurfaceView::Reserves {
+            pool: Box::new(ReservePoolView {
                 id: ViewId::new(path!("amm/pool/energy-credit"), "Energy / Credit AMM"),
-                base_asset: ViewId::new(asset_key::<amm::Ontology>(&Asset::Energy), "Energy"),
-                quote_asset: ViewId::new(asset_key::<amm::Ontology>(&Asset::Credit), "Credit"),
-                base_reserve: exact(state.energy),
-                quote_reserve: exact(state.credit),
-                price_milli: exact(state.price_milli),
-                product: exact(state.product),
-                issued_liquidity: exact(state.issued_lp_shares),
-                fee_numerator: amm::FEE_NUMERATOR,
-                fee_denominator: amm::FEE_DENOMINATOR,
                 account: account_key::<amm::Ontology>(&AccountId::Pool),
+                caption: "AMM pool · x · y = k".into(),
+                base: ReserveView {
+                    asset: ViewId::new(asset_key::<amm::Ontology>(&Asset::Energy), "Energy"),
+                    quantity: exact(state.energy),
+                    symbol: "E".into(),
+                },
+                quote: ReserveView {
+                    asset: ViewId::new(asset_key::<amm::Ontology>(&Asset::Credit), "Credit"),
+                    quantity: exact(state.credit),
+                    symbol: "C".into(),
+                },
+                ratio: ReserveRatioView {
+                    label: "Discovered price".into(),
+                    // Kept in thousandths of a credit per unit of energy.
+                    value: exact(state.price_milli),
+                    format: QuantityFormat::decimal(3).digits(3).unit("credit / energy"),
+                },
+                curve: Some(ReserveCurveView::ConstantProduct {
+                    label: "Reserve curve · xy = k".into(),
+                    product: exact(state.product),
+                }),
             }),
-            actors,
+            participants: actors,
         },
         entities,
         paths: Vec::new(),

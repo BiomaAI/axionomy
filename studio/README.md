@@ -5,7 +5,7 @@ Every problem can be discovered and studied. **Source of truth** shows
 accounts and assets; **The rules** shows rates, roles, goals, and invariants;
 **One step** explains the selected exchange and its exact effects.
 
-Graph, grid, matrix, timeline, and market pictures help people read a result, but they
+Graph, grid, matrix, timeline, and reserves pictures help people read a result, but they
 never become a second simulation model. Geometry, semantic entities, paths,
 metrics, annotations, and transition cues all come from the same Rust contract.
 Graph scenes use one semantic grammar across domains: topology is the stable
@@ -70,7 +70,8 @@ Outcome comparisons open by default and show initial-to-final scene metrics
 alongside objectives and search evidence, making the existing alternatives
 readable before opening an individual trace.
 
-The Living Market adds an exact reserve curve, replayed price path, direct
+The Living Market draws its pool on the reserves surface, in its own words: an
+exact reserve curve, replayed price path, direct
 per-actor price attribution, three counterfactual realities, and final exact
 Shapley attribution across every coalition of active actors. No external price
 or oracle enters the study; every displayed price comes from replayed pool
@@ -151,7 +152,14 @@ observations, and the completed study retains a bounded copy so a fast study
 has the same inspectable evidence as a slow live stream. A saved review starts
 on the last search checkpoint: preparing the study and recording its documents
 are bookkeeping around the search, and a strategy that records no search says
-so instead of listing that bookkeeping. Completion leaves a persistent receipt
+so instead of listing that bookkeeping. Any graph scene whose search reports
+the nodes it expanded becomes a map of that search, under the scene's own
+title; legend entries for the path statuses the map does not draw are left
+out. Phases, algorithms and every other word the Thinking view shows come with
+the observations, except the names of the generic checkpoint kinds (frontier,
+rollouts, search tree, beliefs, candidates, solutions, pruning) that are
+Studio's own vocabulary. A link that names no problem opens the catalog's
+first. Completion leaves a persistent receipt
 and marks the newly loaded study.
 
 The client chooses capabilities in order: a currently healthy native HTTP/SSE

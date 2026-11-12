@@ -927,7 +927,9 @@ against the native server, the browser Wasm engine, and GitHub Pages.
 The implemented Studio exposes the complete Showcase
 surface: pathfinding and networks use graphs; Sokoban and Connect Four use
 grids; Exact Cover uses a constraint matrix; scheduling and perishables use
-timelines; markets expose multi-party settlement and rejected shortfalls;
+timelines; the Living Market draws its pool on the neutral reserves surface,
+whose every caption it writes; markets expose multi-party settlement and
+rejected shortfalls;
 stochastic and partially observed domains expose telemetry, sampled policy
 evidence, and actor-relative views. Every study includes replayable strategy
 alternatives where the domain supplies them. The universal model explorer

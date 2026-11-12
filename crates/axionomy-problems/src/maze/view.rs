@@ -344,16 +344,19 @@ pub(super) fn scene(_: u64, world: &World) -> Option<Scene> {
             label: "Room".into(),
             glyph: SceneGlyphView::Location,
             tone: SceneToneView::Neutral,
+            path: None,
         },
         SceneLegendView {
             label: "Explorer".into(),
             glyph: SceneGlyphView::Agent,
             tone: SceneToneView::Active,
+            path: None,
         },
         SceneLegendView {
             label: "Key".into(),
             glyph: SceneGlyphView::Key,
             tone: SceneToneView::Warning,
+            path: None,
         },
         SceneLegendView {
             label: if gate_open {
@@ -368,11 +371,13 @@ pub(super) fn scene(_: u64, world: &World) -> Option<Scene> {
             } else {
                 SceneToneView::Danger
             },
+            path: None,
         },
         SceneLegendView {
             label: "Exit".into(),
             glyph: SceneGlyphView::Goal,
             tone: SceneToneView::Goal,
+            path: None,
         },
     ];
     Some(scene)
@@ -419,11 +424,8 @@ fn decorate_scene_paths(
     current: Option<&ItemPath>,
 ) {
     let Some(scene) = scene else { return };
-    scene.legend.retain(|entry| {
-        entry.label != "Planned next"
-            && entry.label != "Traversed route"
-            && entry.label != "Current move"
-    });
+    // The route entries explain path statuses; they are drawn again below.
+    scene.legend.retain(|entry| entry.path.is_none());
     let remaining = planned
         .iter()
         .any(|path| !traversed.contains(path) && current != Some(path));
@@ -432,6 +434,7 @@ fn decorate_scene_paths(
             label: "Planned next".into(),
             glyph: SceneGlyphView::Move,
             tone: SceneToneView::Warning,
+            path: Some(ScenePathStatusView::Candidate),
         });
     }
     if !traversed.is_empty() {
@@ -439,6 +442,7 @@ fn decorate_scene_paths(
             label: "Traversed route".into(),
             glyph: SceneGlyphView::Move,
             tone: SceneToneView::Active,
+            path: Some(ScenePathStatusView::Traversed),
         });
     }
     if current.is_some() {
@@ -446,6 +450,7 @@ fn decorate_scene_paths(
             label: "Current move".into(),
             glyph: SceneGlyphView::Move,
             tone: SceneToneView::Success,
+            path: Some(ScenePathStatusView::Current),
         });
     }
     if let SceneSurfaceView::Graph { edges, .. } = &mut scene.surface {

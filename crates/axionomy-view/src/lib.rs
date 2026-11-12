@@ -604,47 +604,91 @@ pub struct SceneLegendView {
     pub label: String,
     pub glyph: SceneGlyphView,
     pub tone: SceneToneView,
+    /// The status of the paths this entry explains, when it explains paths:
+    /// a view that redraws the paths, such as a map of a search, leaves out
+    /// the entries for statuses it does not draw.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub path: Option<ScenePathStatusView>,
 }
 
-/// One constant-product pool projected from an authoritative replay snapshot.
-/// Values remain exact text so renderers cannot silently round economic state.
+/// Two reserves one account holds, and the ratio between them: a liquidity
+/// pool, a constant-function market, any two-sided stock participants
+/// exchange against. Every caption is the problem's; quantities stay exact
+/// text so renderers cannot silently round economic state.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-pub struct MarketPoolView {
+pub struct ReservePoolView {
     pub id: ViewId,
-    pub base_asset: ViewId,
-    pub quote_asset: ViewId,
-    pub base_reserve: ExactQuantity,
-    pub quote_reserve: ExactQuantity,
-    /// Quote per base, scaled by 1,000.
-    pub price_milli: ExactQuantity,
-    pub product: ExactQuantity,
-    pub issued_liquidity: ExactQuantity,
-    pub fee_numerator: u64,
-    pub fee_denominator: u64,
+    /// The account holding the reserves.
     pub account: ItemPath,
+    /// What the pool is, in a few words, such as `AMM pool · x · y = k`.
+    pub caption: String,
+    /// The reserve the ratio is per unit of, such as energy.
+    pub base: ReserveView,
+    /// The reserve the ratio is counted in, such as credit.
+    pub quote: ReserveView,
+    /// Quote per base: what one unit of the base reserve is worth in the
+    /// quote reserve.
+    pub ratio: ReserveRatioView,
+    /// The reserve pairs the pool accepts, when it keeps them on a curve.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub curve: Option<ReserveCurveView>,
 }
 
-/// One participant positioned around a market pool. Balances and status are
-/// replay-derived presentation data linked back to the represented account.
+/// One reserve of a pool.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct ReserveView {
+    pub asset: ViewId,
+    pub quantity: ExactQuantity,
+    /// A short symbol written beside a change of the reserve, such as `E`.
+    pub symbol: String,
+}
+
+/// A pool's ratio as people read it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct ReserveRatioView {
+    /// What the ratio is, such as `Discovered price`.
+    pub label: String,
+    /// The ratio in atoms of `format`.
+    pub value: ExactQuantity,
+    pub format: QuantityFormat,
+}
+
+/// The curve a pool's reserves move along.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum ReserveCurveView {
+    /// Base × quote stays `product`: a constant-product market.
+    ConstantProduct {
+        /// What the curve is, such as `Reserve curve · xy = k`.
+        label: String,
+        product: ExactQuantity,
+    },
+}
+
+/// One participant positioned around a pool. Its holdings and status are
+/// replay-derived presentation data linked back to its account.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
-pub struct MarketActorView {
+pub struct ReserveParticipantView {
     pub id: ViewId,
     pub account: ItemPath,
     pub glyph: SceneGlyphView,
     pub tone: SceneToneView,
+    /// Where the participant stands, in percent of the picture's width.
     pub x: f64,
+    /// Where the participant stands, in percent of the picture's height.
     pub y: f64,
-    pub energy: ExactQuantity,
-    pub credit: ExactQuantity,
-    pub liquidity: ExactQuantity,
-    pub utility: ExactQuantity,
+    /// What it holds of the base reserve's asset.
+    pub base: ExactQuantity,
+    /// What it holds of the quote reserve's asset.
+    pub quote: ExactQuantity,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub status: Option<String>,
 }
 
 /// The geometric substrate for a derived scene. Surface geometry and semantic
 /// entities are deliberately separate so one vehicle can move through a graph,
-/// grid, matrix, or timeline without inventing four domain models.
+/// grid, matrix, or timeline without inventing four domain models. Every kind
+/// is a shape any problem may use; none belongs to one problem.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum SceneSurfaceView {
@@ -670,9 +714,10 @@ pub enum SceneSurfaceView {
         #[serde(skip_serializing_if = "Option::is_none")]
         cursor: Option<u64>,
     },
-    Market {
-        pool: Box<MarketPoolView>,
-        actors: Vec<MarketActorView>,
+    /// A pool of two reserves and the participants who exchange against it.
+    Reserves {
+        pool: Box<ReservePoolView>,
+        participants: Vec<ReserveParticipantView>,
     },
 }
 
@@ -984,7 +1029,7 @@ impl Scene {
                     return Err(SceneValidationError::UnknownAnchor("timeline span".into()));
                 }
             }
-            SceneSurfaceView::Market { .. } => {}
+            SceneSurfaceView::Reserves { .. } => {}
         }
         for anchor in self
             .entities
@@ -1198,6 +1243,7 @@ fn inferred_legend(entities: &[SceneEntityView]) -> Vec<SceneLegendView> {
                 label: entity.id.label.clone(),
                 glyph: entity.glyph,
                 tone: entity.tone,
+                path: None,
             });
         }
     }
@@ -2001,7 +2047,8 @@ where
         .map(|account| account.balances.len())
         .sum::<usize>();
     let scene = ontology.scene(index, economy).map(|mut scene| {
-        if !matches!(scene.surface, SceneSurfaceView::Market { .. }) {
+        // A reserves surface counts its steps along its ratio's history.
+        if !matches!(scene.surface, SceneSurfaceView::Reserves { .. }) {
             scene.metrics.extend([
                 SceneMetricView {
                     key: path!("snapshot"),

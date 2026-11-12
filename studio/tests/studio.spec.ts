@@ -154,12 +154,17 @@ test("shows endogenous AMM price discovery, exact curve evidence, and causal att
   const steps = study.documents.find((document: { id: string }) => document.id === "market-day").frames.length;
   await page.goto(`/?problem=amm&instance=showcase&strategy=market-day&document=market-day&view=replay&step=${steps}&leaderboard=causal-price-contribution&seed=17&budget=128`);
   await expect(page.getByRole("heading", { name: "Living Market · endogenous price discovery" })).toBeVisible();
-  await expect(page.locator(".market-scene")).toBeVisible();
-  await expect(page.getByRole("img", { name: /Discovered price history/ })).toBeVisible();
-  await expect(page.getByRole("img", { name: /Constant-product bonding curve/ })).toBeVisible();
+  // The pool, its ratio and curve are drawn by the neutral reserves surface,
+  // in the words the market's scene gives them.
+  await expect(page.locator(".reserves-scene")).toBeVisible();
+  await expect(page.locator(".reserves-pool")).toContainText("AMM pool · x · y = k");
+  await expect(page.locator(".reserves-pool")).toContainText("credit / energy");
+  await expect(page.getByRole("img", { name: /Discovered price history, currently \d+\.\d{3} credit \/ energy/ })).toBeVisible();
+  await expect(page.getByRole("img", { name: /Constant-product curve at [\d,]+ Energy and [\d,]+ Credit/ })).toBeVisible();
+  await expect(page.locator(".reserves-curve")).toContainText("Reserve curve · xy = k");
   await expect(page.getByRole("combobox", { name: "Leaderboard ranking dimension" })).toHaveValue("causal-price-contribution");
   await expect(page.locator(".leaderboard-entries article")).toHaveCount(7);
-  await expect(page.locator(".market-price-history circle")).toHaveCount(steps + 1);
+  await expect(page.locator(".reserves-ratio-history circle")).toHaveCount(steps + 1);
   await expect(page.locator(".scene-metric").filter({ hasText: "Market day" })).toContainText("8 day");
   await expect(page.locator(".scene-metric").filter({ hasText: "Unmet daily needs" })).toBeVisible();
 

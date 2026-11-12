@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { vi } from "vitest";
 import { App, DEFAULT_BUDGET, DEFAULT_SEED, ThinkingWorkspace } from "./App";
 import { nativeEngine, type EngineEventListener } from "./engine";
-import { fetchProblems, fetchStaticProblems, fetchStaticStudy, type ProblemDescriptor, type Study } from "./api";
+import { fetchProblems, fetchStaticProblems, fetchStaticStudy, type ProblemDescriptor, type Scene, type Study } from "./api";
 import openapi from "../openapi.json";
 
 vi.mock("echarts/core", () => ({
@@ -267,4 +267,39 @@ test("a problem Studio has never heard of reads in its own words", async () => {
   cleanup();
   for (const fetch of catalog) fetch.mockResolvedValue([problem, lending] as ProblemDescriptor[]);
   saved.mockImplementation(async () => study as Study);
+});
+
+test("a link that names no problem opens the catalog's first, without a notice", async () => {
+  const catalog = [vi.mocked(fetchStaticProblems), vi.mocked(fetchProblems)].map((fetch) => fetch.mockResolvedValue([lending, problem] as ProblemDescriptor[]));
+  const cleanup = renderAt("/");
+  await waitFor(() => expect(screen.getByRole("combobox", { name: "Problem" })).toHaveValue("lending"));
+  expect(screen.getByRole("combobox", { name: "Strategy" })).toHaveValue("least-interest");
+  await waitFor(() => expect(window.location.search).toContain("problem=lending"));
+  expect(screen.queryByText(/does not exist/)).not.toBeInTheDocument();
+  cleanup();
+  for (const fetch of catalog) fetch.mockResolvedValue([problem, lending] as ProblemDescriptor[]);
+});
+
+test("a search map draws any graph scene under its own title, without the replay's route legend", () => {
+  const legend = (label: string, path?: "current" | "candidate") => ({ label, glyph: "move", tone: "neutral", ...(path ? { path } : {}) });
+  const scene = {
+    title: "Orchard rows",
+    surface: {
+      kind: "graph",
+      nodes: [{ id: { key: "row/a", label: "Row A" }, classes: [], x: 0, y: 0 }, { id: { key: "row/b", label: "Row B" }, classes: [], x: 200, y: 0 }],
+      edges: [{ id: "lane/a-b", source: "row/a", target: "row/b", classes: ["current"] }],
+    },
+    entities: [],
+    paths: [],
+    annotations: [],
+    metrics: [],
+    legend: [legend("Row"), legend("Walking now", "current"), legend("Still to pick", "candidate")],
+  } as unknown as Scene;
+  const visited = { ...observation(1, ["picking", "Picking"], "frontier", "Picked Row A"), subjects: [{ key: "row/a", label: "Row A" }] };
+  render(<ThinkingWorkspace active={false} scene={scene} observations={[visited]} />);
+  const map = screen.getByRole("region", { name: "Search expansion map" });
+  expect(map.querySelector(".graph-scene")).toHaveAttribute("aria-label", "Orchard rows");
+  expect(map).toHaveTextContent("Row");
+  expect(map).not.toHaveTextContent("Walking now");
+  expect(map).not.toHaveTextContent("Still to pick");
 });

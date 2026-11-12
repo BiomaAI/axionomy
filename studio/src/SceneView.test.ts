@@ -52,50 +52,62 @@ describe("graphEdgeSides", () => {
   });
 });
 
-describe("Living Market scene", () => {
-  test("renders exact reserves and links actor selection to its account", () => {
-    const onAccount = vi.fn();
-    const scene = {
-      title: "The Living Market",
-      surface: {
-        kind: "market",
-        pool: {
-          id: { key: "amm/pool", label: "Energy / Credit AMM" },
-          base_asset: { key: "amm/asset/energy", label: "Energy" },
-          quote_asset: { key: "amm/asset/credit", label: "Credit" },
-          base_reserve: "10000",
-          quote_reserve: "100000",
-          price_milli: "10000",
-          product: "1000000000",
-          issued_liquidity: "10000",
-          fee_numerator: 997,
-          fee_denominator: 1000,
-          account: "amm/account/pool",
-        },
-        actors: [{
-          id: { key: "amm/actor/factory", label: "Factory" },
-          account: "amm/account/actor/factory",
-          glyph: "machine",
-          tone: "neutral",
-          x: 15,
-          y: 50,
-          energy: "0",
-          credit: "40000",
-          liquidity: "0",
-          utility: "0",
-        }],
-      },
-      entities: [],
-      paths: [],
-      annotations: [],
-      metrics: [],
-      legend: [],
-    } as Scene;
+describe("reserves scene", () => {
+  // A pool no canonical problem has: every caption comes from the scene.
+  const pool = (water: string, grain: string, ratio: string) => ({
+    id: { key: "mill/pool", label: "Water / grain mill" },
+    account: "mill/account/pool",
+    caption: "Mill pond · x · y = k",
+    base: { asset: { key: "mill/asset/water", label: "Water" }, quantity: water, symbol: "W" },
+    quote: { asset: { key: "mill/asset/grain", label: "Grain" }, quantity: grain, symbol: "G" },
+    ratio: { label: "Grain per bucket", value: ratio, format: { scale: 2, digits: 2, unit: "grain / water" } },
+    curve: { kind: "constant_product" as const, label: "Pond curve · xy = k", product: "200000" },
+  });
+  const scene = (water: string, grain: string, ratio: string) => ({
+    title: "The mill",
+    surface: {
+      kind: "reserves",
+      pool: pool(water, grain, ratio),
+      participants: [{
+        id: { key: "mill/miller", label: "Miller" },
+        account: "mill/account/miller",
+        glyph: "person",
+        tone: "neutral",
+        x: 15,
+        y: 50,
+        base: "3",
+        quote: "40",
+      }],
+    },
+    entities: [],
+    paths: [],
+    annotations: [],
+    metrics: [],
+    legend: [],
+  }) as Scene;
 
-    render(React.createElement(SceneView, { scene, history: [scene], onAccount }));
-    expect(screen.getByRole("button", { name: /AMM pool.*10.000.*10,000.*100,000/ })).toBeInTheDocument();
-    screen.getByRole("button", { name: /Factory: 0 energy, 40000 credit/ }).click();
-    expect(onAccount).toHaveBeenCalledWith("amm/account/actor/factory");
-    expect(screen.getByRole("img", { name: /Discovered price history/ })).toBeInTheDocument();
+  test("writes the pool in the words its scene gives and links participants to their accounts", () => {
+    const onAccount = vi.fn();
+    const before = scene("100", "2000", "2000");
+    render(React.createElement(SceneView, { scene: before, history: [before], onAccount }));
+    expect(screen.getByRole("button", { name: /Mill pond · x · y = k.*20\.00.*grain \/ water.*100.*Water.*2,000.*Grain/ })).toBeInTheDocument();
+    screen.getByRole("button", { name: "Miller: 3 Water, 40 Grain" }).click();
+    expect(onAccount).toHaveBeenCalledWith("mill/account/miller");
+    expect(screen.getByRole("img", { name: "Grain per bucket history, currently 20.00 grain / water" })).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "Constant-product curve at 100 Water and 2,000 Grain" })).toBeInTheDocument();
+    expect(screen.getByText("Pond curve · xy = k")).toBeInTheDocument();
+  });
+
+  test("names the step and the participant whose account it changed, and the reserves' change", () => {
+    const before = scene("100", "2000", "2000");
+    const after = scene("110", "1820", "1654");
+    const step = {
+      cues: [{ label: "Pour water for grain" }],
+      exchange: { rate: { key: "mill/rate/pour", label: "Pour" } },
+      receipt: { deltas: [{ account: { key: "mill/account/miller", label: "Miller" }, consumed: [{ asset: { key: "mill/asset/water", label: "Water" }, quantity: "10" }], produced: [{ asset: { key: "mill/asset/grain", label: "Grain" }, quantity: "180" }], preserved: [] }] },
+    } as unknown as ExchangeFrame;
+    render(React.createElement(SceneView, { scene: after, previousScene: before, history: [before, after], frame: step }));
+    expect(screen.getByRole("status")).toHaveTextContent("Miller · Pour water for grain+10 W · -180 G");
+    expect(screen.getByRole("button", { name: /^Miller:/ })).toHaveClass("is-active");
   });
 });
