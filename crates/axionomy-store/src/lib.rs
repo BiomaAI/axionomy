@@ -327,12 +327,11 @@ impl Store {
     /// IDs are unique across stores and nodes are content addressed, so
     /// nothing conflicts but names: returns the refs `other` points elsewhere
     /// and the definitions it defines otherwise, which keep what they are
-    /// here.
+    /// here. [`Transaction::merge`] merges inside a transaction that writes
+    /// more.
     pub fn merge(&self, other: &Store) -> Pending<Merged> {
         match other.read() {
-            Ok(reader) => self.transact(Durability::Immediate, move |txn| {
-                transaction::merge(txn, reader.redb())
-            }),
+            Ok(reader) => self.transact(Durability::Immediate, move |txn| txn.merge(&reader)),
             Err(error) => self.transact(Durability::Eventual, move |_| Err(error)),
         }
     }

@@ -124,6 +124,12 @@ pub enum EngineError {
     /// A ref moves forward only, over steps on the history of where it goes.
     #[error("ref `{name}` cannot move to step {} of {}: its point is not on that history", .to.step, .to.run)]
     Backward { name: RefPath, to: Point },
+    /// A ref a package ships is fixed: it is never moved or deleted, so the
+    /// package means what it shipped.
+    #[error(
+        "ref `{name}` is one package `{package}` ships, so it is fixed: name a ref of your own at its point and move that"
+    )]
+    Shipped { name: RefPath, package: PackagePath },
 }
 
 /// A point as the engine serves it: the state there, the point its run

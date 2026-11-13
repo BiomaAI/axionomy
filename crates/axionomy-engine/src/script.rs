@@ -281,11 +281,17 @@ pub(crate) struct Compiled {
 
 /// The scripts a store keeps, each compiled once, its imports checked, and
 /// evaluated once as a module when a script imports it. Clones share both.
+///
+/// Each is cached under the generation it was read in, and every change to
+/// the scripts the store keeps starts a new one once it is committed, so a
+/// script or module read from the store before a change, and cached after
+/// it, is never used again.
 #[derive(Clone)]
 pub(crate) struct Scripts {
     store: Store,
-    compiled: Cache<ScriptPath, Compiled>,
-    modules: Cache<ScriptPath, Module>,
+    generation: Arc<AtomicU64>,
+    compiled: Cache<(u64, ScriptPath), Compiled>,
+    modules: Cache<(u64, ScriptPath), Module>,
 }
 
 /// What checking a script's imports has visited so far.
@@ -304,9 +310,16 @@ impl Scripts {
     pub(crate) fn new(store: Store) -> Self {
         Self {
             store,
+            generation: Arc::default(),
             compiled: Cache::new(COMPILED),
             modules: Cache::new(COMPILED),
         }
+    }
+
+    /// The generation of scripts a read begins in: read before what it
+    /// reads from the store.
+    fn generation(&self) -> u64 {
+        self.generation.load(Ordering::Acquire)
     }
 
     /// The source of the script at `path`.
@@ -346,14 +359,15 @@ impl Scripts {
         rhai: &rhai::Engine,
         path: &ScriptPath,
     ) -> Result<Arc<Compiled>, EngineError> {
-        if let Some(compiled) = self.compiled.get(path) {
+        let key = (self.generation(), path.clone());
+        if let Some(compiled) = self.compiled.get(&key) {
             return Ok(compiled);
         }
         let source = self
             .source(path)?
             .ok_or_else(|| EngineError::UnknownScript(path.clone()))?;
         let compiled = self.checked(rhai, path, &source)?;
-        Ok(self.compiled.insert(path.clone(), compiled))
+        Ok(self.compiled.insert(key, compiled))
     }
 
     /// Remembers `compiled` as the script the store now keeps at `path`.
@@ -361,9 +375,19 @@ impl Scripts {
     /// them may import the script replaced, and is checked again with the
     /// new one when next called.
     pub(crate) fn kept(&self, path: &ScriptPath, compiled: Compiled) {
+        let generation = self.forget();
+        self.compiled.insert((generation, path.clone()), compiled);
+    }
+
+    /// Forgets every script compiled and module evaluated, once the scripts
+    /// the store keeps have changed, such as when a package's version
+    /// replaced another's: each is read again when next called. Gives the
+    /// generation that begins.
+    pub(crate) fn forget(&self) -> u64 {
+        let generation = self.generation.fetch_add(1, Ordering::AcqRel) + 1;
         self.compiled.clear();
         self.modules.clear();
-        self.compiled.insert(path.clone(), compiled);
+        generation
     }
 
     /// `source` compiled by `rhai` as the script at `path`, refusing an
@@ -425,7 +449,7 @@ impl Scripts {
             if walk.finished.contains(import) {
                 continue;
             }
-            match self.compiled.get(import) {
+            match self.compiled.get(&(self.generation(), import.clone())) {
                 Some(cached) => self.visit(rhai, import, &cached, walk)?,
                 None => {
                     let source =
@@ -446,7 +470,8 @@ impl Scripts {
 
     /// The script at `path` evaluated by `rhai` as a module.
     fn module(&self, rhai: &rhai::Engine, path: &ScriptPath) -> Result<Arc<Module>, EngineError> {
-        if let Some(module) = self.modules.get(path) {
+        let key = (self.generation(), path.clone());
+        if let Some(module) = self.modules.get(&key) {
             return Ok(module);
         }
         let compiled = self.compiled(rhai, path)?;
@@ -457,7 +482,7 @@ impl Scripts {
                     message: error.to_string(),
                 }
             })?;
-        Ok(self.modules.insert(path.clone(), module))
+        Ok(self.modules.insert(key, module))
     }
 }
 

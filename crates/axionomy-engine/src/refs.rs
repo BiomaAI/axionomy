@@ -2,9 +2,11 @@
 //! moving it forward is what makes a step count. A ref moves only from where
 //! the mover expects it, so of two proposers moving it from one point the
 //! second looks again; only the steps it moves over are delivered, so a step
-//! that was only tried out never reaches whoever follows the ref.
+//! that was only tried out never reaches whoever follows the ref. A ref a
+//! package ships is fixed: whoever wants to move from its point names a ref
+//! of their own there.
 
-use crate::{Engine, EngineError, GoalPath, ObjectivePath};
+use crate::{Engine, EngineError, GoalPath, ObjectivePath, PackagePath, package::shipper};
 use axionomy::{Quantity, paths};
 use axionomy_store::{Durability, Point, RefPath, StoreError, Target};
 use std::{
@@ -51,11 +53,20 @@ impl Moves {
     }
 }
 
+/// Why a ref's write did not move it.
+enum Unmoved {
+    /// The ref is on `current`, or names nothing, not where the mover
+    /// expected it.
+    Moved(Option<Target>),
+    /// The ref is one this package ships.
+    Shipped(PackagePath),
+}
+
 impl Engine {
     /// Names `at` with the ref `name`, which nothing may name yet.
     pub fn refer(&self, name: &RefPath, at: Point) -> Result<(), EngineError> {
         self.reach(at)?;
-        self.move_ref(name, None, at)
+        self.move_ref(name, None, Some(at))
     }
 
     /// The point the ref `name` names.
@@ -69,13 +80,19 @@ impl Engine {
     /// Moves the ref `name` from `expected` forward to `to`, whose history
     /// passes through `expected`: the steps between are what the move
     /// delivers. Refused with where the ref is when it is at neither
-    /// `expected` nor `to`.
+    /// `expected` nor `to`, and for a ref a package ships, which is fixed.
     ///
     /// A move already made succeeds again: when the ref is at `to`, the move
     /// asked for is the move made, since a ref only moves forward and so
     /// cannot be at `to` by another route. A mover that never heard whether
     /// its move counted asks again.
     pub fn advance(&self, name: &RefPath, expected: Point, to: Point) -> Result<(), EngineError> {
+        if let Some(package) = self.shipped_by(name)? {
+            return Err(EngineError::Shipped {
+                name: name.clone(),
+                package,
+            });
+        }
         self.reach(to)?;
         self.reach(expected)?;
         if !self.passes_through(to, expected)? {
@@ -84,13 +101,24 @@ impl Engine {
                 to,
             });
         }
-        match self.move_ref(name, Some(expected), to) {
+        match self.move_ref(name, Some(expected), Some(to)) {
             Err(EngineError::Moved {
                 current: Some(current),
                 ..
             }) if current == to => Ok(()),
             moved => moved,
         }
+    }
+
+    /// Deletes the ref `name` from `expected`, where its deleter saw it.
+    /// Refused, as a move is, with where the ref is when it is not on
+    /// `expected`, and for a ref a package ships, which is fixed. Unlike a
+    /// move, a deletion is not made again: no ref can be the deleter's, or
+    /// another's, or none ever made. Only the name goes: every point it
+    /// named stays, with its history.
+    pub fn delete_ref(&self, name: &RefPath, expected: Point) -> Result<(), EngineError> {
+        self.reach(expected)?;
+        self.move_ref(name, Some(expected), None)
     }
 
     /// The steps the ref `name` was moved over after `after`, the point a
@@ -185,12 +213,14 @@ impl Engine {
         }
     }
 
-    /// Moves `name` from `expected`, no ref when `None`, to `to`.
+    /// Moves `name` from `expected` to `to`, `None` meaning no ref: makes,
+    /// moves or deletes it. A ref a package ships, which exists, is never
+    /// moved or deleted.
     fn move_ref(
         &self,
         name: &RefPath,
         expected: Option<Point>,
-        to: Point,
+        to: Option<Point>,
     ) -> Result<(), EngineError> {
         let named = name.clone();
         // A move refused is what this write gives, not a failed write: the
@@ -199,13 +229,18 @@ impl Engine {
         let moved = self
             .store
             .transact(Durability::Immediate, move |txn| {
+                if expected.is_some()
+                    && let Some(package) = shipper(&named, |manifest| txn.definition(manifest))?
+                {
+                    return Ok(Some(Unmoved::Shipped(package)));
+                }
                 match txn.compare_and_set_ref(
                     &named,
                     expected.map(Target::Step),
-                    Some(Target::Step(to)),
+                    to.map(Target::Step),
                 ) {
                     Ok(()) => Ok(None),
-                    Err(StoreError::Moved { current, .. }) => Ok(Some(current)),
+                    Err(StoreError::Moved { current, .. }) => Ok(Some(Unmoved::Moved(current))),
                     Err(error) => Err(error),
                 }
             })
@@ -215,12 +250,16 @@ impl Engine {
                 self.moved.tell();
                 Ok(())
             }
-            Ok(Some(current)) => Err(EngineError::Moved {
+            Ok(Some(Unmoved::Moved(current))) => Err(EngineError::Moved {
                 name: name.clone(),
                 current: match current {
                     Some(Target::Step(point)) => Some(point),
                     _ => None,
                 },
+            }),
+            Ok(Some(Unmoved::Shipped(package))) => Err(EngineError::Shipped {
+                name: name.clone(),
+                package,
             }),
             Err(error) => Err(error.into()),
         }

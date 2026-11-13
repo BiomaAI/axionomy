@@ -1,8 +1,18 @@
 //! Packages (P8, D-048): a store file holding economies as runs and points,
 //! refs naming them, and the definitions that use them, with a manifest
 //! saying what it is. Exporting copies what chosen refs and definitions
-//! reach into a new store; loading merges a package into the engine's store.
+//! reach into a new store; loading installs a package in the engine's store.
 //! A package file is a redb file, or a zip holding one.
+//!
+//! A package is published content, like a release. Loading one merges it
+//! into the store, and the store keeps its manifest, less the names the
+//! store already gave something else, as the record of what that version
+//! shipped. Loading another version of it replaces what the version the
+//! store holds shipped: what the new version no longer carries is removed,
+//! and what it carries is its own. Loading the same version again changes
+//! nothing. Runs are history and stay, so every point anything names stays
+//! reachable; what a person made, such as a ref of their own under the
+//! package's name, stays too. A ref a package ships is fixed.
 
 use crate::{
     CandidateSet, Chooser, Engine, EngineError, Experiment, Measure, Objective, Results,
@@ -10,8 +20,8 @@ use crate::{
 };
 use axionomy::{OntologyPath, path::Path};
 use axionomy_store::{
-    DefinitionPath, Durability, GroupId, Merged, Point, RefPath, RunId, Selection, Store,
-    StoreError, Target,
+    DefinitionPath, Durability, GroupId, Merged, Point, Reader, RefPath, RunId, Selection, Store,
+    StoreError, Target, Transaction,
 };
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use std::{
@@ -64,7 +74,9 @@ impl fmt::Display for Version {
     }
 }
 
-/// What a package says of itself, kept in it as `package/<name>`.
+/// What a package says of itself, kept in it as `package/<name>`. A store a
+/// package was loaded into keeps it under the same name, less the names the
+/// store kept as they were: the record of what that version shipped there.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Manifest {
     pub name: PackagePath,
@@ -90,12 +102,16 @@ pub struct Contents {
     pub definitions: Vec<DefinitionPath>,
 }
 
-/// What loading a package did: the manifests it held, and the names the
-/// engine's store already gave something else, which it kept.
+/// What loading a package did: the manifests it held, the names the
+/// engine's store already gave something else, which it kept, and what the
+/// store held of the other versions it replaced.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Loaded {
     pub manifests: Vec<Manifest>,
     pub kept: Merged,
+    /// The manifest the store kept of each package the load gave another
+    /// version: what that version shipped there.
+    pub replaced: Vec<Manifest>,
 }
 
 /// Why a package cannot be made or loaded.
@@ -248,10 +264,18 @@ impl Engine {
         Ok(manifest)
     }
 
-    /// Merges `package` into the engine's store, after checking every
-    /// manifest it holds is written in this version's store format and asks
-    /// for a script host API this engine has. Names the store already gives
-    /// something else keep what they are, and are returned.
+    /// Installs `package` in the engine's store, in one transaction, after
+    /// checking every manifest it holds is written in this version's store
+    /// format and asks for a script host API this engine has.
+    ///
+    /// A package the store does not hold is merged: names the store already
+    /// gives something else keep what they are, and are returned. Another
+    /// version of a package the store holds replaces it: the refs and
+    /// definitions the held version shipped, with the results of the
+    /// experiments it shipped, are removed, unless another package the
+    /// store holds ships them too, and the new version is merged in their
+    /// place. The same version again changes nothing. Runs and steps are
+    /// never removed, nor are refs and definitions no version shipped.
     pub fn load(&self, package: &Store) -> Result<Loaded, EngineError> {
         let manifests = manifests(package)?;
         if manifests.is_empty() {
@@ -277,8 +301,31 @@ impl Engine {
             }
             .into());
         }
-        let kept = self.store.merge(package).wait()?;
-        Ok(Loaded { manifests, kept })
+        let reader = package.read()?;
+        let incoming = manifests.clone();
+        let (kept, replaced) = self
+            .store
+            .transact(Durability::Immediate, move |txn| {
+                install(txn, &reader, &incoming)
+            })
+            .wait()?;
+        if !replaced.is_empty() {
+            // A script compiled or a module evaluated before may be the
+            // other version's.
+            self.scripts.forget();
+        }
+        Ok(Loaded {
+            manifests,
+            kept,
+            replaced,
+        })
+    }
+
+    /// The package that ships the ref `name`, when one does: such a ref is
+    /// fixed, and moving or deleting it is refused.
+    pub fn shipped_by(&self, name: &RefPath) -> Result<Option<PackagePath>, EngineError> {
+        let reader = self.store.read()?;
+        Ok(shipper(name, |manifest| reader.definition(manifest))?)
     }
 
     /// The manifests of the packages this engine's store holds.
@@ -558,6 +605,136 @@ fn under(path: &str, name: &PackagePath) -> bool {
 
 fn decoded<T: DeserializeOwned>(bytes: &[u8]) -> Result<T, EngineError> {
     postcard::from_bytes(bytes).map_err(|_| StoreError::Malformed("a definition").into())
+}
+
+/// Installs the packages of `incoming` from `package` in `txn`'s store, as
+/// [`Engine::load`] says; gives the names kept as they were, and the
+/// manifests of the versions replaced.
+fn install(
+    txn: &mut Transaction<'_>,
+    package: &Reader,
+    incoming: &[Manifest],
+) -> Result<(Merged, Vec<Manifest>), StoreError> {
+    let mut installing = Vec::new();
+    let mut replaced = Vec::new();
+    for manifest in incoming {
+        let named = crate::definitions::definition(&manifest.name);
+        match txn.definition(&named)? {
+            None => installing.push(manifest),
+            Some(bytes) => {
+                let held = manifest_of(&bytes)?;
+                if held.version != manifest.version {
+                    installing.push(manifest);
+                    replaced.push(held);
+                }
+            }
+        }
+    }
+    if installing.is_empty() {
+        return Ok((Merged::default(), replaced));
+    }
+    // What the replaced versions shipped, less what another package the
+    // store holds ships too.
+    let mut refs = BTreeSet::new();
+    let mut definitions = BTreeSet::new();
+    for held in &replaced {
+        refs.extend(held.refs.iter().cloned());
+        definitions.extend(shipped(held));
+        definitions.insert(crate::definitions::definition(&held.name));
+    }
+    let manifests = crate::definitions::prefix::<kind::Package>();
+    for (_, bytes) in txn.definitions(&manifests)? {
+        let other = manifest_of(&bytes)?;
+        if installing
+            .iter()
+            .all(|manifest| manifest.name != other.name)
+        {
+            for reference in &other.refs {
+                refs.remove(reference);
+            }
+            for definition in shipped(&other) {
+                definitions.remove(&definition);
+            }
+        }
+    }
+    for reference in &refs {
+        txn.set_ref(reference, None)?;
+    }
+    for definition in &definitions {
+        txn.define(definition, None)?;
+    }
+    let mut kept = txn.merge(package)?;
+    // A manifest is what the store records of a package, never content.
+    kept.definitions
+        .retain(|definition| !definition.as_str().starts_with(&manifests));
+    // What each version shipped here: its manifest, less the names kept.
+    for manifest in installing {
+        let installed = Manifest {
+            refs: (manifest.refs.iter())
+                .filter(|reference| !kept.refs.contains(reference))
+                .cloned()
+                .collect(),
+            definitions: (manifest.definitions.iter())
+                .filter(|definition| !kept.definitions.contains(definition))
+                .cloned()
+                .collect(),
+            ..manifest.clone()
+        };
+        let bytes = postcard::to_allocvec(&installed).expect("a manifest encodes");
+        txn.define(
+            &crate::definitions::definition(&manifest.name),
+            Some(&bytes),
+        )?;
+    }
+    Ok((kept, replaced))
+}
+
+/// The definitions a package shipped: those its manifest names, and the
+/// results of every experiment among them, whoever recorded them.
+fn shipped(manifest: &Manifest) -> impl Iterator<Item = DefinitionPath> + '_ {
+    let experiments = crate::definitions::prefix::<kind::Experiment>();
+    let results = crate::definitions::prefix::<kind::Results>();
+    manifest.definitions.iter().flat_map(move |definition| {
+        let recorded = definition
+            .as_str()
+            .strip_prefix(&experiments)
+            .map(|experiment| {
+                format!("{results}{experiment}")
+                    .parse()
+                    .expect("a kind and a path make a path")
+            });
+        std::iter::once(definition.clone()).chain(recorded)
+    })
+}
+
+/// The package that ships the ref `name`, its manifest read with
+/// `definition`: a package named by `name`, or by a path `name` is under,
+/// whose manifest names it.
+pub(crate) fn shipper(
+    name: &RefPath,
+    mut definition: impl FnMut(&DefinitionPath) -> Result<Option<Vec<u8>>, StoreError>,
+) -> Result<Option<PackagePath>, StoreError> {
+    let text = name.as_str();
+    let ends = text
+        .match_indices('/')
+        .map(|(end, _)| end)
+        .chain(std::iter::once(text.len()));
+    for end in ends {
+        let package: PackagePath = text[..end]
+            .parse()
+            .expect("a path's leading segments are a path");
+        if let Some(bytes) = definition(&crate::definitions::definition(&package))? {
+            let manifest = manifest_of(&bytes)?;
+            if manifest.refs.contains(name) {
+                return Ok(Some(manifest.name));
+            }
+        }
+    }
+    Ok(None)
+}
+
+fn manifest_of(bytes: &[u8]) -> Result<Manifest, StoreError> {
+    postcard::from_bytes(bytes).map_err(|_| StoreError::Malformed("a package manifest"))
 }
 
 /// The manifests `store` holds.

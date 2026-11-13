@@ -255,6 +255,207 @@ fn a_package_carries_what_its_experiment_needs_and_reruns_it() {
     }
 }
 
+fn pay(units: u64) -> paths::Exchange {
+    paths::Exchange::new(path("pay"), Quantity::new(units))
+        .bind(path("from"), path("bank"))
+        .bind(path("to"), path("alice"))
+}
+
+/// `engine`'s experiment and `refs` as package `bank` at `version`, in a
+/// store in memory.
+fn release(engine: &Engine, version: &str, refs: &[&str]) -> Store {
+    let to = Store::memory().unwrap();
+    engine
+        .export(
+            &path("bank"),
+            version.parse().unwrap(),
+            Contents {
+                refs: refs.iter().map(|reference| path(reference)).collect(),
+                definitions: vec![path("experiment/bank/paying")],
+            },
+            &to,
+        )
+        .unwrap();
+    to
+}
+
+fn shipped(result: Result<(), EngineError>) -> bool {
+    matches!(result, Err(EngineError::Shipped { package, .. }) if package.as_str() == "bank")
+}
+
+#[test]
+fn another_version_replaces_what_the_first_shipped() {
+    let source = bank();
+    let start = source.referred(&path("bank/start")).unwrap();
+    source.refer(&path("bank/other"), start).unwrap();
+    // The first version counts a payment with scripts it imports.
+    source
+        .keep_script(&path("bank/count"), "fn one() { 1 }")
+        .unwrap();
+    source
+        .keep_script(&path("bank/old"), "fn none() { 0 }")
+        .unwrap();
+    source
+        .keep_script(
+            &path("bank"),
+            r#"
+            import "bank/count" as count;
+            import "bank/old" as old;
+            fn randomly(state, random) {
+                exchange("pay", #{ from: "bank", to: "alice" }, random.next(5) + 1)
+            }
+            fn paid(state) { state.balance("alice", "cash") }
+            fn payment(before, exchange, after) { count::one() + old::none() }
+            "#,
+        )
+        .unwrap();
+    let first = release(&source, "1.0.0", &["bank/other"]);
+
+    let engine = Engine::new(Store::memory().unwrap()).unwrap();
+    engine.load(&first).unwrap();
+    // What a person makes of it: a ref of their own under the package's
+    // name moved over a step of theirs, the experiment run again, a goal,
+    // and a ref the next version happens to ship too.
+    let live = path("bank/live");
+    engine.refer(&live, start).unwrap();
+    let played = engine.apply(start, &[pay(2)]).unwrap();
+    engine.advance(&live, start, played).unwrap();
+    let rerun = run(&engine);
+    engine
+        .keep_goal(&path("bank/mine"), &paths::Goal::new())
+        .unwrap();
+    engine.refer(&path("bank/extra"), played).unwrap();
+    // The refs the package ships are fixed.
+    assert!(shipped(engine.advance(&path("bank/start"), start, played)));
+    assert!(shipped(engine.delete_ref(&path("bank/start"), start)));
+    assert!(shipped(engine.delete_ref(&path("bank/other"), start)));
+    assert_eq!(engine.referred(&path("bank/start")).unwrap(), start);
+    // Alice holding ten is rich, as the first version's goal says; and one
+    // payment is one, as its scripts count it, the one it imports evaluated
+    // and kept.
+    let ten = engine.apply(start, &[pay(10)]).unwrap();
+    assert!(engine.holds(ten, &path("bank/rich")).unwrap());
+    assert_eq!(
+        engine.measure(played, &path("bank/payments")).unwrap(),
+        Quantity::new(1)
+    );
+
+    // The second version asks more of its goal, counts a payment twice with
+    // the script it imports, no longer imports `bank/old`, no longer
+    // searches, starts a step on, ships `bank/extra` and no longer ships
+    // `bank/other`.
+    source
+        .keep_goal(
+            &path("bank/rich"),
+            &paths::Goal::new().require(path("alice"), basket([(path("cash"), 12)])),
+        )
+        .unwrap();
+    source
+        .keep_script(&path("bank/count"), "fn one() { 2 }")
+        .unwrap();
+    source
+        .keep_script(
+            &path("bank"),
+            r#"
+            import "bank/count" as count;
+            fn randomly(state, random) {
+                exchange("pay", #{ from: "bank", to: "alice" }, random.next(5) + 1)
+            }
+            fn paid(state) { state.balance("alice", "cash") }
+            fn payment(before, exchange, after) { count::one() }
+            "#,
+        )
+        .unwrap();
+    let mut experiment = source.experiment(&path("bank/paying")).unwrap();
+    experiment.arms.truncate(1);
+    source
+        .keep_experiment(&path("bank/paying"), &experiment)
+        .unwrap();
+    let later = source.apply(start, &[pay(1)]).unwrap();
+    source.advance(&path("bank/start"), start, later).unwrap();
+    source.refer(&path("bank/extra"), later).unwrap();
+    let results = run(&source);
+    let second = release(&source, "2.0.0", &["bank/extra"]);
+
+    let loaded = engine.load(&second).unwrap();
+    assert_eq!(loaded.replaced.len(), 1);
+    assert_eq!(loaded.replaced[0].version.to_string(), "1.0.0");
+    // The person's `bank/extra` names their point, so it keeps it.
+    assert_eq!(loaded.kept.refs, [path("bank/extra")]);
+    assert!(loaded.kept.definitions.is_empty());
+
+    // What only the first version shipped is gone.
+    assert!(matches!(
+        engine.referred(&path("bank/other")),
+        Err(EngineError::UnknownRef(_))
+    ));
+    assert!(matches!(
+        engine.strategy(&path("bank/searched")),
+        Err(EngineError::Undefined(_))
+    ));
+    assert!(matches!(
+        engine.candidates(start, &path("bank/payments")),
+        Err(EngineError::Undefined(_))
+    ));
+    // Among it a script the first version's scripts imported.
+    assert!(
+        loaded.replaced[0]
+            .definitions
+            .contains(&path("script/bank/old"))
+    );
+    assert_eq!(engine.script(&path("bank/old")).unwrap(), None);
+    // What both carry is the second's, its results and scripts among it,
+    // the scripts it imports evaluated again.
+    assert_eq!(engine.referred(&path("bank/start")).unwrap(), later);
+    assert!(!engine.holds(ten, &path("bank/rich")).unwrap());
+    assert_eq!(engine.experiment(&path("bank/paying")).unwrap(), experiment);
+    assert_eq!(engine.results(&path("bank/paying")).unwrap(), results);
+    assert_ne!(engine.results(&path("bank/paying")).unwrap(), rerun);
+    assert_eq!(
+        engine.measure(played, &path("bank/payments")).unwrap(),
+        Quantity::new(2)
+    );
+    let manifests = engine.manifests().unwrap();
+    assert_eq!(manifests.len(), 1);
+    assert_eq!(manifests[0].version.to_string(), "2.0.0");
+    assert_eq!(manifests[0].refs, [path("bank/start")]);
+
+    // What the person made stays, and so do the runs: every point anything
+    // named is still reached.
+    assert_eq!(engine.referred(&live).unwrap(), played);
+    assert_eq!(engine.history(played).unwrap().1, [pay(2)]);
+    assert_eq!(engine.referred(&path("bank/extra")).unwrap(), played);
+    assert!(engine.goal(&path("bank/mine")).is_ok());
+    for trial in rerun.arms.iter().flat_map(|arm| &arm.trials) {
+        engine.reach(trial.end).unwrap();
+    }
+    engine.reach(start).unwrap();
+
+    // The person's refs move; the package's stays fixed.
+    assert_eq!(engine.shipped_by(&live).unwrap(), None);
+    assert_eq!(engine.shipped_by(&path("bank/extra")).unwrap(), None);
+    assert_eq!(
+        engine.shipped_by(&path("bank/start")).unwrap(),
+        Some(path("bank"))
+    );
+    let further = engine.apply(played, &[pay(1)]).unwrap();
+    engine.advance(&live, played, further).unwrap();
+    engine
+        .advance(&path("bank/extra"), played, further)
+        .unwrap();
+    assert!(shipped(engine.advance(&path("bank/start"), later, further)));
+
+    // The same version again changes nothing, not even what the person
+    // changed since.
+    let again = run(&engine);
+    let unchanged = engine.load(&second).unwrap();
+    assert!(unchanged.replaced.is_empty());
+    assert!(unchanged.kept.refs.is_empty() && unchanged.kept.definitions.is_empty());
+    assert_eq!(engine.results(&path("bank/paying")).unwrap(), again);
+    assert_eq!(engine.referred(&path("bank/extra")).unwrap(), further);
+    assert_eq!(engine.manifests().unwrap(), manifests);
+}
+
 #[test]
 fn a_package_names_its_refs_under_its_name() {
     let source = bank();

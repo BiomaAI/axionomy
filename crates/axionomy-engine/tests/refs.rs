@@ -133,6 +133,38 @@ fn a_move_already_made_succeeds_again() {
 }
 
 #[test]
+fn a_ref_is_deleted_from_where_its_deleter_expects_it() {
+    let (engine, start) = bank();
+    let live = path("live");
+    engine.refer(&live, start).unwrap();
+    let first = engine.apply(start, &[pay(5)]).unwrap();
+    engine.advance(&live, start, first).unwrap();
+
+    // A deleter who still saw the start is told where the ref went, and the
+    // ref stays.
+    assert!(matches!(
+        engine.delete_ref(&live, start),
+        Err(EngineError::Moved { current: Some(at), .. }) if at == first
+    ));
+    assert_eq!(engine.referred(&live).unwrap(), first);
+
+    // From where it is, the ref goes; the points it named stay, with their
+    // history, and the name is free again.
+    engine.delete_ref(&live, first).unwrap();
+    assert!(matches!(
+        engine.referred(&live),
+        Err(EngineError::UnknownRef(_))
+    ));
+    assert_eq!(engine.history(first).unwrap().1, [pay(5)]);
+    assert!(matches!(
+        engine.delete_ref(&live, first),
+        Err(EngineError::Moved { current: None, .. })
+    ));
+    engine.refer(&live, start).unwrap();
+    assert_eq!(engine.referred(&live).unwrap(), start);
+}
+
+#[test]
 fn of_two_moves_committed_together_one_counts() {
     let (engine, start) = bank();
     let live = path("live");

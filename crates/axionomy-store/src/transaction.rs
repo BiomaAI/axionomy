@@ -2,8 +2,8 @@
 //! deleting, collecting and merging.
 
 use crate::{
-    DefinitionPath, GroupId, Member, MetricPath, Point, RefPath, RunId, StoreError, TagPath,
-    Transaction,
+    DefinitionPath, GroupId, Member, MetricPath, Point, Reader, RefPath, RunId, StoreError,
+    TagPath, Transaction,
     ontology::Recordable,
     records::{
         BRANCHES, Checkpoints, DEFINITIONS, GROUPS, Group, GroupRecord, MEMBERS, NODES, PINS, REFS,
@@ -258,6 +258,41 @@ impl Transaction<'_> {
             None => refs.remove(name.as_str())?,
         };
         Ok(())
+    }
+
+    /// What `name` defines as this transaction sees it, written or not.
+    pub fn definition(&self, name: &DefinitionPath) -> Result<Option<Vec<u8>>, StoreError> {
+        Ok(self
+            .redb()
+            .open_table(DEFINITIONS)?
+            .get(name.as_str())?
+            .map(|value| value.value().to_vec()))
+    }
+
+    /// The definitions whose names start with `prefix`, in name order, as
+    /// this transaction sees them.
+    pub fn definitions(&self, prefix: &str) -> Result<Vec<(DefinitionPath, Vec<u8>)>, StoreError> {
+        self.redb()
+            .open_table(DEFINITIONS)?
+            .range(prefix..)?
+            .map_while(|entry| match entry {
+                Ok((name, value)) => name.value().starts_with(prefix).then(|| {
+                    let name = name
+                        .value()
+                        .parse()
+                        .map_err(|_| StoreError::Malformed("a stored name"))?;
+                    Ok((name, value.value().to_vec()))
+                }),
+                Err(error) => Some(Err(error.into())),
+            })
+            .collect()
+    }
+
+    /// Copies everything `other` holds that this store lacks, as
+    /// [`Store::merge`](crate::Store::merge) does, in this transaction, so
+    /// what else the transaction writes commits with it.
+    pub fn merge(&mut self, other: &Reader) -> Result<Merged, StoreError> {
+        merge(self, other.redb())
     }
 
     /// Keeps `value` as what `name` defines, or removes the definition with
@@ -542,9 +577,6 @@ where
     Ok(())
 }
 
-/// Copies what `other` holds and this store lacks. Identifiers are unique
-/// across stores, so nothing conflicts but refs, where this store's wins.
-/// Returns the refs left as they were.
 /// The names a merge kept as they were, because the other store gives them
 /// something else.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -553,10 +585,10 @@ pub struct Merged {
     pub definitions: Vec<DefinitionPath>,
 }
 
-pub(crate) fn merge(
-    txn: &mut Transaction<'_>,
-    other: &redb::ReadTransaction,
-) -> Result<Merged, StoreError> {
+/// Copies what `other` holds and this store lacks. Identifiers are unique
+/// across stores, so nothing conflicts but names, where this store's win.
+/// Returns the names left as they were.
+fn merge(txn: &mut Transaction<'_>, other: &redb::ReadTransaction) -> Result<Merged, StoreError> {
     copy(txn, other, NODES)?;
     copy(txn, other, RUNS)?;
     copy(txn, other, STEPS)?;
