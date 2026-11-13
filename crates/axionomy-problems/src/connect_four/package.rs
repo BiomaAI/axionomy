@@ -11,10 +11,13 @@
 //! searches alike in self-play, or drops nearest the center, or as a
 //! depth-five alpha-beta search scores. The search of the game's `k`th turn
 //! is seeded with the study's seed plus `k`, as the study seeds it, and
-//! searches as many iterations as the study gives a move at that size, so
-//! each instance names its own games: `connect-four/<instance>/<document>`.
-//! Its view draws the board, its pieces and the tactics of the player to
-//! move.
+//! searches as many iterations as the study gives a move at that size. How
+//! many is Red's strength, its player's own, so the games are named by it,
+//! the same game at every size: `connect-four/mcts-<iterations>/<game>`,
+//! where the game is `self-play`, `center-opponent` or `search-opponent`,
+//! and each instance's experiment plays the games of the strength its study
+//! gives. Its view draws the board, its pieces and the tactics of the
+//! player to move.
 
 use crate::{
     connect_four::{self, AccountId, Asset, Ontology, Player},
@@ -107,8 +110,8 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
             players: vec![searching.clone(), yellow],
         };
         let mut arms = Vec::new();
-        for (document, strategy) in [
-            ("mcts-game", game(searching.clone())),
+        for (played, strategy) in [
+            ("self-play", game(searching.clone())),
             (
                 "center-opponent",
                 game(Chooser::Policy(script("center_opponent"))),
@@ -118,7 +121,7 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
                 game(Chooser::Policy(script("search_opponent"))),
             ),
         ] {
-            let name: StrategyPath = format!("connect-four/{instance}/{document}")
+            let name: StrategyPath = format!("connect-four/mcts-{iterations}/{played}")
                 .parse()
                 .expect("a path");
             engine.keep_strategy(&name, &strategy)?;

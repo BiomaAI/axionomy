@@ -99,6 +99,16 @@ fn arm<'a>(results: &'a Results, strategy: &str) -> &'a ArmResult {
         .unwrap_or_else(|| panic!("no arm runs {strategy}"))
 }
 
+/// What the package names the strategy giving the document `document`: the
+/// document's own name, but for Connect Four's self-play, which its study
+/// calls `mcts-game`.
+fn named<'a>(problem: &str, document: &'a str) -> &'a str {
+    match (problem, document) {
+        ("connect-four", "mcts-game") => "self-play",
+        _ => document,
+    }
+}
+
 /// The last segment of a path.
 fn last(path: &str) -> &str {
     path.rsplit('/').next().unwrap_or(path)
@@ -162,7 +172,7 @@ fn reproduced_by(
             // gives only for some instances.
             continue;
         };
-        let arm = arm(&results, strategy);
+        let arm = arm(&results, named(problem, strategy));
         let (_, trace) = trajectories
             .iter()
             .find(|(document, _)| document.as_str() == *strategy)
@@ -764,7 +774,27 @@ fn mission_monte_carlo(engine: &Engine) {
 
 fn connect_four(engine: &Engine, instance: &str) {
     // Self-play, and Red's tree search against each opponent, every game
-    // on the instance's board.
+    // on the instance's board, Red as strong as the instance's study makes
+    // it.
+    let strength = match instance {
+        "micro" => 64,
+        "showcase" => 16,
+        _ => 32,
+    };
+    let experiment = engine
+        .experiment(&format!("connect-four/{instance}").parse().unwrap())
+        .unwrap();
+    let arms: Vec<String> = experiment
+        .arms
+        .iter()
+        .map(|arm| arm.strategy.to_string())
+        .collect();
+    assert_eq!(
+        arms,
+        ["self-play", "center-opponent", "search-opponent"]
+            .map(|game| format!("connect-four/mcts-{strength}/{game}")),
+        "{instance}"
+    );
     let documents = ["mcts-game", "center-opponent", "search-opponent"];
     assert_eq!(
         reproduces(engine, "connect-four", instance, &documents),
