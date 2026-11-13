@@ -17,7 +17,7 @@ pub use refs::RefName;
 
 use axionomy_engine::Engine;
 use axionomy_studio_api::{
-    Ancestor, AncestorQuery, Applied, ApplyRequest, AssessRequest, Candidate, Candidates,
+    Ancestor, AncestorQuery, Applied, ApplyRequest, AssessRequest, Balances, Candidate, Candidates,
     CandidatesQuery, CompareRequest, ComparisonView, ExperimentEvent, LoadedView, PackageList,
     Refusal, RefusalBody, ResultsView, SamplePackages, StrategyEvent, StrategyRequest,
 };
@@ -281,6 +281,14 @@ fn endpoints() -> Vec<Endpoint<StudioState>> {
             )
             .path_parameters::<PointName>()
             .query::<AncestorQuery>()
+            .fallible(),
+        Endpoint::new::<Balances>("get", "/api/points/{point}/balances", get(engine::balances))
+            .describe(
+                "getBalances",
+                "List a point's accounts and what each holds there",
+                "points",
+            )
+            .path_parameters::<PointName>()
             .fallible(),
         Endpoint::new::<Candidates>(
             "get",

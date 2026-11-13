@@ -363,7 +363,7 @@ pub(crate) fn document<S>(endpoints: &[Endpoint<S>], also: &[SchemaFn]) -> OpenA
         openapi: "3.1.0",
         info: Info {
             title: "Axionomy Service API",
-            description: "The engine's operations Studio uses: the packages its store holds, loading one, a point's history drawn with its view, the candidates at a point, assessing and applying exchanges, strategies and experiments run while their progress streams, comparison, and refs to points, which move forward and deliver the steps they move over; and, until they retire, interface-neutral problem studies.",
+            description: "The engine's operations Studio uses: the packages its store holds, loading one, a point's history drawn with its view, what its accounts hold, the candidates at a point, assessing and applying exchanges, strategies and experiments run while their progress streams, comparison, and refs to points, which move forward and deliver the steps they move over; and, until they retire, interface-neutral problem studies.",
             version: env!("CARGO_PKG_VERSION"),
         },
         paths,

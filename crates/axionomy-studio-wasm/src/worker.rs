@@ -217,6 +217,11 @@ impl WorkerEngine {
         answer(point_id(point).and_then(|point| api::ancestor(&self.engine, point, parsed(query)?)))
     }
 
+    /// Every account at `point` and what it holds there: a `Balances`.
+    pub fn balances(&self, point: &str) -> Result<String, JsValue> {
+        answer(point_id(point).and_then(|point| api::balances(&self.engine, point)))
+    }
+
     /// What a candidate set offers at `point`, each exchange assessed;
     /// `query` is a `CandidatesQuery`.
     pub fn candidates(&self, point: &str, query: &str) -> Result<String, JsValue> {

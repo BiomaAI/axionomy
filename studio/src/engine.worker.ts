@@ -107,6 +107,8 @@ async function serve(id: number, request: StoreRequest): Promise<unknown> {
       return read(engine.draw(request.point));
     case "ancestor":
       return read(engine.ancestor(request.point, JSON.stringify({ step: request.step })));
+    case "balances":
+      return read(engine.balances(request.point));
     case "candidates":
       return read(engine.candidates(request.point, JSON.stringify({ set: request.set })));
     case "assess":

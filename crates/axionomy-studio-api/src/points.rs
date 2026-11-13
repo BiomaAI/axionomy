@@ -3,7 +3,7 @@
 //! applied, and a strategy run from it.
 
 use crate::{Natural, PointId, Refusal};
-use axionomy::paths;
+use axionomy::{AccountPath, paths};
 use axionomy_engine::{CandidatesPath, Effort, Engine, GoalPath, Outcome, Ran, StrategyPath};
 use axionomy_search::GraphSearchProgress;
 use axionomy_view::{ProposalView, ViewDocument};
@@ -58,6 +58,23 @@ pub struct AssessRequest {
 #[serde(deny_unknown_fields)]
 pub struct ApplyRequest {
     pub exchanges: Vec<paths::Exchange>,
+}
+
+/// A point's accounts, each with what it holds there.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct Balances {
+    pub point: PointId,
+    /// Every account at the point, in the order of their paths.
+    pub accounts: Vec<AccountBalances>,
+}
+
+/// An account and what it holds: each asset with its exact quantity, in
+/// the order of the assets' paths, as an exchange's receipt writes a basket.
+/// An asset it holds none of is not listed.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct AccountBalances {
+    pub account: AccountPath,
+    pub balances: paths::Basket,
 }
 
 /// Exchanges applied: the point they started from, which never changes,
@@ -199,6 +216,25 @@ pub fn candidates(
         candidates: presented(engine, point, exchanges)?,
         set: query.set,
     })
+}
+
+/// Every account at `point` and what it holds there.
+pub fn balances(engine: &Engine, point: PointId) -> Result<Balances, Refusal> {
+    let reached = engine.reach(point.point())?;
+    let accounts = reached
+        .state
+        .economy
+        .accounts()
+        .map(|(account, held)| AccountBalances {
+            account: account.clone(),
+            balances: held
+                .balances()
+                .iter_sorted()
+                .map(|(asset, quantity)| (asset.clone(), *quantity))
+                .collect(),
+        })
+        .collect();
+    Ok(Balances { point, accounts })
 }
 
 /// An exchange assessed at `point`: what it would move, or what it lacks.

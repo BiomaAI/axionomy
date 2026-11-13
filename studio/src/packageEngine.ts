@@ -19,6 +19,7 @@ export type Candidates = Schemas["Candidates"];
 export type Candidate = Schemas["Candidate"];
 export type Exchange = Schemas["Exchange"];
 export type Applied = Schemas["Applied"];
+export type Balances = Schemas["Balances"];
 export type StrategyRequest = Schemas["StrategyRequest"];
 export type RanView = Schemas["RanView"];
 export type StrategyEvent = Schemas["StrategyEvent"];
@@ -86,6 +87,8 @@ export interface PackageEngine {
   draw(point: PointId): Promise<ViewDocument>;
   /** The point at step `step` of `point`'s history. */
   ancestor(point: PointId, step: number): Promise<PointId>;
+  /** Every account at `point` and what it holds there. */
+  balances(point: PointId): Promise<Balances>;
   candidates(point: PointId, set: string): Promise<Candidates>;
   assess(point: PointId, exchange: Exchange): Promise<Candidate>;
   apply(point: PointId, exchanges: Exchange[]): Promise<Applied>;
@@ -202,6 +205,10 @@ export const nativePackages: PackageEngine = {
   },
   async ancestor(point, step) {
     return answered(await api.GET("/api/points/{point}/ancestor", { params: { path: { point }, query: { step } } })).point;
+  },
+  async balances(point) {
+    // The contract's balances: openapi-fetch reads a basket's pairs as arrays.
+    return answered(await api.GET("/api/points/{point}/balances", { params: { path: { point } } })) as Balances;
   },
   async candidates(point, set) {
     return answered(await api.GET("/api/points/{point}/candidates", { params: { path: { point }, query: { set } } }));

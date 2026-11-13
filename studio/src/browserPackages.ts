@@ -2,6 +2,7 @@ import type { ViewDocument } from "./api";
 import {
   EngineRefusal,
   type Applied,
+  type Balances,
   type Candidate,
   type Candidates,
   type CompareRequest,
@@ -39,6 +40,7 @@ export type StoreRequest =
   | { kind: "experiments" }
   | { kind: "draw"; point: PointId }
   | { kind: "ancestor"; point: PointId; step: number }
+  | { kind: "balances"; point: PointId }
   | { kind: "candidates"; point: PointId; set: string }
   | { kind: "assess"; point: PointId; exchange: Exchange }
   | { kind: "apply"; point: PointId; exchanges: Exchange[] }
@@ -109,6 +111,10 @@ export class BrowserPackages implements PackageEngine {
 
   async ancestor(point: PointId, step: number): Promise<PointId> {
     return ((await this.request({ kind: "ancestor", point, step })) as { point: PointId }).point;
+  }
+
+  balances(point: PointId): Promise<Balances> {
+    return this.request({ kind: "balances", point }) as Promise<Balances>;
   }
 
   candidates(point: PointId, set: string): Promise<Candidates> {

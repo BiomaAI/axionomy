@@ -17,9 +17,9 @@ pub use packages::{
     SamplePackages, load, packages,
 };
 pub use points::{
-    Ancestor, AncestorQuery, Applied, ApplyRequest, AssessRequest, Candidate, Candidates,
-    CandidatesQuery, OutcomeView, RanView, StrategyEvent, StrategyRequest, ancestor, apply, assess,
-    candidates, check_strategy, draw, run_strategy,
+    AccountBalances, Ancestor, AncestorQuery, Applied, ApplyRequest, AssessRequest, Balances,
+    Candidate, Candidates, CandidatesQuery, OutcomeView, RanView, StrategyEvent, StrategyRequest,
+    ancestor, apply, assess, balances, candidates, check_strategy, draw, run_strategy,
 };
 pub use refs::{
     MAX_FRAMES, MAX_WAIT_SECONDS, RefAdvanceRequest, RefCreateRequest, RefFrame, RefFrames,

@@ -8,7 +8,7 @@ use crate::{ApiError, StudioState};
 use axionomy_engine::{Engine, ExperimentPath};
 use axionomy_search::GraphSearchProgress;
 use axionomy_studio_api::{
-    Ancestor, AncestorQuery, Applied, ApplyRequest, AssessRequest, Candidate, Candidates,
+    Ancestor, AncestorQuery, Applied, ApplyRequest, AssessRequest, Balances, Candidate, Candidates,
     CandidatesQuery, CompareRequest, ComparisonView, ExperimentEvent, LoadedView, PackageList,
     PointId, Refusal, ResultsView, StrategyEvent, StrategyRequest,
 };
@@ -86,6 +86,17 @@ pub(crate) async fn ancestor(
 ) -> Result<Json<Ancestor>, ApiError> {
     blocking(&state.engine, move |engine| {
         axionomy_studio_api::ancestor(engine, point, query)
+    })
+    .await
+    .map(Json)
+}
+
+pub(crate) async fn balances(
+    State(state): State<StudioState>,
+    Path(PointName { point }): Path<PointName>,
+) -> Result<Json<Balances>, ApiError> {
+    blocking(&state.engine, move |engine| {
+        axionomy_studio_api::balances(engine, point)
     })
     .await
     .map(Json)

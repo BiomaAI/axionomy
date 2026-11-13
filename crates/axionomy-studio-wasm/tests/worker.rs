@@ -158,6 +158,15 @@ fn the_worker_offers_the_operations_the_server_offers() {
     let micro = &listed["packages"][0]["refs"][0];
     assert_eq!(micro["name"], "maze/micro");
     let start = micro["point"].as_str().unwrap().to_owned();
+    let held = parsed(&worker.balances(&start).unwrap());
+    assert_eq!(
+        held,
+        serde_json::to_value(
+            axionomy_studio_api::balances(worker.engine(), start.parse().unwrap()).unwrap()
+        )
+        .unwrap()
+    );
+    assert!(!held["accounts"].as_array().unwrap().is_empty());
 
     // The moves at the start, assessed; one applied, and the ref moved over it.
     let offered = parsed(

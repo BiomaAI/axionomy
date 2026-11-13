@@ -3,7 +3,8 @@
 Connect Four on the standard board, from the connect-four package's
 `connect-four/showcase` point. Two players move the ref `connect-four/live`
 forward, each from where it saw the ref: a player drops a piece when the
-moves at the ref's point are its drops, and both adjudicate every drop, so
+game's account at the ref's point holds its turn, and both adjudicate every
+drop, so
 each adjudication is proposed twice from one point and one of the two is
 refused with where the ref went. A thinker tries every move out at the ref's
 point without ever moving the ref, and a learner follows the ref through its
@@ -26,6 +27,9 @@ PACKAGE = "connect-four"
 START = "connect-four/showcase"
 LIVE = "connect-four/live"
 MOVES = "connect-four/moves"
+# The account holding whose turn it is: `turn/<player>` while that player is
+# to drop, `pending/<player>` while its drop waits on its adjudication.
+GAME = "game"
 # Each player's value where the game ends, in tenths: ten for a win, five
 # for a draw, none for a loss; none before it ends.
 OBJECTIVES = ("connect-four/red", "connect-four/yellow")
@@ -43,15 +47,6 @@ Frame = dict[str, Any]
 def step(point: str) -> int:
     """A point's step: a `PointId` is its run, `:` and its step."""
     return int(point.rsplit(":", 1)[1])
-
-
-def drop_by(exchange: Exchange) -> str | None:
-    """The player whose drop `exchange` is, or nothing for an adjudication.
-    A drop's rate is `standard-move/<player>/<column>/<row>`; every other
-    move settles the drop before it: a line claimed, the draw on a full
-    board, or the turn passing on."""
-    kind, *rest = exchange["rate"].split("/")
-    return rest[0] if kind == "standard-move" else None
 
 
 def decided(frame: Frame) -> bool:
@@ -89,6 +84,27 @@ class Studio:
 
     def live(self) -> str:
         return self.ok(self.http.get(self.ref))["point"]
+
+    def balances(self, point: str) -> dict[str, dict[str, Decimal]]:
+        """What every account holds at `point`, each asset exactly."""
+        held = self.ok(self.http.get(f"/api/points/{point}/balances"))
+        assert held["point"] == point
+        return {
+            account["account"]: {asset: Decimal(quantity) for asset, quantity in account["balances"]}
+            for account in held["accounts"]
+        }
+
+    def dropping(self, point: str) -> str | None:
+        """The player to drop a piece at `point`, as the game's account
+        holds it; nobody while a drop waits on its adjudication (the line
+        claimed, the draw on a full board, or the turn passing on), or once
+        the game is over."""
+        game = self.balances(point)[GAME]
+        turns = [player for player in SEEDS if game.get(f"turn/{player}", 0) > 0]
+        pending = [player for player in SEEDS if game.get(f"pending/{player}", 0) > 0]
+        # One player holds the turn, or one drop waits, or the game is over.
+        assert len(turns) + len(pending) <= 1, game
+        return turns[0] if turns else None
 
     def candidates(self, point: str) -> list[Exchange]:
         offered = self.ok(self.http.get(f"/api/points/{point}/candidates", params={"set": MOVES}))
@@ -151,14 +167,14 @@ class Table:
 
 
 def play(base_url: str, player: str, table: Table) -> None:
-    """Drops when the moves at the ref's point are this player's, and
-    adjudicates every drop; looks again from where the ref is when the other
-    player's move came first. Stops when no move is left."""
+    """Drops when the game's account at the ref's point holds this player's
+    turn, and adjudicates every drop; looks again from where the ref is when
+    the other player's move came first. Stops when no move is left."""
     chooser = random.Random(SEEDS[player])
     with Studio(base_url) as studio:
         point = studio.live()
         while offered := studio.candidates(point):
-            dropping = drop_by(offered[0])
+            dropping = studio.dropping(point)
             if dropping not in (None, player):
                 point = studio.moved_from(point)
                 continue
@@ -259,7 +275,7 @@ def alone(studio: Studio, start: str) -> list[Exchange]:
     played: list[Exchange] = []
     point = start
     while offered := studio.candidates(point):
-        dropping = drop_by(offered[0])
+        dropping = studio.dropping(point)
         exchange = choosers[dropping].choice(offered) if dropping else offered[0]
         point = studio.apply(point, [exchange])
         played.append(exchange)
@@ -309,7 +325,11 @@ def test_two_players_a_thinker_and_a_learner_share_a_live_ref(studio: str) -> No
             first = counted[refused.expected]
             assert refused.current == first.to
             assert refused.player != first.player
-        adjudications = [advanced.expected for advanced in game if drop_by(advanced.exchange) is None]
+        turns = {advanced.expected: client.dropping(advanced.expected) for advanced in game}
+        adjudications = [advanced.expected for advanced in game if turns[advanced.expected] is None]
+        # Every drop was its player's: the one whose turn the game's account
+        # held where it dropped.
+        assert all(advanced.player == turns[advanced.expected] for advanced in game if turns[advanced.expected])
         assert adjudications
         assert sorted(refused.expected for refused in table.refused) == sorted(adjudications)
 
@@ -317,7 +337,7 @@ def test_two_players_a_thinker_and_a_learner_share_a_live_ref(studio: str) -> No
         # it was made; the move was made once, so the frames below hold each
         # step once.
         assert sorted(again.to for again in table.repeated) == sorted(
-            advanced.to for advanced in game if drop_by(advanced.exchange) is not None
+            advanced.to for advanced in game if turns[advanced.expected] is not None
         )
 
         # The learner received exactly the steps the players advanced over,
