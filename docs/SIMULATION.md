@@ -567,7 +567,12 @@ negamax over bitboards) reproduces every document; it needed either tree
 search's rollout to be given the search's random,
 `fn(state, candidates, random)`, whose weighted samples draw the search's
 own tickets, so simulations that explore at random draw as the study's do.
-The
+MCP serves packages it loads when it starts (`axionomy mcp --package`):
+`axionomy_package_list` lists each one's refs with an `eco-` handle for the
+point each names, and its experiments and strategies, and
+`axionomy_experiment_run` and `axionomy_experiment_results` give every
+trial's seed, outcome, exact objective values and an `eco-` handle for its
+end, which every other tool takes, beside the problem tools until P12. The
 micro instances are checked with
 every test run; the showcase and stress instances, minutes in a debug build,
 run in a release build in CI. Rhai is optimised in debug builds too, since package
