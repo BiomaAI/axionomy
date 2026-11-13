@@ -3,7 +3,7 @@
 
 use crate::CliError;
 use axionomy_engine::{
-    Contents, Engine, Manifest, PackagePath, Version, package as read_package, zipped,
+    Contents, Engine, Loaded, Manifest, PackagePath, Version, package as read_package, zipped,
 };
 use axionomy_store::{DefinitionPath, RefPath, Store, Target};
 use clap::Subcommand;
@@ -55,20 +55,9 @@ pub(crate) fn run(action: Action) -> Result<String, CliError> {
         } => export(&store, &output, &name, version, refs, definitions),
         Action::Load { store, package } => {
             let engine = Engine::new(Store::open(&store)?)?;
-            let loaded = engine.load(&read_package(&read(&package)?)?)?;
+            let loaded = load(&engine, &package)?;
             let mut lines: Vec<String> = loaded.manifests.iter().map(describe).collect();
-            lines.extend(
-                loaded.kept.refs.iter().map(|reference| {
-                    format!("kept ref {reference}: the store points it elsewhere")
-                }),
-            );
-            lines.extend(
-                loaded
-                    .kept
-                    .definitions
-                    .iter()
-                    .map(|definition| format!("kept {definition}: the store defines it otherwise")),
-            );
+            lines.extend(kept(&loaded));
             Ok(lines.join("\n"))
         }
         Action::Samples { directory } => {
@@ -116,6 +105,33 @@ pub(crate) fn run(action: Action) -> Result<String, CliError> {
             Ok(lines.join("\n"))
         }
     }
+}
+
+/// Merges the package file `file`, zipped or not, into `engine`'s store,
+/// once it passes the checks loading makes: it is a package, it has a
+/// manifest, and its scripts need no newer host API than this engine's.
+pub(crate) fn load(engine: &Engine, file: &PathBuf) -> Result<Loaded, CliError> {
+    read_package(&read(file)?)
+        .and_then(|package| engine.load(&package))
+        .map_err(|source| CliError::Package {
+            path: file.clone(),
+            source,
+        })
+}
+
+/// The names a load kept as the store gives them, in words.
+pub(crate) fn kept(loaded: &Loaded) -> impl Iterator<Item = String> + '_ {
+    let refs = loaded
+        .kept
+        .refs
+        .iter()
+        .map(|reference| format!("kept ref {reference}: the store points it elsewhere"));
+    let definitions = loaded
+        .kept
+        .definitions
+        .iter()
+        .map(|definition| format!("kept {definition}: the store defines it otherwise"));
+    refs.chain(definitions)
 }
 
 fn export(
@@ -178,7 +194,7 @@ fn written(
     ))
 }
 
-fn describe(manifest: &Manifest) -> String {
+pub(crate) fn describe(manifest: &Manifest) -> String {
     format!(
         "{} {} · format {} · script host API {} · {}, {}",
         manifest.name,
@@ -323,5 +339,51 @@ mod tests {
             )
             .is_err()
         );
+    }
+
+    #[test]
+    fn a_server_loads_a_package_and_refuses_one_that_fails_its_checks() {
+        let scratch = Scratch(
+            std::env::temp_dir().join(format!("axionomy-cli-serve-{}", std::process::id())),
+        );
+        std::fs::create_dir_all(&scratch.0).unwrap();
+        let file = |name: &str| scratch.0.join(name);
+        // The maze's package, zipped as `package samples` writes it.
+        let source = Engine::new(Store::memory().unwrap()).unwrap();
+        axionomy_problems::maze::package::write(&source).unwrap();
+        let name = "maze".parse().unwrap();
+        super::written(
+            &source,
+            &name,
+            "0.1.0".parse().unwrap(),
+            source.named_under(&name).unwrap(),
+            &file("maze.zip"),
+        )
+        .unwrap();
+        let engine = Engine::new(Store::memory().unwrap()).unwrap();
+        let loaded = super::load(&engine, &file("maze.zip")).unwrap();
+        assert_eq!(loaded.manifests.len(), 1);
+        assert_eq!(loaded.manifests[0].name, name);
+        assert!(engine.experiment(&"maze/micro".parse().unwrap()).is_ok());
+        // Loading it again into the same store keeps nothing of its own.
+        let again = super::load(&engine, &file("maze.zip")).unwrap();
+        assert_eq!(super::kept(&again).count(), 0);
+
+        // A file that is no package, a store that holds no manifest, and a
+        // file that is not there are refused, naming the file.
+        std::fs::write(file("notes.txt"), "no package").unwrap();
+        drop(Store::open(file("empty.redb")).unwrap());
+        for (name, says) in [
+            ("notes.txt", "could not load package"),
+            ("empty.redb", "holds no package manifest"),
+            ("missing.zip", "could not read"),
+        ] {
+            let error = super::load(&engine, &file(name)).unwrap_err().to_string();
+            assert!(
+                error.contains(&format!("`{}`", file(name).display())),
+                "{error}"
+            );
+            assert!(error.contains(says), "{error}");
+        }
     }
 }

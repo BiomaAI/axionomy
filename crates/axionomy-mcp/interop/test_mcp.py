@@ -4,13 +4,16 @@ real caller uses. Economic rules are tested in Rust; this checks that a
 standard client can reach them."""
 
 import json
+import os
+import re
+import subprocess
 from collections.abc import Sequence
 from typing import Any, Literal
 
 import anyio
 import httpx
 import pytest
-from conftest import running
+from conftest import binary, running
 from mcp import Client
 from mcp.client.extension import ClaimContext, ClientExtension, ResultClaim
 from mcp.shared.exceptions import MCPError
@@ -123,13 +126,13 @@ async def test_the_server_describes_itself_to_a_standard_client(url: str) -> Non
         assert client.instructions and "axionomy_economy_create" in client.instructions
         # A first-time client learns where to start, what an exchange looks
         # like, and which tools need the tasks extension.
-        for words in ("Start here", "axionomy_problem_catalog", "axionomy_search", "io.modelcontextprotocol/tasks", '"bindings"', "axionomy_ref_advance"):
+        for words in ("Start here", "axionomy_problem_catalog", "axionomy_search", "io.modelcontextprotocol/tasks", '"bindings"', "axionomy_ref_advance", "axionomy_package_list", "axionomy_experiment_run"):
             assert words in client.instructions, words
         capabilities = client.server_capabilities
         assert capabilities.tools and capabilities.resources and capabilities.completions is not None
 
         tools = (await client.list_tools()).tools
-        assert len(tools) == 14
+        assert len(tools) == 17
         for tool in tools:
             assert tool.output_schema is not None, tool.name
             assert tool.annotations is not None and tool.annotations.open_world_hint is False, tool.name
@@ -563,6 +566,114 @@ async def test_a_frames_exchange_is_tried_in_the_studys_economy(url: str) -> Non
             diff = await page(client, f"axionomy://economy/{tried.structured_content['economy_id']}/diff/{after['economy_id']}")
             assert diff["items"] == []
             assert tried.structured_content["root"] == after["root"]
+
+
+# What the engine's `maze/micro` experiment gives each strategy, as the maze
+# study's documents report it: the energy and the time of its route.
+MAZE_MICRO = {
+    "maze/breadth-first": {"maze/energy": "9", "maze/time": "3"},
+    "maze/dijkstra": {"maze/energy": "6", "maze/time": "6"},
+    "maze/a-star": {"maze/energy": "6", "maze/time": "6"},
+    "maze/pareto-energy": {"maze/energy": "6", "maze/time": "6"},
+    "maze/pareto-time": {"maze/energy": "9", "maze/time": "3"},
+}
+
+
+async def test_a_loaded_package_lists_its_refs_experiments_and_strategies(maze_url: str) -> None:
+    async with Client(maze_url) as client:
+        listed = await client.call_tool("axionomy_package_list", {})
+        assert not listed.is_error, listed.structured_content
+        (maze,) = listed.structured_content["packages"]
+        assert maze["name"] == "maze"
+        assert re.fullmatch(r"\d+\.\d+\.\d+", maze["version"])
+        assert maze["format"] >= 1 and maze["host_api"] >= 1
+        instances = ["maze/micro", "maze/showcase", "maze/stress"]
+        assert [named["ref"] for named in maze["refs"]] == instances
+        assert maze["experiments"] == instances
+        assert sorted(maze["strategies"]) == sorted(MAZE_MICRO)
+
+        # Each ref names an economy, linked, where an instance starts.
+        for named in maze["refs"]:
+            assert f"axionomy://economy/{named['economy_id']}" in links(listed)
+            economy = await page(client, f"axionomy://economy/{named['economy_id']}")
+            assert economy["origin"]["kind"] == "authored"
+        again = await client.call_tool("axionomy_package_list", {})
+        assert again.structured_content == listed.structured_content
+
+
+async def test_an_experiment_runs_and_a_client_steps_through_a_trial(maze_url: str) -> None:
+    async with Client(maze_url) as client:
+        listed = await client.call_tool("axionomy_package_list", {})
+        start = listed.structured_content["packages"][0]["refs"][0]
+        assert start["ref"] == "maze/micro"
+
+        ran = await client.call_tool("axionomy_experiment_run", {"experiment": "maze/micro"})
+        assert not ran.is_error, ran.structured_content
+        results = ran.structured_content
+        assert results["objectives"] == [
+            {"objective": "maze/energy", "direction": "minimize"},
+            {"objective": "maze/time", "direction": "minimize"},
+        ]
+        # Every arm reaches the goal, from the instance's start, with the
+        # energy and time the engine gives its strategy.
+        arms = {arm["strategy"]: arm for arm in results["arms"]}
+        assert {strategy: arm["trials"][0]["values"] for strategy, arm in arms.items()} == MAZE_MICRO
+        for arm in results["arms"]:
+            assert (arm["start"], arm["start_economy_id"]) == ("maze/micro", start["economy_id"])
+            (trial,) = arm["trials"]
+            assert trial["ended"] == {"kind": "reached"}
+
+        # A trial's end is an economy like any other: step through its trace
+        # from the arm's start, applying each exchange to the step before it.
+        trial = arms["maze/a-star"]["trials"][0]
+        end = trial["economy_id"]
+        trace = await exchanges(client, end)
+        assert len(trace) == trial["exchanges"] > 0
+        origin = await step(client, end, 0)
+        assert origin["source_economy_id"] == start["economy_id"]
+        assert origin["root"] == (await page(client, f"axionomy://economy/{start['economy_id']}"))["root"]
+        for i, exchange in enumerate(trace):
+            before = await step(client, end, i)
+            tried = await client.call_tool("axionomy_exchange_apply", {"economy_id": before["economy_id"], "exchange": exchange})
+            assert not tried.is_error, tried.structured_content
+            after = await step(client, end, i + 1)
+            assert tried.structured_content["root"] == after["root"]
+        assert after["root"] == (await page(client, f"axionomy://economy/{end}"))["root"]
+
+        # The results read back as they ran, under the same handles.
+        recorded = await client.call_tool("axionomy_experiment_results", {"experiment": "maze/micro"})
+        assert recorded.structured_content == results
+
+
+async def test_an_experiment_is_one_a_loaded_package_carries(maze_url: str) -> None:
+    async with Client(maze_url) as client:
+        for tool in ("axionomy_experiment_run", "axionomy_experiment_results"):
+            refused = await client.call_tool(tool, {"experiment": "sokoban/micro"})
+            assert refused.is_error
+            assert refused.structured_content["error"] == "not_found"
+            assert refused.structured_content["details"] == {"pointer": "/experiment"}
+            assert "axionomy_package_list" in refused.structured_content["message"]
+            malformed = await client.call_tool(tool, {"experiment": "Maze/Micro"})
+            assert malformed.structured_content["error"] == "invalid_request"
+            assert malformed.structured_content["details"] == {"pointer": "/experiment"}
+        unrun = await client.call_tool("axionomy_experiment_results", {"experiment": "maze/stress"})
+        assert unrun.structured_content["error"] == "not_found"
+        assert "axionomy_experiment_run" in unrun.structured_content["message"]
+
+
+def test_a_package_that_fails_its_checks_stops_the_server(tmp_path) -> None:
+    bogus = tmp_path / "bogus.zip"
+    bogus.write_text("no package")
+    environment = {**os.environ, "AXIONOMY_MCP_BIND": "127.0.0.1:0", "RUST_LOG": "warn"}
+    stopped = subprocess.run(
+        [binary(), "mcp", "--package", str(bogus)],
+        env=environment,
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    assert stopped.returncode != 0
+    assert f"could not load package `{bogus}`" in stopped.stderr
 
 
 async def applied(client: Client, economy_id: str, exchange: dict[str, Any]) -> str:

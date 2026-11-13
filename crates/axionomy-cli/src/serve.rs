@@ -1,4 +1,5 @@
-//! Serving the problems over MCP and to Studio until the server is stopped.
+//! Serving the problems and loaded packages over MCP, and the problems to
+//! Studio, until the server is stopped.
 
 use crate::CliError;
 use axionomy_engine::Engine;
@@ -13,18 +14,30 @@ use std::{
     path::{Path, PathBuf},
 };
 use tokio_util::sync::CancellationToken;
-use tracing::info;
+use tracing::{info, warn};
 use tracing_subscriber::EnvFilter;
 
 /// Serves MCP over streamable HTTP at `/mcp`, with `/health`, keeping
-/// economies in `store` when given, in memory otherwise.
+/// economies in `store` when given, in memory otherwise, once every package
+/// file of `packages` is merged into it. A package that fails the checks
+/// loading makes stops the server before it serves.
 pub(crate) fn mcp(
     registry: Registry,
     bind: SocketAddr,
     store: Option<PathBuf>,
+    packages: &[PathBuf],
 ) -> Result<(), CliError> {
     logging("axionomy_cli=info,axionomy_mcp=info,rmcp=info");
     let engine = engine(store, "keeping economies on disk")?;
+    for file in packages {
+        let loaded = crate::package::load(&engine, file)?;
+        for manifest in &loaded.manifests {
+            info!(file = %file.display(), "loaded package {}", crate::package::describe(manifest));
+        }
+        for kept in crate::package::kept(&loaded) {
+            warn!(file = %file.display(), "{kept}");
+        }
+    }
     runtime(async move {
         let cancellation = CancellationToken::new();
         let service = stateless_http_service(engine, registry, cancellation.clone())?;

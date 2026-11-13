@@ -44,6 +44,12 @@ enum Command {
         /// restarts; in memory, until the server stops, when omitted.
         #[arg(long, env = "AXIONOMY_MCP_STORE")]
         store: Option<PathBuf>,
+        /// A package file, zipped or not, to merge into the store before
+        /// serving; repeat for more. A package that fails the checks loading
+        /// makes stops the server. Without `--package`, the files
+        /// `AXIONOMY_MCP_PACKAGES` lists, separated as `PATH` separates them.
+        #[arg(long = "package", value_name = "FILE")]
+        packages: Vec<PathBuf>,
     },
     /// Make, load and look into packages: store files holding economies,
     /// refs and what uses them, zipped when the file name ends in `.zip`.
@@ -134,6 +140,8 @@ pub enum CliError {
     },
     #[error("`{0}` exists; a package is written to a new file")]
     Exists(PathBuf),
+    #[error("could not load package `{path}`: {source}")]
+    Package { path: PathBuf, source: EngineError },
 }
 
 struct CliOutput {
@@ -149,7 +157,14 @@ pub fn run(registry: Registry, cli: Cli) -> Result<Option<String>, CliError> {
         Command::ExportStudies { directory, problem } => {
             export_studies(&registry, problem, &directory).map(Some)
         }
-        Command::Mcp { bind, store } => serve::mcp(registry, bind, store).map(|()| None),
+        Command::Mcp {
+            bind,
+            store,
+            packages,
+        } => {
+            let packages = packages_to_load(packages, std::env::var_os(PACKAGES));
+            serve::mcp(registry, bind, store, &packages).map(|()| None)
+        }
         Command::Package { action } => package::run(action).map(Some),
         Command::Studio {
             bind,
@@ -157,6 +172,25 @@ pub fn run(registry: Registry, cli: Cli) -> Result<Option<String>, CliError> {
             store,
         } => serve::studio(registry, bind, &frontend, store).map(|()| None),
     }
+}
+
+/// The environment variable listing the package files `axionomy mcp` loads
+/// when no `--package` names one.
+const PACKAGES: &str = "AXIONOMY_MCP_PACKAGES";
+
+/// The package files to load: those `given` on the command line, or else
+/// those `listed` names, separated as `PATH` separates them.
+fn packages_to_load(given: Vec<PathBuf>, listed: Option<std::ffi::OsString>) -> Vec<PathBuf> {
+    if !given.is_empty() {
+        return given;
+    }
+    listed
+        .map(|listed| {
+            std::env::split_paths(&listed)
+                .filter(|file| !file.as_os_str().is_empty())
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 /// Parses `arguments` and runs them over the problems of `registry`.
@@ -377,6 +411,36 @@ mod tests {
             )
             .unwrap();
         assert_eq!(cli_study, registry_study);
+    }
+
+    #[test]
+    fn mcp_loads_the_packages_given_or_else_those_the_environment_lists() {
+        let given = vec![PathBuf::from("maze.zip")];
+        let listed = std::env::join_paths(["sokoban.zip", "work.redb"]).unwrap();
+        assert_eq!(packages_to_load(given.clone(), Some(listed.clone())), given);
+        assert_eq!(
+            packages_to_load(Vec::new(), Some(listed)),
+            [PathBuf::from("sokoban.zip"), PathBuf::from("work.redb")]
+        );
+        assert!(packages_to_load(Vec::new(), None).is_empty());
+        let Cli {
+            command: Command::Mcp { packages, .. },
+        } = Cli::try_parse_from([
+            "axionomy",
+            "mcp",
+            "--package",
+            "maze.zip",
+            "--package",
+            "sokoban.zip",
+        ])
+        .unwrap()
+        else {
+            panic!("`mcp` serves MCP");
+        };
+        assert_eq!(
+            packages,
+            [PathBuf::from("maze.zip"), PathBuf::from("sokoban.zip")]
+        );
     }
 
     #[test]
