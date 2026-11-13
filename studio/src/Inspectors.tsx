@@ -1,5 +1,5 @@
 import { useContext, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
-import type { ExchangeFrame, ProposalView, ViewDocument, ViewSnapshot } from "./api";
+import type { ExchangeFrame, ViewDocument, ViewSnapshot } from "./api";
 import { Amount, QuantityFormats, useQuantity } from "./Quantity";
 
 /** A name written as a path, such as `time-accounting`, read as words. */
@@ -113,30 +113,10 @@ export function Transition({ frame, steps }: { frame?: ExchangeFrame; steps: num
   </div>;
 }
 
-export function ProposalInspector({ proposals }: { proposals: ProposalView[] }) {
-  const [selectedId, setSelectedId] = useState(proposals[0]?.id);
-  useEffect(() => setSelectedId(proposals[0]?.id), [proposals]);
-  if (proposals.length === 0) return <div className="empty-state">This problem has no rule-check probe.</div>;
-  const selected = proposals.find((proposal) => proposal.id === selectedId) ?? proposals[0];
-  return <div className="proposal-inspector">
-    <div className="counterexample-note"><strong>Expected rejection</strong><span>These probes are deliberately invalid or impossible. Their rejection proves the rules are doing their job; they are not failed runs.</span></div>
-    <div className="proposal-tabs" role="tablist">
-      {proposals.map((proposal) => <button type="button" role="tab" aria-selected={proposal.id === selected.id} key={proposal.id} onClick={() => setSelectedId(proposal.id)}>{proposal.label}</button>)}
-    </div>
-    <p>{selected.description}</p>
-    <div className="binding-row">
-      <span><small>Rate</small>{selected.exchange.rate.label}</span>
-      {selected.exchange.bindings.map((binding) => <span key={binding.role.key}><small>{binding.role.label}</small>{binding.account.label}</span>)}
-      {selected.exchange.parameters?.map((parameter) => <span key={parameter.name}><small>{words(parameter.name)}</small>{parameter.value}</span>)}
-    </div>
-    <Assessment assessment={selected.assessment} expectedRejection />
-  </div>;
-}
-
-export function Assessment({ assessment, expectedRejection = false }: { assessment: ExchangeFrame["assessment"]; expectedRejection?: boolean }) {
+export function Assessment({ assessment }: { assessment: ExchangeFrame["assessment"] }) {
   const quantity = useQuantity();
-  return <div className={`assessment assessment-${assessment.status} ${expectedRejection ? "expected-rejection" : ""}`}>
-    <strong>{expectedRejection ? `expected rejection · ${assessment.status}` : assessment.status}</strong>
+  return <div className={`assessment assessment-${assessment.status}`}>
+    <strong>{assessment.status}</strong>
     {assessment.shortfalls.map((shortfall) => <div key={shortfall.account.key}>
       {shortfall.account.label} lacks {shortfall.missing.map((missing) => `${quantity(missing.asset.key, missing.quantity)} ${missing.asset.label}`).join(", ")}
     </div>)}
@@ -157,37 +137,6 @@ function DeltaGroup({ label, kind, values }: { label: string; kind: string; valu
 function BasketQuantity({ value }: { value: QuantityValue }) {
   const format = useContext(QuantityFormats)[value.asset.key];
   return <b>{value.asset.label} <em>{format?.unit ? "" : "×"}<Amount asset={value.asset.key} atoms={value.quantity} /></em></b>;
-}
-
-export function Telemetry({ document }: { document: ViewDocument }) {
-  if (document.telemetry.length === 0) return <div className="empty-state">No search telemetry was published.</div>;
-  return <div className="telemetry-list">
-    {document.telemetry.map((series) => <section key={`${series.subject}:${series.title}`}>
-      {/* Model size counts the encoding; only an algorithm's counts can be sampled. */}
-      <h3>{series.title}{series.subject === "algorithm" && <span>{series.exact ? "exact counts" : "sampled estimates"}</span>}</h3>
-      <div>{series.points.map((point) => <article key={`${point.sequence}:${point.kind}`}><strong>{point.value}</strong><span>{point.label}</span><small>{telemetryKindWords(point.kind)}</small></article>)}</div>
-    </section>)}
-  </div>;
-}
-
-type TelemetryKind = ViewDocument["telemetry"][number]["points"][number]["kind"];
-
-/** What a telemetry number measures, in words. */
-function telemetryKindWords(kind: TelemetryKind): string {
-  const words: Record<TelemetryKind, string> = {
-    expanded: "Search work",
-    generated: "Search output",
-    iteration: "Search iterations",
-    sample: "Samples",
-    information_set: "Information sets",
-    accounts: "Model",
-    rates: "Model",
-    transitions: "Trace",
-    constraints: "Rule checks",
-    alternatives: "Compared",
-    message: "Result",
-  };
-  return words[kind];
 }
 
 export function ModelExplorer({ document }: { document: ViewDocument }) {
@@ -229,21 +178,6 @@ function RateBasket({ label, values }: { label: string; values: QuantityValue[] 
 
 function ComputedRateAmount({ label, amount }: { label: string; amount: { role: { key: string; label: string }; asset: { key: string; label: string }; quantity: string } }) {
   return <article className="computed-rate-amount"><h3>{amount.role.label}</h3><div className="rate-basket"><span>{label}</span><b>{amount.asset.label}</b><code>{amount.quantity}</code></div></article>;
-}
-
-export function Observations({ document, frame }: { document: ViewDocument; frame?: ExchangeFrame }) {
-  const observations = frame?.observations.length ? frame.observations : document.observations;
-  if (observations.length === 0) return <div className="empty-state">This problem has no actor-relative observation boundary.</div>;
-  return <div className="observations">
-    {observations.map((observation) => <article key={observation.actor.key}>
-      <h3>{observation.actor.label}</h3><p>{observation.label}</p>
-      {observation.facts.map((fact) => <div className="observation-fact" key={fact.asset.key}><strong>{fact.asset.label}</strong><span><Amount asset={fact.asset.key} atoms={fact.quantity} /></span></div>)}
-      {observation.visible_accounts.map((account) => <details key={account.account.key} className="observation-account" open>
-        <summary>{account.account.label}<span>{account.balances.length} balances</span></summary>
-        {account.balances.map((balance) => <div className="observation-balance" key={balance.asset.key}><span>{balance.asset.label}</span><strong><Amount asset={balance.asset.key} atoms={balance.quantity} /></strong></div>)}
-      </details>)}
-    </article>)}
-  </div>;
 }
 
 export function useSnapshot(document: ViewDocument | undefined, position: number) {

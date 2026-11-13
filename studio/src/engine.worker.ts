@@ -1,20 +1,10 @@
 /// <reference lib="webworker" />
-import init, { Engine, catalog as wasmCatalog, protocol, study as wasmStudy } from "./generated/wasm/axionomy_studio_wasm";
-import type { ProblemDescriptor, Study, StudyRequest, StudioEvent } from "./api";
+import init, { Engine } from "./generated/wasm/axionomy_studio_wasm";
 import type { StoreMessage, StoreRequest } from "./browserPackages";
 import { Followers } from "./following";
 import type { LoadedFrom, LoadedView, StoreKept } from "./packageEngine";
 
-type Command =
-  | { kind: "initialize" }
-  | { kind: "study"; studyId: string; request: StudyRequest }
-  | { kind: "store"; id: number; request: StoreRequest };
-
-type WorkerMessage =
-  | { kind: "ready"; protocol: string; catalog: ProblemDescriptor[] }
-  | { kind: "event"; event: StudioEvent }
-  | { kind: "study"; studyId: string; study: Study }
-  | StoreMessage;
+type Command = { kind: "store"; id: number; request: StoreRequest };
 
 const scope = self as DedicatedWorkerGlobalScope;
 let initialized: Promise<void> | undefined;
@@ -24,42 +14,16 @@ function initialize() {
   return initialized;
 }
 
-function post(message: WorkerMessage) {
+function post(message: StoreMessage) {
   scope.postMessage(message);
 }
 
 scope.onmessage = async (message: MessageEvent<Command>) => {
-  if (message.data.kind === "store") {
-    const { id, request } = message.data;
-    try {
-      post({ kind: "store_reply", id, ok: true, value: await serve(id, request) });
-    } catch (cause) {
-      post({ kind: "store_reply", id, ok: false, ...refused(cause) });
-    }
-    return;
-  }
+  const { id, request } = message.data;
   try {
-    await initialize();
-    if (message.data.kind === "initialize") {
-      post({ kind: "ready", protocol: protocol(), catalog: JSON.parse(wasmCatalog()) as ProblemDescriptor[] });
-      return;
-    }
-    const { studyId, request } = message.data;
-    let sequence = 0;
-    const study = JSON.parse(wasmStudy(JSON.stringify(request), studyId, (eventJson: string) => {
-      const event = JSON.parse(eventJson) as StudioEvent;
-      sequence = Math.max(sequence, event.sequence + 1);
-      post({ kind: "event", event });
-    })) as Study;
-    // The study is stored before completion is announced so the client can
-    // load it synchronously when handling the ordered completion event.
-    post({ kind: "study", studyId, study });
-    post({ kind: "event", event: { kind: "study_published", study_id: studyId, sequence: sequence++, key: study.key, documents: study.documents.length } });
-    post({ kind: "event", event: { kind: "study_completed", study_id: studyId, sequence, document: study.selected_document } });
+    post({ kind: "store_reply", id, ok: true, value: await serve(id, request) });
   } catch (cause) {
-    // Studies are numbered from 1, so a failure before any study never matches one.
-    const studyId = message.data.kind === "study" ? message.data.studyId : "study-0";
-    post({ kind: "event", event: { kind: "study_failed", study_id: studyId, sequence: Number.MAX_SAFE_INTEGER, message: described(cause) } });
+    post({ kind: "store_reply", id, ok: false, ...refused(cause) });
   }
 };
 

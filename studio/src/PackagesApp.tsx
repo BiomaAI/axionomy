@@ -1,10 +1,9 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { IconMaximize } from "@tabler/icons-react";
 import type { ViewDocument } from "./api";
-import { Brand, PlaybackControls, changingBalances } from "./App";
 import { BrowserPackages } from "./browserPackages";
-import { connectionLabel, nativeEngine } from "./engine";
+import { connectionLabel, nativeEngineAnswers } from "./engine";
 import { Accounts, Assessment, ModelExplorer, PanelHeading, StepTicker, Transition, useSnapshot } from "./Inspectors";
 import {
   EngineRefusal,
@@ -24,6 +23,7 @@ import {
   type ResultsView,
   type SearchProgress,
 } from "./packageEngine";
+import { Brand, PlaybackControls, changingBalances } from "./Playback";
 import { QuantityFormats } from "./Quantity";
 import { SceneView, type ReplayMotionMode } from "./SceneView";
 
@@ -43,7 +43,7 @@ function useEngine(): PackageEngine | undefined {
   const probe = import.meta.env.VITE_AXIONOMY_ENGINE !== "browser" && !window.location.hostname.endsWith(".github.io");
   const chosen = useQuery({
     queryKey: ["package-engine"],
-    queryFn: async () => (probe && await nativeEngine.health() ? "native" : "browser") as PackageEngine["kind"],
+    queryFn: async () => (probe && await nativeEngineAnswers() ? "native" : "browser") as PackageEngine["kind"],
     staleTime: Infinity,
     retry: false,
   });
@@ -131,8 +131,8 @@ function useSettled<T>(value: T, delay: number): T {
   return settled;
 }
 
-/** Packages, points, refs and experiments (P12): Studio's default workspace. */
-export function PackagesApp({ workspace }: { workspace?: ReactNode }) {
+/** Packages, points, refs and experiments (P12): what Studio opens. */
+export function PackagesApp() {
   const engine = useEngine();
   const queryClient = useQueryClient();
   const link = useRef(readLink()).current;
@@ -384,7 +384,6 @@ export function PackagesApp({ workspace }: { workspace?: ReactNode }) {
   return <div className="app-shell packages-workspace">
     <header className="topbar">
       <Brand />
-      {workspace}
       <div className="connection" title={engine?.kind === "native" ? "Verified by a live health check" : "Rust/WASM engine isolated in a Web Worker"}><span className={`status-dot ${engine ? "online" : "static"}`} />{label}</div>
     </header>
 
@@ -416,11 +415,11 @@ export function PackagesApp({ workspace }: { workspace?: ReactNode }) {
         void load(file.name, () => engine.loadFile(file));
       }} /></label>
       <button type="button" className="share-link" onClick={copyLink}>{copied ? "Link copied ✓" : "Copy link"}</button>
-      <div className="study-message">{engine ? `The ${engine.kind === "native" ? "native" : "browser"} engine serves these packages; every exchange is the kernel's to apply.` : "Looking for an engine…"}</div>
+      <div className="engine-message">{engine ? `The ${engine.kind === "native" ? "native" : "browser"} engine serves these packages; every exchange is the kernel's to apply.` : "Looking for an engine…"}</div>
     </section>
 
     {(busy || notices.length > 0) && <div className="status-layer">
-      {busy && <div className="study-activity" role="status"><div className="study-activity-heading"><span className="spinner" aria-hidden="true" /><div><strong>{busy}</strong><span>Its manifests are checked before it is merged into the store</span></div></div></div>}
+      {busy && <div className="activity" role="status"><div className="activity-heading"><span className="spinner" aria-hidden="true" /><div><strong>{busy}</strong><span>Its manifests are checked before it is merged into the store</span></div></div></div>}
       {notices.map((message) => <div className="link-notice" role="status" key={message}>{message}<button type="button" onClick={() => setNotices((current) => current.filter((candidate) => candidate !== message))}>Dismiss</button></div>)}
     </div>}
 
@@ -501,7 +500,7 @@ function PointHeading({ pkg, opened, document, position, onKeep, onDelete }: { p
       <p>{opened.shipped ? `The point package ${opened.shipped} ships as ${opened.ref}: the economy after ${steps} of its history. A package's ref is fixed, so the package means what it shipped; name a ref of your own here, and applying an exchange at your ref's point moves it.`
         : opened.ref ? `The point ${opened.ref} names: the economy after ${steps} of its history. Applying an exchange here and moving the ref over it is what makes a step count.`
         : "A point no ref names. It never changes; anything applied here makes another branch."}</p>
-      <dl className="study-key" aria-label="Point on screen">
+      <dl className="point-key" aria-label="Point on screen">
         <div><dt>On screen</dt><dd>{opened.shipped ? "On a package's ref" : opened.ref ? "On a ref" : "Not on any ref"}</dd></div>
         <div><dt>Point</dt><dd title={opened.point}>{shortPoint(opened.point)}</dd></div>
         <div><dt>History</dt><dd>{document.frames.length} steps</dd></div>
@@ -645,7 +644,7 @@ function ContinuePanel({ engine, pkg, at, refName, onOpen, onAdvance }: { engine
     </div>
     <p className="muted">A search expands at most the budget's states and a policy or a game plays at most the turns; each strategy reads only its own limit. The goal and the effort start as those of the experiment that runs the strategy, or, where none does, the package's first goal, a budget of {DEFAULT_EFFORT.budget} and {DEFAULT_EFFORT.turns} turns.</p>
     {!valid && <div className="assessment-issue">A seed, a budget and turns are whole numbers below 2^64, the budget at least 1.</div>}
-    {running && <div className="study-activity-progress" role="status"><div className="indeterminate-progress" /><span>{running.progress ? `${running.progress.expanded} expanded · ${running.progress.generated} generated · ${running.progress.frontier} frontier` : "running"}</span></div>}
+    {running && <div className="activity-progress" role="status"><div className="indeterminate-progress" /><span>{running.progress ? `${running.progress.expanded} expanded · ${running.progress.generated} generated · ${running.progress.frontier} frontier` : "running"}</span></div>}
     {problem && <div className="assessment-issue" role="alert">{problem}</div>}
     {ran && <RanSummary ran={ran} refName={refName} onOpen={() => onOpen(ran.end, `${ran.strategy} toward ${ran.goal} from step ${stepOf(ran.start)}`)} onAdvance={() => onAdvance(ran.start, ran.end)} />}
   </div>;
@@ -795,7 +794,7 @@ function ExperimentCard({ engine, experiment, onOpen, onRecorded }: { engine: Pa
   return <details className="strategy-comparison experiment-card" open aria-label={`Experiment ${path}`}>
     <summary><span>Experiment</span><strong>{path}</strong><i aria-hidden="true">▸</i></summary>
     <div className="experiment-body">
-      <dl className="study-key">
+      <dl className="point-key">
         <div><dt>Starts at</dt><dd>{experiment.start}</dd></div>
         <div><dt>Goal</dt><dd>{experiment.goal}</dd></div>
 

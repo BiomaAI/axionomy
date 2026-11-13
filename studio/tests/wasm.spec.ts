@@ -1,53 +1,14 @@
 import { expect, test } from "@playwright/test";
 
-test("studies a problem in a Rust Worker and loads the verified study", async ({ page }) => {
-  await page.goto("/?studies");
-  await expect(page.getByText("Running in your browser", { exact: true })).toBeVisible({ timeout: 30_000 });
-  await page.getByRole("combobox", { name: "Problem", exact: true }).selectOption("logistics");
-  await page.getByLabel("Budget").fill("8");
-  await page.getByRole("button", { name: "Study", exact: true }).click();
-  await expect(page.getByText("Live thinking")).toBeVisible();
-  await expect(page.getByText("New study computed and loaded")).toBeVisible({ timeout: 60_000 });
-  await expect(page.getByText("Saved thinking")).toBeVisible();
-  await page.getByRole("tab", { name: /Step-by-step replay/ }).click();
-  await expect(page.getByText("Cold van", { exact: true }).first()).toBeVisible();
-  await expect(page.locator(".graph-scene")).toBeVisible();
-  await page.locator(".react-flow__node.occupant-overlay").filter({ hasText: "Cold van" }).click();
-  await expect(page.locator(".account-card.focused")).toContainText("Cold van");
-});
-
-test("cancels a browser study by terminating its isolated Worker", async ({ page }) => {
-  await page.goto("/?studies");
-  await expect(page.getByText("Running in your browser", { exact: true })).toBeVisible({ timeout: 30_000 });
-  await page.getByRole("combobox", { name: "Problem", exact: true }).selectOption("logistics");
-  await page.getByRole("combobox", { name: "Instance (size)", exact: true }).selectOption("stress");
-  await page.getByLabel("Budget").fill("2048");
-  await page.getByRole("button", { name: "Study", exact: true }).click();
-  await page.getByRole("button", { name: "Cancel" }).click();
-  await expect(page.getByRole("button", { name: "Study", exact: true })).toBeEnabled();
-  await expect(page.getByText("Running in your browser", { exact: true })).toBeVisible();
-});
-
-test("browser Worker streams the same verified Work League frames", async ({ page }) => {
-  await page.goto("/?problem=work-league&instance=micro&strategy=mixed-field&view=thinking&step=0&seed=17&budget=32");
-  await expect(page.getByText("Running in your browser", { exact: true })).toBeVisible({ timeout: 30_000 });
-  await expect(page.getByRole("heading", { name: "Work League · Mixed policy field" })).toBeVisible();
-  await page.getByRole("button", { name: "Study", exact: true }).click();
-  await expect(page.locator(".live-standings")).toContainText(/(?:Live|Last) verified frame/, { timeout: 30_000 });
-  await expect(page.getByText("New study computed and loaded")).toBeVisible({ timeout: 60_000 });
-  await page.getByRole("tab", { name: /Step-by-step replay/ }).click();
-  await expect(page.getByText("Who is winning depends on what you value")).toBeVisible();
-  await expect(page.getByLabel("Study on screen")).toContainText("Micro");
-  expect(Number(await page.getByRole("slider", { name: "Trace position" }).getAttribute("max"))).toBeLessThan(100);
-});
+/** A page of Studio's origin that runs no Studio, so no Worker of Studio's holds the store a test's own Workers open. */
+const BLANK = "/tests/worker.html";
 
 test("a Worker loads a package from a URL, runs its experiment, and finds both again after a reload", async ({ page }) => {
   const served: number[] = [];
   page.on("response", (response) => {
     if (new URL(response.url()).pathname === "/packages/maze.zip") served.push(response.status());
   });
-  // The study workspace, whose Worker leaves the store alone for this test's.
-  await page.goto("/?studies");
+  await page.goto(BLANK);
   // The client module as Vite serves it, which Studio's packages workspace uses.
   const client = "/src/browserPackages.ts";
   const first = await page.evaluate(async (client) => {
@@ -89,7 +50,7 @@ test("a Worker loads a package from a URL, runs its experiment, and finds both a
 });
 
 test("a follower waits in the Worker for its ref to move, asking nothing in the meantime", async ({ page }) => {
-  await page.goto("/?studies");
+  await page.goto(BLANK);
   const followed = await page.evaluate(async (client) => {
     // Every request the page posts to a Worker, by kind.
     const posted: string[] = [];
@@ -139,7 +100,7 @@ test("a follower waits in the Worker for its ref to move, asking nothing in the 
 });
 
 test("a second Worker keeps its store in memory while another holds the saved one", async ({ page }) => {
-  await page.goto("/?studies");
+  await page.goto(BLANK);
   const opened = await page.evaluate(async (client) => {
     const { BrowserPackages } = await import(client);
     const holder = new BrowserPackages();
@@ -153,7 +114,7 @@ test("a second Worker keeps its store in memory while another holds the saved on
 
 test("cancelling a run terminates its Worker mid-run, and the next one opens the store with all committed before", async ({ page }) => {
   test.setTimeout(120_000);
-  await page.goto("/?studies");
+  await page.goto(BLANK);
   const client = "/src/browserPackages.ts";
   const first = await page.evaluate(async (client) => {
     let terminated = 0;

@@ -55,7 +55,7 @@ async function playFrom(page: Page, shipped: string, name: string): Promise<numb
 
 test("loads a sample package and scrubs a ref's history", async ({ page }) => {
   await page.goto("/");
-  await expect(page.getByRole("button", { name: "Packages" })).toHaveAttribute("aria-current", "page");
+  await expect(page.getByRole("combobox", { name: "Package", exact: true })).toBeVisible();
   await loadSample(page, "sokoban");
   await expect(page.getByLabel("What this package defines")).toContainText("candidates sokoban/moves");
   expect(await openRef(page, "sokoban/micro/deadlock")).toBe(3);
@@ -192,7 +192,7 @@ test("cancels a game mid-run, and nothing else notices", async ({ page }) => {
   await panel.getByRole("combobox", { name: "Strategy" }).selectOption("connect-four/mcts-32/self-play");
   await panel.getByRole("button", { name: "Run strategy" }).click();
   // A game reports its turns, and its players' searches, as it plays.
-  await expect(panel.locator(".study-activity-progress")).toContainText(/\d+ expanded · \d+ generated/, { timeout: 60_000 });
+  await expect(panel.locator(".activity-progress")).toContainText(/\d+ expanded · \d+ generated/, { timeout: 60_000 });
   await panel.getByRole("button", { name: "Cancel" }).click();
   await expect(panel.locator(".continue [role=alert]")).toContainText("Cancelled: the strategy stopped");
   await expect(panel.getByRole("button", { name: "Run strategy" })).toBeEnabled();
@@ -254,13 +254,4 @@ test("keeps the packages workspace within a narrow viewport", async ({ page }) =
   await expect(page.locator(".action-panel .candidate").first()).toBeVisible();
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   expect(overflow).toBeLessThanOrEqual(1);
-});
-
-test("the study workspace stays one switch away", async ({ page }) => {
-  await page.goto("/");
-  await page.getByRole("button", { name: "Studies" }).click();
-  await expect(page).toHaveURL(/problem=maze/);
-  await expect(page.getByRole("combobox", { name: "Problem", exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Packages" }).click();
-  await expect(page.getByRole("combobox", { name: "Package", exact: true })).toBeVisible();
 });
