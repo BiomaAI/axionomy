@@ -7,8 +7,8 @@
 use axionomy::{Economy, Exchange, path, paths};
 use axionomy_engine::Engine;
 use axionomy_problems::{
-    WritePackage, amm, bridge, exact_cover, lending, marketplace, maze, registry, rescue,
-    scheduling, sokoban, workshop,
+    WritePackage, amm, bridge, exact_cover, lending, logistics, marketplace, maze, registry,
+    rescue, scheduling, sokoban, workshop,
 };
 use axionomy_store::{Checkpoints, Recordable, Store};
 use axionomy_study::{Progress, StudyControl, StudyObserver, StudyRequest};
@@ -125,7 +125,7 @@ fn draws_like_rust<O: Recordable>(problem: &str, write: WritePackage, instances:
 /// Every sample whose package carries a view, and how it is drawn.
 type Drawn = (&'static str, fn(&[&str]) -> usize);
 
-const VIEWS: [Drawn; 10] = [
+const VIEWS: [Drawn; 11] = [
     ("maze", |instances| {
         draws_like_rust::<maze::Ontology>("maze", maze::package::write, instances)
     }),
@@ -174,6 +174,20 @@ const VIEWS: [Drawn; 10] = [
             marketplace::package::write,
             instances,
         )
+    }),
+    // Micro is one vehicle; Showcase and Stress are fleets, an ontology of
+    // their own with a view of its own.
+    ("logistics", |instances| {
+        let (micro, fleets): (Vec<&str>, Vec<&str>) = instances
+            .iter()
+            .copied()
+            .partition(|instance| *instance == "micro");
+        draws_like_rust::<logistics::Ontology>("logistics", logistics::package::write, &micro)
+            + draws_like_rust::<logistics::fleet::Ontology>(
+                "logistics",
+                logistics::package::write,
+                &fleets,
+            )
     }),
 ];
 

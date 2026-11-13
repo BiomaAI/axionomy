@@ -11,22 +11,25 @@
 //! objectives are named under `logistics/fleet`: the fastest-route,
 //! reliable-route and hub-relay dispatch policies, each named for the
 //! document it gives. Every instance has an experiment comparing its
-//! strategies.
+//! strategies. Each ontology has a view of its own.
 
 use crate::{
     logistics::{self, fleet},
     package::{call, written},
 };
-use axionomy::{Economy, path};
+use axionomy::{Economy, OntologyPath, path};
 use axionomy_engine::{
     Arm, CandidateSet, Chooser, Engine, EngineError, Experiment, Measure, Objective, ObjectivePath,
-    Strategy, StrategyPath,
+    Strategy, StrategyPath, View,
 };
 use axionomy_search::pareto::ObjectiveDirection::{self, Maximize, Minimize};
 use axionomy_store::{Checkpoints, Recordable};
 
 const SCRIPT: &str = include_str!("../../scripts/logistics.rhai");
 const FLEET: &str = include_str!("../../scripts/fleet.rhai");
+/// The views of Micro's vehicle and of the fleet.
+const VIEW: &str = include_str!("../../scripts/logistics-view.rhai");
+const FLEET_VIEW: &str = include_str!("../../scripts/fleet-view.rhai");
 
 /// The seed of the study's default request: the weather Micro's runs meet,
 /// and the fleet's route tickets.
@@ -47,6 +50,34 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
     let micro = |function: &str| call("logistics", function);
     engine.keep_script(&path!("logistics"), SCRIPT)?;
     engine.keep_script(&path!("logistics/fleet"), FLEET)?;
+    for (ontology, script, source, title) in [
+        (
+            OntologyPath::of::<logistics::Ontology>(),
+            "logistics/view",
+            VIEW,
+            "Stochastic logistics",
+        ),
+        (
+            OntologyPath::of::<fleet::Ontology>(),
+            "logistics/fleet/view",
+            FLEET_VIEW,
+            "Heterogeneous delivery fleet",
+        ),
+    ] {
+        let view = |function| Some(call(script, function));
+        engine.keep_script(&script.parse().expect("a path"), source)?;
+        engine.keep_view(
+            &ontology,
+            &View {
+                title: title.into(),
+                labels: view("label"),
+                formats: view("format"),
+                carry: None,
+                scene: view("scene"),
+                leaderboards: None,
+            },
+        )?;
+    }
     engine.keep_goal(
         &path!("logistics/all-delivered"),
         &written(&logistics::goal()),
