@@ -273,8 +273,9 @@ Studio's controls then act on a selected point and ref.
 | `axionomy` | The kernel |
 | `axionomy-store` | Runs, points and refs in redb: a file natively; in the browser a file in the origin private file system (OPFS), or memory |
 | `axionomy-study` | Problems, the `Registry` and studies |
-| `axionomy-engine` (new) | All work on studies, economies and runs, shared by every front end |
-| `axionomy-mcp`, `axionomy-studio-server`, `axionomy-cli`, `axionomy-studio-wasm` | Transports |
+| `axionomy-engine` | All work on studies, economies and runs, shared by every front end |
+| `axionomy-mcp`, `axionomy-studio-server` | Transports: libraries that know no problem |
+| `axionomy-cli` (the `axionomy` binary), `axionomy-studio-wasm` | Applications: they register the canonical problems and serve them (`axionomy mcp`, `axionomy studio`, the browser Worker) |
 
 Today the work on economies and runs lives in MCP
 (`crates/axionomy-mcp/src/{store,authoring,studies,read}.rs` and the apply
@@ -347,6 +348,13 @@ what is planned for them.
 The engine takes over MCP's work on economies and runs, and MCP becomes a
 transport over it. The Studio server and the CLI hold an `Engine`, so the
 Studio server has a store: in memory, or a file when one is given.
+
+Done so far: the engine records points (author, apply, reach, ancestor,
+assess) and MCP keeps only its handles; the transports know no problem, and
+the `axionomy` application registers the canonical problems and serves them
+(`axionomy mcp`, `axionomy studio`, `axionomy export-studies`). Next: studies
+recorded as runs, find and search, then the Studio server and the CLI on the
+engine.
 
 Done when MCP's Rust tests and its Python interop suite pass unchanged, and
 MCP touches the store only for its handle table.

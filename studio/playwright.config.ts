@@ -9,7 +9,7 @@ export default defineConfig({
   },
   webServer: [
     {
-      command: "AXIONOMY_STUDIO_BIND=127.0.0.1:3001 cargo run -p axionomy-studio-server --bin axionomy-studio",
+      command: "AXIONOMY_STUDIO_BIND=127.0.0.1:3001 cargo run -p axionomy-cli --bin axionomy -- studio",
       cwd: "..",
       url: "http://127.0.0.1:3001/api/problems",
       reuseExistingServer: false,

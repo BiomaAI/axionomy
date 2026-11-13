@@ -2147,7 +2147,9 @@ paged reads, search, studies recorded as runs, and refs. It is synchronous,
 has no async runtime or protocol types, and builds natively and for
 `wasm32-unknown-unknown`. MCP, the Studio server, the CLI and Studio's browser
 Worker are its transports; MCP keeps its protocol and its table from handles
-to points. A transport never implements an operation the engine has.
+to points. A transport never implements an operation the engine has, and knows
+no problem: an application registers the problems it serves, as the `axionomy`
+binary registers the canonical ones.
 
 ### D-046: Every step is an apply at a point; a ref says which steps count
 

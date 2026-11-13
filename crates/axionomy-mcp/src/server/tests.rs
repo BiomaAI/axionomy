@@ -1,4 +1,12 @@
 use super::*;
+use axionomy_store::Store;
+
+/// A server that studies every canonical problem and keeps its economies in
+/// memory.
+fn server() -> AxionomyMcp {
+    let engine = Engine::new(axionomy_problems::registry(), Store::memory().unwrap()).unwrap();
+    AxionomyMcp::new(engine).unwrap()
+}
 use crate::{handles::StudyId, resources::Address, store::State};
 
 use axionomy_view::DocumentPath;
@@ -149,7 +157,7 @@ async fn complete(
 
 #[test]
 fn tools_declare_schemas_and_behavior_hints() {
-    let tools = AxionomyMcp::default().tool_router.list_all();
+    let tools = server().tool_router.list_all();
     assert_eq!(tools.len(), 10);
     for tool in tools {
         assert!(tool.output_schema.is_some(), "{} output schema", tool.name);
@@ -177,7 +185,7 @@ fn tools_declare_schemas_and_behavior_hints() {
 
 #[tokio::test]
 async fn authoring_adds_entries_without_replacing_any() {
-    let server = AxionomyMcp::default();
+    let server = server();
     let created = create(&server, fixture()).await;
     let economy_id = id(&created);
     assert_eq!(created.value["deduplicated"], false);
@@ -254,7 +262,7 @@ async fn authoring_adds_entries_without_replacing_any() {
 
 #[tokio::test]
 async fn one_call_adds_at_most_ten_thousand_entries() {
-    let server = AxionomyMcp::default();
+    let server = server();
     let assets: serde_json::Map<String, Value> = (0..crate::authoring::MAX_ENTRIES)
         .map(|index| (format!("a{index}"), json!("1")))
         .collect();
@@ -265,7 +273,7 @@ async fn one_call_adds_at_most_ten_thousand_entries() {
 
 #[tokio::test]
 async fn apply_and_replay_share_handles_and_keep_their_source() {
-    let server = AxionomyMcp::default();
+    let server = server();
     let source_id = id(&create(&server, fixture()).await);
 
     let applied = apply(&server, &source_id, transfer(2)).await;
@@ -323,7 +331,7 @@ async fn apply_and_replay_share_handles_and_keep_their_source() {
 
 #[tokio::test]
 async fn failures_explain_themselves_and_store_nothing() {
-    let server = AxionomyMcp::default();
+    let server = server();
     let source_id = id(&create(&server, fixture()).await);
 
     let infeasible = apply(&server, &source_id, transfer(6)).await;
@@ -406,7 +414,7 @@ async fn failures_explain_themselves_and_store_nothing() {
 async fn no_result_or_page_grows_with_the_economy() {
     const ASSETS: usize = 100_000;
     const CHUNK: usize = crate::authoring::MAX_ENTRIES - 1;
-    let server = AxionomyMcp::default();
+    let server = server();
     let mut economy_id = id(&create(
         &server,
         json!({
@@ -499,7 +507,7 @@ async fn no_result_or_page_grows_with_the_economy() {
 
 #[tokio::test]
 async fn bad_cursors_and_unknown_resources_are_refused() {
-    let server = AxionomyMcp::default();
+    let server = server();
     let economy_id = id(&create(&server, fixture()).await);
     let foreign = Target::Accounts {
         economy_id: economy_id.clone(),
@@ -569,7 +577,7 @@ async fn bad_cursors_and_unknown_resources_are_refused() {
 
 #[tokio::test]
 async fn completion_needs_the_arguments_it_depends_on() {
-    let server = AxionomyMcp::default();
+    let server = server();
     let economy_id = id(&create(&server, fixture()).await);
     let accounts = complete(
         &server,
@@ -635,7 +643,7 @@ async fn search_task(server: &AxionomyMcp, max_expansions: usize) -> (TaskManage
 
 #[tokio::test]
 async fn a_search_solution_is_the_snapshot_it_reaches() {
-    let server = AxionomyMcp::default();
+    let server = server();
     let (tasks, task_id) = search_task(&server, 8).await;
     let response = completed(terminal_task(&tasks, &task_id).await);
     assert_eq!(response["outcome"], "solved");
@@ -652,7 +660,7 @@ async fn a_search_solution_is_the_snapshot_it_reaches() {
 
 #[tokio::test]
 async fn a_search_observes_cancellation() {
-    let server = AxionomyMcp::default();
+    let server = server();
     let (tasks, task_id) = search_task(&server, 100_000).await;
     tasks.cancel_task(&task_id).unwrap();
     let task = terminal_task(&tasks, &task_id).await;
@@ -702,7 +710,7 @@ impl axionomy_study::StudyObserver for Trajectories {
 
 #[tokio::test]
 async fn a_problem_study_returns_a_summary_and_pages_its_frames() {
-    let server = AxionomyMcp::default();
+    let server = server();
     let request = maze_study();
     let summary = study(&server, request.clone()).await;
     let study_id: StudyId = summary["study_id"].as_str().unwrap().parse().unwrap();
@@ -754,7 +762,7 @@ async fn a_problem_study_returns_a_summary_and_pages_its_frames() {
 
 #[tokio::test]
 async fn a_frames_exchange_applies_to_the_economy_of_the_step_before_it() {
-    let server = AxionomyMcp::default();
+    let server = server();
     let summary = study(&server, maze_study()).await;
     let study_id: StudyId = handle(&summary["study_id"]);
     for entry in summary["documents"].as_array().unwrap() {
@@ -793,7 +801,7 @@ async fn a_frames_exchange_applies_to_the_economy_of_the_step_before_it() {
 
 #[tokio::test]
 async fn a_studys_documents_are_economies_that_replay_its_trajectories() {
-    let server = AxionomyMcp::default();
+    let server = server();
     let summary = study(&server, maze_study()).await;
     let mut reported = Trajectories::default();
     axionomy_problems::registry()
@@ -839,7 +847,7 @@ async fn a_studys_documents_are_economies_that_replay_its_trajectories() {
 
 #[tokio::test]
 async fn a_study_keeps_its_key_and_handles_and_computes_its_views_again() {
-    let server = AxionomyMcp::default();
+    let server = server();
     let summary = study(&server, maze_study()).await;
     let study_id: StudyId = handle(&summary["study_id"]);
 
@@ -910,7 +918,7 @@ async fn a_study_keeps_its_key_and_handles_and_computes_its_views_again() {
 
 #[tokio::test]
 async fn exchanges_open_and_close_accounts_named_by_their_paths() {
-    let server = AxionomyMcp::default();
+    let server = server();
     let economy_id = id(&create(
         &server,
         json!({
@@ -1038,7 +1046,7 @@ async fn step(server: &AxionomyMcp, economy_id: &EconomyId, step: usize) -> Outc
 
 #[tokio::test]
 async fn stepping_through_a_trace_names_each_state_and_diffs_compare_them() {
-    let server = AxionomyMcp::default();
+    let server = server();
     let parent = create(&server, fixture()).await;
     let parent_id = id(&parent);
     let replayed = replay(
@@ -1125,7 +1133,7 @@ async fn find(
 async fn finding_a_balance_condition_names_the_first_state_it_holds_in() {
     use axionomy::QuantityComparison::{Equal, GreaterThanOrEqual, LessThanOrEqual};
 
-    let server = AxionomyMcp::default();
+    let server = server();
     let parent_id = id(&create(&server, fixture()).await);
     let replayed_id = id(&replay(
         &server,
@@ -1177,7 +1185,7 @@ async fn finding_a_balance_condition_names_the_first_state_it_holds_in() {
 
 #[tokio::test]
 async fn finding_counts_an_account_the_trace_opens() {
-    let server = AxionomyMcp::default();
+    let server = server();
     let economy_id = id(&create(
         &server,
         json!({
@@ -1264,7 +1272,7 @@ fn malformed_arguments_name_the_argument_at_fault() {
     assert!(message.starts_with("argument `/entries/accounts/agents~17~1Wallet` is invalid: `W`"));
 
     // Every tool reads its arguments before it runs.
-    for tool in AxionomyMcp::default().tool_router.list_all() {
+    for tool in server().tool_router.list_all() {
         assert_eq!(
             refused(&tool.name, json!({ "surplus": true })).0,
             "/surplus",
@@ -1276,7 +1284,7 @@ fn malformed_arguments_name_the_argument_at_fault() {
 
 #[tokio::test]
 async fn a_handle_the_store_lacks_says_how_to_make_it_again() {
-    let server = AxionomyMcp::default();
+    let server = server();
     let missing = extend(&server, &missing(), json!({})).await;
     assert_eq!(missing.value["error"], "not_found");
     let message = missing.value["message"].as_str().unwrap();

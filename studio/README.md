@@ -210,7 +210,7 @@ problem can be studied without a server. To use native HTTP/SSE and resumable pa
 start this optional command from the repository root:
 
 ```sh
-cargo run -p axionomy-studio-server --bin axionomy-studio
+cargo run -p axionomy-cli -- studio
 ```
 
 Vite proxies `/api` to `127.0.0.1:3000`. Turn the server off and the badge will

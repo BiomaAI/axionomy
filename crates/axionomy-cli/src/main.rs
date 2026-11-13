@@ -1,9 +1,8 @@
-use axionomy_cli::{execute, write_output};
 use clap::Parser;
 
 fn main() {
     let cli = axionomy_cli::Cli::parse();
-    match execute(&axionomy_problems::registry(), cli).and_then(write_output) {
+    match axionomy_cli::run(axionomy_problems::registry(), cli) {
         Ok(Some(text)) => println!("{text}"),
         Ok(None) => {}
         Err(error) => {

@@ -33,11 +33,13 @@ rust-version = "1.99"
 axionomy = { version = "0.1.0", path = "." }
 axionomy-derive = { version = "0.1.0", path = "crates/axionomy-derive" }
 axionomy-engine = { version = "0.1.0", path = "crates/axionomy-engine" }
+axionomy-mcp = { version = "0.1.0", path = "crates/axionomy-mcp" }
 axionomy-problems = { version = "0.1.0", path = "crates/axionomy-problems" }
 axionomy-search = { version = "0.1.0", path = "crates/axionomy-search" }
 axionomy-tree = { version = "0.1.0", path = "crates/axionomy-tree" }
 axionomy-study = { version = "0.1.0", path = "crates/axionomy-study" }
 axionomy-store = { version = "0.1.0", path = "crates/axionomy-store" }
+axionomy-studio-server = { version = "0.1.0", path = "crates/axionomy-studio-server" }
 axionomy-units = { version = "0.1.0", path = "crates/axionomy-units" }
 axionomy-view = { version = "0.1.0", path = "crates/axionomy-view" }
 

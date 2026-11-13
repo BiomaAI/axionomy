@@ -57,7 +57,7 @@ jobs:
           UV_PYTHON_PREFERENCE: only-system
         run: |
           pipx install uv==0.9.26
-          cargo build -p axionomy-mcp --bin axionomy-mcp
+          cargo build -p axionomy-cli --bin axionomy
           uv run --locked pytest
 
   studio:

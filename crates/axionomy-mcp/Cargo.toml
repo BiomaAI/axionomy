@@ -10,7 +10,6 @@ repository.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-axionomy-problems.workspace = true
 axionomy.workspace = true
 axionomy-engine.workspace = true
 axionomy-search.workspace = true
@@ -18,7 +17,6 @@ axionomy-study.workspace = true
 axionomy-store.workspace = true
 axionomy-tree.workspace = true
 axionomy-view.workspace = true
-axum.workspace = true
 blake3.workspace = true
 getrandom.workspace = true
 indexmap.workspace = true
@@ -29,8 +27,8 @@ serde.workspace = true
 serde_json.workspace = true
 serde_path_to_error.workspace = true
 thiserror.workspace = true
-tokio = { workspace = true, features = ["macros", "net", "rt-multi-thread", "signal", "sync", "time"] }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "sync", "time"] }
 tokio-util.workspace = true
-tracing.workspace = true
-tracing-subscriber.workspace = true
 
+[dev-dependencies]
+axionomy-problems.workspace = true

@@ -336,14 +336,18 @@ application, so a solution is a trace the kernel replays.
 
 ## Running
 
+This crate is a library and knows no problem; the `axionomy` application
+(`axionomy-cli`) serves the canonical problems with it:
+
 ```console
 AXIONOMY_MCP_BIND=127.0.0.1:8000 \
 AXIONOMY_MCP_STORE=economies.redb \
 RUST_LOG=axionomy_mcp=info,rmcp=info \
-  cargo run -p axionomy-mcp --bin axionomy-mcp
+  cargo run -p axionomy-cli -- mcp
 ```
 
-Without `AXIONOMY_MCP_STORE` the server keeps economies in memory.
+Without `AXIONOMY_MCP_STORE` (or `--store`) the server keeps economies in
+memory.
 
 The Streamable HTTP endpoint is `/mcp` and the health endpoint is `/health`.
 The transport accepts only MCP `2026-07-28`, keeps no sessions, prefers JSON
@@ -358,7 +362,7 @@ stepping and diffs, a store on disk across restarts, a study's documents as
 economies that replay its trajectories, frames whose exchanges apply to the
 step before them, and studies computed again from their keys. `interop/`
 checks that a standard client reaches all of it: the official MCP Python SDK
-drives the server binary over Streamable HTTP through discovery, tools,
+drives `axionomy mcp` over Streamable HTTP through discovery, tools,
 resource links and pages, completion, stepping and diffs, task-backed search
 and cancellation, a problem study, stepping into a study and branching from
 it, applying a frame's exchange to its study's economy, structured errors with
@@ -367,7 +371,7 @@ outlive a restart. The SDK does not ship the tasks extension, so the suite
 declares it, as SEP-2663 describes. Python is managed with uv:
 
 ```console
-cargo build -p axionomy-mcp --bin axionomy-mcp
+cargo build -p axionomy-cli --bin axionomy
 cd crates/axionomy-mcp/interop && uv run --locked pytest
 ```
 

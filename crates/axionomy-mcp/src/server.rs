@@ -19,7 +19,7 @@ use axionomy_search::{
     BfsSession, GraphSearchProgress,
     session::{Continue, SearchStatus, WorkBudget},
 };
-use axionomy_store::{Store, StoreError};
+use axionomy_store::StoreError;
 use axionomy_study::{Progress, StudyControl, StudyError, StudyRequest};
 use rmcp::{
     ErrorData as McpError, ServerHandler,
@@ -603,24 +603,6 @@ impl AxionomyMcp {
             Box::pin(study_problem(context, archive, request))
         });
         Ok(CreateTaskResult::new(task).into())
-    }
-}
-
-impl Default for AxionomyMcp {
-    /// A server that studies every canonical problem and keeps its economies
-    /// in memory, until it stops.
-    ///
-    /// # Panics
-    ///
-    /// If an in-memory store cannot be created, or the operating system
-    /// provides no randomness for the handle secret.
-    fn default() -> Self {
-        let engine = Engine::new(
-            axionomy_problems::registry(),
-            Store::memory().expect("an in-memory store opens"),
-        )
-        .expect("an engine opens on an in-memory store");
-        Self::new(engine).expect("an in-memory store keeps the server's tables")
     }
 }
 

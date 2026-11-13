@@ -190,13 +190,6 @@ impl StudioState {
     }
 }
 
-impl Default for StudioState {
-    /// A Studio engine for every canonical problem.
-    fn default() -> Self {
-        Self::new(axionomy_problems::registry())
-    }
-}
-
 #[derive(Debug)]
 struct ApiError {
     status: StatusCode,
@@ -780,7 +773,7 @@ mod tests {
 
     #[tokio::test]
     async fn a_registry_study_is_identical_over_http() {
-        let (app, _) = api(StudioState::default());
+        let (app, _) = api(StudioState::new(axionomy_problems::registry()));
         let request =
             StudyRequest::new("maze".parse().unwrap()).with_strategy("a-star".parse().unwrap());
         let create = app
@@ -827,7 +820,7 @@ mod tests {
 
     #[tokio::test]
     async fn catalog_exposes_all_problems() {
-        let (app, _) = api(StudioState::default());
+        let (app, _) = api(StudioState::new(axionomy_problems::registry()));
         let response = app
             .oneshot(Request::get("/api/problems").body(Body::empty()).unwrap())
             .await
@@ -838,7 +831,7 @@ mod tests {
 
     #[test]
     fn openapi_contains_full_service_surface() {
-        let (_, openapi) = api(StudioState::default());
+        let (_, openapi) = api(StudioState::new(axionomy_problems::registry()));
         let value = serde_json::to_value(openapi).unwrap();
         let paths = value["paths"].as_object().unwrap();
         for path in [

@@ -1,6 +1,6 @@
 [package]
 name = "axionomy-cli"
-description = "Command-line interface for Axionomy studies and reference problems"
+description = "The axionomy application: studies the canonical problems, and serves them over MCP and to Studio"
 readme = "README.md"
 version.workspace = true
 authors.workspace = true
@@ -10,11 +10,20 @@ repository.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+axionomy-engine.workspace = true
+axionomy-mcp.workspace = true
 axionomy-problems.workspace = true
+axionomy-store.workspace = true
+axionomy-studio-server.workspace = true
 axionomy-study.workspace = true
-clap.workspace = true
+axum.workspace = true
+clap = { workspace = true, features = ["env"] }
 serde_json.workspace = true
 thiserror.workspace = true
+tokio = { workspace = true, features = ["net", "rt-multi-thread", "signal"] }
+tokio-util.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
 
 [[bin]]
 name = "axionomy"

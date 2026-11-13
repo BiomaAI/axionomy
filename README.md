@@ -123,11 +123,12 @@ models into one-way workspace dependencies:
 | `axionomy-time` | Calendar-aware Jiff authoring over the same canonical timeline denominations |
 | `axionomy-tree` | Canonical persistent prolly trees: the content-addressed maps stored states are kept in |
 | `axionomy-store` | Runs, stored states, replay verification, tags, groups, metrics and refs, on redb |
-| `axionomy-mcp` | Strict stateless MCP 2026-07-28 reference server with stored, steppable, diffable economies, explorable studies, and interruptible search tasks |
+| `axionomy-engine` | The work every front end shares: studies, and economies as points of runs recorded in a store |
+| `axionomy-mcp` | Strict stateless MCP 2026-07-28 transport over the engine, with stored, steppable, diffable economies, explorable studies, and interruptible search tasks |
 | `axionomy-view` | Runtime-neutral, replay-derived browser presentation contracts, and the labels, formats, scene helpers and Pareto front views problems present themselves with |
 | `axionomy-study` | Generic study runtime: the `Problem` trait and `Registry`, study requests and control, progress reporting, and replay-derived studies of any registered problem |
-| `axionomy-cli` | Human- and script-friendly access to the shared study runtime |
-| `axionomy-studio-server` | Native OpenAPI/SSE reference backend and in-memory study orchestration for Axionomy Studio |
+| `axionomy-cli` | The `axionomy` application: registers the canonical problems, studies them, and serves them over MCP (`axionomy mcp`) and to Studio (`axionomy studio`) |
+| `axionomy-studio-server` | Native OpenAPI/SSE backend for Axionomy Studio, over any registry of problems |
 | `axionomy-studio-wasm` | Single-threaded Web Worker adapter for running the same Rust study runtime and problems in a browser |
 
 ```text
@@ -140,9 +141,11 @@ axionomy-store ───────→ axionomy-tree + axionomy
 axionomy-view ────────→ axionomy-search + axionomy
 axionomy-study ───────→ axionomy-view + axionomy-search
 axionomy-problems ────→ axionomy-study + axionomy-view + axionomy-search
-axionomy-cli ─────────→ axionomy-problems + axionomy-study
-axionomy-mcp ─────────→ axionomy-problems + axionomy-study + axionomy-search
-axionomy-studio-server → axionomy-problems + axionomy-study
+axionomy-engine ──────→ axionomy-study + axionomy-store
+axionomy-mcp ─────────→ axionomy-engine + axionomy-study + axionomy-search
+axionomy-studio-server → axionomy-study + axionomy-view
+axionomy-cli ─────────→ axionomy-problems + axionomy-engine + axionomy-mcp
+                         + axionomy-studio-server
 axionomy-studio-wasm ──→ axionomy-problems + axionomy-study
 ```
 
@@ -258,7 +261,7 @@ state stays outside. Cross-interface tests compare complete studies so the
 four surfaces cannot quietly acquire different semantics.
 
 ```console
-cargo run -p axionomy-studio-server --bin axionomy-studio
+cargo run -p axionomy-cli -- studio
 cd studio
 pnpm install
 pnpm dev
@@ -583,11 +586,11 @@ applying concrete exchanges through the kernel, and its completed result is a
 replayable trace.
 
 ```console
-cargo run -p axionomy-mcp --bin axionomy-mcp
+cargo run -p axionomy-cli -- mcp
 
 # The full stateless HTTP lifecycle, task polling included, through the
 # official MCP Python SDK:
-cargo build -p axionomy-mcp --bin axionomy-mcp
+cargo build -p axionomy-cli --bin axionomy
 cd crates/axionomy-mcp/interop && uv run --locked pytest
 ```
 

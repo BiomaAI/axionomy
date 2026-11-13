@@ -33,8 +33,8 @@ user directs otherwise. Keep commits focused on the milestone's changes.
   --all-targets --all-features -- -D warnings`, `cargo test --workspace
   --all-targets --all-features`) and the spec check before completing core work.
 - Manage any Python with uv and a committed `uv.lock`. The MCP server is checked
-  against the official MCP Python SDK: `cargo build -p axionomy-mcp --bin
-  axionomy-mcp && cd crates/axionomy-mcp/interop && uv run --locked pytest`.
+  against the official MCP Python SDK: `cargo build -p axionomy-cli --bin
+  axionomy && cd crates/axionomy-mcp/interop && uv run --locked pytest`.
 
 Search, problem encodings, transport, Studio and authoring adapters are not the
 execution kernel. Moving authority into them is not a way around this contract.

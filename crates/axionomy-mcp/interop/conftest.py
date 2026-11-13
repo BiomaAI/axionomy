@@ -1,4 +1,4 @@
-"""Starts the axionomy-mcp binary on a free port for the whole test session."""
+"""Starts `axionomy mcp` on a free port for the whole test session."""
 
 import os
 import socket
@@ -12,7 +12,7 @@ import httpx
 import pytest
 
 REPOSITORY = Path(__file__).resolve().parents[3]
-BINARY = Path(os.environ.get("AXIONOMY_MCP_BIN", REPOSITORY / "target" / "debug" / "axionomy-mcp"))
+BINARY = Path(os.environ.get("AXIONOMY_BIN", REPOSITORY / "target" / "debug" / "axionomy"))
 
 
 @pytest.fixture
@@ -25,14 +25,14 @@ def running(store: Path | None = None) -> Iterator[str]:
     """Runs the server until the block ends, keeping snapshots in `store` if
     given, and yields its base URL."""
     if not BINARY.exists():
-        pytest.fail(f"{BINARY} is missing; build it with `cargo build -p axionomy-mcp --bin axionomy-mcp`")
+        pytest.fail(f"{BINARY} is missing; build it with `cargo build -p axionomy-cli --bin axionomy`")
     with socket.socket() as probe:
         probe.bind(("127.0.0.1", 0))
         port = probe.getsockname()[1]
     environment = {**os.environ, "AXIONOMY_MCP_BIND": f"127.0.0.1:{port}", "RUST_LOG": "warn"}
     if store is not None:
         environment["AXIONOMY_MCP_STORE"] = str(store)
-    server = subprocess.Popen([BINARY], env=environment)
+    server = subprocess.Popen([BINARY, "mcp"], env=environment)
     base_url = f"http://127.0.0.1:{port}"
     try:
         deadline = time.monotonic() + 30
@@ -43,7 +43,7 @@ def running(store: Path | None = None) -> Iterator[str]:
             except httpx.TransportError:
                 pass
             if server.poll() is not None or time.monotonic() > deadline:
-                pytest.fail("axionomy-mcp did not start")
+                pytest.fail("axionomy mcp did not start")
             time.sleep(0.05)
         yield base_url
     finally:
