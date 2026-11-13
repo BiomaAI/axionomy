@@ -781,6 +781,8 @@ textarea { width: 100%; min-height: 120px; padding: 9px 11px; font: 11px/1.5 var
 .action-tabs { display: flex; gap: 5px; padding: 10px 15px 0; }
 .action-tabs button { min-height: 30px; padding: 0 10px; color: var(--muted); font-size: 11px; }
 .action-tabs button[aria-selected="true"], .candidate[aria-pressed="true"] { color: var(--accent-contrast); background: var(--accent); border-color: var(--accent); }
+.action-body { display: contents; }
+.action-body[hidden] { display: none; }
 .act, .continue, .follow { display: grid; align-content: start; gap: 11px; padding: 12px 15px 15px; overflow: auto; min-height: 0; }
 .candidate-list { display: grid; gap: 5px; max-height: 260px; margin: 0; padding: 0; overflow: auto; list-style: none; }
 .candidate { display: grid; grid-template-columns: minmax(0, auto) minmax(0, 1fr) auto; align-items: baseline; gap: 10px; width: 100%; min-height: 34px; text-align: left; font-size: 11px; }

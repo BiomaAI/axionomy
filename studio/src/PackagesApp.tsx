@@ -448,9 +448,10 @@ export function PackagesApp({ workspace }: { workspace?: ReactNode }) {
                   <button type="button" role="tab" aria-selected={action === "continue"} onClick={() => setAction("continue")}>Continue from here</button>
                   <button type="button" role="tab" aria-selected={action === "follow"} onClick={() => setAction("follow")} disabled={!opened.ref}>Follow</button>
                 </div>
-                {action === "act" ? <ActPanel engine={engine} pkg={pkg} at={screenPoint} onRefPoint={onRefPoint} refName={opened.ref} onApply={act} />
-                  : action === "continue" ? <ContinuePanel engine={engine} pkg={pkg} at={screenPoint} refName={onRefPoint ? opened.ref : undefined} onOpen={(point, note) => openPoint(point, "continued", note)} onAdvance={advanceTo} />
-                  : opened.ref && <FollowPanel refName={opened.ref} objectives={objectives} follow={follow} />}
+                {/* Every panel stays mounted, so a run or a draft survives a change of tab. */}
+                <div className="action-body" hidden={action !== "act"}><ActPanel engine={engine} pkg={pkg} at={screenPoint} onRefPoint={onRefPoint} refName={opened.ref} onApply={act} /></div>
+                <div className="action-body" hidden={action !== "continue"}><ContinuePanel key={pkg?.name} engine={engine} pkg={pkg} at={screenPoint} refName={onRefPoint ? opened.ref : undefined} onOpen={(point, note) => openPoint(point, "continued", note)} onAdvance={advanceTo} /></div>
+                {opened.ref && <div className="action-body" hidden={action !== "follow"}><FollowPanel refName={opened.ref} objectives={objectives} follow={follow} /></div>}
               </div>
               <div className="panel transition-panel"><PanelHeading kicker="One step" title={frame?.exchange.rate.label ?? "Initial state"} /><Transition frame={frame} steps={steps} /></div>
             </section>
@@ -582,7 +583,6 @@ function ContinuePanel({ engine, pkg, at, refName, onOpen, onAdvance }: { engine
   const [ran, setRan] = useState<RanView>();
   const [problem, setProblem] = useState<string>();
   const cancelled = useRef(false);
-  useEffect(() => () => running?.cancel(), []);
   const choose = (next: string) => {
     setStrategy(next);
     const effort = effortFor(pkg, next);
