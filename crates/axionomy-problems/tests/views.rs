@@ -1,19 +1,16 @@
 //! The samples' views as data (P7, P9): each package's view, a Rhai script,
-//! draws every document of every study of its sample exactly as the sample's
-//! Rust view does, from runs recorded as the sample's ontology and read as
-//! paths.
+//! draws every run of every experiment its package carries, from runs
+//! recorded as the sample's ontology and read as paths, into documents whose
+//! every step is a frame, whose scenes join up and whose evidence is in the
+//! snapshot they explain.
 #![cfg(feature = "packages")]
 
-use axionomy::{Economy, Exchange, path, paths};
-use axionomy_engine::Engine;
-use axionomy_problems::{
-    WritePackage, amm, bridge, connect_four, exact_cover, lending, logistics, marketplace, maze,
-    mission, perishables, registry, rescue, scheduling, sokoban, work_league, workshop,
-};
-use axionomy_store::{Checkpoints, Recordable, Store};
-use axionomy_study::{Progress, StudyControl, StudyObserver, StudyRequest};
-use axionomy_view::{DocumentPath, FrameCueKindView, ViewDocument};
+use axionomy::{path, paths};
+use axionomy_engine::{Engine, rhai::Dynamic};
+use axionomy_problems::{WritePackage, maze, packages};
+use axionomy_store::{Checkpoints, Point, Store};
 use serde::{Serialize, de::DeserializeOwned};
+use std::ops::ControlFlow;
 
 /// `value` written in binary and read back as `T`: an economy or exchange
 /// written as paths read as the sample's, which D-044 makes the same bytes.
@@ -21,239 +18,192 @@ fn written<T: DeserializeOwned>(value: &impl Serialize) -> T {
     postcard::from_bytes(&postcard::to_allocvec(value).unwrap()).unwrap()
 }
 
-#[derive(Default)]
-struct Trajectories(Vec<(DocumentPath, paths::Economy, paths::Trace)>);
-
-impl StudyObserver for Trajectories {
-    fn progress(&mut self, _: Progress) {}
-
-    fn trajectory(
-        &mut self,
-        document: &DocumentPath,
-        initial: &paths::Economy,
-        trace: &paths::Trace,
-    ) {
-        self.0
-            .push((document.clone(), initial.clone(), trace.clone()));
+/// The point `at` drawn with the view of its run's ontology: the document
+/// carries that view's title, the model it was drawn from, a frame for
+/// every step of the point's history in order, each explained by a cue, a
+/// scene at every snapshot that joins up and whose evidence is in that
+/// snapshot's accounts, and the format of exactly the assets of the
+/// economy the view reads in units. Returns how big the document is.
+fn draws(engine: &Engine, at: Point, run: &str) -> Size {
+    let ontology = engine.ontology(at).unwrap();
+    let view = engine
+        .view(&ontology)
+        .unwrap()
+        .unwrap_or_else(|| panic!("{run}: no view of {ontology}"));
+    let (initial, exchanges) = engine.history(at).unwrap();
+    let document = engine.draw(at).unwrap();
+    assert_eq!(document.title, view.title, "{run}: the view's title");
+    let model = document.model.as_ref().unwrap();
+    assert!(!model.rates.is_empty(), "{run}: the model's rates");
+    assert_eq!(document.frames.len(), exchanges.len(), "{run}: frames");
+    for (index, frame) in document.frames.iter().enumerate() {
+        assert_eq!(frame.index, index as u64, "{run}: frame {index}");
+        assert!(
+            !frame.cues.is_empty(),
+            "{run}: frame {index} explains nothing"
+        );
+    }
+    let snapshots =
+        std::iter::once(&document.initial).chain(document.frames.iter().map(|frame| &frame.after));
+    for (index, snapshot) in snapshots.enumerate() {
+        let at = format!("{run}: snapshot {index}");
+        assert_eq!(snapshot.index, index as u64, "{at}");
+        assert!(!snapshot.accounts.is_empty(), "{at}: accounts");
+        let scene = snapshot
+            .scene
+            .as_ref()
+            .unwrap_or_else(|| panic!("{at}: no scene"));
+        scene
+            .validate()
+            .unwrap_or_else(|error| panic!("{at}: {error}"));
+        scene
+            .validate_evidence(&snapshot.accounts)
+            .unwrap_or_else(|error| panic!("{at}: {error}"));
+    }
+    // An asset the view's format function reads in units has its format;
+    // one it leaves a count has none.
+    let formatted: Vec<String> = match &view.formats {
+        None => Vec::new(),
+        Some(formats) => initial
+            .asset_keys()
+            .into_iter()
+            .filter(|asset| {
+                let format: Dynamic = engine
+                    .call(
+                        &formats.script,
+                        formats.function.as_str(),
+                        (asset.to_string(),),
+                    )
+                    .unwrap();
+                !format.is_unit()
+            })
+            .map(|asset| format!("{ontology}/asset/{asset}"))
+            .collect(),
+    };
+    let formats: Vec<&str> = document
+        .formats
+        .keys()
+        .map(|asset| asset.as_str())
+        .collect();
+    assert_eq!(formats, formatted, "{run}: formats");
+    Size {
+        frames: document.frames.len(),
+        accounts: document.initial.accounts.len(),
+        rates: model.rates.len(),
     }
 }
 
-/// Leaderboards a study ranks from runs other than the one it draws, which
-/// no view of that run can draw: the Living Market's causal price
-/// contribution, a Shapley allocation over every coalition of its actors,
-/// each coalition's market replayed from the start.
-const ANALYSES: [&str; 1] = ["causal-price-contribution"];
+/// How big a drawn document is: its frames, the accounts it starts with and
+/// its model's rates; of several, the most of each.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+struct Size {
+    frames: usize,
+    accounts: usize,
+    rates: usize,
+}
 
-/// What a view draws of a document: everything but what the study attaches
-/// to its frames itself, its observations, its analyses and its information
-/// cues, such as what the mission's planner searched before each decision,
-/// which only the search knows. A replay's own cues are of other kinds.
-fn drawn(document: &ViewDocument) -> ViewDocument {
-    let mut drawn = document.clone();
-    for frame in &mut drawn.frames {
-        frame.observations.clear();
-        frame
-            .cues
-            .retain(|cue| cue.kind != FrameCueKindView::Information);
-        frame
-            .after
-            .leaderboards
-            .retain(|board| !ANALYSES.contains(&board.key.as_str()));
+impl Size {
+    fn most(self, other: Self) -> Self {
+        Self {
+            frames: self.frames.max(other.frames),
+            accounts: self.accounts.max(other.accounts),
+            rates: self.rates.max(other.rates),
+        }
+    }
+}
+
+/// The least each sample's Showcase runs must draw, so no refactor quietly
+/// collapses Showcase back into a toy: the longest run's frames, the most
+/// accounts a run starts with, and the most rates its model has.
+fn showcase_pressure(sample: &str) -> Size {
+    let (frames, accounts, rates) = match sample {
+        "maze" => (8, 2, 19),
+        "sokoban" => (20, 36, 100),
+        "exact-cover" => (5, 1, 40),
+        "workshop" => (7, 1, 4),
+        "scheduling" => (20, 6, 80),
+        "rescue" => (7, 2, 70),
+        "bridge" => (10, 3, 18),
+        "marketplace" => (4, 14, 4),
+        "logistics" => (40, 7, 50),
+        "connect-four" => (15, 50, 200),
+        "mission" => (6, 5, 39),
+        "perishables" => (10, 5, 13),
+        "work-league" => (60, 20, 900),
+        "amm" => (14, 11, 10),
+        "lending" => (14, 10, 14),
+        other => panic!("no Showcase pressure for {other}"),
+    };
+    Size {
+        frames,
+        accounts,
+        rates,
+    }
+}
+
+/// Every run of every experiment of `write`'s package at the instances
+/// `larger` says, Micro's or the others', drawn by its view as [`draws`]
+/// checks, Showcase's as big as [`showcase_pressure`] requires. Returns how
+/// many runs it drew.
+fn draws_every_run(name: &str, write: WritePackage, larger: bool) -> usize {
+    let engine = Engine::new(Store::memory().unwrap()).unwrap();
+    write(&engine).unwrap();
+    let mut drawn = 0;
+    let mut showcase = Size::default();
+    for experiment in engine.experiments().unwrap() {
+        // An experiment is named for its sample and instance first, as
+        // `rescue/micro/monte-carlo`.
+        let instance = experiment.as_str().split('/').nth(1).unwrap();
+        if (instance != "micro") != larger {
+            continue;
+        }
+        let results = engine
+            .run_experiment(&experiment, &mut |_| ControlFlow::Continue(()))
+            .unwrap();
+        for arm in &results.arms {
+            for (index, trial) in arm.trials.iter().enumerate() {
+                let run = format!("{name} {experiment} {} {index}", arm.arm.strategy);
+                let size = draws(&engine, trial.end, &run);
+                if instance == "showcase" {
+                    showcase = showcase.most(size);
+                }
+                drawn += 1;
+            }
+        }
+    }
+    if larger {
+        let least = showcase_pressure(name);
+        assert!(showcase.frames >= least.frames, "{name}: {showcase:?}");
+        assert!(showcase.accounts >= least.accounts, "{name}: {showcase:?}");
+        assert!(showcase.rates >= least.rates, "{name}: {showcase:?}");
+        // The standard board stays compact.
+        if name == "connect-four" {
+            assert!(showcase.rates < 300, "{name}: {showcase:?}");
+        }
     }
     drawn
 }
 
-/// Every document of the studies of `problem` at `instances`, one for each
-/// strategy its catalog lists, drawn by `write`'s package's view from runs
-/// recorded as `O`'s, equals the document the study drew in Rust: the same
-/// formats, initial snapshot and frames. Returns how many it compared.
-fn draws_like_rust<O: Recordable>(problem: &str, write: WritePackage, instances: &[&str]) -> usize {
-    let engine = Engine::new(Store::memory().unwrap()).unwrap();
-    write(&engine).unwrap();
-    let key = problem.parse().unwrap();
-    let strategies: Vec<_> = registry()
-        .problem(&key)
-        .unwrap()
-        .strategies
-        .iter()
-        .map(|strategy| strategy.key.clone())
-        .collect();
-    let mut compared = 0;
-    for instance in instances {
-        let mut seen = Vec::new();
-        for strategy in &strategies {
-            let request = StudyRequest::new(key.clone())
-                .with_instance(instance.parse().unwrap())
-                .with_strategy(strategy.clone());
-            let mut observed = Trajectories::default();
-            let study = registry()
-                .study_with(&request, &StudyControl::default(), &mut observed)
-                .unwrap();
-            for ((id, initial, trace), document) in observed.0.iter().zip(&study.documents) {
-                assert_eq!(id, &document.id);
-                if seen.contains(id) {
-                    continue;
-                }
-                seen.push(id.clone());
-                let mut recorder = engine
-                    .store()
-                    .record::<O>(written::<Economy<O>>(initial), Checkpoints::Ends);
-                for exchange in trace.exchanges() {
-                    recorder.apply(written::<Exchange<O>>(exchange)).unwrap();
-                }
-                let end = recorder.finish().unwrap();
-                let scripted = drawn(&engine.draw(end).unwrap());
-                let rust = drawn(document);
-                let at = format!("{problem} {instance} {id}");
-                assert_eq!(scripted.formats, rust.formats, "{at}: formats");
-                // Every rate and invariant, labeled, whether or not a trace
-                // reaches it.
-                if let (Some(scripted), Some(rust)) = (&scripted.model, &rust.model) {
-                    assert_eq!(scripted.rates, rust.rates, "{at}: the model's rates");
-                    assert_eq!(
-                        scripted.invariants, rust.invariants,
-                        "{at}: the model's invariants"
-                    );
-                }
-                assert_eq!(scripted.initial, rust.initial, "{at}: the initial snapshot");
-                assert_eq!(scripted.frames.len(), rust.frames.len(), "{at}: frames");
-                for (scripted, rust) in scripted.frames.iter().zip(&rust.frames) {
-                    assert_eq!(scripted, rust, "{at}: frame {}", rust.index);
-                }
-                compared += 1;
-            }
-        }
-    }
-    compared
-}
-
-/// Every sample whose package carries a view, and how it is drawn.
-type Drawn = (&'static str, fn(&[&str]) -> usize);
-
-const VIEWS: [Drawn; 15] = [
-    ("maze", |instances| {
-        draws_like_rust::<maze::Ontology>("maze", maze::package::write, instances)
-    }),
-    ("sokoban", |instances| {
-        draws_like_rust::<sokoban::Ontology>("sokoban", sokoban::package::write, instances)
-    }),
-    ("exact-cover", |instances| {
-        draws_like_rust::<exact_cover::Ontology>(
-            "exact-cover",
-            exact_cover::package::write,
-            instances,
-        )
-    }),
-    ("workshop", |instances| {
-        draws_like_rust::<workshop::Ontology>("workshop", workshop::package::write, instances)
-    }),
-    ("bridge", |instances| {
-        draws_like_rust::<bridge::Ontology>("bridge", bridge::package::write, instances)
-    }),
-    ("scheduling", |instances| {
-        draws_like_rust::<scheduling::Ontology>("scheduling", scheduling::package::write, instances)
-    }),
-    ("lending", |instances| {
-        draws_like_rust::<lending::Ontology>("lending", lending::package::write, instances)
-    }),
-    // Micro is a rescue; Showcase and Stress are incidents, an ontology of
-    // their own with a view of its own.
-    ("rescue", |instances| {
-        let (micro, incidents): (Vec<&str>, Vec<&str>) = instances
-            .iter()
-            .copied()
-            .partition(|instance| *instance == "micro");
-        draws_like_rust::<rescue::Ontology>("rescue", rescue::package::write, &micro)
-            + draws_like_rust::<rescue::incident::Ontology>(
-                "rescue",
-                rescue::package::write,
-                &incidents,
-            )
-    }),
-    ("amm", |instances| {
-        draws_like_rust::<amm::Ontology>("amm", amm::package::write, instances)
-    }),
-    ("marketplace", |instances| {
-        draws_like_rust::<marketplace::Ontology>(
-            "marketplace",
-            marketplace::package::write,
-            instances,
-        )
-    }),
-    // Micro is one vehicle; Showcase and Stress are fleets, an ontology of
-    // their own with a view of its own.
-    ("logistics", |instances| {
-        let (micro, fleets): (Vec<&str>, Vec<&str>) = instances
-            .iter()
-            .copied()
-            .partition(|instance| *instance == "micro");
-        draws_like_rust::<logistics::Ontology>("logistics", logistics::package::write, &micro)
-            + draws_like_rust::<logistics::fleet::Ontology>(
-                "logistics",
-                logistics::package::write,
-                &fleets,
-            )
-    }),
-    // Micro is one inventory; Showcase and Stress are cold chains, an
-    // ontology of their own with a view of its own.
-    ("perishables", |instances| {
-        let (micro, chains): (Vec<&str>, Vec<&str>) = instances
-            .iter()
-            .copied()
-            .partition(|instance| *instance == "micro");
-        draws_like_rust::<perishables::Ontology>("perishables", perishables::package::write, &micro)
-            + draws_like_rust::<perishables::cold_chain::Ontology>(
-                "perishables",
-                perishables::package::write,
-                &chains,
-            )
-    }),
-    ("work-league", |instances| {
-        draws_like_rust::<work_league::Ontology>(
-            "work-league",
-            work_league::package::write,
-            instances,
-        )
-    }),
-    // Micro is a mission; Showcase and Stress are expeditions, an ontology
-    // of their own with a view of its own.
-    ("mission", |instances| {
-        let (micro, expeditions): (Vec<&str>, Vec<&str>) = instances
-            .iter()
-            .copied()
-            .partition(|instance| *instance == "micro");
-        draws_like_rust::<mission::Ontology>("mission", mission::package::write, &micro)
-            + draws_like_rust::<mission::expedition::Ontology>(
-                "mission",
-                mission::package::write,
-                &expeditions,
-            )
-    }),
-    ("connect-four", |instances| {
-        draws_like_rust::<connect_four::Ontology>(
-            "connect-four",
-            connect_four::package::write,
-            instances,
-        )
-    }),
-];
-
-/// Each view draws its sample's studies at `instances` as Rust does.
-fn views_draw_like_rust(instances: &[&str]) {
-    for (name, draws) in VIEWS {
-        assert!(draws(instances) > 0, "{name} drew nothing");
+/// Each sample's view draws every run of its experiments at Micro or at
+/// the larger instances.
+fn views_draw_every_run(larger: bool) {
+    for (name, write) in packages() {
+        assert!(
+            draws_every_run(name.as_str(), write, larger) > 0,
+            "{name} drew nothing"
+        );
     }
 }
 
 #[test]
-fn every_view_draws_its_micro_studies_as_rust_does() {
-    views_draw_like_rust(&["micro"]);
+fn every_view_draws_every_micro_run() {
+    views_draw_every_run(false);
 }
 
 #[test]
 #[ignore = "minutes in a debug build; CI runs it in a release build"]
-fn every_view_draws_its_larger_studies_as_rust_does() {
-    views_draw_like_rust(&["showcase", "stress"]);
+fn every_view_draws_every_larger_run() {
+    views_draw_every_run(true);
 }
 
 #[test]
