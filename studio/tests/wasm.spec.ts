@@ -104,23 +104,25 @@ test("a follower waits in the Worker for its ref to move, asking nothing in the 
     await packages.loadUrl("/packages/maze.zip");
     const listed = await packages.packages();
     const micro: string = listed.packages[0].refs.find((ref: { name: string }) => ref.name === "maze/micro").point;
+    // The package's ref is fixed: the page follows and moves one of its own there.
+    await packages.createRef("maze/followed", micro);
     const offered = await packages.candidates(micro, "maze/moves");
     const exchange = offered.candidates.find((candidate: { proposal: { assessment: { status: string } } }) => candidate.proposal.assessment.status === "applicable").exchange;
 
     // The ref does not move for a while; then another request moves it.
     const asked = posted.length;
     const waited = performance.now();
-    const waiting = packages.frames("maze/micro", { after: micro, wait_seconds: 20 });
+    const waiting = packages.frames("maze/followed", { after: micro, wait_seconds: 20 });
     await new Promise((resolve) => setTimeout(resolve, 1_000));
     const applied = await packages.apply(micro, [exchange]);
-    await packages.advanceRef("maze/micro", micro, applied.point);
+    await packages.advanceRef("maze/followed", micro, applied.point);
     const moved = await waiting;
     const movedAfter = performance.now() - waited;
     const requests = posted.slice(asked);
 
     // Nothing moves it: the wait ends with its time, with no frames.
     const idleFrom = performance.now();
-    const idle = await packages.frames("maze/micro", { after: applied.point, wait_seconds: 1 });
+    const idle = await packages.frames("maze/followed", { after: applied.point, wait_seconds: 1 });
     const idleFor = performance.now() - idleFrom;
     packages.terminate();
     return { moved, applied: applied.point, movedAfter, requests, idle, idleFor };
@@ -172,13 +174,15 @@ test("cancelling a run terminates its Worker mid-run, and the next one opens the
       const exchange = offered.candidates.find((candidate: { proposal: { assessment: { status: string } } }) => candidate.proposal.assessment.status === "applicable").exchange;
       return (await packages.apply(at, [exchange])).point as string;
     };
-    // Committed before the cancel: a drop at the ref's point, the ref moved
-    // over it, and a ref of its own naming it.
+    // Committed before the cancel: a drop at the point of a ref the package
+    // ships, which is fixed, a ref of the page's own named there and moved
+    // over it, and another naming it.
+    await packages.createRef("connect-four/live", start);
     const dropped = await move(start);
-    await packages.advanceRef("connect-four/stress", start, dropped);
+    await packages.advanceRef("connect-four/live", start, dropped);
     await packages.createRef("connect-four/kept", dropped);
     // A follower waiting for the ref across the cancel.
-    const following = packages.frames("connect-four/stress", { after: dropped, wait_seconds: 30 });
+    const following = packages.frames("connect-four/live", { after: dropped, wait_seconds: 30 });
 
     // A game, cancelled once it has reported its progress a few times.
     let reports = 0;
@@ -194,10 +198,10 @@ test("cancelling a run terminates its Worker mid-run, and the next one opens the
     const opened = await packages.open();
     // The follower goes on following: the next move reaches it.
     const adjudicated = await move(dropped);
-    await packages.advanceRef("connect-four/stress", dropped, adjudicated);
+    await packages.advanceRef("connect-four/live", dropped, adjudicated);
     const followed = await following;
     packages.terminate();
-    return { dropped, adjudicated, cancelled, terminatedMidRun, kept, opened, followed };
+    return { start, dropped, adjudicated, cancelled, terminatedMidRun, kept, opened, followed };
   }, client);
   expect(first.cancelled).toBe("cancelled by terminating the Worker");
   expect(first.terminatedMidRun).toBe(1);
@@ -212,13 +216,15 @@ test("cancelling a run terminates its Worker mid-run, and the next one opens the
     const { BrowserPackages } = await import(client);
     const packages = new BrowserPackages();
     const opened = await packages.open();
-    const stress = await packages.readRef("connect-four/stress");
+    const shipped = await packages.readRef("connect-four/stress");
+    const live = await packages.readRef("connect-four/live");
     const kept = await packages.readRef("connect-four/kept");
-    const drawn = await packages.draw(stress.point);
-    return { opened, stress: stress.point, kept: kept.point, steps: drawn.frames.length };
+    const drawn = await packages.draw(live.point);
+    return { opened, shipped: shipped.point, live: live.point, kept: kept.point, steps: drawn.frames.length };
   }, client);
   expect(again.opened).toEqual({ persistent: true });
-  expect(again.stress).toBe(first.adjudicated);
+  expect(again.shipped).toBe(first.start);
+  expect(again.live).toBe(first.adjudicated);
   expect(again.kept).toBe(first.dropped);
   expect(again.steps).toBeGreaterThanOrEqual(2);
 });

@@ -182,10 +182,12 @@ test("cancels a game mid-run, and nothing else notices", async ({ page }) => {
   test.setTimeout(120_000);
   await page.goto("/");
   await loadSample(page, "connect-four");
-  const start = await openRef(page, "connect-four/stress");
+  // The package's ref is fixed: the game is followed and moved on one of its own.
+  const live = ownRef("connect-four");
+  const start = await playFrom(page, "connect-four/stress", live);
   const panel = page.locator(".action-panel");
   await panel.getByRole("tab", { name: "Follow" }).click();
-  await panel.getByRole("button", { name: "Follow connect-four/stress" }).click();
+  await panel.getByRole("button", { name: `Follow ${live}` }).click();
   await panel.getByRole("tab", { name: "Continue from here" }).click();
   await panel.getByRole("combobox", { name: "Strategy" }).selectOption("connect-four/mcts-32/self-play");
   await panel.getByRole("button", { name: "Run strategy" }).click();
@@ -199,7 +201,7 @@ test("cancels a game mid-run, and nothing else notices", async ({ page }) => {
   await expect(panel.getByRole("button", { name: "Stop following", includeHidden: true })).toBeAttached();
   await panel.getByRole("tab", { name: "Act" }).click();
   await panel.locator(".candidate-applicable").first().click();
-  await panel.getByRole("button", { name: "Apply and move connect-four/stress" }).click();
+  await panel.getByRole("button", { name: `Apply and move ${live}` }).click();
   await expect(trace(page)).toHaveAttribute("max", String(start + 1));
   await panel.getByRole("tab", { name: "Follow" }).click();
   await expect(panel.getByRole("list", { name: "Delivered steps" })).toContainText(`step ${start + 1}`);

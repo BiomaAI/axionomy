@@ -338,14 +338,16 @@ fn a_worker_terminated_mid_run_leaves_its_store_whole() {
     let worker = WorkerEngine::over(Store::on(file.clone()).unwrap()).unwrap();
     worker.load_from(&maze(), None).unwrap();
     let engine = worker.engine();
-    // Committed before the run: an experiment's results, a move at a ref's
-    // point with the ref moved over it, and a ref of its own.
+    // Committed before the run: an experiment's results, and a move at the
+    // point of a ref the package ships, which is fixed, with a ref of the
+    // Worker's own named there and moved over it, and another naming it.
     let results = engine
         .run_experiment(&path("maze/micro"), &mut |_| ControlFlow::Continue(()))
         .unwrap();
     let start = engine.referred(&path("maze/micro")).unwrap();
+    engine.refer(&path("maze/play"), start).unwrap();
     let moved = moved_on(engine, start);
-    engine.advance(&path("maze/micro"), start, moved).unwrap();
+    engine.advance(&path("maze/play"), start, moved).unwrap();
     engine.refer(&path("maze/kept"), moved).unwrap();
 
     // The experiment runs again, recording its trials as it goes; a Worker
@@ -362,14 +364,15 @@ fn a_worker_terminated_mid_run_leaves_its_store_whole() {
         let opened = reopened(&bytes);
         let engine = opened.engine();
         assert_eq!(engine.manifests().unwrap()[0].name, path("maze"));
-        assert_eq!(engine.referred(&path("maze/micro")).unwrap(), moved);
+        assert_eq!(engine.referred(&path("maze/micro")).unwrap(), start);
+        assert_eq!(engine.referred(&path("maze/play")).unwrap(), moved);
         assert_eq!(engine.referred(&path("maze/kept")).unwrap(), moved);
         // The results kept are those the stopped run had not replaced yet.
         assert_eq!(engine.results(&path("maze/micro")).unwrap(), results);
         assert_eq!(engine.draw(moved).unwrap().frames.len(), 1);
         // And the store goes on: the next move is recorded and counts.
         let next = moved_on(engine, moved);
-        engine.advance(&path("maze/micro"), moved, next).unwrap();
+        engine.advance(&path("maze/play"), moved, next).unwrap();
     }
     // The run that went on recorded what it found.
     assert_eq!(engine.results(&path("maze/micro")).unwrap(), again);
