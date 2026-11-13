@@ -481,7 +481,10 @@ one more built-in strategy: an exact Pareto search over state objectives
 that reaches the front's best point by those objectives in order.
 Sokoban's (A* over a crate-to-goal lower bound and breadth-first search,
 and each instance's legal but losing plan recorded under a ref)
-reproduces its studies the same way. The small instances are checked with
+reproduces its studies the same way, and so does exact cover's
+(breadth-first search, and Algorithm X as a plan a script makes whole,
+reading set memberships from what each selection consumes; each instance's
+unsatisfiable twin, where search runs out and Algorithm X plans nothing). The small instances are checked with
 every test run; the stress instances, minutes in a debug build, run in a
 release build in CI. Rhai is optimised in debug builds too, since package
 scripts run in its interpreter.

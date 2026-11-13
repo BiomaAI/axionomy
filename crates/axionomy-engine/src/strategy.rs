@@ -34,6 +34,11 @@ pub enum Strategy {
         goal: GoalPath,
         horizon: u64,
     },
+    /// A plan a script makes whole, `fn(state)` returning the exchanges in
+    /// order or nothing, such as a specialised solver's or an outside
+    /// solver's answer: the kernel applies them all or none, and the run
+    /// ends at the goal or where the plan ends.
+    Plan { plan: ScriptCall, goal: GoalPath },
     /// The fewest exchanges from the candidate set that reach the goal.
     BreadthFirst {
         candidates: CandidatesPath,
@@ -136,7 +141,7 @@ pub struct Effort {
 pub enum Outcome {
     /// The goal holds where the run ends.
     Reached,
-    /// The policy proposed nothing.
+    /// The policy proposed nothing, or a plan ended short of the goal.
     Stopped,
     /// The policy used its every turn.
     Horizon,
@@ -194,6 +199,57 @@ impl Engine {
                 *horizon,
                 effort.seed,
             ),
+            Strategy::Plan { plan, goal } => {
+                let goal = self.goal(goal)?;
+                let planned: rhai::Dynamic = self.call(
+                    &plan.script,
+                    plan.function.as_str(),
+                    (ScriptState::new(initial.clone()),),
+                )?;
+                if planned.is_unit() {
+                    return Ok(Ran {
+                        start: at,
+                        end: at,
+                        outcome: Outcome::Stopped,
+                        thinking: None,
+                        cost: None,
+                    });
+                }
+                let exchanges = crate::exchanges_of(planned.try_cast::<rhai::Array>().ok_or(
+                    EngineError::Returned {
+                        expected: "an array of exchanges or nothing",
+                        found: "something else".to_owned(),
+                    },
+                )?)?;
+                let (end, outcome) = match self.apply(at, &exchanges) {
+                    Ok(end) => {
+                        let reached = self.reach(end)?.state.economy.matches(&goal);
+                        (
+                            end,
+                            if reached {
+                                Outcome::Reached
+                            } else {
+                                Outcome::Stopped
+                            },
+                        )
+                    }
+                    Err(EngineError::Refused { index, assessment }) => (
+                        at,
+                        Outcome::Refused {
+                            turn: index as u64,
+                            assessment,
+                        },
+                    ),
+                    Err(error) => return Err(error),
+                };
+                Ok(Ran {
+                    start: at,
+                    end,
+                    outcome,
+                    thinking: None,
+                    cost: None,
+                })
+            }
             Strategy::BreadthFirst { candidates, goal } => {
                 let candidates = self.candidate_set(candidates)?;
                 let failure = RefCell::new(None);

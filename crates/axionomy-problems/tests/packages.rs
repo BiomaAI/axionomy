@@ -4,7 +4,7 @@
 #![cfg(feature = "packages")]
 
 use axionomy::{path, paths};
-use axionomy_engine::{Engine, Version};
+use axionomy_engine::{Ended, Engine, Version};
 use axionomy_problems::registry;
 use axionomy_store::Store;
 use axionomy_study::{Progress, StudyControl, StudyObserver, StudyRequest};
@@ -169,6 +169,34 @@ fn sokoban(engine: &Engine, instance: &str) {
     );
 }
 
+fn exact_cover(engine: &Engine, instance: &str) {
+    reproduces(
+        engine,
+        "exact-cover",
+        instance,
+        &["breadth-first", "algorithm-x"],
+    );
+    recorded(
+        engine,
+        "exact-cover",
+        instance,
+        "unsatisfiable",
+        &format!("exact-cover/{instance}/unsatisfiable"),
+    );
+    // No strategy covers the unsatisfiable twin: search runs out, and
+    // Algorithm X makes no plan.
+    let results = engine
+        .run_experiment(
+            &format!("exact-cover/{instance}/unsatisfiable")
+                .parse()
+                .unwrap(),
+            &mut |_| ControlFlow::Continue(()),
+        )
+        .unwrap();
+    let ended: Vec<_> = results.arms.iter().map(|arm| arm.trials[0].ended).collect();
+    assert_eq!(ended, [Ended::Exhausted, Ended::Stopped], "{instance}");
+}
+
 /// Every sample, its package builder and its check.
 type Sample = (
     &'static str,
@@ -176,12 +204,17 @@ type Sample = (
     fn(&Engine, &str),
 );
 
-const SAMPLES: [Sample; 2] = [
+const SAMPLES: [Sample; 3] = [
     ("maze", axionomy_problems::maze::package::write, maze),
     (
         "sokoban",
         axionomy_problems::sokoban::package::write,
         sokoban,
+    ),
+    (
+        "exact-cover",
+        axionomy_problems::exact_cover::package::write,
+        exact_cover,
     ),
 ];
 

@@ -112,6 +112,27 @@ impl Random {
     }
 }
 
+/// What `rate` fixes for `role` to consume, produce or preserve, as
+/// `select` reads it, asset by asset; computed amounts are not fixed.
+fn effect(
+    state: &ScriptState,
+    rate: &str,
+    role: &str,
+    select: impl for<'a> Fn(&'a paths::Rate, &RolePath) -> Option<&'a paths::Basket>,
+) -> Result<Map, Failure> {
+    let rate: RatePath = parsed(rate)?;
+    let role: RolePath = parsed(role)?;
+    let definition = state
+        .economy
+        .rate(&rate)
+        .ok_or_else(|| Failure::from(format!("the economy has no rate `{rate}`")))?;
+    Ok(select(definition, &role)
+        .into_iter()
+        .flat_map(|basket| basket.iter())
+        .map(|(asset, quantity)| (asset.as_str().into(), Dynamic::from(*quantity)))
+        .collect())
+}
+
 /// The Rhai engine with the host API registered, shared by every call.
 pub(crate) fn host() -> rhai::Engine {
     let mut rhai = rhai::Engine::new();
@@ -275,6 +296,24 @@ fn states(rhai: &mut rhai::Engine) {
                 .map(|rate| Dynamic::from(rate.to_string()))
                 .collect()
         })
+        .register_fn(
+            "consumed",
+            |state: &mut ScriptState, rate: &str, role: &str| -> Result<Map, Failure> {
+                effect(state, rate, role, |rate, role| rate.consumed(role))
+            },
+        )
+        .register_fn(
+            "produced",
+            |state: &mut ScriptState, rate: &str, role: &str| -> Result<Map, Failure> {
+                effect(state, rate, role, |rate, role| rate.produced(role))
+            },
+        )
+        .register_fn(
+            "preserved",
+            |state: &mut ScriptState, rate: &str, role: &str| -> Result<Map, Failure> {
+                effect(state, rate, role, |rate, role| rate.preserved(role))
+            },
+        )
         .register_fn(
             "roles",
             |state: &mut ScriptState, rate: &str| -> Result<Array, Failure> {

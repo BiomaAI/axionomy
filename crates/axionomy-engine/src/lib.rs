@@ -338,6 +338,10 @@ impl Engine {
                 scripts.push(policy);
                 goal
             }
+            Strategy::Plan { plan, goal } => {
+                scripts.push(plan);
+                goal
+            }
             Strategy::BreadthFirst {
                 candidates: set,
                 goal,

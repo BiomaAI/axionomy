@@ -25,7 +25,9 @@ goes.
   `measure_state`, `step_cost` and `propose` on an economy in memory.
 - `keep_strategy` keeps a strategy, an algorithm naming the goal, candidates
   and scripts it uses, and `run_strategy` runs one from a point with a seed
-  and a budget: a policy turn by turn, breadth-first search, the cheapest
+  and a budget: a policy turn by turn, a plan a script makes whole (such as a
+  specialised solver's answer), applied all or none, breadth-first search,
+  the cheapest
   search in Dijkstra's or A*'s order, branch-and-bound, beam search, an
   exact Pareto search that reaches the front's best point by objectives in
   order, or a game whose players choose by policy, minimax or Monte Carlo
@@ -54,8 +56,9 @@ goes.
 Scripts are how a package says what a generic algorithm cannot know. They
 read a `ScriptState`, the whole economy or a view of the accounts an actor may
 see, through the host API (balances, accounts and rates by prefix, a rate's
-roles, `exchange(...)`, `applicable`, `assess`, `distances` over a list of
-edges), and propose exchanges; they never change an economy. Quantities are
+roles and what it fixes for a role to consume, produce or preserve,
+`exchange(...)`, `applicable`, `assess`, `distances` over a list of edges),
+and propose exchanges; they never change an economy. Quantities are
 exact, with checked arithmetic and `mul_div` that names its rounding;
 randomness is only a `Random` the host seeds; scripts have no clock; and a
 call stops after a bounded number of operations. Scripts are kept in the
@@ -64,8 +67,9 @@ store as definitions (`script/<path>`), so they travel with a package.
 Rhai calls a script's own function in method style before a host method of
 the same name: a script that defines `view(state)` makes `state.view(...)`
 call it, with `state` as `this`. Name script functions apart from the host's
-(`balance`, `balances`, `accounts`, `rates`, `roles`, `view`, `applicable`,
-`assess`, `has_account`, `parameter`, `rate`, `next`). A loop variable
+(`balance`, `balances`, `accounts`, `rates`, `roles`, `consumed`, `produced`,
+`preserved`, `view`, `applicable`, `assess`, `has_account`, `parameter`,
+`rate`, `next`). A loop variable
 needs a name: Rhai refuses `for _ in ...`. A view's script builds its scene on
 the `scene` module (`scene::graph(title, nodes, edges, focus)`, `grid`,
 `matrix`, `timeline`), which infers entities, paths and legend from the

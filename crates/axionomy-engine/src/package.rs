@@ -430,6 +430,10 @@ fn strategy_reaches(strategy: Strategy, closure: &mut Closure, calls: &mut Vec<S
             goal(aim);
             calls.push(policy);
         }
+        Strategy::Plan { plan, goal: aim } => {
+            goal(aim);
+            calls.push(plan);
+        }
         Strategy::BreadthFirst {
             candidates,
             goal: aim,

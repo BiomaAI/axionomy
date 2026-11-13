@@ -143,6 +143,44 @@ fn a_policy_runs_until_the_goal_nothing_a_refusal_or_its_horizon() {
     assert_eq!(ran.end, start);
 }
 
+#[test]
+fn a_plan_is_applied_whole_or_not_at_all() {
+    let (engine, start) = bank(10);
+    engine
+        .keep_script(
+            &path("planner"),
+            r#"
+            fn pay(units) { exchange("pay", #{ from: "bank", to: "alice" }, units) }
+            fn enough(state) { [pay(5), pay(5)] }
+            fn short(state) { [pay(3)] }
+            fn overdrawn(state) { [pay(5), pay(50)] }
+            fn none(state) { () }
+            "#,
+        )
+        .unwrap();
+    let plan = |function: &str| Strategy::Plan {
+        plan: ScriptCall::new(path("planner"), function.parse().unwrap()),
+        goal: path("rich"),
+    };
+    let ran = run(&engine, start, &plan("enough"), EFFORT);
+    assert!(matches!(ran.outcome, Outcome::Reached));
+    assert_eq!(ran.end.step, start.step + 2);
+
+    // A plan short of the goal ends where it ends.
+    let ran = run(&engine, start, &plan("short"), EFFORT);
+    assert!(matches!(ran.outcome, Outcome::Stopped));
+    assert_eq!(ran.end.step, start.step + 1);
+
+    // The second payment overdraws the bank: nothing of the plan is applied.
+    let ran = run(&engine, start, &plan("overdrawn"), EFFORT);
+    assert!(matches!(ran.outcome, Outcome::Refused { turn: 1, .. }));
+    assert_eq!(ran.end, start);
+
+    let ran = run(&engine, start, &plan("none"), EFFORT);
+    assert!(matches!(ran.outcome, Outcome::Stopped));
+    assert_eq!(ran.end, start);
+}
+
 /// A worker buying progress: a small step gives one for one coin, a big one
 /// two for three. Four progress costs four coins at best.
 fn workshop() -> (Engine, Point) {
