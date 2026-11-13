@@ -484,7 +484,15 @@ and each instance's legal but losing plan recorded under a ref)
 reproduces its studies the same way, and so does exact cover's
 (breadth-first search, and Algorithm X as a plan a script makes whole,
 reading set memberships from what each selection consumes; each instance's
-unsatisfiable twin, where search runs out and Algorithm X plans nothing). The small instances are checked with
+unsatisfiable twin, where search runs out and Algorithm X plans nothing).
+Workshop's (breadth-first search, best-first search over its waste, and
+Pareto picks for least waste, least time and highest revenue from a front
+over all three) needed best-first search as a strategy, and a Pareto
+strategy that ranks its front by some of the objectives that span it.
+Workshop's (breadth-first search, best-first search over its waste, and
+Pareto picks for least waste, least time and highest revenue from a front
+over all three) needed best-first search as a strategy, and a Pareto
+strategy that ranks its front by some of the objectives that span it. The small instances are checked with
 every test run; the stress instances, minutes in a debug build, run in a
 release build in CI. Rhai is optimised in debug builds too, since package
 scripts run in its interpreter.

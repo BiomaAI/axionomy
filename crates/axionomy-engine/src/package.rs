@@ -480,10 +480,24 @@ fn strategy_reaches(strategy: Strategy, closure: &mut Closure, calls: &mut Vec<S
                 .push(crate::definitions::definition(&candidates));
             calls.push(score);
         }
+        Strategy::BestFirst {
+            candidates,
+            goal: aim,
+            cost,
+            heuristic,
+        } => {
+            goal(aim);
+            closure
+                .queue
+                .push(crate::definitions::definition(&candidates));
+            calls.push(cost);
+            calls.extend(heuristic);
+        }
         Strategy::Pareto {
             candidates,
             goal: aim,
             objectives,
+            ..
         } => {
             goal(aim);
             closure

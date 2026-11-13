@@ -27,11 +27,10 @@ goes.
   and scripts it uses, and `run_strategy` runs one from a point with a seed
   and a budget: a policy turn by turn, a plan a script makes whole (such as a
   specialised solver's answer), applied all or none, breadth-first search,
-  the cheapest
-  search in Dijkstra's or A*'s order, branch-and-bound, beam search, an
-  exact Pareto search that reaches the front's best point by objectives in
-  order, or a game whose players choose by policy, minimax or Monte Carlo
-  tree search.
+  the cheapest search in Dijkstra's or A*'s order, best-first search over a
+  state's cost, branch-and-bound, beam search, an exact Pareto search that
+  reaches the front's best point by some of its objectives in order, or a
+  game whose players choose by policy, minimax or Monte Carlo tree search.
   What it reaches is recorded as a run forked from its start, with how it
   ended and what the search explored.
 - `refer` names a point with a ref and `referred` reads it.

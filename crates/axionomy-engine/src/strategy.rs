@@ -8,7 +8,7 @@ use crate::{
 };
 use axionomy::{Quantity, paths};
 use axionomy_search::{
-    AStarSession, BfsSession, GraphSearchProgress,
+    AStarSession, BfsSession, GraphSearchProgress, best_first,
     bounded::{beam, branch_and_bound, minimax},
     mcts::{MctsConfig, search as mcts},
     pareto::{Objective as Measured, ObjectiveDirection, ObjectiveVector, ParetoSearchSession},
@@ -74,15 +74,26 @@ pub enum Strategy {
         width: u64,
         depth: u64,
     },
+    /// The goal state the candidate set reaches that ranks best by `cost`,
+    /// `fn(state)`, a state's whole cost so far, plus `heuristic`'s estimate,
+    /// `fn(state)`, of what is left, lower first; states of equal rank in the
+    /// order they were found. It runs to its end.
+    BestFirst {
+        candidates: CandidatesPath,
+        goal: GoalPath,
+        cost: ScriptCall,
+        heuristic: Option<ScriptCall>,
+    },
     /// The exact Pareto front of the goal states the candidate set reaches,
     /// each measured by `objectives`, which measure states: the run reaches
-    /// the front's best state by those objectives in order, the first found
-    /// on a tie. A budget spent before the front is exact leaves it at its
-    /// start.
+    /// the front's best state by the objectives `by`, each one of
+    /// `objectives`, in order, the first found on a tie. A budget spent
+    /// before the front is exact leaves it at its start.
     Pareto {
         candidates: CandidatesPath,
         goal: GoalPath,
         objectives: Vec<ObjectivePath>,
+        by: Vec<ObjectivePath>,
     },
     /// A game played turn by turn until the goal or `horizon` turns: each
     /// turn Nature responds if `nature`, `fn(state, random)`, proposes an
@@ -329,11 +340,56 @@ impl Engine {
                     cost: None,
                 })
             }
+            Strategy::BestFirst {
+                candidates,
+                goal,
+                cost,
+                heuristic,
+            } => {
+                let candidates = self.candidate_set(candidates)?;
+                let failure = RefCell::new(None);
+                let found = best_first(
+                    &initial,
+                    &self.goal(goal)?,
+                    |economy: &paths::Economy| self.offered(&candidates, economy, &failure),
+                    |economy: &paths::Economy| self.counted(cost, economy, &failure),
+                    |economy: &paths::Economy| {
+                        heuristic
+                            .as_ref()
+                            .map_or(0, |heuristic| self.counted(heuristic, economy, &failure))
+                    },
+                );
+                failed(failure)?;
+                let (end, outcome, cost) = match found {
+                    Some(solution) => (
+                        self.apply(at, solution.trace().exchanges())?,
+                        Outcome::Reached,
+                        Some(solution.cost()),
+                    ),
+                    None => (at, Outcome::Exhausted, None),
+                };
+                Ok(Ran {
+                    start: at,
+                    end,
+                    outcome,
+                    thinking: None,
+                    cost,
+                })
+            }
             Strategy::Pareto {
                 candidates,
                 goal,
                 objectives,
-            } => self.pareto(at, &initial, candidates, goal, objectives, effort, watch),
+                by,
+            } => self.pareto(
+                at,
+                &initial,
+                candidates,
+                goal,
+                (objectives, by),
+                effort,
+                watch,
+            ),
             Strategy::Game {
                 goal,
                 horizon,
@@ -746,10 +802,22 @@ impl Engine {
         initial: &paths::Economy,
         candidates: &CandidatesPath,
         goal: &GoalPath,
-        objectives: &[ObjectivePath],
+        (objectives, by): (&[ObjectivePath], &[ObjectivePath]),
         effort: Effort,
         watch: &mut impl FnMut(&GraphSearchProgress) -> ControlFlow<()>,
     ) -> Result<Ran, EngineError> {
+        // Where each objective ranking the front is among those measured.
+        let ranking = by
+            .iter()
+            .map(|objective| {
+                objectives
+                    .iter()
+                    .position(|measured| measured == objective)
+                    .ok_or_else(|| {
+                        EngineError::Undefined(crate::definitions::definition(objective))
+                    })
+            })
+            .collect::<Result<Vec<_>, _>>()?;
         let measures = objectives
             .iter()
             .map(|path| match self.objective(path)? {
@@ -810,13 +878,18 @@ impl Engine {
                     .entries()
                     .iter()
                     .min_by(|left, right| {
-                        left.objectives()
-                            .objectives()
+                        let (left, right) = (
+                            left.objectives().objectives(),
+                            right.objectives().objectives(),
+                        );
+                        ranking
                             .iter()
-                            .zip(right.objectives().objectives())
-                            .map(|(left, right)| match left.direction() {
-                                ObjectiveDirection::Minimize => left.value().cmp(right.value()),
-                                ObjectiveDirection::Maximize => right.value().cmp(left.value()),
+                            .map(|&index| {
+                                let (left, right) = (&left[index], &right[index]);
+                                match left.direction() {
+                                    ObjectiveDirection::Minimize => left.value().cmp(right.value()),
+                                    ObjectiveDirection::Maximize => right.value().cmp(left.value()),
+                                }
                             })
                             .find(|order| order.is_ne())
                             .unwrap_or(std::cmp::Ordering::Equal)

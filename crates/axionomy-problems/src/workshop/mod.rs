@@ -5,6 +5,8 @@ use axionomy::{
     Account, ApplyError, Economy, EconomyBuilder, Exchange, Goal, LinearInvariant, Quantity, Rate,
     basket,
 };
+#[cfg(feature = "packages")]
+pub mod package;
 mod production;
 mod study;
 mod view;

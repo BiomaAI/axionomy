@@ -380,16 +380,31 @@ impl Engine {
                 scripts.push(score);
                 goal
             }
+            Strategy::BestFirst {
+                candidates: set,
+                goal,
+                cost,
+                heuristic,
+            } => {
+                candidates.push(set);
+                scripts.push(cost);
+                scripts.extend(heuristic);
+                goal
+            }
             Strategy::Pareto {
                 candidates: set,
                 goal,
                 objectives,
+                by,
             } => {
                 candidates.push(set);
                 for objective in objectives {
                     if let Measure::Steps(_) = self.objective(objective)?.measure {
                         return Err(EngineError::NeedsHistory(objective.clone()));
                     }
+                }
+                if let Some(missing) = by.iter().find(|objective| !objectives.contains(objective)) {
+                    return Err(EngineError::Undefined(definition(missing)));
                 }
                 goal
             }

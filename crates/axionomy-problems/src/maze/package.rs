@@ -64,13 +64,17 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
         cost: call("energy"),
         heuristic,
     };
-    let pareto = |first: &str, second: &str| Strategy::Pareto {
-        candidates: path!("maze/moves"),
-        goal: path!("maze/solved"),
-        objectives: vec![
+    let pareto = |first: &str, second: &str| {
+        let objectives = vec![
             first.parse().expect("a path"),
             second.parse().expect("a path"),
-        ],
+        ];
+        Strategy::Pareto {
+            candidates: path!("maze/moves"),
+            goal: path!("maze/solved"),
+            by: objectives.clone(),
+            objectives,
+        }
     };
     let strategies = [
         (

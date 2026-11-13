@@ -65,8 +65,10 @@ fn study(
 /// gives a document named for the strategy that the package's experiment
 /// at `instance` reproduces: the arm running `<problem>/<strategy>` reaches
 /// the document's exchanges, and its value on each objective the document
-/// reports, the experiment's objective of that name.
-fn reproduces(engine: &Engine, problem: &str, instance: &str, strategies: &[&str]) {
+/// reports, the experiment's objective of that name. Returns how many
+/// documents it compared.
+fn reproduces(engine: &Engine, problem: &str, instance: &str, strategies: &[&str]) -> usize {
+    let mut compared = 0;
     let experiment = format!("{problem}/{instance}").parse().unwrap();
     let objectives = engine.experiment(&experiment).unwrap().objectives;
     let results = engine
@@ -82,12 +84,22 @@ fn reproduces(engine: &Engine, problem: &str, instance: &str, strategies: &[&str
                 .iter()
                 .any(|document| document.id.as_str() == *strategy)
         };
+        let catalogued = registry()
+            .problem(&problem.parse().unwrap())
+            .unwrap()
+            .strategies
+            .iter()
+            .any(|listed| listed.key.as_str() == *strategy);
         let asked;
         let (study, trajectories) = if has(&default) {
             &default
-        } else {
+        } else if catalogued {
             asked = study(problem, instance, Some(strategy));
             &asked
+        } else {
+            // A document no catalogued strategy asks for, which the study
+            // gives only for some instances.
+            continue;
         };
         let arm = results
             .arms
@@ -123,7 +135,9 @@ fn reproduces(engine: &Engine, problem: &str, instance: &str, strategies: &[&str
                 reported.key
             );
         }
+        compared += 1;
     }
+    compared
 }
 
 /// The document `document` of the study of `problem` at `instance` is the
@@ -197,6 +211,27 @@ fn exact_cover(engine: &Engine, instance: &str) {
     assert_eq!(ended, [Ended::Exhausted, Ended::Stopped], "{instance}");
 }
 
+fn workshop(engine: &Engine, instance: &str) {
+    let compared = reproduces(
+        engine,
+        "workshop",
+        instance,
+        &[
+            "breadth-first",
+            "minimum-waste",
+            "pareto-waste",
+            "pareto-time",
+            "pareto-revenue",
+        ],
+    );
+    // Only instances with customers earn revenue, and have its document.
+    assert_eq!(
+        compared,
+        if instance == "micro" { 4 } else { 5 },
+        "{instance}"
+    );
+}
+
 /// Every sample, its package builder and its check.
 type Sample = (
     &'static str,
@@ -204,7 +239,7 @@ type Sample = (
     fn(&Engine, &str),
 );
 
-const SAMPLES: [Sample; 3] = [
+const SAMPLES: [Sample; 4] = [
     ("maze", axionomy_problems::maze::package::write, maze),
     (
         "sokoban",
@@ -215,6 +250,11 @@ const SAMPLES: [Sample; 3] = [
         "exact-cover",
         axionomy_problems::exact_cover::package::write,
         exact_cover,
+    ),
+    (
+        "workshop",
+        axionomy_problems::workshop::package::write,
+        workshop,
     ),
 ];
 
