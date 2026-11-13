@@ -7,8 +7,10 @@ This crate provides algorithms and learning projections over closed economic
 states. All structures are disposable accelerators; transitions remain
 ordinary exchanges validated by the `axionomy` kernel.
 
-- `bfs`, `dijkstra`, and `astar` use the `pathfinding` crate over implicit,
-  core-validated successors; `best_first` preserves state-ranked compatibility.
+- `bfs`, `dijkstra`, and `astar` search implicit, core-validated successors.
+  `dijkstra` and `astar` keep, with each state, the exchange from the parent
+  that reached it most cheaply, so the plan they return replays at the cost
+  they report; `best_first` preserves state-ranked compatibility.
 - `action_source` lazily emits concrete proposals without giving generators
   transition authority.
 - `rollout` executes bounded speculative exchange trajectories on anything

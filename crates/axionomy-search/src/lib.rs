@@ -14,12 +14,11 @@ pub mod session;
 pub mod tree;
 
 use axionomy::{Economy, Exchange, Goal, StateKey, Trace};
-use pathfinding::prelude::{astar as pathfinding_astar, dijkstra as pathfinding_dijkstra};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
+use std::collections::hash_map::Entry;
 use std::collections::{BinaryHeap, HashMap, HashSet, VecDeque};
-use std::hash::{Hash, Hasher};
 
 use crate::session::{AdvanceReport, Continue, SearchObserver, SearchStatus, WorkBudget};
 
@@ -406,51 +405,30 @@ where
 pub fn dijkstra<O: Ontology, Candidates, StepCost>(
     initial: &Economy<O>,
     goal: &Goal<O>,
-    mut candidates: Candidates,
-    mut step_cost: StepCost,
+    candidates: Candidates,
+    step_cost: StepCost,
 ) -> Option<SearchSolution<O>>
 where
     Candidates: FnMut(&Economy<O>) -> Vec<Exchange<O>>,
     StepCost: FnMut(&Economy<O>, &Exchange<O>, &Economy<O>) -> u64,
 {
-    let start = EconomicNode::root(initial.clone());
-    let mut expanded = 0;
-    let (path, cost) = pathfinding_dijkstra(
-        &start,
-        |node| {
-            expanded += 1;
-            weighted_successors(node, &mut candidates, &mut step_cost)
-        },
-        |node| node.world.matches(goal),
-    )?;
-    Some(solution_from_path(path, cost, expanded))
+    cheapest(initial, goal, candidates, step_cost, |_| 0)
 }
 
 /// A* search with caller-owned edge costs and a derived state heuristic.
 pub fn astar<O: Ontology, Candidates, StepCost, Heuristic>(
     initial: &Economy<O>,
     goal: &Goal<O>,
-    mut candidates: Candidates,
-    mut step_cost: StepCost,
-    mut heuristic: Heuristic,
+    candidates: Candidates,
+    step_cost: StepCost,
+    heuristic: Heuristic,
 ) -> Option<SearchSolution<O>>
 where
     Candidates: FnMut(&Economy<O>) -> Vec<Exchange<O>>,
     StepCost: FnMut(&Economy<O>, &Exchange<O>, &Economy<O>) -> u64,
     Heuristic: FnMut(&Economy<O>) -> u64,
 {
-    let start = EconomicNode::root(initial.clone());
-    let mut expanded = 0;
-    let (path, cost) = pathfinding_astar(
-        &start,
-        |node| {
-            expanded += 1;
-            weighted_successors(node, &mut candidates, &mut step_cost)
-        },
-        |node| heuristic(&node.world),
-        |node| node.world.matches(goal),
-    )?;
-    Some(solution_from_path(path, cost, expanded))
+    cheapest(initial, goal, candidates, step_cost, heuristic)
 }
 
 /// State-ranked best-first compatibility search.
@@ -520,82 +498,163 @@ where
     None
 }
 
-#[derive(Clone)]
-struct EconomicNode<O: Ontology> {
+/// A state a cheapest-plan search has reached, with the cheapest way to it
+/// found so far: the state it was reached from, the exchange taken there, and
+/// what the whole way costs. A cheaper way replaces both together, so the plan
+/// rebuilt from the goal is the one whose cost the search reports.
+struct Reached<O: Ontology> {
     world: Economy<O>,
-    key: StateKey<O>,
-    incoming: Option<Exchange<O>>,
+    via: Option<(usize, Exchange<O>)>,
+    cost: u64,
 }
 
-type WeightedNodes<O> = Vec<(EconomicNode<O>, u64)>;
+/// A* from `initial`, and Dijkstra's search when `heuristic` is zero.
+///
+/// A state is queued again, not updated, when a cheaper way to it is found,
+/// and the entry that way makes stale is skipped. A state reached more cheaply
+/// after its expansion is expanded again, so an admissible heuristic need not
+/// be consistent.
+///
+/// States are expanded in the order the `pathfinding` crate's `astar` and
+/// `dijkstra`, which these searches once delegated to, expand them, so the
+/// same one of equally cheap plans is found. That crate keys a node by its
+/// state and keeps the node it saw first, so the exchange a node carried
+/// could not follow a cheaper parent.
+fn cheapest<O: Ontology, Candidates, StepCost, Heuristic>(
+    initial: &Economy<O>,
+    goal: &Goal<O>,
+    mut candidates: Candidates,
+    mut step_cost: StepCost,
+    mut heuristic: Heuristic,
+) -> Option<SearchSolution<O>>
+where
+    Candidates: FnMut(&Economy<O>) -> Vec<Exchange<O>>,
+    StepCost: FnMut(&Economy<O>, &Exchange<O>, &Economy<O>) -> u64,
+    Heuristic: FnMut(&Economy<O>) -> u64,
+{
+    let mut reached = vec![Reached {
+        world: initial.clone(),
+        via: None,
+        cost: 0,
+    }];
+    let mut indices = HashMap::from([(initial.state_key(), 0)]);
+    let mut frontier = BinaryHeap::from([Estimate {
+        estimate: 0,
+        cost: 0,
+        index: 0,
+    }]);
+    let mut expanded = 0;
 
-impl<O: Ontology> EconomicNode<O> {
-    fn root(world: Economy<O>) -> Self {
-        let key = world.state_key();
-        Self {
-            world,
-            key,
-            incoming: None,
+    while let Some(Estimate { cost, index, .. }) = frontier.pop() {
+        if reached[index].world.matches(goal) {
+            return Some(SearchSolution {
+                trace: plan_to(&reached, index),
+                cost,
+                expanded,
+            });
+        }
+        if cost > reached[index].cost {
+            continue;
+        }
+        expanded += 1;
+        let successors = successors(&reached[index].world, &mut candidates, &mut step_cost);
+        for (world, exchange, step) in successors {
+            let cost = cost.saturating_add(step);
+            let next = match indices.entry(world.state_key()) {
+                Entry::Vacant(entry) => {
+                    entry.insert(reached.len());
+                    reached.push(Reached {
+                        world,
+                        via: Some((index, exchange)),
+                        cost,
+                    });
+                    reached.len() - 1
+                }
+                Entry::Occupied(entry) => {
+                    let next = *entry.get();
+                    let known = &mut reached[next];
+                    if known.cost <= cost {
+                        continue;
+                    }
+                    known.via = Some((index, exchange));
+                    known.cost = cost;
+                    next
+                }
+            };
+            frontier.push(Estimate {
+                estimate: cost.saturating_add(heuristic(&reached[next].world)),
+                cost,
+                index: next,
+            });
         }
     }
-
-    fn successor(world: Economy<O>, incoming: Exchange<O>) -> Self {
-        let key = world.state_key();
-        Self {
-            world,
-            key,
-            incoming: Some(incoming),
-        }
-    }
+    None
 }
 
-impl<O: Ontology> PartialEq for EconomicNode<O> {
-    fn eq(&self, other: &Self) -> bool {
-        self.key == other.key
-    }
-}
-
-impl<O: Ontology> Eq for EconomicNode<O> {}
-
-impl<O: Ontology> Hash for EconomicNode<O> {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.key.hash(state);
-    }
-}
-
-fn weighted_successors<O: Ontology, Candidates, StepCost>(
-    node: &EconomicNode<O>,
+/// The successors the core accepts, each with the exchange that reaches it
+/// and what that step costs.
+fn successors<O: Ontology, Candidates, StepCost>(
+    world: &Economy<O>,
     candidates: &mut Candidates,
     step_cost: &mut StepCost,
-) -> WeightedNodes<O>
+) -> Vec<(Economy<O>, Exchange<O>, u64)>
 where
     Candidates: FnMut(&Economy<O>) -> Vec<Exchange<O>>,
     StepCost: FnMut(&Economy<O>, &Exchange<O>, &Economy<O>) -> u64,
 {
-    candidates(&node.world)
+    candidates(world)
         .into_iter()
         .filter_map(|exchange| {
-            let mut next = node.world.clone();
+            let mut next = world.clone();
             next.apply(exchange.clone()).ok()?;
-            let cost = step_cost(&node.world, &exchange, &next);
-            Some((EconomicNode::successor(next, exchange), cost))
+            let step = step_cost(world, &exchange, &next);
+            Some((next, exchange, step))
         })
         .collect()
 }
 
-fn solution_from_path<O: Ontology>(
-    path: Vec<EconomicNode<O>>,
+/// The exchanges of the cheapest known way from the initial state to
+/// `reached[index]`, in order.
+fn plan_to<O: Ontology>(reached: &[Reached<O>], mut index: usize) -> Trace<O> {
+    let mut steps = Vec::new();
+    while let Some((parent, exchange)) = &reached[index].via {
+        steps.push(exchange.clone());
+        index = *parent;
+    }
+    steps.into_iter().rev().collect()
+}
+
+/// A queued state of a cheapest-plan search: the least estimate first and,
+/// among equal estimates, the costlier way, as `pathfinding` orders them.
+#[derive(Debug, Clone, Copy)]
+struct Estimate {
+    estimate: u64,
     cost: u64,
-    expanded: usize,
-) -> SearchSolution<O> {
-    let mut trace = Trace::new();
-    trace.extend(path.into_iter().skip(1).filter_map(|node| node.incoming));
-    SearchSolution {
-        trace,
-        cost,
-        expanded,
+    index: usize,
+}
+
+impl Ord for Estimate {
+    fn cmp(&self, other: &Self) -> Ordering {
+        other
+            .estimate
+            .cmp(&self.estimate)
+            .then_with(|| self.cost.cmp(&other.cost))
     }
 }
+
+impl PartialOrd for Estimate {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl PartialEq for Estimate {
+    fn eq(&self, other: &Self) -> bool {
+        self.cmp(other).is_eq()
+    }
+}
+
+impl Eq for Estimate {}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct QueueEntry {
