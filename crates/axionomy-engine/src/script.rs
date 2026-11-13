@@ -124,6 +124,24 @@ impl Random {
         }
     }
 
+    /// What `draw` gives with this generator while its weighted samples
+    /// draw `tickets`' tickets, as Rust code drawing from `tickets` would,
+    /// leaving `tickets` where the draws stopped: how a search lends its
+    /// sampler to the scripts it calls.
+    pub(crate) fn lent<T>(&self, tickets: &mut SeededSampler, draw: impl FnOnce(Self) -> T) -> T {
+        let swap = |tickets: &mut SeededSampler| {
+            let mut held = self
+                .tickets
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            std::mem::swap(&mut *held, tickets);
+        };
+        swap(tickets);
+        let drawn = draw(self.clone());
+        swap(tickets);
+        drawn
+    }
+
     /// A number below `bound`, the next of this generator's sequence.
     fn below(&self, bound: u64) -> u64 {
         let value = splitmix(self.seed, self.drawn.fetch_add(1, Ordering::Relaxed));

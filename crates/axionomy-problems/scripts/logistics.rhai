@@ -200,7 +200,7 @@ fn dispatcher(state) { 0 }
 
 // How the planner's simulations move: the reliable policy's move where it is
 // one of the candidates, and otherwise the first.
-fn simulated(state, candidates) {
+fn simulated(state, candidates, random) {
     if candidates.is_empty() { return (); }
     let preferred = decide(state, "reliable");
     if preferred != () {

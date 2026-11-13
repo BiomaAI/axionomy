@@ -587,8 +587,8 @@ fn gamble() -> (Engine, Point) {
                 ()
             }
             fn nothing(state) { [0.0] }
-            fn first(state, candidates) { candidates[0] }
-            fn wrong(state, candidates) { play("begin") }
+            fn first(state, candidates, random) { candidates[0] }
+            fn wrong(state, candidates, random) { play("begin") }
             "#,
         )
         .unwrap();
@@ -902,4 +902,79 @@ fn what_a_player_observes_decides_what_it_searches() {
         ),
         "{refused:?}"
     );
+}
+
+/// Whether a rollout's random draws the search's own tickets in the games
+/// `searching` makes from a rollout: one choosing uniformly by a weighted
+/// sample plays every game the search's own uniform simulations play, for
+/// every seed; one drawing from another stream plays some game otherwise.
+fn rollouts_draw_the_searchs_own_tickets(
+    engine: &Engine,
+    start: Point,
+    searching: impl Fn(Option<ScriptCall>) -> Strategy,
+) {
+    engine
+        .keep_script(
+            &path("rollouts"),
+            r#"
+            fn sampled(state, candidates, random) {
+                candidates[random.sample(candidates.map(|candidate| 1))]
+            }
+            fn apart(state, candidates, random) { candidates[random.next(candidates.len())] }
+            "#,
+        )
+        .unwrap();
+    let rollout =
+        |function: &str| Some(ScriptCall::new(path("rollouts"), function.parse().unwrap()));
+    let played = |strategy: &Strategy, seed| {
+        let ran = run(engine, start, strategy, Effort { seed, budget: 1 });
+        engine.history(ran.end).unwrap().1
+    };
+    let (uniform, sampled, apart) = (
+        searching(None),
+        searching(rollout("sampled")),
+        searching(rollout("apart")),
+    );
+    let mut differs = false;
+    for seed in 0..32 {
+        let game = played(&uniform, seed);
+        assert_eq!(played(&sampled, seed), game, "seed {seed}");
+        differs |= played(&apart, seed) != game;
+    }
+    assert!(differs);
+}
+
+#[test]
+fn a_rollout_draws_the_searchs_own_tickets() {
+    let (engine, start) = nim();
+    rollouts_draw_the_searchs_own_tickets(&engine, start, |rollout| {
+        game(axionomy_engine::Chooser::Mcts {
+            candidates: path("takes"),
+            payoffs: nim_call("payoffs"),
+            estimate: nim_call("even"),
+            iterations: 3,
+            depth: 10,
+            chance: None,
+            rollout,
+            salt: 0,
+        })
+    });
+    let (engine, start) = coin();
+    rollouts_draw_the_searchs_own_tickets(&engine, start, |rollout| Strategy::Game {
+        goal: path("settled"),
+        horizon: 8,
+        nature: Some(coin_call("nature")),
+        actor: coin_call("player"),
+        players: vec![axionomy_engine::Chooser::Ismcts {
+            candidates: path("calls"),
+            observe: coin_call("own"),
+            chance: coin_call("draws"),
+            payoffs: coin_call("payoffs"),
+            estimate: coin_call("nothing"),
+            iterations: 4,
+            depth: 6,
+            rollout,
+            salt: 3,
+        }],
+    });
 }

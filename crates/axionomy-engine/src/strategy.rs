@@ -150,8 +150,10 @@ pub enum Chooser {
     /// a simulation stops at `depth`. Where `chance`, `fn(state)`, gives
     /// Nature's weighted outcomes, `[exchange, weight]` pairs, the tree
     /// draws one by its weight instead of a player choosing. Simulations
-    /// choose as `rollout`, `fn(state, candidates)`, does, one of the
-    /// candidates or nothing to stop there, and uniformly without one. The
+    /// choose as `rollout`, `fn(state, candidates, random)`, does, one of
+    /// the candidates or nothing to stop there, and uniformly without one;
+    /// `random`'s weighted samples draw the search's own tickets, so a
+    /// rollout exploring at random draws as one written in Rust does. The
     /// search of the game's `k`th choice, counting from zero the turns Nature
     /// did not respond on, is seeded with the game's seed XOR `salt`, plus
     /// `k`. A player with no candidates chooses nothing.
@@ -172,7 +174,8 @@ pub enum Chooser {
     /// view of the accounts it may see, `state.view([...])`, or the state
     /// itself where it sees everything. States a player sees alike are one
     /// node of the tree, and the candidate set, `fn(view)`, and `rollout`,
-    /// `fn(view, candidates)`, read only that view; the candidates that apply
+    /// `fn(view, candidates, random)`, read only that view, the rollout's
+    /// random drawing the search's own tickets; the candidates that apply
     /// are reconsidered in each world searched, and the one chosen is
     /// checked against the real economy. `chance`, `fn(state)`, gives
     /// Nature's weighted outcomes, `[exchange, weight]` pairs, where Nature
@@ -929,13 +932,14 @@ impl Engine {
         Ok(&beliefs.worlds)
     }
 
-    /// The one of `actions` that `call`, `fn(state, candidates)`, picks at
-    /// `state`, or none.
+    /// The one of `actions` that `call`, `fn(state, candidates, random)`,
+    /// picks at `state`, or none.
     fn rolled(
         &self,
         call: &ScriptCall,
         state: ScriptState,
         actions: &[paths::Exchange],
+        random: Random,
         failure: &RefCell<Option<EngineError>>,
     ) -> Option<paths::Exchange> {
         if failure.borrow().is_some() {
@@ -943,7 +947,11 @@ impl Engine {
         }
         let candidates: rhai::Array = actions.iter().cloned().map(rhai::Dynamic::from).collect();
         let picked = self
-            .call(&call.script, call.function.as_str(), (state, candidates))
+            .call(
+                &call.script,
+                call.function.as_str(),
+                (state, candidates, random),
+            )
             .and_then(proposal)
             .and_then(|picked| match picked {
                 Some(exchange) if !actions.contains(&exchange) => Err(EngineError::Returned {
@@ -1125,6 +1133,8 @@ impl Engine {
                     usize::try_from(*depth).unwrap_or(usize::MAX),
                 )
                 .with_seed((seed ^ salt).wrapping_add(choice));
+                // What rollouts draw from: the search's tickets, lent to each.
+                let simulating = Random::new(config.seed());
                 let decided = mcts(
                     economy,
                     config,
@@ -1143,12 +1153,15 @@ impl Engine {
                     |economy: &paths::Economy,
                      actions: &[paths::Exchange],
                      sampler: &mut SeededSampler| match rollout {
-                        Some(rollout) => self.rolled(
-                            rollout,
-                            ScriptState::new(economy.clone()),
-                            actions,
-                            &failure,
-                        ),
+                        Some(rollout) => simulating.lent(sampler, |random| {
+                            self.rolled(
+                                rollout,
+                                ScriptState::new(economy.clone()),
+                                actions,
+                                random,
+                                &failure,
+                            )
+                        }),
                         None => uniformly(actions, sampler),
                     },
                 );
@@ -1203,6 +1216,8 @@ impl Engine {
                     usize::try_from(*depth).unwrap_or(usize::MAX),
                 )
                 .with_seed((seed ^ salt).wrapping_add(choice));
+                // What rollouts draw from: the search's tickets, lent to each.
+                let simulating = Random::new(config.seed());
                 let decided = ismcts(
                     economy,
                     config,
@@ -1223,9 +1238,15 @@ impl Engine {
                     |information: &InformationState<Observed>,
                      actions: &[paths::Exchange],
                      sampler: &mut SeededSampler| match rollout {
-                        Some(rollout) => {
-                            self.rolled(rollout, information.key().view.clone(), actions, &failure)
-                        }
+                        Some(rollout) => simulating.lent(sampler, |random| {
+                            self.rolled(
+                                rollout,
+                                information.key().view.clone(),
+                                actions,
+                                random,
+                                &failure,
+                            )
+                        }),
                         None => uniformly(actions, sampler),
                     },
                 );

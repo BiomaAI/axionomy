@@ -36,7 +36,8 @@ goes.
   reaches the front's best point by some of its objectives in order, or a
   game whose players choose by policy, minimax or Monte Carlo tree search,
   which may draw Nature's weighted outcomes as chance in its tree and
-  simulate by a rollout script. A player who sees only part of the economy
+  simulate by a rollout script drawing the search's own tickets. A player
+  who sees only part of the economy
   chooses by information-set tree search: a script says what it observes,
   a view, and its tree's nodes, candidates and simulations read only that;
   each iteration searches a world drawn from what it believes, the point's

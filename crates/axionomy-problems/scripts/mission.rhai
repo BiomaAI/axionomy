@@ -133,7 +133,7 @@ fn named(candidates, wanted) {
 // How the planner's simulations move, from the Scout's view: finish,
 // treat, rescue, then share or move together toward the site the Scout
 // has intelligence of, then scan, go north, go south.
-fn informed(seen, candidates) {
+fn informed(seen, candidates, random) {
     let preferred = ();
     for site in sites() {
         if holds(seen, "agent/scout", `intel/${site}`) || holds(seen, "agent/scout", `shared-intel/${site}`) {
