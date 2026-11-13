@@ -5,22 +5,25 @@
 //! Showcase and Stress are `rescue/incident` economies, an ontology of their
 //! own with its own goal, so its strategies and objectives are named under
 //! `rescue/incident`: triage, rapid-north and stabilize-first policies, and
-//! an experiment per instance.
+//! an experiment per instance. Each ontology has a view of its own.
 
 use crate::{
     package::{call, written},
     rescue::{self, Location, incident},
 };
-use axionomy::{Economy, path};
+use axionomy::{Economy, OntologyPath, path};
 use axionomy_engine::{
     Arm, Engine, EngineError, Experiment, GoalPath, Measure, Objective, ObjectivePath, Strategy,
-    StrategyPath,
+    StrategyPath, View,
 };
 use axionomy_search::pareto::ObjectiveDirection::{self, Maximize, Minimize};
 use axionomy_store::{Checkpoints, Point, Recordable, RefPath};
 
 const SCRIPT: &str = include_str!("../../scripts/rescue.rhai");
 const INCIDENT: &str = include_str!("../../scripts/incident.rhai");
+/// The views of the rescue and of the incidents.
+const VIEW: &str = include_str!("../../scripts/rescue-view.rhai");
+const INCIDENT_VIEW: &str = include_str!("../../scripts/incident-view.rhai");
 
 /// The seed the study plays: the incidents' scenario, and the Monte Carlo's
 /// samples.
@@ -36,6 +39,34 @@ const MICRO_TURNS: u64 = 1 + 8;
 pub fn write(engine: &Engine) -> Result<(), EngineError> {
     engine.keep_script(&path!("rescue"), SCRIPT)?;
     engine.keep_script(&path!("rescue/incident"), INCIDENT)?;
+    for (ontology, script, source, title) in [
+        (
+            OntologyPath::of::<rescue::Ontology>(),
+            "rescue/view",
+            VIEW,
+            "Uncertain rescue",
+        ),
+        (
+            OntologyPath::of::<incident::Ontology>(),
+            "rescue/incident/view",
+            INCIDENT_VIEW,
+            "Multi-patient incident",
+        ),
+    ] {
+        let view = |function| Some(call(script, function));
+        engine.keep_script(&script.parse().expect("a path"), source)?;
+        engine.keep_view(
+            &ontology,
+            &View {
+                title: title.into(),
+                labels: view("label"),
+                formats: view("format"),
+                carry: None,
+                scene: view("scene"),
+                leaderboards: None,
+            },
+        )?;
+    }
     engine.keep_goal(&path!("rescue/solved"), &written(&rescue::goal()))?;
     engine.keep_goal(
         &path!("rescue/incident/closed"),

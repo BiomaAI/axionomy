@@ -7,7 +7,8 @@
 use axionomy::{Economy, Exchange, path, paths};
 use axionomy_engine::Engine;
 use axionomy_problems::{
-    WritePackage, bridge, exact_cover, lending, maze, registry, scheduling, sokoban, workshop,
+    WritePackage, bridge, exact_cover, lending, maze, registry, rescue, scheduling, sokoban,
+    workshop,
 };
 use axionomy_store::{Checkpoints, Recordable, Store};
 use axionomy_study::{Progress, StudyControl, StudyObserver, StudyRequest};
@@ -114,7 +115,7 @@ fn draws_like_rust<O: Recordable>(problem: &str, write: WritePackage, instances:
 /// Every sample whose package carries a view, and how it is drawn.
 type Drawn = (&'static str, fn(&[&str]) -> usize);
 
-const VIEWS: [Drawn; 7] = [
+const VIEWS: [Drawn; 8] = [
     ("maze", |instances| {
         draws_like_rust::<maze::Ontology>("maze", maze::package::write, instances)
     }),
@@ -139,6 +140,20 @@ const VIEWS: [Drawn; 7] = [
     }),
     ("lending", |instances| {
         draws_like_rust::<lending::Ontology>("lending", lending::package::write, instances)
+    }),
+    // Micro is a rescue; Showcase and Stress are incidents, an ontology of
+    // their own with a view of its own.
+    ("rescue", |instances| {
+        let (micro, incidents): (Vec<&str>, Vec<&str>) = instances
+            .iter()
+            .copied()
+            .partition(|instance| *instance == "micro");
+        draws_like_rust::<rescue::Ontology>("rescue", rescue::package::write, &micro)
+            + draws_like_rust::<rescue::incident::Ontology>(
+                "rescue",
+                rescue::package::write,
+                &incidents,
+            )
     }),
 ];
 
