@@ -3,8 +3,8 @@
 
 use axionomy::{Quantity, Rate, basket, path::Path, paths};
 use axionomy_engine::{
-    CandidatesPath, Engine, EngineError, GoalPath, Measure, Objective, ObjectivePath, ScriptCall,
-    ScriptFunction, ScriptPath,
+    CandidateSet, CandidatesPath, Engine, EngineError, GoalPath, Measure, Objective, ObjectivePath,
+    ScriptCall, ScriptFunction, ScriptPath,
 };
 use axionomy_search::pareto::ObjectiveDirection;
 use axionomy_store::Store;
@@ -118,7 +118,7 @@ fn goals_objectives_and_candidates_are_evaluated_at_points() {
 
     let payments: CandidatesPath = path("bank/payments");
     engine
-        .keep_candidates(&payments, &call("payments"))
+        .keep_candidates(&payments, &CandidateSet::Script(call("payments")))
         .unwrap();
     assert_eq!(
         engine.candidates(start, &payments).unwrap(),
@@ -135,7 +135,7 @@ fn definitions_name_scripts_that_exist_and_are_read_back() {
     let engine = engine();
     let missing = ScriptCall::new(path("nowhere"), "alice".parse().unwrap());
     assert!(matches!(
-        engine.keep_candidates(&path("bank/none"), &missing),
+        engine.keep_candidates(&path("bank/none"), &CandidateSet::Script(missing)),
         Err(EngineError::UnknownScript(_))
     ));
     assert!(matches!(

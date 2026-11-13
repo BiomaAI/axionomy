@@ -9,3 +9,17 @@ fn heuristic(state) {
     }
     0
 }
+
+// Every rate the economy has, bound to the agent and the world, that applies.
+fn candidates(state) {
+    // A closure may not borrow `state` while a chain started on it holds it.
+    let rates = state.rates("");
+    rates
+        .map(|rate| exchange(rate, #{ actor: "agent", environment: "world" }, 1))
+        .filter(|proposal| state.applicable(proposal))
+}
+
+// The energy a move spends.
+fn energy(before, exchange, after) {
+    after.balance("agent", "spent-energy") - before.balance("agent", "spent-energy")
+}

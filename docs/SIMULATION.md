@@ -351,6 +351,20 @@ the scripts it calls and its parameters (seed, budget, horizon, actor). The
 engine runs one from a point and gets a run and its thinking. MCP's
 breadth-first search becomes one such strategy.
 
+Built so far: a strategy is a definition (`strategy/<path>`) naming its goal
+and candidate set, and a candidate set is a script or a list of exchanges
+reconsidered at each state. `run_strategy` runs a policy turn by turn
+(`fn(state, random)`, ending at the goal, when it proposes nothing, at a
+refusal or at its horizon), breadth-first search, or the cheapest search in
+Dijkstra's or A*'s order over a script's step costs and heuristic, within a
+budget of expansions that a watcher may also stop, and records what it
+reaches as a run forked from its start. Maze's A* and Dijkstra find routes
+as cheap as the Rust solvers', A* the same trace; sokoban's breadth-first
+search the shortest solutions; incident's policies the same incidents; and
+MCP's `axionomy_search` runs the breadth-first strategy over its goal and
+candidates, kept as definitions named by their content. Next: branch-and-
+bound, beam search, minimax, MCTS and ISMCTS.
+
 **P6. Experiments and comparison.** An experiment is a start point,
 strategies as arms, objectives, a seed and a budget, with Monte Carlo over
 strategies and weighted scenarios, receding-horizon replanning, and

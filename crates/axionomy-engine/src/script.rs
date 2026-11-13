@@ -17,7 +17,10 @@ use axionomy_search::sampling::splitmix;
 use rhai::{Array, Dynamic, EvalAltResult, ImmutableString, Map};
 use std::{
     collections::{BTreeMap, BTreeSet, VecDeque},
-    sync::Arc,
+    sync::{
+        Arc,
+        atomic::{AtomicU64, Ordering},
+    },
 };
 
 /// The version of the host API this engine gives scripts. A package records
@@ -85,21 +88,25 @@ impl ScriptState {
 }
 
 /// The host's seeded random numbers: the only randomness a script has.
+/// Clones share one sequence, so a generator passed to a script call after
+/// call keeps drawing where it left off.
 #[derive(Debug, Clone)]
 pub struct Random {
     seed: u64,
-    drawn: u64,
+    drawn: Arc<AtomicU64>,
 }
 
 impl Random {
     pub fn new(seed: u64) -> Self {
-        Self { seed, drawn: 0 }
+        Self {
+            seed,
+            drawn: Arc::new(AtomicU64::new(0)),
+        }
     }
 
     /// A number below `bound`, the next of this generator's sequence.
-    fn below(&mut self, bound: u64) -> u64 {
-        let value = splitmix(self.seed, self.drawn);
-        self.drawn += 1;
+    fn below(&self, bound: u64) -> u64 {
+        let value = splitmix(self.seed, self.drawn.fetch_add(1, Ordering::Relaxed));
         // The high half of a 128-bit product: uniform enough, and exact.
         ((u128::from(value) * u128::from(bound)) >> 64) as u64
     }

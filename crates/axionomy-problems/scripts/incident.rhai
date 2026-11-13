@@ -193,3 +193,8 @@ fn turn(state, policy) {
 fn decide_seen(state, policy) {
     decide(state.view(visible(state)), policy)
 }
+
+// The incident's policies, as a strategy calls a policy.
+fn triage(state, random) { turn(state, "triage") }
+fn rapid_north(state, random) { turn(state, "rapid-north") }
+fn stabilize_first(state, random) { turn(state, "stabilize-first") }

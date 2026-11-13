@@ -23,6 +23,11 @@ goes.
   history, with a direction) and a candidate set (a script function returning
   exchanges); `holds`, `measure` and `candidates` evaluate them at a point, and
   `measure_state`, `step_cost` and `propose` on an economy in memory.
+- `keep_strategy` keeps a strategy, an algorithm naming the goal, candidates
+  and scripts it uses, and `run_strategy` runs one from a point with a seed
+  and a budget: a policy turn by turn, breadth-first search, or the cheapest
+  search in Dijkstra's or A*'s order. What it reaches is recorded as a run
+  forked from its start, with how it ended and what the search explored.
 
 Scripts are how a package says what a generic algorithm cannot know. They
 read a `ScriptState`, the whole economy or a view of the accounts an actor may

@@ -164,6 +164,42 @@ impl Archive {
         })
     }
 
+    pub fn engine(&self) -> &Engine {
+        &self.engine
+    }
+
+    /// Names `point`, which the engine recorded as a run forked from
+    /// `source_id`'s point, under the handle replaying its exchanges on
+    /// `source_id` would give: the same exchanges name the same economy.
+    pub async fn reached(
+        &self,
+        source_id: &EconomyId,
+        point: Point,
+    ) -> Result<Stored, EngineError> {
+        let engine = self.engine.clone();
+        let reached = blocking(move || engine.reach(point)).await?;
+        let exchanges: Vec<_> = reached
+            .receipts
+            .iter()
+            .map(|receipt| receipt.exchange().clone())
+            .collect();
+        let economy_id = self.handle(Some(source_id), &operation("exchanges", &exchanges));
+        if self.record(&economy_id)?.is_some() {
+            return Ok(Stored {
+                economy_id,
+                deduplicated: true,
+            });
+        }
+        let record = EconomyRecord {
+            point,
+            parent: Some(source_id.clone()),
+            origin: Origin::Exchanged {
+                exchanges: exchanges.len(),
+            },
+        };
+        self.keep(economy_id, record).await
+    }
+
     /// Whether the store is in memory, so its handles end with the server.
     pub fn in_memory(&self) -> bool {
         self.engine.store().in_memory()

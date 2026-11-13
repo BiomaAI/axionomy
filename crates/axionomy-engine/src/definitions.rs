@@ -17,8 +17,10 @@ pub mod kind {
     pub enum Goal {}
     /// An objective: a measure with a direction.
     pub enum Objective {}
-    /// A set of candidate exchanges a script proposes.
+    /// A set of candidate exchanges.
     pub enum Candidates {}
+    /// A strategy: an algorithm with what it calls.
+    pub enum Strategy {}
 
     impl PathKind for Goal {
         const SCHEMA: &'static str = "GoalPath";
@@ -32,11 +34,16 @@ pub mod kind {
         const SCHEMA: &'static str = "CandidatesPath";
         const EXAMPLE: &'static str = "sokoban/moves";
     }
+    impl PathKind for Strategy {
+        const SCHEMA: &'static str = "StrategyPath";
+        const EXAMPLE: &'static str = "maze/a-star";
+    }
 }
 
 pub type GoalPath = Path<kind::Goal>;
 pub type ObjectivePath = Path<kind::Objective>;
 pub type CandidatesPath = Path<kind::Candidates>;
+pub type StrategyPath = Path<kind::Strategy>;
 
 /// The name of a function a script defines: a Rhai identifier, such as
 /// `heuristic` or `decide_seen`.
@@ -112,6 +119,16 @@ pub enum Measure {
     /// the state before it, the exchange and the state after it:
     /// `fn(before, exchange, after)`, such as the interest a loan accrued.
     Steps(ScriptCall),
+}
+
+/// Where a candidate set's exchanges come from.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum CandidateSet {
+    /// What a script function proposes for a state: `fn(state)`, returning
+    /// an array of exchanges.
+    Script(ScriptCall),
+    /// These exchanges, the ones that apply at each state, in this order.
+    Listed(Vec<axionomy::paths::Exchange>),
 }
 
 /// A measure with the direction that improves it.

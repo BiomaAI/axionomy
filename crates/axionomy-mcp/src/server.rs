@@ -14,11 +14,8 @@ use crate::{
     studies,
 };
 use axionomy::{AssessmentStatus, Quantity, QuantityComparison, paths};
-use axionomy_engine::{Engine, EngineError};
-use axionomy_search::{
-    BfsSession, GraphSearchProgress,
-    session::{Continue, SearchStatus, WorkBudget},
-};
+use axionomy_engine::{CandidateSet, Effort, Engine, EngineError, Outcome, Strategy};
+use axionomy_search::GraphSearchProgress;
 use axionomy_store::StoreError;
 use axionomy_study::{Progress, Registry, StudyControl, StudyError, StudyRequest};
 use rmcp::{
@@ -42,7 +39,7 @@ use rmcp::{
 };
 use serde::{Serialize, de::DeserializeOwned};
 use serde_path_to_error::Segment;
-use std::{borrow::Cow, sync::Arc};
+use std::{borrow::Cow, ops::ControlFlow, sync::Arc};
 
 #[cfg(test)]
 mod tests;
@@ -1275,49 +1272,75 @@ async fn run_search(
         ..
     } = request;
     let max_expansions = max_expansions.get();
-    let mut session = BfsSession::new(&source.state().economy, goal, move |_| candidates.clone());
-    let mut remaining = max_expansions;
-
-    let outcome = loop {
-        match session.status() {
-            SearchStatus::Solved => break SearchOutcome::Solved,
-            SearchStatus::Exhausted => break SearchOutcome::Exhausted,
-            SearchStatus::Running | SearchStatus::Interrupted => {}
-        }
-        if context.is_cancel_requested() {
-            return Err(TaskExit::Cancelled);
-        }
-        if remaining == 0 {
-            break SearchOutcome::ExpansionLimit;
-        }
-        let report = session.advance(WorkBudget::new(remaining.min(chunk_size)), &mut Continue);
-        remaining = remaining.saturating_sub(report.work_completed());
-        context.set_status_message(progress_message(
-            *report.progress(),
-            max_expansions,
-            remaining,
-        ));
-        tokio::task::yield_now().await;
-    };
-
-    let progress = session.progress();
+    let start = source.record.point;
+    let engine = archive.engine().clone();
+    let watching = context.clone();
+    // The engine's breadth-first strategy over the goal and the candidates,
+    // kept as definitions named by their content.
+    let ran = tokio::task::spawn_blocking(move || {
+        let goal_path = content_name(&goal);
+        let candidates_path = content_name(&candidates);
+        engine.keep_goal(&goal_path, &goal)?;
+        engine.keep_candidates(&candidates_path, &CandidateSet::Listed(candidates))?;
+        let strategy = Strategy::BreadthFirst {
+            candidates: candidates_path,
+            goal: goal_path,
+        };
+        let effort = Effort {
+            seed: 0,
+            budget: max_expansions as u64,
+        };
+        engine.run_strategy(start, &strategy, effort, &mut |progress| {
+            if watching.is_cancel_requested() {
+                return ControlFlow::Break(());
+            }
+            let expanded = progress.expanded();
+            if expanded > 0 && expanded.is_multiple_of(chunk_size) {
+                watching.set_status_message(progress_message(
+                    *progress,
+                    max_expansions,
+                    max_expansions.saturating_sub(expanded),
+                ));
+            }
+            ControlFlow::Continue(())
+        })
+    })
+    .await
+    .map_err(task_error)?
+    .map_err(task_error)?;
+    let progress = ran.thinking.expect("a search reports what it explored");
     context.set_status_message(format!("finished: {}", describe(progress)));
+    let outcome = match ran.outcome {
+        Outcome::Reached => SearchOutcome::Solved,
+        Outcome::Exhausted => SearchOutcome::Exhausted,
+        Outcome::Spent => SearchOutcome::ExpansionLimit,
+        Outcome::Interrupted => return Err(TaskExit::Cancelled),
+        other => {
+            return Err(task_error(format!(
+                "a search ended as a policy does: {other:?}"
+            )));
+        }
+    };
     let mut links = Vec::new();
-    let solution = match session.into_solution() {
-        Some(solution) => {
-            let exchanges = solution.trace().exchanges().to_vec();
-            let stored = store_exchanged(&archive, economy_id.clone(), &source, exchanges)
+    let solution = match outcome {
+        SearchOutcome::Solved => {
+            let stored = archive
+                .reached(&economy_id, ran.end)
                 .await
-                .map_err(|error| task_error(error.failure.message))?
-                .value;
+                .map_err(task_error)?;
+            let loaded = archive
+                .economy(&stored.economy_id)
+                .await
+                .map_err(task_error)?
+                .ok_or_else(|| task_error("a stored economy cannot be read back"))?;
             links = exchanged_links(&stored.economy_id);
             Some(SearchSolved {
                 economy_id: stored.economy_id,
-                exchanges: stored.exchanges,
-                cost: solution.cost(),
+                exchanges: loaded.receipts().len(),
+                cost: ran.cost.unwrap_or_default(),
             })
         }
-        None => None,
+        SearchOutcome::Exhausted | SearchOutcome::ExpansionLimit => None,
     };
     Linked::new(
         SearchResponse {
@@ -1330,6 +1353,15 @@ async fn run_search(
     )
     .into_result()
     .map_err(TaskExit::Error)
+}
+
+/// The name of a definition MCP keeps, from what it is: `mcp/` and the
+/// digest of its encoding, so the same goal or candidates share one.
+fn content_name<K>(value: &impl Serialize) -> axionomy::path::Path<K> {
+    let digest = blake3::hash(&postcard::to_allocvec(value).expect("values encode"));
+    format!("mcp/{}", digest.to_hex())
+        .parse()
+        .expect("a digest is a path")
 }
 
 fn describe(progress: GraphSearchProgress) -> String {

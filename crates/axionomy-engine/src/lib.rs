@@ -3,12 +3,15 @@
 mod cache;
 pub mod definitions;
 pub mod script;
+mod strategy;
 
 pub use definitions::{
-    CandidatesPath, GoalPath, Measure, Objective, ObjectivePath, ScriptCall, ScriptFunction,
+    CandidateSet, CandidatesPath, GoalPath, Measure, Objective, ObjectivePath, ScriptCall,
+    ScriptFunction, StrategyPath,
 };
 pub use rhai;
 pub use script::{HOST_API, Random, ScriptPath, ScriptState, exchanges_of};
+pub use strategy::{Effort, Outcome, Ran, Strategy};
 
 use axionomy::{
     PathKind, Quantity,
@@ -257,25 +260,66 @@ impl Engine {
         quantity(cost)
     }
 
-    /// Keeps the candidate set at `path`, the exchanges `call` proposes,
-    /// refusing one whose script is not kept.
+    /// Keeps the candidate set at `path`, refusing one whose script is not
+    /// kept.
     pub fn keep_candidates(
         &self,
         path: &CandidatesPath,
-        call: &ScriptCall,
+        set: &CandidateSet,
     ) -> Result<(), EngineError> {
-        self.require_script(&call.script)?;
-        self.define(path, call)
+        if let CandidateSet::Script(call) = set {
+            self.require_script(&call.script)?;
+        }
+        self.define(path, set)
     }
 
-    /// The exchanges the candidate set at `set` proposes at `at`.
+    /// The exchanges the candidate set at `set` offers at `at`: what its
+    /// script proposes, or those of its listed exchanges that apply.
     pub fn candidates(
         &self,
         at: Point,
         set: &CandidatesPath,
     ) -> Result<Vec<paths::Exchange>, EngineError> {
-        let call: ScriptCall = self.defined(set)?;
-        self.propose(&call, &self.reach(at)?.state.economy)
+        let economy = &self.reach(at)?.state.economy;
+        match self.defined(set)? {
+            CandidateSet::Script(call) => self.propose(&call, economy),
+            CandidateSet::Listed(exchanges) => Ok(economy.applicable(exchanges)),
+        }
+    }
+
+    /// Keeps `strategy` at `path`, refusing one that names a goal, a
+    /// candidate set or a script the store does not keep.
+    pub fn keep_strategy(
+        &self,
+        path: &StrategyPath,
+        strategy: &Strategy,
+    ) -> Result<(), EngineError> {
+        let (goal, candidates, scripts) = match strategy {
+            Strategy::Policy { policy, goal, .. } => (goal, None, vec![policy]),
+            Strategy::BreadthFirst { candidates, goal } => (goal, Some(candidates), Vec::new()),
+            Strategy::Cheapest {
+                candidates,
+                goal,
+                cost,
+                heuristic,
+            } => (
+                goal,
+                Some(candidates),
+                std::iter::once(cost).chain(heuristic).collect(),
+            ),
+        };
+        self.goal(goal)?;
+        if let Some(candidates) = candidates {
+            self.defined::<_, CandidateSet>(candidates)?;
+        }
+        for call in scripts {
+            self.require_script(&call.script)?;
+        }
+        self.define(path, strategy)
+    }
+
+    pub fn strategy(&self, path: &StrategyPath) -> Result<Strategy, EngineError> {
+        self.defined(path)
     }
 
     /// The exchanges `call` proposes for `economy`: `fn(state)`, returning
