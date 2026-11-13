@@ -6,7 +6,9 @@
 
 use axionomy::{Economy, Exchange, path, paths};
 use axionomy_engine::Engine;
-use axionomy_problems::{WritePackage, bridge, exact_cover, maze, registry, sokoban, workshop};
+use axionomy_problems::{
+    WritePackage, bridge, exact_cover, lending, maze, registry, scheduling, sokoban, workshop,
+};
 use axionomy_store::{Checkpoints, Recordable, Store};
 use axionomy_study::{Progress, StudyControl, StudyObserver, StudyRequest};
 use axionomy_view::{DocumentPath, ViewDocument};
@@ -88,6 +90,15 @@ fn draws_like_rust<O: Recordable>(problem: &str, write: WritePackage, instances:
                 let rust = drawn(document);
                 let at = format!("{problem} {instance} {id}");
                 assert_eq!(scripted.formats, rust.formats, "{at}: formats");
+                // Every rate and invariant, labeled, whether or not a trace
+                // reaches it.
+                if let (Some(scripted), Some(rust)) = (&scripted.model, &rust.model) {
+                    assert_eq!(scripted.rates, rust.rates, "{at}: the model's rates");
+                    assert_eq!(
+                        scripted.invariants, rust.invariants,
+                        "{at}: the model's invariants"
+                    );
+                }
                 assert_eq!(scripted.initial, rust.initial, "{at}: the initial snapshot");
                 assert_eq!(scripted.frames.len(), rust.frames.len(), "{at}: frames");
                 for (scripted, rust) in scripted.frames.iter().zip(&rust.frames) {
@@ -103,7 +114,7 @@ fn draws_like_rust<O: Recordable>(problem: &str, write: WritePackage, instances:
 /// Every sample whose package carries a view, and how it is drawn.
 type Drawn = (&'static str, fn(&[&str]) -> usize);
 
-const VIEWS: [Drawn; 5] = [
+const VIEWS: [Drawn; 7] = [
     ("maze", |instances| {
         draws_like_rust::<maze::Ontology>("maze", maze::package::write, instances)
     }),
@@ -122,6 +133,12 @@ const VIEWS: [Drawn; 5] = [
     }),
     ("bridge", |instances| {
         draws_like_rust::<bridge::Ontology>("bridge", bridge::package::write, instances)
+    }),
+    ("scheduling", |instances| {
+        draws_like_rust::<scheduling::Ontology>("scheduling", scheduling::package::write, instances)
+    }),
+    ("lending", |instances| {
+        draws_like_rust::<lending::Ontology>("lending", lending::package::write, instances)
     }),
 ];
 

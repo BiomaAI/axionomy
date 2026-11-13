@@ -1,7 +1,7 @@
 //! The lending market as a package: its instances and each one's fresh
-//! market, the script its searches, scenario and attack call, the interest,
-//! collateral and cash objectives, and for each instance its goal, its
-//! strategies and an experiment comparing them.
+//! market, the scripts its searches, scenario, attack and view call, the
+//! interest, collateral and cash objectives, and for each instance its goal,
+//! its strategies and an experiment comparing them.
 //!
 //! The goal is the instance's: the bill paid and all of its collateral
 //! free again. So each instance names its own strategies toward it: least
@@ -14,15 +14,17 @@ use crate::{
     lending::{self, Config, Ontology},
     package::{call, written},
 };
-use axionomy::path;
+use axionomy::{OntologyPath, path};
 use axionomy_engine::{
     Arm, CandidateSet, Engine, EngineError, Experiment, GoalPath, Measure, Objective,
-    ObjectivePath, Strategy,
+    ObjectivePath, ScriptCall, Strategy, View,
 };
 use axionomy_search::pareto::ObjectiveDirection;
 use axionomy_store::{Checkpoints, RefPath};
 
+/// The script the searches, scenario and attack call, and the view's.
 const SCRIPT: &str = include_str!("../../scripts/lending.rhai");
+const VIEW: &str = include_str!("../../scripts/lending-view.rhai");
 
 /// The turns the over-borrowed scenario may take: it opens the loan in
 /// three, then the clock closes at most twelve periods, the price drops
@@ -37,6 +39,24 @@ const ATTACK: &str = "first-depositor-attack";
 pub fn write(engine: &Engine) -> Result<(), EngineError> {
     let call = |function| call("lending", function);
     engine.keep_script(&path!("lending"), SCRIPT)?;
+    engine.keep_script(&path!("lending/view"), VIEW)?;
+    let view = |function: &str| {
+        Some(ScriptCall::new(
+            path!("lending/view"),
+            function.parse().expect("a function name"),
+        ))
+    };
+    engine.keep_view(
+        &OntologyPath::of::<Ontology>(),
+        &View {
+            title: "Lending market".into(),
+            labels: view("label"),
+            formats: view("format"),
+            carry: None,
+            scene: view("scene"),
+            leaderboards: None,
+        },
+    )?;
     engine.keep_candidates(
         &path!("lending/moves"),
         &CandidateSet::Script(call("candidates")),

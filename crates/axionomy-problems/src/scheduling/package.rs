@@ -1,26 +1,47 @@
 //! Job-shop scheduling as a package: its instances and each one's horizon too
-//! short for the work, the script its searches call, its goal, each job's
-//! completion and the makespan as objectives, its strategies, and an
-//! experiment comparing them on every instance.
+//! short for the work, the scripts its searches and view call, its goal,
+//! each job's completion and the makespan as objectives, its strategies, and
+//! an experiment comparing them on every instance.
 
 use crate::{
     package::{call, written},
     scheduling::{self, Ontology},
 };
-use axionomy::path;
+use axionomy::{OntologyPath, path};
 use axionomy_engine::{
-    Arm, CandidateSet, Engine, EngineError, Experiment, Measure, Objective, ObjectivePath, Strategy,
+    Arm, CandidateSet, Engine, EngineError, Experiment, Measure, Objective, ObjectivePath,
+    ScriptCall, Strategy, View,
 };
 use axionomy_search::pareto::ObjectiveDirection;
 use axionomy_store::Checkpoints;
 
+/// The script the searches call, and the view's.
 const SCRIPT: &str = include_str!("../../scripts/scheduling.rhai");
+const VIEW: &str = include_str!("../../scripts/scheduling-view.rhai");
 
 /// Writes job-shop scheduling's package into `engine`'s store, everything
 /// named under `scheduling`.
 pub fn write(engine: &Engine) -> Result<(), EngineError> {
     let call = |function| call("scheduling", function);
     engine.keep_script(&path!("scheduling"), SCRIPT)?;
+    engine.keep_script(&path!("scheduling/view"), VIEW)?;
+    let view = |function: &str| {
+        Some(ScriptCall::new(
+            path!("scheduling/view"),
+            function.parse().expect("a function name"),
+        ))
+    };
+    engine.keep_view(
+        &OntologyPath::of::<Ontology>(),
+        &View {
+            title: "Job-shop scheduling".into(),
+            labels: view("label"),
+            formats: view("format"),
+            carry: None,
+            scene: view("scene"),
+            leaderboards: None,
+        },
+    )?;
     engine.keep_goal(&path!("scheduling/solved"), &written(&scheduling::goal()))?;
     engine.keep_candidates(
         &path!("scheduling/events"),
