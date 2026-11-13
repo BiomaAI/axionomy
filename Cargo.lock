@@ -488,6 +488,7 @@ dependencies = [
  "blake3",
  "getrandom 0.4.3",
  "indexmap 2.14.2",
+ "postcard",
  "redb",
  "rmcp",
  "schemars 1.2.3",

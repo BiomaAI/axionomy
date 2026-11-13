@@ -42,7 +42,6 @@ const CACHED: usize = 32;
 
 /// How a stored economy was made from its parent.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "kind", rename_all = "snake_case")]
 pub(crate) enum Origin {
     /// Entries added by `axionomy_economy_create` or `axionomy_economy_extend`.
     Authored { entries: usize },
@@ -345,10 +344,8 @@ impl Archive {
             before: before.to_vec(),
             exchange: exchange.clone(),
         };
-        let assessment_id = AssessmentId::from_digest(&self.keyed(&[
-            b"assessment",
-            &serde_json::to_vec(&record).expect("records serialize"),
-        ]));
+        let assessment_id =
+            AssessmentId::from_digest(&self.keyed(&[b"assessment", &encode(&record)]));
         let key = assessment_id.to_string();
         self.engine
             .store()
@@ -441,8 +438,7 @@ impl Archive {
     }
 
     fn study_id(&self, key: &StudyKey) -> StudyId {
-        let key = serde_json::to_vec(key).expect("study keys serialize");
-        StudyId::from_digest(&self.keyed(&[b"study", &key]))
+        StudyId::from_digest(&self.keyed(&[b"study", &encode(key)]))
     }
 
     /// Records a document's initial state as a run of its own and its
@@ -508,7 +504,7 @@ impl Archive {
         let Some(bytes) = table.get(study_id.as_str()).map_err(StoreError::from)? else {
             return Ok(None);
         };
-        serde_json::from_slice(bytes.value())
+        postcard::from_bytes(bytes.value())
             .map(Some)
             .map_err(|_| StoreError::Malformed("study record, kept by another version"))
     }
@@ -558,10 +554,12 @@ impl Archive {
 /// The bytes the handle of what an operation makes is minted from, tagged by
 /// kind so different operations never share them.
 pub(crate) fn operation(kind: &str, value: &impl Serialize) -> Vec<u8> {
-    let mut bytes = kind.as_bytes().to_vec();
-    bytes.push(0);
-    serde_json::to_writer(&mut bytes, value).expect("operations serialize");
-    bytes
+    [kind.as_bytes(), &[0], &encode(value)].concat()
+}
+
+/// A record, or what a handle is minted from, in postcard.
+fn encode(value: &impl Serialize) -> Vec<u8> {
+    postcard::to_allocvec(value).expect("records encode")
 }
 
 /// The operations a trajectory's economies are stored by: its initial state,
@@ -606,7 +604,7 @@ fn put(
     key: &str,
     value: &impl Serialize,
 ) -> Result<(), StoreError> {
-    let bytes = serde_json::to_vec(value).expect("records serialize");
+    let bytes = encode(value);
     txn.open_table(table)
         .map_err(StoreError::from)?
         .insert(key, bytes.as_slice())
@@ -623,7 +621,7 @@ fn get<T: DeserializeOwned>(
     let Some(bytes) = table.get(key).map_err(StoreError::from)? else {
         return Ok(None);
     };
-    serde_json::from_slice(bytes.value())
+    postcard::from_bytes(bytes.value())
         .map(Some)
         .map_err(|_| StoreError::Malformed("server record"))
 }

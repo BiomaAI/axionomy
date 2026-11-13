@@ -1,8 +1,8 @@
 # Simulation: primitives, scripts and packages
 
-Status: steps 1 to 5 below are built (step 2 for MCP). The
-[plan](#plan-axionomy-on-primitives) that follows them, P1 to P13, is next,
-in its order.
+Status: steps 1 to 5 below are built (step 2 for MCP). Of the
+[plan](#plan-axionomy-on-primitives) that follows them, P1 is done and P2 to
+P13 follow in order.
 
 The economy owns commitments and their consequences. A policy reads what an
 actor may see and proposes exchanges. Whoever calls the rollout (an
@@ -310,17 +310,18 @@ next. Built already: the engine records points and MCP keeps only handles
 (`36ce883`); the transports know no problem and the `axionomy` binary serves
 everything (`c59a521`).
 
-**P1. Binary records.** Postcard replaces JSON in the store's records, in the
-rate definitions inside state trees, in receipt digests and in MCP's handle
-tables. Every stored type writes all its fields (no `skip_serializing_if`,
-no internally tagged enums). The store records its format version and
-refuses a store of another. Done when no `serde_json` remains in the store,
-the engine or MCP's tables and every suite passes; state roots change once.
+**P1. Binary records (done).** The kernel's values have a complete binary
+form: every field, quantities as big-endian bytes, expressions tagged by
+variant, while JSON keeps its shape (serde's `is_human_readable` tells the
+two apart). The store keys a state tree by identifiers' paths and writes its
+values, records and receipt digests in postcard, and records its format (1),
+refusing any other; MCP's handle tables and the operations its handles are
+minted from are postcard too. JSON is left only in protocols.
 
-**P2. One engine, no registry.** `Engine::new(store)`. The Studio server and
-the CLI hold an engine, so the Studio server has a store, in memory or a
-file. Today's study features keep running on the transports' own registry
-until P9 replaces them.
+**P2. One engine, no registry.** `Engine::new(store)`. MCP takes the
+registry its study tools use beside its engine until P9 replaces them. The
+CLI and the Studio server hold an engine as soon as they use one: the CLI for
+packages (P8), the Studio server for points and refs (P10, P12).
 
 **P3. Rhai scripts in the engine.** `rhai = "1.27.0"`; the host API above,
 exact quantities, seeded randomness, scripts stored by path. Done when maze's
@@ -385,12 +386,19 @@ transitions as they happen.
 **P11. The engine in the browser.** The store's writer runs inline where
 there are no threads, `getrandom`'s `wasm_js` feature is on for wasm only,
 `Store::on(backend)` opens any redb backend, an origin private file system
-(OPFS) backend keeps the store across reloads, Rhai runs on wasm32, and a
-package loads from its bytes. Done when a Worker loads a package, runs an
-experiment and finds it again after a reload.
+(OPFS) backend keeps the store across reloads, and Rhai runs on wasm32. A
+package loads from its bytes wherever they come from: natively from a file,
+in the browser from a URL the Worker fetches (unzipping a zipped one),
+opened as a read-only store over the bytes and merged into the Worker's
+store, its manifest's format and host API versions checked first; with OPFS
+a loaded package stays across reloads and is fetched again only when the URL
+serves a newer version. A package on another host needs that host to allow
+cross-origin requests. Done when a Worker loads a package from a URL, runs
+an experiment and finds both again after a reload.
 
-**P12. Studio on packages, points, refs and experiments.** Load a package,
-scrub, follow a ref, act (a candidate or a written exchange, assessed first;
+**P12. Studio on packages, points, refs and experiments.** Load a package
+(from a file, or from a URL, which a link such as `?package=<url>` opens;
+Pages lists its sample packages by URL), scrub, follow a ref, act (a candidate or a written exchange, assessed first;
 on the point a ref is on it also moves the ref, anywhere else it makes a
 branch), continue from here, run an experiment, compare. The native and the
 browser engine offer the same.

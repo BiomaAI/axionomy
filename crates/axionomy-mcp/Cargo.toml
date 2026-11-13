@@ -20,6 +20,7 @@ axionomy-view.workspace = true
 blake3.workspace = true
 getrandom.workspace = true
 indexmap.workspace = true
+postcard.workspace = true
 redb.workspace = true
 rmcp.workspace = true
 schemars.workspace = true

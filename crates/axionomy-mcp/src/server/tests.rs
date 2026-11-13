@@ -853,11 +853,10 @@ async fn a_study_keeps_its_key_and_handles_and_computes_its_views_again() {
 
     // What is kept is the summary without the study's handle: no views.
     let bytes = server.archive.study_bytes(&study_id).unwrap();
-    assert!(serde_json::from_slice::<axionomy_study::Study>(&bytes).is_err());
-    let mut kept: Value = serde_json::from_slice(&bytes).unwrap();
+    let mut kept: crate::store::StudyRecord = postcard::from_bytes(&bytes).unwrap();
     let mut expected = summary.clone();
     expected.as_object_mut().unwrap().remove("study_id");
-    assert_eq!(kept, expected);
+    assert_eq!(serde_json::to_value(&kept).unwrap(), expected);
 
     // A server with nothing in memory computes the study again from its key
     // and serves the same documents and frames.
@@ -889,12 +888,12 @@ async fn a_study_keeps_its_key_and_handles_and_computes_its_views_again() {
 
     // Trajectories that differ from those recorded are refused: the study
     // was recorded by another version.
-    let stepped = kept["documents"][0]["final_economy_id"].clone();
-    kept["documents"][0]["final_economy_id"] = kept["documents"][1]["final_economy_id"].clone();
-    kept["documents"][1]["final_economy_id"] = stepped;
+    let swapped = kept.documents[0].final_economy_id.clone();
+    kept.documents[0].final_economy_id = kept.documents[1].final_economy_id.clone();
+    kept.documents[1].final_economy_id = swapped;
     server
         .archive
-        .replace_study_bytes(&study_id, serde_json::to_vec(&kept).unwrap())
+        .replace_study_bytes(&study_id, postcard::to_allocvec(&kept).unwrap())
         .await;
     let stale = AxionomyMcp::new(
         Engine::new(axionomy_problems::registry(), server.archive.store()).unwrap(),
@@ -912,7 +911,7 @@ async fn a_study_keeps_its_key_and_handles_and_computes_its_views_again() {
     // Its key and handles are still read as they were kept.
     assert_eq!(
         read(&stale, &uri(targets[0].clone())).await["documents"],
-        kept["documents"]
+        serde_json::to_value(&kept.documents).unwrap()
     );
 }
 
