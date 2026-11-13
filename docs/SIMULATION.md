@@ -1,8 +1,8 @@
 # Simulation: primitives, scripts and packages
 
 Status: steps 1 to 5 below are built (step 2 for MCP). Of the
-[plan](#plan-axionomy-on-primitives) that follows them, P1 to P8 and P10 are
-done; P9 is under way, and P11 to P13 follow in order.
+[plan](#plan-axionomy-on-primitives) that follows them, P1 to P8, P10 and P11
+are done; P9 is under way, and P12 and P13 follow in order.
 
 The economy owns commitments and their consequences. A policy reads what an
 actor may see and proposes exchanges. Whoever calls the rollout (an
@@ -457,7 +457,7 @@ carries. `load` refuses a package whose scripts need a newer host API, then
 merges it; names the store already gives something else keep what they are
 and are reported. A package file is a redb file or a zip holding one, told
 apart by its first bytes, so `package(bytes)` opens either in memory, as
-the browser will. A package exported, compacted, zipped and loaded into a
+the browser does (P11). A package exported, compacted, zipped and loaded into a
 fresh store carries its experiment's results and re-runs the experiment to
 the same trials.
 
@@ -606,7 +606,7 @@ as `PointId`s (`run-…:step`): `POST /api/refs`, `GET /api/refs/{name}`,
 it last handled and waits until there are some, so a pushed stream adds
 nothing a transport needs yet.
 
-**P11. The engine in the browser.** The store's writer runs inline where
+**P11. The engine in the browser (done).** The store's writer runs inline where
 there are no threads, `getrandom`'s `wasm_js` feature is on for wasm only,
 `Store::on(backend)` opens any redb backend, an origin private file system
 (OPFS) backend keeps the store across reloads, and Rhai runs on wasm32. A
@@ -618,6 +618,55 @@ a loaded package stays across reloads and is fetched again only when the URL
 serves a newer version. A package on another host needs that host to allow
 cross-origin requests. Done when a Worker loads a package from a URL, runs
 an experiment and finds both again after a reload.
+
+Built in the store and engine: `Store::on(backend)` opens a store on any
+redb backend, and `memory` and `from_bytes` are uses of it. On WebAssembly
+the writer runs each write inline on its caller, in a transaction of its
+own, committed before `transact` returns; with no thread there is no timer,
+so a write that is `Eventual` is durable with the next `Immediate` one or
+when the store closes. Natively nothing changes. `getrandom`'s `wasm_js`
+feature is on for wasm32 alone, so a new store's prefix comes from the
+browser's `crypto.getRandomValues`. Rhai needs nothing more: with its
+default features off it seeds its hashes when compiling, and `no_time`
+leaves it no clock to ask for. The store, the engine and zip build for
+`wasm32-unknown-unknown` as they are. `Engine::load` checks each manifest's
+store format as well as its host API before it merges, and
+`Engine::experiments` lists the experiments a store keeps.
+
+Built in Studio's Worker (`axionomy-studio-wasm`, beside the studies P12
+retires): an `Engine` over the Worker's store, on a redb backend over a
+`FileSystemSyncAccessHandle` to `axionomy.redb` in the origin private file
+system, or in memory, saying why, where that is unavailable, the saved
+store cannot be opened (it is left as it is) or another tab holds it; the
+Worker of a page just reloaded is waited for, up to three seconds. It loads
+a package from its bytes (`axionomy_engine::package` unzips a zipped one
+and opens it as a store in memory, nothing of which is written but what is
+merged), lists the store's packages and experiments, runs an experiment,
+reporting its searches' progress, reads its results and draws a point.
+Paths and points are parsed where they cross from JavaScript, and results
+come back as the engine's JSON. Cancelling terminates the Worker, as
+cancelling a study does.
+
+The Worker fetches a package's URL and keeps, in the store beside what it
+loaded, the response's `ETag` and `Last-Modified`. While the store holds
+what it loaded from a URL, loading it again sends them back
+(`If-None-Match`, else `If-Modified-Since`, the browser's own cache
+bypassed), so a URL serving the same answers 304 and nothing is downloaded,
+and one serving anything else answers with it, which is loaded. The
+manifest's version cannot decide this soundly: it is inside the bytes, so
+reading it means downloading them. A host that sends neither validator is
+downloaded each time, and loading the same package again changes nothing;
+a newer one merges as `Engine::load` merges, the names the older one gave
+otherwise kept and reported. An unreachable URL whose package the store
+holds is answered from the store. A package on another host needs that
+host to allow cross-origin requests, and, to be asked only whether it
+changed, to allow the conditional headers and expose its `ETag`; otherwise
+it is asked again plainly. `pnpm generate` writes every sample's package,
+zipped, into `studio/public/packages/`, which Vite and Pages serve. A
+Playwright test loads `maze.zip` from its URL, runs `maze/micro`, draws a
+point, reloads the page and finds the package and the results again in the
+origin private file system, the URL answering 304; another finds a second
+Worker keeping its store in memory while the first holds the saved one.
 
 **P12. Studio on packages, points, refs and experiments.** Load a package
 (from a file, or from a URL, which a link such as `?package=<url>` opens;

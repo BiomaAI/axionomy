@@ -1964,7 +1964,7 @@ observations, and studies. Native HTTP/SSE remains preferable when present,
 the Worker is the first-class GitHub Pages engine, and pre-built studies are
 the final read-only fallback. Connection labels report verified current
 capability rather than inferring liveness from cached data. The engine, store
-included, is planned to run in the same Worker (D-047).
+included, runs in the same Worker (D-047).
 
 ### D-036: Visual richness is typed explanation, not extra truth
 
@@ -2021,8 +2021,8 @@ part of the state, including in state keys.
 
 Stored states are canonical trees (`axionomy-tree`) in one redb database
 (`axionomy-store`), with redb as the only storage engine and no storage trait
-of Axionomy's own; where data lives is a redb backend: a file, memory, or, as
-planned for the browser, the origin private file system (D-047). A tree holds
+of Axionomy's own; where data lives is a redb backend: a file, memory, or, in
+the browser, the origin private file system (D-047). A tree holds
 an economy's logical state, accounts in key order rather than creation order,
 so equal states have equal roots whatever their history, and stores written
 apart merge by union. Every identifier in a key is written as its path, and
@@ -2177,17 +2177,24 @@ or a loop applying Nature responses are alike.
 
 ### D-047: The store runs in the browser on redb
 
-Planned ([SIMULATION.md](docs/SIMULATION.md#plan-axionomy-on-primitives), P11).
+Built ([SIMULATION.md](docs/SIMULATION.md#plan-axionomy-on-primitives), P11).
 redb is pure Rust and `axionomy-store` compiles for `wasm32-unknown-unknown`;
 what cannot run there is the store's writer thread and its timer. Without
-threads the writer runs each job inline on the caller, and every durable
-commit flushes. Persistence uses a redb `StorageBackend` over the origin
-private file system's `FileSystemSyncAccessHandle`, whose synchronous reads
-and writes at an offset, truncate, flush and size are the backend's
-operations; it exists only in dedicated Workers, where Studio's engine runs.
+threads the writer runs each job inline on the caller, in a transaction of
+its own, and every durable commit flushes: an `Eventual` write is durable
+with the next `Immediate` one, or when the store closes, instead of within a
+second. `Store::on` opens a store on any redb backend, and persistence uses
+a redb `StorageBackend` over the origin private file system's
+`FileSystemSyncAccessHandle`, whose synchronous reads and writes at an
+offset, truncate, flush and size are the backend's operations; it exists
+only in dedicated Workers, where Studio's engine runs.
 IndexedDB is asynchronous and localStorage is unavailable to Workers, so
 neither can back redb's synchronous interface. The handle is exclusive: a
-second tab opens a store in memory and says so.
+second tab opens a store in memory and says so. A package the Worker loads
+from a URL stays in that store, and the URL is asked again with the
+response's HTTP validators, so it is downloaded again only when it serves
+something else; the manifest's version is inside the bytes, so it cannot
+decide whether to download them.
 
 ### D-048: A package is a redb file
 

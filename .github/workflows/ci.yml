@@ -120,6 +120,7 @@ jobs:
           test -f dist/index.html
           test -f dist/.nojekyll
           test -f dist/studies/catalog.json
+          test -f dist/packages/maze.zip
           find dist/assets -name '*.wasm' -size +100k | grep -q .
           grep -q '/axionomy/' dist/index.html
       - if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'

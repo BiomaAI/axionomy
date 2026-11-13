@@ -7,6 +7,17 @@
 //! The Worker's exports study every sample problem. [`catalog_of`] and
 //! [`study_in`] serve any [`Registry`], for a Worker built over other
 //! problems.
+//!
+//! Beside the studies, which Studio on packages retires (P12), the Worker
+//! holds the engine itself: [`WorkerEngine`], exported as `Engine`, over the
+//! Worker's store on the origin private file system or in memory (P11,
+//! D-047).
+
+#[cfg(target_arch = "wasm32")]
+mod opfs;
+mod worker;
+
+pub use worker::{Validators, WorkerEngine};
 
 use axionomy_study::{
     Progress, Registry, StudioEvent, StudioStudyId, StudyControl, StudyObserver, StudyRequest,

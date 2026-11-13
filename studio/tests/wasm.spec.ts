@@ -40,3 +40,62 @@ test("browser Worker streams the same verified Work League frames", async ({ pag
   await expect(page.getByLabel("Study on screen")).toContainText("Micro");
   expect(Number(await page.getByRole("slider", { name: "Trace position" }).getAttribute("max"))).toBeLessThan(100);
 });
+
+test("a Worker loads a package from a URL, runs its experiment, and finds both again after a reload", async ({ page }) => {
+  const served: number[] = [];
+  page.on("response", (response) => {
+    if (new URL(response.url()).pathname === "/packages/maze.zip") served.push(response.status());
+  });
+  await page.goto("/");
+  // The client module as Vite serves it; Studio's UI moves onto it in P12.
+  const client = "/src/browserPackages.ts";
+  const first = await page.evaluate(async (client) => {
+    const { BrowserPackages } = await import(client);
+    const packages = new BrowserPackages();
+    const opened = await packages.open();
+    const fetched = await packages.loadUrl("/packages/maze.zip");
+    const experiments = await packages.experiments();
+    let progressed = 0;
+    const results = await packages.runExperiment("maze/micro", () => { progressed += 1; });
+    const document = await packages.draw(results.arms[0].trials[0].end);
+    return { opened, fetched, experiments, results, progressed, frames: document.frames.length };
+  }, client);
+  expect(first.opened).toEqual({ persistent: true });
+  expect(first.fetched.got).toBe("downloaded");
+  expect(first.fetched.loaded.manifests.map((manifest: { name: string }) => manifest.name)).toEqual(["maze"]);
+  expect(first.experiments).toContain("maze/micro");
+  expect(first.results.arms.length).toBeGreaterThan(1);
+  expect(first.progressed).toBeGreaterThan(0);
+  expect(first.frames).toBeGreaterThan(0);
+
+  // The page's Workers end with it; the next one opens the same store.
+  await page.reload();
+  const again = await page.evaluate(async (client) => {
+    const { BrowserPackages } = await import(client);
+    const packages = new BrowserPackages();
+    const opened = await packages.open();
+    const held = await packages.packages();
+    const results = await packages.results("maze/micro");
+    const fetched = await packages.loadUrl("/packages/maze.zip");
+    return { opened, held: held.map((manifest: { name: string }) => manifest.name), results, fetched };
+  }, client);
+  expect(again.opened).toEqual({ persistent: true });
+  expect(again.held).toEqual(["maze"]);
+  expect(again.results).toEqual(first.results);
+  // Asked only whether it changed: the URL answers 304 and nothing is downloaded.
+  expect(again.fetched).toEqual({ url: first.fetched.url, got: "current", status: 304 });
+  expect(served).toEqual([200, 304]);
+});
+
+test("a second Worker keeps its store in memory while another holds the saved one", async ({ page }) => {
+  await page.goto("/");
+  const opened = await page.evaluate(async (client) => {
+    const { BrowserPackages } = await import(client);
+    const holder = new BrowserPackages();
+    const first = await holder.open();
+    const second = await new BrowserPackages().open();
+    return { first, second };
+  }, "/src/browserPackages.ts");
+  expect(opened.first).toEqual({ persistent: true });
+  expect(opened.second).toEqual({ persistent: false, reason: "another tab holds the saved store" });
+});

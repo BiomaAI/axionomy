@@ -227,7 +227,7 @@ site. It requires no application server, database, WebSocket, or
 
 ## One source of browser types
 
-Rust DTOs in `axionomy-view` derive Serde and Schemars. The server turns them into OpenAPI 3.1 with Aide, then `openapi-typescript` generates `src/generated/api.d.ts`. `pnpm generate` writes that contract, its TypeScript declarations and the pre-built studies in `public/studies` from the Rust source; `pnpm dev`, `pnpm test` and `pnpm build` run it first. None of it is committed, so it can never be stale.
+Rust DTOs in `axionomy-view` derive Serde and Schemars. The server turns them into OpenAPI 3.1 with Aide, then `openapi-typescript` generates `src/generated/api.d.ts`. `pnpm generate` writes that contract, its TypeScript declarations, the pre-built studies in `public/studies` and every sample's package, zipped, in `public/packages` from the Rust source; `pnpm dev`, `pnpm test` and `pnpm build` run it first. None of it is committed, so it can never be stale.
 
 ```sh
 pnpm generate
@@ -258,4 +258,10 @@ tests in `axionomy-problems` study every problem.
 The Wasm suite launches Studio with native probes disabled, studies stochastic
 logistics in the Worker, verifies live and retained thinking,
 loads the replay-derived study, and proves responsive cancellation by
-terminating and recreating the isolated Worker.
+terminating and recreating the isolated Worker. It also drives the engine
+itself in the Worker (`src/browserPackages.ts`, which Studio's UI moves onto
+in P12): a Worker loads `packages/maze.zip` from its URL into a store on the
+origin private file system, runs its experiment and, after a reload, finds
+the package and the results again, the URL asked only whether it changed
+and answering 304; a second Worker, while the first holds that store, keeps
+one in memory and says so.

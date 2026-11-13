@@ -63,6 +63,9 @@ quote = "1.0.47"
 rand = { version = "0.10.3", default-features = false, features = ["std"] }
 rand_chacha = "0.10.0"
 redb = "4.5.0"
+# Without its default `ahash/runtime-rng` Rhai seeds its hashes when compiling,
+# and with `no_time` it has no clock to read, so it builds for wasm32 without
+# its `wasm-bindgen` feature.
 rhai = { version = "1.27.0", default-features = false, features = ["std", "sync", "no_time", "serde"] }
 ruint = { version = "1.21.1", default-features = false, features = ["std"] }
 rmcp = { version = "3.9.0", default-features = false, features = [
@@ -93,6 +96,7 @@ uom = { version = "0.38.0", default-features = false, features = [
     "std",
 ] }
 wasm-bindgen = "0.2.130"
+web-sys = "0.3.107"
 zip = { version = "9.5.1", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 
 [package]

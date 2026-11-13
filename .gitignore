@@ -11,4 +11,5 @@ studio/src/generated/wasm/
 studio/openapi.json
 studio/src/generated/api.d.ts
 studio/public/studies/
+studio/public/packages/
 verification/lean/.lake/
