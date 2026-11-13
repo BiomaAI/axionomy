@@ -4,7 +4,7 @@
 #![cfg(feature = "packages")]
 
 use axionomy::{path, paths};
-use axionomy_engine::{Ended, Engine, Version};
+use axionomy_engine::{Ended, Engine, ObjectivePath, Version};
 use axionomy_problems::registry;
 use axionomy_store::Store;
 use axionomy_study::{Progress, StudyControl, StudyObserver, StudyRequest};
@@ -59,6 +59,15 @@ fn study(
         .study_with(&request, &StudyControl::default(), &mut observed)
         .unwrap();
     (study, observed.0)
+}
+
+/// Where the objective `key` a document reports is among `objectives`: the
+/// one whose path ends in the key, such as `maze/energy` for `energy` or
+/// `bridge/priority/a` for `priority/a`.
+fn objective_named(objectives: &[ObjectivePath], key: &str) -> Option<usize> {
+    objectives
+        .iter()
+        .position(|objective| objective.as_str().ends_with(&format!("/{key}")))
 }
 
 /// The study of `problem` at `instance`, asked for each of `strategies`,
@@ -123,11 +132,7 @@ fn reproduces(engine: &Engine, problem: &str, instance: &str, strategies: &[&str
             .find(|document| document.id.as_str() == *strategy)
             .unwrap();
         for reported in &document.objectives {
-            let index = objectives
-                .iter()
-                .position(|objective| {
-                    objective.as_str().rsplit('/').next() == Some(reported.key.as_str())
-                })
+            let index = objective_named(&objectives, reported.key.as_str())
                 .unwrap_or_else(|| panic!("{problem} measures no `{}`", reported.key));
             assert_eq!(
                 trial.values[index], reported.value,
@@ -232,6 +237,87 @@ fn workshop(engine: &Engine, instance: &str) {
     );
 }
 
+fn bridge(engine: &Engine, instance: &str) {
+    // Micro's mechanisms meet on an exact front; timed traffic adds the
+    // deadline-responsive policy and compares only the policies it runs.
+    let strategies: &[&str] = if instance == "micro" {
+        &[
+            "breadth-first",
+            "first-come-a",
+            "first-come-b",
+            "auction",
+            "pareto-a",
+            "pareto-b",
+        ]
+    } else {
+        &[
+            "breadth-first",
+            "first-come-a",
+            "first-come-b",
+            "auction",
+            "adaptive",
+        ]
+    };
+    assert_eq!(
+        reproduces(engine, "bridge", instance, strategies),
+        strategies.len(),
+        "{instance}"
+    );
+    if instance == "micro" {
+        return;
+    }
+    // In timed traffic the study prefers, for each traveller, the policy
+    // whose run is best by that traveller's on-time trips, then priority,
+    // then credit, the last of equals: `pick` keeps the first, so it reads
+    // the experiment's runs in reverse.
+    let results = engine
+        .results(&format!("bridge/{instance}").parse().unwrap())
+        .unwrap();
+    let ends: Vec<_> = ["adaptive", "auction", "first-come-b", "first-come-a"]
+        .into_iter()
+        .map(|policy| {
+            let arm = results
+                .arms
+                .iter()
+                .find(|arm| arm.arm.strategy.as_str() == format!("bridge/{policy}"))
+                .unwrap_or_else(|| panic!("no arm runs {policy}"));
+            arm.trials[0].end
+        })
+        .collect();
+    let (study, trajectories) = study("bridge", instance, None);
+    for (document, traveller) in [("pareto-a", "a"), ("pareto-b", "b")] {
+        let by: Vec<ObjectivePath> = ["ontime", "priority", "credit"]
+            .into_iter()
+            .map(|objective| format!("bridge/{objective}/{traveller}").parse().unwrap())
+            .collect();
+        let picked = engine.pick(&ends, &by).unwrap().unwrap();
+        let (_, trace) = trajectories
+            .iter()
+            .find(|(id, _)| id.as_str() == document)
+            .unwrap_or_else(|| panic!("no document {document}"));
+        assert_eq!(
+            engine.history(picked).unwrap().1,
+            trace.exchanges(),
+            "bridge {instance} {document}: the trace"
+        );
+        let reported = &study
+            .documents
+            .iter()
+            .find(|found| found.id.as_str() == document)
+            .unwrap()
+            .objectives;
+        for objective in reported {
+            let path = format!("bridge/{}", objective.key).parse().unwrap();
+            assert_eq!(
+                engine.measure(picked, &path).unwrap(),
+                objective.value,
+                "bridge {instance} {document}: {}",
+                objective.key
+            );
+        }
+    }
+}
+
 /// Every sample, its package builder and its check.
 type Sample = (
     &'static str,
@@ -239,7 +325,7 @@ type Sample = (
     fn(&Engine, &str),
 );
 
-const SAMPLES: [Sample; 4] = [
+const SAMPLES: [Sample; 5] = [
     ("maze", axionomy_problems::maze::package::write, maze),
     (
         "sokoban",
@@ -256,6 +342,7 @@ const SAMPLES: [Sample; 4] = [
         axionomy_problems::workshop::package::write,
         workshop,
     ),
+    ("bridge", axionomy_problems::bridge::package::write, bridge),
 ];
 
 /// Each sample's package reproduces its study at `instances`.

@@ -10,6 +10,8 @@ use axionomy_search::{
     pareto::{self, Objective, ObjectiveVector, ParetoError, ParetoSearchResult},
 };
 
+#[cfg(feature = "packages")]
+pub mod package;
 mod study;
 pub mod timed;
 mod view;

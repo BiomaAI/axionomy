@@ -488,9 +488,14 @@ unsatisfiable twin, where search runs out and Algorithm X plans nothing).
 Workshop's (breadth-first search, best-first search over its waste, and
 Pareto picks for least waste, least time and highest revenue from a front
 over all three) needed best-first search as a strategy, and a Pareto
-strategy that ranks its front by some of the objectives that span it. The
-small instances are checked with every test run; the stress instances,
-minutes in a debug build, run in a release build in CI. Rhai is optimised in debug builds too, since package
+strategy that ranks its front by some of the objectives that span it.
+Bridge's (breadth-first routing, its first-come, auction and
+deadline-responsive policies played turn by turn, and Micro's exact Pareto
+picks for each traveller) needed nothing new: where timed traffic's study
+prefers, for a traveller, the best of the policies it evaluates, `pick`
+finds it among the experiment's runs. The small instances are checked with
+every test run; the stress instances, minutes in a debug build, run in a
+release build in CI. Rhai is optimised in debug builds too, since package
 scripts run in its interpreter.
 
 **P10. Live refs.** The store's refs gain compare-and-set and an index of each
