@@ -663,3 +663,243 @@ fn tree_search_draws_natures_outcomes_and_simulates_by_its_rollout() {
         })
     ));
 }
+
+/// A coin Nature tosses and hides, and a player who calls it: calling at
+/// once pays 1 when right, inspecting first, which reveals the coin, pays
+/// 0.8, and a wrong call nothing.
+fn coin() -> (Engine, Point) {
+    let engine = Engine::new(Store::memory().unwrap()).unwrap();
+    let agent = |from: &str, to: &[&str]| {
+        Rate::new()
+            .consume(path("agent"), basket([(path(from), 1)]))
+            .produce(
+                path("agent"),
+                to.iter()
+                    .map(|asset| (path(asset), Quantity::new(1)))
+                    .collect(),
+            )
+    };
+    let seeing = |rate: paths::Rate, truth: &str| {
+        rate.preserve(path("nature"), basket([(path(truth), 1)]))
+            .distinct(path("agent"), path("nature"))
+    };
+    let mut economy = paths::EconomyBuilder::new()
+        .account(path("agent"), basket([(path("ready"), 1)]).into())
+        .account(
+            path("nature"),
+            basket([
+                (path("unresolved"), 1),
+                (path("weight/heads"), 1),
+                (path("weight/tails"), 1),
+            ])
+            .into(),
+        )
+        .rate(path("inspect"), agent("ready", &["awaiting", "inspected"]));
+    for side in ["heads", "tails"] {
+        economy = economy
+            .rate(
+                path(&format!("toss/{side}")),
+                Rate::new()
+                    .consume(path("nature"), basket([(path("unresolved"), 1)]))
+                    .preserve(
+                        path("nature"),
+                        basket([(path(&format!("weight/{side}")), 1)]),
+                    )
+                    .produce(
+                        path("nature"),
+                        basket([(path(&format!("truth/{side}")), 1)]),
+                    ),
+            )
+            .rate(
+                path(&format!("reveal/{side}")),
+                seeing(
+                    agent("awaiting", &["deciding", &format!("told/{side}")]),
+                    &format!("truth/{side}"),
+                ),
+            )
+            .rate(
+                path(&format!("guess/{side}")),
+                agent("ready", &[&format!("called/{side}")]),
+            )
+            .rate(
+                path(&format!("answer/{side}")),
+                agent("deciding", &[&format!("called/{side}")]),
+            );
+        for truth in ["heads", "tails"] {
+            let result = if side == truth { "won" } else { "lost" };
+            economy = economy.rate(
+                path(&format!("settle/{side}/{truth}")),
+                seeing(
+                    agent(&format!("called/{side}"), &["settled", result]),
+                    &format!("truth/{truth}"),
+                ),
+            );
+        }
+    }
+    engine
+        .keep_script(
+            &path("coin"),
+            r#"
+            fn play(rate) {
+                let kind = rate.split("/")[0];
+                let bindings = if kind == "toss" { #{ nature: "nature" } } else { #{ agent: "agent" } };
+                if kind == "reveal" || kind == "settle" { bindings.nature = "nature"; }
+                exchange(rate, bindings, 1)
+            }
+            // Nature tosses while the coin is unresolved, by its weights,
+            // then reveals the coin to an inspection and settles a call.
+            fn draws(state) {
+                let found = [];
+                if state.balance("nature", "unresolved") > 0 {
+                    for side in ["heads", "tails"] {
+                        found.push([play(`toss/${side}`), state.balance("nature", `weight/${side}`)]);
+                    }
+                    return found;
+                }
+                for rate in ["reveal/heads", "reveal/tails", "settle/heads/heads",
+                             "settle/heads/tails", "settle/tails/heads", "settle/tails/tails"] {
+                    let outcome = play(rate);
+                    if state.applicable(outcome) { found.push([outcome, 1]); }
+                }
+                found
+            }
+            fn nature(state, random) {
+                let outcomes = draws(state);
+                if outcomes.is_empty() { return (); }
+                outcomes[random.sample(outcomes.map(|outcome| outcome[1]))][0]
+            }
+            fn player(state) { 0 }
+            fn own(state, player) { state.view(["agent"]) }
+            fn everything(state, player) { state }
+            fn calls(seen) {
+                if seen.balance("agent", "ready") > 0 {
+                    return ["inspect", "guess/heads", "guess/tails"].map(play);
+                }
+                if seen.balance("agent", "deciding") > 0 {
+                    return ["answer/heads", "answer/tails"].map(play);
+                }
+                []
+            }
+            // A view cannot say what applies: that may hang on the coin.
+            fn peeking(seen) { if seen.applicable(play("inspect")) { [play("inspect")] } else { [] } }
+            fn payoffs(state) {
+                if state.balance("agent", "won") > 0 {
+                    return if state.balance("agent", "inspected") > 0 { [0.8] } else { [1.0] };
+                }
+                if state.balance("agent", "lost") > 0 { return [0.0]; }
+                ()
+            }
+            fn nothing(state) { [0.0] }
+            "#,
+        )
+        .unwrap();
+    engine
+        .keep_goal(
+            &path("settled"),
+            &paths::Goal::new().require(path("agent"), basket([(path("settled"), 1)])),
+        )
+        .unwrap();
+    for (name, function) in [("calls", "calls"), ("peeking", "peeking")] {
+        engine
+            .keep_candidates(&path(name), &CandidateSet::Script(coin_call(function)))
+            .unwrap();
+    }
+    let start = engine.author(economy.build().unwrap()).unwrap();
+    (engine, start)
+}
+
+fn coin_call(function: &str) -> ScriptCall {
+    ScriptCall::new(path("coin"), function.parse().unwrap())
+}
+
+/// The coin's game, its one player choosing by information-set search from
+/// what `observe` shows it, over the candidate set `candidates`.
+fn calling(observe: &str, candidates: &str) -> Strategy {
+    Strategy::Game {
+        goal: path("settled"),
+        horizon: 8,
+        nature: Some(coin_call("nature")),
+        actor: coin_call("player"),
+        players: vec![axionomy_engine::Chooser::Ismcts {
+            candidates: path(candidates),
+            observe: coin_call(observe),
+            chance: coin_call("draws"),
+            payoffs: coin_call("payoffs"),
+            estimate: coin_call("nothing"),
+            iterations: 400,
+            depth: 6,
+            rollout: None,
+            salt: 3,
+        }],
+    }
+}
+
+#[test]
+fn what_a_player_observes_decides_what_it_searches() {
+    let (engine, start) = coin();
+    let rates = |ran: &axionomy_engine::Ran| -> Vec<String> {
+        let (_, exchanges) = engine.history(ran.end).unwrap();
+        exchanges
+            .iter()
+            .map(|exchange| exchange.rate().as_str().to_owned())
+            .collect()
+    };
+    let blind = calling("own", "calls");
+    engine.keep_strategy(&path("coin/blind"), &blind).unwrap();
+    let sighted = calling("everything", "calls");
+    for side in ["heads", "tails"] {
+        // Nature tossed before the game started: the player's beliefs
+        // begin from the history of the point it starts from.
+        let toss = paths::Exchange::new(path(&format!("toss/{side}")), Quantity::new(1))
+            .bind(path("nature"), path("nature"));
+        let tossed = engine.apply(start, &[toss]).unwrap();
+
+        // Seeing only its own account, the player believes either side as
+        // likely, so it inspects whichever way the coin landed, and then
+        // calls the side it is shown.
+        let ran = run(&engine, tossed, &blind, EFFORT);
+        assert!(matches!(ran.outcome, Outcome::Reached));
+        assert_eq!(
+            rates(&ran),
+            [
+                format!("toss/{side}"),
+                "inspect".to_owned(),
+                format!("reveal/{side}"),
+                format!("answer/{side}"),
+                format!("settle/{side}/{side}"),
+            ]
+        );
+        // The same seed searches the same worlds alike.
+        assert_eq!(rates(&run(&engine, tossed, &blind, EFFORT)), rates(&ran));
+
+        // Seeing the coin, it calls the side at once.
+        let ran = run(&engine, tossed, &sighted, EFFORT);
+        assert_eq!(
+            rates(&ran),
+            [
+                format!("toss/{side}"),
+                format!("guess/{side}"),
+                format!("settle/{side}/{side}"),
+            ]
+        );
+    }
+
+    // From before the toss, Nature tosses in the game itself.
+    let ran = run(&engine, start, &blind, EFFORT);
+    assert!(matches!(ran.outcome, Outcome::Reached));
+    assert_eq!(rates(&ran)[1], "inspect");
+
+    // A candidate set reads only the view: whether an exchange applies may
+    // hang on what the player cannot see.
+    let refused = engine.run_strategy(start, &calling("own", "peeking"), EFFORT, &mut |_| {
+        ControlFlow::Continue(())
+    });
+    assert!(
+        matches!(
+            &refused,
+            Err(axionomy_engine::EngineError::Script { message, .. })
+                if message.contains("not observable from a view")
+        ),
+        "{refused:?}"
+    );
+}

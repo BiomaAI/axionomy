@@ -544,6 +544,21 @@ fn strategy_reaches(strategy: Strategy, closure: &mut Closure, calls: &mut Vec<S
                         calls.extend([payoffs, estimate]);
                         calls.extend(chance.into_iter().chain(rollout));
                     }
+                    Chooser::Ismcts {
+                        candidates,
+                        observe,
+                        chance,
+                        payoffs,
+                        estimate,
+                        rollout,
+                        ..
+                    } => {
+                        closure
+                            .queue
+                            .push(crate::definitions::definition(&candidates));
+                        calls.extend([observe, chance, payoffs, estimate]);
+                        calls.extend(rollout);
+                    }
                 }
             }
         }

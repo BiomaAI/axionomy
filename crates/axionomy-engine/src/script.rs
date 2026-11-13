@@ -10,8 +10,10 @@
 
 use crate::EngineError;
 use axionomy::{
-    AccountPath, AssessmentStatus, AssetPath, PathKind, Quantity, RatePath, RolePath, Rounding,
-    path::Path, paths,
+    AccountPath, AssessmentStatus, AssetPath, ObservationKey, PathKind, Quantity, RatePath,
+    RolePath, Rounding,
+    path::Path,
+    paths::{self, Paths},
 };
 use axionomy_search::sampling::{self, SeededSampler, WeightedExchange, splitmix};
 use rhai::{Array, Dynamic, EvalAltResult, ImmutableString, Map};
@@ -69,6 +71,19 @@ impl ScriptState {
 
     pub fn economy(&self) -> &paths::Economy {
         &self.economy
+    }
+
+    /// What this state shows: the observation of the accounts a view sees,
+    /// or of every account of the whole economy. Two states showing the same
+    /// observation answer every question a script may ask of them alike.
+    pub fn observation(&self) -> ObservationKey<Paths> {
+        match &self.visible {
+            Some(visible) => self.economy.view(visible.iter().cloned()),
+            None => self
+                .economy
+                .view(self.economy.accounts().map(|(account, _)| account.clone())),
+        }
+        .observation_key()
     }
 
     fn sees(&self, account: &AccountPath) -> bool {

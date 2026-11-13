@@ -36,7 +36,13 @@ goes.
   reaches the front's best point by some of its objectives in order, or a
   game whose players choose by policy, minimax or Monte Carlo tree search,
   which may draw Nature's weighted outcomes as chance in its tree and
-  simulate by a rollout script. What it reaches is recorded as a run forked from its start, with how it
+  simulate by a rollout script. A player who sees only part of the economy
+  chooses by information-set tree search: a script says what it observes,
+  a view, and its tree's nodes, candidates and simulations read only that;
+  each iteration searches a world drawn from what it believes, the point's
+  history replayed with every one of Nature's draws drawn again every way
+  Nature could have drawn it, kept while the player would have seen it as
+  it saw the real one. What it reaches is recorded as a run forked from its start, with how it
   ended and what the search explored.
 - `refer` names a point with a new ref and `referred` reads it. `advance`
   moves a ref forward from the point its mover expects to a point whose

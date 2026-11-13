@@ -6,19 +6,30 @@ use crate::{
     CandidatesPath, Engine, EngineError, GoalPath, ObjectivePath, Random, ScriptCall, ScriptState,
     definitions::{CandidateSet, Measure, Objective},
 };
-use axionomy::{Quantity, paths};
+use axionomy::{
+    ObservationKey, Quantity,
+    paths::{self, Paths},
+};
 use axionomy_search::{
-    AStarSession, BfsSession, GraphSearchProgress, best_first,
+    AStarSession, BfsSession, GraphSearchProgress,
+    action_source::eager_actions,
+    best_first,
     bounded::{Tie, beam, branch_and_bound, minimax},
     dijkstra,
+    ismcts::{InformationState, search as ismcts},
     mcts::{MctsConfig, search as mcts},
     pareto::{Objective as Measured, ObjectiveDirection, ObjectiveVector, ParetoSearchSession},
-    sampling::{SeededSampler, TicketSource, WeightedExchange, sample_seed},
+    sampling::{SeededSampler, TicketSource, WeightedExchange, sample, sample_seed},
     session::{SearchStatus, WorkBudget},
 };
 use axionomy_store::Point;
 use serde::{Deserialize, Serialize};
-use std::{cell::RefCell, ops::ControlFlow};
+use std::{
+    cell::RefCell,
+    collections::{BTreeMap, btree_map::Entry},
+    hash::{Hash, Hasher},
+    ops::ControlFlow,
+};
 
 /// The most expansions a search makes between two looks at its progress.
 const CHUNK: usize = 1_000;
@@ -154,6 +165,108 @@ pub enum Chooser {
         rollout: Option<ScriptCall>,
         salt: u64,
     },
+    /// Information-set Monte Carlo tree search, for a player who sees only
+    /// part of the economy: `iterations` iterations each turn, as
+    /// [`Mcts`](Self::Mcts) searches, but over what the player observes.
+    /// `observe`, `fn(state, player)`, is what a player sees of a state: a
+    /// view of the accounts it may see, `state.view([...])`, or the state
+    /// itself where it sees everything. States a player sees alike are one
+    /// node of the tree, and the candidate set, `fn(view)`, and `rollout`,
+    /// `fn(view, candidates)`, read only that view; the candidates that apply
+    /// are reconsidered in each world searched, and the one chosen is
+    /// checked against the real economy. `chance`, `fn(state)`, gives
+    /// Nature's weighted outcomes, `[exchange, weight]` pairs, where Nature
+    /// draws, which the tree draws by weight.
+    ///
+    /// Each iteration searches one world the player may be in, drawn by
+    /// weight from what it believes. Its beliefs replay the history of the
+    /// point the game started from, from the economy that history began
+    /// with, and then the game's: at each of Nature's draws, a step where
+    /// `chance` gives outcomes, every world draws again every way `chance`
+    /// gives there, and at every other step it takes the step as it was. A
+    /// world is kept while the player sees it as it saw the real economy and
+    /// Nature draws in it just where Nature draws in the real one, weighted
+    /// by the draws that made it. Payoffs, estimates, seeds, salt, and a
+    /// player with no candidates, are as with `Mcts`.
+    Ismcts {
+        candidates: CandidatesPath,
+        observe: ScriptCall,
+        chance: ScriptCall,
+        payoffs: ScriptCall,
+        estimate: ScriptCall,
+        iterations: u64,
+        depth: u64,
+        rollout: Option<ScriptCall>,
+        salt: u64,
+    },
+}
+
+/// What a player observes of an economy: the view its `observe` script
+/// gives, one information set with every view showing the same.
+#[derive(Clone)]
+struct Observed {
+    observation: ObservationKey<Paths>,
+    view: ScriptState,
+}
+
+impl Observed {
+    fn new(view: ScriptState) -> Self {
+        Self {
+            observation: view.observation(),
+            view,
+        }
+    }
+}
+
+impl PartialEq for Observed {
+    fn eq(&self, other: &Self) -> bool {
+        self.observation == other.observation
+    }
+}
+
+impl Eq for Observed {}
+
+impl Hash for Observed {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.observation.hash(state);
+    }
+}
+
+/// What an information-set player believes: the worlds it may be in, each
+/// weighted by Nature's draws that made it, kept up with the real economy
+/// `seen` steps into the history they replay.
+struct Beliefs {
+    worlds: Vec<WeightedExchange<paths::Economy>>,
+    actual: paths::Economy,
+    /// Whether Nature draws in the real economy there.
+    drawing: bool,
+    seen: usize,
+}
+
+/// What a player's choice in a game is made from.
+struct Turn<'a> {
+    /// Where the game started, and the exchanges it has made since.
+    at: Point,
+    played: &'a [paths::Exchange],
+    economy: &'a paths::Economy,
+    /// The player choosing, of `players`.
+    player: usize,
+    players: usize,
+    actor: &'a ScriptCall,
+    random: &'a Random,
+    seed: u64,
+    /// How many choices the game's players made before this one.
+    choice: u64,
+}
+
+/// What the players of a game who cannot see everything believe, kept from
+/// turn to turn: the history their beliefs replay, the economy it began
+/// with and every exchange to the game's start, read when one first
+/// chooses, and each such player's beliefs.
+#[derive(Default)]
+struct Believing {
+    history: Option<(paths::Economy, Vec<paths::Exchange>)>,
+    players: BTreeMap<usize, Beliefs>,
 }
 
 /// What a strategy is given to spend: the seed of its randomness and its
@@ -647,6 +760,28 @@ impl Engine {
 
     /// Nature's weighted outcomes `call` gives for `economy`: none where it
     /// returns nothing.
+    fn outcomes(
+        &self,
+        call: &ScriptCall,
+        economy: &paths::Economy,
+    ) -> Result<Vec<WeightedExchange<paths::Exchange>>, EngineError> {
+        let returned: rhai::Dynamic = self.call(
+            &call.script,
+            call.function.as_str(),
+            (ScriptState::new(economy.clone()),),
+        )?;
+        if returned.is_unit() {
+            return Ok(Vec::new());
+        }
+        let found = returned.type_name();
+        crate::script::weighted_of(returned.try_cast().ok_or_else(|| EngineError::Returned {
+            expected: "weighted outcomes or nothing",
+            found: found.to_owned(),
+        })?)
+    }
+
+    /// The [`outcomes`](Self::outcomes) `call` gives for `economy`, keeping
+    /// the first failure in `failure` and giving none after one.
     fn weighted(
         &self,
         call: &ScriptCall,
@@ -656,35 +791,150 @@ impl Engine {
         if failure.borrow().is_some() {
             return Vec::new();
         }
-        let returned: Result<rhai::Dynamic, _> = self.call(
-            &call.script,
-            call.function.as_str(),
-            (ScriptState::new(economy.clone()),),
-        );
-        let outcomes = returned.and_then(|returned| {
-            if returned.is_unit() {
-                return Ok(Vec::new());
-            }
-            let found = returned.type_name();
-            crate::script::weighted_of(returned.try_cast().ok_or_else(|| {
-                EngineError::Returned {
-                    expected: "weighted outcomes or nothing",
-                    found: found.to_owned(),
-                }
-            })?)
-        });
-        outcomes.unwrap_or_else(|error| {
+        self.outcomes(call, economy).unwrap_or_else(|error| {
             failure.borrow_mut().get_or_insert(error);
             Vec::new()
         })
     }
 
+    /// What `player` observes of `economy`, by `observe`, `fn(state,
+    /// player)`.
+    fn seen_by(
+        &self,
+        observe: &ScriptCall,
+        economy: &paths::Economy,
+        player: usize,
+    ) -> Result<Observed, EngineError> {
+        let view: ScriptState = self.call(
+            &observe.script,
+            observe.function.as_str(),
+            (
+                ScriptState::new(economy.clone()),
+                i64::try_from(player).unwrap_or(i64::MAX),
+            ),
+        )?;
+        Ok(Observed::new(view))
+    }
+
+    /// What [`seen_by`](Self::seen_by) gives, keeping the first failure in
+    /// `failure` and giving the whole economy after one.
+    fn observed(
+        &self,
+        observe: &ScriptCall,
+        economy: &paths::Economy,
+        player: usize,
+        failure: &RefCell<Option<EngineError>>,
+    ) -> Observed {
+        if failure.borrow().is_none() {
+            match self.seen_by(observe, economy, player) {
+                Ok(seen) => return seen,
+                Err(error) => {
+                    failure.borrow_mut().get_or_insert(error);
+                }
+            }
+        }
+        Observed::new(ScriptState::new(economy.clone()))
+    }
+
+    /// The exchanges `set` proposes to a player seeing `seen`, whether or not
+    /// they apply, keeping the first failure in `failure` and proposing
+    /// nothing after one.
+    fn proposed(
+        &self,
+        set: &CandidateSet,
+        seen: &Observed,
+        failure: &RefCell<Option<EngineError>>,
+    ) -> Vec<paths::Exchange> {
+        if failure.borrow().is_some() {
+            return Vec::new();
+        }
+        let proposed = match set {
+            CandidateSet::Listed(exchanges) => Ok(exchanges.clone()),
+            CandidateSet::Script(call) => self
+                .call(&call.script, call.function.as_str(), (seen.view.clone(),))
+                .and_then(crate::exchanges_of),
+        };
+        proposed.unwrap_or_else(|error| {
+            failure.borrow_mut().get_or_insert(error);
+            Vec::new()
+        })
+    }
+
+    /// Brings what `player` believes up to the end of the game's history,
+    /// `played` after the history of the point it started from: a step at a
+    /// time, each world draws again every way `chance` gives where Nature
+    /// drew in the real economy, and otherwise takes the step as it was;
+    /// a world is kept while `player` sees it, by `observe`, as it saw the
+    /// real economy, and Nature draws in it where it draws in the real one.
+    fn believed<'b>(
+        &self,
+        believing: &'b mut Believing,
+        (at, played): (Point, &[paths::Exchange]),
+        player: usize,
+        (observe, chance): (&ScriptCall, &ScriptCall),
+    ) -> Result<&'b [WeightedExchange<paths::Economy>], EngineError> {
+        let history = match believing.history.take() {
+            Some(history) => history,
+            None => self.history(at)?,
+        };
+        let (root, before) = believing.history.insert(history);
+        let beliefs = match believing.players.entry(player) {
+            Entry::Occupied(beliefs) => beliefs.into_mut(),
+            Entry::Vacant(vacant) => vacant.insert(Beliefs {
+                worlds: vec![WeightedExchange::new(root.clone(), 1)],
+                actual: root.clone(),
+                drawing: !self.outcomes(chance, root)?.is_empty(),
+                seen: 0,
+            }),
+        };
+        for exchange in before.iter().chain(played).skip(beliefs.seen) {
+            let mut next = Vec::new();
+            for believed in std::mem::take(&mut beliefs.worlds) {
+                let weight = believed.weight();
+                if !beliefs.drawing {
+                    let mut world = believed.into_exchange();
+                    if world.apply(exchange.clone()).is_ok() {
+                        next.push(WeightedExchange::new(world, weight));
+                    }
+                    continue;
+                }
+                for outcome in self.outcomes(chance, believed.exchange())? {
+                    let weight = weight.checked_mul(outcome.weight()).ok_or_else(|| {
+                        EngineError::Undecided("a belief's weight overflowed".to_owned())
+                    })?;
+                    let mut world = believed.exchange().clone();
+                    if weight > 0 && world.apply(outcome.into_exchange()).is_ok() {
+                        next.push(WeightedExchange::new(world, weight));
+                    }
+                }
+            }
+            beliefs
+                .actual
+                .apply(exchange.clone())
+                .map_err(|_| EngineError::Refused {
+                    index: beliefs.seen,
+                    assessment: Box::new(beliefs.actual.assess(exchange)),
+                })?;
+            beliefs.drawing = !self.outcomes(chance, &beliefs.actual)?.is_empty();
+            let seen = self.seen_by(observe, &beliefs.actual, player)?;
+            for believed in next {
+                if self.seen_by(observe, believed.exchange(), player)? == seen
+                    && self.outcomes(chance, believed.exchange())?.is_empty() != beliefs.drawing
+                {
+                    beliefs.worlds.push(believed);
+                }
+            }
+            beliefs.seen += 1;
+        }
+        Ok(&beliefs.worlds)
+    }
+
     /// The one of `actions` that `call`, `fn(state, candidates)`, picks at
-    /// `economy`, or none.
+    /// `state`, or none.
     fn rolled(
         &self,
         call: &ScriptCall,
-        economy: &paths::Economy,
+        state: ScriptState,
         actions: &[paths::Exchange],
         failure: &RefCell<Option<EngineError>>,
     ) -> Option<paths::Exchange> {
@@ -693,11 +943,7 @@ impl Engine {
         }
         let candidates: rhai::Array = actions.iter().cloned().map(rhai::Dynamic::from).collect();
         let picked = self
-            .call(
-                &call.script,
-                call.function.as_str(),
-                (ScriptState::new(economy.clone()), candidates),
-            )
+            .call(&call.script, call.function.as_str(), (state, candidates))
             .and_then(proposal)
             .and_then(|picked| match picked {
                 Some(exchange) if !actions.contains(&exchange) => Err(EngineError::Returned {
@@ -729,6 +975,7 @@ impl Engine {
         let mut exchanges = Vec::new();
         // The turns a player chose on so far.
         let mut choices = 0;
+        let mut believing = Believing::default();
         let outcome = loop {
             if economy.matches(goal) {
                 break Outcome::Reached;
@@ -756,21 +1003,25 @@ impl Engine {
                         actor.function.as_str(),
                         (ScriptState::new(economy.clone()),),
                     )?;
-                    let chooser = usize::try_from(index)
+                    let (player, chooser) = usize::try_from(index)
                         .ok()
-                        .and_then(|index| players.get(index))
+                        .and_then(|index| Some((index, players.get(index)?)))
                         .ok_or_else(|| EngineError::Returned {
                             expected: "the index of a player",
                             found: index.to_string(),
                         })?;
-                    let chosen = self.choose(
-                        chooser,
-                        &economy,
-                        &random,
-                        players.len(),
+                    let turn = Turn {
+                        at,
+                        played: &exchanges,
+                        economy: &economy,
+                        player,
+                        players: players.len(),
                         actor,
-                        (seed, choices),
-                    )?;
+                        random: &random,
+                        seed,
+                        choice: choices,
+                    };
+                    let chosen = self.choose(chooser, turn, &mut believing)?;
                     choices += 1;
                     chosen
                 }
@@ -795,17 +1046,23 @@ impl Engine {
         })
     }
 
-    /// What `chooser` chooses at `economy` on the game's choice `choice`, in
-    /// a game seeded `seed`.
+    /// What `chooser` chooses on `turn`, with what the game's
+    /// information-set players believe in `believing`.
     fn choose(
         &self,
         chooser: &Chooser,
-        economy: &paths::Economy,
-        random: &Random,
-        players: usize,
-        actor: &ScriptCall,
-        (seed, choice): (u64, u64),
+        turn: Turn<'_>,
+        believing: &mut Believing,
     ) -> Result<Option<paths::Exchange>, EngineError> {
+        let Turn {
+            economy,
+            random,
+            players,
+            actor,
+            seed,
+            choice,
+            ..
+        } = turn;
         let failure = RefCell::new(None);
         let player = |economy: &paths::Economy| {
             if failure.borrow().is_some() {
@@ -886,15 +1143,92 @@ impl Engine {
                     |economy: &paths::Economy,
                      actions: &[paths::Exchange],
                      sampler: &mut SeededSampler| match rollout {
-                        Some(rollout) => self.rolled(rollout, economy, actions, &failure),
-                        None => {
-                            let ticket = sampler.ticket(actions.len() as u64);
-                            actions.get(usize::try_from(ticket).ok()?).cloned()
-                        }
+                        Some(rollout) => self.rolled(
+                            rollout,
+                            ScriptState::new(economy.clone()),
+                            actions,
+                            &failure,
+                        ),
+                        None => uniformly(actions, sampler),
                     },
                 );
                 // A script that failed explains the search better than the
                 // search's own complaint.
+                if let Some(error) = failure.borrow_mut().take() {
+                    return Err(error);
+                }
+                match decided {
+                    Ok(decision) => Some(decision.action().clone()),
+                    Err(error) => return Err(EngineError::Undecided(format!("{error:?}"))),
+                }
+            }
+            Chooser::Ismcts {
+                candidates,
+                observe,
+                chance,
+                payoffs,
+                estimate,
+                iterations,
+                depth,
+                rollout,
+                salt,
+            } => {
+                let candidates = self.candidate_set(candidates)?;
+                let information = |economy: &paths::Economy| {
+                    let player = player(economy);
+                    InformationState::new(player, self.observed(observe, economy, player, &failure))
+                };
+                let root = information(economy);
+                if self.proposed(&candidates, root.key(), &failure).is_empty() {
+                    return match failure.borrow_mut().take() {
+                        Some(error) => Err(error),
+                        None => Ok(None),
+                    };
+                }
+                // The worlds the player may be in: those where it is the one
+                // choosing, and sees what it sees in the real economy.
+                let worlds = self
+                    .believed(
+                        believing,
+                        (turn.at, turn.played),
+                        turn.player,
+                        (observe, chance),
+                    )?
+                    .iter()
+                    .filter(|believed| information(believed.exchange()) == root)
+                    .map(|believed| WeightedExchange::new(believed.exchange(), believed.weight()))
+                    .collect::<Vec<_>>();
+                let config = MctsConfig::new(
+                    usize::try_from(*iterations).unwrap_or(usize::MAX),
+                    usize::try_from(*depth).unwrap_or(usize::MAX),
+                )
+                .with_seed((seed ^ salt).wrapping_add(choice));
+                let decided = ismcts(
+                    economy,
+                    config,
+                    players,
+                    &information,
+                    |_: &InformationState<Observed>, sampler: &mut SeededSampler| {
+                        sample(&worlds, sampler).ok().map(|world| (*world).clone())
+                    },
+                    eager_actions(|information: &InformationState<Observed>| {
+                        self.proposed(&candidates, information.key(), &failure)
+                    }),
+                    |economy: &paths::Economy| self.weighted(chance, economy, &failure),
+                    |economy: &paths::Economy| self.payoffs(payoffs, economy, &failure),
+                    |economy: &paths::Economy| {
+                        self.payoffs(estimate, economy, &failure)
+                            .unwrap_or_else(|| vec![0.0; players])
+                    },
+                    |information: &InformationState<Observed>,
+                     actions: &[paths::Exchange],
+                     sampler: &mut SeededSampler| match rollout {
+                        Some(rollout) => {
+                            self.rolled(rollout, information.key().view.clone(), actions, &failure)
+                        }
+                        None => uniformly(actions, sampler),
+                    },
+                );
                 if let Some(error) = failure.borrow_mut().take() {
                     return Err(error);
                 }
@@ -1177,6 +1511,13 @@ fn search(
         }
         left = left.saturating_sub(completed.max(1));
     }
+}
+
+/// One of `actions` drawn uniformly with `sampler`, as tree search's
+/// simulations choose without a rollout script.
+fn uniformly(actions: &[paths::Exchange], sampler: &mut SeededSampler) -> Option<paths::Exchange> {
+    let ticket = sampler.ticket(actions.len() as u64);
+    actions.get(usize::try_from(ticket).ok()?).cloned()
 }
 
 fn failed(failure: RefCell<Option<EngineError>>) -> Result<(), EngineError> {

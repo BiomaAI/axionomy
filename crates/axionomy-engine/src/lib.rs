@@ -426,6 +426,19 @@ impl Engine {
                             scripts.extend([payoffs, estimate]);
                             scripts.extend(chance.iter().chain(rollout));
                         }
+                        Chooser::Ismcts {
+                            candidates: set,
+                            observe,
+                            chance,
+                            payoffs,
+                            estimate,
+                            rollout,
+                            ..
+                        } => {
+                            candidates.push(set);
+                            scripts.extend([observe, chance, payoffs, estimate]);
+                            scripts.extend(rollout);
+                        }
                     }
                 }
                 goal
