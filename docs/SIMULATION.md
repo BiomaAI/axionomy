@@ -292,6 +292,15 @@ search, and a seeded random generator.
   replays from its seed.
 - A package's manifest records the host API version its scripts were
   written against.
+- A script imports another kept in the same store by its path
+  (`import "exact-cover/algorithm-x" as algorithm;`), resolved over the
+  kept scripts only, never a file or the network, and compiled and
+  evaluated once. An import names its script literally, so a package
+  carries every script its scripts import. A script and those it imports,
+  directly or not, name their functions apart, and none imports itself
+  through others. The samples share code this way: exact cover's economy
+  script and view import its Algorithm X, and the samples' views read the
+  tables and measures their economy scripts hold from those scripts.
 - A script called at every node of a large search, or millions of times in
   rollouts, can be slow; hot steps move into Rust host helpers, and
   WebAssembly modules stay a later option.
@@ -454,7 +463,8 @@ Built: `export(name, version, contents, to)` takes refs and definitions,
 everything named under the package's name when nothing narrower is chosen,
 and closes over what they reach: the definitions they use (an experiment's
 goal, strategies, objectives and results; a strategy's candidates and
-scripts; a view's scripts), the refs an experiment starts from, the view of
+scripts; a view's scripts; the scripts a script imports), the refs an
+experiment starts from, the view of
 every ontology whose runs come along, and the points an experiment's
 results name. The store copies those refs, definitions and groups, every run
 they name back through the runs they forked from, with steps, states, pins,

@@ -24,7 +24,8 @@ goes.
   of its run's ontology, each assessed there, as Studio shows a candidate
   before anyone applies it.
 - `keep_script` keeps a Rhai script by its path, refusing one that does not
-  compile, and `call` runs one of its functions (D-049).
+  compile or whose imports do not check out, and `call` runs one of its
+  functions (D-049).
 - `keep_goal`, `keep_objective` and `keep_candidates` keep a goal, an
   objective (a script's measure of a state, or its step costs summed over a
   history, with a direction) and a candidate set (a script function returning
@@ -80,8 +81,9 @@ goes.
   before stay.
 - `compare` gives points' objective vectors and the front no other point
   dominates; `pick` the best point by objectives in order.
-- `export` copies a package (refs and definitions and everything they reach)
-  into a new store with a manifest; `load` merges one into the engine's store
+- `export` copies a package (refs and definitions and everything they reach,
+  every script its scripts import among them) into a new store with a
+  manifest; `load` merges one into the engine's store
   after checking each manifest's store format and script host API;
   `manifests` lists those the store holds; `package` opens a package file's
   bytes, a redb file or a zip of one, wherever they came from, and `zipped`
@@ -106,8 +108,26 @@ same seed, so a script samples Nature's scenarios as a Rust Monte Carlo
 seeded alike does, and `keyed(key, bound)` the ticket keyed by what it is
 for, `splitmix(seed ^ key, 1) % bound`, the same whatever else is drawn);
 scripts have no clock; and a call stops after a bounded
-number of operations. Scripts are kept in the
+number of operations, its calls nested at most 64 deep in every build. Scripts are kept in the
 store as definitions (`script/<path>`), so they travel with a package.
+
+A script imports another the store keeps by its path,
+`import "exact-cover/algorithm-x" as algorithm;`, and calls its functions
+through that name, `algorithm::cover(...)`. Imports resolve over the
+scripts the store keeps and nothing else, never a file or the network; each
+script imported is compiled once and evaluated once as a Rhai module, and
+sees the same host API and the same guarantees as the script importing it.
+An import names its script by a literal path, so the scripts a script
+imports are known before it runs: `export` carries every one, transitively,
+and a package that loads runs. `keep_script` refuses a script that imports
+one the store does not keep, so a script is kept after the scripts it
+imports; one whose imports lead back to it, directly or through others;
+and one that, or any script it imports, directly or not, defines a function
+of the same name and number of parameters as another of them, since Rhai
+resolves a function by its name and number of parameters once per call, for
+the script called and every script it imports alike, and could call either
+for the other. A script a package brings is checked the same way when it is
+first called.
 
 Rhai calls a script's own function in method style before a host method of
 the same name: a script that defines `view(state)` makes `state.view(...)`
@@ -124,7 +144,12 @@ named like one of the script's functions reads as a pointer to that
 function: name variables apart from functions. `array.sort(comparer)`
 treats a comparer that fails as finding its two items equal, so a broken
 comparer sorts wrongly rather than failing. `shared` is a keyword, not a name
-a variable may have.
+a variable may have. An imported script's functions see neither the
+importing script's variables nor their own script's top-level ones, and a
+call they make to a function their script does not define finds the
+importing script's before the host's: an imported script calls its own
+functions and the host's only. Each call into an imported script is a call
+level of its own.
 
 The host API's version, `HOST_API`, stays 1 while Axionomy is in
 development: scripts are written against the API as it stands, and the

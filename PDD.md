@@ -2236,7 +2236,9 @@ objectives that are not a plain balance, and the logic in views are Rhai
 its host API: balances, accounts by prefix, rates, applicability, assessment,
 building exchanges, shortest paths, built-in rollouts and searches, and a
 seeded random generator. Quantities enter Rhai as an exact type; randomness
-comes only from the seeded generator, so experiments replay. Rust is the
+comes only from the seeded generator, so experiments replay. A script
+imports another the package keeps by its path, resolved over the package's
+scripts only, and a package carries every script its scripts import. Rust is the
 machinery (kernel, store, engine, the generic algorithms, fast host helpers)
 and data is the structure (which algorithm, its parameters, experiments, view
 layout). Rates and goals stay kernel data, specified by the Lean rules: a
