@@ -14,7 +14,9 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 axionomy-engine.workspace = true
 axionomy-problems.workspace = true
+axionomy-search.workspace = true
 axionomy-store.workspace = true
+axionomy-studio-api.workspace = true
 axionomy-study.workspace = true
 axionomy-view.workspace = true
 js-sys.workspace = true
@@ -32,4 +34,5 @@ web-sys = { workspace = true, features = [
 
 [dev-dependencies]
 axionomy.workspace = true
+axionomy-studio-api.workspace = true
 axionomy-problems = { workspace = true, features = ["packages"] }

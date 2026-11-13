@@ -4,8 +4,9 @@
 
 use axionomy_engine::{Engine, Version, zipped};
 use axionomy_store::Store;
-use axionomy_studio_wasm::{Validators, WorkerEngine};
+use axionomy_studio_wasm::{Source, Validators, WorkerEngine};
 use redb::{StorageBackend, backends::InMemoryBackend};
+use serde_json::{Value, json};
 use std::{io, ops::ControlFlow, sync::Arc};
 
 fn path<K>(text: &str) -> axionomy::path::Path<K> {
@@ -74,6 +75,14 @@ fn maze() -> Vec<u8> {
 
 const URL: &str = "https://studio.example/packages/maze.zip";
 
+/// What the store remembers of loading the maze from `URL`.
+fn source(validators: &Validators) -> Source {
+    Source {
+        validators: validators.clone(),
+        packages: vec![path("maze")],
+    }
+}
+
 #[test]
 fn a_package_and_its_experiment_are_found_again_with_where_it_came_from() {
     let bytes = maze();
@@ -90,7 +99,7 @@ fn a_package_and_its_experiment_are_found_again_with_where_it_came_from() {
             .unwrap();
         assert_eq!(loaded.manifests[0].name, path("maze"));
         assert!(loaded.kept.refs.is_empty() && loaded.kept.definitions.is_empty());
-        assert_eq!(worker.source_of(URL).unwrap(), Some(validators.clone()));
+        assert_eq!(worker.source_of(URL).unwrap(), Some(source(&validators)));
         assert_eq!(
             worker
                 .source_of("https://elsewhere.example/maze.zip")
@@ -111,7 +120,7 @@ fn a_package_and_its_experiment_are_found_again_with_where_it_came_from() {
     assert_eq!(manifests.len(), 1);
     assert_eq!(manifests[0].name, path("maze"));
     assert_eq!(worker.engine().results(&path("maze/micro")).unwrap(), ran);
-    assert_eq!(worker.source_of(URL).unwrap(), Some(validators));
+    assert_eq!(worker.source_of(URL).unwrap(), Some(source(&validators)));
     let end = ran.arms[0].trials[0].end;
     assert!(!worker.engine().draw(end).unwrap().frames.is_empty());
 }
@@ -122,4 +131,117 @@ fn a_package_without_a_url_loads_and_names_no_source() {
     let loaded = worker.load_from(&maze(), None).unwrap();
     assert_eq!(loaded.manifests[0].name, path("maze"));
     assert_eq!(worker.source_of(URL).unwrap(), None);
+}
+
+fn parsed(json: &str) -> Value {
+    serde_json::from_str(json).unwrap()
+}
+
+fn apply_request(candidate: &Value) -> String {
+    json!({ "exchanges": [candidate["exchange"]] }).to_string()
+}
+
+#[test]
+fn the_worker_offers_the_operations_the_server_offers() {
+    let worker = WorkerEngine::over(Store::memory().unwrap()).unwrap();
+    let loaded = parsed(&worker.load(&maze(), None, None, None).unwrap());
+    assert_eq!(
+        loaded,
+        json!({ "packages": ["maze"], "kept": { "refs": [], "definitions": [] } })
+    );
+    // The same functions the server calls, so the same JSON.
+    let listed = parsed(&worker.packages().unwrap());
+    assert_eq!(
+        listed,
+        serde_json::to_value(axionomy_studio_api::packages(worker.engine()).unwrap()).unwrap()
+    );
+    let micro = &listed["packages"][0]["refs"][0];
+    assert_eq!(micro["name"], "maze/micro");
+    let start = micro["point"].as_str().unwrap().to_owned();
+
+    // The moves at the start, assessed; one applied, and the ref moved over it.
+    let offered = parsed(
+        &worker
+            .candidates(&start, r#"{"set":"maze/moves"}"#)
+            .unwrap(),
+    );
+    let candidate = offered["candidates"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|candidate| candidate["proposal"]["assessment"]["status"] == "applicable")
+        .unwrap()
+        .clone();
+    let assess = json!({ "exchange": candidate["exchange"] }).to_string();
+    let assessed = parsed(&worker.assess(&start, &assess).unwrap());
+    assert_eq!(assessed["proposal"]["assessment"]["status"], "applicable");
+    let applied = parsed(&worker.apply(&start, &apply_request(&candidate)).unwrap());
+    let moved = applied["point"].as_str().unwrap().to_owned();
+    let advance = json!({ "expected": start, "to": moved }).to_string();
+    let advanced = parsed(&worker.advance_ref("maze/micro", &advance).unwrap());
+    assert_eq!(advanced, json!({ "name": "maze/micro", "point": moved }));
+    assert_eq!(
+        parsed(&worker.read_ref("maze/micro").unwrap())["point"],
+        json!(moved)
+    );
+    let query = json!({ "after": start, "objectives": "maze/energy" }).to_string();
+    let followed = parsed(&worker.frames("maze/micro", &query).unwrap());
+    assert_eq!(followed["frames"].as_array().unwrap().len(), 1);
+    assert_eq!(followed["frames"][0]["point"], json!(moved));
+    let drawn = parsed(&worker.draw(&moved).unwrap());
+    assert_eq!(drawn["frames"].as_array().unwrap().len(), 1);
+
+    // Anywhere else, applying branches: the ref stays.
+    let earlier = parsed(&worker.ancestor(&moved, r#"{"step":0}"#).unwrap());
+    let earlier = earlier["point"].as_str().unwrap().to_owned();
+    let branched = parsed(&worker.apply(&earlier, &apply_request(&candidate)).unwrap());
+    assert_ne!(branched["point"], json!(moved));
+    assert_eq!(
+        parsed(&worker.read_ref("maze/micro").unwrap())["point"],
+        json!(moved)
+    );
+    let named = json!({ "name": "maze/branch/one", "point": branched["point"] }).to_string();
+    worker.create_ref(&named).unwrap();
+    let refs = parsed(&worker.packages().unwrap())["packages"][0]["refs"].clone();
+    assert!(
+        refs.as_array()
+            .unwrap()
+            .iter()
+            .any(|entry| entry["name"] == "maze/branch/one"),
+        "{refs}"
+    );
+
+    // A strategy continued from the start, as the Worker runs it.
+    let from: axionomy_studio_api::PointId = start.parse().unwrap();
+    let request = serde_json::from_value(
+        json!({ "strategy": "maze/a-star", "seed": "17", "budget": "100000" }),
+    )
+    .unwrap();
+    let ran = axionomy_studio_api::run_strategy(worker.engine(), from, request, &mut |_| {
+        ControlFlow::Continue(())
+    })
+    .unwrap();
+    assert_eq!(
+        serde_json::to_value(ran).unwrap()["outcome"]["kind"],
+        "reached"
+    );
+
+    // An experiment's ends compared.
+    let results =
+        axionomy_studio_api::run_experiment(worker.engine(), path("maze/micro"), &mut |_| {
+            ControlFlow::Continue(())
+        })
+        .unwrap();
+    assert_eq!(
+        parsed(&worker.results("maze/micro").unwrap()),
+        serde_json::to_value(&results).unwrap()
+    );
+    let ends: Vec<String> = results
+        .arms
+        .iter()
+        .map(|arm| arm.trials[0].end.to_string())
+        .collect();
+    let compare = json!({ "points": ends, "objectives": ["maze/energy"] }).to_string();
+    let compared = parsed(&worker.compare(&compare).unwrap());
+    assert!(!compared["front"].as_array().unwrap().is_empty());
 }
