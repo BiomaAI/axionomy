@@ -379,6 +379,17 @@ search the shortest solutions; incident's policies the same incidents; and
 MCP's `axionomy_search` runs the breadth-first strategy over its goal and
 candidates, kept as definitions named by their content.
 
+Every kind of run consults its watcher as it goes: a search before each
+expansion, a policy and a game before every turn, a plan before it is made
+and before it is applied, and a game's player who searches before each
+iteration of its tree search or each state minimax expands. A run its
+watcher stops ends as a stopped search ends, interrupted where it started
+and recording nothing, and an experiment stopped with it keeps no results.
+A run played turn by turn reports its progress as a search reports
+expansions: its turns as expanded, the states it reached as visited, and
+as generated one a turn and every state its players' searches made, so the
+progress of a long turn moves too.
+
 `axionomy-search` gained the algorithms the samples wrote by hand, generic
 over the ontology (`bounded`): depth-first branch-and-bound for the cheapest
 goal state under a lower bound, beam search keeping the best-scoring states
@@ -639,7 +650,11 @@ Studio server holds an engine over a store, in memory or a file
 `GET /api/refs/{name}/frames` with a goal, objectives and a long poll.
 `watch` is that long poll: a follower asks for the frames after the point
 it last handled and waits until there are some, so a pushed stream adds
-nothing a transport needs yet.
+nothing a transport needs yet. The browser's Worker has one thread, which
+`wait` would block, but every move of a ref goes through its engine, which
+counts them (`Engine::moves`): a follower whose ref has not moved waits in
+the Worker, asking nothing, and is answered once a request the Worker
+serves has moved a ref and its own is elsewhere, or when its wait is over.
 
 **P11. The engine in the browser (done).** The store's writer runs inline where
 there are no threads, `getrandom`'s `wasm_js` feature is on for wasm only,
@@ -682,6 +697,27 @@ Paths and points are parsed where they cross from JavaScript, and results
 come back as the engine's JSON. Cancelling terminates the Worker, as
 cancelling a study does.
 
+A run cannot be stopped any other way. A synchronous WebAssembly call reads
+no message until it returns; a flag in shared memory needs cross-origin
+isolation, which GitHub Pages cannot give; and a run that paused at its
+watcher for an engine call to resume would need every strategy's state
+held between calls as a machine the engine resumes, the recursive searches'
+and a game's tree search's among them, for the browser alone, or
+JavaScript Promise Integration, which not every browser has. So cancelling
+a run terminates the Worker while it runs it, once the Worker says it has
+begun it, and starts another on the same store, asked again for everything
+else still waiting: none of it had begun, since the Worker serves one
+request at a time, and a follower goes on following. Terminating is safe:
+the Worker writes through its file's handle as it goes, holding nothing
+back; every write the engine makes is durable when it returns, but an
+experiment's trials, whose results it keeps only once every trial has run;
+and redb commits atomically and opens a file a commit was cut short in as
+it was before that commit. A test reopens the store's file as it stood at
+every look of a run at its progress, each holding all that was committed
+before; a Playwright test cancels a game mid-run and finds the store, the
+refs moved and made before and their points in the next Worker and after a
+reload, the follower waiting across the cancel hearing the next move.
+
 The Worker fetches a package's URL and keeps, in the store beside what it
 loaded, the response's `ETag` and `Last-Modified`. While the store holds
 what it loaded from a URL, loading it again sends them back
@@ -715,9 +751,11 @@ Built: what Studio asks of an engine is written once, in
 and give: list the packages (each manifest's refs with the points they
 name, experiments, strategies, objectives with their directions, goals and
 candidate sets), load a package from its bytes, draw a point's history,
-name an earlier point of it, the candidates a set offers at a point, assess
-and apply exchanges, the refs, run a strategy from a point toward a goal, run an
-experiment and read its results, and compare points (`compare` and `pick`).
+name an earlier point of it, what each account holds at a point (its
+balances by the paths exchanges bind, `/api/points/{point}/balances`), the
+candidates a set offers at a point, assess and apply exchanges, the refs,
+run a strategy from a point toward a goal, run an experiment and read its
+results, and compare points (`compare` and `pick`).
 The Studio server serves them over HTTP (`/api/packages`,
 `/api/points/{point}/…`, `/api/experiments/{experiment}/…`,
 `/api/compare`, and the refs as before), in its OpenAPI contract, and the
@@ -771,10 +809,13 @@ session builds the sample packages with `axionomy package samples`, starts
 `axionomy studio` with `connect-four.zip` loaded into a store in memory, and
 plays Connect Four on the standard board from `connect-four/showcase`, with
 the ref `connect-four/live` made there and four threads, each over its own
-connection, using nothing but refs, candidates, apply and frames. Red and
-Yellow each read where `live` is and ask for the moves there; when they are
-its drops, a player picks one from its seed, applies it at that point and
-advances `live` from it to the new point, and otherwise waits on a long poll
+connection, using nothing but refs, balances, candidates, apply and
+frames. Red and Yellow each read where `live` is, ask for the moves there
+and read whose turn it is from the point's balances, the `game` account
+holding `turn/<player>` while that player is to drop and
+`pending/<player>` while its drop waits on its adjudication. On its turn a
+player picks a drop from its seed, applies it at that point and advances
+`live` from it to the new point, and on the other's it waits on a long poll
 for `live` to move. Both adjudicate every drop, meeting first so both
 propose from the same point: one advance counts and the other is refused
 with 409 and where `live` went, and its player looks again from there. A

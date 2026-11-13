@@ -166,7 +166,8 @@ impl From<Outcome> for OutcomeView {
 #[derive(Debug, Clone, Serialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum StrategyEvent {
-    /// The search's progress so far.
+    /// How far the run is: its search's progress, or its turns counted as a
+    /// search counts expansions.
     Progress { progress: GraphSearchProgress },
     /// The run ended.
     Ran { ran: RanView },
@@ -276,7 +277,7 @@ pub fn check_strategy(
 }
 
 /// Runs the strategy `request` names from `point` toward its goal; `watch`
-/// sees its search's progress and may stop it.
+/// sees how far it is and may stop it, whatever its kind.
 pub fn run_strategy(
     engine: &Engine,
     point: PointId,

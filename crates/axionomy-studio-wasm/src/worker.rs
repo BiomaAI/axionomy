@@ -250,7 +250,7 @@ impl WorkerEngine {
     }
 
     /// Runs a strategy from `point` toward a goal, `request` a
-    /// `StrategyRequest` naming both, calling `progress` with its search's
+    /// `StrategyRequest` naming both, calling `progress` with its
     /// `GraphSearchProgress` as JSON now and then; gives a `RanView`.
     #[wasm_bindgen(js_name = runStrategy)]
     pub fn run_strategy(
@@ -324,7 +324,7 @@ impl WorkerEngine {
 }
 
 /// A watcher calling `progress` with every [`PROGRESS_EVERY`]th report of a
-/// search's progress, as JSON, the first included.
+/// run's progress, as JSON, the first included.
 fn reporter(
     progress: &Function,
 ) -> impl FnMut(&axionomy_search::GraphSearchProgress) -> ControlFlow<()> + '_ {

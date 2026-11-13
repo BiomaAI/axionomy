@@ -24,18 +24,23 @@ economic semantics.
   same.
 - The operations the server serves, each calling the same
   `axionomy-studio-api` function and giving the same JSON: `packages`,
-  `draw`, `ancestor`, `candidates`, `assess`, `apply`, `runStrategy` and
-  `runExperiment` (calling back with their searches' progress), `results`,
-  `compare`, `createRef`, `readRef`, `advanceRef` and `frames`. A request
-  is the JSON of the server's body or query, read as its extractors read
-  it; a point is a `PointId` and a path its text. The engine's wait blocks
-  a thread, which a Worker has only one of, so `frames` answers at once and
-  its caller asks again while it waits.
+  `draw`, `ancestor`, `balances`, `candidates`, `assess`, `apply`,
+  `runStrategy` and `runExperiment` (calling back with their progress),
+  `results`, `compare`, `createRef`, `readRef`, `advanceRef` and `frames`.
+  A request is the JSON of the server's body or query, read as its
+  extractors read it; a point is a `PointId` and a path its text. The
+  engine's wait blocks a thread, which a Worker has only one of, so
+  `frames` answers at once; `moves` counts the moves of the engine's refs,
+  and the Worker keeps a follower whose ref has not moved waiting until it
+  changes and the ref has moved, or the wait is over.
 
 A refused operation throws the JSON of `{status, body}`: the status the
 server answers it with (404, 400, 409 with `RefMoved`, 500) and its body, so
-Studio's client refuses alike whichever engine refused. Cancelling
-terminates the Worker; a stopped Worker loses only writes it had not made
+Studio's client refuses alike whichever engine refused. A synchronous run
+reads no message until it returns, so cancelling one terminates the Worker
+while it runs it and starts another on the same store, asked again for
+every other request waiting; a terminated Worker leaves everything it
+committed, and loses only an experiment's trial records it had not made
 durable. The Worker (`studio/src/engine.worker.ts`) opens the handle,
 fetches packages and posts replies; `studio/src/browserPackages.ts` is its
 client, one of the two implementations of Studio's `PackageEngine`.

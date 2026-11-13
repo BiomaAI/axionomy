@@ -16,6 +16,7 @@ engine's own and shapes its answer for the wire.
 | `load` | `package`, `load` | `LoadedView`: the packages a file held, and the names the store kept |
 | `draw` | `draw` | a point's history as a `ViewDocument`, drawn with its view |
 | `ancestor` | `ancestor` | the point at an earlier step of a history |
+| `balances` | `reach` | `Balances`: every account at a point, in path order, with what it holds, assets and exact quantities by the paths exchanges bind |
 | `candidates` | `candidates`, `present` | each exchange a candidate set offers at a point, assessed there and read with the point's view |
 | `assess` | `present` | a written exchange, assessed at a point; nothing is recorded |
 | `apply` | `apply` | the new point exchanges reach, all of them or none |
@@ -30,6 +31,7 @@ are exact decimal text, as everywhere. A refusal is a `Refusal`, with the
 status HTTP answers it with: 404 for what the store lacks, 400 for a request
 that cannot be served as asked, 409 with `RefMoved` when a ref is not where
 its mover saw it, 500 when the engine fails. `StrategyEvent` and
-`ExperimentEvent` report a run's search progress before its end, which a
-transport streams; a watcher that stops a search stops the run, and an
-experiment stopped keeps no results.
+`ExperimentEvent` report a run's progress before its end, which a
+transport streams: a search's counts, or a policy's or a game's turns
+counted as a search counts expansions. A watcher stops a run of any kind,
+and an experiment stopped keeps no results.

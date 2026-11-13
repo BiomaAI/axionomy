@@ -30,17 +30,18 @@ decimal text.
 | `POST /api/packages` | the file's bytes, `application/octet-stream` | `LoadedView {packages, kept}`: the packages it held and the names the store kept as it gives them; 400 for a file that is no package or one this engine cannot load |
 | `GET /api/points/{point}/document` | | the point's history as a `ViewDocument`, drawn with its view |
 | `GET /api/points/{point}/ancestor` | `step` | `Ancestor {point}`: the point at that step of the history |
+| `GET /api/points/{point}/balances` | | `Balances {point, accounts}`: every account there, in path order, each `{account, balances}`, its basket of `[asset, quantity]` pairs, exactly, by the paths exchanges bind |
 | `GET /api/points/{point}/candidates` | `set` | `Candidates`: each exchange the candidate set offers there, with its `ProposalView`, read with the point's view and assessed there |
 | `POST /api/points/{point}/assess` | `{exchange}` | `Candidate`: the exchange assessed there; nothing is recorded |
 | `POST /api/points/{point}/apply` | `{exchanges}` | `Applied {from, point}`: the new point, all of them applied or none; 400 when one does not apply |
-| `POST /api/points/{point}/run` | `{strategy, goal, seed, budget, turns}`: the budget a search's expansions, the turns the most a policy or a game plays | server-sent `StrategyEvent`s: `progress` with the search's counts, then `ran` (the goal it worked toward, how it ended, where, its thinking and cost) or `failed`; 404 for a strategy or a goal the store lacks |
+| `POST /api/points/{point}/run` | `{strategy, goal, seed, budget, turns}`: the budget a search's expansions, the turns the most a policy or a game plays | server-sent `StrategyEvent`s: `progress` with the search's counts, or a turn-based run's turns counted alike, then `ran` (the goal it worked toward, how it ended, where, its thinking and cost) or `failed`; 404 for a strategy or a goal the store lacks |
 | `GET /api/experiments/{experiment}/results` | | `ResultsView`: every arm's trials with their seeds, ends, how they ended and exact objective values; 404 before it has run |
 | `POST /api/experiments/{experiment}/run` | | server-sent `ExperimentEvent`s: `progress`, then `results` or `failed` |
 | `POST /api/compare` | `{points, objectives}` | `ComparisonView`: each point's values, the front no point dominates, and the pick, best by the objectives in order |
 
 A strategy or an experiment is checked before it runs, so one the store
 lacks is 404 at once; then its run streams, and a client that closes the
-stream stops its search at its next look at its progress. An experiment
+stream stops the run, whatever its kind, at its next look at its progress. An experiment
 stopped that way keeps no results, so the results it kept before stay.
 What the store lacks is 404, a request that cannot be served as asked 400,
 and an engine failure 500, each `ErrorResponse {error}`. The contract also

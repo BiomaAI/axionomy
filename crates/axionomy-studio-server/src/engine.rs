@@ -33,7 +33,7 @@ use std::{
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 
-/// The longest a run goes between two reports of its search's progress.
+/// The longest a run goes between two reports of its progress.
 const PROGRESS_EVERY: Duration = Duration::from_millis(100);
 
 /// A point in a URL, such as `run-000000000000feed0000000000000007:3`.
@@ -193,7 +193,7 @@ pub(crate) async fn compare(
     .map(Json)
 }
 
-/// What a running operation streams: its search's progress, then its end.
+/// What a running operation streams: its progress, then its end.
 trait Streamed: Serialize + Send + 'static {
     fn progress(progress: GraphSearchProgress) -> Self;
     /// The event's name in the stream.
@@ -228,9 +228,9 @@ impl Streamed for ExperimentEvent {
     }
 }
 
-/// Runs `work` where blocking is allowed, streaming its search's progress
+/// Runs `work` where blocking is allowed, streaming its progress
 /// now and then and its last event once it ends. A client that closes the
-/// stream stops the search at its next look at its progress.
+/// stream stops the run, whatever its kind, at its next look at its progress.
 fn streamed<E: Streamed>(
     engine: Engine,
     work: impl FnOnce(&Engine, &mut dyn FnMut(&GraphSearchProgress) -> ControlFlow<()>) -> E

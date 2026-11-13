@@ -328,7 +328,7 @@ fn endpoints() -> Vec<Endpoint<StudioState>> {
         )
         .describe(
             "runStrategy",
-            "Run a strategy from a point, streaming its search's progress; closing the stream stops it",
+            "Run a strategy from a point, streaming its progress; closing the stream stops it",
             "points",
         )
         .path_parameters::<PointName>()
@@ -354,7 +354,7 @@ fn endpoints() -> Vec<Endpoint<StudioState>> {
         )
         .describe(
             "runExperiment",
-            "Run an experiment's trials, streaming their searches' progress; closing the stream stops it and keeps no results",
+            "Run an experiment's trials, streaming their progress; closing the stream stops it and keeps no results",
             "experiments",
         )
         .path_parameters::<ExperimentName>()

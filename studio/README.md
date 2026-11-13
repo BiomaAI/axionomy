@@ -27,10 +27,11 @@ by an engine, native or in the browser, that Studio asks the same way.
   for a search and the most turns a policy or a game plays (the goal and the
   effort an experiment gives that strategy, when one runs it, and otherwise
   the package's first goal, a budget of 1000000 and 1000 turns), reports its
-  search's progress, can be cancelled, and shows how it ended, where, and
-  its thinking: what the search expanded, generated, left on its frontier and
-  visited, and the solution's depth. From a ref's point the ref can move to
-  where it ended.
+  progress (a policy's or a game's turns counted as a search counts
+  expansions), can be cancelled, whatever its kind, and shows how it ended,
+  where, and its thinking: what the search expanded, generated, left on its
+  frontier and visited, and the solution's depth. From a ref's point the ref
+  can move to where it ended.
 - **Follow** delivers the steps a ref is moved over as they come, by this
   page or any other proposer, each with the package's objectives there.
 - **Experiments** lists the package's experiments; running one reports its
@@ -285,10 +286,13 @@ same JSON. Both use the generated OpenAPI types; a refusal is an
 `EngineRefusal` with the server's status, and a ref found elsewhere carries
 where it is. A strategy's or an experiment's run is a `Running`: its
 progress as it comes, its end, and `cancel`, which closes the native stream
-or terminates the Worker. The engine is chosen once, when Studio opens: the
-native server when it answers, else the Worker, since each keeps its own
-store. Points are `PointId`s (`run-…:3`); seeds and budgets are decimal text,
-since JSON's numbers cannot carry every 64-bit one.
+or terminates the Worker while it runs the run, asking the next Worker every
+other request still waiting, so nothing else notices. A follower in the
+Worker waits for its ref to move, asking nothing meanwhile. The engine is
+chosen once, when Studio opens: the native server when it answers, else the
+Worker, since each keeps its own store. Points are `PointId`s (`run-…:3`);
+seeds and budgets are decimal text, since JSON's numbers cannot carry every
+64-bit one.
 
 Quantities are exact decimal strings. `ViewId` joins user-defined ontology values by an item path such as `maze/account/agent` while keeping labels and optional diagnostic JSON separate from semantic authority. Problems, strategies, documents and every other key are kebab-case paths, so Studio links read `?problem=work-league&strategy=mixed-field`; a study started from Studio gets a minted ID such as `study-7`, and once published it is fetched through that ID.
 
