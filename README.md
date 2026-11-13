@@ -711,9 +711,9 @@ lake exe conformance > ../conformance.json
 
 Axionomy uses Rust Edition 2024 and supports Rust 1.99 or newer. It relies on
 mature ecosystem crates for ordered maps, serialization, exact numeric traits,
-typed units, civil time, randomness, statistics, pathfinding, errors, property
-testing, benchmarking, and structured example diagnostics while keeping
-semantic authority in the four core primitives.
+typed units, civil time, randomness, statistics, errors, property testing,
+benchmarking, and structured example diagnostics while keeping semantic
+authority in the four core primitives.
 
 ```console
 cargo test --workspace --all-targets --all-features

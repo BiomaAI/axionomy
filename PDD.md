@@ -636,14 +636,14 @@ domains without kernel access.
 
 The implementation prefers focused, mature ecosystem crates over local
 reinvention: `indexmap` for stable maps, Serde for model encoding, `num-traits`
-for exact numeric bounds, `thiserror` for structured errors,
-`uom` and Jiff for authoring, `rand`/`rand_chacha` for reproducible sampling,
-`statrs` for statistical estimators, `pathfinding` for standard implicit graph
-search, `tracing`/`tracing-subscriber` for example observability, `proptest` for
-laws, and Criterion for benchmarks. `petgraph` is not a kernel dependency
-because Axionomy does not own an authoritative graph and its successors are
-generated implicitly from applicable exchanges. It remains a reasonable future
-adapter when a user needs explicit graph import, export, or analysis.
+for exact numeric bounds, `thiserror` for structured errors, `uom` and Jiff for
+authoring, `rand`/`rand_chacha` for reproducible sampling, `statrs` for
+statistical estimators, `tracing`/`tracing-subscriber` for example
+observability, `proptest` for laws, and Criterion for benchmarks. `petgraph` is
+not a kernel dependency because Axionomy does not own an authoritative graph and
+its successors are generated implicitly from applicable exchanges. It remains a
+reasonable future adapter when a user needs explicit graph import, export, or
+analysis.
 
 The MCP adapter depends inward on the shared study runtime, the problems it serves
 by default, search, and kernel.
@@ -994,14 +994,18 @@ A solver may not:
 - Directly install a successor state.
 - Declare an assignment accepted without core replay.
 
-The `axionomy-search` crate contains deliberately inspectable integrations:
-BFS, Dijkstra, and A* use `pathfinding` over implicit core-validated
-successors; the compatibility best-first strategy remains local because it
-ranks complete economic states rather than additive graph edges. Rollout
-execution, weighted sampling, Monte Carlo aggregation, vector-valued MCTS,
-observation-scoped ISMCTS, and RL trajectory projections build on the same
-exchange boundary. The `axionomy` kernel remains an execution and validation
-substrate, not an attempt to replace every mature solver.
+The `axionomy-search` crate contains deliberately inspectable integrations: BFS,
+Dijkstra, and A* search implicit core-validated successors, and Dijkstra and A*
+keep, with each state, the exchange from the parent that reached it most
+cheaply, so every plan they return replays at the cost they report. They do not
+use the `pathfinding` crate: it keys a node by its state and keeps the node it
+saw first, so the exchange a node carried could not follow a cheaper parent. The
+compatibility best-first strategy ranks complete economic states rather than
+additive graph edges. Rollout execution, weighted sampling, Monte Carlo
+aggregation, vector-valued MCTS, observation-scoped ISMCTS, and RL trajectory
+projections build on the same exchange boundary. The `axionomy` kernel remains
+an execution and validation substrate, not an attempt to replace every mature
+solver.
 
 Candidate generation is also disposable. An `ActionSource` may lazily emit
 concrete exchanges from a full state or an authorized information state. The
@@ -1850,9 +1854,9 @@ becomes hidden authoritative state outside the economy.
 ### D-023: Ecosystem primitives precede local reinvention
 
 The implementation uses mature crates for stable maps, serialization,
-numeric traits, units, civil time, randomness, probability, pathfinding,
-errors, property testing, and benchmarking when they preserve the closure
-contract. Axionomy-specific traits express domain laws such as non-negativity
+numeric traits, units, civil time, randomness, probability, errors, property
+testing, and benchmarking when they preserve the closure contract.
+Axionomy-specific traits express domain laws such as non-negativity
 and signed invariant measurement; they do not reimplement general-purpose
 containers or arithmetic machinery.
 
