@@ -71,6 +71,13 @@ pub enum StoreError {
     UnknownRef(RefPath),
     #[error("nothing defines `{0}`")]
     Undefined(DefinitionPath),
+    /// A ref was not where a compare-and-set expected it; it is on
+    /// `current`, or names nothing.
+    #[error("ref `{name}` has moved")]
+    Moved {
+        name: RefPath,
+        current: Option<Target>,
+    },
     #[error("{run} records {recorded} economies, not {read}")]
     OtherOntology {
         run: RunId,

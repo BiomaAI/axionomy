@@ -4,6 +4,7 @@ mod cache;
 pub mod definitions;
 mod experiment;
 mod package;
+mod refs;
 pub mod script;
 mod strategy;
 mod view;
@@ -16,6 +17,7 @@ pub use experiment::{Arm, ArmResult, Comparison, Ended, Experiment, Results, Tri
 pub use package::{
     Contents, Loaded, Manifest, PackageError, PackagePath, Version, VersionError, package, zipped,
 };
+pub use refs::{Following, Frame};
 pub use rhai;
 pub use script::{HOST_API, Random, ScriptPath, ScriptState, exchanges_of};
 pub use strategy::{Chooser, Effort, Outcome, Ran, Strategy};
@@ -27,7 +29,7 @@ use axionomy::{
     paths::{self, Paths},
 };
 use axionomy_store::{
-    Checkpoints, DefinitionPath, Durability, Point, Reader, RefPath, Store, StoreError, Target,
+    Checkpoints, DefinitionPath, Durability, Point, Reader, RefPath, Store, StoreError,
 };
 use cache::Cache;
 use definitions::definition;
@@ -84,6 +86,16 @@ pub enum EngineError {
     Undecided(String),
     #[error(transparent)]
     Package(#[from] PackageError),
+    /// A ref was not on the point a move expected; it is on `current`, or
+    /// names nothing.
+    #[error("ref `{name}` is not where the move expected it")]
+    Moved {
+        name: RefPath,
+        current: Option<Point>,
+    },
+    /// A ref moves forward only, over steps on the history of where it goes.
+    #[error("ref `{name}` cannot move to step {} of {}: its point is not on that history", .to.step, .to.run)]
+    Backward { name: RefPath, to: Point },
 }
 
 /// A point as the engine serves it: the state there, the point its run
@@ -106,6 +118,8 @@ pub struct Engine {
     reached: Cache<Point, Reached>,
     host: Arc<rhai::Engine>,
     scripts: Cache<ScriptPath, rhai::AST>,
+    /// Told each time a ref moves, so a follower waiting on one wakes.
+    moved: Arc<refs::Moves>,
 }
 
 impl Engine {
@@ -116,6 +130,7 @@ impl Engine {
             reached: Cache::new(CACHED),
             host: Arc::new(script::host()),
             scripts: Cache::new(CACHED),
+            moved: Arc::default(),
         })
     }
 
@@ -173,26 +188,6 @@ impl Engine {
                 expected: std::any::type_name::<T>(),
                 found: found.to_owned(),
             })
-    }
-
-    /// Names `at` with the ref `name`, replacing what it named.
-    pub fn refer(&self, name: &RefPath, at: Point) -> Result<(), EngineError> {
-        self.reach(at)?;
-        let name = name.clone();
-        self.store
-            .transact(Durability::Immediate, move |txn| {
-                txn.set_ref(&name, Some(Target::Step(at)))
-            })
-            .wait()?;
-        Ok(())
-    }
-
-    /// The point the ref `name` names.
-    pub fn referred(&self, name: &RefPath) -> Result<Point, EngineError> {
-        match self.store.read()?.reference(name)? {
-            Some(Target::Step(point)) => Ok(point),
-            _ => Err(EngineError::UnknownRef(name.clone())),
-        }
     }
 
     /// Keeps `goal` at `path`, replacing any goal there.

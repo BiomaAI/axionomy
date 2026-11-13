@@ -16,7 +16,7 @@ pub(crate) const FORMAT: &str = "format";
 /// The format this version writes and reads: records, tree values and receipt
 /// digests in postcard, identifiers in keys as their paths.
 /// The format this version writes and reads, which a package records.
-pub const FORMAT_VERSION: u64 = 1;
+pub const FORMAT_VERSION: u64 = 2;
 /// Tree nodes by hash.
 pub(crate) const NODES: TableDefinition<&[u8; 32], &[u8]> = TableDefinition::new("nodes");
 pub(crate) const RUNS: TableDefinition<u128, &[u8]> = TableDefinition::new("runs");
@@ -34,6 +34,9 @@ pub(crate) const STEP_METRICS: TableDefinition<(u128, u64, &str), f64> =
 pub(crate) const GROUPS: TableDefinition<u128, &[u8]> = TableDefinition::new("groups");
 pub(crate) const MEMBERS: TableDefinition<(u128, u64), &[u8]> = TableDefinition::new("members");
 pub(crate) const REFS: TableDefinition<&str, &[u8]> = TableDefinition::new("refs");
+/// Every fork, by the run and step it forked from and the run it made.
+pub(crate) const BRANCHES: TableDefinition<(u128, u64, u128), ()> =
+    TableDefinition::new("branches");
 /// What packages define, by name: scripts, goals, strategies and the rest, as
 /// the bytes their owner encodes.
 pub(crate) const DEFINITIONS: TableDefinition<&str, &[u8]> = TableDefinition::new("definitions");
@@ -52,6 +55,7 @@ pub(crate) fn create_tables(txn: &redb::WriteTransaction) -> Result<(), redb::Ta
     txn.open_table(GROUPS)?;
     txn.open_table(MEMBERS)?;
     txn.open_table(REFS)?;
+    txn.open_table(BRANCHES)?;
     txn.open_table(DEFINITIONS)?;
     Ok(())
 }
@@ -107,7 +111,8 @@ impl Checkpoints {
 ))]
 pub struct Step<O: Ontology> {
     pub exchange: Exchange<O>,
-    /// The BLAKE3 hash of the receipt's JSON, which replay must reproduce.
+    /// The BLAKE3 hash of the receipt's postcard, which replay must
+    /// reproduce.
     #[serde(with = "digest")]
     pub receipt: Hash,
 }

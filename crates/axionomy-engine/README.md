@@ -33,7 +33,14 @@ goes.
   game whose players choose by policy, minimax or Monte Carlo tree search.
   What it reaches is recorded as a run forked from its start, with how it
   ended and what the search explored.
-- `refer` names a point with a ref and `referred` reads it.
+- `refer` names a point with a new ref and `referred` reads it. `advance`
+  moves a ref forward from the point its mover expects to a point whose
+  history passes through it, and refuses with where the ref is otherwise, so
+  of two proposers moving from one point the second looks again. `frames`
+  delivers the steps a ref was moved over after the point a follower last
+  handled, each with its point, exchange and receipt and the follower's
+  objectives and goal there; a step only tried out is never delivered.
+  `wait` blocks until a ref moves, or a time is up.
 - `keep_experiment` keeps an experiment: a ref to start from, strategies as
   arms (each from that start or a ref of its own), objectives, a seed, a
   budget and a number of trials. `run_experiment` runs every arm's trials

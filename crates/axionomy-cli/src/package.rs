@@ -284,7 +284,7 @@ mod tests {
         // Everything under `walk`, and the script its strategy calls.
         assert!(
             exported
-                .starts_with("walk 0.1.0 · format 1 · script host API 1 · 1 ref, 3 definitions"),
+                .starts_with("walk 0.1.0 · format 2 · script host API 1 · 1 ref, 3 definitions"),
             "{exported}"
         );
         assert!(!std::path::Path::new(&file("walk.redb.partial")).exists());

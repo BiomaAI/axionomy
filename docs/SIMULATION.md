@@ -488,13 +488,9 @@ unsatisfiable twin, where search runs out and Algorithm X plans nothing).
 Workshop's (breadth-first search, best-first search over its waste, and
 Pareto picks for least waste, least time and highest revenue from a front
 over all three) needed best-first search as a strategy, and a Pareto
-strategy that ranks its front by some of the objectives that span it.
-Workshop's (breadth-first search, best-first search over its waste, and
-Pareto picks for least waste, least time and highest revenue from a front
-over all three) needed best-first search as a strategy, and a Pareto
-strategy that ranks its front by some of the objectives that span it. The small instances are checked with
-every test run; the stress instances, minutes in a debug build, run in a
-release build in CI. Rhai is optimised in debug builds too, since package
+strategy that ranks its front by some of the objectives that span it. The
+small instances are checked with every test run; the stress instances,
+minutes in a debug build, run in a release build in CI. Rhai is optimised in debug builds too, since package
 scripts run in its interpreter.
 
 **P10. Live refs.** The store's refs gain compare-and-set and an index of each
@@ -504,6 +500,15 @@ transport offers them; MCP mints a handle for a ref as it does for a point.
 A frame is one step as delivered: the point it led to, its exchange frame,
 the objectives there and whether the goal holds, so a learner receives whole
 transitions as they happen.
+
+Built in the store and engine: refs move by compare-and-set, and the store
+indexes every fork (format 2). `refer` names a point with a new ref;
+`advance(ref, expected, to)` moves it forward over the steps between, on
+`to`'s history, refused with where the ref is when it is not on `expected`;
+`frames(ref, after, following, limit)` delivers the steps it was moved over
+after `after`, each with its point, exchange, receipt, and the follower's
+objectives and goal there; `wait(ref, after, timeout)` blocks until it moves.
+The transports follow.
 
 **P11. The engine in the browser.** The store's writer runs inline where
 there are no threads, `getrandom`'s `wasm_js` feature is on for wasm only,

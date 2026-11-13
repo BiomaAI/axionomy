@@ -6,7 +6,7 @@ use crate::{
     Transaction,
     ontology::Recordable,
     records::{
-        Checkpoints, DEFINITIONS, GROUPS, Group, GroupRecord, MEMBERS, NODES, PINS, REFS,
+        BRANCHES, Checkpoints, DEFINITIONS, GROUPS, Group, GroupRecord, MEMBERS, NODES, PINS, REFS,
         RUN_METRICS, RUNS, Run, STATES, STEP_METRICS, STEPS, Step, Summary, TAGGED, TAGS, Target,
     },
 };
@@ -46,6 +46,11 @@ impl Transaction<'_> {
                     read: ontology,
                 });
             }
+        }
+        if let Some(from) = from {
+            self.redb()
+                .open_table(BRANCHES)?
+                .insert((from.run.key(), from.step, run.key()), ())?;
         }
         let root = self.put_tree(state)?;
         let record = Run {
@@ -220,6 +225,31 @@ impl Transaction<'_> {
         Ok(true)
     }
 
+    /// Moves the ref `name` from `expected` to `to`, `None` meaning no ref,
+    /// only if it is on `expected`; otherwise nothing changes and the error
+    /// says where it is. Of two writers moving one ref from the same target,
+    /// the second is refused.
+    pub fn compare_and_set_ref(
+        &mut self,
+        name: &RefPath,
+        expected: Option<Target>,
+        to: Option<Target>,
+    ) -> Result<(), StoreError> {
+        let current: Option<Target> = self
+            .redb()
+            .open_table(REFS)?
+            .get(name.as_str())?
+            .map(|target| decode(target.value()))
+            .transpose()?;
+        if current != expected {
+            return Err(StoreError::Moved {
+                name: name.clone(),
+                current,
+            });
+        }
+        self.set_ref(name, to)
+    }
+
     /// Points a ref at a target, or removes it with `None`.
     pub fn set_ref(&mut self, name: &RefPath, target: Option<Target>) -> Result<(), StoreError> {
         let mut refs = self.redb().open_table(REFS)?;
@@ -246,7 +276,8 @@ impl Transaction<'_> {
     }
 
     /// Deletes a run with its steps, states, tags and metrics, unless one of
-    /// its points is pinned or a ref names it. Returns whether it was deleted.
+    /// its points is pinned, a ref names it or a run forked from it. Returns
+    /// whether it was deleted.
     /// Its nodes stay until [`collect`](Self::collect) finds them unreachable.
     pub fn delete_run(&mut self, run: RunId) -> Result<bool, StoreError> {
         let points = (run.key(), 0)..=(run.key(), u64::MAX);
@@ -266,10 +297,28 @@ impl Transaction<'_> {
                 return Ok(false);
             }
         }
-        if self.redb().open_table(RUNS)?.remove(run.key())?.is_none() {
+        let (this, next) = (run.key(), run.key() + 1);
+        if self
+            .redb()
+            .open_table(BRANCHES)?
+            .range((this, 0, 0)..(next, 0, 0))?
+            .next()
+            .is_some()
+        {
             return Ok(false);
         }
-        let (this, next) = (run.key(), run.key() + 1);
+        let record: Run = {
+            let mut runs = self.redb().open_table(RUNS)?;
+            let Some(record) = runs.remove(run.key())? else {
+                return Ok(false);
+            };
+            decode(record.value())?
+        };
+        if let Some(from) = record.from {
+            self.redb()
+                .open_table(BRANCHES)?
+                .remove((from.run.key(), from.step, this))?;
+        }
         self.redb()
             .open_table(STEPS)?
             .retain_in(points.clone(), |_, _| false)?;
@@ -411,6 +460,16 @@ pub(crate) fn export(
             .open_table(RUNS)?
             .insert(run.key(), record.value())?;
     }
+    {
+        let mut branches = txn.redb().open_table(BRANCHES)?;
+        for entry in other.open_table(BRANCHES)?.iter()? {
+            let (key, _) = entry?;
+            let (parent, step, child) = key.value();
+            if kept.contains(&RunId::from_key(parent)) && kept.contains(&RunId::from_key(child)) {
+                branches.insert((parent, step, child), ())?;
+            }
+        }
+    }
     let mut roots = Vec::new();
     for run in &kept {
         let (this, next) = (run.key(), run.key() + 1);
@@ -509,6 +568,7 @@ pub(crate) fn merge(
     copy(txn, other, STEP_METRICS)?;
     copy(txn, other, GROUPS)?;
     copy(txn, other, MEMBERS)?;
+    copy(txn, other, BRANCHES)?;
     Ok(Merged {
         refs: merge_names(txn, other, REFS)?,
         definitions: merge_names(txn, other, DEFINITIONS)?,

@@ -4,8 +4,8 @@ use crate::{
     DefinitionPath, GroupId, Member, MetricPath, Point, RefPath, RunId, StoreError, TagPath,
     ontology::Recordable,
     records::{
-        DEFINITIONS, GROUPS, GroupRecord, MEMBERS, NODES, PINS, REFS, RUN_METRICS, RUNS, Run,
-        STATES, STEP_METRICS, STEPS, Step, TAGGED, TAGS, Target,
+        BRANCHES, DEFINITIONS, GROUPS, GroupRecord, MEMBERS, NODES, PINS, REFS, RUN_METRICS, RUNS,
+        Run, STATES, STEP_METRICS, STEPS, Step, TAGGED, TAGS, Target,
     },
     state,
     transaction::{decode, receipt_digest},
@@ -502,6 +502,21 @@ impl Reader {
             .get(name.as_str())?
             .map(|target| decode(target.value()))
             .transpose()
+    }
+
+    /// The runs forked from `run`, each with the step it forked at, in step
+    /// order.
+    pub fn branches(&self, run: RunId) -> Result<Vec<(u64, RunId)>, StoreError> {
+        let (this, next) = (run.key(), run.key() + 1);
+        self.txn
+            .open_table(BRANCHES)?
+            .range((this, 0, 0)..(next, 0, 0))?
+            .map(|entry| {
+                let (key, _) = entry?;
+                let (_, step, child) = key.value();
+                Ok((step, RunId::from_key(child)))
+            })
+            .collect()
     }
 
     /// What `name` defines, as its owner encoded it.

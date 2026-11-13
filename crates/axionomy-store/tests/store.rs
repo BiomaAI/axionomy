@@ -4,7 +4,7 @@ use axionomy::{
     paths::{self, Paths},
 };
 use axionomy_store::{
-    Checkpoints, Durability, Group, Member, Point, State, Store, StoreError, Target,
+    Checkpoints, Durability, Group, Member, Point, RefPath, State, Store, StoreError, Target,
 };
 use std::{collections::BTreeMap, num::NonZeroU64};
 
@@ -776,4 +776,76 @@ fn definitions_are_kept_by_name_and_merged_like_refs() {
             ("script/sokoban/candidates".to_owned(), b"new".to_vec()),
         ]
     );
+}
+
+#[test]
+fn branches_are_indexed_and_a_ref_moves_only_from_where_it_is() {
+    let store = Store::memory().unwrap();
+    let mut source = store.record::<Paths>(economy(3), every(4));
+    for exchange in exchanges(1, 10, 3) {
+        source.apply(exchange).unwrap();
+    }
+    let source = source.finish().unwrap();
+    let fork_at = |step| {
+        let mut fork = store
+            .fork::<Paths>(
+                Point {
+                    run: source.run,
+                    step,
+                },
+                Checkpoints::Ends,
+            )
+            .unwrap();
+        fork.apply(pay("bank", "agents/0", 1)).unwrap();
+        fork.finish().unwrap()
+    };
+    let late = fork_at(7);
+    let early = fork_at(2);
+    let reader = store.read().unwrap();
+    // Every fork of a run, in the order of the steps they fork at.
+    assert_eq!(
+        reader.branches(source.run).unwrap(),
+        [(2, early.run), (7, late.run)]
+    );
+    assert!(reader.branches(late.run).unwrap().is_empty());
+
+    // A run others forked from stays; a fork with none goes, and leaves the
+    // index.
+    let deleted = |run| {
+        store
+            .transact(Durability::Immediate, move |txn| txn.delete_run(run))
+            .wait()
+            .unwrap()
+    };
+    assert!(!deleted(source.run));
+    assert!(deleted(late.run));
+    assert_eq!(
+        store.read().unwrap().branches(source.run).unwrap(),
+        [(2, early.run)]
+    );
+
+    // A ref moves only from where the mover thinks it is.
+    let name: RefPath = path("live");
+    let on = |point| Some(Target::Step(point));
+    let set = |expected, to| {
+        let name = name.clone();
+        store
+            .transact(Durability::Immediate, move |txn| {
+                txn.compare_and_set_ref(&name, expected, to)
+            })
+            .wait()
+    };
+    set(None, on(source)).unwrap();
+    // Created once: a second creation is refused, saying where it is.
+    assert!(matches!(
+        set(None, on(early)),
+        Err(StoreError::Moved { current, .. }) if current == on(source)
+    ));
+    set(on(source), on(early)).unwrap();
+    // A mover that still thinks it is on the source looks again.
+    assert!(matches!(
+        set(on(source), on(source)),
+        Err(StoreError::Moved { current, .. }) if current == on(early)
+    ));
+    assert_eq!(store.read().unwrap().reference(&name).unwrap(), on(early));
 }

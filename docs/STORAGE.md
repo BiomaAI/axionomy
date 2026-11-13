@@ -143,11 +143,12 @@ and then their encoding, since two may share a name. Values and the store's
 records (runs, steps, groups, members, refs) are postcard, the kernel's
 binary form: every field written, quantities as big-endian bytes, expressions
 tagged by variant; a step's receipt digest is the hash of the receipt's
-postcard. The store records the format it is written in (format 1) and
-refuses a store in any other, or from before formats were recorded. The
-**state root** is the tree's hash. The tree holds the logical state, not the
-order accounts were created in, so an economy rebuilt from a root lists
-accounts in key order; decoding accepts only trees an economy could have
+postcard. The store records the format it is written in (format 2, which
+indexes every fork by the run and step it forked from) and refuses a store in
+any other, or from before formats were recorded. The **state root** is the
+tree's hash. The tree holds the logical state, and an economy lists its
+accounts in key order (D-051), so an economy rebuilt from a root is the
+economy that was stored; decoding accepts only trees an economy could have
 produced, in exactly the encoding the store writes.
 
 A recorded run keeps its tree beside the kernel's economy. After a step, the
@@ -291,6 +292,11 @@ exists if and only if its transaction committed.
   conflict. Refs and definitions are the mutable names: when both stores
   name something different, the merging store keeps its own and reports the
   name.
+- **Refs move by compare-and-set.** `compare_and_set_ref` moves a ref only
+  from the target its writer expects, and refuses with where it is
+  otherwise, so of two writers moving a ref from one point the second looks
+  again. The branch index lists every run forked from a run, by the step it
+  forked at; a run others forked from is not deleted.
 - **Export a part.** `Store::export` copies a selection into another store:
   refs and definitions as they are, groups with their members, and every run
   they name back through the runs it forked from, with its steps, states,
