@@ -20,7 +20,7 @@ async function mazeGeometry(page: Page) {
 
 test("studies a problem, receives events, and scrubs its replay", async ({ page }) => {
   test.setTimeout(60_000);
-  await page.goto("/");
+  await page.goto("/?studies");
   await expect(page.getByRole("heading", { name: /Maze · least energy/ })).toBeVisible();
   await page.getByRole("button", { name: "Study", exact: true }).click();
   await expect(page.getByText("New study computed and loaded")).toBeVisible({ timeout: 30_000 });
@@ -123,7 +123,7 @@ test("keeps every frame of every Maze result geometrically sound", async ({ page
 
 test("shows incremental tactical search and responsive pause control", async ({ page }) => {
   test.setTimeout(60_000);
-  await page.goto("/");
+  await page.goto("/?studies");
   await page.getByRole("combobox", { name: "Problem", exact: true }).selectOption("connect-four");
   await page.getByRole("combobox", { name: "Instance (size)", exact: true }).selectOption("micro");
   await page.getByLabel("Seed").fill("42");
@@ -142,7 +142,7 @@ test("shows incremental tactical search and responsive pause control", async ({ 
 });
 
 test("loads a distinct static problem and its specialized renderer", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/?studies");
   await page.getByRole("combobox", { name: "Problem", exact: true }).selectOption("exact-cover");
   await expect(page.getByRole("heading", { name: /Exact cover · Algorithm X/ })).toBeVisible();
   await expect(page.locator(".matrix-scene")).toBeVisible();
@@ -203,7 +203,7 @@ test("renders the generic cockpit for every sample problem without browser error
   test.setTimeout(60_000);
   const browserErrors: string[] = [];
   page.on("pageerror", (error) => browserErrors.push(error.message));
-  await page.goto("/");
+  await page.goto("/?studies");
   const problems = [
     "maze", "sokoban", "exact-cover", "bridge", "scheduling", "workshop", "amm",
     "marketplace", "logistics", "connect-four", "rescue", "mission",
@@ -823,4 +823,29 @@ test("keeps interface text at a readable size", async ({ page }) => {
       .map((element) => `${element.tagName.toLowerCase()}.${element.getAttribute("class") ?? ""}: ${element.textContent?.trim().slice(0, 30)}`));
     expect(small, url).toEqual([]);
   }
+});
+
+test("follows a ref another proposer moves over the native server's HTTP API", async ({ page, request }) => {
+  await page.goto("/?package=/packages/maze.zip");
+  await expect(page.getByRole("combobox", { name: "Package", exact: true })).toHaveValue("maze", { timeout: 30_000 });
+  await page.getByRole("combobox", { name: "Ref" }).selectOption("maze/stress");
+  await expect(page.locator(".point-heading .eyebrow")).toContainText("ref maze/stress");
+  const panel = page.locator(".action-panel");
+  await panel.getByRole("tab", { name: "Follow" }).click();
+  await panel.getByRole("button", { name: "Follow maze/stress" }).click();
+  await expect(panel).toContainText("Waiting for the ref to move");
+
+  // Another proposer, over HTTP: an exchange applied where the ref is, then the ref moved over it.
+  const ref = await (await request.get("/api/refs/maze%2Fstress")).json();
+  const offered = await (await request.get(`/api/points/${ref.point}/candidates?set=maze%2Fmoves`)).json();
+  const move = offered.candidates.find((candidate: { proposal: { assessment: { status: string } } }) => candidate.proposal.assessment.status === "applicable");
+  const applied = await (await request.post(`/api/points/${ref.point}/apply`, { data: { exchanges: [move.exchange] } })).json();
+  const advanced = await request.post("/api/refs/maze%2Fstress/advance", { data: { expected: ref.point, to: applied.point } });
+  expect(advanced.ok()).toBe(true);
+
+  // The step arrives as it is delivered, and the ref's history grows by it.
+  const step = Number(applied.point.split(":")[1]);
+  await expect(panel.getByRole("list", { name: "Delivered steps" })).toContainText(`step ${step}`);
+  await expect(page.getByRole("slider", { name: "Trace position" })).toHaveAttribute("max", String(step));
+  await panel.getByRole("button", { name: "Stop following" }).click();
 });

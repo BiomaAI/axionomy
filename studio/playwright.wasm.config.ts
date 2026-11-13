@@ -2,7 +2,8 @@ import { defineConfig } from "@playwright/test";
 
 export default defineConfig({
   testDir: "./tests",
-  testMatch: "wasm.spec.ts",
+  // The Worker's own tests, and the packages workspace on the engine in the browser.
+  testMatch: ["wasm.spec.ts", "packages.spec.ts"],
   timeout: 60_000,
   use: {
     baseURL: "http://127.0.0.1:5174",
