@@ -27,7 +27,8 @@ pub struct RefCreateRequest {
 }
 
 /// A move of a ref forward: from `expected`, where its mover saw it, to `to`,
-/// whose history passes through `expected`.
+/// whose history passes through `expected`. Asked again once made, with the
+/// ref at `to`, it succeeds.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct RefAdvanceRequest {
@@ -101,6 +102,8 @@ pub struct RefFrames {
 /// what the follower measures there.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct RefFrame {
+    /// The point the step led to, named as its mover named it when it
+    /// advanced the ref there or over it.
     pub point: PointId,
     pub exchange: paths::Exchange,
     pub receipt: paths::Receipt,
@@ -151,7 +154,8 @@ pub fn read_ref(engine: &Engine, name: RefPath) -> Result<RefView, Refusal> {
     })
 }
 
-/// Moves a ref forward from where its mover saw it.
+/// Moves a ref forward from where its mover saw it, or finds it moved
+/// there already.
 pub fn advance_ref(
     engine: &Engine,
     name: RefPath,

@@ -10,15 +10,15 @@
 //! secret the store keeps, so they stay valid across restarts of a server that
 //! keeps its store on disk, and stay infeasible to guess.
 //!
-//! Every point a handle names is indexed, by its earliest name, under the
-//! first handle that named it: a ref, which names a point, reads back as that
-//! handle, and a step the ref was moved over as the handle of the economy the
-//! step made. A step no handle names yet gets one minted from its point: the
-//! economy its exchange made from the step before. A point a package names,
-//! or an experiment reached, is named the same way: by the first handle that
-//! named it, or by one minted from it, the economy its run's exchanges made
-//! from where the run starts, or an authored one when its run starts from an
-//! economy of its own.
+//! Every point a handle names is indexed under the first handle that named
+//! it, by the engine's one name for the point: a ref, which names a point,
+//! reads back as that handle, and a step the ref was moved over as the handle
+//! of the economy the step made. A step no handle names yet gets one minted
+//! from its point: the economy its exchange made from the step before. A
+//! point a package names, or an experiment reached, is named the same way: by
+//! the first handle that named it, or by one minted from it, the economy its
+//! run's exchanges made from where the run starts, or an authored one when
+//! its run starts from an economy of its own.
 
 use crate::{
     handles::{AssessmentId, EconomyId, RefId, StudyId},
@@ -338,13 +338,12 @@ impl Archive {
         economy_id: EconomyId,
         record: EconomyRecord,
     ) -> Result<Stored, EngineError> {
-        let point = self.earliest(record.point)?;
         let handle = economy_id.clone();
         let stored = self
             .engine
             .store()
             .transact(Durability::Immediate, move |txn| {
-                write(txn.redb(), &handle, &record, point)
+                write(txn.redb(), &handle, &record)
             })
             .await?;
         Ok(Stored {
@@ -353,9 +352,9 @@ impl Archive {
         })
     }
 
-    /// Writes every record of `records`, each at its point's earliest name,
-    /// that a concurrent call did not write first, in one transaction: a
-    /// record may name an earlier one as its parent.
+    /// Writes every record of `records` that a concurrent call did not write
+    /// first, in one transaction: a record may name an earlier one as its
+    /// parent.
     async fn keep_all(&self, records: Vec<(EconomyId, EconomyRecord)>) -> Result<(), StoreError> {
         if records.is_empty() {
             return Ok(());
@@ -364,23 +363,17 @@ impl Archive {
             .store()
             .transact(Durability::Immediate, move |txn| {
                 for (economy_id, record) in &records {
-                    write(txn.redb(), economy_id, record, record.point)?;
+                    write(txn.redb(), economy_id, record)?;
                 }
                 Ok(())
             })
             .await
     }
 
-    /// `point` by its earliest name, which every name of it shares.
-    fn earliest(&self, point: Point) -> Result<Point, StoreError> {
-        earliest(&self.engine.store().read()?, point)
-    }
-
-    /// The handle that first named `point`, by whatever name: every point a
-    /// ref of this server is at has one, indexed before the ref moved there.
+    /// The handle that first named `point`: every point a ref of this server
+    /// is at has one, indexed before the ref moved there.
     pub fn handle_of(&self, point: Point) -> Result<EconomyId, StoreError> {
-        let reader = self.engine.store().read()?;
-        named(&reader, earliest(&reader, point)?)?
+        named(&self.engine.store().read()?, point)?
             .ok_or(StoreError::Malformed("a ref at a point no handle names"))
     }
 
@@ -395,7 +388,7 @@ impl Archive {
         let mut nonce = [0; 32];
         getrandom::fill(&mut nonce).expect("operating system randomness is unavailable");
         let ref_id = RefId::from_digest(&self.keyed(&[b"ref", &nonce]));
-        let at = self.earliest(economy.record.point)?;
+        let at = economy.record.point;
         let named = self.index(economy_id, at).await?;
         let (engine, name) = (self.engine.clone(), ref_path(&ref_id));
         blocking(move || engine.refer(&name, at)).await?;
@@ -411,7 +404,6 @@ impl Archive {
         economy_id: &EconomyId,
         to: Point,
     ) -> Result<EconomyId, EngineError> {
-        let (expected, to) = (self.earliest(expected)?, self.earliest(to)?);
         let named = self.index(economy_id, to).await?;
         let (engine, name) = (self.engine.clone(), ref_path(ref_id));
         blocking(move || engine.advance(&name, expected, to)).await?;
@@ -441,7 +433,6 @@ impl Archive {
         limit: usize,
         wait: Duration,
     ) -> Result<(Vec<(EconomyId, Frame)>, EconomyId), EngineError> {
-        let after = self.earliest(after)?;
         let (engine, name) = (self.engine.clone(), ref_path(ref_id));
         let (frames, current) = blocking(move || {
             engine.wait(&name, after, wait)?;
@@ -459,12 +450,12 @@ impl Archive {
         let mut minted = Vec::new();
         let mut named_frames = Vec::with_capacity(frames.len());
         for frame in frames {
-            let point = earliest(&reader, frame.point)?;
+            let point = frame.point;
             let economy_id = match named(&reader, point)? {
                 Some(economy_id) => economy_id,
                 None => {
-                    // The earliest name of a step is a step of its run, so
-                    // its receipt is the run's last up to it.
+                    // A frame's point is a step of its run, so its receipt
+                    // is the run's last up to it.
                     if reader
                         .run(point.run)?
                         .is_none_or(|run| point.step == run.first)
@@ -489,8 +480,7 @@ impl Archive {
         Ok((named_frames, self.handle_of(current)?))
     }
 
-    /// The handle minted for `point`, an earliest name no handle named
-    /// first.
+    /// The handle minted for `point`, which no handle named first.
     fn minted(&self, point: Point) -> EconomyId {
         EconomyId::from_digest(&self.keyed(&[b"point", &encode(&point)]))
     }
@@ -529,8 +519,8 @@ impl Archive {
         blocking(move || engine.run_experiment(&path, &mut |_| ControlFlow::Continue(()))).await
     }
 
-    /// Indexes `point`, an earliest name, by `economy_id` unless a handle
-    /// names it already, and gives the handle that names it.
+    /// Indexes `point` by `economy_id` unless a handle names it already, and
+    /// gives the handle that names it.
     async fn index(&self, economy_id: &EconomyId, point: Point) -> Result<EconomyId, StoreError> {
         if let Some(named) = named(&self.engine.store().read()?, point)? {
             return Ok(named);
@@ -807,7 +797,6 @@ struct Naming<'a> {
 impl Naming<'_> {
     /// The handle of `point`: its first handle, or one minted for it.
     fn name(&mut self, point: Point) -> Result<EconomyId, EngineError> {
-        let point = earliest(self.reader, point)?;
         if let Some(named) = named(self.reader, point)? {
             return Ok(named);
         }
@@ -818,18 +807,18 @@ impl Naming<'_> {
             .reader
             .run(point.run)?
             .ok_or(StoreError::Malformed("a point of a run the store lacks"))?;
-        // An earliest name that starts its run starts from an economy of its
-        // own; any other is the economy its run's exchanges made from the
-        // point the run starts from.
+        // A point that starts its run starts from an economy of its own; any
+        // other is the economy its run's exchanges made from the point the
+        // run starts from, which a fork's first state is named by.
         let (parent, origin) = if point.step == run.first {
             let reached = self.archive.engine.reach(point)?;
             let entries = crate::authoring::entries(&reached.state.economy);
             (None, Origin::Authored { entries })
         } else {
-            let first = Point {
+            let first = run.from.unwrap_or(Point {
                 run: point.run,
                 step: run.first,
-            };
+            });
             let exchanges = usize::try_from(point.step - run.first)
                 .map_err(|_| StoreError::Malformed("a run longer than memory"))?;
             (Some(self.name(first)?), Origin::Exchanged { exchanges })
@@ -881,22 +870,6 @@ fn ref_path(ref_id: &RefId) -> RefPath {
         .expect("a handle is a path segment")
 }
 
-/// `point` by its earliest name: a fork's first point is the point it forked
-/// from. A point a later run holds again, by the same steps, has the name it
-/// had where its step was taken, so every name of a point has one earliest.
-fn earliest(reader: &Reader, point: Point) -> Result<Point, StoreError> {
-    let mut on = point;
-    loop {
-        let run = reader
-            .run(on.run)?
-            .ok_or(StoreError::Malformed("a point of a run the store lacks"))?;
-        match run.from {
-            Some(from) if on.step == run.first => on = from,
-            _ => return Ok(on),
-        }
-    }
-}
-
 /// The operations a trajectory's economies are stored by: its initial state,
 /// and its exchanges applied to that state, which is the operation of
 /// replaying them with `axionomy_trace_replay`. No exchanges, no second
@@ -924,20 +897,18 @@ async fn blocking<T: Send + 'static>(
         .map_err(|_| EngineError::Store(StoreError::Closed))?
 }
 
-/// Writes `record` under `economy_id` and indexes `earliest`, its point's
-/// earliest name, unless a concurrent call wrote it first; whether this call
-/// did.
+/// Writes `record` under `economy_id` and indexes its point, unless a
+/// concurrent call wrote it first; whether this call did.
 fn write(
     txn: &redb::WriteTransaction,
     economy_id: &EconomyId,
     record: &EconomyRecord,
-    earliest: Point,
 ) -> Result<bool, StoreError> {
     if exists(txn, economy_id)? {
         return Ok(false);
     }
     put(txn, ECONOMIES, economy_id.as_str(), record)?;
-    index(txn, earliest, economy_id)?;
+    index(txn, record.point, economy_id)?;
     Ok(true)
 }
 

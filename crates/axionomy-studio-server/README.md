@@ -56,12 +56,17 @@ makes a step count (D-046).
 | --- | --- | --- |
 | `POST /api/refs` | `{name, point}` | `RefView {name, point}`; 409 `RefMoved` when a ref has the name |
 | `GET /api/refs/{name}` | | `RefView`: the point it names |
-| `POST /api/refs/{name}/advance` | `{expected, to}` | `RefView` at `to`; 409 `RefMoved {error, name, current}` when it is not at `expected`; 400 when `to`'s history does not pass through `expected` |
+| `POST /api/refs/{name}/advance` | `{expected, to}` | `RefView` at `to`, also when it is there already; 409 `RefMoved {error, name, current}` when it is at neither `expected` nor `to`; 400 when `to`'s history does not pass through `expected` |
 | `GET /api/refs/{name}/frames` | `after`, `limit` (1 to 1000, 100 by default), `wait_seconds` (up to 30), `goal`, `objectives` | `RefFrames {name, point, frames}` |
 
 A ref moves only from where its mover expects it, so of two movers from one
 point the second gets 409 with where the ref is, and looks again from there.
-It moves only forward, to a point whose history passes through `expected`.
+It moves only forward, to a point whose history passes through `expected`,
+so a ref at `to` can only have been moved there over `expected`: asking again
+for a move already made succeeds, and a mover that never heard whether its
+move counted asks again. A point has one name, in the run whose step reached
+it, so each frame names its step as the mover named the point it advanced
+the ref to, however far behind the follower is.
 `frames` delivers the steps the ref was moved over after `after`, the last
 point a follower handled, earliest first: each `RefFrame` is the point the
 step led to, its exchange and receipt, the `values` of the `objectives` there

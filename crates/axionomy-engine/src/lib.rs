@@ -29,7 +29,7 @@ use axionomy::{
     paths::{self, Paths},
 };
 use axionomy_store::{
-    Checkpoints, DefinitionPath, Durability, Point, Reader, RefPath, Store, StoreError,
+    Checkpoints, DefinitionPath, Durability, Point, Reader, RefPath, Run, Store, StoreError,
 };
 use cache::Cache;
 use definitions::definition;
@@ -483,6 +483,7 @@ impl Engine {
         at: Point,
     ) -> Result<(paths::Economy, Vec<paths::Exchange>), EngineError> {
         let reader = self.store.read()?;
+        run_at(&reader, at)?;
         let mut segments = Vec::new();
         let mut on = at;
         let root = loop {
@@ -615,12 +616,14 @@ impl Engine {
 
     /// Applies `exchanges` at `at`, all of them or none, and records them as a
     /// run forked from `at`, returning the point they reach. The point `at`
-    /// never changes. Applying no exchanges reaches `at` itself.
+    /// never changes, and keeps its one name: the fork's first state is `at`,
+    /// and the fork's points are the steps it takes. Applying no exchanges
+    /// reaches `at` itself.
     pub fn apply(&self, at: Point, exchanges: &[paths::Exchange]) -> Result<Point, EngineError> {
+        let source = self.reach(at)?;
         if exchanges.is_empty() {
             return Ok(at);
         }
-        let source = self.reach(at)?;
         let mut state = source.state.clone();
         let mut steps = Vec::with_capacity(exchanges.len());
         for (index, exchange) in exchanges.iter().enumerate() {
@@ -673,21 +676,15 @@ impl Engine {
     }
 
     /// The state at `at`, with the receipts of the steps its run took to
-    /// reach it, each replayed and checked against what was recorded.
+    /// reach it, each replayed and checked against what was recorded. A
+    /// fork's first state is refused under the fork's name: it is a point
+    /// of the run the fork started from, and has that name alone.
     pub fn reach(&self, at: Point) -> Result<Arc<Reached>, EngineError> {
         if let Some(reached) = self.reached.get(&at) {
             return Ok(reached);
         }
         let reader = self.store.read()?;
-        let run = reader
-            .run_of::<Paths>(at.run)?
-            .ok_or(EngineError::UnknownPoint(at))?;
-        let last = reader
-            .last_step(at.run)?
-            .ok_or(EngineError::UnknownPoint(at))?;
-        if !(run.first..=last).contains(&at.step) {
-            return Err(EngineError::UnknownPoint(at));
-        }
+        let run = run_at(&reader, at)?;
         let mut state = first_state(&reader, at, run.first)?;
         let receipts = reader.replay(&mut state, at.run, run.first, at.step)?;
         Ok(self.reached.insert(
@@ -701,25 +698,15 @@ impl Engine {
         ))
     }
 
-    /// The point at step `step` of `at`'s history, its state stored so it is
-    /// reached as directly as `at`. The history of a run that forked continues
-    /// into the run it forked from.
+    /// The point at step `step` of `at`'s history, by its one name, its
+    /// state stored so it is reached as directly as `at`. The history of a
+    /// run that forked continues into the run it forked from, so a step
+    /// `at`'s run did not take is named in the run that took it.
     pub fn ancestor(&self, at: Point, step: u64) -> Result<Point, EngineError> {
-        if step > at.step {
-            return Err(EngineError::NotOnHistory { at, step });
-        }
-        let reader = self.store.read()?;
-        let mut on = at;
-        let point = loop {
-            let run = reader
-                .run_of::<Paths>(on.run)?
-                .ok_or(EngineError::UnknownPoint(on))?;
-            if step >= run.first {
-                break Point { run: on.run, step };
-            }
-            on = run.from.ok_or(EngineError::NotOnHistory { at, step })?;
-        };
-        let state = reader
+        let point = self.on_history(at, step)?;
+        let state = self
+            .store
+            .read()?
             .state::<Paths>(point)?
             .ok_or(EngineError::UnknownPoint(point))?;
         self.store
@@ -728,6 +715,30 @@ impl Engine {
             })
             .wait()?;
         Ok(point)
+    }
+
+    /// The point at step `step` of `at`'s history, named by the run whose
+    /// step reached it, or the first point of a run that starts from an
+    /// economy of its own: a fork's first state is the point it forked from.
+    pub(crate) fn on_history(&self, at: Point, step: u64) -> Result<Point, EngineError> {
+        let reader = self.store.read()?;
+        let mut run = run_at(&reader, at)?;
+        if step > at.step {
+            return Err(EngineError::NotOnHistory { at, step });
+        }
+        let mut on = at.run;
+        loop {
+            match run.from {
+                Some(from) if step <= run.first => {
+                    on = from.run;
+                    run = reader.run(on)?.ok_or(EngineError::UnknownPoint(from))?;
+                }
+                None if step < run.first => {
+                    return Err(EngineError::NotOnHistory { at, step });
+                }
+                _ => return Ok(Point { run: on, step }),
+            }
+        }
     }
 
     /// Whether `exchange` would apply at the economy `before` reaches from
@@ -750,6 +761,24 @@ impl Engine {
         }
         Ok(economy.assess(exchange))
     }
+}
+
+/// The run of `at`, which must name one of the store's points: a step its
+/// run took, or the first state of a run that starts from an economy of its
+/// own. A fork's first state is not a point of the fork; it has the name of
+/// the point the fork started from.
+fn run_at(reader: &Reader, at: Point) -> Result<Run, EngineError> {
+    let unknown = || EngineError::UnknownPoint(at);
+    let run = reader.run(at.run)?.ok_or_else(unknown)?;
+    let last = reader.last_step(at.run)?.ok_or_else(unknown)?;
+    let named = match run.from {
+        Some(_) => at.step > run.first,
+        None => at.step >= run.first,
+    };
+    if !named || at.step > last {
+        return Err(unknown());
+    }
+    Ok(run)
 }
 
 /// The first state of `at`'s run, which starts at step `first`.

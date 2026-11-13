@@ -1459,6 +1459,8 @@ async fn a_ref_moves_only_forward_from_where_its_mover_expects_it() {
     let moved = advance(&server, &live, &start, &mine).await;
     assert_eq!(id(&moved), mine);
     assert_eq!(moved.value["ref_id"], live.as_str());
+    // A mover that asks again for the move it made is told it was made.
+    assert_eq!(id(&advance(&server, &live, &start, &mine).await), mine);
     let refused = advance(&server, &live, &start, &theirs).await;
     assert!(refused.is_error);
     assert_eq!(refused.value["error"], "moved");

@@ -373,7 +373,10 @@ or a loop applying responses are alike.
   mover expects it, so of two movers from one economy the second fails with
   `moved` and `details.current_economy_id`, where the ref is, and looks again
   from there. It never moves back, or to an economy not made from where it is:
-  that is an `invalid_request` at `/economy_id`.
+  that is an `invalid_request` at `/economy_id`. So a ref at `economy_id` was
+  moved there over `expected_economy_id`, and asking again for a move already
+  made succeeds: a mover that never heard whether its move counted asks
+  again, and fails with `moved` only once the ref is somewhere else.
 - `axionomy_ref_frames` gives a follower the steps the ref was moved over
   after `after_economy_id`, the last economy it handled, earliest first: each
   frame is the step's `exchange`, as `axionomy_exchange_apply` takes it, its
@@ -396,11 +399,12 @@ ref_frames(ref_id, start, wait_seconds) ──> [{economy_id: mine, exchange: x,
 ```
 
 Every economy a ref or a frame names is an `economy_id` every other tool
-takes: assess, apply, step through, find in, diff. The server names a point
-by the first handle that named it, whatever run holds it, so a ref reads back,
-and its steps are delivered, as the handles their movers made; a step inside
-a replay that no handle names yet gets one minted from its point and stored
-like any economy, made by the frame's exchange from the frame before it.
+takes: assess, apply, step through, find in, diff. The engine names a point
+once, in the run whose step reached it, and the server names a point by the
+first handle that named it, so a ref reads back, and its steps are
+delivered, as the handles their movers made; a step inside a replay that no
+handle names yet gets one minted from its point and stored like any economy,
+made by the frame's exchange from the frame before it.
 Refs are store-wide names, so the server exposes only refs it made: each is
 an engine ref named `mcp/` and its handle, and a store on disk keeps it
 across restarts.

@@ -231,21 +231,38 @@ async fn a_candidate_applied_at_a_refs_point_moves_the_ref_and_elsewhere_branche
     assert_eq!(drawn["frames"].as_array().unwrap().len(), 1);
     assert_eq!(drawn["title"], "Key-door maze");
 
-    // A mover who still saw the start is told where the ref went.
-    let (status, conflict) = post(
+    // Asking again for the move made is told it was made.
+    let again = ok(post(
         &router,
         "/api/refs/maze%2Fmicro/advance",
         json!({ "expected": start.to_string(), "to": moved.to_string() }),
+    )
+    .await);
+    assert_eq!(point(&again["point"]), moved);
+
+    // A mover who still saw the start, with a move of its own, is told
+    // where the ref went.
+    let second = applicable.last().unwrap()["exchange"].clone();
+    let other = ok(post(
+        &router,
+        &format!("/api/points/{start}/apply"),
+        json!({ "exchanges": [second] }),
+    )
+    .await);
+    let (status, conflict) = post(
+        &router,
+        "/api/refs/maze%2Fmicro/advance",
+        json!({ "expected": start.to_string(), "to": other["point"] }),
     )
     .await;
     assert_eq!(status, StatusCode::CONFLICT);
     assert_eq!(point(&conflict["current"]), moved);
 
-    // Anywhere else, applying makes a branch: the ref stays where it is.
+    // Anywhere else, applying makes a branch: the ref stays where it is. The
+    // start of the moved point's history is the start, by its one name.
     let earlier = ok(get(&router, &format!("/api/points/{moved}/ancestor?step=0")).await);
     let earlier = point(&earlier["point"]);
-    assert_eq!(earlier.point().step, 0);
-    let second = applicable.last().unwrap()["exchange"].clone();
+    assert_eq!(earlier, start);
     let branched = ok(post(
         &router,
         &format!("/api/points/{earlier}/apply"),

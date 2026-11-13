@@ -3,7 +3,10 @@
 `axionomy-engine` is the work every Axionomy front end shares. An `Engine`
 holds a `Store` and nothing registered, and works on points: a point is one
 saved state of an economy, the economy after a given step of a recorded run,
-named by the run and the step. Scripts, strategies, experiments, views and
+named by the run and the step. A point has one name, in the run whose step
+reached it; an authored economy is the first point of a run of its own. A
+run forked from a point starts from that point's state, and the state keeps
+its name: the engine never names it by the fork, and refuses it so. Scripts, strategies, experiments, views and
 packages join it as [the plan](../../docs/SIMULATION.md#plan-axionomy-on-primitives)
 goes.
 
@@ -14,7 +17,8 @@ goes.
   economy it met.
 - `reach` gives a point's state and the receipts of the steps its run took to
   reach it.
-- `ancestor` names the point at an earlier step of a point's history.
+- `ancestor` names the point at an earlier step of a point's history, by its
+  one name, in whichever run of that history took the step.
 - `assess` explains whether an exchange would apply at a point, and
   `present` gives exchanges as people read them at a point, with the view
   of its run's ontology, each assessed there, as Studio shows a candidate
@@ -51,10 +55,13 @@ goes.
 - `refer` names a point with a new ref and `referred` reads it. `advance`
   moves a ref forward from the point its mover expects to a point whose
   history passes through it, and refuses with where the ref is otherwise, so
-  of two proposers moving from one point the second looks again. `frames`
-  delivers the steps a ref was moved over after the point a follower last
-  handled, each with its point, exchange and receipt and the follower's
-  objectives and goal there; a step only tried out is never delivered.
+  of two proposers moving from one point the second looks again. Asking again
+  for a move already made, the ref at `to`, succeeds: a ref only moves
+  forward, so it cannot be at `to` by another route. `frames` delivers the
+  steps a ref was moved over after the point a follower last handled, each
+  with its point, named as its mover advanced the ref to it, its exchange and
+  receipt and the follower's objectives and goal there; a step only tried out
+  is never delivered.
   `wait` blocks until a ref moves, or a time is up.
 - `keep_experiment` keeps an experiment: a ref to start from, strategies as
   arms (each from that start or a ref of its own), objectives, a seed, a

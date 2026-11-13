@@ -9,7 +9,8 @@ use std::{borrow::Cow, fmt, str::FromStr};
 
 /// A point of the engine's store: the state after `step` steps of the
 /// history of a run, written `run-`, 32 hexadecimal digits, `:` and the
-/// step, such as `run-000000000000feed0000000000000007:3`.
+/// step, such as `run-000000000000feed0000000000000007:3`. A point has one
+/// name, in the run whose step reached it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct PointId(Point);
 
@@ -85,7 +86,7 @@ impl JsonSchema for PointId {
 
     fn json_schema(_: &mut SchemaGenerator) -> Schema {
         json_schema!({
-            "description": "A point of the engine's store: the state after `step` steps of a run's history, written `run-`, 32 hexadecimal digits, `:` and the step.",
+            "description": "A point of the engine's store: the state after `step` steps of a run's history, written `run-`, 32 hexadecimal digits, `:` and the step. A point has one name, in the run whose step reached it.",
             "type": "string",
             "pattern": "^run-[0-9a-f]{32}:(0|[1-9][0-9]*)$"
         })

@@ -16,6 +16,8 @@ use std::{
 /// its exchange and receipt, and what the follower measures there.
 #[derive(Debug, Clone)]
 pub struct Frame {
+    /// The point the step led to, by its one name: the point its mover
+    /// advanced the ref to, or over, however late the follower asks.
     pub point: Point,
     pub exchange: paths::Exchange,
     pub receipt: paths::Receipt,
@@ -66,22 +68,37 @@ impl Engine {
 
     /// Moves the ref `name` from `expected` forward to `to`, whose history
     /// passes through `expected`: the steps between are what the move
-    /// delivers. Refused with where the ref is when it is not on `expected`.
+    /// delivers. Refused with where the ref is when it is at neither
+    /// `expected` nor `to`.
+    ///
+    /// A move already made succeeds again: when the ref is at `to`, the move
+    /// asked for is the move made, since a ref only moves forward and so
+    /// cannot be at `to` by another route. A mover that never heard whether
+    /// its move counted asks again.
     pub fn advance(&self, name: &RefPath, expected: Point, to: Point) -> Result<(), EngineError> {
         self.reach(to)?;
+        self.reach(expected)?;
         if !self.passes_through(to, expected)? {
             return Err(EngineError::Backward {
                 name: name.clone(),
                 to,
             });
         }
-        self.move_ref(name, Some(expected), to)
+        match self.move_ref(name, Some(expected), to) {
+            Err(EngineError::Moved {
+                current: Some(current),
+                ..
+            }) if current == to => Ok(()),
+            moved => moved,
+        }
     }
 
     /// The steps the ref `name` was moved over after `after`, the point a
     /// follower last handled, earliest first and at most `limit` of them,
     /// each measured as `following` asks. `after` must be on the history of
-    /// where the ref is.
+    /// where the ref is. Each step is named as its mover named it, so a
+    /// follower that falls behind receives the points the ref was advanced
+    /// to.
     pub fn frames(
         &self,
         name: &RefPath,
@@ -90,6 +107,7 @@ impl Engine {
         limit: usize,
     ) -> Result<Vec<Frame>, EngineError> {
         let current = self.referred(name)?;
+        let mut economy = self.reach(after)?.state.economy.clone();
         if !self.passes_through(current, after)? {
             return Err(EngineError::NotOnHistory {
                 at: current,
@@ -102,7 +120,6 @@ impl Engine {
             .map(|goal| self.goal(goal))
             .transpose()?;
         let (_, exchanges) = self.history(current)?;
-        let mut economy = self.reach(after)?.state.economy.clone();
         let mut frames = Vec::new();
         for step in after.step + 1..=current.step {
             if frames.len() == limit {
@@ -215,40 +232,9 @@ impl Engine {
         }
     }
 
-    /// The point at step `step` of `at`'s history, named by the latest run
-    /// of that history holding it.
-    fn on_history(&self, at: Point, step: u64) -> Result<Point, EngineError> {
-        let reader = self.store.read()?;
-        let mut on = at;
-        loop {
-            let run = reader.run(on.run)?.ok_or(EngineError::UnknownPoint(on))?;
-            if step >= run.first {
-                return Ok(Point { run: on.run, step });
-            }
-            on = run.from.ok_or(EngineError::NotOnHistory { at, step })?;
-        }
-    }
-
-    /// Whether `at`'s history passes through `point`: the same state by the
-    /// same steps, however the runs that hold them are named.
+    /// Whether `at`'s history passes through `point`: the point at its step
+    /// of that history has its name.
     fn passes_through(&self, at: Point, point: Point) -> Result<bool, EngineError> {
-        if point.step > at.step {
-            return Ok(false);
-        }
-        Ok(self.earliest(self.on_history(at, point.step)?)? == self.earliest(point)?)
-    }
-
-    /// The point's name in the earliest run holding it: a fork's first point
-    /// is the point it forked from.
-    fn earliest(&self, point: Point) -> Result<Point, EngineError> {
-        let reader = self.store.read()?;
-        let mut on = point;
-        loop {
-            let run = reader.run(on.run)?.ok_or(EngineError::UnknownPoint(on))?;
-            match run.from {
-                Some(from) if on.step == run.first => on = from,
-                _ => return Ok(on),
-            }
-        }
+        Ok(point.step <= at.step && self.on_history(at, point.step)? == point)
     }
 }

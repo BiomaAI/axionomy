@@ -180,6 +180,9 @@ fn the_worker_offers_the_operations_the_server_offers() {
     let advance = json!({ "expected": start, "to": moved }).to_string();
     let advanced = parsed(&worker.advance_ref("maze/micro", &advance).unwrap());
     assert_eq!(advanced, json!({ "name": "maze/micro", "point": moved }));
+    // Asking again for the move made is told it was made.
+    let again = parsed(&worker.advance_ref("maze/micro", &advance).unwrap());
+    assert_eq!(again, advanced);
     assert_eq!(
         parsed(&worker.read_ref("maze/micro").unwrap())["point"],
         json!(moved)
@@ -194,6 +197,7 @@ fn the_worker_offers_the_operations_the_server_offers() {
     // Anywhere else, applying branches: the ref stays.
     let earlier = parsed(&worker.ancestor(&moved, r#"{"step":0}"#).unwrap());
     let earlier = earlier["point"].as_str().unwrap().to_owned();
+    assert_eq!(earlier, start);
     let branched = parsed(&worker.apply(&earlier, &apply_request(&candidate)).unwrap());
     assert_ne!(branched["point"], json!(moved));
     assert_eq!(

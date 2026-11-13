@@ -626,7 +626,7 @@ impl AxionomyMcp {
     #[tool(
         name = "axionomy_ref_advance",
         title = "Advance a ref",
-        description = "Move a ref forward from `expected_economy_id`, where the mover saw it, to `economy_id`, an economy made by exchanges from it, such as axionomy_exchange_apply's or axionomy_trace_replay's result: the steps between are what followers receive. When another move came first, the call fails with `moved` and `details.current_economy_id`, where the ref is; look again from there. A ref never moves back, or to an economy that was not made from where it is.",
+        description = "Move a ref forward from `expected_economy_id`, where the mover saw it, to `economy_id`, an economy made by exchanges from it, such as axionomy_exchange_apply's or axionomy_trace_replay's result: the steps between are what followers receive. When another move came first, the call fails with `moved` and `details.current_economy_id`, where the ref is; look again from there. A ref never moves back, or to an economy that was not made from where it is, so asking again for a move already made succeeds.",
         output_schema = schema_for_output::<RefPosition>(),
         annotations(destructive_hint = false, idempotent_hint = true, open_world_hint = false)
     )]

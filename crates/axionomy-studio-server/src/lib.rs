@@ -449,7 +449,7 @@ fn endpoints() -> Vec<Endpoint<StudioState>> {
             .path_parameters::<RefName>()
             .json_body::<RefAdvanceRequest>()
             .conflict::<RefMoved>(
-                "The ref is not at `expected`: another move came first, and it is at `current`",
+                "The ref is at neither `expected` nor `to`: another move came first, and it is at `current`",
             )
             .fallible(),
         Endpoint::new::<RefFrames>("get", "/api/refs/{name}/frames", get(refs::frames))

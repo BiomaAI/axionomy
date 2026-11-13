@@ -107,6 +107,32 @@ fn a_ref_moves_only_forward_from_where_its_mover_expects() {
 }
 
 #[test]
+fn a_move_already_made_succeeds_again() {
+    let (engine, start) = bank();
+    let live = path("live");
+    engine.refer(&live, start).unwrap();
+    let first = engine.apply(start, &[pay(5)]).unwrap();
+    engine.advance(&live, start, first).unwrap();
+    // A mover that never heard whether its move counted asks again: the
+    // ref is at `first`, so the move asked for is the move made.
+    engine.advance(&live, start, first).unwrap();
+    assert_eq!(engine.referred(&live).unwrap(), first);
+    let following = Following::default();
+    assert_eq!(
+        engine.frames(&live, start, &following, 10).unwrap().len(),
+        1
+    );
+
+    // Once the ref has moved on, the same move is refused with where it is.
+    let then = engine.apply(first, &[pay(1)]).unwrap();
+    engine.advance(&live, first, then).unwrap();
+    assert!(matches!(
+        engine.advance(&live, start, first),
+        Err(EngineError::Moved { current: Some(at), .. }) if at == then
+    ));
+}
+
+#[test]
 fn of_two_moves_committed_together_one_counts() {
     let (engine, start) = bank();
     let live = path("live");
@@ -243,4 +269,86 @@ fn a_follower_waits_for_the_ref_to_move() {
     };
     let moved = engine.wait(&live, start, Duration::from_secs(10)).unwrap();
     assert_eq!(moved, mover.join().unwrap());
+}
+
+/// A ref moved over three applies, the last of two steps: `start`, then
+/// `first` and `second` a step each, then `fourth` two steps on.
+fn moved_three_times(engine: &Engine, start: Point) -> [Point; 4] {
+    let live = path("live");
+    engine.refer(&live, start).unwrap();
+    let first = engine.apply(start, &[pay(1)]).unwrap();
+    engine.advance(&live, start, first).unwrap();
+    let second = engine.apply(first, &[pay(2)]).unwrap();
+    engine.advance(&live, first, second).unwrap();
+    let fourth = engine.apply(second, &[pay(3), pay(4)]).unwrap();
+    engine.advance(&live, second, fourth).unwrap();
+    let third = Point {
+        run: fourth.run,
+        step: 3,
+    };
+    [first, second, third, fourth]
+}
+
+#[test]
+fn a_follower_far_behind_receives_each_step_as_its_mover_named_it() {
+    let (engine, start) = bank();
+    let [first, second, third, fourth] = moved_three_times(&engine, start);
+    let live = path("live");
+    let following = Following::default();
+
+    // Asked once the ref is three moves on, each step is the point the ref
+    // was advanced to, not a name of it in a later run.
+    let frames = engine.frames(&live, start, &following, 10).unwrap();
+    let points: Vec<_> = frames.iter().map(|frame| frame.point).collect();
+    assert_eq!(points, [first, second, third, fourth]);
+    // Page by page, from each frame delivered.
+    let mut after = start;
+    let mut paged = Vec::new();
+    while let [frame] = engine
+        .frames(&live, after, &following, 1)
+        .unwrap()
+        .as_slice()
+    {
+        paged.push(frame.point);
+        after = frame.point;
+    }
+    assert_eq!(paged, points);
+}
+
+#[test]
+fn a_point_has_one_name() {
+    let (engine, start) = bank();
+    let [first, second, third, fourth] = moved_three_times(&engine, start);
+
+    // A history names each of its points by the run whose step reached it.
+    let history: Vec<_> = (0..=4)
+        .map(|step| engine.ancestor(fourth, step).unwrap())
+        .collect();
+    assert_eq!(history, [start, first, second, third, fourth]);
+    assert!(matches!(
+        engine.ancestor(fourth, 5),
+        Err(EngineError::NotOnHistory { step: 5, .. })
+    ));
+
+    // A fork's first state is the point it forked from, and has that name
+    // alone: nothing takes it under the fork's.
+    let unnamed = Point {
+        run: second.run,
+        step: first.step,
+    };
+    assert_eq!(engine.reach(second).unwrap().from, Some(first));
+    let refused = |result: Result<_, EngineError>| matches!(result, Err(EngineError::UnknownPoint(at)) if at == unnamed);
+    assert!(refused(engine.reach(unnamed).map(|_| ())));
+    assert!(refused(engine.apply(unnamed, &[pay(1)]).map(|_| ())));
+    assert!(refused(engine.apply(unnamed, &[]).map(|_| ())));
+    assert!(refused(engine.ancestor(unnamed, 0).map(|_| ())));
+    assert!(refused(engine.history(unnamed).map(|_| ())));
+    assert!(refused(engine.refer(&path("other"), unnamed)));
+    let live = path("live");
+    let following = Following::default();
+    assert!(refused(
+        engine.frames(&live, unnamed, &following, 10).map(|_| ())
+    ));
+    let next = engine.apply(fourth, &[pay(1)]).unwrap();
+    assert!(refused(engine.advance(&live, unnamed, next)));
 }
