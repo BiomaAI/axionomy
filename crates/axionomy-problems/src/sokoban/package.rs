@@ -1,22 +1,38 @@
 //! The Sokoban warehouse as a package: its instances, the scripts its
-//! searches call, its goal and strategies, an experiment comparing them on
-//! each instance, and each instance's legal but losing plan, recorded.
+//! searches and view call, its goal and strategies, an experiment comparing
+//! them on each instance, and each instance's legal but losing plan,
+//! recorded.
 
 use crate::{
     package::{call, written},
     sokoban::{self, Ontology},
 };
-use axionomy::{path, paths};
-use axionomy_engine::{Arm, CandidateSet, Engine, EngineError, Experiment, Strategy};
+use axionomy::{OntologyPath, path, paths};
+use axionomy_engine::{Arm, CandidateSet, Engine, EngineError, Experiment, Strategy, View};
 use axionomy_store::Checkpoints;
 
+/// The script the searches call, and the view's.
 const SCRIPT: &str = include_str!("../../scripts/sokoban.rhai");
+const VIEW: &str = include_str!("../../scripts/sokoban-view.rhai");
 
 /// Writes the warehouse's package into `engine`'s store, everything named
 /// under `sokoban`.
 pub fn write(engine: &Engine) -> Result<(), EngineError> {
+    let view = |function| Some(call("sokoban/view", function));
     let call = |function| call("sokoban", function);
     engine.keep_script(&path!("sokoban"), SCRIPT)?;
+    engine.keep_script(&path!("sokoban/view"), VIEW)?;
+    engine.keep_view(
+        &OntologyPath::of::<Ontology>(),
+        &View {
+            title: "Sokoban".into(),
+            labels: view("label"),
+            formats: None,
+            carry: None,
+            scene: view("scene"),
+            leaderboards: None,
+        },
+    )?;
     engine.keep_goal(&path!("sokoban/solved"), &written(&sokoban::goal()))?;
     engine.keep_candidates(
         &path!("sokoban/moves"),
