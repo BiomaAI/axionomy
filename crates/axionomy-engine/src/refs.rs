@@ -145,6 +145,17 @@ impl Engine {
         Ok(frames)
     }
 
+    /// How many times this engine has moved a ref, making one included. A
+    /// follower that cannot block a thread on [`wait`](Self::wait), as in a
+    /// browser's Worker, looks again for its ref whenever this changes.
+    pub fn moves(&self) -> u64 {
+        *self
+            .moved
+            .count
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
     /// Where the ref `name` is once it is anywhere but `after`, waiting at
     /// most `timeout` for a move; where it is when the time is up.
     pub fn wait(

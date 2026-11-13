@@ -352,3 +352,26 @@ fn a_point_has_one_name() {
     let next = engine.apply(fourth, &[pay(1)]).unwrap();
     assert!(refused(engine.advance(&live, unnamed, next)));
 }
+
+/// A follower that cannot block, as in a browser's Worker, looks again
+/// whenever the engine has moved a ref: making one or moving one forward,
+/// never applying an exchange, a move refused or a move already made.
+#[test]
+fn the_engine_counts_every_move_of_a_ref() {
+    let (engine, start) = bank();
+    let live = path("live");
+    let before = engine.moves();
+    engine.refer(&live, start).unwrap();
+    assert_eq!(engine.moves(), before + 1);
+    let next = engine.apply(start, &[pay(1)]).unwrap();
+    assert_eq!(engine.moves(), before + 1);
+    assert!(matches!(
+        engine.advance(&live, next, next),
+        Err(EngineError::Moved { .. })
+    ));
+    assert_eq!(engine.moves(), before + 1);
+    engine.advance(&live, start, next).unwrap();
+    assert_eq!(engine.moves(), before + 2);
+    engine.advance(&live, start, next).unwrap();
+    assert_eq!(engine.moves(), before + 2);
+}

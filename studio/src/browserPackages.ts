@@ -64,9 +64,6 @@ type Waiting = {
   progress?: (progress: SearchProgress) => void;
 };
 
-/** How often a follower asks the Worker again whether a ref moved. */
-const FOLLOW_EVERY_MS = 200;
-
 /** A client of the Worker's engine. */
 export class BrowserPackages implements PackageEngine {
   readonly kind = "browser" as const;
@@ -142,22 +139,13 @@ export class BrowserPackages implements PackageEngine {
   }
 
   /**
-   * The engine's own wait blocks a thread, which a Worker has only one of;
-   * the Worker answers at once, and a follower waiting for the ref to move
-   * asks again until it has or the wait is over.
+   * The Worker answers once the ref has moved from `query.after`, or when
+   * the wait is over: every move of a ref goes through its engine, so it
+   * hears of each and looks again then, asking nothing in the meantime.
+   * Aborting `signal` stops waiting for its answer.
    */
-  async frames(name: string, query: FramesQuery, signal?: AbortSignal): Promise<RefFrames> {
-    const until = performance.now() + (query.wait_seconds ?? 0) * 1_000;
-    const asked = { ...query, wait_seconds: 0 };
-    for (;;) {
-      signal?.throwIfAborted();
-      const frames = await (this.request({ kind: "frames", name, query: asked }) as Promise<RefFrames>);
-      if (frames.point !== query.after || performance.now() >= until) return frames;
-      await new Promise<void>((resolve, reject) => {
-        const timer = setTimeout(resolve, FOLLOW_EVERY_MS);
-        signal?.addEventListener("abort", () => { clearTimeout(timer); reject(signal.reason); }, { once: true });
-      });
-    }
+  frames(name: string, query: FramesQuery, signal?: AbortSignal): Promise<RefFrames> {
+    return this.request({ kind: "frames", name, query }, undefined, [], signal) as Promise<RefFrames>;
   }
 
   runStrategy(point: PointId, request: StrategyRequest, onProgress: (progress: SearchProgress) => void): Running<RanView> {
@@ -221,10 +209,15 @@ export class BrowserPackages implements PackageEngine {
     return worker;
   }
 
-  private request(request: StoreRequest, progress?: (progress: SearchProgress) => void, transfer: Transferable[] = []) {
+  private request(request: StoreRequest, progress?: (progress: SearchProgress) => void, transfer: Transferable[] = [], signal?: AbortSignal) {
     const id = this.next++;
     return new Promise<unknown>((resolve, reject) => {
+      if (signal?.aborted) return reject(signal.reason);
       this.waiting.set(id, { resolve, reject, progress });
+      signal?.addEventListener("abort", () => {
+        this.waiting.delete(id);
+        reject(signal.reason);
+      }, { once: true });
       this.worker.postMessage({ kind: "store", id, request }, transfer);
     });
   }

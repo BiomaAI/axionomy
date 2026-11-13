@@ -88,6 +88,54 @@ test("a Worker loads a package from a URL, runs its experiment, and finds both a
   expect(served).toEqual([200, 304]);
 });
 
+test("a follower waits in the Worker for its ref to move, asking nothing in the meantime", async ({ page }) => {
+  await page.goto("/?studies");
+  const followed = await page.evaluate(async (client) => {
+    // Every request the page posts to a Worker, by kind.
+    const posted: string[] = [];
+    const post = Worker.prototype.postMessage;
+    Worker.prototype.postMessage = function (this: Worker, message: { kind?: string; request?: { kind: string } }, ...rest: never[]) {
+      if (message?.kind === "store" && message.request) posted.push(message.request.kind);
+      return (post as (message: unknown, ...rest: never[]) => void).call(this, message, ...rest);
+    } as typeof Worker.prototype.postMessage;
+    const { BrowserPackages } = await import(client);
+    const packages = new BrowserPackages();
+    await packages.open();
+    await packages.loadUrl("/packages/maze.zip");
+    const listed = await packages.packages();
+    const micro: string = listed.packages[0].refs.find((ref: { name: string }) => ref.name === "maze/micro").point;
+    const offered = await packages.candidates(micro, "maze/moves");
+    const exchange = offered.candidates.find((candidate: { proposal: { assessment: { status: string } } }) => candidate.proposal.assessment.status === "applicable").exchange;
+
+    // The ref does not move for a while; then another request moves it.
+    const asked = posted.length;
+    const waited = performance.now();
+    const waiting = packages.frames("maze/micro", { after: micro, wait_seconds: 20 });
+    await new Promise((resolve) => setTimeout(resolve, 1_000));
+    const applied = await packages.apply(micro, [exchange]);
+    await packages.advanceRef("maze/micro", micro, applied.point);
+    const moved = await waiting;
+    const movedAfter = performance.now() - waited;
+    const requests = posted.slice(asked);
+
+    // Nothing moves it: the wait ends with its time, with no frames.
+    const idleFrom = performance.now();
+    const idle = await packages.frames("maze/micro", { after: applied.point, wait_seconds: 1 });
+    const idleFor = performance.now() - idleFrom;
+    packages.terminate();
+    return { moved, applied: applied.point, movedAfter, requests, idle, idleFor };
+  }, "/src/browserPackages.ts");
+  expect(followed.moved.point).toBe(followed.applied);
+  expect(followed.moved.frames.map((frame: { point: string }) => frame.point)).toEqual([followed.applied]);
+  expect(followed.movedAfter).toBeGreaterThanOrEqual(1_000);
+  expect(followed.movedAfter).toBeLessThan(10_000);
+  // The follower asked once and waited: the move answered it.
+  expect(followed.requests).toEqual(["frames", "apply", "advance_ref"]);
+  expect(followed.idle.point).toBe(followed.applied);
+  expect(followed.idle.frames).toEqual([]);
+  expect(followed.idleFor).toBeGreaterThanOrEqual(1_000);
+});
+
 test("a second Worker keeps its store in memory while another holds the saved one", async ({ page }) => {
   await page.goto("/?studies");
   const opened = await page.evaluate(async (client) => {

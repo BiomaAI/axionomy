@@ -157,6 +157,14 @@ impl WorkerEngine {
         !self.engine.store().in_memory()
     }
 
+    /// How many times the engine has moved a ref, making one included:
+    /// every move goes through it, so a follower waiting in the Worker looks
+    /// again once this changes.
+    #[wasm_bindgen(getter)]
+    pub fn moves(&self) -> u64 {
+        self.engine.moves()
+    }
+
     /// What the store last loaded from `url`, as JSON, while it still holds
     /// every package it loaded from there: the response's `validators`,
     /// its `etag` and `last_modified`, to ask the URL whether it serves
@@ -304,8 +312,9 @@ impl WorkerEngine {
     }
 
     /// The steps the ref `name` was moved over after a point, at once;
-    /// `query` is a `RefFramesQuery`, whose wait the Worker makes by asking
-    /// again, since the engine's own wait blocks a thread.
+    /// `query` is a `RefFramesQuery`. The engine's own wait blocks a thread,
+    /// so the Worker makes the wait: it looks again once
+    /// [`moves`](Self::moves) changes, or when the wait is over.
     pub fn frames(&self, name: &str, query: &str) -> Result<String, JsValue> {
         answer(
             path_of::<RefPath>(name)

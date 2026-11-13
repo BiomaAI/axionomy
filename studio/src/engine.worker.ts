@@ -2,6 +2,7 @@
 import init, { Engine, catalog as wasmCatalog, protocol, study as wasmStudy } from "./generated/wasm/axionomy_studio_wasm";
 import type { ProblemDescriptor, Study, StudyRequest, StudioEvent } from "./api";
 import type { StoreMessage, StoreRequest } from "./browserPackages";
+import { Followers } from "./following";
 import type { LoadedFrom, LoadedView, StoreKept } from "./packageEngine";
 
 type Command =
@@ -68,10 +69,10 @@ const STORE_FILE = "axionomy.redb";
 const HANDLE_ATTEMPTS = 30;
 const HANDLE_RETRY_MS = 100;
 
-let store: Promise<{ engine: Engine; opened: StoreKept }> | undefined;
+let store: Promise<{ engine: Engine; opened: StoreKept; followers: Followers }> | undefined;
 
 function opened() {
-  store ??= openStore().catch((cause: unknown) => {
+  store ??= openStore().then((kept) => ({ ...kept, followers: new Followers(kept.engine) })).catch((cause: unknown) => {
     store = undefined;
     throw cause;
   });
@@ -86,9 +87,19 @@ function read(answer: string): unknown {
 /**
  * The operation `request` names, as the native server serves it, with the
  * same JSON. The engine throws a refusal as the JSON of `{status, body}`.
+ * Followers waiting for a ref look again once it has served anything that
+ * moved one.
  */
 async function serve(id: number, request: StoreRequest): Promise<unknown> {
-  const { engine, opened: where } = await opened();
+  const { engine, opened: where, followers } = await opened();
+  try {
+    return await served(engine, where, followers, id, request);
+  } finally {
+    followers.moved();
+  }
+}
+
+async function served(engine: Engine, where: StoreKept, followers: Followers, id: number, request: StoreRequest): Promise<unknown> {
   const progress = (watched: string) => post({ kind: "store_progress", id, progress: JSON.parse(watched) });
   switch (request.kind) {
     case "open":
@@ -122,7 +133,7 @@ async function serve(id: number, request: StoreRequest): Promise<unknown> {
     case "advance_ref":
       return read(engine.advanceRef(request.name, JSON.stringify({ expected: request.expected, to: request.to })));
     case "frames":
-      return read(engine.frames(request.name, JSON.stringify(request.query)));
+      return followers.frames(request.name, request.query);
     case "run_strategy":
       return read(engine.runStrategy(request.point, JSON.stringify(request.request), progress));
     case "run_experiment":
