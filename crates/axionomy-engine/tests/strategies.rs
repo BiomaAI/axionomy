@@ -265,6 +265,118 @@ fn branch_and_bound_and_beam_find_the_cheapest_progress() {
     assert_eq!(ran.end.step, start.step + 4);
 }
 
+/// One of each asset, `<asset>/<chore>`, of `chores`.
+fn one_each(asset: &str, chores: &[&str]) -> paths::Basket {
+    chores
+        .iter()
+        .map(|chore| (path(&format!("{asset}/{chore}")), Quantity::new(1)))
+        .collect()
+}
+
+/// Four chores a worker does once each, in any order: three cost nothing
+/// and one costs a unit of effort, so every order is equally cheap.
+fn chores() -> (Engine, Point, paths::Economy, Vec<paths::Exchange>) {
+    let engine = Engine::new(Store::memory().unwrap()).unwrap();
+    let chores = ["a", "b", "c", "d"];
+    let mut economy =
+        paths::EconomyBuilder::new().account(path("worker"), one_each("todo", &chores).into());
+    for chore in chores {
+        let mut done = one_each("done", &[chore]);
+        if chore == "d" {
+            done.insert(path("effort"), Quantity::new(1));
+        }
+        economy = economy.rate(
+            path(&format!("chore/{chore}")),
+            Rate::new()
+                .consume(path("worker"), one_each("todo", &[chore]))
+                .produce(path("worker"), done),
+        );
+    }
+    let economy = economy.build().unwrap();
+    engine
+        .keep_script(
+            &path("chores"),
+            r#"
+            fn effort(before, exchange, after) {
+                after.balance("worker", "effort") - before.balance("worker", "effort")
+            }
+            "#,
+        )
+        .unwrap();
+    for (goal, chores) in [("done", &chores[..]), ("impossible", &["a", "e"][..])] {
+        engine
+            .keep_goal(
+                &path(goal),
+                &paths::Goal::new().require(path("worker"), one_each("done", chores)),
+            )
+            .unwrap();
+    }
+    let listed: Vec<paths::Exchange> = chores
+        .iter()
+        .map(|chore| {
+            paths::Exchange::new(path(&format!("chore/{chore}")), Quantity::new(1))
+                .bind(path("worker"), path("worker"))
+        })
+        .collect();
+    engine
+        .keep_candidates(&path("chores"), &CandidateSet::Listed(listed.clone()))
+        .unwrap();
+    let start = engine.author(economy.clone()).unwrap();
+    (engine, start, economy, listed)
+}
+
+#[test]
+fn the_cheapest_search_without_a_heuristic_is_the_samples_dijkstra() {
+    let (engine, start, economy, listed) = chores();
+    let cost = ScriptCall::new(path("chores"), "effort".parse().unwrap());
+    let dijkstra = |goal: &str| Strategy::Cheapest {
+        candidates: path("chores"),
+        goal: path(goal),
+        cost: cost.clone(),
+        heuristic: None,
+    };
+    engine
+        .keep_strategy(&path("chores/dijkstra"), &dijkstra("done"))
+        .unwrap();
+    let ran = run(&engine, start, &dijkstra("done"), EFFORT);
+    assert!(matches!(ran.outcome, Outcome::Reached));
+    assert_eq!(ran.cost, Some(1));
+    // Of the equally cheap orders, the one `axionomy_search::dijkstra`
+    // reaches, which need not be the first a search finds.
+    let effort = |economy: &paths::Economy| economy.balance(&path("worker"), &path("effort"));
+    let expected = axionomy_search::dijkstra(
+        &economy,
+        &engine.goal(&path("done")).unwrap(),
+        |economy: &paths::Economy| economy.applicable(listed.clone()),
+        |before: &paths::Economy, _: &paths::Exchange, after: &paths::Economy| {
+            u64::try_from(effort(after).checked_sub(effort(before)).unwrap()).unwrap()
+        },
+    )
+    .unwrap();
+    assert_eq!(
+        engine.history(ran.end).unwrap().1,
+        expected.trace().exchanges()
+    );
+
+    // A budget of two expansions is spent before the fourth chore.
+    let ran = run(
+        &engine,
+        start,
+        &dijkstra("done"),
+        Effort {
+            budget: 2,
+            ..EFFORT
+        },
+    );
+    assert!(matches!(ran.outcome, Outcome::Spent));
+    assert_eq!(ran.end, start);
+
+    // No chore is `e`: every order is tried, and none reaches it.
+    let ran = run(&engine, start, &dijkstra("impossible"), EFFORT);
+    assert!(matches!(ran.outcome, Outcome::Exhausted));
+    assert_eq!(ran.end, start);
+}
+
 /// Take one or two of four tokens in turn; whoever takes the last wins.
 fn nim() -> (Engine, Point) {
     let engine = Engine::new(Store::memory().unwrap()).unwrap();

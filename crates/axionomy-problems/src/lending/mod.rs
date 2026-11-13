@@ -8,6 +8,8 @@ use axionomy::{
 };
 use axionomy_search::{SearchSolution, bfs, dijkstra};
 
+#[cfg(feature = "packages")]
+pub mod package;
 mod study;
 mod view;
 

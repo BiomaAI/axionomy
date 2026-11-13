@@ -366,6 +366,22 @@ fn rescue(engine: &Engine, instance: &str) {
     }
 }
 
+fn lending(engine: &Engine, instance: &str) {
+    // The searches, the over-borrowed scenario, and the attack on the
+    // instance's fresh market, an arm starting from a ref of its own.
+    let strategies = [
+        "least-interest",
+        "fewest-steps",
+        "over-borrowed",
+        "first-depositor-attack",
+    ];
+    assert_eq!(
+        reproduces(engine, "lending", instance, &strategies),
+        strategies.len(),
+        "{instance}"
+    );
+}
+
 /// `value`, a typed identifier, exchange or economy, as paths.
 fn written<T: DeserializeOwned>(value: &impl Serialize) -> T {
     postcard::from_bytes(&postcard::to_allocvec(value).unwrap()).unwrap()
@@ -517,7 +533,7 @@ type Sample = (
     fn(&Engine, &str),
 );
 
-const SAMPLES: [Sample; 8] = [
+const SAMPLES: [Sample; 9] = [
     ("maze", axionomy_problems::maze::package::write, maze),
     (
         "sokoban",
@@ -542,6 +558,11 @@ const SAMPLES: [Sample; 8] = [
         scheduling,
     ),
     ("amm", axionomy_problems::amm::package::write, amm),
+    (
+        "lending",
+        axionomy_problems::lending::package::write,
+        lending,
+    ),
 ];
 
 /// Each sample's package reproduces its study at `instances`.

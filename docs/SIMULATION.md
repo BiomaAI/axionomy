@@ -509,7 +509,14 @@ short for the work, where every search runs out) needed nothing new. The Living 
 its no-whale and thin-liquidity counterfactuals: plans for Micro's single
 day, each errand quoted against the reserves the plan follows, and policies
 for the seasons, which find whose turn it is from the decisions each actor
-has left) reproduces all three documents and needed nothing new. The
+has left) reproduces all three documents and needed nothing new. Lending's (each instance's goal and
+strategies toward it: least interest over each closed period's interest,
+fewest steps, the over-borrowed scenario played turn by turn until the
+keeper liquidates, and the first-depositor attack as a plan from an arm
+starting at the instance's fresh market) reproduces every document; the
+cheapest search without a heuristic runs `axionomy_search::dijkstra`, as
+the samples do, since of equally cheap plans Showcase's study keeps the
+one that search's heap yields. The
 micro instances are checked with
 every test run; the showcase and stress instances, minutes in a debug build,
 run in a release build in CI. Rhai is optimised in debug builds too, since package

@@ -10,6 +10,7 @@ use axionomy::{Quantity, paths};
 use axionomy_search::{
     AStarSession, BfsSession, GraphSearchProgress, best_first,
     bounded::{beam, branch_and_bound, minimax},
+    dijkstra,
     mcts::{MctsConfig, search as mcts},
     pareto::{Objective as Measured, ObjectiveDirection, ObjectiveVector, ParetoSearchSession},
     sampling::{SeededSampler, TicketSource, sample_seed},
@@ -45,9 +46,12 @@ pub enum Strategy {
         goal: GoalPath,
     },
     /// The cheapest exchanges from the candidate set that reach the goal,
-    /// each costing what `cost` charges, `fn(before, exchange, after)`: in
-    /// Dijkstra's order, or A*'s when `heuristic`, `fn(state)`, bounds the
-    /// cost still to pay from below.
+    /// each costing what `cost` charges, `fn(before, exchange, after)`: by
+    /// Dijkstra's search as `axionomy_search::dijkstra` runs it, which of
+    /// equally cheap plans reaches the one its heap yields first and stops
+    /// without a plan once it has expanded its budget; or, when `heuristic`,
+    /// `fn(state)`, bounds the cost still to pay from below, by A*, watched
+    /// as it goes.
     Cheapest {
         candidates: CandidatesPath,
         goal: GoalPath,
@@ -410,7 +414,55 @@ impl Engine {
                 candidates,
                 goal,
                 cost,
-                heuristic,
+                heuristic: None,
+            } => {
+                let candidates = self.candidate_set(candidates)?;
+                let failure = RefCell::new(None);
+                let budget = effort.budget;
+                let (mut expanded, mut spent) = (0, false);
+                let found = dijkstra(
+                    &initial,
+                    &self.goal(goal)?,
+                    |economy: &paths::Economy| {
+                        // Past its budget the search expands nothing more.
+                        if expanded >= budget {
+                            spent = true;
+                            return Vec::new();
+                        }
+                        expanded += 1;
+                        self.offered(&candidates, economy, &failure)
+                    },
+                    |before: &paths::Economy,
+                     exchange: &paths::Exchange,
+                     after: &paths::Economy| {
+                        self.charged(cost, (before, exchange, after), &failure)
+                    },
+                );
+                failed(failure)?;
+                // A goal found once a state went unexpanded may not be the
+                // cheapest.
+                let (end, outcome, cost) = match found {
+                    _ if spent => (at, Outcome::Spent, None),
+                    Some(solution) => (
+                        self.apply(at, solution.trace().exchanges())?,
+                        Outcome::Reached,
+                        Some(solution.cost()),
+                    ),
+                    None => (at, Outcome::Exhausted, None),
+                };
+                Ok(Ran {
+                    start: at,
+                    end,
+                    outcome,
+                    thinking: None,
+                    cost,
+                })
+            }
+            Strategy::Cheapest {
+                candidates,
+                goal,
+                cost,
+                heuristic: Some(heuristic),
             } => {
                 let candidates = self.candidate_set(candidates)?;
                 let failure = RefCell::new(None);
@@ -419,22 +471,15 @@ impl Engine {
                 let charge = |before: &paths::Economy,
                               exchange: &paths::Exchange,
                               after: &paths::Economy| {
-                    self.step_cost(cost, before, exchange, after)
-                        .map(|cost| u64::try_from(cost).unwrap_or(u64::MAX))
-                        .unwrap_or_else(|error| {
-                            failure.borrow_mut().get_or_insert(error);
-                            0
-                        })
+                    self.charged(cost, (before, exchange, after), &failure)
                 };
-                let estimate = |economy: &paths::Economy| match heuristic {
-                    None => 0,
-                    Some(heuristic) => self
-                        .measure_state(heuristic, economy)
+                let estimate = |economy: &paths::Economy| {
+                    self.measure_state(heuristic, economy)
                         .map(|estimate| u64::try_from(estimate).unwrap_or(u64::MAX))
                         .unwrap_or_else(|error| {
                             failure.borrow_mut().get_or_insert(error);
                             0
-                        }),
+                        })
                 };
                 let mut session =
                     AStarSession::new(&initial, self.goal(goal)?, propose, charge, estimate);
@@ -449,6 +494,23 @@ impl Engine {
 
     fn candidate_set(&self, path: &CandidatesPath) -> Result<CandidateSet, EngineError> {
         self.defined(path)
+    }
+
+    /// What `cost` charges for a step, `(before, exchange, after)`, as a
+    /// count, keeping the first failure in `failure` and charging nothing
+    /// for a step it fails on.
+    fn charged(
+        &self,
+        cost: &ScriptCall,
+        (before, exchange, after): (&paths::Economy, &paths::Exchange, &paths::Economy),
+        failure: &RefCell<Option<EngineError>>,
+    ) -> u64 {
+        self.step_cost(cost, before, exchange, after)
+            .map(|cost| u64::try_from(cost).unwrap_or(u64::MAX))
+            .unwrap_or_else(|error| {
+                failure.borrow_mut().get_or_insert(error);
+                0
+            })
     }
 
     /// The exchanges `set` offers at `economy` that apply, keeping the first
