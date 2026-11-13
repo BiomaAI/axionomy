@@ -2253,7 +2253,9 @@ those before and those it opened, less those it closed, in order
 (`apply_accounts`, `apply_ordered`); the conformance fixtures were
 regenerated from it. Opening an account greater than every account costs
 what it did; opening one below lays the accounts out again, as compaction
-already does.
+already does. Invariants keep the order they are declared in, which is the
+model's (an exchange breaking several is refused for the first), and the
+store keys them by position, so they read back in that order too.
 
 ## 16. Success criteria
 

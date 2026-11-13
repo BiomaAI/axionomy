@@ -16,7 +16,7 @@ pub(crate) const FORMAT: &str = "format";
 /// The format this version writes and reads: records, tree values and receipt
 /// digests in postcard, identifiers in keys as their paths.
 /// The format this version writes and reads, which a package records.
-pub const FORMAT_VERSION: u64 = 2;
+pub const FORMAT_VERSION: u64 = 3;
 /// Tree nodes by hash.
 pub(crate) const NODES: TableDefinition<&[u8; 32], &[u8]> = TableDefinition::new("nodes");
 pub(crate) const RUNS: TableDefinition<u128, &[u8]> = TableDefinition::new("runs");

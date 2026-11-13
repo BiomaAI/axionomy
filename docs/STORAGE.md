@@ -127,7 +127,7 @@ A stored economy is one tree, whose keys say what each entry holds:
 | `a` account | empty: the account exists |
 | `b` account `\0` asset | the balance, 32 bytes big-endian, never zero |
 | `r` rate | the rate, in postcard |
-| `v` invariant name `\0` the invariant in postcard | empty |
+| `v` the invariant's position, 4 bytes big-endian | the invariant, in postcard |
 
 Every identifier in a key is written as its path (D-044), so a sample's own
 Rust types and paths are stored the same way: an economy of any
@@ -138,14 +138,15 @@ writes every fork, keeps the ontology of the run it forked from, so a maze
 run and every branch from it stay maze's and are drawn with maze's view. A
 path never contains `\0`, which sorts before every other byte, so an
 account's balances are contiguous and in account order, and a prefix range
-reads one account; a path prefix is a key prefix. Invariants are keyed by name
-and then their encoding, since two may share a name. Values and the store's
+reads one account; a path prefix is a key prefix. Invariants are keyed by the
+position they are declared at, since that order is the model's: an exchange
+breaking several is refused for the first. Values and the store's
 records (runs, steps, groups, members, refs) are postcard, the kernel's
 binary form: every field written, quantities as big-endian bytes, expressions
 tagged by variant; a step's receipt digest is the hash of the receipt's
-postcard. The store records the format it is written in (format 2, which
-indexes every fork by the run and step it forked from) and refuses a store in
-any other, or from before formats were recorded. The **state root** is the
+postcard. The store records the format it is written in (format 3, which
+indexes every fork by the run and step it forked from and keys invariants by
+position) and refuses a store in any other, or from before formats were recorded. The **state root** is the
 tree's hash. The tree holds the logical state, and an economy lists its
 accounts in key order (D-051), so an economy rebuilt from a root is the
 economy that was stored; decoding accepts only trees an economy could have

@@ -849,3 +849,42 @@ fn branches_are_indexed_and_a_ref_moves_only_from_where_it_is() {
     ));
     assert_eq!(store.read().unwrap().reference(&name).unwrap(), on(early));
 }
+
+#[test]
+fn invariants_read_back_in_the_order_they_were_declared() {
+    // Declared out of name order: the model's order is the declaration's,
+    // since an exchange breaking several is refused for the first.
+    let economy = paths::EconomyBuilder::new()
+        .account(path("bank"), axionomy::basket([(path("cash"), 5)]).into())
+        .invariant(paths::LinearInvariant::new(path("zeta")).weight(path("cash"), 1))
+        .invariant(paths::LinearInvariant::new(path("alpha")).weight(path("cash"), 2))
+        .invariant(paths::LinearInvariant::new(path("alpha")).weight(path("cash"), 1))
+        .build()
+        .unwrap();
+    let store = Store::memory().unwrap();
+    let point = store
+        .record::<Paths>(economy.clone(), Checkpoints::Ends)
+        .finish()
+        .unwrap();
+    let read = store
+        .read()
+        .unwrap()
+        .state::<Paths>(point)
+        .unwrap()
+        .unwrap();
+    let names = |economy: &paths::Economy| {
+        economy
+            .invariants()
+            .map(|invariant| invariant.name().to_string())
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(names(&read.economy), ["zeta", "alpha", "alpha"]);
+    // Each in its place, the same weights.
+    let weights = |economy: &paths::Economy| {
+        economy
+            .invariants()
+            .map(|invariant| format!("{invariant:?}"))
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(weights(&read.economy), weights(&economy));
+}

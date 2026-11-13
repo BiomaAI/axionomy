@@ -6,15 +6,16 @@
 //! | `a` account | empty: the account exists |
 //! | `b` account `\0` asset | the balance, 32 bytes big-endian, never zero |
 //! | `r` rate | the rate, in postcard |
-//! | `v` invariant name `\0` the invariant in postcard | empty |
+//! | `v` the invariant's position, 4 bytes big-endian | the invariant, in postcard |
 //!
 //! Every identifier in a key is written as its path (D-044). A path never
 //! contains `\0`, which sorts before every other byte, so an account's
 //! balances are contiguous and in the same order as the accounts, and a path
 //! prefix is a key prefix. The tree holds the economy's logical state, not
 //! the order its accounts were created in: a rebuilt economy lists accounts in
-//! key order. Invariants are keyed by name and then their encoding, since two
-//! may share a name.
+//! key order (D-051). Invariants are keyed by their position, since the order
+//! they are declared in is the model's: an exchange that breaks several is
+//! refused for the first.
 
 use crate::ontology::{Id, Recordable};
 use axionomy::path::{self, Path, Segments};
@@ -47,8 +48,8 @@ pub fn tree<O: Recordable>(economy: &Economy<O>) -> Tree {
         let definition = economy.rate(rate).expect("listed rates exist");
         entries.push((key(RATE, rate), encode(definition)));
     }
-    for invariant in economy.invariants() {
-        entries.push((invariant_key(invariant), Vec::new()));
+    for (position, invariant) in economy.invariants().enumerate() {
+        entries.push((invariant_key(position), encode(invariant)));
     }
     entries.into_iter().collect()
 }
@@ -116,12 +117,13 @@ pub fn economy<O: Recordable>(tree: &Tree) -> Result<Economy<O>, StateError> {
         read += 1;
         builder = builder.rate(identifier(&key[1..], "a rate")?, decode(value, "a rate")?);
     }
-    for (key, value) in tree.prefix(&[INVARIANT]) {
+    for (position, (key, value)) in tree.prefix(&[INVARIANT]).enumerate() {
         read += 1;
-        if !value.is_empty() {
-            return Err(StateError("an invariant entry has a value"));
+        if key != invariant_key(position) {
+            return Err(StateError("invariants are not numbered from zero in order"));
         }
-        builder = builder.invariant(invariant(&key[1..])?);
+        let invariant: LinearInvariant<O::Asset> = decode(value, "an invariant")?;
+        builder = builder.invariant(invariant);
     }
     if read != tree.len() {
         return Err(StateError("an entry holds nothing an economy has"));
@@ -302,23 +304,10 @@ fn balances_key(account: &AccountPath) -> Vec<u8> {
     [key(BALANCE, account), vec![0]].concat()
 }
 
-/// An invariant's key: its name, then its encoding, since two invariants may
-/// share a name.
-fn invariant_key<A: Id>(invariant: &LinearInvariant<A>) -> Vec<u8> {
-    [key(INVARIANT, invariant.name()), vec![0], encode(invariant)].concat()
-}
-
-/// The invariant whose key, after its space, is `rest`.
-fn invariant<A: Id>(rest: &[u8]) -> Result<LinearInvariant<A>, StateError> {
-    let split = rest
-        .iter()
-        .position(|&byte| byte == 0)
-        .ok_or(StateError("an invariant key has no encoding"))?;
-    let invariant: LinearInvariant<A> = decode(&rest[split + 1..], "an invariant")?;
-    if written(invariant.name()) != rest[..split] {
-        return Err(StateError("an invariant is keyed by another name"));
-    }
-    Ok(invariant)
+/// The key of the invariant declared at `position`.
+fn invariant_key(position: usize) -> Vec<u8> {
+    let position = u32::try_from(position).expect("an economy declares fewer than 2^32 invariants");
+    [&[INVARIANT][..], &position.to_be_bytes()].concat()
 }
 
 /// The identifier a key writes, accepting only the path [`written`] gives.
