@@ -13,6 +13,8 @@ use axionomy_search::{
 };
 use std::ops::ControlFlow;
 
+#[cfg(feature = "packages")]
+pub mod package;
 mod study;
 mod tactics;
 mod view;

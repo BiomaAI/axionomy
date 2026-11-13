@@ -557,7 +557,17 @@ decisions on all sixteen scenarios; it needed ISMCTS as a game's chooser,
 whose `observe` script gives the view the tree's nodes, candidates and
 simulations read, and whose beliefs replay the point's history with each of
 Nature's draws drawn again every way its chance script gives, kept while the
-player sees them as it saw the real economy. The
+player sees them as it saw the real economy. Connect Four's (Micro's
+compact board and the standard one of Showcase and Stress, each with its
+self-play and its games against the center-first and depth-five opponents,
+every turn a choice: Red searching its drops by tree search over the
+tactical moves, seeded per turn, and Yellow, who takes each drop's
+adjudication, searching alike or scripted, the depth-five opponent a
+negamax over bitboards) reproduces every document; it needed either tree
+search's rollout to be given the search's random,
+`fn(state, candidates, random)`, whose weighted samples draw the search's
+own tickets, so simulations that explore at random draw as the study's do.
+The
 micro instances are checked with
 every test run; the showcase and stress instances, minutes in a debug build,
 run in a release build in CI. Rhai is optimised in debug builds too, since package

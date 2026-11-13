@@ -736,6 +736,17 @@ fn mission_monte_carlo(engine: &Engine) {
     }
 }
 
+fn connect_four(engine: &Engine, instance: &str) {
+    // Self-play, and Red's tree search against each opponent, every game
+    // on the instance's board.
+    let documents = ["mcts-game", "center-opponent", "search-opponent"];
+    assert_eq!(
+        reproduces(engine, "connect-four", instance, &documents),
+        documents.len(),
+        "{instance}"
+    );
+}
+
 fn perishables(engine: &Engine, instance: &str) {
     // Micro plays its outage and picks from its exact storage front; the
     // cold chains plan each of their four daily policies over the outage
@@ -819,7 +830,7 @@ type Sample = (
     fn(&Engine, &str),
 );
 
-const SAMPLES: [Sample; 14] = [
+const SAMPLES: [Sample; 15] = [
     ("maze", axionomy_problems::maze::package::write, maze),
     (
         "sokoban",
@@ -858,6 +869,11 @@ const SAMPLES: [Sample; 14] = [
         "logistics",
         axionomy_problems::logistics::package::write,
         logistics,
+    ),
+    (
+        "connect-four",
+        axionomy_problems::connect_four::package::write,
+        connect_four,
     ),
     (
         "work-league",

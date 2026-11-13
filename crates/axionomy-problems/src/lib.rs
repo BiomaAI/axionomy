@@ -32,7 +32,7 @@ pub type WritePackage = fn(&axionomy_engine::Engine) -> Result<(), axionomy_engi
 /// The samples written as packages, by name, in catalog order.
 #[cfg(feature = "packages")]
 pub fn packages() -> Vec<(axionomy_engine::PackagePath, WritePackage)> {
-    let packages: [(&str, WritePackage); 14] = [
+    let packages: [(&str, WritePackage); 15] = [
         ("maze", maze::package::write),
         ("sokoban", sokoban::package::write),
         ("exact-cover", exact_cover::package::write),
@@ -44,6 +44,7 @@ pub fn packages() -> Vec<(axionomy_engine::PackagePath, WritePackage)> {
         ("lending", lending::package::write),
         ("marketplace", marketplace::package::write),
         ("logistics", logistics::package::write),
+        ("connect-four", connect_four::package::write),
         ("work-league", work_league::package::write),
         ("mission", mission::package::write),
         ("perishables", perishables::package::write),
