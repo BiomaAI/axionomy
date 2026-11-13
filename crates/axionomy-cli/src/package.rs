@@ -6,8 +6,12 @@ use axionomy_engine::{
     Contents, Engine, Loaded, Manifest, PackagePath, Version, package as read_package, zipped,
 };
 use axionomy_store::{DefinitionPath, RefPath, Store, Target};
+use axionomy_studio_api::SamplePackages;
 use clap::Subcommand;
 use std::{fs, path::PathBuf};
+
+/// The file naming the samples `package samples` writes.
+const INDEX: &str = "index.json";
 
 #[derive(Debug, Subcommand)]
 pub(crate) enum Action {
@@ -36,7 +40,8 @@ pub(crate) enum Action {
     Load { store: PathBuf, package: PathBuf },
     /// Say what a package file holds.
     Inspect { package: PathBuf },
-    /// Write every sample's package, zipped, as `<sample>.zip`.
+    /// Write every sample's package, zipped, as `<sample>.zip`, and
+    /// `index.json` naming them, which Studio lists them by.
     Samples {
         /// The directory to write into.
         directory: PathBuf,
@@ -69,13 +74,21 @@ pub(crate) fn run(action: Action) -> Result<String, CliError> {
                 .parse()
                 .expect("the crate's version is a version");
             let mut lines = Vec::new();
+            let mut index = SamplePackages {
+                packages: Vec::new(),
+            };
             for (name, write_sample) in axionomy_problems::packages() {
                 let engine = Engine::new(Store::memory()?)?;
                 write_sample(&engine)?;
                 let contents = engine.named_under(&name)?;
                 let output = directory.join(format!("{name}.zip"));
                 lines.push(written(&engine, &name, version, contents, &output)?);
+                index.packages.push(name);
             }
+            // What a static site lists its samples by: Studio's own contract.
+            let listed = directory.join(INDEX);
+            write(&listed, &serde_json::to_vec(&index)?)?;
+            lines.push(format!("wrote {}", listed.display()));
             Ok(lines.join("\n"))
         }
         Action::Inspect { package } => {

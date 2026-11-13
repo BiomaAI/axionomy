@@ -1,0 +1,22 @@
+[package]
+name = "axionomy-studio-api"
+description = "Studio's engine operations and their wire types, the same natively and in the browser"
+readme = "README.md"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+axionomy.workspace = true
+axionomy-engine.workspace = true
+axionomy-search.workspace = true
+axionomy-store.workspace = true
+axionomy-view.workspace = true
+schemars.workspace = true
+serde.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true

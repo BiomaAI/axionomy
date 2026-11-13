@@ -10,9 +10,9 @@ use schemars::{JsonSchema, Schema, SchemaGenerator, generate::SchemaSettings};
 use serde::Serialize;
 use serde_json::{Map, Value};
 
-type SchemaFn = fn(&mut SchemaGenerator) -> Schema;
+pub(crate) type SchemaFn = fn(&mut SchemaGenerator) -> Schema;
 
-fn schema_of<T: JsonSchema>(generator: &mut SchemaGenerator) -> Schema {
+pub(crate) fn schema_of<T: JsonSchema>(generator: &mut SchemaGenerator) -> Schema {
     generator.subschema_for::<T>()
 }
 
@@ -35,6 +35,13 @@ enum Body {
     EventStream(SchemaFn),
 }
 
+/// What a request carries: a JSON value, or a file's bytes.
+#[derive(Clone, Copy)]
+enum Request {
+    Json(SchemaFn),
+    Bytes(&'static str),
+}
+
 /// One documented route and the handler that serves it.
 pub(crate) struct Endpoint<S> {
     method: &'static str,
@@ -43,7 +50,7 @@ pub(crate) struct Endpoint<S> {
     summary: &'static str,
     tag: &'static str,
     parameters: Vec<(Location, SchemaFn)>,
-    request: Option<SchemaFn>,
+    request: Option<Request>,
     response: Body,
     conflict: Option<(&'static str, SchemaFn)>,
     fallible: bool,
@@ -110,7 +117,13 @@ impl<S> Endpoint<S> {
     }
 
     pub(crate) fn json_body<B: JsonSchema>(mut self) -> Self {
-        self.request = Some(schema_of::<B>);
+        self.request = Some(Request::Json(schema_of::<B>));
+        self
+    }
+
+    /// The request's body is a file's bytes, said in `description`.
+    pub(crate) fn bytes_body(mut self, description: &'static str) -> Self {
+        self.request = Some(Request::Bytes(description));
         self
     }
 
@@ -164,6 +177,8 @@ struct Parameter {
 
 #[derive(Debug, Clone, Serialize)]
 struct RequestBody {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    description: Option<&'static str>,
     content: IndexMap<&'static str, Media>,
     required: bool,
 }
@@ -241,8 +256,9 @@ fn parameters(
         .collect()
 }
 
-/// The OpenAPI document for `endpoints`, in declaration order.
-pub(crate) fn document<S>(endpoints: &[Endpoint<S>]) -> OpenApiDocument {
+/// The OpenAPI document for `endpoints`, in declaration order, with the
+/// schemas of `also`, types the API's clients read that no endpoint serves.
+pub(crate) fn document<S>(endpoints: &[Endpoint<S>], also: &[SchemaFn]) -> OpenApiDocument {
     let mut generator = SchemaSettings::draft07()
         .with(|settings| {
             settings.inline_subschemas = false;
@@ -256,9 +272,20 @@ pub(crate) fn document<S>(endpoints: &[Endpoint<S>]) -> OpenApiDocument {
             .iter()
             .flat_map(|(location, object)| parameters(&mut generator, *location, *object))
             .collect();
-        let request_body = endpoint.request.map(|request| RequestBody {
-            content: media("application/json", request(&mut generator).to_value()),
-            required: true,
+        let request_body = endpoint.request.map(|request| match request {
+            Request::Json(schema) => RequestBody {
+                description: None,
+                content: media("application/json", schema(&mut generator).to_value()),
+                required: true,
+            },
+            Request::Bytes(description) => RequestBody {
+                description: Some(description),
+                content: media(
+                    "application/octet-stream",
+                    serde_json::json!({ "type": "string", "contentMediaType": "application/octet-stream" }),
+                ),
+                required: true,
+            },
         });
         let mut responses = IndexMap::new();
         if endpoint.fallible {
@@ -281,10 +308,19 @@ pub(crate) fn document<S>(endpoints: &[Endpoint<S>]) -> OpenApiDocument {
                     content: media("application/json", reference.to_value()),
                 }
             }
-            Body::EventStream(event) => Response {
-                description: "Tagged StudioEvent values encoded in SSE data fields".into(),
-                content: media("text/event-stream", event(&mut generator).to_value()),
-            },
+            Body::EventStream(event) => {
+                let reference = event(&mut generator);
+                let name = reference
+                    .get("$ref")
+                    .and_then(Value::as_str)
+                    .and_then(|target| target.rsplit('/').next())
+                    .unwrap_or("JSON")
+                    .to_owned();
+                Response {
+                    description: format!("Tagged {name} values encoded in SSE data fields"),
+                    content: media("text/event-stream", reference.to_value()),
+                }
+            }
         };
         responses.insert("200", success);
         if let Some((description, conflict)) = endpoint.conflict {
@@ -296,7 +332,7 @@ pub(crate) fn document<S>(endpoints: &[Endpoint<S>]) -> OpenApiDocument {
                 },
             );
         }
-        if endpoint.request.is_some() {
+        if let Some(Request::Json(_)) = endpoint.request {
             // Axum's JSON extractor rejects malformed bodies before the handler.
             responses.insert("400", text("Failed to parse the request body as JSON"));
             responses.insert(
@@ -320,11 +356,14 @@ pub(crate) fn document<S>(endpoints: &[Endpoint<S>]) -> OpenApiDocument {
             },
         );
     }
+    for schema in also {
+        schema(&mut generator);
+    }
     OpenApiDocument {
         openapi: "3.1.0",
         info: Info {
             title: "Axionomy Service API",
-            description: "Interface-neutral problem studies, their replays, lifecycle control, and Studio data; and refs to the points of the engine's store, which move forward and deliver the steps they move over.",
+            description: "The engine's operations Studio uses: the packages its store holds, loading one, a point's history drawn with its view, the candidates at a point, assessing and applying exchanges, strategies and experiments run while their progress streams, comparison, and refs to points, which move forward and deliver the steps they move over; and, until they retire, interface-neutral problem studies.",
             version: env!("CARGO_PKG_VERSION"),
         },
         paths,

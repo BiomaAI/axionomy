@@ -14,6 +14,7 @@ axionomy-engine.workspace = true
 axionomy-mcp.workspace = true
 axionomy-problems = { workspace = true, features = ["packages"] }
 axionomy-store.workspace = true
+axionomy-studio-api.workspace = true
 axionomy-studio-server.workspace = true
 axionomy-study.workspace = true
 axum.workspace = true

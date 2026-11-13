@@ -456,6 +456,7 @@ dependencies = [
  "axionomy-mcp",
  "axionomy-problems",
  "axionomy-store",
+ "axionomy-studio-api",
  "axionomy-studio-server",
  "axionomy-study",
  "axum",
@@ -570,6 +571,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "axionomy-studio-api"
+version = "0.1.0"
+dependencies = [
+ "axionomy",
+ "axionomy-engine",
+ "axionomy-search",
+ "axionomy-store",
+ "axionomy-view",
+ "schemars 1.2.3",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "axionomy-studio-server"
 version = "0.1.0"
 dependencies = [
@@ -578,6 +593,7 @@ dependencies = [
  "axionomy-problems",
  "axionomy-search",
  "axionomy-store",
+ "axionomy-studio-api",
  "axionomy-study",
  "axionomy-view",
  "axum",

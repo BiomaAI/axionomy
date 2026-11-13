@@ -1,5 +1,5 @@
-//! Serving the problems and loaded packages over MCP, and the problems to
-//! Studio, until the server is stopped.
+//! Serving the problems and loaded packages over MCP and to Studio, until
+//! the server is stopped.
 
 use crate::CliError;
 use axionomy_engine::Engine;
@@ -29,15 +29,7 @@ pub(crate) fn mcp(
 ) -> Result<(), CliError> {
     logging("axionomy_cli=info,axionomy_mcp=info,rmcp=info");
     let engine = engine(store, "keeping economies on disk")?;
-    for file in packages {
-        let loaded = crate::package::load(&engine, file)?;
-        for manifest in &loaded.manifests {
-            info!(file = %file.display(), "loaded package {}", crate::package::describe(manifest));
-        }
-        for kept in crate::package::kept(&loaded) {
-            warn!(file = %file.display(), "{kept}");
-        }
-    }
+    load(&engine, packages)?;
     runtime(async move {
         let cancellation = CancellationToken::new();
         let service = stateless_http_service(engine, registry, cancellation.clone())?;
@@ -58,16 +50,20 @@ pub(crate) fn mcp(
 }
 
 /// Serves Studio's API over the points and refs of `store` when given, a
-/// store in memory otherwise, and the frontend built in `frontend` when there
-/// is one.
+/// store in memory otherwise, once every package file of `packages` is
+/// merged into it, and the frontend built in `frontend` when there is one. A
+/// package that fails the checks loading makes stops the server before it
+/// serves.
 pub(crate) fn studio(
     registry: Registry,
     bind: SocketAddr,
     frontend: &Path,
     store: Option<PathBuf>,
+    packages: &[PathBuf],
 ) -> Result<(), CliError> {
     logging("axionomy_cli=info,axionomy_studio_server=info,tower_http=info");
     let engine = engine(store, "serving the points and refs of a store on disk")?;
+    load(&engine, packages)?;
     let serves_frontend = frontend.join("index.html").is_file();
     let (router, _) = api(StudioState::new(engine, registry));
     let router = with_studio_frontend(router, frontend);
@@ -87,6 +83,21 @@ pub(crate) fn studio(
             .await?;
         Ok(())
     })
+}
+
+/// Merges every package file of `packages` into `engine`'s store, saying
+/// what each held and which names the store kept as it gives them.
+fn load(engine: &Engine, packages: &[PathBuf]) -> Result<(), CliError> {
+    for file in packages {
+        let loaded = crate::package::load(engine, file)?;
+        for manifest in &loaded.manifests {
+            info!(file = %file.display(), "loaded package {}", crate::package::describe(manifest));
+        }
+        for kept in crate::package::kept(&loaded) {
+            warn!(file = %file.display(), "{kept}");
+        }
+    }
+    Ok(())
 }
 
 /// An engine over the store file at `store`, saying `on_disk` when there is

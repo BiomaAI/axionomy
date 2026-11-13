@@ -1,16 +1,26 @@
-//! Native HTTP adapter for the interface-neutral Axionomy study runtime, and
-//! for the refs of the engine's store.
+//! Native HTTP adapter for the engine's operations Studio uses (P12): its
+//! packages, points, refs, strategies and experiments, as
+//! `axionomy-studio-api` defines them; and for the interface-neutral study
+//! runtime until it retires.
 
+mod engine;
 mod openapi;
 mod refs;
 
-pub use openapi::OpenApiDocument;
-pub use refs::{
-    ObjectiveList, PointId, PointIdError, RefAdvanceRequest, RefCreateRequest, RefFrame, RefFrames,
-    RefFramesQuery, RefMoved, RefName, RefView,
+pub use axionomy_studio_api::{
+    ErrorResponse, ObjectiveList, PointId, PointIdError, RefAdvanceRequest, RefCreateRequest,
+    RefFrame, RefFrames, RefFramesQuery, RefMoved, RefView,
 };
+pub use engine::{ExperimentName, PointName};
+pub use openapi::OpenApiDocument;
+pub use refs::RefName;
 
 use axionomy_engine::Engine;
+use axionomy_studio_api::{
+    Ancestor, AncestorQuery, Applied, ApplyRequest, AssessRequest, Candidate, Candidates,
+    CandidatesQuery, CompareRequest, ComparisonView, ExperimentEvent, LoadedView, PackageList,
+    Refusal, RefusalBody, ResultsView, SamplePackages, StrategyEvent, StrategyRequest,
+};
 use axionomy_study::{
     ProblemDescriptor, Progress, Registry, StudioEvent, StudioStudyId, Study, StudyControl,
     StudyError, StudyKey, StudyObserver, StudyRequest,
@@ -18,7 +28,7 @@ use axionomy_study::{
 use axionomy_view::{DocumentPath, ExchangeFrame, SearchObservationView, ViewDocument};
 use axum::{
     Json, Router,
-    extract::{Path, Query, State},
+    extract::{DefaultBodyLimit, Path, Query, State},
     http::{HeaderValue, StatusCode},
     response::{IntoResponse, Sse, sse::Event},
     routing::{delete, get, post},
@@ -119,11 +129,6 @@ const fn default_frame_limit() -> u64 {
     100
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-pub struct ErrorResponse {
-    pub error: String,
-}
-
 #[derive(Debug)]
 struct StudyRecord {
     summary: RwLock<StudySummary>,
@@ -201,46 +206,30 @@ impl StudioState {
     }
 }
 
+/// The largest package file the server loads.
+const MAX_PACKAGE_BYTES: usize = 256 * 1024 * 1024;
+
+/// A refused request, answered with its status and body.
 #[derive(Debug)]
-enum ApiError {
-    Status {
-        status: StatusCode,
-        message: String,
-    },
-    /// A ref was not where a move expected it: 409 with where it is.
-    Moved(RefMoved),
-}
+struct ApiError(Refusal);
 
 impl ApiError {
     fn not_found(message: impl Into<String>) -> Self {
-        Self::Status {
-            status: StatusCode::NOT_FOUND,
-            message: message.into(),
-        }
+        Self(Refusal::NotFound(message.into()))
     }
 
     fn bad_request(message: impl Into<String>) -> Self {
-        Self::Status {
-            status: StatusCode::BAD_REQUEST,
-            message: message.into(),
-        }
-    }
-
-    fn internal(message: impl Into<String>) -> Self {
-        Self::Status {
-            status: StatusCode::INTERNAL_SERVER_ERROR,
-            message: message.into(),
-        }
+        Self(Refusal::BadRequest(message.into()))
     }
 }
 
 impl IntoResponse for ApiError {
     fn into_response(self) -> axum::response::Response {
-        match self {
-            Self::Status { status, message } => {
-                (status, Json(ErrorResponse { error: message })).into_response()
-            }
-            Self::Moved(moved) => (StatusCode::CONFLICT, Json(moved)).into_response(),
+        let status =
+            StatusCode::from_u16(self.0.status()).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+        match self.0.body() {
+            RefusalBody::Moved(moved) => (status, Json(moved)).into_response(),
+            RefusalBody::Error(error) => (status, Json(error)).into_response(),
         }
     }
 }
@@ -253,6 +242,124 @@ fn endpoints() -> Vec<Endpoint<StudioState>> {
             "Check whether the native Studio engine is reachable",
             "system",
         ),
+        Endpoint::new::<PackageList>("get", "/api/packages", get(engine::packages))
+            .describe(
+                "listPackages",
+                "List the packages the store holds: their refs, experiments, strategies, objectives, goals and candidate sets",
+                "packages",
+            )
+            .fallible(),
+        Endpoint::new::<LoadedView>(
+            "post",
+            "/api/packages",
+            post(engine::load).layer(DefaultBodyLimit::max(MAX_PACKAGE_BYTES)),
+        )
+        .describe(
+            "loadPackage",
+            "Load a package file into the store, its manifests checked first",
+            "packages",
+        )
+        .bytes_body("A package file: a store file, or a zip holding one")
+        .fallible(),
+        Endpoint::new::<ViewDocument>(
+            "get",
+            "/api/points/{point}/document",
+            get(engine::draw),
+        )
+        .describe(
+            "drawPoint",
+            "Draw a point's history with the view of its run's ontology",
+            "points",
+        )
+        .path_parameters::<PointName>()
+        .fallible(),
+        Endpoint::new::<Ancestor>("get", "/api/points/{point}/ancestor", get(engine::ancestor))
+            .describe(
+                "getAncestor",
+                "Name the point at an earlier step of a point's history",
+                "points",
+            )
+            .path_parameters::<PointName>()
+            .query::<AncestorQuery>()
+            .fallible(),
+        Endpoint::new::<Candidates>(
+            "get",
+            "/api/points/{point}/candidates",
+            get(engine::candidates),
+        )
+        .describe(
+            "listCandidates",
+            "List the exchanges a candidate set offers at a point, each assessed there",
+            "points",
+        )
+        .path_parameters::<PointName>()
+        .query::<CandidatesQuery>()
+        .fallible(),
+        Endpoint::new::<Candidate>("post", "/api/points/{point}/assess", post(engine::assess))
+            .describe(
+                "assessExchange",
+                "Assess an exchange at a point without recording anything",
+                "points",
+            )
+            .path_parameters::<PointName>()
+            .json_body::<AssessRequest>()
+            .fallible(),
+        Endpoint::new::<Applied>("post", "/api/points/{point}/apply", post(engine::apply))
+            .describe(
+                "applyExchanges",
+                "Apply exchanges at a point, all of them or none, reaching a new point",
+                "points",
+            )
+            .path_parameters::<PointName>()
+            .json_body::<ApplyRequest>()
+            .fallible(),
+        Endpoint::new::<StrategyEvent>(
+            "post",
+            "/api/points/{point}/run",
+            post(engine::run_strategy),
+        )
+        .describe(
+            "runStrategy",
+            "Run a strategy from a point, streaming its search's progress; closing the stream stops it",
+            "points",
+        )
+        .path_parameters::<PointName>()
+        .json_body::<StrategyRequest>()
+        .event_stream::<StrategyEvent>()
+        .fallible(),
+        Endpoint::new::<ResultsView>(
+            "get",
+            "/api/experiments/{experiment}/results",
+            get(engine::results),
+        )
+        .describe(
+            "getResults",
+            "Read the results an experiment last recorded",
+            "experiments",
+        )
+        .path_parameters::<ExperimentName>()
+        .fallible(),
+        Endpoint::new::<ExperimentEvent>(
+            "post",
+            "/api/experiments/{experiment}/run",
+            post(engine::run_experiment),
+        )
+        .describe(
+            "runExperiment",
+            "Run an experiment's trials, streaming their searches' progress; closing the stream stops it and keeps no results",
+            "experiments",
+        )
+        .path_parameters::<ExperimentName>()
+        .event_stream::<ExperimentEvent>()
+        .fallible(),
+        Endpoint::new::<ComparisonView>("post", "/api/compare", post(engine::compare))
+            .describe(
+                "comparePoints",
+                "Compare points on objectives: their values, the front and the best in order",
+                "experiments",
+            )
+            .json_body::<CompareRequest>()
+            .fallible(),
         Endpoint::new::<ProblemList>("get", "/api/problems", get(list_problems)).describe(
             "listProblems",
             "List problems, strategies, and capabilities",
@@ -361,7 +468,7 @@ fn endpoints() -> Vec<Endpoint<StudioState>> {
 /// table, so a route cannot exist without its contract or the reverse.
 pub fn api(state: StudioState) -> (Router, OpenApiDocument) {
     let endpoints = endpoints();
-    let document = openapi::document(&endpoints);
+    let document = openapi::document(&endpoints, &[openapi::schema_of::<SamplePackages>]);
     let routes = endpoints
         .into_iter()
         .fold(Router::new(), |router, endpoint| {
@@ -904,9 +1011,30 @@ mod tests {
             "/api/refs/{name}",
             "/api/refs/{name}/advance",
             "/api/refs/{name}/frames",
+            "/api/packages",
+            "/api/points/{point}/document",
+            "/api/points/{point}/ancestor",
+            "/api/points/{point}/candidates",
+            "/api/points/{point}/assess",
+            "/api/points/{point}/apply",
+            "/api/points/{point}/run",
+            "/api/experiments/{experiment}/results",
+            "/api/experiments/{experiment}/run",
+            "/api/compare",
         ] {
             assert!(paths.contains_key(path), "missing {path}");
         }
+        // A package loads from its bytes; a run streams its progress.
+        assert!(
+            paths["/api/packages"]["post"]["requestBody"]["content"]
+                .get("application/octet-stream")
+                .is_some()
+        );
+        assert_eq!(
+            paths["/api/points/{point}/run"]["post"]["responses"]["200"]["content"]["text/event-stream"]
+                ["schema"]["$ref"],
+            "#/components/schemas/StrategyEvent"
+        );
         // A move that finds the ref elsewhere says where it is.
         assert_eq!(
             paths["/api/refs/{name}/advance"]["post"]["responses"]["409"]["content"]["application/json"]
@@ -917,5 +1045,7 @@ mod tests {
         assert!(schemas.contains_key("StudioEvent"));
         assert!(schemas.contains_key("Study"));
         assert!(schemas.contains_key("PointId"));
+        // Read by Studio from a static site, though no endpoint serves it.
+        assert!(schemas.contains_key("SamplePackages"));
     }
 }

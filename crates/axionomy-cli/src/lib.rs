@@ -69,6 +69,13 @@ enum Command {
         /// omitted.
         #[arg(long, env = "AXIONOMY_STUDIO_STORE")]
         store: Option<PathBuf>,
+        /// A package file, zipped or not, to merge into the store before
+        /// serving; repeat for more. A package that fails the checks loading
+        /// makes stops the server. Without `--package`, the files
+        /// `AXIONOMY_STUDIO_PACKAGES` lists, separated as `PATH` separates
+        /// them.
+        #[arg(long = "package", value_name = "FILE")]
+        packages: Vec<PathBuf>,
     },
 }
 
@@ -162,7 +169,7 @@ pub fn run(registry: Registry, cli: Cli) -> Result<Option<String>, CliError> {
             store,
             packages,
         } => {
-            let packages = packages_to_load(packages, std::env::var_os(PACKAGES));
+            let packages = packages_to_load(packages, std::env::var_os(MCP_PACKAGES));
             serve::mcp(registry, bind, store, &packages).map(|()| None)
         }
         Command::Package { action } => package::run(action).map(Some),
@@ -170,13 +177,18 @@ pub fn run(registry: Registry, cli: Cli) -> Result<Option<String>, CliError> {
             bind,
             frontend,
             store,
-        } => serve::studio(registry, bind, &frontend, store).map(|()| None),
+            packages,
+        } => {
+            let packages = packages_to_load(packages, std::env::var_os(STUDIO_PACKAGES));
+            serve::studio(registry, bind, &frontend, store, &packages).map(|()| None)
+        }
     }
 }
 
-/// The environment variable listing the package files `axionomy mcp` loads
-/// when no `--package` names one.
-const PACKAGES: &str = "AXIONOMY_MCP_PACKAGES";
+/// The environment variables listing the package files `axionomy mcp` and
+/// `axionomy studio` load when no `--package` names one.
+const MCP_PACKAGES: &str = "AXIONOMY_MCP_PACKAGES";
+const STUDIO_PACKAGES: &str = "AXIONOMY_STUDIO_PACKAGES";
 
 /// The package files to load: those `given` on the command line, or else
 /// those `listed` names, separated as `PATH` separates them.
@@ -441,6 +453,17 @@ mod tests {
             packages,
             [PathBuf::from("maze.zip"), PathBuf::from("sokoban.zip")]
         );
+    }
+
+    #[test]
+    fn studio_loads_the_packages_given() {
+        let Cli {
+            command: Command::Studio { packages, .. },
+        } = Cli::try_parse_from(["axionomy", "studio", "--package", "maze.zip"]).unwrap()
+        else {
+            panic!("`studio` serves Studio");
+        };
+        assert_eq!(packages, [PathBuf::from("maze.zip")]);
     }
 
     #[test]
