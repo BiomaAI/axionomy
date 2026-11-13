@@ -7,12 +7,12 @@
 use axionomy::{Economy, Exchange, path, paths};
 use axionomy_engine::Engine;
 use axionomy_problems::{
-    WritePackage, amm, bridge, exact_cover, lending, logistics, marketplace, maze, perishables,
-    registry, rescue, scheduling, sokoban, work_league, workshop,
+    WritePackage, amm, bridge, exact_cover, lending, logistics, marketplace, maze, mission,
+    perishables, registry, rescue, scheduling, sokoban, work_league, workshop,
 };
 use axionomy_store::{Checkpoints, Recordable, Store};
 use axionomy_study::{Progress, StudyControl, StudyObserver, StudyRequest};
-use axionomy_view::{DocumentPath, ViewDocument};
+use axionomy_view::{DocumentPath, FrameCueKindView, ViewDocument};
 use serde::{Serialize, de::DeserializeOwned};
 
 /// `value` written in binary and read back as `T`: an economy or exchange
@@ -45,11 +45,16 @@ impl StudyObserver for Trajectories {
 const ANALYSES: [&str; 1] = ["causal-price-contribution"];
 
 /// What a view draws of a document: everything but what the study attaches
-/// to its frames itself, its observations and its analyses.
+/// to its frames itself, its observations, its analyses and its information
+/// cues, such as what the mission's planner searched before each decision,
+/// which only the search knows. A replay's own cues are of other kinds.
 fn drawn(document: &ViewDocument) -> ViewDocument {
     let mut drawn = document.clone();
     for frame in &mut drawn.frames {
         frame.observations.clear();
+        frame
+            .cues
+            .retain(|cue| cue.kind != FrameCueKindView::Information);
         frame
             .after
             .leaderboards
@@ -125,7 +130,7 @@ fn draws_like_rust<O: Recordable>(problem: &str, write: WritePackage, instances:
 /// Every sample whose package carries a view, and how it is drawn.
 type Drawn = (&'static str, fn(&[&str]) -> usize);
 
-const VIEWS: [Drawn; 13] = [
+const VIEWS: [Drawn; 14] = [
     ("maze", |instances| {
         draws_like_rust::<maze::Ontology>("maze", maze::package::write, instances)
     }),
@@ -209,6 +214,20 @@ const VIEWS: [Drawn; 13] = [
             work_league::package::write,
             instances,
         )
+    }),
+    // Micro is a mission; Showcase and Stress are expeditions, an ontology
+    // of their own with a view of its own.
+    ("mission", |instances| {
+        let (micro, expeditions): (Vec<&str>, Vec<&str>) = instances
+            .iter()
+            .copied()
+            .partition(|instance| *instance == "micro");
+        draws_like_rust::<mission::Ontology>("mission", mission::package::write, &micro)
+            + draws_like_rust::<mission::expedition::Ontology>(
+                "mission",
+                mission::package::write,
+                &expeditions,
+            )
     }),
 ];
 

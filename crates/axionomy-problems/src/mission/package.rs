@@ -14,22 +14,25 @@
 //! goal, policies and objectives are named under `mission/expedition`: radio
 //! coordination, north-first search and rendezvous, each named for the
 //! document it gives. Every instance has an experiment comparing its
-//! strategies.
+//! strategies. Each ontology has a view of its own.
 
 use crate::{
     mission::{self, expedition},
     package::{call, written},
 };
-use axionomy::{Economy, path};
+use axionomy::{Economy, OntologyPath, path};
 use axionomy_engine::{
     Arm, CandidateSet, Chooser, Engine, EngineError, Experiment, Measure, Objective, ObjectivePath,
-    Strategy, StrategyPath,
+    Strategy, StrategyPath, View,
 };
 use axionomy_search::pareto::ObjectiveDirection::{self, Maximize, Minimize};
 use axionomy_store::{Checkpoints, Point, Recordable, RefPath};
 
 const SCRIPT: &str = include_str!("../../scripts/mission.rhai");
 const EXPEDITION: &str = include_str!("../../scripts/expedition.rhai");
+/// The views of the mission and of the expeditions.
+const VIEW: &str = include_str!("../../scripts/mission-view.rhai");
+const EXPEDITION_VIEW: &str = include_str!("../../scripts/expedition-view.rhai");
 
 /// The seed of the study's default request: Micro's scenario and planning
 /// seeds, and the expeditions' hidden sites and hazard.
@@ -49,6 +52,34 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
     let micro = |function: &str| call("mission", function);
     engine.keep_script(&path!("mission"), SCRIPT)?;
     engine.keep_script(&path!("mission/expedition"), EXPEDITION)?;
+    for (ontology, script, source, title) in [
+        (
+            OntologyPath::of::<mission::Ontology>(),
+            "mission/view",
+            VIEW,
+            "Hidden-information mission",
+        ),
+        (
+            OntologyPath::of::<expedition::Ontology>(),
+            "mission/expedition/view",
+            EXPEDITION_VIEW,
+            "Cooperative expedition",
+        ),
+    ] {
+        let view = |function| Some(call(script, function));
+        engine.keep_script(&script.parse().expect("a path"), source)?;
+        engine.keep_view(
+            &ontology,
+            &View {
+                title: title.into(),
+                labels: view("label"),
+                formats: view("format"),
+                carry: None,
+                scene: view("scene"),
+                leaderboards: None,
+            },
+        )?;
+    }
     engine.keep_goal(&path!("mission/solved"), &written(&mission::goal()))?;
     engine.keep_goal(
         &path!("mission/expedition/closed"),
