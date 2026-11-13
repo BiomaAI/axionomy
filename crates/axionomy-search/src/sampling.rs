@@ -58,7 +58,7 @@ pub const fn splitmix(seed: u64, index: u64) -> u64 {
     value ^ (value >> 31)
 }
 
-/// The seed of sample `index` of a repeated experiment seeded `seed`, well
+/// The seed of sample `index` of a repeated trial seeded `seed`, well
 /// apart from its neighbours' seeds.
 pub fn sample_seed(seed: u64, index: usize) -> u64 {
     seed.wrapping_add(

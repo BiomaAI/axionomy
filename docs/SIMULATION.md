@@ -1,8 +1,8 @@
 # Simulation: primitives, scripts and packages
 
 Status: steps 1 to 5 below are built (step 2 for MCP). Of the
-[plan](#plan-axionomy-on-primitives) that follows them, P1 to P5 are done and
-P6 to P13 follow in order.
+[plan](#plan-axionomy-on-primitives) that follows them, P1 to P6 are done and
+P7 to P13 follow in order.
 
 The economy owns commitments and their consequences. A policy reads what an
 actor may see and proposes exchanges. Whoever calls the rollout (an
@@ -55,13 +55,13 @@ is that overlaps stay few and no Axionomy term means two things.
 | Counterfactual | A forked run that examines an alternative to what the run did |
 | Rollout | A run a policy drives, to a goal, a stop or a horizon |
 | Episode | One rollout of a Monte Carlo estimate: one trial |
-| Trial | One sample of a Monte Carlo estimate (its code says `Experiment` until P6) |
+| Trial | One seeded run: one sample of a Monte Carlo estimate, or of an experiment's arm |
 | Group | The runs produced together, such as an experiment's or one Monte Carlo estimate's |
 | Policy | How an actor chooses; in a package, a Rhai script |
 | Decision | One choice a policy makes |
 | Strategy | A built-in algorithm, the scripts it calls and its parameters (seed, budget, horizon, actor) |
 | Objective | A measure of a state with a direction, minimize or maximize |
-| Experiment | A start point, strategies as arms, objectives, a seed and a budget; it produces runs, recorded as a group, and the thinking that found them |
+| Experiment | A start point, strategies as arms, objectives, a seed, a budget and a number of trials; it produces runs, recorded as a group |
 | Comparison | Objective vectors, dominance and the Pareto front, over any runs |
 | Thinking | Trying exchanges at a point and playing them out before choosing, with the same `apply` as the step finally chosen; the search observations of how a run was found |
 | Ref | A named label on a point, like a Git branch name on a commit. An application keeps a ref on the point its game or simulation is actually at, and moving the ref forward is what makes a step count; only the steps a ref is moved over are delivered |
@@ -375,15 +375,31 @@ payoffs, seeded per turn so a game replays. ISMCTS, which needs a package to
 say what an actor observes and how hidden worlds are sampled, joins with the
 mission sample in P9.
 
-**P6. Experiments and comparison.** An experiment is a start point,
+**P6. Experiments and comparison (done).** An experiment is a start point,
 strategies as arms, objectives, a seed and a budget, with Monte Carlo over
 strategies and weighted scenarios, receding-horizon replanning, and
 counterfactual variants (a trace played first, an actor dropped). Running one
-records a store group of runs with their thinking. Comparison works over any
-runs: objective vectors, dominance, the Pareto front, and picking a run by
-lexicographic objectives. Monte Carlo's `Experiment` becomes `Trial`. Done
-when an experiment re-runs identically from its seed through every
-transport.
+records a store group of runs. Comparison works over any runs: objective
+vectors, dominance, the Pareto front, and picking a run by lexicographic
+objectives. Monte Carlo's `Experiment` becomes `Trial`.
+
+Built: an experiment is a definition (`experiment/<path>`) naming the ref
+it starts from, its arms, objectives, seed, budget and number of trials. An
+arm is a strategy, from the experiment's start or from a ref of its own,
+which is how a counterfactual variant is run: a trace played first, or an
+actor's holdings withdrawn, is a point with a ref. Every arm runs the same
+trials, trial `i` seeded from the experiment's seed and `i`, so arms meet
+the same chances. `run_experiment` records every trial's run in a store
+group of kind `experiment`, with each objective as a metric named
+`<strategy>/<objective>`, and keeps the results (each trial's seed, end
+point, how it ended and its objective values, exactly) beside the
+experiment. A game's Nature draws from a random stream of its own,
+`fn(state, random)`, so weighted scenarios are Nature sampling them and
+receding-horizon replanning is a player that searches again every turn,
+and how hard the players think never changes what Nature does. `compare`
+gives any points' objective vectors and the front no point dominates, and
+`pick` the best by objectives in order. The same seed re-runs the same
+trials; transports run experiments once packages carry them (P9).
 
 **P7. Views.** A view per ontology: labels, formats, scene structure (surface
 kind, node or cell source, layout, edges) and script logic (anchors, status

@@ -11,7 +11,7 @@ use axionomy_search::{
     AStarSession, BfsSession, GraphSearchProgress,
     bounded::{beam, branch_and_bound, minimax},
     mcts::{MctsConfig, search as mcts},
-    sampling::{SeededSampler, TicketSource},
+    sampling::{SeededSampler, TicketSource, sample_seed},
     session::{SearchStatus, WorkBudget},
 };
 use axionomy_store::Point;
@@ -69,9 +69,13 @@ pub enum Strategy {
         depth: u64,
     },
     /// A game played turn by turn until the goal or `horizon` turns: each
-    /// turn Nature responds if `nature`, `fn(state)`, proposes an exchange,
-    /// and otherwise the player `actor`, `fn(state)` returning an index into
-    /// `players`, chooses as its chooser does.
+    /// turn Nature responds if `nature`, `fn(state, random)`, proposes an
+    /// exchange, and otherwise the player `actor`, `fn(state)` returning an
+    /// index into `players`, chooses as its chooser does. Nature draws from
+    /// a random stream of its own, so how hard the players think never
+    /// changes what Nature does: weighted scenarios are Nature sampling
+    /// them, and receding-horizon planning is a player that searches again
+    /// every turn from what happened.
     Game {
         goal: GoalPath,
         horizon: u64,
@@ -445,7 +449,8 @@ impl Engine {
         players: &[Chooser],
         seed: u64,
     ) -> Result<Ran, EngineError> {
-        let random = Random::new(seed);
+        let chance = Random::new(seed);
+        let random = Random::new(sample_seed(seed, 1));
         let mut exchanges = Vec::new();
         let outcome = loop {
             if economy.matches(goal) {
@@ -460,7 +465,7 @@ impl Engine {
                     let proposed: rhai::Dynamic = self.call(
                         &nature.script,
                         nature.function.as_str(),
-                        (ScriptState::new(economy.clone()),),
+                        (ScriptState::new(economy.clone()), chance.clone()),
                     )?;
                     proposal(proposed)?
                 }

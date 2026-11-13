@@ -2,13 +2,15 @@
 
 mod cache;
 pub mod definitions;
+mod experiment;
 pub mod script;
 mod strategy;
 
 pub use definitions::{
-    CandidateSet, CandidatesPath, GoalPath, Measure, Objective, ObjectivePath, ScriptCall,
-    ScriptFunction, StrategyPath,
+    CandidateSet, CandidatesPath, ExperimentPath, GoalPath, Measure, Objective, ObjectivePath,
+    ScriptCall, ScriptFunction, StrategyPath,
 };
+pub use experiment::{Arm, ArmResult, Comparison, Ended, Experiment, Results, Trial};
 pub use rhai;
 pub use script::{HOST_API, Random, ScriptPath, ScriptState, exchanges_of};
 pub use strategy::{Chooser, Effort, Outcome, Ran, Strategy};
@@ -18,7 +20,9 @@ use axionomy::{
     path::Path,
     paths::{self, Paths},
 };
-use axionomy_store::{Checkpoints, DefinitionPath, Durability, Point, Reader, Store, StoreError};
+use axionomy_store::{
+    Checkpoints, DefinitionPath, Durability, Point, Reader, RefPath, Store, StoreError, Target,
+};
 use cache::Cache;
 use definitions::definition;
 use serde::{Serialize, de::DeserializeOwned};
@@ -53,6 +57,8 @@ pub enum EngineError {
     },
     #[error("the store has no script `{0}`")]
     UnknownScript(ScriptPath),
+    #[error("no ref `{0}` names a point")]
+    UnknownRef(RefPath),
     /// A script that does not compile, or failed while it ran; `message` is
     /// Rhai's, with the position it names.
     #[error("script `{path}`: {message}")]
@@ -159,6 +165,26 @@ impl Engine {
                 expected: std::any::type_name::<T>(),
                 found: found.to_owned(),
             })
+    }
+
+    /// Names `at` with the ref `name`, replacing what it named.
+    pub fn refer(&self, name: &RefPath, at: Point) -> Result<(), EngineError> {
+        self.reach(at)?;
+        let name = name.clone();
+        self.store
+            .transact(Durability::Immediate, move |txn| {
+                txn.set_ref(&name, Some(Target::Step(at)))
+            })
+            .wait()?;
+        Ok(())
+    }
+
+    /// The point the ref `name` names.
+    pub fn referred(&self, name: &RefPath) -> Result<Point, EngineError> {
+        match self.store.read()?.reference(name)? {
+            Some(Target::Step(point)) => Ok(point),
+            _ => Err(EngineError::UnknownRef(name.clone())),
+        }
     }
 
     /// Keeps `goal` at `path`, replacing any goal there.

@@ -2,7 +2,7 @@
 //!
 //! A rollout steps whatever it is given through [`Apply`]: an economy of its
 //! own, so the steps live and die in memory, or a recorder that keeps them.
-//! [`Episodes`] makes the same choice for repeated experiments.
+//! [`Episodes`] makes the same choice for repeated trials.
 
 use axionomy::Ontology;
 use axionomy::{Apply, ApplyError, Economy, Exchange, Goal, Receipt, Trace};
@@ -168,7 +168,7 @@ where
     run(world, config, controller, |economy| economy.matches(goal))
 }
 
-/// Where the rollouts of a repeated experiment go, one episode per sample of
+/// Where the rollouts of a repeated trial go, one episode per sample of
 /// each policy: nowhere, as [`Unrecorded`] does, or somewhere that records
 /// them, such as a store keeping one run per episode in a group per policy.
 pub trait Episodes<O: Ontology, Policy, Outcome> {

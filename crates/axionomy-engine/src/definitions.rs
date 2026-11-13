@@ -21,6 +21,10 @@ pub mod kind {
     pub enum Candidates {}
     /// A strategy: an algorithm with what it calls.
     pub enum Strategy {}
+    /// An experiment: strategies run as arms under the same conditions.
+    pub enum Experiment {}
+    /// The results an experiment last recorded.
+    pub enum Results {}
 
     impl PathKind for Goal {
         const SCHEMA: &'static str = "GoalPath";
@@ -38,12 +42,21 @@ pub mod kind {
         const SCHEMA: &'static str = "StrategyPath";
         const EXAMPLE: &'static str = "maze/a-star";
     }
+    impl PathKind for Experiment {
+        const SCHEMA: &'static str = "ExperimentPath";
+        const EXAMPLE: &'static str = "maze/routes";
+    }
+    impl PathKind for Results {
+        const SCHEMA: &'static str = "ResultsPath";
+        const EXAMPLE: &'static str = "maze/routes";
+    }
 }
 
 pub type GoalPath = Path<kind::Goal>;
 pub type ObjectivePath = Path<kind::Objective>;
 pub type CandidatesPath = Path<kind::Candidates>;
 pub type StrategyPath = Path<kind::Strategy>;
+pub type ExperimentPath = Path<kind::Experiment>;
 
 /// The name of a function a script defines: a Rhai identifier, such as
 /// `heuristic` or `decide_seen`.

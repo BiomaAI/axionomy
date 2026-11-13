@@ -30,6 +30,14 @@ goes.
   game whose players choose by policy, minimax or Monte Carlo tree search.
   What it reaches is recorded as a run forked from its start, with how it
   ended and what the search explored.
+- `refer` names a point with a ref and `referred` reads it.
+- `keep_experiment` keeps an experiment: a ref to start from, strategies as
+  arms (each from that start or a ref of its own), objectives, a seed, a
+  budget and a number of trials. `run_experiment` runs every arm's trials
+  over the same seeds, records the runs as a store group of kind
+  `experiment` and keeps the results, which `results` reads back.
+- `compare` gives points' objective vectors and the front no other point
+  dominates; `pick` the best point by objectives in order.
 
 Scripts are how a package says what a generic algorithm cannot know. They
 read a `ScriptState`, the whole economy or a view of the accounts an actor may
@@ -45,7 +53,8 @@ Rhai calls a script's own function in method style before a host method of
 the same name: a script that defines `view(state)` makes `state.view(...)`
 call it, with `state` as `this`. Name script functions apart from the host's
 (`balance`, `balances`, `accounts`, `rates`, `roles`, `view`, `applicable`,
-`assess`, `has_account`, `parameter`, `rate`, `next`).
+`assess`, `has_account`, `parameter`, `rate`, `next`). A loop variable
+needs a name: Rhai refuses `for _ in ...`.
 
 The engine is synchronous and knows no protocol: MCP calls it from blocking
 tasks, and so will the Studio server, the CLI and Studio's browser Worker

@@ -132,7 +132,7 @@ pub mod kind {
     }
 }
 
-/// A tag's key, such as `experiment` or `split`.
+/// A tag's key, such as `dataset` or `split`.
 pub type TagPath = Path<kind::Tag>;
 /// A metric's name, such as `return` or `importance-weight`.
 pub type MetricPath = Path<kind::Metric>;

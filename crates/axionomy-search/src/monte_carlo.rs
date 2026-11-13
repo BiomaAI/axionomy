@@ -1,4 +1,4 @@
-//! Generic repeated-experiment evaluation for core-validated rollouts.
+//! Generic repeated-trial evaluation for core-validated rollouts.
 
 use crate::session::{AdvanceReport, Continue, SearchObserver, WorkBudget};
 use schemars::JsonSchema;
@@ -53,12 +53,12 @@ impl<Policy, Summary> PolicyEstimate<Policy, Summary> {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
-pub enum MonteCarloError<ExperimentError, StatisticsError> {
-    #[error("experiment failed for policy {policy_index}, sample {sample_index}")]
-    Experiment {
+pub enum MonteCarloError<TrialError, StatisticsError> {
+    #[error("trial failed for policy {policy_index}, sample {sample_index}")]
+    Trial {
         policy_index: usize,
         sample_index: usize,
-        error: ExperimentError,
+        error: TrialError,
     },
     #[error("statistics failed for policy {policy_index}, sample {sample_index}")]
     Statistics {
@@ -113,20 +113,20 @@ impl MonteCarloProgress {
 }
 
 /// Resumable policy evaluation with deterministic policy-major sample order.
-pub struct MonteCarloSession<Policy, Statistic, Experiment> {
+pub struct MonteCarloSession<Policy, Statistic, Trial> {
     policies: Vec<(Policy, Statistic)>,
     config: MonteCarloConfig,
-    experiment: Experiment,
+    trial: Trial,
     policy_index: usize,
     sample_index: usize,
     completed_samples: usize,
 }
 
-impl<Policy, Statistic, Experiment> MonteCarloSession<Policy, Statistic, Experiment> {
+impl<Policy, Statistic, Trial> MonteCarloSession<Policy, Statistic, Trial> {
     pub fn new(
         policies: impl IntoIterator<Item = Policy>,
         config: MonteCarloConfig,
-        experiment: Experiment,
+        trial: Trial,
         mut make_statistics: impl FnMut() -> Statistic,
     ) -> Self {
         Self {
@@ -135,7 +135,7 @@ impl<Policy, Statistic, Experiment> MonteCarloSession<Policy, Statistic, Experim
                 .map(|policy| (policy, make_statistics()))
                 .collect(),
             config,
-            experiment,
+            trial,
             policy_index: 0,
             sample_index: 0,
             completed_samples: 0,
@@ -161,16 +161,16 @@ impl<Policy, Statistic, Experiment> MonteCarloSession<Policy, Statistic, Experim
         }
     }
 
-    pub fn advance<Observation, ExperimentError, StatisticsError>(
+    pub fn advance<Observation, TrialError, StatisticsError>(
         &mut self,
         budget: WorkBudget,
         observer: &mut impl SearchObserver<MonteCarloProgress>,
     ) -> Result<
         AdvanceReport<MonteCarloProgress, MonteCarloStatus>,
-        MonteCarloError<ExperimentError, StatisticsError>,
+        MonteCarloError<TrialError, StatisticsError>,
     >
     where
-        Experiment: FnMut(&Policy, usize) -> Result<Observation, ExperimentError>,
+        Trial: FnMut(&Policy, usize) -> Result<Observation, TrialError>,
         Statistic: Statistics<Observation, Error = StatisticsError>,
     {
         if self.status() == MonteCarloStatus::Completed {
@@ -192,8 +192,8 @@ impl<Policy, Statistic, Experiment> MonteCarloSession<Policy, Statistic, Experim
             }
 
             let (policy, statistics) = &mut self.policies[self.policy_index];
-            let observation = (self.experiment)(policy, self.sample_index).map_err(|error| {
-                MonteCarloError::Experiment {
+            let observation = (self.trial)(policy, self.sample_index).map_err(|error| {
+                MonteCarloError::Trial {
                     policy_index: self.policy_index,
                     sample_index: self.sample_index,
                     error,
@@ -258,31 +258,31 @@ impl<Policy, Statistic, Experiment> MonteCarloSession<Policy, Statistic, Experim
 
 /// Evaluates each policy with common sample indices.
 ///
-/// The experiment is expected to run a core-validated rollout. Statistics are
+/// The trial is expected to run a core-validated rollout. Statistics are
 /// disposable projections of encoded rollout outcomes.
 pub fn evaluate<
     Policy,
     Policies,
     Observation,
     Summary,
-    Experiment,
-    ExperimentError,
+    Trial,
+    TrialError,
     MakeStatistics,
     Statistic,
     StatisticsError,
 >(
     policies: Policies,
     config: MonteCarloConfig,
-    experiment: Experiment,
+    trial: Trial,
     make_statistics: MakeStatistics,
-) -> Result<Vec<PolicyEstimate<Policy, Summary>>, MonteCarloError<ExperimentError, StatisticsError>>
+) -> Result<Vec<PolicyEstimate<Policy, Summary>>, MonteCarloError<TrialError, StatisticsError>>
 where
     Policies: IntoIterator<Item = Policy>,
-    Experiment: FnMut(&Policy, usize) -> Result<Observation, ExperimentError>,
+    Trial: FnMut(&Policy, usize) -> Result<Observation, TrialError>,
     MakeStatistics: FnMut() -> Statistic,
     Statistic: Statistics<Observation, Summary = Summary, Error = StatisticsError>,
 {
-    let mut session = MonteCarloSession::new(policies, config, experiment, make_statistics);
+    let mut session = MonteCarloSession::new(policies, config, trial, make_statistics);
     let mut observer = Continue;
     session.advance(WorkBudget::new(usize::MAX), &mut observer)?;
     Ok(session
@@ -532,7 +532,7 @@ mod tests {
             |policy, sample| Ok::<_, Infallible>(*policy == "always" || sample % 2 == 0),
             BernoulliStatistics::new,
         )
-        .expect("infallible experiment");
+        .expect("infallible trial");
 
         assert_eq!(estimates[0].summary().successes(), 4);
         assert_eq!(estimates[1].summary().successes(), 2);
