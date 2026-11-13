@@ -145,9 +145,10 @@ assert_eq!(study.selected().map(|document| document.frames.len()), Some(3));
 `Registry::register` refuses a key already registered, so a problem can join
 the samples in `registry()` or stand in a registry of its own. Hand
 that registry to a front end: `axionomy_cli::run` or `run_from` for the CLI,
-`AxionomyMcp::new` or `stateless_http_service`, beside an
-`axionomy_engine::Engine`, for the MCP server, `StudioState::new` for the Studio server, and `catalog_of`
-and `study_in` for Studio's browser Worker. The `axionomy` application serves
+`AxionomyMcp::new` or `stateless_http_service` for the MCP server and
+`StudioState::new` for the Studio server, each beside an
+`axionomy_engine::Engine`, and `catalog_of` and `study_in` for Studio's
+browser Worker. The `axionomy` application serves
 `registry()` (`axionomy mcp`, `axionomy studio`); an application of your own
 serves your registry with the same calls.
 
