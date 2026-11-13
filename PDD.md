@@ -2165,22 +2165,31 @@ the browser engine through one client.
 Built ([SIMULATION.md](docs/SIMULATION.md#plan-axionomy-on-primitives), P10).
 A point is one saved state of the economy: the economy after a given step of
 a recorded run, named by the run and the step. Every point has one history,
-the exchanges that led to it. `apply(point, exchanges)` applies all of them or
-none and gives a new point, leaving every existing point unchanged, so trying
-out an exchange, a counterfactual, a branch and the step that counts are one
-operation, and the boundary has no separate fork or replay.
+the exchanges that led to it, and one name: in the run whose step reached
+it, or for an authored economy the first of its own run.
+`apply(point, exchanges)` applies all of them or none and gives a new point,
+leaving every existing point unchanged, so trying out an exchange, a
+counterfactual, a branch and the step that counts are one operation, and the
+boundary has no separate fork or replay. The run `apply` records starts from
+the point's state, which keeps the point's name: the engine never gives out
+a fork's first state as a point of the fork, and refuses it as one, so a
+point reached by any route, an ancestor or a delivered step, is the point
+its mover was given.
 
 A ref is a named label on a point, like a Git branch name on a commit. An
 application keeps a ref on the point its game or simulation is actually at,
 and moving the ref forward is what makes a step count. A ref moves only by
 `advance(ref, expected, to)`, which is refused, with the point the ref is on,
 when it is no longer on `expected`: of two proposers moving from the same
-point, the second looks again. Only the steps a ref is moved over are
-delivered, each an exchange and its receipt with the point it led to, pushed
-by `watch` or pulled by `frames(after)`; a step that was only tried out is
-never delivered, so it cannot reach an executor that follows the ref. The
-engine does not know who proposes: a person in Studio, an AI agent, a policy
-or a loop applying Nature responses are alike.
+point, the second looks again. A ref only moves forward, so one at `to` was
+moved there over `expected`, and asking again for a move already made
+succeeds: a mover that never heard whether its move counted asks again. Only
+the steps a ref is moved over are delivered, each an exchange and its
+receipt with the point it led to, pushed by `watch` or pulled by
+`frames(after)`; a step that was only tried out is never delivered, so it
+cannot reach an executor that follows the ref. The engine does not know who
+proposes: a person in Studio, an AI agent, a policy or a loop applying
+Nature responses are alike.
 
 ### D-047: The store runs in the browser on redb
 

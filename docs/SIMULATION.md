@@ -51,7 +51,7 @@ is that overlaps stay few and no Axionomy term means two things.
 | Trace | Exchanges in order |
 | Replay | Applying a trace, all of it or none of it: `replayed` gives the economy after it, `replay` applies it in place |
 | Run | A trajectory: a trace from a state, kept in memory or recorded in the store |
-| Point | One saved state of the economy: the economy after a given step of a recorded run, named by the run and the step. Every point has one history, the exchanges that led to it |
+| Point | One saved state of the economy: the economy after a given step of a recorded run, named by the run whose step reached it and the step. Every point has one history, the exchanges that led to it, and one name |
 | Fork | An independent economy starting from a chosen state of a run (a clone, constant-time) |
 | Counterfactual | A forked run that examines an alternative to what the run did |
 | Rollout | A run a policy drives, to a goal, a stop or a horizon |
@@ -590,7 +590,8 @@ transitions as they happen.
 Built in the store and engine: refs move by compare-and-set, and the store
 indexes every fork (format 2). `refer` names a point with a new ref;
 `advance(ref, expected, to)` moves it forward over the steps between, on
-`to`'s history, refused with where the ref is when it is not on `expected`;
+`to`'s history, refused with where the ref is when it is on neither
+`expected` nor `to` (asking again for a move made succeeds);
 `frames(ref, after, following, limit)` delivers the steps it was moved over
 after `after`, each with its point, exchange, receipt, and the follower's
 objectives and goal there; `wait(ref, after, timeout)` blocks until it moves.
@@ -601,11 +602,11 @@ kept as the engine ref `mcp/<handle>`, so it exposes only its own refs.
 with `moved` and `current_economy_id`, where the ref is) and
 `axionomy_ref_frames` (at most 100 frames, a goal as `axionomy_search` takes
 it, and a long poll of up to 30 seconds) name every point by an `eco-`
-handle: the first handle that named it, whatever run holds it, or one minted
-from the point and recorded as the economy the step's exchange made from the
-step before. The Studio server holds an engine over a store, in memory or a
-file (`axionomy studio --store`), and serves refs by their paths and points
-as `PointId`s (`run-…:step`): `POST /api/refs`, `GET /api/refs/{name}`,
+handle: the first handle that named it, or one minted from the point and
+recorded as the economy the step's exchange made from the step before. The
+Studio server holds an engine over a store, in memory or a file
+(`axionomy studio --store`), and serves refs by their paths and points as
+`PointId`s (`run-…:step`): `POST /api/refs`, `GET /api/refs/{name}`,
 `POST /api/refs/{name}/advance` (409 with where the ref is) and
 `GET /api/refs/{name}/frames` with a goal, objectives and a long poll.
 `watch` is that long poll: a follower asks for the frames after the point
@@ -766,10 +767,15 @@ the ref left where it was and both movers told it was where the first had
 moved it: the store's writer commits many callers' writes together, and one
 that fails fails them all. A refused move is now what the ref's write gives
 rather than a failed write, and an engine test commits two moves together.
-A frame delivered after the ref has moved on names its step in the run the
-next step made from it, as the ref's history names it then, so a follower
-that falls behind receives a different name for the point its mover
-advanced to; the test accepts either.
+It found too that a point had two names: a run forked from a point started
+from its state and named it again, so a frame delivered after the ref had
+moved on named its step in the run the next step made from it, and a
+follower that fell behind received a name for the point other than the one
+its mover advanced to. A point now has one name, in the run whose step
+reached it: `ancestor` and `frames` give it, and the engine refuses a fork's
+first state under the fork's name. The test requires every frame to name
+exactly the point its player advanced to, and that asking again for an
+advance already made succeeds, which a mover that never heard back does.
 
 ## Not planned
 
