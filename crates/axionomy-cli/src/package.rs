@@ -36,6 +36,11 @@ pub(crate) enum Action {
     Load { store: PathBuf, package: PathBuf },
     /// Say what a package file holds.
     Inspect { package: PathBuf },
+    /// Write every sample's package, zipped, as `<sample>.zip`.
+    Samples {
+        /// The directory to write into.
+        directory: PathBuf,
+    },
 }
 
 pub(crate) fn run(action: Action) -> Result<String, CliError> {
@@ -64,6 +69,24 @@ pub(crate) fn run(action: Action) -> Result<String, CliError> {
                     .iter()
                     .map(|definition| format!("kept {definition}: the store defines it otherwise")),
             );
+            Ok(lines.join("\n"))
+        }
+        Action::Samples { directory } => {
+            fs::create_dir_all(&directory).map_err(|source| CliError::Write {
+                path: directory.clone(),
+                source,
+            })?;
+            let version: Version = env!("CARGO_PKG_VERSION")
+                .parse()
+                .expect("the crate's version is a version");
+            let mut lines = Vec::new();
+            for (name, write_sample) in axionomy_problems::packages() {
+                let engine = Engine::new(Store::memory()?)?;
+                write_sample(&engine)?;
+                let contents = engine.named_under(&name)?;
+                let output = directory.join(format!("{name}.zip"));
+                lines.push(written(&engine, &name, version, contents, &output)?);
+            }
             Ok(lines.join("\n"))
         }
         Action::Inspect { package } => {
@@ -103,15 +126,27 @@ fn export(
     refs: Vec<RefPath>,
     definitions: Vec<DefinitionPath>,
 ) -> Result<String, CliError> {
-    if output.exists() {
-        return Err(CliError::Exists(output.clone()));
-    }
     let engine = Engine::new(Store::open(store)?)?;
     let contents = if refs.is_empty() && definitions.is_empty() {
         engine.named_under(name)?
     } else {
         Contents { refs, definitions }
     };
+    written(&engine, name, version, contents, output)
+}
+
+/// Writes `engine`'s package of `contents` to `output`, a new file, zipped
+/// when it ends in `.zip`, and says what it wrote.
+fn written(
+    engine: &Engine,
+    name: &PackagePath,
+    version: Version,
+    contents: Contents,
+    output: &PathBuf,
+) -> Result<String, CliError> {
+    if output.exists() {
+        return Err(CliError::Exists(output.clone()));
+    }
     let zip = output
         .extension()
         .is_some_and(|extension| extension == "zip");

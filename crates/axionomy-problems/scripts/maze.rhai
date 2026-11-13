@@ -23,3 +23,7 @@ fn candidates(state) {
 fn energy(before, exchange, after) {
     after.balance("agent", "spent-energy") - before.balance("agent", "spent-energy")
 }
+
+// What a route has spent, as the objectives measure it.
+fn spent_energy(state) { state.balance("agent", "spent-energy") }
+fn spent_time(state) { state.balance("agent", "spent-time") }

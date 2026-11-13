@@ -470,6 +470,16 @@ size. Done when every experiment reproduces today's study outcomes
 package and experiment tools, Studio's catalog lists the loaded packages, and
 Pages ships the sample packages, built in CI and never committed.
 
+Built so far: each sample's builder (`<sample>::package::write`, behind
+`axionomy-problems`' `packages` feature) writes its package into an engine's
+store, and `axionomy package samples <directory>` writes every one, zipped.
+Maze's package (its three instances as maze runs, its search and view
+scripts, goal, candidates, energy and time objectives, five strategies and an
+experiment per instance) reproduces every document of every maze study
+exactly, traces and objectives, loaded alone into a fresh store. It needed
+one more built-in strategy: an exact Pareto search over state objectives
+that reaches the front's best point by those objectives in order.
+
 **P10. Live refs.** The store's refs gain compare-and-set and an index of each
 run's branches; the engine gains `refer`, `advance`, `watch` and
 `frames(after)`, which pulls from the last point a reader handled. Every

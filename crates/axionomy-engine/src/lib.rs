@@ -376,6 +376,19 @@ impl Engine {
                 scripts.push(score);
                 goal
             }
+            Strategy::Pareto {
+                candidates: set,
+                goal,
+                objectives,
+            } => {
+                candidates.push(set);
+                for objective in objectives {
+                    if let Measure::Steps(_) = self.objective(objective)?.measure {
+                        return Err(EngineError::NeedsHistory(objective.clone()));
+                    }
+                }
+                goal
+            }
             Strategy::Game {
                 goal,
                 nature,

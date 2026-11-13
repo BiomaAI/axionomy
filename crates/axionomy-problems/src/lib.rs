@@ -22,6 +22,21 @@ use axionomy::{ApplyError, Ontology, ReplayError};
 use axionomy_search::{sampling::SamplingError, tree::TreeSearchError};
 use axionomy_study::{DuplicateProblem, Registry};
 
+/// What writes a sample's package into an engine's store, everything named
+/// under the sample's name.
+#[cfg(feature = "packages")]
+pub type WritePackage = fn(&axionomy_engine::Engine) -> Result<(), axionomy_engine::EngineError>;
+
+/// The samples written as packages, by name, in catalog order.
+#[cfg(feature = "packages")]
+pub fn packages() -> Vec<(axionomy_engine::PackagePath, WritePackage)> {
+    let packages: [(&str, WritePackage); 1] = [("maze", maze::package::write)];
+    packages
+        .into_iter()
+        .map(|(name, write)| (name.parse().expect("a sample's name is a path"), write))
+        .collect()
+}
+
 /// Every sample problem, in catalog order: the registry Axionomy's
 /// front ends study by default.
 pub fn registry() -> Registry {

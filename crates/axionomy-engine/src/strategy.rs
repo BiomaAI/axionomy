@@ -3,14 +3,15 @@
 //! records the exchanges it reaches as a run forked from that point.
 
 use crate::{
-    CandidatesPath, Engine, EngineError, GoalPath, Random, ScriptCall, ScriptState,
-    definitions::CandidateSet,
+    CandidatesPath, Engine, EngineError, GoalPath, ObjectivePath, Random, ScriptCall, ScriptState,
+    definitions::{CandidateSet, Measure, Objective},
 };
-use axionomy::paths;
+use axionomy::{Quantity, paths};
 use axionomy_search::{
     AStarSession, BfsSession, GraphSearchProgress,
     bounded::{beam, branch_and_bound, minimax},
     mcts::{MctsConfig, search as mcts},
+    pareto::{Objective as Measured, ObjectiveDirection, ObjectiveVector, ParetoSearchSession},
     sampling::{SeededSampler, TicketSource, sample_seed},
     session::{SearchStatus, WorkBudget},
 };
@@ -67,6 +68,16 @@ pub enum Strategy {
         score: ScriptCall,
         width: u64,
         depth: u64,
+    },
+    /// The exact Pareto front of the goal states the candidate set reaches,
+    /// each measured by `objectives`, which measure states: the run reaches
+    /// the front's best state by those objectives in order, the first found
+    /// on a tie. A budget spent before the front is exact leaves it at its
+    /// start.
+    Pareto {
+        candidates: CandidatesPath,
+        goal: GoalPath,
+        objectives: Vec<ObjectivePath>,
     },
     /// A game played turn by turn until the goal or `horizon` turns: each
     /// turn Nature responds if `nature`, `fn(state, random)`, proposes an
@@ -262,6 +273,11 @@ impl Engine {
                     cost: None,
                 })
             }
+            Strategy::Pareto {
+                candidates,
+                goal,
+                objectives,
+            } => self.pareto(at, &initial, candidates, goal, objectives, effort, watch),
             Strategy::Game {
                 goal,
                 horizon,
@@ -660,6 +676,109 @@ impl Engine {
             end: self.apply(at, &exchanges)?,
             outcome,
             thinking: None,
+            cost: None,
+        })
+    }
+
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "a search's parts, each read once"
+    )]
+    fn pareto(
+        &self,
+        at: Point,
+        initial: &paths::Economy,
+        candidates: &CandidatesPath,
+        goal: &GoalPath,
+        objectives: &[ObjectivePath],
+        effort: Effort,
+        watch: &mut impl FnMut(&GraphSearchProgress) -> ControlFlow<()>,
+    ) -> Result<Ran, EngineError> {
+        let measures = objectives
+            .iter()
+            .map(|path| match self.objective(path)? {
+                Objective {
+                    measure: Measure::State(call),
+                    direction,
+                } => Ok((call, direction)),
+                Objective {
+                    measure: Measure::Steps(_),
+                    ..
+                } => Err(EngineError::NeedsHistory(path.clone())),
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        let candidates = self.candidate_set(candidates)?;
+        let failure = RefCell::new(None);
+        let propose = |economy: &paths::Economy| self.offered(&candidates, economy, &failure);
+        let project = |economy: &paths::Economy| {
+            let values = measures
+                .iter()
+                .enumerate()
+                .map(|(index, (call, direction))| {
+                    let value = self.measure_state(call, economy).unwrap_or_else(|error| {
+                        failure.borrow_mut().get_or_insert(error);
+                        Quantity::ZERO
+                    });
+                    match direction {
+                        ObjectiveDirection::Minimize => Measured::minimize(index, value),
+                        ObjectiveDirection::Maximize => Measured::maximize(index, value),
+                    }
+                });
+            ObjectiveVector::try_new(values).expect("objectives are numbered apart")
+        };
+        let mut session = ParetoSearchSession::new(initial, self.goal(goal)?, propose, project);
+        let mut left = usize::try_from(effort.budget).unwrap_or(usize::MAX);
+        let status = loop {
+            if session.status().is_terminal() || left == 0 {
+                break session.status();
+            }
+            let report = session
+                .advance(WorkBudget::new(left.min(CHUNK)), &mut |progress: &_| {
+                    watch(&GraphSearchProgress::from(*progress))
+                })
+                .map_err(|error| EngineError::Undecided(format!("{error:?}")))?;
+            if report.status() == SearchStatus::Interrupted {
+                break SearchStatus::Interrupted;
+            }
+            left = left.saturating_sub(report.work_completed().max(1));
+        };
+        let progress = GraphSearchProgress::from(session.progress());
+        if let Some(error) = failure.borrow_mut().take() {
+            return Err(error);
+        }
+        // The best point by the objectives in order, each in its direction.
+        let best = (status == SearchStatus::Exhausted)
+            .then(|| {
+                session
+                    .front()
+                    .entries()
+                    .iter()
+                    .min_by(|left, right| {
+                        left.objectives()
+                            .objectives()
+                            .iter()
+                            .zip(right.objectives().objectives())
+                            .map(|(left, right)| match left.direction() {
+                                ObjectiveDirection::Minimize => left.value().cmp(right.value()),
+                                ObjectiveDirection::Maximize => right.value().cmp(left.value()),
+                            })
+                            .find(|order| order.is_ne())
+                            .unwrap_or(std::cmp::Ordering::Equal)
+                    })
+                    .map(|entry| entry.payload().clone())
+            })
+            .flatten();
+        let (end, outcome) = match (status, best) {
+            (_, Some(trace)) => (self.apply(at, trace.exchanges())?, Outcome::Reached),
+            (SearchStatus::Exhausted, None) => (at, Outcome::Exhausted),
+            (SearchStatus::Interrupted, None) => (at, Outcome::Interrupted),
+            _ => (at, Outcome::Spent),
+        };
+        Ok(Ran {
+            start: at,
+            end,
+            outcome,
+            thinking: Some(progress),
             cost: None,
         })
     }

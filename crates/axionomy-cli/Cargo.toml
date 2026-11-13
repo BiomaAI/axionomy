@@ -12,7 +12,7 @@ rust-version.workspace = true
 [dependencies]
 axionomy-engine.workspace = true
 axionomy-mcp.workspace = true
-axionomy-problems.workspace = true
+axionomy-problems = { workspace = true, features = ["packages"] }
 axionomy-store.workspace = true
 axionomy-studio-server.workspace = true
 axionomy-study.workspace = true

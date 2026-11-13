@@ -476,6 +476,19 @@ fn strategy_reaches(strategy: Strategy, closure: &mut Closure, calls: &mut Vec<S
                 .push(crate::definitions::definition(&candidates));
             calls.push(score);
         }
+        Strategy::Pareto {
+            candidates,
+            goal: aim,
+            objectives,
+        } => {
+            goal(aim);
+            closure
+                .queue
+                .push(crate::definitions::definition(&candidates));
+            closure
+                .queue
+                .extend(objectives.iter().map(crate::definitions::definition));
+        }
         Strategy::Game {
             goal: aim,
             nature,

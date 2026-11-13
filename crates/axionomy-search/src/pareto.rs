@@ -326,6 +326,20 @@ impl ParetoSearchProgress {
     }
 }
 
+/// A Pareto search's progress as a graph search reports it, for a watcher
+/// that follows every search alike.
+impl From<ParetoSearchProgress> for crate::GraphSearchProgress {
+    fn from(progress: ParetoSearchProgress) -> Self {
+        Self {
+            expanded: progress.expanded,
+            generated: progress.generated,
+            frontier: progress.frontier,
+            visited: progress.visited,
+            solution_depth: None,
+        }
+    }
+}
+
 struct ParetoSearchState<O: Ontology> {
     world: Economy<O>,
     trace: Trace<O>,

@@ -9,11 +9,18 @@ license.workspace = true
 repository.workspace = true
 rust-version.workspace = true
 
+[features]
+# The samples' package builders, which write through the engine.
+packages = ["dep:axionomy-engine", "dep:axionomy-store", "dep:postcard"]
+
 [dependencies]
 axionomy.workspace = true
+axionomy-engine = { workspace = true, optional = true }
 axionomy-search.workspace = true
+axionomy-store = { workspace = true, optional = true }
 axionomy-study.workspace = true
 axionomy-view.workspace = true
+postcard = { workspace = true, optional = true }
 serde.workspace = true
 thiserror.workspace = true
 
