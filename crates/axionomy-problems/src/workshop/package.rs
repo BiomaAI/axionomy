@@ -61,7 +61,6 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
     }
     let pareto = |by: &[&ObjectivePath]| Strategy::Pareto {
         candidates: path!("workshop/recipes"),
-        goal: path!("workshop/delivered"),
         objectives: objectives.clone(),
         by: by.iter().map(|objective| (*objective).clone()).collect(),
     };
@@ -70,14 +69,12 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
             "workshop/breadth-first",
             Strategy::BreadthFirst {
                 candidates: path!("workshop/recipes"),
-                goal: path!("workshop/delivered"),
             },
         ),
         (
             "workshop/minimum-waste",
             Strategy::BestFirst {
                 candidates: path!("workshop/recipes"),
-                goal: path!("workshop/delivered"),
                 cost: call("waste"),
                 heuristic: None,
             },
@@ -110,6 +107,7 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
             &name.parse().expect("a path"),
             &Experiment {
                 start: name.parse().expect("a path"),
+                goal: path!("workshop/delivered"),
                 arms: strategies
                     .iter()
                     .map(|(strategy, _)| Arm {

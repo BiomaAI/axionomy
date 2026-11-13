@@ -4,12 +4,14 @@
 //! its strategies, and an experiment comparing them on each instance.
 //!
 //! Each instance has orders of its own to settle, so each has its own goal,
-//! and its strategies are named under it. Micro settles an order in one
-//! exchange: its clearing is branch-and-bound over the gross value a clearing
-//! forgoes, and its Pareto picks rank the exact front of the participants'
-//! utility. Showcase and Stress fund contracts that are dispatched and
-//! delivered over time, planned as the study plans them: a beam of 24 states
-//! scored for volume, or weighted toward buyers or sellers.
+//! which its experiment names. Micro settles an order in one exchange, and
+//! its strategies are named under `marketplace/settlement`: its clearing is
+//! branch-and-bound over the gross value a clearing forgoes, and its Pareto
+//! picks rank the exact front of the participants' utility. Showcase and
+//! Stress fund contracts that are dispatched and delivered over time,
+//! planned as the study plans them, by the same strategies at either size:
+//! a beam of 24 states scored for volume, or weighted toward buyers or
+//! sellers.
 
 use crate::{
     marketplace::{self, Ontology},
@@ -18,7 +20,7 @@ use crate::{
 use axionomy::{OntologyPath, path};
 use axionomy_engine::{
     Arm, CandidateSet, Engine, EngineError, Experiment, GoalPath, Measure, Objective,
-    ObjectivePath, Strategy, View,
+    ObjectivePath, Strategy, StrategyPath, View,
 };
 use axionomy_search::{
     bounded::Tie,
@@ -100,6 +102,59 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
     ]
     .map(objective);
 
+    // Micro's market settles each order in one exchange; every other's
+    // fulfills its contracts over time.
+    let beam = |score| Strategy::Beam {
+        candidates: path!("marketplace/fulfillment"),
+        score: call(score),
+        width: WIDTH,
+        depth: DEPTH,
+        tie: TIE,
+    };
+    // Every allocation on Micro's front gives its buyers 55 and its sellers
+    // 20; of equals the study takes the one the search keeps last, which
+    // gives buyer B and seller B the most.
+    let pareto = |by: [&str; 3]| Strategy::Pareto {
+        candidates: path!("marketplace/settlements"),
+        objectives: front.to_vec(),
+        by: by.map(objective).to_vec(),
+    };
+    let mut fulfilling = Vec::new();
+    let mut settling = Vec::new();
+    for (strategies, prefix, kept) in [
+        (
+            &mut fulfilling,
+            "marketplace",
+            [
+                ("market-clearing", beam("volume")),
+                ("pareto-buyers", beam("favor_buyers")),
+                ("pareto-sellers", beam("favor_sellers")),
+            ],
+        ),
+        (
+            &mut settling,
+            "marketplace/settlement",
+            [
+                (
+                    "market-clearing",
+                    Strategy::BranchAndBound {
+                        candidates: path!("marketplace/settlements"),
+                        cost: call("forgone"),
+                        bound: call("forgone_settled"),
+                    },
+                ),
+                ("pareto-buyers", pareto(["buyers", "buyer-b", "seller-b"])),
+                ("pareto-sellers", pareto(["sellers", "seller-b", "buyer-b"])),
+            ],
+        ),
+    ] {
+        for (name, strategy) in kept {
+            let path: StrategyPath = format!("{prefix}/{name}").parse().expect("a path");
+            engine.keep_strategy(&path, &strategy)?;
+            strategies.push(path);
+        }
+    }
+
     for (instance, initial, settled) in [
         ("micro", marketplace::initial(), marketplace::goal()),
         (
@@ -118,55 +173,14 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
             .expect("a path");
         engine.keep_goal(&goal, &written(&settled))?;
         let timed = marketplace::fulfillment::enabled(&initial);
-        let strategies = if timed {
-            let beam = |score| Strategy::Beam {
-                candidates: path!("marketplace/fulfillment"),
-                goal: goal.clone(),
-                score: call(score),
-                width: WIDTH,
-                depth: DEPTH,
-                tie: TIE,
-            };
-            [
-                ("market-clearing", beam("volume")),
-                ("pareto-buyers", beam("favor_buyers")),
-                ("pareto-sellers", beam("favor_sellers")),
-            ]
-        } else {
-            // Every allocation on Micro's front gives its buyers 55 and its
-            // sellers 20; of equals the study takes the one the search keeps
-            // last, which gives buyer B and seller B the most.
-            let pareto = |by: [&str; 3]| Strategy::Pareto {
-                candidates: path!("marketplace/settlements"),
-                goal: goal.clone(),
-                objectives: front.to_vec(),
-                by: by.map(objective).to_vec(),
-            };
-            [
-                (
-                    "market-clearing",
-                    Strategy::BranchAndBound {
-                        candidates: path!("marketplace/settlements"),
-                        goal: goal.clone(),
-                        cost: call("forgone"),
-                        bound: call("forgone_settled"),
-                    },
-                ),
-                ("pareto-buyers", pareto(["buyers", "buyer-b", "seller-b"])),
-                ("pareto-sellers", pareto(["sellers", "seller-b", "buyer-b"])),
-            ]
-        };
-        let mut arms = Vec::new();
-        for (name, strategy) in &strategies {
-            let path = format!("marketplace/{instance}/{name}")
-                .parse()
-                .expect("a path");
-            engine.keep_strategy(&path, strategy)?;
-            arms.push(Arm {
-                strategy: path,
+        let strategies = if timed { &fulfilling } else { &settling };
+        let arms = strategies
+            .iter()
+            .map(|strategy| Arm {
+                strategy: strategy.clone(),
                 start: None,
-            });
-        }
+            })
+            .collect();
         let start = engine
             .store()
             .record::<Ontology>(initial, Checkpoints::Ends)
@@ -177,6 +191,7 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
             &name.parse().expect("a path"),
             &Experiment {
                 start: name.parse().expect("a path"),
+                goal,
                 arms,
                 objectives: if timed {
                     reported.to_vec()

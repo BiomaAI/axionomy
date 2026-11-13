@@ -45,14 +45,12 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
             "exact-cover/breadth-first",
             Strategy::BreadthFirst {
                 candidates: path!("exact-cover/selections"),
-                goal: path!("exact-cover/covered"),
             },
         ),
         (
             "exact-cover/algorithm-x",
             Strategy::Plan {
                 plan: call("algorithm_x"),
-                goal: path!("exact-cover/covered"),
             },
         ),
     ];
@@ -92,6 +90,7 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
                 &name.parse().expect("a path"),
                 &Experiment {
                     start: name.parse().expect("a path"),
+                    goal: path!("exact-cover/covered"),
                     arms: strategies
                         .iter()
                         .map(|(strategy, _)| Arm {

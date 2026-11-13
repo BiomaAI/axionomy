@@ -60,7 +60,6 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
     }
     let search = |heuristic: Option<ScriptCall>| Strategy::Cheapest {
         candidates: path!("maze/moves"),
-        goal: path!("maze/solved"),
         cost: call("energy"),
         heuristic,
     };
@@ -71,7 +70,6 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
         ];
         Strategy::Pareto {
             candidates: path!("maze/moves"),
-            goal: path!("maze/solved"),
             by: objectives.clone(),
             objectives,
         }
@@ -81,7 +79,6 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
             "maze/breadth-first",
             Strategy::BreadthFirst {
                 candidates: path!("maze/moves"),
-                goal: path!("maze/solved"),
             },
         ),
         ("maze/dijkstra", search(None)),
@@ -107,6 +104,7 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
             &name.parse().expect("a path"),
             &Experiment {
                 start: name.parse().expect("a path"),
+                goal: path!("maze/solved"),
                 arms: strategies
                     .iter()
                     .map(|(strategy, _)| Arm {

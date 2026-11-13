@@ -104,7 +104,6 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
             salt: 0,
         };
         let game = |horizon, yellow| Strategy::Game {
-            goal: path!("connect-four/red-wins"),
             horizon,
             nature: None,
             actor: script("mover"),
@@ -137,6 +136,7 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
             &name.parse().expect("a path"),
             &Experiment {
                 start: name.parse().expect("a path"),
+                goal: path!("connect-four/red-wins"),
                 arms,
                 objectives: objectives.clone(),
                 seed: SEED,

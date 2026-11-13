@@ -1,7 +1,9 @@
 //! Perishable inventory as a package. Micro is a `perishables` economy:
-//! the outage played turn by turn, each timed condition spoiling its cohort
-//! once its moment comes, and the exact front of storage plans, ranked for
-//! usable stock or for cooling energy, with claims, usable claims and
+//! the outage played turn by turn until it is resolved, each timed
+//! condition spoiling its cohort once its moment comes; and the exact front
+//! of storage plans, ranked for usable stock or for cooling energy, toward
+//! a sealed plan, a question of its own, so an experiment of its own,
+//! `perishables/micro/storage-plans`; with claims, usable claims and
 //! cooling energy as objectives. Showcase and Stress are
 //! `perishables/cold-chain` economies, an ontology of their own with its own
 //! goal, so its strategies and objectives are named under
@@ -16,8 +18,8 @@ use crate::{
 };
 use axionomy::{Economy, OntologyPath, path};
 use axionomy_engine::{
-    Arm, CandidateSet, Engine, EngineError, Experiment, Measure, Objective, ObjectivePath,
-    Strategy, StrategyPath, View,
+    Arm, CandidateSet, Engine, EngineError, Experiment, GoalPath, Measure, Objective,
+    ObjectivePath, Strategy, StrategyPath, View,
 };
 use axionomy_search::pareto::ObjectiveDirection::{self, Maximize, Minimize};
 use axionomy_store::{Checkpoints, Recordable};
@@ -102,38 +104,50 @@ fn micro(engine: &Engine) -> Result<(), EngineError> {
     let front = objectives[1..].to_vec();
     let pareto = |by: [&ObjectivePath; 2]| Strategy::Pareto {
         candidates: path!("perishables/storage-plans"),
-        goal: path!("perishables/plan-sealed"),
         objectives: front.clone(),
         by: by.map(ObjectivePath::clone).to_vec(),
     };
-    let strategies = [
-        (
-            "perishables/outage",
-            Strategy::Policy {
-                policy: call("outage"),
-                goal: path!("perishables/solved"),
-                horizon: OUTAGE_TURNS,
-            },
-        ),
-        (
-            "perishables/pareto-inventory",
-            pareto([&objectives[1], &objectives[2]]),
-        ),
-        (
-            "perishables/pareto-energy",
-            pareto([&objectives[2], &objectives[1]]),
-        ),
-    ];
-    let mut arms = Vec::new();
-    for (name, strategy) in &strategies {
+    let kept = |name: &str, strategy: &Strategy| -> Result<StrategyPath, EngineError> {
         let path: StrategyPath = name.parse().expect("a path");
         engine.keep_strategy(&path, strategy)?;
-        arms.push(path);
-    }
+        Ok(path)
+    };
+    let outage = kept(
+        "perishables/outage",
+        &Strategy::Policy {
+            policy: call("outage"),
+            horizon: OUTAGE_TURNS,
+        },
+    )?;
+    let plans = vec![
+        kept(
+            "perishables/pareto-inventory",
+            &pareto([&objectives[1], &objectives[2]]),
+        )?,
+        kept(
+            "perishables/pareto-energy",
+            &pareto([&objectives[2], &objectives[1]]),
+        )?,
+    ];
     // Micro's study holds seventy claims in the warehouse and thirty in the
     // fridge, and moves ten at a time.
-    let start = perishables::initial_with_inventory(70, 30);
-    experiment(engine, "micro", start, arms, objectives)
+    recorded(engine, "micro", perishables::initial_with_inventory(70, 30))?;
+    // The outage plays until it is resolved; the storage plans are searched
+    // for a sealed one.
+    experiment(
+        engine,
+        "micro",
+        path!("perishables/solved"),
+        vec![outage],
+        objectives.clone(),
+    )?;
+    experiment(
+        engine,
+        "micro/storage-plans",
+        path!("perishables/plan-sealed"),
+        plans,
+        objectives,
+    )
 }
 
 /// Showcase and Stress: the cold chain's daily policies, each planned whole.
@@ -169,37 +183,55 @@ fn cold_chain(engine: &Engine) -> Result<(), EngineError> {
             &path,
             &Strategy::Plan {
                 plan: call(function),
-                goal: path!("perishables/cold-chain/closed"),
             },
         )?;
         arms.push(path);
     }
     for (instance, stress) in [("showcase", false), ("stress", true)] {
-        let start = cold_chain::initial(stress, SEED);
-        experiment(engine, instance, start, arms.clone(), objectives.clone())?;
+        recorded(engine, instance, cold_chain::initial(stress, SEED))?;
+        experiment(
+            engine,
+            instance,
+            path!("perishables/cold-chain/closed"),
+            arms.clone(),
+            objectives.clone(),
+        )?;
     }
     Ok(())
 }
 
-/// Records `start` as a run of its own ontology under `perishables/<instance>`
-/// and keeps an experiment of that name comparing `strategies` from there.
-fn experiment<O: Recordable>(
+/// Records `start` as a run of its own ontology under the ref
+/// `perishables/<instance>`.
+fn recorded<O: Recordable>(
     engine: &Engine,
     instance: &str,
     start: Economy<O>,
-    strategies: Vec<StrategyPath>,
-    objectives: Vec<ObjectivePath>,
 ) -> Result<(), EngineError> {
     let start = engine
         .store()
         .record::<O>(start, Checkpoints::Ends)
         .finish()?;
-    let name = format!("perishables/{instance}");
-    engine.refer(&name.parse().expect("a path"), start)?;
+    engine.refer(
+        &format!("perishables/{instance}").parse().expect("a path"),
+        start,
+    )
+}
+
+/// Keeps the experiment `perishables/<name>` comparing `strategies` toward
+/// `goal` from the instance its first segment names.
+fn experiment(
+    engine: &Engine,
+    name: &str,
+    goal: GoalPath,
+    strategies: Vec<StrategyPath>,
+    objectives: Vec<ObjectivePath>,
+) -> Result<(), EngineError> {
+    let instance = name.split('/').next().unwrap_or(name);
     engine.keep_experiment(
-        &name.parse().expect("a path"),
+        &format!("perishables/{name}").parse().expect("a path"),
         &Experiment {
-            start: name.parse().expect("a path"),
+            start: format!("perishables/{instance}").parse().expect("a path"),
+            goal,
             arms: strategies
                 .into_iter()
                 .map(|strategy| Arm {

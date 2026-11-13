@@ -82,14 +82,12 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
     }
     let policy = |function| Strategy::Policy {
         policy: call(function),
-        goal: path!("bridge/solved"),
         horizon: HORIZON,
     };
     // The exact front over both travellers' priority and credit, ranked by
     // one traveller's priority and credit, then the other's.
     let pareto = |by: [&str; 4]| Strategy::Pareto {
         candidates: path!("bridge/mechanisms"),
-        goal: path!("bridge/solved"),
         objectives: ["priority/a", "priority/b", "credit/a", "credit/b"]
             .map(objective)
             .to_vec(),
@@ -100,7 +98,6 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
             "bridge/breadth-first",
             Strategy::BreadthFirst {
                 candidates: path!("bridge/routes"),
-                goal: path!("bridge/solved"),
             },
         ),
         ("bridge/first-come-a", policy("first_come_a")),
@@ -162,6 +159,7 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
             &name.parse().expect("a path"),
             &Experiment {
                 start: name.parse().expect("a path"),
+                goal: path!("bridge/solved"),
                 arms: arms
                     .iter()
                     .map(|strategy| Arm {

@@ -19,8 +19,8 @@ use crate::{
 };
 use axionomy::{Economy, OntologyPath, path};
 use axionomy_engine::{
-    Arm, CandidateSet, Chooser, Engine, EngineError, Experiment, Measure, Objective, ObjectivePath,
-    Strategy, StrategyPath, View,
+    Arm, CandidateSet, Chooser, Engine, EngineError, Experiment, GoalPath, Measure, Objective,
+    ObjectivePath, Strategy, StrategyPath, View,
 };
 use axionomy_search::pareto::ObjectiveDirection::{self, Maximize, Minimize};
 use axionomy_store::{Checkpoints, Recordable};
@@ -91,11 +91,9 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
     // Micro: the fixed routes turn by turn, and the planner.
     let route = |function: &str| Strategy::Policy {
         policy: micro(function),
-        goal: path!("logistics/all-delivered"),
         horizon: HORIZON,
     };
     let planner = Strategy::Game {
-        goal: path!("logistics/all-delivered"),
         horizon: HORIZON,
         nature: Some(micro("nature")),
         actor: micro("dispatcher"),
@@ -130,7 +128,13 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
         ],
     )?;
     recorded(engine, "logistics/micro", logistics::initial_micro())?;
-    experiment(engine, "logistics/micro", &strategies, &objectives)?;
+    experiment(
+        engine,
+        "logistics/micro",
+        path!("logistics/all-delivered"),
+        &strategies,
+        &objectives,
+    )?;
 
     // Showcase and Stress: the fleet's dispatch policies, named for the
     // catalog's strategies whose documents they give.
@@ -147,7 +151,6 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
             &name,
             &Strategy::Policy {
                 policy: call("logistics/fleet", function),
-                goal: path!("logistics/fleet/closed"),
                 horizon: fleet::HORIZON as u64,
             },
         )?;
@@ -168,7 +171,13 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
     for (instance, stress) in [("showcase", false), ("stress", true)] {
         let name = format!("logistics/{instance}");
         recorded(engine, &name, fleet::initial(stress, SEED))?;
-        experiment(engine, &name, &dispatch, &outcomes)?;
+        experiment(
+            engine,
+            &name,
+            path!("logistics/fleet/closed"),
+            &dispatch,
+            &outcomes,
+        )?;
     }
     Ok(())
 }
@@ -186,11 +195,13 @@ fn recorded<O: Recordable>(
     engine.refer(&name.parse().expect("a path"), start)
 }
 
-/// Keeps the experiment `name`, every strategy run once from the ref of
-/// the same name with the study's seed, measured by `objectives`.
+/// Keeps the experiment `name`, every strategy run once toward `goal` from
+/// the ref of the same name with the study's seed, measured by
+/// `objectives`.
 fn experiment(
     engine: &Engine,
     name: &str,
+    goal: GoalPath,
     strategies: &[StrategyPath],
     objectives: &[ObjectivePath],
 ) -> Result<(), EngineError> {
@@ -198,6 +209,7 @@ fn experiment(
         &name.parse().expect("a path"),
         &Experiment {
             start: name.parse().expect("a path"),
+            goal,
             arms: strategies
                 .iter()
                 .map(|strategy| Arm {

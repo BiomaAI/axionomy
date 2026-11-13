@@ -65,7 +65,6 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
     let (job_one, job_two) = (&objectives[0], &objectives[1]);
     let pareto = |by: [&ObjectivePath; 2]| Strategy::Pareto {
         candidates: path!("scheduling/events"),
-        goal: path!("scheduling/solved"),
         objectives: vec![job_one.clone(), job_two.clone()],
         by: by.into_iter().cloned().collect(),
     };
@@ -74,7 +73,6 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
             "scheduling/best-first",
             Strategy::BestFirst {
                 candidates: path!("scheduling/events"),
-                goal: path!("scheduling/solved"),
                 cost: call("makespan"),
                 heuristic: None,
             },
@@ -86,7 +84,6 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
             "scheduling/bounded-optimizer",
             Strategy::BranchAndBound {
                 candidates: path!("scheduling/events"),
-                goal: path!("scheduling/solved"),
                 cost: call("makespan"),
                 bound: call("makespan"),
             },
@@ -126,6 +123,7 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
                 &name.parse().expect("a path"),
                 &Experiment {
                     start: name.parse().expect("a path"),
+                    goal: path!("scheduling/solved"),
                     arms: strategies
                         .iter()
                         .map(|(strategy, _)| Arm {

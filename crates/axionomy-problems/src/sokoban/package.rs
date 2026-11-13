@@ -43,7 +43,6 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
             "sokoban/a-star",
             Strategy::Cheapest {
                 candidates: path!("sokoban/moves"),
-                goal: path!("sokoban/solved"),
                 cost: call("step"),
                 heuristic: Some(call("crate_goal_distance")),
             },
@@ -52,7 +51,6 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
             "sokoban/breadth-first",
             Strategy::BreadthFirst {
                 candidates: path!("sokoban/moves"),
-                goal: path!("sokoban/solved"),
             },
         ),
     ];
@@ -83,6 +81,7 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
             &name.parse().expect("a path"),
             &Experiment {
                 start: name.parse().expect("a path"),
+                goal: path!("sokoban/solved"),
                 arms: strategies
                     .iter()
                     .map(|(strategy, _)| Arm {

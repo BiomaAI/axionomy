@@ -111,8 +111,26 @@ fn last(path: &str) -> &str {
 /// document reports, the experiment's objective of that name. Returns how
 /// many documents it compared.
 fn reproduces(engine: &Engine, problem: &str, instance: &str, strategies: &[&str]) -> usize {
+    reproduced_by(
+        engine,
+        &format!("{problem}/{instance}"),
+        problem,
+        instance,
+        strategies,
+    )
+}
+
+/// What [`reproduces`] checks, of the experiment at `experiment`, which
+/// starts at the instance.
+fn reproduced_by(
+    engine: &Engine,
+    experiment: &str,
+    problem: &str,
+    instance: &str,
+    strategies: &[&str],
+) -> usize {
     let mut compared = 0;
-    let experiment = format!("{problem}/{instance}").parse().unwrap();
+    let experiment = experiment.parse().unwrap();
     let objectives = engine.experiment(&experiment).unwrap().objectives;
     let results = engine
         .run_experiment(&experiment, &mut |_| ControlFlow::Continue(()))
@@ -563,6 +581,7 @@ fn logistics_beyond_the_study(engine: &Engine) {
         .record::<logistics::Ontology>(logistics::initial(), Checkpoints::Ends)
         .finish()
         .unwrap();
+    let goal = engine.experiment(&path!("logistics/micro")).unwrap().goal;
     let ran = |strategy: &str| {
         let strategy = engine
             .strategy(&format!("logistics/{strategy}").parse().unwrap())
@@ -572,7 +591,9 @@ fn logistics_beyond_the_study(engine: &Engine) {
             budget: 1,
         };
         let ran = engine
-            .run_strategy(start, &strategy, effort, &mut |_| ControlFlow::Continue(()))
+            .run_strategy(start, &strategy, &goal, effort, &mut |_| {
+                ControlFlow::Continue(())
+            })
             .unwrap();
         engine.history(ran.end).unwrap().1
     };
@@ -641,6 +662,7 @@ fn mission_planned(engine: &Engine, seeds: impl IntoIterator<Item = u64>) -> Vec
     use axionomy_search::mcts::MctsConfig;
     let model = mission::initial();
     let planner = engine.strategy(&path!("mission/coordinated")).unwrap();
+    let goal = engine.experiment(&path!("mission/micro")).unwrap().goal;
     let prior = engine.referred(&path!("mission/micro")).unwrap();
     let mut outcomes = Vec::new();
     for seed in seeds {
@@ -664,7 +686,7 @@ fn mission_planned(engine: &Engine, seeds: impl IntoIterator<Item = u64>) -> Vec
         let scenario = engine.apply(prior, &trace[..1]).unwrap();
         let effort = Effort { seed, budget: 1 };
         let ran = engine
-            .run_strategy(scenario, &planner, effort, &mut |_| {
+            .run_strategy(scenario, &planner, &goal, effort, &mut |_| {
                 ControlFlow::Continue(())
             })
             .unwrap();
@@ -748,20 +770,33 @@ fn connect_four(engine: &Engine, instance: &str) {
 }
 
 fn perishables(engine: &Engine, instance: &str) {
-    // Micro plays its outage and picks from its exact storage front; the
-    // cold chains plan each of their four daily policies over the outage
+    // Micro plays its outage until it is resolved and, in an experiment of
+    // its own, picks from its exact front of sealed storage plans; the cold
+    // chains plan each of their four daily policies over the outage
     // schedule, the storage buffer among them.
-    let compared = reproduces(
-        engine,
-        "perishables",
-        instance,
-        &[
-            "outage",
-            "pareto-inventory",
-            "pareto-energy",
-            "storage-buffer",
-        ],
-    );
+    let compared = if instance == "micro" {
+        reproduces(engine, "perishables", instance, &["outage"])
+            + reproduced_by(
+                engine,
+                "perishables/micro/storage-plans",
+                "perishables",
+                instance,
+                &["pareto-inventory", "pareto-energy"],
+            )
+    } else {
+        reproduces(
+            engine,
+            "perishables",
+            instance,
+            &[
+                "outage",
+                "pareto-inventory",
+                "pareto-energy",
+                "storage-buffer",
+            ],
+        )
+    };
+
     assert_eq!(
         compared,
         if instance == "micro" { 3 } else { 4 },
@@ -808,7 +843,9 @@ fn work_league_beyond_the_study(engine: &Engine, instance: &str) {
         for seed in 0..4 {
             let effort = Effort { seed, budget: 1 };
             let ran = engine
-                .run_strategy(start, &strategy, effort, &mut |_| ControlFlow::Continue(()))
+                .run_strategy(start, &strategy, &experiment.goal, effort, &mut |_| {
+                    ControlFlow::Continue(())
+                })
                 .unwrap();
             let rust = work_league::run(&league, seed).unwrap();
             let trace: Vec<paths::Exchange> =

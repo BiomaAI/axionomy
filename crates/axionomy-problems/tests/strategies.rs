@@ -37,10 +37,12 @@ where
     trace.exchanges().iter().map(written).collect()
 }
 
+/// What `strategy` reaches from `initial` toward the goal at `goal`.
 fn solve(
     engine: &Engine,
     initial: paths::Economy,
     strategy: &StrategyPath,
+    goal: &str,
 ) -> axionomy_engine::Ran {
     let start = engine.author(initial).unwrap();
     let strategy = engine.strategy(strategy).unwrap();
@@ -49,7 +51,9 @@ fn solve(
         budget: 1_000_000,
     };
     engine
-        .run_strategy(start, &strategy, effort, &mut |_| ControlFlow::Continue(()))
+        .run_strategy(start, &strategy, &path(goal), effort, &mut |_| {
+            ControlFlow::Continue(())
+        })
         .unwrap()
 }
 
@@ -77,7 +81,6 @@ fn mazes_cheapest_routes_are_the_rust_solvers() {
                 &path(name),
                 &Strategy::Cheapest {
                     candidates: path("maze/moves"),
-                    goal: path("maze/solved"),
                     cost: call("maze", "energy"),
                     heuristic,
                 },
@@ -91,12 +94,17 @@ fn mazes_cheapest_routes_are_the_rust_solvers() {
     ] {
         let expected = maze::solve_astar(&initial).unwrap();
         for strategy in ["maze/a-star", "maze/dijkstra"] {
-            let ran = solve(&engine, written(&initial), &path(strategy));
+            let ran = solve(&engine, written(&initial), &path(strategy), "maze/solved");
             assert!(matches!(ran.outcome, Outcome::Reached), "{strategy}");
             assert_eq!(ran.cost, Some(expected.cost()), "{strategy}");
             assert!(engine.holds(ran.end, &path("maze/solved")).unwrap());
         }
-        let ran = solve(&engine, written(&initial), &path("maze/a-star"));
+        let ran = solve(
+            &engine,
+            written(&initial),
+            &path("maze/a-star"),
+            "maze/solved",
+        );
         assert_eq!(trace(&engine, ran.end, 0), typed_trace(expected.trace()));
     }
 }
@@ -121,13 +129,17 @@ fn sokobans_breadth_first_solutions_are_the_shortest() {
             &path("sokoban/breadth-first"),
             &Strategy::BreadthFirst {
                 candidates: path("sokoban/moves"),
-                goal: path("sokoban/solved"),
             },
         )
         .unwrap();
     for initial in [sokoban::initial(), sokoban::initial_showcase()] {
         let expected = sokoban::solve(&initial).unwrap();
-        let ran = solve(&engine, written(&initial), &path("sokoban/breadth-first"));
+        let ran = solve(
+            &engine,
+            written(&initial),
+            &path("sokoban/breadth-first"),
+            "sokoban/solved",
+        );
         assert!(matches!(ran.outcome, Outcome::Reached));
         assert_eq!(
             trace(&engine, ran.end, 0).len(),
@@ -157,7 +169,6 @@ fn incidents_policies_run_the_rust_incidents() {
                 &path(&format!("incident/{}", function.replace('_', "-"))),
                 &Strategy::Policy {
                     policy: call("incident", function),
-                    goal: path("incident/closed"),
                     horizon: incident::HORIZON as u64,
                 },
             )
@@ -172,6 +183,7 @@ fn incidents_policies_run_the_rust_incidents() {
                 &engine,
                 written(&initial),
                 &path(&format!("incident/{}", function.replace('_', "-"))),
+                "incident/closed",
             );
             assert!(matches!(ran.outcome, Outcome::Reached));
             assert_eq!(

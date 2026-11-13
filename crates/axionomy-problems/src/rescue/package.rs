@@ -73,6 +73,7 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
         &written(&incident::goal()),
     )?;
     let micro = Family {
+        goal: path!("rescue/solved"),
         objectives: measures(
             engine,
             "rescue",
@@ -85,7 +86,6 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
         strategies: policies(
             engine,
             "rescue",
-            &path!("rescue/solved"),
             MICRO_TURNS,
             &[
                 ("observe-then-follow", "observe_then_follow"),
@@ -94,6 +94,7 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
         )?,
     };
     let incidents = Family {
+        goal: path!("rescue/incident/closed"),
         objectives: measures(
             engine,
             "rescue/incident",
@@ -109,7 +110,6 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
         strategies: policies(
             engine,
             "rescue/incident",
-            &path!("rescue/incident/closed"),
             incident::HORIZON as u64,
             &[
                 ("observe-then-follow", "triage"),
@@ -145,8 +145,10 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
     Ok(())
 }
 
-/// An ontology's objectives and strategies, which its experiments compare.
+/// An ontology's goal, objectives and strategies, which its experiments
+/// compare toward the goal.
 struct Family {
+    goal: GoalPath,
     objectives: Vec<ObjectivePath>,
     strategies: Vec<StrategyPath>,
 }
@@ -167,6 +169,7 @@ impl Family {
             &name.parse().expect("a path"),
             &Experiment {
                 start: instance.parse().expect("a path"),
+                goal: self.goal.clone(),
                 arms: self
                     .strategies
                     .iter()
@@ -222,11 +225,10 @@ fn measures(
 }
 
 /// Keeps `<script>/<key>` for each policy, the function of `script` that
-/// plays a turn, until `goal` or `horizon` turns.
+/// plays a turn, until the run's goal or `horizon` turns.
 fn policies(
     engine: &Engine,
     script: &str,
-    goal: &GoalPath,
     horizon: u64,
     policies: &[(&str, &str)],
 ) -> Result<Vec<StrategyPath>, EngineError> {
@@ -238,7 +240,6 @@ fn policies(
                 &strategy,
                 &Strategy::Policy {
                     policy: call(script, function),
-                    goal: goal.clone(),
                     horizon,
                 },
             )?;

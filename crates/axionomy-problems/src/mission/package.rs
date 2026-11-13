@@ -22,8 +22,8 @@ use crate::{
 };
 use axionomy::{Economy, OntologyPath, path};
 use axionomy_engine::{
-    Arm, CandidateSet, Chooser, Engine, EngineError, Experiment, Measure, Objective, ObjectivePath,
-    Strategy, StrategyPath, View,
+    Arm, CandidateSet, Chooser, Engine, EngineError, Experiment, GoalPath, Measure, Objective,
+    ObjectivePath, Strategy, StrategyPath, View,
 };
 use axionomy_search::pareto::ObjectiveDirection::{self, Maximize, Minimize};
 use axionomy_store::{Checkpoints, Point, Recordable, RefPath};
@@ -92,7 +92,6 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
 
     // Micro: the planner, and both agents going north.
     let planner = Strategy::Game {
-        goal: path!("mission/solved"),
         horizon: HORIZON,
         nature: Some(micro("nature")),
         actor: micro("planner"),
@@ -111,7 +110,6 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
     };
     let policy = |function: &str| Strategy::Policy {
         policy: micro(function),
-        goal: path!("mission/solved"),
         horizon: HORIZON,
     };
     let kept = |name: &str, strategy: &Strategy| -> Result<StrategyPath, EngineError> {
@@ -146,6 +144,7 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
     experiment(
         engine,
         "mission/micro",
+        path!("mission/solved"),
         Arms {
             start: Some(path!("mission/micro/scenario")),
             strategies: &[coordinated, direct_north.clone()],
@@ -159,6 +158,7 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
     experiment(
         engine,
         "mission/micro/monte-carlo",
+        path!("mission/solved"),
         Arms {
             start: None,
             strategies: &[share_and_coordinate, direct_north],
@@ -182,7 +182,6 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
             &name,
             &Strategy::Policy {
                 policy: call("mission/expedition", function),
-                goal: path!("mission/expedition/closed"),
                 horizon: expedition::HORIZON as u64,
             },
         )?;
@@ -206,6 +205,7 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
         experiment(
             engine,
             &name,
+            path!("mission/expedition/closed"),
             Arms {
                 start: None,
                 strategies: &policies,
@@ -240,10 +240,11 @@ fn recorded<O: Recordable>(
 }
 
 /// Keeps the experiment `name` on the instance its first two segments name,
-/// with `arms`, the study's seed, and `objectives`.
+/// toward `goal`, with `arms`, the study's seed, and `objectives`.
 fn experiment(
     engine: &Engine,
     name: &str,
+    goal: GoalPath,
     arms: Arms<'_>,
     objectives: &[ObjectivePath],
 ) -> Result<(), EngineError> {
@@ -252,6 +253,7 @@ fn experiment(
         &name.parse().expect("a path"),
         &Experiment {
             start: instance.parse().expect("a path"),
+            goal,
             arms: arms
                 .strategies
                 .iter()

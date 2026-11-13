@@ -22,7 +22,7 @@ use crate::{
 };
 use axionomy::{OntologyPath, path};
 use axionomy_engine::{
-    Arm, Engine, EngineError, Experiment, Measure, Objective, ObjectivePath, Strategy,
+    Arm, Engine, EngineError, Experiment, GoalPath, Measure, Objective, ObjectivePath, Strategy,
     StrategyPath, View,
 };
 use axionomy_search::pareto::ObjectiveDirection::{Maximize, Minimize};
@@ -59,6 +59,15 @@ fn strategy(profile: Profile, document: &str) -> StrategyPath {
     .expect("a path")
 }
 
+/// What a run at `profile` works toward: Micro's serial match completed,
+/// or a season ended.
+fn goal(profile: Profile) -> GoalPath {
+    match profile {
+        Profile::Micro => path!("work-league/serial/completed"),
+        Profile::Showcase | Profile::Stress => path!("work-league/season-ended"),
+    }
+}
+
 /// Writes the work league's package into `engine`'s store, everything
 /// named under `work-league`.
 pub fn write(engine: &Engine) -> Result<(), EngineError> {
@@ -79,11 +88,8 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
     )?;
     let micro = work_league::league(Profile::Micro, work_league::mixed_lineup());
     let season = work_league::league(Profile::Showcase, work_league::mixed_lineup());
-    engine.keep_goal(
-        &path!("work-league/serial/completed"),
-        &written(micro.goal()),
-    )?;
-    engine.keep_goal(&path!("work-league/season-ended"), &written(season.goal()))?;
+    engine.keep_goal(&goal(Profile::Micro), &written(micro.goal()))?;
+    engine.keep_goal(&goal(Profile::Showcase), &written(season.goal()))?;
     // Named by the keys the study's documents report them under.
     let mut objectives: Vec<ObjectivePath> = Vec::new();
     for (key, function, direction) in [
@@ -108,14 +114,12 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
             &strategy(Profile::Micro, document),
             &Strategy::Plan {
                 plan: call("serial"),
-                goal: path!("work-league/serial/completed"),
             },
         )?;
         engine.keep_strategy(
             &strategy(Profile::Showcase, document),
             &Strategy::Policy {
                 policy: call("season"),
-                goal: path!("work-league/season-ended"),
                 horizon: HORIZON,
             },
         )?;
@@ -154,7 +158,9 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
             &name.parse().expect("a path"),
             &Experiment {
                 start: name.parse().expect("a path"),
+                goal: goal(profile),
                 arms,
+
                 objectives: objectives.clone(),
                 seed: SEED,
                 budget: 10_000_000,

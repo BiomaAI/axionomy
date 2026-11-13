@@ -1,14 +1,15 @@
 //! The lending market as a package: its instances and each one's fresh
 //! market, the scripts its searches, scenario, attack and view call, the
-//! interest, collateral and cash objectives, and for each instance its goal,
-//! its strategies and an experiment comparing them.
+//! interest, collateral and cash objectives, its strategies, and for each
+//! instance its goal and an experiment comparing the strategies toward it.
 //!
 //! The goal is the instance's: the bill paid and all of its collateral
-//! free again. So each instance names its own strategies toward it: least
-//! interest, Dijkstra's search over each closed period's interest as the
-//! study runs it; fewest steps, breadth-first search; the over-borrowed
-//! scenario, a policy played turn by turn; and the first-depositor attack,
-//! a plan run from the instance's fresh market.
+//! free again. The strategies are the same at every size, since each
+//! experiment names the goal its arms work toward: least interest,
+//! Dijkstra's search over each closed period's interest as the study runs
+//! it; fewest steps, breadth-first search; the over-borrowed scenario, a
+//! policy played turn by turn; and the first-depositor attack, a plan run
+//! from the instance's fresh market.
 
 use crate::{
     lending::{self, Config, Ontology},
@@ -17,7 +18,7 @@ use crate::{
 use axionomy::{OntologyPath, path};
 use axionomy_engine::{
     Arm, CandidateSet, Engine, EngineError, Experiment, GoalPath, Measure, Objective,
-    ObjectivePath, ScriptCall, Strategy, View,
+    ObjectivePath, ScriptCall, Strategy, StrategyPath, View,
 };
 use axionomy_search::pareto::ObjectiveDirection;
 use axionomy_store::{Checkpoints, RefPath};
@@ -86,6 +87,10 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
     ] {
         engine.keep_objective(objective, &Objective { measure, direction })?;
     }
+    let strategies = strategies();
+    for (strategy, definition) in &strategies {
+        engine.keep_strategy(&strategy_path(strategy), definition)?;
+    }
     for (instance, config) in [
         ("micro", Config::micro()),
         ("showcase", Config::showcase()),
@@ -94,13 +99,6 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
         let name = format!("lending/{instance}");
         let goal: GoalPath = format!("{name}/repaid").parse().expect("a path");
         engine.keep_goal(&goal, &written(&lending::goal(&config)))?;
-        let strategies = strategies(&goal);
-        for (strategy, definition) in &strategies {
-            engine.keep_strategy(
-                &format!("{name}/{strategy}").parse().expect("a path"),
-                definition,
-            )?;
-        }
         let genesis = format!("{name}/genesis");
         for (reference, economy) in [
             (&name, lending::world(&config)),
@@ -117,10 +115,11 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
             &name.parse().expect("a path"),
             &Experiment {
                 start: name.parse().expect("a path"),
+                goal,
                 arms: strategies
                     .iter()
                     .map(|(strategy, _)| Arm {
-                        strategy: format!("{name}/{strategy}").parse().expect("a path"),
+                        strategy: strategy_path(strategy),
                         // The attack needs a market no one has deposited in.
                         start: (*strategy == ATTACK).then(|| genesis.clone()),
                     })
@@ -135,15 +134,19 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
     Ok(())
 }
 
-/// Every strategy toward `goal`, by name.
-fn strategies(goal: &GoalPath) -> [(&'static str, Strategy); 4] {
+/// The strategy named `name`, `lending/<name>`.
+fn strategy_path(name: &str) -> StrategyPath {
+    format!("lending/{name}").parse().expect("a path")
+}
+
+/// Every strategy, by name.
+fn strategies() -> [(&'static str, Strategy); 4] {
     let call = |function| call("lending", function);
     [
         (
             "least-interest",
             Strategy::Cheapest {
                 candidates: path!("lending/moves"),
-                goal: goal.clone(),
                 cost: call("interest"),
                 heuristic: None,
             },
@@ -152,14 +155,12 @@ fn strategies(goal: &GoalPath) -> [(&'static str, Strategy); 4] {
             "fewest-steps",
             Strategy::BreadthFirst {
                 candidates: path!("lending/moves"),
-                goal: goal.clone(),
             },
         ),
         (
             "over-borrowed",
             Strategy::Policy {
                 policy: call("over_borrowed"),
-                goal: goal.clone(),
                 horizon: HORIZON,
             },
         ),
@@ -167,7 +168,6 @@ fn strategies(goal: &GoalPath) -> [(&'static str, Strategy); 4] {
             ATTACK,
             Strategy::Plan {
                 plan: call("first_depositor_attack"),
-                goal: goal.clone(),
             },
         ),
     ]

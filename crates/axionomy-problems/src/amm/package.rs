@@ -19,7 +19,7 @@ use crate::{
 };
 use axionomy::{OntologyPath, path};
 use axionomy_engine::{
-    Arm, Engine, EngineError, Experiment, Measure, Objective, ObjectivePath, Strategy,
+    Arm, Engine, EngineError, Experiment, GoalPath, Measure, Objective, ObjectivePath, Strategy,
     StrategyPath, View,
 };
 use axionomy_search::pareto::ObjectiveDirection::{Maximize, Minimize};
@@ -94,7 +94,6 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
             &plan,
             &Strategy::Plan {
                 plan: call(&format!("{function}_plan")),
-                goal: path!("amm/day/met"),
             },
         )?;
         day.push(plan);
@@ -103,16 +102,23 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
             &policy,
             &Strategy::Policy {
                 policy: call(function),
-                goal: path!("amm/closed"),
                 horizon: HORIZON,
             },
         )?;
         seasonal.push(policy);
     }
-    for (instance, initial, strategies) in [
-        ("micro", amm::initial(), &day),
-        ("showcase", season, &seasonal),
-        ("stress", amm::initial_stress_with_seed(SEED), &seasonal),
+    // Micro's day ends where the actors' goals are met; a season, when the
+    // market closes.
+    let (met, closed): (GoalPath, GoalPath) = (path!("amm/day/met"), path!("amm/closed"));
+    for (instance, initial, goal, strategies) in [
+        ("micro", amm::initial(), &met, &day),
+        ("showcase", season, &closed, &seasonal),
+        (
+            "stress",
+            amm::initial_stress_with_seed(SEED),
+            &closed,
+            &seasonal,
+        ),
     ] {
         let start = engine
             .store()
@@ -124,6 +130,7 @@ pub fn write(engine: &Engine) -> Result<(), EngineError> {
             &name.parse().expect("a path"),
             &Experiment {
                 start: name.parse().expect("a path"),
+                goal: goal.clone(),
                 arms: strategies
                     .iter()
                     .map(|strategy| Arm {
