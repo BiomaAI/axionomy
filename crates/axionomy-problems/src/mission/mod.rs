@@ -24,6 +24,8 @@ use axionomy_search::{
 };
 use std::ops::ControlFlow;
 pub mod expedition;
+#[cfg(feature = "packages")]
+pub mod package;
 mod study;
 mod view;
 

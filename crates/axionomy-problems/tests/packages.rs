@@ -607,6 +607,135 @@ fn logistics_beyond_the_study(engine: &Engine) {
     assert_eq!(ran("mcts"), trace, "logistics mcts");
 }
 
+fn mission(engine: &Engine, instance: &str) {
+    // Micro's planner and both agents going north; the expedition's radio
+    // coordination, north-first search and rendezvous.
+    let compared = reproduces(
+        engine,
+        "mission",
+        instance,
+        &["coordinated", "direct-north", "rendezvous"],
+    );
+    assert_eq!(
+        compared,
+        if instance == "micro" { 2 } else { 3 },
+        "{instance}"
+    );
+    if instance == "micro" {
+        mission_monte_carlo(engine);
+        // Beyond the study's scenario, where the sensor reads wrong and the
+        // planner replans on its report: a direct move south that strands
+        // the team, and a direct move north where Nature's injury is seen,
+        // treated, and the victim rescued.
+        assert_eq!(mission_planned(engine, [2, 6]), [(false, 1), (true, 4)]);
+    }
+}
+
+/// Micro's study plays the scenario its seed draws, sample `seed` modulo
+/// the sixteen, and plans its `k`th decision seeded `seed` plus `k`. On the
+/// scenario each of `seeds` draws, the package's planner makes the Rust
+/// receding-horizon run's decisions; returns whether each run succeeded,
+/// and after how many decisions.
+fn mission_planned(engine: &Engine, seeds: impl IntoIterator<Item = u64>) -> Vec<(bool, usize)> {
+    use axionomy_problems::mission;
+    use axionomy_search::mcts::MctsConfig;
+    let model = mission::initial();
+    let planner = engine.strategy(&path!("mission/coordinated")).unwrap();
+    let prior = engine.referred(&path!("mission/micro")).unwrap();
+    let mut outcomes = Vec::new();
+    for seed in seeds {
+        let planned = mission::run_planned_with_progress(
+            &model,
+            usize::try_from(seed % 16).unwrap(),
+            MctsConfig::new(16, 12).with_seed(seed),
+            8,
+            |_, _| ControlFlow::Continue(()),
+        )
+        .unwrap()
+        .unwrap();
+        let trace: Vec<paths::Exchange> = planned
+            .rollout
+            .trace()
+            .exchanges()
+            .iter()
+            .map(written)
+            .collect();
+        // The run's first exchange is Nature's draw of its scenario.
+        let scenario = engine.apply(prior, &trace[..1]).unwrap();
+        let effort = Effort { seed, budget: 1 };
+        let ran = engine
+            .run_strategy(scenario, &planner, effort, &mut |_| {
+                ControlFlow::Continue(())
+            })
+            .unwrap();
+        assert_eq!(engine.history(ran.end).unwrap().1, trace, "mission {seed}");
+        outcomes.push((planned.rollout.succeeded(), planned.decisions.len()));
+    }
+    outcomes
+}
+
+/// The Micro study's documents show the fixed policies' front, sampled by
+/// Monte Carlo over Nature's prior: the package's Monte Carlo experiment
+/// samples each policy over the same scenarios, and its means are the
+/// front's points.
+fn mission_monte_carlo(engine: &Engine) {
+    let path = path!("mission/micro/monte-carlo");
+    let experiment = engine.experiment(&path).unwrap();
+    let results = engine
+        .run_experiment(&path, &mut |_| ControlFlow::Continue(()))
+        .unwrap();
+    let trials = experiment.trials;
+    let (study, _) = study("mission", "micro", None);
+    for document in &study.documents {
+        let sampled = document
+            .telemetry
+            .iter()
+            .flat_map(|telemetry| &telemetry.points)
+            .find(|point| point.kind == TelemetryKindView::Sample)
+            .unwrap();
+        assert_eq!(sampled.value, trials.to_string());
+        let front = &document.pareto_fronts[0];
+        for point in &front.points {
+            let strategy = match point.label.as_str() {
+                "Share and coordinate" => "share-and-coordinate",
+                "Both go north" => "direct-north",
+                other => panic!("mission samples no policy `{other}`"),
+            };
+            let totals = arm(&results, strategy).totals();
+            for (axis, value) in front.axes.iter().zip(&point.values) {
+                let index = experiment
+                    .objectives
+                    .iter()
+                    .position(|objective| last(objective.as_str()) == axis.key.as_str())
+                    .unwrap_or_else(|| panic!("mission measures no `{}`", axis.key));
+                let mean = u64::try_from(totals[index]).unwrap() as f64 / trials as f64;
+                let reported: f64 = value.parse().unwrap();
+                // The front prints three decimals, so a mean of sixteenths
+                // may sit half a thousandth from what it prints.
+                assert!(
+                    (mean - reported).abs() <= 0.0005 + 1e-9,
+                    "mission micro {}: {strategy}'s {} is {mean}, the study's {reported}",
+                    document.id,
+                    axis.key
+                );
+            }
+        }
+        // Only the direct-north document is a point of its own front.
+        let selected: Vec<_> = front
+            .points
+            .iter()
+            .filter(|point| point.selected)
+            .map(|point| point.label.as_str())
+            .collect();
+        let expected: &[&str] = if document.id.as_str() == "direct-north" {
+            &["Both go north"]
+        } else {
+            &[]
+        };
+        assert_eq!(selected, expected, "mission micro {}", document.id);
+    }
+}
+
 fn perishables(engine: &Engine, instance: &str) {
     // Micro plays its outage and picks from its exact storage front; the
     // cold chains plan each of their four daily policies over the outage
@@ -690,7 +819,7 @@ type Sample = (
     fn(&Engine, &str),
 );
 
-const SAMPLES: [Sample; 13] = [
+const SAMPLES: [Sample; 14] = [
     ("maze", axionomy_problems::maze::package::write, maze),
     (
         "sokoban",
@@ -736,6 +865,11 @@ const SAMPLES: [Sample; 13] = [
         work_league,
     ),
     (
+        "mission",
+        axionomy_problems::mission::package::write,
+        mission,
+    ),
+    (
         "perishables",
         axionomy_problems::perishables::package::write,
         perishables,
@@ -761,6 +895,18 @@ fn every_sample_reproduces_its_micro_instance() {
 #[ignore = "minutes in a debug build; CI runs it in a release build"]
 fn every_sample_reproduces_its_larger_instances() {
     samples_reproduce(&["showcase", "stress"]);
+}
+
+#[test]
+#[ignore = "seconds in a debug build; CI runs it in a release build"]
+fn the_mission_planner_plans_every_scenario_as_the_study_does() {
+    let engine = loaded("mission", axionomy_problems::mission::package::write);
+    let planned = mission_planned(&engine, 0..16);
+    // The planner rescues the victim in eleven of the sixteen scenarios: it
+    // is stranded where the sensor reads wrong, seed 0 of either site, and
+    // where it went south at once with the victim north.
+    let stranded: Vec<_> = (0..16).filter(|&seed| !planned[seed].0).collect();
+    assert_eq!(stranded, [0, 1, 2, 8, 9], "{planned:?}");
 }
 
 #[test]

@@ -547,7 +547,17 @@ end, then each worker's decision in the clock's rotation, then the tick)
 reproduces every document, and every field's match on four more seeds; it
 needed scripts to draw a ticket keyed by what it is for,
 `random.keyed(key, bound)`, as the samples' common random numbers do, and a
-plan to draw chance from the run's seed when its function takes a random. The
+plan to draw chance from the run's seed when its function takes a random. Mission's (Micro's receding-horizon planner as a game in which the
+Scout chooses every public action by information-set tree search over its
+own view, and the fixed policies' Monte Carlo front over Nature's prior; the
+Showcase and Stress expeditions, an ontology of their own under
+`mission/expedition`, by radio coordination, north-first search and
+rendezvous) reproduces every document, and its planner the Rust run's
+decisions on all sixteen scenarios; it needed ISMCTS as a game's chooser,
+whose `observe` script gives the view the tree's nodes, candidates and
+simulations read, and whose beliefs replay the point's history with each of
+Nature's draws drawn again every way its chance script gives, kept while the
+player sees them as it saw the real economy. The
 micro instances are checked with
 every test run; the showcase and stress instances, minutes in a debug build,
 run in a release build in CI. Rhai is optimised in debug builds too, since package
