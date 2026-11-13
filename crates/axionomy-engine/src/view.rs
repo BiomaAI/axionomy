@@ -13,8 +13,9 @@ use axionomy::{
 use axionomy_store::Point;
 use axionomy_view::{
     DocumentPath, ItemPath, LeaderboardEntryView, LeaderboardView, MeasurePath,
-    ObjectiveDirectionView, QuantityFormat, Scene, SceneMetricView, ViewDocument,
-    ViewDocumentMetadata, ViewId, ViewOntology, ViewSource, derive_document, derive_model,
+    ObjectiveDirectionView, ProposalPath, ProposalView, QuantityFormat, Scene, SceneMetricView,
+    ViewDocument, ViewDocumentMetadata, ViewId, ViewOntology, ViewSource, derive_document,
+    derive_model, derive_proposal,
 };
 use rhai::{Array, Dynamic, Map};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
@@ -132,6 +133,42 @@ impl Engine {
         document.model = Some(derive_model(&initial, &paths::Goal::new(), &drawing));
         drawing.failed()?;
         Ok(document)
+    }
+
+    /// `exchanges` as people read them at `at`, with the view of its run's
+    /// ontology or with their paths, each assessed against the economy
+    /// there: what it would move, or what it lacks. The `i`th is named
+    /// `exchange/i` and by its rate's label. Nothing is recorded.
+    pub fn present(
+        &self,
+        at: Point,
+        exchanges: &[paths::Exchange],
+    ) -> Result<Vec<ProposalView>, EngineError> {
+        let ontology = self.ontology(at)?;
+        let view = self.view(&ontology)?;
+        let reached = self.reach(at)?;
+        let drawing = Drawing::new(self, ontology, view.as_ref(), &[]);
+        let proposals = exchanges
+            .iter()
+            .enumerate()
+            .map(|(index, exchange)| {
+                let id = format!("exchange/{index}")
+                    .parse::<ProposalPath>()
+                    .expect("an index makes a path");
+                let label = drawing.rate(exchange.rate()).label;
+                derive_proposal(
+                    id,
+                    label,
+                    String::new(),
+                    at.step,
+                    &reached.state.economy,
+                    exchange,
+                    &drawing,
+                )
+            })
+            .collect();
+        drawing.failed()?;
+        Ok(proposals)
     }
 }
 

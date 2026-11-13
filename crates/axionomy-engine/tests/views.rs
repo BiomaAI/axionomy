@@ -177,3 +177,53 @@ fn a_failing_view_fails_the_drawing() {
             .is_err()
     );
 }
+
+#[test]
+fn exchanges_are_presented_assessed_in_the_views_words() {
+    let (engine, end) = paid();
+    keep(
+        &engine,
+        r#"
+        fn label(item) {
+            if item == "rate/pay" { "Payment" }
+            else if item == "account/player/alice" { "Alice" }
+            else { () }
+        }
+        "#,
+        View {
+            title: "Bank".into(),
+            labels: call("label"),
+            formats: None,
+            carry: None,
+            scene: None,
+            leaderboards: None,
+        },
+    );
+    // The bank holds 88: a payment of 80 applies, one of 90 lacks 2.
+    let presented = engine
+        .present(end, &[pay("player/alice", 80), pay("player/alice", 90)])
+        .unwrap();
+    assert_eq!(presented.len(), 2);
+    assert_eq!(presented[0].id.as_str(), "exchange/0");
+    assert_eq!(presented[0].label, "Payment");
+    assert_eq!(presented[0].snapshot_index, 3);
+    let alice = presented[0]
+        .exchange
+        .bindings
+        .iter()
+        .find(|binding| binding.role.key.as_str().ends_with("role/to"))
+        .unwrap();
+    assert_eq!(alice.account.label, "Alice");
+    use axionomy_view::AssessmentStatusView;
+    assert_eq!(
+        presented[0].assessment.status,
+        AssessmentStatusView::Applicable
+    );
+    assert_eq!(
+        presented[1].assessment.status,
+        AssessmentStatusView::Infeasible
+    );
+    assert_eq!(presented[1].assessment.shortfalls.len(), 1);
+    // Presenting records nothing: the point is where it was.
+    assert_eq!(engine.reach(end).unwrap().receipts.len(), 3);
+}

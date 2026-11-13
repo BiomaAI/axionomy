@@ -158,7 +158,10 @@ impl Engine {
 
     /// Runs every arm of the experiment at `path` once per trial, records
     /// the runs as a store group of kind `experiment`, and keeps and returns
-    /// the results. `watch` sees every search's progress and may stop it.
+    /// the results. `watch` sees every search's progress and may stop it,
+    /// which stops the experiment: it keeps no results, and the results it
+    /// kept before stay, so an experiment stopped is never mistaken for
+    /// one whose searches ran out.
     pub fn run_experiment(
         &self,
         path: &ExperimentPath,
@@ -196,6 +199,9 @@ impl Engine {
                     budget: experiment.budget,
                 };
                 let ran = self.run_strategy(from, &strategy, effort, watch)?;
+                if let Outcome::Interrupted = ran.outcome {
+                    return Err(EngineError::Interrupted);
+                }
                 let values = experiment
                     .objectives
                     .iter()

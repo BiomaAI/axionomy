@@ -15,7 +15,10 @@ goes.
 - `reach` gives a point's state and the receipts of the steps its run took to
   reach it.
 - `ancestor` names the point at an earlier step of a point's history.
-- `assess` explains whether an exchange would apply at a point.
+- `assess` explains whether an exchange would apply at a point, and
+  `present` gives exchanges as people read them at a point, with the view
+  of its run's ontology, each assessed there, as Studio shows a candidate
+  before anyone applies it.
 - `keep_script` keeps a Rhai script by its path, refusing one that does not
   compile, and `call` runs one of its functions (D-049).
 - `keep_goal`, `keep_objective` and `keep_candidates` keep a goal, an
@@ -58,7 +61,9 @@ goes.
   budget and a number of trials, and `experiments` lists those the store
   keeps. `run_experiment` runs every arm's trials over the same seeds,
   records the runs as a store group of kind `experiment` and keeps the
-  results, which `results` reads back.
+  results, which `results` reads back. A watcher that stops a search stops
+  the experiment, which keeps no results then, so the results it kept
+  before stay.
 - `compare` gives points' objective vectors and the front no other point
   dominates; `pick` the best point by objectives in order.
 - `export` copies a package (refs and definitions and everything they reach)

@@ -256,6 +256,23 @@ fn an_arm_can_start_from_its_own_ref() {
 }
 
 #[test]
+fn an_experiment_stopped_keeps_no_results() {
+    let (engine, _) = bank();
+    engine
+        .keep_experiment(&path("paying"), &experiment(&["ones", "searched"]))
+        .unwrap();
+    let finished = run(&engine, "paying");
+    // The watcher stops the first search: the experiment stops with it,
+    // and the results it kept before stay.
+    let stopped = engine.run_experiment(&path("paying"), &mut |_| ControlFlow::Break(()));
+    assert!(matches!(
+        stopped,
+        Err(axionomy_engine::EngineError::Interrupted)
+    ));
+    assert_eq!(engine.results(&path("paying")).unwrap(), finished);
+}
+
+#[test]
 fn an_experiment_names_only_what_is_kept() {
     let (engine, _) = bank();
     assert!(
