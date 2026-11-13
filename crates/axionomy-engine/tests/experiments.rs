@@ -71,7 +71,6 @@ fn bank() -> (Engine, Point) {
                 &path(function),
                 &Strategy::Policy {
                     policy: call(function),
-                    goal: path("rich"),
                     horizon: 20,
                 },
             )
@@ -82,7 +81,6 @@ fn bank() -> (Engine, Point) {
             &path("searched"),
             &Strategy::BreadthFirst {
                 candidates: path("payments"),
-                goal: path("rich"),
             },
         )
         .unwrap();
@@ -112,6 +110,7 @@ fn bank() -> (Engine, Point) {
 fn experiment(arms: &[&str]) -> Experiment {
     Experiment {
         start: path("start"),
+        goal: path("rich"),
         arms: arms
             .iter()
             .map(|strategy| Arm {
@@ -283,6 +282,11 @@ fn an_experiment_names_only_what_is_kept() {
     let mut unmeasured = experiment(&["ones"]);
     unmeasured.objectives.push(path("unknown"));
     assert!(engine.keep_experiment(&path("bad"), &unmeasured).is_err());
+    let aimless = Experiment {
+        goal: path("unknown"),
+        ..experiment(&["ones"])
+    };
+    assert!(engine.keep_experiment(&path("bad"), &aimless).is_err());
     assert!(engine.results(&path("never-run")).is_err());
     assert!(engine.experiments().unwrap().is_empty());
     engine
@@ -385,7 +389,6 @@ fn walk() -> Engine {
             .keep_strategy(
                 &path(player),
                 &Strategy::Game {
-                    goal: path("there"),
                     horizon: 10,
                     nature: Some(walk_call("weather")),
                     actor: walk_call("walker"),
@@ -416,6 +419,7 @@ fn nature_samples_weighted_scenarios_whatever_the_players_think() {
             &path("weather"),
             &Experiment {
                 start: path("start"),
+                goal: path("there"),
                 arms: ["plain", "fidgety"]
                     .iter()
                     .map(|strategy| Arm {

@@ -66,16 +66,24 @@ fn bank(wanted: u64) -> (Engine, Point) {
     (engine, start)
 }
 
-fn run(engine: &Engine, start: Point, strategy: &Strategy, effort: Effort) -> axionomy_engine::Ran {
+/// `strategy`'s run from `start` toward the goal at `goal`.
+fn run(
+    engine: &Engine,
+    start: Point,
+    strategy: &Strategy,
+    goal: &str,
+    effort: Effort,
+) -> axionomy_engine::Ran {
     engine
-        .run_strategy(start, strategy, effort, &mut |_| ControlFlow::Continue(()))
+        .run_strategy(start, strategy, &path(goal), effort, &mut |_| {
+            ControlFlow::Continue(())
+        })
         .unwrap()
 }
 
 fn breadth_first() -> Strategy {
     Strategy::BreadthFirst {
         candidates: path("payments"),
-        goal: path("rich"),
     }
 }
 
@@ -83,14 +91,14 @@ fn breadth_first() -> Strategy {
 fn a_search_reaches_the_goal_or_says_why_not() {
     let (engine, start) = bank(11);
     // Five, five and one: the fewest payments to eleven.
-    let ran = run(&engine, start, &breadth_first(), EFFORT);
+    let ran = run(&engine, start, &breadth_first(), "rich", EFFORT);
     assert!(matches!(ran.outcome, Outcome::Reached));
     assert_eq!(ran.end.step, start.step + 3);
     assert!(ran.thinking.unwrap().expanded() > 0);
 
     // The bank holds twenty: thirty is out of reach.
     let (engine, start) = bank(30);
-    let ran = run(&engine, start, &breadth_first(), EFFORT);
+    let ran = run(&engine, start, &breadth_first(), "rich", EFFORT);
     assert!(matches!(ran.outcome, Outcome::Exhausted));
     assert_eq!(ran.end, start);
 
@@ -100,6 +108,7 @@ fn a_search_reaches_the_goal_or_says_why_not() {
         &engine,
         start,
         &breadth_first(),
+        "rich",
         Effort {
             budget: 1,
             ..EFFORT
@@ -110,7 +119,7 @@ fn a_search_reaches_the_goal_or_says_why_not() {
 
     // The caller stops it.
     let interrupted = engine
-        .run_strategy(start, &breadth_first(), EFFORT, &mut |_| {
+        .run_strategy(start, &breadth_first(), &path("rich"), EFFORT, &mut |_| {
             ControlFlow::Break(())
         })
         .unwrap();
@@ -122,24 +131,23 @@ fn a_policy_runs_until_the_goal_nothing_a_refusal_or_its_horizon() {
     let (engine, start) = bank(10);
     let policy = |function: &str, horizon| Strategy::Policy {
         policy: call(function),
-        goal: path("rich"),
         horizon,
     };
-    let ran = run(&engine, start, &policy("five", 10), EFFORT);
+    let ran = run(&engine, start, &policy("five", 10), "rich", EFFORT);
     assert!(matches!(ran.outcome, Outcome::Reached));
     assert_eq!(ran.end.step, start.step + 2);
     assert!(engine.holds(ran.end, &path("rich")).unwrap());
 
-    let ran = run(&engine, start, &policy("five", 1), EFFORT);
+    let ran = run(&engine, start, &policy("five", 1), "rich", EFFORT);
     assert!(matches!(ran.outcome, Outcome::Horizon));
     assert_eq!(ran.end.step, start.step + 1);
 
-    let ran = run(&engine, start, &policy("nothing", 10), EFFORT);
+    let ran = run(&engine, start, &policy("nothing", 10), "rich", EFFORT);
     assert!(matches!(ran.outcome, Outcome::Stopped));
     assert_eq!(ran.end, start);
 
     // Fifty overdraws the bank: refused on the first turn, nothing recorded.
-    let ran = run(&engine, start, &policy("too_much", 10), EFFORT);
+    let ran = run(&engine, start, &policy("too_much", 10), "rich", EFFORT);
     assert!(matches!(ran.outcome, Outcome::Refused { turn: 0, .. }));
     assert_eq!(ran.end, start);
 }
@@ -167,29 +175,34 @@ fn a_plan_is_applied_whole_or_not_at_all() {
         .unwrap();
     let plan = |function: &str| Strategy::Plan {
         plan: ScriptCall::new(path("planner"), function.parse().unwrap()),
-        goal: path("rich"),
     };
-    let ran = run(&engine, start, &plan("enough"), EFFORT);
+    let ran = run(&engine, start, &plan("enough"), "rich", EFFORT);
     assert!(matches!(ran.outcome, Outcome::Reached));
     assert_eq!(ran.end.step, start.step + 2);
 
     // A plan short of the goal ends where it ends.
-    let ran = run(&engine, start, &plan("short"), EFFORT);
+    let ran = run(&engine, start, &plan("short"), "rich", EFFORT);
     assert!(matches!(ran.outcome, Outcome::Stopped));
     assert_eq!(ran.end.step, start.step + 1);
 
     // The second payment overdraws the bank: nothing of the plan is applied.
-    let ran = run(&engine, start, &plan("overdrawn"), EFFORT);
+    let ran = run(&engine, start, &plan("overdrawn"), "rich", EFFORT);
     assert!(matches!(ran.outcome, Outcome::Refused { turn: 1, .. }));
     assert_eq!(ran.end, start);
 
-    let ran = run(&engine, start, &plan("none"), EFFORT);
+    let ran = run(&engine, start, &plan("none"), "rich", EFFORT);
     assert!(matches!(ran.outcome, Outcome::Stopped));
     assert_eq!(ran.end, start);
 
     // A plan that draws chance takes the run's random, seeded by its effort.
     let drawn = |seed| {
-        let ran = run(&engine, start, &plan("drawn"), Effort { seed, budget: 1 });
+        let ran = run(
+            &engine,
+            start,
+            &plan("drawn"),
+            "rich",
+            Effort { seed, budget: 1 },
+        );
         ran.end.step - start.step
     };
     let steps: Vec<u64> = (0..16).map(drawn).collect();
@@ -258,27 +271,25 @@ fn branch_and_bound_and_beam_find_the_cheapest_progress() {
     let (engine, start) = workshop();
     let bounded = Strategy::BranchAndBound {
         candidates: path("steps"),
-        goal: path("done"),
         cost: workshop_call("cost"),
         bound: workshop_call("cost"),
     };
     engine
         .keep_strategy(&path("workshop/bounded"), &bounded)
         .unwrap();
-    let ran = run(&engine, start, &bounded, EFFORT);
+    let ran = run(&engine, start, &bounded, "done", EFFORT);
     assert!(matches!(ran.outcome, Outcome::Reached));
     assert_eq!(ran.cost, Some(4));
     assert_eq!(ran.end.step, start.step + 4);
 
     let narrow = Strategy::Beam {
         candidates: path("steps"),
-        goal: path("done"),
         score: workshop_call("score"),
         width: 1,
         depth: 10,
         tie: Tie::First,
     };
-    let ran = run(&engine, start, &narrow, EFFORT);
+    let ran = run(&engine, start, &narrow, "done", EFFORT);
     assert!(matches!(ran.outcome, Outcome::Reached));
     assert!(engine.holds(ran.end, &path("done")).unwrap());
     assert_eq!(ran.end.step, start.step + 4);
@@ -348,16 +359,15 @@ fn chores() -> (Engine, Point, paths::Economy, Vec<paths::Exchange>) {
 fn the_cheapest_search_without_a_heuristic_is_the_samples_dijkstra() {
     let (engine, start, economy, listed) = chores();
     let cost = ScriptCall::new(path("chores"), "effort".parse().unwrap());
-    let dijkstra = |goal: &str| Strategy::Cheapest {
+    let dijkstra = Strategy::Cheapest {
         candidates: path("chores"),
-        goal: path(goal),
         cost: cost.clone(),
         heuristic: None,
     };
     engine
-        .keep_strategy(&path("chores/dijkstra"), &dijkstra("done"))
+        .keep_strategy(&path("chores/dijkstra"), &dijkstra)
         .unwrap();
-    let ran = run(&engine, start, &dijkstra("done"), EFFORT);
+    let ran = run(&engine, start, &dijkstra, "done", EFFORT);
     assert!(matches!(ran.outcome, Outcome::Reached));
     assert_eq!(ran.cost, Some(1));
     // Of the equally cheap orders, the one `axionomy_search::dijkstra`
@@ -381,7 +391,8 @@ fn the_cheapest_search_without_a_heuristic_is_the_samples_dijkstra() {
     let ran = run(
         &engine,
         start,
-        &dijkstra("done"),
+        &dijkstra,
+        "done",
         Effort {
             budget: 2,
             ..EFFORT
@@ -391,7 +402,7 @@ fn the_cheapest_search_without_a_heuristic_is_the_samples_dijkstra() {
     assert_eq!(ran.end, start);
 
     // No chore is `e`: every order is tried, and none reaches it.
-    let ran = run(&engine, start, &dijkstra("impossible"), EFFORT);
+    let ran = run(&engine, start, &dijkstra, "impossible", EFFORT);
     assert!(matches!(ran.outcome, Outcome::Exhausted));
     assert_eq!(ran.end, start);
 }
@@ -403,14 +414,13 @@ fn beam_keeps_the_first_or_the_last_of_goals_scoring_alike() {
     // reach it at the third depth, three smalls and a big at the fourth.
     let beam = |tie| Strategy::Beam {
         candidates: path("steps"),
-        goal: path("done"),
         score: workshop_call("progress"),
         width: 4,
         depth: 10,
         tie,
     };
     let rates = |tie| {
-        let ran = run(&engine, start, &beam(tie), EFFORT);
+        let ran = run(&engine, start, &beam(tie), "done", EFFORT);
         assert!(matches!(ran.outcome, Outcome::Reached));
         let (_, exchanges) = engine.history(ran.end).unwrap();
         exchanges
@@ -485,7 +495,6 @@ fn nim_call(function: &str) -> ScriptCall {
 
 fn game(chooser: axionomy_engine::Chooser) -> Strategy {
     Strategy::Game {
-        goal: path("over"),
         horizon: 10,
         nature: None,
         actor: nim_call("player"),
@@ -504,7 +513,7 @@ fn players_choose_by_minimax_and_by_tree_search() {
     engine
         .keep_strategy(&path("nim/minimax"), &minimax)
         .unwrap();
-    let ran = run(&engine, start, &minimax, EFFORT);
+    let ran = run(&engine, start, &minimax, "over", EFFORT);
     assert!(matches!(ran.outcome, Outcome::Reached));
     // The first player takes one, and takes the last token on the third move.
     let (_, exchanges) = engine.history(ran.end).unwrap();
@@ -522,10 +531,10 @@ fn players_choose_by_minimax_and_by_tree_search() {
         salt: 0,
     });
     engine.keep_strategy(&path("nim/mcts"), &searched).unwrap();
-    let ran = run(&engine, start, &searched, EFFORT);
+    let ran = run(&engine, start, &searched, "over", EFFORT);
     assert!(matches!(ran.outcome, Outcome::Reached));
     // The same seed plays the same game.
-    let again = run(&engine, start, &searched, EFFORT);
+    let again = run(&engine, start, &searched, "over", EFFORT);
     assert_eq!(
         engine.history(ran.end).unwrap().1,
         engine.history(again.end).unwrap().1
@@ -613,7 +622,6 @@ fn tree_search_draws_natures_outcomes_and_simulates_by_its_rollout() {
     let (engine, start) = gamble();
     let call = |function: &str| ScriptCall::new(path("gamble"), function.parse().unwrap());
     let searching = |chance: Option<&str>, rollout: Option<&str>| Strategy::Game {
-        goal: path("over"),
         horizon: 3,
         nature: Some(call("nature")),
         actor: call("player"),
@@ -640,18 +648,19 @@ fn tree_search_draws_natures_outcomes_and_simulates_by_its_rollout() {
     // left to choose: the game stops short of a good result.
     let knowing = searching(Some("draws"), Some("first"));
     engine.keep_strategy(&path("knowing"), &knowing).unwrap();
-    let ran = run(&engine, start, &knowing, EFFORT);
+    let ran = run(&engine, start, &knowing, "over", EFFORT);
     assert!(matches!(ran.outcome, Outcome::Stopped));
     assert_eq!(rates(&ran), ["begin", "safe"]);
 
     // A tree without Nature thinks the player picks the good result.
-    let ran = run(&engine, start, &searching(None, None), EFFORT);
+    let ran = run(&engine, start, &searching(None, None), "over", EFFORT);
     assert_eq!(rates(&ran)[..2], ["begin", "gamble"]);
 
     // A rollout must pick one of the candidates.
     let refused = engine.run_strategy(
         start,
         &searching(Some("draws"), Some("wrong")),
+        &path("over"),
         EFFORT,
         &mut |_| ControlFlow::Continue(()),
     );
@@ -816,7 +825,6 @@ fn coin_call(function: &str) -> ScriptCall {
 /// what `observe` shows it, over the candidate set `candidates`.
 fn calling(observe: &str, candidates: &str) -> Strategy {
     Strategy::Game {
-        goal: path("settled"),
         horizon: 8,
         nature: Some(coin_call("nature")),
         actor: coin_call("player"),
@@ -857,7 +865,7 @@ fn what_a_player_observes_decides_what_it_searches() {
         // Seeing only its own account, the player believes either side as
         // likely, so it inspects whichever way the coin landed, and then
         // calls the side it is shown.
-        let ran = run(&engine, tossed, &blind, EFFORT);
+        let ran = run(&engine, tossed, &blind, "settled", EFFORT);
         assert!(matches!(ran.outcome, Outcome::Reached));
         assert_eq!(
             rates(&ran),
@@ -870,10 +878,13 @@ fn what_a_player_observes_decides_what_it_searches() {
             ]
         );
         // The same seed searches the same worlds alike.
-        assert_eq!(rates(&run(&engine, tossed, &blind, EFFORT)), rates(&ran));
+        assert_eq!(
+            rates(&run(&engine, tossed, &blind, "settled", EFFORT)),
+            rates(&ran)
+        );
 
         // Seeing the coin, it calls the side at once.
-        let ran = run(&engine, tossed, &sighted, EFFORT);
+        let ran = run(&engine, tossed, &sighted, "settled", EFFORT);
         assert_eq!(
             rates(&ran),
             [
@@ -885,15 +896,19 @@ fn what_a_player_observes_decides_what_it_searches() {
     }
 
     // From before the toss, Nature tosses in the game itself.
-    let ran = run(&engine, start, &blind, EFFORT);
+    let ran = run(&engine, start, &blind, "settled", EFFORT);
     assert!(matches!(ran.outcome, Outcome::Reached));
     assert_eq!(rates(&ran)[1], "inspect");
 
     // A candidate set reads only the view: whether an exchange applies may
     // hang on what the player cannot see.
-    let refused = engine.run_strategy(start, &calling("own", "peeking"), EFFORT, &mut |_| {
-        ControlFlow::Continue(())
-    });
+    let refused = engine.run_strategy(
+        start,
+        &calling("own", "peeking"),
+        &path("settled"),
+        EFFORT,
+        &mut |_| ControlFlow::Continue(()),
+    );
     assert!(
         matches!(
             &refused,
@@ -905,12 +920,14 @@ fn what_a_player_observes_decides_what_it_searches() {
 }
 
 /// Whether a rollout's random draws the search's own tickets in the games
-/// `searching` makes from a rollout: one choosing uniformly by a weighted
-/// sample plays every game the search's own uniform simulations play, for
-/// every seed; one drawing from another stream plays some game otherwise.
+/// `searching` makes from a rollout, played toward `goal`: one choosing
+/// uniformly by a weighted sample plays every game the search's own uniform
+/// simulations play, for every seed; one drawing from another stream plays
+/// some game otherwise.
 fn rollouts_draw_the_searchs_own_tickets(
     engine: &Engine,
     start: Point,
+    goal: &str,
     searching: impl Fn(Option<ScriptCall>) -> Strategy,
 ) {
     engine
@@ -927,7 +944,7 @@ fn rollouts_draw_the_searchs_own_tickets(
     let rollout =
         |function: &str| Some(ScriptCall::new(path("rollouts"), function.parse().unwrap()));
     let played = |strategy: &Strategy, seed| {
-        let ran = run(engine, start, strategy, Effort { seed, budget: 1 });
+        let ran = run(engine, start, strategy, goal, Effort { seed, budget: 1 });
         engine.history(ran.end).unwrap().1
     };
     let (uniform, sampled, apart) = (
@@ -947,7 +964,7 @@ fn rollouts_draw_the_searchs_own_tickets(
 #[test]
 fn a_rollout_draws_the_searchs_own_tickets() {
     let (engine, start) = nim();
-    rollouts_draw_the_searchs_own_tickets(&engine, start, |rollout| {
+    rollouts_draw_the_searchs_own_tickets(&engine, start, "over", |rollout| {
         game(axionomy_engine::Chooser::Mcts {
             candidates: path("takes"),
             payoffs: nim_call("payoffs"),
@@ -960,8 +977,7 @@ fn a_rollout_draws_the_searchs_own_tickets() {
         })
     });
     let (engine, start) = coin();
-    rollouts_draw_the_searchs_own_tickets(&engine, start, |rollout| Strategy::Game {
-        goal: path("settled"),
+    rollouts_draw_the_searchs_own_tickets(&engine, start, "settled", |rollout| Strategy::Game {
         horizon: 8,
         nature: Some(coin_call("nature")),
         actor: coin_call("player"),

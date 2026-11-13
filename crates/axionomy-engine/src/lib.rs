@@ -313,8 +313,8 @@ impl Engine {
         }
     }
 
-    /// Keeps `strategy` at `path`, refusing one that names a goal, a
-    /// candidate set or a script the store does not keep.
+    /// Keeps `strategy` at `path`, refusing one that names a candidate set,
+    /// an objective or a script the store does not keep.
     pub fn keep_strategy(
         &self,
         path: &StrategyPath,
@@ -322,67 +322,42 @@ impl Engine {
     ) -> Result<(), EngineError> {
         let mut candidates: Vec<&CandidatesPath> = Vec::new();
         let mut scripts: Vec<&ScriptCall> = Vec::new();
-        let goal = match strategy {
-            Strategy::Policy { policy, goal, .. } => {
-                scripts.push(policy);
-                goal
-            }
-            Strategy::Plan { plan, goal } => {
-                scripts.push(plan);
-                goal
-            }
-            Strategy::BreadthFirst {
-                candidates: set,
-                goal,
-            } => {
-                candidates.push(set);
-                goal
-            }
+        match strategy {
+            Strategy::Policy { policy, .. } => scripts.push(policy),
+            Strategy::Plan { plan } => scripts.push(plan),
+            Strategy::BreadthFirst { candidates: set } => candidates.push(set),
             Strategy::Cheapest {
                 candidates: set,
-                goal,
+                cost,
+                heuristic,
+            }
+            | Strategy::BestFirst {
+                candidates: set,
                 cost,
                 heuristic,
             } => {
                 candidates.push(set);
                 scripts.push(cost);
                 scripts.extend(heuristic);
-                goal
             }
             Strategy::BranchAndBound {
                 candidates: set,
-                goal,
                 cost,
                 bound,
             } => {
                 candidates.push(set);
                 scripts.extend([cost, bound]);
-                goal
             }
             Strategy::Beam {
                 candidates: set,
-                goal,
                 score,
                 ..
             } => {
                 candidates.push(set);
                 scripts.push(score);
-                goal
-            }
-            Strategy::BestFirst {
-                candidates: set,
-                goal,
-                cost,
-                heuristic,
-            } => {
-                candidates.push(set);
-                scripts.push(cost);
-                scripts.extend(heuristic);
-                goal
             }
             Strategy::Pareto {
                 candidates: set,
-                goal,
                 objectives,
                 by,
             } => {
@@ -395,10 +370,8 @@ impl Engine {
                 if let Some(missing) = by.iter().find(|objective| !objectives.contains(objective)) {
                     return Err(EngineError::Undefined(definition(missing)));
                 }
-                goal
             }
             Strategy::Game {
-                goal,
                 nature,
                 actor,
                 players,
@@ -444,10 +417,8 @@ impl Engine {
                         }
                     }
                 }
-                goal
             }
-        };
-        self.goal(goal)?;
+        }
         for set in candidates {
             self.defined::<_, CandidateSet>(set)?;
         }

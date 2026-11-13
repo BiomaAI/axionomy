@@ -99,7 +99,6 @@ fn bank() -> Engine {
             &path("bank/randomly"),
             &Strategy::Policy {
                 policy: call("randomly"),
-                goal: path("bank/rich"),
                 horizon: 20,
             },
         )
@@ -109,7 +108,6 @@ fn bank() -> Engine {
             &path("bank/searched"),
             &Strategy::BreadthFirst {
                 candidates: path("bank/payments"),
-                goal: path("bank/rich"),
             },
         )
         .unwrap();
@@ -136,6 +134,7 @@ fn bank() -> Engine {
             &path("bank/paying"),
             &Experiment {
                 start: path("bank/start"),
+                goal: path("bank/rich"),
                 arms: ["bank/randomly", "bank/searched"]
                     .iter()
                     .map(|strategy| Arm {

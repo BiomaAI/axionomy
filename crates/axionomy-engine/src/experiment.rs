@@ -1,10 +1,10 @@
 //! Experiments and comparison (D-050). An experiment runs strategies as arms
-//! from one start, each over the same seeds, and measures every run on the
-//! same objectives; comparison ranks any runs by objective vectors, dominance
+//! from one start toward one goal, each over the same seeds, and measures
+//! every run on the same objectives; comparison ranks any runs by objective vectors, dominance
 //! and the Pareto front.
 
 use crate::{
-    Engine, EngineError, ExperimentPath, ObjectivePath, Outcome, StrategyPath,
+    Engine, EngineError, ExperimentPath, GoalPath, ObjectivePath, Outcome, StrategyPath,
     definitions::{Objective, kind},
     strategy::Effort,
 };
@@ -31,6 +31,9 @@ pub struct Arm {
 pub struct Experiment {
     /// The ref naming the point the arms start from.
     pub start: RefPath,
+    /// The goal every arm works toward, so the arms answer the same
+    /// question (D-052).
+    pub goal: GoalPath,
     pub arms: Vec<Arm>,
     pub objectives: Vec<ObjectivePath>,
     pub seed: u64,
@@ -118,13 +121,14 @@ pub struct Comparison {
 }
 
 impl Engine {
-    /// Keeps `experiment` at `path`, refusing one that names a strategy or
-    /// an objective the store does not keep.
+    /// Keeps `experiment` at `path`, refusing one that names a goal, a
+    /// strategy or an objective the store does not keep.
     pub fn keep_experiment(
         &self,
         path: &ExperimentPath,
         experiment: &Experiment,
     ) -> Result<(), EngineError> {
+        self.goal(&experiment.goal)?;
         for arm in &experiment.arms {
             self.strategy(&arm.strategy)?;
         }
@@ -156,12 +160,12 @@ impl Engine {
             .collect()
     }
 
-    /// Runs every arm of the experiment at `path` once per trial, records
-    /// the runs as a store group of kind `experiment`, and keeps and returns
-    /// the results. `watch` sees every search's progress and may stop it,
-    /// which stops the experiment: it keeps no results, and the results it
-    /// kept before stay, so an experiment stopped is never mistaken for
-    /// one whose searches ran out.
+    /// Runs every arm of the experiment at `path` once per trial, toward the
+    /// experiment's goal, records the runs as a store group of kind
+    /// `experiment`, and keeps and returns the results. `watch` sees every
+    /// search's progress and may stop it, which stops the experiment: it
+    /// keeps no results, and the results it kept before stay, so an
+    /// experiment stopped is never mistaken for one whose searches ran out.
     pub fn run_experiment(
         &self,
         path: &ExperimentPath,
@@ -198,7 +202,7 @@ impl Engine {
                     seed,
                     budget: experiment.budget,
                 };
-                let ran = self.run_strategy(from, &strategy, effort, watch)?;
+                let ran = self.run_strategy(from, &strategy, &experiment.goal, effort, watch)?;
                 if let Outcome::Interrupted = ran.outcome {
                     return Err(EngineError::Interrupted);
                 }

@@ -34,29 +34,26 @@ use std::{
 /// The most expansions a search makes between two looks at its progress.
 const CHUNK: usize = 1_000;
 
-/// An algorithm with what it calls.
+/// An algorithm with what it calls: how to choose, never what to choose
+/// for. The question comes from whoever runs it: the point it starts from
+/// and the goal it works toward are the run's (D-052), so a strategy means
+/// the same at every start and toward any goal. "The goal" below is the
+/// goal the run is given.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Strategy {
     /// A policy driving the economy turn by turn: each turn it proposes one
     /// exchange, `fn(state, random)`, or nothing, until the goal holds, it
     /// proposes nothing, or `horizon` turns. Turn order, Nature's responses
     /// and who acts are the policy's to decide.
-    Policy {
-        policy: ScriptCall,
-        goal: GoalPath,
-        horizon: u64,
-    },
+    Policy { policy: ScriptCall, horizon: u64 },
     /// A plan a script makes whole, `fn(state)` returning the exchanges in
     /// order or nothing, such as a specialised solver's or an outside
     /// solver's answer, or `fn(state, random)` for a plan that draws chance
     /// (Nature's outcomes) from the run's seed: the kernel applies them all
     /// or none, and the run ends at the goal or where the plan ends.
-    Plan { plan: ScriptCall, goal: GoalPath },
+    Plan { plan: ScriptCall },
     /// The fewest exchanges from the candidate set that reach the goal.
-    BreadthFirst {
-        candidates: CandidatesPath,
-        goal: GoalPath,
-    },
+    BreadthFirst { candidates: CandidatesPath },
     /// The cheapest exchanges from the candidate set that reach the goal,
     /// each costing what `cost` charges, `fn(before, exchange, after)`: by
     /// Dijkstra's search as `axionomy_search::dijkstra` runs it, which of
@@ -66,7 +63,6 @@ pub enum Strategy {
     /// as it goes.
     Cheapest {
         candidates: CandidatesPath,
-        goal: GoalPath,
         cost: ScriptCall,
         heuristic: Option<ScriptCall>,
     },
@@ -76,7 +72,6 @@ pub enum Strategy {
     /// state, `fn(state)`.
     BranchAndBound {
         candidates: CandidatesPath,
-        goal: GoalPath,
         cost: ScriptCall,
         bound: ScriptCall,
     },
@@ -86,7 +81,6 @@ pub enum Strategy {
     /// found of those scoring alike, as `tie` says.
     Beam {
         candidates: CandidatesPath,
-        goal: GoalPath,
         score: ScriptCall,
         width: u64,
         depth: u64,
@@ -98,7 +92,6 @@ pub enum Strategy {
     /// order they were found. It runs to its end.
     BestFirst {
         candidates: CandidatesPath,
-        goal: GoalPath,
         cost: ScriptCall,
         heuristic: Option<ScriptCall>,
     },
@@ -109,7 +102,6 @@ pub enum Strategy {
     /// before the front is exact leaves it at its start.
     Pareto {
         candidates: CandidatesPath,
-        goal: GoalPath,
         objectives: Vec<ObjectivePath>,
         by: Vec<ObjectivePath>,
     },
@@ -122,7 +114,6 @@ pub enum Strategy {
     /// them, and receding-horizon planning is a player that searches again
     /// every turn from what happened.
     Game {
-        goal: GoalPath,
         horizon: u64,
         nature: Option<ScriptCall>,
         actor: ScriptCall,
@@ -319,32 +310,27 @@ pub struct Ran {
 }
 
 impl Engine {
-    /// Runs `strategy` from `at` with `effort`, telling `watch` of a search's
-    /// progress, which may stop it. Every exchange is the kernel's to apply;
-    /// what the strategy reaches is recorded as a run forked from `at`.
+    /// Runs `strategy` from `at` toward the goal kept at `goal` with
+    /// `effort`, telling `watch` of a search's progress, which may stop it.
+    /// The start, the goal and the effort are the caller's question; the
+    /// strategy is how it is answered. Every exchange is the kernel's to
+    /// apply; what the strategy reaches is recorded as a run forked from
+    /// `at`.
     pub fn run_strategy(
         &self,
         at: Point,
         strategy: &Strategy,
+        goal: &GoalPath,
         effort: Effort,
         watch: &mut impl FnMut(&GraphSearchProgress) -> ControlFlow<()>,
     ) -> Result<Ran, EngineError> {
         let initial = self.reach(at)?.state.economy.clone();
+        let goal = self.goal(goal)?;
         match strategy {
-            Strategy::Policy {
-                policy,
-                goal,
-                horizon,
-            } => self.drive(
-                at,
-                initial,
-                policy,
-                &self.goal(goal)?,
-                *horizon,
-                effort.seed,
-            ),
-            Strategy::Plan { plan, goal } => {
-                let goal = self.goal(goal)?;
+            Strategy::Policy { policy, horizon } => {
+                self.drive(at, initial, policy, &goal, *horizon, effort.seed)
+            }
+            Strategy::Plan { plan } => {
                 let (script, function) = (&plan.script, plan.function.as_str());
                 let state = ScriptState::new(initial.clone());
                 // A plan that draws chance takes the run's random as well.
@@ -397,12 +383,12 @@ impl Engine {
                     cost: None,
                 })
             }
-            Strategy::BreadthFirst { candidates, goal } => {
+            Strategy::BreadthFirst { candidates } => {
                 let candidates = self.candidate_set(candidates)?;
                 let failure = RefCell::new(None);
                 let propose =
                     |economy: &paths::Economy| self.offered(&candidates, economy, &failure);
-                let mut session = BfsSession::new(&initial, self.goal(goal)?, propose);
+                let mut session = BfsSession::new(&initial, goal, propose);
                 let status = search(&mut session, effort.budget, watch);
                 let progress = session.progress();
                 let solution = session.into_solution();
@@ -411,7 +397,6 @@ impl Engine {
             }
             Strategy::BranchAndBound {
                 candidates,
-                goal,
                 cost,
                 bound,
             } => {
@@ -419,7 +404,7 @@ impl Engine {
                 let failure = RefCell::new(None);
                 let found = branch_and_bound(
                     &initial,
-                    &self.goal(goal)?,
+                    &goal,
                     |economy: &paths::Economy| self.offered(&candidates, economy, &failure),
                     |economy: &paths::Economy| self.counted(cost, economy, &failure),
                     |economy: &paths::Economy| self.counted(bound, economy, &failure),
@@ -448,7 +433,6 @@ impl Engine {
             }
             Strategy::Beam {
                 candidates,
-                goal,
                 score,
                 width,
                 depth,
@@ -458,7 +442,7 @@ impl Engine {
                 let failure = RefCell::new(None);
                 let found = beam(
                     &initial,
-                    &self.goal(goal)?,
+                    &goal,
                     |economy: &paths::Economy| self.offered(&candidates, economy, &failure),
                     |economy: &paths::Economy| self.signed(score, economy, &failure),
                     usize::try_from(*width).unwrap_or(usize::MAX),
@@ -480,7 +464,6 @@ impl Engine {
             }
             Strategy::BestFirst {
                 candidates,
-                goal,
                 cost,
                 heuristic,
             } => {
@@ -488,7 +471,7 @@ impl Engine {
                 let failure = RefCell::new(None);
                 let found = best_first(
                     &initial,
-                    &self.goal(goal)?,
+                    &goal,
                     |economy: &paths::Economy| self.offered(&candidates, economy, &failure),
                     |economy: &paths::Economy| self.counted(cost, economy, &failure),
                     |economy: &paths::Economy| {
@@ -516,7 +499,6 @@ impl Engine {
             }
             Strategy::Pareto {
                 candidates,
-                goal,
                 objectives,
                 by,
             } => self.pareto(
@@ -529,7 +511,6 @@ impl Engine {
                 watch,
             ),
             Strategy::Game {
-                goal,
                 horizon,
                 nature,
                 actor,
@@ -537,7 +518,7 @@ impl Engine {
             } => self.play(
                 at,
                 initial,
-                &self.goal(goal)?,
+                &goal,
                 *horizon,
                 nature.as_ref(),
                 actor,
@@ -546,7 +527,6 @@ impl Engine {
             ),
             Strategy::Cheapest {
                 candidates,
-                goal,
                 cost,
                 heuristic: None,
             } => {
@@ -556,7 +536,7 @@ impl Engine {
                 let (mut expanded, mut spent) = (0, false);
                 let found = dijkstra(
                     &initial,
-                    &self.goal(goal)?,
+                    &goal,
                     |economy: &paths::Economy| {
                         // Past its budget the search expands nothing more.
                         if expanded >= budget {
@@ -594,7 +574,6 @@ impl Engine {
             }
             Strategy::Cheapest {
                 candidates,
-                goal,
                 cost,
                 heuristic: Some(heuristic),
             } => {
@@ -615,8 +594,7 @@ impl Engine {
                             0
                         })
                 };
-                let mut session =
-                    AStarSession::new(&initial, self.goal(goal)?, propose, charge, estimate);
+                let mut session = AStarSession::new(&initial, goal, propose, charge, estimate);
                 let status = search(&mut session, effort.budget, watch);
                 let progress = session.progress();
                 let solution = session.into_solution();
@@ -1324,7 +1302,7 @@ impl Engine {
         at: Point,
         initial: &paths::Economy,
         candidates: &CandidatesPath,
-        goal: &GoalPath,
+        goal: paths::Goal,
         (objectives, by): (&[ObjectivePath], &[ObjectivePath]),
         effort: Effort,
         watch: &mut impl FnMut(&GraphSearchProgress) -> ControlFlow<()>,
@@ -1373,7 +1351,7 @@ impl Engine {
                 });
             ObjectiveVector::try_new(values).expect("objectives are numbered apart")
         };
-        let mut session = ParetoSearchSession::new(initial, self.goal(goal)?, propose, project);
+        let mut session = ParetoSearchSession::new(initial, goal, propose, project);
         let mut left = usize::try_from(effort.budget).unwrap_or(usize::MAX);
         let status = loop {
             if session.status().is_terminal() || left == 0 {

@@ -346,6 +346,9 @@ impl Engine {
             "experiment" => {
                 let experiment: Experiment = decoded(&bytes)?;
                 closure.refs.insert(experiment.start);
+                closure
+                    .queue
+                    .push(crate::definitions::definition(&experiment.goal));
                 for arm in experiment.arms {
                     closure.refs.extend(arm.start);
                     closure
@@ -439,130 +442,84 @@ struct Closure {
 }
 
 fn strategy_reaches(strategy: Strategy, closure: &mut Closure, calls: &mut Vec<ScriptCall>) {
-    let mut goal = |goal| closure.queue.push(crate::definitions::definition(&goal));
+    let mut candidates = |set| closure.queue.push(crate::definitions::definition(&set));
     match strategy {
-        Strategy::Policy {
-            policy, goal: aim, ..
-        } => {
-            goal(aim);
-            calls.push(policy);
-        }
-        Strategy::Plan { plan, goal: aim } => {
-            goal(aim);
-            calls.push(plan);
-        }
-        Strategy::BreadthFirst {
-            candidates,
-            goal: aim,
-        } => {
-            goal(aim);
-            closure
-                .queue
-                .push(crate::definitions::definition(&candidates));
-        }
+        Strategy::Policy { policy, .. } => calls.push(policy),
+        Strategy::Plan { plan } => calls.push(plan),
+        Strategy::BreadthFirst { candidates: set } => candidates(set),
         Strategy::Cheapest {
-            candidates,
-            goal: aim,
+            candidates: set,
+            cost,
+            heuristic,
+        }
+        | Strategy::BestFirst {
+            candidates: set,
             cost,
             heuristic,
         } => {
-            goal(aim);
-            closure
-                .queue
-                .push(crate::definitions::definition(&candidates));
+            candidates(set);
             calls.push(cost);
             calls.extend(heuristic);
         }
         Strategy::BranchAndBound {
-            candidates,
-            goal: aim,
+            candidates: set,
             cost,
             bound,
         } => {
-            goal(aim);
-            closure
-                .queue
-                .push(crate::definitions::definition(&candidates));
+            candidates(set);
             calls.extend([cost, bound]);
         }
         Strategy::Beam {
-            candidates,
-            goal: aim,
+            candidates: set,
             score,
             ..
         } => {
-            goal(aim);
-            closure
-                .queue
-                .push(crate::definitions::definition(&candidates));
+            candidates(set);
             calls.push(score);
         }
-        Strategy::BestFirst {
-            candidates,
-            goal: aim,
-            cost,
-            heuristic,
-        } => {
-            goal(aim);
-            closure
-                .queue
-                .push(crate::definitions::definition(&candidates));
-            calls.push(cost);
-            calls.extend(heuristic);
-        }
         Strategy::Pareto {
-            candidates,
-            goal: aim,
+            candidates: set,
             objectives,
             ..
         } => {
-            goal(aim);
-            closure
-                .queue
-                .push(crate::definitions::definition(&candidates));
+            candidates(set);
             closure
                 .queue
                 .extend(objectives.iter().map(crate::definitions::definition));
         }
         Strategy::Game {
-            goal: aim,
             nature,
             actor,
             players,
             ..
         } => {
-            goal(aim);
             calls.extend(nature);
             calls.push(actor);
             for player in players {
                 match player {
                     Chooser::Policy(policy) => calls.push(policy),
                     Chooser::Minimax {
-                        candidates,
+                        candidates: set,
                         evaluate,
                         ..
                     } => {
-                        closure
-                            .queue
-                            .push(crate::definitions::definition(&candidates));
+                        candidates(set);
                         calls.push(evaluate);
                     }
                     Chooser::Mcts {
-                        candidates,
+                        candidates: set,
                         payoffs,
                         estimate,
                         chance,
                         rollout,
                         ..
                     } => {
-                        closure
-                            .queue
-                            .push(crate::definitions::definition(&candidates));
+                        candidates(set);
                         calls.extend([payoffs, estimate]);
                         calls.extend(chance.into_iter().chain(rollout));
                     }
                     Chooser::Ismcts {
-                        candidates,
+                        candidates: set,
                         observe,
                         chance,
                         payoffs,
@@ -570,9 +527,7 @@ fn strategy_reaches(strategy: Strategy, closure: &mut Closure, calls: &mut Vec<S
                         rollout,
                         ..
                     } => {
-                        closure
-                            .queue
-                            .push(crate::definitions::definition(&candidates));
+                        candidates(set);
                         calls.extend([observe, chance, payoffs, estimate]);
                         calls.extend(rollout);
                     }
