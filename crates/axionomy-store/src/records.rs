@@ -8,9 +8,14 @@ use redb::TableDefinition;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::{collections::BTreeMap, num::NonZeroU64};
 
-/// The store's own 64-bit prefix for the identifiers it mints.
+/// The store's own 64-bit prefix for the identifiers it mints, and the format
+/// its records and trees are written in.
 pub(crate) const META: TableDefinition<&str, u64> = TableDefinition::new("meta");
 pub(crate) const STORE_PREFIX: &str = "store-prefix";
+pub(crate) const FORMAT: &str = "format";
+/// The format this version writes and reads: records, tree values and receipt
+/// digests in postcard, identifiers in keys as their paths.
+pub(crate) const FORMAT_VERSION: u64 = 1;
 /// Tree nodes by hash.
 pub(crate) const NODES: TableDefinition<&[u8; 32], &[u8]> = TableDefinition::new("nodes");
 pub(crate) const RUNS: TableDefinition<u128, &[u8]> = TableDefinition::new("runs");
@@ -58,7 +63,7 @@ pub struct Run {
     /// at, so forks number their steps as their source does.
     pub first: u64,
     /// The root of the run's first state, which is always stored.
-    #[serde(with = "hex")]
+    #[serde(with = "digest")]
     pub root: Hash,
     pub checkpoints: Checkpoints,
     pub finished: bool,
@@ -98,7 +103,7 @@ impl Checkpoints {
 pub struct Step<O: Ontology> {
     pub exchange: Exchange<O>,
     /// The BLAKE3 hash of the receipt's JSON, which replay must reproduce.
-    #[serde(with = "hex")]
+    #[serde(with = "digest")]
     pub receipt: Hash,
 }
 
@@ -180,15 +185,41 @@ pub enum Target {
     Group(GroupId),
 }
 
-pub(crate) mod hex {
+/// A digest: its hex digits where people read the format, its 32 bytes in the
+/// store's records.
+pub(crate) mod digest {
     use super::*;
 
     pub fn serialize<S: Serializer>(hash: &Hash, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.collect_str(&hash.to_hex())
+        if serializer.is_human_readable() {
+            serializer.collect_str(&hash.to_hex())
+        } else {
+            serializer.serialize_bytes(hash.as_bytes())
+        }
     }
 
     pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Hash, D::Error> {
-        let text = std::borrow::Cow::<str>::deserialize(deserializer)?;
-        Hash::from_hex(text.as_bytes()).map_err(serde::de::Error::custom)
+        if deserializer.is_human_readable() {
+            let text = std::borrow::Cow::<str>::deserialize(deserializer)?;
+            return Hash::from_hex(text.as_bytes()).map_err(serde::de::Error::custom);
+        }
+        deserializer.deserialize_bytes(Bytes)
+    }
+
+    struct Bytes;
+
+    impl serde::de::Visitor<'_> for Bytes {
+        type Value = Hash;
+
+        fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            formatter.write_str("a 32-byte digest")
+        }
+
+        fn visit_bytes<E: serde::de::Error>(self, value: &[u8]) -> Result<Hash, E> {
+            let bytes: [u8; 32] = value
+                .try_into()
+                .map_err(|_| E::invalid_length(value.len(), &self))?;
+            Ok(Hash::from_bytes(bytes))
+        }
     }
 }

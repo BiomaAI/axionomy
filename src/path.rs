@@ -427,6 +427,22 @@ pub enum IdentifierError {
     Unexpected(String),
 }
 
+/// A path is its own segments. Read as an identifier, it takes every segment
+/// left, so it ends whatever identifier it is part of.
+impl<K> Segments for Path<K> {
+    fn write_segments(&self, segments: &mut Vec<String>) {
+        segments.extend(self.as_str().split('/').map(str::to_owned));
+    }
+
+    fn read_segments(segments: &mut SegmentReader<'_>) -> Result<Self, IdentifierError> {
+        let rest = segments.0.by_ref().collect::<Vec<_>>().join("/");
+        if rest.is_empty() {
+            return Err(IdentifierError::Short);
+        }
+        rest.parse().map_err(|_| IdentifierError::Unexpected(rest))
+    }
+}
+
 /// An identifier's path: its segments joined with `/`.
 pub fn write<K, T: Segments>(value: &T) -> Path<K> {
     let path = written(value);

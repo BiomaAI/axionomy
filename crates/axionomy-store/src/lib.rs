@@ -19,7 +19,7 @@ pub use writer::{Pending, Transaction};
 
 use axionomy::{Economy, OntologyPath};
 use axionomy_tree::Hash;
-use records::{GROUPS, META, RUNS, STORE_PREFIX};
+use records::{FORMAT, FORMAT_VERSION, GROUPS, META, RUNS, STORE_PREFIX};
 use redb::{Database, ReadableDatabase, ReadableTable, backends::InMemoryBackend};
 use std::{
     path::Path,
@@ -69,6 +69,20 @@ pub enum StoreError {
     NotFinite(MetricPath),
     #[error("the store's writer has stopped")]
     Closed,
+    /// The store was written by a version that writes another format, or
+    /// before formats were recorded; this version reads only its own.
+    #[error(
+        "the store is written in {}, but this version reads only format {FORMAT_VERSION}",
+        written_in(.found)
+    )]
+    Format { found: Option<u64> },
+}
+
+fn written_in(found: &Option<u64>) -> String {
+    match found {
+        Some(format) => format!("format {format}"),
+        None => "a format from before formats were recorded".to_owned(),
+    }
 }
 
 macro_rules! storage_errors {
@@ -140,13 +154,20 @@ impl Store {
             let mut meta = txn.open_table(META)?;
             let stored = meta.get(STORE_PREFIX)?.map(|prefix| prefix.value());
             match stored {
-                Some(prefix) => prefix,
+                Some(prefix) => {
+                    let found = meta.get(FORMAT)?.map(|format| format.value());
+                    if found != Some(FORMAT_VERSION) {
+                        return Err(StoreError::Format { found });
+                    }
+                    prefix
+                }
                 None => {
                     let mut bytes = [0; 8];
                     getrandom::fill(&mut bytes)
                         .expect("operating system randomness is unavailable");
                     let prefix = u64::from_le_bytes(bytes);
                     meta.insert(STORE_PREFIX, prefix)?;
+                    meta.insert(FORMAT, FORMAT_VERSION)?;
                     prefix
                 }
             }

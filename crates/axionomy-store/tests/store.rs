@@ -461,26 +461,25 @@ fn replay_rejects_a_trace_that_does_not_reproduce_its_receipts() {
 
 /// A ledger with Rust types of its own for its identifiers.
 mod ledger {
-    use axionomy::Ontology;
-    use serde::{Deserialize, Serialize};
+    use axionomy::{Identifier, Ontology};
 
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Identifier)]
     pub enum Account {
         Bank,
         Agent(u8),
     }
 
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Identifier)]
     pub enum Asset {
         Cash,
     }
 
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Identifier)]
     pub enum Rate {
         Pay,
     }
 
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Identifier)]
     pub enum Role {
         From,
         To,
@@ -658,4 +657,33 @@ fn transitions_chain_the_roots_of_a_run() {
         [26, 27, 28]
     );
     assert_eq!(tail[0].before, transitions[24].after);
+}
+
+#[test]
+fn a_store_in_another_format_is_refused() {
+    let directory =
+        std::env::temp_dir().join(format!("axionomy-store-format-{}", std::process::id()));
+    std::fs::create_dir_all(&directory).unwrap();
+    // A store from before formats were recorded has a prefix and no format.
+    let old = directory.join("old.redb");
+    let _ = std::fs::remove_file(&old);
+    {
+        let database = redb::Database::create(&old).unwrap();
+        let txn = database.begin_write().unwrap();
+        txn.open_table(redb::TableDefinition::<&str, u64>::new("meta"))
+            .unwrap()
+            .insert("store-prefix", 7)
+            .unwrap();
+        txn.commit().unwrap();
+    }
+    assert!(matches!(
+        Store::open(&old),
+        Err(StoreError::Format { found: None })
+    ));
+    // A store this version wrote opens again.
+    let fresh = directory.join("fresh.redb");
+    let _ = std::fs::remove_file(&fresh);
+    drop(Store::open(&fresh).unwrap());
+    assert!(Store::open(&fresh).is_ok());
+    std::fs::remove_dir_all(&directory).unwrap();
 }

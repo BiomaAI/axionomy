@@ -54,7 +54,7 @@ impl Transaction<'_> {
         };
         self.redb()
             .open_table(RUNS)?
-            .insert(run.key(), json(&record).as_slice())?;
+            .insert(run.key(), encode(&record).as_slice())?;
         self.redb()
             .open_table(STATES)?
             .insert((run.key(), first), root.as_bytes())?;
@@ -75,7 +75,7 @@ impl Transaction<'_> {
         };
         self.redb()
             .open_table(STEPS)?
-            .insert(point.key(), json(&step).as_slice())?;
+            .insert(point.key(), encode(&step).as_slice())?;
         if let Some(state) = state {
             self.put_state(point, state)?;
         }
@@ -118,7 +118,7 @@ impl Transaction<'_> {
         if let Some(record) = record {
             let mut run: Run = decode(&record)?;
             run.finished = true;
-            runs.insert(last.run.key(), json(&run).as_slice())?;
+            runs.insert(last.run.key(), encode(&run).as_slice())?;
         }
         Ok(())
     }
@@ -176,7 +176,7 @@ impl Transaction<'_> {
         };
         self.redb()
             .open_table(GROUPS)?
-            .insert(id.key(), json(&record).as_slice())?;
+            .insert(id.key(), encode(&record).as_slice())?;
         Ok(())
     }
 
@@ -211,8 +211,8 @@ impl Transaction<'_> {
                 .and_modify(|summary| summary.add(*value))
                 .or_insert_with(|| Summary::of(*value));
         }
-        members.insert((group.key(), sample), json(member).as_slice())?;
-        groups.insert(group.key(), json(&record).as_slice())?;
+        members.insert((group.key(), sample), encode(member).as_slice())?;
+        groups.insert(group.key(), encode(&record).as_slice())?;
         Ok(true)
     }
 
@@ -220,7 +220,7 @@ impl Transaction<'_> {
     pub fn set_ref(&mut self, name: &RefPath, target: Option<Target>) -> Result<(), StoreError> {
         let mut refs = self.redb().open_table(REFS)?;
         match target {
-            Some(target) => refs.insert(name.as_str(), json(&target).as_slice())?,
+            Some(target) => refs.insert(name.as_str(), encode(&target).as_slice())?,
             None => refs.remove(name.as_str())?,
         };
         Ok(())
@@ -370,15 +370,16 @@ fn copy<K: redb::Key + 'static, V: redb::Value + 'static>(
     Ok(())
 }
 
-/// The digest a step records for its receipt.
+/// The digest a step records for its receipt: the hash of its encoding.
 pub(crate) fn receipt_digest<O: Recordable>(receipt: &Receipt<O>) -> Hash {
-    blake3::hash(&json(receipt))
+    blake3::hash(&encode(receipt))
 }
 
-pub(crate) fn json(value: &impl serde::Serialize) -> Vec<u8> {
-    serde_json::to_vec(value).expect("records serialize")
+/// A record as the store writes it, in postcard.
+pub(crate) fn encode(value: &impl serde::Serialize) -> Vec<u8> {
+    postcard::to_allocvec(value).expect("records encode")
 }
 
 pub(crate) fn decode<T: serde::de::DeserializeOwned>(bytes: &[u8]) -> Result<T, StoreError> {
-    serde_json::from_slice(bytes).map_err(|_| StoreError::Malformed(std::any::type_name::<T>()))
+    postcard::from_bytes(bytes).map_err(|_| StoreError::Malformed(std::any::type_name::<T>()))
 }

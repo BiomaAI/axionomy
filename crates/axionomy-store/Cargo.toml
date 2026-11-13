@@ -14,9 +14,9 @@ axionomy.workspace = true
 axionomy-tree.workspace = true
 blake3.workspace = true
 getrandom.workspace = true
+postcard.workspace = true
 redb.workspace = true
 serde.workspace = true
-serde_json.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]

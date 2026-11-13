@@ -2024,8 +2024,8 @@ of Axionomy's own; where data lives is a redb backend: a file, memory, or, as
 planned for the browser, the origin private file system (D-047). A tree holds
 an economy's logical state, accounts in key order rather than creation order,
 so equal states have equal roots whatever their history, and stores written
-apart merge by union. Every identifier is stored as its JSON (postcard with
-D-048), so a problem's
+apart merge by union. Every identifier in a key is written as its path, and
+every value and record as postcard (D-048), so a sample's
 own Rust types and paths are stored alike; an `Ontology` names a problem's
 identifier types, and a run is read back only as the ontology that recorded
 it. A run records each exchange with its receipt digest and stores states by

@@ -124,20 +124,22 @@ A stored economy is one tree, whose keys say what each entry holds:
 | --- | --- |
 | `a` account | empty: the account exists |
 | `b` account `\0` asset | the balance, 32 bytes big-endian, never zero |
-| `r` rate | the rate, as the kernel serializes it |
-| `v` invariant, as the kernel serializes it | empty |
+| `r` rate | the rate, in postcard |
+| `v` invariant name `\0` the invariant in postcard | empty |
 
-Every identifier is written as its JSON today, and every record and rate
-definition too; P1 of [the plan](SIMULATION.md#plan-axionomy-on-primitives)
-replaces JSON with postcard throughout, and a store becomes a package as it is
-(D-048). Identifiers are written the same way for a problem's own Rust types
-and for paths: an economy of any `axionomy::Ontology` whose
-identifiers serialize can be recorded, and a run records its ontology's name
-and is read back only as that ontology. JSON never contains `\0`, which sorts
-before every other byte, so an account's balances are contiguous and in
-account order, and a prefix range reads one account. A JSON string sorts as
-its text does, so an economy identified by paths (`axionomy::paths::Paths`)
-lists its accounts in path order and a path prefix is a key prefix. The
+Every identifier in a key is written as its path (D-044), so a sample's own
+Rust types and paths are stored the same way: an economy of any
+`axionomy::Ontology` whose identifiers are written as paths can be recorded,
+and a run records its ontology's name and is read back only as that
+ontology. A path never contains `\0`, which sorts before every other byte, so
+an account's balances are contiguous and in account order, and a prefix range
+reads one account; a path prefix is a key prefix. Invariants are keyed by name
+and then their encoding, since two may share a name. Values and the store's
+records (runs, steps, groups, members, refs) are postcard, the kernel's
+binary form: every field written, quantities as big-endian bytes, expressions
+tagged by variant; a step's receipt digest is the hash of the receipt's
+postcard. The store records the format it is written in (format 1) and
+refuses a store in any other, or from before formats were recorded. The
 **state root** is the tree's hash. The tree holds the logical state, not the
 order accounts were created in, so an economy rebuilt from a root lists
 accounts in key order; decoding accepts only trees an economy could have
