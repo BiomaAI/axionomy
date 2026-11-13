@@ -19,7 +19,7 @@ engine's own and shapes its answer for the wire.
 | `candidates` | `candidates`, `present` | each exchange a candidate set offers at a point, assessed there and read with the point's view |
 | `assess` | `present` | a written exchange, assessed at a point; nothing is recorded |
 | `apply` | `apply` | the new point exchanges reach, all of them or none |
-| `run_strategy` | `run_strategy` | where a strategy run from a point ended, how, and its search's thinking |
+| `run_strategy` | `run_strategy` | where a strategy run from a point toward a goal ended, how, and its search's thinking |
 | `run_experiment`, `results` | `run_experiment`, `results` | every arm's trials with their seeds, ends and exact objective values |
 | `compare` | `compare`, `pick` | points' objective values, the front no point dominates, and the best by objectives in order |
 | `create_ref`, `read_ref`, `advance_ref`, `frames` | `refer`, `referred`, `advance`, `frames` | refs, moved forward only from where the mover saw them |

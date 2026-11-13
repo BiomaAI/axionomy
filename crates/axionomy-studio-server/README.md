@@ -26,14 +26,14 @@ decimal text.
 
 | Route | Body or query | Result |
 | --- | --- | --- |
-| `GET /api/packages` | | `PackageList`: each package's manifest, its refs with their points (those it names and any made under its name since), experiments with their arms, objectives, seed, budget, trials and whether results are recorded, strategies, objectives with their directions, goals and candidate sets |
+| `GET /api/packages` | | `PackageList`: each package's manifest, its refs with their points (those it names and any made under its name since), experiments with their start, goal, arms, objectives, seed, budget, trials and whether results are recorded, strategies, objectives with their directions, goals and candidate sets |
 | `POST /api/packages` | the file's bytes, `application/octet-stream` | `LoadedView {packages, kept}`: the packages it held and the names the store kept as it gives them; 400 for a file that is no package or one this engine cannot load |
 | `GET /api/points/{point}/document` | | the point's history as a `ViewDocument`, drawn with its view |
 | `GET /api/points/{point}/ancestor` | `step` | `Ancestor {point}`: the point at that step of the history |
 | `GET /api/points/{point}/candidates` | `set` | `Candidates`: each exchange the candidate set offers there, with its `ProposalView`, read with the point's view and assessed there |
 | `POST /api/points/{point}/assess` | `{exchange}` | `Candidate`: the exchange assessed there; nothing is recorded |
 | `POST /api/points/{point}/apply` | `{exchanges}` | `Applied {from, point}`: the new point, all of them applied or none; 400 when one does not apply |
-| `POST /api/points/{point}/run` | `{strategy, seed, budget}` | server-sent `StrategyEvent`s: `progress` with the search's counts, then `ran` (how it ended, where, its thinking and cost) or `failed` |
+| `POST /api/points/{point}/run` | `{strategy, goal, seed, budget}` | server-sent `StrategyEvent`s: `progress` with the search's counts, then `ran` (the goal it worked toward, how it ended, where, its thinking and cost) or `failed`; 404 for a strategy or a goal the store lacks |
 | `GET /api/experiments/{experiment}/results` | | `ResultsView`: every arm's trials with their seeds, ends, how they ended and exact objective values; 404 before it has run |
 | `POST /api/experiments/{experiment}/run` | | server-sent `ExperimentEvent`s: `progress`, then `results` or `failed` |
 | `POST /api/compare` | `{points, objectives}` | `ComparisonView`: each point's values, the front no point dominates, and the pick, best by the objectives in order |

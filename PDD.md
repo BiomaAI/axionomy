@@ -2251,8 +2251,8 @@ P4 to P9). Axionomy is complete without problems or studies. Goals,
 objectives, candidates, strategies, experiments and comparison are
 primitives: a strategy is a built-in algorithm of `axionomy-search` with the
 scripts it calls and its parameters; an experiment runs strategies as arms
-from one start point with one seed and budget and records their runs as a
-group; comparison gives objective vectors, dominance and the Pareto front
+from one start point toward one goal with one seed and budget and records
+their runs as a group; comparison gives objective vectors, dominance and the Pareto front
 over any runs. `axionomy-search` stays generic over the ontology and gains
 the algorithms the samples wrote by hand: branch-and-bound, beam search and
 minimax with alpha-beta. The samples become packages built from these
@@ -2279,6 +2279,26 @@ what it did; opening one below lays the accounts out again, as compaction
 already does. Invariants keep the order they are declared in, which is the
 model's (an exchange breaking several is refused for the first), and the
 store keys them by position, so they read back in that order too.
+
+### D-052: A strategy is how to choose; whoever runs it asks the question
+
+Decided with P9 ([SIMULATION.md](docs/SIMULATION.md#plan-axionomy-on-primitives)).
+A strategy is an algorithm, the scripts it calls and its own settings: how
+to choose, never what to choose for. The goal it works toward is part of the
+question, like the point it starts from, and comes from whoever runs it:
+`run_strategy(at, strategy, goal, effort)`, the goal one the store keeps.
+An experiment names one goal for every arm, so its arms are compared toward
+the same thing. A strategy used to carry its goal, so a sample whose
+instances have goals of their own kept the same algorithm under a key per
+instance (`lending/micro/least-interest`), and a key could not mean one
+thing at every size; now lending's strategies are `lending/<name>` and the
+funded marketplaces share `marketplace/<name>`. An experiment whose arms
+worked toward different goals was asking two questions, and is two
+experiments (perishables' Micro outage, toward its resolution, and its
+storage plans, toward a sealed plan, `perishables/micro/storage-plans`).
+The store format is unchanged: it covers the store's own records and trees,
+and a definition is the bytes its owner encodes, as when strategies gained
+fields before; packages are written again from their builders.
 
 ## 16. Success criteria
 

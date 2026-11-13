@@ -60,9 +60,9 @@ is that overlaps stay few and no Axionomy term means two things.
 | Group | The runs produced together, such as an experiment's or one Monte Carlo estimate's |
 | Policy | How an actor chooses; in a package, a Rhai script |
 | Decision | One choice a policy makes |
-| Strategy | A built-in algorithm, the scripts it calls and its parameters (seed, budget, horizon, actor) |
+| Strategy | How to choose: a built-in algorithm, the scripts it calls and its own settings. Whoever runs it asks the question: the point to start from, the goal and the effort (seed, budget) |
 | Objective | A measure of a state with a direction, minimize or maximize |
-| Experiment | A start point, strategies as arms, objectives, a seed, a budget and a number of trials; it produces runs, recorded as a group |
+| Experiment | A start point, a goal, strategies as arms, objectives, a seed, a budget and a number of trials; it produces runs, recorded as a group |
 | Comparison | Objective vectors, dominance and the Pareto front, over any runs |
 | Thinking | Trying exchanges at a point and playing them out before choosing, with the same `apply` as the step finally chosen; the search observations of how a run was found |
 | Ref | A named label on a point, like a Git branch name on a commit. An application keeps a ref on the point its game or simulation is actually at, and moving the ref forward is what makes a step count; only the steps a ref is moved over are delivered |
@@ -76,8 +76,8 @@ is that overlaps stay few and no Axionomy term means two things.
 | Study | Retiring in P9: today's request to study a problem, replaced by an experiment on a package |
 | Path | An identifier's one written form, such as `edge/key-room/gate`, and its order. Typed identifiers derive `Identifier`, so they are written and ordered as their paths, and a typed run written down reads as a `paths` run that MCP can explore (D-044) |
 
-An experiment is named for what it is: the same start, seed and budget,
-strategies as arms, each measured on the same objectives. Monte Carlo's
+An experiment is named for what it is: the same start, goal, seed and
+budget, strategies as arms, each measured on the same objectives. Monte Carlo's
 single sample, which its code still calls an experiment, is a trial.
 
 None of these names is a mode or a separate execution system. A game or a
@@ -352,9 +352,11 @@ the scripts it calls and its parameters (seed, budget, horizon, actor). The
 engine runs one from a point and gets a run and its thinking. MCP's
 breadth-first search becomes one such strategy.
 
-Built so far: a strategy is a definition (`strategy/<path>`) naming its goal
-and candidate set, and a candidate set is a script or a list of exchanges
-reconsidered at each state. `run_strategy` runs a policy turn by turn
+Built so far: a strategy is a definition (`strategy/<path>`) naming its
+candidate set and scripts, and a candidate set is a script or a list of
+exchanges reconsidered at each state. A strategy is how to choose; the goal
+is the caller's, named with each run like the point it starts from (D-052).
+`run_strategy` runs a policy turn by turn
 (`fn(state, random)`, ending at the goal, when it proposes nothing, at a
 refusal or at its horizon), breadth-first search, or the cheapest search in
 Dijkstra's or A*'s order over a script's step costs and heuristic, within a
@@ -377,7 +379,7 @@ say what an actor observes and how hidden worlds are sampled, joins with the
 mission sample in P9.
 
 **P6. Experiments and comparison (done).** An experiment is a start point,
-strategies as arms, objectives, a seed and a budget, with Monte Carlo over
+a goal, strategies as arms, objectives, a seed and a budget, with Monte Carlo over
 strategies and weighted scenarios, receding-horizon replanning, and
 counterfactual variants (a trace played first, an actor dropped). Running one
 records a store group of runs. Comparison works over any runs: objective
@@ -385,7 +387,8 @@ vectors, dominance, the Pareto front, and picking a run by lexicographic
 objectives. Monte Carlo's `Experiment` becomes `Trial`.
 
 Built: an experiment is a definition (`experiment/<path>`) naming the ref
-it starts from, its arms, objectives, seed, budget and number of trials. An
+it starts from, the goal every arm works toward, so the arms answer one
+question, its arms, objectives, seed, budget and number of trials. An
 arm is a strategy, from the experiment's start or from a ref of its own,
 which is how a counterfactual variant is run: a trace played first, or an
 actor's holdings withdrawn, is a point with a ref. Every arm runs the same
@@ -445,7 +448,7 @@ experiments with identical results.
 Built: `export(name, version, contents, to)` takes refs and definitions,
 everything named under the package's name when nothing narrower is chosen,
 and closes over what they reach: the definitions they use (an experiment's
-strategies, objectives and results; a strategy's goal, candidates and
+goal, strategies, objectives and results; a strategy's candidates and
 scripts; a view's scripts), the refs an experiment starts from, the view of
 every ontology whose runs come along, and the points an experiment's
 results name. The store copies those refs, definitions and groups, every run
@@ -465,7 +468,9 @@ the same trials.
 **P9. The samples become packages.** The 15 samples' builders write their
 packages: economies for each instance and each seed shipped, goals, scripts,
 strategies, experiments, views. A strategy key means one thing at every
-size. Done when every experiment reproduces today's study outcomes
+size: a strategy is how to choose, and each run names its start, its goal
+and its effort, so an instance's own goal is its experiment's, never a
+strategy's (D-052). Done when every experiment reproduces today's study outcomes
 (objectives and traces) from its package alone; then `Problem`, `Registry`,
 `Study`, `axionomy-study` and `export-studies` go, MCP's problem tools become
 package and experiment tools, Studio's catalog lists the loaded packages, and
@@ -510,17 +515,19 @@ short for the work, where every search runs out) needed nothing new. The Living 
 its no-whale and thin-liquidity counterfactuals: plans for Micro's single
 day, each errand quoted against the reserves the plan follows, and policies
 for the seasons, which find whose turn it is from the decisions each actor
-has left) reproduces all three documents and needed nothing new. Lending's (each instance's goal and
-strategies toward it: least interest over each closed period's interest,
+has left) reproduces all three documents and needed nothing new. Lending's (each instance's goal,
+which its experiment names, and strategies the same at every size,
+`lending/<strategy>`: least interest over each closed period's interest,
 fewest steps, the over-borrowed scenario played turn by turn until the
 keeper liquidates, and the first-depositor attack as a plan from an arm
 starting at the instance's fresh market) reproduces every document; the
 cheapest search without a heuristic runs `axionomy_search::dijkstra`, as
 the samples do, since of equally cheap plans Showcase's study keeps the
-one that search's heap yields. Marketplace's (each instance's goal settling its own orders; Micro's
-clearing as branch-and-bound over the gross value it forgoes, and its exact
-Pareto picks for buyers and for sellers; the funded markets' fulfillment
-planned by beam search, for volume, buyers or sellers, over a script
+one that search's heap yields. Marketplace's (each instance's goal settling its own orders, which its
+experiment names; Micro's clearing, under `marketplace/settlement`, as
+branch-and-bound over the gross value it forgoes, and its exact Pareto
+picks for buyers and for sellers; the funded markets' fulfillment, the same
+strategies at either size, planned by beam search, for volume, buyers or sellers, over a script
 proposing contracts, dispatches, deliveries, cancellations and clock advances
 in the study's order) needed the beam strategy to answer with the last of the
 plans scoring best alike, as the study's planner does. Logistics' (Micro's direct and reliable routes as policies and its
@@ -533,9 +540,11 @@ decisions on the four-order economy; it needed tree search to draw
 Nature's weighted outcomes as chance in its tree, simulate by a rollout
 script, choose nothing with no candidates, and seed the game's `k`th
 choice with its seed XOR a salt, plus `k`. Perishables'
-(Micro's outage played turn by turn, each timed condition spoiling its
-cohort once its moment comes, and exact Pareto picks from its storage plans
-for usable stock or cooling energy; the cold chains, an ontology of their
+(Micro's outage played turn by turn until it is resolved, each timed
+condition spoiling its cohort once its moment comes, and, in an experiment
+of its own toward a sealed plan, `perishables/micro/storage-plans`, exact
+Pareto picks from its storage plans for usable stock or cooling energy;
+the cold chains, an ontology of their
 own named under `perishables/cold-chain`, whose four daily policies are
 plans for every day of the outage schedule, made whole on a shadow of the
 balances each decision reads) reproduces every document and needed nothing
@@ -688,7 +697,7 @@ and give: list the packages (each manifest's refs with the points they
 name, experiments, strategies, objectives with their directions, goals and
 candidate sets), load a package from its bytes, draw a point's history,
 name an earlier point of it, the candidates a set offers at a point, assess
-and apply exchanges, the refs, run a strategy from a point, run an
+and apply exchanges, the refs, run a strategy from a point toward a goal, run an
 experiment and read its results, and compare points (`compare` and `pick`).
 The Studio server serves them over HTTP (`/api/packages`,
 `/api/points/{point}/…`, `/api/experiments/{experiment}/…`,
@@ -720,7 +729,7 @@ before it can be applied: at the point a ref is on, applying moves the ref
 over the new step, refused with where it went when another mover came
 first, and anywhere else it makes a branch, a point no ref names, which can
 be kept as a ref. Continue from here runs a strategy from the step on
-screen with a seed and a budget, shows how it ended, its search's counts,
+screen toward one of the package's goals, with a seed and a budget, shows how it ended, its search's counts,
 and where it ended, and from a ref's point moves the ref there. Follow
 delivers the steps a ref is moved over as they come, by whoever moves it.
 An experiment runs from the Experiments view, its trials listed by arm with

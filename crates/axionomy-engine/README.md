@@ -30,9 +30,11 @@ goes.
   history, with a direction) and a candidate set (a script function returning
   exchanges); `holds`, `measure` and `candidates` evaluate them at a point, and
   `measure_state`, `step_cost` and `propose` on an economy in memory.
-- `keep_strategy` keeps a strategy, an algorithm naming the goal, candidates
-  and scripts it uses, and `run_strategy` runs one from a point with a seed
-  and a budget: a policy turn by turn, a plan a script makes whole (such as a
+- `keep_strategy` keeps a strategy, an algorithm naming the candidates and
+  scripts it uses: how to choose, never what for. `run_strategy` runs one
+  from a point toward a goal the store keeps, with a seed and a budget, the
+  start, the goal and the effort being the caller's question (D-052): a
+  policy turn by turn, a plan a script makes whole (such as a
   specialised solver's answer, or a match whose chances it draws from the
   run's seed), applied all or none, breadth-first search,
   the cheapest search (Dijkstra's as `axionomy_search::dijkstra` runs it,
@@ -63,10 +65,11 @@ goes.
   receipt and the follower's objectives and goal there; a step only tried out
   is never delivered.
   `wait` blocks until a ref moves, or a time is up.
-- `keep_experiment` keeps an experiment: a ref to start from, strategies as
-  arms (each from that start or a ref of its own), objectives, a seed, a
-  budget and a number of trials, and `experiments` lists those the store
-  keeps. `run_experiment` runs every arm's trials over the same seeds,
+- `keep_experiment` keeps an experiment: a ref to start from, the goal every
+  arm works toward, strategies as arms (each from that start or a ref of its
+  own), objectives, a seed, a budget and a number of trials, and
+  `experiments` lists those the store keeps. `run_experiment` runs every
+  arm's trials toward the goal over the same seeds,
   records the runs as a store group of kind `experiment` and keeps the
   results, which `results` reads back. A watcher that stops a search stops
   the experiment, which keeps no results then, so the results it kept

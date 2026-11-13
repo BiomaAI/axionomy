@@ -41,8 +41,9 @@ ref_id + economy_id ─── ref_frames ──────> the steps it was mo
                                            that economy
 (nothing) ───────────── package_list ────> each loaded package, its refs'
                                            economy_ids, experiments, strategies
-experiment ──────────── experiment_run ──> every trial's seed, outcome,
-                                           objective values and economy_id
+experiment ──────────── experiment_run ──> its goal, every trial's seed,
+                                           outcome, objective values and
+                                           economy_id
 experiment ──────────── experiment_results  the same, as last recorded
 ```
 
@@ -190,7 +191,7 @@ the reason it is malformed.
 | `axionomy_problem_catalog` | Built-in problems, instances and strategies | read-only |
 | `axionomy_problem_study` | MCP task: study summary | additive, idempotent |
 | `axionomy_package_list` | Every loaded package's manifest, its refs with the `economy_id` of each point, its experiments and strategies | additive, idempotent |
-| `axionomy_experiment_run` | Every arm's strategy and start, and every trial's seed, outcome, objective values and `economy_id` | additive |
+| `axionomy_experiment_run` | The goal every arm works toward, every arm's strategy and start, and every trial's seed, outcome, objective values and `economy_id` | additive |
 | `axionomy_experiment_results` | The same, as the experiment last recorded them | additive, idempotent |
 | `axionomy_ref_create` | A new `ref_id` and the `economy_id` it names | additive |
 | `axionomy_ref_read` | The `economy_id` a ref is at | read-only |
@@ -307,14 +308,16 @@ it carries, by path. A ref here is the package's name for a point, not a
 `axionomy_ref_create`.
 
 `axionomy_experiment_run` takes an experiment's path, such as `maze/micro`,
-and runs it as the engine does: every arm's strategy from the arm's start,
-once per trial, trial `i` seeded from the experiment's seed and `i` so every
-arm meets the same chances, each trial measured on the experiment's
+and runs it as the engine does: every arm's strategy from the arm's start
+toward the goal the experiment names, which every arm shares, once per
+trial, trial `i` seeded from the experiment's seed and `i` so every arm
+meets the same chances, each trial measured on the experiment's
 objectives. It records the runs and the results, and returns them:
 
 ```json
 {
   "experiment": "maze/micro",
+  "goal": "maze/solved",
   "objectives": [
     { "objective": "maze/energy", "direction": "minimize" },
     { "objective": "maze/time", "direction": "minimize" }

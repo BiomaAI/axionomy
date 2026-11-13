@@ -22,8 +22,9 @@ by an engine, native or in the browser, that Studio asks the same way.
   new step, and is told where the ref went if another mover came first;
   anywhere else it makes a branch, a new point no ref names, which **Keep as
   a ref** names.
-- **Continue from here** runs a strategy from the step on screen with a seed
-  and a budget (an experiment's, when one runs that strategy), reports its
+- **Continue from here** runs a strategy from the step on screen toward a
+  goal picked from the package's goals, with a seed and a budget (the goal
+  and the effort an experiment gives that strategy, when one runs it), reports its
   search's progress, can be cancelled, and shows how it ended, where, and
   its thinking: what the search expanded, generated, left on its frontier and
   visited, and the solution's depth. From a ref's point the ref can move to
