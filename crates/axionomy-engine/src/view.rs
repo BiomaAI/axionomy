@@ -522,5 +522,14 @@ pub(crate) fn register(rhai: &mut rhai::Engine) {
             ))
         },
     );
+    // A scene's entities extended, its legend inferred again from them all,
+    // as a Rust view's `with_entities` does.
+    scene.set_native_fn(
+        "entities",
+        |drawn: Dynamic, entities: Array| -> Result<Dynamic, Failure> {
+            let drawn: Scene = read(drawn)?;
+            rhai::serde::to_dynamic(drawn.with_entities(read::<Vec<_>>(entities.into())?))
+        },
+    );
     rhai.register_static_module("scene", scene.into());
 }
