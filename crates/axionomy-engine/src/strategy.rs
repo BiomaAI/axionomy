@@ -9,6 +9,9 @@ use crate::{
 use axionomy::paths;
 use axionomy_search::{
     AStarSession, BfsSession, GraphSearchProgress,
+    bounded::{beam, branch_and_bound, minimax},
+    mcts::{MctsConfig, search as mcts},
+    sampling::{SeededSampler, TicketSource},
     session::{SearchStatus, WorkBudget},
 };
 use axionomy_store::Point;
@@ -44,6 +47,64 @@ pub enum Strategy {
         goal: GoalPath,
         cost: ScriptCall,
         heuristic: Option<ScriptCall>,
+    },
+    /// The cheapest goal state the candidate set reaches, by depth-first
+    /// branch-and-bound: `cost` is a goal state's cost, `fn(state)`, and
+    /// `bound` a lower bound on the cost of any goal state reachable from a
+    /// state, `fn(state)`.
+    BranchAndBound {
+        candidates: CandidatesPath,
+        goal: GoalPath,
+        cost: ScriptCall,
+        bound: ScriptCall,
+    },
+    /// Beam search: each depth keeps the `width` states that score best,
+    /// `fn(state)` returning an integer, higher better, for at most `depth`
+    /// depths; the best-scoring goal state found.
+    Beam {
+        candidates: CandidatesPath,
+        goal: GoalPath,
+        score: ScriptCall,
+        width: u64,
+        depth: u64,
+    },
+    /// A game played turn by turn until the goal or `horizon` turns: each
+    /// turn Nature responds if `nature`, `fn(state)`, proposes an exchange,
+    /// and otherwise the player `actor`, `fn(state)` returning an index into
+    /// `players`, chooses as its chooser does.
+    Game {
+        goal: GoalPath,
+        horizon: u64,
+        nature: Option<ScriptCall>,
+        actor: ScriptCall,
+        players: Vec<Chooser>,
+    },
+}
+
+/// How a player in a game chooses its exchange.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Chooser {
+    /// What a policy proposes, `fn(state, random)`.
+    Policy(ScriptCall),
+    /// Minimax with alpha-beta pruning `depth` exchanges ahead, over the
+    /// candidate set, between players 0 and 1: `evaluate`, `fn(state)`,
+    /// scores a state for player 0 as an integer, higher better for 0.
+    Minimax {
+        candidates: CandidatesPath,
+        evaluate: ScriptCall,
+        depth: u64,
+    },
+    /// Monte Carlo tree search, `iterations` iterations each turn, over the
+    /// candidate set: `payoffs`, `fn(state)`, gives every player's payoff at
+    /// a state the game ends in, an array of numbers, or nothing at any
+    /// other; `estimate`, `fn(state)`, every player's expected payoff where
+    /// a simulation stops at `depth`. Simulations choose uniformly.
+    Mcts {
+        candidates: CandidatesPath,
+        payoffs: ScriptCall,
+        estimate: ScriptCall,
+        iterations: u64,
+        depth: u64,
     },
 }
 
@@ -130,6 +191,89 @@ impl Engine {
                 failed(failure)?;
                 self.searched(at, status, progress, solution)
             }
+            Strategy::BranchAndBound {
+                candidates,
+                goal,
+                cost,
+                bound,
+            } => {
+                let candidates = self.candidate_set(candidates)?;
+                let failure = RefCell::new(None);
+                let found = branch_and_bound(
+                    &initial,
+                    &self.goal(goal)?,
+                    |economy: &paths::Economy| self.offered(&candidates, economy, &failure),
+                    |economy: &paths::Economy| self.counted(cost, economy, &failure),
+                    |economy: &paths::Economy| self.counted(bound, economy, &failure),
+                    usize::try_from(effort.budget).unwrap_or(usize::MAX),
+                );
+                failed(failure)?;
+                let outcome = match (&found.solution, found.exhausted) {
+                    (Some(_), _) => Outcome::Reached,
+                    (None, true) => Outcome::Exhausted,
+                    (None, false) => Outcome::Spent,
+                };
+                let (end, cost) = match found.solution {
+                    Some(solution) => (
+                        self.apply(at, solution.trace().exchanges())?,
+                        Some(solution.cost()),
+                    ),
+                    None => (at, None),
+                };
+                Ok(Ran {
+                    start: at,
+                    end,
+                    outcome,
+                    thinking: None,
+                    cost,
+                })
+            }
+            Strategy::Beam {
+                candidates,
+                goal,
+                score,
+                width,
+                depth,
+            } => {
+                let candidates = self.candidate_set(candidates)?;
+                let failure = RefCell::new(None);
+                let found = beam(
+                    &initial,
+                    &self.goal(goal)?,
+                    |economy: &paths::Economy| self.offered(&candidates, economy, &failure),
+                    |economy: &paths::Economy| self.signed(score, economy, &failure),
+                    usize::try_from(*width).unwrap_or(usize::MAX),
+                    usize::try_from(*depth).unwrap_or(usize::MAX),
+                );
+                failed(failure)?;
+                let (end, outcome) = match found.best {
+                    Some(best) => (self.apply(at, best.trace.exchanges())?, Outcome::Reached),
+                    None => (at, Outcome::Exhausted),
+                };
+                Ok(Ran {
+                    start: at,
+                    end,
+                    outcome,
+                    thinking: None,
+                    cost: None,
+                })
+            }
+            Strategy::Game {
+                goal,
+                horizon,
+                nature,
+                actor,
+                players,
+            } => self.play(
+                at,
+                initial,
+                &self.goal(goal)?,
+                *horizon,
+                nature.as_ref(),
+                actor,
+                players,
+                effort.seed,
+            ),
             Strategy::Cheapest {
                 candidates,
                 goal,
@@ -197,6 +341,270 @@ impl Engine {
                 Vec::new()
             }
         }
+    }
+
+    /// What `call` measures of `economy`, as a count, keeping the first
+    /// failure in `failure` and counting zero after one.
+    fn counted(
+        &self,
+        call: &ScriptCall,
+        economy: &paths::Economy,
+        failure: &RefCell<Option<EngineError>>,
+    ) -> u64 {
+        if failure.borrow().is_some() {
+            return 0;
+        }
+        match self.measure_state(call, economy) {
+            Ok(value) => u64::try_from(value).unwrap_or(u64::MAX),
+            Err(error) => {
+                failure.borrow_mut().get_or_insert(error);
+                0
+            }
+        }
+    }
+
+    /// The integer `call` returns for `economy`, which may be negative, with
+    /// failures kept as [`counted`](Self::counted) keeps them.
+    fn signed(
+        &self,
+        call: &ScriptCall,
+        economy: &paths::Economy,
+        failure: &RefCell<Option<EngineError>>,
+    ) -> i64 {
+        if failure.borrow().is_some() {
+            return 0;
+        }
+        match self.call::<i64>(
+            &call.script,
+            call.function.as_str(),
+            (ScriptState::new(economy.clone()),),
+        ) {
+            Ok(value) => value,
+            Err(error) => {
+                failure.borrow_mut().get_or_insert(error);
+                0
+            }
+        }
+    }
+
+    /// Every player's payoffs `call` gives for `economy`: none where it
+    /// returns nothing.
+    fn payoffs(
+        &self,
+        call: &ScriptCall,
+        economy: &paths::Economy,
+        failure: &RefCell<Option<EngineError>>,
+    ) -> Option<Vec<f64>> {
+        if failure.borrow().is_some() {
+            return None;
+        }
+        let returned: Result<rhai::Dynamic, _> = self.call(
+            &call.script,
+            call.function.as_str(),
+            (ScriptState::new(economy.clone()),),
+        );
+        let numbers = returned.and_then(|returned| {
+            if returned.is_unit() {
+                return Ok(None);
+            }
+            let found = returned.type_name();
+            let values: rhai::Array = returned.try_cast().ok_or_else(|| EngineError::Returned {
+                expected: "an array of payoffs or nothing",
+                found: found.to_owned(),
+            })?;
+            values
+                .into_iter()
+                .map(|value| {
+                    let found = value.type_name();
+                    value
+                        .as_float()
+                        .or_else(|_| value.as_int().map(|value| value as f64))
+                        .map_err(|_| EngineError::Returned {
+                            expected: "a payoff",
+                            found: found.to_owned(),
+                        })
+                })
+                .collect::<Result<Vec<f64>, _>>()
+                .map(Some)
+        });
+        numbers.unwrap_or_else(|error| {
+            failure.borrow_mut().get_or_insert(error);
+            None
+        })
+    }
+
+    #[expect(clippy::too_many_arguments, reason = "a game's parts, each read once")]
+    fn play(
+        &self,
+        at: Point,
+        mut economy: paths::Economy,
+        goal: &paths::Goal,
+        horizon: u64,
+        nature: Option<&ScriptCall>,
+        actor: &ScriptCall,
+        players: &[Chooser],
+        seed: u64,
+    ) -> Result<Ran, EngineError> {
+        let random = Random::new(seed);
+        let mut exchanges = Vec::new();
+        let outcome = loop {
+            if economy.matches(goal) {
+                break Outcome::Reached;
+            }
+            let turn = exchanges.len() as u64;
+            if turn >= horizon {
+                break Outcome::Horizon;
+            }
+            let responded = match nature {
+                Some(nature) => {
+                    let proposed: rhai::Dynamic = self.call(
+                        &nature.script,
+                        nature.function.as_str(),
+                        (ScriptState::new(economy.clone()),),
+                    )?;
+                    proposal(proposed)?
+                }
+                None => None,
+            };
+            let chosen = match responded {
+                Some(exchange) => Some(exchange),
+                None => {
+                    let index: i64 = self.call(
+                        &actor.script,
+                        actor.function.as_str(),
+                        (ScriptState::new(economy.clone()),),
+                    )?;
+                    let chooser = usize::try_from(index)
+                        .ok()
+                        .and_then(|index| players.get(index))
+                        .ok_or_else(|| EngineError::Returned {
+                            expected: "the index of a player",
+                            found: index.to_string(),
+                        })?;
+                    self.choose(
+                        chooser,
+                        &economy,
+                        &random,
+                        players.len(),
+                        actor,
+                        seed ^ turn,
+                    )?
+                }
+            };
+            let Some(exchange) = chosen else {
+                break Outcome::Stopped;
+            };
+            if economy.apply(exchange.clone()).is_err() {
+                break Outcome::Refused {
+                    turn,
+                    assessment: Box::new(economy.assess(&exchange)),
+                };
+            }
+            exchanges.push(exchange);
+        };
+        Ok(Ran {
+            start: at,
+            end: self.apply(at, &exchanges)?,
+            outcome,
+            thinking: None,
+            cost: None,
+        })
+    }
+
+    fn choose(
+        &self,
+        chooser: &Chooser,
+        economy: &paths::Economy,
+        random: &Random,
+        players: usize,
+        actor: &ScriptCall,
+        seed: u64,
+    ) -> Result<Option<paths::Exchange>, EngineError> {
+        let failure = RefCell::new(None);
+        let player = |economy: &paths::Economy| {
+            if failure.borrow().is_some() {
+                return 0;
+            }
+            self.call::<i64>(
+                &actor.script,
+                actor.function.as_str(),
+                (ScriptState::new(economy.clone()),),
+            )
+            .map(|index| usize::try_from(index).unwrap_or(usize::MAX))
+            .unwrap_or_else(|error| {
+                failure.borrow_mut().get_or_insert(error);
+                0
+            })
+        };
+        let chosen = match chooser {
+            Chooser::Policy(policy) => {
+                let proposed: rhai::Dynamic = self.call(
+                    &policy.script,
+                    policy.function.as_str(),
+                    (ScriptState::new(economy.clone()), random.clone()),
+                )?;
+                proposal(proposed)?
+            }
+            Chooser::Minimax {
+                candidates,
+                evaluate,
+                depth,
+            } => {
+                let candidates = self.candidate_set(candidates)?;
+                minimax(
+                    economy,
+                    usize::try_from(*depth).unwrap_or(usize::MAX),
+                    |economy: &paths::Economy| self.offered(&candidates, economy, &failure),
+                    player,
+                    |economy: &paths::Economy| self.signed(evaluate, economy, &failure),
+                )
+                .map(|chosen| chosen.exchange)
+            }
+            Chooser::Mcts {
+                candidates,
+                payoffs,
+                estimate,
+                iterations,
+                depth,
+            } => {
+                let candidates = self.candidate_set(candidates)?;
+                let config = MctsConfig::new(
+                    usize::try_from(*iterations).unwrap_or(usize::MAX),
+                    usize::try_from(*depth).unwrap_or(usize::MAX),
+                )
+                .with_seed(seed);
+                let decided = mcts(
+                    economy,
+                    config,
+                    players,
+                    |economy: &paths::Economy| self.offered(&candidates, economy, &failure),
+                    |_: &paths::Economy| Vec::new(),
+                    player,
+                    |economy: &paths::Economy| self.payoffs(payoffs, economy, &failure),
+                    |economy: &paths::Economy| {
+                        self.payoffs(estimate, economy, &failure)
+                            .unwrap_or_else(|| vec![0.0; players])
+                    },
+                    |_: &paths::Economy,
+                     actions: &[paths::Exchange],
+                     sampler: &mut SeededSampler| {
+                        let ticket = sampler.ticket(actions.len() as u64);
+                        actions.get(usize::try_from(ticket).ok()?).cloned()
+                    },
+                );
+                // A script that failed explains the search better than the
+                // search's own complaint.
+                if let Some(error) = failure.borrow_mut().take() {
+                    return Err(error);
+                }
+                match decided {
+                    Ok(decision) => Some(decision.action().clone()),
+                    Err(error) => return Err(EngineError::Undecided(format!("{error:?}"))),
+                }
+            }
+        };
+        failed(failure)?;
+        Ok(chosen)
     }
 
     fn drive(
@@ -355,4 +763,19 @@ fn failed(failure: RefCell<Option<EngineError>>) -> Result<(), EngineError> {
         Some(error) => Err(error),
         None => Ok(()),
     }
+}
+
+/// What a script proposed: an exchange, or nothing.
+fn proposal(proposed: rhai::Dynamic) -> Result<Option<paths::Exchange>, EngineError> {
+    if proposed.is_unit() {
+        return Ok(None);
+    }
+    let found = proposed.type_name();
+    proposed
+        .try_cast::<paths::Exchange>()
+        .map(Some)
+        .ok_or_else(|| EngineError::Returned {
+            expected: "an exchange or nothing",
+            found: found.to_owned(),
+        })
 }

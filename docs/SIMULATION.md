@@ -1,8 +1,8 @@
 # Simulation: primitives, scripts and packages
 
 Status: steps 1 to 5 below are built (step 2 for MCP). Of the
-[plan](#plan-axionomy-on-primitives) that follows them, P1 to P4 are done and
-P5 to P13 follow in order.
+[plan](#plan-axionomy-on-primitives) that follows them, P1 to P5 are done and
+P6 to P13 follow in order.
 
 The economy owns commitments and their consequences. A policy reads what an
 actor may see and proposes exchanges. Whoever calls the rollout (an
@@ -344,7 +344,7 @@ any economy in memory, as searches need (`measure_state`, `step_cost`,
 `propose`). Transports expose them with packages and experiments (P9) and
 Studio (P12).
 
-**P5. Strategies.** A strategy is a built-in algorithm (priority, BFS,
+**P5. Strategies (done, ISMCTS with P9).** A strategy is a built-in algorithm (priority, BFS,
 Dijkstra, A*, best-first, rollout, Monte Carlo, MCTS, ISMCTS, Pareto search,
 and the new branch-and-bound, beam search and minimax with alpha-beta) with
 the scripts it calls and its parameters (seed, budget, horizon, actor). The
@@ -362,8 +362,18 @@ reaches as a run forked from its start. Maze's A* and Dijkstra find routes
 as cheap as the Rust solvers', A* the same trace; sokoban's breadth-first
 search the shortest solutions; incident's policies the same incidents; and
 MCP's `axionomy_search` runs the breadth-first strategy over its goal and
-candidates, kept as definitions named by their content. Next: branch-and-
-bound, beam search, minimax, MCTS and ISMCTS.
+candidates, kept as definitions named by their content.
+
+`axionomy-search` gained the algorithms the samples wrote by hand, generic
+over the ontology (`bounded`): depth-first branch-and-bound for the cheapest
+goal state under a lower bound, beam search keeping the best-scoring states
+of each depth, and minimax with alpha-beta pruning for a two-player choice.
+Strategies use them, and a game strategy plays turn by turn: Nature's
+response first, then the player an actor script names, choosing by its own
+policy, by minimax, or by Monte Carlo tree search over every player's
+payoffs, seeded per turn so a game replays. ISMCTS, which needs a package to
+say what an actor observes and how hidden worlds are sampled, joins with the
+mission sample in P9.
 
 **P6. Experiments and comparison.** An experiment is a start point,
 strategies as arms, objectives, a seed and a budget, with Monte Carlo over

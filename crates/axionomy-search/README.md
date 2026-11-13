@@ -17,6 +17,9 @@ ordinary exchanges validated by the `axionomy` kernel.
   rollouts of repeated experiments, with `Unrecorded` keeping none.
 - `sampling` selects among weighted, encoded Nature exchanges through `rand`,
   including reproducible ChaCha8 and caller-owned generators.
+- `bounded` holds depth-first branch-and-bound for the cheapest goal state under
+  a lower bound, beam search keeping the best-scoring states of each depth, and
+  minimax with alpha-beta pruning for a two-player choice.
 - `monte_carlo` evaluates arbitrary experiments with Bernoulli, scalar, vector,
   quantile, credible-interval, and tail-risk statistics backed by `statrs`.
 - `pareto` compares ordered objective schemas, maintains non-dominated sets,

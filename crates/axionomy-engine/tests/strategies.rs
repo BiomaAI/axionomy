@@ -142,3 +142,194 @@ fn a_policy_runs_until_the_goal_nothing_a_refusal_or_its_horizon() {
     assert!(matches!(ran.outcome, Outcome::Refused { turn: 0, .. }));
     assert_eq!(ran.end, start);
 }
+
+/// A worker buying progress: a small step gives one for one coin, a big one
+/// two for three. Four progress costs four coins at best.
+fn workshop() -> (Engine, Point) {
+    let engine = Engine::new(Store::memory().unwrap()).unwrap();
+    let economy = paths::EconomyBuilder::new()
+        .account(path("worker"), basket([]).into())
+        .rate(
+            path("small"),
+            Rate::new().produce(
+                path("worker"),
+                basket([(path("progress"), 1), (path("cost"), 1)]),
+            ),
+        )
+        .rate(
+            path("big"),
+            Rate::new().produce(
+                path("worker"),
+                basket([(path("progress"), 2), (path("cost"), 3)]),
+            ),
+        )
+        .build()
+        .unwrap();
+    engine
+        .keep_script(
+            &path("workshop"),
+            r#"
+            fn cost(state) { state.balance("worker", "cost") }
+            fn score(state) { -state.balance("worker", "cost").to_int() }
+            "#,
+        )
+        .unwrap();
+    engine
+        .keep_goal(
+            &path("done"),
+            &paths::Goal::new().require(path("worker"), basket([(path("progress"), 4)])),
+        )
+        .unwrap();
+    let step = |rate: &str| {
+        paths::Exchange::new(path(rate), Quantity::new(1)).bind(path("worker"), path("worker"))
+    };
+    engine
+        .keep_candidates(
+            &path("steps"),
+            &CandidateSet::Listed(vec![step("big"), step("small")]),
+        )
+        .unwrap();
+    let start = engine.author(economy).unwrap();
+    (engine, start)
+}
+
+fn workshop_call(function: &str) -> ScriptCall {
+    ScriptCall::new(path("workshop"), function.parse().unwrap())
+}
+
+#[test]
+fn branch_and_bound_and_beam_find_the_cheapest_progress() {
+    let (engine, start) = workshop();
+    let bounded = Strategy::BranchAndBound {
+        candidates: path("steps"),
+        goal: path("done"),
+        cost: workshop_call("cost"),
+        bound: workshop_call("cost"),
+    };
+    engine
+        .keep_strategy(&path("workshop/bounded"), &bounded)
+        .unwrap();
+    let ran = run(&engine, start, &bounded, EFFORT);
+    assert!(matches!(ran.outcome, Outcome::Reached));
+    assert_eq!(ran.cost, Some(4));
+    assert_eq!(ran.end.step, start.step + 4);
+
+    let narrow = Strategy::Beam {
+        candidates: path("steps"),
+        goal: path("done"),
+        score: workshop_call("score"),
+        width: 1,
+        depth: 10,
+    };
+    let ran = run(&engine, start, &narrow, EFFORT);
+    assert!(matches!(ran.outcome, Outcome::Reached));
+    assert!(engine.holds(ran.end, &path("done")).unwrap());
+    assert_eq!(ran.end.step, start.step + 4);
+}
+
+/// Take one or two of four tokens in turn; whoever takes the last wins.
+fn nim() -> (Engine, Point) {
+    let engine = Engine::new(Store::memory().unwrap()).unwrap();
+    let take = |count: u64| {
+        Rate::new()
+            .consume(path("pile"), basket([(path("token"), count)]))
+            .produce(
+                path("counter"),
+                basket([(path("move"), 1), (path("taken"), count)]),
+            )
+    };
+    let economy = paths::EconomyBuilder::new()
+        .account(path("pile"), basket([(path("token"), 4)]).into())
+        .account(path("counter"), basket([]).into())
+        .rate(path("take-one"), take(1))
+        .rate(path("take-two"), take(2))
+        .build()
+        .unwrap();
+    engine
+        .keep_script(
+            &path("nim"),
+            r#"
+            fn player(state) { state.balance("counter", "move").to_int() % 2 }
+            // An empty pile: whoever moved last, the player not to move, won.
+            fn evaluate(state) {
+                if !state.balance("pile", "token").is_zero() { return 0; }
+                if player(state) == 1 { 1 } else { -1 }
+            }
+            fn payoffs(state) {
+                if !state.balance("pile", "token").is_zero() { return (); }
+                if player(state) == 1 { [1.0, 0.0] } else { [0.0, 1.0] }
+            }
+            fn even(state) { [0.5, 0.5] }
+            "#,
+        )
+        .unwrap();
+    engine
+        .keep_goal(
+            &path("over"),
+            &paths::Goal::new().require(path("counter"), basket([(path("taken"), 4)])),
+        )
+        .unwrap();
+    let take = |rate: &str| {
+        paths::Exchange::new(path(rate), Quantity::new(1))
+            .bind(path("pile"), path("pile"))
+            .bind(path("counter"), path("counter"))
+    };
+    engine
+        .keep_candidates(
+            &path("takes"),
+            &CandidateSet::Listed(vec![take("take-one"), take("take-two")]),
+        )
+        .unwrap();
+    let start = engine.author(economy).unwrap();
+    (engine, start)
+}
+
+fn nim_call(function: &str) -> ScriptCall {
+    ScriptCall::new(path("nim"), function.parse().unwrap())
+}
+
+fn game(chooser: axionomy_engine::Chooser) -> Strategy {
+    Strategy::Game {
+        goal: path("over"),
+        horizon: 10,
+        nature: None,
+        actor: nim_call("player"),
+        players: vec![chooser.clone(), chooser],
+    }
+}
+
+#[test]
+fn players_choose_by_minimax_and_by_tree_search() {
+    let (engine, start) = nim();
+    let minimax = game(axionomy_engine::Chooser::Minimax {
+        candidates: path("takes"),
+        evaluate: nim_call("evaluate"),
+        depth: 6,
+    });
+    engine
+        .keep_strategy(&path("nim/minimax"), &minimax)
+        .unwrap();
+    let ran = run(&engine, start, &minimax, EFFORT);
+    assert!(matches!(ran.outcome, Outcome::Reached));
+    // The first player takes one, and takes the last token on the third move.
+    let (_, exchanges) = engine.history(ran.end).unwrap();
+    assert_eq!(exchanges.len(), 3);
+    assert_eq!(exchanges[0].rate().as_str(), "take-one");
+
+    let searched = game(axionomy_engine::Chooser::Mcts {
+        candidates: path("takes"),
+        payoffs: nim_call("payoffs"),
+        estimate: nim_call("even"),
+        iterations: 400,
+        depth: 10,
+    });
+    engine.keep_strategy(&path("nim/mcts"), &searched).unwrap();
+    let ran = run(&engine, start, &searched, EFFORT);
+    assert!(matches!(ran.outcome, Outcome::Reached));
+    // The same seed plays the same game.
+    let again = run(&engine, start, &searched, EFFORT);
+    assert_eq!(
+        engine.history(ran.end).unwrap().1,
+        engine.history(again.end).unwrap().1
+    );
+}

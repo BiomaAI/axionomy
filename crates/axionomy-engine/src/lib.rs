@@ -11,7 +11,7 @@ pub use definitions::{
 };
 pub use rhai;
 pub use script::{HOST_API, Random, ScriptPath, ScriptState, exchanges_of};
-pub use strategy::{Effort, Outcome, Ran, Strategy};
+pub use strategy::{Chooser, Effort, Outcome, Ran, Strategy};
 
 use axionomy::{
     PathKind, Quantity,
@@ -67,6 +67,9 @@ pub enum EngineError {
     /// An objective summed over a history, asked of an economy without one.
     #[error("objective `{0}` is measured over a history, so it needs a point")]
     NeedsHistory(ObjectivePath),
+    /// A tree search could not decide, with the reason it gives.
+    #[error("no decision: {0}")]
+    Undecided(String),
 }
 
 /// A point as the engine serves it: the state there, the point its run
@@ -294,23 +297,88 @@ impl Engine {
         path: &StrategyPath,
         strategy: &Strategy,
     ) -> Result<(), EngineError> {
-        let (goal, candidates, scripts) = match strategy {
-            Strategy::Policy { policy, goal, .. } => (goal, None, vec![policy]),
-            Strategy::BreadthFirst { candidates, goal } => (goal, Some(candidates), Vec::new()),
+        let mut candidates: Vec<&CandidatesPath> = Vec::new();
+        let mut scripts: Vec<&ScriptCall> = Vec::new();
+        let goal = match strategy {
+            Strategy::Policy { policy, goal, .. } => {
+                scripts.push(policy);
+                goal
+            }
+            Strategy::BreadthFirst {
+                candidates: set,
+                goal,
+            } => {
+                candidates.push(set);
+                goal
+            }
             Strategy::Cheapest {
-                candidates,
+                candidates: set,
                 goal,
                 cost,
                 heuristic,
-            } => (
+            } => {
+                candidates.push(set);
+                scripts.push(cost);
+                scripts.extend(heuristic);
+                goal
+            }
+            Strategy::BranchAndBound {
+                candidates: set,
                 goal,
-                Some(candidates),
-                std::iter::once(cost).chain(heuristic).collect(),
-            ),
+                cost,
+                bound,
+            } => {
+                candidates.push(set);
+                scripts.extend([cost, bound]);
+                goal
+            }
+            Strategy::Beam {
+                candidates: set,
+                goal,
+                score,
+                ..
+            } => {
+                candidates.push(set);
+                scripts.push(score);
+                goal
+            }
+            Strategy::Game {
+                goal,
+                nature,
+                actor,
+                players,
+                ..
+            } => {
+                scripts.push(actor);
+                scripts.extend(nature);
+                for player in players {
+                    match player {
+                        Chooser::Policy(policy) => scripts.push(policy),
+                        Chooser::Minimax {
+                            candidates: set,
+                            evaluate,
+                            ..
+                        } => {
+                            candidates.push(set);
+                            scripts.push(evaluate);
+                        }
+                        Chooser::Mcts {
+                            candidates: set,
+                            payoffs,
+                            estimate,
+                            ..
+                        } => {
+                            candidates.push(set);
+                            scripts.extend([payoffs, estimate]);
+                        }
+                    }
+                }
+                goal
+            }
         };
         self.goal(goal)?;
-        if let Some(candidates) = candidates {
-            self.defined::<_, CandidateSet>(candidates)?;
+        for set in candidates {
+            self.defined::<_, CandidateSet>(set)?;
         }
         for call in scripts {
             self.require_script(&call.script)?;

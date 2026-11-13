@@ -2,6 +2,7 @@
 
 use axionomy::Ontology;
 pub mod action_source;
+pub mod bounded;
 pub mod ismcts;
 pub mod mcts;
 pub mod monte_carlo;
