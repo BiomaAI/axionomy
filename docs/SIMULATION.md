@@ -543,7 +543,20 @@ indexes every fork (format 2). `refer` names a point with a new ref;
 `frames(ref, after, following, limit)` delivers the steps it was moved over
 after `after`, each with its point, exchange, receipt, and the follower's
 objectives and goal there; `wait(ref, after, timeout)` blocks until it moves.
-The transports follow.
+
+Built in the transports: MCP mints a `ref-` handle for each ref it makes,
+kept as the engine ref `mcp/<handle>`, so it exposes only its own refs.
+`axionomy_ref_create`, `axionomy_ref_read`, `axionomy_ref_advance` (failing
+with `moved` and `current_economy_id`, where the ref is) and
+`axionomy_ref_frames` (at most 100 frames, a goal as `axionomy_search` takes
+it, and a long poll of up to 30 seconds) name every point by an `eco-`
+handle: the first handle that named it, whatever run holds it, or one minted
+from the point and recorded as the economy the step's exchange made from the
+step before. The Studio server holds an engine over a store, in memory or a
+file (`axionomy studio --store`), and serves refs by their paths and points
+as `PointId`s (`run-…:step`): `POST /api/refs`, `GET /api/refs/{name}`,
+`POST /api/refs/{name}/advance` (409 with where the ref is) and
+`GET /api/refs/{name}/frames` with a goal, objectives and a long poll.
 
 **P11. The engine in the browser.** The store's writer runs inline where
 there are no threads, `getrandom`'s `wasm_js` feature is on for wasm only,
