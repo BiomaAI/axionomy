@@ -9,20 +9,22 @@ which steps count.
 connect-four package's `connect-four/showcase` point, with four roles in
 threads of their own, each over its own connection:
 
-- **Two players**, Red and Yellow, move the ref `connect-four/live`. Each
-  reads where the ref is, asks for the moves there (`connect-four/moves`,
-  each assessed) and reads whose turn it is from the point's balances: the
-  `game` account holds `turn/<player>` while that player is to drop and
-  `pending/<player>` while its drop waits on its adjudication. On its turn
-  it picks a drop at random from its seed, applies it at the ref's point
-  and advances the ref from that point to the new one, then asks for that
-  advance again, as a mover that never heard back would, and is told it
-  was made: the ref stays at a drop until both players adjudicate it. On
-  the other player's turn, it waits with a long poll on the ref's frames
-  for the ref to move. Both adjudicate every drop (the line claimed, the
-  draw or the turn passing on), meeting first so both propose from the same
-  point: one advance counts and the other is refused with 409 and where the
-  ref went, and its player looks again from there.
+- **Two players**, Red and Yellow, move the ref `connect-four/live`, which
+  the test names at `connect-four/showcase`'s point: the package's own ref
+  is fixed, and `live` is the application's. Each reads where the ref is,
+  asks for the moves there (`connect-four/moves`, each assessed) and reads
+  whose turn it is from the point's balances: the `game` account holds
+  `turn/<player>` while that player is to drop and `pending/<player>` while
+  its drop waits on its adjudication. On its turn it picks a drop at random
+  from its seed, applies it at the ref's point and advances the ref from
+  that point to the new one, then asks for that advance again, as a mover
+  that never heard back would, and is told it was made: the ref stays at a
+  drop until both players adjudicate it. On the other player's turn, it
+  waits with a long poll on the ref's frames for the ref to move. Both
+  adjudicate every drop (the line claimed, the draw or the turn passing on),
+  meeting first so both propose from the same point: one advance counts and
+  the other is refused with 409 and where the ref went, and its player looks
+  again from there.
 - **A thinker** tries every move out at each point it finds the ref on,
   applying each there and never moving the ref, then waits for the ref to
   move.

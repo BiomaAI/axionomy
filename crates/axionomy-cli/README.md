@@ -28,8 +28,9 @@ cargo run -p axionomy-cli -- package samples packages
 
 `package export` writes a package of everything a store names under
 `--name`, or of the `--ref` and `--definition` given, with all they reach,
-to a new file, zipped when its name ends in `.zip`; `package load` merges
-one into a store file, creating it if needed; `package inspect` lists a
+to a new file, zipped when its name ends in `.zip`; `package load` installs
+one in a store file, creating it if needed: merged, or in place of the
+version of it the store holds, which it names; `package inspect` lists a
 package's manifest, refs and definitions; `package samples` writes every
 sample's package, zipped, into a directory, with `index.json` naming them,
 which Studio lists them by.
@@ -37,7 +38,7 @@ which Studio lists them by.
 `mcp` serves MCP over Streamable HTTP at `/mcp` with `/health`, keeping
 economies in a store file when `--store` names one and in memory otherwise.
 Each `--package` (repeatable) names a package file, zipped or not, that the
-server merges into its store before it serves, so its clients list its refs
+server installs in its store before it serves, so its clients list its refs
 and run its experiments; clients never name files themselves. A package that
 fails the checks loading makes (a file that is no package, no manifest,
 scripts needing a newer script host API) stops the server with a message

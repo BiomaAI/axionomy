@@ -235,8 +235,12 @@ Studio's study events, and with them `axionomy-study`.
   trying one out, branching and a counterfactual are this one operation.
 - Every point has one history: the exchanges that led to it.
 - A ref moves only by `advance(ref, expected, to)`, refused, with the point
-  the ref is on, when it is no longer on `expected`. Only the steps a ref is
-  moved over are delivered, each with the point it led to.
+  the ref is on, when it is no longer on `expected`, and is deleted the same
+  way. Only the steps a ref is moved over are delivered, each with the point
+  it led to. A ref a package ships is fixed: whoever moves from its point
+  names a ref of their own there.
+- A package is a release: another version replaces the one a store holds,
+  and the same version again changes nothing. Runs are history and stay.
 - Every proposer a package carries is a Rhai script. Rust is the machinery
   (kernel, store, engine, the generic algorithms, fast host helpers); data
   is the structure (which algorithm, its parameters, an experiment's arms,
@@ -465,7 +469,7 @@ specified and proved in Lean (D-051).
 version, contents). Export copies what is reachable from chosen refs (the
 points, the runs they come from, the tree nodes under their states, the
 definitions they use) into a new store file, which redb compacts. Load
-merges a file into the engine's store, its refs under the package's name.
+installs a file in the engine's store, its refs under the package's name.
 Zip is optional both ways. `axionomy package export`, `load` and `inspect`.
 Done when an exported package, loaded into a fresh store, re-runs its
 experiments with identical results.
@@ -484,12 +488,26 @@ Every ref must be named under the package's name, so loading never moves
 anyone else's refs. The manifest is a definition (`package/<name>`) naming
 the package, its version, the store format, the script host API and what it
 carries. `load` refuses a package whose scripts need a newer host API, then
-merges it; names the store already gives something else keep what they are
-and are reported. A package file is a redb file or a zip holding one, told
-apart by its first bytes, so `package(bytes)` opens either in memory, as
-the browser does (P11). A package exported, compacted, zipped and loaded into a
-fresh store carries its experiment's results and re-runs the experiment to
-the same trials.
+installs it in one transaction. A package the store does not hold is
+merged; names the store already gives something else keep what they are
+and are reported, and the store keeps the manifest, less those names, as
+what that version shipped there. Another version of a package the store
+holds replaces it: what the held version shipped, the scripts its scripts
+import and the results of its experiments counted in however they were
+recorded, is removed unless another held package ships it too, the new
+version is merged in its place, and the load reports the version it
+replaced; the same version again changes nothing. Runs and steps are never
+removed, nor are refs and definitions no version shipped, such as a ref a
+person named under the package's name; every script compiled and module
+evaluated before a replacement is forgotten, each cached under the
+generation it was read in, so none read before is used after.
+A ref a package ships is fixed: `advance` and `delete_ref` refuse it with
+`Shipped`, naming the package. A package file is a redb file or a zip
+holding one, told apart by its first bytes, so `package(bytes)` opens
+either in memory, as the browser does (P11). A package exported, compacted,
+zipped and loaded into a fresh store carries its experiment's results and
+re-runs the experiment to the same trials; a second version loaded over
+the first replaces what it shipped and leaves what a person made.
 
 **P9. The samples become packages.** The 15 samples' builders write their
 packages: economies for each instance and each seed shipped, goals, scripts,
@@ -634,11 +652,15 @@ indexes every fork (format 2). `refer` names a point with a new ref;
 `frames(ref, after, following, limit)` delivers the steps it was moved over
 after `after`, each with its point, exchange, receipt, and the follower's
 objectives and goal there; `wait(ref, after, timeout)` blocks until it moves.
+`delete_ref(ref, expected)` deletes a ref by compare-and-set to no ref,
+refused with where it is as a move is, and leaves every point it named; a
+ref a package ships is neither moved nor deleted (P8).
 
 Built in the transports: MCP mints a `ref-` handle for each ref it makes,
 kept as the engine ref `mcp/<handle>`, so it exposes only its own refs.
 `axionomy_ref_create`, `axionomy_ref_read`, `axionomy_ref_advance` (failing
-with `moved` and `current_economy_id`, where the ref is) and
+with `moved` and `current_economy_id`, where the ref is),
+`axionomy_ref_delete` (failing alike) and
 `axionomy_ref_frames` (at most 100 frames, a goal as `axionomy_search` takes
 it, and a long poll of up to 30 seconds) name every point by an `eco-`
 handle: the first handle that named it, or one minted from the point and
@@ -646,8 +668,13 @@ recorded as the economy the step's exchange made from the step before. The
 Studio server holds an engine over a store, in memory or a file
 (`axionomy studio --store`), and serves refs by their paths and points as
 `PointId`s (`run-…:step`): `POST /api/refs`, `GET /api/refs/{name}`,
-`POST /api/refs/{name}/advance` (409 with where the ref is) and
-`GET /api/refs/{name}/frames` with a goal, objectives and a long poll.
+`POST /api/refs/{name}/advance` (409 with where the ref is),
+`DELETE /api/refs/{name}?expected=` (alike) and
+`GET /api/refs/{name}/frames` with a goal, objectives and a long poll; a
+ref a package ships is refused with 403 and an `ErrorResponse` naming the
+ref and the package, since no request moves it, and reads back with
+`shipped_by`. MCP names only its own refs, so a client makes one at the
+economy a package's ref names.
 `watch` is that long poll: a follower asks for the frames after the point
 it last handled and waits until there are some, so a pushed stream adds
 nothing a transport needs yet. The browser's Worker has one thread, which
@@ -727,8 +754,9 @@ and one serving anything else answers with it, which is loaded. The
 manifest's version cannot decide this soundly: it is inside the bytes, so
 reading it means downloading them. A host that sends neither validator is
 downloaded each time, and loading the same package again changes nothing;
-a newer one merges as `Engine::load` merges, the names the older one gave
-otherwise kept and reported. An unreachable URL whose package the store
+another version replaces the one the store holds, as `Engine::load`
+replaces it, so a store that persists across reloads holds the version the
+URL serves, never a mix of both. An unreachable URL whose package the store
 holds is answered from the store. A package on another host needs that
 host to allow cross-origin requests, and, to be asked only whether it
 changed, to allow the conditional headers and expose its `ETag`; otherwise
@@ -742,9 +770,10 @@ Worker keeping its store in memory while the first holds the saved one.
 **P12. Studio on packages, points, refs and experiments (done).** Load a
 package (from a file, or from a URL, which a link such as `?package=<url>`
 opens; Pages lists its sample packages by URL), scrub, follow a ref, act (a
-candidate or a written exchange, assessed first; on the point a ref is on it
-also moves the ref, anywhere else it makes a branch), continue from here, run
-an experiment, compare. The native and the browser engine offer the same.
+candidate or a written exchange, assessed first; on the point a ref of one's
+own is on it also moves the ref, anywhere else it makes a branch), continue
+from here, run an experiment, compare. The native and the browser engine
+offer the same.
 
 Built: what Studio asks of an engine is written once, in
 `axionomy-studio-api`, as functions over `Engine` and the types they take
@@ -782,22 +811,29 @@ URL, the ref or point, the step and the view, so reloading opens them again.
 Opening a ref draws its point's history with the package's view, in the
 playback, scene and inspectors studies use. Act offers the candidates at
 the step on screen, each assessed, and an exchange written as JSON, assessed
-before it can be applied: at the point a ref is on, applying moves the ref
-over the new step, refused with where it went when another mover came
-first, and anywhere else it makes a branch, a point no ref names, which can
-be kept as a ref. Continue from here runs a strategy from the step on
-screen toward one of the package's goals, with a seed, a budget and turns, shows how it ended, its search's counts,
-and where it ended, and from a ref's point moves the ref there. Follow
+before it can be applied: at the point a ref of one's own is on, applying
+moves the ref over the new step, refused with where it went when another
+mover came first, and anywhere else it makes a branch, a point no ref
+names, which can be kept as a ref. A package's ref is fixed: at its point
+applying makes a branch, and Studio offers to name a ref of one's own
+there, which moves; a ref of one's own can be deleted, and loading another
+version of a package says which version it replaced. Continue from here
+runs a strategy from the step on screen toward one of the package's goals,
+with a seed, a budget and turns, shows how it ended, its search's counts,
+and where it ended, and from the point of a ref of one's own moves the ref
+there. Follow
 delivers the steps a ref is moved over as they come, by whoever moves it.
 An experiment runs from the Experiments view, its trials listed by arm with
 their seeds, how they ended and their exact objective values, the front
 marked and the pick, by the objective chosen first, highlighted; any trial's
 end opens like any point. Playwright runs the same package tests against
 the native server and the browser Worker: a sample loaded and a ref's
-history scrubbed, a candidate applied at a ref's point and elsewhere, a
-strategy continued, a ref followed, an experiment run and compared, and a
+history scrubbed, a ref of one's own named at a package's ref, a candidate
+applied at its point and elsewhere and the ref deleted, a strategy
+continued, a ref followed, an experiment run and compared, and a
 `?package=` link opened and reloaded; natively, a ref another proposer
-moves over HTTP is followed as it moves.
+moves over HTTP is followed as it moves, and moving the package's ref is
+refused.
 
 **P13. Acceptance (done).** A Python test drives the native server over HTTP
 with the connect-four package: two players advance `live`, one thinking by
@@ -807,15 +843,16 @@ applying moves at `live`'s point without moving it, while a learner follows
 Built in `acceptance/`, a uv project beside the MCP interop suite: the
 session builds the sample packages with `axionomy package samples`, starts
 `axionomy studio` with `connect-four.zip` loaded into a store in memory, and
-plays Connect Four on the standard board from `connect-four/showcase`, with
-the ref `connect-four/live` made there and four threads, each over its own
-connection, using nothing but refs, balances, candidates, apply and
-frames. Red and Yellow each read where `live` is, ask for the moves there
-and read whose turn it is from the point's balances, the `game` account
-holding `turn/<player>` while that player is to drop and
-`pending/<player>` while its drop waits on its adjudication. On its turn a
-player picks a drop from its seed, applies it at that point and advances
-`live` from it to the new point, and on the other's it waits on a long poll
+plays Connect Four on the standard board from `connect-four/showcase`, which
+the package ships and so never moves, with the ref `connect-four/live` made
+there and four threads, each over its own connection, using nothing but
+refs, balances, candidates, apply and frames. Red and Yellow each read where
+`live` is, ask for the moves there and read whose turn it is from the
+point's balances, the `game` account holding `turn/<player>` while that
+player is to drop and `pending/<player>` while its drop waits on its
+adjudication. On its turn a player picks a drop from its seed, applies it at
+that point and advances `live` from it to the new point, and on the other's
+it waits on a long poll
 for `live` to move. Both adjudicate every drop, meeting first so both
 propose from the same point: one advance counts and the other is refused
 with 409 and where `live` went, and its player looks again from there. A

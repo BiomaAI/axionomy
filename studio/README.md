@@ -11,17 +11,24 @@ by an engine, native or in the browser, that Studio asks the same way.
   lists); a link such as `?package=packages/maze.zip` loads one when it
   opens. The link keeps the URL, the package, the ref or point, the step and
   the view (`name`, `ref`, `point`, `step`, `view`), so a reload or a copied
-  link opens the same.
+  link opens the same. A package is a release: loading another version of
+  one the store holds replaces what the held version shipped, and Studio
+  says so; loading the same version again changes nothing. Refs and runs of
+  your own stay.
+- **A package's refs are fixed**, so the package means what it shipped:
+  at one, **Name a ref of your own here** names its point with a ref of
+  yours, which moves as you play. A ref of your own can be deleted; the
+  points it named stay.
 - **A ref or a point** draws its history with the package's view, in the
   same playback, scene and inspectors studies use; a ref opens where it is,
   at the end of its history.
 - **Act** works at the step on screen. A candidate set's exchanges there are
   listed, each assessed (applicable, infeasible or invalid, with what it
   lacks), and an exchange can be written as JSON and assessed before it can
-  be applied. At the point a ref is on, applying also moves the ref over the
-  new step, and is told where the ref went if another mover came first;
-  anywhere else it makes a branch, a new point no ref names, which **Keep as
-  a ref** names.
+  be applied. At the point a ref of your own is on, applying also moves the
+  ref over the new step, and is told where the ref went if another mover
+  came first; anywhere else, a package's ref's point among them, it makes a
+  branch, a new point no ref names, which **Keep as a ref** names.
 - **Continue from here** runs a strategy from the step on screen toward a
   goal picked from the package's goals, with a seed, a budget of expansions
   for a search and the most turns a policy or a game plays (the goal and the
@@ -30,8 +37,8 @@ by an engine, native or in the browser, that Studio asks the same way.
   progress (a policy's or a game's turns counted as a search counts
   expansions), can be cancelled, whatever its kind, and shows how it ended,
   where, and its thinking: what the search expanded, generated, left on its
-  frontier and visited, and the solution's depth. From a ref's point the ref
-  can move to where it ended.
+  frontier and visited, and the solution's depth. From the point of a ref of
+  your own, the ref can move to where it ended.
 - **Follow** delivers the steps a ref is moved over as they come, by this
   page or any other proposer, each with the package's objectives there.
 - **Experiments** lists the package's experiments; running one reports its
@@ -43,7 +50,8 @@ by an engine, native or in the browser, that Studio asks the same way.
 
 Natively the store is the server's, so whatever another client does to a
 ref there shows here; in the browser it is the Worker's, on the origin
-private file system where it stays across reloads.
+private file system where it stays across reloads, so a sample loaded again
+after Pages publishes a new version is that version, not a mix of both.
 
 Every problem can also be discovered and studied. **Source of truth** shows
 accounts and assets; **The rules** shows rates, roles, goals, and invariants;

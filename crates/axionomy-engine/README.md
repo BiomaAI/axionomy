@@ -64,11 +64,14 @@ goes.
   history passes through it, and refuses with where the ref is otherwise, so
   of two proposers moving from one point the second looks again. Asking again
   for a move already made, the ref at `to`, succeeds: a ref only moves
-  forward, so it cannot be at `to` by another route. `frames` delivers the
-  steps a ref was moved over after the point a follower last handled, each
-  with its point, named as its mover advanced the ref to it, its exchange and
-  receipt and the follower's objectives and goal there; a step only tried out
-  is never delivered.
+  forward, so it cannot be at `to` by another route. `delete_ref` deletes a
+  ref the same way, from where its deleter saw it; its points stay. A ref a
+  package ships is fixed: `shipped_by` names the package, and moving or
+  deleting it is refused with `Shipped`. `frames` delivers the steps a ref
+  was moved over after the point a follower last handled, each with its
+  point, named as its mover advanced the ref to it, its exchange and receipt
+  and the follower's objectives and goal there; a step only tried out is
+  never delivered.
   `wait` blocks until a ref moves, or a time is up.
 - `keep_experiment` keeps an experiment: a ref to start from, the goal every
   arm works toward, strategies as arms (each from that start or a ref of its
@@ -83,11 +86,17 @@ goes.
   dominates; `pick` the best point by objectives in order.
 - `export` copies a package (refs and definitions and everything they reach,
   every script its scripts import among them) into a new store with a
-  manifest; `load` merges one into the engine's store
-  after checking each manifest's store format and script host API;
-  `manifests` lists those the store holds; `package` opens a package file's
-  bytes, a redb file or a zip of one, wherever they came from, and `zipped`
-  zips one.
+  manifest; `load` installs one in the engine's store after checking each
+  manifest's store format and script host API, in one transaction. A
+  package is a release: the store keeps its manifest, less the names it
+  already gave something else, as what that version shipped, and another
+  version replaces it, removing what the old one shipped (the scripts its
+  scripts import and the results of its experiments among it) and the new
+  one does not carry, and forgetting every script compiled and module
+  evaluated; the same version again changes nothing. Runs and steps stay,
+  and so do refs and definitions a person made. `manifests` lists the
+  packages the store holds; `package` opens a package file's bytes, a redb
+  file or a zip of one, wherever they came from, and `zipped` zips one.
 - `keep_view` keeps how people read an ontology's runs: script functions that
   label its identifiers, format its quantities, carry what the view needs
   from frame to frame, draw a scene and give leaderboard scores. `draw`

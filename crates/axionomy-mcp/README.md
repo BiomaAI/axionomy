@@ -39,6 +39,8 @@ ref_id + economy_ids ── ref_advance ─────> the ref moved forward f
                                            it is
 ref_id + economy_id ─── ref_frames ──────> the steps it was moved over after
                                            that economy
+ref_id + economy_id ─── ref_delete ──────> the ref gone from there, or
+                                           `moved` and where it is
 (nothing) ───────────── package_list ────> each loaded package, its refs'
                                            economy_ids, experiments, strategies
 experiment ──────────── experiment_run ──> its goal, every trial's seed,
@@ -197,6 +199,7 @@ the reason it is malformed.
 | `axionomy_ref_read` | The `economy_id` a ref is at | read-only |
 | `axionomy_ref_advance` | The `economy_id` a ref moved to, or `moved` with where it is | additive, idempotent |
 | `axionomy_ref_frames` | The steps a ref was moved over after an economy, waiting up to 30 s for the next, and where it is | additive, idempotent |
+| `axionomy_ref_delete` | The `economy_id` a deleted ref was at, or `moved` with where it is | destructive, idempotent |
 
 Every tool declares input and output schemas and `openWorldHint: false`.
 Results link to the resources that page through what they summarize. Applying
@@ -297,15 +300,17 @@ their equal roots say so.
 A package is a store file, or a zip holding one, with a manifest: its name,
 version, store format and script host API, the refs it names and the
 definitions it carries (D-048). The server loads packages only when it
-starts (`axionomy mcp --package maze.zip`, below), merging each into its
-store after the engine's checks; no tool reads a file or fetches a URL.
+starts (`axionomy mcp --package maze.zip`, below), installing each in its
+store after the engine's checks: merged, or in place of the version of it
+a store on disk holds; no tool reads a file or fetches a URL.
 
 `axionomy_package_list` lists every loaded package: its manifest, each of
 its refs that names a point with the `economy_id` of that point (such as
 `maze/micro`, where an instance starts), and the experiments and strategies
 it carries, by path. A ref here is the package's name for a point, not a
-`ref_id`: to follow an application from that economy, make a ref with
-`axionomy_ref_create`.
+`ref_id`, and the package's to keep: it never moves, so the package means
+what it shipped. To play or follow an application from that economy, make a
+ref of your own there with `axionomy_ref_create`.
 
 `axionomy_experiment_run` takes an experiment's path, such as `maze/micro`,
 and runs it as the engine does: every arm's strategy from the arm's start
@@ -392,6 +397,10 @@ or a loop applying responses are alike.
   up to 30, a call made while the ref is still at `after_economy_id` waits for
   it to move, on a thread where blocking is allowed, and returns as soon as it
   does.
+- `axionomy_ref_delete` deletes the ref from `expected_economy_id`, where the
+  deleter saw it, failing with `moved` and where it is as an advance does,
+  and returns the economy it was at. Only the ref goes: the economies it
+  named stay, and a ref read, advanced or followed after is `not_found`.
 
 ```text
 ref_create(start) ────────────────────────> ref_id
@@ -511,7 +520,8 @@ RUST_LOG=axionomy_mcp=info,rmcp=info \
 
 Without `AXIONOMY_MCP_STORE` (or `--store`) the server keeps economies in
 memory. Each `--package` names a package file, a redb file or a zip holding
-one, which the server merges into its store before it serves; without
+one, which the server installs in its store before it serves (another
+version of a package the store holds replaces it); without
 `--package`, `AXIONOMY_MCP_PACKAGES` lists the files, separated as `PATH`
 separates them. A package that fails the engine's checks (a file that is no
 package, no manifest, scripts needing a newer host API) stops the server

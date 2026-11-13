@@ -26,8 +26,8 @@ decimal text.
 
 | Route | Body or query | Result |
 | --- | --- | --- |
-| `GET /api/packages` | | `PackageList`: each package's manifest, its refs with their points (those it names and any made under its name since), experiments with their start, goal, arms, objectives, seed, budget, turns, trials and whether results are recorded, strategies, objectives with their directions, goals and candidate sets |
-| `POST /api/packages` | the file's bytes, `application/octet-stream` | `LoadedView {packages, kept}`: the packages it held and the names the store kept as it gives them; 400 for a file that is no package or one this engine cannot load |
+| `GET /api/packages` | | `PackageList`: each package's manifest, its refs with their points (those it ships, each with `shipped_by`, and any made under its name since), experiments with their start, goal, arms, objectives, seed, budget, turns, trials and whether results are recorded, strategies, objectives with their directions, goals and candidate sets |
+| `POST /api/packages` | the file's bytes, `application/octet-stream` | `LoadedView {packages, kept, replaced}`: the packages it held, the names the store kept as it gives them, and the versions it replaced; 400 for a file that is no package or one this engine cannot load |
 | `GET /api/points/{point}/document` | | the point's history as a `ViewDocument`, drawn with its view |
 | `GET /api/points/{point}/ancestor` | `step` | `Ancestor {point}`: the point at that step of the history |
 | `GET /api/points/{point}/balances` | | `Balances {point, accounts}`: every account there, in path order, each `{account, balances}`, its basket of `[asset, quantity]` pairs, exactly, by the paths exchanges bind |
@@ -56,8 +56,9 @@ makes a step count (D-046).
 | Route | Body or query | Result |
 | --- | --- | --- |
 | `POST /api/refs` | `{name, point}` | `RefView {name, point}`; 409 `RefMoved` when a ref has the name |
-| `GET /api/refs/{name}` | | `RefView`: the point it names |
-| `POST /api/refs/{name}/advance` | `{expected, to}` | `RefView` at `to`, also when it is there already; 409 `RefMoved {error, name, current}` when it is at neither `expected` nor `to`; 400 when `to`'s history does not pass through `expected` |
+| `GET /api/refs/{name}` | | `RefView`: the point it names, and `shipped_by`, the package that ships it, when one does |
+| `POST /api/refs/{name}/advance` | `{expected, to}` | `RefView` at `to`, also when it is there already; 409 `RefMoved {error, name, current}` when it is at neither `expected` nor `to`; 400 when `to`'s history does not pass through `expected`; 403 for a ref a package ships, which is fixed |
+| `DELETE /api/refs/{name}` | `expected` | `RefView` as it was; 409 `RefMoved` when it is not at `expected`; 404 when no ref has the name; 403 for a ref a package ships. Its points stay |
 | `GET /api/refs/{name}/frames` | `after`, `limit` (1 to 1000, 100 by default), `wait_seconds` (up to 30), `goal`, `objectives` | `RefFrames {name, point, frames}` |
 
 A ref moves only from where its mover expects it, so of two movers from one
@@ -67,7 +68,14 @@ so a ref at `to` can only have been moved there over `expected`: asking again
 for a move already made succeeds, and a mover that never heard whether its
 move counted asks again. A point has one name, in the run whose step reached
 it, so each frame names its step as the mover named the point it advanced
-the ref to, however far behind the follower is.
+the ref to, however far behind the follower is. A ref is deleted the same
+way, from where its deleter saw it, though not again once it is gone; the
+points it named stay. A ref a package ships, such as `maze/micro`, is
+fixed, so the package means what it shipped: moving or deleting it is
+refused with 403, an `ErrorResponse` naming the ref and the package. A
+request that cannot succeed however it is repeated is 403, where a 409 says
+to look again; name a ref of your own at the package's ref's point and move
+that.
 `frames` delivers the steps the ref was moved over after `after`, the last
 point a follower handled, earliest first: each `RefFrame` is the point the
 step led to, its exchange and receipt, the `values` of the `objectives` there

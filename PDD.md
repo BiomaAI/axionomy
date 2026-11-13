@@ -2191,6 +2191,18 @@ cannot reach an executor that follows the ref. The engine does not know who
 proposes: a person in Studio, an AI agent, a policy or a loop applying
 Nature responses are alike.
 
+A ref is deleted as it moves: `delete_ref(ref, expected)` takes the point
+its deleter saw it on and is refused, with where the ref is, when it moved
+since; once the ref is gone, asking again is refused, since no ref can be
+the deleter's, another's or none ever made. Only the name goes; every point
+it named stays, with its history. A
+ref a package ships, such as `connect-four/showcase`, is fixed: moving or
+deleting it is refused, naming the ref and the package (403 over HTTP, which
+says no request will do, where 409 says to look again), so the package means
+what it shipped wherever it is loaded. An application names a ref of its
+own at a package's ref's point and moves that, as P13's `connect-four/live`
+is named at `connect-four/showcase`.
+
 ### D-047: The store runs in the browser on redb
 
 Built ([SIMULATION.md](docs/SIMULATION.md#plan-axionomy-on-primitives), P11).
@@ -2219,13 +2231,30 @@ and P8). Everything a package holds lives in a store: economies as runs and
 points, refs naming them, goals, scripts, strategies, experiments with their
 results, views and a manifest (name, version, format version, host API
 version). Exporting copies what is reachable from chosen refs into a new
-store file, which redb compacts; loading merges a file into the engine's
+store file, which redb compacts; loading installs a file in the engine's
 store, its refs under the package's name; zip is optional both ways. Nothing
 is registered: an engine works with whatever its store holds. Every record is
 binary (postcard), including the rate definitions inside state trees and the
 digest of each receipt; JSON stays only where a protocol defines it. A
 package's format is the store's, versioned in its manifest, and our tools
 rewrite an older one.
+
+A package is published content, like a release. Loading one the store does
+not hold merges it; names the store already gives something else keep what
+they are and are reported. The store keeps the package's manifest, less
+those names, as the record of what that version shipped there. Loading the
+same version again changes nothing. Loading another version replaces the
+held one in one transaction: the refs and definitions the held version
+shipped, the scripts its scripts import among them, and the results of the
+experiments it shipped however they were recorded, are removed unless
+another package the store holds ships them too, and the new version is
+merged in their place; every script compiled and module evaluated before
+is forgotten. A browser's store, which
+persists across reloads, therefore holds the version Pages publishes, never
+a mix of two. Runs and steps are history and are never removed, so every
+point anything names stays reachable; refs and definitions a person made,
+such as a ref of their own under the package's name, stay. The refs a
+package ships are fixed (D-046).
 
 ### D-049: Every proposer a package carries is a Rhai script
 
