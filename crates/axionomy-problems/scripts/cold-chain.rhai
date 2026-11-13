@@ -335,7 +335,7 @@ fn process_first(state) { day_plan(state, "process-first") }
 fn conserve_fuel(state) { day_plan(state, "conserve-fuel") }
 fn rebalance_cold(state) { day_plan(state, "rebalance-cold") }
 
-// The objectives, as the study measures them.
+// The objectives an experiment measures.
 
 // Every account's balance of `asset`.
 fn total(state, asset) {

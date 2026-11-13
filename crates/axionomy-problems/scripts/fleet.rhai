@@ -306,7 +306,7 @@ fn fastest(state, random) { turn(state, "fastest") }
 fn reliable(state, random) { turn(state, "reliable") }
 fn relay(state, random) { turn(state, "relay") }
 
-// What a season's outcome is measured by, as the study reports it.
+// What a season's outcome is measured by.
 fn delivered(state) { state.balance("world", "delivered-count") }
 fn on_time(state) { state.balance("world", "on-time-count") }
 fn expired(state) { state.balance("world", "expired-count") }

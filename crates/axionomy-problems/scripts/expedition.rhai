@@ -259,7 +259,7 @@ fn radio_coordination(state, random) { turn(state, "radio-coordination") }
 fn rendezvous(state, random) { turn(state, "rendezvous") }
 fn north_first(state, random) { turn(state, "north-first") }
 
-// What the study reports of an expedition: objectives completed and lost,
+// What an expedition is measured by: objectives completed and lost,
 // evacuated vitality, radio charges and team energy spent, and the time.
 fn completed(state) { state.balance("world", "completed") }
 fn lost(state) { state.balance("world", "failed-count") }

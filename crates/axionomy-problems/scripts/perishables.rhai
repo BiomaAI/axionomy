@@ -5,7 +5,7 @@
 // condition spoils its cohort once its moment comes, unless the fact it
 // spoils is gone. The kernel applies or refuses every exchange.
 
-// The claims one storage commitment moves to the fridge: Micro's study moves
+// The claims one storage commitment moves to the fridge: Micro moves
 // ten at a time.
 fn transfer() { 10 }
 
@@ -86,7 +86,7 @@ fn outage(state, random) {
     finish()
 }
 
-// The objectives, as the study measures them.
+// The objectives an experiment measures.
 
 // Every claim of a cohort, wherever it is held.
 fn cohort_claims(state, cohort) {

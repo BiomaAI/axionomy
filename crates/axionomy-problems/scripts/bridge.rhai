@@ -186,7 +186,7 @@ fn turn(state, policy) {
     ()
 }
 
-// The policies the study compares, turn by turn.
+// The policies an experiment compares, turn by turn.
 fn first_come_a(state, random) { turn(state, "first-come-a") }
 fn first_come_b(state, random) { turn(state, "first-come-b") }
 fn auction(state, random) { turn(state, "auction") }

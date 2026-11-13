@@ -390,7 +390,7 @@ fn market_day(state, random) { season_turn(state, "market-day") }
 fn no_whale(state, random) { season_turn(state, "no-whale") }
 fn thin_liquidity(state, random) { season_turn(state, "thin-liquidity") }
 
-// The objectives, as the study measures them.
+// The objectives an experiment measures.
 
 // Needs satisfied and missed, the factory's and the household's.
 fn needs(state) {

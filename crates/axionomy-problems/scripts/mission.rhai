@@ -218,7 +218,7 @@ fn direct_north(state, random) { turn(state, random, "north-together") }
 fn share_and_coordinate(state, random) { turn(state, random, "share-and-coordinate") }
 
 // Whether the mission succeeded, the time it took, and whether the Medic's
-// kit was used, as the study reports them.
+// kit was used.
 fn succeeded(state) { if solved(state) { 1 } else { 0 } }
 fn elapsed(state) { state.balance("mission", "elapsed-time") }
 fn kit_used(state) { if state.balance("agent/medic", "used-medical-kit") > 0 { 1 } else { 0 } }

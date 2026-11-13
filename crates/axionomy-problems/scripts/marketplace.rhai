@@ -1,6 +1,6 @@
 // Multi-party marketplace: which settlements, contracts, dispatches,
 // deliveries, cancellations and clock advances a market may make next, how
-// the study's planner scores a market, and what its participants gain. Micro
+// a planner scores a market, and what its participants gain. Micro
 // settles each order in one exchange; Showcase and Stress fund contracts that
 // are dispatched and delivered over time.
 
@@ -79,7 +79,7 @@ fn parties(state, order) {
 }
 
 // Micro: every order's settlement that applies, order by order, then by
-// buyer, seller and carrier, as the study derives them from the accounts.
+// buyer, seller and carrier, in the order of their accounts.
 fn settlements(state) {
     let proposals = [];
     for order in order_ids(state) {
@@ -119,7 +119,7 @@ fn booking(state, order) {
     if party.len() == 3 { party } else { () }
 }
 
-// Showcase and Stress: what a funded market may do next, as the study's
+// Showcase and Stress: what a funded market may do next, as a
 // planner proposes it; nothing once every order has settled. A dispatch or a
 // delivery that applies goes first, alone: the first, order by order, of a
 // reservation's dispatch, then its delivery at the order's price on time and
@@ -212,7 +212,7 @@ fn fulfillment(state) {
     proposals
 }
 
-// How the study's planner scores a market for `preference`: every settled
+// How a planner scores a market for `preference`: every settled
 // order first, then less time spent, then the participants' utility, weighted
 // twenty to one toward buyers or sellers, or evenly for volume. A contract
 // signed but not yet delivered counts toward settling, with the utility its

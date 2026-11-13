@@ -92,7 +92,7 @@ fn observe_then_follow(state, random) { turn(state, random, "observe-then-follow
 fn direct_north(state, random) { turn(state, random, "direct-north") }
 
 // Whether the survivor was rescued, whether the sensor was spent, and the
-// energy spent, as the study reports them.
+// energy spent.
 fn succeeded(state) { if state.balance("agent", "solved") > 0 { 1 } else { 0 } }
 fn sensed(state) { if state.balance("agent", "used-sensor") > 0 { 1 } else { 0 } }
 fn spent_energy(state) { state.balance("agent", "spent-energy") }

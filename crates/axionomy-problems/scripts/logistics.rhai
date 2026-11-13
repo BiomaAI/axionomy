@@ -238,8 +238,7 @@ fn utility(state) {
 fn payoff(state) { if all_delivered(state) { [utility(state)] } else { () } }
 fn estimated(state) { [utility(state)] }
 
-// Whether every order was delivered, how many were, and the time elapsed,
-// as the study reports them.
+// Whether every order was delivered, how many were, and the time elapsed.
 fn completed(state) { if all_delivered(state) { 1 } else { 0 } }
 fn delivered(state) { delivered_count(state) }
 fn elapsed(state) { state.balance("vehicle", "elapsed-time") }
