@@ -7,7 +7,7 @@
 use axionomy::{Economy, Exchange, path, paths};
 use axionomy_engine::Engine;
 use axionomy_problems::{
-    WritePackage, bridge, exact_cover, lending, maze, registry, rescue, scheduling, sokoban,
+    WritePackage, amm, bridge, exact_cover, lending, maze, registry, rescue, scheduling, sokoban,
     workshop,
 };
 use axionomy_store::{Checkpoints, Recordable, Store};
@@ -38,12 +38,22 @@ impl StudyObserver for Trajectories {
     }
 }
 
+/// Leaderboards a study ranks from runs other than the one it draws, which
+/// no view of that run can draw: the Living Market's causal price
+/// contribution, a Shapley allocation over every coalition of its actors,
+/// each coalition's market replayed from the start.
+const ANALYSES: [&str; 1] = ["causal-price-contribution"];
+
 /// What a view draws of a document: everything but what the study attaches
-/// to its frames itself.
+/// to its frames itself, its observations and its analyses.
 fn drawn(document: &ViewDocument) -> ViewDocument {
     let mut drawn = document.clone();
     for frame in &mut drawn.frames {
         frame.observations.clear();
+        frame
+            .after
+            .leaderboards
+            .retain(|board| !ANALYSES.contains(&board.key.as_str()));
     }
     drawn
 }
@@ -115,7 +125,7 @@ fn draws_like_rust<O: Recordable>(problem: &str, write: WritePackage, instances:
 /// Every sample whose package carries a view, and how it is drawn.
 type Drawn = (&'static str, fn(&[&str]) -> usize);
 
-const VIEWS: [Drawn; 8] = [
+const VIEWS: [Drawn; 9] = [
     ("maze", |instances| {
         draws_like_rust::<maze::Ontology>("maze", maze::package::write, instances)
     }),
@@ -154,6 +164,9 @@ const VIEWS: [Drawn; 8] = [
                 rescue::package::write,
                 &incidents,
             )
+    }),
+    ("amm", |instances| {
+        draws_like_rust::<amm::Ontology>("amm", amm::package::write, instances)
     }),
 ];
 

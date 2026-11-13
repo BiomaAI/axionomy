@@ -10,20 +10,24 @@
 //! are plans, `amm/day/<document>`, that follow the reserves by the pool's
 //! own law and end where the actors' goals are met. Showcase and Stress are
 //! seasons, their sunlight seeded as the study seeds it, played turn by turn
-//! by `amm/<document>` until the market closes.
+//! by `amm/<document>` until the market closes. Its view carries each
+//! actor's direct contribution to the price over the trace, and ranks them.
 
 use crate::{
     amm::{self, Ontology},
     package::{call, written},
 };
-use axionomy::path;
+use axionomy::{OntologyPath, path};
 use axionomy_engine::{
-    Arm, Engine, EngineError, Experiment, Measure, Objective, ObjectivePath, Strategy, StrategyPath,
+    Arm, Engine, EngineError, Experiment, Measure, Objective, ObjectivePath, Strategy,
+    StrategyPath, View,
 };
 use axionomy_search::pareto::ObjectiveDirection::{Maximize, Minimize};
 use axionomy_store::Checkpoints;
 
+/// The script the plans and policies call, and the view's.
 const SCRIPT: &str = include_str!("../../scripts/amm.rhai");
+const VIEW: &str = include_str!("../../scripts/amm-view.rhai");
 
 /// The seed of the study's default request, which seeds a season's
 /// sunlight.
@@ -45,8 +49,21 @@ const DOCUMENTS: [(&str, &str); 3] = [
 /// Writes the Living Market's package into `engine`'s store, everything
 /// named under `amm`.
 pub fn write(engine: &Engine) -> Result<(), EngineError> {
+    let view = |function| Some(call("amm/view", function));
     let call = |function: &str| call("amm", function);
     engine.keep_script(&path!("amm"), SCRIPT)?;
+    engine.keep_script(&path!("amm/view"), VIEW)?;
+    engine.keep_view(
+        &OntologyPath::of::<Ontology>(),
+        &View {
+            title: "Closed endogenous market".into(),
+            labels: view("label"),
+            formats: view("format"),
+            carry: view("carry"),
+            scene: view("scene"),
+            leaderboards: view("leaderboards"),
+        },
+    )?;
     engine.keep_goal(&path!("amm/day/met"), &written(&amm::goal()))?;
     let season = amm::initial_showcase_with_seed(SEED);
     engine.keep_goal(&path!("amm/closed"), &written(&amm::market_goal(&season)))?;
