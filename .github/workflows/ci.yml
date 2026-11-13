@@ -95,6 +95,10 @@ jobs:
         working-directory: studio
       - run: pnpm exec playwright install --with-deps chromium
         working-directory: studio
+      # Playwright gives `cargo run` two minutes to start the server, which a
+      # cold build can take on its own; build it first so it only starts.
+      - name: Build the server the end-to-end tests start
+        run: cargo build -p axionomy-cli --bin axionomy
       - run: pnpm test:e2e
         working-directory: studio
       - run: pnpm test:e2e:wasm
