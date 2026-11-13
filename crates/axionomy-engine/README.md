@@ -1,9 +1,12 @@
 # axionomy-engine
 
 `axionomy-engine` is the work every Axionomy front end shares. An `Engine`
-holds a `Registry` of problems and a `Store`, and works on points: a point is
-one saved state of an economy, the economy after a given step of a recorded
-run, named by the run and the step.
+holds a `Store` (and, until P2 of
+[the plan](../../docs/SIMULATION.md#plan-axionomy-on-primitives), a
+`Registry`) and works on points: a point is one saved state of an economy, the
+economy after a given step of a recorded run, named by the run and the step.
+Scripts, strategies, experiments, views and packages join it as the plan
+goes.
 
 - `author` records an economy as the first point of a run of its own.
 - `apply` applies exchanges at a point, all of them or none, and records them
@@ -17,7 +20,7 @@ run, named by the run and the step.
 
 The engine is synchronous and knows no protocol: MCP calls it from blocking
 tasks, and so will the Studio server, the CLI and Studio's browser Worker
-([plan](../../docs/SIMULATION.md#interactive-execution), D-045). A transport
+(D-045). A transport
 never implements an operation the engine has.
 
 ```rust

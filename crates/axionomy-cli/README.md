@@ -5,9 +5,9 @@ The `axionomy` application. It registers the sample problems
 with `axionomy mcp`, and to Studio with `axionomy studio`. The transports are
 libraries that know no problem; this is where problems meet them. `run` and
 `run_from` take the `Registry` to serve, so an application of your own reuses
-them with its own problems. Planned: studies go through an `axionomy-engine`
-like every other front end
-([plan](../../docs/SIMULATION.md#interactive-execution), D-045).
+them with its own problems. Planned: problems and studies give way to
+packages, redb files the application loads, and experiments on them
+([plan](../../docs/SIMULATION.md#plan-axionomy-on-primitives), D-048, D-050).
 
 ```console
 cargo run -p axionomy-cli -- catalog

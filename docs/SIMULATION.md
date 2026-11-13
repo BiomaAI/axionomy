@@ -1,15 +1,14 @@
-# Simulation: policies, runs and studies
+# Simulation: primitives, scripts and packages
 
-Status: planned, in the order the steps below give. Built: rollouts and
-Monte Carlo episodes recording where they run, steps 1, 3, 4 and 5, and step
-2 for MCP. [Interactive execution](#interactive-execution): step 6 is done;
-steps 7 to 13 are planned and also give the Studio server the store step 2
-left.
+Status: steps 1 to 5 below are built (step 2 for MCP). The
+[plan](#plan-axionomy-on-primitives) that follows them, P1 to P13, is next,
+in its order.
 
 The economy owns commitments and their consequences. A policy reads what an
-actor may see and proposes exchanges. Whoever calls the rollout (a problem, a
-study, an MCP client, an outside harness) decides when execution advances.
-Where an action has got to lives in assets, not in policy state: a worker
+actor may see and proposes exchanges. Whoever calls the rollout (an
+application, a script, an MCP client, an outside harness) decides when
+execution advances. Where an action has got to lives in assets, not in policy
+state: a worker
 holding a job, travelling, busy until a tick or awaiting an outcome is a
 balance, so every simulation resumes, replays and forks for free.
 
@@ -43,10 +42,11 @@ is that overlaps stay few and no Axionomy term means two things.
 
 | Term | Means |
 | --- | --- |
-| Economy (`World` in a problem) | The authoritative state; the only thing that changes |
+| Economy (`World` in a sample) | The authoritative state; the only thing that changes |
 | Exchange | One firing of a rate |
 | Receipt | What the kernel returns for an exchange it accepted: what moved, opened and closed |
 | Proposal | One exchange offered for applying; never a trace |
+| Proposer | Anything that proposes exchanges: a person, an AI agent, a simulator, a script. The kernel decides what applies |
 | Trace | Exchanges in order |
 | Replay | Applying a trace, all of it or none of it: `replayed` gives the economy after it, `replay` applies it in place |
 | Run | A trajectory: a trace from a state, kept in memory or recorded in the store |
@@ -54,31 +54,36 @@ is that overlaps stay few and no Axionomy term means two things.
 | Fork | An independent economy starting from a chosen state of a run (a clone, constant-time) |
 | Counterfactual | A forked run that examines an alternative to what the run did |
 | Rollout | A run a policy drives, to a goal, a stop or a horizon |
-| Episode | One rollout of a repeated experiment, such as one Monte Carlo sample |
-| Group | The runs produced together, such as one Monte Carlo estimate's episodes |
-| Policy | How an actor chooses; a problem's `Policy` enum names its policies |
-| Decision | One choice: a problem's `decision(view, actor, policy)` |
-| Thinking | Trying exchanges at a point and playing them out before choosing, with the same `apply` as the step finally chosen; a study keeps its search's observations as each document's `thinking` |
+| Episode | One rollout of a Monte Carlo estimate: one trial |
+| Trial | One sample of a Monte Carlo estimate (its code says `Experiment` until P6) |
+| Group | The runs produced together, such as an experiment's or one Monte Carlo estimate's |
+| Policy | How an actor chooses; in a package, a Rhai script |
+| Decision | One choice a policy makes |
+| Strategy | A built-in algorithm, the scripts it calls and its parameters (seed, budget, horizon, actor) |
+| Objective | A measure of a state with a direction, minimize or maximize |
+| Experiment | A start point, strategies as arms, objectives, a seed and a budget; it produces runs, recorded as a group, and the thinking that found them |
+| Comparison | Objective vectors, dominance and the Pareto front, over any runs |
+| Thinking | Trying exchanges at a point and playing them out before choosing, with the same `apply` as the step finally chosen; the search observations of how a run was found |
 | Ref | A named label on a point, like a Git branch name on a commit. An application keeps a ref on the point its game or simulation is actually at, and moving the ref forward is what makes a step count; only the steps a ref is moved over are delivered |
 | Learning | Updating a policy from experience; done outside Axionomy, by the Autonomy Harness ([CONTINUOUS_AGENT_SYSTEMS.md](CONTINUOUS_AGENT_SYSTEMS.md)) |
-| Nature response | What happens without anyone choosing: an outcome resolves, a vehicle arrives, a deadline expires; a problem's `nature_response(world)` |
+| Nature response | What happens without anyone choosing: an outcome resolves, a vehicle arrives, a deadline expires; a proposer like any other |
 | Tick | The clock advancing |
 | Horizon | The most steps a rollout may take |
-| Study | One request to investigate or compare outcomes, through Studio, MCP or the CLI: a problem, an instance, strategies, a seed and a budget. A study produces runs and the evidence of how they were found |
-| Engine | `axionomy-engine`: the work on studies, economies and runs that every front end shares, natively and in the browser |
+| Script | Rhai source a package carries for anything a generic algorithm cannot know: candidates, policies, Nature responses, heuristics, objectives, view logic |
+| Package | A redb file, zipped optionally, holding everything above for an ontology; loaded, it is what an engine continues from |
+| Engine | `axionomy-engine`: the work every front end shares, natively and in the browser, with nothing registered |
+| Study | Retiring in P9: today's request to study a problem, replaced by an experiment on a package |
 | Path | An identifier's one written form, such as `edge/key-room/gate`, and its order. Typed identifiers derive `Identifier`, so they are written and ordered as their paths, and a typed run written down reads as a `paths` run that MCP can explore (D-044) |
 
-A study is not called a job, session, experiment or scenario because each
-already means something else here: work-league's workers claim jobs, search
-has sessions, Monte Carlo runs experiments, and Nature encodes scenarios.
+An experiment is named for what it is: the same start, seed and budget,
+strategies as arms, each measured on the same objectives. Monte Carlo's
+single sample, which its code still calls an experiment, is a trial.
 
 None of these names is a mode or a separate execution system. A game or a
 simulation is an application built from the same operations: it applies
 exchanges, forks, rolls out and records runs, and schedules that work in its
 own loop. Live is not a kind of run either: it is a ref an application
-advances. `axionomy_study::Problem` is an entry in the catalog of problems
-one can study, not the way an application runs; a continuous application
-need not wrap its lifetime in a study.
+advances. A package is not a mode: loaded, it is data the same operations use.
 
 ## Step 1: simulations run through `rollout::run` (done)
 
@@ -144,8 +149,8 @@ Built for MCP, which needed nothing new in the store for it:
   recorded by another version is refused and studied again. Work-league's
   showcase study took a 135 MB store file as JSON and takes 8.4 MB as runs.
 
-The Studio server's store, and reopening a recorded study there, come with
-the engine (step 7).
+The Studio server's store comes with the engine (P2); studies themselves are
+replaced by experiments on packages (P9).
 
 ## Step 3: studies are named studies (done)
 
@@ -197,20 +202,55 @@ for the outside party, through MCP's existing tools: a duplicate report and a
 report after the lapse are refused, and the lapse cannot fire before its
 deadline. MCP needed nothing new for it.
 
-## Interactive execution
+## Plan: Axionomy on primitives
 
-### Why
+Axionomy has to be complete without problems or studies. Points, runs, refs,
+goals, objectives, strategies, experiments and comparison are primitives
+every front end uses with nothing registered; what a user puts together for
+an ontology (economies to start from, goals, objectives, the scripts that
+propose exchanges, experiments and views) is a package: a redb file the
+engine loads and continues from. The samples become packages like any user's.
 
-Today the operations on recorded economies (author, assess, apply, step,
-find, diff, page through accounts and balances, search) are implemented
-inside the MCP server. The Studio server, the CLI and the browser have none
-of them, so Studio computes and replays studies but cannot apply an exchange.
-A learner gets transitions only after a run ends, by replaying its trace
-(`rl::replay_transitions`). And when an application applies exchanges both to
-take its next step and to try out alternatives, nothing records which of them
-actually happened.
+### Model
 
-### How it works, in connect-four
+| Layer | Holds | Knows |
+| --- | --- | --- |
+| Kernel (`axionomy`) | Economy, exchange, receipt, trace, goal, and the rules for what a rate means, specified in Lean; rates themselves are data in the economy | Nothing above it |
+| Store (`axionomy-store`) | Runs, points, refs, groups and the state tree's nodes, in redb, every record binary (postcard) | The kernel |
+| Search (`axionomy-search`) | Generic algorithms over any ontology, experiments, comparison | The kernel |
+| Engine (`axionomy-engine`) | Operations on points, runs and refs; runs scripts, strategies and experiments; draws views | Store, search, Rhai; no package, no registry |
+| Scripts (Rhai 1.27.0) | Every proposer a package carries | The engine's host API |
+| Packages | redb files, zipped optionally: economies as runs, refs, goals, scripts, strategies, experiments with their results, views, a manifest | Nothing; they are data |
+| Transports (`axionomy-mcp`, `axionomy-studio-server`) | Protocols over the engine | No package |
+| Applications (the `axionomy` binary, Studio's browser Worker) | Open stores, load packages, serve | The packages they are given |
+
+Retired as the plan completes (P9): `Problem`, `Registry`, `Study` and
+Studio's study events, and with them `axionomy-study`.
+
+### Rules
+
+- One apply: `apply(point, exchanges)` applies all of them or none and gives
+  a new point; the point it started from never changes. Making a move,
+  trying one out, branching and a counterfactual are this one operation.
+- Every point has one history: the exchanges that led to it.
+- A ref moves only by `advance(ref, expected, to)`, refused, with the point
+  the ref is on, when it is no longer on `expected`. Only the steps a ref is
+  moved over are delivered, each with the point it led to.
+- Every proposer a package carries is a Rhai script. Rust is the machinery
+  (kernel, store, engine, the generic algorithms, fast host helpers); data
+  is the structure (which algorithm, its parameters, an experiment's arms,
+  view layout, the manifest).
+- Rates and goals stay kernel data. A script proposes an exchange of an
+  existing rate; the kernel decides whether it applies and what it does.
+- Outside proposers (people in Studio, AI agents over MCP or HTTP,
+  simulators such as MuJoCo) send exchanges through a transport, generated
+  however they like. Only a valid exchange gets through.
+- Nothing is registered: an engine works with whatever its store holds.
+- No JSON in storage. JSON stays only where a protocol defines it (MCP's
+  JSON-RPC, the HTTP API to the browser) and in the Lean conformance
+  fixtures, which are the specification's test output.
+
+### How points and refs work, in connect-four
 
 A game is a run: the empty board, then one exchange per move. Each board
 along the way is a point, such as the board after move 7.
@@ -235,246 +275,138 @@ along the way is a point, such as the board after move 7.
 Any economy works the same way, with an economy for the board and an
 exchange for the move.
 
-### What this builds
+### Scripts
 
-1. `axionomy-engine`: one synchronous library with the operations above,
-   over a `Registry` and a `Store`, called by MCP, the Studio server, the CLI
-   and Studio's browser Worker. MCP keeps only its protocol and its table
-   from handles to points.
-2. Refs that can be moved safely and followed. The store has refs already
-   (`Transaction::set_ref`); they gain compare-and-set, so
-   `advance(ref, expected, to)` moves a ref only while it is still on
-   `expected`. `watch` pushes, and `frames(after)` pulls, each step a ref is
-   moved over.
-3. A view per ontology, so any point of any recorded run is drawn as frames
-   and offers exchanges, whether or not a problem or a study produced it.
-4. The store in a browser Worker: its writer runs without a thread, and a
-   redb backend over the origin private file system (OPFS) keeps it across
-   page reloads.
+Rhai scripts are how a package says anything a generic algorithm cannot
+know: candidate generators, policies and decision rules, Nature and chance
+responses, heuristics, objectives that are not a plain balance, and the
+logic in views (anchors, status and tone ladders, metrics). The engine gives
+them a host API: balances, the accounts under a prefix, rates, `applicable`,
+`assess`, building exchanges, shortest paths, calling a built-in rollout or
+search, and a seeded random generator.
 
-Studio's controls then act on a selected point and ref.
+- Quantities enter Rhai as an exact type with checked operations, never as
+  floats.
+- Randomness comes only from the host's seeded generator, so an experiment
+  replays from its seed.
+- A package's manifest records the host API version its scripts were
+  written against.
+- A script called at every node of a large search, or millions of times in
+  rollouts, can be slow; hot steps move into Rust host helpers, and
+  WebAssembly modules stay a later option.
 
-### Rules
+The inventory of the samples sized this: their generic searches (BFS,
+Dijkstra, A*, best-first, Pareto) need only candidate scripts, heuristics and
+objectives; their tactical policies (triage, dispatch, bidding, daily plans,
+market actors, connect-four tactics) are domain programs, which is what the
+scripts are for; and branch-and-bound, beam search, minimax with alpha-beta
+and ordered depth-first search (Algorithm X) are generic algorithms the
+samples wrote by hand, which join `axionomy-search`.
 
-- `apply(point, exchanges)` applies all the exchanges or none and gives a new
-  point; the point it started from never changes. Making a move, trying one
-  out, branching and a counterfactual are all this one operation.
-- Every point has one history: the exchanges that led to it.
-- A ref moves only by `advance(ref, expected, to)`, which is refused, with
-  the point the ref is on, when the ref is no longer on `expected`.
-- Only the steps a ref is moved over are delivered, each with the point it
-  led to.
+### Steps
 
-### Layers
+Each step is one or more validated commits, pushed with CI green before the
+next. Built already: the engine records points and MCP keeps only handles
+(`36ce883`); the transports know no problem and the `axionomy` binary serves
+everything (`c59a521`).
 
-| Crate | Owns |
-| --- | --- |
-| `axionomy` | The kernel |
-| `axionomy-store` | Runs, points and refs in redb: a file natively; in the browser a file in the origin private file system (OPFS), or memory |
-| `axionomy-study` | Problems, the `Registry` and studies |
-| `axionomy-engine` | All work on studies, economies and runs, shared by every front end |
-| `axionomy-mcp`, `axionomy-studio-server` | Transports: libraries that know no problem |
-| `axionomy-cli` (the `axionomy` binary), `axionomy-studio-wasm` | Applications: they register the sample problems and serve them (`axionomy mcp`, `axionomy studio`, the browser Worker) |
+**P1. Binary records.** Postcard replaces JSON in the store's records, in the
+rate definitions inside state trees, in receipt digests and in MCP's handle
+tables. Every stored type writes all its fields (no `skip_serializing_if`,
+no internally tagged enums). The store records its format version and
+refuses a store of another. Done when no `serde_json` remains in the store,
+the engine or MCP's tables and every suite passes; state roots change once.
 
-Today the work on economies and runs lives in MCP
-(`crates/axionomy-mcp/src/{store,authoring,studies,read}.rs` and the apply
-and search paths of `server.rs`), so only MCP clients can author, apply,
-step, find, diff or page through an economy; the Studio server has no store
-and the CLI only studies.
+**P2. One engine, no registry.** `Engine::new(store)`. The Studio server and
+the CLI hold an engine, so the Studio server has a store, in memory or a
+file. Today's study features keep running on the transports' own registry
+until P9 replaces them.
 
-### `axionomy-engine`
+**P3. Rhai scripts in the engine.** `rhai = "1.27.0"`; the host API above,
+exact quantities, seeded randomness, scripts stored by path. Done when maze's
+A* heuristic, sokoban's candidates and incident's triage, run as scripts,
+propose the same exchanges as their Rust code, with their speed measured.
 
-Synchronous, without tokio or protocol types, and built natively and for
-`wasm32-unknown-unknown`. Servers call it from blocking tasks; the browser's
-Worker calls it directly.
+**P4. Goals, objectives and candidates.** Goals are kernel data stored by
+path; objectives are script expressions with a direction, including sums of
+step costs along a path; candidates come from script generators. All can be
+evaluated at any point through every transport.
 
-```rust
-pub struct Engine { registry: Registry, store: Store } // Clone
+**P5. Strategies.** A strategy is a built-in algorithm (priority, BFS,
+Dijkstra, A*, best-first, rollout, Monte Carlo, MCTS, ISMCTS, Pareto search,
+and the new branch-and-bound, beam search and minimax with alpha-beta) with
+the scripts it calls and its parameters (seed, budget, horizon, actor). The
+engine runs one from a point and gets a run and its thinking. MCP's
+breadth-first search becomes one such strategy.
 
-impl Engine {
-    // Studies: each document's trajectory is recorded as a run.
-    pub fn catalog(&self) -> Vec<ProblemDescriptor>;
-    pub fn study(&self, request: &StudyRequest, progress: …) -> Result<Studied, EngineError>; // and each document's first and last point
+**P6. Experiments and comparison.** An experiment is a start point,
+strategies as arms, objectives, a seed and a budget, with Monte Carlo over
+strategies and weighted scenarios, receding-horizon replanning, and
+counterfactual variants (a trace played first, an actor dropped). Running one
+records a store group of runs with their thinking. Comparison works over any
+runs: objective vectors, dominance, the Pareto front, and picking a run by
+lexicographic objectives. Monte Carlo's `Experiment` becomes `Trial`. Done
+when an experiment re-runs identically from its seed through every
+transport.
 
-    // Points.
-    pub fn author(&self, economy: paths::Economy) -> Result<Point, EngineError>;
-    pub fn extend(&self, at: Point, additions: …) -> Result<Point, EngineError>;
-    pub fn apply(&self, at: Point, exchanges: &[paths::Exchange]) -> Result<Point, Refused>; // all or nothing: Refused { index, assessment }
-    pub fn assess(&self, at: Point, exchange: &paths::Exchange) -> Result<paths::ExchangeAssessment, EngineError>;
-    pub fn actions(&self, at: Point) -> Result<Vec<paths::Exchange>, EngineError>;
-    pub fn ancestor(&self, at: Point, step: u64) -> Result<Point, EngineError>;
-    pub fn find(&self, at: Point, condition: …) -> Result<Option<Point>, EngineError>;
-    pub fn frames(&self, at: Point, after: u64, limit: usize) -> Result<Vec<Frame>, EngineError>;
-    pub fn search(&self, at: Point, candidates: …, goal: …, budget: …, progress: …) -> Result<Option<Point>, EngineError>;
-    // and paged reads: accounts, balances, rates, invariants, changes, diff
+**P7. Views.** A view per ontology: labels, formats, scene structure (surface
+kind, node or cell source, layout, edges) and script logic (anchors, status
+and tone ladders, metrics, classes that depend on the trace); leaderboards
+are ranked expressions. Any run is drawn with its ontology's view, or with
+its paths when there is none. Runs keep the ontology they were written from,
+and any run reads as `Paths` (D-044).
 
-    // Live.
-    pub fn refer(&self, name: &RefPath, at: Point) -> Result<(), EngineError>;
-    pub fn advance(&self, name: &RefPath, expected: Point, to: Point) -> Result<(), Moved>; // Moved { current }
-    pub fn watch(&self, name: &RefPath, on: impl FnMut(Live) + Send + 'static) -> Watch;    // Live: a Frame, or Switched
-}
-```
+**P8. Packages.** A manifest (name, version, format version, host API
+version, contents). Export copies what is reachable from chosen refs (the
+points, the runs they come from, the tree nodes under their states, the
+definitions they use) into a new store file, which redb compacts. Load
+merges a file into the engine's store, its refs under the package's name.
+Zip is optional both ways. `axionomy package export`, `load` and `inspect`.
+Done when an exported package, loaded into a fresh store, re-runs its
+experiments with identical results.
 
-A `Frame` is one step as delivered: the point it led to, its
-`ExchangeFrame` (the exchange, its assessment, its receipt and the economy
-after it), the problem's objectives there and whether its goal holds. That is
-one learning transition, what `RlTransition` carries. `watch` pushes frames;
-`frames(after)` pulls them from the last point a reader handled, so delivery
-resumes after a disconnect and works over a stateless transport. `Switched`
-reports that a ref was moved to a point whose history does not contain the
-point it was on, such as Studio's Continue from here moving `live` to a
-branch; an executor stops there, since it cannot undo what it did.
+**P9. The samples become packages.** The 15 samples' builders write their
+packages: economies for each instance and each seed shipped, goals, scripts,
+strategies, experiments, views. A strategy key means one thing at every
+size. Done when every experiment reproduces today's study outcomes
+(objectives and traces) from its package alone; then `Problem`, `Registry`,
+`Study`, `axionomy-study` and `export-studies` go, MCP's problem tools become
+package and experiment tools, Studio's catalog lists the loaded packages, and
+Pages ships the sample packages, built in CI and never committed.
 
-Moving out of MCP: economies as points and studies recorded as runs
-(`store.rs`), authoring (`authoring.rs`), studies as economies
-(`studies.rs`), the page reads of `read.rs`, and the apply and search work of
-`server.rs`. MCP keeps its tools, resources, schemas, messages, issues,
-completion and HTTP, and its table from handles to points.
+**P10. Live refs.** The store's refs gain compare-and-set and an index of each
+run's branches; the engine gains `refer`, `advance`, `watch` and
+`frames(after)`, which pulls from the last point a reader handled. Every
+transport offers them; MCP mints a handle for a ref as it does for a point.
+A frame is one step as delivered: the point it led to, its exchange frame,
+the objectives there and whether the goal holds, so a learner receives whole
+transitions as they happen.
 
-### Step 6: the other documents (done)
+**P11. The engine in the browser.** The store's writer runs inline where
+there are no threads, `getrandom`'s `wasm_js` feature is on for wasm only,
+`Store::on(backend)` opens any redb backend, an origin private file system
+(OPFS) backend keeps the store across reloads, Rhai runs on wasm32, and a
+package loads from its bytes. Done when a Worker loads a package, runs an
+experiment and finds it again after a reload.
 
-`docs/CONTINUOUS_AGENT_SYSTEMS.md`'s decision loop and integration contract
-use points and refs: `fork(snapshot)` and `apply(fork_or_live, exchange)`
-became `apply(point, exchanges)`, with `refer`, `advance` and `follow`. The
-PDD defines Thinking this way, says which layer is shared today, and records
-D-045 (one engine), D-046 (apply at points, refs) and D-047 (the store in the
-browser). `docs/STORAGE.md` and the READMEs of the root, MCP, the store, the
-Studio server, the browser Worker, the CLI, the study runtime and Studio say
-what is planned for them.
+**P12. Studio on packages, points, refs and experiments.** Load a package,
+scrub, follow a ref, act (a candidate or a written exchange, assessed first;
+on the point a ref is on it also moves the ref, anywhere else it makes a
+branch), continue from here, run an experiment, compare. The native and the
+browser engine offer the same.
 
-### Step 7: `axionomy-engine`
-
-The engine takes over MCP's work on economies and runs, and MCP becomes a
-transport over it. The Studio server and the CLI hold an `Engine`, so the
-Studio server has a store: in memory, or a file when one is given.
-
-Done so far: the engine records points (author, apply, reach, ancestor,
-assess) and MCP keeps only its handles; the transports know no problem, and
-the `axionomy` application registers the sample problems and serves them
-(`axionomy mcp`, `axionomy studio`, `axionomy export-studies`). Next: studies
-recorded as runs, find and search, then the Studio server and the CLI on the
-engine.
-
-Done when MCP's Rust tests and its Python interop suite pass unchanged, and
-MCP touches the store only for its handle table.
-
-### Step 8: the engine runs in the browser
-
-redb is pure Rust and `axionomy-store` already compiles for
-`wasm32-unknown-unknown` with `getrandom`'s `wasm_js` feature. What does not
-run there is the store's own writer, a thread with a timer
-(`crates/axionomy-store/src/writer.rs`):
-
-- Without threads, the writer runs each job inline on the caller, the Worker,
-  still in batches, and every durable commit flushes.
-- `getrandom`'s `wasm_js` feature is enabled for wasm targets only.
-- `Store::on(backend)` opens a store on any redb `StorageBackend`.
-- `axionomy-studio-wasm` gains an OPFS backend over a
-  `FileSystemSyncAccessHandle`, whose synchronous `read` and `write` at an
-  offset, `truncate`, `flush` and `getSize` map one to one onto
-  `StorageBackend`'s `read`, `write`, `set_len`, `sync_data` and `len`. The
-  handle exists only in dedicated Workers, where Studio's engine already runs
-  (`studio/src/engine.worker.ts`), which opens the file; IndexedDB is
-  asynchronous and localStorage is not available to Workers. The handle is
-  exclusive, so a second tab gets a store in memory and says so.
-
-Done when a wasm test records a run in a Worker, reloads and reads it back,
-and CI builds `axionomy-engine` for `wasm32-unknown-unknown`.
-
-### Step 9: any run is shown, and offers exchanges, by its ontology
-
-How an ontology's states look and which exchanges it offers belong to the
-ontology, not to a problem. Problems and studies stay an optional layer for
-comparing strategies; nothing interactive needs them.
-
-- Runs keep their ontology. Every identifier is written as its path (D-044),
-  so the store reads any run as `Paths`; the engine records each run under
-  the ontology it was written from: a study document under its problem's
-  ontology (the study runtime reports it with the trajectory), an authored
-  economy as `paths`.
-- `axionomy-view` gains a view per ontology, which the application registers
-  as it registers problems: a history's frames with the ontology's labels and
-  scene, from the derivation studies already use, and the exchanges to offer
-  at a state. A problem reuses its ontology's view.
-- The engine draws a run with the view of its ontology, and a run of an
-  ontology without one with its paths as labels and no candidates; an
-  exchange can still be written and assessed.
-
-Done when every study document's frames equal `Engine::frames` of the run
-that recorded it, and a run of an economy authored outside any problem is
-drawn with the view of its ontology.
-
-### Step 10: live refs
-
-The store's refs gain compare-and-set, and the store indexes each run's
-branches; the engine gains `refer`, `advance` and `watch`. Every transport
-offers them: MCP mints a handle for a ref as it does for a point, so a client
-reaches only the refs it was given, and follows one by pulling
-`frames(after)`, since its HTTP transport is stateless.
-
-Done when moving a ref from a point it is no longer on is refused with the
-point it is on, points made while thinking are never delivered,
-`frames(after)` resumes where a reader stopped, and a ref moved to a branch is
-reported as `Switched`.
-
-### Step 11: Studio works on points and refs
-
-The native server's routes and the Worker's messages expose the same
-`EngineClient` operations, so the browser engine does everything the native
-one does; the static engine, which plays saved studies, stays read-only.
-Studio selects a point, and its controls target it:
-
-| Control | Effect |
-| --- | --- |
-| Scrub, play | Reads a history; changes nothing |
-| Follow | Shows a ref's steps as they are delivered; scrubbing back does not stop it |
-| Act | Applies a candidate or a written exchange, assessed first. On the point a ref is on, it also moves the ref; anywhere else it makes a branch |
-| Continue from here | Moves a ref to the selected point |
-| Compare | Two histories side by side |
-
-Done when Studio's end-to-end tests pass on the native and the browser
-engine.
-
-### Step 12: acceptance: two players, one ref, a learner
-
-A Python test (uv, httpx) drives the native server on connect-four, standing
-in for an application and the Autonomy Harness:
-
-- The test puts `live` on the empty board, the first point of a
-  connect-four study's recorded run.
-- Player A plays one colour: it applies a move to the board `live` is on and
-  moves `live` to the result. Step 11's end-to-end test does the same
-  through Studio's Act.
-- Player B plays the other: it applies each of its moves to the board `live`
-  is on and plays the game out with its value table, without moving `live`;
-  then it applies its chosen move and moves `live` from the board it looked
-  at, looking again if refused.
-- A learner follows `live` with `frames(after)` and updates B's value table
-  between B's moves.
-
-Done when every delivered move names the board it led to, no board B tried
-out is delivered, moving `live` from a board it is no longer on is refused,
-and `live`'s history verifies.
-
-### Step 13: thinking in Studio (separable)
-
-A problem's own policy proposes a move from the selected point,
-connect-four's MCTS first, and the branch its move makes shows its
-thinking.
+**P13. Acceptance.** A Python test drives the native server over HTTP with the
+connect-four package: two players advance `live`, one thinking by applying
+moves at `live`'s point without moving it, while a learner follows `live`
+through `frames(after)`.
 
 ## Not planned
 
-Each of these waits for a problem or a client that needs it:
-
-- A separate behavior crate, or scorer, picker, thinker and action types.
-- Floating-point utility scores.
-- Action state machines and behavior checkpoints.
-- Typed behavior identifiers, versioned definitions, or definitions as data.
-- Durable workflow, retry or compensation machinery.
-- MCP operations for behaviors.
-- MuJoCo or language-model executors; those belong to the Autonomy Harness.
-- A runner or scheduler framework: step 12's loop is the first application
-  loop, and one is extracted when a second application shares it.
-- Bridges to robots or other executors, which belong to the Autonomy
-  Harness: a bridge follows a ref, resumes with `frames(after)` and stops on
-  `Switched`.
+- A runner or scheduler framework: P13's loop is the first application loop,
+  and one is extracted when a second application shares it.
+- WebAssembly strategy modules, unless Rhai's speed demands them.
+- MCAP or RRD files.
+- Learning inside Axionomy, and bridges to robots or other executors: the
+  Autonomy Harness's. A bridge follows a ref, resumes with `frames(after)` and
+  stops on `Switched`.
+- MuJoCo or language-model executors, which are outside proposers.

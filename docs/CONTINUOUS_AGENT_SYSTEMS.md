@@ -369,7 +369,7 @@ This contract should work synchronously in process and asynchronously through
 CLI, HTTP, task, or tool protocols. Transport changes must not change
 transition meaning. Axionomy plans to implement it once, in `axionomy-engine`,
 with MCP, the Studio server, the CLI and Studio's browser Worker as its
-transports ([SIMULATION.md](SIMULATION.md#interactive-execution)); today MCP
+transports ([SIMULATION.md](SIMULATION.md#plan-axionomy-on-primitives)); today MCP
 implements points, apply and assessment, and refs are planned.
 
 ## Non-goals for the Work Utility System

@@ -9,10 +9,10 @@ on disk.
 Its economies are points the engine (`axionomy-engine`) records: authoring,
 applying exchanges, stepping to a point of a history and assessing are the
 engine's, and this server keeps its protocol and its tables from handles to
-points. Recording studies as runs, finding a balance condition and search move
-to the engine next, shared with the Studio server, the CLI and Studio's
-browser Worker ([plan](../../docs/SIMULATION.md#interactive-execution),
-D-045).
+points. Finding a balance condition and search move to the engine as it
+gains strategies, and the problem tools become package and experiment tools
+([plan](../../docs/SIMULATION.md#plan-axionomy-on-primitives), D-045,
+D-050).
 
 ## Semantic contract
 

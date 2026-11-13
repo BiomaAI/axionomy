@@ -1679,11 +1679,12 @@ factor.
    server keeps studies and scrubs from stored roots, as
    [simulation, runs and studies](docs/SIMULATION.md) describes. Extract generic holdings, dependency, and event indexes only after a
    second domain confirms the perishables shapes.
-5. Build [interactive execution](docs/SIMULATION.md#interactive-execution):
-   `axionomy-engine` for every front end (D-045), live refs with
-   compare-and-set and delivery (D-046), a view per ontology that draws any
-   run and offers its exchanges, the store in the browser (D-047), and Studio
-   controls that act on a selected point and ref.
+5. Build [Axionomy on primitives](docs/SIMULATION.md#plan-axionomy-on-primitives):
+   binary records, one engine with nothing registered (D-045), Rhai scripts
+   for every proposer a package carries (D-049), goals, objectives,
+   strategies, experiments and comparison as primitives (D-050), views per
+   ontology, packages as redb files (D-048), live refs (D-046), the engine
+   in the browser (D-047), and Studio on packages, points and refs.
 6. Extend invariants with carefully constrained local and inequality forms.
 7. Build an external OR adapter that compiles one closed schedule and replays
    the returned assignment.
@@ -2023,7 +2024,8 @@ of Axionomy's own; where data lives is a redb backend: a file, memory, or, as
 planned for the browser, the origin private file system (D-047). A tree holds
 an economy's logical state, accounts in key order rather than creation order,
 so equal states have equal roots whatever their history, and stores written
-apart merge by union. Every identifier is stored as its JSON, so a problem's
+apart merge by union. Every identifier is stored as its JSON (postcard with
+D-048), so a problem's
 own Rust types and paths are stored alike; an `Ontology` names a problem's
 identifier types, and a run is read back only as the ontology that recorded
 it. A run records each exchange with its receipt digest and stores states by
@@ -2140,20 +2142,20 @@ its fixtures are too.
 
 ### D-045: One engine serves every front end
 
-Planned ([SIMULATION.md](docs/SIMULATION.md#interactive-execution), step 7).
-`axionomy-engine` holds the operations on studies, economies and runs, over a
-`Registry` and a `Store`: author and extend, assess, apply, step, find, diff,
-paged reads, search, studies recorded as runs, and refs. It is synchronous,
-has no async runtime or protocol types, and builds natively and for
-`wasm32-unknown-unknown`. MCP, the Studio server, the CLI and Studio's browser
-Worker are its transports; MCP keeps its protocol and its table from handles
-to points. A transport never implements an operation the engine has, and knows
-no problem: an application registers the problems it serves, as the `axionomy`
-binary registers the samples.
+Partly built: the engine records points (author, apply, reach, ancestor,
+assess) and MCP keeps only its handles; P2 of
+[the plan](docs/SIMULATION.md#plan-axionomy-on-primitives) removes its
+`Registry`. `axionomy-engine` holds every operation on economies, runs and
+refs, and runs scripts, strategies, experiments and views, over a `Store`
+alone. It is synchronous, has no async runtime or protocol types, and builds
+natively and for `wasm32-unknown-unknown`. MCP, the Studio server, the CLI
+and Studio's browser Worker are its transports; MCP keeps its protocol and
+its table from handles to points. A transport never implements an operation
+the engine has, and knows no package.
 
 ### D-046: Every step is an apply at a point; a ref says which steps count
 
-Planned ([SIMULATION.md](docs/SIMULATION.md#interactive-execution), step 10).
+Planned ([SIMULATION.md](docs/SIMULATION.md#plan-axionomy-on-primitives), P10).
 A point is one saved state of the economy: the economy after a given step of
 a recorded run, named by the run and the step. Every point has one history,
 the exchanges that led to it. `apply(point, exchanges)` applies all of them or
@@ -2175,7 +2177,7 @@ or a loop applying Nature responses are alike.
 
 ### D-047: The store runs in the browser on redb
 
-Planned ([SIMULATION.md](docs/SIMULATION.md#interactive-execution), step 8).
+Planned ([SIMULATION.md](docs/SIMULATION.md#plan-axionomy-on-primitives), P11).
 redb is pure Rust and `axionomy-store` compiles for `wasm32-unknown-unknown`;
 what cannot run there is the store's writer thread and its timer. Without
 threads the writer runs each job inline on the caller, and every durable
@@ -2186,6 +2188,54 @@ operations; it exists only in dedicated Workers, where Studio's engine runs.
 IndexedDB is asynchronous and localStorage is unavailable to Workers, so
 neither can back redb's synchronous interface. The handle is exclusive: a
 second tab opens a store in memory and says so.
+
+### D-048: A package is a redb file
+
+Planned ([SIMULATION.md](docs/SIMULATION.md#plan-axionomy-on-primitives), P1
+and P8). Everything a package holds lives in a store: economies as runs and
+points, refs naming them, goals, scripts, strategies, experiments with their
+results, views and a manifest (name, version, format version, host API
+version). Exporting copies what is reachable from chosen refs into a new
+store file, which redb compacts; loading merges a file into the engine's
+store, its refs under the package's name; zip is optional both ways. Nothing
+is registered: an engine works with whatever its store holds. Every record is
+binary (postcard), including the rate definitions inside state trees and the
+digest of each receipt; JSON stays only where a protocol defines it. A
+package's format is the store's, versioned in its manifest, and our tools
+rewrite an older one.
+
+### D-049: Every proposer a package carries is a Rhai script
+
+Planned ([SIMULATION.md](docs/SIMULATION.md#plan-axionomy-on-primitives), P3).
+Candidate generators, policies, Nature and chance responses, heuristics,
+objectives that are not a plain balance, and the logic in views are Rhai
+(`rhai = "1.27.0"`) scripts stored in the package, run by the engine through
+its host API: balances, accounts by prefix, rates, applicability, assessment,
+building exchanges, shortest paths, built-in rollouts and searches, and a
+seeded random generator. Quantities enter Rhai as an exact type; randomness
+comes only from the seeded generator, so experiments replay. Rust is the
+machinery (kernel, store, engine, the generic algorithms, fast host helpers)
+and data is the structure (which algorithm, its parameters, experiments, view
+layout). Rates and goals stay kernel data, specified by the Lean rules: a
+script proposes an exchange of an existing rate, and the kernel decides
+whether it applies and what it does. Outside proposers (people, AI agents,
+simulators) send exchanges through a transport, generated however they like.
+
+### D-050: Primitives before packages
+
+Planned ([SIMULATION.md](docs/SIMULATION.md#plan-axionomy-on-primitives),
+P4 to P9). Axionomy is complete without problems or studies. Goals,
+objectives, candidates, strategies, experiments and comparison are
+primitives: a strategy is a built-in algorithm of `axionomy-search` with the
+scripts it calls and its parameters; an experiment runs strategies as arms
+from one start point with one seed and budget and records their runs as a
+group; comparison gives objective vectors, dominance and the Pareto front
+over any runs. `axionomy-search` stays generic over the ontology and gains
+the algorithms the samples wrote by hand: branch-and-bound, beam search and
+minimax with alpha-beta. The samples become packages built from these
+primitives, and `Problem`, `Registry`, `Study` and `axionomy-study` retire
+once every sample experiment reproduces its study's outcomes from its
+package alone.
 
 ## 16. Success criteria
 

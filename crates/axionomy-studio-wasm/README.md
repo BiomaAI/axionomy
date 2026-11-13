@@ -7,7 +7,7 @@ JavaScript schedules and transports the computation; it does not reimplement
 any economic semantics. Planned: the Worker holds an `axionomy-engine` over a
 store in memory or on the origin private file system, so the browser applies,
 branches and follows refs as the native server does
-([plan](../../docs/SIMULATION.md#interactive-execution), D-047).
+([plan](../../docs/SIMULATION.md#plan-axionomy-on-primitives), D-047).
 
 Build it through `pnpm build:wasm` in `studio/`. The generated bindings are
 consumed by Vite and intentionally remain build output.

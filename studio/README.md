@@ -176,7 +176,7 @@ candidate or a written exchange, assessed first, and on the point a ref is on
 also moves the ref, while anywhere else it makes a branch; Continue from here
 moves a ref to the selected point; Compare shows two histories. The
 native and browser engines both offer them; static playback stays read-only
-([plan](../docs/SIMULATION.md#interactive-execution)).
+([plan](../docs/SIMULATION.md#plan-axionomy-on-primitives)).
 
 The constraint-probe panel contains deliberately invalid or infeasible
 proposals. Their expected rejection is evidence that the model's constraints

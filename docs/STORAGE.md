@@ -4,7 +4,7 @@ Status: being built, in the order the phases at the end give. The kernel's
 forks are constant-time, the canonical tree and the store exist, and MCP keeps
 its snapshots and its studies' runs in the store; Studio, search and every
 other producer of runs move onto it next, Studio through `axionomy-engine` and
-in the browser as well ([SIMULATION.md](SIMULATION.md#interactive-execution)).
+in the browser as well ([SIMULATION.md](SIMULATION.md#plan-axionomy-on-primitives)).
 
 Axionomy is an economic debugger and a simulation engine. Both need states
 that can be kept, revisited, compared and branched: time travel to any step,
@@ -127,8 +127,11 @@ A stored economy is one tree, whose keys say what each entry holds:
 | `r` rate | the rate, as the kernel serializes it |
 | `v` invariant, as the kernel serializes it | empty |
 
-Every identifier is written as its JSON, so a problem's own Rust types and
-paths are stored the same way: an economy of any `axionomy::Ontology` whose
+Every identifier is written as its JSON today, and every record and rate
+definition too; P1 of [the plan](SIMULATION.md#plan-axionomy-on-primitives)
+replaces JSON with postcard throughout, and a store becomes a package as it is
+(D-048). Identifiers are written the same way for a problem's own Rust types
+and for paths: an economy of any `axionomy::Ontology` whose
 identifiers serialize can be recorded, and a run records its ontology's name
 and is read back only as that ontology. JSON never contains `\0`, which sorts
 before every other byte, so an account's balances are contiguous and in
@@ -429,7 +432,7 @@ Each phase is a validated commit or series of commits.
    (done); studies recording their runs in the store (done for MCP; the Studio
    server and the browser through `axionomy-engine` next, with refs that
    proposers advance by compare-and-set and readers follow, as
-   [SIMULATION.md](SIMULATION.md#interactive-execution) plans); recording from
+   [SIMULATION.md](SIMULATION.md#plan-axionomy-on-primitives) plans); recording from
    inside search sessions, MPPI and RL; watch and actor views; Studio
    scrubbing from the store.
 5. **Many writers, one history:** stores written independently by any

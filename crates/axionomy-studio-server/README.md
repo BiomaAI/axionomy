@@ -14,7 +14,7 @@ playback is wanted. Planned: the server holds an `axionomy-engine` over a store
 (in memory, or a file when one is given), records each study's documents as
 runs, and serves points and refs: frames, candidate exchanges, assess and
 apply at a point, and refs to create, advance and follow
-([plan](../../docs/SIMULATION.md#interactive-execution), D-045, D-046).
+([plan](../../docs/SIMULATION.md#plan-axionomy-on-primitives), D-045, D-046).
 
 The `axionomy` application (`axionomy-cli`) serves the sample problems with
 it, the API and the optional built Studio frontend:
