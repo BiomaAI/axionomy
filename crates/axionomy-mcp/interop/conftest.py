@@ -1,5 +1,6 @@
 """Starts `axionomy mcp` on a free port for the whole test session, and once
-more with the maze's package, which the session builds, loaded."""
+more with each of the maze's and the logistics packages, which the session
+builds, loaded."""
 
 import os
 import socket
@@ -84,4 +85,11 @@ def samples(tmp_path_factory: pytest.TempPathFactory) -> Path:
 def maze_url(samples: Path) -> Iterator[str]:
     """A server that loaded the maze's package when it started."""
     with running(packages=[samples / "maze.zip"]) as base_url:
+        yield f"{base_url}/mcp"
+
+
+@pytest.fixture(scope="session")
+def logistics_url(samples: Path) -> Iterator[str]:
+    """A server that loaded the logistics package when it started."""
+    with running(packages=[samples / "logistics.zip"]) as base_url:
         yield f"{base_url}/mcp"

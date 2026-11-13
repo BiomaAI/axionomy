@@ -8,7 +8,6 @@
 use axionomy_engine::{Engine, Version, zipped};
 use axionomy_store::Store;
 use axionomy_studio_server::{PointId, StudioState, api};
-use axionomy_study::Registry;
 use axum::{
     Router,
     body::Body,
@@ -49,7 +48,7 @@ fn maze() -> Vec<u8> {
 
 fn studio() -> Router {
     let engine = Engine::new(Store::memory().unwrap()).unwrap();
-    api(StudioState::new(engine, Registry::new())).0
+    api(StudioState::new(engine)).0
 }
 
 async fn send(router: &Router, request: Request<Body>) -> (StatusCode, Value) {

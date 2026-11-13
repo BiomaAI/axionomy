@@ -5,7 +5,6 @@ use axionomy::{Quantity, Rate, basket, path::Path, paths};
 use axionomy_engine::Engine;
 use axionomy_store::{Point, Store};
 use axionomy_studio_server::{PointId, StudioState, api};
-use axionomy_study::Registry;
 use axum::{
     Router,
     body::Body,
@@ -37,7 +36,7 @@ fn bank() -> (Engine, Point, Router) {
         .build()
         .unwrap();
     let start = engine.author(economy).unwrap();
-    let (router, _) = api(StudioState::new(engine.clone(), Registry::new()));
+    let (router, _) = api(StudioState::new(engine.clone()));
     (engine, start, router)
 }
 

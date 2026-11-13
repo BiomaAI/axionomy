@@ -11,10 +11,10 @@ applying exchanges, stepping to a point of a history and assessing are the
 engine's, and this server keeps its protocol and its tables from handles to
 points. Finding a balance condition and search move to the engine as it
 gains strategies. Packages loaded when the server starts carry economies,
-strategies and experiments, and the package and experiment tools run them;
-the problem tools remain until Studio no longer plays studies (P12)
+strategies and experiments, and the package and experiment tools run them
 ([plan](../../docs/SIMULATION.md#plan-axionomy-on-primitives), D-045,
-D-048, D-050).
+D-048, D-050). The server knows no problem: the samples reach it as
+packages like any other.
 
 ## Semantic contract
 
@@ -29,9 +29,6 @@ economy_id + exchange ─ exchange_apply ──> new economy_id
 economy_id + exchanges  trace_replay ────> new economy_id
 economy_id + step ───── trace_step ──────> economy_id of a step of its trace
 economy_id + goal ───── search (task) ───> economy_id the solution reaches
-problem + strategy ──── problem_study ───> study_id, and two economy_ids for
-                        (task)             each document: where it starts and
-                                           where its exchanges reach
 economy_id ──────────── ref_create ──────> ref_id, a name for where an
                                            application is
 ref_id + economy_ids ── ref_advance ─────> the ref moved forward from one to
@@ -62,26 +59,22 @@ as a resource, one page at a time.
 
 ## Start here
 
-The server's instructions walk a first-time client through a study:
+The server's instructions walk a first-time client through an experiment:
 
-1. `axionomy_problem_catalog` lists the problems the server studies, with
-   the keys of their instances and strategies and the labels each problem
-   gives its family, capabilities, instances and strategies.
-2. `axionomy_problem_study` studies one and returns its documents, each with
-   `initial_economy_id` and `final_economy_id`.
-3. `axionomy_trace_step` with a step on `final_economy_id` names the economy
-   at that step of the study.
+1. `axionomy_package_list` lists the packages the server loaded when it
+   started: each one's refs, with the `economy_id` of the point each names,
+   and its experiments and strategies.
+2. `axionomy_experiment_run` runs an experiment, such as `maze/micro`, and
+   names each trial's end by an `economy_id`.
+3. `axionomy_trace_step` with a step on that `economy_id` names the economy
+   at that step of the trial's run.
 4. That economy's `rates` resource lists the exchanges it can take, and its
    `accounts` resource the accounts to bind.
 5. `axionomy_exchange_assess` says whether an exchange would apply, and why
    not; `axionomy_exchange_apply` applies it.
-6. The `diff` resource compares the result with the study's next step.
+6. The `diff` resource compares the result with the run's next step.
 
-A server started with packages walks the same way from an experiment:
-`axionomy_package_list` lists their experiments, `axionomy_experiment_run`
-runs one and names each trial's end by an `economy_id`, and steps 3 to 6
-apply to it as to a study's final economy; see
-[Packages and experiments](#packages-and-experiments).
+See [Packages and experiments](#packages-and-experiments).
 
 An exchange names a rate, an account for each of its roles, and how many units
 to apply:
@@ -91,8 +84,8 @@ to apply:
 ```
 
 A role the rate opens binds the path of the account the exchange creates,
-which must not exist yet. `axionomy_problem_study` and `axionomy_search` run
-only as MCP tasks; every other tool works without the tasks extension.
+which must not exist yet. `axionomy_search` runs only as an MCP task;
+every other tool works without the tasks extension.
 An application that moves through economies, such as a game, keeps a ref on
 the economy it is at; see [Refs](#refs).
 
@@ -155,9 +148,6 @@ Resources hold the data. Their URI templates (RFC 6570) are listed by
 | `…/exchanges{?cursor}` | Those exchanges; replaying them on the parent reproduces it |
 | `…/diff/{other_id}{?cursor}` | What differs from this economy to another: accounts opened and closed, balances with both quantities, rates and invariants |
 | `axionomy://assessment/{assessment_id}` and `…/lines{?cursor}` | An assessment and what explains it |
-| `axionomy://study/{study_id}` | A study: its key, selected document, and each document with its frame count and two economies |
-| `…/documents/{document}` | One document without its frames, with its two economies |
-| `…/documents/{document}/frames{?cursor}` | Its frames, each with its `step`, its `exchange` as the economies take it, and its `view` |
 
 A list page is `{"items": [...], "nextCursor": "..."}` and follows the MCP
 pagination rules: the server chooses the page size, the cursor is opaque, the
@@ -169,12 +159,12 @@ a page and a prefix filter cost the logarithm of the economy's size, and a
 diff skips everything the two economies share. `resources/list` is empty:
 economies are reached through their handles and the `resource_link`s tool
 results carry, never through a listing shared by every caller.
-`completion/complete` suggests accounts, assets, rates, invariants and
-documents for template arguments, by prefix.
+`completion/complete` suggests accounts, assets, rates and invariants for
+template arguments, by prefix.
 
 A resource that names something missing is refused with `-32602` and a
 message saying what: an economy the store does not hold, or an account, rate,
-invariant or document the economy or study does not have, with the resource
+or invariant the economy does not have, with the resource
 that lists what it has. A malformed path or handle in a URI is refused with
 the reason it is malformed.
 
@@ -190,8 +180,6 @@ the reason it is malformed.
 | `axionomy_trace_step` | `economy_id` of the economy at one step of the trace that made another | additive, idempotent |
 | `axionomy_trace_find` | The first step of that trace where a balance is equal to, at least or at most a quantity, and its economy; `null` if none | additive, idempotent |
 | `axionomy_search` | MCP task: outcome and the economy a solution reaches | additive, idempotent |
-| `axionomy_problem_catalog` | Built-in problems, instances and strategies | read-only |
-| `axionomy_problem_study` | MCP task: study summary | additive, idempotent |
 | `axionomy_package_list` | Every loaded package's manifest, its refs with the `economy_id` of each point, its experiments and strategies | additive, idempotent |
 | `axionomy_experiment_run` | The goal every arm works toward, every arm's strategy and start, and every trial's seed, outcome, objective values and `economy_id` | additive |
 | `axionomy_experiment_results` | The same, as the experiment last recorded them | additive, idempotent |
@@ -228,10 +216,10 @@ One convention holds everywhere:
 
 - Step `N` of a trace is the economy after its first `N` exchanges; step `0`
   is the economy they were applied to. `axionomy_trace_step`,
-  `axionomy_trace_find` and a study frame's `step` count steps.
+  and `axionomy_trace_find` count steps.
 - A position of an exchange counts from zero: the exchange at index `i` takes
   step `i` to step `i + 1`. Change lines and failures name it
-  `exchange_index`; a frame's `view.index` is one too.
+  `exchange_index`.
 - Messages count from one: "exchange 2 of 3 is infeasible" is the exchange at
   index `1`.
 
@@ -240,60 +228,6 @@ economy passed in as `traced_economy_id`, and the trace's source, step `0`, as
 `source_economy_id`. `axionomy_trace_find` returns the first step where a
 balance condition holds, or `{"step": null, "message": …}` when none does; an
 account no economy of the trace has is `not_found`.
-
-## Studies
-
-`axionomy_problem_study` studies one instance of a listed problem with a
-seed and a budget. Its documents are the problem's outcomes: the run of the
-requested strategy, which is the `selected_document`, beside the others,
-usually the runs of its other strategies and cases such as a deadlock. Each
-document's frames are resources, and each document is also two ordinary
-economies, listed in the study's summary and in the document resource:
-
-- `initial_economy_id`: the economy the document starts from, stored as an
-  authored economy.
-- `final_economy_id`: the economy its exchanges reach, made by applying them
-  to the initial economy, one step per exchange; the initial economy itself
-  when the document has none.
-
-Everything a client does with an economy, it does with a study. The final
-economy's `exchanges` resource is the document's trace; `axionomy_trace_step`
-with step `N` names the economy after its first `N` exchanges, the one frame
-`N − 1` shows; `axionomy_trace_find` finds where a balance condition starts.
-
-A frame is the exchange that makes its step and the view Studio draws of it:
-
-```json
-{
-  "step": 1,
-  "exchange": {
-    "rate": "move/start/key-room/2/false",
-    "bindings": { "actor": "agent", "environment": "world" },
-    "units": "1"
-  },
-  "view": { "index": 0, "exchange": { "rate": { "key": "maze/rate/move/start/key-room/2/false", "label": "…" }, "…": "…" }, "after": "…" }
-}
-```
-
-Its `exchange` is written in the economy's own paths, exactly as
-`axionomy_exchange_apply` takes it: applied to step `step − 1` of the final
-economy's trace, it makes step `step`. The `view` keys accounts, assets and
-rates for display, under the problem's name; act with `exchange` and the
-economies' resources instead. To try something else from step `N`, assess or
-apply another exchange to that economy, or replay another trace from it, and
-compare the result with the study's own step `N + 1` through the `diff`
-resource:
-
-```text
-final_economy_id + N ─────── trace_step ──────> the study's economy at step N
-that economy + exchange ──── exchange_apply ──> your branch
-your branch + study's N + 1  …/diff/{other} ──> what your choice changed
-```
-
-Replaying a document's trace on its initial economy is the operation that made
-its final economy, so `axionomy_trace_replay` returns the same handle. A
-study's documents usually start from equal economies under different handles;
-their equal roots say so.
 
 ## Packages and experiments
 
@@ -352,8 +286,18 @@ quantities, written as every quantity is. A trial's `economy_id` is the
 economy it reached, made by its `exchanges` exchanges from the arm's start:
 its `exchanges` resource is the trial's trace, `axionomy_trace_step` names
 every step from the start (step zero) to it, and every other tool takes it,
-so a client assesses, applies, diffs and branches from any step of any trial
-as it does from a study's final economy. `axionomy_experiment_results` gives
+so a client assesses, applies, diffs and branches from any step of any
+trial. To try something else from step `N`, assess or apply another exchange
+to that step's economy, or replay another trace from it, and compare the
+result with the trial's own step `N + 1` through the `diff` resource:
+
+```text
+economy_id + N ──────────── trace_step ──────> the trial's economy at step N
+that economy + exchange ─── exchange_apply ──> your branch
+your branch + trial's N + 1  …/diff/{other} ──> what your choice changed
+```
+
+ `axionomy_experiment_results` gives
 the results the experiment last recorded, by a run or in its package, in
 the same shape, and is `not_found` until there are some. The engine runs the
 experiment on a thread where blocking is allowed. One call runs or reports
@@ -433,12 +377,7 @@ that reach the same balances get different handles, so a handle also names how
 its economy was reached; their equal `root`s say they reached equal contents.
 Assessment handles, `AssessmentId`, are written `asm-` and keyed the same way.
 Ref handles, `RefId`, are written `ref-` and keyed from fresh randomness,
-since a ref is a name to move rather than a result. Study handles, `StudyId`,
-are written `stu-` and keyed by what the study was computed from, so the same problem, instance, strategy, seed and budget always
-get the same handle. A study takes the problem, instance and strategy as kebab-case paths
-(`work-league`, `micro`, `a-star`), the instance one its problem declares;
-its summary carries the study handle, that key, the selected document and, for
-every document, its frame count and its two economies.
+since a ref is a name to move rather than a result.
 
 Every economy is a point of a run in the store. Authoring records a run that
 starts from the authored state; applying exchanges records a run forked from
@@ -447,15 +386,8 @@ and the last. A handle, its run, its steps and its states commit in one
 transaction, so a handle exists exactly when everything it names does. The
 economy at a step that `axionomy_trace_step` names is rebuilt from the nearest
 stored state by replay, with every receipt checked against the one recorded.
-Assessments are stored as their inputs and computed again when read. A study
-is stored as its key and its documents' handles, never as its views: each
-document's initial economy is a run of its own, and its exchanges a run forked
-from it. Its documents and frames are computed again from the key when they
-are not in memory, and served only if they replay the very trajectories the
-study recorded; a study recorded by another version of the server is refused
-with `-32602` (a resource not found, which rmcp reports as invalid params under
-`2026-07-28`) and must be studied again, while its economies remain. Recently
-used economies and studies stay in memory.
+Assessments are stored as their inputs and computed again when read.
+Recently used economies and assessments stay in memory.
 
 A point the server did not make, such as one a package's ref names or one an
 experiment reached, is named as a ref's steps are: by the first handle that
@@ -468,17 +400,15 @@ results again names every point as before.
 
 `AxionomyMcp::new` takes the `Engine` it serves (`axionomy-engine`), which
 holds the store it keeps economies in, with any packages already loaded into
-it, and the `Registry` of problems its study tools study until packages
-replace them; `axionomy_problems::registry()` holds every sample problem.
+it.
 
 ```rust
 use axionomy_engine::Engine;
 use axionomy_mcp::AxionomyMcp;
 use axionomy_store::Store;
-use axionomy_study::Registry;
 
 let engine = Engine::new(Store::memory()?)?;
-let server = AxionomyMcp::new(engine, Registry::new())?;
+let server = AxionomyMcp::new(engine)?;
 # let _ = server;
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
@@ -489,8 +419,7 @@ stops, and a handle it issued is `not_found` after a restart.
 
 ## Tasks
 
-`axionomy_search` and `axionomy_problem_study` return a task handle when the
-caller declares the `io.modelcontextprotocol/tasks` extension, and a
+`axionomy_search` returns a task handle when the caller declares the `io.modelcontextprotocol/tasks` extension, and a
 `tasks_required` error otherwise; a client without the extension can still
 build, step through and branch economies with every other tool.
 `rmcp::TaskManager` registers the task before returning its handle.
@@ -506,9 +435,9 @@ application, so a solution is a trace the kernel replays.
 
 ## Running
 
-This crate is a library and knows no problem and reads no file; the
-`axionomy` application (`axionomy-cli`) serves the sample problems with it,
-and the packages it is given:
+This crate is a library and knows no package and reads no file; the
+`axionomy` application (`axionomy-cli`) serves with it the packages it is
+given:
 
 ```console
 cargo run -p axionomy-cli -- package samples packages
@@ -539,9 +468,7 @@ responses, and requires per-request protocol metadata and the `Mcp-Method` and
 
 The Rust unit tests hold the economic behavior: authoring conflicts and limits,
 paging a 100,000-asset economy, failures and the arguments they name, tasks,
-stepping and diffs, a store on disk across restarts, a study's documents as
-economies that replay its trajectories, frames whose exchanges apply to the
-step before them, studies computed again from their keys, and refs that move
+stepping and diffs, a store on disk across restarts, and refs that move
 only forward from where their movers expect them, deliver only the steps
 they move over, under the same handles every call, and wake a waiting
 follower; and the maze's package loaded into a server: its refs' economies,
@@ -552,17 +479,18 @@ and experiments no package carries or too large for a call. `interop/`
 checks that a standard client reaches all of it: the official MCP Python SDK
 drives `axionomy mcp` over Streamable HTTP through discovery, tools,
 resource links and pages, completion, stepping and diffs, task-backed search
-and cancellation, a problem study, stepping into a study and branching from
-it, applying a frame's exchange to its study's economy, structured errors with
-argument pointers, the routing-header rule, and economies and studies that
-outlive a restart, and refs: two clients advancing one ref from the same
+and cancellation, structured errors with argument pointers, the
+routing-header rule, economies and an experiment's results that outlive a
+restart, and refs: two clients advancing one ref from the same
 economy, the second told where it is; a step only tried out never delivered;
 a follower pulling frames after the last economy it handled, and a long poll
-that returns when another client advances. It also starts a server with the
-maze's package, which the session builds with `axionomy package samples`
-and never commits: listing it, running `maze/micro` to the energy and time
-the engine gives each strategy, stepping through a trial's trace from its
-start, and a package that fails its checks stopping the server. The SDK does
+that returns when another client advances. It also starts servers with the
+maze's and the logistics packages, which the session builds with `axionomy
+package samples` and never commits: listing one, running `maze/micro` to the
+energy and time the engine gives each strategy, stepping through a trial's
+trace from its start, stepping into one logistics trial and branching from it
+with another's exchange, and a package that fails its checks stopping the
+server. The SDK does
 not ship the tasks extension, so the suite declares it, as SEP-2663
 describes. Python is managed with uv:
 
@@ -574,7 +502,7 @@ cd crates/axionomy-mcp/interop && uv run --locked pytest
 ## Deployment boundary
 
 This crate is a local reference implementation, not a production control
-plane. Economies, assessments, studies, refs, loaded packages and experiment
+plane. Economies, assessments, refs, loaded packages and experiment
 results persist in its store; tasks and followers waiting on a ref live in
 the process. Anyone holding a ref's handle may move it, and anyone may run a
 loaded package's experiments. It has no authentication, tenant isolation,

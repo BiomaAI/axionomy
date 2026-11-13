@@ -1,12 +1,10 @@
 //! What the server keeps beside the engine's runs: handles for economies,
-//! assessments, studies and refs.
+//! assessments and refs.
 //!
 //! Every economy is a point the engine recorded. Authoring records a run that
 //! starts from the authored state; applying exchanges records a run that forks
-//! from the source economy's point, with one step per exchange. A study records
-//! each of its documents the same way: its initial state as a run of its own,
-//! and its trace as a run forked from it. A handle is written after the runs it
-//! names, so a handle never names something missing. Handles are keyed with a
+//! from the source economy's point, with one step per exchange. A handle is
+//! written after the runs it names, so a handle never names something missing. Handles are keyed with a
 //! secret the store keeps, so they stay valid across restarts of a server that
 //! keeps its store on disk, and stay infeasible to guess.
 //!
@@ -20,18 +18,12 @@
 //! run's exchanges made from where the run starts, or an authored one when
 //! its run starts from an economy of its own.
 
-use crate::{
-    handles::{AssessmentId, EconomyId, RefId, StudyId},
-    messages::DocumentSummary,
-    studies::Trajectory,
-};
+use crate::handles::{AssessmentId, EconomyId, RefId};
 use axionomy::paths;
 use axionomy_engine::{
     Engine, EngineError, ExperimentPath, Following, Frame, GoalPath, Reached, Results,
 };
 use axionomy_store::{Durability, Point, Reader, RefPath, StoreError};
-use axionomy_study::{Study, StudyKey};
-use axionomy_view::DocumentPath;
 
 /// An economy's state: MCP's economies are identified by paths.
 pub(crate) type State = axionomy_engine::State;
@@ -47,13 +39,12 @@ use std::{
 
 const ECONOMIES: TableDefinition<&str, &[u8]> = TableDefinition::new("mcp-economies");
 const ASSESSMENTS: TableDefinition<&str, &[u8]> = TableDefinition::new("mcp-assessments");
-const STUDIES: TableDefinition<&str, &[u8]> = TableDefinition::new("mcp-studies");
 const SECRETS: TableDefinition<&str, &[u8; 32]> = TableDefinition::new("mcp-secrets");
 /// The handle that first named each point, by the point's encoding.
 const POINTS: TableDefinition<&[u8], &str> = TableDefinition::new("mcp-points");
 const HANDLE_SECRET: &str = "handles";
 
-/// Assessments and studies kept in memory.
+/// Assessments kept in memory.
 const CACHED: usize = 32;
 
 /// How a stored economy was made from its parent.
@@ -79,30 +70,6 @@ struct AssessmentRecord {
     economy_id: EconomyId,
     before: Vec<paths::Exchange>,
     exchange: paths::Exchange,
-}
-
-/// A study as the server keeps it: what it was computed from, and each
-/// document's economies. Its views are computed again from its key.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub(crate) struct StudyRecord {
-    pub key: StudyKey,
-    pub selected_document: DocumentPath,
-    pub documents: Vec<DocumentSummary>,
-}
-
-/// The operation a study document's initial economy is stored by: the study,
-/// the document and the state it starts from.
-#[derive(Serialize)]
-struct StudiedDocument<'a> {
-    study: &'a StudyKey,
-    document: &'a DocumentPath,
-    #[serde(serialize_with = "hex")]
-    root: axionomy_tree::Hash,
-}
-
-/// A root written as its hex digest, as every handle's operation writes it.
-fn hex<S: serde::Serializer>(root: &axionomy_tree::Hash, serializer: S) -> Result<S::Ok, S::Error> {
-    serializer.collect_str(&root.to_hex())
 }
 
 /// An economy as the server serves it: what its handle names, and the point
@@ -138,15 +105,13 @@ pub(crate) struct Assessed {
     pub assessment: paths::Assessment,
 }
 
-/// The server's handles for economies, assessments and studies, over the
-/// engine that records them, with the most recently used assessments and
-/// studies in memory.
+/// The server's handles for economies and assessments, over the engine that
+/// records them, with the most recently used assessments in memory.
 #[derive(Clone)]
 pub(crate) struct Archive {
     engine: Engine,
     secret: Arc<[u8; 32]>,
     assessments: Cache<AssessmentId, Assessed>,
-    studies: Cache<StudyId, Study>,
 }
 
 /// Whether a stored economy was stored by this call or an earlier one.
@@ -167,7 +132,6 @@ impl Archive {
                 let txn = txn.redb();
                 txn.open_table(ECONOMIES)?;
                 txn.open_table(ASSESSMENTS)?;
-                txn.open_table(STUDIES)?;
                 txn.open_table(POINTS)?;
                 let mut secrets = txn.open_table(SECRETS)?;
                 let kept = secrets.get(HANDLE_SECRET)?.map(|secret| *secret.value());
@@ -184,7 +148,6 @@ impl Archive {
             engine,
             secret: Arc::new(secret),
             assessments: Cache::default(),
-            studies: Cache::default(),
         })
     }
 
@@ -638,158 +601,6 @@ impl Archive {
             self.assessments.insert(assessment_id.clone(), assessed),
         ))
     }
-
-    /// Records a study's documents as economies and keeps the study under a
-    /// handle minted from its key, so the same study always has the same
-    /// handle. `trajectories` are its documents', in order. The record keeps
-    /// the key and each document's handles, never the study's views.
-    pub async fn keep_study(
-        &self,
-        study: Study,
-        trajectories: Vec<Trajectory>,
-    ) -> Result<(StudyId, StudyRecord), EngineError> {
-        let mut documents = Vec::with_capacity(trajectories.len());
-        for (document, trajectory) in study.documents.iter().zip(trajectories) {
-            let (initial_economy_id, final_economy_id) =
-                self.record_trajectory(&study.key, trajectory).await?;
-            documents.push(DocumentSummary {
-                id: document.id.clone(),
-                title: document.title.clone(),
-                frames: document.frames.len(),
-                initial_economy_id,
-                final_economy_id,
-            });
-        }
-        let record = StudyRecord {
-            key: study.key.clone(),
-            selected_document: study.selected_document.clone(),
-            documents,
-        };
-        let study_id = self.study_id(&study.key);
-        let key = study_id.to_string();
-        let kept = record.clone();
-        self.engine
-            .store()
-            .transact(Durability::Immediate, move |txn| {
-                put(txn.redb(), STUDIES, &key, &kept)
-            })
-            .await?;
-        self.studies.insert(study_id.clone(), study);
-        Ok((study_id, record))
-    }
-
-    fn study_id(&self, key: &StudyKey) -> StudyId {
-        StudyId::from_digest(&self.keyed(&[b"study", &encode(key)]))
-    }
-
-    /// Records a document's initial state as a run of its own and its
-    /// exchanges as a run forked from it, and returns both handles: the
-    /// initial one twice when it has no exchanges.
-    async fn record_trajectory(
-        &self,
-        key: &StudyKey,
-        trajectory: Trajectory,
-    ) -> Result<(EconomyId, EconomyId), EngineError> {
-        let studied = trajectory_operations(key, &trajectory).0;
-        let Trajectory {
-            initial, exchanges, ..
-        } = trajectory;
-        let entries = crate::authoring::entries(&initial.economy);
-        let initial_id = self
-            .author(None, &studied, entries, initial.economy)
-            .await?
-            .economy_id;
-        if exchanges.is_empty() {
-            return Ok((initial_id.clone(), initial_id));
-        }
-        let source = self
-            .economy(&initial_id)
-            .await?
-            .ok_or(StoreError::Malformed("study document's initial economy"))?;
-        let final_id = self
-            .exchanged(&initial_id, &source, exchanges)
-            .await?
-            .economy_id;
-        Ok((initial_id, final_id))
-    }
-
-    /// Whether `trajectories` are those `record` recorded: the same
-    /// documents, from the same initial states, by the same exchanges. It
-    /// compares the handles recording them would mint, and stores nothing.
-    pub fn recorded(&self, record: &StudyRecord, trajectories: &[Trajectory]) -> bool {
-        record.documents.len() == trajectories.len()
-            && record
-                .documents
-                .iter()
-                .zip(trajectories)
-                .all(|(document, trajectory)| {
-                    let (studied, exchanged) = trajectory_operations(&record.key, trajectory);
-                    let initial = self.handle(None, &studied);
-                    let last = match exchanged {
-                        Some(exchanged) => self.handle(Some(&initial), &exchanged),
-                        None => initial.clone(),
-                    };
-                    document.id == trajectory.document
-                        && document.initial_economy_id == initial
-                        && document.final_economy_id == last
-                })
-    }
-
-    /// A study's record: its key and its documents' handles.
-    pub fn study_record(&self, study_id: &StudyId) -> Result<Option<StudyRecord>, StoreError> {
-        let reader = self.engine.store().read()?;
-        let table = reader
-            .redb()
-            .open_table(STUDIES)
-            .map_err(StoreError::from)?;
-        let Some(bytes) = table.get(study_id.as_str()).map_err(StoreError::from)? else {
-            return Ok(None);
-        };
-        postcard::from_bytes(bytes.value())
-            .map(Some)
-            .map_err(|_| StoreError::Malformed("study record, kept by another version"))
-    }
-
-    /// A study's views, if they are in memory.
-    pub fn cached_study(&self, study_id: &StudyId) -> Option<Arc<Study>> {
-        self.studies.get(study_id)
-    }
-
-    /// Keeps a study's views in memory.
-    pub fn cache_study(&self, study_id: StudyId, study: Study) -> Arc<Study> {
-        self.studies.insert(study_id, study)
-    }
-}
-
-#[cfg(test)]
-impl Archive {
-    /// The store, for a server that starts with nothing in memory.
-    pub fn store(&self) -> axionomy_store::Store {
-        self.engine.store().clone()
-    }
-
-    /// The bytes a study is kept as.
-    pub fn study_bytes(&self, study_id: &StudyId) -> Option<Vec<u8>> {
-        let reader = self.engine.store().read().unwrap();
-        let table = reader.redb().open_table(STUDIES).unwrap();
-        let bytes = table.get(study_id.as_str()).unwrap()?;
-        Some(bytes.value().to_vec())
-    }
-
-    /// Replaces the bytes a study is kept as.
-    pub async fn replace_study_bytes(&self, study_id: &StudyId, bytes: Vec<u8>) {
-        let key = study_id.to_string();
-        self.engine
-            .store()
-            .transact(Durability::Immediate, move |txn| {
-                txn.redb()
-                    .open_table(STUDIES)?
-                    .insert(key.as_str(), bytes.as_slice())?;
-                Ok(())
-            })
-            .await
-            .unwrap();
-    }
 }
 
 /// Points named so far by one call to [`Archive::names`], and the records
@@ -875,24 +686,6 @@ fn ref_path(ref_id: &RefId) -> RefPath {
     format!("mcp/{ref_id}")
         .parse()
         .expect("a handle is a path segment")
-}
-
-/// The operations a trajectory's economies are stored by: its initial state,
-/// and its exchanges applied to that state, which is the operation of
-/// replaying them with `axionomy_trace_replay`. No exchanges, no second
-/// economy.
-fn trajectory_operations(key: &StudyKey, trajectory: &Trajectory) -> (Vec<u8>, Option<Vec<u8>>) {
-    let studied = operation(
-        "study",
-        &StudiedDocument {
-            study: key,
-            document: &trajectory.document,
-            root: trajectory.initial.root(),
-        },
-    );
-    let exchanges = &trajectory.exchanges;
-    let exchanged = (!exchanges.is_empty()).then(|| operation("exchanges", exchanges));
-    (studied, exchanged)
 }
 
 /// Runs the engine's synchronous `work` where blocking is allowed.

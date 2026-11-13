@@ -13,12 +13,9 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 axionomy-engine.workspace = true
-axionomy-problems.workspace = true
 axionomy-search.workspace = true
 axionomy-store.workspace = true
 axionomy-studio-api.workspace = true
-axionomy-study.workspace = true
-axionomy-view.workspace = true
 js-sys.workspace = true
 postcard.workspace = true
 redb.workspace = true

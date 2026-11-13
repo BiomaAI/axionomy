@@ -2,7 +2,7 @@ use clap::Parser;
 
 fn main() {
     let cli = axionomy_cli::Cli::parse();
-    match axionomy_cli::run(axionomy_problems::registry(), cli) {
+    match axionomy_cli::run(cli) {
         Ok(Some(text)) => println!("{text}"),
         Ok(None) => {}
         Err(error) => {

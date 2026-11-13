@@ -1,4 +1,4 @@
-//! Serving the problems and loaded packages over MCP and to Studio, until
+//! Serving the packages loaded into a store over MCP and to Studio, until
 //! the server is stopped.
 
 use crate::CliError;
@@ -6,7 +6,6 @@ use axionomy_engine::Engine;
 use axionomy_mcp::stateless_http_service;
 use axionomy_store::Store;
 use axionomy_studio_server::{StudioState, api, with_studio_frontend};
-use axionomy_study::Registry;
 use axum::{Router, routing::get};
 use std::{
     future::Future,
@@ -22,7 +21,6 @@ use tracing_subscriber::EnvFilter;
 /// file of `packages` is merged into it. A package that fails the checks
 /// loading makes stops the server before it serves.
 pub(crate) fn mcp(
-    registry: Registry,
     bind: SocketAddr,
     store: Option<PathBuf>,
     packages: &[PathBuf],
@@ -32,7 +30,7 @@ pub(crate) fn mcp(
     load(&engine, packages)?;
     runtime(async move {
         let cancellation = CancellationToken::new();
-        let service = stateless_http_service(engine, registry, cancellation.clone())?;
+        let service = stateless_http_service(engine, cancellation.clone())?;
         let app = Router::new()
             .route("/health", get(|| async { "ok" }))
             .nest_service("/mcp", service);
@@ -55,7 +53,6 @@ pub(crate) fn mcp(
 /// package that fails the checks loading makes stops the server before it
 /// serves.
 pub(crate) fn studio(
-    registry: Registry,
     bind: SocketAddr,
     frontend: &Path,
     store: Option<PathBuf>,
@@ -65,7 +62,7 @@ pub(crate) fn studio(
     let engine = engine(store, "serving the points and refs of a store on disk")?;
     load(&engine, packages)?;
     let serves_frontend = frontend.join("index.html").is_file();
-    let (router, _) = api(StudioState::new(engine, registry));
+    let (router, _) = api(StudioState::new(engine));
     let router = with_studio_frontend(router, frontend);
     let frontend = frontend.to_owned();
     runtime(async move {

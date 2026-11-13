@@ -1,7 +1,6 @@
 use crate::AxionomyMcp;
 use axionomy_engine::Engine;
 use axionomy_store::StoreError;
-use axionomy_study::Registry;
 use rmcp::transport::streamable_http_server::{
     StreamableHttpServerConfig, StreamableHttpService, session::never::NeverSessionManager,
 };
@@ -20,14 +19,12 @@ pub fn stateless_http_config(cancellation_token: CancellationToken) -> Streamabl
         .with_cancellation_token(cancellation_token)
 }
 
-/// The server over stateless HTTP, on `engine`, studying the problems of
-/// `registry`.
+/// The server over stateless HTTP, on `engine`.
 pub fn stateless_http_service(
     engine: Engine,
-    registry: Registry,
     cancellation_token: CancellationToken,
 ) -> Result<StatelessHttpService, StoreError> {
-    let server = AxionomyMcp::new(engine, registry)?;
+    let server = AxionomyMcp::new(engine)?;
     Ok(StreamableHttpService::new(
         move || Ok(server.clone()),
         Arc::new(NeverSessionManager::default()),

@@ -11,8 +11,7 @@ browser Worker (`axionomy-studio-wasm`) calls the same functions and gives
 the same JSON, so Studio reaches both through one client.
 
 `StudioState::new` takes the `axionomy-engine` `Engine` whose store the API
-serves, beside the `Registry` of the problems it studies until studies
-retire. Each handler runs the engine's synchronous work where blocking is
+serves; it knows no package of its own. Each handler runs the engine's synchronous work where blocking is
 allowed, never on the async runtime.
 
 ## Packages, points and experiments
@@ -87,19 +86,10 @@ made while the ref is still at `after` waits for it to move and returns as
 soon as it does. A ref, point, goal or objective the store lacks is 404, and
 `after` off the ref's history is 400.
 
-## Studies
-
-Until they retire, it also adapts the `axionomy-study` runtime into one
-problem catalog, pausable, resumable and cancellable in-memory studies,
-replay-derived documents, paginated frames and Server-Sent Events, over the
-problems of its `Registry`; it knows no problem of its own. Each study gets
-a minted ID such as `study-7`; once published, the study, its documents and
-their frames are served under `/api/studies/{study_id}/study`.
-
 ## Serving
 
-The `axionomy` application (`axionomy-cli`) serves the sample problems with
-it, the API and the optional built Studio frontend:
+The `axionomy` application (`axionomy-cli`) serves the packages a store holds
+with it, the API and the optional built Studio frontend:
 
 ```sh
 cargo run -p axionomy-cli -- studio
@@ -119,14 +109,12 @@ prints clickable Studio, health, and OpenAPI URLs using the address and port
 the operating system actually bound. It also reports when the frontend has
 not been built and prints the command needed to build it.
 
-Studio generates its browser contract, its static catalog and the sample
-packages with `pnpm generate`, which runs:
+Studio generates its browser contract and the sample packages with
+`pnpm generate`, which runs:
 
 ```sh
 cargo run -p axionomy-studio-server --bin export-openapi -- studio/openapi.json
-cargo run -p axionomy-cli -- export-studies studio/public/studies
 cargo run -p axionomy-cli -- package samples studio/public/packages
 ```
 
-The contract does not depend on which problems are registered or which
-packages are loaded.
+The contract does not depend on which packages are loaded.

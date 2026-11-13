@@ -1,14 +1,13 @@
-//! Resource addresses. Everything an economy, assessment or study holds is read
-//! as an `axionomy://` resource, and every list is read one page at a time with
+//! Resource addresses. Everything an economy or assessment holds is read as
+//! an `axionomy://` resource, and every list is read one page at a time with
 //! the MCP pagination conventions: an opaque `cursor` chosen by the server,
 //! returned as `nextCursor` while more items remain. The named economies never
 //! change, so a page's content never goes stale.
 
 use axionomy::InvariantPath;
 
-use crate::handles::{AssessmentId, EconomyId, HandleError, StudyId};
+use crate::handles::{AssessmentId, EconomyId, HandleError};
 use axionomy::{AccountPath, AssetPath, RatePath, path::Path};
-use axionomy_view::DocumentPath;
 use rmcp::{
     ErrorData as McpError,
     model::{Resource, ResourceTemplate},
@@ -22,8 +21,6 @@ use std::{
 pub(crate) const SCHEME: &str = "axionomy://";
 /// Items per page of quantities, accounts, rates and other small rows.
 pub(crate) const PAGE_ROWS: usize = 500;
-/// Frames per page; one frame carries a whole rendered scene.
-pub(crate) const PAGE_FRAMES: usize = 10;
 /// How long a page stays fresh: its economy never changes, so a day is only a
 /// bound on how long a client keeps it.
 pub(crate) const IMMUTABLE_TTL_MS: u64 = 86_400_000;
@@ -84,17 +81,6 @@ pub(crate) enum Target {
     },
     AssessmentLines {
         assessment_id: AssessmentId,
-    },
-    Study {
-        study_id: StudyId,
-    },
-    Document {
-        study_id: StudyId,
-        document: DocumentPath,
-    },
-    Frames {
-        study_id: StudyId,
-        document: DocumentPath,
     },
 }
 
@@ -166,9 +152,6 @@ pub(crate) fn templates() -> Vec<ResourceTemplate> {
         ("axionomy://economy/{economy_id}/diff/{other_id}{?cursor}", "diff", "Diff", "What differs from this economy to another, in path order: accounts opened and closed, balances with both quantities, rates added, removed or redefined, and whether the invariants differ. Economies with equal contents have no rows."),
         ("axionomy://assessment/{assessment_id}", "assessment", "Assessment", "An exchange checked against an economy: its status (`applicable`, `infeasible` or `invalid`), its issues, and how many lines explain it."),
         ("axionomy://assessment/{assessment_id}/lines{?cursor}", "assessment-lines", "Assessment lines", "What each account lacks for an infeasible exchange, or what an applicable one would move."),
-        ("axionomy://study/{study_id}", "study", "Study", "A finished study of a problem: its key, its selected document, and each document with its frame count and its two economies, initial_economy_id and final_economy_id, which every economy tool reads, steps through and branches from."),
-        ("axionomy://study/{study_id}/documents/{document}", "document", "Study document", "One document of a study, an outcome such as a strategy's run, without its frames: its initial_economy_id and final_economy_id, how many frames it has, and its view: initial balances, objectives and thinking, keyed for display."),
-        ("axionomy://study/{study_id}/documents/{document}/frames{?cursor}", "frames", "Study frames", "A document's frames in order, one per exchange of its trajectory. Frame i (its `step` is i + 1, its `view.index` is i) shows the economy axionomy_trace_step names at step i + 1 on the document's final_economy_id. Its `exchange` is written in that economy's own paths: apply it to step i with axionomy_exchange_apply and you get step i + 1. Its `view` is how Studio shows the frame, keyed for display."),
     ]
     .into_iter()
     .map(|(template, name, title, description)| {
@@ -252,21 +235,6 @@ impl Target {
             Self::AssessmentLines { assessment_id } => {
                 (vec!["assessment", assessment_id.as_str(), "lines"], vec![])
             }
-            Self::Study { study_id } => (vec!["study", study_id.as_str()], vec![]),
-            Self::Document { study_id, document } => (
-                vec!["study", study_id.as_str(), "documents", document.as_str()],
-                vec![],
-            ),
-            Self::Frames { study_id, document } => (
-                vec![
-                    "study",
-                    study_id.as_str(),
-                    "documents",
-                    document.as_str(),
-                    "frames",
-                ],
-                vec![],
-            ),
         };
         let path: Vec<String> = segments.into_iter().map(encode).collect();
         uri.push_str(&path.join("/"));
@@ -292,11 +260,7 @@ impl Target {
     fn is_paged(&self) -> bool {
         !matches!(
             self,
-            Self::Economy { .. }
-                | Self::Rate { .. }
-                | Self::Assessment { .. }
-                | Self::Study { .. }
-                | Self::Document { .. }
+            Self::Economy { .. } | Self::Rate { .. } | Self::Assessment { .. }
         )
     }
 
@@ -384,17 +348,6 @@ impl Address {
             },
             ["assessment", id, "lines"] => Target::AssessmentLines {
                 assessment_id: handle(uri, id)?,
-            },
-            ["study", id] => Target::Study {
-                study_id: handle(uri, id)?,
-            },
-            ["study", id, "documents", document] => Target::Document {
-                study_id: handle(uri, id)?,
-                document: joined(uri, "a document", &[document])?,
-            },
-            ["study", id, "documents", document, "frames"] => Target::Frames {
-                study_id: handle(uri, id)?,
-                document: joined(uri, "a document", &[document])?,
             },
             _ => return Err(unknown()),
         };
@@ -596,10 +549,6 @@ mod tests {
             Target::InvariantWeights {
                 economy_id: economy(),
                 invariant: "supply/cash".parse().unwrap(),
-            },
-            Target::Frames {
-                study_id: format!("stu-{}", "0".repeat(64)).parse().unwrap(),
-                document: "outcomes/a-star".parse().unwrap(),
             },
         ];
         for target in targets {

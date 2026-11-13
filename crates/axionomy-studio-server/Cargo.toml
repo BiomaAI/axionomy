@@ -15,7 +15,6 @@ axionomy-engine.workspace = true
 axionomy-search.workspace = true
 axionomy-store.workspace = true
 axionomy-studio-api.workspace = true
-axionomy-study.workspace = true
 axionomy-view.workspace = true
 axum.workspace = true
 futures-util.workspace = true

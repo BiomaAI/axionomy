@@ -2,11 +2,8 @@
 
 The Web Worker adapter for Axionomy Studio. It exports the engine itself
 (P11, D-047), offering the operations the native Studio server offers (P12,
-D-045), and, until studies retire, the same Rust-owned problem catalog,
-study request, solver observations and study the native HTTP service uses:
-`study()` computes one and emits the same Studio events. JavaScript
-schedules and transports the computation; it does not reimplement any
-economic semantics.
+D-045). JavaScript schedules and transports the computation; it does not
+reimplement any economic semantics.
 
 `Engine` is an `axionomy-engine` over the Worker's store.
 

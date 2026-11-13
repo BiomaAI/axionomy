@@ -258,7 +258,6 @@ fn write(path: &PathBuf, bytes: &[u8]) -> Result<(), CliError> {
 mod tests {
     use crate::run_from;
     use axionomy_engine::{Engine, ScriptCall, Strategy};
-    use axionomy_problems::registry;
     use axionomy_store::Store;
 
     /// A scratch directory, removed when the test ends.
@@ -271,7 +270,7 @@ mod tests {
     }
 
     fn printed(arguments: &[&str]) -> String {
-        run_from(registry(), arguments.iter().copied())
+        run_from(arguments.iter().copied())
             .unwrap()
             .expect("a package command prints")
     }
@@ -347,20 +346,17 @@ mod tests {
         assert!(fresh.referred(&"elsewhere".parse().unwrap()).is_err());
         // A package is written to a new file only.
         assert!(
-            run_from(
-                registry(),
-                [
-                    "axionomy",
-                    "package",
-                    "export",
-                    &file("work.redb"),
-                    &file("walk.zip"),
-                    "--name",
-                    "walk",
-                    "--version",
-                    "0.1.0",
-                ],
-            )
+            run_from([
+                "axionomy",
+                "package",
+                "export",
+                &file("work.redb"),
+                &file("walk.zip"),
+                "--name",
+                "walk",
+                "--version",
+                "0.1.0",
+            ],)
             .is_err()
         );
     }

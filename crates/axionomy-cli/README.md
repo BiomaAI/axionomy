@@ -1,21 +1,15 @@
 # axionomy-cli
 
-The `axionomy` application. It registers the sample problems
-(`axionomy_problems::registry()`) and studies them, or serves them: over MCP
-with `axionomy mcp`, and to Studio with `axionomy studio`. The transports are
-libraries that know no problem; this is where problems meet them. `run` and
-`run_from` take the `Registry` to serve, so an application of your own reuses
-them with its own problems. Problems and studies give way to packages,
-redb files the application loads, and experiments on them: `axionomy mcp`
-and `axionomy studio` load packages and serve them already
-([plan](../../docs/SIMULATION.md#plan-axionomy-on-primitives), D-048, D-050).
+The `axionomy` application. It makes, loads and looks into packages, redb
+files holding economies, refs, goals, scripts, strategies, experiments and
+views, and serves the packages a store holds: over MCP with `axionomy mcp`,
+and to Studio with `axionomy studio`. The transports are libraries that know
+no package; they serve whatever the store holds, so an application of your
+own serves its packages with the same calls
+([plan](../../docs/SIMULATION.md#plan-axionomy-on-primitives), D-045, D-048).
+The sample problems reach it as packages too, written by `package samples`.
 
 ```console
-cargo run -p axionomy-cli -- catalog
-cargo run -p axionomy-cli -- describe logistics
-cargo run -p axionomy-cli -- study logistics --instance showcase --strategy reliable
-cargo run -p axionomy-cli -- study marketplace --instance micro --format json > marketplace.json
-cargo run -p axionomy-cli -- export-studies studio/public/studies
 cargo run -p axionomy-cli -- mcp --bind 127.0.0.1:8000 --store economies.redb
 cargo run -p axionomy-cli -- mcp --package packages/maze.zip --package packages/sokoban.zip
 cargo run -p axionomy-cli -- studio --bind 127.0.0.1:3000 --store work.redb
@@ -53,11 +47,6 @@ files separated as `PATH` separates them, read when no `--package` is
 given), `AXIONOMY_STUDIO_BIND`, `AXIONOMY_STUDIO_DIR`,
 `AXIONOMY_STUDIO_STORE`, `AXIONOMY_STUDIO_PACKAGES`.
 
-Every problem declares its instances, and `describe` lists them with its
-family and capabilities in the words the problem gives them; the canonical
-problems declare `micro`, `showcase` and `stress`. Omitting `--instance`
-selects the problem's default, Showcase for the samples, and the study
-records its key: the problem, instance, strategy, seed and budget it was
-computed from. Problems, instances and strategies are written in kebab-case
-(`work-league`, `showcase`, `a-star`), and the CLI refuses any other spelling
-when it reads them.
+Package names, refs and definitions are paths written in kebab-case
+(`work-league`, `maze/micro`, `maze/a-star`), and the CLI refuses any other
+spelling when it reads them.

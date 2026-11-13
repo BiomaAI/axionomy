@@ -9,7 +9,6 @@ use axionomy_store::{Point, Store};
 use axionomy_studio_server::{
     ErrorResponse, PointId, RefFrames, RefMoved, RefView, StudioState, api,
 };
-use axionomy_study::Registry;
 use axum::{
     Router,
     body::Body,
@@ -68,7 +67,7 @@ fn bank() -> (Engine, Point, Router) {
         )
         .unwrap();
     let start = engine.author(economy).unwrap();
-    let (router, _) = api(StudioState::new(engine.clone(), Registry::new()));
+    let (router, _) = api(StudioState::new(engine.clone()));
     (engine, start, router)
 }
 

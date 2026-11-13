@@ -94,11 +94,6 @@ handle!(
     "asm-"
 );
 handle!(
-    /// A stored study of a problem.
-    StudyId,
-    "stu-"
-);
-handle!(
     /// A ref the server made: a name for the economy an application is at,
     /// which moves only forward.
     RefId,
@@ -115,17 +110,12 @@ pub(crate) trait Handle: fmt::Display {
 
 impl Handle for EconomyId {
     const NAMES: &'static str = "economy";
-    const MADE_AGAIN: &'static str = "make the economy again with the call that made it (axionomy_economy_create, axionomy_economy_extend, axionomy_exchange_apply, axionomy_trace_replay, axionomy_trace_step, axionomy_search, axionomy_problem_study, axionomy_package_list, axionomy_experiment_run, axionomy_experiment_results, axionomy_ref_read or axionomy_ref_frames)";
+    const MADE_AGAIN: &'static str = "make the economy again with the call that made it (axionomy_economy_create, axionomy_economy_extend, axionomy_exchange_apply, axionomy_trace_replay, axionomy_trace_step, axionomy_search, axionomy_package_list, axionomy_experiment_run, axionomy_experiment_results, axionomy_ref_read or axionomy_ref_frames)";
 }
 
 impl Handle for AssessmentId {
     const NAMES: &'static str = "assessment";
     const MADE_AGAIN: &'static str = "assess the exchange again with axionomy_exchange_assess";
-}
-
-impl Handle for StudyId {
-    const NAMES: &'static str = "study";
-    const MADE_AGAIN: &'static str = "study the problem again with axionomy_problem_study";
 }
 
 impl Handle for RefId {

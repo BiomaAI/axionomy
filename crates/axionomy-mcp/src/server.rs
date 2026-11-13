@@ -7,15 +7,13 @@ use crate::{
         EconomyExtendRequest, EconomyStored, ExchangeRequest, ExchangedResponse,
         ExperimentObjective, ExperimentRequest, ExperimentResults, FailureCode, FrameReceipt,
         Issue, LineKind, PackageListRequest, PackageListResponse, PackageRef, PackageSummary,
-        PackageVersion, ProblemCatalogRequest, ProblemCatalogResponse, QuantityLine,
-        RefAdvanceRequest, RefCreateRequest, RefDeleteRequest, RefFrame, RefFramesRequest,
-        RefFramesResponse, RefPosition, RefReadRequest, ReplayRequest, SearchOutcome,
-        SearchRequest, SearchResponse, SearchSolved, StateRoot, StudySummary, ToolFailure,
+        PackageVersion, QuantityLine, RefAdvanceRequest, RefCreateRequest, RefDeleteRequest,
+        RefFrame, RefFramesRequest, RefFramesResponse, RefPosition, RefReadRequest, ReplayRequest,
+        SearchOutcome, SearchRequest, SearchResponse, SearchSolved, StateRoot, ToolFailure,
         TraceFindRequest, TraceFindResponse, TraceStepRequest, TraceStepResponse, TrialResult,
     },
     resources::{self, Address, IMMUTABLE_TTL_MS, LIST_TTL_MS, Target},
     store::{self, Archive, Assessed, Loaded, Origin, content_name},
-    studies,
 };
 use axionomy::{
     AccountPath, AssessmentStatus, PathKind, Quantity, QuantityComparison, path::Path, paths,
@@ -26,7 +24,6 @@ use axionomy_engine::{
 };
 use axionomy_search::GraphSearchProgress;
 use axionomy_store::{DefinitionPath, StoreError};
-use axionomy_study::{Progress, Registry, StudyControl, StudyError, StudyRequest};
 use rmcp::{
     ErrorData as McpError, ServerHandler,
     handler::server::{
@@ -73,7 +70,6 @@ const MAX_WAIT_SECONDS: u64 = 30;
 /// Trials over all its arms an experiment may run, or report, in one call.
 const MAX_TRIALS: u64 = 1_000;
 const SEARCH: &str = "axionomy_search";
-const PROBLEM_STUDY: &str = "axionomy_problem_study";
 
 const INSTRUCTIONS: &str = "Axionomy is an exact economic kernel. An economy holds accounts with \
 balances, rates and conservation invariants, and every change is an exchange: some units of a \
@@ -84,17 +80,18 @@ never changes: every call that changes something stores a new economy and return
 older handles are branches to return to.
 
 Start here:
-1. axionomy_problem_catalog lists the problems this server studies with their instance and strategy keys.
-2. axionomy_problem_study studies one and returns its documents, the requested strategy's run \
-and the problem's other outcomes, each with initial_economy_id and final_economy_id.
-3. axionomy_trace_step with a step on final_economy_id names the economy at that step of the \
-study.
+1. axionomy_package_list lists the packages loaded when the server started: each package's refs, \
+each with the economy_id of the point it names, and its experiments and strategies.
+2. axionomy_experiment_run runs an experiment, such as `maze/micro`, and returns every arm's \
+trials, each with the economy_id it reached.
+3. axionomy_trace_step with a step on that economy_id names the economy at that step of the \
+trial's run.
 4. Read that economy's rates (axionomy://economy/{economy_id}/rates) for candidate exchanges, and \
 its accounts (.../accounts).
 5. axionomy_exchange_assess says whether an exchange would apply, and why not; \
 axionomy_exchange_apply applies it and returns your economy.
 6. The diff resource (axionomy://economy/{economy_id}/diff/{other_id}) compares your economy \
-with the study's next step.
+with the run's next step.
 
 An exchange looks like {\"rate\": \"transfer\", \"bindings\": {\"giver\": \"source\", \
 \"receiver\": \"sink\"}, \"units\": \"2\"}. Bind an account to every role of the rate. A role the \
@@ -102,10 +99,8 @@ rate opens binds the path of the account the exchange creates, which must not ex
 it closes binds an account its effects leave empty.
 
 Steps: step N of a trace is the economy after its first N exchanges, and step 0 the economy they \
-were applied to. Positions of exchanges count from 0 (exchange_index, a frame's view.index): the \
-exchange at index i takes step i to step i + 1. Messages count from 1 (\"exchange 2 of 3\"). \
-Frame i of a study document shows step i + 1 of its final_economy_id, and its exchange is written \
-as that economy writes it: applied to step i with axionomy_exchange_apply, it makes step i + 1.
+were applied to. Positions of exchanges count from 0 (exchange_index): the exchange at index i \
+takes step i to step i + 1. Messages count from 1 (\"exchange 2 of 3\").
 
 Build economies of your own with axionomy_economy_create and axionomy_economy_extend, at most \
 10,000 entries per call; apply a sequence of exchanges with axionomy_trace_replay; find the first \
@@ -115,12 +110,9 @@ resources: tool results link to them, paths appear in their URIs as is \
 (.../accounts/agents/7/wallet), every list is paged with a cursor, and a page never changes. \
 Economies with equal roots have equal contents, however they were made.
 
-Packages loaded when the server started carry economies, strategies and experiments. \
-axionomy_package_list lists them: each package's refs, each with the economy_id of the point it \
-names, and its experiments and strategies by path. axionomy_experiment_run runs an experiment, \
-such as `maze/micro`, and returns every arm's trials, each with its seed, how it ended, its \
-objective values and the economy_id it reached: step through that economy's trace with \
-axionomy_trace_step and branch from any step, as from a study's final economy. \
+Packages carry economies, strategies and experiments. An experiment's trials each give their \
+seed, how they ended, their objective values and the economy_id they reached: step through that \
+economy's trace with axionomy_trace_step and branch from any step. \
 axionomy_experiment_results gives the results an experiment last recorded.
 
 An application that moves through economies, such as a game or a simulation, keeps a ref on the \
@@ -135,9 +127,9 @@ delivered. axionomy_ref_delete deletes a ref from the economy the deleter saw it
 never move: make a ref of your own at the economy one names. Every economy a ref or a frame names \
 is an economy_id like any other.
 
-axionomy_problem_study and axionomy_search run as MCP tasks: declare the \
-io.modelcontextprotocol/tasks extension and poll tasks/get for the result. Without it they fail \
-with tasks_required; every other tool works without it, so a client can still build, step \
+axionomy_search runs as an MCP task: declare the io.modelcontextprotocol/tasks extension and \
+poll tasks/get for the result. Without it it fails with tasks_required; every other tool works \
+without it, so a client can still build, step \
 through and branch economies of its own.
 
 A failed call returns isError with {error, message, details}: error is a stable code, an \
@@ -148,9 +140,6 @@ server's store: across restarts when it is on disk, until the server stops when 
 #[derive(Clone)]
 pub struct AxionomyMcp {
     pub(crate) archive: Archive,
-    /// The problems `axionomy_problem_study` studies, until packages replace
-    /// them.
-    pub(crate) registry: Arc<Registry>,
     tasks: TaskManager,
     task_options: TaskOptions,
     tool_router: ToolRouter<Self>,
@@ -159,13 +148,11 @@ pub struct AxionomyMcp {
 #[tool_router]
 impl AxionomyMcp {
     /// A server over `engine`, keeping its economies, and the handles that
-    /// name them, in the engine's store, and studying the problems of
-    /// `registry`. A store on disk keeps them, and the secret the handles are
-    /// keyed with, across restarts.
-    pub fn new(engine: Engine, registry: Registry) -> Result<Self, StoreError> {
+    /// name them, in the engine's store. A store on disk keeps them, and the
+    /// secret the handles are keyed with, across restarts.
+    pub fn new(engine: Engine) -> Result<Self, StoreError> {
         Ok(Self {
             archive: Archive::open(engine)?,
-            registry: Arc::new(registry),
             tasks: TaskManager::new(),
             task_options: TaskOptions::new()
                 .with_poll_interval_ms(TASK_POLL_INTERVAL_MS)
@@ -422,39 +409,6 @@ impl AxionomyMcp {
         Parameters(_request): Parameters<SearchRequest>,
     ) -> Result<Linked<SearchResponse>, ToolError> {
         Err(tasks_required(SEARCH))
-    }
-
-    #[tool(
-        name = "axionomy_problem_catalog",
-        title = "List problems",
-        description = "List the problems this server studies: each problem's `key`, the `key`s of its instances and strategies, which axionomy_problem_study takes, and its defaults. Each problem declares its own instances, family and capabilities as a `key` with a `label` to show people.",
-        output_schema = schema_for_output::<ProblemCatalogResponse>(),
-        annotations(read_only_hint = true, open_world_hint = false)
-    )]
-    async fn problem_catalog(
-        &self,
-        Parameters(_request): Parameters<ProblemCatalogRequest>,
-    ) -> Result<Linked<ProblemCatalogResponse>, ToolError> {
-        Ok(Linked::new(
-            ProblemCatalogResponse {
-                problems: self.registry.catalog(),
-            },
-            Vec::new(),
-        ))
-    }
-
-    #[tool(
-        name = "axionomy_problem_study",
-        title = "Study a problem",
-        description = "Study one problem from axionomy_problem_catalog and return a summary of its documents: the run of the requested `strategy`, which is the `selected_document`, beside the problem's other outcomes, usually the runs of its other strategies and cases such as a deadlock. Take the `problem`, `instance` and `strategy` keys from axionomy_problem_catalog; the instance is one of the problem's own, its default when omitted. Each document is two stored economies: initial_economy_id, where its trajectory starts, and final_economy_id, where its exchanges reach. Step into the final one with axionomy_trace_step and branch from any step; frame i's exchange applies to step i. The study's documents and frames are linked resources. Runs only as an MCP task: a client that does not declare the io.modelcontextprotocol/tasks extension gets `tasks_required`.",
-        output_schema = schema_for_output::<StudySummary>(),
-        annotations(destructive_hint = false, idempotent_hint = true, open_world_hint = false)
-    )]
-    async fn problem_study_requires_tasks(
-        &self,
-        Parameters(_request): Parameters<StudyRequest>,
-    ) -> Result<Linked<StudySummary>, ToolError> {
-        Err(tasks_required(PROBLEM_STUDY))
     }
 
     #[tool(
@@ -1066,39 +1020,6 @@ impl AxionomyMcp {
         });
         Ok(CreateTaskResult::new(task).into())
     }
-
-    fn start_problem_study(
-        &self,
-        arguments: Option<&JsonObject>,
-    ) -> Result<CallToolResponse, ToolError> {
-        let request: StudyRequest = arguments_of(arguments)?;
-        if request.budget == 0 {
-            return Err(ToolError::argument(
-                "/budget",
-                "budget must be greater than zero",
-            ));
-        }
-        self.registry.resolve(&request).map_err(|error| {
-            let refused = ToolError::new(
-                FailureCode::InvalidRequest,
-                format!(
-                    "{error}; axionomy_problem_catalog lists every problem with its instances and strategies"
-                ),
-            );
-            match error {
-                StudyError::UnknownProblem(_) => refused.at("/problem"),
-                StudyError::UnknownInstance { .. } => refused.at("/instance"),
-                StudyError::UnknownStrategy { .. } => refused.at("/strategy"),
-                _ => refused,
-            }
-        })?;
-        let archive = self.archive.clone();
-        let registry = Arc::clone(&self.registry);
-        let task = self.tasks.spawn(self.task_options.clone(), move |context| {
-            Box::pin(study_problem(context, archive, registry, request))
-        });
-        Ok(CreateTaskResult::new(task).into())
-    }
 }
 
 #[tool_handler(router = self.tool_router)]
@@ -1118,11 +1039,6 @@ impl ServerHandler for AxionomyMcp {
             return self
                 .start_search(request.arguments.as_ref())
                 .await
-                .or_else(ToolError::into_call_tool_result);
-        }
-        if tasks && request.name == PROBLEM_STUDY {
-            return self
-                .start_problem_study(request.arguments.as_ref())
                 .or_else(ToolError::into_call_tool_result);
         }
         let context = ToolCallContext::new(self, request, context);
@@ -1489,8 +1405,6 @@ fn check_arguments(tool: &str, arguments: Option<&JsonObject>) -> Result<(), Too
         "axionomy_trace_step" => check::<TraceStepRequest>(arguments),
         "axionomy_trace_find" => check::<TraceFindRequest>(arguments),
         SEARCH => check::<SearchRequest>(arguments),
-        "axionomy_problem_catalog" => check::<ProblemCatalogRequest>(arguments),
-        PROBLEM_STUDY => check::<StudyRequest>(arguments),
         "axionomy_package_list" => check::<PackageListRequest>(arguments),
         "axionomy_experiment_run" | "axionomy_experiment_results" => {
             check::<ExperimentRequest>(arguments)
@@ -1512,7 +1426,7 @@ fn traced(economy_id: &EconomyId, loaded: &Loaded) -> Result<(EconomyId, usize),
         _ => Err(ToolError::argument(
             "/economy_id",
             format!(
-                "`{economy_id}` was authored, not made by exchanges, so it has no trace to step through; name an economy that axionomy_exchange_apply, axionomy_trace_replay, axionomy_search or a study made"
+                "`{economy_id}` was authored, not made by exchanges, so it has no trace to step through; name an economy that axionomy_exchange_apply, axionomy_trace_replay, axionomy_search or an experiment made"
             ),
         )),
     }
@@ -1758,88 +1672,6 @@ pub(crate) fn assessment_lines(
 
 fn task_error(error: impl ToString) -> TaskExit {
     TaskExit::Error(McpError::internal_error(error.to_string(), None))
-}
-
-async fn study_problem(
-    context: TaskContext,
-    archive: Archive,
-    registry: Arc<Registry>,
-    request: StudyRequest,
-) -> Result<CallToolResult, TaskExit> {
-    let control = Arc::new(StudyControl::default());
-    let worker_control = Arc::clone(&control);
-    let (progress_tx, mut progress_rx) = tokio::sync::mpsc::unbounded_channel::<Progress>();
-    let mut worker = tokio::task::spawn_blocking(move || {
-        studies::compute(&registry, &request, &worker_control, Some(progress_tx))
-    });
-
-    let mut reporting = true;
-    let (study, trajectories) = loop {
-        tokio::select! {
-            progress = progress_rx.recv(), if reporting => match progress {
-                Some(progress) => context.set_status_message(format!("{}: {} ({}/{})", progress.phase.label, progress.message, progress.completed, progress.total)),
-                // The worker has returned; its result is ready.
-                None => reporting = false,
-            },
-            result = &mut worker => {
-                break result.map_err(task_error)?.map_err(task_error)?;
-            }
-            () = tokio::time::sleep(std::time::Duration::from_millis(10)) => {
-                if context.is_cancel_requested() {
-                    control.cancel();
-                    return Err(TaskExit::Cancelled);
-                }
-            }
-        }
-    };
-    context.set_status_message(format!(
-        "recording {} documents as economies",
-        study.documents.len()
-    ));
-    let (study_id, record) = archive
-        .keep_study(study, trajectories)
-        .await
-        .map_err(task_error)?;
-    let summary = StudySummary {
-        study_id,
-        key: record.key,
-        selected_document: record.selected_document,
-        documents: record.documents,
-    };
-    context.set_status_message(format!(
-        "completed: {} documents, selected {}",
-        summary.documents.len(),
-        summary.selected_document
-    ));
-    let mut links = vec![
-        Target::Study {
-            study_id: summary.study_id.clone(),
-        }
-        .link("study", "The study's key and documents, each with its two economies"),
-        Target::Frames {
-            study_id: summary.study_id.clone(),
-            document: summary.selected_document.clone(),
-        }
-        .link("frames", "The selected document's frames, paged; frame i's exchange applies to step i of its final economy"),
-    ];
-    if let Some(selected) = summary
-        .documents
-        .iter()
-        .find(|document| document.id == summary.selected_document)
-    {
-        links.push(
-            Target::Economy {
-                economy_id: selected.final_economy_id.clone(),
-            }
-            .link(
-                "economy",
-                "The economy the selected document reaches; step into it with axionomy_trace_step",
-            ),
-        );
-    }
-    Linked::new(summary, links)
-        .into_result()
-        .map_err(TaskExit::Error)
 }
 
 async fn run_search(

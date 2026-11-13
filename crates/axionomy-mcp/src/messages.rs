@@ -4,7 +4,7 @@
 //! Maps are ordered by ID, so the same entries produce the same economy handle
 //! however a client orders its JSON keys.
 
-use crate::handles::{AssessmentId, EconomyId, RefId, StudyId};
+use crate::handles::{AssessmentId, EconomyId, RefId};
 use axionomy::{
     AccountPath, AssetPath, ConditionPath, InvariantPath, Measure, ParameterPath, Quantity,
     RatePath, RolePath, paths,
@@ -14,8 +14,6 @@ use axionomy_engine::{
 };
 use axionomy_search::{GraphSearchProgress, pareto::ObjectiveDirection};
 use axionomy_store::RefPath;
-use axionomy_study::StudyKey;
-use axionomy_view::DocumentPath;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, num::NonZeroUsize};
@@ -441,47 +439,6 @@ pub struct SearchSolved {
     pub cost: u64,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct ProblemCatalogRequest {}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-pub struct ProblemCatalogResponse {
-    pub problems: Vec<axionomy_study::ProblemDescriptor>,
-}
-
-/// A finished study of a problem. Its documents and their frames are
-/// resources, and each document's trajectory is two economies: the economy it
-/// starts from and the economy its exchanges reach.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-pub struct StudySummary {
-    pub study_id: StudyId,
-    /// What the study was computed from: the problem, instance, strategy, seed
-    /// and budget.
-    pub key: StudyKey,
-    /// The document of the requested strategy's run.
-    pub selected_document: DocumentPath,
-    pub documents: Vec<DocumentSummary>,
-}
-
-/// One document of a study: one outcome, such as a strategy's run, as a
-/// trajectory.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-pub struct DocumentSummary {
-    pub id: DocumentPath,
-    pub title: String,
-    /// Frames, one per exchange of the trajectory.
-    pub frames: usize,
-    /// The economy the trajectory starts from, stored as an authored economy.
-    pub initial_economy_id: EconomyId,
-    /// The economy the trajectory reaches, made by applying its exchanges to
-    /// the initial one: `axionomy_trace_step` with step N names the economy
-    /// after N of them, the one frame N − 1 shows, and its `exchanges`
-    /// resource is the trace.
-    /// The initial economy itself when the trajectory has no exchanges.
-    pub final_economy_id: EconomyId,
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct RefCreateRequest {
@@ -787,8 +744,8 @@ pub enum FailureCode {
     /// The arguments are malformed or out of range; `details.pointer` is the
     /// JSON pointer of the argument at fault.
     InvalidRequest,
-    /// What a handle or path names does not exist: an economy, assessment,
-    /// study or ref this server's store does not hold, an account no
+    /// What a handle or path names does not exist: an economy, assessment
+    /// or ref this server's store does not hold, an account no
     /// economy of the trace has, an experiment no loaded package carries, or
     /// results an experiment has not recorded.
     NotFound,

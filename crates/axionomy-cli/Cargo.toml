@@ -1,6 +1,6 @@
 [package]
 name = "axionomy-cli"
-description = "The axionomy application: studies the sample problems, and serves them over MCP and to Studio"
+description = "The axionomy application: makes and loads packages, the samples among them, and serves them over MCP and to Studio"
 readme = "README.md"
 version.workspace = true
 authors.workspace = true
@@ -16,7 +16,6 @@ axionomy-problems = { workspace = true, features = ["packages"] }
 axionomy-store.workspace = true
 axionomy-studio-api.workspace = true
 axionomy-studio-server.workspace = true
-axionomy-study.workspace = true
 axum.workspace = true
 clap = { workspace = true, features = ["env"] }
 serde_json.workspace = true
