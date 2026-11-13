@@ -302,6 +302,35 @@ fn branch_and_bound_and_beam_find_the_cheapest_progress() {
     assert_eq!(ran.end.step, start.step + 4);
 }
 
+#[test]
+fn best_first_finds_the_cheapest_progress_within_its_budget() {
+    let (engine, start) = workshop();
+    let best_first = Strategy::BestFirst {
+        candidates: path("steps"),
+        cost: workshop_call("cost"),
+        heuristic: None,
+    };
+    let ran = run(&engine, start, &best_first, "done", EFFORT);
+    assert!(matches!(ran.outcome, Outcome::Reached));
+    assert_eq!(ran.cost, Some(4));
+    assert_eq!(ran.end.step, start.step + 4);
+
+    // One expansion reaches two units of progress at most, short of four.
+    let ran = run(
+        &engine,
+        start,
+        &best_first,
+        "done",
+        Effort {
+            budget: 1,
+            ..EFFORT
+        },
+    );
+    assert!(matches!(ran.outcome, Outcome::Spent));
+    assert_eq!(ran.end, start);
+    assert_eq!(ran.cost, None);
+}
+
 /// One of each asset, `<asset>/<chore>`, of `chores`.
 fn one_each(asset: &str, chores: &[&str]) -> paths::Basket {
     chores

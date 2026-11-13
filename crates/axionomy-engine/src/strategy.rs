@@ -95,7 +95,7 @@ pub enum Strategy {
     /// The goal state the candidate set reaches that ranks best by `cost`,
     /// `fn(state)`, a state's whole cost so far, plus `heuristic`'s estimate,
     /// `fn(state)`, of what is left, lower first; states of equal rank in the
-    /// order they were found. It runs to its end, whatever the budget.
+    /// order they were found, within the budget's expansions.
     BestFirst {
         candidates: CandidatesPath,
         cost: ScriptCall,
@@ -273,12 +273,12 @@ struct Believing {
 /// What a run is given to spend, which its caller names with its start and
 /// its goal (D-052): the seed of its randomness and two limits, of which
 /// each kind of strategy reads only the one it spends. A search
-/// (breadth-first, cheapest, branch-and-bound, Pareto) expands at most
+/// (breadth-first, cheapest, branch-and-bound, best-first, Pareto) expands at most
 /// `budget` states; a policy or a game plays at most `turns` turns, and
 /// ends [`Outcome::Horizon`] when it has played them all; a plan spends
-/// neither. Beam search is bounded by its own width and depth, best-first
-/// search runs to its end, and a game's players think as hard as their
-/// choosers say: those describe the strategy, not the run.
+/// neither. Beam search is bounded by its own width and depth, and a game's
+/// players think as hard as their choosers say: those describe the
+/// strategy, not the run.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Effort {
     pub seed: u64,
@@ -531,10 +531,17 @@ impl Engine {
                 let candidates = self.candidate_set(candidates)?;
                 let failure = RefCell::new(None);
                 let watcher = RefCell::new(Watcher::expansions(watch));
+                let (expanded, spent) = (Cell::new(0), Cell::new(false));
                 let found = best_first(
                     &initial,
                     &goal,
                     |economy: &paths::Economy| {
+                        // Past its budget the search expands nothing more.
+                        if expanded.get() >= effort.budget {
+                            spent.set(true);
+                            return Vec::new();
+                        }
+                        expanded.set(expanded.get() + 1);
                         self.expanding(&candidates, economy, &failure, &watcher)
                     },
                     |economy: &paths::Economy| self.counted(cost, economy, &failure),
@@ -545,7 +552,10 @@ impl Engine {
                     },
                 );
                 failed(failure)?;
+                // A goal found once a state went unexpanded may not be the
+                // one that ranks best.
                 let (end, outcome, cost) = match found {
+                    _ if spent.get() => (at, Outcome::Spent, None),
                     Some(solution) => (
                         self.apply(at, solution.trace().exchanges())?,
                         Outcome::Reached,
