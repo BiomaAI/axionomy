@@ -13,20 +13,23 @@
 //! is seeded with the study's seed plus `k`, as the study seeds it, and
 //! searches as many iterations as the study gives a move at that size, so
 //! each instance names its own games: `connect-four/<instance>/<document>`.
+//! Its view draws the board, its pieces and the tactics of the player to
+//! move.
 
 use crate::{
     connect_four::{self, AccountId, Asset, Ontology, Player},
     package::{call, written},
 };
-use axionomy::{Economy, Goal, basket, path};
+use axionomy::{Economy, Goal, OntologyPath, basket, path};
 use axionomy_engine::{
     Arm, CandidateSet, Chooser, Engine, EngineError, Experiment, Measure, Objective, ObjectivePath,
-    Strategy, StrategyPath,
+    Strategy, StrategyPath, View,
 };
 use axionomy_search::pareto::ObjectiveDirection::Maximize;
 use axionomy_store::Checkpoints;
 
 const SCRIPT: &str = include_str!("../../scripts/connect-four.rhai");
+const VIEW: &str = include_str!("../../scripts/connect-four-view.rhai");
 
 /// The seed of the study's default request.
 const SEED: u64 = 17;
@@ -41,6 +44,19 @@ const OPPONENT_HORIZON: u64 = 85;
 pub fn write(engine: &Engine) -> Result<(), EngineError> {
     let script = |function| call("connect-four", function);
     engine.keep_script(&path!("connect-four"), SCRIPT)?;
+    engine.keep_script(&path!("connect-four/view"), VIEW)?;
+    let view = |function| Some(call("connect-four/view", function));
+    engine.keep_view(
+        &OntologyPath::of::<Ontology>(),
+        &View {
+            title: "Connect Four".into(),
+            labels: view("label"),
+            formats: None,
+            carry: None,
+            scene: view("scene"),
+            leaderboards: None,
+        },
+    )?;
     let red_wins = Goal::<Ontology>::new()
         .require(AccountId::Result, basket([(Asset::Winner(Player::Red), 1)]));
     engine.keep_goal(&path!("connect-four/red-wins"), &written(&red_wins))?;
