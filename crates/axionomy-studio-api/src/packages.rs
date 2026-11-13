@@ -57,8 +57,12 @@ pub struct ExperimentView {
     pub goal: GoalPath,
     pub arms: Vec<ArmView>,
     pub objectives: Vec<ObjectiveView>,
+    /// The effort every arm is given: the seed its trials are seeded from,
+    /// the most states a search expands, and the most turns a policy or a
+    /// game plays.
     pub seed: Natural,
     pub budget: Natural,
+    pub turns: Natural,
     /// How many trials each arm runs.
     pub trials: Natural,
     /// Whether the store keeps results the experiment recorded.
@@ -179,8 +183,9 @@ fn experiment_view(
             })
             .collect(),
         objectives: objectives(engine, &experiment.objectives)?,
-        seed: experiment.seed.into(),
-        budget: experiment.budget.into(),
+        seed: experiment.effort.seed.into(),
+        budget: experiment.effort.budget.into(),
+        turns: experiment.effort.turns.into(),
         trials: experiment.trials.into(),
         recorded,
         experiment: path,

@@ -93,7 +93,7 @@ impl JsonSchema for PointId {
     }
 }
 
-/// A whole number below 2^64, such as a seed or a budget, written in
+/// A whole number below 2^64, such as a seed, a budget or turns, written in
 /// decimal: JSON's numbers cannot carry every such number exactly.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Natural(pub u64);
@@ -137,7 +137,7 @@ impl JsonSchema for Natural {
 
     fn json_schema(_: &mut SchemaGenerator) -> Schema {
         json_schema!({
-            "description": "A whole number below 2^64, such as a seed or a budget, written in decimal, since JSON numbers cannot carry every such number exactly.",
+            "description": "A whole number below 2^64, such as a seed, a budget or turns, written in decimal, since JSON numbers cannot carry every such number exactly.",
             "type": "string",
             "pattern": "^(0|[1-9][0-9]*)$"
         })

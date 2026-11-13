@@ -568,14 +568,18 @@ function natural(text: string): boolean {
   return /^(0|[1-9]\d*)$/.test(text) && BigInt(text) < 2n ** 64n;
 }
 
+/** The effort Studio gives a strategy no experiment runs. */
+const DEFAULT_EFFORT = { seed: "17", budget: "1000000", turns: "1000" };
+
 /**
  * What an experiment that runs `strategy` asks of it, when one does: the
  * goal it works toward and the effort it is given. Otherwise the package's
- * first goal, and a seed and a budget of Studio's own.
+ * first goal and Studio's own effort.
  */
-function askedOf(pkg: PackageView | undefined, strategy: string | undefined): { goal?: string; seed: string; budget: string } {
+function askedOf(pkg: PackageView | undefined, strategy: string | undefined): { goal?: string; seed: string; budget: string; turns: string } {
   const experiment = pkg?.experiments.find((candidate) => candidate.arms.some((arm) => arm.strategy === strategy));
-  return { goal: experiment?.goal ?? pkg?.goals[0], seed: experiment?.seed ?? "17", budget: experiment?.budget ?? "1000000" };
+  if (!experiment) return { goal: pkg?.goals[0], ...DEFAULT_EFFORT };
+  return { goal: experiment.goal, seed: experiment.seed, budget: experiment.budget, turns: experiment.turns };
 }
 
 /** A strategy run from the point on screen toward a goal: its progress, where it ended and its thinking. */
@@ -584,6 +588,7 @@ function ContinuePanel({ engine, pkg, at, refName, onOpen, onAdvance }: { engine
   const [goal, setGoal] = useState(() => askedOf(pkg, pkg?.strategies[0]).goal);
   const [seed, setSeed] = useState(() => askedOf(pkg, pkg?.strategies[0]).seed);
   const [budget, setBudget] = useState(() => askedOf(pkg, pkg?.strategies[0]).budget);
+  const [turns, setTurns] = useState(() => askedOf(pkg, pkg?.strategies[0]).turns);
   const [running, setRunning] = useState<{ cancel(): void; progress?: SearchProgress }>();
   const [ran, setRan] = useState<RanView>();
   const [problem, setProblem] = useState<string>();
@@ -594,27 +599,30 @@ function ContinuePanel({ engine, pkg, at, refName, onOpen, onAdvance }: { engine
     setGoal(asked.goal);
     setSeed(asked.seed);
     setBudget(asked.budget);
+    setTurns(asked.turns);
   };
   const run = async () => {
     if (!at || !strategy || !goal) return;
     setRan(undefined);
     setProblem(undefined);
-    const work = engine.runStrategy(at, { strategy, goal, seed, budget }, (progress) => setRunning((current) => current && { ...current, progress }));
+    const work = engine.runStrategy(at, { strategy, goal, seed, budget, turns }, (progress) => setRunning((current) => current && { ...current, progress }));
     setRunning({ cancel: work.cancel });
     try { setRan(await work.result); } catch (cause) { setProblem(cancelled.current ? "Cancelled: the strategy stopped, and nothing it reached is shown." : described(cause)); } finally { setRunning(undefined); cancelled.current = false; }
   };
   if (!pkg || pkg.strategies.length === 0) return <div className="empty-state">This package defines no strategy.</div>;
   if (pkg.goals.length === 0) return <div className="empty-state">This package defines no goal for a strategy to work toward.</div>;
-  const valid = natural(seed) && natural(budget) && BigInt(budget) > 0n;
+  const valid = natural(seed) && natural(budget) && BigInt(budget) > 0n && natural(turns);
   return <div className="continue">
     <div className="continue-controls">
       <label className="field"><span>Strategy</span><select name="strategy" value={strategy} onChange={(event) => choose(event.target.value)} disabled={Boolean(running)}>{pkg.strategies.map((candidate) => <option key={candidate} value={candidate}>{candidate}</option>)}</select></label>
       <label className="field"><span>Goal</span><select name="goal" value={goal} onChange={(event) => setGoal(event.target.value)} disabled={Boolean(running)}>{pkg.goals.map((candidate) => <option key={candidate} value={candidate}>{candidate}</option>)}</select></label>
       <label className="field numeric-field"><span>Seed</span><input name="seed" type="text" inputMode="numeric" value={seed} onChange={(event) => setSeed(event.target.value.trim())} disabled={Boolean(running)} /></label>
       <label className="field numeric-field"><span>Budget</span><input name="budget" type="text" inputMode="numeric" value={budget} onChange={(event) => setBudget(event.target.value.trim())} disabled={Boolean(running)} /></label>
+      <label className="field numeric-field"><span>Turns</span><input name="turns" type="text" inputMode="numeric" value={turns} onChange={(event) => setTurns(event.target.value.trim())} disabled={Boolean(running)} /></label>
       {running ? <button type="button" className="danger" onClick={() => { cancelled.current = true; running.cancel(); }}>Cancel</button> : <button type="button" className="primary" disabled={!at || !goal || !valid} onClick={() => void run()}>Run strategy</button>}
     </div>
-    {!valid && <div className="assessment-issue">A seed and a budget are whole numbers below 2^64, the budget at least 1.</div>}
+    <p className="muted">A search expands at most the budget's states and a policy or a game plays at most the turns; each strategy reads only its own limit. The goal and the effort start as those of the experiment that runs the strategy, or, where none does, the package's first goal, a budget of {DEFAULT_EFFORT.budget} and {DEFAULT_EFFORT.turns} turns.</p>
+    {!valid && <div className="assessment-issue">A seed, a budget and turns are whole numbers below 2^64, the budget at least 1.</div>}
     {running && <div className="study-activity-progress" role="status"><div className="indeterminate-progress" /><span>{running.progress ? `${running.progress.expanded} expanded · ${running.progress.generated} generated · ${running.progress.frontier} frontier` : "running"}</span></div>}
     {problem && <div className="assessment-issue" role="alert">{problem}</div>}
     {ran && <RanSummary ran={ran} refName={refName} onOpen={() => onOpen(ran.end, `${ran.strategy} toward ${ran.goal} from step ${stepOf(ran.start)}`)} onAdvance={() => onAdvance(ran.start, ran.end)} />}
@@ -625,7 +633,7 @@ function outcomeWords(outcome: RanView["outcome"]): string {
   switch (outcome.kind) {
     case "reached": return "Reached its goal";
     case "stopped": return "Stopped short of its goal";
-    case "horizon": return "Used its every turn";
+    case "horizon": return "Played every turn it was given";
     case "refused": return `Refused on turn ${outcome.turn}`;
     case "exhausted": return "Explored everything without its goal";
     case "spent": return "Spent its budget first";
@@ -773,6 +781,7 @@ function ExperimentCard({ engine, experiment, onOpen, onRecorded }: { engine: Pa
         <div><dt>Trials</dt><dd>{experiment.trials} each</dd></div>
         <div><dt>Seed</dt><dd>{experiment.seed}</dd></div>
         <div><dt>Budget</dt><dd>{experiment.budget}</dd></div>
+        <div><dt>Turns</dt><dd>{experiment.turns}</dd></div>
       </dl>
       <div className="editor-actions">
         {running ? <button type="button" className="danger" onClick={() => { cancelled.current = true; running.cancel(); }}>Cancel</button> : <button type="button" className="primary" onClick={() => void run()}>Run experiment</button>}

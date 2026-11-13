@@ -98,6 +98,8 @@ test("continues from here with a strategy, showing where it ended and its thinki
     // The goal and the effort are those of the experiment that runs the strategy.
     await expect(panel.getByRole("combobox", { name: "Goal" })).toHaveValue("maze/solved");
     await expect(panel.getByRole("textbox", { name: "Seed" })).toHaveValue("17");
+    // Maze's strategies search, so its experiments give them no turns.
+    await expect(panel.getByRole("textbox", { name: "Turns" })).toHaveValue("0");
     await panel.getByRole("button", { name: "Run strategy" }).click();
     await expect(ended).toContainText("Reached its goal", { timeout: 30_000 });
   };

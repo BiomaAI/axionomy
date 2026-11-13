@@ -218,7 +218,7 @@ fn the_worker_offers_the_operations_the_server_offers() {
     // A strategy continued from the start, as the Worker runs it.
     let from: axionomy_studio_api::PointId = start.parse().unwrap();
     let request = serde_json::from_value(
-        json!({ "strategy": "maze/a-star", "goal": "maze/solved", "seed": "17", "budget": "100000" }),
+        json!({ "strategy": "maze/a-star", "goal": "maze/solved", "seed": "17", "budget": "100000", "turns": "0" }),
     )
     .unwrap();
     let ran = axionomy_studio_api::run_strategy(worker.engine(), from, request, &mut |_| {

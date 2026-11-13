@@ -68,10 +68,11 @@ pub struct Applied {
     pub point: PointId,
 }
 
-/// A strategy to run from a point toward a goal, with the seed of its
-/// randomness and its budget, in expansions for a search. The strategy is
-/// how to choose; the point, the goal and the effort are the question it is
-/// asked.
+/// A strategy to run from a point toward a goal, with what it may spend:
+/// the seed of its randomness, a budget of expansions for a search, and the
+/// most turns a policy or a game plays. The strategy is how to choose; the
+/// point, the goal and the effort are the question it is asked, and it
+/// reads only the limit it spends.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct StrategyRequest {
@@ -79,7 +80,10 @@ pub struct StrategyRequest {
     /// A goal the store keeps, such as one of the package's goals.
     pub goal: GoalPath,
     pub seed: Natural,
+    /// The most states a search expands.
     pub budget: Natural,
+    /// The most turns a policy or a game plays.
+    pub turns: Natural,
 }
 
 /// A strategy's run from a point: where it ended, how, and what its search
@@ -110,7 +114,7 @@ pub enum OutcomeView {
     Reached,
     /// The policy proposed nothing, or a plan ended short of the goal.
     Stopped,
-    /// The policy used its every turn.
+    /// The policy or the game played every turn it was given.
     Horizon,
     /// The policy proposed an exchange that does not apply, on turn `turn`
     /// counting from zero; the run ends before it.
@@ -247,6 +251,7 @@ pub fn run_strategy(
     let effort = Effort {
         seed: request.seed.0,
         budget: request.budget.0,
+        turns: request.turns.0,
     };
     let Ran {
         start,

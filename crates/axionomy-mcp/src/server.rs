@@ -1823,9 +1823,11 @@ async fn run_search(
         let strategy = Strategy::BreadthFirst {
             candidates: candidates_path,
         };
+        // A search spends its expansions and plays no turns.
         let effort = Effort {
             seed: 0,
             budget: max_expansions as u64,
+            turns: 0,
         };
         engine.run_strategy(start, &strategy, &goal_path, effort, &mut |progress| {
             if watching.is_cancel_requested() {

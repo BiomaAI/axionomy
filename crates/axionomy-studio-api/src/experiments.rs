@@ -49,7 +49,7 @@ pub enum EndedView {
     Reached,
     /// The policy proposed nothing, or a plan ended short of the goal.
     Stopped,
-    /// The policy used its every turn.
+    /// The policy or the game played every turn the experiment gives.
     Horizon,
     /// The policy proposed an exchange that does not apply on turn `turn`,
     /// counting from zero; the run ends before it.

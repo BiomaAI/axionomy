@@ -157,9 +157,10 @@ async fn a_package_loads_from_its_bytes_and_lists_what_it_holds() {
         .unwrap();
     assert_eq!(micro["start"], "maze/micro");
     assert_eq!(micro["goal"], "maze/solved");
-    // A seed and a budget are written in decimal, exactly.
+    // A seed, a budget and turns are written in decimal, exactly.
     assert_eq!(micro["seed"], "17");
     assert_eq!(micro["budget"], "10000000");
+    assert_eq!(micro["turns"], "0");
     assert_eq!(micro["recorded"], false);
 
     // Loading it again keeps nothing of its own; a file that is no package is refused.
@@ -309,6 +310,7 @@ async fn a_strategy_continues_from_a_point_reporting_its_thinking() {
             "goal": "maze/solved",
             "seed": "17",
             "budget": "10000000",
+            "turns": "0",
         }),
     )
     .await;
@@ -334,7 +336,7 @@ async fn a_strategy_continues_from_a_point_reporting_its_thinking() {
         let (status, _) = post(
             &router,
             &format!("/api/points/{start}/run"),
-            json!({ "strategy": strategy, "goal": goal, "seed": "17", "budget": "1" }),
+            json!({ "strategy": strategy, "goal": goal, "seed": "17", "budget": "1", "turns": "0" }),
         )
         .await;
         assert_eq!(status, StatusCode::NOT_FOUND, "{strategy} toward {goal}");
@@ -343,7 +345,7 @@ async fn a_strategy_continues_from_a_point_reporting_its_thinking() {
     let (status, _) = post(
         &router,
         &format!("/api/points/{start}/run"),
-        json!({ "strategy": "maze/a-star", "seed": "17", "budget": "1" }),
+        json!({ "strategy": "maze/a-star", "seed": "17", "budget": "1", "turns": "0" }),
     )
     .await;
     assert!(status.is_client_error(), "{status}");
