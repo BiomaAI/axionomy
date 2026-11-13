@@ -522,7 +522,16 @@ Pareto picks for buyers and for sellers; the funded markets' fulfillment
 planned by beam search, for volume, buyers or sellers, over a script
 proposing contracts, dispatches, deliveries, cancellations and clock advances
 in the study's order) needed the beam strategy to answer with the last of the
-plans scoring best alike, as the study's planner does. The
+plans scoring best alike, as the study's planner does. Logistics' (Micro's direct and reliable routes as policies and its
+receding-horizon planner as a game, Nature drawing each leg's weather and
+taking the vehicle's only move, the dispatcher replanning every real choice
+by tree search; the Showcase and Stress fleets, an ontology of their own
+under `logistics/fleet`, by their fastest, reliable and relay dispatch)
+reproduces every document, and the planner the Rust run's thirteen
+decisions on the four-order economy; it needed tree search to draw
+Nature's weighted outcomes as chance in its tree, simulate by a rollout
+script, choose nothing with no candidates, and seed the game's `k`th
+choice with its seed XOR a salt, plus `k`. The
 micro instances are checked with
 every test run; the showcase and stress instances, minutes in a debug build,
 run in a release build in CI. Rhai is optimised in debug builds too, since package

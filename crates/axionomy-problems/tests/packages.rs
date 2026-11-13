@@ -4,9 +4,9 @@
 #![cfg(feature = "packages")]
 
 use axionomy::{path, paths};
-use axionomy_engine::{ArmResult, Ended, Engine, ObjectivePath, Results, Version};
+use axionomy_engine::{ArmResult, Effort, Ended, Engine, ObjectivePath, Results, Version};
 use axionomy_problems::{registry, rescue};
-use axionomy_store::Store;
+use axionomy_store::{Checkpoints, Store};
 use axionomy_study::{Progress, StudyControl, StudyObserver, StudyRequest};
 use axionomy_view::{DocumentPath, TelemetryKindView};
 use serde::{Serialize, de::DeserializeOwned};
@@ -538,6 +538,75 @@ fn marketplace(engine: &Engine, instance: &str) {
     assert_eq!(compared, 3, "{instance}");
 }
 
+fn logistics(engine: &Engine, instance: &str) {
+    // Micro's fixed routes and planner; the fleet's dispatch policies.
+    let documents = ["direct", "reliable", "mcts"];
+    assert_eq!(
+        reproduces(engine, "logistics", instance, &documents),
+        documents.len(),
+        "{instance}"
+    );
+    if instance == "micro" {
+        logistics_beyond_the_study(engine);
+    }
+}
+
+/// Micro's study plans a single decision. On the economy with all four
+/// orders waiting, which its Monte Carlo samples, the package's policies
+/// play the Rust ones, and its planner the Rust receding-horizon run, which
+/// replans thirteen times there, around three breakdowns, with this seed.
+fn logistics_beyond_the_study(engine: &Engine) {
+    use axionomy_problems::logistics::{self, Policy};
+    const SEED: u64 = 2;
+    let start = engine
+        .store()
+        .record::<logistics::Ontology>(logistics::initial(), Checkpoints::Ends)
+        .finish()
+        .unwrap();
+    let ran = |strategy: &str| {
+        let strategy = engine
+            .strategy(&format!("logistics/{strategy}").parse().unwrap())
+            .unwrap();
+        let effort = Effort {
+            seed: SEED,
+            budget: 1,
+        };
+        let ran = engine
+            .run_strategy(start, &strategy, effort, &mut |_| ControlFlow::Continue(()))
+            .unwrap();
+        engine.history(ran.end).unwrap().1
+    };
+    let traced = |trace: &axionomy::Trace<logistics::Ontology>| -> Vec<paths::Exchange> {
+        trace.exchanges().iter().map(written).collect()
+    };
+    for (strategy, policy) in [("direct", Policy::Direct), ("reliable", Policy::Reliable)] {
+        let rollout = logistics::run_policy(&mut logistics::initial(), policy, SEED);
+        assert_eq!(
+            ran(strategy),
+            traced(rollout.trace()),
+            "logistics {strategy}"
+        );
+    }
+    // The study's planning seed for a request seeded `SEED`.
+    let planned = logistics::run_planned_with_progress(
+        &logistics::initial(),
+        16,
+        SEED,
+        SEED ^ 0x4c4f_4749_5354_4943,
+        8,
+        |_, _| ControlFlow::Continue(()),
+    )
+    .unwrap()
+    .unwrap();
+    let trace = traced(planned.rollout.trace());
+    let repairs = trace
+        .iter()
+        .filter(|exchange| exchange.rate().as_str().starts_with("repair/"))
+        .count();
+    assert_eq!((planned.decisions.len(), repairs), (13, 3));
+    assert_eq!(ran("mcts"), trace, "logistics mcts");
+}
+
 /// Every sample, its package builder and its check.
 type Sample = (
     &'static str,
@@ -545,7 +614,7 @@ type Sample = (
     fn(&Engine, &str),
 );
 
-const SAMPLES: [Sample; 10] = [
+const SAMPLES: [Sample; 11] = [
     ("maze", axionomy_problems::maze::package::write, maze),
     (
         "sokoban",
@@ -579,6 +648,11 @@ const SAMPLES: [Sample; 10] = [
         "marketplace",
         axionomy_problems::marketplace::package::write,
         marketplace,
+    ),
+    (
+        "logistics",
+        axionomy_problems::logistics::package::write,
+        logistics,
     ),
 ];
 
