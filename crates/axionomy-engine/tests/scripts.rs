@@ -3,6 +3,7 @@
 
 use axionomy::{Quantity, Rate, basket, path::Path, paths};
 use axionomy_engine::{Engine, EngineError, Random, ScriptPath, ScriptState, exchanges_of, rhai};
+use axionomy_search::sampling::{SeededSampler, WeightedExchange, sample, sample_seed};
 use axionomy_store::Store;
 
 fn path<K>(text: &str) -> Path<K> {
@@ -54,6 +55,17 @@ const SCRIPT: &str = r#"
 
     fn draws(random) {
         [random.next(1000), random.next(1000), random.next(1000)]
+    }
+
+    fn weighted(random, weights) {
+        [random.sample(weights), random.sample(weights), random.sample(weights)]
+    }
+
+    // A weighted sample between two draws.
+    fn between(random) {
+        let first = random.next(1000);
+        random.sample([1, 2, 3]);
+        [first, random.next(1000)]
     }
 
     fn road(from, to) {
@@ -120,6 +132,55 @@ fn randomness_is_the_hosts_and_replays_from_its_seed() {
     assert_eq!(draws(7), draws(7));
     assert_ne!(draws(7), draws(8));
     assert!(draws(7).iter().all(|value| (0..1000).contains(value)));
+}
+
+#[test]
+fn weighted_samples_are_the_rust_samplers() {
+    let (engine, script) = engine();
+    let ints = |drawn: rhai::Array| -> Vec<i64> {
+        drawn
+            .into_iter()
+            .map(|value| value.as_int().unwrap())
+            .collect()
+    };
+    let weights = [3_u64, 0, 5, 1];
+    let outcomes: Vec<_> = weights
+        .iter()
+        .enumerate()
+        .map(|(index, weight)| WeightedExchange::new(index as i64, *weight))
+        .collect();
+    let as_ints: rhai::Array = weights
+        .iter()
+        .map(|weight| rhai::Dynamic::from(*weight as i64))
+        .collect();
+    let as_quantities: rhai::Array = weights
+        .iter()
+        .map(|weight| rhai::Dynamic::from(Quantity::new(*weight)))
+        .collect();
+    for seed in [7, 8, sample_seed(17, 3)] {
+        // What `axionomy_search` samples from a sampler of the same seed.
+        let mut sampler = SeededSampler::new(seed);
+        let expected: Vec<i64> = (0..3)
+            .map(|_| *sample(&outcomes, &mut sampler).unwrap())
+            .collect();
+        for weights in [&as_ints, &as_quantities] {
+            let drawn: rhai::Array = engine
+                .call(&script, "weighted", (Random::new(seed), weights.clone()))
+                .unwrap();
+            assert_eq!(ints(drawn), expected, "seed {seed}");
+        }
+    }
+
+    // Samples draw tickets of their own: `next` goes on as if none were.
+    let between: rhai::Array = engine.call(&script, "between", (Random::new(7),)).unwrap();
+    let drawn: rhai::Array = engine.call(&script, "draws", (Random::new(7),)).unwrap();
+    assert_eq!(ints(between), ints(drawn)[..2]);
+
+    // Nothing to weigh, or no weight, samples nothing.
+    for weights in [vec![], vec![rhai::Dynamic::from(0_i64)]] {
+        let refused = engine.call::<rhai::Array>(&script, "weighted", (Random::new(7), weights));
+        assert!(matches!(refused, Err(EngineError::Script { .. })));
+    }
 }
 
 #[test]

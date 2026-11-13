@@ -21,6 +21,8 @@ use axionomy_search::{
 };
 
 pub mod incident;
+#[cfg(feature = "packages")]
+pub mod package;
 mod study;
 mod view;
 

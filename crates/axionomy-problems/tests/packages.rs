@@ -4,11 +4,12 @@
 #![cfg(feature = "packages")]
 
 use axionomy::{path, paths};
-use axionomy_engine::{Ended, Engine, ObjectivePath, Version};
-use axionomy_problems::registry;
+use axionomy_engine::{ArmResult, Ended, Engine, ObjectivePath, Results, Version};
+use axionomy_problems::{registry, rescue};
 use axionomy_store::Store;
 use axionomy_study::{Progress, StudyControl, StudyObserver, StudyRequest};
-use axionomy_view::DocumentPath;
+use axionomy_view::{DocumentPath, TelemetryKindView};
+use serde::{Serialize, de::DeserializeOwned};
 use std::ops::ControlFlow;
 
 #[derive(Default)]
@@ -70,12 +71,28 @@ fn objective_named(objectives: &[ObjectivePath], key: &str) -> Option<usize> {
         .position(|objective| objective.as_str().ends_with(&format!("/{key}")))
 }
 
+/// The arm of `results` running the strategy named `strategy`: its last
+/// segment, since an ontology of a problem's own names its strategies
+/// under its own path, as `rescue/incident/direct-north`.
+fn arm<'a>(results: &'a Results, strategy: &str) -> &'a ArmResult {
+    results
+        .arms
+        .iter()
+        .find(|arm| last(arm.arm.strategy.as_str()) == strategy)
+        .unwrap_or_else(|| panic!("no arm runs {strategy}"))
+}
+
+/// The last segment of a path.
+fn last(path: &str) -> &str {
+    path.rsplit('/').next().unwrap_or(path)
+}
+
 /// The study of `problem` at `instance`, asked for each of `strategies`,
 /// gives a document named for the strategy that the package's experiment
-/// at `instance` reproduces: the arm running `<problem>/<strategy>` reaches
-/// the document's exchanges, and its value on each objective the document
-/// reports, the experiment's objective of that name. Returns how many
-/// documents it compared.
+/// at `instance` reproduces: the arm running the strategy of that name
+/// reaches the document's exchanges, and its value on each objective the
+/// document reports, the experiment's objective of that name. Returns how
+/// many documents it compared.
 fn reproduces(engine: &Engine, problem: &str, instance: &str, strategies: &[&str]) -> usize {
     let mut compared = 0;
     let experiment = format!("{problem}/{instance}").parse().unwrap();
@@ -110,11 +127,7 @@ fn reproduces(engine: &Engine, problem: &str, instance: &str, strategies: &[&str
             // gives only for some instances.
             continue;
         };
-        let arm = results
-            .arms
-            .iter()
-            .find(|arm| arm.arm.strategy.as_str() == format!("{problem}/{strategy}"))
-            .unwrap_or_else(|| panic!("no arm runs {strategy}"));
+        let arm = arm(&results, strategy);
         let (_, trace) = trajectories
             .iter()
             .find(|(document, _)| document.as_str() == *strategy)
@@ -318,6 +331,126 @@ fn bridge(engine: &Engine, instance: &str) {
     }
 }
 
+fn rescue(engine: &Engine, instance: &str) {
+    let compared = reproduces(
+        engine,
+        "rescue",
+        instance,
+        &["observe-then-follow", "direct-north", "stabilize-first"],
+    );
+    // Only the incidents have kits to stabilize with, and its document.
+    assert_eq!(
+        compared,
+        if instance == "micro" { 2 } else { 3 },
+        "{instance}"
+    );
+    if instance == "micro" {
+        rescue_monte_carlo(engine);
+    }
+}
+
+/// `value`, a typed identifier, exchange or economy, as paths.
+fn written<T: DeserializeOwned>(value: &impl Serialize) -> T {
+    postcard::from_bytes(&postcard::to_allocvec(value).unwrap()).unwrap()
+}
+
+/// Every episode a Rust Monte Carlo of the rescue played, in its order.
+#[derive(Default)]
+struct Episodes(Vec<(rescue::Policy, usize, Vec<axionomy::paths::Exchange>)>);
+
+impl axionomy_search::rollout::Episodes<rescue::Ontology, rescue::Policy, rescue::Rollout>
+    for Episodes
+{
+    type World = rescue::World;
+
+    fn begin(&mut self, _: &rescue::Policy, _: usize, initial: rescue::World) -> rescue::World {
+        initial
+    }
+
+    fn end(
+        &mut self,
+        policy: &rescue::Policy,
+        sample: usize,
+        _: rescue::World,
+        rollout: &rescue::Rollout,
+    ) {
+        let trace = rollout.trace().exchanges().iter().map(written).collect();
+        self.0.push((*policy, sample, trace));
+    }
+}
+
+/// The Micro study estimates each policy by Monte Carlo over Nature's
+/// prior: the package's Monte Carlo experiment plays the scenario each of
+/// the study's samples plays, trial by trial, and its means are the study's
+/// sampled front.
+fn rescue_monte_carlo(engine: &Engine) {
+    let path = path!("rescue/micro/monte-carlo");
+    let experiment = engine.experiment(&path).unwrap();
+    let results = engine
+        .run_experiment(&path, &mut |_| ControlFlow::Continue(()))
+        .unwrap();
+    let trials = usize::try_from(experiment.trials).unwrap();
+
+    // Trial by trial, the episodes of the Rust Monte Carlo seeded alike.
+    let mut episodes = Episodes::default();
+    rescue::policy_front(
+        &rescue::uniform_uncertain(),
+        trials,
+        experiment.seed,
+        &mut episodes,
+    )
+    .unwrap();
+    let policies = [
+        ("observe-then-follow", rescue::Policy::ObserveThenFollow),
+        ("direct-north", rescue::Policy::NorthWithoutObserving),
+    ];
+    let mut played = episodes.0.iter();
+    for (strategy, policy) in policies {
+        for (index, trial) in arm(&results, strategy).trials.iter().enumerate() {
+            let (sampled, sample, trace) = played.next().unwrap();
+            assert_eq!((*sampled, *sample), (policy, index));
+            assert_eq!(
+                engine.history(trial.end).unwrap().1,
+                *trace,
+                "rescue micro {strategy}: sample {index}"
+            );
+        }
+    }
+    assert!(played.next().is_none());
+
+    // Each document's front point for its policy: the arm's means, which the
+    // front prints to three decimals, finer than a trial in 128 moves them.
+    let (study, _) = study("rescue", "micro", None);
+    for document in &study.documents {
+        let arm = arm(&results, document.id.as_str());
+        let sampled = document
+            .telemetry
+            .iter()
+            .flat_map(|telemetry| &telemetry.points)
+            .find(|point| point.kind == TelemetryKindView::Sample)
+            .unwrap();
+        assert_eq!(sampled.value, trials.to_string());
+        let front = &document.pareto_fronts[0];
+        let point = front.points.iter().find(|point| point.selected).unwrap();
+        let totals = arm.totals();
+        for (axis, value) in front.axes.iter().zip(&point.values) {
+            let index = experiment
+                .objectives
+                .iter()
+                .position(|objective| last(objective.as_str()) == axis.key.as_str())
+                .unwrap_or_else(|| panic!("rescue measures no `{}`", axis.key));
+            let mean = u64::try_from(totals[index]).unwrap() as f64 / trials as f64;
+            let reported: f64 = value.parse().unwrap();
+            assert!(
+                (mean - reported).abs() <= 0.0005,
+                "rescue micro {}: {} is {mean}, the study's {reported}",
+                document.id,
+                axis.key
+            );
+        }
+    }
+}
+
 /// Every sample, its package builder and its check.
 type Sample = (
     &'static str,
@@ -325,7 +458,7 @@ type Sample = (
     fn(&Engine, &str),
 );
 
-const SAMPLES: [Sample; 5] = [
+const SAMPLES: [Sample; 6] = [
     ("maze", axionomy_problems::maze::package::write, maze),
     (
         "sokoban",
@@ -343,6 +476,7 @@ const SAMPLES: [Sample; 5] = [
         workshop,
     ),
     ("bridge", axionomy_problems::bridge::package::write, bridge),
+    ("rescue", axionomy_problems::rescue::package::write, rescue),
 ];
 
 /// Each sample's package reproduces its study at `instances`.

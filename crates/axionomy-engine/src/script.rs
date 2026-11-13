@@ -13,12 +13,12 @@ use axionomy::{
     AccountPath, AssessmentStatus, AssetPath, PathKind, Quantity, RatePath, RolePath, Rounding,
     path::Path, paths,
 };
-use axionomy_search::sampling::splitmix;
+use axionomy_search::sampling::{self, SeededSampler, WeightedExchange, splitmix};
 use rhai::{Array, Dynamic, EvalAltResult, ImmutableString, Map};
 use std::{
     collections::{BTreeMap, BTreeSet, VecDeque},
     sync::{
-        Arc,
+        Arc, Mutex,
         atomic::{AtomicU64, Ordering},
     },
 };
@@ -94,6 +94,10 @@ impl ScriptState {
 pub struct Random {
     seed: u64,
     drawn: Arc<AtomicU64>,
+    /// The tickets weighted samples draw, a sequence of their own: those
+    /// `axionomy_search`'s sampler of the same seed draws, so a script
+    /// samples weighted outcomes as Rust code seeded alike does.
+    tickets: Arc<Mutex<SeededSampler>>,
 }
 
 impl Random {
@@ -101,6 +105,7 @@ impl Random {
         Self {
             seed,
             drawn: Arc::new(AtomicU64::new(0)),
+            tickets: Arc::new(Mutex::new(SeededSampler::new(seed))),
         }
     }
 
@@ -110,6 +115,37 @@ impl Random {
         // The high half of a 128-bit product: uniform enough, and exact.
         ((u128::from(value) * u128::from(bound)) >> 64) as u64
     }
+
+    /// The index of one of `weights`, integers or quantities, drawn by the
+    /// next ticket as [`sampling::sample`] draws one of weighted outcomes.
+    fn sample(&self, weights: Array) -> Result<i64, Failure> {
+        let outcomes = weights
+            .into_iter()
+            .enumerate()
+            .map(|(index, weight)| Ok(WeightedExchange::new(index, weight_of(weight)?)))
+            .collect::<Result<Vec<_>, Failure>>()?;
+        let mut tickets = self
+            .tickets
+            .lock()
+            .map_err(|_| Failure::from("the sampler failed while drawing"))?;
+        let drawn = sampling::sample(&outcomes, &mut *tickets)
+            .map_err(|error| Failure::from(error.to_string()))?;
+        i64::try_from(*drawn).map_err(|_| "an index out of range".into())
+    }
+}
+
+/// A weight a script gives: a non-negative integer or a quantity.
+fn weight_of(weight: Dynamic) -> Result<u64, Failure> {
+    if weight.is::<Quantity>() {
+        let quantity = weight.cast::<Quantity>();
+        return u64::try_from(quantity)
+            .map_err(|_| format!("weight {quantity} is too large").into());
+    }
+    weight
+        .as_int()
+        .ok()
+        .and_then(|weight| u64::try_from(weight).ok())
+        .ok_or_else(|| format!("{weight} is not a weight").into())
 }
 
 /// What `rate` fixes for `role` to consume, produce or preserve, as
@@ -152,6 +188,9 @@ pub(crate) fn host() -> rhai::Engine {
                 .filter(|bound| *bound > 0)
                 .ok_or_else(|| Failure::from(format!("{bound} is not a positive bound")))?;
             Ok::<_, Failure>(random.below(bound) as i64)
+        })
+        .register_fn("sample", |random: &mut Random, weights: Array| {
+            random.sample(weights)
         });
     rhai.register_fn("distances", distances);
     rhai

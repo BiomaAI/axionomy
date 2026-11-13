@@ -66,8 +66,12 @@ roles and what it fixes for a role to consume, produce or preserve,
 `exchange(...)`, `applicable`, `assess`, `distances` over a list of edges),
 and propose exchanges; they never change an economy. Quantities are
 exact, with checked arithmetic and `mul_div` that names its rounding;
-randomness is only a `Random` the host seeds; scripts have no clock; and a
-call stops after a bounded number of operations. Scripts are kept in the
+randomness is only a `Random` the host seeds (`next(bound)` draws a number
+below a bound, and `sample(weights)` the index of a weight, drawn as
+`axionomy_search::sampling` samples weighted outcomes with a sampler of the
+same seed, so a script samples Nature's scenarios as a Rust Monte Carlo
+seeded alike does); scripts have no clock; and a call stops after a bounded
+number of operations. Scripts are kept in the
 store as definitions (`script/<path>`), so they travel with a package.
 
 Rhai calls a script's own function in method style before a host method of
@@ -75,7 +79,7 @@ the same name: a script that defines `view(state)` makes `state.view(...)`
 call it, with `state` as `this`. Name script functions apart from the host's
 (`balance`, `balances`, `accounts`, `rates`, `roles`, `consumed`, `produced`,
 `preserved`, `view`, `applicable`, `assess`, `has_account`, `parameter`,
-`rate`, `next`). A loop variable
+`rate`, `next`, `sample`). A loop variable
 needs a name: Rhai refuses `for _ in ...`. A view's script builds its scene on
 the `scene` module (`scene::graph(title, nodes, edges, focus)`, `grid`,
 `matrix`, `timeline`), which infers entities, paths and legend from the

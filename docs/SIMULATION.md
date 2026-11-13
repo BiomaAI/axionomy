@@ -493,7 +493,13 @@ Bridge's (breadth-first routing, its first-come, auction and
 deadline-responsive policies played turn by turn, and Micro's exact Pareto
 picks for each traveller) needed nothing new: where timed traffic's study
 prefers, for a traveller, the best of the policies it evaluates, `pick`
-finds it among the experiment's runs. The small instances are checked with
+finds it among the experiment's runs. Rescue's (Micro's weighted prior with
+the scenario its study plays, and the Showcase and Stress incidents, an
+ontology of their own whose goal and policies are named under
+`rescue/incident`) reproduces every policy's document, and a Monte Carlo
+experiment of 128 trials plays each sampled scenario of its study's front,
+which needed scripts to sample weighted outcomes with the tickets
+`axionomy_search`'s sampler draws. The small instances are checked with
 every test run; the stress instances, minutes in a debug build, run in a
 release build in CI. Rhai is optimised in debug builds too, since package
 scripts run in its interpreter.

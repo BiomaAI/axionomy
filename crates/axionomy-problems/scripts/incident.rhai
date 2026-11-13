@@ -198,3 +198,11 @@ fn decide_seen(state, policy) {
 fn triage(state, random) { turn(state, "triage") }
 fn rapid_north(state, random) { turn(state, "rapid-north") }
 fn stabilize_first(state, random) { turn(state, "stabilize-first") }
+
+// What an incident's outcome is measured by, as the study reports it.
+fn saved(state) { state.balance("world", "saved-count") }
+fn saved_vitality(state) { state.balance("world", "saved-vitality") }
+fn deaths(state) { state.balance("world", "death-count") }
+fn spent_fuel(state) { state.balance("responder", "spent-fuel") }
+fn kits_used(state) { state.balance("responder", "used-medical-kit") }
+fn elapsed(state) { state.balance("world", "time") }
