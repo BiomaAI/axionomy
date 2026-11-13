@@ -1,36 +1,33 @@
-//! What the server keeps, in an [`axionomy_store::Store`]: economies by
-//! handle, assessments and studies.
+//! What the server keeps beside the engine's runs: handles for economies,
+//! assessments and studies.
 //!
-//! Every economy is a point of a run. Authoring records a run that starts
-//! from the authored state; applying exchanges records a run that forks from
-//! the source economy's point, with one step per exchange. A study records
+//! Every economy is a point the engine recorded. Authoring records a run that
+//! starts from the authored state; applying exchanges records a run that forks
+//! from the source economy's point, with one step per exchange. A study records
 //! each of its documents the same way: its initial state as a run of its own,
-//! and its trace as a run forked from it. A handle, its run's steps and the
-//! states they store commit in one transaction, so a handle exists if and
-//! only if everything it names does. Handles are keyed with a secret the
-//! store keeps, so they stay valid across restarts of a server that keeps its
-//! store on disk, and stay infeasible to guess.
+//! and its trace as a run forked from it. A handle is written after the runs it
+//! names, so a handle never names something missing. Handles are keyed with a
+//! secret the store keeps, so they stay valid across restarts of a server that
+//! keeps its store on disk, and stay infeasible to guess.
 
 use crate::{
-    authoring,
     handles::{AssessmentId, EconomyId, StudyId},
     messages::DocumentSummary,
     studies::Trajectory,
 };
 use axionomy::paths;
-use axionomy::paths::Paths;
-use axionomy_store::{Checkpoints, Durability, Point, Reader, Store, StoreError};
+use axionomy_engine::{Engine, EngineError, Reached};
+use axionomy_store::{Durability, Point, Reader, StoreError};
 use axionomy_study::{Study, StudyKey};
 use axionomy_view::DocumentPath;
 
 /// An economy's state: MCP's economies are identified by paths.
-pub(crate) type State = axionomy_store::State<Paths>;
+pub(crate) type State = axionomy_engine::State;
 use redb::{ReadableTable, TableDefinition};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use std::{
     collections::HashMap,
     hash::Hash,
-    num::NonZeroU64,
     sync::{Arc, Mutex},
 };
 
@@ -40,10 +37,7 @@ const STUDIES: TableDefinition<&str, &[u8]> = TableDefinition::new("mcp-studies"
 const SECRETS: TableDefinition<&str, &[u8; 32]> = TableDefinition::new("mcp-secrets");
 const HANDLE_SECRET: &str = "handles";
 
-/// States a call's run stores besides its last: replaying to any step of a
-/// long replay starts at most this many exchanges back.
-const CHECKPOINT_EVERY: NonZeroU64 = NonZeroU64::new(64).expect("nonzero");
-/// Loaded economies, assessments and studies kept in memory.
+/// Assessments and studies kept in memory.
 const CACHED: usize = 32;
 
 /// How a stored economy was made from its parent.
@@ -96,12 +90,22 @@ fn hex<S: serde::Serializer>(root: &axionomy_tree::Hash, serializer: S) -> Resul
     serializer.collect_str(&root.to_hex())
 }
 
-/// An economy as the server serves it.
+/// An economy as the server serves it: what its handle names, and the point
+/// the engine reached.
 pub(crate) struct Loaded {
     pub record: EconomyRecord,
-    pub state: State,
+    pub reached: Arc<Reached>,
+}
+
+impl Loaded {
+    pub fn state(&self) -> &State {
+        &self.reached.state
+    }
+
     /// The receipts of the exchanges that made it from its parent.
-    pub receipts: Vec<paths::Receipt>,
+    pub fn receipts(&self) -> &[paths::Receipt] {
+        &self.reached.receipts
+    }
 }
 
 /// An assessment as the server serves it, computed again from its record.
@@ -112,13 +116,13 @@ pub(crate) struct Assessed {
     pub assessment: paths::Assessment,
 }
 
-/// The server's economies, assessments and studies on its store, with the
-/// most recently used ones in memory.
+/// The server's handles for economies, assessments and studies, over the
+/// engine that records them, with the most recently used assessments and
+/// studies in memory.
 #[derive(Clone)]
 pub(crate) struct Archive {
-    store: Store,
+    engine: Engine,
     secret: Arc<[u8; 32]>,
-    economies: Cache<EconomyId, Loaded>,
     assessments: Cache<AssessmentId, Assessed>,
     studies: Cache<StudyId, Study>,
 }
@@ -130,12 +134,13 @@ pub(crate) struct Stored {
 }
 
 impl Archive {
-    /// Opens the server's tables in `store`, creating its handle secret the
-    /// first time.
-    pub fn open(store: Store) -> Result<Self, StoreError> {
+    /// Opens the server's tables in the engine's store, creating its handle
+    /// secret the first time.
+    pub fn open(engine: Engine) -> Result<Self, StoreError> {
         let mut fresh = [0; 32];
         getrandom::fill(&mut fresh).expect("operating system randomness is unavailable");
-        let secret = store
+        let secret = engine
+            .store()
             .transact(Durability::Immediate, move |txn| {
                 let txn = txn.redb();
                 txn.open_table(ECONOMIES)?;
@@ -153,17 +158,20 @@ impl Archive {
             })
             .wait()?;
         Ok(Self {
-            store,
+            engine,
             secret: Arc::new(secret),
-            economies: Cache::default(),
             assessments: Cache::default(),
             studies: Cache::default(),
         })
     }
 
+    pub fn engine(&self) -> &Engine {
+        &self.engine
+    }
+
     /// Whether the store is in memory, so its handles end with the server.
     pub fn in_memory(&self) -> bool {
-        self.store.in_memory()
+        self.engine.store().in_memory()
     }
 
     fn keyed(&self, parts: &[&[u8]]) -> blake3::Hash {
@@ -182,219 +190,145 @@ impl Archive {
         EconomyId::from_digest(&self.keyed(&[parent.as_bytes(), operation]))
     }
 
-    /// Stores an authored state as a run of its own.
+    /// Records an authored economy as a run of its own, under the handle
+    /// `operation` mints from `parent`.
     pub async fn author(
         &self,
         parent: Option<EconomyId>,
         operation: &[u8],
         entries: usize,
-        state: State,
-    ) -> Result<Stored, StoreError> {
+        economy: paths::Economy,
+    ) -> Result<Stored, EngineError> {
         let economy_id = self.handle(parent.as_ref(), operation);
-        if self.record(&economy_id).await?.is_some() {
+        if self.record(&economy_id)?.is_some() {
             return Ok(Stored {
                 economy_id,
                 deduplicated: true,
             });
         }
-        let run = self.store.mint_run();
+        let engine = self.engine.clone();
+        let point = blocking(move || engine.author(economy)).await?;
         let record = EconomyRecord {
-            point: Point { run, step: 0 },
+            point,
             parent,
             origin: Origin::Authored { entries },
         };
-        let tree = state.tree.clone();
-        let handle = economy_id.clone();
-        let kept = record.clone();
-        let stored = self
-            .store
-            .transact(Durability::Immediate, move |txn| {
-                if exists(txn.redb(), &handle)? {
-                    return Ok(false);
-                }
-                txn.create_run::<Paths>(run, None, 0, &tree, Checkpoints::Ends)?;
-                txn.pin(kept.point, None)?;
-                put(txn.redb(), ECONOMIES, handle.as_str(), &kept)?;
-                Ok(true)
-            })
-            .await?;
-        if stored {
-            let loaded = Loaded {
-                record,
-                state,
-                receipts: Vec::new(),
-            };
-            self.economies.insert(economy_id.clone(), loaded);
-        }
-        Ok(Stored {
-            economy_id,
-            deduplicated: !stored,
-        })
+        self.keep(economy_id, record).await
     }
 
-    /// Stores the state `exchanges` reached from `source`, which `state` and
-    /// `receipts` are, as a run forked from the source's point.
+    /// Applies `exchanges` at `source`'s point, all of them or none, under
+    /// the handle their operation mints from `source_id`. Applying one
+    /// exchange and replaying it alone are the same operation, so they share
+    /// a handle. A refusal stores nothing.
     pub async fn exchanged(
         &self,
         source_id: &EconomyId,
         source: &Loaded,
-        operation: &[u8],
-        mut steps: Vec<(paths::Receipt, Option<axionomy_tree::Tree>)>,
-        state: State,
-    ) -> Result<Stored, StoreError> {
-        let economy_id = self.handle(Some(source_id), operation);
-        if self.record(&economy_id).await?.is_some() {
+        exchanges: Vec<paths::Exchange>,
+    ) -> Result<Stored, EngineError> {
+        let economy_id = self.handle(Some(source_id), &operation("exchanges", &exchanges));
+        if self.record(&economy_id)?.is_some() {
             return Ok(Stored {
                 economy_id,
                 deduplicated: true,
             });
         }
-        let from = source.record.point;
-        let run = self.store.mint_run();
-        let exchanges = steps.len();
+        let count = exchanges.len();
+        let at = source.record.point;
+        let engine = self.engine.clone();
+        let point = blocking(move || engine.apply(at, &exchanges)).await?;
         let record = EconomyRecord {
-            point: Point {
-                run,
-                step: from.step + exchanges as u64,
-            },
+            point,
             parent: Some(source_id.clone()),
-            origin: Origin::Exchanged { exchanges },
+            origin: Origin::Exchanged { exchanges: count },
         };
-        let receipts: Vec<paths::Receipt> =
-            steps.iter().map(|(receipt, _)| receipt.clone()).collect();
-        let first = source.state.tree.clone();
-        let last = state.tree.clone();
-        let handle = economy_id.clone();
-        let loaded = Loaded {
-            record: record.clone(),
-            state,
-            receipts,
-        };
-        let stored = self
-            .store
-            .transact(Durability::Immediate, move |txn| {
-                if exists(txn.redb(), &handle)? {
-                    return Ok(false);
-                }
-                txn.create_run::<Paths>(run, Some(from), from.step, &first, every())?;
-                for (index, (receipt, state)) in steps.drain(..).enumerate() {
-                    let point = Point {
-                        run,
-                        step: from.step + index as u64 + 1,
-                    };
-                    txn.put_step::<Paths>(point, &receipt, state.as_ref())?;
-                }
-                txn.pin(record.point, Some(&last))?;
-                put(txn.redb(), ECONOMIES, handle.as_str(), &record)?;
-                Ok(true)
-            })
-            .await?;
-        if stored {
-            self.economies.insert(economy_id.clone(), loaded);
-        }
-        Ok(Stored {
-            economy_id,
-            deduplicated: !stored,
-        })
+        self.keep(economy_id, record).await
     }
 
     /// Names the state after the first `step` exchanges of those that made
-    /// `economy_id`, storing it so it reads like any economy.
+    /// `economy_id`, so it reads like any economy.
     pub async fn step(
         &self,
         economy_id: &EconomyId,
         loaded: &Loaded,
         step: usize,
-    ) -> Result<Stored, StoreError> {
+    ) -> Result<Stored, EngineError> {
         let handle = EconomyId::from_digest(&self.keyed(&[
             economy_id.as_str().as_bytes(),
             b"step",
             &(step as u64).to_le_bytes(),
         ]));
-        if self.record(&handle).await?.is_some() {
+        if self.record(&handle)?.is_some() {
             return Ok(Stored {
                 economy_id: handle,
                 deduplicated: true,
             });
         }
-        let point = Point {
-            run: loaded.record.point.run,
-            step: loaded.record.point.step - (loaded.receipts.len() - step) as u64,
-        };
+        let at = loaded.record.point;
+        let first = at.step - loaded.receipts().len() as u64;
+        let engine = self.engine.clone();
+        let point = blocking(move || engine.ancestor(at, first + step as u64)).await?;
         let record = EconomyRecord {
             point,
             parent: loaded.record.parent.clone(),
             origin: Origin::Exchanged { exchanges: step },
         };
-        let store = self.store.clone();
-        let state = tokio::task::spawn_blocking(move || store.read()?.state::<Paths>(point))
-            .await
-            .map_err(|_| StoreError::Closed)??
-            .ok_or(StoreError::UnknownRun(point.run))?;
-        let key = handle.clone();
+        self.keep(handle, record).await
+    }
+
+    /// Writes `record` under `economy_id`, unless a concurrent call wrote it
+    /// first.
+    async fn keep(
+        &self,
+        economy_id: EconomyId,
+        record: EconomyRecord,
+    ) -> Result<Stored, EngineError> {
+        let handle = economy_id.clone();
         let stored = self
-            .store
+            .engine
+            .store()
             .transact(Durability::Immediate, move |txn| {
-                if exists(txn.redb(), &key)? {
+                if exists(txn.redb(), &handle)? {
                     return Ok(false);
                 }
-                txn.pin(point, Some(&state.tree))?;
-                put(txn.redb(), ECONOMIES, key.as_str(), &record)?;
+                put(txn.redb(), ECONOMIES, handle.as_str(), &record)?;
                 Ok(true)
             })
             .await?;
         Ok(Stored {
-            economy_id: handle,
+            economy_id,
             deduplicated: !stored,
         })
     }
 
-    async fn record(&self, economy_id: &EconomyId) -> Result<Option<EconomyRecord>, StoreError> {
-        if let Some(loaded) = self.economies.get(economy_id) {
-            return Ok(Some(loaded.record.clone()));
-        }
-        let reader = self.store.read()?;
+    fn record(&self, economy_id: &EconomyId) -> Result<Option<EconomyRecord>, StoreError> {
+        let reader = self.engine.store().read()?;
         get(&reader, ECONOMIES, economy_id.as_str())
     }
 
-    /// The economy a handle names, loaded with the receipts that made it.
-    pub async fn economy(&self, economy_id: &EconomyId) -> Result<Option<Arc<Loaded>>, StoreError> {
-        if let Some(loaded) = self.economies.get(economy_id) {
-            return Ok(Some(loaded));
-        }
-        let store = self.store.clone();
-        let handle = economy_id.clone();
-        let loaded = tokio::task::spawn_blocking(move || -> Result<_, StoreError> {
-            let reader = store.read()?;
-            let Some(record) = get::<EconomyRecord>(&reader, ECONOMIES, handle.as_str())? else {
-                return Ok(None);
-            };
-            let point = record.point;
-            let (state, receipts) = match record.origin {
-                Origin::Authored { .. } => (reader.state::<Paths>(point)?, Vec::new()),
-                Origin::Exchanged { exchanges } => {
-                    let first = point.step - exchanges as u64;
-                    let mut state = reader.state::<Paths>(Point {
-                        run: point.run,
-                        step: first,
-                    })?;
-                    let receipts = match &mut state {
-                        Some(state) => reader.replay(state, point.run, first, point.step)?,
-                        None => Vec::new(),
-                    };
-                    (state, receipts)
-                }
-            };
-            let state = state.ok_or(StoreError::UnknownRun(point.run))?;
-            Ok(Some(Loaded {
-                record,
-                state,
-                receipts,
-            }))
-        })
-        .await
-        .map_err(|_| StoreError::Closed)??;
-        Ok(loaded.map(|loaded| self.economies.insert(economy_id.clone(), loaded)))
+    /// The economy a handle names, with the receipts that made it.
+    pub async fn economy(
+        &self,
+        economy_id: &EconomyId,
+    ) -> Result<Option<Arc<Loaded>>, EngineError> {
+        let Some(record) = self.record(economy_id)? else {
+            return Ok(None);
+        };
+        let engine = self.engine.clone();
+        let at = record.point;
+        let reached = blocking(move || engine.reach(at)).await?;
+        Ok(Some(Arc::new(Loaded { record, reached })))
+    }
+
+    /// Whether `exchange` would apply to `economy`, and why not.
+    pub async fn assess(
+        &self,
+        economy: &Loaded,
+        exchange: &paths::Exchange,
+    ) -> Result<paths::Assessment, EngineError> {
+        let engine = self.engine.clone();
+        let (at, exchange) = (economy.record.point, exchange.clone());
+        blocking(move || engine.assess(at, &[], &exchange)).await
     }
 
     /// Keeps an assessment of `exchange` against the state `economy_id`
@@ -416,7 +350,8 @@ impl Archive {
             &serde_json::to_vec(&record).expect("records serialize"),
         ]));
         let key = assessment_id.to_string();
-        self.store
+        self.engine
+            .store()
             .transact(Durability::Eventual, move |txn| {
                 put(txn.redb(), ASSESSMENTS, &key, &record)
             })
@@ -436,26 +371,27 @@ impl Archive {
     pub async fn assessment(
         &self,
         assessment_id: &AssessmentId,
-    ) -> Result<Option<Arc<Assessed>>, StoreError> {
+    ) -> Result<Option<Arc<Assessed>>, EngineError> {
         if let Some(assessed) = self.assessments.get(assessment_id) {
             return Ok(Some(assessed));
         }
-        let reader = self.store.read()?;
+        let reader = self.engine.store().read()?;
         let Some(record) = get::<AssessmentRecord>(&reader, ASSESSMENTS, assessment_id.as_str())?
         else {
             return Ok(None);
         };
-        let Some(loaded) = self.economy(&record.economy_id).await? else {
+        let Some(economy) = self.record(&record.economy_id)? else {
             return Ok(None);
         };
-        let mut economy = loaded.state.economy.clone();
-        for exchange in &record.before {
-            economy
-                .apply(exchange.clone())
-                .map_err(|_| StoreError::Malformed("assessment whose exchanges no longer apply"))?;
-        }
+        let engine = self.engine.clone();
+        let (at, before, exchange) = (
+            economy.point,
+            record.before.clone(),
+            record.exchange.clone(),
+        );
+        let assessment = blocking(move || engine.assess(at, &before, &exchange)).await?;
         let assessed = Assessed {
-            assessment: economy.assess(&record.exchange),
+            assessment,
             economy_id: record.economy_id,
             after_exchanges: record.before.len(),
             exchange: record.exchange,
@@ -473,7 +409,7 @@ impl Archive {
         &self,
         study: Study,
         trajectories: Vec<Trajectory>,
-    ) -> Result<(StudyId, StudyRecord), StoreError> {
+    ) -> Result<(StudyId, StudyRecord), EngineError> {
         let mut documents = Vec::with_capacity(trajectories.len());
         for (document, trajectory) in study.documents.iter().zip(trajectories) {
             let (initial_economy_id, final_economy_id) =
@@ -494,7 +430,8 @@ impl Archive {
         let study_id = self.study_id(&study.key);
         let key = study_id.to_string();
         let kept = record.clone();
-        self.store
+        self.engine
+            .store()
             .transact(Durability::Immediate, move |txn| {
                 put(txn.redb(), STUDIES, &key, &kept)
             })
@@ -515,28 +452,25 @@ impl Archive {
         &self,
         key: &StudyKey,
         trajectory: Trajectory,
-    ) -> Result<(EconomyId, EconomyId), StoreError> {
-        let (studied, exchanged) = trajectory_operations(key, &trajectory);
+    ) -> Result<(EconomyId, EconomyId), EngineError> {
+        let studied = trajectory_operations(key, &trajectory).0;
         let Trajectory {
-            initial,
-            steps,
-            last,
-            ..
+            initial, exchanges, ..
         } = trajectory;
-        let entries = authoring::entries(&initial.economy);
+        let entries = crate::authoring::entries(&initial.economy);
         let initial_id = self
-            .author(None, &studied, entries, initial)
+            .author(None, &studied, entries, initial.economy)
             .await?
             .economy_id;
-        let Some(exchanged) = exchanged else {
+        if exchanges.is_empty() {
             return Ok((initial_id.clone(), initial_id));
-        };
+        }
         let source = self
             .economy(&initial_id)
             .await?
             .ok_or(StoreError::Malformed("study document's initial economy"))?;
         let final_id = self
-            .exchanged(&initial_id, &source, &exchanged, steps, last)
+            .exchanged(&initial_id, &source, exchanges)
             .await?
             .economy_id;
         Ok((initial_id, final_id))
@@ -566,7 +500,7 @@ impl Archive {
 
     /// A study's record: its key and its documents' handles.
     pub fn study_record(&self, study_id: &StudyId) -> Result<Option<StudyRecord>, StoreError> {
-        let reader = self.store.read()?;
+        let reader = self.engine.store().read()?;
         let table = reader
             .redb()
             .open_table(STUDIES)
@@ -593,13 +527,13 @@ impl Archive {
 #[cfg(test)]
 impl Archive {
     /// The store, for a server that starts with nothing in memory.
-    pub fn store(&self) -> Store {
-        self.store.clone()
+    pub fn store(&self) -> axionomy_store::Store {
+        self.engine.store().clone()
     }
 
     /// The bytes a study is kept as.
     pub fn study_bytes(&self, study_id: &StudyId) -> Option<Vec<u8>> {
-        let reader = self.store.read().unwrap();
+        let reader = self.engine.store().read().unwrap();
         let table = reader.redb().open_table(STUDIES).unwrap();
         let bytes = table.get(study_id.as_str()).unwrap()?;
         Some(bytes.value().to_vec())
@@ -608,7 +542,8 @@ impl Archive {
     /// Replaces the bytes a study is kept as.
     pub async fn replace_study_bytes(&self, study_id: &StudyId, bytes: Vec<u8>) {
         let key = study_id.to_string();
-        self.store
+        self.engine
+            .store()
             .transact(Durability::Immediate, move |txn| {
                 txn.redb()
                     .open_table(STUDIES)?
@@ -642,19 +577,18 @@ fn trajectory_operations(key: &StudyKey, trajectory: &Trajectory) -> (Vec<u8>, O
             root: trajectory.initial.root(),
         },
     );
-    let exchanges = trajectory.exchanges();
-    let exchanged = (!exchanges.is_empty()).then(|| operation("exchanges", &exchanges));
+    let exchanges = &trajectory.exchanges;
+    let exchanged = (!exchanges.is_empty()).then(|| operation("exchanges", exchanges));
     (studied, exchanged)
 }
 
-fn every() -> Checkpoints {
-    Checkpoints::Every(CHECKPOINT_EVERY)
-}
-
-/// Whether the state after step `step` of a call's run is stored before the
-/// call's last state.
-pub(crate) fn checkpoint(step: u64) -> bool {
-    step.is_multiple_of(CHECKPOINT_EVERY.get())
+/// Runs the engine's synchronous `work` where blocking is allowed.
+async fn blocking<T: Send + 'static>(
+    work: impl FnOnce() -> Result<T, EngineError> + Send + 'static,
+) -> Result<T, EngineError> {
+    tokio::task::spawn_blocking(work)
+        .await
+        .map_err(|_| EngineError::Store(StoreError::Closed))?
 }
 
 fn exists(txn: &redb::WriteTransaction, economy_id: &EconomyId) -> Result<bool, StoreError> {

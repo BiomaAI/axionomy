@@ -1,5 +1,5 @@
 use super::*;
-use crate::{handles::StudyId, resources::Address};
+use crate::{handles::StudyId, resources::Address, store::State};
 
 use axionomy_view::DocumentPath;
 use rmcp::model::{
@@ -672,9 +672,8 @@ fn maze_study() -> StudyRequest {
 async fn study(server: &AxionomyMcp, request: StudyRequest) -> Value {
     let tasks = TaskManager::new();
     let archive = server.archive.clone();
-    let registry = Arc::clone(&server.registry);
     let task = tasks.spawn(TaskOptions::new(), move |context| {
-        Box::pin(study_problem(context, archive, registry, request))
+        Box::pin(study_problem(context, archive, request))
     });
     completed(terminal_task(&tasks, &task.task_id).await)
 }
@@ -774,7 +773,7 @@ async fn a_frames_exchange_applies_to_the_economy_of_the_step_before_it() {
                 assert_eq!(frame["view"]["index"], index);
                 let exchange: paths::Exchange =
                     serde_json::from_value(frame["exchange"].clone()).unwrap();
-                assert_eq!(&exchange, trace.receipts[index].exchange());
+                assert_eq!(&exchange, trace.receipts()[index].exchange());
 
                 // Frame i's exchange takes step i of the trace to step i + 1.
                 let before = id(&step(&server, &final_id, index).await);
@@ -810,20 +809,20 @@ async fn a_studys_documents_are_economies_that_replay_its_trajectories() {
 
         let start = server.economy(&initial_id).await.unwrap();
         assert_eq!(start.record.parent, None);
-        assert_eq!(start.state.root(), State::new(initial.clone()).root());
+        assert_eq!(start.state().root(), State::new(initial.clone()).root());
 
         // The final economy is the trace applied to the initial one: its
         // parent, its exchanges, and the state replaying them reaches.
         let end = server.economy(&final_id).await.unwrap();
         assert_eq!(end.record.parent.as_ref(), Some(&initial_id));
         assert!(
-            end.receipts
+            end.receipts()
                 .iter()
                 .map(paths::Receipt::exchange)
                 .eq(trace.exchanges())
         );
         let replayed = initial.replayed(trace).unwrap();
-        assert_eq!(end.state.root(), State::new(replayed).root());
+        assert_eq!(end.state().root(), State::new(replayed).root());
 
         // It is an ordinary economy: replaying the trace on the initial
         // economy is the operation that made it, and every step is a state.
@@ -868,8 +867,10 @@ async fn a_study_keeps_its_key_and_handles_and_computes_its_views_again() {
             document: document.clone(),
         },
     ];
-    let restarted =
-        AxionomyMcp::new(axionomy_problems::registry(), server.archive.store()).unwrap();
+    let restarted = AxionomyMcp::new(
+        Engine::new(axionomy_problems::registry(), server.archive.store()).unwrap(),
+    )
+    .unwrap();
     assert!(restarted.archive.cached_study(&study_id).is_none());
     for target in &targets {
         assert_eq!(
@@ -887,7 +888,10 @@ async fn a_study_keeps_its_key_and_handles_and_computes_its_views_again() {
         .archive
         .replace_study_bytes(&study_id, serde_json::to_vec(&kept).unwrap())
         .await;
-    let stale = AxionomyMcp::new(axionomy_problems::registry(), server.archive.store()).unwrap();
+    let stale = AxionomyMcp::new(
+        Engine::new(axionomy_problems::registry(), server.archive.store()).unwrap(),
+    )
+    .unwrap();
     let error = stale
         .read(&Address::parse(&uri(targets[1].clone())).unwrap())
         .await
@@ -1303,8 +1307,11 @@ async fn a_store_on_disk_keeps_snapshots_and_handles_across_restarts() {
     let _ = std::fs::remove_file(&file);
     let (parent_id, applied) = {
         let server = AxionomyMcp::new(
-            axionomy_problems::registry(),
-            axionomy_store::Store::open(&file).unwrap(),
+            Engine::new(
+                axionomy_problems::registry(),
+                axionomy_store::Store::open(&file).unwrap(),
+            )
+            .unwrap(),
         )
         .unwrap();
         let parent_id = id(&create(&server, fixture()).await);
@@ -1312,8 +1319,11 @@ async fn a_store_on_disk_keeps_snapshots_and_handles_across_restarts() {
         (parent_id, applied)
     };
     let server = AxionomyMcp::new(
-        axionomy_problems::registry(),
-        axionomy_store::Store::open(&file).unwrap(),
+        Engine::new(
+            axionomy_problems::registry(),
+            axionomy_store::Store::open(&file).unwrap(),
+        )
+        .unwrap(),
     )
     .unwrap();
     let economy = read(

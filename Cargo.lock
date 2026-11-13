@@ -454,10 +454,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "axionomy-engine"
+version = "0.1.0"
+dependencies = [
+ "axionomy",
+ "axionomy-store",
+ "axionomy-study",
+ "thiserror",
+]
+
+[[package]]
 name = "axionomy-mcp"
 version = "0.1.0"
 dependencies = [
  "axionomy",
+ "axionomy-engine",
  "axionomy-problems",
  "axionomy-search",
  "axionomy-store",

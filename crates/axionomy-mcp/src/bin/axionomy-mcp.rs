@@ -1,3 +1,4 @@
+use axionomy_engine::Engine;
 use axionomy_mcp::stateless_http_service;
 use axionomy_store::Store;
 use axum::{Router, routing::get};
@@ -29,8 +30,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
         None => Store::memory()?,
     };
     let cancellation = CancellationToken::new();
-    let service =
-        stateless_http_service(axionomy_problems::registry(), store, cancellation.clone())?;
+    let engine = Engine::new(axionomy_problems::registry(), store)?;
+    let service = stateless_http_service(engine, cancellation.clone())?;
     let app = Router::new()
         .route("/health", get(|| async { "ok" }))
         .nest_service("/mcp", service);

@@ -8,6 +8,7 @@ members = [
     "crates/axionomy-time",
     "crates/axionomy-tree",
     "crates/axionomy-store",
+    "crates/axionomy-engine",
     "crates/axionomy-mcp",
     "crates/axionomy-view",
     "crates/axionomy-study",
@@ -31,6 +32,7 @@ rust-version = "1.99"
 [workspace.dependencies]
 axionomy = { version = "0.1.0", path = "." }
 axionomy-derive = { version = "0.1.0", path = "crates/axionomy-derive" }
+axionomy-engine = { version = "0.1.0", path = "crates/axionomy-engine" }
 axionomy-problems = { version = "0.1.0", path = "crates/axionomy-problems" }
 axionomy-search = { version = "0.1.0", path = "crates/axionomy-search" }
 axionomy-tree = { version = "0.1.0", path = "crates/axionomy-tree" }

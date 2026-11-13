@@ -90,14 +90,14 @@ impl AxionomyMcp {
                 // The final economy's receipts are the document's trace, one
                 // exchange per frame, written as its economies write them.
                 let last = self.loaded(address, &economies.final_economy_id).await?;
-                if last.receipts.len() != view.frames.len() {
+                if last.receipts().len() != view.frames.len() {
                     return Err(internal(format!(
                         "document `{document}` shows {} frames, but its final economy was made by {} exchanges",
                         view.frames.len(),
-                        last.receipts.len()
+                        last.receipts().len()
                     )));
                 }
-                let frames = view.frames.iter().zip(&last.receipts).enumerate().map(
+                let frames = view.frames.iter().zip(last.receipts()).enumerate().map(
                     |(index, (frame, receipt))| {
                         let item = FrameItem {
                             step: index + 1,
@@ -129,7 +129,7 @@ impl AxionomyMcp {
             } => {
                 let before = self.loaded(address, economy_id).await?;
                 let after = self.loaded(address, other_id).await?;
-                let changes = state::changes::<Paths>(&before.state.tree, &after.state.tree)
+                let changes = state::changes::<Paths>(&before.state().tree, &after.state().tree)
                     .map_err(internal)?
                     .into_iter()
                     .map(DiffRow::from)
@@ -183,7 +183,7 @@ impl AxionomyMcp {
                     .stored(&economy_id)
                     .await?
                     .ok_or_else(|| not_found(self.not_stored(&economy_id)))?;
-                let (economy, tree) = (&loaded.state.economy, &loaded.state.tree);
+                let (economy, tree) = (&loaded.state().economy, &loaded.state().tree);
                 match argument {
                     "account" | "prefix" if argument == "account" || accounts_template => {
                         // Accounts are read by prefix from the state's tree,
@@ -318,9 +318,9 @@ impl AxionomyMcp {
             return Ok(None);
         };
         let request = studies::request(&record.key);
-        let registry = Arc::clone(&self.registry);
+        let engine = self.archive.engine().clone();
         let (study, trajectories) = tokio::task::spawn_blocking(move || {
-            studies::compute(&registry, &request, &StudyControl::default(), None)
+            studies::compute(engine.registry(), &request, &StudyControl::default(), None)
         })
         .await
         .map_err(internal)?
@@ -401,8 +401,8 @@ fn read_economy(
     economy_id: &EconomyId,
     loaded: &Loaded,
 ) -> Result<String, McpError> {
-    let (economy, tree) = (&loaded.state.economy, &loaded.state.tree);
-    let receipts = &loaded.receipts[..];
+    let (economy, tree) = (&loaded.state().economy, &loaded.state().tree);
+    let receipts = loaded.receipts();
     let economy_id = economy_id.clone();
     // "economy `…` has no rate `swap`; its rates are listed at …"
     let lacks = |kind: &str, path: &dyn std::fmt::Display, listing: Target| {
@@ -433,7 +433,7 @@ fn read_economy(
                 Origin::Authored { entries } => OriginView::Authored { entries },
                 Origin::Exchanged { exchanges } => OriginView::Exchanged { exchanges },
             },
-            root: StateRoot(loaded.state.root()),
+            root: StateRoot(loaded.state().root()),
             counts: counts(economy),
         }),
         Target::Accounts { prefix, .. } => tree_page(

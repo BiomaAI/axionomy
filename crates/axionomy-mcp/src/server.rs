@@ -10,16 +10,17 @@ use crate::{
         TraceFindRequest, TraceFindResponse, TraceStepRequest, TraceStepResponse,
     },
     resources::{self, Address, IMMUTABLE_TTL_MS, LIST_TTL_MS, Target},
-    store::{self, Archive, Assessed, Loaded, Origin, State, checkpoint},
+    store::{self, Archive, Assessed, Loaded, Origin},
     studies,
 };
 use axionomy::{AssessmentStatus, Quantity, QuantityComparison, paths};
+use axionomy_engine::{Engine, EngineError};
 use axionomy_search::{
     BfsSession, GraphSearchProgress,
     session::{Continue, SearchStatus, WorkBudget},
 };
 use axionomy_store::{Store, StoreError};
-use axionomy_study::{Progress, Registry, StudyControl, StudyError, StudyRequest};
+use axionomy_study::{Progress, StudyControl, StudyError, StudyRequest};
 use rmcp::{
     ErrorData as McpError, ServerHandler,
     handler::server::{
@@ -109,7 +110,6 @@ server's store: across restarts when it is on disk, until the server stops when 
 #[derive(Clone)]
 pub struct AxionomyMcp {
     pub(crate) archive: Archive,
-    pub(crate) registry: Arc<Registry>,
     tasks: TaskManager,
     task_options: TaskOptions,
     tool_router: ToolRouter<Self>,
@@ -117,13 +117,13 @@ pub struct AxionomyMcp {
 
 #[tool_router]
 impl AxionomyMcp {
-    /// A server that studies the problems of `registry` and keeps its
-    /// economies in `store`. A store on disk keeps them, and the secret their
-    /// handles are keyed with, across restarts.
-    pub fn new(registry: Registry, store: Store) -> Result<Self, StoreError> {
+    /// A server over `engine`, studying the problems of its registry and
+    /// keeping its economies, and the handles that name them, in its store.
+    /// A store on disk keeps them, and the secret the handles are keyed with,
+    /// across restarts.
+    pub fn new(engine: Engine) -> Result<Self, StoreError> {
         Ok(Self {
-            archive: Archive::open(store)?,
-            registry: Arc::new(registry),
+            archive: Archive::open(engine)?,
             tasks: TaskManager::new(),
             task_options: TaskOptions::new()
                 .with_poll_interval_ms(TASK_POLL_INTERVAL_MS)
@@ -180,7 +180,11 @@ impl AxionomyMcp {
         Parameters(request): Parameters<ExchangeRequest>,
     ) -> Result<Linked<AssessResponse>, ToolError> {
         let source = self.economy(&request.economy_id).await?;
-        let assessment = source.state.economy.assess(&request.exchange);
+        let assessment = self
+            .archive
+            .assess(&source, &request.exchange)
+            .await
+            .map_err(ToolError::internal)?;
         let (assessment_id, stored) = self
             .keep_assessment(&request.economy_id, &[], &request.exchange, assessment)
             .await?;
@@ -281,12 +285,12 @@ impl AxionomyMcp {
         let source = self.economy(&source_id).await?;
         let opened = || {
             loaded
-                .receipts
+                .receipts()
                 .iter()
                 .flat_map(|receipt| receipt.opened())
                 .any(|account| account == &request.account)
         };
-        if source.state.economy.account(&request.account).is_none() && !opened() {
+        if source.state().economy.account(&request.account).is_none() && !opened() {
             return Err(ToolError::new(
                 FailureCode::NotFound,
                 format!(
@@ -310,11 +314,11 @@ impl AxionomyMcp {
         // The receipts say what each exchange moved, so the balance after
         // every step follows from the source's without rebuilding a state.
         let mut balance = source
-            .state
+            .state()
             .economy
             .balance(&request.account, &request.asset);
         let mut found = holds(balance).then_some(0);
-        for (index, receipt) in loaded.receipts.iter().enumerate() {
+        for (index, receipt) in loaded.receipts().iter().enumerate() {
             if found.is_some() {
                 break;
             }
@@ -347,7 +351,7 @@ impl AxionomyMcp {
                         request.account,
                         request.asset,
                         request.quantity,
-                        loaded.receipts.len() + 1,
+                        loaded.receipts().len() + 1,
                         request.economy_id
                     )),
                 },
@@ -391,7 +395,7 @@ impl AxionomyMcp {
     ) -> Result<Linked<ProblemCatalogResponse>, ToolError> {
         Ok(Linked::new(
             ProblemCatalogResponse {
-                problems: self.registry.catalog(),
+                problems: self.archive.engine().registry().catalog(),
             },
             Vec::new(),
         ))
@@ -443,24 +447,26 @@ impl AxionomyMcp {
         let size = entries.len();
         let operation = store::operation("entries", &entries);
         let (parent_id, base) = parent.unzip();
-        let economy =
-            authoring::extend(base.as_deref().map(|loaded| &loaded.state.economy), entries)
-                .map_err(|error| {
-                    let code = match error {
-                        AuthoringError::TooLarge { .. } => FailureCode::TooLarge,
-                        AuthoringError::AccountHolds { .. }
-                        | AuthoringError::RateHas { .. }
-                        | AuthoringError::InvariantWeights { .. } => FailureCode::Conflict,
-                    };
-                    ToolError::new(code, error.to_string())
-                })?;
+        let economy = authoring::extend(
+            base.as_deref().map(|loaded| &loaded.state().economy),
+            entries,
+        )
+        .map_err(|error| {
+            let code = match error {
+                AuthoringError::TooLarge { .. } => FailureCode::TooLarge,
+                AuthoringError::AccountHolds { .. }
+                | AuthoringError::RateHas { .. }
+                | AuthoringError::InvariantWeights { .. } => FailureCode::Conflict,
+            };
+            ToolError::new(code, error.to_string())
+        })?;
         let counts = counts(&economy);
         let stored = self
             .archive
-            .author(parent_id.clone(), &operation, size, State::new(economy))
+            .author(parent_id.clone(), &operation, size, economy)
             .await
             .map_err(ToolError::internal)?;
-        let root = self.economy(&stored.economy_id).await?.state.root();
+        let root = self.economy(&stored.economy_id).await?.state().root();
         let link = Target::Economy {
             economy_id: stored.economy_id.clone(),
         }
@@ -477,47 +483,15 @@ impl AxionomyMcp {
         ))
     }
 
-    /// Applies `exchanges` in order to an economy and stores the economy they make.
+    /// Applies `exchanges` in order to an economy and stores the economy they
+    /// make, or explains the first that fails and stores nothing.
     async fn exchange(
         &self,
         source_economy_id: EconomyId,
         exchanges: Vec<paths::Exchange>,
     ) -> Result<Linked<ExchangedResponse>, ToolError> {
         let source = self.economy(&source_economy_id).await?;
-        let mut state = source.state.clone();
-        let mut steps = Vec::with_capacity(exchanges.len());
-        for (index, exchange) in exchanges.iter().enumerate() {
-            if let Ok(receipt) = state.apply(exchange.clone()) {
-                let step = source.record.point.step + index as u64 + 1;
-                steps.push((receipt, checkpoint(step).then(|| state.tree.clone())));
-                continue;
-            }
-            // Explain the failure against the state this exchange met.
-            let assessment = state.economy.assess(exchange);
-            let (assessment_id, stored) = self
-                .keep_assessment(
-                    &source_economy_id,
-                    &exchanges[..index],
-                    exchange,
-                    assessment,
-                )
-                .await?;
-            return Err(failed_exchange(
-                index,
-                exchanges.len(),
-                &assessment_id,
-                &stored,
-            ));
-        }
-        store_exchanged(
-            &self.archive,
-            source_economy_id,
-            &source,
-            &exchanges,
-            steps,
-            state,
-        )
-        .await
+        store_exchanged(&self.archive, source_economy_id, &source, exchanges).await
     }
 
     /// Names step `step` of the trace that made `economy_id` from `source`.
@@ -610,7 +584,7 @@ impl AxionomyMcp {
                 "budget must be greater than zero",
             ));
         }
-        self.registry.resolve(&request).map_err(|error| {
+        self.archive.engine().registry().resolve(&request).map_err(|error| {
             let refused = ToolError::new(
                 FailureCode::InvalidRequest,
                 format!(
@@ -625,9 +599,8 @@ impl AxionomyMcp {
             }
         })?;
         let archive = self.archive.clone();
-        let registry = Arc::clone(&self.registry);
         let task = self.tasks.spawn(self.task_options.clone(), move |context| {
-            Box::pin(study_problem(context, archive, registry, request))
+            Box::pin(study_problem(context, archive, request))
         });
         Ok(CreateTaskResult::new(task).into())
     }
@@ -642,11 +615,12 @@ impl Default for AxionomyMcp {
     /// If an in-memory store cannot be created, or the operating system
     /// provides no randomness for the handle secret.
     fn default() -> Self {
-        Self::new(
+        let engine = Engine::new(
             axionomy_problems::registry(),
             Store::memory().expect("an in-memory store opens"),
         )
-        .expect("an in-memory store keeps the server's tables")
+        .expect("an engine opens on an in-memory store");
+        Self::new(engine).expect("an in-memory store keeps the server's tables")
     }
 }
 
@@ -984,22 +958,35 @@ pub(crate) fn counts(economy: &paths::Economy) -> EconomyCounts {
     }
 }
 
-/// Stores the state a call's exchanges reached from `source` and describes it.
-/// Applying one exchange and replaying it alone are the same operation, so
-/// they share a handle.
+/// Stores the economy a call's exchanges reach from `source` and describes
+/// it, or explains the first that fails, assessed against the economy it met,
+/// and stores nothing.
 async fn store_exchanged(
     archive: &Archive,
     source_economy_id: EconomyId,
     source: &Loaded,
-    exchanges: &[paths::Exchange],
-    steps: Vec<(paths::Receipt, Option<axionomy_tree::Tree>)>,
-    state: State,
+    exchanges: Vec<paths::Exchange>,
 ) -> Result<Linked<ExchangedResponse>, ToolError> {
-    let operation = store::operation("exchanges", &exchanges);
-    let stored = archive
-        .exchanged(&source_economy_id, source, &operation, steps, state)
+    let count = exchanges.len();
+    let stored = match archive
+        .exchanged(&source_economy_id, source, exchanges.clone())
         .await
-        .map_err(ToolError::internal)?;
+    {
+        Ok(stored) => stored,
+        Err(EngineError::Refused { index, assessment }) => {
+            let (assessment_id, stored) = archive
+                .keep_assessment(
+                    &source_economy_id,
+                    &exchanges[..index],
+                    &exchanges[index],
+                    *assessment,
+                )
+                .await
+                .map_err(ToolError::internal)?;
+            return Err(failed_exchange(index, count, &assessment_id, &stored));
+        }
+        Err(error) => return Err(ToolError::internal(error)),
+    };
     let loaded = archive
         .economy(&stored.economy_id)
         .await
@@ -1019,14 +1006,14 @@ fn exchanged_response(
     deduplicated: bool,
     loaded: &Loaded,
 ) -> Linked<ExchangedResponse> {
-    let receipts = &loaded.receipts;
+    let receipts = loaded.receipts();
     let links = exchanged_links(&economy_id);
     Linked::new(
         ExchangedResponse {
             source_economy_id,
             economy_id,
             deduplicated,
-            root: StateRoot(loaded.state.root()),
+            root: StateRoot(loaded.state().root()),
             exchanges: receipts.len(),
             changes: receipt_lines(receipts).count(),
             opened: receipts
@@ -1207,14 +1194,19 @@ fn task_error(error: impl ToString) -> TaskExit {
 async fn study_problem(
     context: TaskContext,
     archive: Archive,
-    registry: Arc<Registry>,
     request: StudyRequest,
 ) -> Result<CallToolResult, TaskExit> {
     let control = Arc::new(StudyControl::default());
     let worker_control = Arc::clone(&control);
     let (progress_tx, mut progress_rx) = tokio::sync::mpsc::unbounded_channel::<Progress>();
+    let engine = archive.engine().clone();
     let mut worker = tokio::task::spawn_blocking(move || {
-        studies::compute(&registry, &request, &worker_control, Some(progress_tx))
+        studies::compute(
+            engine.registry(),
+            &request,
+            &worker_control,
+            Some(progress_tx),
+        )
     });
 
     let mut reporting = true;
@@ -1301,7 +1293,7 @@ async fn run_search(
         ..
     } = request;
     let max_expansions = max_expansions.get();
-    let mut session = BfsSession::new(&source.state.economy, goal, move |_| candidates.clone());
+    let mut session = BfsSession::new(&source.state().economy, goal, move |_| candidates.clone());
     let mut remaining = max_expansions;
 
     let outcome = loop {
@@ -1332,24 +1324,10 @@ async fn run_search(
     let solution = match session.into_solution() {
         Some(solution) => {
             let exchanges = solution.trace().exchanges().to_vec();
-            let mut state = source.state.clone();
-            let mut steps = Vec::with_capacity(exchanges.len());
-            for (index, exchange) in exchanges.iter().enumerate() {
-                let receipt = state.apply(exchange.clone()).map_err(task_error)?;
-                let step = source.record.point.step + index as u64 + 1;
-                steps.push((receipt, checkpoint(step).then(|| state.tree.clone())));
-            }
-            let stored = store_exchanged(
-                &archive,
-                economy_id.clone(),
-                &source,
-                &exchanges,
-                steps,
-                state,
-            )
-            .await
-            .map_err(|error| task_error(error.failure.message))?
-            .value;
+            let stored = store_exchanged(&archive, economy_id.clone(), &source, exchanges)
+                .await
+                .map_err(|error| task_error(error.failure.message))?
+                .value;
             links = exchanged_links(&stored.economy_id);
             Some(SearchSolved {
                 economy_id: stored.economy_id,

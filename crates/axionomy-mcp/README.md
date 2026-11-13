@@ -6,12 +6,13 @@ read everything they hold, without putting HTTP, Tokio or task lifecycle into
 the core engine. Economies are kept in an `axionomy-store` store, in memory or
 on disk.
 
-Planned: the operations on economies and runs this crate implements (storing
-economies as points of runs, authoring, apply, assessment, step, find, diff,
-paged reads, search, studies recorded as runs) move into `axionomy-engine`,
-shared with the Studio server, the CLI and Studio's browser Worker; this server
-keeps its protocol and its table from handles to points
-([plan](../../docs/SIMULATION.md#interactive-execution), D-045).
+Its economies are points the engine (`axionomy-engine`) records: authoring,
+applying exchanges, stepping to a point of a history and assessing are the
+engine's, and this server keeps its protocol and its tables from handles to
+points. Recording studies as runs, finding a balance condition and search move
+to the engine next, shared with the Studio server, the CLI and Studio's
+browser Worker ([plan](../../docs/SIMULATION.md#interactive-execution),
+D-045).
 
 ## Semantic contract
 
@@ -296,15 +297,18 @@ with `-32602` (a resource not found, which rmcp reports as invalid params under
 `2026-07-28`) and must be studied again, while its economies remain. Recently
 used economies and studies stay in memory.
 
-`AxionomyMcp::new` takes the `Registry` of problems the server studies, and
-the store it keeps economies in; `axionomy_problems::registry()` holds every
-canonical problem.
+`AxionomyMcp::new` takes the `Engine` it serves (`axionomy-engine`), which
+holds the `Registry` of problems the server studies and the store it keeps
+economies in; `axionomy_problems::registry()` holds every canonical problem.
 
 ```rust
+use axionomy_engine::Engine;
 use axionomy_mcp::AxionomyMcp;
 use axionomy_store::Store;
+use axionomy_study::Registry;
 
-let server = AxionomyMcp::new(axionomy_problems::registry(), Store::memory()?)?;
+let engine = Engine::new(Registry::new(), Store::memory()?)?;
+let server = AxionomyMcp::new(engine)?;
 # let _ = server;
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
