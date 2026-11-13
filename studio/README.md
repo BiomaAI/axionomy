@@ -1,7 +1,47 @@
 # Axionomy Studio
 
 Axionomy Studio is the browser trace player and economic debugger for Axionomy.
-Every problem can be discovered and studied. **Source of truth** shows
+It opens on **packages**
+([plan](../docs/SIMULATION.md#plan-axionomy-on-primitives), P12): the
+economies, refs, strategies, experiments and views a package carries, served
+by an engine, native or in the browser, that Studio asks the same way.
+
+- **Load a package** from a file (a store file or a zip of one), or a sample
+  package by its URL (`packages/<name>.zip`, which `packages/index.json`
+  lists); a link such as `?package=packages/maze.zip` loads one when it
+  opens. The link keeps the URL, the package, the ref or point, the step and
+  the view (`name`, `ref`, `point`, `step`, `view`), so a reload or a copied
+  link opens the same.
+- **A ref or a point** draws its history with the package's view, in the
+  same playback, scene and inspectors studies use; a ref opens where it is,
+  at the end of its history.
+- **Act** works at the step on screen. A candidate set's exchanges there are
+  listed, each assessed (applicable, infeasible or invalid, with what it
+  lacks), and an exchange can be written as JSON and assessed before it can
+  be applied. At the point a ref is on, applying also moves the ref over the
+  new step, and is told where the ref went if another mover came first;
+  anywhere else it makes a branch, a new point no ref names, which **Keep as
+  a ref** names.
+- **Continue from here** runs a strategy from the step on screen with a seed
+  and a budget (an experiment's, when one runs that strategy), reports its
+  search's progress, can be cancelled, and shows how it ended, where, and
+  its thinking: what the search expanded, generated, left on its frontier and
+  visited, and the solution's depth. From a ref's point the ref can move to
+  where it ended.
+- **Follow** delivers the steps a ref is moved over as they come, by this
+  page or any other proposer, each with the package's objectives there.
+- **Experiments** lists the package's experiments; running one reports its
+  progress and can be cancelled (a cancelled experiment keeps no results).
+  Each arm's trials are listed with their seeds, how they ended and their
+  exact objective values; **Pick by** orders the objectives, and the trial
+  ends no other dominates are marked, the pick highlighted. A trial's end
+  opens like any point.
+
+Natively the store is the server's, so whatever another client does to a
+ref there shows here; in the browser it is the Worker's, on the origin
+private file system where it stays across reloads.
+
+Every problem can also be discovered and studied. **Source of truth** shows
 accounts and assets; **The rules** shows rates, roles, goals, and invariants;
 **One step** explains the selected exchange and its exact effects.
 
@@ -169,14 +209,9 @@ it does not infer connection from a catalog loaded earlier. Native studies expos
 pause, resume, and cancel. Browser cancellation terminates the disposable
 Worker immediately; resumable browser pause is not advertised.
 
-Planned: Studio selects a point, the economy after a given step of a recorded
-run, and its controls act on it: scrub and play read a history and change
-nothing; Follow shows a ref's steps as they are delivered; Act applies a
-candidate or a written exchange, assessed first, and on the point a ref is on
-also moves the ref, while anywhere else it makes a branch; Continue from here
-moves a ref to the selected point; Compare shows two histories. The
-native and browser engines both offer them; static playback stays read-only
-([plan](../docs/SIMULATION.md#plan-axionomy-on-primitives)).
+The studies above are reachable from the masthead's **Studies** switch, and
+every study link (one naming a `problem`, or `?studies`) opens them, until
+their machinery retires.
 
 The constraint-probe panel contains deliberately invalid or infeasible
 proposals. Their expected rejection is evidence that the model's constraints
@@ -211,11 +246,16 @@ start this optional command from the repository root:
 
 ```sh
 cargo run -p axionomy-cli -- studio
+# with packages loaded before it serves, and its store kept in a file:
+cargo run -p axionomy-cli -- studio --store work.redb --package studio/public/packages/maze.zip
 ```
 
 Vite proxies `/api` to `127.0.0.1:3000`. Turn the server off and the badge will
 fall back to `Running in your browser` after the next health check; Study
-remains available. The Rust-generated catalog and studies in `public/studies`
+remains available. The packages workspace chooses its engine once, when the
+page opens, since the server's store and the browser's are not the same: a
+page opened while the server answers works on the server's store until it is
+reloaded. The Rust-generated catalog and studies in `public/studies`
 remain the final fallback if Worker initialization fails.
 
 The production build is deployed automatically from `main` to
@@ -232,6 +272,20 @@ Rust DTOs in `axionomy-view` derive Serde and Schemars. The server turns them in
 ```sh
 pnpm generate
 ```
+
+The engine's operations are typed once, in Rust (`axionomy-studio-api`), and
+Studio reaches them through one interface, `PackageEngine`
+(`src/packageEngine.ts`), with two implementations: `nativePackages`, over
+the Studio server's HTTP API, and `BrowserPackages` (`src/browserPackages.ts`),
+over the Worker's engine, which runs the same Rust functions and posts the
+same JSON. Both use the generated OpenAPI types; a refusal is an
+`EngineRefusal` with the server's status, and a ref found elsewhere carries
+where it is. A strategy's or an experiment's run is a `Running`: its
+progress as it comes, its end, and `cancel`, which closes the native stream
+or terminates the Worker. The engine is chosen once, when Studio opens: the
+native server when it answers, else the Worker, since each keeps its own
+store. Points are `PointId`s (`run-…:3`); seeds and budgets are decimal text,
+since JSON's numbers cannot carry every 64-bit one.
 
 Quantities are exact decimal strings. `ViewId` joins user-defined ontology values by an item path such as `maze/account/agent` while keeping labels and optional diagnostic JSON separate from semantic authority. Problems, strategies, documents and every other key are kebab-case paths, so Studio links read `?problem=work-league&strategy=mixed-field`; a study started from Studio gets a minted ID such as `study-7`, and once published it is fetched through that ID.
 
@@ -259,9 +313,20 @@ The Wasm suite launches Studio with native probes disabled, studies stochastic
 logistics in the Worker, verifies live and retained thinking,
 loads the replay-derived study, and proves responsive cancellation by
 terminating and recreating the isolated Worker. It also drives the engine
-itself in the Worker (`src/browserPackages.ts`, which Studio's UI moves onto
-in P12): a Worker loads `packages/maze.zip` from its URL into a store on the
-origin private file system, runs its experiment and, after a reload, finds
-the package and the results again, the URL asked only whether it changed
-and answering 304; a second Worker, while the first holds that store, keeps
-one in memory and says so.
+itself in the Worker (`src/browserPackages.ts`): a Worker loads
+`packages/maze.zip` from its URL into a store on the origin private file
+system, runs its experiment and, after a reload, finds the package and the
+results again, the URL asked only whether it changed and answering 304; a
+second Worker, while the first holds that store, keeps one in memory and
+says so.
+
+`tests/packages.spec.ts` runs in both suites, against the native server and
+the Worker alike: it loads a sample package and scrubs a ref's history,
+applies a candidate at a ref's point (the ref moves) and at an earlier step
+(a branch), refuses to apply a written exchange before it is assessed
+applicable, continues from a ref's point with a strategy and moves the ref
+to where it ended, follows a ref while the page moves it, runs an experiment
+and compares its trials, and opens a `?package=` link and reloads it. The
+native server's store outlives a test, so each test that moves a ref has
+one of its own and counts from where it is. Natively, the suite also
+follows a ref that another proposer moves over the HTTP API.

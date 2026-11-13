@@ -7,7 +7,7 @@ libraries that know no problem; this is where problems meet them. `run` and
 `run_from` take the `Registry` to serve, so an application of your own reuses
 them with its own problems. Problems and studies give way to packages,
 redb files the application loads, and experiments on them: `axionomy mcp`
-loads packages and serves their experiments already
+and `axionomy studio` load packages and serve them already
 ([plan](../../docs/SIMULATION.md#plan-axionomy-on-primitives), D-048, D-050).
 
 ```console
@@ -19,6 +19,7 @@ cargo run -p axionomy-cli -- export-studies studio/public/studies
 cargo run -p axionomy-cli -- mcp --bind 127.0.0.1:8000 --store economies.redb
 cargo run -p axionomy-cli -- mcp --package packages/maze.zip --package packages/sokoban.zip
 cargo run -p axionomy-cli -- studio --bind 127.0.0.1:3000 --store work.redb
+cargo run -p axionomy-cli -- studio --package packages/maze.zip
 cargo run -p axionomy-cli -- package export work.redb maze.zip --name maze --version 1.0.0
 cargo run -p axionomy-cli -- package inspect maze.zip
 cargo run -p axionomy-cli -- package load mine.redb maze.zip
@@ -30,7 +31,8 @@ cargo run -p axionomy-cli -- package samples packages
 to a new file, zipped when its name ends in `.zip`; `package load` merges
 one into a store file, creating it if needed; `package inspect` lists a
 package's manifest, refs and definitions; `package samples` writes every
-sample's package, zipped, into a directory.
+sample's package, zipped, into a directory, with `index.json` naming them,
+which Studio lists them by.
 
 `mcp` serves MCP over Streamable HTTP at `/mcp` with `/health`, keeping
 economies in a store file when `--store` names one and in memory otherwise.
@@ -41,13 +43,14 @@ fails the checks loading makes (a file that is no package, no manifest,
 scripts needing a newer script host API) stops the server with a message
 naming the file and why; a name the store already gives something else
 keeps what it is, with a warning. `studio` serves Studio's API and the
-frontend built in `studio/dist` (`--frontend`), over the points and refs of
-a store file when `--store` names one and of a store in memory otherwise.
+frontend built in `studio/dist` (`--frontend`), over the packages, points
+and refs of a store file when `--store` names one and of a store in memory
+otherwise, loading each `--package` first as `mcp` does.
 Each flag can be given by its environment variable instead:
 `AXIONOMY_MCP_BIND`, `AXIONOMY_MCP_STORE`, `AXIONOMY_MCP_PACKAGES` (package
 files separated as `PATH` separates them, read when no `--package` is
 given), `AXIONOMY_STUDIO_BIND`, `AXIONOMY_STUDIO_DIR`,
-`AXIONOMY_STUDIO_STORE`.
+`AXIONOMY_STUDIO_STORE`, `AXIONOMY_STUDIO_PACKAGES`.
 
 Every problem declares its instances, and `describe` lists them with its
 family and capabilities in the words the problem gives them; the canonical

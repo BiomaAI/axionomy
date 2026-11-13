@@ -1,8 +1,9 @@
 # Simulation: primitives, scripts and packages
 
 Status: steps 1 to 5 below are built (step 2 for MCP). Of the
-[plan](#plan-axionomy-on-primitives) that follows them, P1 to P8, P10 and P11
-are done; P9 is under way, and P12 and P13 follow in order.
+[plan](#plan-axionomy-on-primitives) that follows them, P1 to P8 and P10 to
+P12 are done; P9 is under way, its study machinery retiring now that Studio
+runs on packages, and P13 follows.
 
 The economy owns commitments and their consequences. A policy reads what an
 actor may see and proposes exchanges. Whoever calls the rollout (an
@@ -673,12 +674,63 @@ point, reloads the page and finds the package and the results again in the
 origin private file system, the URL answering 304; another finds a second
 Worker keeping its store in memory while the first holds the saved one.
 
-**P12. Studio on packages, points, refs and experiments.** Load a package
-(from a file, or from a URL, which a link such as `?package=<url>` opens;
-Pages lists its sample packages by URL), scrub, follow a ref, act (a candidate or a written exchange, assessed first;
-on the point a ref is on it also moves the ref, anywhere else it makes a
-branch), continue from here, run an experiment, compare. The native and the
-browser engine offer the same.
+**P12. Studio on packages, points, refs and experiments (done).** Load a
+package (from a file, or from a URL, which a link such as `?package=<url>`
+opens; Pages lists its sample packages by URL), scrub, follow a ref, act (a
+candidate or a written exchange, assessed first; on the point a ref is on it
+also moves the ref, anywhere else it makes a branch), continue from here, run
+an experiment, compare. The native and the browser engine offer the same.
+
+Built: what Studio asks of an engine is written once, in
+`axionomy-studio-api`, as functions over `Engine` and the types they take
+and give: list the packages (each manifest's refs with the points they
+name, experiments, strategies, objectives with their directions, goals and
+candidate sets), load a package from its bytes, draw a point's history,
+name an earlier point of it, the candidates a set offers at a point, assess
+and apply exchanges, the refs, run a strategy from a point, run an
+experiment and read its results, and compare points (`compare` and `pick`).
+The Studio server serves them over HTTP (`/api/packages`,
+`/api/points/{point}/…`, `/api/experiments/{experiment}/…`,
+`/api/compare`, and the refs as before), in its OpenAPI contract, and the
+Worker's `Engine` calls the same functions and gives the same JSON, so
+Studio talks to both through one TypeScript interface on the generated
+types. A point is a `PointId`; a seed or a budget, which JSON's numbers
+cannot always carry, is decimal text; a refusal carries the status the
+server answers with, 409 with where a ref is. A strategy's or an
+experiment's run streams its searches' progress, as server-sent events
+natively and as messages from the Worker; closing the stream, or
+terminating the Worker, stops it. The engine gained two things for this:
+`present(point, exchanges)`, each exchange as the point's view reads it,
+assessed there, which is how Studio shows a candidate before anyone applies
+it; and an experiment a watcher stops now stops, keeping no results,
+instead of recording its stopped searches as trials that ran out.
+`axionomy studio --package <file>` loads packages when it starts, as
+`axionomy mcp --package` does, and `axionomy package samples` writes
+`index.json` naming the samples, which Studio lists them by.
+
+Studio opens on packages; the studies stay one switch away, and every study
+link still opens them, until their machinery retires. A package loads from
+a file, from a sample's URL, or from `?package=<url>`; the link keeps the
+URL, the ref or point, the step and the view, so reloading opens them again.
+Opening a ref draws its point's history with the package's view, in the
+playback, scene and inspectors studies use. Act offers the candidates at
+the step on screen, each assessed, and an exchange written as JSON, assessed
+before it can be applied: at the point a ref is on, applying moves the ref
+over the new step, refused with where it went when another mover came
+first, and anywhere else it makes a branch, a point no ref names, which can
+be kept as a ref. Continue from here runs a strategy from the step on
+screen with a seed and a budget, shows how it ended, its search's counts,
+and where it ended, and from a ref's point moves the ref there. Follow
+delivers the steps a ref is moved over as they come, by whoever moves it.
+An experiment runs from the Experiments view, its trials listed by arm with
+their seeds, how they ended and their exact objective values, the front
+marked and the pick, by the objective chosen first, highlighted; any trial's
+end opens like any point. Playwright runs the same package tests against
+the native server and the browser Worker: a sample loaded and a ref's
+history scrubbed, a candidate applied at a ref's point and elsewhere, a
+strategy continued, a ref followed, an experiment run and compared, and a
+`?package=` link opened and reloaded; natively, a ref another proposer
+moves over HTTP is followed as it moves.
 
 **P13. Acceptance.** A Python test drives the native server over HTTP with the
 connect-four package: two players advance `live`, one thinking by applying

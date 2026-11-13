@@ -1,15 +1,14 @@
 # axionomy-studio-wasm
 
-The Web Worker adapter for Axionomy Studio. It exports the same Rust-owned
-problem catalog, study request, solver observations, and study used by the
-native HTTP service: `study()` computes one and emits the same Studio events.
-JavaScript schedules and transports the computation; it does not reimplement
-any economic semantics.
+The Web Worker adapter for Axionomy Studio. It exports the engine itself
+(P11, D-047), offering the operations the native Studio server offers (P12,
+D-045), and, until studies retire, the same Rust-owned problem catalog,
+study request, solver observations and study the native HTTP service uses:
+`study()` computes one and emits the same Studio events. JavaScript
+schedules and transports the computation; it does not reimplement any
+economic semantics.
 
-Beside the studies, which Studio on packages retires
-([plan](../../docs/SIMULATION.md#plan-axionomy-on-primitives), P12), it
-exports the engine itself (P11, D-047): `Engine`, an `axionomy-engine` over
-the Worker's store.
+`Engine` is an `axionomy-engine` over the Worker's store.
 
 - `Engine.open(handle)` opens the store on a `FileSystemSyncAccessHandle` to
   a file of the origin private file system, through a redb backend over the
@@ -17,20 +16,29 @@ the Worker's store.
   `persistent` says which.
 - `load(bytes, url, etag, last_modified)` loads a package file, a store file
   or a zip of one, as the engine loads any package (its manifests checked,
-  then merged), and gives the manifests and the names the store kept. Given
-  the URL it came from, the store keeps the response's validators, which
-  `source(url)` gives back while the store still holds every package it
-  loaded from there: the Worker sends them with its next request for the
-  URL, which answers 304 when it serves the same.
-- `packages()`, `experiments()`, `runExperiment(path, progress)`,
-  `results(path)` and `draw(point)` list the store's manifests and
-  experiments, run one, read its last results and draw a point's history
-  with its view.
+  then merged), and gives a `LoadedView`, the packages it held and the names
+  the store kept. Given the URL it came from, the store keeps the response's
+  validators and the packages it held, which `source(url)` gives back while
+  the store still holds every one of them: the Worker sends the validators
+  with its next request for the URL, which answers 304 when it serves the
+  same.
+- The operations the server serves, each calling the same
+  `axionomy-studio-api` function and giving the same JSON: `packages`,
+  `draw`, `ancestor`, `candidates`, `assess`, `apply`, `runStrategy` and
+  `runExperiment` (calling back with their searches' progress), `results`,
+  `compare`, `createRef`, `readRef`, `advanceRef` and `frames`. A request
+  is the JSON of the server's body or query, read as its extractors read
+  it; a point is a `PointId` and a path its text. The engine's wait blocks
+  a thread, which a Worker has only one of, so `frames` answers at once and
+  its caller asks again while it waits.
 
-Paths and points are parsed where they cross from JavaScript, and results
-come back as the engine's JSON. The Worker (`studio/src/engine.worker.ts`)
-opens the handle, fetches packages and posts replies;
-`studio/src/browserPackages.ts` is its client.
+A refused operation throws the JSON of `{status, body}`: the status the
+server answers it with (404, 400, 409 with `RefMoved`, 500) and its body, so
+Studio's client refuses alike whichever engine refused. Cancelling
+terminates the Worker; a stopped Worker loses only writes it had not made
+durable. The Worker (`studio/src/engine.worker.ts`) opens the handle,
+fetches packages and posts replies; `studio/src/browserPackages.ts` is its
+client, one of the two implementations of Studio's `PackageEngine`.
 
 Build it through `pnpm build:wasm` in `studio/`. The generated bindings are
 consumed by Vite and intentionally remain build output.

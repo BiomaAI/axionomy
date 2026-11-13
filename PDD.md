@@ -2151,7 +2151,10 @@ alone. It is synchronous, has no async runtime or protocol types, and builds
 natively and for `wasm32-unknown-unknown`. MCP, the Studio server, the CLI
 and Studio's browser Worker are its transports; MCP keeps its protocol and
 its table from handles to points. A transport never implements an operation
-the engine has, and knows no package.
+the engine has, and knows no package. The Studio server and the Worker
+offer Studio the same operations, written once over the engine with their
+wire types (`axionomy-studio-api`, P12), so Studio reaches the native and
+the browser engine through one client.
 
 ### D-046: Every step is an apply at a point; a ref says which steps count
 
