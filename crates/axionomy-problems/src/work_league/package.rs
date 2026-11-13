@@ -5,6 +5,7 @@
 //! sustainable fields, from which those documents' arms start. Contract
 //! value, jobs completed and residual waste, summed over the workers, are
 //! the objectives, and each instance has an experiment comparing its fields.
+//! Its view ranks the workers on leaderboards as the study's documents do.
 //!
 //! Micro is the serial fixture: each turn runs until its job is done, which
 //! takes a count of attempts the economy does not hold, and a steward's
@@ -19,14 +20,16 @@ use crate::{
     package::{call, written},
     work_league::{self, Ontology, Policy, Profile},
 };
-use axionomy::path;
+use axionomy::{OntologyPath, path};
 use axionomy_engine::{
-    Arm, Engine, EngineError, Experiment, Measure, Objective, ObjectivePath, Strategy, StrategyPath,
+    Arm, Engine, EngineError, Experiment, Measure, Objective, ObjectivePath, Strategy,
+    StrategyPath, View,
 };
 use axionomy_search::pareto::ObjectiveDirection::{Maximize, Minimize};
 use axionomy_store::{Checkpoints, RefPath};
 
 const SCRIPT: &str = include_str!("../../scripts/work-league.rhai");
+const VIEW: &str = include_str!("../../scripts/work-league-view.rhai");
 
 /// The seed of the study's default request, which keys Nature's tickets.
 const SEED: u64 = 17;
@@ -59,8 +62,21 @@ fn strategy(profile: Profile, document: &str) -> StrategyPath {
 /// Writes the work league's package into `engine`'s store, everything
 /// named under `work-league`.
 pub fn write(engine: &Engine) -> Result<(), EngineError> {
+    let view = |function| Some(call("work-league/view", function));
     let call = |function| call("work-league", function);
     engine.keep_script(&path!("work-league"), SCRIPT)?;
+    engine.keep_script(&path!("work-league/view"), VIEW)?;
+    engine.keep_view(
+        &OntologyPath::of::<Ontology>(),
+        &View {
+            title: "Competitive multi-agent work allocation".into(),
+            labels: view("label"),
+            formats: view("format"),
+            carry: None,
+            scene: view("scene"),
+            leaderboards: view("leaderboards"),
+        },
+    )?;
     let micro = work_league::league(Profile::Micro, work_league::mixed_lineup());
     let season = work_league::league(Profile::Showcase, work_league::mixed_lineup());
     engine.keep_goal(
