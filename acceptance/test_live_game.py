@@ -8,7 +8,7 @@ each adjudication is proposed twice from one point and one of the two is
 refused with where the ref went. A thinker tries every move out at the ref's
 point without ever moving the ref, and a learner follows the ref through its
 frames, waiting for each with a long poll. Only the steps the ref is moved
-over reach the learner."""
+over reach the learner, each named as the point its player advanced to."""
 
 import random
 import threading
@@ -143,6 +143,8 @@ class Table:
         self.lock = threading.Lock()
         self.advanced: list[Advanced] = []
         self.refused: list[Refused] = []
+        # Advances asked for again once they counted, and told they had.
+        self.repeated: list[Advanced] = []
         # Both players adjudicate each drop and meet first, so both propose
         # from the same point before either moves the ref.
         self.meet = threading.Barrier(2, timeout=GAME_SECONDS)
@@ -167,8 +169,18 @@ def play(base_url: str, player: str, table: Table) -> None:
             answer = studio.advance(point, made)
             if answer.status_code == 200:
                 assert answer.json() == {"name": LIVE, "point": made}
+                advanced = Advanced(player, point, made, exchange)
+                if dropping:
+                    # The ref stays at a drop until both players meet to
+                    # adjudicate it, so asking again for the move made is
+                    # told it was made.
+                    again = studio.advance(point, made)
+                    assert again.status_code == 200, f"advance again: {again.status_code} {again.text}"
+                    assert again.json() == answer.json()
                 with table.lock:
-                    table.advanced.append(Advanced(player, point, made, exchange))
+                    table.advanced.append(advanced)
+                    if dropping:
+                        table.repeated.append(advanced)
                 point = made
             else:
                 assert answer.status_code == 409, f"advance: {answer.status_code} {answer.text}"
@@ -301,15 +313,23 @@ def test_two_players_a_thinker_and_a_learner_share_a_live_ref(studio: str) -> No
         assert adjudications
         assert sorted(refused.expected for refused in table.refused) == sorted(adjudications)
 
+        # Every drop's advance was asked for again once it counted, and told
+        # it was made; the move was made once, so the frames below hold each
+        # step once.
+        assert sorted(again.to for again in table.repeated) == sorted(
+            advanced.to for advanced in game if drop_by(advanced.exchange) is not None
+        )
+
         # The learner received exactly the steps the players advanced over,
         # in order, each the step after the one before, ending where the ref
-        # is. A frame delivered once the ref had moved on names its point as
-        # the ref's history names it then: in the run the next step made
-        # from it.
+        # is. A point has one name, so each frame names the point its player
+        # advanced to, however late it was delivered, as the history of
+        # where the ref is names it too.
         assert [frame["exchange"] for frame in frames] == [advanced.exchange for advanced in game]
         for index, (frame, advanced) in enumerate(zip(frames, game, strict=True), start=1):
             assert step(frame["point"]) == step(start) + index
-            assert frame["point"] == advanced.to or frame["point"] == client.ancestor(final, step(start) + index)
+            assert frame["point"] == advanced.to
+            assert client.ancestor(final, step(start) + index) == advanced.to
             assert frame["receipt"]["exchange"] == advanced.exchange
         assert frames[-1]["point"] == final
 
