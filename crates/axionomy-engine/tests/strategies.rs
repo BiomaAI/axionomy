@@ -156,6 +156,12 @@ fn a_plan_is_applied_whole_or_not_at_all() {
             fn short(state) { [pay(3)] }
             fn overdrawn(state) { [pay(5), pay(50)] }
             fn none(state) { () }
+            // As many payments of one as the run's seed draws, below four.
+            fn drawn(state, random) {
+                let plan = [];
+                for paid in 0..random.next(4) { plan.push(pay(1)); }
+                plan
+            }
             "#,
         )
         .unwrap();
@@ -180,6 +186,16 @@ fn a_plan_is_applied_whole_or_not_at_all() {
     let ran = run(&engine, start, &plan("none"), EFFORT);
     assert!(matches!(ran.outcome, Outcome::Stopped));
     assert_eq!(ran.end, start);
+
+    // A plan that draws chance takes the run's random, seeded by its effort.
+    let drawn = |seed| {
+        let ran = run(&engine, start, &plan("drawn"), Effort { seed, budget: 1 });
+        ran.end.step - start.step
+    };
+    let steps: Vec<u64> = (0..16).map(drawn).collect();
+    assert_eq!(steps, (0..16).map(drawn).collect::<Vec<_>>());
+    assert!(steps.iter().all(|steps| *steps < 4));
+    assert!(steps.windows(2).any(|pair| pair[0] != pair[1]));
 }
 
 /// A worker buying progress: a small step gives one for one coin, a big one

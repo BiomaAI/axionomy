@@ -116,6 +116,15 @@ impl Random {
         ((u128::from(value) * u128::from(bound)) >> 64) as u64
     }
 
+    /// The number below `bound` keyed by `key`: value 1 of the SplitMix64
+    /// sequence that starts at the seed XOR `key`, modulo `bound`, the
+    /// ticket the samples draw for what they sample (a job's attempt). The
+    /// same key gets the same number whatever else is drawn, so runs that
+    /// differ elsewhere meet the same chances: common random numbers.
+    fn keyed(&self, key: u64, bound: u64) -> u64 {
+        splitmix(self.seed ^ key, 1) % bound
+    }
+
     /// The index of one of `weights`, integers or quantities, drawn by the
     /// next ticket as [`sampling::sample`] draws one of weighted outcomes.
     fn sample(&self, weights: Array) -> Result<i64, Failure> {
@@ -189,6 +198,19 @@ pub(crate) fn host() -> rhai::Engine {
                 .ok_or_else(|| Failure::from(format!("{bound} is not a positive bound")))?;
             Ok::<_, Failure>(random.below(bound) as i64)
         })
+        .register_fn(
+            "keyed",
+            |random: &mut Random, key: i64, bound: i64| -> Result<i64, Failure> {
+                let key = u64::try_from(key).map_err(|_| {
+                    Failure::from(format!("{key} is not a key: keys are not negative"))
+                })?;
+                let bound = u64::try_from(bound)
+                    .ok()
+                    .filter(|bound| *bound > 0)
+                    .ok_or_else(|| Failure::from(format!("{bound} is not a positive bound")))?;
+                i64::try_from(random.keyed(key, bound)).map_err(|_| "a number out of range".into())
+            },
+        )
         .register_fn("sample", |random: &mut Random, weights: Array| {
             random.sample(weights)
         });

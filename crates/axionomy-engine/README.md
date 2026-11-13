@@ -26,7 +26,8 @@ goes.
 - `keep_strategy` keeps a strategy, an algorithm naming the goal, candidates
   and scripts it uses, and `run_strategy` runs one from a point with a seed
   and a budget: a policy turn by turn, a plan a script makes whole (such as a
-  specialised solver's answer), applied all or none, breadth-first search,
+  specialised solver's answer, or a match whose chances it draws from the
+  run's seed), applied all or none, breadth-first search,
   the cheapest search (Dijkstra's as `axionomy_search::dijkstra` runs it,
   breaking ties between equally cheap plans as the samples' Rust solvers do,
   or A* given a heuristic), best-first search over a state's cost,
@@ -74,7 +75,9 @@ randomness is only a `Random` the host seeds (`next(bound)` draws a number
 below a bound, and `sample(weights)` the index of a weight, drawn as
 `axionomy_search::sampling` samples weighted outcomes with a sampler of the
 same seed, so a script samples Nature's scenarios as a Rust Monte Carlo
-seeded alike does); scripts have no clock; and a call stops after a bounded
+seeded alike does, and `keyed(key, bound)` the ticket keyed by what it is
+for, `splitmix(seed ^ key, 1) % bound`, the same whatever else is drawn);
+scripts have no clock; and a call stops after a bounded
 number of operations. Scripts are kept in the
 store as definitions (`script/<path>`), so they travel with a package.
 
@@ -83,7 +86,7 @@ the same name: a script that defines `view(state)` makes `state.view(...)`
 call it, with `state` as `this`. Name script functions apart from the host's
 (`balance`, `balances`, `accounts`, `rates`, `roles`, `consumed`, `produced`,
 `preserved`, `view`, `applicable`, `assess`, `has_account`, `parameter`,
-`rate`, `next`, `sample`). A loop variable
+`rate`, `next`, `sample`, `keyed`). A loop variable
 needs a name: Rhai refuses `for _ in ...`. A view's script builds its scene on
 the `scene` module (`scene::graph(title, nodes, edges, focus)`, `grid`,
 `matrix`, `timeline`), which infers entities, paths and legend from the

@@ -37,8 +37,9 @@ pub enum Strategy {
     },
     /// A plan a script makes whole, `fn(state)` returning the exchanges in
     /// order or nothing, such as a specialised solver's or an outside
-    /// solver's answer: the kernel applies them all or none, and the run
-    /// ends at the goal or where the plan ends.
+    /// solver's answer, or `fn(state, random)` for a plan that draws chance
+    /// (Nature's outcomes) from the run's seed: the kernel applies them all
+    /// or none, and the run ends at the goal or where the plan ends.
     Plan { plan: ScriptCall, goal: GoalPath },
     /// The fewest exchanges from the candidate set that reach the goal.
     BreadthFirst {
@@ -228,11 +229,14 @@ impl Engine {
             ),
             Strategy::Plan { plan, goal } => {
                 let goal = self.goal(goal)?;
-                let planned: rhai::Dynamic = self.call(
-                    &plan.script,
-                    plan.function.as_str(),
-                    (ScriptState::new(initial.clone()),),
-                )?;
+                let (script, function) = (&plan.script, plan.function.as_str());
+                let state = ScriptState::new(initial.clone());
+                // A plan that draws chance takes the run's random as well.
+                let planned: rhai::Dynamic = if self.defines(script, function, 2)? {
+                    self.call(script, function, (state, Random::new(effort.seed)))?
+                } else {
+                    self.call(script, function, (state,))?
+                };
                 if planned.is_unit() {
                     return Ok(Ran {
                         start: at,

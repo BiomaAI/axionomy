@@ -164,16 +164,7 @@ impl Engine {
         function: &str,
         arguments: impl rhai::FuncArgs,
     ) -> Result<T, EngineError> {
-        let ast = match self.scripts.get(path) {
-            Some(ast) => ast,
-            None => {
-                let source = self
-                    .script(path)?
-                    .ok_or_else(|| EngineError::UnknownScript(path.clone()))?;
-                let ast = self.compile(path, &source)?;
-                self.scripts.insert(path.clone(), ast)
-            }
-        };
+        let ast = self.compiled(path)?;
         let returned: rhai::Dynamic = self
             .host
             .call_fn(&mut rhai::Scope::new(), &ast, function, arguments)
@@ -548,6 +539,32 @@ impl Engine {
                 path: path.clone(),
                 message: error.to_string(),
             })
+    }
+
+    /// The script at `path`, compiled.
+    fn compiled(&self, path: &ScriptPath) -> Result<Arc<rhai::AST>, EngineError> {
+        if let Some(ast) = self.scripts.get(path) {
+            return Ok(ast);
+        }
+        let source = self
+            .script(path)?
+            .ok_or_else(|| EngineError::UnknownScript(path.clone()))?;
+        let ast = self.compile(path, &source)?;
+        Ok(self.scripts.insert(path.clone(), ast))
+    }
+
+    /// Whether the script at `path` defines `function` with `parameters`
+    /// parameters.
+    fn defines(
+        &self,
+        path: &ScriptPath,
+        function: &str,
+        parameters: usize,
+    ) -> Result<bool, EngineError> {
+        Ok(self
+            .compiled(path)?
+            .iter_functions()
+            .any(|defined| defined.name == function && defined.params.len() == parameters))
     }
 
     pub fn store(&self) -> &Store {
